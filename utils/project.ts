@@ -243,7 +243,8 @@ const reconcileMechanismTargets = (
         if (parts[pathPartId]) targetPartId = pathPartId;
         else targetPathId = undefined;
     }
-    const targetAnchorJointId = targetPartId ? (mechanism.targetAnchorJointId ?? parts[targetPartId]?.anchorJointId) : undefined;
+    const pathAnchorJointId = targetPathId ? paths[targetPathId]?.targetAnchorJointId : undefined;
+    const targetAnchorJointId = targetPartId ? (mechanism.targetAnchorJointId ?? pathAnchorJointId ?? parts[targetPartId]?.anchorJointId) : undefined;
     return mechanismWithGeneratedPath({ ...mechanism, targetPartId, targetPathId, targetAnchorJointId, activeVisualPartIds: targetPartId ? [targetPartId] : [] }, options);
 };
 
@@ -608,6 +609,7 @@ export const validatePath = (path: ProjectMotionPath): ProjectMotionPath => {
     const normalized: ProjectMotionPath = {
         id: typeof raw.id === 'string' && raw.id.trim() ? raw.id.slice(0, 80) : uid('path'),
         partId: typeof raw.partId === 'string' ? raw.partId : '',
+        targetAnchorJointId: typeof raw.targetAnchorJointId === 'string' && raw.targetAnchorJointId.trim() ? raw.targetAnchorJointId.slice(0, 80) : undefined,
         points,
         timedPoints: Array.isArray(raw.timedPoints) ? raw.timedPoints.map(p => ({ ...sanitizePoint(p), time: finiteNumber(asRecord(p).time, 0) })).slice(0, 2000) : undefined,
         duration: clampNumber(raw.duration, 1800, 100, 120000),

@@ -536,6 +536,13 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await page.getByLabel('Selected body part').selectOption('right_arm');
   await expect(page.getByTestId('free-draw-status')).toContainText(/5 points .*path-right-arm/);
   await expect(page.getByText('No path for this part yet. Draw or track a path before fitting a mechanism.')).toHaveCount(0);
+  await expect(page.getByTestId('quick-rig-helper')).toContainText('Easy IK setup');
+  await expect(page.getByLabel('Anchor point')).toHaveValue('right_shoulder');
+  await expect(page.getByLabel('IK handle')).toHaveValue('right_hand');
+  await page.getByRole('button', { name: 'Fold left', exact: true }).click();
+  await expect(page.getByTestId('fold-direction-control')).toContainText('left');
+  await page.getByLabel('IK handle').selectOption('right_elbow');
+  await expect(page.getByLabel('IK handle')).toHaveValue('right_elbow');
 
   await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
   const firstArmPoint = pathCanvas.locator('circle[stroke="#5a6cff"]').first();
@@ -570,6 +577,7 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await expect(page.locator('label').filter({ hasText: 'Selected part anchor' }).locator('select')).toHaveValue('right_elbow');
   await page.getByRole('button', { name: /Mechanism Foundry/i }).click();
   await expect(page.getByTestId('foundry-target-summary')).toContainText('anchor right_elbow');
+  await expect(page.getByTestId('foundry-target-summary')).toContainText('IK handle right_elbow');
 
   expectCleanPage(pageErrors, consoleErrors);
 });

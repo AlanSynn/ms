@@ -173,7 +173,10 @@ const App: React.FC = () => {
         const nextUpdates = { ...updates };
         if (updates.targetPathId) {
             const path = project.paths[updates.targetPathId];
-            if (path) nextUpdates.targetPartId = path.partId;
+            if (path) {
+                nextUpdates.targetPartId = path.partId;
+                nextUpdates.targetAnchorJointId = path.targetAnchorJointId ?? preferredMotionJointId(project, path.partId, mechanism.targetAnchorJointId, { preferDistalWhenRoot: !mechanism.targetAnchorJointId });
+            }
         }
         if (updates.targetPartId !== undefined) {
             const pathId = updates.targetPathId ?? mechanism.targetPathId;
@@ -197,6 +200,7 @@ const App: React.FC = () => {
             path: validatePath({
                 id,
                 partId,
+                targetAnchorJointId: current?.targetAnchorJointId,
                 points,
                 timedPoints: points.map((p, i) => ({ ...p, time: points.length <= 1 ? 0 : (i / (points.length - 1)) * (current?.duration ?? project.settings.animationDurationMs) })),
                 duration: current?.duration ?? project.settings.animationDurationMs,
@@ -940,6 +944,23 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
     const [isFreeDrawing, setIsFreeDrawing] = useState(false);
     const pathLocked = Boolean(selectedPart?.locked);
     const pointCount = selectedPath?.points.length ?? 0;
+    const jointOptions = selectedPart ? motionAnchorJointIds(project, selectedPart.id) : [];
+    const selectedIkJointId = selectedPart
+        ? preferredMotionJointId(project, selectedPart.id, selectedPath?.targetAnchorJointId, { preferDistalWhenRoot: !selectedPath?.targetAnchorJointId })
+        : undefined;
+    const ikChain = useMemo(() => {
+        if (!project.skeleton || !selectedPart || !selectedIkJointId) return [] as string[];
+        const chain = [selectedIkJointId];
+        let current = project.skeleton.joints[selectedIkJointId]?.parentId ?? null;
+        while (current) {
+            chain.push(current);
+            if (current === selectedPart.anchorJointId) return chain.reverse();
+            current = project.skeleton.joints[current]?.parentId ?? null;
+        }
+        return selectedIkJointId === selectedPart.anchorJointId ? [selectedIkJointId] : [];
+    }, [project.skeleton, selectedPart?.anchorJointId, selectedIkJointId]);
+    const bendJoint = ikChain.length >= 3 ? project.skeleton?.joints[ikChain[ikChain.length - 2]] : undefined;
+    const jointLabel = (id?: string) => id ? id.replaceAll('_', ' ') : 'none';
     useEffect(() => {
         freeDraftRef.current = null;
         setIsFreeDrawing(false);
@@ -962,6 +983,21 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
         appendFreePoint(p, true);
     };
     const updatePath = (updates: Partial<ProjectMotionPath>) => selectedPath && !pathLocked && dispatch({ type: 'upsert_path', path: { ...selectedPath, ...updates } });
+    const updateSelectedAnchor = (anchorJointId: string) => {
+        if (!selectedPart || pathLocked) return;
+        const anchor = project.skeleton?.joints[anchorJointId]?.position;
+        dispatch({ type: 'update_part', partId: selectedPart.id, updates: { anchorJointId, localPivotOffset: anchor ? localPivotOffsetForScene(selectedPart, anchor) : selectedPart.localPivotOffset, localPivotJointId: anchorJointId } });
+    };
+    const updateIkHandle = (targetAnchorJointId: string) => updatePath({ targetAnchorJointId });
+    const setBendDirection = (bendDirection: number) => bendJoint && dispatch({ type: 'update_joint', jointId: bendJoint.id, updates: { bendDirection } });
+    const addJointAtIkHandle = () => {
+        if (!project.skeleton || !selectedPart || !selectedIkJointId) return;
+        const parent = project.skeleton.joints[selectedIkJointId];
+        if (!parent) return;
+        const id = uid('joint');
+        dispatch({ type: 'add_joint', joint: { id, name: 'new IK handle', position: { x: parent.position.x + 34, y: parent.position.y - 34 }, parentId: parent.id, locked: false, bendDirection: 1 } });
+        if (selectedPath && !pathLocked) dispatch({ type: 'upsert_path', path: { ...selectedPath, targetAnchorJointId: id } });
+    };
     const movePoint = (e: React.MouseEvent<SVGSVGElement>) => {
         if (isFreeDrawing && svgRef.current && !pathLocked) {
             appendFreePoint(svgPointerToScene(svgRef.current, e.clientX, e.clientY));
@@ -1032,6 +1068,31 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
                 {pathLocked && <div className="warning">Unlock the selected part before editing, deleting, drawing, or tracking its path.</div>}
                 {selectedPath?.warnings.map((w, i) => <div key={`${w}-${i}`} className="warning">{w}</div>)}
             </div>
+            <div className="rig-helper" data-testid="quick-rig-helper">
+                <h4 className="section-title">Body rig</h4>
+                <h3>Easy IK setup</h3>
+                <p>Anchor is where this part attaches. IK handle is the joint that follows your drawn path.</p>
+                {selectedPart && <label className={`block text-xs font-black uppercase tracking-wider text-slate-500 ${pathLocked ? 'opacity-50' : ''}`}>Anchor point<select aria-label="Anchor point" className="field mt-1" disabled={pathLocked} value={selectedPart.anchorJointId} onChange={e => updateSelectedAnchor(e.target.value)}>
+                    {Object.keys(project.skeleton?.joints ?? {}).map(id => <option key={id} value={id}>{jointLabel(id)}</option>)}
+                </select></label>}
+                {selectedPart && <label className={`block text-xs font-black uppercase tracking-wider text-slate-500 ${pathLocked || !selectedPath ? 'opacity-50' : ''}`}>IK handle<select aria-label="IK handle" className="field mt-1" disabled={pathLocked || !selectedPath} value={selectedIkJointId ?? ''} onChange={e => updateIkHandle(e.target.value)}>
+                    {jointOptions.map(id => <option key={id} value={id}>{jointLabel(id)}</option>)}
+                </select></label>}
+                <div className="fold-picker" data-testid="fold-direction-control">
+                    <div>
+                        <div className="text-xs font-black uppercase tracking-wider text-slate-500">Fold direction</div>
+                        <div className="text-sm text-slate-600">{bendJoint ? `${jointLabel(bendJoint.id)} bends ${bendJoint.bendDirection < 0 ? 'left' : 'right'}` : 'Choose a limb with elbow/knee joint'}</div>
+                    </div>
+                    <div className="flex gap-2">
+                        <button className={`btn-secondary ${bendJoint && bendJoint.bendDirection < 0 ? 'active' : ''}`} disabled={!bendJoint || bendJoint.locked} onClick={() => setBendDirection(-1)}>Fold left</button>
+                        <button className={`btn-secondary ${bendJoint && bendJoint.bendDirection >= 0 ? 'active' : ''}`} disabled={!bendJoint || bendJoint.locked} onClick={() => setBendDirection(1)}>Fold right</button>
+                    </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    <button className="btn-secondary" onClick={addLayer}><Plus size={16}/> Add body part</button>
+                    <button className="btn-secondary" disabled={!selectedPart || pathLocked} onClick={addJointAtIkHandle}><Plus size={16}/> New IK handle</button>
+                </div>
+            </div>
             <details className="advanced-panel">
                 <summary>Path options</summary>
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -1062,7 +1123,8 @@ const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, 
     const kit = project.settings.physicalKit;
     const sheet = sceneBoundsForSheet(kit);
     const pathMechanism = selectedPath ? project.mechanisms.find(m => m.targetPathId === selectedPath.id && m.targetPartId === selectedPath.partId) : undefined;
-    const targetJointId = selectedPath ? preferredMotionJointId(project, selectedPath.partId, pathMechanism?.targetAnchorJointId, { preferDistalWhenRoot: !pathMechanism?.targetAnchorJointId }) : undefined;
+    const requestedTargetJointId = pathMechanism?.targetAnchorJointId ?? selectedPath?.targetAnchorJointId;
+    const targetJointId = selectedPath ? preferredMotionJointId(project, selectedPath.partId, requestedTargetJointId, { preferDistalWhenRoot: !requestedTargetJointId }) : undefined;
     const pathPreview = isPlaying && selectedPath?.visible && selectedPath.enabled && selectedPath.points.length > 1
         ? motionPreviewForPath(project, selectedPath, angle, targetJointId)
         : undefined;
@@ -1169,6 +1231,7 @@ const SkeletonInspector = ({ project, dispatch }: { project: ProjectState; dispa
             <MiniNumber label="Joint X" value={joint.position.x} min={-320} max={320} disabled={joint.locked} onChange={x => dispatch({ type: 'update_joint', jointId: joint.id, updates: { position: { ...joint.position, x } } })}/>
             <MiniNumber label="Joint Y" value={joint.position.y} min={-320} max={320} disabled={joint.locked} onChange={y => dispatch({ type: 'update_joint', jointId: joint.id, updates: { position: { ...joint.position, y } } })}/>
             <Toggle label="Locked" checked={joint.locked} onChange={locked => dispatch({ type: 'update_joint', jointId: joint.id, updates: { locked } })}/>
+            <div className="flex gap-2"><button className={`btn-secondary ${joint.bendDirection < 0 ? 'active' : ''}`} disabled={joint.locked} onClick={() => dispatch({ type: 'update_joint', jointId: joint.id, updates: { bendDirection: -1 } })}>Fold left</button><button className={`btn-secondary ${joint.bendDirection >= 0 ? 'active' : ''}`} disabled={joint.locked} onClick={() => dispatch({ type: 'update_joint', jointId: joint.id, updates: { bendDirection: 1 } })}>Fold right</button></div>
             <MiniNumber label="Bend direction" value={joint.bendDirection} min={-1} max={1} step={0.1} disabled={joint.locked} onChange={bendDirection => dispatch({ type: 'update_joint', jointId: joint.id, updates: { bendDirection } })}/>
             <button className="btn-secondary" disabled={joint.locked || project.skeleton?.rootJointIds.includes(joint.id)} onClick={() => dispatch({ type: 'remove_joint', jointId: joint.id })}><Trash2 size={16}/> Remove joint</button>
         </div>}
@@ -1289,7 +1352,7 @@ const createRecommendedMechanism = (project: ProjectState, selectedPart: BodyPar
         phase: 0,
         targetPartId: selectedPart.id,
         targetPathId: selectedPath.id,
-        targetAnchorJointId: availableMotionAnchorForRecommendation(project, selectedPart.id),
+        targetAnchorJointId: selectedPath.targetAnchorJointId ?? availableMotionAnchorForRecommendation(project, selectedPart.id),
         activeVisualPartIds: [selectedPart.id],
         source: 'optimized',
         presetId: `recommendation-${type}`,
@@ -1401,6 +1464,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const preview = useMemo(() => generateCurvePoints(landedFoundry, 96).points, [landedFoundry]);
     const range = sampleFeasibleRange(landedFoundry);
     const library = MECHANISM_LIBRARY[foundry.type];
+    const targetIkJointId = selectedPart ? preferredMotionJointId(project, selectedPart.id, selectedPath?.targetAnchorJointId, { preferDistalWhenRoot: !selectedPath?.targetAnchorJointId }) : undefined;
     const feasibilityText = range.warning ?? '360° valid sampled motion';
     const previewPoints = fitPointsToBox(preview, 360, 240);
     const previewPath = pointsToSvgPath(previewPoints);
@@ -1440,7 +1504,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             animation: { duration: selectedPath?.duration ?? 3200, steps: preview.length, loop: true },
             targetPartId: selectedPart?.id,
             targetPathId: selectedPath?.id,
-            targetAnchorJointId: preferredMotionJointId(project, selectedPart?.id, undefined, { preferDistalWhenRoot: true }),
+            targetAnchorJointId: targetIkJointId,
             metadata: { sourceTab: 'mechanism-foundry', selectedPreset: preset, recommendation: foundry.recommendation ?? FOUNDRY_PRESETS[preset]?.recommendation },
             warnings: range.warning ? [range.warning] : [],
             source: 'mechanism-foundry'
@@ -1494,7 +1558,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             </div>}
             <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600" data-testid="foundry-target-summary">
                 <div className="font-bold text-slate-800">Target: {selectedPart?.name ?? 'none'} · path {selectedPath?.points.length ?? 0} pts</div>
-                <div>Export lands at {landing.x.toFixed(0)}, {landing.y.toFixed(0)} ({landingBoard.label}) · anchor {selectedPart?.anchorJointId ?? 'none'}</div>
+                <div>Export lands at {landing.x.toFixed(0)}, {landing.y.toFixed(0)} ({landingBoard.label}) · anchor {selectedPart?.anchorJointId ?? 'none'} · IK handle {targetIkJointId ?? 'none'}</div>
                 {snapDistance > 0.5 && <div>Snapped {snapDistance.toFixed(0)} scene units from target to nearest board hole for fabrication.</div>}
                 <div>{foundry.recommendation ?? FOUNDRY_PRESETS.balanced.recommendation}</div>
             </div>

@@ -162,6 +162,7 @@ export interface BodyPartLayer {
 export interface ProjectMotionPath {
     id: string;
     partId: string;
+    targetAnchorJointId?: string;
     points: Point[];
     timedPoints?: Array<Point & { time: number }>;
     duration: number;

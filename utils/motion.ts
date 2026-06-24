@@ -246,7 +246,7 @@ export const motionPreviewForPath = (
     project: ProjectState,
     path: ProjectMotionPath,
     angle: number,
-    targetJointId = preferredMotionJointId(project, path.partId, undefined, { preferDistalWhenRoot: true })
+    targetJointId = preferredMotionJointId(project, path.partId, path.targetAnchorJointId, { preferDistalWhenRoot: !path.targetAnchorJointId })
 ): MotionPreview => motionPreviewForTarget(project, path.partId, targetJointId, pointOnProjectPath(path, angle));
 
 export const mechanismBindingWarnings = (project: ProjectState, mechanisms: MechanismConfig[] = project.mechanisms) => {
