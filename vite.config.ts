@@ -1,9 +1,8 @@
 import path from 'path';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, '.', '');
+export default defineConfig(() => {
   // Use relative path for Tauri builds, absolute for web deployment
   const isTauri = process.env.TAURI_PLATFORM !== undefined;
 
@@ -15,10 +14,7 @@ export default defineConfig(({ mode }) => {
     },
     envPrefix: ['VITE_', 'TAURI_'],
     plugins: [react()],
-    define: {
-      'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
-    },
+    publicDir: 'public',
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
@@ -26,7 +22,7 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       target: process.env.TAURI_PLATFORM == 'windows' ? 'chrome105' : 'safari13',
-      minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
+      minify: process.env.TAURI_DEBUG ? false : 'esbuild' as const,
       sourcemap: !!process.env.TAURI_DEBUG,
     }
   };

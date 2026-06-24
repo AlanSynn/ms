@@ -2,7 +2,7 @@
 import { MechanismConfig, Point, MechanismType } from '../types';
 import { generateCurvePoints } from './kinematics';
 
-const MECHANISM_TYPES: MechanismType[] = ['4bar', 'piston', 'yoke', 'quick-return', '5bar'];
+const MECHANISM_TYPES: MechanismType[] = ['4bar', 'cam', 'gear', 'planetary_gear', 'piston', 'yoke', 'quick-return', '5bar'];
 
 // Proven harmonic gear ratio pairs for clean, closed 5-bar curves
 // Each produces a distinct, predictable pattern
@@ -463,6 +463,7 @@ export const generateSmartConfig = (targetPath?: Point[], forcedType?: Mechanism
         id: Math.random().toString(36).substr(2, 9),
         type: type,
         visible: true,
+        enabled: true,
         color: '#3b82f6',
 
         anchorX: anchorX,
@@ -494,6 +495,23 @@ export const generateSmartConfig = (targetPath?: Point[], forcedType?: Mechanism
         config.sliderOffset = (Math.random() - 0.5) * s(1.0);
         config.groundLength = Math.max(s(0.5), config.crankLength + 10);
         config.rockerLength = s(1.5);
+    } else if (type === 'cam') {
+        config.groundAngle = 90;
+        config.groundLength = 0;
+        config.couplerLength = 0;
+        config.rockerLength = s(0.5);
+        config.sliderOffset = (Math.random() - 0.5) * s(0.4);
+    } else if (type === 'gear') {
+        config.gearRatio = Math.random() < 0.5 ? -1 : -2;
+        config.speed2 = config.gearRatio;
+        config.rockerLength = s(0.25);
+        config.couplerLength = 0;
+    } else if (type === 'planetary_gear') {
+        config.gearRatio = 2 + Math.floor(Math.random() * 4);
+        config.speed2 = config.gearRatio;
+        config.groundLength = s(0.45);
+        config.rockerLength = s(0.18);
+        config.couplerLength = 0;
     } else if (type === '5bar') {
         // Select gear ratio - prefer recommended ratio based on target path analysis
         let selectedRatio: { s1: number; s2: number };
@@ -575,14 +593,17 @@ export const mutateConfig = (config: MechanismConfig, temperature: number = 1.0,
 
         if (types.length > 0) {
             newConfig.type = types[Math.floor(Math.random() * types.length)];
-            if (newConfig.type === '5bar') {
-                // Use harmonic ratio preset
-                const ratio = FIVE_BAR_HARMONIC_RATIOS[Math.floor(Math.random() * FIVE_BAR_HARMONIC_RATIOS.length)];
-                newConfig.speed1 = ratio.s1;
-                newConfig.speed2 = ratio.s2;
-                newConfig.phase = PHASE_SAMPLES[Math.floor(Math.random() * PHASE_SAMPLES.length)];
-                newConfig.rodLength = newConfig.couplerLength;
-            }
+        if (newConfig.type === '5bar') {
+            // Use harmonic ratio preset
+            const ratio = FIVE_BAR_HARMONIC_RATIOS[Math.floor(Math.random() * FIVE_BAR_HARMONIC_RATIOS.length)];
+            newConfig.speed1 = ratio.s1;
+            newConfig.speed2 = ratio.s2;
+            newConfig.phase = PHASE_SAMPLES[Math.floor(Math.random() * PHASE_SAMPLES.length)];
+            newConfig.rodLength = newConfig.couplerLength;
+        } else if (newConfig.type === 'gear' || newConfig.type === 'planetary_gear') {
+            newConfig.gearRatio = newConfig.type === 'gear' ? -1 : 3;
+            newConfig.speed2 = newConfig.gearRatio;
+        }
         }
     }
 

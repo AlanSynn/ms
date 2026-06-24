@@ -1,24 +1,27 @@
 
 import { GlobalConfig, MechanismConfig, Point } from '../types';
 import { calculateLinkage, generateCurvePoints } from './kinematics';
+import { SCENE_VIEW, sceneToSvg } from './coordinates';
+import { finiteNumber, sanitizeHexColor, sanitizeMechanismRuntime, svgNumber } from './sanitize';
 
 // --- DXF HELPER FUNCTIONS ---
 
 const dxfHeader = () => `0\nSECTION\n2\nHEADER\n0\nENDSEC\n0\nSECTION\n2\nTABLES\n0\nENDSEC\n0\nSECTION\n2\nBLOCKS\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n`;
 const dxfFooter = () => `0\nENDSEC\n0\nEOF\n`;
+const dxfLayer = (value: string) => value.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64) || '0';
 
 const dxfLine = (x1: number, y1: number, x2: number, y2: number, layer: string = "0", color: number = 7) => {
-    return `0\nLINE\n8\n${layer}\n62\n${color}\n10\n${x1}\n20\n${y1}\n11\n${x2}\n21\n${y2}\n`;
+    return `0\nLINE\n8\n${dxfLayer(layer)}\n62\n${color}\n10\n${svgNumber(x1)}\n20\n${svgNumber(y1)}\n11\n${svgNumber(x2)}\n21\n${svgNumber(y2)}\n`;
 };
 
 const dxfCircle = (cx: number, cy: number, r: number, layer: string = "0", color: number = 7) => {
-    return `0\nCIRCLE\n8\n${layer}\n62\n${color}\n10\n${cx}\n20\n${cy}\n40\n${r}\n`;
+    return `0\nCIRCLE\n8\n${dxfLayer(layer)}\n62\n${color}\n10\n${svgNumber(cx)}\n20\n${svgNumber(cy)}\n40\n${svgNumber(r)}\n`;
 };
 
 const dxfPolyline = (points: Point[], layer: string = "TRACE", color: number = 3) => {
-    let s = `0\nLWPOLYLINE\n8\n${layer}\n62\n${color}\n100\nAcDbEntity\n100\nAcDbPolyline\n90\n${points.length}\n70\n0\n`;
+    let s = `0\nLWPOLYLINE\n8\n${dxfLayer(layer)}\n62\n${color}\n100\nAcDbEntity\n100\nAcDbPolyline\n90\n${points.length}\n70\n0\n`;
     points.forEach(p => {
-        s += `10\n${p.x}\n20\n${p.y}\n`;
+        s += `10\n${svgNumber(p.x)}\n20\n${svgNumber(p.y)}\n`;
     });
     return s;
 };
@@ -48,13 +51,16 @@ const getGearPathD = (radius: number, teeth: number) => {
     return d;
 };
 
+const rawPath = (points: Point[]) => points.length ? `M ${points.map(p => `${svgNumber(p.x)} ${svgNumber(p.y)}`).join(' L ')}` : '';
+const activeMechanisms = (config: GlobalConfig) => config.mechanisms.map(sanitizeMechanismRuntime).filter(m => m.visible && m.enabled !== false);
+
 // --- EXPORT FUNCTIONS ---
 
 export const generateDXF = (config: GlobalConfig, angle: number): string => {
     let content = dxfHeader();
 
     // 1. Trace Paths (Green)
-    config.mechanisms.forEach(m => {
+    activeMechanisms(config).forEach(m => {
         if (m.type !== 'crank') {
             const { points } = generateCurvePoints(m, 100);
             if (points.length > 1) {
@@ -64,7 +70,7 @@ export const generateDXF = (config: GlobalConfig, angle: number): string => {
     });
 
     // 2. Mechanism Geometry (Current Frame)
-    config.mechanisms.forEach(m => {
+    activeMechanisms(config).forEach(m => {
         const state = calculateLinkage(m, angle);
         const { p1, p2, j1, j2, aux, effector, isValid } = state;
         
@@ -107,7 +113,7 @@ export const generateDXF = (config: GlobalConfig, angle: number): string => {
         else if (m.type === 'yoke') {
             content += dxfLine(j2.x - 40, j2.y, j2.x + 40, j2.y, MECH_LAYER, 1); // Plate
         }
-        else if (m.type === 'quick-return') {
+        else if (m.type === 'quick-return' || m.type === 'cam' || m.type === 'gear' || m.type === 'planetary_gear') {
             content += dxfLine(p1.x, p1.y, p2.x, p2.y, "GROUND", 8);
             content += dxfLine(p2.x, p2.y, j2.x, j2.y, MECH_LAYER, 1);
             content += dxfLine(j2.x, j2.y, effector.x, effector.y, MECH_LAYER, 1);
@@ -124,39 +130,36 @@ export const generateDXF = (config: GlobalConfig, angle: number): string => {
 };
 
 export const generateSVG = (config: GlobalConfig, angle: number): string => {
-    const W = 800;
-    const H = 600;
-    const OFFSET_X = 400;
-    const OFFSET_Y = 300;
+    const origin = sceneToSvg({ x: 0, y: 0 });
 
-    let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="background-color: #f8fafc">`;
-    
-    // Apply coordinate transformation to match the canvas
-    svg += `<g transform="translate(${OFFSET_X}, ${OFFSET_Y}) scale(1, -1)">`;
+    let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SCENE_VIEW.width} ${SCENE_VIEW.height}" style="background-color: #f8fafc">`;
+
+    // Shared scene transform from coordinates.ts; render/export use one origin.
+    svg += `<g transform="translate(${origin.x}, ${origin.y}) scale(1, -1)">`;
 
     // 1. Traces
-    config.mechanisms.forEach(m => {
+    activeMechanisms(config).forEach(m => {
         if (m.type !== 'crank') {
             const { points } = generateCurvePoints(m, 100);
             if (points.length > 1) {
-                const d = `M ${points.map(p => `${p.x},${p.y}`).join(' L ')}`;
-                svg += `<path d="${d}" fill="none" stroke="${m.color}" stroke-width="2" opacity="0.5" stroke-linejoin="round" stroke-linecap="round" />`;
+                svg += `<path d="${rawPath(points)}" fill="none" stroke="${sanitizeHexColor(m.color, '#3b82f6')}" stroke-width="2" opacity="0.5" stroke-linejoin="round" stroke-linecap="round" />`;
             }
         }
     });
 
     // 2. Mechanisms
-    config.mechanisms.forEach(m => {
+    activeMechanisms(config).forEach(m => {
         const state = calculateLinkage(m, angle);
         const { p1, p2, j1, j2, aux, effector, isValid } = state;
 
         if (!isValid) return;
 
         const crankDeg = (angle * 180) / Math.PI;
+        const color = sanitizeHexColor(m.color, '#3b82f6');
 
         // Anchors & Gears
-        svg += `<g transform="translate(${p1.x}, ${p1.y}) rotate(${crankDeg * (m.speed1 ?? 1)})">`;
-        svg += `<path d="${getGearPathD(m.crankLength + 10, 14)}" fill="#f59e0b" stroke="#b45309" stroke-width="2" />`;
+        svg += `<g transform="translate(${svgNumber(p1.x)}, ${svgNumber(p1.y)}) rotate(${svgNumber(crankDeg * (m.speed1 ?? 1))})">`;
+        svg += `<path d="${getGearPathD(finiteNumber(m.crankLength, 1) + 10, 14)}" fill="#f59e0b" stroke="#b45309" stroke-width="2" />`;
         svg += `<circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />`;
         svg += `</g>`;
 
@@ -164,44 +167,44 @@ export const generateSVG = (config: GlobalConfig, angle: number): string => {
         if (m.type === '5bar' && aux) {
              const rot = (crankDeg * (m.speed2 ?? (m.gearRatio || 1))) + ((m.phase ?? 0) * 180 / Math.PI);
              const teeth = Math.max(3, Math.round(14 * (m.rockerLength / m.crankLength)));
-             svg += `<g transform="translate(${p2.x}, ${p2.y}) rotate(${rot})">`;
-             svg += `<path d="${getGearPathD(m.rockerLength + 10, teeth)}" fill="#f59e0b" stroke="#b45309" stroke-width="2" />`;
+             svg += `<g transform="translate(${svgNumber(p2.x)}, ${svgNumber(p2.y)}) rotate(${svgNumber(rot)})">`;
+             svg += `<path d="${getGearPathD(finiteNumber(m.rockerLength, 1) + 10, teeth)}" fill="#f59e0b" stroke="#b45309" stroke-width="2" />`;
              svg += `<circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />`;
              svg += `</g>`;
         }
 
         // Arms
-        svg += `<line x1="${p1.x}" y1="${p1.y}" x2="${j1.x}" y2="${j1.y}" stroke="#78350f" stroke-width="4" stroke-linecap="round" />`;
+        svg += `<line x1="${svgNumber(p1.x)}" y1="${svgNumber(p1.y)}" x2="${svgNumber(j1.x)}" y2="${svgNumber(j1.y)}" stroke="#78350f" stroke-width="4" stroke-linecap="round" />`;
 
         if (m.type === '4bar') {
-            svg += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="#cbd5e1" stroke-width="12" stroke-linecap="round" />`;
-            svg += `<line x1="${p2.x}" y1="${p2.y}" x2="${j2.x}" y2="${j2.y}" stroke="#475569" stroke-width="8" stroke-linecap="round" />`;
-            svg += `<path d="M ${j1.x} ${j1.y} L ${j2.x} ${j2.y} L ${effector.x} ${effector.y} Z" fill="${m.color}" fill-opacity="0.2" stroke="${m.color}" stroke-width="1" />`;
-            svg += `<line x1="${j1.x}" y1="${j1.y}" x2="${j2.x}" y2="${j2.y}" stroke="${m.color}" stroke-width="8" stroke-linecap="round" />`;
-            svg += `<circle cx="${p2.x}" cy="${p2.y}" r="8" fill="#94a3b8" stroke="white" stroke-width="2" />`;
+            svg += `<line x1="${svgNumber(p1.x)}" y1="${svgNumber(p1.y)}" x2="${svgNumber(p2.x)}" y2="${svgNumber(p2.y)}" stroke="#cbd5e1" stroke-width="12" stroke-linecap="round" />`;
+            svg += `<line x1="${svgNumber(p2.x)}" y1="${svgNumber(p2.y)}" x2="${svgNumber(j2.x)}" y2="${svgNumber(j2.y)}" stroke="#475569" stroke-width="8" stroke-linecap="round" />`;
+            svg += `<path d="M ${svgNumber(j1.x)} ${svgNumber(j1.y)} L ${svgNumber(j2.x)} ${svgNumber(j2.y)} L ${svgNumber(effector.x)} ${svgNumber(effector.y)} Z" fill="${color}" fill-opacity="0.2" stroke="${color}" stroke-width="1" />`;
+            svg += `<line x1="${svgNumber(j1.x)}" y1="${svgNumber(j1.y)}" x2="${svgNumber(j2.x)}" y2="${svgNumber(j2.y)}" stroke="${color}" stroke-width="8" stroke-linecap="round" />`;
+            svg += `<circle cx="${svgNumber(p2.x)}" cy="${svgNumber(p2.y)}" r="8" fill="#94a3b8" stroke="white" stroke-width="2" />`;
         } 
         else if (m.type === '5bar' && aux) {
-             svg += `<line x1="${p2.x}" y1="${p2.y}" x2="${aux.x}" y2="${aux.y}" stroke="#78350f" stroke-width="4" stroke-linecap="round" />`;
-             svg += `<line x1="${j1.x}" y1="${j1.y}" x2="${effector.x}" y2="${effector.y}" stroke="#475569" stroke-width="6" stroke-linecap="round" />`;
-             svg += `<line x1="${aux.x}" y1="${aux.y}" x2="${j2.x}" y2="${j2.y}" stroke="#475569" stroke-width="6" stroke-linecap="round" />`;
+             svg += `<line x1="${svgNumber(p2.x)}" y1="${svgNumber(p2.y)}" x2="${svgNumber(aux.x)}" y2="${svgNumber(aux.y)}" stroke="#78350f" stroke-width="4" stroke-linecap="round" />`;
+             svg += `<line x1="${svgNumber(j1.x)}" y1="${svgNumber(j1.y)}" x2="${svgNumber(effector.x)}" y2="${svgNumber(effector.y)}" stroke="#475569" stroke-width="6" stroke-linecap="round" />`;
+             svg += `<line x1="${svgNumber(aux.x)}" y1="${svgNumber(aux.y)}" x2="${svgNumber(j2.x)}" y2="${svgNumber(j2.y)}" stroke="#475569" stroke-width="6" stroke-linecap="round" />`;
         }
         else if (m.type === 'piston') {
-             svg += `<path d="M ${j1.x} ${j1.y} L ${j2.x} ${j2.y} L ${effector.x} ${effector.y} Z" fill="${m.color}" fill-opacity="0.2" stroke="${m.color}" stroke-width="1" />`;
-             svg += `<line x1="${j1.x}" y1="${j1.y}" x2="${j2.x}" y2="${j2.y}" stroke="${m.color}" stroke-width="8" stroke-linecap="round" />`;
-             svg += `<rect x="${j2.x - 20}" y="${j2.y - 10}" width="40" height="20" fill="#334155" rx="2" transform="rotate(${m.groundAngle||0} ${j2.x} ${j2.y})" />`;
+             svg += `<path d="M ${svgNumber(j1.x)} ${svgNumber(j1.y)} L ${svgNumber(j2.x)} ${svgNumber(j2.y)} L ${svgNumber(effector.x)} ${svgNumber(effector.y)} Z" fill="${color}" fill-opacity="0.2" stroke="${color}" stroke-width="1" />`;
+             svg += `<line x1="${svgNumber(j1.x)}" y1="${svgNumber(j1.y)}" x2="${svgNumber(j2.x)}" y2="${svgNumber(j2.y)}" stroke="${color}" stroke-width="8" stroke-linecap="round" />`;
+             svg += `<rect x="${svgNumber(j2.x - 20)}" y="${svgNumber(j2.y - 10)}" width="40" height="20" fill="#334155" rx="2" transform="rotate(${svgNumber(m.groundAngle || 0)} ${svgNumber(j2.x)} ${svgNumber(j2.y)})" />`;
         }
-        else if (m.type === 'quick-return') {
-            svg += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="#cbd5e1" stroke-width="8" stroke-linecap="round" />`;
-            svg += `<line x1="${j2.x}" y1="${j2.y}" x2="${effector.x}" y2="${effector.y}" stroke="${m.color}" stroke-width="4" stroke-linecap="round" />`;
-            svg += `<path d="M ${p2.x} ${p2.y} L ${j2.x} ${j2.y} L ${effector.x} ${effector.y} Z" fill="${m.color}" fill-opacity="0.1" />`;
-            svg += `<line x1="${p2.x}" y1="${p2.y}" x2="${j2.x}" y2="${j2.y}" stroke="#475569" stroke-width="10" stroke-linecap="round" />`;
+        else if (m.type === 'quick-return' || m.type === 'cam' || m.type === 'gear' || m.type === 'planetary_gear') {
+            svg += `<line x1="${svgNumber(p1.x)}" y1="${svgNumber(p1.y)}" x2="${svgNumber(p2.x)}" y2="${svgNumber(p2.y)}" stroke="#cbd5e1" stroke-width="8" stroke-linecap="round" />`;
+            svg += `<line x1="${svgNumber(j2.x)}" y1="${svgNumber(j2.y)}" x2="${svgNumber(effector.x)}" y2="${svgNumber(effector.y)}" stroke="${color}" stroke-width="4" stroke-linecap="round" />`;
+            svg += `<path d="M ${svgNumber(p2.x)} ${svgNumber(p2.y)} L ${svgNumber(j2.x)} ${svgNumber(j2.y)} L ${svgNumber(effector.x)} ${svgNumber(effector.y)} Z" fill="${color}" fill-opacity="0.1" />`;
+            svg += `<line x1="${svgNumber(p2.x)}" y1="${svgNumber(p2.y)}" x2="${svgNumber(j2.x)}" y2="${svgNumber(j2.y)}" stroke="#475569" stroke-width="10" stroke-linecap="round" />`;
         }
 
         // Joints
-        svg += `<circle cx="${j1.x}" cy="${j1.y}" r="4" fill="${m.color}" />`;
-        if (aux) svg += `<circle cx="${aux.x}" cy="${aux.y}" r="4" fill="${m.color}" />`;
-        if (j2) svg += `<circle cx="${j2.x}" cy="${j2.y}" r="5" fill="white" stroke="#334155" stroke-width="2" />`;
-        svg += `<circle cx="${effector.x}" cy="${effector.y}" r="6" fill="#ef4444" stroke="white" stroke-width="2" />`;
+        svg += `<circle cx="${svgNumber(j1.x)}" cy="${svgNumber(j1.y)}" r="4" fill="${color}" />`;
+        if (aux) svg += `<circle cx="${svgNumber(aux.x)}" cy="${svgNumber(aux.y)}" r="4" fill="${color}" />`;
+        if (j2) svg += `<circle cx="${svgNumber(j2.x)}" cy="${svgNumber(j2.y)}" r="5" fill="white" stroke="#334155" stroke-width="2" />`;
+        svg += `<circle cx="${svgNumber(effector.x)}" cy="${svgNumber(effector.y)}" r="6" fill="#ef4444" stroke="white" stroke-width="2" />`;
     });
 
     svg += `</g></svg>`;

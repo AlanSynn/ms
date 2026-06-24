@@ -1,9 +1,13 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { GlobalConfig, MechanismConfig, Point, MechanismType } from '../types';
+import { BodyPartLayer, GlobalConfig, MechanismConfig, Point, ProjectState } from '../types';
 import { calculateLinkage, generateCurvePoints } from '../utils/kinematics';
+import { boardGridLines, bodyPartPivotScene, defaultPhysicalKit, pathFromPoints, SCENE_VIEW, sceneBoundsForSheet, sceneToSvg } from '../utils/coordinates';
+import { motionPreviewForProject, pointOnProjectPath } from '../utils/motion';
+import { mechanismWithGeneratedPath } from '../utils/project';
 
 interface CanvasProps {
+    project?: ProjectState;
     config: GlobalConfig;
     setConfig: React.Dispatch<React.SetStateAction<GlobalConfig>>;
     selectedId: string | null;
@@ -17,10 +21,11 @@ interface CanvasProps {
     setAngle: React.Dispatch<React.SetStateAction<number>>;
 }
 
-const INITIAL_OFFSET_X = 400;
-const INITIAL_OFFSET_Y = 300;
-const VB_WIDTH = 800;
-const VB_HEIGHT = 600;
+const VB_WIDTH = SCENE_VIEW.width;
+const VB_HEIGHT = SCENE_VIEW.height;
+const SCENE_ORIGIN = sceneToSvg({ x: 0, y: 0 });
+const INITIAL_OFFSET_X = SCENE_ORIGIN.x;
+const INITIAL_OFFSET_Y = SCENE_ORIGIN.y;
 
 const GearPath = ({ radius, teeth }: { radius: number, teeth: number }) => {
     const hole = radius * 0.2;
@@ -46,7 +51,7 @@ const GearPath = ({ radius, teeth }: { radius: number, teeth: number }) => {
 };
 
 export const Canvas: React.FC<CanvasProps> = ({
-    config, setConfig, selectedId, setSelectedId, isPlaying, showTrace, isDrawMode, userPath, setUserPath, angle, setAngle
+    project, config, setConfig, selectedId, setSelectedId, isPlaying, showTrace, isDrawMode, userPath, setUserPath, angle, setAngle
 }) => {
     const [traces, setTraces] = useState<Record<string, Point[]>>({});
     const svgRef = useRef<SVGSVGElement>(null);
@@ -62,6 +67,22 @@ export const Canvas: React.FC<CanvasProps> = ({
     const [pathDragAction, setPathDragAction] = useState<'move' | 'resize' | null>(null);
     const [pathDragStart, setPathDragStart] = useState<Point | null>(null);
     const [isHoveringPath, setIsHoveringPath] = useState(false);
+
+    const canDragJ2 = (m: MechanismConfig) => ['4bar', 'piston', 'yoke', 'quick-return', '5bar', 'gear', 'planetary_gear'].includes(m.type);
+    const canDragP2 = (m: MechanismConfig) => ['4bar', '5bar', 'piston', 'yoke', 'quick-return', 'cam', 'gear'].includes(m.type);
+    const canDragEffector = (m: MechanismConfig) => !['crank', 'cam'].includes(m.type);
+    const activeMechanisms = config.mechanisms.filter(m => m.visible && m.enabled !== false);
+    const activeMechanismIds = new Set(activeMechanisms.map(m => m.id));
+    const motionPreview = project ? motionPreviewForProject(project, activeMechanisms, angle) : undefined;
+    const animatedParts = motionPreview?.parts ?? {};
+    const groundDragHandle = (m: MechanismConfig, state: ReturnType<typeof calculateLinkage>) => {
+        if (m.type === 'piston' || m.type === 'yoke' || m.type === 'quick-return' || m.type === 'cam') {
+            const rad = (m.groundAngle || 0) * Math.PI / 180;
+            const d = m.type === 'quick-return' ? 120 : 100;
+            return { x: state.p1.x + Math.cos(rad) * d, y: state.p1.y + Math.sin(rad) * d };
+        }
+        return state.p2;
+    };
 
     // Calculate bounding box for userPath
     const getPathBounds = () => {
@@ -81,7 +102,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         if (!isPlaying) {
             // Generate full static traces
             const newTraces: Record<string, Point[]> = {};
-            config.mechanisms.forEach(m => {
+            activeMechanisms.forEach(m => {
                 if (m.type !== 'crank') {
                     newTraces[m.id] = generateCurvePoints(m, 100).points;
                 }
@@ -96,7 +117,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     useEffect(() => {
         if (isPlaying && !isDrawMode && showTrace) {
             // Realtime appending
-            config.mechanisms.forEach(m => {
+            activeMechanisms.forEach(m => {
                 const state = calculateLinkage(m, angle);
                 if (state.isValid && m.type !== 'crank') {
                     setTraces(prev => {
@@ -132,9 +153,13 @@ export const Canvas: React.FC<CanvasProps> = ({
     const updateMechanism = (id: string, updates: Partial<MechanismConfig>) => {
         setConfig(prev => ({
             ...prev,
-            mechanisms: prev.mechanisms.map(m => m.id === id ? { ...m, ...updates } : m)
+            mechanisms: prev.mechanisms.map(m => m.id === id ? mechanismWithGeneratedPath({ ...m, ...updates }) : m)
         }));
     };
+
+    useEffect(() => {
+        if (dragTarget && (!activeMechanisms.some(m => m.id === dragTarget.mechId) || selectedId !== dragTarget.mechId)) setDragTarget(null);
+    }, [config.mechanisms, selectedId, dragTarget]);
 
     const handleWheel = (e: React.WheelEvent) => {
         if (!svgRef.current) return;
@@ -192,12 +217,12 @@ export const Canvas: React.FC<CanvasProps> = ({
             const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 
             // Check all mechanisms (reverse order to grab top-most)
-            for (let i = config.mechanisms.length - 1; i >= 0; i--) {
-                const m = config.mechanisms[i];
+            for (let i = activeMechanisms.length - 1; i >= 0; i--) {
+                const m = activeMechanisms[i];
                 const state = calculateLinkage(m, angle);
 
                 // Check Effector
-                if (m.type !== 'crank' && dist(p, state.effector) < HIT_RADIUS) {
+                if (canDragEffector(m) && dist(p, state.effector) < HIT_RADIUS) {
                     setDragTarget({ mechId: m.id, type: 'Effector' });
                     setSelectedId(m.id);
                     return;
@@ -211,7 +236,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 }
 
                 // Check J2 (Joint/Slider/Intersection)
-                if (m.type !== 'crank' && dist(p, state.j2) < HIT_RADIUS) {
+                if (canDragJ2(m) && dist(p, state.j2) < HIT_RADIUS) {
                     setDragTarget({ mechId: m.id, type: 'J2' });
                     setSelectedId(m.id);
                     return;
@@ -224,18 +249,9 @@ export const Canvas: React.FC<CanvasProps> = ({
                 }
 
                 // Check P2 (Ground / Angle Handle / Secondary Gear)
-                let groundHandle = state.p2;
-                if (m.type === 'piston' || m.type === 'yoke' || m.type === 'quick-return') {
-                    // Calculate visual handle position
-                    const rad = (m.groundAngle || 0) * Math.PI / 180;
-                    const dist = m.type === 'quick-return' ? 120 : 100;
-                    groundHandle = {
-                        x: m.anchorX! + Math.cos(rad) * dist,
-                        y: m.anchorY! + Math.sin(rad) * dist
-                    };
-                }
+                const groundHandle = groundDragHandle(m, state);
 
-                if (dist(p, groundHandle) < HIT_RADIUS) {
+                if (canDragP2(m) && dist(p, groundHandle) < HIT_RADIUS) {
                     setDragTarget({ mechId: m.id, type: 'P2' });
                     setSelectedId(m.id);
                     return;
@@ -287,7 +303,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 const dy = p.y - state.p1.y;
                 const newAngle = toDeg(Math.atan2(dy, dx));
 
-                if (m.type === '4bar' || m.type === '5bar') {
+                if (m.type === '4bar' || m.type === '5bar' || m.type === 'gear') {
                     const newGround = Math.hypot(dx, dy);
                     updateMechanism(m.id, { groundLength: newGround, groundAngle: newAngle });
                 } else {
@@ -321,13 +337,19 @@ export const Canvas: React.FC<CanvasProps> = ({
                     const newCoupler = dist(state.j1, p);
                     const newRod = state.aux ? dist(state.aux, p) : 100;
                     updateMechanism(m.id, { couplerLength: newCoupler, rodLength: newRod });
+                } else if (m.type === 'quick-return' || m.type === 'gear' || m.type === 'planetary_gear') {
+                    updateMechanism(m.id, { rockerLength: dist(state.p2, p) });
                 }
             }
             else if (dragTarget.type === 'Effector') {
-                if (m.type !== 'crank') {
+                if (canDragEffector(m)) {
                     if (m.type === '5bar') {
                         const newExtension = dist(state.j2, p);
                         updateMechanism(m.id, { couplerPointDist: newExtension });
+                    } else if (m.type === 'gear' || m.type === 'planetary_gear') {
+                        const baseAngle = Math.atan2(state.j2.y - state.p2.y, state.j2.x - state.p2.x);
+                        const mouseAngle = Math.atan2(p.y - state.j2.y, p.x - state.j2.x);
+                        updateMechanism(m.id, { couplerPointDist: dist(state.j2, p), couplerPointAngle: toDeg(mouseAngle - baseAngle) });
                     } else {
                         const barAngle = Math.atan2(state.j2.y - state.j1.y, state.j2.x - state.j1.x);
                         const mouseAngle = Math.atan2(p.y - state.j1.y, p.x - state.j1.x);
@@ -408,6 +430,8 @@ export const Canvas: React.FC<CanvasProps> = ({
         >
             <svg
                 ref={svgRef}
+                aria-label="Mechanism design canvas"
+                data-testid="design-canvas"
                 viewBox={`0 0 ${VB_WIDTH} ${VB_HEIGHT}`}
                 className={`w-full h-full ${isPanning ? 'cursor-grabbing' : 'cursor-default'}`}
                 preserveAspectRatio="xMidYMid slice"
@@ -415,19 +439,10 @@ export const Canvas: React.FC<CanvasProps> = ({
                 <g transform={`translate(${INITIAL_OFFSET_X + viewOffset.x}, ${INITIAL_OFFSET_Y + viewOffset.y}) scale(${zoom}, -${zoom})`}>
 
                     {/* Grid */}
-                    <g opacity="0.1">
-                        {Array.from({ length: 41 }).map((_, i) => (
-                            <React.Fragment key={i}>
-                                <line x1="-2000" y1={(i - 20) * 50} x2="2000" y2={(i - 20) * 50} stroke="#000" width="1" />
-                                <line x1={(i - 20) * 50} y1="-2000" x2={(i - 20) * 50} y2="2000" stroke="#000" width="1" />
-                            </React.Fragment>
-                        ))}
-                        <line x1="-2000" y1="0" x2="2000" y2="0" stroke="#000" strokeWidth="2" />
-                        <line x1="0" y1="-2000" x2="0" y2="2000" stroke="#000" strokeWidth="2" />
-                    </g>
+                    <SceneUnderlay project={project} animatedParts={animatedParts} previewSkeleton={motionPreview?.skeleton} />
 
                     {/* RENDER MECHANISMS */}
-                    {config.mechanisms.map(m => {
+                    {activeMechanisms.map(m => {
                         const { p1, p2, j1, j2, aux, effector, isValid } = calculateLinkage(m, angle);
                         const isSelected = m.id === selectedId;
                         const opacity = isSelected ? 1 : 0.6;
@@ -444,14 +459,14 @@ export const Canvas: React.FC<CanvasProps> = ({
                                 {/* Anchor P1 Visualization */}
                                 <g transform={`translate(${p1.x}, ${p1.y})`}>
                                     <g transform={`rotate(${crankDeg * (m.speed1 ?? 1)})`}>
-                                        <g fill={m.type === '5bar' ? "#d97706" : "#f59e0b"} stroke={m.type === '5bar' ? "#78350f" : "#b45309"} strokeWidth="2">
+                                        <g fill="#5a6cff" stroke="#3742c6" strokeWidth="2">
                                             <GearPath radius={m.crankLength + 10} teeth={14} />
                                         </g>
                                         <circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />
                                     </g>
                                     <circle cx="0" cy="0" r="12" fill="transparent" stroke={isSelected ? "white" : "transparent"} strokeWidth="2" strokeDasharray="2 2" className="cursor-move" />
 
-                                    {isSelected && m.type !== 'crank' && (
+                                    {isSelected && (m.type === 'piston' || m.type === 'yoke' || m.type === 'quick-return' || m.type === 'cam') && (
                                         <g transform={`rotate(${m.groundAngle || 0})`}>
                                             <line x1="0" y1="0" x2="100" y2="0" stroke={color} strokeWidth="1" strokeDasharray="4 4" />
                                             <circle cx="100" cy="0" r="6" fill="white" stroke={color} strokeWidth="2" className="cursor-grab" />
@@ -461,14 +476,14 @@ export const Canvas: React.FC<CanvasProps> = ({
 
                                 {(m.type === '4bar' || m.type === 'quick-return') && m.showOutputGear && isValid && (
                                     <g transform={`translate(${p2.x}, ${p2.y}) rotate(${rockerAngleDeg})`}>
-                                        <g fill="#f59e0b" stroke="#b45309" strokeWidth="2">
+                                        <g fill="#5a6cff" stroke="#3742c6" strokeWidth="2">
                                             <GearPath radius={m.outputGearRadius || 40} teeth={12} />
                                         </g>
                                         <circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />
                                     </g>
                                 )}
 
-                                <line x1={p1.x} y1={p1.y} x2={j1.x} y2={j1.y} stroke="#78350f" strokeWidth="4" strokeLinecap="round" />
+                                <line x1={p1.x} y1={p1.y} x2={j1.x} y2={j1.y} stroke="#3742c6" strokeWidth="4" strokeLinecap="round" />
                                 <circle cx={j1.x} cy={j1.y} r={4} fill={color} />
 
                                 {isValid ? (
@@ -487,7 +502,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                                         {m.type === '5bar' && aux && (
                                             <>
                                                 <g transform={`translate(${p2.x}, ${p2.y}) rotate(${(crankDeg * (m.speed2 ?? (m.gearRatio || 1))) + ((m.phase ?? 0) * 180 / Math.PI)})`}>
-                                                    <g fill="#f59e0b" stroke="#b45309" strokeWidth="2">
+                                                    <g fill="#5a6cff" stroke="#3742c6" strokeWidth="2">
                                                         <GearPath
                                                             radius={m.rockerLength + 10}
                                                             teeth={Math.max(3, Math.round(14 * (m.rockerLength / m.crankLength)))}
@@ -495,7 +510,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                                                     </g>
                                                     <circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />
                                                 </g>
-                                                <line x1={p2.x} y1={p2.y} x2={aux.x} y2={aux.y} stroke="#78350f" strokeWidth="4" strokeLinecap="round" />
+                                                <line x1={p2.x} y1={p2.y} x2={aux.x} y2={aux.y} stroke="#3742c6" strokeWidth="4" strokeLinecap="round" />
                                                 <circle cx={aux.x} cy={aux.y} r={4} fill={color} className="cursor-grab" />
 
                                                 {isSelected && (
@@ -507,6 +522,17 @@ export const Canvas: React.FC<CanvasProps> = ({
 
                                                 <circle cx={p2.x} cy={p2.y} r={8} fill="transparent" stroke="#94a3b8" strokeWidth="2" className="cursor-grab" />
                                                 <circle cx={j2.x} cy={j2.y} r={5} fill="white" stroke="#334155" strokeWidth="2" className="cursor-grab" />
+                                            </>
+                                        )}
+
+                                        {(m.type === 'cam' || m.type === 'gear' || m.type === 'planetary_gear') && (
+                                            <>
+                                                {aux && <circle cx={aux.x} cy={aux.y} r={m.rockerLength || 20} fill="none" stroke="#5a6cff" strokeWidth="2" strokeDasharray="6 6" />}
+                                                <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="#cbd5e1" strokeWidth="7" strokeLinecap="round" />
+                                                <line x1={p2.x} y1={p2.y} x2={j2.x} y2={j2.y} stroke={color} strokeWidth="6" strokeLinecap="round" />
+                                                <line x1={j2.x} y1={j2.y} x2={effector.x} y2={effector.y} stroke="#475569" strokeWidth="4" strokeLinecap="round" />
+                                                <circle cx={p2.x} cy={p2.y} r={8} fill="#94a3b8" stroke="white" strokeWidth="2" className={m.type === 'gear' ? 'cursor-grab' : ''} opacity={m.type === 'gear' ? 1 : 0.65} />
+                                                <circle cx={j2.x} cy={j2.y} r={5} fill="white" stroke="#334155" strokeWidth="2" className={canDragJ2(m) ? 'cursor-grab' : ''} opacity={canDragJ2(m) ? 1 : 0.65} />
                                             </>
                                         )}
 
@@ -532,9 +558,9 @@ export const Canvas: React.FC<CanvasProps> = ({
                                                         <g transform={`translate(${j2.x}, ${j2.y}) rotate(${m.groundAngle || 0})`}>
                                                             <rect x="-40" y="-10" width="80" height="20" fill={color} rx="4" />
                                                             <rect x="-15" y={-yokeSlotHalfHeight} width="30" height={yokeSlotHalfHeight * 2} rx="4" fill="none" stroke={color} strokeWidth="4" />
-                                                            <line x1="0" y1={-yokeSlotHalfHeight + 10} x2="0" y2={yokeSlotHalfHeight - 10} stroke="#fef3c7" strokeWidth="14" strokeLinecap="round" />
+                                                            <line x1="0" y1={-yokeSlotHalfHeight + 10} x2="0" y2={yokeSlotHalfHeight - 10} stroke="#dfe3ff" strokeWidth="14" strokeLinecap="round" />
                                                         </g>
-                                                        <circle cx={j1.x} cy={j1.y} r={7} fill="#78350f" />
+                                                        <circle cx={j1.x} cy={j1.y} r={7} fill="#3742c6" />
                                                     </>
                                                 )}
 
@@ -545,14 +571,34 @@ export const Canvas: React.FC<CanvasProps> = ({
                                                         <path d={`M ${p2.x} ${p2.y} L ${j2.x} ${j2.y} L ${effector.x} ${effector.y} Z`} fill={`${color}10`} stroke="none" />
                                                         <line x1={p2.x} y1={p2.y} x2={j2.x} y2={j2.y} stroke="#475569" strokeWidth="10" strokeLinecap="round" />
                                                         <circle cx={p2.x} cy={p2.y} r={8} fill="#94a3b8" stroke="white" strokeWidth="2" />
-                                                        <circle cx={j1.x} cy={j1.y} r={5} fill="white" stroke="#78350f" strokeWidth="2" />
+                                                        <circle cx={j1.x} cy={j1.y} r={5} fill="white" stroke="#3742c6" strokeWidth="2" />
                                                     </>
                                                 )}
                                             </>
                                         )}
 
                                         {m.type !== 'crank' && (
-                                            <circle cx={effector.x} cy={effector.y} r={6 / zoom} fill="#ef4444" stroke="white" strokeWidth={2 / zoom} className="cursor-grab" />
+                                            <circle cx={effector.x} cy={effector.y} r={6 / zoom} fill="#ef4444" stroke="white" strokeWidth={2 / zoom} className={canDragEffector(m) ? 'cursor-grab' : ''} opacity={canDragEffector(m) ? 1 : 0.55} />
+                                        )}
+                                        {project && m.targetPartId && project.parts[m.targetPartId] && (
+                                            <g opacity="0.8">
+                                                {(() => {
+                                                    const desiredOutput = m.targetPathId && project.paths[m.targetPathId]?.enabled && project.paths[m.targetPathId].points.length > 1
+                                                        ? pointOnProjectPath(project.paths[m.targetPathId], angle)
+                                                        : undefined;
+                                                    const targetPart = animatedParts[m.targetPartId!] ?? project.parts[m.targetPartId!];
+                                                    const anchored = m.targetAnchorJointId ? { ...targetPart, anchorJointId: m.targetAnchorJointId } : targetPart;
+                                                    const target = bodyPartPivotScene(anchored, motionPreview?.skeleton ?? project.skeleton);
+                                                    return <>
+                                                        {desiredOutput && <>
+                                                            <line x1={desiredOutput.x} y1={desiredOutput.y} x2={effector.x} y2={effector.y} stroke="#f97316" strokeWidth={2 / zoom} strokeDasharray={`${6 / zoom},${5 / zoom}`} opacity="0.8" />
+                                                            <circle cx={desiredOutput.x} cy={desiredOutput.y} r={4 / zoom} fill="white" stroke="#f97316" strokeWidth={2 / zoom} />
+                                                        </>}
+                                                        <line x1={effector.x} y1={effector.y} x2={target.x} y2={target.y} stroke="#ef4444" strokeWidth={2 / zoom} strokeDasharray={`${6 / zoom},${5 / zoom}`} />
+                                                        <circle cx={target.x} cy={target.y} r={5 / zoom} fill="#5a6cff" stroke="white" strokeWidth={2 / zoom} />
+                                                    </>;
+                                                })()}
+                                            </g>
                                         )}
                                     </>
                                 ) : (
@@ -568,7 +614,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                         );
                     })}
 
-                    {showTrace && Object.entries(traces).map(([id, trace]: [string, Point[]]) => (
+                    {showTrace && Object.entries(traces).filter(([id]) => activeMechanismIds.has(id)).map(([id, trace]: [string, Point[]]) => (
                         trace.length > 1 && (
                             <path
                                 key={id}
@@ -595,7 +641,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                                 <polyline
                                     points={userPath.map(p => `${p.x},${p.y}`).join(' ')}
                                     fill="none"
-                                    stroke="#6366f1"
+                                    stroke="#5a6cff"
                                     strokeWidth={4 / zoom}
                                     strokeDasharray="8,6"
                                     strokeLinecap="round"
@@ -705,4 +751,48 @@ export const Canvas: React.FC<CanvasProps> = ({
             </svg>
         </div>
     );
+};
+
+const SceneUnderlay = ({ project, animatedParts = {}, previewSkeleton }: { project?: ProjectState; animatedParts?: Record<string, BodyPartLayer>; previewSkeleton?: ProjectState['skeleton'] }) => {
+    const kit = project?.settings.physicalKit ?? defaultPhysicalKit();
+    const skeleton = previewSkeleton ?? project?.skeleton;
+    const sheet = sceneBoundsForSheet(kit);
+    const lines = boardGridLines(kit).map(line => <line key={line.key} x1={line.a.x} y1={line.a.y} x2={line.b.x} y2={line.b.y} stroke="#e5e8f0" strokeWidth="1" />);
+    return <g>
+        <rect x={sheet.x} y={sheet.y} width={sheet.width} height={sheet.height} rx="18" fill="#ffffff" stroke="#d6dbe8" strokeWidth="1.5" />
+        <g opacity="0.28">{lines}</g>
+        <g transform="scale(1,-1)">
+            <text x={sheet.x + 16} y={-(sheet.y + sheet.height - 28)} className="fill-slate-400 text-[12px] font-bold" data-testid="scene-grid-label">Letter sheet · {kit.gridPitchMm / 10}cm grid</text>
+        </g>
+        <line x1={sheet.x} y1="0" x2={sheet.x + sheet.width} y2="0" stroke="#d6dbe8" strokeWidth="1" opacity="0.25" />
+        <line x1="0" y1={sheet.y} x2="0" y2={sheet.y + sheet.height} stroke="#d6dbe8" strokeWidth="1" opacity="0.25" />
+        {project?.partOrder.map(id => animatedParts[id] ?? project.parts[id]).filter(Boolean).map(part => <React.Fragment key={part.id}><WorldPart part={part} selected={project.selectedPartId === part.id} /></React.Fragment>)}
+        {skeleton?.bones.map(([a, b]) => {
+            const ja = skeleton?.joints[a];
+            const jb = skeleton?.joints[b];
+            return ja && jb ? <line key={`${a}-${b}`} x1={ja.position.x} y1={ja.position.y} x2={jb.position.x} y2={jb.position.y} stroke="#334155" strokeWidth="2" opacity="0.35" /> : null;
+        })}
+        {Object.values(project?.paths ?? {}).filter(p => p.visible).map(path => {
+            const d = rawScenePath(path.points, path.closed);
+            return d ? <path key={path.id} d={d} fill="none" stroke={path.enabled ? '#5a6cff' : '#94a3b8'} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" opacity="0.75" /> : null;
+        })}
+    </g>;
+};
+
+const WorldPart = ({ part, selected }: { part: BodyPartLayer; selected: boolean }) => {
+    if (!part.visible) return null;
+    const w = part.bounds.width * part.transform.scale;
+    const h = part.bounds.height * part.transform.scale;
+    return <g data-testid={`design-part-${part.id}`} transform={`translate(${part.transform.x} ${part.transform.y}) rotate(${part.transform.rotation})`} opacity={part.opacity}>
+        <g transform="scale(1,-1)">
+            {part.textureUrl ? <image href={part.textureUrl} x={-w / 2} y={-h / 2} width={w} height={h} preserveAspectRatio="xMidYMid meet" opacity="0.58" /> : <rect x={-w / 2} y={-h / 2} width={w} height={h} rx="20" fill={part.fillColor} opacity="0.42" />}
+            <rect x={-w / 2} y={-h / 2} width={w} height={h} rx="20" fill="none" stroke={selected ? '#5a6cff' : part.fillColor} strokeWidth={selected ? 4 : 1.5} strokeDasharray={selected ? undefined : '5 5'} />
+        </g>
+        {part.localPivotOffset && <circle cx={part.localPivotOffset.x * part.transform.scale} cy={part.localPivotOffset.y * part.transform.scale} r="5" fill="#5a6cff" stroke="white" strokeWidth="2" />}
+    </g>;
+};
+
+const rawScenePath = (points: Point[], close = false) => {
+    if (!points.length) return '';
+    return `M ${points.map(p => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' L ')}${close ? ' Z' : ''}`;
 };

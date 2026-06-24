@@ -1,0 +1,223 @@
+import { FabricationIssue, FabricationPackage, FabricationRecipe, MechanismConfig, ProjectState } from '../types';
+import { calculateLinkage, generateCurvePoints } from './kinematics';
+import { boardToScene, pathFromPoints, SCENE_PX_PER_MM, sceneToBoardRaw, sceneToSvg, sceneBoundsForSheet } from './coordinates';
+import { mechanismRequiredParts } from './project';
+import { mechanismBindingWarnings } from './motion';
+
+export const sampleFeasibleRange = (mechanism: MechanismConfig, samples = 96) => {
+    let valid = 0;
+    const validSamples: boolean[] = [];
+    for (let i = 0; i <= samples; i++) {
+        const angle = (i / samples) * Math.PI * 2;
+        validSamples[i] = calculateLinkage(mechanism, angle).isValid;
+        if (validSamples[i]) valid++;
+    }
+    const intervals: Array<{ startDeg: number; endDeg: number }> = [];
+    let start: number | null = null;
+    validSamples.forEach((ok, i) => {
+        if (ok && start === null) start = i;
+        if ((!ok || i === samples) && start !== null) {
+            const end = ok && i === samples ? i : i - 1;
+            intervals.push({ startDeg: Math.round(start * 360 / samples), endDeg: Math.round(end * 360 / samples) });
+            start = null;
+        }
+    });
+    const intervalText = intervals.map(i => `${i.startDeg}°–${i.endDeg}°`).join(', ');
+    return {
+        percentValid: valid / (samples + 1),
+        startDeg: intervals[0]?.startDeg ?? 0,
+        endDeg: intervals.at(-1)?.endDeg ?? 0,
+        intervals,
+        warning: valid === samples + 1 ? null : valid === 0 ? 'No valid sampled motion' : `Partial motion ${Math.round((valid / (samples + 1)) * 100)}% (${intervalText})`
+    };
+};
+
+export const validateForFabrication = (project: ProjectState) => {
+    const warnings: string[] = [];
+    const errors: string[] = [];
+    const issues: FabricationIssue[] = [];
+    const add = (severity: FabricationIssue['severity'], message: string, extra: Partial<FabricationIssue> = {}) => {
+        issues.push({ severity, message, recoveryStage: severity === 'error' ? 'design' : 'blueprint', recoveryAction: 'Review item', ...extra });
+        (severity === 'error' ? errors : warnings).push(message);
+    };
+    const sheet = sceneBoundsForSheet(project.settings.physicalKit);
+    const insideSheet = (p: { x: number; y: number }) => p.x >= sheet.x && p.x <= sheet.x + sheet.width && p.y >= sheet.y && p.y <= sheet.y + sheet.height;
+    if (!project.partOrder.length) add('error', 'No character in scene.', { recoveryStage: 'character', recoveryAction: 'Load a character package' });
+    const activeMechanisms = project.mechanisms.filter(m => m.visible && m.enabled !== false);
+    if (!activeMechanisms.length) add('error', 'No enabled mechanism to export.', { recoveryStage: 'design', recoveryAction: 'Enable or add a mechanism' });
+    const bindingWarnings = mechanismBindingWarnings(project, activeMechanisms);
+    project.partOrder.forEach(partId => {
+        const part = project.parts[partId];
+        if (!part?.visible) return;
+        const corners = [
+            { x: part.transform.x + part.bounds.x * part.transform.scale, y: part.transform.y + part.bounds.y * part.transform.scale },
+            { x: part.transform.x + (part.bounds.x + part.bounds.width) * part.transform.scale, y: part.transform.y + part.bounds.y * part.transform.scale },
+            { x: part.transform.x + part.bounds.x * part.transform.scale, y: part.transform.y + (part.bounds.y + part.bounds.height) * part.transform.scale },
+            { x: part.transform.x + (part.bounds.x + part.bounds.width) * part.transform.scale, y: part.transform.y + (part.bounds.y + part.bounds.height) * part.transform.scale }
+        ];
+        if (corners.some(p => !insideSheet(p))) add('warning', `${part.id}: visible part extends outside sheet bounds.`, { partId, recoveryStage: 'path', recoveryAction: 'Move part inside sheet' });
+    });
+    activeMechanisms.forEach(m => {
+        (bindingWarnings[m.id] ?? []).forEach(message => add('error', `${m.id}: ${message}`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Rebind mechanism target' }));
+        if (!m.id) add('error', 'Mechanism missing per-instance id.', { recoveryStage: 'design', recoveryAction: 'Select or recreate mechanism' });
+        if (!m.targetPartId || !m.targetPathId) add('error', `${m.id}: choose a target part and path before blueprint export.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Choose target part and path' });
+        if (m.targetPartId && !project.parts[m.targetPartId]) add('error', `${m.id}: target part ${m.targetPartId} is missing.`, { mechanismId: m.id, partId: m.targetPartId, recoveryStage: 'design', recoveryAction: 'Choose an existing target part' });
+        if (m.targetPathId) {
+            const path = project.paths[m.targetPathId];
+            if (!path) add('error', `${m.id}: target path ${m.targetPathId} is missing.`, { mechanismId: m.id, pathId: m.targetPathId, recoveryStage: 'path', recoveryAction: 'Create or select a valid path' });
+            else if (m.targetPartId && path.partId !== m.targetPartId) add('error', `${m.id}: target path ${m.targetPathId} belongs to ${path.partId}, not ${m.targetPartId}.`, { mechanismId: m.id, pathId: m.targetPathId, partId: m.targetPartId, recoveryStage: 'design', recoveryAction: 'Rebind target path' });
+        }
+        if (![m.crankLength, m.couplerLength, m.groundLength, m.rockerLength].every(Number.isFinite)) add('error', `${m.id}: non-finite physical dimension.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Fix mechanism dimensions' });
+        const range = sampleFeasibleRange(m);
+        if (range.warning?.startsWith('No valid')) add('error', `${m.id}: ${range.warning}.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Adjust mechanism parameters' });
+        else if (range.warning) add('warning', `${m.id}: ${range.warning}`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Review partial motion' });
+        if (!Number.isFinite(m.anchorX) || !Number.isFinite(m.anchorY)) {
+            add('error', `${m.id}: missing board coordinate anchor.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Drag mechanism onto board grid' });
+            return;
+        }
+        const board = sceneToBoardRaw({ x: m.anchorX!, y: m.anchorY! }, project.settings.physicalKit);
+        const boardScene = board.valid ? boardToScene(board.col, board.row, project.settings.physicalKit) : null;
+        if (!board.valid) add('error', `${m.id}: anchor outside board at ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move anchor onto board' });
+        else if (boardScene && Math.hypot(boardScene.x - m.anchorX!, boardScene.y - m.anchorY!) > 0.5) add('error', `${m.id}: anchor off grid at ${board.label}; snap to a board hole before export.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Snap anchor to board hole' });
+        else if (board.col <= 0 || board.row <= 0 || board.col >= project.settings.physicalKit.boardCells - 1 || board.row >= project.settings.physicalKit.boardCells - 1) {
+            add('warning', `${m.id}: anchor near board edge at ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move anchor inward if needed' });
+        }
+        const path = generateCurvePoints(m, 72).points;
+        if (path.some(p => !insideSheet(p))) add('error', `${m.id}: generated mechanism path leaves sheet bounds.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Resize or move mechanism' });
+    });
+    return { warnings, errors, issues };
+};
+
+const createRecipe = (project: ProjectState, mechanism: MechanismConfig): FabricationRecipe => {
+    if (!Number.isFinite(mechanism.anchorX) || !Number.isFinite(mechanism.anchorY)) throw new Error(`${mechanism.id}: missing board coordinate anchor.`);
+    const board = sceneToBoardRaw({ x: mechanism.anchorX!, y: mechanism.anchorY! }, project.settings.physicalKit);
+    const boardScene = board.valid ? boardToScene(board.col, board.row, project.settings.physicalKit) : { x: mechanism.anchorX!, y: mechanism.anchorY! };
+    const targetPart = mechanism.targetPartId ? project.parts[mechanism.targetPartId] : undefined;
+    const range = sampleFeasibleRange(mechanism);
+    const warnings = [
+        ...(range.warning ? [range.warning] : []),
+        ...((targetPart && !targetPart.visible) ? ['Target part hidden'] : [])
+    ];
+    return {
+        mechanismId: mechanism.id,
+        type: mechanism.type,
+        targetPartId: mechanism.targetPartId,
+        targetPathId: mechanism.targetPathId,
+        boardCoordinate: board.label,
+        board,
+        sceneAnchor: { x: mechanism.anchorX!, y: mechanism.anchorY! },
+        offsetFromBoardMm: { x: (mechanism.anchorX! - boardScene.x) / SCENE_PX_PER_MM, y: (mechanism.anchorY! - boardScene.y) / SCENE_PX_PER_MM },
+        requiredParts: mechanism.fabricationMetadata?.requiredParts ?? mechanismRequiredParts(mechanism),
+        steps: [
+            `Place ${mechanism.id} main axle at ${board.label}.`,
+            `Install ${mechanism.type} links with crank ${mechanism.crankLength.toFixed(0)} and coupler ${mechanism.couplerLength.toFixed(0)} scene units.`,
+            targetPart ? `Connect output to ${targetPart.name}.` : 'Connect output to selected character part or leave as standalone preview.',
+            warnings.length ? `Resolve warning before cutting: ${warnings.join('; ')}` : 'Run preview once, then cut and assemble.'
+        ],
+        warnings
+    };
+};
+
+const makeSvg = (project: ProjectState, recipes: FabricationRecipe[]) => {
+    const kit = project.settings.physicalKit;
+    const bounds = sceneBoundsForSheet(kit);
+    const esc = (value: unknown) => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[ch] ?? ch));
+    const color = (value: string | undefined) => /^#[0-9a-fA-F]{3,8}$/.test(value ?? '') ? value : '#64748b';
+    let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 680" width="900" height="680">`;
+    svg += `<metadata>${esc(JSON.stringify({ project: project.metadata.name, profile: kit.profileKey, gridPitchMm: kit.gridPitchMm, mechanisms: recipes.map(r => r.mechanismId) }))}</metadata>`;
+    svg += `<rect width="900" height="680" fill="#f8fafc"/>`;
+    const sheet = { x: 450 + bounds.x, y: 340 - bounds.y - bounds.height, width: bounds.width, height: bounds.height };
+    svg += `<rect x="${sheet.x}" y="${sheet.y}" width="${sheet.width}" height="${sheet.height}" fill="#fff" stroke="#0f172a" stroke-width="1.5"/>`;
+    for (let c = 0; c < kit.boardCells; c++) {
+        for (let r = 0; r < kit.boardCells; r++) {
+            const recipe = recipes.find(x => x.board.valid !== false && x.board.col === c && x.board.row === r);
+            const { x, y } = sceneToSvg(boardToScene(c, r, kit));
+            svg += `<circle cx="${x}" cy="${y}" r="${recipe ? 5 : 2}" fill="${recipe ? '#ef4444' : '#cbd5e1'}"/>`;
+            if (recipe) svg += `<text x="${x + 8}" y="${y - 8}" font-size="12" font-family="Inter,Arial" fill="#0f172a">${esc(recipe.mechanismId)} ${esc(recipe.boardCoordinate)}</text>`;
+        }
+    }
+    project.partOrder.forEach(partId => {
+        const part = project.parts[partId];
+        if (!part?.visible) return;
+        const p = sceneToSvg(part.transform);
+        const w = part.bounds.width * part.transform.scale;
+        const h = part.bounds.height * part.transform.scale;
+        svg += `<g transform="translate(${p.x} ${p.y}) rotate(${-(Number(part.transform.rotation) || 0)})"><rect x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" rx="12" fill="${color(part.fillColor)}" opacity="0.22" stroke="${color(part.fillColor)}"/></g>`;
+    });
+    project.mechanisms.filter(m => m.visible && m.enabled !== false).forEach(m => {
+        const points = generateCurvePoints(m, 72).points;
+        if (points.length > 1) svg += `<path d="${pathFromPoints(points)}" fill="none" stroke="${color(m.color)}" stroke-width="2" opacity="0.8"/>`;
+    });
+    svg += `</svg>`;
+    return svg;
+};
+
+const makeAssemblyGuideHtml = (project: ProjectState, recipes: FabricationRecipe[], warnings: string[]) => {
+    const esc = (value: unknown) => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] ?? ch));
+    return `<!doctype html><html><meta charset="utf-8"><title>${esc(project.metadata.name)} assembly</title><body><h1>${esc(project.metadata.name)} assembly guide</h1><p>Profile ${esc(project.settings.physicalKit.profileKey)} · ${project.settings.physicalKit.gridPitchMm}mm grid.</p>${warnings.map(w => `<p><strong>Warning:</strong> ${esc(w)}</p>`).join('')}<ol>${recipes.flatMap(r => r.steps.map(step => `<li><strong>${esc(r.mechanismId)}</strong> ${esc(step)}</li>`)).join('')}</ol></body></html>`;
+};
+
+const makeSimplePdf = (title: string, lines: string[]) => {
+    const safe = (s: string) => s.replace(/[()\\]/g, '\\$&').slice(0, 96);
+    const text = [title, ...lines].slice(0, 46);
+    const content = `BT /F1 14 Tf 50 760 Td ${text.map((line, i) => `${i ? '0 -16 Td ' : ''}(${safe(line)}) Tj`).join(' ')} ET`;
+    const objects = [
+        '1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj',
+        '2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj',
+        '3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj',
+        '4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj',
+        `5 0 obj << /Length ${content.length} >> stream\n${content}\nendstream endobj`
+    ];
+    let pdf = '%PDF-1.4\n';
+    const offsets = [0];
+    objects.forEach(obj => { offsets.push(pdf.length); pdf += `${obj}\n`; });
+    const xref = pdf.length;
+    pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map(n => String(n).padStart(10, '0') + ' 00000 n ').join('\n')}\n`;
+    pdf += `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+    return pdf;
+};
+
+export const createFabricationPackage = (project: ProjectState): FabricationPackage => {
+    const validation = validateForFabrication(project);
+    if (validation.errors.length) throw new Error(validation.errors.join('\n'));
+    const recipes = project.mechanisms.filter(m => m.visible && m.enabled !== false).map(m => createRecipe(project, m));
+    const cutList = Array.from(
+        recipes.flatMap(r => r.requiredParts).reduce((map, item) => {
+            map.set(item.name, (map.get(item.name) ?? 0) + item.quantity);
+            return map;
+        }, new Map<string, number>())
+    ).map(([name, quantity]) => ({ name, quantity }));
+
+    const metadata = {
+        projectId: project.metadata.id,
+        projectName: project.metadata.name,
+        createdAt: new Date().toISOString(),
+        profile: project.settings.physicalKit,
+        validationIssues: validation.issues,
+        sceneSnapshot: { metadata: project.metadata, paths: project.paths, mechanisms: project.mechanisms },
+        recipes: recipes.map(r => ({ mechanismId: r.mechanismId, type: r.type, targetPartId: r.targetPartId, targetPathId: r.targetPathId, board: r.board, sceneAnchor: r.sceneAnchor, requiredParts: r.requiredParts }))
+    };
+    const createdAt = metadata.createdAt;
+    return {
+        id: `fab-${Date.now().toString(36)}`,
+        createdAt,
+        projectName: project.metadata.name,
+        sceneSnapshot: {
+            metadata: project.metadata,
+            parts: project.parts,
+            partOrder: project.partOrder,
+            skeleton: project.skeleton,
+            paths: project.paths,
+            mechanisms: project.mechanisms,
+            settings: project.settings
+        },
+        recipes,
+        cutList,
+        warnings: validation.warnings,
+        validationIssues: validation.issues,
+        svg: makeSvg(project, recipes),
+        assemblyGuideHtml: makeAssemblyGuideHtml(project, recipes, validation.warnings),
+        assemblyGuidePdf: makeSimplePdf(`${project.metadata.name} assembly`, recipes.flatMap(r => [`${r.mechanismId} at ${r.boardCoordinate}`, ...r.steps])),
+        metadataJson: JSON.stringify(metadata, null, 2)
+    };
+};

@@ -1,7 +1,18 @@
 
-import { Point, MechanismConfig, JointState } from '../types';
+import { Point, MechanismConfig, JointState, AppSettings } from '../types';
 
 const toRad = (deg: number) => (deg * Math.PI) / 180;
+
+export const animationDeltaRadians = (
+    dtMs: number,
+    durationMs: number,
+    speed = 1,
+    timingProfile: AppSettings['timingProfile'] = 'realtime'
+) => {
+    const profileRate = timingProfile === 'slow' ? 0.5 : timingProfile === 'presentation' ? 0.75 : 1;
+    const periodMs = Math.max(300, durationMs) / Math.max(0.01, speed * profileRate);
+    return (Math.max(0, dtMs) / periodMs) * Math.PI * 2;
+};
 
 /**
  * Calculates the intersection of two circles with safety epsilon. 
@@ -56,6 +67,66 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
     // --- BASIC CRANK ---
     if (config.type === 'crank') {
         return { p1, p2: p1, j1, j2: j1, effector: j1, isValid: true };
+    }
+
+    // --- CAM FOLLOWER ---
+    else if (config.type === 'cam') {
+        const trackAngle = toRad(config.groundAngle ?? 90);
+        const lift = Math.max(1, config.rockerLength || config.crankLength);
+        const radius = Math.max(1, config.crankLength);
+        const rise = (1 - Math.cos(angle1)) * 0.5 * lift;
+        const base = config.sliderOffset || 0;
+        const p2: Point = {
+            x: p1.x + Math.cos(trackAngle) * (base + rise),
+            y: p1.y + Math.sin(trackAngle) * (base + rise)
+        };
+        const camPoint: Point = {
+            x: p1.x + radius * (1 + 0.18 * Math.sin(angle1 * 2)) * Math.cos(angle1),
+            y: p1.y + radius * (1 + 0.18 * Math.sin(angle1 * 2)) * Math.sin(angle1)
+        };
+        return { p1, p2, j1: camPoint, j2: p2, effector: p2, isValid: true };
+    }
+
+    // --- SIMPLE GEAR OUTPUT ---
+    else if (config.type === 'gear') {
+        const gAngle = toRad(config.groundAngle ?? 0);
+        const p2: Point = {
+            x: p1.x + config.groundLength * Math.cos(gAngle),
+            y: p1.y + config.groundLength * Math.sin(gAngle)
+        };
+        const ratio = config.gearRatio ?? config.speed2 ?? -1;
+        const outAngle = -angle1 * ratio + (config.phase ?? 0);
+        const j2: Point = {
+            x: p2.x + config.rockerLength * Math.cos(outAngle),
+            y: p2.y + config.rockerLength * Math.sin(outAngle)
+        };
+        const effector: Point = {
+            x: j2.x + config.couplerPointDist * Math.cos(outAngle + toRad(config.couplerPointAngle)),
+            y: j2.y + config.couplerPointDist * Math.sin(outAngle + toRad(config.couplerPointAngle))
+        };
+        return { p1, p2, j1, j2, effector, isValid: true };
+    }
+
+    // --- PLANETARY GEAR / EPITROCHOID OUTPUT ---
+    else if (config.type === 'planetary_gear') {
+        const carrier = Math.max(1, config.groundLength || 90);
+        const planet = Math.max(1, config.rockerLength || 36);
+        const arm = config.couplerPointDist || 65;
+        const ratio = config.gearRatio ?? config.speed2 ?? 3;
+        const center: Point = {
+            x: p1.x + carrier * Math.cos(angle1),
+            y: p1.y + carrier * Math.sin(angle1)
+        };
+        const spin = -angle1 * ratio + (config.phase ?? 0);
+        const j2: Point = {
+            x: center.x + planet * Math.cos(spin),
+            y: center.y + planet * Math.sin(spin)
+        };
+        const effector: Point = {
+            x: center.x + arm * Math.cos(spin + toRad(config.couplerPointAngle)),
+            y: center.y + arm * Math.sin(spin + toRad(config.couplerPointAngle))
+        };
+        return { p1, p2: center, j1, j2, aux: center, effector, isValid: true };
     }
 
     // --- 4-BAR LINKAGE ---
@@ -236,7 +307,7 @@ export const generateCurvePoints = (config: MechanismConfig, resolution: number 
     
     // For 5-bar, use more loops to ensure closure for complex ratios
     let loops = 1;
-    if (config.type === '5bar') loops = 8;
+    if (config.type === '5bar' || config.type === 'planetary_gear') loops = 8;
 
     const res = resolution * loops;
 

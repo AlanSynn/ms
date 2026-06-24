@@ -1,0 +1,18 @@
+{
+  "parts": {
+    "right_arm": {
+      "name": "Right arm replacement",
+      "texture_path": "body.png",
+      "anchor_joint_id": "right_shoulder",
+      "roi": [50, 30, 60, 150],
+      "z_index": 0,
+      "local_pivot_offset": [30, 18],
+      "original_svg_path": "source/right_arm.svg",
+      "enhanced_svg_path": "enhanced/right_arm.svg",
+      "fill_color": "#38bdf8"
+    }
+  },
+  "joint_map": {
+    "right_arm": "right_shoulder"
+  }
+}

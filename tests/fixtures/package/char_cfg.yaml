@@ -1,0 +1,8 @@
+{
+  "width": 160,
+  "height": 220,
+  "joints": {
+    "root": { "id": "root", "name": "root", "loc": [80, 120], "parent": null, "bend_direction": 1 },
+    "hand": { "id": "hand", "name": "hand", "loc": [112, 78], "parent": "root", "bend_direction": 1 }
+  }
+}

@@ -26,8 +26,10 @@ dist-ssr
 # Tauri build artifacts (can be regenerated)
 src-tauri/target/
 
-# Generated icons (can be regenerated with tauri icon)
-src-tauri/icons/
+# Required bundle icons are source assets; keep generated extras ignored.
+src-tauri/icons/*
+!src-tauri/icons/icon.png
+!src-tauri/icons/icon.ico
 
 # Generated Tauri schemas
 src-tauri/gen/
@@ -37,3 +39,11 @@ exe build/
 
 # Temporary build files
 app-icon.png
+
+test-results/
+playwright-report/
+
+# Local agent/runtime state
+.omx/
+.agents/
+skills-lock.json

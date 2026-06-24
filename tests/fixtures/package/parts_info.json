@@ -1,0 +1,18 @@
+{
+  "parts": {
+    "body": {
+      "name": "Fixture body",
+      "texture_path": "body.png",
+      "anchor_joint_id": "root",
+      "roi": [30, 20, 100, 170],
+      "z_index": 0,
+      "local_pivot_offset": [50, 85],
+      "original_svg_path": "source/body.svg",
+      "enhanced_svg_path": "enhanced/body.svg",
+      "fill_color": "#64748b"
+    }
+  },
+  "joint_map": {
+    "body": "root"
+  }
+}
