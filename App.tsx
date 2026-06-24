@@ -6,6 +6,7 @@ import {
     BodyPartLayer,
     CanvasViewport,
     CharacterPackageArtifact,
+    FabricationRecipe,
     FoundryExportPackage,
     GlobalConfig,
     MechanismConfig,
@@ -25,6 +26,7 @@ import {
     downloadText,
     handoffGate,
     loadProjectSnapshot,
+    mechanismRequiredParts,
     mechanismWithGeneratedPath,
     projectSelfCheck,
     serializeProject,
@@ -33,7 +35,7 @@ import {
 } from './utils/project';
 import { processImageWithWebOnnx } from './utils/webOnnx';
 import { createFabricationPackage, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
-import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
+import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToBoardRaw, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
 import { mechanismBindingWarnings, motionAnchorJointIds, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT, normalizeCanvasViewport } from './utils/viewport';
@@ -536,9 +538,10 @@ const App: React.FC = () => {
                             setStage('design');
                         }} />}
                         {stage === 'design' && <MechanismDesign project={project} selectedMechanism={selectedMechanism} mechanismConfig={mechanismConfig} setMechanismConfig={setMechanismConfig} updateMechanism={updateMechanism} dispatch={dispatch} isPlaying={isPlaying} setIsPlaying={setIsPlaying} showTrace={showTrace} setShowTrace={setShowTrace} angle={angle} setAngle={setAngle} onOptimize={optimizeSelectedMechanism} onRecommendations={() => setShowRecommendations(true)} optimizerBusy={optimizerBusy} exportSvg={exportMechanismSvg} exportDxf={exportMechanismDxf} viewport={canvasViewport} setViewport={setCanvasViewport} />}
-                        {stage === 'blueprint' && <BlueprintExport project={project} dispatch={dispatch} goStage={goStage} />}
+                        {stage === 'blueprint' && <BlueprintExport project={project} config={mechanismConfig} setConfig={setMechanismConfig} dispatch={dispatch} goStage={goStage} isPlaying={isPlaying} angle={angle} setAngle={setAngle} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {stage === 'options' && <Options project={project} dispatch={dispatch} />}
                     </div>
+                    <WorkflowStatusStrip stage={stage} project={project} selectedPart={selectedPart} selectedPath={selectedPath} />
                     <footer className="status-bar" data-testid="status-bar">{commandStatus} · parts:{project.partOrder.length} · paths:{Object.keys(project.paths).length} · mechs:{project.mechanisms.length} · zoom {Math.round(canvasViewport.zoom * 100)}%</footer>
                 </section>
             </div>
@@ -616,6 +619,39 @@ const CanvasZoomToolbar = ({ viewport, setViewport }: { viewport: CanvasViewport
         <span data-testid="canvas-zoom-readout">{Math.round(viewport.zoom * 100)}%</span>
         <button type="button" aria-label="Zoom in" onClick={() => zoomBy(1.2)}>+</button>
         <button type="button" aria-label="Fit view" onClick={reset}>Fit</button>
+    </div>;
+};
+
+const WorkflowStatusStrip = ({ stage, project, selectedPart, selectedPath }: { stage: AppStage; project: ProjectState; selectedPart?: BodyPartLayer; selectedPath?: ProjectMotionPath }) => {
+    const validation = validateForFabrication(project);
+    const enabledMechanisms = project.mechanisms.filter(m => m.visible && m.enabled !== false);
+    const stageLabel = STAGES.find(item => item.id === stage)?.label ?? stage;
+    let blocker = 'No blocker';
+    let nextAction = 'Keep going';
+    if (!project.partOrder.length) {
+        blocker = 'No character loaded';
+        nextAction = 'Open a template, load a package, or create from image.';
+    } else if (stage === 'path') {
+        blocker = selectedPart?.locked ? `${selectedPart.name} is locked` : (selectedPath && selectedPath.points.length >= 3 ? 'No blocker' : 'Need at least 3 path points');
+        nextAction = selectedPath && selectedPath.points.length >= 3 ? 'Open Foundry or Design to attach a mechanism.' : 'Press Draw free path and click a few motion points.';
+    } else if (stage === 'foundry') {
+        blocker = selectedPath && selectedPath.points.length >= 3 ? 'No blocker' : 'Path is not ready';
+        nextAction = selectedPath && selectedPath.points.length >= 3 ? 'Choose a mechanism and Add to Mechanism Tab.' : 'Return to Path Editor and draw a path.';
+    } else if (stage === 'design') {
+        blocker = enabledMechanisms.length ? 'No blocker' : 'No enabled mechanism';
+        nextAction = enabledMechanisms.length ? 'Review target part/path/anchor, then Blueprint Export.' : 'Use Get recommendations or add from Foundry.';
+    } else if (stage === 'blueprint') {
+        blocker = validation.errors[0] ?? validation.warnings[0] ?? 'No blocker';
+        nextAction = validation.errors.length ? 'Use the recovery action or return to Mechanism Design.' : 'Generate package, then download the guide and cut sheet.';
+    } else if (stage === 'options') {
+        nextAction = 'Tune settings, then return to the current workflow stage.';
+    } else {
+        nextAction = 'Choose a template or browser ONNX capture.';
+    }
+    return <div className="workflow-status-strip" data-testid="workflow-status-strip">
+        <span><strong>Step</strong> {stageLabel}</span>
+        <span><strong>Blocker</strong> {blocker}</span>
+        <span><strong>Next</strong> {nextAction}</span>
     </div>;
 };
 
@@ -1551,7 +1587,43 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
 </div>;
 };
 
-const BlueprintExport = ({ project, dispatch, goStage }: { project: ProjectState; dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void; goStage: (stage: AppStage) => void }) => {
+const pendingRecipeForMechanism = (project: ProjectState, mechanism: MechanismConfig): FabricationRecipe => {
+    const board = sceneToBoardRaw({ x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 }, project.settings.physicalKit);
+    const boardScene = board.valid ? boardToScene(board.col, board.row, project.settings.physicalKit) : { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 };
+    const targetPart = mechanism.targetPartId ? project.parts[mechanism.targetPartId] : undefined;
+    const targetPath = mechanism.targetPathId ? project.paths[mechanism.targetPathId] : undefined;
+    const targetAnchorJointId = preferredMotionJointId(project, mechanism.targetPartId, mechanism.targetAnchorJointId);
+    const range = sampleFeasibleRange(mechanism);
+    return {
+        mechanismId: mechanism.id,
+        type: mechanism.type,
+        targetPartId: mechanism.targetPartId,
+        targetPathId: mechanism.targetPathId,
+        targetAnchorJointId,
+        targetPartName: targetPart?.name,
+        targetPathPointCount: targetPath?.points.length,
+        boardCoordinate: board.label,
+        board,
+        sceneAnchor: { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 },
+        offsetFromBoardMm: { x: ((mechanism.anchorX ?? 0) - boardScene.x) / SCENE_PX_PER_MM, y: ((mechanism.anchorY ?? 0) - boardScene.y) / SCENE_PX_PER_MM },
+        requiredParts: mechanismRequiredParts(mechanism),
+        steps: ['Generate package to lock the final cut sheet and detailed assembly sequence.'],
+        warnings: [...(mechanism.warnings ?? []), ...(range.warning ? [range.warning] : [])]
+    };
+};
+
+const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlaying, angle, setAngle, viewport, setViewport }: {
+    project: ProjectState;
+    config: GlobalConfig;
+    setConfig: React.Dispatch<React.SetStateAction<GlobalConfig>>;
+    dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void;
+    goStage: (stage: AppStage) => void;
+    isPlaying: boolean;
+    angle: number;
+    setAngle: React.Dispatch<React.SetStateAction<number>>;
+    viewport: CanvasViewport;
+    setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
+}) => {
     const validation = validateForFabrication(project);
     const create = () => {
         const pkg = createFabricationPackage(project);
@@ -1560,13 +1632,17 @@ const BlueprintExport = ({ project, dispatch, goStage }: { project: ProjectState
     const pkg = project.lastExport;
     const defaultFormat = project.settings.physicalKit.defaultExportFormat;
     const cutSheetFileType = project.settings.physicalKit.cutSheetFileType;
+    const activeMechanisms = project.mechanisms.filter(m => m.visible && m.enabled !== false);
+    const recipes = pkg?.recipes ?? activeMechanisms.map(mechanism => pendingRecipeForMechanism(project, mechanism));
     const downloadJson = () => pkg && downloadText(`${pkg.id}.json`, JSON.stringify(pkg, null, 2));
     const downloadSvg = () => pkg && downloadText(`${pkg.id}.svg`, pkg.svg, 'image/svg+xml');
     const downloadCutSheetPdf = () => pkg && downloadText(`${pkg.id}-cut-sheet.pdf`, pkg.cutSheetPdf, 'application/pdf');
     const downloadAssemblyPdf = () => pkg && downloadText(`${pkg.id}-assembly.pdf`, pkg.assemblyGuidePdf, 'application/pdf');
-    return <div className="grid gap-5 xl:grid-cols-[.8fr_1.2fr]">
-        <section className="workspace p-6">
+    return <div className="grid gap-5 xl:grid-cols-[.75fr_1.25fr]">
+        <section className="workspace p-6" data-testid="blueprint-control-panel">
             <h4 className="section-title">Validation</h4>
+            <h3>Build-ready package</h3>
+            <p className="mt-2 text-sm text-slate-600">This step reads the actual scene: character layers, mechanism anchors, board holes, target part/path/anchor, and warnings.</p>
             <div className="mt-4 space-y-2">{validation.issues.map((issue, index) => <div className={issue.severity === 'error' ? 'error' : 'warning'} key={`${issue.message}-${index}`}>
                 <div>{issue.message}</div>
                 <button className="mt-2 underline" onClick={() => goStage(issue.recoveryStage)}>{issue.recoveryAction}</button>
@@ -1591,18 +1667,39 @@ const BlueprintExport = ({ project, dispatch, goStage }: { project: ProjectState
                     <div className="mt-2 text-xs">Assembly guide stays bundled even when SVG is the preferred cut sheet.</div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                <button className="btn-secondary" onClick={downloadJson}>JSON</button>
-                <button className="btn-secondary" onClick={downloadSvg}>SVG</button>
-                <button className="btn-secondary" onClick={() => downloadText(`${pkg.id}-assembly.html`, pkg.assemblyGuideHtml, 'text/html')}>Guide</button>
-                <button className="btn-secondary" onClick={() => downloadText(`${pkg.id}-metadata.json`, pkg.metadataJson)}>Metadata</button>
-                <button className="btn-secondary" onClick={downloadAssemblyPdf}>PDF</button>
+                    <button className="btn-secondary" onClick={downloadJson}>JSON</button>
+                    <button className="btn-secondary" onClick={downloadSvg}>SVG</button>
+                    <button className="btn-secondary" onClick={() => downloadText(`${pkg.id}-assembly.html`, pkg.assemblyGuideHtml, 'text/html')}>Guide</button>
+                    <button className="btn-secondary" onClick={() => downloadText(`${pkg.id}-metadata.json`, pkg.metadataJson)}>Metadata</button>
+                    <button className="btn-secondary" onClick={downloadAssemblyPdf}>PDF</button>
                 </div>
             </div>}
         </section>
-        <section className="workspace p-6">
-            <h4 className="section-title">Current-scene recipes</h4>
-            <div className="mt-4 grid gap-3">{(pkg?.recipes ?? project.mechanisms.map(m => ({ mechanismId: m.id, type: m.type, boardCoordinate: 'pending', warnings: m.warnings ?? [] }))).map(r => <div key={r.mechanismId} className="row"><div><div className="font-bold">{r.mechanismId} · {r.type}</div><div className="text-sm text-slate-500">Board {r.boardCoordinate}</div></div><div className="text-xs text-amber-700">{r.warnings?.join(', ')}</div></div>)}</div>
-            {pkg && <img className="mt-5 rounded-3xl border border-slate-200 bg-white p-3" alt="fabrication SVG preview" src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(pkg.svg)}`} />}
+        <section className="space-y-5">
+            <div className="path-canvas-shell workspace overflow-hidden p-0" data-testid="blueprint-canvas-preview">
+                <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
+                <Canvas project={project} config={config} setConfig={setConfig} selectedId={project.selectedMechanismId ?? null} setSelectedId={id => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: id })} isPlaying={isPlaying} showTrace={true} isDrawMode={false} userPath={[]} setUserPath={() => {}} angle={angle} setAngle={setAngle} viewport={viewport} setViewport={setViewport}/>
+            </div>
+            <section className="workspace p-6" data-testid="assembly-guide-preview">
+                <h4 className="section-title">Current-scene recipes</h4>
+                <h3>Assembly guide preview</h3>
+                <p className="mt-2 text-sm text-slate-600">Each card links the mechanism to its board coordinate, target body part, path, anchor joint, required parts, and warnings.</p>
+                <div className="mt-4 grid gap-3">{recipes.map(recipe => <article key={recipe.mechanismId} className="assembly-recipe-card" data-testid={`assembly-recipe-${recipe.mechanismId}`}>
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <div className="font-bold text-slate-800">{recipe.mechanismId} · {recipe.type}</div>
+                            <div className="text-sm text-slate-600">Board {recipe.boardCoordinate}</div>
+                            <div className="text-xs text-slate-500">Target {recipe.targetPartName ?? recipe.targetPartId ?? 'unbound'} · path {recipe.targetPathId ?? 'none'} · anchor {recipe.targetAnchorJointId ?? 'part default'} · {recipe.targetPathPointCount ?? 0} points</div>
+                        </div>
+                        <button className="chip" onClick={() => goStage('design')}>Edit</button>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">{recipe.requiredParts.map(part => <span className="blueprint-pill" key={`${recipe.mechanismId}-${part.name}`}>{part.name} × {part.quantity}</span>)}</div>
+                    {recipe.warnings.length ? <div className="warning mt-3">Warnings: {recipe.warnings.join('; ')}</div> : <div className="ok mt-3">Warnings: none</div>}
+                    <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-slate-600">{recipe.steps.map(step => <li key={step}>{step}</li>)}</ol>
+                </article>)}</div>
+                {pkg && <img className="mt-5 rounded-3xl border border-slate-200 bg-white p-3" alt="fabrication SVG preview" src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(pkg.svg)}`} />}
+                {!pkg && <div className="mt-5 rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">Generate package to lock downloadable cut sheets, metadata, and the final assembly guide.</div>}
+            </section>
         </section>
     </div>;
 };

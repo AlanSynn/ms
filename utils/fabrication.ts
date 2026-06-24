@@ -2,7 +2,7 @@ import { FabricationIssue, FabricationPackage, FabricationRecipe, MechanismConfi
 import { calculateLinkage, generateCurvePoints } from './kinematics';
 import { boardToScene, pathFromPoints, SCENE_PX_PER_MM, sceneToBoardRaw, sceneToSvg, sceneBoundsForSheet } from './coordinates';
 import { mechanismRequiredParts } from './project';
-import { mechanismBindingWarnings } from './motion';
+import { mechanismBindingWarnings, preferredMotionJointId } from './motion';
 
 export const sampleFeasibleRange = (mechanism: MechanismConfig, samples = 96) => {
     let valid = 0;
@@ -95,16 +95,23 @@ const createRecipe = (project: ProjectState, mechanism: MechanismConfig): Fabric
     const board = sceneToBoardRaw({ x: mechanism.anchorX!, y: mechanism.anchorY! }, project.settings.physicalKit);
     const boardScene = board.valid ? boardToScene(board.col, board.row, project.settings.physicalKit) : { x: mechanism.anchorX!, y: mechanism.anchorY! };
     const targetPart = mechanism.targetPartId ? project.parts[mechanism.targetPartId] : undefined;
+    const targetPath = mechanism.targetPathId ? project.paths[mechanism.targetPathId] : undefined;
+    const targetAnchorJointId = preferredMotionJointId(project, mechanism.targetPartId, mechanism.targetAnchorJointId);
     const range = sampleFeasibleRange(mechanism);
-    const warnings = [
+    const warnings = [...new Set([
+        ...(mechanism.warnings ?? []),
+        ...((mechanism.fabricationMetadata as { warnings?: string[] } | undefined)?.warnings ?? []),
         ...(range.warning ? [range.warning] : []),
         ...((targetPart && !targetPart.visible) ? ['Target part hidden'] : [])
-    ];
+    ])];
     return {
         mechanismId: mechanism.id,
         type: mechanism.type,
         targetPartId: mechanism.targetPartId,
         targetPathId: mechanism.targetPathId,
+        targetAnchorJointId,
+        targetPartName: targetPart?.name,
+        targetPathPointCount: targetPath?.points.length,
         boardCoordinate: board.label,
         board,
         sceneAnchor: { x: mechanism.anchorX!, y: mechanism.anchorY! },
@@ -113,7 +120,7 @@ const createRecipe = (project: ProjectState, mechanism: MechanismConfig): Fabric
         steps: [
             `Place ${mechanism.id} main axle at ${board.label}.`,
             `Install ${mechanism.type} links with crank ${mechanism.crankLength.toFixed(0)} and coupler ${mechanism.couplerLength.toFixed(0)} scene units.`,
-            targetPart ? `Connect output to ${targetPart.name}.` : 'Connect output to selected character part or leave as standalone preview.',
+            targetPart ? `Connect output to ${targetPart.name} at anchor ${targetAnchorJointId ?? targetPart.anchorJointId} and follow path ${targetPath?.id ?? 'unassigned'}.` : 'Connect output to selected character part or leave as standalone preview.',
             warnings.length ? `Resolve warning before cutting: ${warnings.join('; ')}` : 'Run preview once, then cut and assemble.'
         ],
         warnings
@@ -156,7 +163,15 @@ const makeSvg = (project: ProjectState, recipes: FabricationRecipe[]) => {
 
 const makeAssemblyGuideHtml = (project: ProjectState, recipes: FabricationRecipe[], warnings: string[]) => {
     const esc = (value: unknown) => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] ?? ch));
-    return `<!doctype html><html><meta charset="utf-8"><title>${esc(project.metadata.name)} assembly</title><body><h1>${esc(project.metadata.name)} assembly guide</h1><p>Profile ${esc(project.settings.physicalKit.profileKey)} · ${project.settings.physicalKit.gridPitchMm}mm grid.</p>${warnings.map(w => `<p><strong>Warning:</strong> ${esc(w)}</p>`).join('')}<ol>${recipes.flatMap(r => r.steps.map(step => `<li><strong>${esc(r.mechanismId)}</strong> ${esc(step)}</li>`)).join('')}</ol></body></html>`;
+    const recipeSections = recipes.map(recipe => `<section>
+<h2>${esc(recipe.mechanismId)} · ${esc(recipe.type)}</h2>
+<p><strong>Board coordinate:</strong> ${esc(recipe.boardCoordinate)} (${recipe.sceneAnchor.x.toFixed(1)}, ${recipe.sceneAnchor.y.toFixed(1)} scene units)</p>
+<p><strong>Target:</strong> ${esc(recipe.targetPartName ?? recipe.targetPartId ?? 'unbound')} · path ${esc(recipe.targetPathId ?? 'none')} · anchor ${esc(recipe.targetAnchorJointId ?? 'part default')} · ${recipe.targetPathPointCount ?? 0} path points</p>
+${recipe.warnings.length ? `<p><strong>Warnings:</strong> ${recipe.warnings.map(esc).join('; ')}</p>` : '<p><strong>Warnings:</strong> none</p>'}
+<h3>Required parts</h3><ul>${recipe.requiredParts.map(part => `<li>${esc(part.name)} × ${part.quantity}</li>`).join('')}</ul>
+<h3>Steps</h3><ol>${recipe.steps.map(step => `<li>${esc(step)}</li>`).join('')}</ol>
+</section>`).join('');
+    return `<!doctype html><html><meta charset="utf-8"><title>${esc(project.metadata.name)} assembly</title><body><h1>${esc(project.metadata.name)} assembly guide</h1><p>Profile ${esc(project.settings.physicalKit.profileKey)} · ${project.settings.physicalKit.gridPitchMm}mm grid.</p>${warnings.map(w => `<p><strong>Warning:</strong> ${esc(w)}</p>`).join('')}${recipeSections}</body></html>`;
 };
 
 const makePdfDocument = (content: string) => {
@@ -257,7 +272,21 @@ export const createFabricationPackage = (project: ProjectState): FabricationPack
         profile: project.settings.physicalKit,
         validationIssues: validation.issues,
         sceneSnapshot: { metadata: project.metadata, paths: project.paths, mechanisms: project.mechanisms },
-        recipes: recipes.map(r => ({ mechanismId: r.mechanismId, type: r.type, targetPartId: r.targetPartId, targetPathId: r.targetPathId, board: r.board, sceneAnchor: r.sceneAnchor, requiredParts: r.requiredParts }))
+        recipes: recipes.map(r => ({
+            mechanismId: r.mechanismId,
+            type: r.type,
+            targetPartId: r.targetPartId,
+            targetPathId: r.targetPathId,
+            targetAnchorJointId: r.targetAnchorJointId,
+            targetPartName: r.targetPartName,
+            targetPathPointCount: r.targetPathPointCount,
+            boardCoordinate: r.boardCoordinate,
+            board: r.board,
+            sceneAnchor: r.sceneAnchor,
+            requiredParts: r.requiredParts,
+            warnings: r.warnings,
+            steps: r.steps
+        }))
     };
     const createdAt = metadata.createdAt;
     return {

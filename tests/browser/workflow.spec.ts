@@ -124,11 +124,16 @@ test('character → path → foundry → design → blueprint runs end-to-end in
 
   await page.getByRole('button', { name: /Blueprint Export/i }).click();
   await expect(page.getByRole('heading', { name: 'Blueprint Export' })).toBeVisible();
+  await expect(page.getByTestId('workflow-status-strip')).toContainText('Blueprint Export');
+  await expect(page.getByTestId('blueprint-canvas-preview')).toBeVisible();
+  await expect(page.getByTestId('assembly-guide-preview')).toContainText('Assembly guide preview');
   await expect(page.getByText('Validation')).toBeVisible();
   await expect(page.getByText('Fabrication state ready.')).toBeVisible();
   await page.getByRole('button', { name: /Generate package/i }).click();
   await expect(page.getByText(/Default export:/)).toBeVisible();
   await expect(page.getByText(/Board (?!pending)/)).toHaveCount(1);
+  await expect(page.getByTestId('assembly-guide-preview')).toContainText(/Target Right arm · path path-right-arm · anchor right_(hand|elbow)/);
+  await expect(page.getByTestId('assembly-guide-preview')).toContainText('Warnings: none');
   await expect(page.getByRole('button', { name: 'JSON', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'SVG', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Guide', exact: true })).toBeVisible();
@@ -152,8 +157,15 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   expect(metadata.profile.profileKey).toBe('letter-15x15-2cm');
   expect(metadata.recipes).toHaveLength(1);
   expect(new Set(metadata.recipes.map((recipe: { mechanismId: string }) => recipe.mechanismId)).size).toBe(1);
-  expect(metadata.recipes.every((recipe: { board: unknown; sceneAnchor: unknown }) => recipe.board && recipe.sceneAnchor)).toBe(true);
-  expect(metadata.recipes.some((recipe: { targetPartId?: string; targetPathId?: string }) => recipe.targetPartId === 'right_arm' && recipe.targetPathId === 'path-right-arm')).toBe(true);
+  expect(metadata.recipes.every((recipe: { board: unknown; sceneAnchor: unknown; boardCoordinate?: string; requiredParts?: unknown[] }) => recipe.board && recipe.sceneAnchor && recipe.boardCoordinate && recipe.requiredParts?.length)).toBe(true);
+  expect(metadata.recipes.some((recipe: { targetPartId?: string; targetPathId?: string; targetAnchorJointId?: string; targetPartName?: string; steps?: string[]; warnings?: string[] }) =>
+    recipe.targetPartId === 'right_arm' &&
+    recipe.targetPathId === 'path-right-arm' &&
+    /^right_(hand|elbow)$/.test(recipe.targetAnchorJointId ?? '') &&
+    recipe.targetPartName === 'Right arm' &&
+    recipe.steps?.some(step => step.includes('Connect output')) &&
+    Array.isArray(recipe.warnings)
+  )).toBe(true);
 
   const [guideDownload] = await Promise.all([
     page.waitForEvent('download'),
@@ -164,7 +176,12 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   expect(guidePath, 'guide download path').toBeTruthy();
   const guideText = await readFile(guidePath!, 'utf8');
   expect(guideText).toContain('assembly guide');
-  expect(guideText).toContain('<ol>');
+  expect(guideText).toContain('Board coordinate:');
+  expect(guideText).toContain('Target:');
+  expect(guideText).toContain('Right arm');
+  expect(guideText).toContain('path-right-arm');
+  expect(guideText).toContain('right_');
+  expect(guideText).toContain('Required parts');
 
   const [pdfDownload] = await Promise.all([
     page.waitForEvent('download'),
@@ -371,7 +388,7 @@ test('Options and validation gates update browser blueprint output', async ({ pa
   await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').fill('255');
   await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').press('Enter');
   await page.getByRole('button', { name: /Blueprint Export/i }).click();
-  await expect(page.getByText(/anchor off grid/)).toBeVisible();
+  await expect(page.getByTestId('blueprint-control-panel').getByText(/anchor off grid/)).toBeVisible();
   await expect(page.getByRole('button', { name: /Snap anchor to board hole/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /Generate package/i })).toBeDisabled();
 
@@ -894,7 +911,7 @@ test('Detached visible mechanisms block browser blueprint generation', async ({ 
   await expect(page.getByLabel('Mechanism target path')).toHaveValue('');
 
   await page.getByRole('button', { name: /Blueprint Export/i }).click();
-  await expect(page.getByText(/choose a target part and path before blueprint export/)).toBeVisible();
+  await expect(page.getByTestId('blueprint-control-panel').getByText(/choose a target part and path before blueprint export/)).toBeVisible();
   await expect(page.getByRole('button', { name: /Generate package/i })).toBeDisabled();
 });
 
@@ -940,7 +957,7 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
 
   await page.locator('label').filter({ hasText: 'Enabled' }).locator('input[type="checkbox"]').uncheck();
   await page.getByRole('button', { name: /Blueprint Export/i }).click();
-  await expect(page.getByText('No enabled mechanism to export.')).toBeVisible();
+  await expect(page.getByTestId('blueprint-control-panel').getByText('No enabled mechanism to export.')).toBeVisible();
   await expect(page.getByRole('button', { name: /Generate package/i })).toBeDisabled();
 
   await page.getByRole('button', { name: /Mechanism Design/i }).click();

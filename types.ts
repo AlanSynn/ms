@@ -213,6 +213,9 @@ export interface FabricationRecipe {
     type: MechanismType;
     targetPartId?: string;
     targetPathId?: string;
+    targetAnchorJointId?: string;
+    targetPartName?: string;
+    targetPathPointCount?: number;
     boardCoordinate: string;
     board: { col: number; row: number; xMm: number; yMm: number; valid?: boolean };
     sceneAnchor: Point;
