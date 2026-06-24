@@ -40,6 +40,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   const openTemplateButton = page.getByRole('button', { name: /Open Waving arm/i });
   const loadPackageButton = page.getByRole('button', { name: /Load package/i });
   const runOnnxButton = page.getByRole('button', { name: /Create from image/i });
+  const cameraButton = page.getByRole('button', { name: /Capture Camera/i });
   const importProjectButton = page.getByRole('button', { name: /Import project/i });
   await page.keyboard.press('Tab');
   await expect(openTemplateButton).toBeFocused();
@@ -47,6 +48,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(loadPackageButton).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(runOnnxButton).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(cameraButton).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(importProjectButton).toBeFocused();
 
@@ -603,6 +606,210 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   expect(foundryMechanism.foundryExport.simulationSummary).toContain('Partial motion');
 
   expectCleanPage(pageErrors, consoleErrors);
+});
+
+test('Character edit drawer mutates body layers and skeleton joints into design controls', async ({ page }) => {
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByText('Advanced part setup').click();
+
+  const selectedPart = page.getByLabel('Selected body part');
+  await selectedPart.selectOption('right_arm');
+  await page.getByRole('button', { name: /Add layer/i }).click();
+  const copiedPartId = await selectedPart.evaluate((select: HTMLSelectElement) => select.value);
+  const copiedPartText = await selectedPart.evaluate((select: HTMLSelectElement) => select.selectedOptions[0]?.textContent ?? '');
+  expect(copiedPartId).toContain('part-');
+  expect(copiedPartText).toContain('copy');
+
+  await page.getByRole('button', { name: /Mechanism Design/i }).click();
+  const designPartOptions = await page.getByLabel('Mechanism target part').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
+  expect(designPartOptions.join(' ')).toContain('copy');
+
+  await page.getByRole('button', { name: /Path Editor/i }).click();
+  await page.getByText('Advanced part setup').click();
+  await page.getByRole('button', { name: /Remove layer/i }).click();
+  await expect(selectedPart).not.toHaveValue(copiedPartId);
+  await page.getByRole('button', { name: /Mechanism Design/i }).click();
+  const designPartOptionsAfterRemove = await page.getByLabel('Mechanism target part').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
+  expect(designPartOptionsAfterRemove.join(' ')).not.toContain(copiedPartText);
+
+  await page.getByRole('button', { name: /Path Editor/i }).click();
+  await page.getByLabel('Selected body part').selectOption('right_arm');
+  await page.getByText('Advanced part setup').click();
+  const editJoint = page.getByLabel('Edit joint');
+  await editJoint.selectOption('right_hand');
+  const beforeJoints = await editJoint.evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));
+  await page.getByRole('button', { name: /Add joint/i }).click();
+  const afterJoints = await editJoint.evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));
+  const newJointId = afterJoints.find(id => !beforeJoints.includes(id));
+  expect(newJointId).toBeTruthy();
+  await editJoint.selectOption(newJointId!);
+  const jointLocked = page.locator('label').filter({ hasText: 'Locked' }).nth(1).locator('input[type="checkbox"]');
+  await jointLocked.check();
+  await expect(page.getByRole('button', { name: /Remove joint/i })).toBeDisabled();
+  await jointLocked.uncheck();
+
+  await page.getByRole('button', { name: /Mechanism Design/i }).click();
+  await page.getByLabel('Mechanism target part').selectOption('right_arm');
+  const anchorOptionsWithJoint = await page.getByLabel('Mechanism target anchor').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));
+  expect(anchorOptionsWithJoint).toContain(newJointId);
+
+  await page.getByRole('button', { name: /Path Editor/i }).click();
+  await page.getByText('Advanced part setup').click();
+  await editJoint.selectOption(newJointId!);
+  await page.getByRole('button', { name: /Remove joint/i }).click();
+  const anchorOptionsAfterJointRemove = await editJoint.evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));
+  expect(anchorOptionsAfterJointRemove).not.toContain(newJointId);
+  await page.getByRole('button', { name: /Mechanism Design/i }).click();
+  const designAnchorOptionsAfterRemove = await page.getByLabel('Mechanism target anchor').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));
+  expect(designAnchorOptionsAfterRemove).not.toContain(newJointId);
+
+  expectCleanPage(pageErrors, consoleErrors);
+});
+
+test('Recommendation sheet applies a distinct mechanism and blueprint recipe', async ({ page }) => {
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByRole('button', { name: /Mechanism Design/i }).click();
+  const initialMechanisms = await page.getByLabel('Mechanism instance').evaluate((select: HTMLSelectElement) => select.options.length);
+  await page.getByRole('button', { name: /Get recommendations/i }).click();
+  await expect(page.getByTestId('recommendation-sheet')).toBeVisible();
+  await expect(page.getByTestId('recommendation-sheet')).toContainText('Mechanism Recommendations for Right arm');
+  await expect(page.getByTestId('recommendation-card-4bar')).toBeVisible();
+  await page.getByTestId('recommendation-sheet').getByRole('button', { name: /Apply this/i }).first().click();
+  await expect(page.getByTestId('recommendation-sheet')).toHaveCount(0);
+  const mechanismOptions = await page.getByLabel('Mechanism instance').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));
+  expect(mechanismOptions).toHaveLength(initialMechanisms + 1);
+  expect(new Set(mechanismOptions).size).toBe(mechanismOptions.length);
+
+  await page.getByRole('button', { name: /Blueprint Export/i }).click();
+  await expect(page.getByRole('button', { name: /Generate package/i })).toBeEnabled();
+  await page.getByRole('button', { name: /Generate package/i }).click();
+  const metadata = await downloadMetadataJson(page);
+  expect(metadata.recipes).toHaveLength(initialMechanisms + 1);
+  expect(new Set(metadata.recipes.map((recipe: { mechanismId: string }) => recipe.mechanismId)).size).toBe(initialMechanisms + 1);
+  expect(metadata.sceneSnapshot.mechanisms.some((mechanism: { presetId?: string; source?: string }) => mechanism.source === 'optimized' && mechanism.presetId?.startsWith('recommendation-'))).toBe(true);
+
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByRole('button', { name: /Mechanism Design/i }).click();
+  await page.getByRole('button', { name: /Get recommendations/i }).click();
+  await expect(page.getByTestId('recommendation-sheet')).toBeVisible();
+  const enabledApplyButtons = page.getByTestId('recommendation-sheet').locator('button.btn-primary:not(:disabled)');
+  await expect(enabledApplyButtons.first()).toBeVisible();
+  expect(await enabledApplyButtons.count(), 'at least two fabrication-ready recommendations').toBeGreaterThan(1);
+  await enabledApplyButtons.nth(1).click();
+  await page.getByRole('button', { name: /Blueprint Export/i }).click();
+  await expect(page.getByRole('button', { name: /Generate package/i })).toBeEnabled();
+
+  expectCleanPage(pageErrors, consoleErrors);
+});
+
+test('Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking', async ({ page }) => {
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByRole('button', { name: /Mechanism Foundry/i }).click();
+
+  await expect(page.getByTestId('foundry-toolbar')).toBeVisible();
+  await expect(page.getByTestId('foundry-path-preview')).toBeVisible();
+  await page.getByRole('button', { name: 'Path Preview' }).click();
+  await expect(page.getByTestId('foundry-path-preview')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Trail' }).click();
+  await expect(page.getByTestId('foundry-trail-overlay')).toBeVisible();
+  await page.getByRole('button', { name: 'Forces' }).click();
+  await expect(page.getByTestId('foundry-forces-overlay')).toBeVisible();
+  await page.getByRole('button', { name: 'Velocity' }).click();
+  await expect(page.getByTestId('foundry-velocity-overlay')).toBeVisible();
+  await page.getByRole('button', { name: 'Show Sensemaking' }).click();
+  await expect(page.getByTestId('foundry-mechanism-library')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Back to Gallery' }).click();
+  await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Sensemaking:');
+  await page.getByRole('button', { name: 'Play' }).click();
+  await expect(page.getByTestId('foundry-toolbar-state')).toContainText('playing');
+  await page.getByRole('button', { name: 'Reset' }).click();
+  await expect(page.getByTestId('foundry-toolbar-state')).toContainText('paused');
+});
+
+test('Camera capture dialog uses browser getUserMedia and reports permission denial', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: {
+        getUserMedia: async () => {
+          throw new DOMException('Permission denied', 'NotAllowedError');
+        }
+      }
+    });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: /Capture Camera/i }).click();
+  await expect(page.getByTestId('camera-dialog')).toBeVisible();
+  await expect(page.getByTestId('camera-error')).toContainText('Camera permission denied');
+  await expect(page.getByRole('button', { name: /Capture frame/i })).toBeDisabled();
+});
+
+test('Camera capture waits for live preview and stops stream after handoff', async ({ page }) => {
+  await page.addInitScript(() => {
+    const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
+    const stops: string[] = [];
+    (window as unknown as { __cameraStops: string[] }).__cameraStops = stops;
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: {
+        getUserMedia: async () => ({
+          getTracks: () => [{ stop: () => stops.push('stopped') }]
+        })
+      }
+    });
+    Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', {
+      configurable: true,
+      get() {
+        return (this as HTMLVideoElement & { __stream?: unknown }).__stream;
+      },
+      set(value) {
+        const video = this as HTMLVideoElement & { __stream?: unknown };
+        video.__stream = value;
+        window.setTimeout(() => {
+          Object.defineProperty(video, 'videoWidth', { configurable: true, value: 16 });
+          Object.defineProperty(video, 'videoHeight', { configurable: true, value: 16 });
+          video.dispatchEvent(new Event('loadedmetadata'));
+          video.dispatchEvent(new Event('canplay'));
+        }, 0);
+      }
+    });
+    HTMLMediaElement.prototype.play = async () => undefined;
+    const originalGetContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function(type: string, options?: unknown) {
+      const ctx = originalGetContext.call(this, type, options as CanvasRenderingContext2DSettings) as CanvasRenderingContext2D | null;
+      if (type === '2d' && ctx) ctx.drawImage = (() => undefined) as CanvasRenderingContext2D['drawImage'];
+      return ctx;
+    } as HTMLCanvasElement['getContext'];
+    HTMLCanvasElement.prototype.toBlob = function(callback: BlobCallback, type?: string) {
+      const bytes = Uint8Array.from(atob(png), char => char.charCodeAt(0));
+      callback(new Blob([bytes], { type: type ?? 'image/png' }));
+    };
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: /Capture Camera/i }).click();
+  await expect(page.getByTestId('camera-dialog')).toBeVisible();
+  await expect(page.getByText(/Camera Ready/i)).toBeVisible();
+  await page.getByRole('button', { name: /Capture frame/i }).click();
+  await expect(page.getByTestId('camera-dialog')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __cameraStops: string[] }).__cameraStops.length)).toBeGreaterThan(0);
 });
 
 test('Mobile path editor keeps Draw free path action above the canvas', async ({ page }) => {

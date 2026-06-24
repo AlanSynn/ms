@@ -33,7 +33,7 @@ import {
 } from './utils/project';
 import { processImageWithWebOnnx } from './utils/webOnnx';
 import { createFabricationPackage, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
-import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToSvg, svgPointerToScene, SCENE_VIEW } from './utils/coordinates';
+import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
 import { mechanismBindingWarnings, motionAnchorJointIds, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT, normalizeCanvasViewport } from './utils/viewport';
@@ -98,6 +98,8 @@ const App: React.FC = () => {
     const [showTrace, setShowTrace] = useState(true);
     const [drawMode, setDrawMode] = useState(false);
     const [showTracking, setShowTracking] = useState(false);
+    const [showCamera, setShowCamera] = useState(false);
+    const [showRecommendations, setShowRecommendations] = useState(false);
     const [foundry, setFoundry] = useState<FoundryState>(() => createDefaultMechanism('4bar', 'foundry-preview'));
     const [pendingCharacter, setPendingCharacter] = useState<{ project: ProjectState; summary: string; returnStage: AppStage } | null>(null);
     const [replaceCharacter, setReplaceCharacter] = useState(false);
@@ -505,7 +507,7 @@ const App: React.FC = () => {
                     <input ref={projectInputRef} hidden type="file" accept="application/json,.mechanim.json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/>
 
                     <div className={`stage-body min-h-0 flex-1 overflow-auto ${stage === 'character' ? 'p-0' : 'p-7'}`}>
-                        {stage === 'character' && <CharacterSelection project={project} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onSample={() => { setPendingCharacter(null); setProject(createSampleProject()); setStage('path'); }} onProcess={runWebOnnx} onPackage={importCharacterPackage} onImport={importProject} />}
+                        {stage === 'character' && <CharacterSelection project={project} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onSample={() => { setPendingCharacter(null); setProject(createSampleProject()); setStage('path'); }} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} />}
                         {stage === 'path' && <PathEditor project={project} sortedParts={sortedParts} selectedPart={selectedPart} selectedPath={selectedPath} drawMode={drawMode} setDrawMode={setDrawMode} dispatch={dispatch} setPathPoints={setPathPoints} openTracking={() => setShowTracking(true)} isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} onNext={() => goStage('foundry')} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {stage === 'foundry' && <MechanismFoundry project={project} foundry={foundry} setFoundry={setFoundry} selectedPart={selectedPart} selectedPath={selectedPath} onExport={(pkg) => {
                             const existingTarget = project.mechanisms.find(m =>
@@ -533,13 +535,15 @@ const App: React.FC = () => {
                             dispatch({ type: 'upsert_mechanism', mechanism: mech });
                             setStage('design');
                         }} />}
-                        {stage === 'design' && <MechanismDesign project={project} selectedMechanism={selectedMechanism} mechanismConfig={mechanismConfig} setMechanismConfig={setMechanismConfig} updateMechanism={updateMechanism} dispatch={dispatch} isPlaying={isPlaying} setIsPlaying={setIsPlaying} showTrace={showTrace} setShowTrace={setShowTrace} angle={angle} setAngle={setAngle} onOptimize={optimizeSelectedMechanism} optimizerBusy={optimizerBusy} exportSvg={exportMechanismSvg} exportDxf={exportMechanismDxf} viewport={canvasViewport} setViewport={setCanvasViewport} />}
+                        {stage === 'design' && <MechanismDesign project={project} selectedMechanism={selectedMechanism} mechanismConfig={mechanismConfig} setMechanismConfig={setMechanismConfig} updateMechanism={updateMechanism} dispatch={dispatch} isPlaying={isPlaying} setIsPlaying={setIsPlaying} showTrace={showTrace} setShowTrace={setShowTrace} angle={angle} setAngle={setAngle} onOptimize={optimizeSelectedMechanism} onRecommendations={() => setShowRecommendations(true)} optimizerBusy={optimizerBusy} exportSvg={exportMechanismSvg} exportDxf={exportMechanismDxf} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {stage === 'blueprint' && <BlueprintExport project={project} dispatch={dispatch} goStage={goStage} />}
                         {stage === 'options' && <Options project={project} dispatch={dispatch} />}
                     </div>
                     <footer className="status-bar" data-testid="status-bar">{commandStatus} · parts:{project.partOrder.length} · paths:{Object.keys(project.paths).length} · mechs:{project.mechanisms.length} · zoom {Math.round(canvasViewport.zoom * 100)}%</footer>
                 </section>
             </div>
+            <CameraCaptureDialog isOpen={showCamera} onClose={() => setShowCamera(false)} onCapture={file => { setShowCamera(false); runWebOnnx(file); }} />
+            <MechanismRecommendationSheet isOpen={showRecommendations} project={project} selectedPart={selectedPart} selectedPath={selectedPath} onClose={() => setShowRecommendations(false)} onApply={mechanism => { dispatch({ type: 'upsert_mechanism', mechanism }); setShowRecommendations(false); setStage('design'); }} />
             <TrackingModal isOpen={showTracking} onClose={() => setShowTracking(false)} onTransfer={path => { setPathPoints(path, 'tracked'); setShowTracking(false); setStage('path'); }} />
         </main>
     );
@@ -615,7 +619,7 @@ const CanvasZoomToolbar = ({ viewport, setViewport }: { viewport: CanvasViewport
     </div>;
 };
 
-const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setReplaceCharacter, onAccept, onDiscard, onSample, onProcess, onPackage, onImport }: {
+const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setReplaceCharacter, onAccept, onDiscard, onSample, onProcess, onCamera, onPackage, onImport }: {
     project: ProjectState;
     pendingCharacter: { project: ProjectState; summary: string; returnStage: AppStage } | null;
     replaceCharacter: boolean;
@@ -624,6 +628,7 @@ const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setRe
     onDiscard: () => void;
     onSample: () => void;
     onProcess: (file: File) => void;
+    onCamera: () => void;
     onPackage: (files: FileList | File[]) => void;
     onImport: (file: File) => void;
 }) => {
@@ -684,6 +689,13 @@ const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setRe
                     e.currentTarget.value = '';
                     if (file) onProcess(file);
                 }}/>
+                <button type="button" className="template-tile cursor-pointer" onClick={onCamera}>
+                    <span className="template-kicker">Camera</span>
+                    <strong>Capture Camera</strong>
+                    <span>Use the browser camera, capture one frame, then run the same local ONNX package review.</span>
+                    <small>Permission required · no mock camera</small>
+                    <b><Camera size={16}/> Capture Camera</b>
+                </button>
             </div>
         </section>
         <section className="onboarding-secondary">
@@ -718,6 +730,123 @@ const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setRe
         </section>
     </div>
     );
+};
+
+const CameraCaptureDialog = ({ isOpen, onClose, onCapture }: { isOpen: boolean; onClose: () => void; onCapture: (file: File) => void }) => {
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const streamRef = useRef<MediaStream | null>(null);
+    const [status, setStatus] = useState<'starting' | 'ready' | 'error'>('starting');
+    const [error, setError] = useState('');
+    useEffect(() => {
+        if (!isOpen) return;
+        let active = true;
+        const stopStream = () => {
+            streamRef.current?.getTracks().forEach(track => track.stop());
+            streamRef.current = null;
+            if (videoRef.current) videoRef.current.srcObject = null;
+        };
+        setStatus('starting');
+        setError('');
+        const camera = navigator.mediaDevices;
+        if (!camera?.getUserMedia) {
+            setStatus('error');
+            setError('Camera unavailable in this browser. Upload an image instead.');
+            return stopStream;
+        }
+        const waitForPreview = (video: HTMLVideoElement) => new Promise<void>((resolve, reject) => {
+            let timeout = 0;
+            const cleanup = () => {
+                window.clearTimeout(timeout);
+                video.removeEventListener('loadedmetadata', ready);
+                video.removeEventListener('canplay', ready);
+            };
+            const ready = () => {
+                if (!video.videoWidth || !video.videoHeight) return;
+                cleanup();
+                resolve();
+            };
+            video.addEventListener('loadedmetadata', ready);
+            video.addEventListener('canplay', ready);
+            timeout = window.setTimeout(() => {
+                cleanup();
+                reject(new Error('Camera preview did not start. Try closing and reopening camera capture.'));
+            }, 7000);
+            ready();
+        });
+        camera.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+            .then(async stream => {
+                if (!active) {
+                    stream.getTracks().forEach(track => track.stop());
+                    return;
+                }
+                streamRef.current = stream;
+                if (videoRef.current) {
+                    videoRef.current.srcObject = stream;
+                    void videoRef.current.play().catch(() => undefined);
+                    await waitForPreview(videoRef.current);
+                } else {
+                    throw new Error('Camera preview element is missing.');
+                }
+                if (active) setStatus('ready');
+            })
+            .catch((cause: unknown) => {
+                if (!active) return;
+                stopStream();
+                const name = cause instanceof DOMException ? cause.name : cause instanceof Error ? cause.name : 'CameraError';
+                const message = cause instanceof Error ? cause.message : String(cause);
+                setStatus('error');
+                setError(name === 'NotAllowedError' ? 'Camera permission denied. Allow camera access or use Create from image.' : `Camera error: ${message}`);
+            });
+        return () => {
+            active = false;
+            stopStream();
+        };
+    }, [isOpen]);
+
+    const captureFrame = () => {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        if (!video || !canvas || status !== 'ready' || !video.videoWidth || !video.videoHeight) {
+            setError('Camera preview is still starting. Wait for the live preview or use Create from image.');
+            return;
+        }
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(blob => {
+            if (!blob) {
+                setStatus('error');
+                setError('Could not capture a camera frame.');
+                return;
+            }
+            onCapture(new File([blob], `camera-frame-${Date.now()}.png`, { type: 'image/png' }));
+        }, 'image/png');
+    };
+
+    if (!isOpen) return null;
+    return <div className="modal-backdrop" role="presentation">
+        <section className="modal-sheet camera-dialog" role="dialog" aria-modal="true" aria-labelledby="camera-dialog-title" data-testid="camera-dialog">
+            <div className="flex items-center justify-between gap-3">
+                <div>
+                    <div className="section-title">Camera Capture</div>
+                    <h3 id="camera-dialog-title">Camera Capture</h3>
+                </div>
+                <button className="btn-secondary" onClick={onClose}>Cancel</button>
+            </div>
+            <div className="camera-preview mt-4">
+                <video ref={videoRef} muted playsInline data-testid="camera-preview-video" className={status === 'ready' ? '' : 'hidden'} />
+                {status !== 'ready' && <div className="camera-placeholder">{status === 'starting' ? 'Requesting browser camera…' : 'Camera preview unavailable'}</div>}
+            </div>
+            <canvas ref={canvasRef} hidden />
+            {status === 'error' && <div className="error" data-testid="camera-error">{error}</div>}
+            {status === 'ready' && <div className="ok">Camera Ready. Capture one frame to process with local ONNX.</div>}
+            <div className="mt-4 flex flex-wrap gap-2">
+                <button className="btn-primary" disabled={status !== 'ready'} onClick={captureFrame}><Camera size={16}/> Capture frame</button>
+                <button className="btn-secondary" onClick={onClose}>Close</button>
+            </div>
+        </section>
+    </div>;
 };
 
 const ProgressBlock = ({ project }: { project: ProjectState }) => {
@@ -1011,7 +1140,222 @@ const SkeletonInspector = ({ project, dispatch }: { project: ProjectState; dispa
     </div>;
 };
 
+type MechanismRecommendation = {
+    type: MechanismType;
+    label: string;
+    score: number;
+    reason: string;
+    mechanism: MechanismConfig;
+    previewPath: string;
+    feasibility: string;
+    fabricationErrors: string[];
+};
+
+const pathMetrics = (path: ProjectMotionPath) => {
+    const xs = path.points.map(p => p.x);
+    const ys = path.points.map(p => p.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    const width = Math.max(1, maxX - minX);
+    const height = Math.max(1, maxY - minY);
+    const direct = Math.hypot(path.points.at(-1)!.x - path.points[0].x, path.points.at(-1)!.y - path.points[0].y);
+    const length = path.points.slice(1).reduce((sum, p, i) => sum + Math.hypot(p.x - path.points[i].x, p.y - path.points[i].y), 0) || 1;
+    const closure = Math.hypot(path.points[0].x - path.points.at(-1)!.x, path.points[0].y - path.points.at(-1)!.y) / Math.max(width, height, 1);
+    return { width, height, aspect: width / height, directness: direct / length, closure, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, length };
+};
+
+const generatedBounds = (mechanism: MechanismConfig) => {
+    const points = generateCurvePoints(mechanism, 72).points;
+    if (!points.length) return null;
+    const xs = points.map(p => p.x);
+    const ys = points.map(p => p.y);
+    return {
+        minX: Math.min(...xs),
+        maxX: Math.max(...xs),
+        minY: Math.min(...ys),
+        maxY: Math.max(...ys)
+    };
+};
+
+const snapMechanismAnchor = (mechanism: MechanismConfig, project: ProjectState) => {
+    const board = sceneToBoard({ x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 }, project.settings.physicalKit);
+    const anchor = boardToScene(board.col, board.row, project.settings.physicalKit);
+    return mechanismWithGeneratedPath({ ...mechanism, anchorX: anchor.x, anchorY: anchor.y, sceneAnchor: anchor, transform: { ...(mechanism.transform ?? { x: anchor.x, y: anchor.y, rotation: mechanism.groundAngle ?? 0, scale: 1 }), x: anchor.x, y: anchor.y } });
+};
+
+const fitRecommendedMechanismToSheet = (project: ProjectState, mechanism: MechanismConfig) => {
+    const sheet = sceneBoundsForSheet(project.settings.physicalKit);
+    const margin = Math.max(10, project.settings.physicalKit.gridPitchMm * 0.35 * SCENE_PX_PER_MM);
+    let fitted = snapMechanismAnchor(mechanism, project);
+    let moved = false;
+    for (let i = 0; i < 4; i++) {
+        const bounds = generatedBounds(fitted);
+        if (!bounds) return fitted;
+        let dx = 0;
+        let dy = 0;
+        if (bounds.minX < sheet.x + margin) dx = sheet.x + margin - bounds.minX;
+        if (bounds.maxX > sheet.x + sheet.width - margin) dx = sheet.x + sheet.width - margin - bounds.maxX;
+        if (bounds.minY < sheet.y + margin) dy = sheet.y + margin - bounds.minY;
+        if (bounds.maxY > sheet.y + sheet.height - margin) dy = sheet.y + sheet.height - margin - bounds.maxY;
+        if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return fitted;
+        moved = true;
+        fitted = snapMechanismAnchor({ ...fitted, anchorX: (fitted.anchorX ?? 0) + dx, anchorY: (fitted.anchorY ?? 0) + dy }, project);
+    }
+    return moved
+        ? { ...fitted, warnings: [...(fitted.warnings ?? []), 'Auto-positioned inside the printable sheet; review anchor before cutting.'] }
+        : fitted;
+};
+
+const fabricationErrorsForCandidate = (project: ProjectState, mechanism: MechanismConfig) => {
+    const baseline = new Set(validateForFabrication(project).errors);
+    const candidateProject: ProjectState = { ...project, mechanisms: [...project.mechanisms, mechanism] };
+    return validateForFabrication(candidateProject).errors.filter(error => !baseline.has(error));
+};
+
+const availableMotionAnchorForRecommendation = (project: ProjectState, partId: string) => {
+    const anchors = motionAnchorJointIds(project, partId);
+    const occupied = new Set(project.mechanisms
+        .filter(m => m.visible && m.enabled !== false && m.targetPartId === partId)
+        .map(m => preferredMotionJointId(project, partId, m.targetAnchorJointId))
+        .filter(Boolean));
+    return [...anchors].reverse().find(anchor => !occupied.has(anchor)) ?? preferredMotionJointId(project, partId, undefined, { preferDistalWhenRoot: true });
+};
+
+const createRecommendedMechanism = (project: ProjectState, selectedPart: BodyPartLayer, selectedPath: ProjectMotionPath, type: MechanismType, reason: string, score: number): MechanismConfig => {
+    const metrics = pathMetrics(selectedPath);
+    const landingBoard = sceneToBoard(selectedPath.points[0], project.settings.physicalKit);
+    const landing = boardToScene(landingBoard.col, landingBoard.row, project.settings.physicalKit);
+    const first = selectedPath.points[0];
+    const last = selectedPath.points.at(-1) ?? first;
+    const travelAngle = Math.atan2(last.y - first.y, last.x - first.x) * 180 / Math.PI;
+    const span = Math.max(metrics.width, metrics.height, 40);
+    const base = createDefaultMechanism(type, `recommend-${type}`);
+    const smart = generateSmartConfig(selectedPath.points, type);
+    const tuned: MechanismConfig = {
+        ...base,
+        ...smart,
+        id: `recommend-${type}`,
+        type,
+        visible: true,
+        enabled: true,
+        color: base.color,
+        anchorX: landing.x,
+        anchorY: landing.y,
+        groundAngle: Number.isFinite(travelAngle) ? travelAngle : base.groundAngle,
+        crankLength: Math.max(20, Math.min(90, span * 0.24)),
+        groundLength: type === 'cam' || type === 'yoke' ? 0 : Math.max(60, Math.min(220, span * 0.85)),
+        couplerLength: type === 'gear' || type === 'planetary_gear' || type === 'cam' || type === 'yoke' ? 0 : Math.max(70, Math.min(260, metrics.length * 0.55)),
+        rockerLength: type === 'cam' ? Math.max(36, Math.min(130, metrics.height * 0.9)) : Math.max(40, Math.min(180, span * 0.55)),
+        sliderOffset: type === 'piston' || type === 'yoke' ? Math.max(-80, Math.min(80, metrics.height * 0.2)) : base.sliderOffset,
+        couplerPointDist: Math.max(35, Math.min(190, span * 0.72)),
+        couplerPointAngle: type === 'piston' ? 0 : base.couplerPointAngle,
+        gearRatio: type === 'gear' ? -1 : type === 'planetary_gear' ? 3 : undefined,
+        speed2: type === 'gear' ? -1 : type === 'planetary_gear' ? 3 : base.speed2,
+        phase: 0,
+        targetPartId: selectedPart.id,
+        targetPathId: selectedPath.id,
+        targetAnchorJointId: availableMotionAnchorForRecommendation(project, selectedPart.id),
+        activeVisualPartIds: [selectedPart.id],
+        source: 'optimized',
+        presetId: `recommendation-${type}`,
+        recommendation: reason,
+        warnings: score < 55 ? ['Low-confidence recommendation; review in Foundry before fabrication.'] : []
+    };
+    return fitRecommendedMechanismToSheet(project, mechanismWithGeneratedPath(tuned));
+};
+
+const buildMechanismRecommendations = (project: ProjectState, selectedPart?: BodyPartLayer, selectedPath?: ProjectMotionPath): MechanismRecommendation[] => {
+    if (!selectedPart || !selectedPath || selectedPath.points.length < 3) return [];
+    const metrics = pathMetrics(selectedPath);
+    const compact = Math.max(metrics.width, metrics.height) < 120;
+    const linear = metrics.directness > 0.72;
+    const closed = selectedPath.closed || metrics.closure < 0.35;
+    const candidates: Array<{ type: MechanismType; score: number; reason: string }> = [
+        { type: '4bar', score: 78 + (linear ? -6 : 8) + (metrics.aspect > 0.7 && metrics.aspect < 2.6 ? 8 : 0), reason: 'Best novice fit for an arcing limb path with printable bars.' },
+        { type: 'piston', score: 62 + (linear ? 22 : 0) + (metrics.aspect > 2.0 || metrics.aspect < 0.5 ? 8 : 0), reason: 'Good when the drawn motion reads as push-pull travel.' },
+        { type: 'yoke', score: 58 + (linear ? 18 : 0) + (compact ? 8 : 0), reason: 'Compact straight reciprocation with a slot-style guide.' },
+        { type: 'cam', score: 57 + (metrics.height > metrics.width * 0.75 ? 12 : 0) + (compact ? 8 : 0), reason: 'Useful for repeated lifts and bouncy offsets.' },
+        { type: 'gear', score: 48 + (closed ? 20 : 0), reason: 'Use when the output should stay rotational or reverse direction.' },
+        { type: 'planetary_gear', score: 45 + (closed && compact ? 28 : 6), reason: 'Dense rotary recipe for small circular or loopy paths.' }
+    ];
+    return candidates
+        .map(candidate => {
+            const mechanism = createRecommendedMechanism(project, selectedPart, selectedPath, candidate.type, candidate.reason, candidate.score);
+            const range = sampleFeasibleRange(mechanism);
+            const fabricationErrors = fabricationErrorsForCandidate(project, mechanism);
+            return {
+                type: candidate.type,
+                label: MECHANISM_LIBRARY[candidate.type].label,
+                score: Math.max(1, Math.min(99, Math.round(candidate.score - (range.percentValid < 1 ? 12 : 0) - (fabricationErrors.length ? 35 : 0)))),
+                reason: candidate.reason,
+                mechanism,
+                previewPath: fitPathToBox(mechanism.generatedPath ?? [], 220, 120),
+                feasibility: fabricationErrors.length ? `Blueprint blocked: ${fabricationErrors[0]}` : range.warning ?? '360° valid sampled motion',
+                fabricationErrors
+            };
+        })
+        .sort((a, b) => b.score - a.score);
+};
+
+const MechanismRecommendationSheet = ({ isOpen, project, selectedPart, selectedPath, onClose, onApply }: {
+    isOpen: boolean;
+    project: ProjectState;
+    selectedPart?: BodyPartLayer;
+    selectedPath?: ProjectMotionPath;
+    onClose: () => void;
+    onApply: (mechanism: MechanismConfig) => void;
+}) => {
+    const recommendations = useMemo(() => buildMechanismRecommendations(project, selectedPart, selectedPath), [project, selectedPart, selectedPath]);
+    const apply = (option: MechanismRecommendation) => {
+        onApply(mechanismWithGeneratedPath({
+            ...option.mechanism,
+            id: uid('mech'),
+            presetId: `recommendation-${option.type}`,
+            recommendation: `${option.reason} Score ${option.score}/100.`,
+            warnings: option.mechanism.warnings
+        }));
+    };
+    if (!isOpen) return null;
+    return <div className="modal-backdrop" role="presentation">
+        <section className="modal-sheet recommendation-dialog" role="dialog" aria-modal="true" aria-labelledby="recommendation-dialog-title" data-testid="recommendation-sheet">
+            <div className="flex items-center justify-between gap-3">
+                <div>
+                    <div className="section-title">Mechanism Recommendations</div>
+                    <h3 id="recommendation-dialog-title">Mechanism Recommendations for {selectedPart?.name ?? 'selected part'}</h3>
+                    <p className="mt-1 text-sm text-slate-600">Ranked from the current free path. Apply adds a real editable mechanism instance and blueprint recipe.</p>
+                </div>
+                <button className="btn-secondary" onClick={onClose}>Close</button>
+            </div>
+            {!recommendations.length ? <div className="recommendation-empty" data-testid="recommendation-empty">
+                Draw at least 3 free-path points for a selected body part, then return here for mechanism cards.
+            </div> : <div className="recommendation-grid mt-5">
+                {recommendations.map(option => <article key={option.type} className="recommendation-card recommendation-option" data-testid={`recommendation-card-${option.type}`}>
+                    <div className="flex items-center justify-between gap-3">
+                        <div>
+                            <div className="font-bold text-slate-800">{option.label}</div>
+                            <div className="text-xs font-black uppercase tracking-wider text-slate-500">{option.type} · score {option.score}/100</div>
+                        </div>
+                        <span className="recommendation-score">{option.score}</span>
+                    </div>
+                    <svg viewBox="0 0 220 120" className="recommendation-preview mt-3" aria-hidden="true">
+                        <path d={option.previewPath} fill="none" stroke={option.mechanism.color} strokeWidth="3" strokeLinecap="round" />
+                    </svg>
+                    <p className="mt-3">{option.reason}</p>
+                    <p className={`mt-2 text-xs ${option.fabricationErrors.length ? 'font-bold text-amber-700' : 'text-slate-500'}`}>Feasibility: {option.feasibility}</p>
+                    <button className="btn-primary mt-4" disabled={!!option.fabricationErrors.length} onClick={() => apply(option)}>Apply this</button>
+                </article>)}
+            </div>}
+        </section>
+    </div>;
+};
+
 const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selectedPath, onExport }: { project: ProjectState; foundry: FoundryState; setFoundry: (m: FoundryState) => void; selectedPart?: BodyPartLayer; selectedPath?: ProjectMotionPath; onExport: (pkg: FoundryExportPackage) => void }) => {
+    const [foundryPlaying, setFoundryPlaying] = useState(false);
+    const [foundryPhase, setFoundryPhase] = useState(0);
+    const [showForces, setShowForces] = useState(false);
+    const [showVelocity, setShowVelocity] = useState(false);
+    const [showTrail, setShowTrail] = useState(false);
+    const [showPathPreview, setShowPathPreview] = useState(true);
+    const [showSensemaking, setShowSensemaking] = useState(true);
     const targetReady = Boolean(selectedPart && selectedPath && selectedPath.enabled && selectedPath.points.length >= 3);
     const rawLanding = selectedPath?.points[0] ?? (selectedPart ? bodyPartPivotScene(selectedPart, project.skeleton) : { x: foundry.anchorX ?? 0, y: foundry.anchorY ?? 0 });
     const landingBoard = sceneToBoard(rawLanding, project.settings.physicalKit);
@@ -1022,8 +1366,26 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const range = sampleFeasibleRange(landedFoundry);
     const library = MECHANISM_LIBRARY[foundry.type];
     const feasibilityText = range.warning ?? '360° valid sampled motion';
-    const previewPath = fitPathToBox(preview, 360, 240);
+    const previewPoints = fitPointsToBox(preview, 360, 240);
+    const previewPath = pointsToSvgPath(previewPoints);
+    const playIndex = previewPoints.length ? Math.floor((((foundryPhase / (Math.PI * 2)) % 1 + 1) % 1) * (previewPoints.length - 1)) : 0;
+    const playhead = previewPoints[playIndex];
+    const previousPoint = previewPoints[Math.max(0, playIndex - 1)] ?? playhead;
+    const nextPoint = previewPoints[Math.min(previewPoints.length - 1, playIndex + 1)] ?? playhead;
     const hardBlocked = !targetReady || range.percentValid === 0 || !Number.isFinite(landing.x) || !Number.isFinite(landing.y);
+    useEffect(() => {
+        if (!foundryPlaying) return;
+        let frame = 0;
+        let last = performance.now();
+        const tick = (time: number) => {
+            const dt = Math.min(64, time - last);
+            last = time;
+            setFoundryPhase(prev => (prev + dt * 0.0025 * project.settings.animationSpeed) % (Math.PI * 2));
+            frame = requestAnimationFrame(tick);
+        };
+        frame = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(frame);
+    }, [foundryPlaying, project.settings.animationSpeed]);
     const makePackage = (): FoundryExportPackage => {
         const mechanismId = uid('mech');
         const state = calculateLinkage(landedFoundry, 0);
@@ -1051,10 +1413,31 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     return <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
         <section className="workspace p-6">
             <div className="mb-5 flex items-center justify-between"><h4 className="section-title">Sandbox preview</h4><button className="btn-primary" disabled={hardBlocked} onClick={() => onExport(makePackage())}><Boxes size={16}/> Use this mechanism</button></div>
+            <div className="foundry-toolbar mb-5" data-testid="foundry-toolbar">
+                <button className="btn-secondary" onClick={() => setShowSensemaking(true)}>Back to Gallery</button>
+                <button className={`btn-secondary ${foundryPlaying ? 'active' : ''}`} onClick={() => setFoundryPlaying(!foundryPlaying)}>{foundryPlaying ? 'Pause' : 'Play'}</button>
+                <button className={`btn-secondary ${showForces ? 'active' : ''}`} onClick={() => setShowForces(!showForces)}>Forces</button>
+                <button className={`btn-secondary ${showVelocity ? 'active' : ''}`} onClick={() => setShowVelocity(!showVelocity)}>Velocity</button>
+                <button className={`btn-secondary ${showTrail ? 'active' : ''}`} onClick={() => setShowTrail(!showTrail)}>Trail</button>
+                <button className={`btn-secondary ${showPathPreview ? 'active' : ''}`} onClick={() => setShowPathPreview(!showPathPreview)}>Path Preview</button>
+                <button className={`btn-secondary ${showSensemaking ? 'active' : ''}`} onClick={() => setShowSensemaking(!showSensemaking)}>Show Sensemaking</button>
+                <button className="btn-secondary" onClick={() => { setFoundryPhase(0); setFoundryPlaying(false); }}>Reset</button>
+                <button className="btn-primary" disabled={hardBlocked} onClick={() => onExport(makePackage())}>Add to Mechanism Tab</button>
+            </div>
             <svg viewBox="0 0 360 240" className="foundry-preview h-[520px] w-full rounded-[2rem]">
-                <path d={previewPath} fill="none" stroke={foundry.color} strokeWidth="4" strokeLinecap="round" opacity="0.95"/>
+                {showTrail && <path data-testid="foundry-trail-overlay" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="12" strokeLinecap="round" opacity="0.14"/>}
+                {showPathPreview && <path data-testid="foundry-path-preview" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="4" strokeLinecap="round" opacity="0.95"/>}
+                {showForces && playhead && <g data-testid="foundry-forces-overlay" stroke="#ef4444" strokeWidth="3" strokeLinecap="round">
+                    <line x1={playhead.x} y1={playhead.y} x2={180} y2={120} />
+                    <line x1={playhead.x} y1={playhead.y} x2={playhead.x} y2={Math.max(22, playhead.y - 42)} />
+                </g>}
+                {showVelocity && playhead && <g data-testid="foundry-velocity-overlay" stroke="#10b981" strokeWidth="4" strokeLinecap="round">
+                    <line x1={playhead.x} y1={playhead.y} x2={playhead.x + (nextPoint.x - previousPoint.x) * 2.2} y2={playhead.y + (nextPoint.y - previousPoint.y) * 2.2} />
+                </g>}
+                {playhead && <circle data-testid="foundry-playhead" cx={playhead.x} cy={playhead.y} r="6" fill="#5a6cff" stroke="white" strokeWidth="3" />}
                 <text x="22" y="38" className="foundry-preview-label" fontSize="16" fontWeight="800">{library.label} · {range.percentValid === 1 ? '360° valid' : range.warning}</text>
             </svg>
+            <div className="mt-3 text-xs font-bold text-slate-500" data-testid="foundry-toolbar-state">Toolbar: {foundryPlaying ? 'playing' : 'paused'} · path {showPathPreview ? 'shown' : 'hidden'} · phase {Math.round(foundryPhase * 180 / Math.PI)}°</div>
         </section>
         <aside className="workspace space-y-4 p-5">
             <h4 className="section-title">Mechanism library</h4>
@@ -1067,12 +1450,12 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                     </button>;
                 })}
             </div>
-            <div className="recommendation-card" data-testid="foundry-mechanism-library">
+            {showSensemaking && <div className="recommendation-card" data-testid="foundry-mechanism-library">
                 <div className="font-bold text-slate-800">Selected: {library.label}</div>
                 <div>Sensemaking: {library.sense}.</div>
                 <div>Constraint: {library.constraint}.</div>
                 <div data-testid="foundry-feasibility">Feasibility: {feasibilityText}</div>
-            </div>
+            </div>}
             <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600" data-testid="foundry-target-summary">
                 <div className="font-bold text-slate-800">Target: {selectedPart?.name ?? 'none'} · path {selectedPath?.points.length ?? 0} pts</div>
                 <div>Export lands at {landing.x.toFixed(0)}, {landing.y.toFixed(0)} ({landingBoard.label}) · anchor {selectedPart?.anchorJointId ?? 'none'}</div>
@@ -1099,7 +1482,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     </div>;
 };
 
-const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMechanismConfig, updateMechanism, dispatch, isPlaying, setIsPlaying, showTrace, setShowTrace, angle, setAngle, onOptimize, optimizerBusy, exportSvg, exportDxf, viewport, setViewport }: {
+const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMechanismConfig, updateMechanism, dispatch, isPlaying, setIsPlaying, showTrace, setShowTrace, angle, setAngle, onOptimize, onRecommendations, optimizerBusy, exportSvg, exportDxf, viewport, setViewport }: {
     project: ProjectState;
     selectedMechanism?: MechanismConfig;
     mechanismConfig: GlobalConfig;
@@ -1113,6 +1496,7 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
     angle: number;
     setAngle: React.Dispatch<React.SetStateAction<number>>;
     onOptimize: () => void;
+    onRecommendations: () => void;
     optimizerBusy: boolean;
     exportSvg: () => void;
     exportDxf: () => void;
@@ -1133,7 +1517,7 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
         <Canvas project={project} config={mechanismConfig} setConfig={setMechanismConfig} selectedId={project.selectedMechanismId ?? null} setSelectedId={id => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: id })} isPlaying={isPlaying} showTrace={showTrace} isDrawMode={false} userPath={[]} setUserPath={() => {}} angle={angle} setAngle={setAngle} viewport={viewport} setViewport={setViewport}/>
     </div>
     {project.settings.partPanelVisible && <aside className="workspace space-y-4 p-5">
-        <div className="flex gap-2"><button className="btn-secondary" onClick={() => setIsPlaying(!isPlaying)}><Play size={16}/>{isPlaying ? 'Pause' : 'Play'}</button><button className="btn-secondary" onClick={() => setShowTrace(!showTrace)}>Trace</button></div>
+        <div className="flex flex-wrap gap-2"><button className="btn-secondary" onClick={() => setIsPlaying(!isPlaying)}><Play size={16}/>{isPlaying ? 'Pause' : 'Play'}</button><button className="btn-secondary" onClick={() => setShowTrace(!showTrace)}>Trace</button><button className="btn-primary" onClick={onRecommendations}><Sparkles size={16}/> Get recommendations</button></div>
         <h4 className="section-title">Mechanism instances</h4>
         <select aria-label="Mechanism instance" className="field" value={selectedMechanism?.id ?? ''} onChange={e => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: e.target.value })}>{project.mechanisms.map(m => <option key={m.id} value={m.id}>{m.id} · {m.type}</option>)}</select>
         <div className="flex flex-wrap gap-2">
@@ -1342,15 +1726,17 @@ const showParam = (type: MechanismType, key: keyof MechanismConfig) => {
     return true;
 };
 
-const fitPathToBox = (points: Point[], width: number, height: number) => {
-    if (!points.length) return '';
+const fitPointsToBox = (points: Point[], width: number, height: number) => {
+    if (!points.length) return [];
     const xs = points.map(p => p.x), ys = points.map(p => p.y);
     const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
     const scale = Math.min((width - 60) / Math.max(1, maxX - minX), (height - 70) / Math.max(1, maxY - minY));
     const tx = width / 2 - ((minX + maxX) / 2) * scale;
     const ty = height / 2 + ((minY + maxY) / 2) * scale;
-    const scaled = points.map(p => ({ x: p.x * scale + tx, y: ty - p.y * scale }));
-    return `M ${scaled.map(p => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' L ')}`;
+    return points.map(p => ({ x: p.x * scale + tx, y: ty - p.y * scale }));
 };
+
+const pointsToSvgPath = (points: Point[]) => points.length ? `M ${points.map(p => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' L ')}` : '';
+const fitPathToBox = (points: Point[], width: number, height: number) => pointsToSvgPath(fitPointsToBox(points, width, height));
 
 export default App;

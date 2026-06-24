@@ -89,6 +89,19 @@
       .advanced-panel summary { cursor: pointer; list-style: none; color: var(--ms-muted); font-size: .78rem; font-weight: 950; letter-spacing: .16em; text-transform: uppercase; }
       .advanced-panel summary::-webkit-details-marker { display: none; }
       .recommendation-card { border: 1px solid var(--ms-line); border-radius: 1.25rem; background: #fff; padding: 1rem; color: var(--ms-muted); font-size: .9rem; line-height: 1.45; }
+      .modal-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 1.25rem; background: rgba(15,23,42,.28); backdrop-filter: blur(10px); }
+      .modal-sheet { width: min(100%, 68rem); max-height: min(88vh, 56rem); overflow: auto; border: 1px solid var(--ms-line); border-radius: 2rem; background: rgba(255,255,255,.98); box-shadow: 0 40px 120px rgba(8,10,18,.20); padding: 1.5rem; color: var(--ms-text); }
+      .modal-sheet h3 { margin: .25rem 0 0; font-size: clamp(1.6rem, 3vw, 2.4rem); line-height: 1; letter-spacing: -.055em; font-weight: 950; }
+      .camera-dialog { max-width: 46rem; }
+      .camera-preview { min-height: 20rem; display: grid; place-items: center; overflow: hidden; border: 1px solid var(--ms-line); border-radius: 1.5rem; background: #020617; }
+      .camera-preview video { width: 100%; max-height: 56vh; object-fit: contain; }
+      .camera-placeholder { color: #e2e8f0; font-weight: 850; }
+      .recommendation-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1rem; }
+      .recommendation-option { display: flex; flex-direction: column; }
+      .recommendation-preview { width: 100%; height: 7.5rem; border: 1px solid var(--ms-line); border-radius: 1rem; background: var(--ms-bg-soft); }
+      .recommendation-score { min-width: 2.4rem; border-radius: 999px; background: var(--ms-accent); color: white; padding: .45rem .55rem; text-align: center; font-weight: 950; }
+      .recommendation-empty { margin-top: 1.25rem; border: 1px dashed var(--ms-accent-line); border-radius: 1.25rem; background: var(--ms-accent-soft); padding: 1.25rem; color: var(--ms-text-soft); font-weight: 800; }
+      .foundry-toolbar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
       .command-bar { display: flex; align-items: center; justify-content: flex-end; gap: .35rem; color: var(--ms-muted); font-size: .78rem; font-weight: 900; }
       .command-bar details { position: relative; }
       .command-bar summary { list-style: none; border-radius: 999px; padding: .45rem .65rem; cursor: pointer; }
