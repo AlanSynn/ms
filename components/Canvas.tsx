@@ -773,6 +773,12 @@ const SceneUnderlay = ({ project, animatedParts = {}, previewSkeleton }: { proje
         <g transform="scale(1,-1)">
             <text x={sheet.x + 16} y={-(sheet.y + sheet.height - 28)} className="fill-slate-400 text-[12px] font-bold" data-testid="scene-grid-label">Letter sheet · {kit.gridPitchMm / 10}cm grid</text>
         </g>
+        {project?.settings.debugVisuals && <g data-testid="canvas-debug-visuals" pointerEvents="none" transform="scale(1,-1)">
+            <rect x={sheet.x + sheet.width - 182} y={-(sheet.y + sheet.height - 94)} width="166" height="76" rx="12" fill="#0f172a" opacity="0.78"/>
+            <text x={sheet.x + sheet.width - 166} y={-(sheet.y + sheet.height - 68)} fill="white" fontSize="12" fontWeight="800">Debug visuals</text>
+            <text x={sheet.x + sheet.width - 166} y={-(sheet.y + sheet.height - 48)} fill="#cbd5e1" fontSize="11">{project.partOrder.length} parts · {Object.keys(skeleton?.joints ?? {}).length} joints</text>
+            <text x={sheet.x + sheet.width - 166} y={-(sheet.y + sheet.height - 30)} fill="#cbd5e1" fontSize="11">snap {project.settings.physicsSnapMode} · fab {project.settings.fabricationReadyMode ? 'on' : 'off'}</text>
+        </g>}
         <line x1={sheet.x} y1="0" x2={sheet.x + sheet.width} y2="0" stroke="#d6dbe8" strokeWidth="1" opacity="0.25" />
         <line x1="0" y1={sheet.y} x2="0" y2={sheet.y + sheet.height} stroke="#d6dbe8" strokeWidth="1" opacity="0.25" />
         {project?.partOrder.map(id => animatedParts[id] ?? project.parts[id]).filter(Boolean).map(part => <React.Fragment key={part.id}><WorldPart part={part} selected={project.selectedPartId === part.id} /></React.Fragment>)}

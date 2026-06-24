@@ -41,6 +41,8 @@ export const validateForFabrication = (project: ProjectState) => {
         (severity === 'error' ? errors : warnings).push(message);
     };
     const sheet = sceneBoundsForSheet(project.settings.physicalKit);
+    const snapTolerance = project.settings.physicsSnapMode === 'fast' ? 4 : project.settings.physicsSnapMode === 'high' ? 0.25 : 0.5;
+    const fabricationSeverity: FabricationIssue['severity'] = project.settings.fabricationReadyMode ? 'error' : 'warning';
     const insideSheet = (p: { x: number; y: number }) => p.x >= sheet.x && p.x <= sheet.x + sheet.width && p.y >= sheet.y && p.y <= sheet.y + sheet.height;
     if (!project.partOrder.length) add('error', 'No character in scene.', { recoveryStage: 'character', recoveryAction: 'Load a character package' });
     const activeMechanisms = project.mechanisms.filter(m => m.visible && m.enabled !== false);
@@ -77,8 +79,8 @@ export const validateForFabrication = (project: ProjectState) => {
         }
         const board = sceneToBoardRaw({ x: m.anchorX!, y: m.anchorY! }, project.settings.physicalKit);
         const boardScene = board.valid ? boardToScene(board.col, board.row, project.settings.physicalKit) : null;
-        if (!board.valid) add('error', `${m.id}: anchor outside board at ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move anchor onto board' });
-        else if (boardScene && Math.hypot(boardScene.x - m.anchorX!, boardScene.y - m.anchorY!) > 0.5) add('error', `${m.id}: anchor off grid at ${board.label}; snap to a board hole before export.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Snap anchor to board hole' });
+        if (!board.valid) add(fabricationSeverity, `${m.id}: anchor outside board at ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move anchor onto board' });
+        else if (boardScene && Math.hypot(boardScene.x - m.anchorX!, boardScene.y - m.anchorY!) > snapTolerance) add(fabricationSeverity, `${m.id}: anchor off grid at ${board.label}; snap to a board hole before export.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Snap anchor to board hole' });
         else if (board.col <= 0 || board.row <= 0 || board.col >= project.settings.physicalKit.boardCells - 1 || board.row >= project.settings.physicalKit.boardCells - 1) {
             add('warning', `${m.id}: anchor near board edge at ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move anchor inward if needed' });
         }
@@ -157,10 +159,7 @@ const makeAssemblyGuideHtml = (project: ProjectState, recipes: FabricationRecipe
     return `<!doctype html><html><meta charset="utf-8"><title>${esc(project.metadata.name)} assembly</title><body><h1>${esc(project.metadata.name)} assembly guide</h1><p>Profile ${esc(project.settings.physicalKit.profileKey)} · ${project.settings.physicalKit.gridPitchMm}mm grid.</p>${warnings.map(w => `<p><strong>Warning:</strong> ${esc(w)}</p>`).join('')}<ol>${recipes.flatMap(r => r.steps.map(step => `<li><strong>${esc(r.mechanismId)}</strong> ${esc(step)}</li>`)).join('')}</ol></body></html>`;
 };
 
-const makeSimplePdf = (title: string, lines: string[]) => {
-    const safe = (s: string) => s.replace(/[()\\]/g, '\\$&').slice(0, 96);
-    const text = [title, ...lines].slice(0, 46);
-    const content = `BT /F1 14 Tf 50 760 Td ${text.map((line, i) => `${i ? '0 -16 Td ' : ''}(${safe(line)}) Tj`).join(' ')} ET`;
+const makePdfDocument = (content: string) => {
     const objects = [
         '1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj',
         '2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj',
@@ -175,6 +174,69 @@ const makeSimplePdf = (title: string, lines: string[]) => {
     pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map(n => String(n).padStart(10, '0') + ' 00000 n ').join('\n')}\n`;
     pdf += `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
     return pdf;
+};
+
+const pdfText = (value: unknown) => String(value)
+    .replace(/[^\x20-\x7E]/g, '?')
+    .replace(/[()\\]/g, '\\$&')
+    .slice(0, 120);
+
+const num = (value: number) => Number.isFinite(value) ? value.toFixed(2) : '0';
+
+const circlePath = (x: number, y: number, r: number) => {
+    const k = r * 0.5522847498;
+    return `${num(x + r)} ${num(y)} m ${num(x + r)} ${num(y + k)} ${num(x + k)} ${num(y + r)} ${num(x)} ${num(y + r)} c ${num(x - k)} ${num(y + r)} ${num(x - r)} ${num(y + k)} ${num(x - r)} ${num(y)} c ${num(x - r)} ${num(y - k)} ${num(x - k)} ${num(y - r)} ${num(x)} ${num(y - r)} c ${num(x + k)} ${num(y - r)} ${num(x + r)} ${num(y - k)} ${num(x + r)} ${num(y)} c h`;
+};
+
+const hexRgb = (value: string | undefined) => {
+    const safe = /^#[0-9a-fA-F]{6}$/.test(value ?? '') ? value! : '#5a6cff';
+    const r = parseInt(safe.slice(1, 3), 16) / 255;
+    const g = parseInt(safe.slice(3, 5), 16) / 255;
+    const b = parseInt(safe.slice(5, 7), 16) / 255;
+    return `${num(r)} ${num(g)} ${num(b)}`;
+};
+
+const makeCutSheetPdf = (project: ProjectState, recipes: FabricationRecipe[]) => {
+    const kit = project.settings.physicalKit;
+    const bounds = sceneBoundsForSheet(kit);
+    const page = { width: 612, height: 792, margin: 38, titleY: 760 };
+    const scale = Math.min((page.width - page.margin * 2) / bounds.width, (page.height - 150) / bounds.height);
+    const origin = { x: page.width / 2, y: 390 };
+    const toPdf = (p: { x: number; y: number }) => ({ x: origin.x + p.x * scale, y: origin.y + p.y * scale });
+    const sheetLeft = origin.x + bounds.x * scale;
+    const sheetBottom = origin.y + bounds.y * scale;
+    const commands: string[] = [
+        `BT /F1 14 Tf ${page.margin} ${page.titleY} Td (Cut sheet: ${pdfText(project.metadata.name)}) Tj ET`,
+        `BT /F1 9 Tf ${page.margin} ${page.titleY - 18} Td (Profile ${pdfText(kit.profileKey)} / ${kit.gridPitchMm}mm pitch / ${kit.boardCells}x${kit.boardCells} board holes) Tj ET`,
+        '0.92 0.95 1.00 rg 0.10 0.16 0.28 RG 1.1 w',
+        `${num(sheetLeft)} ${num(sheetBottom)} ${num(bounds.width * scale)} ${num(bounds.height * scale)} re B`
+    ];
+    for (let c = 0; c < kit.boardCells; c++) {
+        for (let r = 0; r < kit.boardCells; r++) {
+            const recipe = recipes.find(x => x.board.valid !== false && x.board.col === c && x.board.row === r);
+            const p = toPdf(boardToScene(c, r, kit));
+            commands.push(recipe ? '0.94 0.27 0.27 rg' : '0.62 0.68 0.78 rg');
+            commands.push(`${circlePath(p.x, p.y, recipe ? 3.8 : 1.7)} f`);
+            if (recipe) commands.push(`0.10 0.16 0.28 rg BT /F1 7 Tf ${num(p.x + 6)} ${num(p.y + 5)} Td (${pdfText(`${recipe.mechanismId} ${recipe.boardCoordinate}`)}) Tj ET`);
+        }
+    }
+    project.mechanisms.filter(m => m.visible && m.enabled !== false).forEach(m => {
+        const points = generateCurvePoints(m, 48).points.map(toPdf);
+        if (points.length > 1) {
+            commands.push(`${hexRgb(m.color)} RG 0.9 w`);
+            commands.push(`${num(points[0].x)} ${num(points[0].y)} m ${points.slice(1).map(p => `${num(p.x)} ${num(p.y)} l`).join(' ')} S`);
+        }
+    });
+    recipes.slice(0, 12).forEach((recipe, index) => {
+        commands.push(`0.10 0.16 0.28 rg BT /F1 8 Tf ${page.margin} ${118 - index * 10} Td (${pdfText(`${recipe.mechanismId}: ${recipe.type} at ${recipe.boardCoordinate}`)}) Tj ET`);
+    });
+    return makePdfDocument(commands.join('\n'));
+};
+
+const makeSimplePdf = (title: string, lines: string[]) => {
+    const text = [title, ...lines].slice(0, 46);
+    const content = `BT /F1 14 Tf 50 760 Td ${text.map((line, i) => `${i ? '0 -16 Td ' : ''}(${pdfText(line)}) Tj`).join(' ')} ET`;
+    return makePdfDocument(content);
 };
 
 export const createFabricationPackage = (project: ProjectState): FabricationPackage => {
@@ -216,6 +278,7 @@ export const createFabricationPackage = (project: ProjectState): FabricationPack
         warnings: validation.warnings,
         validationIssues: validation.issues,
         svg: makeSvg(project, recipes),
+        cutSheetPdf: makeCutSheetPdf(project, recipes),
         assemblyGuideHtml: makeAssemblyGuideHtml(project, recipes, validation.warnings),
         assemblyGuidePdf: makeSimplePdf(`${project.metadata.name} assembly`, recipes.flatMap(r => [`${r.mechanismId} at ${r.boardCoordinate}`, ...r.steps])),
         metadataJson: JSON.stringify(metadata, null, 2)

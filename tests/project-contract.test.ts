@@ -46,6 +46,7 @@ const twoFourBars = {
 const pkg = createFabricationPackage(twoFourBars);
 assert.equal(pkg.recipes.length, 2, 'duplicate same-type mechanisms create separate recipes');
 assert(pkg.sceneSnapshot.skeleton, 'fabrication snapshot includes skeleton');
+assert(pkg.cutSheetPdf.startsWith('%PDF-') && pkg.cutSheetPdf.includes('Cut sheet'), 'fabrication package includes a real PDF cut sheet artifact');
 assert(pkg.assemblyGuidePdf.startsWith('%PDF-'), 'fabrication package includes a PDF assembly artifact');
 assert(pkg.metadataJson.includes('validationIssues'), 'fabrication metadata includes structured validation issues');
 assert(pkg.recipes.every(r => r.requiredParts.length > 0), 'fabrication recipes include explicit required parts');
@@ -85,9 +86,63 @@ assert(!removedPartProject.parts['head-copy'] && !removedPartProject.paths['path
 const deletedPathProject = applyProjectAction(sample, { type: 'delete_path', pathId: 'path-right-arm' });
 assert(!deletedPathProject.paths['path-right-arm'], 'path editor delete removes path data instead of leaving an empty path');
 assert.equal(deletedPathProject.mechanisms[0].targetPathId, undefined, 'deleting a path detaches mechanisms from stale targetPathId');
-assert.equal(sample.settings.timingProfile, 'realtime', 'options include a persisted timing profile');
+assert.equal(sample.settings.timingProfile, 'linear', 'options include a persisted timing profile');
+assert.equal(sample.settings.theme, 'light', 'settings default to the light novice UI theme');
+assert.equal(sample.settings.performancePreset, 'balanced', 'settings default includes performance preset');
+assert.equal(sample.settings.physicsSnapMode, 'balanced', 'settings default includes physics snap mode');
+assert.equal(sample.settings.debugVisuals, false, 'settings default hides debug visuals');
+assert.equal(sample.settings.detailedProcessingSteps, false, 'settings default hides detailed processing steps');
+assert.equal(sample.settings.autosaveIntervalSeconds, 60, 'settings default includes autosave interval seconds');
+assert.equal(sample.settings.fabricationReadyMode, true, 'settings default keeps fabrication validation strict');
+assert.equal(sample.settings.gridUnit, 'cm', 'settings default labels grid in centimeters');
+assert.equal(sample.settings.physicalKit.cutSheetFileType, 'pdf', 'physical kit default is PDF-first for cut sheets');
+assert.equal(animationDeltaRadians(1600, 3200, 1, 'linear'), Math.PI, 'linear animation duration drives playback phase');
 assert.equal(animationDeltaRadians(1600, 3200, 1, 'realtime'), Math.PI, 'animation duration drives playback phase');
 assert.equal(animationDeltaRadians(1600, 6400, 1, 'realtime'), Math.PI / 2, 'longer duration slows playback phase');
+const linearQuarter = animationDeltaRadians(800, 3200, 1, 'linear', 0);
+assert(Math.abs(linearQuarter - Math.PI / 2) < 1e-9, 'linear timing advances a quarter cycle after a quarter duration');
+assert(animationDeltaRadians(800, 3200, 1, 'ease-in', 0) < linearQuarter, 'ease-in starts slower than linear');
+assert(animationDeltaRadians(800, 3200, 1, 'ease-out', 0) > linearQuarter, 'ease-out starts faster than linear');
+assert(animationDeltaRadians(800, 3200, 1, 'ease-in-out', 0) < linearQuarter, 'ease-in-out starts with a real eased phase');
+const legacySettingsProject = loadProjectSnapshot({
+  ...sample,
+  settings: {
+    animationSpeed: 1,
+    animationDurationMs: 3200,
+    timingProfile: 'realtime',
+    theme: 'blueprint',
+    toolbarVisible: true,
+    partPanelVisible: true,
+    autosave: false,
+    physicalKit: { ...sample.settings.physicalKit, cutSheetFileType: undefined }
+  }
+});
+assert.equal(legacySettingsProject.settings.performancePreset, 'balanced', 'legacy snapshots receive M3 performance default');
+assert.equal(legacySettingsProject.settings.autosaveIntervalSeconds, 60, 'legacy snapshots receive M3 autosave interval default');
+assert.equal(legacySettingsProject.settings.physicalKit.cutSheetFileType, 'pdf', 'legacy physical kit receives cut-sheet default');
+const optionsRoundTrip = loadProjectSnapshot(JSON.parse(serializeProject({
+  ...sample,
+  settings: {
+    ...sample.settings,
+    performancePreset: 'high',
+    physicsSnapMode: 'fast',
+    debugVisuals: true,
+    detailedProcessingSteps: true,
+    autosave: true,
+    autosaveIntervalSeconds: 3,
+    gridUnit: 'inch',
+    fabricationReadyMode: false,
+    physicalKit: { ...sample.settings.physicalKit, cutSheetFileType: 'svg' }
+  }
+})));
+assert.equal(optionsRoundTrip.settings.performancePreset, 'high', 'M3 performance setting serializes and reloads');
+assert.equal(optionsRoundTrip.settings.physicsSnapMode, 'fast', 'physics snap mode round-trips');
+assert.equal(optionsRoundTrip.settings.debugVisuals, true, 'debug visuals round-trip');
+assert.equal(optionsRoundTrip.settings.detailedProcessingSteps, true, 'detailed processing setting round-trips');
+assert.equal(optionsRoundTrip.settings.autosaveIntervalSeconds, 3, 'autosave interval round-trips');
+assert.equal(optionsRoundTrip.settings.gridUnit, 'inch', 'grid unit setting round-trips');
+assert.equal(optionsRoundTrip.settings.fabricationReadyMode, false, 'fabrication-ready mode round-trips');
+assert.equal(optionsRoundTrip.settings.physicalKit.cutSheetFileType, 'svg', 'cut-sheet file type round-trips');
 assert(sample.characterPackage?.partsInfo && sample.characterPackage.charCfg, 'sample project carries character package review artifacts');
 const detachedMechanismProject = { ...sample, mechanisms: [createDefaultMechanism('4bar', 'detached')] };
 assert(validateForFabrication(detachedMechanismProject).errors.some(e => e.includes('choose a target part and path')), 'fabrication blocks detached visible mechanisms');
@@ -98,6 +153,8 @@ const impossibleMechanismProject = { ...sample, mechanisms: [{ ...boundMechanism
 assert(validateForFabrication(impossibleMechanismProject).errors.some(e => e.includes('No valid sampled motion')), 'fabrication blocks mechanisms with no valid sampled motion');
 const offGridProject = { ...sample, mechanisms: [{ ...boundMechanism('4bar', 'off-grid'), anchorX: -70, anchorY: -80 }] };
 assert(validateForFabrication(offGridProject).errors.some(e => e.includes('off grid')), 'fabrication blocks off-grid anchors instead of rounding silently');
+const simulationOnlyOffGridProject = { ...offGridProject, settings: { ...sample.settings, fabricationReadyMode: false } };
+assert(validateForFabrication(simulationOnlyOffGridProject).warnings.some(e => e.includes('off grid')), 'simulation-only mode downgrades board snap issues to warnings');
 const recipeWithPath = createFabricationPackage(sample).recipes[0];
 assert.equal(recipeWithPath.targetPathId, 'path-right-arm', 'fabrication recipe preserves target path metadata');
 assert(recipeWithPath.sceneAnchor && 'x' in recipeWithPath.sceneAnchor, 'fabrication recipe includes explicit scene anchor');
@@ -346,11 +403,13 @@ assert(conflicts['drive-effector']?.some(w => w.includes('also drives right_arm:
 assert(conflicts['second-driver']?.some(w => w.includes('also drives right_arm:right_hand')), 'second duplicate driver receives explicit conflict warning');
 assert(validateForFabrication(conflictProject).errors.some(e => e.includes('only one mechanism can own a target anchor')), 'blueprint export blocks ambiguous duplicate target drivers');
 const exportedForSettings = applyProjectAction(sample, { type: 'set_export', fabricationPackage: createFabricationPackage(sample) });
-const uiSettingsProject = applyProjectAction(exportedForSettings, { type: 'update_settings', settings: { toolbarVisible: !exportedForSettings.settings.toolbarVisible } });
+const uiSettingsProject = applyProjectAction(exportedForSettings, { type: 'update_settings', settings: { toolbarVisible: !exportedForSettings.settings.toolbarVisible, debugVisuals: true, detailedProcessingSteps: true } });
 assert.equal(uiSettingsProject.lastExport, exportedForSettings.lastExport, 'UI-only options do not clear export package');
 assert.equal(uiSettingsProject.metadata.updatedAt, exportedForSettings.metadata.updatedAt, 'UI-only options do not mutate project metadata');
 const gridSettingsProject = applyProjectAction(exportedForSettings, { type: 'update_settings', settings: { physicalKit: { ...exportedForSettings.settings.physicalKit, gridPitchMm: exportedForSettings.settings.physicalKit.gridPitchMm + 1 } } });
 assert.equal(gridSettingsProject.lastExport, undefined, 'physical kit options invalidate export package');
+const snapSettingsProject = applyProjectAction(exportedForSettings, { type: 'update_settings', settings: { physicsSnapMode: 'high' } });
+assert.equal(snapSettingsProject.lastExport, undefined, 'physics snap settings invalidate fabrication export package');
 const indexHtml = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
 assert(!/https?:\/\//.test(indexHtml), 'index.html has no external CDN URLs');
 assert(!/importmap|tailwindcss/i.test(indexHtml), 'index.html does not rely on importmap or Tailwind CDN');

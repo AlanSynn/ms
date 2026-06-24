@@ -180,16 +180,24 @@ export interface PhysicalKitSettings {
     boardCells: number;
     holeDiameterMm: number;
     defaultExportFormat: 'svg' | 'json' | 'both';
+    cutSheetFileType: 'pdf' | 'svg';
 }
 
 export interface AppSettings {
     animationSpeed: number;
     animationDurationMs: number;
-    timingProfile: 'realtime' | 'slow' | 'presentation';
+    timingProfile: 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'realtime' | 'slow' | 'presentation';
     theme: 'light' | 'dark' | 'blueprint';
     toolbarVisible: boolean;
     partPanelVisible: boolean;
     autosave: boolean;
+    autosaveIntervalSeconds: number;
+    performancePreset: 'fast' | 'balanced' | 'high';
+    physicsSnapMode: 'fast' | 'balanced' | 'high';
+    debugVisuals: boolean;
+    detailedProcessingSteps: boolean;
+    gridUnit: 'cm' | 'inch' | 'px';
+    fabricationReadyMode: boolean;
     physicalKit: PhysicalKitSettings;
 }
 
@@ -224,6 +232,7 @@ export interface FabricationPackage {
     warnings: string[];
     validationIssues: FabricationIssue[];
     svg: string;
+    cutSheetPdf: string;
     assemblyGuideHtml: string;
     assemblyGuidePdf: string;
     metadataJson: string;

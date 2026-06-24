@@ -7,11 +7,29 @@ export const animationDeltaRadians = (
     dtMs: number,
     durationMs: number,
     speed = 1,
-    timingProfile: AppSettings['timingProfile'] = 'realtime'
+    timingProfile: AppSettings['timingProfile'] = 'linear',
+    currentAngleRad = 0
 ) => {
     const profileRate = timingProfile === 'slow' ? 0.5 : timingProfile === 'presentation' ? 0.75 : 1;
     const periodMs = Math.max(300, durationMs) / Math.max(0.01, speed * profileRate);
-    return (Math.max(0, dtMs) / periodMs) * Math.PI * 2;
+    const linearDelta = Math.max(0, dtMs) / periodMs;
+    const cycle = (value: number) => ((value % 1) + 1) % 1;
+    const ease = (t: number) => {
+        if (timingProfile === 'ease-in') return t * t;
+        if (timingProfile === 'ease-out') return 1 - (1 - t) * (1 - t);
+        if (timingProfile === 'ease-in-out') return t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2;
+        return t;
+    };
+    const inverseEase = (y: number) => {
+        if (timingProfile === 'ease-in') return Math.sqrt(y);
+        if (timingProfile === 'ease-out') return 1 - Math.sqrt(1 - y);
+        if (timingProfile === 'ease-in-out') return y < 0.5 ? Math.sqrt(y / 2) : 1 - Math.sqrt((1 - y) / 2);
+        return y;
+    };
+    const currentEased = cycle(currentAngleRad / (Math.PI * 2));
+    const nextLinear = cycle(inverseEase(currentEased) + linearDelta);
+    const nextEased = ease(nextLinear);
+    return cycle(nextEased - currentEased) * Math.PI * 2;
 };
 
 /**

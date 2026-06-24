@@ -27,13 +27,60 @@ export const idleProcessing = (): ProcessingStatus => ({ stage: 'idle', message:
 export const defaultSettings = (): AppSettings => ({
     animationSpeed: 1,
     animationDurationMs: 3200,
-    timingProfile: 'realtime',
-    theme: 'blueprint',
+    timingProfile: 'linear',
+    theme: 'light',
     toolbarVisible: true,
     partPanelVisible: true,
     autosave: false,
+    autosaveIntervalSeconds: 60,
+    performancePreset: 'balanced',
+    physicsSnapMode: 'balanced',
+    debugVisuals: false,
+    detailedProcessingSteps: false,
+    gridUnit: 'cm',
+    fabricationReadyMode: true,
     physicalKit: defaultPhysicalKit()
 });
+
+const pickOne = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T =>
+    typeof value === 'string' && (allowed as readonly string[]).includes(value) ? value as T : fallback;
+
+const normalizePhysicalKitSettings = (value: unknown, fallback = defaultPhysicalKit()): AppSettings['physicalKit'] => {
+    const raw = asRecord(value);
+    return {
+        ...fallback,
+        profileKey: typeof raw.profileKey === 'string' && raw.profileKey.trim() ? raw.profileKey : fallback.profileKey,
+        gridPitchMm: clampNumber(raw.gridPitchMm, fallback.gridPitchMm, 5, 50),
+        sheetWidthMm: clampNumber(raw.sheetWidthMm, fallback.sheetWidthMm, 80, 1200),
+        sheetHeightMm: clampNumber(raw.sheetHeightMm, fallback.sheetHeightMm, 80, 1600),
+        boardCells: Math.round(clampNumber(raw.boardCells, fallback.boardCells, 4, 40)),
+        holeDiameterMm: clampNumber(raw.holeDiameterMm, fallback.holeDiameterMm, 1, 20),
+        defaultExportFormat: pickOne(raw.defaultExportFormat, ['svg', 'json', 'both'] as const, fallback.defaultExportFormat),
+        cutSheetFileType: pickOne(raw.cutSheetFileType, ['pdf', 'svg'] as const, fallback.cutSheetFileType)
+    };
+};
+
+const normalizeAppSettings = (value: unknown, fallback = defaultSettings()): AppSettings => {
+    const raw = asRecord(value);
+    return {
+        ...fallback,
+        animationSpeed: clampNumber(raw.animationSpeed, fallback.animationSpeed, 0.1, 5),
+        animationDurationMs: Math.round(clampNumber(raw.animationDurationMs, fallback.animationDurationMs, 100, 60000)),
+        timingProfile: pickOne(raw.timingProfile, ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'realtime', 'slow', 'presentation'] as const, fallback.timingProfile),
+        theme: pickOne(raw.theme, ['light', 'dark', 'blueprint'] as const, fallback.theme),
+        toolbarVisible: typeof raw.toolbarVisible === 'boolean' ? raw.toolbarVisible : fallback.toolbarVisible,
+        partPanelVisible: typeof raw.partPanelVisible === 'boolean' ? raw.partPanelVisible : fallback.partPanelVisible,
+        autosave: typeof raw.autosave === 'boolean' ? raw.autosave : fallback.autosave,
+        autosaveIntervalSeconds: Math.round(clampNumber(raw.autosaveIntervalSeconds, fallback.autosaveIntervalSeconds, 1, 600)),
+        performancePreset: pickOne(raw.performancePreset, ['fast', 'balanced', 'high'] as const, fallback.performancePreset),
+        physicsSnapMode: pickOne(raw.physicsSnapMode, ['fast', 'balanced', 'high'] as const, fallback.physicsSnapMode),
+        debugVisuals: typeof raw.debugVisuals === 'boolean' ? raw.debugVisuals : fallback.debugVisuals,
+        detailedProcessingSteps: typeof raw.detailedProcessingSteps === 'boolean' ? raw.detailedProcessingSteps : fallback.detailedProcessingSteps,
+        gridUnit: pickOne(raw.gridUnit, ['cm', 'inch', 'px'] as const, fallback.gridUnit),
+        fabricationReadyMode: typeof raw.fabricationReadyMode === 'boolean' ? raw.fabricationReadyMode : fallback.fabricationReadyMode,
+        physicalKit: normalizePhysicalKitSettings(raw.physicalKit, fallback.physicalKit)
+    };
+};
 
 const joint = (id: string, x: number, y: number, parentId: string | null = null): StandardJoint => ({
     id,
@@ -536,9 +583,15 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
         }
         case 'delete_mechanism':
             return touch({ ...project, mechanisms: project.mechanisms.filter(m => m.id !== action.mechanismId), selectedMechanismId: project.selectedMechanismId === action.mechanismId ? undefined : project.selectedMechanismId });
-        case 'update_settings':
-            if (!action.settings.physicalKit) return { ...project, settings: { ...project.settings, ...action.settings } };
-            return touch({ ...project, settings: { ...project.settings, ...action.settings, physicalKit: { ...project.settings.physicalKit, ...(action.settings.physicalKit ?? {}) } } });
+        case 'update_settings': {
+            const settings = normalizeAppSettings({
+                ...project.settings,
+                ...action.settings,
+                physicalKit: { ...project.settings.physicalKit, ...(action.settings.physicalKit ?? {}) }
+            }, project.settings);
+            const invalidatesExport = Boolean(action.settings.physicalKit || action.settings.fabricationReadyMode !== undefined || action.settings.physicsSnapMode !== undefined);
+            return invalidatesExport ? touch({ ...project, settings }) : { ...project, settings };
+        }
         case 'set_export':
             return touch({ ...project, lastExport: action.fabricationPackage }, { preserveExport: true });
         case 'set_foundry_export':
@@ -730,7 +783,7 @@ export const migrateProjectSnapshot = (raw: unknown): ProjectState => {
         skeleton,
         paths,
         mechanisms: (Array.isArray(data.mechanisms) ? data.mechanisms : fallback.mechanisms).map(m => reconcileMechanismTargets(normalizeMechanismSnapshot(m), parts, paths, { preserveGeneratedPath: true })),
-        settings: { ...fallback.settings, ...(data.settings ?? {}), timingProfile: ['realtime', 'slow', 'presentation'].includes(String(data.settings?.timingProfile)) ? data.settings!.timingProfile : fallback.settings.timingProfile, physicalKit: { ...fallback.settings.physicalKit, ...(data.settings?.physicalKit ?? {}) } },
+        settings: normalizeAppSettings(data.settings, fallback.settings),
         processing: data.processing ?? idleProcessing(),
         lastExport: undefined
     };

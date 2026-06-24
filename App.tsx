@@ -105,6 +105,7 @@ const App: React.FC = () => {
     const [canvasViewport, setCanvasViewport] = useState<CanvasViewport>(DEFAULT_CANVAS_VIEWPORT);
     const [commandStatus, setCommandStatus] = useState('Ready');
     const projectInputRef = useRef<HTMLInputElement>(null);
+    const latestProjectRef = useRef<ProjectState | null>(null);
 
     const dispatch = (action: Parameters<typeof applyProjectAction>[1]) => setProject(prev => applyProjectAction(prev, action));
     const goStage = (target: AppStage) => {
@@ -137,7 +138,7 @@ const App: React.FC = () => {
         const tick = (time: number) => {
             const dt = Math.min(64, time - last);
             last = time;
-            setAngle(prev => (prev + animationDeltaRadians(dt, playbackDurationMs, project.settings.animationSpeed, project.settings.timingProfile)) % (Math.PI * 2));
+            setAngle(prev => (prev + animationDeltaRadians(dt, playbackDurationMs, project.settings.animationSpeed, project.settings.timingProfile, prev)) % (Math.PI * 2));
             frame = requestAnimationFrame(tick);
         };
         frame = requestAnimationFrame(tick);
@@ -314,7 +315,8 @@ const App: React.FC = () => {
         await new Promise(r => setTimeout(r, 16));
         let best = generateSmartConfig(selectedPath.points, selectedMechanism.type);
         let bestScore = evaluateFitness(best, selectedPath.points);
-        for (let i = 0; i < 260; i++) {
+        const iterations = project.settings.performancePreset === 'fast' ? 120 : project.settings.performancePreset === 'high' ? 520 : 260;
+        for (let i = 0; i < iterations; i++) {
             const candidate = i < 80 ? generateSmartConfig(selectedPath.points, selectedMechanism.type) : mutateConfig(best, 0.45, true);
             const score = evaluateFitness(candidate, selectedPath.points);
             if (score < bestScore) {
@@ -336,13 +338,23 @@ const App: React.FC = () => {
     };
 
     useEffect(() => {
-        if (!project.settings.autosave) return;
-        try {
-            localStorage.setItem('mechanim.autosave', serializeProject(project));
-        } catch {
-            // ponytail: autosave is best-effort; manual Save stays available.
-        }
+        latestProjectRef.current = project;
     }, [project]);
+
+    useEffect(() => {
+        if (!project.settings.autosave) return;
+        const writeAutosave = () => {
+            try {
+                localStorage.setItem('mechanim.autosave', serializeProject(latestProjectRef.current ?? project));
+            } catch {
+                // ponytail: autosave is best-effort; manual Save stays available.
+            }
+        };
+        writeAutosave();
+        const intervalMs = Math.max(1000, project.settings.autosaveIntervalSeconds * 1000);
+        const interval = window.setInterval(writeAutosave, intervalMs);
+        return () => window.clearInterval(interval);
+    }, [project.settings.autosave, project.settings.autosaveIntervalSeconds]);
 
     const exportMechanismSvg = () => {
         downloadText(`mechanisms-${Date.now()}.svg`, generateSVG(mechanismConfig, angle), 'image/svg+xml');
@@ -483,7 +495,7 @@ const App: React.FC = () => {
                                 onOptions={() => goStage('options')}
                                 onDisabled={disabledCommand}
                             />
-                            {project.settings.toolbarVisible && <div className="flex gap-2">
+                            {project.settings.toolbarVisible && <div className="flex gap-2" data-testid="quick-toolbar">
                                 <label className="btn-secondary cursor-pointer"><Upload size={16}/> Import<input hidden type="file" accept="application/json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/></label>
                                 <button className="btn-secondary" onClick={saveProject}><Save size={16}/> Save</button>
                                 <button className="btn-primary" onClick={() => goStage('blueprint')}><Download size={16}/> Export</button>
@@ -619,7 +631,7 @@ const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setRe
     const artifact = reviewedProject.characterPackage;
     const isPlainReview = artifact?.replacementContext?.mode !== 'replace-character';
     const isReplacementReview = artifact?.replacementContext?.mode === 'replace-character';
-    const statusOpen = Boolean(pendingCharacter || ['loading-model', 'running-model', 'normalizing', 'error'].includes(project.processing.stage));
+    const statusOpen = Boolean(pendingCharacter || project.settings.detailedProcessingSteps || ['loading-model', 'running-model', 'normalizing', 'error'].includes(project.processing.stage));
     const checks = [
         { label: 'parts_info.json package artifact', ok: Boolean(artifact?.partsInfo) },
         { label: 'char_cfg.yaml skeleton artifact', ok: Boolean(artifact?.charCfg && reviewedProject.skeleton) },
@@ -710,6 +722,15 @@ const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setRe
 
 const ProgressBlock = ({ project }: { project: ProjectState }) => {
     const p = project.processing;
+    const steps: Array<{ stage: ProjectState['processing']['stage']; label: string }> = [
+        { stage: 'selecting', label: 'Choose source files' },
+        { stage: 'loading-model', label: 'Load local model or package' },
+        { stage: 'running-onnx', label: 'Run browser ONNX analysis' },
+        { stage: 'extracting-parts', label: 'Extract character parts' },
+        { stage: 'normalizing', label: 'Normalize to the physical sheet' },
+        { stage: 'ready', label: 'Ready for review' }
+    ];
+    const activeIndex = Math.max(0, steps.findIndex(step => step.stage === p.stage));
     return <div className="progress-card rounded-3xl p-5">
         <div className="flex items-center gap-3">
             {p.stage === 'error' ? <AlertCircle className="text-red-400"/> : p.stage === 'ready' ? <CheckCircle2 className="text-emerald-400"/> : <Loader2 className="progress-icon animate-spin"/>}
@@ -719,6 +740,12 @@ const ProgressBlock = ({ project }: { project: ProjectState }) => {
             </div>
         </div>
         <div className="progress-track mt-4 h-2 rounded-full"><div className="progress-bar h-2 rounded-full transition-all" style={{ width: `${p.progress}%` }}/></div>
+        {project.settings.detailedProcessingSteps && <ol className="mt-4 grid gap-2 text-xs text-slate-600" data-testid="processing-step-details">
+            {steps.map((step, index) => <li key={step.stage} className={`flex items-center gap-2 ${index <= activeIndex || p.stage === 'error' ? 'font-bold text-slate-800' : ''}`}>
+                <span className={`h-2 w-2 rounded-full ${index <= activeIndex ? 'bg-indigo-500' : 'bg-slate-300'}`} />
+                <span>{step.label}</span>
+            </li>)}
+        </ol>}
         {p.error && <pre className="mt-4 max-h-32 overflow-auto whitespace-pre-wrap rounded-2xl bg-red-950/60 p-3 text-xs text-red-100">{p.error}</pre>}
     </div>;
 };
@@ -890,7 +917,13 @@ const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, 
         <defs><filter id="soft"><feDropShadow dx="0" dy="10" stdDeviation="10" floodOpacity="0.13"/></filter></defs>
         <rect x={sheetSvg.x} y={sheetSvg.y} width={sheetSvg.width} height={sheetSvg.height} rx="18" fill="white" stroke="#d6dbe8" strokeWidth="1.5"/>
         {gridLines}
-        <text x={sheetSvg.x + 16} y={sheetSvg.y + 28} className="fill-slate-400 text-[12px] font-bold">Letter sheet · {kit.gridPitchMm / 10}cm grid</text>
+        <text x={sheetSvg.x + 16} y={sheetSvg.y + 28} className="fill-slate-400 text-[12px] font-bold" data-testid="scene-grid-label">Letter sheet · {kit.gridPitchMm / 10}cm grid</text>
+        {project.settings.debugVisuals && <g data-testid="canvas-debug-visuals" pointerEvents="none">
+            <rect x={sheetSvg.x + sheetSvg.width - 178} y={sheetSvg.y + 14} width="160" height="72" rx="12" fill="#0f172a" opacity="0.78"/>
+            <text x={sheetSvg.x + sheetSvg.width - 164} y={sheetSvg.y + 38} fill="white" fontSize="12" fontWeight="800">Debug visuals</text>
+            <text x={sheetSvg.x + sheetSvg.width - 164} y={sheetSvg.y + 57} fill="#cbd5e1" fontSize="11">{project.partOrder.length} parts · {Object.keys(project.skeleton?.joints ?? {}).length} joints</text>
+            <text x={sheetSvg.x + sheetSvg.width - 164} y={sheetSvg.y + 75} fill="#cbd5e1" fontSize="11">snap {project.settings.physicsSnapMode} · fab {project.settings.fabricationReadyMode ? 'on' : 'off'}</text>
+        </g>}
         {previewSkeleton?.bones.map(([a, b]) => {
             const ja = previewSkeleton?.joints[a]; const jb = previewSkeleton?.joints[b];
             if (!ja || !jb) return null;
@@ -1142,8 +1175,11 @@ const BlueprintExport = ({ project, dispatch, goStage }: { project: ProjectState
     };
     const pkg = project.lastExport;
     const defaultFormat = project.settings.physicalKit.defaultExportFormat;
+    const cutSheetFileType = project.settings.physicalKit.cutSheetFileType;
     const downloadJson = () => pkg && downloadText(`${pkg.id}.json`, JSON.stringify(pkg, null, 2));
     const downloadSvg = () => pkg && downloadText(`${pkg.id}.svg`, pkg.svg, 'image/svg+xml');
+    const downloadCutSheetPdf = () => pkg && downloadText(`${pkg.id}-cut-sheet.pdf`, pkg.cutSheetPdf, 'application/pdf');
+    const downloadAssemblyPdf = () => pkg && downloadText(`${pkg.id}-assembly.pdf`, pkg.assemblyGuidePdf, 'application/pdf');
     return <div className="grid gap-5 xl:grid-cols-[.8fr_1.2fr]">
         <section className="workspace p-6">
             <h4 className="section-title">Validation</h4>
@@ -1161,12 +1197,21 @@ const BlueprintExport = ({ project, dispatch, goStage }: { project: ProjectState
                     </div>
                     <div className="mt-2 text-xs">Full package artifacts remain available for handoff and archival.</div>
                 </div>
+                <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
+                    <div className="font-bold text-slate-800">Cut-sheet default: {cutSheetFileType.toUpperCase()}</div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                        {cutSheetFileType === 'pdf'
+                            ? <button className="btn-primary" onClick={downloadCutSheetPdf}>Download PDF cut sheet default</button>
+                            : <button className="btn-primary" onClick={downloadSvg}>Download SVG cut sheet default</button>}
+                    </div>
+                    <div className="mt-2 text-xs">Assembly guide stays bundled even when SVG is the preferred cut sheet.</div>
+                </div>
                 <div className="flex flex-wrap gap-2">
                 <button className="btn-secondary" onClick={downloadJson}>JSON</button>
                 <button className="btn-secondary" onClick={downloadSvg}>SVG</button>
                 <button className="btn-secondary" onClick={() => downloadText(`${pkg.id}-assembly.html`, pkg.assemblyGuideHtml, 'text/html')}>Guide</button>
                 <button className="btn-secondary" onClick={() => downloadText(`${pkg.id}-metadata.json`, pkg.metadataJson)}>Metadata</button>
-                <button className="btn-secondary" onClick={() => downloadText(`${pkg.id}-assembly.pdf`, pkg.assemblyGuidePdf, 'application/pdf')}>PDF</button>
+                <button className="btn-secondary" onClick={downloadAssemblyPdf}>PDF</button>
                 </div>
             </div>}
         </section>
@@ -1178,31 +1223,113 @@ const BlueprintExport = ({ project, dispatch, goStage }: { project: ProjectState
     </div>;
 };
 
-const Options = ({ project, dispatch }: { project: ProjectState; dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void }) => <div className="workspace max-w-3xl space-y-5 p-6">
-    <h4 className="section-title">Global settings</h4>
-    <MiniNumber label="Animation speed" value={project.settings.animationSpeed} min={0.1} max={5} step={0.1} onChange={animationSpeed => dispatch({ type: 'update_settings', settings: { animationSpeed } })}/>
-    <MiniNumber label="Animation duration ms" value={project.settings.animationDurationMs} min={300} max={12000} step={100} onChange={animationDurationMs => dispatch({ type: 'update_settings', settings: { animationDurationMs } })}/>
-    <select className="field" value={project.settings.timingProfile} onChange={e => dispatch({ type: 'update_settings', settings: { timingProfile: e.target.value as ProjectState['settings']['timingProfile'] } })}>
-        <option value="realtime">Timing: realtime</option>
-        <option value="slow">Timing: slow inspection</option>
-        <option value="presentation">Timing: presentation</option>
-    </select>
-    <MiniNumber label="Grid pitch mm" value={project.settings.physicalKit.gridPitchMm} min={5} max={50} onChange={gridPitchMm => dispatch({ type: 'update_settings', settings: { physicalKit: { ...project.settings.physicalKit, gridPitchMm } } })}/>
-    <select className="field" value={project.settings.physicalKit.profileKey} onChange={e => dispatch({ type: 'update_settings', settings: { physicalKit: physicalKitPreset(e.target.value, project.settings.physicalKit) } })}>
-        <option value="letter-15x15-2cm">Letter 15×15 · 2cm</option>
-        <option value="letter-12x12-2cm">Letter 12×12 · 2cm draft</option>
-        <option value="custom">Custom profile</option>
-    </select>
-    <select className="field" value={project.settings.physicalKit.defaultExportFormat} onChange={e => dispatch({ type: 'update_settings', settings: { physicalKit: { ...project.settings.physicalKit, defaultExportFormat: e.target.value as ProjectState['settings']['physicalKit']['defaultExportFormat'] } } })}>
-        <option value="both">Export SVG + JSON</option>
-        <option value="svg">Export SVG only</option>
-        <option value="json">Export JSON only</option>
-    </select>
-    <Toggle label="Toolbar visible" checked={project.settings.toolbarVisible} onChange={toolbarVisible => dispatch({ type: 'update_settings', settings: { toolbarVisible } })}/>
-    <Toggle label="Part panel visible" checked={project.settings.partPanelVisible} onChange={partPanelVisible => dispatch({ type: 'update_settings', settings: { partPanelVisible } })}/>
-    <Toggle label="Autosave" checked={project.settings.autosave} onChange={autosave => dispatch({ type: 'update_settings', settings: { autosave } })}/>
-    <select className="field" value={project.settings.theme} onChange={e => dispatch({ type: 'update_settings', settings: { theme: e.target.value as ProjectState['settings']['theme'] } })}><option value="blueprint">Blueprint</option><option value="light">Light</option><option value="dark">Dark</option></select>
-</div>;
+const Options = ({ project, dispatch }: { project: ProjectState; dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void }) => {
+    const kit = project.settings.physicalKit;
+    const updateSettings = (settings: Partial<ProjectState['settings']>) => dispatch({ type: 'update_settings', settings });
+    const updateKit = (physicalKit: Partial<ProjectState['settings']['physicalKit']>) => updateSettings({ physicalKit: { ...kit, ...physicalKit } });
+    const durationSeconds = Number((project.settings.animationDurationMs / 1000).toFixed(1));
+    const unitSummary = project.settings.gridUnit === 'inch'
+        ? `${(kit.gridPitchMm / 25.4).toFixed(2)} in between board holes`
+        : project.settings.gridUnit === 'px'
+            ? `${(kit.gridPitchMm * 2).toFixed(0)} scene px between board holes`
+            : `${(kit.gridPitchMm / 10).toFixed(1)} cm between board holes`;
+    return <div className="options-workspace grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
+        <section className="workspace space-y-5 p-6">
+            <div>
+                <div className="section-title">Options</div>
+                <h3>Make the studio feel simple.</h3>
+                <p className="mt-2 text-sm text-slate-600">These controls write into the real project settings. Fabrication and grid choices also refresh blueprint validation.</p>
+            </div>
+            <SettingsSection id="appearance" title="Appearance" description="Keep the interface light and show only the panels you need.">
+                <SelectField label="Theme" value={project.settings.theme} onChange={theme => updateSettings({ theme: theme as ProjectState['settings']['theme'] })}>
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                    <option value="blueprint">Blueprint tint</option>
+                </SelectField>
+                <Toggle label="Show toolbar" checked={project.settings.toolbarVisible} onChange={toolbarVisible => updateSettings({ toolbarVisible })}/>
+                <Toggle label="Show part panel" checked={project.settings.partPanelVisible} onChange={partPanelVisible => updateSettings({ partPanelVisible })}/>
+            </SettingsSection>
+            <SettingsSection id="simulation" title="Simulation" description="Preview timing for one full motion loop.">
+                <MiniNumber label="Animation speed" value={project.settings.animationSpeed} min={0.1} max={5} step={0.1} onChange={animationSpeed => updateSettings({ animationSpeed })}/>
+                <MiniNumber label="Simulation duration seconds" value={durationSeconds} min={0.1} max={60} step={0.1} onChange={seconds => updateSettings({ animationDurationMs: Math.round(seconds * 1000) })}/>
+                <SelectField label="Timing profile" value={project.settings.timingProfile} onChange={timingProfile => updateSettings({ timingProfile: timingProfile as ProjectState['settings']['timingProfile'] })}>
+                    <option value="linear">Linear · steady preview</option>
+                    <option value="ease-in">Ease-In · slower start</option>
+                    <option value="ease-out">Ease-Out · faster finish</option>
+                    <option value="ease-in-out">Ease-In-Out · gentle loop</option>
+                    <option value="realtime">Realtime legacy</option>
+                    <option value="slow">Slow inspection legacy</option>
+                    <option value="presentation">Presentation legacy</option>
+                </SelectField>
+            </SettingsSection>
+        </section>
+        <section className="space-y-5">
+            <SettingsSection id="performance" title="Performance" description="Choose how hard path fitting and snap checks work.">
+                <SelectField label="Performance preset" value={project.settings.performancePreset} onChange={performancePreset => updateSettings({ performancePreset: performancePreset as ProjectState['settings']['performancePreset'] })}>
+                    <option value="fast">Fast · fewer fit samples</option>
+                    <option value="balanced">Balanced</option>
+                    <option value="high">High · more fit samples</option>
+                </SelectField>
+                <SelectField label="Physics snap mode" value={project.settings.physicsSnapMode} onChange={physicsSnapMode => updateSettings({ physicsSnapMode: physicsSnapMode as ProjectState['settings']['physicsSnapMode'] })}>
+                    <option value="fast">Fast · forgiving snap tolerance</option>
+                    <option value="balanced">Balanced</option>
+                    <option value="high">High · strict board-hole snap</option>
+                </SelectField>
+            </SettingsSection>
+            <SettingsSection id="debugging" title="Debugging" description="Turn on labels when something feels off.">
+                <Toggle label="Show debug visuals" checked={project.settings.debugVisuals} onChange={debugVisuals => updateSettings({ debugVisuals })}/>
+                <Toggle label="Detailed processing steps" checked={project.settings.detailedProcessingSteps} onChange={detailedProcessingSteps => updateSettings({ detailedProcessingSteps })}/>
+            </SettingsSection>
+            <SettingsSection id="workflow" title="Workflow" description="Autosave is local to this browser.">
+                <Toggle label="Enable autosave" checked={project.settings.autosave} onChange={autosave => updateSettings({ autosave })}/>
+                <MiniNumber label="Autosave interval seconds" value={project.settings.autosaveIntervalSeconds} min={1} max={600} step={1} disabled={!project.settings.autosave} onChange={autosaveIntervalSeconds => updateSettings({ autosaveIntervalSeconds })}/>
+            </SettingsSection>
+            <SettingsSection id="fabrication" title="Fabrication / Blueprint export" description="Match the preview grid to the physical sheet and board holes.">
+                <SelectField label="Default export format" value={kit.defaultExportFormat} onChange={defaultExportFormat => updateKit({ defaultExportFormat: defaultExportFormat as ProjectState['settings']['physicalKit']['defaultExportFormat'] })}>
+                    <option value="both">Export SVG + JSON</option>
+                    <option value="svg">Export SVG only</option>
+                    <option value="json">Export JSON only</option>
+                </SelectField>
+                <SelectField label="Cut-sheet file type" value={kit.cutSheetFileType} onChange={cutSheetFileType => updateKit({ cutSheetFileType: cutSheetFileType as ProjectState['settings']['physicalKit']['cutSheetFileType'] })}>
+                    <option value="pdf">PDF default</option>
+                    <option value="svg">SVG</option>
+                </SelectField>
+                <Toggle label="Fabrication-ready mode" checked={project.settings.fabricationReadyMode} onChange={fabricationReadyMode => updateSettings({ fabricationReadyMode })}/>
+                <SelectField label="Board profile" value={kit.profileKey} onChange={profileKey => updateSettings({ physicalKit: physicalKitPreset(profileKey, kit) })}>
+                    <option value="letter-15x15-2cm">Letter paper · 15×15 board holes · 2cm pitch</option>
+                    <option value="letter-12x12-2cm">Letter paper · 12×12 draft board · 2cm pitch</option>
+                    <option value="custom">Custom profile</option>
+                </SelectField>
+                <MiniNumber label="Grid pitch mm" value={kit.gridPitchMm} min={5} max={50} step={1} onChange={gridPitchMm => updateKit({ gridPitchMm, profileKey: kit.profileKey === 'custom' ? 'custom' : kit.profileKey })}/>
+                <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600" data-testid="grid-cell-readout">
+                    <div className="font-bold text-slate-800">Grid cell size</div>
+                    <div>{unitSummary}</div>
+                    <div>{kit.boardCells}×{kit.boardCells} board holes · {kit.sheetWidthMm.toFixed(1)}×{kit.sheetHeightMm.toFixed(1)}mm sheet</div>
+                </div>
+            </SettingsSection>
+            <SettingsSection id="units" title="Units" description="Only labels change; fabrication still stores millimeters.">
+                <SelectField label="Grid unit system" value={project.settings.gridUnit} onChange={gridUnit => updateSettings({ gridUnit: gridUnit as ProjectState['settings']['gridUnit'] })}>
+                    <option value="cm">Centimeters</option>
+                    <option value="inch">Inches</option>
+                    <option value="px">Scene pixels</option>
+                </SelectField>
+            </SettingsSection>
+        </section>
+    </div>;
+};
+
+const SettingsSection = ({ id, title, description, children }: { id: string; title: string; description: string; children: React.ReactNode }) => <section className="workspace space-y-3 p-5" data-testid={`options-${id}`} aria-label={title}>
+    <div>
+        <div className="section-title">{title}</div>
+        <p className="mt-1 text-sm text-slate-600">{description}</p>
+    </div>
+    <div className="space-y-3">{children}</div>
+</section>;
+
+const SelectField = ({ label, value, onChange, children }: { label: string; value: string; onChange: (value: string) => void; children: React.ReactNode }) => <label className="block text-xs font-black uppercase tracking-wider text-slate-500">
+    <span>{label}</span>
+    <select aria-label={label} className="field mt-1" value={value} onChange={e => onChange(e.target.value)}>{children}</select>
+</label>;
 
 const MiniNumber = ({ label, value, min, max, step = 1, disabled = false, onChange }: { label: string; value: number; min: number; max: number; step?: number; disabled?: boolean; onChange: (v: number) => void }) => <label className={`block ${disabled ? 'opacity-50' : ''}`}><div className="mb-1 flex justify-between text-xs font-black uppercase tracking-wider text-slate-500"><span>{label}</span><span>{Number(value).toFixed(step < 1 ? 2 : 0)}</span></div><input aria-label={`${label} slider`} className="w-full" type="range" min={min} max={max} step={step} disabled={disabled} value={Number.isFinite(value) ? value : 0} onChange={e => onChange(Number(e.target.value))}/><input aria-label={`${label} number`} className="field mt-1" type="number" min={min} max={max} step={step} disabled={disabled} value={Number.isFinite(value) ? value : 0} onChange={e => onChange(Number(e.target.value))}/></label>;
 const Toggle = ({ label, checked, disabled = false, onChange }: { label: string; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void }) => <label className={`flex items-center justify-between rounded-2xl bg-slate-100 px-3 py-2 text-sm font-bold ${disabled ? 'opacity-50' : ''}`}><span>{label}</span><input type="checkbox" disabled={disabled} checked={checked} onChange={e => onChange(e.target.checked)} /></label>;

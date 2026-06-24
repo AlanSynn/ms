@@ -131,6 +131,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByRole('button', { name: 'Guide', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Metadata', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'PDF', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Download PDF cut sheet default' })).toBeVisible();
   await expect(page.getByAltText('fabrication SVG preview')).toBeVisible();
 
   const [metadataDownload] = await Promise.all([
@@ -172,6 +173,17 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   const pdfHeader = (await readFile(pdfPath!)).subarray(0, 5).toString('utf8');
   expect(pdfHeader).toBe('%PDF-');
 
+  const [cutSheetPdfDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Download PDF cut sheet default' }).click()
+  ]);
+  expect(cutSheetPdfDownload.suggestedFilename()).toMatch(/cut-sheet\.pdf$/);
+  const cutSheetPdfPath = await cutSheetPdfDownload.path();
+  expect(cutSheetPdfPath, 'cut sheet pdf download path').toBeTruthy();
+  const cutSheetPdfText = await readFile(cutSheetPdfPath!, 'utf8');
+  expect(cutSheetPdfText.slice(0, 5)).toBe('%PDF-');
+  expect(cutSheetPdfText).toContain('Cut sheet');
+
   const [svgDownload] = await Promise.all([
     page.waitForEvent('download'),
     page.getByRole('button', { name: 'SVG', exact: true }).click()
@@ -187,8 +199,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
 
   await page.getByRole('button', { name: /Options/i }).click();
   await expect(page.getByRole('heading', { name: 'Options' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Global settings' })).toBeVisible();
-  await expect(page.locator('select').filter({ hasText: 'Export SVG + JSON' })).toHaveValue('both');
+  await expect(page.getByTestId('options-fabrication')).toBeVisible();
+  await expect(page.getByLabel('Default export format')).toHaveValue('both');
 
   expectCleanPage(pageErrors, consoleErrors);
 });
@@ -323,10 +335,10 @@ test('Options and validation gates update browser blueprint output', async ({ pa
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
   await page.getByRole('button', { name: /Options/i }).click();
   await expect(page.getByRole('heading', { name: 'Options' })).toBeVisible();
-  await page.locator('label').filter({ hasText: 'Grid pitch mm' }).locator('input[type="number"]').fill('25');
-  await page.locator('label').filter({ hasText: 'Grid pitch mm' }).locator('input[type="number"]').press('Enter');
-  await page.locator('select').filter({ hasText: 'Export SVG + JSON' }).selectOption('json');
-  await expect(page.locator('select').filter({ hasText: 'Export SVG + JSON' })).toHaveValue('json');
+  await page.getByLabel('Grid pitch mm number').fill('25');
+  await page.getByLabel('Grid pitch mm number').press('Enter');
+  await page.getByLabel('Default export format').selectOption('json');
+  await expect(page.getByLabel('Default export format')).toHaveValue('json');
 
   await page.getByRole('button', { name: /Path Editor/i }).click();
   await expect(page.getByTestId('path-canvas').getByText('Letter sheet · 2.5cm grid')).toBeVisible();
@@ -359,6 +371,112 @@ test('Options and validation gates update browser blueprint output', async ({ pa
   await expect(page.getByText(/anchor off grid/)).toBeVisible();
   await expect(page.getByRole('button', { name: /Snap anchor to board hole/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /Generate package/i })).toBeDisabled();
+
+  expectCleanPage(pageErrors, consoleErrors);
+});
+
+test('Options parity updates workspace UI, canvas context, and blueprint defaults', async ({ page }) => {
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByRole('button', { name: /Options/i }).click();
+  await expect(page.getByRole('heading', { name: 'Options' })).toBeVisible();
+  for (const section of ['appearance', 'simulation', 'performance', 'debugging', 'workflow', 'fabrication', 'units']) {
+    await expect(page.getByTestId(`options-${section}`)).toBeVisible();
+  }
+
+  await page.getByLabel('Theme').selectOption('dark');
+  await expect(page.locator('main[data-theme="dark"]')).toBeVisible();
+  await page.getByLabel('Show toolbar').uncheck();
+  await expect(page.getByTestId('quick-toolbar')).toHaveCount(0);
+  await page.getByLabel('Show toolbar').check();
+  await expect(page.getByTestId('quick-toolbar')).toBeVisible();
+
+  await page.getByLabel('Show part panel').uncheck();
+  await page.getByRole('button', { name: /Path Editor/i }).click();
+  await expect(page.getByTestId('novice-path-panel')).toHaveCount(0);
+  await expect(page.getByTestId('path-canvas')).toBeVisible();
+  await page.getByRole('button', { name: /Options/i }).click();
+  await page.getByLabel('Show part panel').check();
+
+  await page.getByLabel('Show debug visuals').check();
+  await page.getByRole('button', { name: /Path Editor/i }).click();
+  await expect(page.getByTestId('canvas-debug-visuals')).toBeVisible();
+  await page.getByRole('button', { name: /Options/i }).click();
+
+  await page.getByLabel('Enable autosave').check();
+  await page.getByLabel('Autosave interval seconds number').fill('1');
+  await page.getByLabel('Autosave interval seconds number').press('Enter');
+  await page.getByLabel('Simulation duration seconds number').fill('6');
+  await page.getByLabel('Simulation duration seconds number').press('Enter');
+  await page.getByLabel('Timing profile').selectOption('ease-in-out');
+  await page.getByLabel('Performance preset').selectOption('high');
+  await page.getByLabel('Physics snap mode').selectOption('high');
+  await page.getByLabel('Detailed processing steps').check();
+  await page.getByLabel('Cut-sheet file type').selectOption('svg');
+  await page.getByLabel('Grid unit system').selectOption('inch');
+  await page.getByLabel('Board profile').selectOption('letter-12x12-2cm');
+  await page.getByLabel('Grid pitch mm number').fill('25');
+  await page.getByLabel('Grid pitch mm number').press('Enter');
+  await page.getByLabel('Default export format').selectOption('json');
+  await expect(page.getByTestId('grid-cell-readout')).toContainText('0.98 in');
+
+  await expect.poll(async () => page.evaluate(() => {
+    const saved = JSON.parse(localStorage.getItem('mechanim.autosave') ?? '{}');
+    return {
+      autosave: saved.settings?.autosave,
+      interval: saved.settings?.autosaveIntervalSeconds,
+      duration: saved.settings?.animationDurationMs,
+      timing: saved.settings?.timingProfile,
+      performance: saved.settings?.performancePreset,
+      snap: saved.settings?.physicsSnapMode,
+      detailed: saved.settings?.detailedProcessingSteps,
+      unit: saved.settings?.gridUnit,
+      profile: saved.settings?.physicalKit?.profileKey,
+      pitch: saved.settings?.physicalKit?.gridPitchMm,
+      cutSheet: saved.settings?.physicalKit?.cutSheetFileType
+    };
+  }), { timeout: 5000 }).toEqual({
+    autosave: true,
+    interval: 1,
+    duration: 6000,
+    timing: 'ease-in-out',
+    performance: 'high',
+    snap: 'high',
+    detailed: true,
+    unit: 'inch',
+    profile: 'letter-12x12-2cm',
+    pitch: 25,
+    cutSheet: 'svg'
+  });
+
+  await page.getByRole('button', { name: /Path Editor/i }).click();
+  await expect(page.getByTestId('scene-grid-label')).toContainText('Letter sheet · 2.5cm grid');
+  await page.getByRole('button', { name: /Mechanism Design/i }).click();
+  await expect(page.getByTestId('design-canvas').getByTestId('scene-grid-label')).toContainText('Letter sheet · 2.5cm grid');
+  await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').fill('0');
+  await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').press('Enter');
+  await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').fill('100');
+  await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').press('Enter');
+  await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('mechanim.autosave') ?? '{}')?.mechanisms?.[0]?.anchorX), { timeout: 5000 }).toBe(0);
+  await page.getByRole('button', { name: /Blueprint Export/i }).click();
+  await page.getByRole('button', { name: /Generate package/i }).click();
+  await expect(page.getByRole('button', { name: 'Download JSON default' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Download SVG default' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Download SVG cut sheet default' })).toBeVisible();
+  const metadata = await downloadMetadataJson(page);
+  expect(metadata.profile.profileKey).toBe('letter-12x12-2cm');
+  expect(metadata.profile.boardCells).toBe(12);
+  expect(metadata.profile.gridPitchMm).toBe(25);
+  expect(metadata.profile.cutSheetFileType).toBe('svg');
+  await page.getByRole('button', { name: /Character Selection/i }).click();
+  await expect(page.getByTestId('processing-step-details')).toContainText('Normalize to the physical sheet');
 
   expectCleanPage(pageErrors, consoleErrors);
 });
