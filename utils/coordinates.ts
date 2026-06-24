@@ -99,10 +99,24 @@ export const sceneBoundsForSheet = (kit: PhysicalKitSettings): Bounds => ({
     height: kit.sheetHeightMm * SCENE_PX_PER_MM
 });
 
-export const pathFromPoints = (points: Point[], close = false): string => {
+export const pathFromPoints = (points: Point[], close = false, smoothness = 0): string => {
     if (!points.length) return '';
     const [first, ...rest] = points.map(sceneToSvg);
-    return `M ${first.x.toFixed(2)} ${first.y.toFixed(2)} ${rest.map(p => `L ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' ')}${close ? ' Z' : ''}`;
+    if (smoothness <= 0 || rest.length < 2) return `M ${first.x.toFixed(2)} ${first.y.toFixed(2)} ${rest.map(p => `L ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' ')}${close ? ' Z' : ''}`;
+    const pts = [first, ...rest];
+    const corner = Math.min(0.5, Math.max(0, smoothness / 200));
+    const segments = [`M ${first.x.toFixed(2)} ${first.y.toFixed(2)}`];
+    for (let i = 1; i < pts.length - 1; i++) {
+        const prev = pts[i - 1];
+        const curr = pts[i];
+        const next = pts[i + 1];
+        const before = { x: curr.x + (prev.x - curr.x) * corner, y: curr.y + (prev.y - curr.y) * corner };
+        const after = { x: curr.x + (next.x - curr.x) * corner, y: curr.y + (next.y - curr.y) * corner };
+        segments.push(`L ${before.x.toFixed(2)} ${before.y.toFixed(2)} Q ${curr.x.toFixed(2)} ${curr.y.toFixed(2)} ${after.x.toFixed(2)} ${after.y.toFixed(2)}`);
+    }
+    const last = pts.at(-1)!;
+    segments.push(`L ${last.x.toFixed(2)} ${last.y.toFixed(2)}`);
+    return `${segments.join(' ')}${close ? ' Z' : ''}`;
 };
 
 export const svgPointerToScene = (svg: SVGSVGElement, clientX: number, clientY: number): Point => {

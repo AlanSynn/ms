@@ -201,6 +201,7 @@ const App: React.FC = () => {
                 id,
                 partId,
                 targetAnchorJointId: current?.targetAnchorJointId,
+                smoothness: current?.smoothness ?? 0,
                 points,
                 timedPoints: points.map((p, i) => ({ ...p, time: points.length <= 1 ? 0 : (i / (points.length - 1)) * (current?.duration ?? project.settings.animationDurationMs) })),
                 duration: current?.duration ?? project.settings.animationDurationMs,
@@ -541,7 +542,7 @@ const App: React.FC = () => {
                             dispatch({ type: 'upsert_mechanism', mechanism: mech });
                             setStage('design');
                         }} />}
-                        {stage === 'design' && <MechanismDesign project={project} selectedMechanism={selectedMechanism} mechanismConfig={mechanismConfig} setMechanismConfig={setMechanismConfig} updateMechanism={updateMechanism} dispatch={dispatch} isPlaying={isPlaying} setIsPlaying={setIsPlaying} showTrace={showTrace} setShowTrace={setShowTrace} angle={angle} setAngle={setAngle} onOptimize={optimizeSelectedMechanism} onRecommendations={() => setShowRecommendations(true)} optimizerBusy={optimizerBusy} exportSvg={exportMechanismSvg} exportDxf={exportMechanismDxf} viewport={canvasViewport} setViewport={setCanvasViewport} />}
+                        {stage === 'design' && <MechanismDesign project={project} selectedMechanism={selectedMechanism} mechanismConfig={mechanismConfig} setMechanismConfig={setMechanismConfig} updateMechanism={updateMechanism} dispatch={dispatch} isPlaying={isPlaying} setIsPlaying={setIsPlaying} showTrace={showTrace} setShowTrace={setShowTrace} angle={angle} setAngle={setAngle} onOptimize={optimizeSelectedMechanism} onRecommendations={() => setShowRecommendations(true)} optimizerBusy={optimizerBusy} exportSvg={exportMechanismSvg} exportDxf={exportMechanismDxf} onBlueprint={() => goStage('blueprint')} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {stage === 'blueprint' && <BlueprintExport project={project} config={mechanismConfig} setConfig={setMechanismConfig} dispatch={dispatch} goStage={goStage} isPlaying={isPlaying} angle={angle} setAngle={setAngle} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {stage === 'options' && <Options project={project} dispatch={dispatch} />}
                     </div>
@@ -1063,6 +1064,13 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
                     <button className="btn-secondary" disabled={pointCount < 3 || pathLocked} onClick={onNext}>Next: choose mechanism</button>
                 </div>
                 <div className="free-draw-status" data-testid="free-draw-status">{selectedPath ? `${pointCount} points · ${selectedPath.id}` : '0 points · none'}{pathLocked ? ' · locked part' : ''}</div>
+                {selectedPath && <div className="mt-3 space-y-3" data-testid="path-shape-controls">
+                    <div className="flex gap-2">
+                        <button className={`btn-secondary ${!selectedPath.closed ? 'active' : ''}`} disabled={pathLocked} onClick={() => updatePath({ closed: false })}>Open</button>
+                        <button className={`btn-secondary ${selectedPath.closed ? 'active' : ''}`} disabled={pathLocked} onClick={() => updatePath({ closed: true })}>Closed</button>
+                    </div>
+                    <MiniNumber label="Smoothness" value={selectedPath.smoothness ?? 0} min={0} max={100} step={1} disabled={pathLocked} onChange={smoothness => updatePath({ smoothness })}/>
+                </div>}
                 {!selectedPath && <div className="warning">No path for this part yet. Draw or track a path before fitting a mechanism.</div>}
                 {selectedPath && selectedPath.points.length < 3 && <div className="warning">Add at least 3 path points before choosing a mechanism.</div>}
                 {pathLocked && <div className="warning">Unlock the selected part before editing, deleting, drawing, or tracking its path.</div>}
@@ -1097,7 +1105,7 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
                 <summary>Path options</summary>
                 <div className="mt-3 flex flex-wrap gap-2">
                     <button className="btn-secondary" disabled={pathLocked} onClick={openTracking}><Camera size={16}/> Track from video</button>
-                    <button className="btn-secondary" onClick={() => setIsPlaying(!isPlaying)}><Play size={16}/>{isPlaying ? 'Stop' : 'Play'}</button>
+                    <button className="btn-secondary" aria-label={isPlaying ? 'Play / Stop' : 'Play'} onClick={() => setIsPlaying(!isPlaying)}><Play size={16}/>{isPlaying ? 'Stop' : 'Play'}</button>
                     <button className="btn-secondary" onClick={() => setAngle(0)}>Reset</button>
                     {selectedPath && <button className="btn-secondary" disabled={pathLocked} onClick={() => updatePath({ visible: !selectedPath.visible })}>{selectedPath.visible ? 'Hide path' : 'Show path'}</button>}
                     {selectedPath && <button className="btn-secondary" disabled={pathLocked} onClick={() => updatePath({ enabled: !selectedPath.enabled })}>{selectedPath.enabled ? 'Disable' : 'Enable'}</button>}
@@ -1162,7 +1170,7 @@ const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, 
             const p = sceneToSvg(j.position);
             return <g key={j.id}><circle cx={p.x} cy={p.y} r={j.locked ? 6 : 4} fill={j.locked ? '#ef4444' : '#434a59'} stroke="white" strokeWidth="2"/><title>{j.id} bend {j.bendDirection}</title></g>;
         })}
-        {Object.values(project.paths).filter(p => p.visible).map(path => <path key={path.id} d={pathFromPoints(path.points, path.closed)} fill="none" stroke={path.enabled ? '#5a6cff' : '#94a3b8'} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" opacity="0.8"/>)}
+        {Object.values(project.paths).filter(p => p.visible).map(path => <path key={path.id} d={pathFromPoints(path.points, path.closed, path.smoothness)} fill="none" stroke={path.enabled ? '#5a6cff' : '#94a3b8'} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" opacity="0.8"/>)}
         {selectedPath?.visible && selectedPath.points.map((pt, i) => {
             const p = sceneToSvg(pt);
             const active = dragPoint === i || selectedPoint === i;
@@ -1540,7 +1548,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             <div className="mt-3 text-xs font-bold text-slate-500" data-testid="foundry-toolbar-state">Toolbar: {foundryPlaying ? 'playing' : 'paused'} · path {showPathPreview ? 'shown' : 'hidden'} · phase {Math.round(foundryPhase * 180 / Math.PI)}°</div>
         </section>
         <aside className="workspace space-y-4 p-5">
-            <h4 className="section-title">Mechanism library</h4>
+            <h4 className="section-title">Mechanism Gallery</h4>
             <div className="mechanism-choice-grid">
                 {(['4bar', 'cam', 'piston', 'gear'] as MechanismType[]).map(type => {
                     const item = MECHANISM_LIBRARY[type];
@@ -1561,6 +1569,8 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 <div>Export lands at {landing.x.toFixed(0)}, {landing.y.toFixed(0)} ({landingBoard.label}) · anchor {selectedPart?.anchorJointId ?? 'none'} · IK handle {targetIkJointId ?? 'none'}</div>
                 {snapDistance > 0.5 && <div>Snapped {snapDistance.toFixed(0)} scene units from target to nearest board hole for fabrication.</div>}
                 <div>{foundry.recommendation ?? FOUNDRY_PRESETS.balanced.recommendation}</div>
+                <div><strong>Valid Range:</strong> {range.percentValid === 1 ? '360° valid' : feasibilityText}</div>
+                <div><strong>Motion Point:</strong> {playhead ? `${playhead.x.toFixed(0)}, ${playhead.y.toFixed(0)}` : 'no preview point'}</div>
             </div>
             {!targetReady && <div className="warning">Draw at least 3 points for a selected body part before exporting a mechanism.</div>}
             {range.warning && <div className="warning">{range.warning}</div>}
@@ -1582,7 +1592,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     </div>;
 };
 
-const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMechanismConfig, updateMechanism, dispatch, isPlaying, setIsPlaying, showTrace, setShowTrace, angle, setAngle, onOptimize, onRecommendations, optimizerBusy, exportSvg, exportDxf, viewport, setViewport }: {
+const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMechanismConfig, updateMechanism, dispatch, isPlaying, setIsPlaying, showTrace, setShowTrace, angle, setAngle, onOptimize, onRecommendations, optimizerBusy, exportSvg, exportDxf, onBlueprint, viewport, setViewport }: {
     project: ProjectState;
     selectedMechanism?: MechanismConfig;
     mechanismConfig: GlobalConfig;
@@ -1600,6 +1610,7 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
     optimizerBusy: boolean;
     exportSvg: () => void;
     exportDxf: () => void;
+    onBlueprint: () => void;
     viewport: CanvasViewport;
     setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
 }) => {
@@ -1617,7 +1628,7 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
         <Canvas project={project} config={mechanismConfig} setConfig={setMechanismConfig} selectedId={project.selectedMechanismId ?? null} setSelectedId={id => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: id })} isPlaying={isPlaying} showTrace={showTrace} isDrawMode={false} userPath={[]} setUserPath={() => {}} angle={angle} setAngle={setAngle} viewport={viewport} setViewport={setViewport}/>
     </div>
     {project.settings.partPanelVisible && <aside className="workspace space-y-4 p-5">
-        <div className="flex flex-wrap gap-2"><button className="btn-secondary" onClick={() => setIsPlaying(!isPlaying)}><Play size={16}/>{isPlaying ? 'Pause' : 'Play'}</button><button className="btn-secondary" onClick={() => setShowTrace(!showTrace)}>Trace</button><button className="btn-primary" onClick={onRecommendations}><Sparkles size={16}/> Get recommendations</button></div>
+        <div className="flex flex-wrap gap-2"><button className="btn-secondary" aria-label={isPlaying ? 'Play / Pause' : 'Play'} onClick={() => setIsPlaying(!isPlaying)}><Play size={16}/>{isPlaying ? 'Pause' : 'Play'}</button><button className="btn-secondary" onClick={() => setShowTrace(!showTrace)}>Trace</button><button className="btn-primary" onClick={onRecommendations}><Sparkles size={16}/> Get recommendations</button></div>
         <h4 className="section-title">Mechanism instances</h4>
         <select aria-label="Mechanism instance" className="field" value={selectedMechanism?.id ?? ''} onChange={e => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: e.target.value })}>{project.mechanisms.map(m => <option key={m.id} value={m.id}>{m.id} · {m.type}</option>)}</select>
         <div className="flex flex-wrap gap-2">
@@ -1634,18 +1645,20 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
         {selectedMechanism && <>
             <Toggle label="Visible" checked={selectedMechanism.visible} onChange={visible => updateMechanism(selectedMechanism.id, { visible })}/>
             <Toggle label="Enabled" checked={selectedMechanism.enabled !== false} onChange={enabled => updateMechanism(selectedMechanism.id, { enabled })}/>
+            <div className="section-title">Assign Character</div>
             <select aria-label="Mechanism target part" className="field" value={selectedMechanism.targetPartId ?? ''} onChange={e => updateMechanism(selectedMechanism.id, { targetPartId: e.target.value || undefined })}><option value="">No target part</option>{project.partOrder.map(id => <option key={id} value={id}>{project.parts[id].name}</option>)}</select>
             <select aria-label="Mechanism target path" className="field" value={selectedMechanism.targetPathId ?? ''} onChange={e => updateMechanism(selectedMechanism.id, { targetPathId: e.target.value || undefined })}><option value="">No target path</option>{Object.values(project.paths).filter(p => !selectedMechanism.targetPartId || p.partId === selectedMechanism.targetPartId).map(p => <option key={p.id} value={p.id}>{p.id} · {p.points.length} pts</option>)}</select>
             {selectedMechanism.targetPartId && project.skeleton && <select aria-label="Mechanism target anchor" className="field" value={selectedTargetAnchor ?? ''} onChange={e => updateMechanism(selectedMechanism.id, { targetAnchorJointId: e.target.value || undefined })}>
                 <option value="">Part anchor default</option>
                 {targetAnchorOptions.map(id => <option key={id} value={id}>{id}</option>)}
             </select>}
+            <div className="section-title">Parametric Edit</div>
             {PARAMS.filter(p => showParam(selectedMechanism.type, p.key)).map(p => <React.Fragment key={String(p.key)}><MiniNumber label={p.label} value={Number(selectedMechanism[p.key] ?? 0)} min={p.min} max={p.max} step={p.step} onChange={value => updateMechanism(selectedMechanism.id, { [p.key]: value } as Partial<MechanismConfig>)}/></React.Fragment>) }
             {selectedBindingWarnings.map((w, i) => <div className="warning" key={`binding-${w}-${i}`}>{w}</div>)}
             {selectedRange?.warning && <div className="warning">{selectedRange.warning}</div>}
             {selectedMechanism.warnings?.map((w, i) => <div className="warning" key={`${w}-${i}`}>{w}</div>)}
             <div className="flex flex-wrap gap-2"><button className="btn-primary" disabled={optimizerBusy} onClick={onOptimize}>{optimizerBusy ? <Loader2 className="animate-spin" size={16}/> : <Sparkles size={16}/>} Fit path</button><button className="btn-secondary" onClick={() => dispatch({ type: 'delete_mechanism', mechanismId: selectedMechanism.id })}><Trash2 size={16}/> Delete</button></div>
-            <div className="flex gap-2"><button className="btn-secondary" onClick={exportSvg}>SVG</button><button className="btn-secondary" onClick={exportDxf}>DXF</button></div>
+            <div className="flex flex-wrap gap-2"><button className="btn-primary" onClick={onBlueprint}>Export Blueprint</button><button className="btn-secondary" onClick={exportSvg}>SVG</button><button className="btn-secondary" onClick={exportDxf}>DXF</button></div>
         </>}
     </aside>}
 </div>;
@@ -1792,11 +1805,11 @@ const Options = ({ project, dispatch }: { project: ProjectState; dispatch: (acti
                     <option value="blueprint">Blueprint tint</option>
                 </SelectField>
                 <Toggle label="Show toolbar" checked={project.settings.toolbarVisible} onChange={toolbarVisible => updateSettings({ toolbarVisible })}/>
-                <Toggle label="Show part panel" checked={project.settings.partPanelVisible} onChange={partPanelVisible => updateSettings({ partPanelVisible })}/>
+                <Toggle label="Show Part Properties Panel" checked={project.settings.partPanelVisible} onChange={partPanelVisible => updateSettings({ partPanelVisible })}/>
             </SettingsSection>
             <SettingsSection id="simulation" title="Simulation" description="Preview timing for one full motion loop.">
                 <MiniNumber label="Animation speed" value={project.settings.animationSpeed} min={0.1} max={5} step={0.1} onChange={animationSpeed => updateSettings({ animationSpeed })}/>
-                <MiniNumber label="Simulation duration seconds" value={durationSeconds} min={0.1} max={60} step={0.1} onChange={seconds => updateSettings({ animationDurationMs: Math.round(seconds * 1000) })}/>
+                <MiniNumber label="Animation Duration" value={durationSeconds} min={0.1} max={60} step={0.1} onChange={seconds => updateSettings({ animationDurationMs: Math.round(seconds * 1000) })}/>
                 <SelectField label="Timing profile" value={project.settings.timingProfile} onChange={timingProfile => updateSettings({ timingProfile: timingProfile as ProjectState['settings']['timingProfile'] })}>
                     <option value="linear">Linear · steady preview</option>
                     <option value="ease-in">Ease-In · slower start</option>
@@ -1822,8 +1835,8 @@ const Options = ({ project, dispatch }: { project: ProjectState; dispatch: (acti
                 </SelectField>
             </SettingsSection>
             <SettingsSection id="debugging" title="Debugging" description="Turn on labels when something feels off.">
-                <Toggle label="Show debug visuals" checked={project.settings.debugVisuals} onChange={debugVisuals => updateSettings({ debugVisuals })}/>
-                <Toggle label="Detailed processing steps" checked={project.settings.detailedProcessingSteps} onChange={detailedProcessingSteps => updateSettings({ detailedProcessingSteps })}/>
+                <Toggle label="Enable Debug Visuals" checked={project.settings.debugVisuals} onChange={debugVisuals => updateSettings({ debugVisuals })}/>
+                <Toggle label="Show Detailed Processing Steps" checked={project.settings.detailedProcessingSteps} onChange={detailedProcessingSteps => updateSettings({ detailedProcessingSteps })}/>
             </SettingsSection>
             <SettingsSection id="workflow" title="Workflow" description="Autosave is local to this browser.">
                 <Toggle label="Enable autosave" checked={project.settings.autosave} onChange={autosave => updateSettings({ autosave })}/>

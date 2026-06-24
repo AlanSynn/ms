@@ -418,14 +418,14 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await page.getByLabel('Show toolbar').check();
   await expect(page.getByTestId('quick-toolbar')).toBeVisible();
 
-  await page.getByLabel('Show part panel').uncheck();
+  await page.getByLabel('Show Part Properties Panel').uncheck();
   await page.getByRole('button', { name: /Path Editor/i }).click();
   await expect(page.getByTestId('novice-path-panel')).toHaveCount(0);
   await expect(page.getByTestId('path-canvas')).toBeVisible();
   await page.getByRole('button', { name: /Options/i }).click();
-  await page.getByLabel('Show part panel').check();
+  await page.getByLabel('Show Part Properties Panel').check();
 
-  await page.getByLabel('Show debug visuals').check();
+  await page.getByLabel('Enable Debug Visuals').check();
   await page.getByRole('button', { name: /Path Editor/i }).click();
   await expect(page.getByTestId('canvas-debug-visuals')).toBeVisible();
   await page.getByRole('button', { name: /Options/i }).click();
@@ -433,12 +433,12 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await page.getByLabel('Enable autosave').check();
   await page.getByLabel('Autosave interval seconds number').fill('1');
   await page.getByLabel('Autosave interval seconds number').press('Enter');
-  await page.getByLabel('Simulation duration seconds number').fill('6');
-  await page.getByLabel('Simulation duration seconds number').press('Enter');
+  await page.getByLabel('Animation Duration number').fill('6');
+  await page.getByLabel('Animation Duration number').press('Enter');
   await page.getByLabel('Timing profile').selectOption('ease-in-out');
   await page.getByLabel('Performance preset').selectOption('high');
   await page.getByLabel('Physics snap mode').selectOption('high');
-  await page.getByLabel('Detailed processing steps').check();
+  await page.getByLabel('Show Detailed Processing Steps').check();
   await page.getByLabel('Cut-sheet file type').selectOption('svg');
   await page.getByLabel('Grid unit system').selectOption('inch');
   await page.getByLabel('Board profile').selectOption('letter-12x12-2cm');
@@ -543,6 +543,14 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await expect(page.getByTestId('fold-direction-control')).toContainText('left');
   await page.getByLabel('IK handle').selectOption('right_elbow');
   await expect(page.getByLabel('IK handle')).toHaveValue('right_elbow');
+  await expect(page.getByTestId('path-shape-controls')).toBeVisible();
+  await page.getByRole('button', { name: 'Closed', exact: true }).click();
+  await expect(pathCanvas.locator('path[stroke="#5a6cff"]').first()).toHaveAttribute('d', /Z$/);
+  await page.getByLabel('Smoothness number').fill('70');
+  await page.getByLabel('Smoothness number').press('Enter');
+  await expect(pathCanvas.locator('path[stroke="#5a6cff"]').first()).toHaveAttribute('d', /Q/);
+  await page.getByRole('button', { name: 'Open', exact: true }).click();
+  await expect(pathCanvas.locator('path[stroke="#5a6cff"]').first()).not.toHaveAttribute('d', /Z$/);
 
   await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
   const firstArmPoint = pathCanvas.locator('circle[stroke="#5a6cff"]').first();
@@ -596,6 +604,8 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await expect(page.getByRole('heading', { name: 'Mechanism Foundry' })).toBeVisible();
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Four-bar linkage');
   await expect(page.getByTestId('foundry-feasibility')).toContainText('360° valid sampled motion');
+  await expect(page.getByTestId('foundry-target-summary')).toContainText('Valid Range: 360° valid');
+  await expect(page.getByTestId('foundry-target-summary')).toContainText(/Motion Point: \d+, \d+/);
   await expect(page.getByLabel('Foundry mechanism type')).toBeHidden();
   await page.getByText('Mechanism options').click();
 
@@ -970,7 +980,7 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
 
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   await page.locator('label').filter({ hasText: 'Enabled' }).locator('input[type="checkbox"]').check();
-  await page.getByRole('button', { name: /Blueprint Export/i }).click();
+  await page.getByRole('button', { name: 'Export Blueprint', exact: true }).click();
   await page.getByRole('button', { name: /Generate package/i }).click();
   expect((await downloadMetadataJson(page)).recipes).toHaveLength(1);
 
