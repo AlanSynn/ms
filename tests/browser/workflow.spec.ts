@@ -503,6 +503,63 @@ test('Mobile path editor keeps Draw free path action above the canvas', async ({
   expect(drawBox!.y, 'mobile draw action appears before canvas').toBeLessThan(canvasBox!.y);
 });
 
+test('Command menu and shared canvas zoom persist across workflow stages', async ({ page }) => {
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+
+  await expect(page.getByTestId('top-command-bar')).toBeVisible();
+  await expect(page.getByTestId('canvas-zoom-readout')).toHaveText('100%');
+  await page.getByLabel('Zoom in').click();
+  await expect(page.getByTestId('canvas-zoom-readout')).toHaveText('120%');
+
+  await page.getByRole('button', { name: /Mechanism Design/i }).click();
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+  await expect(page.getByTestId('canvas-zoom-readout')).toHaveText('120%');
+
+  await page.getByTestId('design-canvas').hover();
+  await page.mouse.wheel(0, -10000);
+  await expect(page.getByTestId('canvas-zoom-readout')).toHaveText('400%');
+  await page.getByRole('button', { name: /Path Editor/i }).click();
+  await expect(page.getByTestId('canvas-zoom-readout')).toHaveText('400%');
+  await page.getByRole('button', { name: /Mechanism Design/i }).click();
+  await expect(page.getByTestId('canvas-zoom-readout')).toHaveText('400%');
+
+  await page.getByTestId('top-command-bar').getByText('View', { exact: true }).click();
+  await page.getByRole('button', { name: 'Reset View' }).click();
+  await expect(page.getByTestId('canvas-zoom-readout')).toHaveText('100%');
+  await expect(page.getByTestId('status-bar')).toContainText('Canvas fitted to sheet');
+
+  await page.evaluate(() => localStorage.setItem('mechanim.workspace', JSON.stringify({
+    stage: 'not-a-stage',
+    viewport: { offset: { x: 'bad', y: 0 }, zoom: -10 },
+    toolbarVisible: 'yes'
+  })));
+  await page.getByTestId('top-command-bar').getByText('View', { exact: true }).click();
+  await page.getByRole('button', { name: 'Restore Workspace Layout' }).click();
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+  await expect(page.getByTestId('status-bar')).toContainText('ignored invalid workspace viewport');
+  await expect(page.getByTestId('status-bar')).toContainText('ignored invalid workspace stage');
+
+  await page.getByTestId('top-command-bar').getByText('File', { exact: true }).click();
+  let dialogMessage = '';
+  page.once('dialog', async dialog => {
+    dialogMessage = dialog.message();
+    await dialog.dismiss();
+  });
+  await page.getByRole('button', { name: 'New', exact: true }).click();
+  expect(dialogMessage).toContain('Start a new project');
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+  await expect(page.getByTestId('status-bar')).toContainText('New project cancelled');
+
+  await page.getByTestId('top-command-bar').getByText('File', { exact: true }).click();
+  await page.getByRole('button', { name: 'Recover Autosave…' }).click();
+  await expect(page.getByTestId('status-bar')).toContainText(/No autosave snapshot found|Recovered autosave snapshot/);
+
+  await page.getByTestId('top-command-bar').getByText('Edit', { exact: true }).click();
+  await page.getByRole('button', { name: 'Back (Undo)' }).click();
+  await expect(page.getByTestId('status-bar')).toContainText('Undo is not available in the browser build yet.');
+});
+
 test('Detached visible mechanisms block browser blueprint generation', async ({ page }) => {
   await page.goto('/');
   await openWavingArmTemplate(page);

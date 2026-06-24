@@ -4,6 +4,7 @@ import { TrackingModal } from './components/TrackingModal';
 import {
     AppStage,
     BodyPartLayer,
+    CanvasViewport,
     CharacterPackageArtifact,
     FoundryExportPackage,
     GlobalConfig,
@@ -35,6 +36,7 @@ import { createFabricationPackage, sampleFeasibleRange, validateForFabrication }
 import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToSvg, svgPointerToScene, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
 import { mechanismBindingWarnings, motionAnchorJointIds, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
+import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT, normalizeCanvasViewport } from './utils/viewport';
 import { AlertCircle, Boxes, BrainCircuit, Camera, CheckCircle2, Download, FileJson, Loader2, Play, Plus, Route, Save, Sparkles, Trash2, Upload } from 'lucide-react';
 
 type FoundryState = MechanismConfig;
@@ -82,6 +84,9 @@ const PARAMS: Array<{ key: keyof MechanismConfig; label: string; min: number; ma
     { key: 'phase', label: 'phase', min: -3.14, max: 3.14, step: 0.01 }
 ];
 
+const isAppStage = (value: unknown): value is AppStage => typeof value === 'string' && STAGES.some(stage => stage.id === value);
+const projectHasUserWork = (project: ProjectState) => project.partOrder.length > 0 || Object.keys(project.paths).length > 0 || project.mechanisms.length > 0;
+
 const App: React.FC = () => {
     const [project, setProject] = useState<ProjectState>(() => {
         projectSelfCheck();
@@ -97,14 +102,19 @@ const App: React.FC = () => {
     const [pendingCharacter, setPendingCharacter] = useState<{ project: ProjectState; summary: string; returnStage: AppStage } | null>(null);
     const [replaceCharacter, setReplaceCharacter] = useState(false);
     const [optimizerBusy, setOptimizerBusy] = useState(false);
+    const [canvasViewport, setCanvasViewport] = useState<CanvasViewport>(DEFAULT_CANVAS_VIEWPORT);
+    const [commandStatus, setCommandStatus] = useState('Ready');
+    const projectInputRef = useRef<HTMLInputElement>(null);
 
     const dispatch = (action: Parameters<typeof applyProjectAction>[1]) => setProject(prev => applyProjectAction(prev, action));
     const goStage = (target: AppStage) => {
         const gate = handoffGate(project, target);
         if (!gate.ok && 'recoveryStage' in gate) {
             dispatch({ type: 'set_processing', processing: { stage: 'error', message: gate.message, progress: 0, error: gate.message } });
+            setCommandStatus(gate.message);
             setStage(gate.recoveryStage);
         } else {
+            setCommandStatus(`Opened ${STAGES.find(s => s.id === target)?.label ?? target}`);
             setStage(target);
         }
     };
@@ -281,6 +291,7 @@ const App: React.FC = () => {
         try {
             const raw = JSON.parse(await file.text());
             setProject(loadProjectSnapshot(raw));
+            setCommandStatus(`Loaded project ${file.name}`);
             setStage('path');
         } catch (error) {
             dispatch({
@@ -292,6 +303,7 @@ const App: React.FC = () => {
                     error: error instanceof Error ? error.message : String(error)
                 }
             });
+            setCommandStatus(`Project import failed: ${error instanceof Error ? error.message : String(error)}`);
             setStage('character');
         }
     };
@@ -332,9 +344,92 @@ const App: React.FC = () => {
         }
     }, [project]);
 
-    const exportMechanismSvg = () => downloadText(`mechanisms-${Date.now()}.svg`, generateSVG(mechanismConfig, angle), 'image/svg+xml');
-    const exportMechanismDxf = () => downloadText(`mechanisms-${Date.now()}.dxf`, generateDXF(mechanismConfig, angle), 'application/dxf');
-    const saveProject = () => downloadText(`${project.metadata.name.replaceAll(' ', '-')}.mechanim.json`, serializeProject(project));
+    const exportMechanismSvg = () => {
+        downloadText(`mechanisms-${Date.now()}.svg`, generateSVG(mechanismConfig, angle), 'image/svg+xml');
+        setCommandStatus('Exported mechanism SVG');
+    };
+    const exportMechanismDxf = () => {
+        downloadText(`mechanisms-${Date.now()}.dxf`, generateDXF(mechanismConfig, angle), 'application/dxf');
+        setCommandStatus('Exported mechanism DXF');
+    };
+    const saveProject = () => {
+        downloadText(`${project.metadata.name.replaceAll(' ', '-')}.mechanim.json`, serializeProject(project));
+        setCommandStatus('Saved project snapshot');
+    };
+    const newProject = () => {
+        if (projectHasUserWork(project) && !window.confirm('Start a new project? Unsaved paths, mechanisms, and blueprint work will be discarded.')) {
+            setCommandStatus('New project cancelled');
+            return;
+        }
+        setPendingCharacter(null);
+        setProject(createSampleProject());
+        setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
+        setCommandStatus('Started a fresh template project');
+        setStage('character');
+    };
+    const recoverAutosave = () => {
+        try {
+            const raw = localStorage.getItem('mechanim.autosave');
+            if (!raw) {
+                setCommandStatus('No autosave snapshot found');
+                return;
+            }
+            setProject(loadProjectSnapshot(JSON.parse(raw)));
+            setCommandStatus('Recovered autosave snapshot');
+            setStage('path');
+        } catch (error) {
+            setCommandStatus(`Autosave recovery failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    };
+    const saveWorkspaceLayout = () => {
+        localStorage.setItem('mechanim.workspace', JSON.stringify({ stage, viewport: canvasViewport, toolbarVisible: project.settings.toolbarVisible, partPanelVisible: project.settings.partPanelVisible }));
+        setCommandStatus('Workspace layout saved');
+    };
+    const restoreWorkspaceLayout = () => {
+        try {
+            const raw = localStorage.getItem('mechanim.workspace');
+            if (!raw) {
+                setCommandStatus('No workspace layout saved');
+                return;
+            }
+            const layout = JSON.parse(raw) as Partial<{ stage: unknown; viewport: unknown; toolbarVisible: unknown; partPanelVisible: unknown }>;
+            const warnings: string[] = [];
+            if (layout.viewport !== undefined) {
+                const viewport = normalizeCanvasViewport(layout.viewport);
+                if (viewport) setCanvasViewport(viewport);
+                else warnings.push('ignored invalid workspace viewport');
+            }
+            if (layout.toolbarVisible !== undefined || layout.partPanelVisible !== undefined) {
+                const toolbarVisible = typeof layout.toolbarVisible === 'boolean' ? layout.toolbarVisible : project.settings.toolbarVisible;
+                const partPanelVisible = typeof layout.partPanelVisible === 'boolean' ? layout.partPanelVisible : project.settings.partPanelVisible;
+                if (layout.toolbarVisible !== undefined && typeof layout.toolbarVisible !== 'boolean') warnings.push('ignored invalid toolbar visibility');
+                if (layout.partPanelVisible !== undefined && typeof layout.partPanelVisible !== 'boolean') warnings.push('ignored invalid panel visibility');
+                dispatch({ type: 'update_settings', settings: { toolbarVisible, partPanelVisible } });
+            }
+            if (layout.stage !== undefined) {
+                if (isAppStage(layout.stage)) goStage(layout.stage);
+                else warnings.push('ignored invalid workspace stage');
+            }
+            setCommandStatus(warnings.length ? `Workspace layout restored; ${warnings.join('; ')}` : 'Workspace layout restored');
+        } catch (error) {
+            setCommandStatus(`Workspace restore failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    };
+    const resetWorkspaceLayout = () => {
+        setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
+        dispatch({ type: 'update_settings', settings: { toolbarVisible: true, partPanelVisible: true } });
+        setCommandStatus('Workspace layout reset');
+    };
+    const zoomCanvas = (factor: number) => {
+        const nextZoom = clampCanvasZoom(canvasViewport.zoom * factor);
+        setCanvasViewport(prev => ({ ...prev, zoom: clampCanvasZoom(prev.zoom * factor) }));
+        setCommandStatus(`Canvas zoom ${Math.round(nextZoom * 100)}%`);
+    };
+    const fitCanvas = () => {
+        setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
+        setCommandStatus('Canvas fitted to sheet');
+    };
+    const disabledCommand = (reason: string) => setCommandStatus(reason);
     const themeClass = project.settings.theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-950';
 
     return (
@@ -372,16 +467,34 @@ const App: React.FC = () => {
                             <div className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">{STAGES.find(s => s.id === stage)?.kicker}</div>
                             <h2 className="text-2xl font-black tracking-[-0.05em]">{STAGES.find(s => s.id === stage)?.label}</h2>
                         </div>
-                        {project.settings.toolbarVisible && <div className="flex gap-2">
-                            <label className="btn-secondary cursor-pointer"><Upload size={16}/> Import<input hidden type="file" accept="application/json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/></label>
-                            <button className="btn-secondary" onClick={saveProject}><Save size={16}/> Save</button>
-                            <button className="btn-primary" onClick={() => goStage('blueprint')}><Download size={16}/> Export</button>
-                        </div>}
+                        <div className="flex flex-col items-end gap-2">
+                            <TopCommandBar
+                                onNew={newProject}
+                                onLoad={() => projectInputRef.current?.click()}
+                                onRecoverAutosave={recoverAutosave}
+                                onSave={saveProject}
+                                onExport={() => goStage('blueprint')}
+                                onZoomIn={() => zoomCanvas(1.2)}
+                                onZoomOut={() => zoomCanvas(1 / 1.2)}
+                                onFit={fitCanvas}
+                                onSaveWorkspace={saveWorkspaceLayout}
+                                onRestoreWorkspace={restoreWorkspaceLayout}
+                                onResetWorkspace={resetWorkspaceLayout}
+                                onOptions={() => goStage('options')}
+                                onDisabled={disabledCommand}
+                            />
+                            {project.settings.toolbarVisible && <div className="flex gap-2">
+                                <label className="btn-secondary cursor-pointer"><Upload size={16}/> Import<input hidden type="file" accept="application/json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/></label>
+                                <button className="btn-secondary" onClick={saveProject}><Save size={16}/> Save</button>
+                                <button className="btn-primary" onClick={() => goStage('blueprint')}><Download size={16}/> Export</button>
+                            </div>}
+                        </div>
                     </header>
+                    <input ref={projectInputRef} hidden type="file" accept="application/json,.mechanim.json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/>
 
                     <div className={`stage-body min-h-0 flex-1 overflow-auto ${stage === 'character' ? 'p-0' : 'p-7'}`}>
                         {stage === 'character' && <CharacterSelection project={project} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onSample={() => { setPendingCharacter(null); setProject(createSampleProject()); setStage('path'); }} onProcess={runWebOnnx} onPackage={importCharacterPackage} onImport={importProject} />}
-                        {stage === 'path' && <PathEditor project={project} sortedParts={sortedParts} selectedPart={selectedPart} selectedPath={selectedPath} drawMode={drawMode} setDrawMode={setDrawMode} dispatch={dispatch} setPathPoints={setPathPoints} openTracking={() => setShowTracking(true)} isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} onNext={() => goStage('foundry')} />}
+                        {stage === 'path' && <PathEditor project={project} sortedParts={sortedParts} selectedPart={selectedPart} selectedPath={selectedPath} drawMode={drawMode} setDrawMode={setDrawMode} dispatch={dispatch} setPathPoints={setPathPoints} openTracking={() => setShowTracking(true)} isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} onNext={() => goStage('foundry')} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {stage === 'foundry' && <MechanismFoundry project={project} foundry={foundry} setFoundry={setFoundry} selectedPart={selectedPart} selectedPath={selectedPath} onExport={(pkg) => {
                             const existingTarget = project.mechanisms.find(m =>
                                 m.targetPartId === pkg.targetPartId &&
@@ -408,15 +521,86 @@ const App: React.FC = () => {
                             dispatch({ type: 'upsert_mechanism', mechanism: mech });
                             setStage('design');
                         }} />}
-                        {stage === 'design' && <MechanismDesign project={project} selectedMechanism={selectedMechanism} mechanismConfig={mechanismConfig} setMechanismConfig={setMechanismConfig} updateMechanism={updateMechanism} dispatch={dispatch} isPlaying={isPlaying} setIsPlaying={setIsPlaying} showTrace={showTrace} setShowTrace={setShowTrace} angle={angle} setAngle={setAngle} onOptimize={optimizeSelectedMechanism} optimizerBusy={optimizerBusy} exportSvg={exportMechanismSvg} exportDxf={exportMechanismDxf} />}
+                        {stage === 'design' && <MechanismDesign project={project} selectedMechanism={selectedMechanism} mechanismConfig={mechanismConfig} setMechanismConfig={setMechanismConfig} updateMechanism={updateMechanism} dispatch={dispatch} isPlaying={isPlaying} setIsPlaying={setIsPlaying} showTrace={showTrace} setShowTrace={setShowTrace} angle={angle} setAngle={setAngle} onOptimize={optimizeSelectedMechanism} optimizerBusy={optimizerBusy} exportSvg={exportMechanismSvg} exportDxf={exportMechanismDxf} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {stage === 'blueprint' && <BlueprintExport project={project} dispatch={dispatch} goStage={goStage} />}
                         {stage === 'options' && <Options project={project} dispatch={dispatch} />}
                     </div>
+                    <footer className="status-bar" data-testid="status-bar">{commandStatus} · parts:{project.partOrder.length} · paths:{Object.keys(project.paths).length} · mechs:{project.mechanisms.length} · zoom {Math.round(canvasViewport.zoom * 100)}%</footer>
                 </section>
             </div>
             <TrackingModal isOpen={showTracking} onClose={() => setShowTracking(false)} onTransfer={path => { setPathPoints(path, 'tracked'); setShowTracking(false); setStage('path'); }} />
         </main>
     );
+};
+
+const TopCommandBar = ({ onNew, onLoad, onRecoverAutosave, onSave, onExport, onZoomIn, onZoomOut, onFit, onSaveWorkspace, onRestoreWorkspace, onResetWorkspace, onOptions, onDisabled }: {
+    onNew: () => void;
+    onLoad: () => void;
+    onRecoverAutosave: () => void;
+    onSave: () => void;
+    onExport: () => void;
+    onZoomIn: () => void;
+    onZoomOut: () => void;
+    onFit: () => void;
+    onSaveWorkspace: () => void;
+    onRestoreWorkspace: () => void;
+    onResetWorkspace: () => void;
+    onOptions: () => void;
+    onDisabled: (reason: string) => void;
+}) => {
+    const unavailable = (label: string) => () => onDisabled(`${label} is not available in the browser build yet.`);
+    const [openMenu, setOpenMenu] = useState<string | null>(null);
+    const toggleMenu = (id: string) => (event: React.MouseEvent) => {
+        event.preventDefault();
+        setOpenMenu(openMenu === id ? null : id);
+    };
+    const runCommand = (fn: () => void) => () => {
+        fn();
+        setOpenMenu(null);
+    };
+    return <nav className="command-bar" aria-label="Application command menu" data-testid="top-command-bar">
+        <details open={openMenu === 'file'}><summary onClick={toggleMenu('file')}>File</summary><div className="command-menu">
+            <button onClick={runCommand(onNew)}>New</button>
+            <button onClick={runCommand(onLoad)}>Load Project…</button>
+            <button onClick={runCommand(onRecoverAutosave)}>Recover Autosave…</button>
+            <button onClick={runCommand(onSave)}>Save Project</button>
+            <button onClick={runCommand(onSave)}>Save Project As…</button>
+            <button onClick={runCommand(onExport)}>Export Blueprint Package</button>
+            <button onClick={runCommand(onSave)}>Export Project Copy</button>
+            <button onClick={runCommand(unavailable('Exit'))}>Exit</button>
+        </div></details>
+        <details open={openMenu === 'view'}><summary onClick={toggleMenu('view')}>View</summary><div className="command-menu">
+            <button onClick={runCommand(onZoomIn)}>Zoom In</button>
+            <button onClick={runCommand(onZoomOut)}>Zoom Out</button>
+            <button onClick={runCommand(onFit)}>Zoom to Fit</button>
+            <button onClick={runCommand(onFit)}>Reset View</button>
+            <button onClick={runCommand(onSaveWorkspace)}>Save Workspace Layout</button>
+            <button onClick={runCommand(onRestoreWorkspace)}>Restore Workspace Layout</button>
+            <button onClick={runCommand(onResetWorkspace)}>Reset Workspace Layout</button>
+        </div></details>
+        <details open={openMenu === 'edit'}><summary onClick={toggleMenu('edit')}>Edit</summary><div className="command-menu">
+            <button onClick={runCommand(unavailable('Undo'))}>Back (Undo)</button>
+            <button onClick={runCommand(unavailable('Redo'))}>Forward (Redo)</button>
+        </div></details>
+        <details open={openMenu === 'options'}><summary onClick={toggleMenu('options')}>Options</summary><div className="command-menu">
+            <button onClick={runCommand(onOptions)}>Preferences…</button>
+        </div></details>
+        <details open={openMenu === 'help'}><summary onClick={toggleMenu('help')}>Help</summary><div className="command-menu">
+            <button onClick={runCommand(unavailable('Check for Updates'))}>Check for Updates…</button>
+            <button onClick={runCommand(() => onDisabled('MechAnim web port · local ONNX, persistent scene state, blueprint export.'))}>About…</button>
+        </div></details>
+    </nav>;
+};
+
+const CanvasZoomToolbar = ({ viewport, setViewport }: { viewport: CanvasViewport; setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>> }) => {
+    const zoomBy = (factor: number) => setViewport(prev => ({ ...prev, zoom: clampCanvasZoom(prev.zoom * factor) }));
+    const reset = () => setViewport(DEFAULT_CANVAS_VIEWPORT);
+    return <div className="canvas-zoom-toolbar" onMouseDown={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
+        <button type="button" aria-label="Zoom out" onClick={() => zoomBy(1 / 1.2)}>−</button>
+        <span data-testid="canvas-zoom-readout">{Math.round(viewport.zoom * 100)}%</span>
+        <button type="button" aria-label="Zoom in" onClick={() => zoomBy(1.2)}>+</button>
+        <button type="button" aria-label="Fit view" onClick={reset}>Fit</button>
+    </div>;
 };
 
 const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setReplaceCharacter, onAccept, onDiscard, onSample, onProcess, onPackage, onImport }: {
@@ -539,7 +723,7 @@ const ProgressBlock = ({ project }: { project: ProjectState }) => {
     </div>;
 };
 
-const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode, setDrawMode, dispatch, setPathPoints, openTracking, isPlaying, setIsPlaying, angle, setAngle, onNext }: {
+const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode, setDrawMode, dispatch, setPathPoints, openTracking, isPlaying, setIsPlaying, angle, setAngle, onNext, viewport, setViewport }: {
     project: ProjectState;
     sortedParts: BodyPartLayer[];
     selectedPart?: BodyPartLayer;
@@ -554,6 +738,8 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
     angle: number;
     setAngle: React.Dispatch<React.SetStateAction<number>>;
     onNext: () => void;
+    viewport: CanvasViewport;
+    setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
 }) => {
     const svgRef = useRef<SVGSVGElement>(null);
     const freeDraftRef = useRef<Point[] | null>(null);
@@ -632,7 +818,8 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
                 <strong>{drawMode ? (isFreeDrawing ? 'Drawing…' : 'Drag anywhere to draw') : 'Pick Draw free path'}</strong>
                 <span>{selectedPart?.name ?? 'No part'} · {pointCount} points</span>
             </div>
-            <SceneSketch svgRef={svgRef} project={project} selectedPath={selectedPath} dragPoint={dragPoint} selectedPoint={selectedPoint} setDragPoint={setDragPoint} setSelectedPoint={setSelectedPoint} onPointMove={movePoint} onPointUp={stopDrawing} onCanvasDown={onCanvasDown} dispatch={dispatch} drawMode={drawMode} pathLocked={pathLocked} isPlaying={isPlaying} angle={angle}/>
+            <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
+            <SceneSketch svgRef={svgRef} project={project} selectedPath={selectedPath} dragPoint={dragPoint} selectedPoint={selectedPoint} setDragPoint={setDragPoint} setSelectedPoint={setSelectedPoint} onPointMove={movePoint} onPointUp={stopDrawing} onCanvasDown={onCanvasDown} dispatch={dispatch} drawMode={drawMode} pathLocked={pathLocked} isPlaying={isPlaying} angle={angle} viewport={viewport}/>
         </div>
         {project.settings.partPanelVisible && <aside className="path-panel workspace space-y-4 p-5" data-testid="novice-path-panel">
             <div>
@@ -679,7 +866,7 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
     </div>;
 };
 
-const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, setDragPoint, setSelectedPoint, onPointMove, onPointUp, onCanvasDown, dispatch, drawMode, pathLocked, isPlaying, angle }: { project: ProjectState; svgRef: React.RefObject<SVGSVGElement | null>; selectedPath?: ProjectMotionPath; dragPoint: number | null; selectedPoint: number | null; setDragPoint: (i: number | null) => void; setSelectedPoint: (i: number | null) => void; onPointMove: (e: React.MouseEvent<SVGSVGElement>) => void; onPointUp: () => void; onCanvasDown: (e: React.MouseEvent<SVGSVGElement>) => void; dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void; drawMode?: boolean; pathLocked?: boolean; isPlaying: boolean; angle: number }) => {
+const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, setDragPoint, setSelectedPoint, onPointMove, onPointUp, onCanvasDown, dispatch, drawMode, pathLocked, isPlaying, angle, viewport }: { project: ProjectState; svgRef: React.RefObject<SVGSVGElement | null>; selectedPath?: ProjectMotionPath; dragPoint: number | null; selectedPoint: number | null; setDragPoint: (i: number | null) => void; setSelectedPoint: (i: number | null) => void; onPointMove: (e: React.MouseEvent<SVGSVGElement>) => void; onPointUp: () => void; onCanvasDown: (e: React.MouseEvent<SVGSVGElement>) => void; dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void; drawMode?: boolean; pathLocked?: boolean; isPlaying: boolean; angle: number; viewport: CanvasViewport }) => {
     const kit = project.settings.physicalKit;
     const sheet = sceneBoundsForSheet(kit);
     const pathMechanism = selectedPath ? project.mechanisms.find(m => m.targetPathId === selectedPath.id && m.targetPartId === selectedPath.partId) : undefined;
@@ -695,7 +882,11 @@ const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, 
         const b = sceneToSvg(line.b);
         return <line key={line.key} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#e5e8f0" strokeWidth="1"/>;
     });
-    return <svg ref={svgRef} aria-label="Path editor canvas" data-testid="path-canvas" viewBox={`0 0 ${SCENE_VIEW.width} ${SCENE_VIEW.height}`} className={`h-[calc(100vh-160px)] min-h-[560px] w-full bg-[#f8fbff] ${drawMode ? 'cursor-crosshair' : ''}`} onMouseDown={onCanvasDown} onMouseMove={onPointMove} onMouseUp={onPointUp} onMouseLeave={onPointUp}>
+    const viewWidth = SCENE_VIEW.width / viewport.zoom;
+    const viewHeight = SCENE_VIEW.height / viewport.zoom;
+    const viewX = (SCENE_VIEW.width - viewWidth) / 2 - viewport.offset.x / viewport.zoom;
+    const viewY = (SCENE_VIEW.height - viewHeight) / 2 - viewport.offset.y / viewport.zoom;
+    return <svg ref={svgRef} aria-label="Path editor canvas" data-testid="path-canvas" viewBox={`${viewX} ${viewY} ${viewWidth} ${viewHeight}`} className={`h-[calc(100vh-160px)] min-h-[560px] w-full bg-[#f8fbff] ${drawMode ? 'cursor-crosshair' : ''}`} onMouseDown={onCanvasDown} onMouseMove={onPointMove} onMouseUp={onPointUp} onMouseLeave={onPointUp}>
         <defs><filter id="soft"><feDropShadow dx="0" dy="10" stdDeviation="10" floodOpacity="0.13"/></filter></defs>
         <rect x={sheetSvg.x} y={sheetSvg.y} width={sheetSvg.width} height={sheetSvg.height} rx="18" fill="white" stroke="#d6dbe8" strokeWidth="1.5"/>
         {gridLines}
@@ -875,7 +1066,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     </div>;
 };
 
-const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMechanismConfig, updateMechanism, dispatch, isPlaying, setIsPlaying, showTrace, setShowTrace, angle, setAngle, onOptimize, optimizerBusy, exportSvg, exportDxf }: {
+const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMechanismConfig, updateMechanism, dispatch, isPlaying, setIsPlaying, showTrace, setShowTrace, angle, setAngle, onOptimize, optimizerBusy, exportSvg, exportDxf, viewport, setViewport }: {
     project: ProjectState;
     selectedMechanism?: MechanismConfig;
     mechanismConfig: GlobalConfig;
@@ -892,6 +1083,8 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
     optimizerBusy: boolean;
     exportSvg: () => void;
     exportDxf: () => void;
+    viewport: CanvasViewport;
+    setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
 }) => {
     const selectedLibrary = selectedMechanism ? MECHANISM_LIBRARY[selectedMechanism.type] : undefined;
     const selectedRange = selectedMechanism ? sampleFeasibleRange(selectedMechanism) : undefined;
@@ -902,8 +1095,9 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
         ? preferredMotionJointId(project, selectedMechanism.targetPartId, selectedMechanism.targetAnchorJointId)
         : undefined;
     return <div className={`grid gap-5 ${project.settings.partPanelVisible ? 'xl:grid-cols-[1fr_360px]' : ''}`}>
-    <div className="workspace overflow-hidden p-0">
-        <Canvas project={project} config={mechanismConfig} setConfig={setMechanismConfig} selectedId={project.selectedMechanismId ?? null} setSelectedId={id => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: id })} isPlaying={isPlaying} showTrace={showTrace} isDrawMode={false} userPath={[]} setUserPath={() => {}} angle={angle} setAngle={setAngle}/>
+    <div className="path-canvas-shell workspace overflow-hidden p-0">
+        <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
+        <Canvas project={project} config={mechanismConfig} setConfig={setMechanismConfig} selectedId={project.selectedMechanismId ?? null} setSelectedId={id => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: id })} isPlaying={isPlaying} showTrace={showTrace} isDrawMode={false} userPath={[]} setUserPath={() => {}} angle={angle} setAngle={setAngle} viewport={viewport} setViewport={setViewport}/>
     </div>
     {project.settings.partPanelVisible && <aside className="workspace space-y-4 p-5">
         <div className="flex gap-2"><button className="btn-secondary" onClick={() => setIsPlaying(!isPlaying)}><Play size={16}/>{isPlaying ? 'Pause' : 'Play'}</button><button className="btn-secondary" onClick={() => setShowTrace(!showTrace)}>Trace</button></div>

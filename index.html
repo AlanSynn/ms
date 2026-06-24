@@ -89,8 +89,22 @@
       .advanced-panel summary { cursor: pointer; list-style: none; color: var(--ms-muted); font-size: .78rem; font-weight: 950; letter-spacing: .16em; text-transform: uppercase; }
       .advanced-panel summary::-webkit-details-marker { display: none; }
       .recommendation-card { border: 1px solid var(--ms-line); border-radius: 1.25rem; background: #fff; padding: 1rem; color: var(--ms-muted); font-size: .9rem; line-height: 1.45; }
+      .command-bar { display: flex; align-items: center; justify-content: flex-end; gap: .35rem; color: var(--ms-muted); font-size: .78rem; font-weight: 900; }
+      .command-bar details { position: relative; }
+      .command-bar summary { list-style: none; border-radius: 999px; padding: .45rem .65rem; cursor: pointer; }
+      .command-bar summary::-webkit-details-marker { display: none; }
+      .command-bar details[open] summary, .command-bar summary:hover { background: var(--ms-accent-soft); color: var(--ms-accent); }
+      .command-menu { position: absolute; right: 0; top: calc(100% + .45rem); z-index: 20; min-width: 14rem; border: 1px solid var(--ms-line); border-radius: 1.1rem; background: rgba(255,255,255,.98); box-shadow: 0 24px 70px rgba(8,10,18,.14); padding: .45rem; display: grid; gap: .15rem; }
+      .command-menu button { border-radius: .85rem; background: transparent; color: var(--ms-text-soft); padding: .55rem .7rem; text-align: left; font-size: .82rem; font-weight: 800; }
+      .command-menu button:hover { background: var(--ms-bg-soft); color: var(--ms-text); }
+      .status-bar { border-top: 1px solid var(--ms-line); background: rgba(255,255,255,.72); color: var(--ms-muted); padding: .55rem 1.75rem; font-size: .76rem; font-weight: 800; backdrop-filter: blur(14px); }
+      .canvas-zoom-toolbar { position: absolute; right: 1rem; bottom: 1rem; z-index: 5; display: inline-flex; align-items: center; gap: .25rem; border: 1px solid var(--ms-line); border-radius: 999px; background: rgba(255,255,255,.94); box-shadow: 0 18px 52px rgba(8,10,18,.08); padding: .35rem; }
+      .canvas-zoom-toolbar button, .canvas-zoom-toolbar span { min-width: 2.2rem; border-radius: 999px; padding: .45rem .55rem; color: var(--ms-text-soft); font-size: .78rem; font-weight: 950; text-align: center; }
+      .canvas-zoom-toolbar button { background: #fff; border: 1px solid var(--ms-line); }
+      .canvas-zoom-toolbar button:hover { color: var(--ms-accent); border-color: var(--ms-accent-line); background: var(--ms-accent-soft); }
 
       .app-rail, .app-header { color: var(--ms-text); }
+      .app-header { position: relative; z-index: 30; }
       .accent-label { color: var(--ms-accent); }
       .app-rail button.bg-slate-950 { background: var(--ms-accent); color: #fff; box-shadow: 0 16px 40px rgba(90,108,255,.20); }
       .nav-active-dot { background: #fff; }

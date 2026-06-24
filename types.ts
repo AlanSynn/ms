@@ -6,6 +6,11 @@ export interface Point {
     y: number;
 }
 
+export interface CanvasViewport {
+    offset: Point;
+    zoom: number;
+}
+
 export interface Bounds {
     x: number;
     y: number;

@@ -1,10 +1,11 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { BodyPartLayer, GlobalConfig, MechanismConfig, Point, ProjectState } from '../types';
+import { BodyPartLayer, CanvasViewport, GlobalConfig, MechanismConfig, Point, ProjectState } from '../types';
 import { calculateLinkage, generateCurvePoints } from '../utils/kinematics';
 import { boardGridLines, bodyPartPivotScene, defaultPhysicalKit, pathFromPoints, SCENE_VIEW, sceneBoundsForSheet, sceneToSvg } from '../utils/coordinates';
 import { motionPreviewForProject, pointOnProjectPath } from '../utils/motion';
 import { mechanismWithGeneratedPath } from '../utils/project';
+import { clampCanvasZoom } from '../utils/viewport';
 
 interface CanvasProps {
     project?: ProjectState;
@@ -19,6 +20,8 @@ interface CanvasProps {
     setUserPath: (path: Point[]) => void;
     angle: number;
     setAngle: React.Dispatch<React.SetStateAction<number>>;
+    viewport?: CanvasViewport;
+    setViewport?: React.Dispatch<React.SetStateAction<CanvasViewport>>;
 }
 
 const VB_WIDTH = SCENE_VIEW.width;
@@ -51,13 +54,22 @@ const GearPath = ({ radius, teeth }: { radius: number, teeth: number }) => {
 };
 
 export const Canvas: React.FC<CanvasProps> = ({
-    project, config, setConfig, selectedId, setSelectedId, isPlaying, showTrace, isDrawMode, userPath, setUserPath, angle, setAngle
+    project, config, setConfig, selectedId, setSelectedId, isPlaying, showTrace, isDrawMode, userPath, setUserPath, angle, setAngle, viewport, setViewport
 }) => {
     const [traces, setTraces] = useState<Record<string, Point[]>>({});
     const svgRef = useRef<SVGSVGElement>(null);
 
-    const [viewOffset, setViewOffset] = useState({ x: 0, y: 0 });
-    const [zoom, setZoom] = useState(1);
+    const [internalViewport, setInternalViewport] = useState<CanvasViewport>({ offset: { x: 0, y: 0 }, zoom: 1 });
+    const activeViewport = viewport ?? internalViewport;
+    const viewOffset = activeViewport.offset;
+    const zoom = activeViewport.zoom;
+    const writeViewport = setViewport ?? setInternalViewport;
+    const setViewOffset = (next: Point | ((prev: Point) => Point)) => {
+        writeViewport(prev => ({ ...prev, offset: typeof next === 'function' ? next(prev.offset) : next }));
+    };
+    const setZoom = (nextZoom: number) => {
+        writeViewport(prev => ({ ...prev, zoom: nextZoom }));
+    };
     const [isPanning, setIsPanning] = useState(false);
     const [isDrawing, setIsDrawing] = useState(false);
     const [dragTarget, setDragTarget] = useState<{ mechId: string, type: 'P1' | 'P2' | 'J1' | 'J2' | 'Effector' | 'Aux' } | null>(null);
@@ -165,13 +177,10 @@ export const Canvas: React.FC<CanvasProps> = ({
         if (!svgRef.current) return;
 
         const zoomSensitivity = 0.001;
-        const MIN_ZOOM = 0.1;
-        const MAX_ZOOM = 10;
-
         // Calculate new zoom
         const delta = -e.deltaY;
         const scaleFactor = 1 + delta * zoomSensitivity;
-        const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * scaleFactor));
+        const newZoom = clampCanvasZoom(zoom * scaleFactor);
 
         // Calculate point under mouse in SVG ViewBox coordinates
         const pt = svgRef.current.createSVGPoint();
