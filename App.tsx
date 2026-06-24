@@ -318,6 +318,35 @@ const App: React.FC = () => {
         }
     };
 
+    const editCharacterParts = () => {
+        setCommandStatus('Opened actual parts / skeleton editor');
+        setStage('path');
+    };
+
+    const saveSkeleton = () => {
+        if (!project.skeleton) {
+            setCommandStatus('No skeleton to save');
+            return;
+        }
+        const charCfg = project.characterPackage?.charCfg ?? { joints: project.skeleton.joints, bones: project.skeleton.bones, root_joint_ids: project.skeleton.rootJointIds, metadata: project.skeleton.metadata };
+        downloadText('char_cfg.json', JSON.stringify(charCfg, null, 2));
+        setCommandStatus('Saved skeleton config');
+    };
+
+    const chooseSaveFolder = async () => {
+        const picker = (window as Window & { showDirectoryPicker?: () => Promise<{ name?: string }> }).showDirectoryPicker;
+        if (!picker) {
+            setCommandStatus('Browser downloads use the default download folder');
+            return;
+        }
+        try {
+            const handle = await picker();
+            setCommandStatus(`Output folder: ${handle.name ?? 'selected'}`);
+        } catch {
+            setCommandStatus('Choose save folder cancelled');
+        }
+    };
+
     const optimizeSelectedMechanism = async () => {
         if (!selectedMechanism || !selectedPath || selectedPath.points.length < 3) return;
         setOptimizerBusy(true);
@@ -514,7 +543,7 @@ const App: React.FC = () => {
                     <input ref={projectInputRef} hidden type="file" accept="application/json,.mechanim.json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/>
 
                     <div className={`stage-body min-h-0 flex-1 overflow-auto ${stage === 'character' ? 'p-0' : 'p-7'}`}>
-                        {stage === 'character' && <CharacterSelection project={project} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onSample={() => { setPendingCharacter(null); setProject(createSampleProject()); setStage('path'); }} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} />}
+                        {stage === 'character' && <CharacterSelection project={project} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onSample={() => { setPendingCharacter(null); setProject(createSampleProject()); setStage('path'); }} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} />}
                         {stage === 'path' && <PathEditor project={project} sortedParts={sortedParts} selectedPart={selectedPart} selectedPath={selectedPath} drawMode={drawMode} setDrawMode={setDrawMode} dispatch={dispatch} setPathPoints={setPathPoints} openTracking={() => setShowTracking(true)} isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} onNext={() => goStage('foundry')} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {stage === 'foundry' && <MechanismFoundry project={project} foundry={foundry} setFoundry={setFoundry} selectedPart={selectedPart} selectedPath={selectedPath} onExport={(pkg) => {
                             const existingTarget = project.mechanisms.find(m =>
@@ -660,7 +689,7 @@ const WorkflowStatusStrip = ({ stage, project, selectedPart, selectedPath }: { s
     </div>;
 };
 
-const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setReplaceCharacter, onAccept, onDiscard, onSample, onProcess, onCamera, onPackage, onImport }: {
+const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setReplaceCharacter, onAccept, onDiscard, onSample, onProcess, onCamera, onPackage, onImport, onEditCharacter, onSaveSkeleton, onChooseSaveFolder }: {
     project: ProjectState;
     pendingCharacter: { project: ProjectState; summary: string; returnStage: AppStage } | null;
     replaceCharacter: boolean;
@@ -672,6 +701,9 @@ const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setRe
     onCamera: () => void;
     onPackage: (files: FileList | File[]) => void;
     onImport: (file: File) => void;
+    onEditCharacter: () => void;
+    onSaveSkeleton: () => void;
+    onChooseSaveFolder: () => void;
 }) => {
     const reviewedProject = pendingCharacter?.project ?? project;
     const artifact = reviewedProject.characterPackage;
@@ -747,6 +779,29 @@ const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setRe
                     if (file) onImport(file);
                 }}/>
                 <label className="flex items-center gap-2 text-sm font-bold text-slate-600"><input type="checkbox" checked={replaceCharacter} onChange={e => setReplaceCharacter(e.target.checked)} /> Replace current character and preserve compatible mechanisms</label>
+            </div>
+            <div className="workspace mt-5 grid gap-4 p-5 md:grid-cols-3" data-testid="character-processing-panel">
+                <div>
+                    <h4 className="section-title">Processing Steps</h4>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                        <button className="btn-primary" onClick={() => onnxInputRef.current?.click()}>Process Image (Skeleton)</button>
+                        <button className="btn-secondary" onClick={onEditCharacter}>Edit Skeleton</button>
+                        <button className="btn-secondary" onClick={onSaveSkeleton}>Save Skeleton</button>
+                        <button className="btn-secondary" onClick={() => onnxInputRef.current?.click()}>Generate Body Parts</button>
+                    </div>
+                </div>
+                <div>
+                    <h4 className="section-title">Recognition Editing</h4>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                        <button className="btn-secondary" onClick={onEditCharacter}>Edit Parts / Skeleton / Boxes</button>
+                        <button className="btn-secondary" onClick={onEditCharacter}>Edit Skeleton Joints</button>
+                    </div>
+                </div>
+                <div>
+                    <h4 className="section-title">Download / Output Location</h4>
+                    <div className="mt-3 flex flex-wrap gap-2"><button className="btn-secondary" onClick={onChooseSaveFolder}>Choose Save Folder…</button></div>
+                    <p className="mt-2 text-xs font-bold text-slate-500">Web exports still use browser-safe downloads.</p>
+                </div>
             </div>
             <details className="advanced-panel import-status" open={statusOpen}>
                 <summary>Import status</summary>

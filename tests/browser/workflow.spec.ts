@@ -225,6 +225,44 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   expectCleanPage(pageErrors, consoleErrors);
 });
 
+test('Character Selection processing controls route to real browser workflows', async ({ page }) => {
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  await page.goto('/');
+  await expect(page.getByTestId('character-processing-panel')).toContainText('Processing Steps');
+
+  const skeletonChooserPromise = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Process Image (Skeleton)', exact: true }).click();
+  expect((await skeletonChooserPromise).isMultiple()).toBe(false);
+
+  const bodyPartsChooserPromise = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Generate Body Parts', exact: true }).click();
+  expect((await bodyPartsChooserPromise).isMultiple()).toBe(false);
+
+  const [skeletonDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Save Skeleton', exact: true }).click()
+  ]);
+  expect(skeletonDownload.suggestedFilename()).toBe('char_cfg.json');
+  const skeletonPath = await skeletonDownload.path();
+  expect(skeletonPath, 'skeleton download path').toBeTruthy();
+  const skeletonConfig = JSON.parse(await readFile(skeletonPath!, 'utf8'));
+  expect(skeletonConfig.joints).toBeTruthy();
+  expect(skeletonConfig.bones).toBeTruthy();
+
+  await page.getByRole('button', { name: 'Edit Parts / Skeleton / Boxes', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
+  await page.getByText('Advanced part setup').click();
+  await expect(page.getByLabel('Edit joint')).toBeVisible();
+
+  expectCleanPage(pageErrors, consoleErrors);
+});
+
 test('Create from image upload creates a reviewed character package in browser', async ({ page }) => {
   test.setTimeout(180_000);
   const pageErrors: string[] = [];
