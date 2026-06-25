@@ -1,5 +1,6 @@
 import type { Point, ProjectState } from '../types';
 import { calculateLinkage } from './kinematics';
+import { mechanismTemplateLabel } from './mechanismTemplates';
 import type { ProjectionSourceType, ToonSceneProjection } from './sceneProjection';
 
 export type PhysicsBodyKind = 'fixed' | 'kinematic' | 'joint' | 'driver';
@@ -126,6 +127,7 @@ export const buildKinematicPhysicsSession = (
   project.mechanisms
     .filter(mechanism => mechanism.visible && mechanism.enabled !== false)
     .forEach(mechanism => {
+      const templateLabel = mechanismTemplateLabel(mechanism.type);
       const anchor = resolvedAnchor(mechanism);
       const resolved = { ...mechanism, anchorX: anchor.x, anchorY: anchor.y };
       const current = calculateLinkage(resolved, angleRad);
@@ -147,7 +149,7 @@ export const buildKinematicPhysicsSession = (
           mechanismId: mechanism.id,
           sourceType: 'mechanism-state',
           sourceId: mechanism.id,
-          label: `${mechanism.type} ${sampleId}`,
+          label: `${templateLabel} ${sampleId}`,
           kind,
           position: { x: finite(point.x), y: finite(point.y), zMm: finite(depth + 0.7) },
           velocity,
@@ -158,7 +160,7 @@ export const buildKinematicPhysicsSession = (
       addConstraint(constraints, `/physics/constraints/${mechanism.id}/coupler`, 'rod', current.j1, current.j2, finite(mechanism.couplerLength), 'coupler length', mechanism.id);
       addConstraint(constraints, `/physics/constraints/${mechanism.id}/rocker`, 'rod', current.j2, current.p2, finite(mechanism.rockerLength), 'rocker length', mechanism.id);
       addConstraint(constraints, `/physics/constraints/${mechanism.id}/target`, 'target', current.effector, current.effector, 0, 'end effector target', mechanism.id);
-      if (!current.isValid) warnings.push({ id: `/physics/warnings/${mechanism.id}/invalid`, severity: 'warning', message: `${mechanism.type} kinematic sample is outside its valid linkage range.`, sourceId: mechanism.id });
+      if (!current.isValid) warnings.push({ id: `/physics/warnings/${mechanism.id}/invalid`, severity: 'warning', message: `${templateLabel} kinematic sample is outside its valid linkage range.`, sourceId: mechanism.id });
     });
 
   const maxSpeed = bodies.reduce((max, body) => Math.max(max, Math.hypot(body.velocity.x, body.velocity.y)), 0);

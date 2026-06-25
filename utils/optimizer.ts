@@ -1,8 +1,9 @@
 
 import { MechanismConfig, Point, MechanismType } from '../types';
 import { generateCurvePoints } from './kinematics';
+import { AUTHORABLE_MECHANISM_TYPES } from './mechanismTemplates';
 
-const MECHANISM_TYPES: MechanismType[] = ['4bar', 'cam', 'gear', 'planetary_gear', 'piston', 'yoke', 'quick-return', '5bar'];
+export const OPTIMIZER_MECHANISM_TYPES: MechanismType[] = [...AUTHORABLE_MECHANISM_TYPES];
 
 // Proven harmonic gear ratio pairs for clean, closed 5-bar curves
 // Each produces a distinct, predictable pattern
@@ -447,11 +448,11 @@ export const generateSmartConfig = (targetPath?: Point[], forcedType?: Mechanism
 
     const s = (factor: number) => scale * factor * (0.5 + Math.random());
 
-    let availableTypes = MECHANISM_TYPES;
+    let availableTypes = OPTIMIZER_MECHANISM_TYPES;
     if (forcedType) {
         availableTypes = [forcedType];
     } else if (excludedType) {
-        availableTypes = MECHANISM_TYPES.filter(t => t !== excludedType);
+        availableTypes = OPTIMIZER_MECHANISM_TYPES.filter(t => t !== excludedType);
     }
 
     const type = availableTypes[Math.floor(Math.random() * availableTypes.length)];
@@ -587,7 +588,7 @@ export const mutateConfig = (config: MechanismConfig, temperature: number = 1.0,
 
     // Structure Mutation
     if (!fixedType && temperature > 0.3 && Math.random() < 0.15) {
-        let types = MECHANISM_TYPES;
+        let types = OPTIMIZER_MECHANISM_TYPES;
         if (excludedType) types = types.filter(t => t !== excludedType);
         types = types.filter(t => t !== config.type);
 

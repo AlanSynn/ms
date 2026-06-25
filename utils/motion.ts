@@ -11,6 +11,22 @@ export interface MotionPreview {
     warnings?: Record<string, string[]>;
 }
 
+export type MotionChainKind = 'invalid' | 'root-only' | 'two-joint-direct' | 'three-joint-ik' | 'multi-joint';
+
+export interface MotionChainDescriptor {
+    kind: MotionChainKind;
+    rootJointId?: string;
+    targetJointId?: string;
+    foldJointId?: string;
+    jointIds: string[];
+    jointCount: number;
+    segmentCount: number;
+    label: string;
+    helper: string;
+    canFold: boolean;
+    warning?: string;
+}
+
 export const pointOnProjectPath = (path: ProjectMotionPath, angle: number): Point => {
     if (path.timedPoints?.length) {
         const timed = [...path.timedPoints].sort((a, b) => a.time - b.time);
@@ -119,7 +135,7 @@ const rotateAround = (point: Point, center: Point, radians: number): Point => {
     };
 };
 
-const jointChain = (skeleton: StandardSkeleton, rootJointId: string, targetJointId: string) => {
+export const motionJointChain = (skeleton: StandardSkeleton, rootJointId: string, targetJointId: string) => {
     const chain = [targetJointId];
     let current = skeleton.joints[targetJointId]?.parentId ?? null;
     while (current) {
@@ -130,6 +146,104 @@ const jointChain = (skeleton: StandardSkeleton, rootJointId: string, targetJoint
     return targetJointId === rootJointId ? [rootJointId] : [];
 };
 
+const jointDisplayName = (skeleton: StandardSkeleton | null | undefined, id?: string) =>
+    id ? (skeleton?.joints[id]?.name || id).replaceAll('_', ' ') : 'none';
+
+export const describeMotionChain = (project: ProjectState, partId: string | undefined, targetJointId?: string): MotionChainDescriptor => {
+    const part = partId ? project.parts[partId] : undefined;
+    const skeleton = project.skeleton;
+    if (!part || !skeleton) {
+        return {
+            kind: 'invalid',
+            jointIds: [],
+            jointCount: 0,
+            segmentCount: 0,
+            label: 'No IK chain',
+            helper: 'Choose a body part with skeleton joints before assigning motion.',
+            canFold: false,
+            warning: 'Missing part or skeleton'
+        };
+    }
+    const rootJointId = part.anchorJointId;
+    const resolvedTargetJointId = preferredMotionJointId(project, partId, targetJointId) ?? rootJointId;
+    const jointIds = motionJointChain(skeleton, rootJointId, resolvedTargetJointId);
+    const jointCount = jointIds.length;
+    const segmentCount = Math.max(0, jointCount - 1);
+    if (!jointCount) {
+        return {
+            kind: 'invalid',
+            rootJointId,
+            targetJointId: resolvedTargetJointId,
+            jointIds: [],
+            jointCount: 0,
+            segmentCount: 0,
+            label: 'Invalid IK chain',
+            helper: `${jointDisplayName(skeleton, resolvedTargetJointId)} is not inside ${jointDisplayName(skeleton, rootJointId)}'s limb chain.`,
+            canFold: false,
+            warning: 'Target joint is outside this part chain'
+        };
+    }
+    if (jointCount === 1) {
+        return {
+            kind: 'root-only',
+            rootJointId,
+            targetJointId: resolvedTargetJointId,
+            jointIds,
+            jointCount,
+            segmentCount,
+            label: 'Root-only anchor',
+            helper: 'Moves the whole part from its anchor. Add or choose a distal IK handle for elbow/knee bending.',
+            canFold: false
+        };
+    }
+    if (jointCount === 2) {
+        return {
+            kind: 'two-joint-direct',
+            rootJointId,
+            targetJointId: resolvedTargetJointId,
+            jointIds,
+            jointCount,
+            segmentCount,
+            label: '2-joint direct handle',
+            helper: 'One straight segment follows the path. Mechanisms pin the handle exactly; there is no fold joint.',
+            canFold: false
+        };
+    }
+    const foldJointId = jointIds[jointIds.length - 2];
+    if (jointCount === 3) {
+        return {
+            kind: 'three-joint-ik',
+            rootJointId,
+            targetJointId: resolvedTargetJointId,
+            foldJointId,
+            jointIds,
+            jointCount,
+            segmentCount,
+            label: '3-joint IK',
+            helper: `${jointDisplayName(skeleton, foldJointId)} is the elbow/knee. Fold direction decides which side it bends.`,
+            canFold: true
+        };
+    }
+    return {
+        kind: 'multi-joint',
+        rootJointId,
+        targetJointId: resolvedTargetJointId,
+        foldJointId,
+        jointIds,
+        jointCount,
+        segmentCount,
+        label: `Multi-joint IK (${jointCount} joints)`,
+        helper: `${jointDisplayName(skeleton, foldJointId)} acts as the visible bend control while extra child joints follow the handle.`,
+        canFold: true,
+        warning: 'Multi-joint chains currently use the distal bend joint as the solver control.'
+    };
+};
+
+export const motionChainOptionLabel = (project: ProjectState, partId: string | undefined, jointId: string): string => {
+    const descriptor = describeMotionChain(project, partId, jointId);
+    return `${jointDisplayName(project.skeleton, jointId)} · ${descriptor.label}`;
+};
+
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
 const solveChainTargets = (skeleton: StandardSkeleton, rootJointId: string, targetJointId: string, target: Point, pinTarget = false): Record<string, Point> => {
@@ -137,7 +251,16 @@ const solveChainTargets = (skeleton: StandardSkeleton, rootJointId: string, targ
     const oldTarget = skeleton.joints[targetJointId]?.position;
     if (!root || !oldTarget || targetJointId === rootJointId) return {};
 
-    const chain = jointChain(skeleton, rootJointId, targetJointId);
+    const chain = motionJointChain(skeleton, rootJointId, targetJointId);
+    if (chain.length === 2) {
+        const length = Math.hypot(oldTarget.x - root.x, oldTarget.y - root.y);
+        const direction = Math.atan2(target.y - root.y, target.x - root.x);
+        return {
+            [targetJointId]: pinTarget
+                ? target
+                : { x: root.x + Math.cos(direction) * length, y: root.y + Math.sin(direction) * length }
+        };
+    }
     if (chain.length >= 3) {
         const midId = chain[chain.length - 2];
         const mid = skeleton.joints[midId]?.position;

@@ -37,11 +37,12 @@ import { processImageWithWebOnnx } from './utils/webOnnx';
 import { createFabricationPackage, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
 import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToBoardRaw, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
-import { mechanismBindingWarnings, motionAnchorJointIds, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
+import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT, normalizeCanvasViewport } from './utils/viewport';
 import { buildToonSceneProjection } from './utils/sceneProjection';
 import { buildKinematicPhysicsSession } from './utils/physicsSession';
 import { cameraForLens, lockCameraToStudio, type CameraSessionState, type ViewLensState } from './utils/viewLens';
+import { AUTHORABLE_MECHANISM_TYPES, FOUNDRY_PRESETS, MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY, mechanismTemplateLabel } from './utils/mechanismTemplates';
 import { ViewLensHud } from './components/ViewLensHud';
 import { AlertCircle, Boxes, BrainCircuit, Camera, CheckCircle2, Download, FileJson, Loader2, Play, Plus, Route, Save, Sparkles, Trash2, Upload } from 'lucide-react';
 import girlStarterUrl from './resources/examples/raw/girl.png?url';
@@ -69,23 +70,6 @@ const stageNavLabel = (stage: AppStage) => ({
     blueprint: 'Blueprint'
 } as Partial<Record<AppStage, string>>)[stage];
 
-const MECH_TYPES: MechanismType[] = ['4bar', 'cam', 'gear', 'planetary_gear', 'piston', 'yoke', 'quick-return', '5bar'];
-const FOUNDRY_PRESETS: Record<string, Partial<MechanismConfig> & { label: string; recommendation: string }> = {
-    balanced: { label: 'Balanced recommendation', recommendation: 'general purpose linkage with printable proportions' },
-    compact: { label: 'Compact', recommendation: 'smaller footprint for tight board placement', groundLength: 120, couplerLength: 120, rockerLength: 80 },
-    broad: { label: 'Broad sweep', recommendation: 'larger output sweep when board space allows', groundLength: 220, couplerLength: 210, rockerLength: 150 }
-};
-const MECHANISM_LIBRARY: Record<MechanismType, { label: string; sense: string; goodFor: string; constraint: string }> = {
-    crank: { label: 'Crank driver', sense: 'single rotating input sets phase for simple cyclic motion', goodFor: 'baseline timing checks', constraint: 'needs downstream linkage before fabrication output is useful' },
-    '4bar': { label: 'Four-bar linkage', sense: 'crank, coupler, and rocker turn rotation into an arcing output point', goodFor: 'limb swings and repeatable character gestures', constraint: 'show sampled safe angle range; partial rotation is acceptable when warned' },
-    piston: { label: 'Slider piston', sense: 'rotation pushes a rod along one linear slide', goodFor: 'push-pull limbs, doors, and props', constraint: 'rod length and slider offset must keep the guide printable' },
-    yoke: { label: 'Scotch yoke', sense: 'pin-in-slot motion converts rotation to straight reciprocation', goodFor: 'compact back-and-forth travel', constraint: 'slot stroke must stay inside the board profile' },
-    'quick-return': { label: 'Quick-return linkage', sense: 'uneven timing makes one stroke faster than the return stroke', goodFor: 'snappy mechanical accents', constraint: 'review partial range before export' },
-    '5bar': { label: 'Five-bar linkage', sense: 'two cranks combine phases for wider two-arm tracing', goodFor: 'complex foot or hand trajectories', constraint: 'phase and second speed decide path shape and collision risk' },
-    cam: { label: 'Cam follower', sense: 'cam radius lifts a follower from a rotating disk profile', goodFor: 'timed bumps and repeated lifts', constraint: 'follower guide and cam disk must stay aligned' },
-    gear: { label: 'Gear train', sense: 'paired gears transfer rotation through a fixed ratio', goodFor: 'reversing or scaling rotation', constraint: 'ratio sign and gear size decide output direction' },
-    planetary_gear: { label: 'Planetary gear', sense: 'sun and planet gears compound rotation in a small footprint', goodFor: 'dense rotary assemblies', constraint: 'extra gears need spacing and clear labels in the recipe' }
-};
 const PARAMS: Array<{ key: keyof MechanismConfig; label: string; min: number; max: number; step?: number }> = [
     { key: 'anchorX', label: 'anchor X', min: -260, max: 260, step: 40 },
     { key: 'anchorY', label: 'anchor Y', min: -260, max: 260, step: 40 },
@@ -1152,18 +1136,8 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
     const selectedIkJointId = selectedPart
         ? preferredMotionJointId(project, selectedPart.id, selectedPath?.targetAnchorJointId, { preferDistalWhenRoot: !selectedPath?.targetAnchorJointId })
         : undefined;
-    const ikChain = useMemo(() => {
-        if (!project.skeleton || !selectedPart || !selectedIkJointId) return [] as string[];
-        const chain = [selectedIkJointId];
-        let current = project.skeleton.joints[selectedIkJointId]?.parentId ?? null;
-        while (current) {
-            chain.push(current);
-            if (current === selectedPart.anchorJointId) return chain.reverse();
-            current = project.skeleton.joints[current]?.parentId ?? null;
-        }
-        return selectedIkJointId === selectedPart.anchorJointId ? [selectedIkJointId] : [];
-    }, [project.skeleton, selectedPart?.anchorJointId, selectedIkJointId]);
-    const bendJoint = ikChain.length >= 3 ? project.skeleton?.joints[ikChain[ikChain.length - 2]] : undefined;
+    const ikDescriptor = selectedPart ? describeMotionChain(project, selectedPart.id, selectedIkJointId) : undefined;
+    const bendJoint = ikDescriptor?.foldJointId ? project.skeleton?.joints[ikDescriptor.foldJointId] : undefined;
     const jointLabel = (id?: string) => id ? id.replaceAll('_', ' ') : 'none';
     useEffect(() => {
         freeDraftRef.current = null;
@@ -1287,12 +1261,16 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
                     {Object.keys(project.skeleton?.joints ?? {}).map(id => <option key={id} value={id}>{jointLabel(id)}</option>)}
                 </select></label>}
                 {selectedPart && <label className={`block text-xs font-black uppercase tracking-wider text-slate-500 ${pathLocked || !selectedPath ? 'opacity-50' : ''}`}>IK handle<select aria-label="IK handle" className="field mt-1" disabled={pathLocked || !selectedPath} value={selectedIkJointId ?? ''} onChange={e => updateIkHandle(e.target.value)}>
-                    {jointOptions.map(id => <option key={id} value={id}>{jointLabel(id)}</option>)}
+                    {jointOptions.map(id => <option key={id} value={id}>{motionChainOptionLabel(project, selectedPart.id, id)}</option>)}
                 </select></label>}
+                {selectedPart && <div className="rounded-2xl border border-violet-100 bg-violet-50/70 p-3 text-sm text-slate-600" data-testid="ik-chain-summary">
+                    <div className="font-bold text-slate-800">{ikDescriptor?.label ?? 'No IK chain'}</div>
+                    <div>{ikDescriptor?.helper ?? 'Choose an IK handle to preview the limb chain.'}</div>
+                </div>}
                 <div className="fold-picker" data-testid="fold-direction-control">
                     <div>
                         <div className="text-xs font-black uppercase tracking-wider text-slate-500">Fold direction</div>
-                        <div className="text-sm text-slate-600">{bendJoint ? `${jointLabel(bendJoint.id)} bends ${bendJoint.bendDirection < 0 ? 'left' : 'right'}` : 'Choose a limb with elbow/knee joint'}</div>
+                        <div className="text-sm text-slate-600">{bendJoint ? `${jointLabel(bendJoint.id)} bends ${bendJoint.bendDirection < 0 ? 'left' : 'right'}` : ikDescriptor?.kind === 'two-joint-direct' ? 'Direct handle has no fold joint' : 'Choose a limb with elbow/knee joint'}</div>
                     </div>
                     <div className="flex gap-2">
                         <button className={`btn-secondary ${bendJoint && bendJoint.bendDirection < 0 ? 'active' : ''}`} disabled={!bendJoint || bendJoint.locked} onClick={() => setBendDirection(-1)}>Fold left</button>
@@ -1754,7 +1732,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
         <aside className="workspace space-y-4 p-5">
             <h4 className="section-title">Mechanism Gallery</h4>
             <div className="mechanism-choice-grid">
-                {(['4bar', 'cam', 'piston', 'gear'] as MechanismType[]).map(type => {
+                {AUTHORABLE_MECHANISM_TYPES.map(type => {
                     const item = MECHANISM_LIBRARY[type];
                     return <button key={type} type="button" className={`recommendation-card mechanism-choice ${foundry.type === type ? 'active' : ''}`} onClick={() => setFoundry({ ...createDefaultMechanism(type, 'foundry-preview'), color: foundry.color, presetId: 'balanced', recommendation: FOUNDRY_PRESETS.balanced.recommendation })}>
                         <div className="font-bold text-slate-800">{item.label}</div>
@@ -1781,7 +1759,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             <details className="advanced-panel">
                 <summary>Mechanism options</summary>
                 <div className="mt-3 space-y-3">
-                    <select aria-label="Foundry mechanism type" className="field" value={foundry.type} onChange={e => setFoundry({ ...createDefaultMechanism(e.target.value as MechanismType, 'foundry-preview'), color: foundry.color, presetId: 'balanced', recommendation: FOUNDRY_PRESETS.balanced.recommendation })}>{MECH_TYPES.map(t => <option key={t}>{t}</option>)}</select>
+                    <select aria-label="Foundry mechanism type" className="field" value={foundry.type} onChange={e => setFoundry({ ...createDefaultMechanism(e.target.value as MechanismType, 'foundry-preview'), color: foundry.color, presetId: 'balanced', recommendation: FOUNDRY_PRESETS.balanced.recommendation })}>{AUTHORABLE_MECHANISM_TYPES.map(t => <option key={t} value={t}>{mechanismTemplateLabel(t)}</option>)}</select>
                     <select aria-label="Foundry preset" className="field" value={foundry.presetId ?? 'balanced'} onChange={e => {
                         const presetId = e.target.value;
                         const preset = FOUNDRY_PRESETS[presetId];
@@ -1826,6 +1804,9 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
     const selectedTargetAnchor = selectedMechanism?.targetPartId
         ? preferredMotionJointId(project, selectedMechanism.targetPartId, selectedMechanism.targetAnchorJointId)
         : undefined;
+    const selectedTargetChain = selectedMechanism?.targetPartId
+        ? describeMotionChain(project, selectedMechanism.targetPartId, selectedTargetAnchor)
+        : undefined;
     return <div className={`grid gap-5 ${project.settings.partPanelVisible ? 'xl:grid-cols-[1fr_360px]' : ''}`}>
     <div className="path-canvas-shell workspace overflow-hidden p-0">
         <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
@@ -1836,7 +1817,7 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
         <h4 className="section-title">Mechanism instances</h4>
         <select aria-label="Mechanism instance" className="field" value={selectedMechanism?.id ?? ''} onChange={e => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: e.target.value })}>{project.mechanisms.map(m => <option key={m.id} value={m.id}>{m.id} · {m.type}</option>)}</select>
         <div className="flex flex-wrap gap-2">
-            {MECH_TYPES.map(type => <button key={type} className="chip" onClick={() => dispatch({ type: 'upsert_mechanism', mechanism: mechanismWithGeneratedPath(createDefaultMechanism(type, uid('mech'))) })}>{type}</button>)}
+            {AUTHORABLE_MECHANISM_TYPES.map(type => <button key={type} className="chip" title={mechanismTemplateLabel(type)} onClick={() => dispatch({ type: 'upsert_mechanism', mechanism: mechanismWithGeneratedPath(createDefaultMechanism(type, uid('mech'))) })}>{type}</button>)}
         </div>
         {selectedLibrary && <div className="rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-600" data-testid="design-mechanism-library">
             <div className="font-bold text-slate-800">Mechanism library</div>
@@ -1854,8 +1835,12 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
             <select aria-label="Mechanism target path" className="field" value={selectedMechanism.targetPathId ?? ''} onChange={e => updateMechanism(selectedMechanism.id, { targetPathId: e.target.value || undefined })}><option value="">No target path</option>{Object.values(project.paths).filter(p => !selectedMechanism.targetPartId || p.partId === selectedMechanism.targetPartId).map(p => <option key={p.id} value={p.id}>{p.id} · {p.points.length} pts</option>)}</select>
             {selectedMechanism.targetPartId && project.skeleton && <select aria-label="Mechanism target anchor" className="field" value={selectedTargetAnchor ?? ''} onChange={e => updateMechanism(selectedMechanism.id, { targetAnchorJointId: e.target.value || undefined })}>
                 <option value="">Part anchor default</option>
-                {targetAnchorOptions.map(id => <option key={id} value={id}>{id}</option>)}
+                {targetAnchorOptions.map(id => <option key={id} value={id}>{motionChainOptionLabel(project, selectedMechanism.targetPartId, id)}</option>)}
             </select>}
+            {selectedTargetChain && <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3 text-sm text-slate-600" data-testid="mechanism-ik-chain-summary">
+                <div className="font-bold text-slate-800">{selectedTargetChain.label}</div>
+                <div>{selectedTargetChain.helper}</div>
+            </div>}
             <div className="section-title">Parametric Edit</div>
             {PARAMS.filter(p => showParam(selectedMechanism.type, p.key)).map(p => <React.Fragment key={String(p.key)}><MiniNumber label={p.label} value={Number(selectedMechanism[p.key] ?? 0)} min={p.min} max={p.max} step={p.step} onChange={value => updateMechanism(selectedMechanism.id, { [p.key]: value } as Partial<MechanismConfig>)}/></React.Fragment>) }
             {selectedBindingWarnings.map((w, i) => <div className="warning" key={`binding-${w}-${i}`}>{w}</div>)}

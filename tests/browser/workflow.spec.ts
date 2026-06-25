@@ -613,10 +613,13 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await expect(page.getByTestId('quick-rig-helper')).toContainText('Easy IK setup');
   await expect(page.getByLabel('Anchor point')).toHaveValue('right_shoulder');
   await expect(page.getByLabel('IK handle')).toHaveValue('right_hand');
+  await expect(page.getByTestId('ik-chain-summary')).toContainText('3-joint IK');
   await page.getByRole('button', { name: 'Fold left', exact: true }).click();
   await expect(page.getByTestId('fold-direction-control')).toContainText('left');
   await page.getByLabel('IK handle').selectOption('right_elbow');
   await expect(page.getByLabel('IK handle')).toHaveValue('right_elbow');
+  await expect(page.getByTestId('ik-chain-summary')).toContainText('2-joint direct');
+  await expect(page.getByTestId('fold-direction-control')).toContainText('Direct handle has no fold joint');
   await expect(page.getByTestId('path-shape-controls')).toBeVisible();
   await page.getByRole('button', { name: 'Closed', exact: true }).click();
   await expect(pathCanvas.locator('path[stroke="#5a6cff"]').first()).toHaveAttribute('d', /Z$/);
@@ -1078,10 +1081,13 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   await page.getByLabel('Mechanism target part').selectOption('right_arm');
   const armPathOptions = await page.getByLabel('Mechanism target path').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
   expect(armPathOptions.join(' ')).toContain('path-right-arm · 5 pts');
+  const anchorOptionValues = await page.getByLabel('Mechanism target anchor').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));
+  expect(anchorOptionValues).toEqual(['', 'right_shoulder', 'right_elbow', 'right_hand']);
   const anchorOptions = await page.getByLabel('Mechanism target anchor').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
-  expect(anchorOptions).toEqual(['Part anchor default', 'right_shoulder', 'right_elbow', 'right_hand']);
-  expect(anchorOptions.join(' ')).not.toContain('left_hand');
+  expect(anchorOptions.join(' ')).toContain('3-joint IK');
+  expect(anchorOptions.join(' ')).not.toContain('left hand');
   await expect(page.getByLabel('Mechanism target anchor')).toHaveValue('right_hand');
+  await expect(page.getByTestId('mechanism-ik-chain-summary')).toContainText('3-joint IK');
   await page.getByLabel('Mechanism target path').selectOption('path-right-arm');
 
   await page.getByRole('button', { name: 'Delete', exact: true }).click();

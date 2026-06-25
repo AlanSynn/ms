@@ -7,11 +7,14 @@ import { createFabricationPackage, validateForFabrication } from '../utils/fabri
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
 import { animationDeltaRadians, calculateLinkage, generateCurvePoints } from '../utils/kinematics';
-import { animatedPartsForProject, mechanismBindingWarnings, motionAnchorJointIds, motionPreviewForPath, motionPreviewForProject, preferredMotionJointId } from '../utils/motion';
+import { animatedPartsForProject, describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionPreviewForPath, motionPreviewForProject, motionPreviewForTarget, preferredMotionJointId } from '../utils/motion';
 import { buildToonSceneProjection } from '../utils/sceneProjection';
 import { buildKinematicPhysicsSession } from '../utils/physicsSession';
 import { cameraForLens, cameraSessionIsViewOnly, lockCameraToStudio, resetCameraForLens, unlockCameraPreview } from '../utils/viewLens';
-import type { BodyPartLayer, MechanismType, ProjectState } from '../types';
+import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, mechanismTemplateLabel } from '../utils/mechanismTemplates';
+import { MECHANISM_TYPES as SANITIZE_MECHANISM_TYPES } from '../utils/sanitize';
+import { OPTIMIZER_MECHANISM_TYPES } from '../utils/optimizer';
+import type { BodyPartLayer, ProjectState } from '../types';
 
 projectSelfCheck();
 
@@ -32,6 +35,37 @@ assert(sample.partOrder.every(id => ['#cbd5e1', '#e2e8f0', '#b6c2d2', '#94a3b8']
 assert.equal(sample.mechanisms[0].targetAnchorJointId, 'right_hand', 'sample waving arm drives the hand, not the shoulder root');
 assert.deepEqual(motionAnchorJointIds(sample, 'right_arm'), ['right_shoulder', 'right_elbow', 'right_hand'], 'IK anchor choices stay within the target limb chain');
 assert.equal(preferredMotionJointId(sample, 'right_arm', 'left_hand'), 'right_shoulder', 'invalid IK anchor falls back to the target part root');
+assert.deepEqual(SANITIZE_MECHANISM_TYPES, [...ALL_MECHANISM_TYPES], 'import sanitizer accepts every low-level mechanism template including crank');
+assert.deepEqual(OPTIMIZER_MECHANISM_TYPES, [...AUTHORABLE_MECHANISM_TYPES], 'optimizer searches authorable mechanism templates only');
+assert(!AUTHORABLE_MECHANISM_TYPES.includes('crank'), 'bare crank stays a low-level driver, not a novice authoring template');
+ALL_MECHANISM_TYPES.forEach(type => {
+  assert(MECHANISM_TEMPLATE_LIBRARY[type].label && MECHANISM_TEMPLATE_LIBRARY[type].sense, `${type} has shared template metadata`);
+});
+const controlsText = readFileSync(join(process.cwd(), 'components', 'Controls.tsx'), 'utf8');
+assert(controlsText.includes('mechanismTemplateLabel'), 'legacy Controls uses shared mechanism registry labels');
+assert(!controlsText.includes('Drawing Machine'), 'legacy Controls no longer hardcodes stale mechanism labels');
+assert(!controlsText.includes("m.type === '5bar' ? '5-Bar'"), 'legacy Controls active mechanism chips use shared labels');
+assert(!controlsText.includes("m.type === 'crank' ? 'Gear'"), 'legacy Controls no longer aliases crank as gear');
+assert.equal(describeMotionChain(sample, 'right_arm', 'right_shoulder').kind, 'root-only', 'root anchor is labeled as a root-only chain');
+assert.equal(describeMotionChain(sample, 'right_arm', 'right_elbow').kind, 'two-joint-direct', 'elbow handle is labeled as a 2-joint direct chain');
+assert.equal(describeMotionChain(sample, 'right_arm', 'right_hand').kind, 'three-joint-ik', 'hand handle is labeled as a 3-joint IK chain');
+const directPinnedPreview = motionPreviewForTarget(sample, 'right_arm', 'right_elbow', { x: 210, y: 40 }, { parts: {}, skeleton: sample.skeleton }, { pinTarget: true });
+const directPinnedElbow = directPinnedPreview.skeleton?.joints.right_elbow.position;
+assert(directPinnedElbow && Math.hypot(directPinnedElbow.x - 210, directPinnedElbow.y - 40) < 1e-9, '2-joint direct mechanism drive pins the handle exactly');
+const directPreview = motionPreviewForTarget(sample, 'right_arm', 'right_elbow', { x: 210, y: 40 }, { parts: {}, skeleton: sample.skeleton }, { pinTarget: false });
+const directPreviewElbow = directPreview.skeleton?.joints.right_elbow.position;
+assert(directPreviewElbow && Math.hypot(directPreviewElbow.x - 210, directPreviewElbow.y - 40) > 1, '2-joint direct path preview preserves non-pinned limb length');
+const rightBendProject = applyProjectAction(sample, { type: 'update_joint', jointId: 'right_elbow', updates: { bendDirection: 1 } });
+const leftBendProject = applyProjectAction(sample, { type: 'update_joint', jointId: 'right_elbow', updates: { bendDirection: -1 } });
+const rightBendPreview = motionPreviewForTarget(rightBendProject, 'right_arm', 'right_hand', { x: 180, y: 90 }, { parts: {}, skeleton: rightBendProject.skeleton }, { pinTarget: true });
+const leftBendPreview = motionPreviewForTarget(leftBendProject, 'right_arm', 'right_hand', { x: 180, y: 90 }, { parts: {}, skeleton: leftBendProject.skeleton }, { pinTarget: true });
+const rightBendElbow = rightBendPreview.skeleton?.joints.right_elbow.position;
+const leftBendElbow = leftBendPreview.skeleton?.joints.right_elbow.position;
+assert(rightBendElbow && leftBendElbow && Math.hypot(rightBendElbow.x - leftBendElbow.x, rightBendElbow.y - leftBendElbow.y) > 1, '3-joint IK fold direction changes elbow/knee side');
+const multiJointProject = applyProjectAction(sample, { type: 'add_joint', joint: { id: 'right_finger_tip', name: 'right finger tip', position: { x: 174, y: 30 }, parentId: 'right_hand', locked: false, bendDirection: 1 } });
+assert.equal(describeMotionChain(multiJointProject, 'right_arm', 'right_finger_tip').kind, 'multi-joint', '4+ joint limbs are labeled as multi-joint IK');
+const multiPreview = motionPreviewForTarget(multiJointProject, 'right_arm', 'right_finger_tip', { x: 205, y: 84 }, { parts: {}, skeleton: multiJointProject.skeleton }, { pinTarget: true });
+assert(Number.isFinite(multiPreview.skeleton?.joints.right_finger_tip.position.x) && Number.isFinite(multiPreview.skeleton?.joints.right_finger_tip.position.y), 'multi-joint IK preview stays finite');
 const boundMechanism = (type: Parameters<typeof createDefaultMechanism>[0], id: string) => ({
   ...createDefaultMechanism(type, id),
   targetPartId: 'right_arm',
@@ -190,8 +224,7 @@ assert.equal(loadProjectSnapshot(disabledMechanismProject).mechanisms[1].enabled
 const disabledDxf = generateDXF({ speed: 1, rotation: 0, mechanisms: disabledMechanismProject.mechanisms }, 0);
 assert(disabledDxf.includes('ENABLED-ONE'.replace(/[^A-Za-z0-9_-]/g, '_')), 'DXF includes enabled mechanism');
 assert(!disabledDxf.includes('DISABLED-ONE'.replace(/[^A-Za-z0-9_-]/g, '_')), 'DXF excludes disabled mechanism');
-const mechanismTypes: MechanismType[] = ['crank', '4bar', 'piston', 'yoke', 'quick-return', '5bar', 'cam', 'gear', 'planetary_gear'];
-mechanismTypes.forEach(type => {
+ALL_MECHANISM_TYPES.forEach(type => {
   const mechanism = createDefaultMechanism(type, `contract-${type}`);
   [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2].forEach(angle => {
     const state = calculateLinkage(mechanism, angle);
@@ -200,6 +233,24 @@ mechanismTypes.forEach(type => {
     });
   });
   assert(generateCurvePoints(mechanism, 24).points.length > 0, `${type} generates an output motion path`);
+  const templateProject = {
+    ...sample,
+    mechanisms: [mechanismWithGeneratedPath({
+      ...mechanism,
+      targetPartId: 'right_arm',
+      targetPathId: 'path-right-arm',
+      targetAnchorJointId: 'right_hand',
+      activeVisualPartIds: ['right_arm']
+    })]
+  };
+  const templateProjection = buildToonSceneProjection(templateProject);
+  const templateLabel = mechanismTemplateLabel(type);
+  assert(templateProjection.nodes.some(node => node.sourceType === 'mechanism' && node.sourceId === mechanism.id && node.label.includes(templateLabel)), `${type} projects 2.5D nodes with shared template labels`);
+  assert(templateProjection.nodes.some(node => node.sourceType === 'hardware' && node.parentId === `/mechanisms/${mechanism.id}/base` && node.label.includes(templateLabel)), `${type} projects a mechanism hardware preview`);
+  const templatePhysics = buildKinematicPhysicsSession(templateProject, templateProjection, Math.PI / 4);
+  assert(templatePhysics.bodies.some(body => body.mechanismId === mechanism.id && body.sourceType === 'mechanism-state'), `${type} creates physics mechanism-state bodies`);
+  assert(templatePhysics.constraints.some(constraint => constraint.mechanismId === mechanism.id), `${type} creates physics mechanism constraints`);
+  assertFiniteDeep(templatePhysics, `${type}.templatePhysics`);
 });
 let exportedProject = applyProjectAction(sample, { type: 'set_export', fabricationPackage: createFabricationPackage(sample) });
 assert(exportedProject.lastExport, 'set_export stores generated fabrication package');

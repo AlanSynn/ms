@@ -1,6 +1,7 @@
 import { AppStage, MechanismConfig, Point, ProjectState } from '../types';
 import { boardGridLines, sceneBoundsForSheet, SCENE_PX_PER_MM } from './coordinates';
 import { calculateLinkage } from './kinematics';
+import { mechanismTemplateLabel } from './mechanismTemplates';
 
 export type ProjectionSourceType =
     | 'board'
@@ -316,11 +317,12 @@ export const buildToonSceneProjection = (project: ProjectState): ToonSceneProjec
         const state = calculateLinkage(resolvedMechanism, 0);
         const depth = mechanismNodeDepth(index);
         const baseId = `/mechanisms/${pathSegment(mechanism.id)}`;
+        const templateLabel = mechanismTemplateLabel(mechanism.type);
         nodes.push(baseNode({
             id: `${baseId}/base`,
             sourceType: 'mechanism',
             sourceId: mechanism.id,
-            label: `${mechanism.type} base`,
+            label: `${templateLabel} base`,
             geometry: { kind: 'circle', center: anchor, radius: 6 },
             transform2d: { x: anchor.x, y: anchor.y, rotationRad: rotationRad(mechanism.groundAngle ?? 0), scale: 1 },
             depthMm: depth,
@@ -333,7 +335,7 @@ export const buildToonSceneProjection = (project: ProjectState): ToonSceneProjec
             id: `${baseId}/output`,
             sourceType: 'mechanism',
             sourceId: mechanism.id,
-            label: `${mechanism.type} output`,
+            label: `${templateLabel} output`,
             geometry: { kind: 'circle', center: clonePoint(state.effector), radius: 5 },
             transform2d: { x: state.effector.x, y: state.effector.y, rotationRad: 0, scale: 1 },
             depthMm: depth + 0.5,
@@ -346,7 +348,7 @@ export const buildToonSceneProjection = (project: ProjectState): ToonSceneProjec
             id: `${baseId}/link/base-to-output`,
             sourceType: 'hardware',
             parentId: `${baseId}/base`,
-            label: `${mechanism.type} linkage preview`,
+            label: `${templateLabel} linkage preview`,
             geometry: { kind: 'line', from: anchor, to: clonePoint(state.effector), width: 3 },
             transform2d: { x: 0, y: 0, rotationRad: 0, scale: 1 },
             depthMm: depth + 0.25,
@@ -359,7 +361,7 @@ export const buildToonSceneProjection = (project: ProjectState): ToonSceneProjec
         const anchorPoint = clonePoint(state.effector);
         labels.push({
             id: `/labels/mechanisms/${pathSegment(mechanism.id)}`,
-            text: mechanism.targetPartId ? `drives ${mechanism.targetPartId}` : `${mechanism.type} preview`,
+            text: mechanism.targetPartId ? `drives ${mechanism.targetPartId}` : `${templateLabel} preview`,
             anchorNodeId: `${baseId}/output`,
             anchorPoint,
             severity: mechanism.targetPartId ? 'info' : 'warning',
@@ -370,7 +372,7 @@ export const buildToonSceneProjection = (project: ProjectState): ToonSceneProjec
             warnings.push({
                 id: `/warnings/mechanisms/${pathSegment(mechanism.id)}/invalid-sample`,
                 severity: 'warning',
-                message: `${mechanism.type} has no valid sampled output at phase 0`,
+                message: `${templateLabel} has no valid sampled output at phase 0`,
                 sourceNodeId: `${baseId}/output`,
                 sourceType: 'mechanism',
                 sourceId: mechanism.id,

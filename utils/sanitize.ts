@@ -1,16 +1,7 @@
 import { MechanismConfig, MechanismType, Point } from '../types';
+import { ALL_MECHANISM_TYPES } from './mechanismTemplates';
 
-export const MECHANISM_TYPES: MechanismType[] = [
-    'crank',
-    '4bar',
-    'piston',
-    'yoke',
-    'quick-return',
-    '5bar',
-    'cam',
-    'gear',
-    'planetary_gear'
-];
+export const MECHANISM_TYPES: MechanismType[] = [...ALL_MECHANISM_TYPES];
 
 const MECHANISM_TYPE_SET = new Set<string>(MECHANISM_TYPES);
 

@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { GlobalConfig, MechanismConfig, MechanismType } from '../types';
 import { Play, Pause, RefreshCw, Info, MousePointer2, Pencil, Sparkles, Trash2, Save, ChevronRight, ChevronDown, Gauge, Component, MoveHorizontal, Settings2, Plus, Route, Timer, Download, FileJson, ListTree, Crosshair } from 'lucide-react';
+import { mechanismTemplateLabel } from '../utils/mechanismTemplates';
 
 interface Preset {
     name: string;
@@ -317,11 +318,7 @@ export const Controls: React.FC<ControlsProps> = ({
         }
     };
 
-    const getMechLabel = (type: MechanismType) => {
-        if (type === '5bar') return 'Drawing Machine';
-        if (type === 'crank') return 'Gear';
-        return `${type} Config`;
-    }
+    const getMechLabel = (type: MechanismType) => mechanismTemplateLabel(type);
 
     return (
         <div className="h-full flex flex-col bg-slate-50 border-r border-slate-300 shadow-xl overflow-hidden">
@@ -548,7 +545,7 @@ export const Controls: React.FC<ControlsProps> = ({
                                     }`}
                             >
                                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: m.color }}></div>
-                                {m.type === '5bar' ? '5-Bar' : (m.type === 'crank' ? 'Gear' : m.type)}
+                                {getMechLabel(m.type)}
                             </button>
                         ))}
                     </div>
