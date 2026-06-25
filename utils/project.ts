@@ -271,12 +271,12 @@ export const createEmptyProject = (): ProjectState => ({
 export const createSampleProject = (): ProjectState => {
     const skeleton = defaultSkeleton();
     const partsArray = [
-        part('torso', 'Torso', 'torso', { x: 0, y: 20, rotation: 0, scale: 1 }, { width: 112, height: 170 }, '#8b5cf6', 0),
-        part('head', 'Head', 'neck', { x: 0, y: 154, rotation: 0, scale: 1 }, { width: 82, height: 82 }, '#f59e0b', 5),
-        part('left_arm', 'Left arm', 'left_shoulder', { x: -98, y: 24, rotation: -18, scale: 1 }, { width: 42, height: 150 }, '#38bdf8', 3),
-        part('right_arm', 'Right arm', 'right_shoulder', { x: 98, y: 24, rotation: 18, scale: 1 }, { width: 42, height: 150 }, '#38bdf8', 3),
-        part('left_leg', 'Left leg', 'left_hip', { x: -42, y: -160, rotation: -8, scale: 1 }, { width: 46, height: 170 }, '#10b981', 1),
-        part('right_leg', 'Right leg', 'right_hip', { x: 42, y: -160, rotation: 8, scale: 1 }, { width: 46, height: 170 }, '#10b981', 1)
+        part('torso', 'Torso', 'torso', { x: 0, y: 20, rotation: 0, scale: 1 }, { width: 112, height: 170 }, '#cbd5e1', 0),
+        part('head', 'Head', 'neck', { x: 0, y: 154, rotation: 0, scale: 1 }, { width: 82, height: 82 }, '#e2e8f0', 5),
+        part('left_arm', 'Left arm', 'left_shoulder', { x: -98, y: 24, rotation: -18, scale: 1 }, { width: 42, height: 150 }, '#b6c2d2', 3),
+        part('right_arm', 'Right arm', 'right_shoulder', { x: 98, y: 24, rotation: 18, scale: 1 }, { width: 42, height: 150 }, '#b6c2d2', 3),
+        part('left_leg', 'Left leg', 'left_hip', { x: -42, y: -160, rotation: -8, scale: 1 }, { width: 46, height: 170 }, '#94a3b8', 1),
+        part('right_leg', 'Right leg', 'right_hip', { x: 42, y: -160, rotation: 8, scale: 1 }, { width: 46, height: 170 }, '#94a3b8', 1)
     ].map(p => ({ ...p, localPivotOffset: localPivotOffsetForScene(p, skeleton.joints[p.anchorJointId]?.position ?? p.transform), localPivotJointId: p.anchorJointId }));
     const mechanisms = [createDefaultMechanism('4bar', 'mech-1')];
     mechanisms[0].targetPartId = 'right_arm';

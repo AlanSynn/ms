@@ -40,8 +40,16 @@ import { loadCharacterPackage } from './utils/packageLoader';
 import { mechanismBindingWarnings, motionAnchorJointIds, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT, normalizeCanvasViewport } from './utils/viewport';
 import { AlertCircle, Boxes, BrainCircuit, Camera, CheckCircle2, Download, FileJson, Loader2, Play, Plus, Route, Save, Sparkles, Trash2, Upload } from 'lucide-react';
+import girlStarterUrl from './resources/examples/raw/girl.png?url';
+import boyStarterUrl from './resources/examples/raw/boy.PNG?url';
 
 type FoundryState = MechanismConfig;
+type StarterImageTemplate = { id: string; label: string; fileName: string; description: string; url: string };
+
+const STARTER_IMAGE_TEMPLATES: StarterImageTemplate[] = [
+    { id: 'girl', label: 'Girl starter', fileName: 'girl.png', description: 'Flat vector pose from resources/examples/raw/girl.png.', url: girlStarterUrl },
+    { id: 'boy', label: 'Boy starter', fileName: 'boy.PNG', description: 'Textured pose from resources/examples/raw/boy.PNG.', url: boyStarterUrl }
+];
 
 const STAGES: Array<{ id: AppStage; label: string; kicker: string }> = [
     { id: 'character', label: 'Character Selection', kicker: 'image → rig package' },
@@ -276,6 +284,21 @@ const App: React.FC = () => {
                     error: error instanceof Error ? error.message : String(error)
                 }
             });
+        }
+    };
+
+    const loadStarterImage = async (template: StarterImageTemplate) => {
+        setCommandStatus(`Processing ${template.label} with local ONNX`);
+        dispatch({ type: 'set_processing', processing: { stage: 'loading-model', message: `Loading ${template.label}`, progress: 8 } });
+        try {
+            const response = await fetch(template.url);
+            if (!response.ok) throw new Error(`Could not load ${template.fileName}`);
+            const blob = await response.blob();
+            await runWebOnnx(new File([blob], template.fileName, { type: blob.type || 'image/png' }));
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            dispatch({ type: 'set_processing', processing: { stage: 'error', message: 'Starter image failed', progress: 0, error: message } });
+            setCommandStatus(`Starter failed: ${message}`);
         }
     };
 
@@ -543,7 +566,7 @@ const App: React.FC = () => {
                     <input ref={projectInputRef} hidden type="file" accept="application/json,.mechanim.json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/>
 
                     <div className={`stage-body min-h-0 flex-1 overflow-auto ${stage === 'character' ? 'p-0' : 'p-7'}`}>
-                        {stage === 'character' && <CharacterSelection project={project} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onSample={() => { setPendingCharacter(null); setProject(createSampleProject()); setStage('path'); }} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} />}
+                        {stage === 'character' && <CharacterSelection project={project} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} starterTemplates={STARTER_IMAGE_TEMPLATES} onStarterImage={loadStarterImage} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onSample={() => { setPendingCharacter(null); setProject(createSampleProject()); setStage('path'); }} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} />}
                         {stage === 'path' && <PathEditor project={project} sortedParts={sortedParts} selectedPart={selectedPart} selectedPath={selectedPath} drawMode={drawMode} setDrawMode={setDrawMode} dispatch={dispatch} setPathPoints={setPathPoints} openTracking={() => setShowTracking(true)} isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} onNext={() => goStage('foundry')} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {stage === 'foundry' && <MechanismFoundry project={project} foundry={foundry} setFoundry={setFoundry} selectedPart={selectedPart} selectedPath={selectedPath} onExport={(pkg) => {
                             const existingTarget = project.mechanisms.find(m =>
@@ -689,11 +712,13 @@ const WorkflowStatusStrip = ({ stage, project, selectedPart, selectedPath }: { s
     </div>;
 };
 
-const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setReplaceCharacter, onAccept, onDiscard, onSample, onProcess, onCamera, onPackage, onImport, onEditCharacter, onSaveSkeleton, onChooseSaveFolder }: {
+const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setReplaceCharacter, starterTemplates, onStarterImage, onAccept, onDiscard, onSample, onProcess, onCamera, onPackage, onImport, onEditCharacter, onSaveSkeleton, onChooseSaveFolder }: {
     project: ProjectState;
     pendingCharacter: { project: ProjectState; summary: string; returnStage: AppStage } | null;
     replaceCharacter: boolean;
     setReplaceCharacter: (v: boolean) => void;
+    starterTemplates: StarterImageTemplate[];
+    onStarterImage: (template: StarterImageTemplate) => void;
     onAccept: () => void;
     onDiscard: () => void;
     onSample: () => void;
@@ -735,9 +760,19 @@ const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setRe
                     <span className="template-kicker">Best first choice</span>
                     <strong>Waving arm</strong>
                     <span>Right arm path + four-bar linkage, ready to preview and export.</span>
-                    <small>6 parts · 1 path · 1 mechanism</small>
+                    <small>6 parts · 17 joints · 1 path · 1 mechanism</small>
                     <b><Sparkles size={16}/> Open Waving arm</b>
                 </button>
+                {starterTemplates.map(template => (
+                    <button key={template.id} type="button" className="template-tile starter cursor-pointer" onClick={() => onStarterImage(template)}>
+                        <img className="starter-thumb" src={template.url} alt="" />
+                        <span className="template-kicker">Starter image</span>
+                        <strong>{template.label}</strong>
+                        <span>{template.description}</span>
+                        <small>Runs the same browser ONNX rigging flow.</small>
+                        <b><BrainCircuit size={16}/> Create from {template.id}</b>
+                    </button>
+                ))}
                 <button type="button" className="template-tile cursor-pointer" onClick={() => packageInputRef.current?.click()}>
                     <span className="template-kicker">Use your art</span>
                     <strong>Blank character</strong>
@@ -1223,7 +1258,7 @@ const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, 
         {project.partOrder.map(id => previewParts[id] ?? project.parts[id]).filter(Boolean).map(part => <React.Fragment key={part.id}><PartShape part={part} selected={project.selectedPartId === part.id} drawMode={drawMode} onSelect={() => dispatch({ type: 'select_part', partId: part.id })}/></React.Fragment>) }
         {previewSkeleton && Object.values(previewSkeleton.joints).map(j => {
             const p = sceneToSvg(j.position);
-            return <g key={j.id}><circle cx={p.x} cy={p.y} r={j.locked ? 6 : 4} fill={j.locked ? '#ef4444' : '#434a59'} stroke="white" strokeWidth="2"/><title>{j.id} bend {j.bendDirection}</title></g>;
+            return <g key={j.id}><circle data-testid={`skeleton-joint-${j.id}`} cx={p.x} cy={p.y} r={j.locked ? 6 : 4.5} fill={j.locked ? '#64748b' : '#94a3b8'} stroke="white" strokeWidth="2"/><title>{j.id} bend {j.bendDirection}</title></g>;
         })}
         {Object.values(project.paths).filter(p => p.visible).map(path => <path key={path.id} d={pathFromPoints(path.points, path.closed, path.smoothness)} fill="none" stroke={path.enabled ? '#5a6cff' : '#94a3b8'} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" opacity="0.8"/>)}
         {selectedPath?.visible && selectedPath.points.map((pt, i) => {
@@ -1246,10 +1281,11 @@ const PartShape = ({ part, selected, drawMode, onSelect }: { part: BodyPartLayer
     const p = sceneToSvg(part.transform);
     const w = part.bounds.width * part.transform.scale;
     const h = part.bounds.height * part.transform.scale;
+    const stroke = selected ? '#5a6cff' : '#94a3b8';
     return <g data-testid={`path-part-${part.id}`} transform={`translate(${p.x} ${p.y}) rotate(${-part.transform.rotation})`} onClick={e => { if (!drawMode) { e.stopPropagation(); onSelect(); } }} className={`${drawMode ? 'cursor-crosshair' : 'cursor-pointer'} transition-opacity`} opacity={part.opacity} filter="url(#soft)">
-        {part.textureUrl ? <image href={part.textureUrl} x={-w / 2} y={-h / 2} width={w} height={h} preserveAspectRatio="xMidYMid meet"/> : <rect x={-w/2} y={-h/2} width={w} height={h} rx="22" fill={part.fillColor}/>}
-        <rect x={-w/2} y={-h/2} width={w} height={h} rx="22" fill="none" stroke={selected ? '#5a6cff' : part.fillColor} strokeWidth={selected ? 4 : 1.5} strokeDasharray={selected ? '0' : '5 5'}/>
-        {part.localPivotOffset && <circle cx={part.localPivotOffset.x * part.transform.scale} cy={-part.localPivotOffset.y * part.transform.scale} r={5} fill="#5a6cff" stroke="white" strokeWidth="2"><title>local pivot</title></circle>}
+        {part.textureUrl ? <image href={part.textureUrl} x={-w / 2} y={-h / 2} width={w} height={h} preserveAspectRatio="xMidYMid meet" opacity=".5" style={{ filter: 'grayscale(1) saturate(0.2)' }}/> : <rect x={-w/2} y={-h/2} width={w} height={h} rx="22" fill="#cbd5e1" opacity=".42"/>}
+        <rect x={-w/2} y={-h/2} width={w} height={h} rx="22" fill="none" stroke={stroke} strokeWidth={selected ? 4 : 1.5} strokeDasharray={selected ? '0' : '5 5'}/>
+        {part.localPivotOffset && <circle cx={part.localPivotOffset.x * part.transform.scale} cy={-part.localPivotOffset.y * part.transform.scale} r={5} fill="#64748b" stroke="white" strokeWidth="2"><title>local pivot</title></circle>}
     </g>;
 };
 

@@ -785,8 +785,21 @@ const SceneUnderlay = ({ project, animatedParts = {}, previewSkeleton }: { proje
         {skeleton?.bones.map(([a, b]) => {
             const ja = skeleton?.joints[a];
             const jb = skeleton?.joints[b];
-            return ja && jb ? <line key={`${a}-${b}`} x1={ja.position.x} y1={ja.position.y} x2={jb.position.x} y2={jb.position.y} stroke="#334155" strokeWidth="2" opacity="0.35" /> : null;
+            return ja && jb ? <line key={`${a}-${b}`} x1={ja.position.x} y1={ja.position.y} x2={jb.position.x} y2={jb.position.y} stroke="#64748b" strokeWidth="2" opacity="0.38" /> : null;
         })}
+        {Object.values(skeleton?.joints ?? {}).map(joint => (
+            <circle
+                key={joint.id}
+                data-testid={`skeleton-joint-${joint.id}`}
+                cx={joint.position.x}
+                cy={joint.position.y}
+                r={joint.locked ? 6 : 4.5}
+                fill={joint.locked ? '#64748b' : '#94a3b8'}
+                stroke="#ffffff"
+                strokeWidth="1.8"
+                opacity="0.95"
+            />
+        ))}
         {Object.values(project?.paths ?? {}).filter(p => p.visible).map(path => {
             const d = rawScenePath(path.points, path.closed);
             return d ? <path key={path.id} d={d} fill="none" stroke={path.enabled ? '#5a6cff' : '#94a3b8'} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" opacity="0.75" /> : null;
@@ -798,12 +811,13 @@ const WorldPart = ({ part, selected }: { part: BodyPartLayer; selected: boolean 
     if (!part.visible) return null;
     const w = part.bounds.width * part.transform.scale;
     const h = part.bounds.height * part.transform.scale;
+    const stroke = selected ? '#5a6cff' : '#94a3b8';
     return <g data-testid={`design-part-${part.id}`} transform={`translate(${part.transform.x} ${part.transform.y}) rotate(${part.transform.rotation})`} opacity={part.opacity}>
         <g transform="scale(1,-1)">
-            {part.textureUrl ? <image href={part.textureUrl} x={-w / 2} y={-h / 2} width={w} height={h} preserveAspectRatio="xMidYMid meet" opacity="0.58" /> : <rect x={-w / 2} y={-h / 2} width={w} height={h} rx="20" fill={part.fillColor} opacity="0.42" />}
-            <rect x={-w / 2} y={-h / 2} width={w} height={h} rx="20" fill="none" stroke={selected ? '#5a6cff' : part.fillColor} strokeWidth={selected ? 4 : 1.5} strokeDasharray={selected ? undefined : '5 5'} />
+            {part.textureUrl ? <image href={part.textureUrl} x={-w / 2} y={-h / 2} width={w} height={h} preserveAspectRatio="xMidYMid meet" opacity="0.46" style={{ filter: 'grayscale(1) saturate(0.2)' }} /> : <rect x={-w / 2} y={-h / 2} width={w} height={h} rx="20" fill="#cbd5e1" opacity="0.36" />}
+            <rect x={-w / 2} y={-h / 2} width={w} height={h} rx="20" fill="none" stroke={stroke} strokeWidth={selected ? 4 : 1.5} strokeDasharray={selected ? undefined : '5 5'} />
         </g>
-        {part.localPivotOffset && <circle cx={part.localPivotOffset.x * part.transform.scale} cy={part.localPivotOffset.y * part.transform.scale} r="5" fill="#5a6cff" stroke="white" strokeWidth="2" />}
+        {part.localPivotOffset && <circle cx={part.localPivotOffset.x * part.transform.scale} cy={part.localPivotOffset.y * part.transform.scale} r="5" fill="#64748b" stroke="white" strokeWidth="2" />}
     </g>;
 };
 

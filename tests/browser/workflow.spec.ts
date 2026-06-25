@@ -33,17 +33,26 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByRole('heading', { name: 'MechAnim' })).toBeVisible();
   await expect(page.getByText('Start with a template')).toBeVisible();
   await expect(page.getByTestId('template-gallery')).toContainText('Waving arm');
+  await expect(page.getByTestId('template-gallery')).toContainText('Girl starter');
+  await expect(page.getByTestId('template-gallery')).toContainText('Boy starter');
   await expect(page.getByTestId('template-gallery')).toContainText('Blank character');
   await expect(page.getByText('Private on-device processing')).toBeVisible();
+  expect(await page.locator('.starter-thumb').evaluateAll(images => images.every(img => (img as HTMLImageElement).naturalWidth > 0))).toBe(true);
   await expect(page.getByText('parts_info.json package artifact')).toBeHidden();
   await expect(page.getByTestId('onboarding-import-input')).toBeAttached();
   const openTemplateButton = page.getByRole('button', { name: /Open Waving arm/i });
+  const girlStarterButton = page.getByRole('button', { name: /Create from girl/i });
+  const boyStarterButton = page.getByRole('button', { name: /Create from boy/i });
   const loadPackageButton = page.getByRole('button', { name: /Load package/i });
   const runOnnxButton = page.getByRole('button', { name: /Create from image/i });
   const cameraButton = page.getByRole('button', { name: /Capture Camera/i });
   const importProjectButton = page.getByRole('button', { name: /Import project/i });
   await page.keyboard.press('Tab');
   await expect(openTemplateButton).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(girlStarterButton).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(boyStarterButton).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(loadPackageButton).toBeFocused();
   await page.keyboard.press('Tab');
@@ -64,6 +73,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByText('Choose a body part, press Draw free path')).toBeVisible();
   await expect(page.getByTestId('free-draw-status')).toContainText(/5 points .*path-right-arm/);
   await expect(page.getByTestId('path-canvas').getByText('Letter sheet · 2cm grid')).toBeVisible();
+  await expect(page.getByTestId('skeleton-joint-right_elbow')).toBeVisible();
+  expect(await page.locator('[data-testid^="skeleton-joint-"]').count()).toBeGreaterThanOrEqual(17);
 
   const [projectDownload] = await Promise.all([
     page.waitForEvent('download'),

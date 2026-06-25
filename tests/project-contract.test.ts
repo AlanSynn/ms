@@ -18,6 +18,10 @@ assert(statSync(onnxPath).size > 1_000_000, 'web ONNX asset is real model data, 
 assert(!readFileSync(onnxPath).subarray(0, 64).toString('utf8').startsWith('version https://git-lfs'), 'web ONNX asset is checked out from Git LFS before tests run');
 
 const sample = createSampleProject();
+assert(existsSync(join(process.cwd(), 'resources/examples/raw/girl.png')), 'girl starter source image is present');
+assert(existsSync(join(process.cwd(), 'resources/examples/raw/boy.PNG')), 'boy starter source image is present');
+assert(Object.keys(sample.skeleton?.joints ?? {}).length >= 17, 'sample placeholder exposes the full editable joint set');
+assert(sample.partOrder.every(id => ['#cbd5e1', '#e2e8f0', '#b6c2d2', '#94a3b8'].includes(sample.parts[id].fillColor)), 'sample character uses muted placeholder part colors');
 assert.equal(sample.mechanisms[0].targetAnchorJointId, 'right_hand', 'sample waving arm drives the hand, not the shoulder root');
 assert.deepEqual(motionAnchorJointIds(sample, 'right_arm'), ['right_shoulder', 'right_elbow', 'right_hand'], 'IK anchor choices stay within the target limb chain');
 assert.equal(preferredMotionJointId(sample, 'right_arm', 'left_hand'), 'right_shoulder', 'invalid IK anchor falls back to the target part root');
