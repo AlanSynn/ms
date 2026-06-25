@@ -28,7 +28,7 @@ const dxfPolyline = (points: Point[], layer: string = "TRACE", color: number = 3
 
 // --- SVG HELPER FUNCTIONS ---
 
-const getGearPathD = (radius: number, teeth: number) => {
+export const gearPathD = (radius: number, teeth: number) => {
     const hole = radius * 0.2;
     const outer = radius;
     const inner = radius * 0.85;
@@ -159,7 +159,7 @@ export const generateSVG = (config: GlobalConfig, angle: number): string => {
 
         // Anchors & Gears
         svg += `<g transform="translate(${svgNumber(p1.x)}, ${svgNumber(p1.y)}) rotate(${svgNumber(crankDeg * (m.speed1 ?? 1))})">`;
-        svg += `<path d="${getGearPathD(finiteNumber(m.crankLength, 1) + 10, 14)}" fill="#f59e0b" stroke="#b45309" stroke-width="2" />`;
+        svg += `<path d="${gearPathD(finiteNumber(m.crankLength, 1) + 10, 14)}" fill="#f59e0b" stroke="#b45309" stroke-width="2" />`;
         svg += `<circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />`;
         svg += `</g>`;
 
@@ -168,7 +168,7 @@ export const generateSVG = (config: GlobalConfig, angle: number): string => {
              const rot = (crankDeg * (m.speed2 ?? (m.gearRatio || 1))) + ((m.phase ?? 0) * 180 / Math.PI);
              const teeth = Math.max(3, Math.round(14 * (m.rockerLength / m.crankLength)));
              svg += `<g transform="translate(${svgNumber(p2.x)}, ${svgNumber(p2.y)}) rotate(${svgNumber(rot)})">`;
-             svg += `<path d="${getGearPathD(finiteNumber(m.rockerLength, 1) + 10, teeth)}" fill="#f59e0b" stroke="#b45309" stroke-width="2" />`;
+             svg += `<path d="${gearPathD(finiteNumber(m.rockerLength, 1) + 10, teeth)}" fill="#f59e0b" stroke="#b45309" stroke-width="2" />`;
              svg += `<circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />`;
              svg += `</g>`;
         }

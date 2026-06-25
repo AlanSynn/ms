@@ -685,6 +685,8 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await expect(page.getByTestId('foundry-mechanism-link')).toHaveCount(1);
   await expect(page.getByTestId('foundry-mechanism-output')).toHaveCount(1);
   await expect(page.getByTestId('workspace-player-dock')).toHaveCount(0);
+  expect(await page.getByTestId('foundry-fabrication-part').count(), 'Sandbox uses fabrication-style holed bars').toBeGreaterThanOrEqual(4);
+  expect(await page.getByTestId('foundry-fabrication-hole').count(), 'Sandbox shows drilled holes, not abstract lines').toBeGreaterThanOrEqual(12);
   await expect(page.getByTestId('foundry-mini-linkage-gear')).toBeVisible();
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Four-bar linkage');
   await expect(page.getByTestId('foundry-feasibility')).toContainText('360° valid sampled motion');
@@ -697,6 +699,7 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Gear train');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('ratio sign');
   await expect(page.getByTestId('foundry-mechanism-gear')).toBeVisible();
+  expect(await page.getByTestId('foundry-fabrication-gear').count(), 'Gear preview uses toothed fabrication geometry').toBeGreaterThanOrEqual(2);
   await page.getByLabel('Foundry mechanism type').selectOption('4bar');
   await page.getByLabel('Foundry preset').selectOption('compact');
   await expect(page.getByTestId('foundry-target-summary')).toContainText('smaller footprint');
