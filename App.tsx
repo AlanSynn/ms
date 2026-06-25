@@ -162,6 +162,10 @@ const App: React.FC = () => {
         return () => cancelAnimationFrame(frame);
     }, [isPlaying, drawMode, optimizerBusy, playbackDurationMs, project.settings.animationSpeed, project.settings.timingProfile]);
 
+    useEffect(() => {
+        if (stage !== 'path' && drawMode) setDrawMode(false);
+    }, [stage, drawMode]);
+
     const mechanismConfig: GlobalConfig = {
         speed: project.settings.animationSpeed,
         rotation: 0,

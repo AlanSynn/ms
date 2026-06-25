@@ -930,6 +930,18 @@ test('Shared player dock stays inside the editor content at medium desktop width
   expect(dockBox!.x, 'player dock does not overlap the fixed sidebar').toBeGreaterThanOrEqual(railBox!.x + railBox!.width);
 });
 
+test('Animation resumes after leaving path drawing mode', async ({ page }) => {
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
+  await page.getByRole('button', { name: 'Mechanism Design' }).click();
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+
+  const scrubber = page.getByLabel('Workspace scrubber');
+  const before = await scrubber.inputValue();
+  await expect.poll(() => scrubber.inputValue(), { timeout: 1500 }).not.toBe(before);
+});
+
 test('Command menu and shared canvas zoom persist across workflow stages', async ({ page }) => {
   await page.goto('/');
   await openWavingArmTemplate(page);
