@@ -39,6 +39,10 @@ import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForSc
 import { loadCharacterPackage } from './utils/packageLoader';
 import { mechanismBindingWarnings, motionAnchorJointIds, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT, normalizeCanvasViewport } from './utils/viewport';
+import { buildToonSceneProjection } from './utils/sceneProjection';
+import { buildKinematicPhysicsSession } from './utils/physicsSession';
+import { cameraForLens, lockCameraToStudio, type CameraSessionState, type ViewLensState } from './utils/viewLens';
+import { ViewLensHud } from './components/ViewLensHud';
 import { AlertCircle, Boxes, BrainCircuit, Camera, CheckCircle2, Download, FileJson, Loader2, Play, Plus, Route, Save, Sparkles, Trash2, Upload } from 'lucide-react';
 import girlStarterUrl from './resources/examples/raw/girl.png?url';
 import boyStarterUrl from './resources/examples/raw/boy.PNG?url';
@@ -121,6 +125,10 @@ const App: React.FC = () => {
     const [optimizerBusy, setOptimizerBusy] = useState(false);
     const [canvasViewport, setCanvasViewport] = useState<CanvasViewport>(DEFAULT_CANVAS_VIEWPORT);
     const [commandStatus, setCommandStatus] = useState('Ready');
+    const toonProjection = useMemo(() => buildToonSceneProjection(project), [project]);
+    const [viewLens, setViewLens] = useState<ViewLensState>('studio');
+    const [cameraSession, setCameraSession] = useState<CameraSessionState>(() => lockCameraToStudio(toonProjection));
+    const physicsSession = useMemo(() => buildKinematicPhysicsSession(project, toonProjection, angle), [project, toonProjection, angle]);
     const projectInputRef = useRef<HTMLInputElement>(null);
     const latestProjectRef = useRef<ProjectState | null>(null);
 
@@ -165,6 +173,18 @@ const App: React.FC = () => {
     useEffect(() => {
         if (stage !== 'path' && drawMode) setDrawMode(false);
     }, [stage, drawMode]);
+
+    useEffect(() => {
+        if (!drawMode) return;
+        setViewLens('studio');
+        setCameraSession(lockCameraToStudio(toonProjection));
+    }, [drawMode, toonProjection]);
+
+    useEffect(() => {
+        if (stage !== 'blueprint') return;
+        setViewLens('blueprint');
+        setCameraSession(cameraForLens(toonProjection, 'blueprint'));
+    }, [stage, toonProjection]);
 
     const mechanismConfig: GlobalConfig = {
         speed: project.settings.animationSpeed,
@@ -585,7 +605,8 @@ const App: React.FC = () => {
                     </header>
                     <input ref={projectInputRef} hidden type="file" accept="application/json,.mechanim.json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/>
 
-                    <div className={`stage-body editor-workbench min-h-0 flex-1 overflow-auto ${stage === 'character' ? 'p-0' : 'p-7'}`} data-testid="shared-workbench">
+                    <div className={`stage-body editor-workbench relative min-h-0 flex-1 overflow-auto ${stage === 'character' ? 'p-0' : 'p-7'}`} data-testid="shared-workbench">
+                        {stage !== 'character' && <ViewLensHud stage={stage} lens={viewLens} setLens={setViewLens} camera={cameraSession} setCamera={setCameraSession} projection={toonProjection} physics={physicsSession} selectedPart={selectedPart} selectedPath={selectedPath} selectedMechanism={selectedMechanism} drawMode={drawMode} />}
                         {stage === 'character' && <CharacterSelection project={project} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} starterTemplates={STARTER_IMAGE_TEMPLATES} onStarterImage={loadStarterImage} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onSample={() => { setPendingCharacter(null); setProject(createSampleProject()); setStage('path'); }} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} />}
                         {stage === 'path' && <PathEditor project={project} sortedParts={sortedParts} selectedPart={selectedPart} selectedPath={selectedPath} drawMode={drawMode} setDrawMode={setDrawMode} dispatch={dispatch} setPathPoints={setPathPoints} openTracking={() => setShowTracking(true)} isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} onNext={() => goStage('foundry')} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {stage === 'foundry' && <MechanismFoundry project={project} foundry={foundry} setFoundry={setFoundry} selectedPart={selectedPart} selectedPath={selectedPath} onExport={(pkg) => {
@@ -619,7 +640,7 @@ const App: React.FC = () => {
                         {stage === 'options' && <Options project={project} dispatch={dispatch} />}
                     </div>
                     {stage !== 'character' && <WorkflowStatusStrip stage={stage} project={project} selectedPart={selectedPart} selectedPath={selectedPath} />}
-                    {stage !== 'character' && <WorkspacePlayerDock isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} speed={project.settings.animationSpeed} />}
+                    {stage !== 'character' && <WorkspacePlayerDock isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} speed={project.settings.animationSpeed} drawMode={drawMode} />}
                     {stage !== 'character' && <footer className="status-bar" data-testid="status-bar">{commandStatus} · parts:{project.partOrder.length} · paths:{Object.keys(project.paths).length} · mechs:{project.mechanisms.length} · zoom {Math.round(canvasViewport.zoom * 100)}%</footer>}
                 </section>
             </div>
@@ -700,16 +721,17 @@ const CanvasZoomToolbar = ({ viewport, setViewport }: { viewport: CanvasViewport
     </div>;
 };
 
-const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, speed }: {
+const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, speed, drawMode }: {
     isPlaying: boolean;
     setIsPlaying: (value: boolean) => void;
     angle: number;
     setAngle: React.Dispatch<React.SetStateAction<number>>;
     speed: number;
+    drawMode: boolean;
 }) => {
     const progress = ((angle / (Math.PI * 2)) % 1 + 1) % 1;
     const percent = Math.round(progress * 100);
-    return <aside className="player-dock" data-testid="workspace-player-dock" aria-label="Shared animation controls">
+    return <aside className={`player-dock ${drawMode ? 'is-drawing' : ''}`} data-testid="workspace-player-dock" aria-label="Shared animation controls">
         <div className="section-title">Animation</div>
         <div className="player-actions">
             <button type="button" aria-label="Shared transport toggle" onClick={() => setIsPlaying(!isPlaying)}>{isPlaying ? 'Ⅱ' : '▶'}</button>

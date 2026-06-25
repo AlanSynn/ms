@@ -63,8 +63,8 @@
       .app-header > div:last-child { flex-direction: row; align-items: center; gap: .75rem; }
       .stage-body { margin-left: 300px; padding-top: calc(5rem + 1.5rem) !important; min-height: calc(100vh - 4.3rem); }
       .editor-workbench { background-color: var(--ms-bg-soft); background-size: 40px 40px; background-image: linear-gradient(to right, rgba(139,92,246,.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(139,92,246,.06) 1px, transparent 1px); }
-      .app-shell:not(.is-onboarding) .stage-body { flex: none; height: calc(100vh - 10.1rem); margin-top: 5rem; min-height: 0; overflow: hidden; padding-top: 1.5rem !important; }
-      .app-shell:not(.is-onboarding) .stage-body > .grid { height: 100%; min-height: 0; }
+      .app-shell:not(.is-onboarding) .stage-body { display: flex; flex-direction: column; gap: .75rem; flex: none; height: calc(100vh - 10.1rem); margin-top: 5rem; min-height: 0; overflow: hidden; padding-top: 1.5rem !important; }
+      .app-shell:not(.is-onboarding) .stage-body > .grid { flex: 1 1 auto; height: auto; min-height: 0; }
       .app-shell:not(.is-onboarding) .stage-body > .grid > * { min-height: 0; }
       .app-shell:not(.is-onboarding) .stage-body > .grid > section,
       .app-shell:not(.is-onboarding) .stage-body > .grid > .space-y-5 { max-height: 100%; overflow: auto; overscroll-behavior: contain; }
@@ -155,6 +155,26 @@
       .canvas-zoom-toolbar button:hover { color: var(--ms-accent); border-color: var(--ms-accent-line); background: var(--ms-accent-soft); }
       .assembly-recipe-card { border: 1px solid var(--ms-line); border-radius: 1.35rem; background: #fff; padding: 1rem; box-shadow: 0 16px 46px rgba(8,10,18,.05); }
       .blueprint-pill { border: 1px solid var(--ms-accent-line); border-radius: 999px; background: var(--ms-accent-soft); color: var(--ms-accent); padding: .35rem .55rem; font-size: .75rem; font-weight: 950; }
+      .view-lens-hud { position: relative; z-index: 18; flex: 0 0 auto; width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 16rem; gap: .7rem; pointer-events: auto; }
+      .view-lens-main, .toon-renderer-shell { border: 1px solid var(--ms-line); border-radius: 1.35rem; background: rgba(255,255,255,.88); box-shadow: 0 18px 52px rgba(8,10,18,.08); backdrop-filter: blur(16px); }
+      .view-lens-main { padding: .8rem; }
+      .view-lens-title { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+      .view-lens-title span, .toon-renderer-head span { color: var(--ms-muted); font-size: .68rem; font-weight: 950; letter-spacing: .18em; text-transform: uppercase; }
+      .view-lens-title strong { color: var(--ms-accent); font-size: .98rem; font-weight: 950; letter-spacing: -.03em; }
+      .view-lens-buttons, .camera-session-row, .view-lens-chips { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; margin-top: .45rem; }
+      .view-lens-buttons button, .camera-session-row button { border: 1px solid var(--ms-line); border-radius: 999px; background: #fff; color: var(--ms-text-soft); padding: .36rem .5rem; font-size: .7rem; font-weight: 950; }
+      .view-lens-buttons button.active, .view-lens-buttons button:hover, .camera-session-row button:hover { color: var(--ms-accent); border-color: var(--ms-accent-line); background: var(--ms-accent-soft); }
+      .view-lens-chips span { border: 1px solid var(--ms-line); border-radius: 999px; background: var(--ms-bg-soft); color: var(--ms-muted); padding: .28rem .45rem; font-size: .68rem; font-weight: 850; }
+      .view-lens-chips b { color: var(--ms-text); margin-right: .2rem; }
+      .physics-session-summary, .view-lens-draw-guard { margin-top: .45rem; border-radius: .9rem; padding: .42rem .55rem; font-size: .72rem; font-weight: 850; line-height: 1.25; }
+      .physics-session-summary { border: 1px solid rgba(16,185,129,.24); background: rgba(16,185,129,.10); color: #047857; }
+      .view-lens-draw-guard { border: 1px solid var(--ms-accent-line); background: var(--ms-accent-soft); color: var(--ms-accent); }
+      .toon-renderer-shell { min-height: 9.8rem; overflow: hidden; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+      .toon-renderer-head, .toon-renderer-foot { display: flex; justify-content: space-between; align-items: center; gap: .5rem; padding: .55rem .65rem; }
+      .toon-renderer-head b, .toon-renderer-foot { color: var(--ms-text-soft); font-size: .68rem; font-weight: 900; }
+      .toon-renderer-frame { position: relative; min-height: 5.9rem; background: linear-gradient(180deg, #fff, #f8f9ff); border-top: 1px solid var(--ms-line); border-bottom: 1px solid var(--ms-line); }
+      .toon-renderer-frame canvas, .toon-fallback-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+      .toon-fallback-svg { background: transparent; }
 
       .app-rail, .app-header { color: var(--ms-text); }
       .accent-label { color: var(--ms-accent); }
@@ -178,11 +198,14 @@
       .workspace-steps button:hover, .workspace-steps button.active { color: var(--ms-accent); background: var(--ms-accent-soft); }
       .workspace-side-link { width: 100%; display: flex; align-items: center; gap: .65rem; border-radius: 1rem; background: transparent; color: var(--ms-muted); padding: .78rem .9rem; text-align: left; transition: background .18s ease, color .18s ease, box-shadow .18s ease; }
       .workspace-side-link:hover, .workspace-side-link.active { color: var(--ms-secondary); background: rgba(16,185,129,.12); box-shadow: inset 0 0 0 1px rgba(16,185,129,.18); }
-      .player-dock { position: fixed; right: calc(360px + 2.5rem); bottom: 4rem; z-index: 35; width: min(22rem, calc(100vw - 2rem)); border: 1px solid var(--ms-line); border-radius: 2rem; background: rgba(255,255,255,.86); box-shadow: var(--ms-shadow); backdrop-filter: blur(16px); padding: 1rem; }
-      .player-actions { display: flex; align-items: center; justify-content: space-between; gap: .55rem; margin: .75rem 0; }
+      .player-dock { position: fixed; right: calc(360px + 2.5rem); bottom: 4rem; z-index: 35; width: min(22rem, calc(100vw - 2rem)); border: 1px solid var(--ms-line); border-radius: 2rem; background: rgba(255,255,255,.86); box-shadow: var(--ms-shadow); backdrop-filter: blur(16px); padding: 1rem; pointer-events: none; }
+      .player-actions { display: flex; align-items: center; justify-content: space-between; gap: .55rem; margin: .75rem 0; pointer-events: auto; }
       .player-actions button, .player-actions span { min-height: 2.65rem; border-radius: 1rem; padding: .65rem .8rem; background: #fff; border: 1px solid var(--ms-line); color: var(--ms-text-soft); font-size: .82rem; font-weight: 900; }
       .player-actions button:first-child { flex: 1; background: var(--ms-accent-soft); border-color: var(--ms-accent-line); color: var(--ms-accent); }
       .player-actions button:hover { transform: translateY(-1px); color: var(--ms-accent); border-color: var(--ms-accent-line); }
+      .player-dock input { pointer-events: auto; }
+      .player-dock.is-drawing { opacity: .28; transform: translateY(1.25rem); pointer-events: none; }
+      .player-dock.is-drawing .player-actions, .player-dock.is-drawing input { pointer-events: none; }
       @media (min-width: 901px) and (max-width: 1100px) {
         .player-dock { right: 1rem; width: min(22rem, calc(100vw - 300px - 2rem)); }
       }
@@ -199,6 +222,8 @@
         .app-shell:not(.is-onboarding) .stage-body { height: auto; margin-top: 0; overflow: auto; }
         .workflow-status-strip, .status-bar { margin-left: 0; }
         .player-dock { left: 1rem; right: 1rem; bottom: 1rem; width: auto; }
+        .view-lens-hud { grid-template-columns: 1fr; }
+        .toon-renderer-shell { display: none; }
         .onboarding-page { height: auto; min-height: 100svh; overflow: auto; padding: 1rem; }
         .onboarding-hero { min-height: auto; grid-template-columns: 1fr; }
         .landing-board { grid-template-columns: 1fr; }

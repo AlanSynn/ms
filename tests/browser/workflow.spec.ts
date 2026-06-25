@@ -1102,3 +1102,83 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
 
   expectCleanPage(pageErrors, consoleErrors);
 });
+
+test('View lenses, toon sidecar, physics replay, and blueprint flow stay non-destructive', async ({ page }) => {
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  const saveSnapshot = async () => {
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: /Save/i }).click()
+    ]);
+    const path = await download.path();
+    expect(path, 'project save path').toBeTruthy();
+    return JSON.parse(await readFile(path!, 'utf8'));
+  };
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+
+  await expect(page.getByTestId('view-lens-hud')).toBeVisible();
+  await expect(page.getByTestId('view-lens-status')).toHaveText('2.5D Locked');
+  await expect(page.getByTestId('toon-renderer-shell')).toBeVisible();
+  await expect(page.getByTestId('toon-renderer-status')).toContainText(/WebGL active|SVG fallback/);
+  const before = await saveSnapshot();
+
+  await page.getByTestId('view-lens-toy-stage').click();
+  await expect(page.getByTestId('view-lens-status')).toHaveText('Toy Stage');
+  await expect(page.getByTestId('view-lens-hud')).toContainText('orbit preview');
+  await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
+
+  await page.getByTestId('view-lens-blueprint').click();
+  await expect(page.getByTestId('view-lens-status')).toHaveText('Blueprint');
+  await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
+  await expect(page.getByTestId('view-lens-status')).toHaveText('2.5D Locked');
+  await expect(page.getByTestId('view-lens-draw-guard')).toContainText('Drawing locks the camera');
+  await expect(page.getByTestId('view-lens-toy-stage')).toBeDisabled();
+
+  await page.getByRole('button', { name: /Mechanism Design/i }).click();
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+  await page.getByTestId('view-lens-physics').click();
+  await expect(page.getByTestId('view-lens-status')).toHaveText('Physics');
+  await expect(page.getByTestId('physics-session-summary')).toContainText(/bodies .* constraints .* active mechanisms/);
+  await expect(page.getByTestId('toon-renderer-shell')).toContainText('view-only');
+
+  await page.getByTestId('camera-front').click();
+  await expect(page.getByTestId('view-lens-status')).toHaveText('2.5D Locked');
+  await page.getByTestId('camera-iso').click();
+  await expect(page.getByTestId('view-lens-status')).toHaveText('Toy Stage');
+  await page.getByTestId('camera-lock-toggle').click();
+  await expect(page.getByTestId('view-lens-status')).toHaveText('2.5D Locked');
+
+  const after = await saveSnapshot();
+  expect(after.parts).toEqual(before.parts);
+  expect(after.skeleton).toEqual(before.skeleton);
+  expect(after.paths).toEqual(before.paths);
+  expect(after.mechanisms).toEqual(before.mechanisms);
+  expect(after.settings).toEqual(before.settings);
+  expect(after.lastExport).toEqual(before.lastExport);
+
+  await page.setViewportSize({ width: 390, height: 820 });
+  await expect(page.getByTestId('view-lens-hud')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 4)).toBe(true);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByRole('button', { name: /Blueprint Export/i }).click();
+  await expect(page.getByRole('heading', { name: 'Blueprint Export' })).toBeVisible();
+  await expect(page.getByTestId('view-lens-status')).toHaveText('Blueprint');
+  await expect(page.getByTestId('blueprint-canvas-preview')).toBeVisible();
+  await page.getByRole('button', { name: /Generate package/i }).click();
+  await expect(page.getByTestId('assembly-guide-preview')).toContainText('Assembly guide preview');
+  await expect(page.getByRole('button', { name: 'Metadata', exact: true })).toBeVisible();
+
+  expectCleanPage(pageErrors, consoleErrors);
+});

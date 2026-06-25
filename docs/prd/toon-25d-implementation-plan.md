@@ -418,3 +418,16 @@ Commit by functional milestone:
 6. M6 compact UI polish + end-to-end browser QA.
 
 Each commit must use the Lore commit protocol and must not stage unrelated resource assets.
+
+## 7. Implementation checkpoints
+
+### 2026-06-25 — M2-M6 baseline shipped
+
+Delivered in the browser app as a safe, reversible layer over the existing 2D workflows:
+
+- M2/M4: transient `ViewLensState` + `CameraSessionState` in the app shell, with compact lens/camera HUD, camera lock/unlock, Front/Iso/Explode/home controls, drawing guard, and no `ProjectState` fields.
+- M3: lazy-loaded plain `three` toon sidecar with SVG fallback. It consumes `ToonSceneProjection` and never intercepts the canonical SVG path editor.
+- M5: deterministic `PhysicsSession` sidecar using existing kinematic linkage samples, body/constraint descriptors, velocities/forces, warnings, and no write-back.
+- M6: browser regression coverage for non-destructive lens/camera/physics actions, responsive compact shell, sidecar renderer status, blueprint continuity, and all previous workflows.
+
+Remaining future work is additive: richer toon materials, true interactive 3D picking, optional physics-engine validation, and explicit undoable bake/write-back actions. Those must continue to preserve the same canonical-2D and no-silent-mutation rules.
