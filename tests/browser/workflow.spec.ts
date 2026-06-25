@@ -21,6 +21,11 @@ const openWavingArmTemplate = async (page) => {
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
 };
 
+const readScenePoint = async (locator) => locator.evaluate((el: SVGElement) => ({
+  x: Number(el.getAttribute('cx')),
+  y: Number(el.getAttribute('cy'))
+}));
+
 test('character → path → foundry → design → blueprint runs end-to-end in browser', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
@@ -133,6 +138,20 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   const playback = page.getByRole('button', { name: /Play|Pause/ }).first();
   await expect(playback).toBeVisible();
   await expect(page.getByTestId('design-part-right_arm')).not.toHaveAttribute('transform', 'translate(98 24) rotate(18)');
+  const sharedTransport = page.getByRole('button', { name: 'Shared transport toggle' });
+  if ((await sharedTransport.textContent())?.includes('Ⅱ')) await sharedTransport.click();
+  const scrubber = page.getByLabel('Workspace scrubber');
+  const effectorSamples: Array<{ x: number; y: number }> = [];
+  for (const frame of ['0', '25', '50', '75']) {
+    await scrubber.fill(frame);
+    const effector = await readScenePoint(page.locator('[data-testid^="mechanism-effector-"]').first());
+    const target = await readScenePoint(page.locator('[data-testid^="mechanism-target-"]').first());
+    const hand = await readScenePoint(page.getByTestId('skeleton-joint-right_hand'));
+    effectorSamples.push(effector);
+    expect(Math.hypot(effector.x - hand.x, effector.y - hand.y), `mechanism effector stays pinned to right hand at ${frame}%`).toBeLessThan(0.01);
+    expect(Math.hypot(target.x - hand.x, target.y - hand.y), `target marker stays pinned to right hand at ${frame}%`).toBeLessThan(0.01);
+  }
+  expect(Math.hypot(effectorSamples[0].x - effectorSamples.at(-1)!.x, effectorSamples[0].y - effectorSamples.at(-1)!.y), 'scrubbing moves the mechanism-driven endpoint').toBeGreaterThan(10);
   if ((await playback.textContent())?.includes('Pause')) await playback.click();
   await expect(page.getByRole('button', { name: 'SVG', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'DXF' })).toBeVisible();

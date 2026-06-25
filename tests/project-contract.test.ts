@@ -411,6 +411,14 @@ assert(Math.hypot((mechanismPreview.skeleton?.joints.right_hand.position.x ?? 0)
 assert(Math.hypot((mechanismPreview.skeleton?.joints.right_hand.position.x ?? 0) - drivenProject.paths['path-right-arm'].points[0].x, (mechanismPreview.skeleton?.joints.right_hand.position.y ?? 0) - drivenProject.paths['path-right-arm'].points[0].y) > 20, 'mechanism design does not fake success by directly following the target path');
 assert.notEqual(animated.right_arm.transform.rotation, drivenProject.parts.right_arm.transform.rotation, 'IK preview rotates the limb instead of only offsetting it');
 assert(Math.hypot(bodyPartPivotScene(animated.right_hand_part, mechanismPreview.skeleton).x - (mechanismPreview.skeleton?.joints.right_hand.position.x ?? 0), bodyPartPivotScene(animated.right_hand_part, mechanismPreview.skeleton).y - (mechanismPreview.skeleton?.joints.right_hand.position.y ?? 0)) < 1e-9, 'descendant part anchor follows animated skeleton');
+for (const phase of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
+  const state = calculateLinkage(sample.mechanisms[0], phase);
+  const preview = motionPreviewForProject(sample, sample.mechanisms, phase);
+  const targetJointId = preferredMotionJointId(sample, sample.mechanisms[0].targetPartId, sample.mechanisms[0].targetAnchorJointId)!;
+  const targetJoint = preview.skeleton?.joints[targetJointId]?.position;
+  assert(state.isValid && targetJoint, 'sample mechanism has a valid driven target joint');
+  assert(Math.hypot(targetJoint!.x - state.effector.x, targetJoint!.y - state.effector.y) < 1e-9, 'sample mechanism keeps its driven joint pinned to the linkage effector through the whole scrub range');
+}
 const conflictProject: ProjectState = { ...drivenProject, mechanisms: [drivenMechanism, { ...drivenMechanism, id: 'second-driver', anchorX: drivenMechanism.anchorX + 8 }] };
 const conflicts = mechanismBindingWarnings(conflictProject);
 assert(conflicts['drive-effector']?.some(w => w.includes('also drives right_arm:right_hand')), 'first duplicate driver receives explicit conflict warning');

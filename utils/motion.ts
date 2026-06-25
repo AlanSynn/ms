@@ -132,7 +132,7 @@ const jointChain = (skeleton: StandardSkeleton, rootJointId: string, targetJoint
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
-const solveChainTargets = (skeleton: StandardSkeleton, rootJointId: string, targetJointId: string, target: Point): Record<string, Point> => {
+const solveChainTargets = (skeleton: StandardSkeleton, rootJointId: string, targetJointId: string, target: Point, pinTarget = false): Record<string, Point> => {
     const root = skeleton.joints[rootJointId]?.position;
     const oldTarget = skeleton.joints[targetJointId]?.position;
     if (!root || !oldTarget || targetJointId === rootJointId) return {};
@@ -151,12 +151,12 @@ const solveChainTargets = (skeleton: StandardSkeleton, rootJointId: string, targ
                 const bend = skeleton.joints[midId]?.bendDirection || 1;
                 const cosAtRoot = clamp((upper ** 2 + reachable ** 2 - lower ** 2) / (2 * upper * reachable), -1, 1);
                 const midAngle = direction + bend * Math.acos(cosAtRoot);
-                const end = desired < Math.abs(upper - lower) || desired > upper + lower
+                const clampedEnd = desired < Math.abs(upper - lower) || desired > upper + lower
                     ? { x: root.x + Math.cos(direction) * reachable, y: root.y + Math.sin(direction) * reachable }
                     : target;
                 return {
                     [midId]: { x: root.x + Math.cos(midAngle) * upper, y: root.y + Math.sin(midAngle) * upper },
-                    [targetJointId]: end
+                    [targetJointId]: pinTarget ? target : clampedEnd
                 };
             }
         }
@@ -177,7 +177,8 @@ export const motionPreviewForTarget = (
     targetPartId: string | undefined,
     targetJointId: string | undefined,
     target: Point,
-    existing: MotionPreview = { parts: {}, skeleton: project.skeleton }
+    existing: MotionPreview = { parts: {}, skeleton: project.skeleton },
+    options: { pinTarget?: boolean } = {}
 ): MotionPreview => {
     const targetPart = targetPartId ? project.parts[targetPartId] : undefined;
     const skeleton = existing.skeleton ?? project.skeleton;
@@ -210,7 +211,7 @@ export const motionPreviewForTarget = (
         return { parts, skeleton: nextSkeleton, target, targetJointId: resolvedTargetJointId, rootJointId };
     }
 
-    const jointUpdates = solveChainTargets(skeleton, rootJointId, resolvedTargetJointId, target);
+    const jointUpdates = solveChainTargets(skeleton, rootJointId, resolvedTargetJointId, target, options.pinTarget === true);
     const solvedTarget = jointUpdates[resolvedTargetJointId] ?? targetJoint.position;
     const endDx = solvedTarget.x - targetJoint.position.x;
     const endDy = solvedTarget.y - targetJoint.position.y;
@@ -298,7 +299,7 @@ export const motionPreviewForProject = (project: ProjectState, mechanisms: Mecha
         const key = `${m.targetPartId}:${targetJointId ?? project.parts[m.targetPartId].anchorJointId}`;
         if (drivenTargets.has(key)) return;
         drivenTargets.add(key);
-        preview = motionPreviewForTarget(project, m.targetPartId, targetJointId, state.effector, preview);
+        preview = motionPreviewForTarget(project, m.targetPartId, targetJointId, state.effector, preview, { pinTarget: true });
     });
     return { ...preview, warnings };
 };

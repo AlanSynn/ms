@@ -587,7 +587,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                                         )}
 
                                         {m.type !== 'crank' && (
-                                            <circle cx={effector.x} cy={effector.y} r={6 / zoom} fill="#ef4444" stroke="white" strokeWidth={2 / zoom} className={canDragEffector(m) ? 'cursor-grab' : ''} opacity={canDragEffector(m) ? 1 : 0.55} />
+                                            <circle data-testid={`mechanism-effector-${m.id}`} cx={effector.x} cy={effector.y} r={6 / zoom} fill="#ef4444" stroke="white" strokeWidth={2 / zoom} className={canDragEffector(m) ? 'cursor-grab' : ''} opacity={canDragEffector(m) ? 1 : 0.55} />
                                         )}
                                         {project && m.targetPartId && project.parts[m.targetPartId] && (
                                             <g opacity="0.8">
@@ -604,7 +604,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                                                             <circle cx={desiredOutput.x} cy={desiredOutput.y} r={4 / zoom} fill="white" stroke="#f97316" strokeWidth={2 / zoom} />
                                                         </>}
                                                         <line x1={effector.x} y1={effector.y} x2={target.x} y2={target.y} stroke="#ef4444" strokeWidth={2 / zoom} strokeDasharray={`${6 / zoom},${5 / zoom}`} />
-                                                        <circle cx={target.x} cy={target.y} r={5 / zoom} fill="#5a6cff" stroke="white" strokeWidth={2 / zoom} />
+                                                        <circle data-testid={`mechanism-target-${m.id}`} cx={target.x} cy={target.y} r={5 / zoom} fill="#5a6cff" stroke="white" strokeWidth={2 / zoom} />
                                                     </>;
                                                 })()}
                                             </g>
