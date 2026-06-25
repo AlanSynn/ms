@@ -679,6 +679,9 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await openWavingArmTemplate(page);
   await page.getByRole('button', { name: /Mechanism Foundry/i }).click();
   await expect(page.getByRole('heading', { name: 'Mechanism Foundry' })).toBeVisible();
+  await expect(page.locator('[data-testid^="foundry-mini-simulation-"]')).toHaveCount(8);
+  await expect(page.getByTestId('foundry-selected-linkage')).toBeVisible();
+  await expect(page.getByTestId('foundry-mini-linkage-gear')).toBeVisible();
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Four-bar linkage');
   await expect(page.getByTestId('foundry-feasibility')).toContainText('360° valid sampled motion');
   await expect(page.getByTestId('foundry-target-summary')).toContainText('Valid Range: 360° valid');

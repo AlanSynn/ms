@@ -1656,10 +1656,11 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const library = MECHANISM_LIBRARY[foundry.type];
     const targetIkJointId = selectedPart ? preferredMotionJointId(project, selectedPart.id, selectedPath?.targetAnchorJointId, { preferDistalWhenRoot: !selectedPath?.targetAnchorJointId }) : undefined;
     const feasibilityText = range.warning ?? '360° valid sampled motion';
-    const previewPoints = fitPointsToBox(preview, 360, 240);
-    const previewPath = pointsToSvgPath(previewPoints);
+    const selectedSimulation = fitMechanismSimulation(landedFoundry, foundryPhase, 360, 240, 96);
+    const previewPoints = selectedSimulation.pathPoints.length ? selectedSimulation.pathPoints : fitPointsToBox(preview, 360, 240);
+    const previewPath = selectedSimulation.pathD || pointsToSvgPath(previewPoints);
     const playIndex = previewPoints.length ? Math.floor((((foundryPhase / (Math.PI * 2)) % 1 + 1) % 1) * (previewPoints.length - 1)) : 0;
-    const playhead = previewPoints[playIndex];
+    const playhead = selectedSimulation.state.effector ?? previewPoints[playIndex];
     const previousPoint = previewPoints[Math.max(0, playIndex - 1)] ?? playhead;
     const nextPoint = previewPoints[Math.min(previewPoints.length - 1, playIndex + 1)] ?? playhead;
     const hardBlocked = !targetReady || range.percentValid === 0 || !Number.isFinite(landing.x) || !Number.isFinite(landing.y);
@@ -1717,6 +1718,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             <svg viewBox="0 0 360 240" className="foundry-preview h-[520px] w-full rounded-[2rem]">
                 {showTrail && <path data-testid="foundry-trail-overlay" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="12" strokeLinecap="round" opacity="0.14"/>}
                 {showPathPreview && <path data-testid="foundry-path-preview" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="4" strokeLinecap="round" opacity="0.95"/>}
+                <MechanismLinkagePreview simulation={selectedSimulation} color={foundry.color} testId="foundry-selected-linkage" />
                 {showForces && playhead && <g data-testid="foundry-forces-overlay" stroke="#ef4444" strokeWidth="3" strokeLinecap="round">
                     <line x1={playhead.x} y1={playhead.y} x2={180} y2={120} />
                     <line x1={playhead.x} y1={playhead.y} x2={playhead.x} y2={Math.max(22, playhead.y - 42)} />
@@ -1734,7 +1736,13 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             <div className="mechanism-choice-grid">
                 {AUTHORABLE_MECHANISM_TYPES.map(type => {
                     const item = MECHANISM_LIBRARY[type];
+                    const cardMechanism = { ...createDefaultMechanism(type, `foundry-card-${type}`), color: foundry.color };
+                    const cardSimulation = fitMechanismSimulation(cardMechanism, foundryPhase, 180, 96, 48);
                     return <button key={type} type="button" className={`recommendation-card mechanism-choice ${foundry.type === type ? 'active' : ''}`} onClick={() => setFoundry({ ...createDefaultMechanism(type, 'foundry-preview'), color: foundry.color, presetId: 'balanced', recommendation: FOUNDRY_PRESETS.balanced.recommendation })}>
+                        <svg viewBox="0 0 180 96" className="mechanism-choice-sim" data-testid={`foundry-mini-simulation-${type}`} aria-hidden="true">
+                            <path d={cardSimulation.pathD} fill="none" stroke={foundry.color} strokeWidth="2.5" strokeLinecap="round" opacity="0.45"/>
+                            <MechanismLinkagePreview simulation={cardSimulation} color={foundry.color} testId={`foundry-mini-linkage-${type}`} compact />
+                        </svg>
                         <div className="font-bold text-slate-800">{item.label}</div>
                         <div>{item.goodFor}</div>
                     </button>;
@@ -2101,5 +2109,45 @@ const fitPointsToBox = (points: Point[], width: number, height: number) => {
 
 const pointsToSvgPath = (points: Point[]) => points.length ? `M ${points.map(p => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' L ')}` : '';
 const fitPathToBox = (points: Point[], width: number, height: number) => pointsToSvgPath(fitPointsToBox(points, width, height));
+
+const fitMechanismSimulation = (mechanism: MechanismConfig, angle: number, width: number, height: number, resolution = 72) => {
+    const state = calculateLinkage(mechanism, angle);
+    const pathPoints = generateCurvePoints(mechanism, resolution).points;
+    const statePoints = [state.p1, state.p2, state.j1, state.j2, state.aux, state.effector].filter((point): point is Point => Boolean(point));
+    const source = [...pathPoints, ...statePoints];
+    if (!source.length) return { pathPoints: [] as Point[], pathD: '', state };
+    const xs = source.map(p => p.x), ys = source.map(p => p.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    const scale = Math.min((width - 34) / Math.max(1, maxX - minX), (height - 32) / Math.max(1, maxY - minY));
+    const tx = width / 2 - ((minX + maxX) / 2) * scale;
+    const ty = height / 2 + ((minY + maxY) / 2) * scale;
+    const map = (point: Point): Point => ({ x: point.x * scale + tx, y: ty - point.y * scale });
+    const fittedPath = pathPoints.map(map);
+    return {
+        pathPoints: fittedPath,
+        pathD: pointsToSvgPath(fittedPath),
+        state: {
+            ...state,
+            p1: map(state.p1),
+            p2: map(state.p2),
+            j1: map(state.j1),
+            j2: map(state.j2),
+            aux: state.aux ? map(state.aux) : undefined,
+            effector: map(state.effector)
+        }
+    };
+};
+
+const MechanismLinkagePreview = ({ simulation, color, testId, compact = false }: { simulation: ReturnType<typeof fitMechanismSimulation>; color: string; testId: string; compact?: boolean }) => {
+    const s = simulation.state;
+    const r = compact ? 3 : 5;
+    const stroke = compact ? 3 : 5;
+    const link = (a: Point | undefined, b: Point | undefined, key: string) => a && b ? <line key={key} x1={a.x} y1={a.y} x2={b.x} y2={b.y} /> : null;
+    return <g data-testid={testId} stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" fill="none">
+        {[link(s.p1, s.j1, 'crank'), link(s.j1, s.j2, 'coupler'), link(s.j2, s.p2, 'rocker'), link(s.p2, s.aux, 'aux-a'), link(s.aux, s.j2, 'aux-b')]}
+        {[s.p1, s.p2, s.j1, s.j2, s.aux].filter((point): point is Point => Boolean(point)).map((point, i) => <circle key={i} cx={point.x} cy={point.y} r={r} fill="white" />)}
+        <circle cx={s.effector.x} cy={s.effector.y} r={r + 1} fill={color} stroke="white" strokeWidth={compact ? 1.5 : 3}/>
+    </g>;
+};
 
 export default App;
