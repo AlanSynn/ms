@@ -695,11 +695,21 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await expect(page.getByLabel('Foundry mechanism type')).toBeHidden();
   await page.getByText('Mechanism options').click();
 
+  for (const type of ['piston', 'yoke', 'quick-return', '5bar', 'cam', 'gear', 'planetary_gear', '4bar']) {
+    await page.getByLabel('Foundry mechanism type').selectOption(type);
+    await expect(page.getByTestId(`foundry-template-${type}`), `${type} has its own physical preview template`).toBeVisible();
+    expect(await page.getByTestId('foundry-fabrication-hole').count(), `${type} preview shows physical holes`).toBeGreaterThan(0);
+  }
   await page.getByLabel('Foundry mechanism type').selectOption('gear');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Gear train');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('ratio sign');
   await expect(page.getByTestId('foundry-mechanism-gear')).toBeVisible();
   expect(await page.getByTestId('foundry-fabrication-gear').count(), 'Gear preview uses toothed fabrication geometry').toBeGreaterThanOrEqual(2);
+  await page.getByLabel('Foundry mechanism type').selectOption('cam');
+  await expect(page.getByTestId('foundry-fabrication-cam'), 'Cam follower uses a cam profile, not a generic gear').toBeVisible();
+  await expect(page.getByTestId('foundry-fabrication-follower'), 'Cam follower shows its follower block').toBeVisible();
+  await page.getByLabel('Foundry mechanism type').selectOption('yoke');
+  expect(await page.getByTestId('foundry-fabrication-slot').count(), 'Scotch yoke shows guide and pin-in-slot yoke slots').toBeGreaterThanOrEqual(2);
   await page.getByLabel('Foundry mechanism type').selectOption('4bar');
   await page.getByLabel('Foundry preset').selectOption('compact');
   await expect(page.getByTestId('foundry-target-summary')).toContainText('smaller footprint');

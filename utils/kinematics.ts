@@ -93,7 +93,7 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
         const lift = Math.max(1, config.rockerLength || config.crankLength);
         const radius = Math.max(1, config.crankLength);
         const rise = (1 - Math.cos(angle1)) * 0.5 * lift;
-        const base = config.sliderOffset || 0;
+        const base = radius + (config.sliderOffset || 0);
         const p2: Point = {
             x: p1.x + Math.cos(trackAngle) * (base + rise),
             y: p1.y + Math.sin(trackAngle) * (base + rise)
@@ -113,7 +113,7 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
             y: p1.y + config.groundLength * Math.sin(gAngle)
         };
         const ratio = config.gearRatio ?? config.speed2 ?? -1;
-        const outAngle = -angle1 * ratio + (config.phase ?? 0);
+        const outAngle = angle1 * ratio + (config.phase ?? 0);
         const j2: Point = {
             x: p2.x + config.rockerLength * Math.cos(outAngle),
             y: p2.y + config.rockerLength * Math.sin(outAngle)
@@ -281,9 +281,10 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
             y: p1.y + localJ2x * Math.sin(trackAngle) + localJ2y * Math.cos(trackAngle)
         };
         
+        const effectorAngle = trackAngle + toRad(config.couplerPointAngle);
         const effector: Point = {
-            x: j2.x + config.couplerPointDist * Math.cos(toRad(config.couplerPointAngle)),
-            y: j2.y + config.couplerPointDist * Math.sin(toRad(config.couplerPointAngle)) 
+            x: j2.x + config.couplerPointDist * Math.cos(effectorAngle),
+            y: j2.y + config.couplerPointDist * Math.sin(effectorAngle)
         };
 
         return { p1, p2: j2, j1, j2, effector, isValid: true };

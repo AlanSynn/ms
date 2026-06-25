@@ -2115,7 +2115,24 @@ const fitMechanismSimulation = (mechanism: MechanismConfig, angle: number, width
     const state = calculateLinkage(mechanism, angle);
     const pathPoints = generateCurvePoints(mechanism, resolution).points;
     const statePoints = [state.p1, state.p2, state.j1, state.j2, state.aux, state.effector].filter((point): point is Point => Boolean(point));
-    const source = [...pathPoints, ...statePoints];
+    const visualBounds: Point[] = [];
+    const addRadiusBounds = (center: Point | undefined, radius: number) => {
+        if (!center || !Number.isFinite(radius) || radius <= 0) return;
+        visualBounds.push(
+            { x: center.x - radius, y: center.y - radius },
+            { x: center.x + radius, y: center.y + radius }
+        );
+    };
+    if (mechanism.type === 'cam') addRadiusBounds(state.p1, mechanism.crankLength * 1.35);
+    if (mechanism.type === 'gear' || mechanism.type === '5bar') {
+        addRadiusBounds(state.p1, mechanism.crankLength);
+        addRadiusBounds(state.p2, mechanism.rockerLength);
+    }
+    if (mechanism.type === 'planetary_gear') {
+        addRadiusBounds(state.p1, mechanism.groundLength + mechanism.rockerLength);
+        addRadiusBounds(state.p2, mechanism.rockerLength);
+    }
+    const source = [...pathPoints, ...statePoints, ...visualBounds];
     if (!source.length) return { pathPoints: [] as Point[], pathD: '', state, scale: 1 };
     const xs = source.map(p => p.x), ys = source.map(p => p.y);
     const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
@@ -2145,11 +2162,25 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
     const r = compact ? 2.5 : 4;
     const scaled = (length: number, min: number, max: number) => Math.max(min, Math.min(max, length * simulation.scale));
     const test = (name: string) => compact ? undefined : `foundry-mechanism-${name}`;
+    const templateTest = compact ? undefined : `foundry-template-${mechanism.type}`;
     const fabricationTest = (name: string) => compact ? undefined : `foundry-fabrication-${name}`;
     const radius = (length: number, min = compact ? 8 : 16, max = compact ? 28 : 58) => scaled(Math.max(1, length), min, max);
     const holeR = Math.max(compact ? 1.8 : 2.6, Math.min(compact ? 3.4 : 5.6, (kit.holeDiameterMm * SCENE_PX_PER_MM * simulation.scale) / 2));
     const pitch = Math.max(holeR * 3.5, kit.gridPitchMm * SCENE_PX_PER_MM * simulation.scale);
     const barWidth = Math.max(holeR * 4.2, compact ? 8 : 14);
+    const degToRad = (deg: number) => (deg * Math.PI) / 180;
+    const axisForAngle = (deg: number) => ({ x: Math.cos(degToRad(deg)), y: -Math.sin(degToRad(deg)) });
+    const trackAxis = axisForAngle(mechanism.groundAngle ?? 0);
+    const normalAxis = { x: -trackAxis.y, y: trackAxis.x };
+    const inputAngleDeg = Math.atan2(s.j1.y - s.p1.y, s.j1.x - s.p1.x) * 180 / Math.PI;
+    const outputAngleDeg = Math.atan2(s.j2.y - s.p2.y, s.j2.x - s.p2.x) * 180 / Math.PI;
+    const vectorAxis = (a: Point | undefined, b: Point | undefined, fallback = trackAxis) => {
+        if (!a || !b) return fallback;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const len = Math.hypot(dx, dy);
+        return len > 0.5 ? { x: dx / len, y: dy / len } : fallback;
+    };
     const link = (a: Point | undefined, b: Point | undefined, key: string, className = 'mechanism-link', testIdName?: string) => {
         if (!a || !b) return null;
         const dx = b.x - a.x;
@@ -2165,13 +2196,10 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
             })}
         </g>;
     };
-    const guide = (center: Point, a: Point, b: Point, key: string) => {
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const len = Math.hypot(dx, dy) || 1;
-        const reach = compact ? 42 : 95;
-        const ux = dx / len;
-        const uy = dy / len;
+    const guideAxis = (center: Point, axis: Point, key: string, reach = compact ? 42 : 95) => {
+        const len = Math.hypot(axis.x, axis.y) || 1;
+        const ux = axis.x / len;
+        const uy = axis.y / len;
         const start = { x: center.x - ux * reach, y: center.y - uy * reach };
         const angle = Math.atan2(uy, ux) * 180 / Math.PI;
         return <g key={key} data-testid={test('guide')} className="mechanism-part mechanism-frame" transform={`translate(${start.x} ${start.y}) rotate(${angle})`}>
@@ -2180,26 +2208,57 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
             {[0, reach * 2].map((x, index) => <circle key={index} data-testid={fabricationTest('hole')} className="mechanism-hole" cx={x} cy="0" r={holeR} />)}
         </g>;
     };
+    const guide = (center: Point, a: Point, b: Point, key: string) => guideAxis(center, vectorAxis(a, b), key);
+    const slotPlate = (center: Point, axis: Point, length: number, key: string, className = 'mechanism-link', testIdName?: string) => {
+        const len = Math.max(length, barWidth * 3);
+        const angle = Math.atan2(axis.y, axis.x) * 180 / Math.PI;
+        return <g key={key} data-testid={testIdName ? test(testIdName) : undefined} className={`mechanism-part ${className}`} transform={`translate(${center.x} ${center.y}) rotate(${angle})`}>
+            <rect data-testid={fabricationTest('part')} x={-len / 2} y={-barWidth / 2} width={len} height={barWidth} rx={barWidth / 2} />
+            <rect data-testid={fabricationTest('slot')} className="mechanism-slot" x={-len / 2 + barWidth * 0.75} y={-holeR} width={len - barWidth * 1.5} height={holeR * 2} rx={holeR} />
+            {[-len / 2, len / 2].map((x, index) => <circle key={index} data-testid={fabricationTest('hole')} className="mechanism-hole" cx={x} cy="0" r={holeR} />)}
+        </g>;
+    };
     const pins = [s.p1, s.p2, s.j1, s.j2, s.aux].filter((point): point is Point => Boolean(point));
-    const gear = (center: Point, length: number, className: string, key: string, min = compact ? 8 : 16, max = compact ? 34 : 62) => {
+    const gear = (center: Point, length: number, className: string, key: string, min = compact ? 8 : 16, max = compact ? 34 : 62, rotation = 0) => {
         const outer = radius(length, min, max);
         const teeth = Math.max(8, Math.min(40, Math.round(outer / (compact ? 2.3 : 2.8))));
         const attachment = Math.max(outer * 0.48, holeR * 3);
-        return <g key={key} className={`mechanism-gear-part ${className}`} transform={`translate(${center.x} ${center.y})`}>
+        return <g key={key} className={`mechanism-gear-part ${className}`} transform={`translate(${center.x} ${center.y}) rotate(${rotation})`}>
             <path data-testid={fabricationTest('gear')} className="mechanism-gear-teeth" d={gearPathD(outer, teeth)} />
             <circle data-testid={fabricationTest('hole')} className="mechanism-hole axle-hole" cx="0" cy="0" r={holeR} />
             {[0, Math.PI / 2, Math.PI, Math.PI * 1.5].map((angle, index) => <circle key={index} data-testid={fabricationTest('hole')} className="mechanism-hole" cx={Math.cos(angle) * attachment} cy={Math.sin(angle) * attachment} r={holeR} />)}
         </g>;
     };
-    const gearPreview = (mechanism.type === 'gear' || mechanism.type === 'planetary_gear') && <g data-testid={test('gear')}>
+    const camProfile = (center: Point, length: number) => {
+        const base = radius(length, compact ? 10 : 20, compact ? 34 : 66);
+        const points = Array.from({ length: 42 }, (_, index) => {
+            const angle = (index / 42) * Math.PI * 2;
+            const lift = 0.72 + 0.2 * (1 - Math.cos(angle)) + 0.08 * Math.sin(angle * 2);
+            return `${Math.cos(angle) * base * lift} ${Math.sin(angle) * base * lift}`;
+        });
+        return <g key="cam-body" data-testid={fabricationTest('cam')} className="mechanism-part mechanism-cam" transform={`translate(${center.x} ${center.y}) rotate(${inputAngleDeg})`}>
+            <path className="mechanism-cam-profile" d={`M ${points.join(' L ')} Z`} />
+            <circle data-testid={fabricationTest('hole')} className="mechanism-hole axle-hole" cx="0" cy="0" r={holeR} />
+            <circle className="mechanism-hole" cx={base * 0.45} cy="0" r={holeR} />
+        </g>;
+    };
+    const followerBlock = (center: Point) => <g key="follower" data-testid={fabricationTest('follower')} className="mechanism-part mechanism-output" transform={`translate(${center.x} ${center.y}) rotate(${Math.atan2(normalAxis.y, normalAxis.x) * 180 / Math.PI})`}>
+        <rect data-testid={fabricationTest('part')} x={-barWidth * 1.35} y={-barWidth / 2} width={barWidth * 2.7} height={barWidth} rx={barWidth / 3} />
+        <circle data-testid={fabricationTest('hole')} className="mechanism-hole" cx="0" cy="0" r={holeR} />
+    </g>;
+    const gearPreview = (mechanism.type === 'gear' || mechanism.type === 'planetary_gear' || mechanism.type === '5bar') && <g data-testid={mechanism.type === '5bar' ? undefined : test('gear')}>
         {mechanism.type === 'gear' && <>
-            {gear(s.p1, mechanism.crankLength, 'mechanism-driver', 'gear-a')}
-            {gear(s.p2, mechanism.rockerLength, 'mechanism-link secondary', 'gear-b')}
+            {gear(s.p1, mechanism.crankLength, 'mechanism-driver', 'gear-a', compact ? 8 : 16, compact ? 34 : 62, inputAngleDeg)}
+            {gear(s.p2, mechanism.rockerLength, 'mechanism-link secondary', 'gear-b', compact ? 8 : 16, compact ? 34 : 62, outputAngleDeg)}
         </>}
         {mechanism.type === 'planetary_gear' && <>
-            {gear(s.p1, mechanism.crankLength, 'mechanism-driver', 'sun', compact ? 7 : 12, compact ? 22 : 42)}
-            {gear(s.p2, mechanism.rockerLength, 'mechanism-link secondary', 'planet', compact ? 7 : 12, compact ? 22 : 42)}
+            {gear(s.p1, mechanism.crankLength, 'mechanism-driver', 'sun', compact ? 7 : 12, compact ? 22 : 42, 0)}
+            {gear(s.p2, mechanism.rockerLength, 'mechanism-link secondary', 'planet', compact ? 7 : 12, compact ? 22 : 42, outputAngleDeg)}
             <circle className="mechanism-gear carrier" cx={s.p1.x} cy={s.p1.y} r={Math.max(radius(mechanism.groundLength, compact ? 16 : 30, compact ? 52 : 105), radius(mechanism.crankLength))} />
+        </>}
+        {mechanism.type === '5bar' && <>
+            {gear(s.p1, mechanism.crankLength, 'mechanism-driver', 'fivebar-gear-a', compact ? 7 : 12, compact ? 22 : 42, inputAngleDeg)}
+            {gear(s.p2, mechanism.rockerLength, 'mechanism-driver', 'fivebar-gear-b', compact ? 7 : 12, compact ? 22 : 42, outputAngleDeg)}
         </>}
     </g>;
     const links = (() => {
@@ -2212,25 +2271,38 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
             link(s.aux, s.j2, 'rod-b', 'mechanism-link'),
             link(s.j2, s.effector, 'output', 'mechanism-output', 'output')
         ];
-        if (mechanism.type === 'piston' || mechanism.type === 'yoke' || mechanism.type === 'cam') return [
-            guide(s.j2, s.p1, s.j2, 'guide'),
-            mechanism.type === 'cam'
-                ? gear(s.p1, mechanism.crankLength, 'mechanism-cam', 'cam-body', compact ? 8 : 18, compact ? 32 : 62)
-                : link(s.p1, s.j1, 'driver', 'mechanism-driver', 'driver'),
+        if (mechanism.type === 'piston') return [
+            guideAxis(s.j2, trackAxis, 'guide'),
+            link(s.p1, s.j1, 'driver', 'mechanism-driver', 'driver'),
             link(s.j1, s.j2, 'slider-link', 'mechanism-link', 'link'),
             link(s.j2, s.effector, 'output', 'mechanism-output', 'output')
+        ];
+        if (mechanism.type === 'yoke') return [
+            guideAxis(s.j2, trackAxis, 'guide'),
+            slotPlate(s.j2, normalAxis, radius(mechanism.crankLength, compact ? 28 : 54, compact ? 72 : 130), 'yoke-slot', 'mechanism-link', 'link'),
+            link(s.p1, s.j1, 'driver', 'mechanism-driver', 'driver'),
+            link(s.j2, s.effector, 'output', 'mechanism-output', 'output')
+        ];
+        if (mechanism.type === 'cam') return [
+            guideAxis(s.j2, trackAxis, 'guide'),
+            camProfile(s.p1, mechanism.crankLength),
+            followerBlock(s.j2)
         ];
         if (mechanism.type === 'quick-return') return [
             link(s.p1, s.p2, 'frame', 'mechanism-frame', 'frame'),
             link(s.p1, s.j1, 'driver', 'mechanism-driver', 'driver'),
-            link(s.p2, s.j2, 'slotted-rocker', 'mechanism-link', 'link'),
+            slotPlate({ x: (s.p2.x + s.j2.x) / 2, y: (s.p2.y + s.j2.y) / 2 }, vectorAxis(s.p2, s.j2), Math.hypot(s.j2.x - s.p2.x, s.j2.y - s.p2.y), 'slotted-rocker', 'mechanism-link', 'link'),
             link(s.j2, s.effector, 'output', 'mechanism-output', 'output')
         ];
-        if (mechanism.type === 'gear' || mechanism.type === 'planetary_gear') return [
+        if (mechanism.type === 'gear') return [
             link(s.p1, s.p2, 'gear-frame', 'mechanism-frame', 'frame'),
-            link(s.p1, s.j1, 'gear-driver', 'mechanism-driver', 'driver'),
             link(s.p2, s.j2, 'gear-output-arm', 'mechanism-link', 'link'),
             link(s.j2, s.effector, 'gear-output', 'mechanism-output', 'output')
+        ];
+        if (mechanism.type === 'planetary_gear') return [
+            link(s.p1, s.p2, 'carrier', 'mechanism-driver', 'driver'),
+            link(s.p2, s.j2, 'planet-output-arm', 'mechanism-link', 'link'),
+            link(s.j2, s.effector, 'planet-output', 'mechanism-output', 'output')
         ];
         return [
             link(s.p1, s.p2, 'frame', 'mechanism-frame', 'frame'),
@@ -2241,10 +2313,12 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
         ];
     })();
     return <g data-testid={testId} strokeLinecap="round" strokeLinejoin="round" fill="none">
-        {gearPreview}
-        {links}
-        {pins.map((point, i) => <circle key={i} className="mechanism-pin" cx={point.x} cy={point.y} r={r} />)}
-        <circle data-testid={test('output-point')} className="mechanism-effector" cx={s.effector.x} cy={s.effector.y} r={r + 2}/>
+        <g data-testid={templateTest}>
+            {gearPreview}
+            {links}
+            {pins.map((point, i) => <circle key={i} className="mechanism-pin" cx={point.x} cy={point.y} r={r} />)}
+            <circle data-testid={test('output-point')} className="mechanism-effector" cx={s.effector.x} cy={s.effector.y} r={r + 2}/>
+        </g>
     </g>;
 };
 

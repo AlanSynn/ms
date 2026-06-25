@@ -252,6 +252,11 @@ ALL_MECHANISM_TYPES.forEach(type => {
   assert(templatePhysics.constraints.some(constraint => constraint.mechanismId === mechanism.id), `${type} creates physics mechanism constraints`);
   assertFiniteDeep(templatePhysics, `${type}.templatePhysics`);
 });
+const gearDefault = createDefaultMechanism('gear', 'contract-gear-mesh');
+const gearStart = calculateLinkage(gearDefault, 0);
+const gearQuarter = calculateLinkage(gearDefault, Math.PI / 2);
+assert(Math.abs(Math.hypot(gearStart.p2.x - gearStart.p1.x, gearStart.p2.y - gearStart.p1.y) - (gearDefault.crankLength + gearDefault.rockerLength)) < 1e-9, 'gear template defaults mesh the two pitch circles');
+assert(gearQuarter.j1.y > gearStart.j1.y && gearQuarter.j2.y < gearStart.j2.y, 'gear train reverses output rotation for a negative gear ratio');
 let exportedProject = applyProjectAction(sample, { type: 'set_export', fabricationPackage: createFabricationPackage(sample) });
 assert(exportedProject.lastExport, 'set_export stores generated fabrication package');
 exportedProject = applyProjectAction(exportedProject, { type: 'upsert_mechanism', mechanism: { ...exportedProject.mechanisms[0], enabled: false } });
