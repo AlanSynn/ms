@@ -224,8 +224,10 @@
       .canvas-overlay-toolbar { position: absolute; left: .85rem; top: .85rem; z-index: 18; display: inline-flex; align-items: center; gap: .55rem; border: 1px solid var(--ms-line); border-radius: 999px; background: rgba(255,255,255,.9); box-shadow: 0 12px 32px rgba(15,23,42,.07); padding: .45rem .55rem; backdrop-filter: blur(12px); }
       .canvas-overlay-toolbar h4 { margin: 0; }
       .canvas-status-readout { position: absolute; left: .9rem; bottom: .85rem; z-index: 18; border: 1px solid var(--ms-line); border-radius: 999px; background: rgba(255,255,255,.88); color: var(--ms-muted); box-shadow: 0 12px 32px rgba(15,23,42,.06); padding: .42rem .65rem; font-size: .72rem; font-weight: 900; backdrop-filter: blur(12px); }
-      .foundry-preview { background-color: rgba(255,255,255,.72); background-size: 24px 24px; background-image: linear-gradient(to right, rgba(139,92,246,.07) 1px, transparent 1px), linear-gradient(to bottom, rgba(139,92,246,.07) 1px, transparent 1px); border: 1px solid rgba(148,163,184,.28); box-shadow: inset 0 1px 0 rgba(255,255,255,.92); }
+      .foundry-preview { background-color: rgba(255,255,255,.72); background-size: 24px 24px; background-image: linear-gradient(to right, rgba(139,92,246,.07) 1px, transparent 1px), linear-gradient(to bottom, rgba(139,92,246,.07) 1px, transparent 1px); border: 1px solid rgba(148,163,184,.28); box-shadow: inset 0 1px 0 rgba(255,255,255,.92); cursor: grab; touch-action: none; }
+      .foundry-preview.is-orbiting { cursor: grabbing; }
       .foundry-preview.is-picking-anchor { cursor: crosshair; outline: 3px solid rgba(139,92,246,.32); outline-offset: 3px; }
+      .foundry-camera-chip { color: #5b21b6; border-color: rgba(139,92,246,.25); background: rgba(139,92,246,.1); }
       .foundry-preview-label { fill: var(--ms-text); }
       .foundry-depth-plane { fill: url(#foundry-board-plane); stroke: #cbd5e1; stroke-width: 1.4; filter: drop-shadow(10px 15px 18px rgba(15,23,42,.12)); }
       .foundry-depth-grid { fill: none; stroke: #93c5fd; stroke-width: .7; opacity: .5; }

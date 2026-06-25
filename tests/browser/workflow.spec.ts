@@ -967,6 +967,51 @@ test('Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking'
   await expect(page.getByTestId('foundry-toolbar-state')).toContainText('paused');
 });
 
+test('Mechanism Foundry supports CAD-style 3D camera presets and drag orbit', async ({ page }) => {
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByRole('button', { name: /Mechanism Foundry/i }).click();
+
+  const rig = page.getByTestId('foundry-camera-rig');
+  await expect(rig).toHaveAttribute('data-camera-preset', 'iso');
+  await expect(page.getByTestId('foundry-camera-readout')).toContainText('3D Iso');
+  const isoTransform = await rig.getAttribute('transform');
+
+  const boardHoleSvg = { x: 212, y: 120 - (40 / 680) * 240 };
+  const boardHoleScreen = await rig.evaluate((element: SVGGElement, point) => {
+    const svg = element.ownerSVGElement!;
+    const svgPoint = svg.createSVGPoint();
+    svgPoint.x = point.x;
+    svgPoint.y = point.y;
+    const screenPoint = svgPoint.matrixTransform(element.getScreenCTM()!);
+    return { x: screenPoint.x, y: screenPoint.y };
+  }, boardHoleSvg);
+  await page.getByTestId('foundry-pick-anchor').click();
+  await page.mouse.click(boardHoleScreen.x, boardHoleScreen.y);
+  const pickedMarker = await page.getByTestId('foundry-anchor-marker').getAttribute('transform');
+  const pickedCoords = pickedMarker?.match(/translate\(([-\d.]+) ([-\d.]+)/);
+  expect(pickedCoords, 'anchor marker keeps transformed pick in camera-local SVG coordinates').toBeTruthy();
+  expect(Number(pickedCoords![1])).toBeCloseTo(boardHoleSvg.x, 1);
+  expect(Number(pickedCoords![2])).toBeCloseTo(boardHoleSvg.y, 1);
+
+  await page.getByRole('button', { name: 'Front view' }).click();
+  await expect(rig).toHaveAttribute('data-camera-preset', 'front');
+  await expect(page.getByTestId('foundry-camera-readout')).toContainText('3D Front');
+  await expect(rig).not.toHaveAttribute('transform', isoTransform ?? '');
+
+  const yawBeforeDrag = await rig.getAttribute('data-camera-yaw');
+  const previewBox = await page.getByTestId('foundry-preview').boundingBox();
+  expect(previewBox, 'foundry preview supports direct orbit dragging').toBeTruthy();
+  await page.mouse.move(previewBox!.x + previewBox!.width * 0.5, previewBox!.y + previewBox!.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.move(previewBox!.x + previewBox!.width * 0.64, previewBox!.y + previewBox!.height * 0.42);
+  await page.mouse.up();
+
+  await expect(rig).toHaveAttribute('data-camera-preset', 'custom');
+  await expect(page.getByTestId('foundry-camera-readout')).toContainText('3D Drag orbit');
+  expect(await rig.getAttribute('data-camera-yaw')).not.toBe(yawBeforeDrag);
+});
+
 test('Camera capture dialog uses browser getUserMedia and reports permission denial', async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'mediaDevices', {

@@ -47,7 +47,28 @@ import girlStarterUrl from './resources/examples/raw/girl.png?url';
 import boyStarterUrl from './resources/examples/raw/boy.PNG?url';
 
 type FoundryState = MechanismConfig;
+type FoundryViewPreset = 'front' | 'iso' | 'side' | 'top' | 'custom';
+type FoundryCamera = { yaw: number; pitch: number; preset: FoundryViewPreset };
 type StarterImageTemplate = { id: string; label: string; fileName: string; description: string; url: string };
+
+const FOUNDRY_VIEW_PRESETS: Record<Exclude<FoundryViewPreset, 'custom'>, { label: string; yaw: number; pitch: number }> = {
+    front: { label: 'Front', yaw: 0, pitch: 0 },
+    iso: { label: 'Iso', yaw: -32, pitch: 24 },
+    side: { label: 'Side', yaw: 64, pitch: 12 },
+    top: { label: 'Top', yaw: 0, pitch: 62 }
+};
+
+const clampFoundryPitch = (value: number) => Math.max(-64, Math.min(68, value));
+const foundryCameraTransform = ({ yaw, pitch }: FoundryCamera) => {
+    const yawRad = yaw * Math.PI / 180;
+    const pitchRad = pitch * Math.PI / 180;
+    const squash = 0.58 + Math.cos(pitchRad) * 0.24;
+    const skew = Math.sin(yawRad) * 16;
+    const rotation = yaw * 0.08;
+    const lift = -Math.sin(pitchRad) * 9;
+    const drift = Math.sin(yawRad) * 11;
+    return `translate(180 120) translate(${drift.toFixed(2)} ${lift.toFixed(2)}) rotate(${rotation.toFixed(2)}) skewX(${skew.toFixed(2)}) scale(1 ${squash.toFixed(3)}) translate(-180 -120)`;
+};
 
 const STARTER_IMAGE_TEMPLATES: StarterImageTemplate[] = [
     { id: 'girl', label: 'Girl starter', fileName: 'girl.png', description: 'Flat vector pose from resources/examples/raw/girl.png.', url: girlStarterUrl },
@@ -1831,6 +1852,10 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const [showTrail, setShowTrail] = useState(false);
     const [showPathPreview, setShowPathPreview] = useState(true);
     const [showSensemaking, setShowSensemaking] = useState(true);
+    const [foundryCamera, setFoundryCamera] = useState<FoundryCamera>({ ...FOUNDRY_VIEW_PRESETS.iso, preset: 'iso' });
+    const [isOrbitingFoundry, setIsOrbitingFoundry] = useState(false);
+    const foundryOrbitStartRef = useRef<{ pointerId: number; x: number; y: number; yaw: number; pitch: number } | null>(null);
+    const foundryCameraRigRef = useRef<SVGGElement | null>(null);
     const targetReady = Boolean(selectedPart && selectedPath && selectedPath.enabled && selectedPath.points.length >= 3);
     const rawLanding = manualAnchor ?? selectedPath?.points[0] ?? (selectedPart ? bodyPartPivotScene(selectedPart, project.skeleton) : { x: foundry.anchorX ?? 0, y: foundry.anchorY ?? 0 });
     const landingBoard = sceneToBoard(rawLanding, project.settings.physicalKit);
@@ -1851,6 +1876,8 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const previousPoint = previewPoints[Math.max(0, playIndex - 1)] ?? playhead;
     const nextPoint = previewPoints[Math.min(previewPoints.length - 1, playIndex + 1)] ?? playhead;
     const hardBlocked = !targetReady || range.percentValid === 0 || !Number.isFinite(landing.x) || !Number.isFinite(landing.y);
+    const foundryCameraTransformValue = foundryCameraTransform(foundryCamera);
+    const foundryCameraLabel = foundryCamera.preset === 'custom' ? 'Drag orbit' : FOUNDRY_VIEW_PRESETS[foundryCamera.preset].label;
     const applyAnchor = (point: Point) => {
         const board = sceneToBoard(point, project.settings.physicalKit);
         const snapped = boardToScene(board.col, board.row, project.settings.physicalKit);
@@ -1866,7 +1893,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const handleAnchorPick = (event: React.MouseEvent<SVGSVGElement>) => {
         if (!isPickingAnchor) return;
         const svg = event.currentTarget;
-        const matrix = svg.getScreenCTM();
+        const matrix = foundryCameraRigRef.current?.getScreenCTM() ?? svg.getScreenCTM();
         if (!matrix) return;
         const point = svg.createSVGPoint();
         point.x = event.clientX;
@@ -1874,6 +1901,30 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
         const { x, y } = point.matrixTransform(matrix.inverse());
         applyAnchor({ x: ((x / 360) - 0.5) * SCENE_VIEW.width, y: (0.5 - (y / 240)) * SCENE_VIEW.height });
         setIsPickingAnchor(false);
+    };
+    const setCameraPreset = (preset: Exclude<FoundryViewPreset, 'custom'>) => setFoundryCamera({ ...FOUNDRY_VIEW_PRESETS[preset], preset });
+    const handleFoundryPointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
+        if (isPickingAnchor || event.button !== 0) return;
+        foundryOrbitStartRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, yaw: foundryCamera.yaw, pitch: foundryCamera.pitch };
+        setIsOrbitingFoundry(true);
+        event.currentTarget.setPointerCapture(event.pointerId);
+    };
+    const handleFoundryPointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
+        const start = foundryOrbitStartRef.current;
+        if (!start || start.pointerId !== event.pointerId) return;
+        event.preventDefault();
+        setFoundryCamera({
+            yaw: start.yaw + (event.clientX - start.x) * 0.45,
+            pitch: clampFoundryPitch(start.pitch - (event.clientY - start.y) * 0.45),
+            preset: 'custom'
+        });
+    };
+    const finishFoundryOrbit = (event: React.PointerEvent<SVGSVGElement>) => {
+        if (foundryOrbitStartRef.current?.pointerId === event.pointerId) {
+            foundryOrbitStartRef.current = null;
+            setIsOrbitingFoundry(false);
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+        }
     };
     const updateFoundryParam = (key: keyof MechanismConfig, value: number) => {
         if (key === 'anchorX' || key === 'anchorY') {
@@ -1978,8 +2029,8 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             </StageLeftSummary>
         </div>),
             canvas: canvasPane(<section className="path-canvas-shell foundry-canvas-shell canvas-workspace p-0">
-            <div className="canvas-overlay-toolbar foundry-preview-toolbar"><h4 className="section-title">Sandbox preview</h4><span className="chip">{foundryPlaying ? 'Simulation active' : 'Paused'}</span></div>
-            <svg viewBox="0 0 360 240" data-testid="foundry-preview" onClick={handleAnchorPick} className={`foundry-preview h-[520px] w-full ${isPickingAnchor ? 'is-picking-anchor' : ''}`} aria-label="Mechanism Foundry CAD-like 2.5D sandbox preview">
+            <div className="canvas-overlay-toolbar foundry-preview-toolbar"><h4 className="section-title">Sandbox preview</h4><span className="chip">{foundryPlaying ? 'Simulation active' : 'Paused'}</span><span className="chip foundry-camera-chip" data-testid="foundry-camera-readout">3D {foundryCameraLabel} · {Math.round(foundryCamera.yaw)}°/{Math.round(foundryCamera.pitch)}°</span></div>
+            <svg viewBox="0 0 360 240" data-testid="foundry-preview" onClick={handleAnchorPick} onPointerDown={handleFoundryPointerDown} onPointerMove={handleFoundryPointerMove} onPointerUp={finishFoundryOrbit} onPointerCancel={finishFoundryOrbit} className={`foundry-preview h-[520px] w-full ${isPickingAnchor ? 'is-picking-anchor' : ''} ${isOrbitingFoundry ? 'is-orbiting' : ''}`} aria-label="Mechanism Foundry CAD-like 2.5D sandbox preview">
                 <defs>
                     <pattern id="foundry-cad-grid" width="18" height="18" patternUnits="userSpaceOnUse">
                         <path d="M 18 0 L 0 0 0 18" fill="none" stroke="#93c5fd" strokeWidth="0.55" opacity="0.38" />
@@ -1992,30 +2043,32 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                         <feDropShadow dx="8" dy="10" stdDeviation="6" floodColor="#1e293b" floodOpacity="0.18" />
                     </filter>
                 </defs>
-                <FoundryDepthOverlay />
-                {showTrail && <path data-testid="foundry-trail-overlay" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="12" strokeLinecap="round" opacity="0.12"/>}
-                {showPathPreview && <path data-testid="foundry-path-preview" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="3" strokeLinecap="round" strokeDasharray="9 7" opacity="0.52"/>}
-                <g data-testid="foundry-depth-scene" className="foundry-depth-scene" filter="url(#foundry-depth-shadow-filter)">
-                    <MechanismLinkagePreview mechanism={landedFoundry} simulation={selectedSimulation} kit={project.settings.physicalKit} testId="foundry-selected-linkage" />
+                <g ref={foundryCameraRigRef} data-testid="foundry-camera-rig" data-camera-preset={foundryCamera.preset} data-camera-yaw={foundryCamera.yaw.toFixed(1)} data-camera-pitch={foundryCamera.pitch.toFixed(1)} transform={foundryCameraTransformValue}>
+                    <FoundryDepthOverlay />
+                    {showTrail && <path data-testid="foundry-trail-overlay" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="12" strokeLinecap="round" opacity="0.12"/>}
+                    {showPathPreview && <path data-testid="foundry-path-preview" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="3" strokeLinecap="round" strokeDasharray="9 7" opacity="0.52"/>}
+                    <g data-testid="foundry-depth-scene" className="foundry-depth-scene" filter="url(#foundry-depth-shadow-filter)">
+                        <MechanismLinkagePreview mechanism={landedFoundry} simulation={selectedSimulation} kit={project.settings.physicalKit} testId="foundry-selected-linkage" />
+                    </g>
+                    {showForces && playhead && <g data-testid="foundry-forces-overlay" stroke="#ef4444" strokeWidth="3" strokeLinecap="round">
+                        <line x1={playhead.x} y1={playhead.y} x2={180} y2={120} />
+                        <line x1={playhead.x} y1={playhead.y} x2={playhead.x} y2={Math.max(22, playhead.y - 42)} />
+                    </g>}
+                    {showVelocity && playhead && <g data-testid="foundry-velocity-overlay" stroke="#10b981" strokeWidth="4" strokeLinecap="round">
+                        <line x1={playhead.x} y1={playhead.y} x2={playhead.x + (nextPoint.x - previousPoint.x) * 2.2} y2={playhead.y + (nextPoint.y - previousPoint.y) * 2.2} />
+                    </g>}
+                    {playhead && <circle data-testid="foundry-playhead" cx={playhead.x} cy={playhead.y} r="7" fill="#f472b6" stroke="white" strokeWidth="3" />}
+                    <g data-testid="foundry-anchor-marker" transform={`translate(${anchorMarker.x} ${anchorMarker.y})`}>
+                        <circle r="8" fill="#ffffff" stroke="#8b5cf6" strokeWidth="3" />
+                        <path d="M -13 0 H 13 M 0 -13 V 13" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" />
+                        <text x="12" y="-10" fill="#5b21b6" fontSize="8" fontWeight="900">{landingBoard.label}</text>
+                    </g>
+                    <FoundrySpacerStack points={[selectedSimulation.state.p1, selectedSimulation.state.p2, selectedSimulation.state.j1, selectedSimulation.state.j2, selectedSimulation.state.aux, selectedSimulation.state.effector]} />
+                    <text x="22" y="38" className="foundry-preview-label" fontSize="8" fontWeight="900">{library.label} · {range.percentValid === 1 ? '360° valid' : range.warning} · {Z_STACK_LABEL}</text>
                 </g>
-                {showForces && playhead && <g data-testid="foundry-forces-overlay" stroke="#ef4444" strokeWidth="3" strokeLinecap="round">
-                    <line x1={playhead.x} y1={playhead.y} x2={180} y2={120} />
-                    <line x1={playhead.x} y1={playhead.y} x2={playhead.x} y2={Math.max(22, playhead.y - 42)} />
-                </g>}
-                {showVelocity && playhead && <g data-testid="foundry-velocity-overlay" stroke="#10b981" strokeWidth="4" strokeLinecap="round">
-                    <line x1={playhead.x} y1={playhead.y} x2={playhead.x + (nextPoint.x - previousPoint.x) * 2.2} y2={playhead.y + (nextPoint.y - previousPoint.y) * 2.2} />
-                </g>}
-                {playhead && <circle data-testid="foundry-playhead" cx={playhead.x} cy={playhead.y} r="7" fill="#f472b6" stroke="white" strokeWidth="3" />}
-                <g data-testid="foundry-anchor-marker" transform={`translate(${anchorMarker.x} ${anchorMarker.y})`}>
-                    <circle r="8" fill="#ffffff" stroke="#8b5cf6" strokeWidth="3" />
-                    <path d="M -13 0 H 13 M 0 -13 V 13" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" />
-                    <text x="12" y="-10" fill="#5b21b6" fontSize="8" fontWeight="900">{landingBoard.label}</text>
-                </g>
-                <FoundrySpacerStack points={[selectedSimulation.state.p1, selectedSimulation.state.p2, selectedSimulation.state.j1, selectedSimulation.state.j2, selectedSimulation.state.aux, selectedSimulation.state.effector]} />
                 <FoundryAngleStrip mechanism={landedFoundry} phase={foundryPhase} kit={project.settings.physicalKit} />
-                <text x="22" y="38" className="foundry-preview-label" fontSize="8" fontWeight="900">{library.label} · {range.percentValid === 1 ? '360° valid' : range.warning} · {Z_STACK_LABEL}</text>
             </svg>
-            <div className="canvas-status-readout" data-testid="foundry-toolbar-state">Toolbar: {foundryPlaying ? 'playing' : 'paused'} · path {showPathPreview ? 'shown' : 'hidden'} · phase {Math.round(foundryPhase * 180 / Math.PI)}°</div>
+            <div className="canvas-status-readout" data-testid="foundry-toolbar-state">Toolbar: {foundryPlaying ? 'playing' : 'paused'} · path {showPathPreview ? 'shown' : 'hidden'} · camera {foundryCameraLabel} · phase {Math.round(foundryPhase * 180 / Math.PI)}°</div>
         </section>),
             inspector: inspectorPane(<div className="stage-pane-stack">
             <div>
@@ -2050,6 +2103,13 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                     <button type="button" className={`btn-secondary ${showPathPreview ? 'active' : ''}`} aria-pressed={showPathPreview} onClick={() => setShowPathPreview(!showPathPreview)}>Path Preview</button>
                     <button type="button" className={`btn-secondary ${showSensemaking ? 'active' : ''}`} aria-pressed={showSensemaking} onClick={() => setShowSensemaking(!showSensemaking)}>Show Sensemaking</button>
                     <button type="button" className="btn-secondary" onClick={() => setShowSensemaking(true)}>Back to Gallery</button>
+                </div>
+                <div className="font-bold text-slate-800 mt-4">3D camera</div>
+                <p className="mt-1 text-xs font-bold uppercase tracking-wider text-slate-500">Drag the sandbox to orbit. Use presets for CAD-style inspection.</p>
+                <div className="foundry-toolbar mt-2" data-testid="foundry-camera-controls">
+                    {(Object.entries(FOUNDRY_VIEW_PRESETS) as Array<[Exclude<FoundryViewPreset, 'custom'>, { label: string; yaw: number; pitch: number }]>).map(([preset, view]) =>
+                        <button key={preset} type="button" data-testid={`foundry-camera-preset-${preset}`} className={`btn-secondary ${foundryCamera.preset === preset ? 'active' : ''}`} aria-pressed={foundryCamera.preset === preset} onClick={() => setCameraPreset(preset)}>{view.label} view</button>
+                    )}
                 </div>
             </div>
         </div>)
