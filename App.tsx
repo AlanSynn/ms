@@ -618,9 +618,9 @@ const App: React.FC = () => {
                         {stage === 'blueprint' && <BlueprintExport project={project} config={mechanismConfig} setConfig={setMechanismConfig} dispatch={dispatch} goStage={goStage} isPlaying={isPlaying} angle={angle} setAngle={setAngle} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {stage === 'options' && <Options project={project} dispatch={dispatch} />}
                     </div>
-                    <WorkflowStatusStrip stage={stage} project={project} selectedPart={selectedPart} selectedPath={selectedPath} />
+                    {stage !== 'character' && <WorkflowStatusStrip stage={stage} project={project} selectedPart={selectedPart} selectedPath={selectedPath} />}
                     {stage !== 'character' && <WorkspacePlayerDock isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} speed={project.settings.animationSpeed} />}
-                    <footer className="status-bar" data-testid="status-bar">{commandStatus} · parts:{project.partOrder.length} · paths:{Object.keys(project.paths).length} · mechs:{project.mechanisms.length} · zoom {Math.round(canvasViewport.zoom * 100)}%</footer>
+                    {stage !== 'character' && <footer className="status-bar" data-testid="status-bar">{commandStatus} · parts:{project.partOrder.length} · paths:{Object.keys(project.paths).length} · mechs:{project.mechanisms.length} · zoom {Math.round(canvasViewport.zoom * 100)}%</footer>}
                 </section>
             </div>
             <CameraCaptureDialog isOpen={showCamera} onClose={() => setShowCamera(false)} onCapture={file => { setShowCamera(false); runWebOnnx(file); }} />
@@ -798,62 +798,102 @@ const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setRe
     <div className="onboarding-page">
         <section className="onboarding-hero">
             <div className="onboarding-copy animate-rise">
-                <div className="accent-label section-title">Start with a template</div>
+                <div className="landing-brand">
+                    <span>MotionSmith</span>
+                    <small>local ONNX · real blueprints</small>
+                </div>
                 <h1>MechAnim</h1>
-                <h3>Pick a motion, then draw the path.</h3>
-                <p>Choose a real starter project or load your own character package. Everything flows into paths, mechanisms, and blueprint export.</p>
+                <h3>Draw the path. Build the motion.</h3>
+                <p>Start with a rigged character, sketch a free path, fit a mechanism, then export the assembly guide.</p>
+                <div className="landing-steps" aria-label="Workflow preview">
+                    <span>1 Character</span>
+                    <span>2 Free path</span>
+                    <span>3 Mechanism</span>
+                    <span>4 Blueprint</span>
+                </div>
             </div>
-            <div className="template-gallery" data-testid="template-gallery">
-                <button type="button" className="template-tile primary" onClick={onSample}>
-                    <span className="template-kicker">Best first choice</span>
-                    <strong>Waving arm</strong>
-                    <span>Right arm path + four-bar linkage, ready to preview and export.</span>
-                    <small>6 parts · 17 joints · 1 path · 1 mechanism</small>
-                    <b><Sparkles size={16}/> Open Waving arm</b>
-                </button>
-                {starterTemplates.map(template => (
-                    <button key={template.id} type="button" className="template-tile starter cursor-pointer" onClick={() => onStarterImage(template)}>
-                        <img className="starter-thumb" src={template.url} alt="" />
-                        <span className="template-kicker">Starter image</span>
-                        <strong>{template.label}</strong>
-                        <span>{template.description}</span>
-                        <small>Runs the same browser ONNX rigging flow.</small>
-                        <b><BrainCircuit size={16}/> Create from {template.id}</b>
+
+            <div className="landing-board">
+                <div className="landing-sketch" aria-hidden="true">
+                    <svg viewBox="0 0 460 420" role="img">
+                        <defs>
+                            <pattern id="landing-grid" width="32" height="32" patternUnits="userSpaceOnUse">
+                                <path d="M32 0H0V32" fill="none" stroke="#e2e8f0" strokeWidth="1"/>
+                            </pattern>
+                            <filter id="landing-soft-shadow" x="-20%" y="-20%" width="140%" height="140%">
+                                <feDropShadow dx="0" dy="18" stdDeviation="18" floodColor="#8b5cf6" floodOpacity=".16"/>
+                            </filter>
+                        </defs>
+                        <rect width="460" height="420" rx="32" fill="#fff"/>
+                        <rect x="18" y="18" width="424" height="384" rx="28" fill="url(#landing-grid)" stroke="#dbe3f1"/>
+                        <g filter="url(#landing-soft-shadow)">
+                            <rect x="190" y="72" width="80" height="74" rx="26" fill="#d8dee8"/>
+                            <rect x="154" y="150" width="152" height="138" rx="34" fill="#cbd5e1"/>
+                            <rect x="96" y="164" width="50" height="138" rx="25" fill="#d8dee8" transform="rotate(13 121 233)"/>
+                            <rect x="312" y="162" width="50" height="138" rx="25" fill="#d8dee8" transform="rotate(-13 337 231)"/>
+                            <rect x="166" y="296" width="56" height="128" rx="28" fill="#d8dee8" transform="rotate(4 194 360)"/>
+                            <rect x="244" y="296" width="56" height="128" rx="28" fill="#d8dee8" transform="rotate(-4 272 360)"/>
+                        </g>
+                        <path d="M333 180 C395 154 424 204 394 248 S342 295 354 336" fill="none" stroke="#8b5cf6" strokeWidth="8" strokeLinecap="round"/>
+                        <path d="M333 180 C392 158 421 205 394 248 S342 295 354 336" fill="none" stroke="#f472b6" strokeWidth="3" strokeDasharray="8 8" strokeLinecap="round"/>
+                        {[[230,118],[230,172],[230,226],[154,158],[306,158],[132,232],[328,232],[194,340],[272,340]].map(([x, y]) => (
+                            <circle key={`${x}-${y}`} cx={x} cy={y} r="7" fill="#fff" stroke="#64748b" strokeWidth="5"/>
+                        ))}
+                    </svg>
+                    <div className="landing-sketch-label">
+                        <strong>Starter preview</strong>
+                        <span>6 parts · 17 joints · 1 path</span>
+                    </div>
+                </div>
+
+                <div className="template-gallery" data-testid="template-gallery">
+                    <button type="button" className="template-tile primary" onClick={onSample}>
+                        <span className="template-kicker">Start fastest</span>
+                        <strong>Waving arm</strong>
+                        <span>Ready path + four-bar.</span>
+                        <b><Sparkles size={16}/> Open Waving arm</b>
                     </button>
-                ))}
-                <button type="button" className="template-tile cursor-pointer" onClick={() => packageInputRef.current?.click()}>
-                    <span className="template-kicker">Use your art</span>
-                    <strong>Blank character</strong>
-                    <span>Load a character package with artwork and skeleton. No fake mechanism is added.</span>
-                    <small>Package review · 0 mechanisms</small>
-                    <b><FileJson size={16}/> Load package</b>
-                </button>
-                <input ref={packageInputRef} data-testid="blank-package-input" hidden type="file" multiple accept=".json,.yaml,.yml,image/png,image/jpeg,image/webp,image/svg+xml" onChange={e => {
-                    const files = e.currentTarget.files ? Array.from(e.currentTarget.files) as File[] : [];
-                    e.currentTarget.value = '';
-                    if (files.length) onPackage(files);
-                }}/>
-                <button type="button" className="template-tile cursor-pointer" onClick={() => onnxInputRef.current?.click()}>
-                    <span className="template-kicker">Image assist</span>
-                    <strong>Create from image</strong>
-                    <span>Analyze one image locally, then review the generated character package.</span>
-                    <small>Private on-device processing</small>
-                    <b><BrainCircuit size={16}/> Choose image</b>
-                </button>
-                <input ref={onnxInputRef} data-testid="onnx-input" hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={e => {
-                    const file = e.currentTarget.files?.[0];
-                    e.currentTarget.value = '';
-                    if (file) onProcess(file);
-                }}/>
-                <button type="button" className="template-tile cursor-pointer" onClick={onCamera}>
-                    <span className="template-kicker">Camera</span>
-                    <strong>Capture Camera</strong>
-                    <span>Use the browser camera, capture one frame, then run the same local ONNX package review.</span>
-                    <small>Permission required · no mock camera</small>
-                    <b><Camera size={16}/> Capture Camera</b>
-                </button>
+                    {starterTemplates.map(template => (
+                        <button key={template.id} type="button" className="template-tile starter cursor-pointer" onClick={() => onStarterImage(template)}>
+                            <img className="starter-thumb" src={template.url} alt="" />
+                            <span className="template-kicker">Image</span>
+                            <strong>{template.label}</strong>
+                            <span>Browser ONNX rigging.</span>
+                            <b><BrainCircuit size={16}/> Create from {template.id}</b>
+                        </button>
+                    ))}
+                    <button type="button" className="template-tile cursor-pointer" onClick={() => packageInputRef.current?.click()}>
+                        <span className="template-kicker">Package</span>
+                        <strong>Blank character</strong>
+                        <span>Load art + skeleton.</span>
+                        <b><FileJson size={16}/> Load package</b>
+                    </button>
+                    <input ref={packageInputRef} data-testid="blank-package-input" hidden type="file" multiple accept=".json,.yaml,.yml,image/png,image/jpeg,image/webp,image/svg+xml" onChange={e => {
+                        const files = e.currentTarget.files ? Array.from(e.currentTarget.files) as File[] : [];
+                        e.currentTarget.value = '';
+                        if (files.length) onPackage(files);
+                    }}/>
+                    <button type="button" className="template-tile cursor-pointer" onClick={() => onnxInputRef.current?.click()}>
+                        <span className="template-kicker">Private</span>
+                        <strong>Create from image</strong>
+                        <span>Local on-device processing.</span>
+                        <b><BrainCircuit size={16}/> Choose image</b>
+                    </button>
+                    <input ref={onnxInputRef} data-testid="onnx-input" hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={e => {
+                        const file = e.currentTarget.files?.[0];
+                        e.currentTarget.value = '';
+                        if (file) onProcess(file);
+                    }}/>
+                    <button type="button" className="template-tile cursor-pointer" onClick={onCamera}>
+                        <span className="template-kicker">Camera</span>
+                        <strong>Capture Camera</strong>
+                        <span>Capture one frame.</span>
+                        <b><Camera size={16}/> Capture Camera</b>
+                    </button>
+                </div>
             </div>
         </section>
+
         <section className="onboarding-secondary">
             <div className="secondary-actions">
                 <button type="button" className="btn-secondary cursor-pointer" onClick={() => importInputRef.current?.click()}><Upload size={16}/> Import project</button><input ref={importInputRef} data-testid="onboarding-import-input" hidden type="file" accept="application/json,.json" onChange={e => {
@@ -861,31 +901,34 @@ const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setRe
                     e.currentTarget.value = '';
                     if (file) onImport(file);
                 }}/>
-                <label className="flex items-center gap-2 text-sm font-bold text-slate-600"><input type="checkbox" checked={replaceCharacter} onChange={e => setReplaceCharacter(e.target.checked)} /> Replace current character and preserve compatible mechanisms</label>
+                <label className="replace-toggle"><input aria-label="Replace current character and preserve compatible mechanisms" type="checkbox" checked={replaceCharacter} onChange={e => setReplaceCharacter(e.target.checked)} /> Preserve mechanisms when replacing character</label>
             </div>
-            <div className="workspace mt-5 grid gap-4 p-5 md:grid-cols-3" data-testid="character-processing-panel">
-                <div>
-                    <h4 className="section-title">Processing Steps</h4>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                        <button className="btn-primary" onClick={() => onnxInputRef.current?.click()}>Process Image (Skeleton)</button>
-                        <button className="btn-secondary" onClick={onEditCharacter}>Edit Skeleton</button>
-                        <button className="btn-secondary" onClick={onSaveSkeleton}>Save Skeleton</button>
-                        <button className="btn-secondary" onClick={() => onnxInputRef.current?.click()}>Generate Body Parts</button>
+            <details className="advanced-panel landing-tools" data-testid="character-processing-panel">
+                <summary>Advanced import tools</summary>
+                <div className="landing-tools-grid">
+                    <div>
+                        <h4 className="section-title">Processing Steps</h4>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            <button className="btn-primary" onClick={() => onnxInputRef.current?.click()}>Process Image (Skeleton)</button>
+                            <button className="btn-secondary" onClick={onEditCharacter}>Edit Skeleton</button>
+                            <button className="btn-secondary" onClick={onSaveSkeleton}>Save Skeleton</button>
+                            <button className="btn-secondary" onClick={() => onnxInputRef.current?.click()}>Generate Body Parts</button>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 className="section-title">Recognition Editing</h4>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            <button className="btn-secondary" onClick={onEditCharacter}>Edit Parts / Skeleton / Boxes</button>
+                            <button className="btn-secondary" onClick={onEditCharacter}>Edit Skeleton Joints</button>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 className="section-title">Download / Output Location</h4>
+                        <div className="mt-3 flex flex-wrap gap-2"><button className="btn-secondary" onClick={onChooseSaveFolder}>Choose Save Folder…</button></div>
+                        <p className="mt-2 text-xs font-bold text-slate-500">Web exports still use browser-safe downloads.</p>
                     </div>
                 </div>
-                <div>
-                    <h4 className="section-title">Recognition Editing</h4>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                        <button className="btn-secondary" onClick={onEditCharacter}>Edit Parts / Skeleton / Boxes</button>
-                        <button className="btn-secondary" onClick={onEditCharacter}>Edit Skeleton Joints</button>
-                    </div>
-                </div>
-                <div>
-                    <h4 className="section-title">Download / Output Location</h4>
-                    <div className="mt-3 flex flex-wrap gap-2"><button className="btn-secondary" onClick={onChooseSaveFolder}>Choose Save Folder…</button></div>
-                    <p className="mt-2 text-xs font-bold text-slate-500">Web exports still use browser-safe downloads.</p>
-                </div>
-            </div>
+            </details>
             <details className="advanced-panel import-status" open={statusOpen}>
                 <summary>Import status</summary>
                 <div className="mt-3"><ProgressBlock project={project} /></div>

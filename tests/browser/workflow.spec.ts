@@ -31,12 +31,13 @@ test('character → path → foundry → design → blueprint runs end-to-end in
 
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'MechAnim' })).toBeVisible();
-  await expect(page.getByText('Start with a template')).toBeVisible();
+  await expect(page.getByText('Draw the path. Build the motion.')).toBeVisible();
   await expect(page.getByTestId('template-gallery')).toContainText('Waving arm');
   await expect(page.getByTestId('template-gallery')).toContainText('Girl starter');
   await expect(page.getByTestId('template-gallery')).toContainText('Boy starter');
   await expect(page.getByTestId('template-gallery')).toContainText('Blank character');
-  await expect(page.getByText('Private on-device processing')).toBeVisible();
+  await expect(page.getByText('Local on-device processing.')).toBeVisible();
+  expect(await page.evaluate(() => document.scrollingElement!.scrollHeight <= document.scrollingElement!.clientHeight + 8)).toBe(true);
   expect(await page.locator('.starter-thumb').evaluateAll(images => images.every(img => (img as HTMLImageElement).naturalWidth > 0))).toBe(true);
   await expect(page.getByText('parts_info.json package artifact')).toBeHidden();
   await expect(page.getByTestId('onboarding-import-input')).toBeAttached();
@@ -250,6 +251,7 @@ test('Character Selection processing controls route to real browser workflows', 
 
   await page.goto('/');
   await expect(page.getByTestId('character-processing-panel')).toContainText('Processing Steps');
+  await page.getByText('Advanced import tools').click();
 
   const skeletonChooserPromise = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Process Image (Skeleton)', exact: true }).click();
