@@ -71,6 +71,31 @@ const stageNavLabel = (stage: AppStage) => ({
     blueprint: 'Blueprint'
 } as Partial<Record<AppStage, string>>)[stage];
 
+
+const STAGE_PANE_NAV_ITEMS: Array<{ ariaLabel: string; label: string; target: AppStage; activeStages: AppStage[]; icon: 'route' | 'boxes' | 'download' }> = [
+    { ariaLabel: 'Rail motion path', label: 'Motion path', target: 'path', activeStages: ['path'], icon: 'route' },
+    { ariaLabel: 'Rail mechanism parameters', label: 'Parameters', target: 'design', activeStages: ['foundry', 'design'], icon: 'boxes' },
+    { ariaLabel: 'Rail export package', label: 'Blueprint export', target: 'blueprint', activeStages: ['blueprint'], icon: 'download' }
+];
+
+const OPTIONS_SECTION_MANIFEST = [
+    { id: 'appearance', label: 'Appearance', description: 'Keep the interface light and show only the panels you need.' },
+    { id: 'simulation', label: 'Simulation', description: 'Preview timing for one full motion loop.' },
+    { id: 'performance', label: 'Performance', description: 'Choose how hard path fitting and snap checks work.' },
+    { id: 'debugging', label: 'Debugging', description: 'Turn on labels when something feels off.' },
+    { id: 'workflow', label: 'Workflow', description: 'Autosave is local to this browser.' },
+    { id: 'fabrication', label: 'Fabrication / Blueprint export', description: 'Match the preview grid to the physical sheet and board holes.' },
+    { id: 'units', label: 'Units', description: 'Only labels change; fabrication still stores millimeters.' }
+] as const;
+
+type OptionsSectionMeta = typeof OPTIONS_SECTION_MANIFEST[number];
+const optionSection = (id: OptionsSectionMeta['id']) => OPTIONS_SECTION_MANIFEST.find(section => section.id === id)!;
+const StagePaneNavIcon = ({ icon }: { icon: typeof STAGE_PANE_NAV_ITEMS[number]['icon'] }) => {
+    if (icon === 'boxes') return <Boxes size={16}/>;
+    if (icon === 'download') return <Download size={16}/>;
+    return <Route size={16}/>;
+};
+
 const PARAMS: Array<{ key: keyof MechanismConfig; label: string; min: number; max: number; step?: number }> = [
     { key: 'anchorX', label: 'anchor X', min: -260, max: 260, step: 40 },
     { key: 'anchorY', label: 'anchor Y', min: -260, max: 260, step: 40 },
@@ -518,37 +543,18 @@ const App: React.FC = () => {
     };
     const disabledCommand = (reason: string) => setCommandStatus(reason);
     const themeClass = project.settings.theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-950';
-    const sideLinkClass = (targets: AppStage[]) => `workspace-side-link ${targets.includes(stage) ? 'active' : ''}`;
     const stageMeta = STAGES.find(s => s.id === stage);
+    const playerDock = stage !== 'character' && stage !== 'foundry'
+        ? <WorkspacePlayerDock isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} speed={project.settings.animationSpeed} drawMode={drawMode} />
+        : null;
+    const canvasOverlay = stage !== 'character'
+        ? <ViewLensHud stage={stage} lens={viewLens} setLens={setViewLens} camera={cameraSession} setCamera={setCameraSession} projection={toonProjection} physics={physicsSession} selectedPart={selectedPart} selectedPath={selectedPath} selectedMechanism={selectedMechanism} drawMode={drawMode} />
+        : null;
 
     return (
         <main className={`min-h-screen overflow-hidden ${themeClass}`} data-theme={project.settings.theme}>
             <div className="pointer-events-none fixed inset-0 opacity-70" style={{ background: 'radial-gradient(circle at 15% 10%, rgba(90,108,255,.12), transparent 28%), radial-gradient(circle at 85% 20%, rgba(90,108,255,.08), transparent 24%), linear-gradient(120deg, rgba(8,10,18,.04), transparent)' }} />
             <div className={`relative grid min-h-screen app-shell ${stage === 'character' ? 'is-onboarding' : ''}`}>
-                <aside className="app-rail border-r border-slate-300/80 bg-white/70 p-5 backdrop-blur-xl" data-testid="editor-sidebar">
-                    <div className="mb-5 rounded-3xl bg-slate-100 p-4">
-                        <div className="flex items-center gap-3">
-                            <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-sm font-black text-white">MS</div>
-                            <div>
-                                <div className="font-black tracking-tight text-slate-900">{project.metadata.name}</div>
-                                <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">Automata editor</div>
-                            </div>
-                        </div>
-                        <button className="btn-primary mt-4 w-full" onClick={() => goStage('foundry')}><Plus size={16}/> New mechanism</button>
-                    </div>
-                    <div className="space-y-2 border-b border-slate-200 pb-5 text-sm font-bold">
-                        <div className="section-title">Active workspace</div>
-                        <button aria-label="Rail motion path" className={sideLinkClass(['path'])} onClick={() => goStage('path')}><Route size={16}/> Motion path</button>
-                        <button aria-label="Rail mechanism parameters" className={sideLinkClass(['foundry', 'design'])} onClick={() => goStage('design')}><Boxes size={16}/> Parameters</button>
-                        <button aria-label="Rail export package" className={sideLinkClass(['blueprint'])} onClick={() => goStage('blueprint')}><Download size={16}/> Blueprint export</button>
-                    </div>
-                    <div className="mt-5 text-xs text-slate-500">
-                        <div>{project.partOrder.length} parts · {Object.keys(project.paths).length} paths · {project.mechanisms.length} mechanisms</div>
-                        <div>Grid {project.settings.physicalKit.gridPitchMm} mm · {project.metadata.status}</div>
-                        <div>Shared canvas · zoom {Math.round(canvasViewport.zoom * 100)}%</div>
-                    </div>
-                </aside>
-
                 <section className="relative flex min-w-0 flex-col">
                     <header className="app-header flex items-center justify-between border-b border-slate-300/70 bg-white/50 px-7 py-4 backdrop-blur-xl">
                         <div className="flex min-w-0 items-center gap-6">
@@ -591,10 +597,9 @@ const App: React.FC = () => {
                     <input ref={projectInputRef} hidden type="file" accept="application/json,.mechanim.json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/>
 
                     <div className={`stage-body editor-workbench relative min-h-0 flex-1 overflow-auto ${stage === 'character' ? 'p-0' : 'p-7'}`} data-testid="shared-workbench">
-                        {stage !== 'character' && <ViewLensHud stage={stage} lens={viewLens} setLens={setViewLens} camera={cameraSession} setCamera={setCameraSession} projection={toonProjection} physics={physicsSession} selectedPart={selectedPart} selectedPath={selectedPath} selectedMechanism={selectedMechanism} drawMode={drawMode} />}
                         {stage === 'character' && <CharacterSelection project={project} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} starterTemplates={STARTER_IMAGE_TEMPLATES} onStarterImage={loadStarterImage} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onSample={() => { setPendingCharacter(null); setProject(createSampleProject()); setStage('path'); }} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} />}
-                        {stage === 'path' && <PathEditor project={project} sortedParts={sortedParts} selectedPart={selectedPart} selectedPath={selectedPath} drawMode={drawMode} setDrawMode={setDrawMode} dispatch={dispatch} setPathPoints={setPathPoints} openTracking={() => setShowTracking(true)} isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} onNext={() => goStage('foundry')} viewport={canvasViewport} setViewport={setCanvasViewport} />}
-                        {stage === 'foundry' && <MechanismFoundry project={project} foundry={foundry} setFoundry={setFoundry} selectedPart={selectedPart} selectedPath={selectedPath} onExport={(pkg) => {
+                        {stage === 'path' && <PathEditor project={project} sortedParts={sortedParts} selectedPart={selectedPart} selectedPath={selectedPath} drawMode={drawMode} setDrawMode={setDrawMode} dispatch={dispatch} setPathPoints={setPathPoints} openTracking={() => setShowTracking(true)} isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} onNext={() => goStage('foundry')} goStage={goStage} viewport={canvasViewport} setViewport={setCanvasViewport} canvasOverlay={canvasOverlay} />}
+                        {stage === 'foundry' && <MechanismFoundry project={project} foundry={foundry} setFoundry={setFoundry} selectedPart={selectedPart} selectedPath={selectedPath} goStage={goStage} canvasOverlay={canvasOverlay} onExport={(pkg) => {
                             const existingTarget = project.mechanisms.find(m =>
                                 m.targetPartId === pkg.targetPartId &&
                                 m.targetPathId === pkg.targetPathId &&
@@ -620,12 +625,12 @@ const App: React.FC = () => {
                             dispatch({ type: 'upsert_mechanism', mechanism: mech });
                             setStage('design');
                         }} />}
-                        {stage === 'design' && <MechanismDesign project={project} selectedMechanism={selectedMechanism} mechanismConfig={mechanismConfig} setMechanismConfig={setMechanismConfig} updateMechanism={updateMechanism} dispatch={dispatch} isPlaying={isPlaying} setIsPlaying={setIsPlaying} showTrace={showTrace} setShowTrace={setShowTrace} angle={angle} setAngle={setAngle} onOptimize={optimizeSelectedMechanism} onRecommendations={() => setShowRecommendations(true)} optimizerBusy={optimizerBusy} exportSvg={exportMechanismSvg} exportDxf={exportMechanismDxf} onBlueprint={() => goStage('blueprint')} viewport={canvasViewport} setViewport={setCanvasViewport} />}
-                        {stage === 'blueprint' && <BlueprintExport project={project} config={mechanismConfig} setConfig={setMechanismConfig} dispatch={dispatch} goStage={goStage} isPlaying={isPlaying} angle={angle} setAngle={setAngle} viewport={canvasViewport} setViewport={setCanvasViewport} />}
-                        {stage === 'options' && <Options project={project} dispatch={dispatch} />}
+                        {stage === 'design' && <MechanismDesign project={project} selectedMechanism={selectedMechanism} mechanismConfig={mechanismConfig} setMechanismConfig={setMechanismConfig} updateMechanism={updateMechanism} dispatch={dispatch} isPlaying={isPlaying} setIsPlaying={setIsPlaying} showTrace={showTrace} setShowTrace={setShowTrace} angle={angle} setAngle={setAngle} onOptimize={optimizeSelectedMechanism} onRecommendations={() => setShowRecommendations(true)} optimizerBusy={optimizerBusy} exportSvg={exportMechanismSvg} exportDxf={exportMechanismDxf} onBlueprint={() => goStage('blueprint')} goStage={goStage} viewport={canvasViewport} setViewport={setCanvasViewport} canvasOverlay={canvasOverlay} />}
+                        {stage === 'blueprint' && <BlueprintExport project={project} config={mechanismConfig} setConfig={setMechanismConfig} dispatch={dispatch} goStage={goStage} isPlaying={isPlaying} angle={angle} setAngle={setAngle} viewport={canvasViewport} setViewport={setCanvasViewport} canvasOverlay={canvasOverlay} />}
+                        {stage === 'options' && <Options project={project} dispatch={dispatch} goStage={goStage} canvasOverlay={canvasOverlay} />}
+                        {playerDock && <div className="stage-player-row" data-testid="stage-player-row" aria-label="Shared playback controls">{playerDock}</div>}
                     </div>
                     {stage !== 'character' && <WorkflowStatusStrip stage={stage} project={project} selectedPart={selectedPart} selectedPath={selectedPath} />}
-                    {stage !== 'character' && stage !== 'foundry' && <WorkspacePlayerDock isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} speed={project.settings.animationSpeed} drawMode={drawMode} />}
                     {stage !== 'character' && <footer className="status-bar" data-testid="status-bar">{commandStatus} · parts:{project.partOrder.length} · paths:{Object.keys(project.paths).length} · mechs:{project.mechanisms.length} · zoom {Math.round(canvasViewport.zoom * 100)}%</footer>}
                 </section>
             </div>
@@ -732,6 +737,70 @@ const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, speed, 
             onChange={event => setAngle((Number(event.currentTarget.value) / 100) * Math.PI * 2)}
         />
     </aside>;
+};
+
+const EDITOR_PANE_CONTRACT = {
+    left: { testId: 'stage-left-pane', ariaLabel: 'Workflow and primary actions' },
+    center: { testId: 'stage-canvas-pane', ariaLabel: 'Shared canvas' },
+    right: { testId: 'stage-right-inspector', ariaLabel: 'Selected item inspector' }
+} as const;
+
+type PaneSlot<Kind extends 'workflow' | 'canvas' | 'inspector'> = Readonly<{
+    kind: Kind;
+    content: React.ReactNode;
+}>;
+type CanvasPaneSlot = PaneSlot<'canvas'> & Readonly<{ overlay?: React.ReactNode }>;
+type StageLayoutSpec = Readonly<{
+    workflow: PaneSlot<'workflow'>;
+    canvas: CanvasPaneSlot;
+    inspector: PaneSlot<'inspector'>;
+}>;
+const workflowPane = (content: React.ReactNode): PaneSlot<'workflow'> => ({ kind: 'workflow', content });
+const canvasPane = (content: React.ReactNode, overlay?: React.ReactNode): CanvasPaneSlot => ({ kind: 'canvas', content, overlay });
+const inspectorPane = (content: React.ReactNode): PaneSlot<'inspector'> => ({ kind: 'inspector', content });
+
+const EditorStageFrame = ({ stage, layout, className = '' }: { stage: AppStage; layout: StageLayoutSpec; className?: string }) => (
+    <div className={`editor-stage-frame ${className}`.trim()} data-stage={stage}>
+        <aside className="stage-left-pane workspace p-5" data-pane-kind={layout.workflow.kind} data-testid={EDITOR_PANE_CONTRACT.left.testId} aria-label={EDITOR_PANE_CONTRACT.left.ariaLabel}>
+            <div className="stage-left-pane-content" data-testid="editor-sidebar">{layout.workflow.content}</div>
+        </aside>
+        <section className="stage-canvas-pane" data-pane-kind={layout.canvas.kind} data-testid={EDITOR_PANE_CONTRACT.center.testId} aria-label={EDITOR_PANE_CONTRACT.center.ariaLabel}>{layout.canvas.content}{layout.canvas.overlay}</section>
+        <aside className="stage-right-inspector workspace p-5" data-pane-kind={layout.inspector.kind} data-testid={EDITOR_PANE_CONTRACT.right.testId} aria-label={EDITOR_PANE_CONTRACT.right.ariaLabel}>{layout.inspector.content}</aside>
+    </div>
+);
+
+const StageLeftSummary = ({ project, title, kicker, stage, goStage, children }: {
+    project: ProjectState;
+    title: string;
+    kicker: string;
+    stage: AppStage;
+    goStage?: (stage: AppStage) => void;
+    children: React.ReactNode;
+}) => {
+    const linkClass = (targets: AppStage[]) => `workspace-side-link ${targets.includes(stage) ? 'active' : ''}`;
+    return <>
+        <div className="stage-project-card rounded-3xl bg-slate-100 p-4">
+            <div className="flex items-center gap-3">
+                <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-sm font-black text-white">MS</div>
+                <div>
+                    <div className="font-black tracking-tight text-slate-900">{project.metadata.name}</div>
+                    <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">{kicker}</div>
+                </div>
+            </div>
+            <div className="mt-3 text-xs font-bold text-slate-500">
+                <div>{project.partOrder.length} parts · {Object.keys(project.paths).length} paths · {project.mechanisms.length} mechanisms</div>
+                <div>Grid {project.settings.physicalKit.gridPitchMm} mm · Shared canvas</div>
+            </div>
+        </div>
+        {goStage && <nav className="stage-nav-compact">
+            <div className="section-title">Workflow tabs</div>
+            {STAGE_PANE_NAV_ITEMS.map(item => <button key={item.ariaLabel} aria-label={item.ariaLabel} className={linkClass(item.activeStages)} onClick={() => goStage(item.target)}><StagePaneNavIcon icon={item.icon}/> {item.label}</button>)}
+        </nav>}
+        <div className="stage-workflow-block">
+            <div className="section-title">{title}</div>
+            {children}
+        </div>
+    </>;
 };
 
 const WorkflowStatusStrip = ({ stage, project, selectedPart, selectedPath }: { stage: AppStage; project: ProjectState; selectedPart?: BodyPartLayer; selectedPath?: ProjectMotionPath }) => {
@@ -1108,7 +1177,7 @@ const ProgressBlock = ({ project }: { project: ProjectState }) => {
     </div>;
 };
 
-const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode, setDrawMode, dispatch, setPathPoints, openTracking, isPlaying, setIsPlaying, angle, setAngle, onNext, viewport, setViewport }: {
+const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode, setDrawMode, dispatch, setPathPoints, openTracking, isPlaying, setIsPlaying, angle, setAngle, onNext, goStage, viewport, setViewport, canvasOverlay }: {
     project: ProjectState;
     sortedParts: BodyPartLayer[];
     selectedPart?: BodyPartLayer;
@@ -1123,8 +1192,10 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
     angle: number;
     setAngle: React.Dispatch<React.SetStateAction<number>>;
     onNext: () => void;
+    goStage: (stage: AppStage) => void;
     viewport: CanvasViewport;
     setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
+    canvasOverlay?: React.ReactNode;
 }) => {
     const svgRef = useRef<SVGSVGElement>(null);
     const freeDraftRef = useRef<Point[] | null>(null);
@@ -1219,20 +1290,14 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
             }
         });
     };
-    return <div className={`grid gap-5 ${project.settings.partPanelVisible ? 'xl:grid-cols-[1fr_340px]' : ''}`}>
-        <div className="path-canvas-shell workspace overflow-hidden p-0">
-            <div className="canvas-hint">
-                <strong>{drawMode ? (isFreeDrawing ? 'Drawing…' : 'Drag anywhere to draw') : 'Pick Draw free path'}</strong>
-                <span>{selectedPart?.name ?? 'No part'} · {pointCount} points</span>
-            </div>
-            <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
-            <SceneSketch svgRef={svgRef} project={project} selectedPath={selectedPath} dragPoint={dragPoint} selectedPoint={selectedPoint} setDragPoint={setDragPoint} setSelectedPoint={setSelectedPoint} onPointMove={movePoint} onPointUp={stopDrawing} onCanvasDown={onCanvasDown} dispatch={dispatch} drawMode={drawMode} pathLocked={pathLocked} isPlaying={isPlaying} angle={angle} viewport={viewport}/>
-        </div>
-        {project.settings.partPanelVisible && <aside className="path-panel workspace space-y-4 p-5" data-testid="novice-path-panel">
-            <div>
-                <h4 className="section-title">Free path</h4>
+    return <EditorStageFrame
+        stage="path"
+        className="path-stage-frame"
+        layout={{
+            workflow: workflowPane(<div className="path-panel stage-pane-stack" data-testid="novice-path-panel">
+            <StageLeftSummary project={project} title="Free path workflow" kicker="parts · paths · IK" stage="path" goStage={goStage}>
                 <h3>Draw the motion path</h3>
-                <p>Choose a body part, press Draw free path, then hold and drag on the canvas.</p>
+                <p>Choose a body part, press Draw free path, then sketch directly on the shared canvas.</p>
                 <select aria-label="Selected body part" className="field mt-2" value={selectedPart?.id ?? ''} onChange={e => dispatch({ type: 'select_part', partId: e.target.value })}>
                     {sortedParts.map(p => <option value={p.id} key={p.id}>{p.name}</option>)}
                 </select>
@@ -1253,7 +1318,57 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
                 {selectedPath && selectedPath.points.length < 3 && <div className="warning">Add at least 3 path points before choosing a mechanism.</div>}
                 {pathLocked && <div className="warning">Unlock the selected part before editing, deleting, drawing, or tracking its path.</div>}
                 {selectedPath?.warnings.map((w, i) => <div key={`${w}-${i}`} className="warning">{w}</div>)}
+                <details className="advanced-panel mt-4">
+                    <summary>Path options</summary>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                        <button className="btn-secondary" disabled={pathLocked} onClick={openTracking}><Camera size={16}/> Track from video</button>
+                        <button className="btn-secondary" aria-label={isPlaying ? 'Play / Stop' : 'Play'} onClick={() => setIsPlaying(!isPlaying)}><Play size={16}/>{isPlaying ? 'Stop' : 'Play'}</button>
+                        <button className="btn-secondary" onClick={() => setAngle(0)}>Reset</button>
+                        {selectedPath && <button className="btn-secondary" disabled={pathLocked} onClick={() => updatePath({ visible: !selectedPath.visible })}>{selectedPath.visible ? 'Hide path' : 'Show path'}</button>}
+                        {selectedPath && <button className="btn-secondary" disabled={pathLocked} onClick={() => updatePath({ enabled: !selectedPath.enabled })}>{selectedPath.enabled ? 'Disable' : 'Enable'}</button>}
+                        {selectedPoint !== null && <button className="btn-secondary" disabled={pathLocked} onClick={deletePoint}>Delete point</button>}
+                    </div>
+                    <div className="mt-3 text-sm text-slate-600">{selectedPath ? `${selectedPath.source} · ${selectedPath.duration} ms · ${selectedPath.timedPoints?.length ?? 0} timed samples` : 'No timing yet'}</div>
+                </details>
+                {project.settings.partPanelVisible ? <details className="advanced-panel mt-4" data-testid="rig-structure-drawer">
+                    <summary>Advanced part setup</summary>
+                    <div className="mt-3 space-y-3">
+                        <div>
+                            <h4 className="section-title">Parts + skeleton</h4>
+                            <p className="mt-1 text-sm text-slate-600">Topology changes live in this workflow column so the inspector stays focused on the selected item.</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <button className="btn-secondary" onClick={addLayer}><Plus size={16}/> Add body part</button>
+                            <button className="btn-secondary" onClick={addLayer}><Plus size={16}/> Add layer</button>
+                            {selectedPart && <button className="btn-secondary" disabled={selectedPart.locked} onClick={() => dispatch({ type: 'delete_part', partId: selectedPart.id })}><Trash2 size={16}/> Remove layer</button>}
+                            <button className="btn-secondary" disabled={!selectedPart || pathLocked} onClick={addJointAtIkHandle}><Plus size={16}/> New IK handle</button>
+                        </div>
+                        {selectedPart && <PartInspector part={selectedPart} dispatch={dispatch} />}
+                        <div className="divider mt-4" />
+                        <SkeletonInspector project={project} dispatch={dispatch} />
+                    </div>
+                </details> : <div className="rounded-2xl border border-slate-200 bg-white p-3 text-sm font-bold text-slate-500" data-testid="rig-structure-hidden">Part properties are hidden from Options. Free drawing stays available.</div>}
+            </StageLeftSummary>
+        </div>),
+            canvas: canvasPane(<div className="path-canvas-shell workspace overflow-hidden p-0">
+            <div className="canvas-hint">
+                <strong>{drawMode ? (isFreeDrawing ? 'Drawing…' : 'Drag anywhere to draw') : 'Pick Draw free path'}</strong>
+                <span>{selectedPart?.name ?? 'No part'} · {pointCount} points</span>
             </div>
+            <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
+            <SceneSketch svgRef={svgRef} project={project} selectedPath={selectedPath} dragPoint={dragPoint} selectedPoint={selectedPoint} setDragPoint={setDragPoint} setSelectedPoint={setSelectedPoint} onPointMove={movePoint} onPointUp={stopDrawing} onCanvasDown={onCanvasDown} dispatch={dispatch} drawMode={drawMode} pathLocked={pathLocked} isPlaying={isPlaying} angle={angle} viewport={viewport}/>
+        </div>, canvasOverlay),
+            inspector: inspectorPane(<div className="path-inspector stage-pane-stack">
+            <div>
+                <div className="section-title">Selected inspector</div>
+                <h3>{selectedPart?.name ?? 'No body part selected'}</h3>
+                <p className="mt-2 text-sm text-slate-600">Fine tune the selected path anchor, IK handle, fold direction, and point readout here.</p>
+            </div>
+            {selectedPath && <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
+                <div className="font-bold text-slate-800">Path detail</div>
+                <div>{selectedPath.id} · {pointCount} points · {selectedPath.closed ? 'closed' : 'open'}</div>
+                <div>{selectedPoint !== null && selectedPath.points[selectedPoint] ? `Point ${selectedPoint + 1}: ${selectedPath.points[selectedPoint].x.toFixed(0)}, ${selectedPath.points[selectedPoint].y.toFixed(0)}` : 'Select a point on the canvas for point-level edits.'}</div>
+            </div>}
             <div className="rig-helper" data-testid="quick-rig-helper">
                 <h4 className="section-title">Body rig</h4>
                 <h3>Easy IK setup</h3>
@@ -1278,35 +1393,10 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
                         <button className={`btn-secondary ${bendJoint && bendJoint.bendDirection >= 0 ? 'active' : ''}`} disabled={!bendJoint || bendJoint.locked} onClick={() => setBendDirection(1)}>Fold right</button>
                     </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                    <button className="btn-secondary" onClick={addLayer}><Plus size={16}/> Add body part</button>
-                    <button className="btn-secondary" disabled={!selectedPart || pathLocked} onClick={addJointAtIkHandle}><Plus size={16}/> New IK handle</button>
-                </div>
             </div>
-            <details className="advanced-panel">
-                <summary>Path options</summary>
-                <div className="mt-3 flex flex-wrap gap-2">
-                    <button className="btn-secondary" disabled={pathLocked} onClick={openTracking}><Camera size={16}/> Track from video</button>
-                    <button className="btn-secondary" aria-label={isPlaying ? 'Play / Stop' : 'Play'} onClick={() => setIsPlaying(!isPlaying)}><Play size={16}/>{isPlaying ? 'Stop' : 'Play'}</button>
-                    <button className="btn-secondary" onClick={() => setAngle(0)}>Reset</button>
-                    {selectedPath && <button className="btn-secondary" disabled={pathLocked} onClick={() => updatePath({ visible: !selectedPath.visible })}>{selectedPath.visible ? 'Hide path' : 'Show path'}</button>}
-                    {selectedPath && <button className="btn-secondary" disabled={pathLocked} onClick={() => updatePath({ enabled: !selectedPath.enabled })}>{selectedPath.enabled ? 'Disable' : 'Enable'}</button>}
-                    {selectedPoint !== null && <button className="btn-secondary" disabled={pathLocked} onClick={deletePoint}>Delete point</button>}
-                </div>
-                <div className="mt-3 text-sm text-slate-600">{selectedPath ? `${selectedPath.source} · ${selectedPath.duration} ms · ${selectedPath.timedPoints?.length ?? 0} timed samples` : 'No timing yet'}</div>
-            </details>
-            <details className="advanced-panel">
-                <summary>Advanced part setup</summary>
-                <div className="mt-3">
-                    <h4 className="section-title">Parts + skeleton</h4>
-                    <div className="mt-3 flex gap-2"><button className="btn-secondary" onClick={addLayer}><Plus size={16}/> Add layer</button>{selectedPart && <button className="btn-secondary" disabled={selectedPart.locked} onClick={() => dispatch({ type: 'delete_part', partId: selectedPart.id })}><Trash2 size={16}/> Remove layer</button>}</div>
-                    {selectedPart && <PartInspector part={selectedPart} dispatch={dispatch} />}
-                    <div className="divider mt-4" />
-                    <SkeletonInspector project={project} dispatch={dispatch} />
-                </div>
-            </details>
-        </aside>}
-    </div>;
+        </div>)
+        }}
+    />;
 };
 
 const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, setDragPoint, setSelectedPoint, onPointMove, onPointUp, onCanvasDown, dispatch, drawMode, pathLocked, isPlaying, angle, viewport }: { project: ProjectState; svgRef: React.RefObject<SVGSVGElement | null>; selectedPath?: ProjectMotionPath; dragPoint: number | null; selectedPoint: number | null; setDragPoint: (i: number | null) => void; setSelectedPoint: (i: number | null) => void; onPointMove: (e: React.MouseEvent<SVGSVGElement>) => void; onPointUp: () => void; onCanvasDown: (e: React.MouseEvent<SVGSVGElement>) => void; dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void; drawMode?: boolean; pathLocked?: boolean; isPlaying: boolean; angle: number; viewport: CanvasViewport }) => {
@@ -1638,7 +1728,7 @@ const MechanismRecommendationSheet = ({ isOpen, project, selectedPart, selectedP
     </div>;
 };
 
-const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selectedPath, onExport }: { project: ProjectState; foundry: FoundryState; setFoundry: (m: FoundryState) => void; selectedPart?: BodyPartLayer; selectedPath?: ProjectMotionPath; onExport: (pkg: FoundryExportPackage) => void }) => {
+const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selectedPath, goStage, canvasOverlay, onExport }: { project: ProjectState; foundry: FoundryState; setFoundry: (m: FoundryState) => void; selectedPart?: BodyPartLayer; selectedPath?: ProjectMotionPath; goStage: (stage: AppStage) => void; canvasOverlay?: React.ReactNode; onExport: (pkg: FoundryExportPackage) => void }) => {
     const [foundryPlaying, setFoundryPlaying] = useState(false);
     const [foundryPhase, setFoundryPhase] = useState(0);
     const [showForces, setShowForces] = useState(false);
@@ -1702,20 +1792,49 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             source: 'mechanism-foundry'
         };
     };
-    return <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
-        <section className="workspace p-6">
-            <div className="mb-5 flex items-center justify-between"><h4 className="section-title">Sandbox preview</h4><button className="btn-primary" disabled={hardBlocked} onClick={() => onExport(makePackage())}><Boxes size={16}/> Use this mechanism</button></div>
-            <div className="foundry-toolbar mb-5" data-testid="foundry-toolbar">
-                <button className="btn-secondary" onClick={() => setShowSensemaking(true)}>Back to Gallery</button>
-                <button className={`btn-secondary ${foundryPlaying ? 'active' : ''}`} onClick={() => setFoundryPlaying(!foundryPlaying)}>{foundryPlaying ? 'Pause' : 'Play'}</button>
-                <button className={`btn-secondary ${showForces ? 'active' : ''}`} onClick={() => setShowForces(!showForces)}>Forces</button>
-                <button className={`btn-secondary ${showVelocity ? 'active' : ''}`} onClick={() => setShowVelocity(!showVelocity)}>Velocity</button>
-                <button className={`btn-secondary ${showTrail ? 'active' : ''}`} onClick={() => setShowTrail(!showTrail)}>Trail</button>
-                <button className={`btn-secondary ${showPathPreview ? 'active' : ''}`} onClick={() => setShowPathPreview(!showPathPreview)}>Path Preview</button>
-                <button className={`btn-secondary ${showSensemaking ? 'active' : ''}`} onClick={() => setShowSensemaking(!showSensemaking)}>Show Sensemaking</button>
-                <button className="btn-secondary" onClick={() => { setFoundryPhase(0); setFoundryPlaying(false); }}>Reset</button>
-                <button className="btn-primary" disabled={hardBlocked} onClick={() => onExport(makePackage())}>Add to Mechanism Tab</button>
-            </div>
+    return <EditorStageFrame
+        stage="foundry"
+        className="foundry-stage-frame"
+        layout={{
+            workflow: workflowPane(<div className="stage-pane-stack">
+            <StageLeftSummary project={project} title="Mechanism Foundry" kicker="recipe sandbox" stage="foundry" goStage={goStage}>
+                <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600" data-testid="foundry-target-summary">
+                    <div className="font-bold text-slate-800">Target: {selectedPart?.name ?? 'none'} · path {selectedPath?.points.length ?? 0} pts</div>
+                    <div>Export lands at {landing.x.toFixed(0)}, {landing.y.toFixed(0)} ({landingBoard.label}) · anchor {selectedPart?.anchorJointId ?? 'none'} · IK handle {targetIkJointId ?? 'none'}</div>
+                    {snapDistance > 0.5 && <div>Snapped {snapDistance.toFixed(0)} scene units from target to nearest board hole for fabrication.</div>}
+                    <div>{foundry.recommendation ?? FOUNDRY_PRESETS.balanced.recommendation}</div>
+                    <div><strong>Valid Range:</strong> {range.percentValid === 1 ? '360° valid' : feasibilityText}</div>
+                    <div><strong>Motion Point:</strong> {playhead ? `${playhead.x.toFixed(0)}, ${playhead.y.toFixed(0)}` : 'no preview point'}</div>
+                </div>
+                <button className="btn-primary w-full" disabled={hardBlocked} onClick={() => onExport(makePackage())}><Boxes size={16}/> Use this mechanism</button>
+                {!targetReady && <div className="warning">Draw at least 3 points for a selected body part before exporting a mechanism.</div>}
+                {range.warning && <div className="warning">{range.warning}</div>}
+                <h4 className="section-title mt-4">Mechanism Gallery</h4>
+                <div className="mechanism-choice-grid" data-testid="foundry-mechanism-gallery">
+                    {AUTHORABLE_MECHANISM_TYPES.map(type => {
+                        const item = MECHANISM_LIBRARY[type];
+                        const cardMechanism = { ...createDefaultMechanism(type, `foundry-card-${type}`), color: foundry.color };
+                        const cardSimulation = fitMechanismSimulation(cardMechanism, foundryPhase, 180, 96, 48);
+                        return <button key={type} type="button" className={`recommendation-card mechanism-choice ${foundry.type === type ? 'active' : ''}`} onClick={() => setFoundry({ ...createDefaultMechanism(type, 'foundry-preview'), color: foundry.color, presetId: 'balanced', recommendation: FOUNDRY_PRESETS.balanced.recommendation })}>
+                            <svg viewBox="0 0 180 96" className="mechanism-choice-sim" data-testid={`foundry-mini-simulation-${type}`} aria-hidden="true">
+                                <path d={cardSimulation.pathD} fill="none" stroke={foundry.color} strokeWidth="2.5" strokeLinecap="round" opacity="0.45"/>
+                                <MechanismLinkagePreview mechanism={cardMechanism} simulation={cardSimulation} kit={project.settings.physicalKit} testId={`foundry-mini-linkage-${type}`} compact />
+                            </svg>
+                            <div className="font-bold text-slate-800">{item.label}</div>
+                            <div>{item.goodFor}</div>
+                        </button>;
+                    })}
+                </div>
+                {showSensemaking && <div className="recommendation-card" data-testid="foundry-mechanism-library">
+                    <div className="font-bold text-slate-800">Selected: {library.label}</div>
+                    <div>Sensemaking: {library.sense}.</div>
+                    <div>Constraint: {library.constraint}.</div>
+                    <div data-testid="foundry-feasibility">Feasibility: {feasibilityText}</div>
+                </div>}
+            </StageLeftSummary>
+        </div>),
+            canvas: canvasPane(<section className="path-canvas-shell foundry-canvas-shell workspace p-6">
+            <div className="mb-5 flex items-center justify-between"><h4 className="section-title">Sandbox preview</h4><span className="chip">{foundryPlaying ? 'Simulation active' : 'Paused'}</span></div>
             <svg viewBox="0 0 360 240" className="foundry-preview h-[520px] w-full rounded-[2rem]">
                 {showTrail && <path data-testid="foundry-trail-overlay" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="12" strokeLinecap="round" opacity="0.12"/>}
                 {showPathPreview && <path data-testid="foundry-path-preview" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="3" strokeLinecap="round" strokeDasharray="9 7" opacity="0.48"/>}
@@ -1731,40 +1850,13 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 <text x="22" y="38" className="foundry-preview-label" fontSize="16" fontWeight="800">{library.label} · {range.percentValid === 1 ? '360° valid' : range.warning}</text>
             </svg>
             <div className="mt-3 text-xs font-bold text-slate-500" data-testid="foundry-toolbar-state">Toolbar: {foundryPlaying ? 'playing' : 'paused'} · path {showPathPreview ? 'shown' : 'hidden'} · phase {Math.round(foundryPhase * 180 / Math.PI)}°</div>
-        </section>
-        <aside className="workspace space-y-4 p-5">
-            <h4 className="section-title">Mechanism Gallery</h4>
-            <div className="mechanism-choice-grid">
-                {AUTHORABLE_MECHANISM_TYPES.map(type => {
-                    const item = MECHANISM_LIBRARY[type];
-                    const cardMechanism = { ...createDefaultMechanism(type, `foundry-card-${type}`), color: foundry.color };
-                    const cardSimulation = fitMechanismSimulation(cardMechanism, foundryPhase, 180, 96, 48);
-                    return <button key={type} type="button" className={`recommendation-card mechanism-choice ${foundry.type === type ? 'active' : ''}`} onClick={() => setFoundry({ ...createDefaultMechanism(type, 'foundry-preview'), color: foundry.color, presetId: 'balanced', recommendation: FOUNDRY_PRESETS.balanced.recommendation })}>
-                        <svg viewBox="0 0 180 96" className="mechanism-choice-sim" data-testid={`foundry-mini-simulation-${type}`} aria-hidden="true">
-                            <path d={cardSimulation.pathD} fill="none" stroke={foundry.color} strokeWidth="2.5" strokeLinecap="round" opacity="0.45"/>
-                            <MechanismLinkagePreview mechanism={cardMechanism} simulation={cardSimulation} kit={project.settings.physicalKit} testId={`foundry-mini-linkage-${type}`} compact />
-                        </svg>
-                        <div className="font-bold text-slate-800">{item.label}</div>
-                        <div>{item.goodFor}</div>
-                    </button>;
-                })}
+        </section>, canvasOverlay),
+            inspector: inspectorPane(<div className="stage-pane-stack">
+            <div>
+                <div className="section-title">Selected mechanism</div>
+                <h3>{library.label}</h3>
+                <p className="mt-2 text-sm text-slate-600">Fine tune the selected physical template and preview overlays.</p>
             </div>
-            {showSensemaking && <div className="recommendation-card" data-testid="foundry-mechanism-library">
-                <div className="font-bold text-slate-800">Selected: {library.label}</div>
-                <div>Sensemaking: {library.sense}.</div>
-                <div>Constraint: {library.constraint}.</div>
-                <div data-testid="foundry-feasibility">Feasibility: {feasibilityText}</div>
-            </div>}
-            <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600" data-testid="foundry-target-summary">
-                <div className="font-bold text-slate-800">Target: {selectedPart?.name ?? 'none'} · path {selectedPath?.points.length ?? 0} pts</div>
-                <div>Export lands at {landing.x.toFixed(0)}, {landing.y.toFixed(0)} ({landingBoard.label}) · anchor {selectedPart?.anchorJointId ?? 'none'} · IK handle {targetIkJointId ?? 'none'}</div>
-                {snapDistance > 0.5 && <div>Snapped {snapDistance.toFixed(0)} scene units from target to nearest board hole for fabrication.</div>}
-                <div>{foundry.recommendation ?? FOUNDRY_PRESETS.balanced.recommendation}</div>
-                <div><strong>Valid Range:</strong> {range.percentValid === 1 ? '360° valid' : feasibilityText}</div>
-                <div><strong>Motion Point:</strong> {playhead ? `${playhead.x.toFixed(0)}, ${playhead.y.toFixed(0)}` : 'no preview point'}</div>
-            </div>
-            {!targetReady && <div className="warning">Draw at least 3 points for a selected body part before exporting a mechanism.</div>}
-            {range.warning && <div className="warning">{range.warning}</div>}
             <details className="advanced-panel">
                 <summary>Mechanism options</summary>
                 <div className="mt-3 space-y-3">
@@ -1779,11 +1871,27 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                     {PARAMS.filter(p => showParam(foundry.type, p.key)).map(p => <React.Fragment key={String(p.key)}><MiniNumber label={p.label} value={Number(foundry[p.key] ?? 0)} min={p.min} max={p.max} step={p.step} onChange={value => setFoundry({ ...foundry, [p.key]: value })}/></React.Fragment>) }
                 </div>
             </details>
-        </aside>
-    </div>;
+            <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
+                <div className="foundry-toolbar mb-3" data-testid="foundry-toolbar">
+                    <button className={`btn-secondary ${foundryPlaying ? 'active' : ''}`} onClick={() => setFoundryPlaying(!foundryPlaying)}>{foundryPlaying ? 'Pause' : 'Play'}</button>
+                    <button className="btn-secondary" onClick={() => { setFoundryPhase(0); setFoundryPlaying(false); }}>Reset</button>
+                </div>
+                <div className="font-bold text-slate-800">Preview overlays</div>
+                <div className="foundry-toolbar mt-2">
+                    <button type="button" className={`btn-secondary ${showForces ? 'active' : ''}`} aria-pressed={showForces} onClick={() => setShowForces(!showForces)}>Forces</button>
+                    <button type="button" className={`btn-secondary ${showVelocity ? 'active' : ''}`} aria-pressed={showVelocity} onClick={() => setShowVelocity(!showVelocity)}>Velocity</button>
+                    <button type="button" className={`btn-secondary ${showTrail ? 'active' : ''}`} aria-pressed={showTrail} onClick={() => setShowTrail(!showTrail)}>Trail</button>
+                    <button type="button" className={`btn-secondary ${showPathPreview ? 'active' : ''}`} aria-pressed={showPathPreview} onClick={() => setShowPathPreview(!showPathPreview)}>Path Preview</button>
+                    <button type="button" className={`btn-secondary ${showSensemaking ? 'active' : ''}`} aria-pressed={showSensemaking} onClick={() => setShowSensemaking(!showSensemaking)}>Show Sensemaking</button>
+                    <button type="button" className="btn-secondary" onClick={() => setShowSensemaking(true)}>Back to Gallery</button>
+                </div>
+            </div>
+        </div>)
+        }}
+    />;
 };
 
-const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMechanismConfig, updateMechanism, dispatch, isPlaying, setIsPlaying, showTrace, setShowTrace, angle, setAngle, onOptimize, onRecommendations, optimizerBusy, exportSvg, exportDxf, onBlueprint, viewport, setViewport }: {
+const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMechanismConfig, updateMechanism, dispatch, isPlaying, setIsPlaying, showTrace, setShowTrace, angle, setAngle, onOptimize, onRecommendations, optimizerBusy, exportSvg, exportDxf, onBlueprint, goStage, viewport, setViewport, canvasOverlay }: {
     project: ProjectState;
     selectedMechanism?: MechanismConfig;
     mechanismConfig: GlobalConfig;
@@ -1802,8 +1910,10 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
     exportSvg: () => void;
     exportDxf: () => void;
     onBlueprint: () => void;
+    goStage: (stage: AppStage) => void;
     viewport: CanvasViewport;
     setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
+    canvasOverlay?: React.ReactNode;
 }) => {
     const selectedLibrary = selectedMechanism ? MECHANISM_LIBRARY[selectedMechanism.type] : undefined;
     const selectedRange = selectedMechanism ? sampleFeasibleRange(selectedMechanism) : undefined;
@@ -1816,50 +1926,69 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
     const selectedTargetChain = selectedMechanism?.targetPartId
         ? describeMotionChain(project, selectedMechanism.targetPartId, selectedTargetAnchor)
         : undefined;
-    return <div className={`grid gap-5 ${project.settings.partPanelVisible ? 'xl:grid-cols-[1fr_360px]' : ''}`}>
-    <div className="path-canvas-shell workspace overflow-hidden p-0">
-        <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
-        <Canvas project={project} config={mechanismConfig} setConfig={setMechanismConfig} selectedId={project.selectedMechanismId ?? null} setSelectedId={id => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: id })} isPlaying={isPlaying} showTrace={showTrace} isDrawMode={false} userPath={[]} setUserPath={() => {}} angle={angle} setAngle={setAngle} viewport={viewport} setViewport={setViewport}/>
-    </div>
-    {project.settings.partPanelVisible && <aside className="workspace space-y-4 p-5">
-        <div className="flex flex-wrap gap-2"><button className="btn-secondary" aria-label={isPlaying ? 'Play / Pause' : 'Play'} onClick={() => setIsPlaying(!isPlaying)}><Play size={16}/>{isPlaying ? 'Pause' : 'Play'}</button><button className="btn-secondary" onClick={() => setShowTrace(!showTrace)}>Trace</button><button className="btn-primary" onClick={onRecommendations}><Sparkles size={16}/> Get recommendations</button></div>
-        <h4 className="section-title">Mechanism instances</h4>
-        <select aria-label="Mechanism instance" className="field" value={selectedMechanism?.id ?? ''} onChange={e => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: e.target.value })}>{project.mechanisms.map(m => <option key={m.id} value={m.id}>{m.id} · {m.type}</option>)}</select>
-        <div className="flex flex-wrap gap-2">
-            {AUTHORABLE_MECHANISM_TYPES.map(type => <button key={type} className="chip" title={mechanismTemplateLabel(type)} onClick={() => dispatch({ type: 'upsert_mechanism', mechanism: mechanismWithGeneratedPath(createDefaultMechanism(type, uid('mech'))) })}>{type}</button>)}
-        </div>
-        {selectedLibrary && <div className="rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-600" data-testid="design-mechanism-library">
-            <div className="font-bold text-slate-800">Mechanism library</div>
-            <div>{selectedLibrary.label}</div>
-            <div>Sensemaking: {selectedLibrary.sense}.</div>
-            <div>Good for: {selectedLibrary.goodFor}.</div>
-            <div>Constraint: {selectedLibrary.constraint}.</div>
-            <div data-testid="design-feasibility">Feasibility: {selectedRange?.warning ?? '360° valid sampled motion'}</div>
-        </div>}
-        {selectedMechanism && <>
-            <Toggle label="Visible" checked={selectedMechanism.visible} onChange={visible => updateMechanism(selectedMechanism.id, { visible })}/>
-            <Toggle label="Enabled" checked={selectedMechanism.enabled !== false} onChange={enabled => updateMechanism(selectedMechanism.id, { enabled })}/>
-            <div className="section-title">Assign Character</div>
-            <select aria-label="Mechanism target part" className="field" value={selectedMechanism.targetPartId ?? ''} onChange={e => updateMechanism(selectedMechanism.id, { targetPartId: e.target.value || undefined })}><option value="">No target part</option>{project.partOrder.map(id => <option key={id} value={id}>{project.parts[id].name}</option>)}</select>
-            <select aria-label="Mechanism target path" className="field" value={selectedMechanism.targetPathId ?? ''} onChange={e => updateMechanism(selectedMechanism.id, { targetPathId: e.target.value || undefined })}><option value="">No target path</option>{Object.values(project.paths).filter(p => !selectedMechanism.targetPartId || p.partId === selectedMechanism.targetPartId).map(p => <option key={p.id} value={p.id}>{p.id} · {p.points.length} pts</option>)}</select>
-            {selectedMechanism.targetPartId && project.skeleton && <select aria-label="Mechanism target anchor" className="field" value={selectedTargetAnchor ?? ''} onChange={e => updateMechanism(selectedMechanism.id, { targetAnchorJointId: e.target.value || undefined })}>
-                <option value="">Part anchor default</option>
-                {targetAnchorOptions.map(id => <option key={id} value={id}>{motionChainOptionLabel(project, selectedMechanism.targetPartId, id)}</option>)}
-            </select>}
-            {selectedTargetChain && <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3 text-sm text-slate-600" data-testid="mechanism-ik-chain-summary">
-                <div className="font-bold text-slate-800">{selectedTargetChain.label}</div>
-                <div>{selectedTargetChain.helper}</div>
-            </div>}
-            <div className="section-title">Parametric Edit</div>
-            {PARAMS.filter(p => showParam(selectedMechanism.type, p.key)).map(p => <React.Fragment key={String(p.key)}><MiniNumber label={p.label} value={Number(selectedMechanism[p.key] ?? 0)} min={p.min} max={p.max} step={p.step} onChange={value => updateMechanism(selectedMechanism.id, { [p.key]: value } as Partial<MechanismConfig>)}/></React.Fragment>) }
-            {selectedBindingWarnings.map((w, i) => <div className="warning" key={`binding-${w}-${i}`}>{w}</div>)}
-            {selectedRange?.warning && <div className="warning">{selectedRange.warning}</div>}
-            {selectedMechanism.warnings?.map((w, i) => <div className="warning" key={`${w}-${i}`}>{w}</div>)}
-            <div className="flex flex-wrap gap-2"><button className="btn-primary" disabled={optimizerBusy} onClick={onOptimize}>{optimizerBusy ? <Loader2 className="animate-spin" size={16}/> : <Sparkles size={16}/>} Fit path</button><button className="btn-secondary" onClick={() => dispatch({ type: 'delete_mechanism', mechanismId: selectedMechanism.id })}><Trash2 size={16}/> Delete</button></div>
-            <div className="flex flex-wrap gap-2"><button className="btn-primary" onClick={onBlueprint}>Export Blueprint</button><button className="btn-secondary" onClick={exportSvg}>SVG</button><button className="btn-secondary" onClick={exportDxf}>DXF</button></div>
-        </>}
-    </aside>}
-</div>;
+    return <EditorStageFrame
+        stage="design"
+        className="design-stage-frame"
+        layout={{
+            workflow: workflowPane(<div className="stage-pane-stack">
+            <StageLeftSummary project={project} title="Mechanism Design" kicker="attach · tune" stage="design" goStage={goStage}>
+                <div className="flex flex-wrap gap-2">
+                    <button className="btn-secondary" aria-label={isPlaying ? 'Play / Pause' : 'Play'} onClick={() => setIsPlaying(!isPlaying)}><Play size={16}/>{isPlaying ? 'Pause' : 'Play'}</button>
+                    <button className={`btn-secondary ${showTrace ? 'active' : ''}`} onClick={() => setShowTrace(!showTrace)}>Trace</button>
+                    <button className="btn-primary" onClick={onRecommendations}><Sparkles size={16}/> Get recommendations</button>
+                </div>
+                <h4 className="section-title mt-4">Mechanism instances</h4>
+                <select aria-label="Mechanism instance" className="field" value={selectedMechanism?.id ?? ''} onChange={e => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: e.target.value })}>{project.mechanisms.map(m => <option key={m.id} value={m.id}>{m.id} · {m.type}</option>)}</select>
+                <div className="mt-3 flex flex-wrap gap-2">
+                    {AUTHORABLE_MECHANISM_TYPES.map(type => <button key={type} className="chip" title={mechanismTemplateLabel(type)} onClick={() => dispatch({ type: 'upsert_mechanism', mechanism: mechanismWithGeneratedPath(createDefaultMechanism(type, uid('mech'))) })}>{type}</button>)}
+                </div>
+                {selectedLibrary && <div className="rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-600" data-testid="design-mechanism-library">
+                    <div className="font-bold text-slate-800">Mechanism library</div>
+                    <div>{selectedLibrary.label}</div>
+                    <div>Sensemaking: {selectedLibrary.sense}.</div>
+                    <div>Good for: {selectedLibrary.goodFor}.</div>
+                    <div>Constraint: {selectedLibrary.constraint}.</div>
+                    <div data-testid="design-feasibility">Feasibility: {selectedRange?.warning ?? '360° valid sampled motion'}</div>
+                </div>}
+                {Object.entries(bindingWarnings).map(([id, warnings]) => warnings.length ? <div className="warning" key={id}>{id}: {warnings.join('; ')}</div> : null)}
+                <button className="btn-primary w-full" onClick={onBlueprint}>Go to blueprint</button>
+            </StageLeftSummary>
+        </div>),
+            canvas: canvasPane(<div className="path-canvas-shell workspace overflow-hidden p-0">
+            <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
+            <Canvas project={project} config={mechanismConfig} setConfig={setMechanismConfig} selectedId={project.selectedMechanismId ?? null} setSelectedId={id => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: id })} isPlaying={isPlaying} showTrace={showTrace} isDrawMode={false} userPath={[]} setUserPath={() => {}} angle={angle} setAngle={setAngle} viewport={viewport} setViewport={setViewport}/>
+        </div>, canvasOverlay),
+            inspector: inspectorPane(<div className="stage-pane-stack">
+            <div>
+                <div className="section-title">Selected mechanism inspector</div>
+                <h3>{selectedMechanism ? `${selectedMechanism.id} · ${mechanismTemplateLabel(selectedMechanism.type)}` : 'No mechanism selected'}</h3>
+                <p className="mt-2 text-sm text-slate-600">Bindings, visibility, feasibility, and numeric parameters live here.</p>
+            </div>
+            {selectedMechanism && <>
+                <Toggle label="Visible" checked={selectedMechanism.visible} onChange={visible => updateMechanism(selectedMechanism.id, { visible })}/>
+                <Toggle label="Enabled" checked={selectedMechanism.enabled !== false} onChange={enabled => updateMechanism(selectedMechanism.id, { enabled })}/>
+                <div className="section-title">Assign Character</div>
+                <select aria-label="Mechanism target part" className="field" value={selectedMechanism.targetPartId ?? ''} onChange={e => updateMechanism(selectedMechanism.id, { targetPartId: e.target.value || undefined })}><option value="">No target part</option>{project.partOrder.map(id => <option key={id} value={id}>{project.parts[id].name}</option>)}</select>
+                <select aria-label="Mechanism target path" className="field" value={selectedMechanism.targetPathId ?? ''} onChange={e => updateMechanism(selectedMechanism.id, { targetPathId: e.target.value || undefined })}><option value="">No target path</option>{Object.values(project.paths).filter(p => !selectedMechanism.targetPartId || p.partId === selectedMechanism.targetPartId).map(p => <option key={p.id} value={p.id}>{p.id} · {p.points.length} pts</option>)}</select>
+                {selectedMechanism.targetPartId && project.skeleton && <select aria-label="Mechanism target anchor" className="field" value={selectedTargetAnchor ?? ''} onChange={e => updateMechanism(selectedMechanism.id, { targetAnchorJointId: e.target.value || undefined })}>
+                    <option value="">Part anchor default</option>
+                    {targetAnchorOptions.map(id => <option key={id} value={id}>{motionChainOptionLabel(project, selectedMechanism.targetPartId, id)}</option>)}
+                </select>}
+                {selectedTargetChain && <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3 text-sm text-slate-600" data-testid="mechanism-ik-chain-summary">
+                    <div className="font-bold text-slate-800">{selectedTargetChain.label}</div>
+                    <div>{selectedTargetChain.helper}</div>
+                </div>}
+                <div className="section-title">Parametric Edit</div>
+                {PARAMS.filter(p => showParam(selectedMechanism.type, p.key)).map(p => <React.Fragment key={String(p.key)}><MiniNumber label={p.label} value={Number(selectedMechanism[p.key] ?? 0)} min={p.min} max={p.max} step={p.step} onChange={value => updateMechanism(selectedMechanism.id, { [p.key]: value } as Partial<MechanismConfig>)}/></React.Fragment>) }
+                {selectedBindingWarnings.map((w, i) => <div className="warning" key={`binding-${w}-${i}`}>{w}</div>)}
+                {selectedRange?.warning && <div className="warning">{selectedRange.warning}</div>}
+                {selectedMechanism.warnings?.map((w, i) => <div className="warning" key={`${w}-${i}`}>{w}</div>)}
+                <div className="flex flex-wrap gap-2"><button className="btn-primary" disabled={optimizerBusy} onClick={onOptimize}>{optimizerBusy ? <Loader2 className="animate-spin" size={16}/> : <Sparkles size={16}/>} Fit path</button><button className="btn-secondary" onClick={() => dispatch({ type: 'delete_mechanism', mechanismId: selectedMechanism.id })}><Trash2 size={16}/> Delete</button></div>
+                <div className="flex flex-wrap gap-2"><button className="btn-secondary" onClick={exportSvg}>SVG</button><button className="btn-secondary" onClick={exportDxf}>DXF</button><button className="btn-primary" onClick={onBlueprint}>Export Blueprint</button></div>
+            </>}
+        </div>)
+        }}
+    />;
 };
 
 const pendingRecipeForMechanism = (project: ProjectState, mechanism: MechanismConfig): FabricationRecipe => {
@@ -1887,7 +2016,7 @@ const pendingRecipeForMechanism = (project: ProjectState, mechanism: MechanismCo
     };
 };
 
-const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlaying, angle, setAngle, viewport, setViewport }: {
+const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlaying, angle, setAngle, viewport, setViewport, canvasOverlay }: {
     project: ProjectState;
     config: GlobalConfig;
     setConfig: React.Dispatch<React.SetStateAction<GlobalConfig>>;
@@ -1898,6 +2027,7 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
     setAngle: React.Dispatch<React.SetStateAction<number>>;
     viewport: CanvasViewport;
     setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
+    canvasOverlay?: React.ReactNode;
 }) => {
     const validation = validateForFabrication(project);
     const create = () => {
@@ -1913,73 +2043,90 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
     const downloadSvg = () => pkg && downloadText(`${pkg.id}.svg`, pkg.svg, 'image/svg+xml');
     const downloadCutSheetPdf = () => pkg && downloadText(`${pkg.id}-cut-sheet.pdf`, pkg.cutSheetPdf, 'application/pdf');
     const downloadAssemblyPdf = () => pkg && downloadText(`${pkg.id}-assembly.pdf`, pkg.assemblyGuidePdf, 'application/pdf');
-    return <div className="grid gap-5 xl:grid-cols-[.75fr_1.25fr]">
-        <section className="workspace p-6" data-testid="blueprint-control-panel">
-            <h4 className="section-title">Validation</h4>
-            <h3>Build-ready package</h3>
-            <p className="mt-2 text-sm text-slate-600">This step reads the actual scene: character layers, mechanism anchors, board holes, target part/path/anchor, and warnings.</p>
-            <div className="mt-4 space-y-2">{validation.issues.map((issue, index) => <div className={issue.severity === 'error' ? 'error' : 'warning'} key={`${issue.message}-${index}`}>
-                <div>{issue.message}</div>
-                <button className="mt-2 underline" onClick={() => goStage(issue.recoveryStage)}>{issue.recoveryAction}</button>
-            </div>)}{!validation.errors.length && !validation.warnings.length && <div className="ok">Fabrication state ready.</div>}</div>
-            <button className="btn-primary mt-5" disabled={!!validation.errors.length} onClick={create}><FileJson size={16}/> Generate package</button>
-            {pkg && <div className="mt-5 space-y-3">
-                <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
-                    <div className="font-bold text-slate-800">Default export: {defaultFormat}</div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                        {defaultFormat !== 'svg' && <button className="btn-primary" onClick={downloadJson}>Download JSON default</button>}
-                        {defaultFormat !== 'json' && <button className="btn-primary" onClick={downloadSvg}>Download SVG default</button>}
-                    </div>
-                    <div className="mt-2 text-xs">Full package artifacts remain available for handoff and archival.</div>
-                </div>
-                <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
-                    <div className="font-bold text-slate-800">Cut-sheet default: {cutSheetFileType.toUpperCase()}</div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                        {cutSheetFileType === 'pdf'
-                            ? <button className="btn-primary" onClick={downloadCutSheetPdf}>Download PDF cut sheet default</button>
-                            : <button className="btn-primary" onClick={downloadSvg}>Download SVG cut sheet default</button>}
-                    </div>
-                    <div className="mt-2 text-xs">Assembly guide stays bundled even when SVG is the preferred cut sheet.</div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                    <button className="btn-secondary" onClick={downloadJson}>JSON</button>
-                    <button className="btn-secondary" onClick={downloadSvg}>SVG</button>
-                    <button className="btn-secondary" onClick={() => downloadText(`${pkg.id}-assembly.html`, pkg.assemblyGuideHtml, 'text/html')}>Guide</button>
-                    <button className="btn-secondary" onClick={() => downloadText(`${pkg.id}-metadata.json`, pkg.metadataJson)}>Metadata</button>
-                    <button className="btn-secondary" onClick={downloadAssemblyPdf}>PDF</button>
-                </div>
-            </div>}
-        </section>
-        <section className="space-y-5">
-            <div className="path-canvas-shell workspace overflow-hidden p-0" data-testid="blueprint-canvas-preview">
-                <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
-                <Canvas project={project} config={config} setConfig={setConfig} selectedId={project.selectedMechanismId ?? null} setSelectedId={id => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: id })} isPlaying={isPlaying} showTrace={true} isDrawMode={false} userPath={[]} setUserPath={() => {}} angle={angle} setAngle={setAngle} viewport={viewport} setViewport={setViewport}/>
-            </div>
-            <section className="workspace p-6" data-testid="assembly-guide-preview">
-                <h4 className="section-title">Current-scene recipes</h4>
-                <h3>Assembly guide preview</h3>
-                <p className="mt-2 text-sm text-slate-600">Each card links the mechanism to its board coordinate, target body part, path, anchor joint, required parts, and warnings.</p>
-                <div className="mt-4 grid gap-3">{recipes.map(recipe => <article key={recipe.mechanismId} className="assembly-recipe-card" data-testid={`assembly-recipe-${recipe.mechanismId}`}>
-                    <div className="flex items-start justify-between gap-3">
-                        <div>
-                            <div className="font-bold text-slate-800">{recipe.mechanismId} · {recipe.type}</div>
-                            <div className="text-sm text-slate-600">Board {recipe.boardCoordinate}</div>
-                            <div className="text-xs text-slate-500">Target {recipe.targetPartName ?? recipe.targetPartId ?? 'unbound'} · path {recipe.targetPathId ?? 'none'} · anchor {recipe.targetAnchorJointId ?? 'part default'} · {recipe.targetPathPointCount ?? 0} points</div>
+    const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
+    const selectedRecipe = recipes.find(recipe => recipe.mechanismId === selectedRecipeId) ?? recipes[0];
+    return <EditorStageFrame
+        stage="blueprint"
+        className="blueprint-stage-frame"
+        layout={{
+            workflow: workflowPane(<div className="stage-pane-stack" data-testid="blueprint-control-panel">
+            <StageLeftSummary project={project} title="Blueprint Export" kicker="fabrication package" stage="blueprint" goStage={goStage}>
+                <h3>Build-ready package</h3>
+                <p className="mt-2 text-sm text-slate-600">Validation, downloads, and recipe selection stay here; the center remains the build canvas.</p>
+                <div className="mt-4 space-y-2">{validation.issues.map((issue, index) => <div className={issue.severity === 'error' ? 'error' : 'warning'} key={`${issue.message}-${index}`}>
+                    <div>{issue.message}</div>
+                    <button className="mt-2 underline" onClick={() => goStage(issue.recoveryStage)}>{issue.recoveryAction}</button>
+                </div>)}{!validation.errors.length && !validation.warnings.length && <div className="ok">Fabrication state ready.</div>}</div>
+                <button className="btn-primary mt-5" disabled={!!validation.errors.length} onClick={create}><FileJson size={16}/> Generate package</button>
+                {pkg && <div className="mt-5 space-y-3">
+                    <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
+                        <div className="font-bold text-slate-800">Default export: {defaultFormat}</div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                            {defaultFormat !== 'svg' && <button className="btn-primary" onClick={downloadJson}>Download JSON default</button>}
+                            {defaultFormat !== 'json' && <button className="btn-primary" onClick={downloadSvg}>Download SVG default</button>}
                         </div>
-                        <button className="chip" onClick={() => goStage('design')}>Edit</button>
+                        <div className="mt-2 text-xs">Full package artifacts remain available for handoff and archival.</div>
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-2">{recipe.requiredParts.map(part => <span className="blueprint-pill" key={`${recipe.mechanismId}-${part.name}`}>{part.name} × {part.quantity}</span>)}</div>
-                    {recipe.warnings.length ? <div className="warning mt-3">Warnings: {recipe.warnings.join('; ')}</div> : <div className="ok mt-3">Warnings: none</div>}
-                    <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-slate-600">{recipe.steps.map(step => <li key={step}>{step}</li>)}</ol>
-                </article>)}</div>
-                {pkg && <img className="mt-5 rounded-3xl border border-slate-200 bg-white p-3" alt="fabrication SVG preview" src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(pkg.svg)}`} />}
-                {!pkg && <div className="mt-5 rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">Generate package to lock downloadable cut sheets, metadata, and the final assembly guide.</div>}
-            </section>
-        </section>
-    </div>;
+                    <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
+                        <div className="font-bold text-slate-800">Cut-sheet default: {cutSheetFileType.toUpperCase()}</div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                            {cutSheetFileType === 'pdf'
+                                ? <button className="btn-primary" onClick={downloadCutSheetPdf}>Download PDF cut sheet default</button>
+                                : <button className="btn-primary" onClick={downloadSvg}>Download SVG cut sheet default</button>}
+                        </div>
+                        <div className="mt-2 text-xs">Assembly guide stays bundled even when SVG is the preferred cut sheet.</div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        <button className="btn-secondary" onClick={downloadJson}>JSON</button>
+                        <button className="btn-secondary" onClick={downloadSvg}>SVG</button>
+                        <button className="btn-secondary" onClick={() => downloadText(`${pkg.id}-assembly.html`, pkg.assemblyGuideHtml, 'text/html')}>Guide</button>
+                        <button className="btn-secondary" onClick={() => downloadText(`${pkg.id}-metadata.json`, pkg.metadataJson)}>Metadata</button>
+                        <button className="btn-secondary" onClick={downloadAssemblyPdf}>PDF</button>
+                    </div>
+                </div>}
+                <div className="mt-5">
+                    <h4 className="section-title">Recipe list</h4>
+                    <div className="mt-3 grid gap-2">
+                        {recipes.map(recipe => <button key={recipe.mechanismId} type="button" className={`assembly-recipe-card text-left ${selectedRecipe?.mechanismId === recipe.mechanismId ? 'ring-2 ring-inset' : ''}`} onClick={() => setSelectedRecipeId(recipe.mechanismId)}>
+                            <div className="font-bold text-slate-800">{recipe.mechanismId} · {recipe.type}</div>
+                            <div className="text-sm text-slate-600">Hole {recipe.boardCoordinate}</div>
+                            <div className="text-xs text-slate-500">Target {recipe.targetPartName ?? recipe.targetPartId ?? 'unbound'} · {recipe.targetPathPointCount ?? 0} points</div>
+                        </button>)}
+                    </div>
+                </div>
+            </StageLeftSummary>
+        </div>),
+            canvas: canvasPane(<div className="path-canvas-shell workspace overflow-hidden p-0" data-testid="blueprint-canvas-preview">
+            <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
+            <Canvas project={project} config={config} setConfig={setConfig} selectedId={project.selectedMechanismId ?? null} setSelectedId={id => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: id })} isPlaying={isPlaying} showTrace={true} isDrawMode={false} userPath={[]} setUserPath={() => {}} angle={angle} setAngle={setAngle} viewport={viewport} setViewport={setViewport}/>
+        </div>, canvasOverlay),
+            inspector: inspectorPane(<section className="stage-pane-stack" data-testid="assembly-guide-preview">
+            <div>
+                <div className="section-title">Selected recipe detail</div>
+                <h3>Assembly guide preview</h3>
+                <p className="mt-2 text-sm text-slate-600">Inspect the selected recipe without moving the shared work canvas.</p>
+            </div>
+            {selectedRecipe ? <article className="assembly-recipe-card" data-testid={`assembly-recipe-${selectedRecipe.mechanismId}`}>
+                <div className="flex items-start justify-between gap-3">
+                    <div>
+                        <div className="font-bold text-slate-800">{selectedRecipe.mechanismId} · {selectedRecipe.type}</div>
+                        <div className="text-sm text-slate-600">Board {selectedRecipe.boardCoordinate}</div>
+                        <div className="text-xs text-slate-500">Target {selectedRecipe.targetPartName ?? selectedRecipe.targetPartId ?? 'unbound'} · path {selectedRecipe.targetPathId ?? 'none'} · anchor {selectedRecipe.targetAnchorJointId ?? 'part default'} · {selectedRecipe.targetPathPointCount ?? 0} points</div>
+                    </div>
+                    <button className="chip" onClick={() => goStage('design')}>Edit</button>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">{selectedRecipe.requiredParts.map(part => <span className="blueprint-pill" key={`${selectedRecipe.mechanismId}-${part.name}`}>{part.name} × {part.quantity}</span>)}</div>
+                {selectedRecipe.warnings.length ? <div className="warning mt-3">Warnings: {selectedRecipe.warnings.join('; ')}</div> : <div className="ok mt-3">Warnings: none</div>}
+                <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-slate-600">{selectedRecipe.steps.map(step => <li key={step}>{step}</li>)}</ol>
+            </article> : <div className="warning">No recipe yet. Return to Mechanism Design or generate a package.</div>}
+            {pkg && <img className="mt-5 rounded-3xl border border-slate-200 bg-white p-3" alt="fabrication SVG preview" src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(pkg.svg)}`} />}
+            {!pkg && <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">Generate package to lock downloadable cut sheets, metadata, and the final assembly guide.</div>}
+        </section>)
+        }}
+    />;
 };
 
-const Options = ({ project, dispatch }: { project: ProjectState; dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void }) => {
+const Options = ({ project, dispatch, goStage, canvasOverlay }: { project: ProjectState; dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void; goStage: (stage: AppStage) => void; canvasOverlay?: React.ReactNode }) => {
     const kit = project.settings.physicalKit;
     const updateSettings = (settings: Partial<ProjectState['settings']>) => dispatch({ type: 'update_settings', settings });
     const updateKit = (physicalKit: Partial<ProjectState['settings']['physicalKit']>) => updateSettings({ physicalKit: { ...kit, ...physicalKit } });
@@ -1989,14 +2136,45 @@ const Options = ({ project, dispatch }: { project: ProjectState; dispatch: (acti
         : project.settings.gridUnit === 'px'
             ? `${(kit.gridPitchMm * 2).toFixed(0)} scene px between board holes`
             : `${(kit.gridPitchMm / 10).toFixed(1)} cm between board holes`;
-    return <div className="options-workspace grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
+    return <EditorStageFrame
+        stage="options"
+        className="options-stage-frame"
+        layout={{
+            workflow: workflowPane(<div className="stage-pane-stack">
+            <StageLeftSummary project={project} title="Options" kicker="global settings" stage="options" goStage={goStage}>
+                <h3>Studio settings</h3>
+                <p className="mt-2 text-sm text-slate-600">Pick a category here, then tune details in the inspector.</p>
+                <div className="stage-option-list">
+                    {OPTIONS_SECTION_MANIFEST.map(section => <a key={section.id} className="workspace-side-link" href={`#${section.id}`}>{section.label === 'Fabrication / Blueprint export' ? 'Fabrication' : section.label}</a>)}
+                </div>
+            </StageLeftSummary>
+        </div>),
+            canvas: canvasPane(<div className="path-canvas-shell options-preview-shell workspace overflow-hidden p-6">
+            <div className="canvas-hint"><strong>Settings preview</strong><span>Shared canvas stays pinned while options scroll.</span></div>
+            <svg viewBox="0 0 640 420" className="options-preview-canvas w-full h-full" role="img" aria-label="Options preview canvas">
+                <defs>
+                    <pattern id="options-grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#e2e8f0" strokeWidth="1"/></pattern>
+                </defs>
+                <rect x="34" y="24" width="572" height="372" rx="24" fill="white" stroke="#d6dbe8"/>
+                <rect x="34" y="24" width="572" height="372" rx="24" fill="url(#options-grid)" opacity=".9"/>
+                <text x="58" y="64" fill="#94a3b8" fontSize="18" fontWeight="800">Letter sheet · {project.settings.physicalKit.gridPitchMm / 10}cm grid</text>
+                <g transform="translate(300 210)">
+                    <rect x="-70" y="-90" width="140" height="180" rx="32" fill="#cbd5e1" opacity=".55"/>
+                    <circle cx="0" cy="-115" r="38" fill="#d8dee8"/>
+                    <path d="M 70 -52 C 142 -24 122 58 78 94" fill="none" stroke="#8b5cf6" strokeWidth="8" strokeLinecap="round"/>
+                    <path d="M -70 -54 C -126 -18 -116 60 -68 94" fill="none" stroke="#10b981" strokeWidth="6" strokeLinecap="round" opacity=".7"/>
+                </g>
+                <text x="58" y="362" fill="#64748b" fontSize="14" fontWeight="800">{project.settings.theme} theme · {project.settings.animationSpeed.toFixed(1)}x speed · {project.settings.physicalKit.defaultExportFormat} export</text>
+            </svg>
+        </div>, canvasOverlay),
+            inspector: inspectorPane(<div className="options-workspace stage-pane-stack">
         <section className="workspace space-y-5 p-6">
             <div>
                 <div className="section-title">Options</div>
                 <h3>Make the studio feel simple.</h3>
                 <p className="mt-2 text-sm text-slate-600">These controls write into the real project settings. Fabrication and grid choices also refresh blueprint validation.</p>
             </div>
-            <SettingsSection id="appearance" title="Appearance" description="Keep the interface light and show only the panels you need.">
+            <SettingsSection section={optionSection('appearance')}>
                 <SelectField label="Theme" value={project.settings.theme} onChange={theme => updateSettings({ theme: theme as ProjectState['settings']['theme'] })}>
                     <option value="light">Light</option>
                     <option value="dark">Dark</option>
@@ -2005,7 +2183,7 @@ const Options = ({ project, dispatch }: { project: ProjectState; dispatch: (acti
                 <Toggle label="Show toolbar" checked={project.settings.toolbarVisible} onChange={toolbarVisible => updateSettings({ toolbarVisible })}/>
                 <Toggle label="Show Part Properties Panel" checked={project.settings.partPanelVisible} onChange={partPanelVisible => updateSettings({ partPanelVisible })}/>
             </SettingsSection>
-            <SettingsSection id="simulation" title="Simulation" description="Preview timing for one full motion loop.">
+            <SettingsSection section={optionSection('simulation')}>
                 <MiniNumber label="Animation speed" value={project.settings.animationSpeed} min={0.1} max={5} step={0.1} onChange={animationSpeed => updateSettings({ animationSpeed })}/>
                 <MiniNumber label="Animation Duration" value={durationSeconds} min={0.1} max={60} step={0.1} onChange={seconds => updateSettings({ animationDurationMs: Math.round(seconds * 1000) })}/>
                 <SelectField label="Timing profile" value={project.settings.timingProfile} onChange={timingProfile => updateSettings({ timingProfile: timingProfile as ProjectState['settings']['timingProfile'] })}>
@@ -2020,7 +2198,7 @@ const Options = ({ project, dispatch }: { project: ProjectState; dispatch: (acti
             </SettingsSection>
         </section>
         <section className="space-y-5">
-            <SettingsSection id="performance" title="Performance" description="Choose how hard path fitting and snap checks work.">
+            <SettingsSection section={optionSection('performance')}>
                 <SelectField label="Performance preset" value={project.settings.performancePreset} onChange={performancePreset => updateSettings({ performancePreset: performancePreset as ProjectState['settings']['performancePreset'] })}>
                     <option value="fast">Fast · fewer fit samples</option>
                     <option value="balanced">Balanced</option>
@@ -2032,15 +2210,15 @@ const Options = ({ project, dispatch }: { project: ProjectState; dispatch: (acti
                     <option value="high">High · strict board-hole snap</option>
                 </SelectField>
             </SettingsSection>
-            <SettingsSection id="debugging" title="Debugging" description="Turn on labels when something feels off.">
+            <SettingsSection section={optionSection('debugging')}>
                 <Toggle label="Enable Debug Visuals" checked={project.settings.debugVisuals} onChange={debugVisuals => updateSettings({ debugVisuals })}/>
                 <Toggle label="Show Detailed Processing Steps" checked={project.settings.detailedProcessingSteps} onChange={detailedProcessingSteps => updateSettings({ detailedProcessingSteps })}/>
             </SettingsSection>
-            <SettingsSection id="workflow" title="Workflow" description="Autosave is local to this browser.">
+            <SettingsSection section={optionSection('workflow')}>
                 <Toggle label="Enable autosave" checked={project.settings.autosave} onChange={autosave => updateSettings({ autosave })}/>
                 <MiniNumber label="Autosave interval seconds" value={project.settings.autosaveIntervalSeconds} min={1} max={600} step={1} disabled={!project.settings.autosave} onChange={autosaveIntervalSeconds => updateSettings({ autosaveIntervalSeconds })}/>
             </SettingsSection>
-            <SettingsSection id="fabrication" title="Fabrication / Blueprint export" description="Match the preview grid to the physical sheet and board holes.">
+            <SettingsSection section={optionSection('fabrication')}>
                 <SelectField label="Default export format" value={kit.defaultExportFormat} onChange={defaultExportFormat => updateKit({ defaultExportFormat: defaultExportFormat as ProjectState['settings']['physicalKit']['defaultExportFormat'] })}>
                     <option value="both">Export SVG + JSON</option>
                     <option value="svg">Export SVG only</option>
@@ -2063,7 +2241,7 @@ const Options = ({ project, dispatch }: { project: ProjectState; dispatch: (acti
                     <div>{kit.boardCells}×{kit.boardCells} board holes · {kit.sheetWidthMm.toFixed(1)}×{kit.sheetHeightMm.toFixed(1)}mm sheet</div>
                 </div>
             </SettingsSection>
-            <SettingsSection id="units" title="Units" description="Only labels change; fabrication still stores millimeters.">
+            <SettingsSection section={optionSection('units')}>
                 <SelectField label="Grid unit system" value={project.settings.gridUnit} onChange={gridUnit => updateSettings({ gridUnit: gridUnit as ProjectState['settings']['gridUnit'] })}>
                     <option value="cm">Centimeters</option>
                     <option value="inch">Inches</option>
@@ -2071,13 +2249,16 @@ const Options = ({ project, dispatch }: { project: ProjectState; dispatch: (acti
                 </SelectField>
             </SettingsSection>
         </section>
-    </div>;
+
+        </div>)
+        }}
+    />;
 };
 
-const SettingsSection = ({ id, title, description, children }: { id: string; title: string; description: string; children: React.ReactNode }) => <section className="workspace space-y-3 p-5" data-testid={`options-${id}`} aria-label={title}>
+const SettingsSection = ({ section, children }: { section: OptionsSectionMeta; children: React.ReactNode }) => <section id={section.id} className="workspace settings-section space-y-3 p-5" data-testid={`options-${section.id}`} aria-label={section.label}>
     <div>
-        <div className="section-title">{title}</div>
-        <p className="mt-1 text-sm text-slate-600">{description}</p>
+        <div className="section-title">{section.label}</div>
+        <p className="mt-1 text-sm text-slate-600">{section.description}</p>
     </div>
     <div className="space-y-3">{children}</div>
 </section>;

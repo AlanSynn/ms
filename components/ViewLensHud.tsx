@@ -52,7 +52,7 @@ export const ViewLensHud = ({
     }
   };
 
-  return <div className="view-lens-hud" data-testid="view-lens-hud" aria-label="Canvas view lens controls">
+  return <div className={`view-lens-hud ${drawMode ? 'is-drawing' : ''}`} data-testid="view-lens-hud" aria-label="Canvas view lens controls">
     <div className="view-lens-main">
       <div className="view-lens-title">
         <span>Canvas lens</span>

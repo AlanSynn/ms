@@ -494,10 +494,15 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
 
   await page.getByLabel('Show Part Properties Panel').uncheck();
   await page.getByRole('button', { name: /Path Editor/i }).click();
-  await expect(page.getByTestId('novice-path-panel')).toHaveCount(0);
+  await expect(page.getByTestId('novice-path-panel')).toBeVisible();
+  await expect(page.getByTestId('rig-structure-drawer')).toHaveCount(0);
+  await expect(page.getByTestId('rig-structure-hidden')).toBeVisible();
   await expect(page.getByTestId('path-canvas')).toBeVisible();
   await page.getByRole('button', { name: /Options/i }).click();
   await page.getByLabel('Show Part Properties Panel').check();
+  await page.getByRole('button', { name: /Path Editor/i }).click();
+  await expect(page.getByTestId('rig-structure-drawer')).toBeVisible();
+  await page.getByRole('button', { name: /Options/i }).click();
 
   await page.getByLabel('Enable Debug Visuals').check();
   await page.getByRole('button', { name: /Path Editor/i }).click();
@@ -961,34 +966,108 @@ test('Mobile path editor keeps Draw free path action above the canvas', async ({
   expect(drawBox!.y, 'mobile draw action appears before canvas').toBeLessThan(canvasBox!.y);
 });
 
-test('Shared player dock stays inside the editor content at medium desktop width', async ({ page }) => {
-  await page.setViewportSize({ width: 1024, height: 768 });
-  await page.goto('/');
-  await openWavingArmTemplate(page);
-  await page.getByRole('button', { name: 'Rail mechanism parameters' }).click();
-  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+test('Shared player dock stays inside the editor content at lower and medium desktop widths', async ({ page }) => {
+  for (const width of [901, 950, 1024]) {
+    await page.setViewportSize({ width, height: 768 });
+    await page.goto('/');
+    await openWavingArmTemplate(page);
+    await page.getByRole('button', { name: 'Rail mechanism parameters' }).click();
+    await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
 
-  const railBox = await page.getByTestId('editor-sidebar').boundingBox();
-  const dockBox = await page.getByTestId('workspace-player-dock').boundingBox();
-  expect(railBox, 'sidebar layout box').toBeTruthy();
-  expect(dockBox, 'player dock layout box').toBeTruthy();
-  expect(dockBox!.x, 'player dock does not overlap the fixed sidebar').toBeGreaterThanOrEqual(railBox!.x + railBox!.width);
+    const leftBox = await page.getByTestId('stage-left-pane').boundingBox();
+    const rightBox = await page.getByTestId('stage-right-inspector').boundingBox();
+    const dockBox = await page.getByTestId('workspace-player-dock').boundingBox();
+    expect(leftBox, `left pane layout box at ${width}px`).toBeTruthy();
+    expect(rightBox, `right inspector layout box at ${width}px`).toBeTruthy();
+    expect(dockBox, `player dock layout box at ${width}px`).toBeTruthy();
+    const overlaps = (a: NonNullable<typeof dockBox>, b: NonNullable<typeof dockBox>) =>
+      a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+    expect(overlaps(dockBox!, leftBox!), `player dock does not geometrically overlap the workflow pane at ${width}px`).toBe(false);
+    expect(overlaps(dockBox!, rightBox!), `player dock does not geometrically overlap the right inspector at ${width}px`).toBe(false);
+  }
 });
 
 test('Right inspector scroll does not move the center canvas', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto('/');
   await openWavingArmTemplate(page);
+  await page.getByRole('button', { name: /Options/i }).click();
 
-  const canvas = page.getByTestId('path-canvas');
-  const panel = page.getByTestId('novice-path-panel');
-  const before = await canvas.boundingBox();
-  await panel.hover();
-  await page.mouse.wheel(0, 700);
+  const center = page.getByTestId('stage-canvas-pane');
+  const inspector = page.getByTestId('stage-right-inspector');
+  const before = await center.boundingBox();
+  await inspector.hover();
+  await page.mouse.wheel(0, 900);
 
-  await expect.poll(() => panel.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
-  const after = await canvas.boundingBox();
-  expect(Math.abs(after!.y - before!.y), 'canvas stays pinned while inspector scrolls').toBeLessThan(1);
+  await expect.poll(() => inspector.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+  const after = await center.boundingBox();
+  expect(Math.abs(after!.y - before!.y), 'center canvas stays pinned while right inspector scrolls').toBeLessThan(1);
+});
+
+test('Workflow tabs keep left workflow, center canvas, and right inspector roles', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+
+  const assertPaneContract = async (leftText: RegExp | string, centerText: RegExp | string, rightText: RegExp | string) => {
+    const left = page.getByTestId('stage-left-pane');
+    const center = page.getByTestId('stage-canvas-pane');
+    const right = page.getByTestId('stage-right-inspector');
+    await expect(left).toBeVisible();
+    await expect(center).toBeVisible();
+    await expect(right).toBeVisible();
+    await expect(left).toHaveAttribute('aria-label', 'Workflow and primary actions');
+    await expect(center).toHaveAttribute('aria-label', 'Shared canvas');
+    await expect(right).toHaveAttribute('aria-label', 'Selected item inspector');
+    await expect(left).toHaveAttribute('data-pane-kind', 'workflow');
+    await expect(center).toHaveAttribute('data-pane-kind', 'canvas');
+    await expect(right).toHaveAttribute('data-pane-kind', 'inspector');
+    await expect(left).toContainText(leftText);
+    await expect(center).toContainText(centerText);
+    await expect(right).toContainText(rightText);
+    const unexpectedCenterControls = await center.locator('button, input, select, textarea').evaluateAll(nodes => nodes.filter(node => !node.closest('.canvas-zoom-toolbar') && !node.closest('[data-testid="view-lens-hud"]')).length);
+    expect(unexpectedCenterControls, 'center pane only allows canvas overlay controls').toBe(0);
+    const centerBox = await center.boundingBox();
+    const leftBox = await left.boundingBox();
+    const rightBox = await right.boundingBox();
+    const hudBox = await center.getByTestId('view-lens-hud').boundingBox();
+    const surfaceBox = await center.locator('svg, canvas').first().boundingBox();
+    expect(centerBox, 'center pane box').toBeTruthy();
+    expect(leftBox, 'left pane box').toBeTruthy();
+    expect(rightBox, 'right pane box').toBeTruthy();
+    expect(hudBox, 'view lens HUD box').toBeTruthy();
+    expect(surfaceBox, 'center work surface box').toBeTruthy();
+    expect(hudBox!.x, 'view lens HUD stays inside center left edge').toBeGreaterThanOrEqual(centerBox!.x - 1);
+    expect(hudBox!.x + hudBox!.width, 'view lens HUD stays inside center right edge').toBeLessThanOrEqual(centerBox!.x + centerBox!.width + 1);
+    expect(hudBox!.x, 'view lens HUD does not overlap left workflow pane').toBeGreaterThanOrEqual(leftBox!.x + leftBox!.width - 1);
+    expect(hudBox!.x + hudBox!.width, 'view lens HUD does not overlap right inspector pane').toBeLessThanOrEqual(rightBox!.x + 1);
+    expect(surfaceBox!.x, 'work surface stays inside center left edge').toBeGreaterThanOrEqual(centerBox!.x - 1);
+    expect(surfaceBox!.y, 'work surface stays inside center top edge').toBeGreaterThanOrEqual(centerBox!.y - 1);
+    expect(surfaceBox!.x + surfaceBox!.width, 'work surface stays inside center right edge').toBeLessThanOrEqual(centerBox!.x + centerBox!.width + 1);
+    expect(surfaceBox!.y + surfaceBox!.height, 'work surface stays inside center bottom edge').toBeLessThanOrEqual(centerBox!.y + centerBox!.height + 1);
+  };
+
+  await assertPaneContract('Draw free path', 'Letter sheet', 'Selected inspector');
+  await expect(page.getByTestId('stage-left-pane')).toContainText('Advanced part setup');
+  await expect(page.getByTestId('stage-right-inspector')).not.toContainText(/Add body part|Add layer|Remove layer|Add joint|New IK handle|Parts \+ skeleton/);
+
+  await page.getByRole('button', { name: /Mechanism Foundry/i }).click();
+  await assertPaneContract('Mechanism Gallery', 'Sandbox preview', 'Mechanism options');
+  await expect(page.getByTestId('stage-left-pane')).toContainText('Use this mechanism');
+
+  await page.getByRole('button', { name: /Mechanism Design/i }).click();
+  await assertPaneContract('Mechanism instances', 'Letter sheet', 'Parametric Edit');
+
+  await page.getByRole('button', { name: /Blueprint Export/i }).click();
+  await assertPaneContract('Generate package', 'Letter sheet', 'Assembly guide preview');
+
+  await page.getByRole('button', { name: /Options/i }).click();
+  await assertPaneContract('Studio settings', 'Settings preview', 'Appearance');
+  const rightInspector = page.getByTestId('stage-right-inspector');
+  await rightInspector.evaluate(element => { element.scrollTop = 0; });
+  await page.getByTestId('stage-left-pane').getByRole('link', { name: 'Units' }).click();
+  await expect.poll(() => rightInspector.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+  await expect(page.getByTestId('options-units')).toBeVisible();
 });
 
 test('Animation resumes after leaving path drawing mode', async ({ page }) => {
@@ -1004,13 +1083,27 @@ test('Animation resumes after leaving path drawing mode', async ({ page }) => {
 });
 
 test('Command menu and shared canvas zoom persist across workflow stages', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await openWavingArmTemplate(page);
+  const assertZoomInClickable = async (expectedAfterClick: string) => {
+    const zoomIn = page.getByLabel('Zoom in');
+    await expect(zoomIn).toBeVisible();
+    await zoomIn.scrollIntoViewIfNeeded();
+    const zoomBox = await zoomIn.boundingBox();
+    expect(zoomBox, 'zoom-in button box').toBeTruthy();
+    const hitLabel = await page.evaluate(({ x, y }) => {
+      const target = document.elementFromPoint(x, y);
+      return target?.closest('button')?.getAttribute('aria-label') ?? '';
+    }, { x: zoomBox!.x + zoomBox!.width / 2, y: zoomBox!.y + zoomBox!.height / 2 });
+    expect(hitLabel, 'zoom toolbar is topmost at its click point').toBe('Zoom in');
+    await zoomIn.click();
+    await expect(page.getByTestId('canvas-zoom-readout')).toHaveText(expectedAfterClick);
+  };
 
   await expect(page.getByTestId('top-command-bar')).toBeVisible();
   await expect(page.getByTestId('canvas-zoom-readout')).toHaveText('100%');
-  await page.getByLabel('Zoom in').click();
-  await expect(page.getByTestId('canvas-zoom-readout')).toHaveText('120%');
+  await assertZoomInClickable('120%');
 
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
@@ -1039,6 +1132,15 @@ test('Command menu and shared canvas zoom persist across workflow stages', async
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
   await expect(page.getByTestId('status-bar')).toContainText('ignored invalid workspace viewport');
   await expect(page.getByTestId('status-bar')).toContainText('ignored invalid workspace stage');
+  await expect(page.getByTestId('canvas-zoom-readout')).toHaveText('100%');
+
+  await page.setViewportSize({ width: 899, height: 720 });
+  await page.getByRole('button', { name: 'Rail motion path' }).click();
+  await expect(page.getByTestId('canvas-zoom-readout')).toHaveText('100%');
+  await assertZoomInClickable('120%');
+  await page.getByRole('button', { name: 'Rail mechanism parameters' }).click();
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 900 });
 
   await page.getByTestId('top-command-bar').getByText('File', { exact: true }).click();
   let dialogMessage = '';
@@ -1198,6 +1300,22 @@ test('View lenses, toon sidecar, physics replay, and blueprint flow stay non-des
   await expect(page.getByTestId('view-lens-hud')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 4)).toBe(true);
 
+  await page.setViewportSize({ width: 899, height: 720 });
+  await page.getByRole('button', { name: 'Rail motion path' }).click();
+  const leftBox = await page.getByTestId('stage-left-pane').boundingBox();
+  const centerBox = await page.getByTestId('stage-canvas-pane').boundingBox();
+  const rightBox = await page.getByTestId('stage-right-inspector').boundingBox();
+  const narrowHudBox = await page.getByTestId('view-lens-hud').boundingBox();
+  expect(leftBox).toBeTruthy();
+  expect(centerBox).toBeTruthy();
+  expect(rightBox).toBeTruthy();
+  expect(narrowHudBox).toBeTruthy();
+  expect(centerBox!.y, 'single-column center follows left workflow').toBeGreaterThan(leftBox!.y);
+  expect(rightBox!.y, 'single-column inspector follows center canvas').toBeGreaterThan(centerBox!.y);
+  expect(narrowHudBox!.x, 'single-column HUD stays inside center left edge').toBeGreaterThanOrEqual(centerBox!.x - 1);
+  expect(narrowHudBox!.x + narrowHudBox!.width, 'single-column HUD stays inside center right edge').toBeLessThanOrEqual(centerBox!.x + centerBox!.width + 1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 4)).toBe(true);
+
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('button', { name: /Blueprint Export/i }).click();
   await expect(page.getByRole('heading', { name: 'Blueprint Export' })).toBeVisible();
@@ -1208,4 +1326,22 @@ test('View lenses, toon sidecar, physics replay, and blueprint flow stay non-des
   await expect(page.getByRole('button', { name: 'Metadata', exact: true })).toBeVisible();
 
   expectCleanPage(pageErrors, consoleErrors);
+});
+
+test('Draw mode accepts free path strokes through the view lens overlay', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
+  await expect(page.getByTestId('view-lens-draw-guard')).toContainText('Drawing locks the camera');
+
+  const beforeHudDraw = Number((await page.getByTestId('free-draw-status').textContent())?.match(/^(\d+)/)?.[1] ?? 0);
+  const hudBox = await page.getByTestId('view-lens-hud').boundingBox();
+  expect(hudBox, 'draw-through HUD box').toBeTruthy();
+  await page.mouse.move(hudBox!.x + hudBox!.width * 0.45, hudBox!.y + hudBox!.height * 0.45);
+  await page.mouse.down();
+  await page.mouse.move(hudBox!.x + hudBox!.width * 0.45 + 34, hudBox!.y + hudBox!.height * 0.45 + 22, { steps: 4 });
+  await page.mouse.up();
+
+  await expect.poll(async () => Number((await page.getByTestId('free-draw-status').textContent())?.match(/^(\d+)/)?.[1] ?? 0), { message: 'draw mode accepts pointer input through HUD overlay' }).toBeGreaterThan(beforeHudDraw);
 });
