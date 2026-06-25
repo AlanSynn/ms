@@ -69,6 +69,10 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   expect(forbiddenRuntimeImports.every(item => !item.src || item.src.startsWith('/'))).toBe(true);
 
   await openWavingArmTemplate(page);
+  await expect(page.getByTestId('workspace-steps')).toContainText('Path Editor');
+  await expect(page.getByTestId('editor-sidebar')).toContainText('Shared canvas');
+  await expect(page.getByTestId('shared-workbench')).toBeVisible();
+  await expect(page.getByTestId('workspace-player-dock')).toBeVisible();
   await expect(page.getByTestId('novice-path-panel')).toContainText('Draw the motion path');
   await expect(page.getByText('Choose a body part, press Draw free path')).toBeVisible();
   await expect(page.getByTestId('free-draw-status')).toContainText(/5 points .*path-right-arm/);
@@ -910,6 +914,20 @@ test('Mobile path editor keeps Draw free path action above the canvas', async ({
   expect(drawBox, 'draw button layout box').toBeTruthy();
   expect(canvasBox, 'path canvas layout box').toBeTruthy();
   expect(drawBox!.y, 'mobile draw action appears before canvas').toBeLessThan(canvasBox!.y);
+});
+
+test('Shared player dock stays inside the editor content at medium desktop width', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByRole('button', { name: 'Rail mechanism parameters' }).click();
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+
+  const railBox = await page.getByTestId('editor-sidebar').boundingBox();
+  const dockBox = await page.getByTestId('workspace-player-dock').boundingBox();
+  expect(railBox, 'sidebar layout box').toBeTruthy();
+  expect(dockBox, 'player dock layout box').toBeTruthy();
+  expect(dockBox!.x, 'player dock does not overlap the fixed sidebar').toBeGreaterThanOrEqual(railBox!.x + railBox!.width);
 });
 
 test('Command menu and shared canvas zoom persist across workflow stages', async ({ page }) => {

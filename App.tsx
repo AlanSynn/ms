@@ -59,6 +59,11 @@ const STAGES: Array<{ id: AppStage; label: string; kicker: string }> = [
     { id: 'blueprint', label: 'Blueprint Export', kicker: 'fabrication package' },
     { id: 'options', label: 'Options', kicker: 'global settings' }
 ];
+const stageNavLabel = (stage: AppStage) => ({
+    character: 'Character',
+    foundry: 'Foundry',
+    blueprint: 'Blueprint'
+} as Partial<Record<AppStage, string>>)[stage];
 
 const MECH_TYPES: MechanismType[] = ['4bar', 'cam', 'gear', 'planetary_gear', 'piston', 'yoke', 'quick-return', '5bar'];
 const FOUNDRY_PRESETS: Record<string, Partial<MechanismConfig> & { label: string; recommendation: string }> = {
@@ -504,41 +509,52 @@ const App: React.FC = () => {
     };
     const disabledCommand = (reason: string) => setCommandStatus(reason);
     const themeClass = project.settings.theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-950';
+    const sideLinkClass = (targets: AppStage[]) => `workspace-side-link ${targets.includes(stage) ? 'active' : ''}`;
+    const stageMeta = STAGES.find(s => s.id === stage);
 
     return (
         <main className={`min-h-screen overflow-hidden ${themeClass}`} data-theme={project.settings.theme}>
             <div className="pointer-events-none fixed inset-0 opacity-70" style={{ background: 'radial-gradient(circle at 15% 10%, rgba(90,108,255,.12), transparent 28%), radial-gradient(circle at 85% 20%, rgba(90,108,255,.08), transparent 24%), linear-gradient(120deg, rgba(8,10,18,.04), transparent)' }} />
             <div className={`relative grid min-h-screen app-shell ${stage === 'character' ? 'is-onboarding' : ''}`}>
-                <aside className="app-rail border-r border-slate-300/80 bg-white/70 p-5 backdrop-blur-xl">
-                    <div className="mb-7">
-                        <div className="accent-label text-[11px] font-black uppercase tracking-[0.28em]">Automataii web port</div>
-                        <h1 className="mt-2 text-4xl font-black tracking-[-0.08em]">MechAnim</h1>
-                        <p className="mt-2 text-sm leading-5 text-slate-500">Character, motion, mechanism, fabrication. One scene frame.</p>
+                <aside className="app-rail border-r border-slate-300/80 bg-white/70 p-5 backdrop-blur-xl" data-testid="editor-sidebar">
+                    <div className="mb-5 rounded-3xl bg-slate-100 p-4">
+                        <div className="flex items-center gap-3">
+                            <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-sm font-black text-white">MS</div>
+                            <div>
+                                <div className="font-black tracking-tight text-slate-900">{project.metadata.name}</div>
+                                <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">Automata editor</div>
+                            </div>
+                        </div>
+                        <button className="btn-primary mt-4 w-full" onClick={() => goStage('foundry')}><Plus size={16}/> New mechanism</button>
                     </div>
-                    <nav className="space-y-1">
-                        {STAGES.map((item, index) => (
-                            <button key={item.id} onClick={() => goStage(item.id)} className={`group w-full rounded-2xl px-3 py-3 text-left transition-all ${stage === item.id ? 'bg-slate-950 text-white shadow-xl shadow-slate-400/20' : 'hover:bg-white'}`}>
-                                <div className="flex items-center justify-between">
-                                    <span className="text-[11px] font-black uppercase tracking-[0.2em] opacity-60">0{index + 1}</span>
-                                    {stage === item.id && <span className="nav-active-dot h-2 w-2 rounded-full" />}
-                                </div>
-                                <div className="mt-1 font-bold tracking-tight">{item.label}</div>
-                                <div className="text-xs opacity-60">{item.kicker}</div>
-                            </button>
-                        ))}
-                    </nav>
-                    <div className="mt-6 border-t border-slate-200 pt-5 text-xs text-slate-500">
-                        <div className="font-bold text-slate-800">{project.metadata.name}</div>
+                    <div className="space-y-2 border-b border-slate-200 pb-5 text-sm font-bold">
+                        <div className="section-title">Active workspace</div>
+                        <button aria-label="Rail motion path" className={sideLinkClass(['path'])} onClick={() => goStage('path')}><Route size={16}/> Motion path</button>
+                        <button aria-label="Rail mechanism parameters" className={sideLinkClass(['foundry', 'design'])} onClick={() => goStage('design')}><Boxes size={16}/> Parameters</button>
+                        <button aria-label="Rail export package" className={sideLinkClass(['blueprint'])} onClick={() => goStage('blueprint')}><Download size={16}/> Blueprint export</button>
+                    </div>
+                    <div className="mt-5 text-xs text-slate-500">
                         <div>{project.partOrder.length} parts · {Object.keys(project.paths).length} paths · {project.mechanisms.length} mechanisms</div>
                         <div>Grid {project.settings.physicalKit.gridPitchMm} mm · {project.metadata.status}</div>
+                        <div>Shared canvas · zoom {Math.round(canvasViewport.zoom * 100)}%</div>
                     </div>
                 </aside>
 
                 <section className="relative flex min-w-0 flex-col">
                     <header className="app-header flex items-center justify-between border-b border-slate-300/70 bg-white/50 px-7 py-4 backdrop-blur-xl">
-                        <div>
-                            <div className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">{STAGES.find(s => s.id === stage)?.kicker}</div>
-                            <h2 className="text-2xl font-black tracking-[-0.05em]">{STAGES.find(s => s.id === stage)?.label}</h2>
+                        <div className="flex min-w-0 items-center gap-6">
+                            <div>
+                                <div className="accent-label text-[11px] font-black uppercase tracking-[0.28em]">MotionSmith</div>
+                                <h1 className="text-2xl font-black tracking-[-0.05em]">MechAnim</h1>
+                                <h2 className="current-stage-title">{stageMeta?.label}</h2>
+                            </div>
+                            <nav className="workspace-steps" data-testid="workspace-steps">
+                                {STAGES.map((item, index) => (
+                                    <button key={item.id} aria-label={item.label} onClick={() => goStage(item.id)} className={stage === item.id ? 'active' : ''}>
+                                        {index + 1}. {stageNavLabel(item.id) ?? item.label}
+                                    </button>
+                                ))}
+                            </nav>
                         </div>
                         <div className="flex flex-col items-end gap-2">
                             <TopCommandBar
@@ -565,7 +581,7 @@ const App: React.FC = () => {
                     </header>
                     <input ref={projectInputRef} hidden type="file" accept="application/json,.mechanim.json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/>
 
-                    <div className={`stage-body min-h-0 flex-1 overflow-auto ${stage === 'character' ? 'p-0' : 'p-7'}`}>
+                    <div className={`stage-body editor-workbench min-h-0 flex-1 overflow-auto ${stage === 'character' ? 'p-0' : 'p-7'}`} data-testid="shared-workbench">
                         {stage === 'character' && <CharacterSelection project={project} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} starterTemplates={STARTER_IMAGE_TEMPLATES} onStarterImage={loadStarterImage} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onSample={() => { setPendingCharacter(null); setProject(createSampleProject()); setStage('path'); }} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} />}
                         {stage === 'path' && <PathEditor project={project} sortedParts={sortedParts} selectedPart={selectedPart} selectedPath={selectedPath} drawMode={drawMode} setDrawMode={setDrawMode} dispatch={dispatch} setPathPoints={setPathPoints} openTracking={() => setShowTracking(true)} isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} onNext={() => goStage('foundry')} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {stage === 'foundry' && <MechanismFoundry project={project} foundry={foundry} setFoundry={setFoundry} selectedPart={selectedPart} selectedPath={selectedPath} onExport={(pkg) => {
@@ -599,6 +615,7 @@ const App: React.FC = () => {
                         {stage === 'options' && <Options project={project} dispatch={dispatch} />}
                     </div>
                     <WorkflowStatusStrip stage={stage} project={project} selectedPart={selectedPart} selectedPath={selectedPath} />
+                    {stage !== 'character' && <WorkspacePlayerDock isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} speed={project.settings.animationSpeed} />}
                     <footer className="status-bar" data-testid="status-bar">{commandStatus} · parts:{project.partOrder.length} · paths:{Object.keys(project.paths).length} · mechs:{project.mechanisms.length} · zoom {Math.round(canvasViewport.zoom * 100)}%</footer>
                 </section>
             </div>
@@ -677,6 +694,33 @@ const CanvasZoomToolbar = ({ viewport, setViewport }: { viewport: CanvasViewport
         <button type="button" aria-label="Zoom in" onClick={() => zoomBy(1.2)}>+</button>
         <button type="button" aria-label="Fit view" onClick={reset}>Fit</button>
     </div>;
+};
+
+const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, speed }: {
+    isPlaying: boolean;
+    setIsPlaying: (value: boolean) => void;
+    angle: number;
+    setAngle: React.Dispatch<React.SetStateAction<number>>;
+    speed: number;
+}) => {
+    const progress = ((angle / (Math.PI * 2)) % 1 + 1) % 1;
+    const percent = Math.round(progress * 100);
+    return <aside className="player-dock" data-testid="workspace-player-dock" aria-label="Shared animation controls">
+        <div className="section-title">Animation</div>
+        <div className="player-actions">
+            <button type="button" aria-label="Shared transport toggle" onClick={() => setIsPlaying(!isPlaying)}>{isPlaying ? 'Ⅱ' : '▶'}</button>
+            <button type="button" aria-label="Shared scrub restart" onClick={() => setAngle(0)}>↺</button>
+            <span>{speed.toFixed(1)}x</span>
+        </div>
+        <input
+            aria-label="Workspace scrubber"
+            type="range"
+            min={0}
+            max={100}
+            value={percent}
+            onChange={event => setAngle((Number(event.currentTarget.value) / 100) * Math.PI * 2)}
+        />
+    </aside>;
 };
 
 const WorkflowStatusStrip = ({ stage, project, selectedPart, selectedPath }: { stage: AppStage; project: ProjectState; selectedPart?: BodyPartLayer; selectedPath?: ProjectMotionPath }) => {
