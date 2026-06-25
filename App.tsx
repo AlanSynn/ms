@@ -38,6 +38,7 @@ import { processImageWithWebOnnx } from './utils/webOnnx';
 import { createFabricationPackage, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
 import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToBoardRaw, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
+import { Z_AXIS_LABEL, Z_STACK_LABEL, Z_STACK_LAYERS } from './utils/zStack';
 import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT, normalizeCanvasViewport } from './utils/viewport';
 import { buildToonSceneProjection } from './utils/sceneProjection';
@@ -1835,10 +1836,25 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
         </div>),
             canvas: canvasPane(<section className="path-canvas-shell foundry-canvas-shell workspace p-6">
             <div className="mb-5 flex items-center justify-between"><h4 className="section-title">Sandbox preview</h4><span className="chip">{foundryPlaying ? 'Simulation active' : 'Paused'}</span></div>
-            <svg viewBox="0 0 360 240" className="foundry-preview h-[520px] w-full rounded-[2rem]">
+            <svg viewBox="0 0 360 240" className="foundry-preview h-[520px] w-full rounded-[2rem]" aria-label="Mechanism Foundry CAD-like 2.5D sandbox preview">
+                <defs>
+                    <pattern id="foundry-cad-grid" width="18" height="18" patternUnits="userSpaceOnUse">
+                        <path d="M 18 0 L 0 0 0 18" fill="none" stroke="#93c5fd" strokeWidth="0.55" opacity="0.38" />
+                    </pattern>
+                    <linearGradient id="foundry-board-plane" x1="0" x2="1" y1="0" y2="1">
+                        <stop offset="0" stopColor="#ffffff" />
+                        <stop offset="1" stopColor="#eff6ff" />
+                    </linearGradient>
+                    <filter id="foundry-depth-shadow-filter" x="-30%" y="-30%" width="170%" height="170%">
+                        <feDropShadow dx="8" dy="10" stdDeviation="6" floodColor="#1e293b" floodOpacity="0.18" />
+                    </filter>
+                </defs>
+                <FoundryDepthOverlay />
                 {showTrail && <path data-testid="foundry-trail-overlay" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="12" strokeLinecap="round" opacity="0.12"/>}
-                {showPathPreview && <path data-testid="foundry-path-preview" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="3" strokeLinecap="round" strokeDasharray="9 7" opacity="0.48"/>}
-                <MechanismLinkagePreview mechanism={landedFoundry} simulation={selectedSimulation} kit={project.settings.physicalKit} testId="foundry-selected-linkage" />
+                {showPathPreview && <path data-testid="foundry-path-preview" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="3" strokeLinecap="round" strokeDasharray="9 7" opacity="0.52"/>}
+                <g data-testid="foundry-depth-scene" className="foundry-depth-scene" filter="url(#foundry-depth-shadow-filter)">
+                    <MechanismLinkagePreview mechanism={landedFoundry} simulation={selectedSimulation} kit={project.settings.physicalKit} testId="foundry-selected-linkage" />
+                </g>
                 {showForces && playhead && <g data-testid="foundry-forces-overlay" stroke="#ef4444" strokeWidth="3" strokeLinecap="round">
                     <line x1={playhead.x} y1={playhead.y} x2={180} y2={120} />
                     <line x1={playhead.x} y1={playhead.y} x2={playhead.x} y2={Math.max(22, playhead.y - 42)} />
@@ -1847,7 +1863,9 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                     <line x1={playhead.x} y1={playhead.y} x2={playhead.x + (nextPoint.x - previousPoint.x) * 2.2} y2={playhead.y + (nextPoint.y - previousPoint.y) * 2.2} />
                 </g>}
                 {playhead && <circle data-testid="foundry-playhead" cx={playhead.x} cy={playhead.y} r="7" fill="#f472b6" stroke="white" strokeWidth="3" />}
-                <text x="22" y="38" className="foundry-preview-label" fontSize="16" fontWeight="800">{library.label} · {range.percentValid === 1 ? '360° valid' : range.warning}</text>
+                <FoundrySpacerStack points={[selectedSimulation.state.p1, selectedSimulation.state.p2, selectedSimulation.state.j1, selectedSimulation.state.j2, selectedSimulation.state.aux, selectedSimulation.state.effector]} />
+                <FoundryAngleStrip mechanism={landedFoundry} phase={foundryPhase} kit={project.settings.physicalKit} />
+                <text x="22" y="38" className="foundry-preview-label" fontSize="16" fontWeight="800">{library.label} · {range.percentValid === 1 ? '360° valid' : range.warning} · {Z_STACK_LABEL}</text>
             </svg>
             <div className="mt-3 text-xs font-bold text-slate-500" data-testid="foundry-toolbar-state">Toolbar: {foundryPlaying ? 'playing' : 'paused'} · path {showPathPreview ? 'shown' : 'hidden'} · phase {Math.round(foundryPhase * 180 / Math.PI)}°</div>
         </section>, canvasOverlay),
@@ -2291,6 +2309,57 @@ const fitPointsToBox = (points: Point[], width: number, height: number) => {
 
 const pointsToSvgPath = (points: Point[]) => points.length ? `M ${points.map(p => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' L ')}` : '';
 const fitPathToBox = (points: Point[], width: number, height: number) => pointsToSvgPath(fitPointsToBox(points, width, height));
+
+const FoundryDepthOverlay = () => <g data-testid="foundry-depth-overlay" aria-label="Foundry CAD Z-axis and board depth overlay">
+    <path data-testid="foundry-cad-plane" className="foundry-depth-plane" d="M 24 58 L 276 34 L 342 72 L 85 102 Z" />
+    <path className="foundry-depth-grid" d="M 24 58 L 85 102 M 66 54 L 129 96 M 108 50 L 172 90 M 150 46 L 215 84 M 192 42 L 258 78 M 234 38 L 301 72 M 64 64 L 316 40 M 82 76 L 334 52 M 100 88 L 352 64" />
+    <g data-testid="foundry-axis-widget" className="foundry-axis-widget" transform="translate(42 205)">
+        <line x1="0" y1="0" x2="46" y2="0" className="foundry-axis-x" />
+        <line x1="0" y1="0" x2="0" y2="-42" className="foundry-axis-y" />
+        <line data-testid="foundry-axis-z" x1="0" y1="0" x2="28" y2="-28" className="foundry-axis-z" />
+        <text x="50" y="4">X</text>
+        <text x="-7" y="-48">Y</text>
+        <text x="32" y="-30">{Z_AXIS_LABEL}</text>
+    </g>
+    <g data-testid="foundry-spacer-stack" className="foundry-spacer-stack" transform="translate(282 156)">
+        <text x="-18" y="-42">{Z_STACK_LABEL}</text>
+        {Z_STACK_LAYERS.map((layer, index) => <g key={layer.id} data-z-layer={layer.id} transform={`translate(${index * 10} ${-index * 9})`}>
+            <ellipse data-testid="foundry-spacer-washer" className="foundry-spacer-ring" cx="0" cy="0" rx="14" ry="5.2" fill={layer.color} />
+            <ellipse className="foundry-spacer-hole" cx="0" cy="0" rx="5.2" ry="2" />
+        </g>)}
+    </g>
+</g>;
+
+const FoundrySpacerStack = ({ points }: { points: Array<Point | undefined> }) => <g data-testid="foundry-z-spacers" className="foundry-z-spacers">
+    {points.filter((point): point is Point => Boolean(point)).slice(0, 6).map((point, index) => (
+        <g key={`${Math.round(point.x)}-${Math.round(point.y)}-${index}`} data-testid="foundry-z-spacer" className="foundry-z-spacer" data-point-x={point.x.toFixed(2)} data-point-y={point.y.toFixed(2)} data-z-offset-mm={(index * 2).toFixed(1)} transform={`translate(${point.x} ${point.y})`}>
+            <line x1="0" y1="0" x2="8" y2="-8" />
+            <ellipse cx="8" cy="-8" rx="5.4" ry="2.2" />
+            <ellipse cx="0" cy="0" rx="5.4" ry="2.2" />
+        </g>
+    ))}
+</g>;
+
+const FoundryAngleStrip = ({ mechanism, phase, kit }: { mechanism: MechanismConfig; phase: number; kit: PhysicalKitSettings }) => {
+    const views = [
+        { angle: 0, label: 'Front', testId: 'foundry-angle-view-0' },
+        { angle: Math.PI / 2, label: 'Iso 90°', testId: 'foundry-angle-view-90' },
+        { angle: Math.PI, label: 'Side 180°', testId: 'foundry-angle-view-180' },
+        { angle: Math.PI * 1.5, label: 'Back 270°', testId: 'foundry-angle-view-270' }
+    ];
+    return <g data-testid="foundry-angle-strip" className="foundry-angle-strip" transform="translate(20 166)">
+        <rect x="0" y="0" width="236" height="58" rx="13" />
+        <text x="10" y="16">multi-angle simulation</text>
+        {views.map((view, index) => {
+            const simulation = fitMechanismSimulation(mechanism, phase + view.angle, 54, 34, 36);
+            return <svg key={view.testId} data-testid={view.testId} data-angle-deg={Math.round(view.angle * 180 / Math.PI)} data-effector-x={simulation.state.effector.x.toFixed(2)} data-effector-y={simulation.state.effector.y.toFixed(2)} x={10 + index * 56} y="20" width="50" height="31" viewBox="0 0 54 34" className="foundry-angle-card">
+                <path d={simulation.pathD} fill="none" stroke={mechanism.color} strokeWidth="1.2" strokeDasharray="3 3" opacity="0.45" />
+                <MechanismLinkagePreview mechanism={mechanism} simulation={simulation} kit={kit} testId={`${view.testId}-linkage`} compact />
+                <text x="3" y="31">{view.label}</text>
+            </svg>;
+        })}
+    </g>;
+};
 
 const fitMechanismSimulation = (mechanism: MechanismConfig, angle: number, width: number, height: number, resolution = 72) => {
     const state = calculateLinkage(mechanism, angle);

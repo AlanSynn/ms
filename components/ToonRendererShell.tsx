@@ -3,6 +3,7 @@ import type { CameraSessionState, ViewLensState } from '../utils/viewLens';
 import type { PhysicsSession } from '../utils/physicsSession';
 import type { Point } from '../types';
 import type { ProjectionGeometry, ToonMaterial, ToonSceneNode, ToonSceneProjection } from '../utils/sceneProjection';
+import { Z_AXIS_LABEL, Z_STACK_LABEL, Z_STACK_LAYERS } from '../utils/zStack';
 
 type ThreeMesh = import('three').Mesh;
 type ThreeMaterial = import('three').Material;
@@ -86,6 +87,15 @@ const FallbackSvg = ({ projection, physics }: { projection: ToonSceneProjection;
       <text x="-236" y="94" fill={AXIS_COLORS.y}>Y</text>
       <text x="-172" y="141" fill={AXIS_COLORS.z}>Z</text>
     </g>
+    <g data-testid="toon-svg-spacer-stack" strokeLinecap="round" fontSize="10" fontWeight="900">
+      {Z_STACK_LAYERS.map((layer, index) => (
+        <g key={layer.id} data-z-layer={layer.id} transform={`translate(${148 + index * 14} ${186 - index * 12})`}>
+          <ellipse data-testid="toon-spacer-washer" rx="13" ry="5" fill={layer.color} stroke="#475569" strokeWidth="1.2" opacity="0.9" />
+          <ellipse rx="5.2" ry="2.1" fill="#f8fbff" stroke="#64748b" strokeWidth=".8" />
+        </g>
+      ))}
+      <text x="142" y="214" fill="#2563eb">{Z_STACK_LABEL}</text>
+    </g>
     {nodes.filter(node => node.sourceType !== 'board').map(node => {
       const color = MATERIAL_COLORS[node.material];
       const offset = fallbackDepthOffset(node);
@@ -157,6 +167,7 @@ export const ToonRendererShell = ({ projection, lens, camera, physics }: {
           });
           delete canvas.dataset.toonRenderedObjects;
           delete canvas.dataset.toonRenderedLens;
+          delete canvas.dataset.toonRenderedSpacers;
           renderer.dispose();
         };
         scene.add(new THREE.HemisphereLight(0xffffff, 0xdbeafe, 2.2));
@@ -229,6 +240,19 @@ export const ToonRendererShell = ({ projection, lens, camera, physics }: {
         addLine(new THREE.Vector3(-235, 205, 0), new THREE.Vector3(-235, 92, 0), AXIS_COLORS.y, 0.95);
         addLine(new THREE.Vector3(-235, 205, 0), new THREE.Vector3(-190, 160, 82), AXIS_COLORS.z, 0.95);
 
+        const spacerMat = new THREE.MeshToonMaterial({ color: 0x93c5fd, transparent: true, opacity: 0.88 });
+        const spacerCoreMat = new THREE.MeshToonMaterial({ color: 0xf8fbff, transparent: true, opacity: 0.92 });
+        Z_STACK_LAYERS.forEach((_, index) => {
+          const ring = new THREE.Mesh(new THREE.TorusGeometry(10, 2.2, 10, 28), spacerMat);
+          ring.position.set(222 + index * 6, 188 - index * 6, 8 + index * 16);
+          ring.rotation.x = Math.PI / 2.5;
+          scene.add(ring);
+          const core = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 4.4, 2.2, 20), spacerCoreMat);
+          core.position.copy(ring.position);
+          core.rotation.x = Math.PI / 2.5;
+          scene.add(core);
+        });
+
         projectedNodes(projection).filter(node => node.sourceType !== 'board').forEach(node => {
           const z = node.depthMm + (lens === 'assembly' && node.sourceType === 'part' ? Math.max(12, node.depthMm * 2.2) : 0);
           if (node.geometry.kind === 'rect') {
@@ -277,6 +301,7 @@ export const ToonRendererShell = ({ projection, lens, camera, physics }: {
         renderer.render(scene, cam);
         canvas.dataset.toonRenderedObjects = String(scene.children.length);
         canvas.dataset.toonRenderedLens = lens;
+        canvas.dataset.toonRenderedSpacers = String(Z_STACK_LAYERS.length);
         setStatus('webgl');
       } catch {
         cleanup?.();
@@ -306,7 +331,11 @@ export const ToonRendererShell = ({ projection, lens, camera, physics }: {
         <span>{viewportMode} · scene graph preview</span>
       </div>
       <div className="toon-axis-legend" data-testid="toon-axis-legend" aria-label="Viewport XYZ axes">
-        <span data-axis="x">X</span><span data-axis="y">Y</span><span data-axis="z">Z depth</span>
+        <span data-axis="x">X</span><span data-axis="y">Y</span><span data-axis="z">{Z_AXIS_LABEL}</span>
+      </div>
+      <div className="toon-depth-stack" data-testid="toon-depth-stack" aria-label={`Viewport ${Z_STACK_LABEL}`}>
+        <span>{Z_STACK_LABEL}</span>
+        {Z_STACK_LAYERS.map(layer => <b key={layer.id} data-z-layer={layer.id}>{layer.label}</b>)}
       </div>
     </div>
     <div className="toon-renderer-foot">{projection.nodes.length} scene nodes · {physics.summary.constraintCount} constraints · canonical 2D remains unchanged · view-only</div>

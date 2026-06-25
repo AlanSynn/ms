@@ -692,6 +692,51 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await expect(page.getByTestId('workspace-player-dock')).toHaveCount(0);
   expect(await page.getByTestId('foundry-fabrication-part').count(), 'Sandbox uses fabrication-style holed bars').toBeGreaterThanOrEqual(4);
   expect(await page.getByTestId('foundry-fabrication-hole').count(), 'Sandbox shows drilled holes, not abstract lines').toBeGreaterThanOrEqual(12);
+  await expect(page.getByTestId('foundry-depth-overlay'), 'Foundry sandbox has a CAD-like depth board').toBeVisible();
+  await expect(page.getByTestId('foundry-cad-plane'), 'Foundry sandbox shows the 2.5D board plane').toBeVisible();
+  await expect(page.getByTestId('foundry-axis-z'), 'Foundry sandbox exposes the Z axis').toBeVisible();
+  await expect(page.getByTestId('foundry-axis-z')).toHaveCount(1);
+  await expect(page.getByTestId('foundry-depth-scene'), 'Mechanism is rendered in a depth-aware scene group').toBeVisible();
+  await expect(page.getByTestId('foundry-angle-strip'), 'Foundry shows multi-angle mechanism simulation').toBeVisible();
+  const cadPlaneBox = await page.getByTestId('foundry-cad-plane').evaluate((element: SVGGraphicsElement) => {
+    const box = element.getBBox();
+    return { x: box.x, y: box.y, width: box.width, height: box.height };
+  });
+  expect(cadPlaneBox.width, 'Foundry CAD board plane spans the mechanism work area').toBeGreaterThan(250);
+  expect(cadPlaneBox.height, 'Foundry CAD board plane has visible perspective depth').toBeGreaterThan(40);
+  const zAxis = await page.getByTestId('foundry-axis-z').evaluate((element: SVGLineElement) => ({
+    x1: Number(element.getAttribute('x1')),
+    y1: Number(element.getAttribute('y1')),
+    x2: Number(element.getAttribute('x2')),
+    y2: Number(element.getAttribute('y2'))
+  }));
+  expect(zAxis.x2, 'Foundry Z axis points into positive screen-right depth').toBeGreaterThan(zAxis.x1);
+  expect(zAxis.y2, 'Foundry Z axis points upward into depth').toBeLessThan(zAxis.y1);
+  for (const angleView of ['foundry-angle-view-0', 'foundry-angle-view-90', 'foundry-angle-view-180', 'foundry-angle-view-270']) {
+    await expect(page.getByTestId(angleView), `${angleView} is visible in the sandbox`).toBeVisible();
+    await expect(page.getByTestId(`${angleView}-linkage`), `${angleView} contains actual linkage geometry`).toBeVisible();
+  }
+  const angleCards = await Promise.all(['foundry-angle-view-0', 'foundry-angle-view-90', 'foundry-angle-view-180', 'foundry-angle-view-270'].map(testId =>
+    page.getByTestId(testId).evaluate((element: SVGSVGElement) => ({
+      angle: element.getAttribute('data-angle-deg'),
+      effector: `${element.getAttribute('data-effector-x')},${element.getAttribute('data-effector-y')}`,
+      geometryCount: element.querySelectorAll('path, rect, circle, ellipse').length
+    }))
+  ));
+  expect(angleCards.map(card => card.angle)).toEqual(['0', '90', '180', '270']);
+  expect(new Set(angleCards.map(card => card.effector)).size, 'Angle cards sample different mechanism poses').toBeGreaterThan(2);
+  expect(angleCards.every(card => card.geometryCount > 5), 'Each angle card contains mechanism and path geometry').toBe(true);
+  expect(await page.getByTestId('foundry-z-spacer').count(), 'Foundry shows spacer offsets at mechanism pivots').toBeGreaterThanOrEqual(4);
+  expect(await page.getByTestId('foundry-spacer-washer').count(), 'Foundry shows a physical spacer washer stack').toBeGreaterThanOrEqual(4);
+  const spacerGeometry = await page.getByTestId('foundry-z-spacer').evaluateAll(nodes => nodes.map(node => ({
+    x: Number(node.getAttribute('data-point-x')),
+    y: Number(node.getAttribute('data-point-y')),
+    z: Number(node.getAttribute('data-z-offset-mm')),
+    transform: node.getAttribute('transform') ?? ''
+  })));
+  expect(spacerGeometry.every(item => Number.isFinite(item.x) && Number.isFinite(item.y) && Number.isFinite(item.z)), 'Spacer washers carry finite pivot and Z-offset data').toBe(true);
+  expect(new Set(spacerGeometry.map(item => `${Math.round(item.x)},${Math.round(item.y)}`)).size, 'Spacer washers align to multiple mechanism pivots').toBeGreaterThanOrEqual(4);
+  expect(spacerGeometry.every(item => item.transform.includes(`${item.x}`) || item.transform.includes(String(Math.round(item.x)))), 'Spacer transforms use their pivot coordinates').toBe(true);
   await expect(page.getByTestId('foundry-mini-linkage-gear')).toBeVisible();
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Four-bar linkage');
   await expect(page.getByTestId('foundry-feasibility')).toContainText('360° valid sampled motion');
@@ -1262,7 +1307,8 @@ test('View lenses, toon sidecar, physics replay, and blueprint flow stay non-des
   await expect(page.getByTestId('toon-renderer-shell')).toBeVisible();
   await expect(page.getByTestId('toon-renderer-status')).toContainText(/WebGL active|SVG fallback/);
   await expect(page.getByTestId('toon-cad-hud')).toContainText(/2.5D authoring plane|scene graph preview/);
-  await expect(page.getByTestId('toon-axis-legend')).toContainText('Z depth');
+  await expect(page.getByTestId('toon-axis-legend')).toContainText('Z axis');
+  await expect(page.getByTestId('toon-depth-stack')).toContainText('spacer');
   const cadBox = await page.getByTestId('toon-cad-viewport').boundingBox();
   expect(cadBox, 'CAD-like 2.5D/3D viewport is mounted in the center workspace').toBeTruthy();
   expect(cadBox!.width, 'CAD viewport has real center-workspace width').toBeGreaterThan(300);
@@ -1286,13 +1332,15 @@ test('View lenses, toon sidecar, physics replay, and blueprint flow stay non-des
       height: canvas.height,
       litPixels,
       renderedObjects: Number(canvas.dataset.toonRenderedObjects ?? 0),
-      renderedLens: canvas.dataset.toonRenderedLens
+      renderedLens: canvas.dataset.toonRenderedLens,
+      renderedSpacers: Number(canvas.dataset.toonRenderedSpacers ?? 0)
     };
   });
   expect(webglProbe.width, 'WebGL canvas receives a real drawing buffer width').toBeGreaterThan(300);
   expect(webglProbe.height, 'WebGL canvas receives a real drawing buffer height').toBeGreaterThan(220);
   expect(webglProbe.renderedObjects, 'WebGL renderer builds a non-empty scene graph').toBeGreaterThan(20);
   expect(webglProbe.renderedLens, 'WebGL renderer records the active lens').toBe('studio');
+  expect(webglProbe.renderedSpacers, 'WebGL renderer includes the shared spacer stack geometry').toBe(4);
   expect(webglProbe.litPixels, 'WebGL canvas contains non-blank rendered pixels').toBeGreaterThan(12);
   const before = await saveSnapshot();
 
@@ -1337,6 +1385,14 @@ test('View lenses, toon sidecar, physics replay, and blueprint flow stay non-des
 
   await page.setViewportSize({ width: 390, height: 820 });
   await expect(page.getByTestId('view-lens-hud')).toBeVisible();
+  await expect(page.getByTestId('toon-renderer-shell')).toBeVisible();
+  const mobileShellBox = await page.getByTestId('toon-renderer-shell').boundingBox();
+  const mobileCadBox = await page.getByTestId('toon-cad-viewport').boundingBox();
+  expect(mobileShellBox, 'mobile toon shell has a layout box').toBeTruthy();
+  expect(mobileCadBox, 'mobile CAD viewport has a layout box').toBeTruthy();
+  expect(mobileShellBox!.width, 'mobile toon shell fits viewport width').toBeLessThanOrEqual(390);
+  expect(mobileShellBox!.height, 'mobile toon shell remains readable').toBeGreaterThan(180);
+  expect(mobileCadBox!.height, 'mobile CAD drawing area remains usable').toBeGreaterThan(110);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 4)).toBe(true);
 
   await page.setViewportSize({ width: 899, height: 720 });
@@ -1377,7 +1433,9 @@ test('Toon CAD viewport exposes fallback axes and mid-width layout', async ({ pa
 
   await expect(page.getByTestId('toon-renderer-status')).toHaveText('SVG fallback');
   await expect(page.getByTestId('toon-cad-hud')).toContainText('2.5D authoring plane');
-  await expect(page.getByTestId('toon-axis-legend')).toContainText('Z depth');
+  await expect(page.getByTestId('toon-axis-legend')).toContainText('Z axis');
+  await expect(page.getByTestId('toon-svg-spacer-stack')).toBeVisible();
+  expect(await page.getByTestId('toon-spacer-washer').count(), 'Fallback SVG includes the shared four-layer spacer stack').toBe(4);
   await expect(page.locator('[data-testid="toon-axis-z"]')).toHaveCount(1);
   const centerBox = await page.getByTestId('stage-canvas-pane').boundingBox();
   const cadBox = await page.getByTestId('toon-cad-viewport').boundingBox();
