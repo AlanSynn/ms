@@ -1250,6 +1250,9 @@ test('View lenses, toon sidecar, physics replay, and blueprint flow stay non-des
     return JSON.parse(await readFile(path!, 'utf8'));
   };
 
+  await page.addInitScript(() => {
+    (window as Window & { __MECHANIM_TEST_PRESERVE_WEBGL__?: boolean }).__MECHANIM_TEST_PRESERVE_WEBGL__ = true;
+  });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await openWavingArmTemplate(page);
@@ -1258,15 +1261,50 @@ test('View lenses, toon sidecar, physics replay, and blueprint flow stay non-des
   await expect(page.getByTestId('view-lens-status')).toHaveText('2.5D Locked');
   await expect(page.getByTestId('toon-renderer-shell')).toBeVisible();
   await expect(page.getByTestId('toon-renderer-status')).toContainText(/WebGL active|SVG fallback/);
+  await expect(page.getByTestId('toon-cad-hud')).toContainText(/2.5D authoring plane|scene graph preview/);
+  await expect(page.getByTestId('toon-axis-legend')).toContainText('Z depth');
+  const cadBox = await page.getByTestId('toon-cad-viewport').boundingBox();
+  expect(cadBox, 'CAD-like 2.5D/3D viewport is mounted in the center workspace').toBeTruthy();
+  expect(cadBox!.width, 'CAD viewport has real center-workspace width').toBeGreaterThan(300);
+  expect(cadBox!.height, 'CAD viewport has real center-workspace height').toBeGreaterThan(220);
+  await expect(page.getByTestId('toon-renderer-status')).toHaveText('WebGL active');
+  const webglProbe = await page.getByTestId('toon-webgl-canvas').evaluate((canvas: HTMLCanvasElement) => {
+    const probe = document.createElement('canvas');
+    probe.width = 36;
+    probe.height = 36;
+    const ctx = probe.getContext('2d');
+    ctx?.drawImage(canvas, 0, 0, probe.width, probe.height);
+    const data = ctx?.getImageData(0, 0, probe.width, probe.height).data ?? new Uint8ClampedArray();
+    let litPixels = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const alpha = data[i + 3];
+      const colorEnergy = data[i] + data[i + 1] + data[i + 2];
+      if (alpha > 8 && colorEnergy > 24) litPixels += 1;
+    }
+    return {
+      width: canvas.width,
+      height: canvas.height,
+      litPixels,
+      renderedObjects: Number(canvas.dataset.toonRenderedObjects ?? 0),
+      renderedLens: canvas.dataset.toonRenderedLens
+    };
+  });
+  expect(webglProbe.width, 'WebGL canvas receives a real drawing buffer width').toBeGreaterThan(300);
+  expect(webglProbe.height, 'WebGL canvas receives a real drawing buffer height').toBeGreaterThan(220);
+  expect(webglProbe.renderedObjects, 'WebGL renderer builds a non-empty scene graph').toBeGreaterThan(20);
+  expect(webglProbe.renderedLens, 'WebGL renderer records the active lens').toBe('studio');
+  expect(webglProbe.litPixels, 'WebGL canvas contains non-blank rendered pixels').toBeGreaterThan(12);
   const before = await saveSnapshot();
 
   await page.getByTestId('view-lens-toy-stage').click();
   await expect(page.getByTestId('view-lens-status')).toHaveText('Toy Stage');
   await expect(page.getByTestId('view-lens-hud')).toContainText('orbit preview');
+  await expect(page.getByTestId('toon-cad-hud')).toContainText('3/4 toy-stage preview');
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
 
   await page.getByTestId('view-lens-blueprint').click();
   await expect(page.getByTestId('view-lens-status')).toHaveText('Blueprint');
+  await expect(page.getByTestId('toon-cad-hud')).toContainText('Blueprint-safe locked view');
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
@@ -1278,6 +1316,7 @@ test('View lenses, toon sidecar, physics replay, and blueprint flow stay non-des
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
   await page.getByTestId('view-lens-physics').click();
   await expect(page.getByTestId('view-lens-status')).toHaveText('Physics');
+  await expect(page.getByTestId('toon-cad-hud')).toContainText('Physics replay overlay');
   await expect(page.getByTestId('physics-session-summary')).toContainText(/bodies .* constraints .* active mechanisms/);
   await expect(page.getByTestId('toon-renderer-shell')).toContainText('view-only');
 
@@ -1326,6 +1365,30 @@ test('View lenses, toon sidecar, physics replay, and blueprint flow stay non-des
   await expect(page.getByRole('button', { name: 'Metadata', exact: true })).toBeVisible();
 
   expectCleanPage(pageErrors, consoleErrors);
+});
+
+test('Toon CAD viewport exposes fallback axes and mid-width layout', async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as Window & { __MECHANIM_FORCE_TOON_FALLBACK__?: boolean }).__MECHANIM_FORCE_TOON_FALLBACK__ = true;
+  });
+  await page.setViewportSize({ width: 1024, height: 780 });
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+
+  await expect(page.getByTestId('toon-renderer-status')).toHaveText('SVG fallback');
+  await expect(page.getByTestId('toon-cad-hud')).toContainText('2.5D authoring plane');
+  await expect(page.getByTestId('toon-axis-legend')).toContainText('Z depth');
+  await expect(page.locator('[data-testid="toon-axis-z"]')).toHaveCount(1);
+  const centerBox = await page.getByTestId('stage-canvas-pane').boundingBox();
+  const cadBox = await page.getByTestId('toon-cad-viewport').boundingBox();
+  expect(centerBox, 'center pane visible at mid-width').toBeTruthy();
+  expect(cadBox, 'fallback CAD viewport visible at mid-width').toBeTruthy();
+  expect(cadBox!.x, 'fallback viewport stays inside center left edge').toBeGreaterThanOrEqual(centerBox!.x - 1);
+  expect(cadBox!.x + cadBox!.width, 'fallback viewport stays inside center right edge').toBeLessThanOrEqual(centerBox!.x + centerBox!.width + 1);
+  expect(cadBox!.height, 'fallback viewport remains large enough to read at mid-width').toBeGreaterThan(150);
+
+  await page.getByTestId('view-lens-toy-stage').click();
+  await expect(page.getByTestId('toon-cad-hud')).toContainText('3/4 toy-stage preview');
 });
 
 test('Draw mode accepts free path strokes through the view lens overlay', async ({ page }) => {
