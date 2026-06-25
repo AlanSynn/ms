@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
 const expectCleanPage = (pageErrors: string[], consoleErrors: string[]) => {
@@ -26,6 +26,8 @@ const readScenePoint = async (locator) => locator.evaluate((el: SVGElement) => (
   y: Number(el.getAttribute('cy'))
 }));
 
+const activeElementIsInDialog = (page: Page) => page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]')));
+
 test('character → path → foundry → design → blueprint runs end-to-end in browser', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
@@ -35,8 +37,13 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   });
 
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'MechAnim' })).toBeVisible();
-  await expect(page.getByText('Draw the path. Build the motion.')).toBeVisible();
+  await expect(page.getByTestId('shared-workbench')).toBeVisible();
+  await expect(page.getByTestId('welcome-dialog')).toBeVisible();
+  await expect(page.getByTestId('welcome-dialog').getByRole('heading', { name: 'MechAnim' })).toBeVisible();
+  await expect(page.getByTestId('welcome-dialog').getByText('Draw the path. Build the motion.')).toBeVisible();
+  const welcomeBox = await page.getByTestId('welcome-dialog').boundingBox();
+  const viewport = page.viewportSize();
+  expect(welcomeBox?.height ?? 0, 'welcome dialog fits inside the editor viewport').toBeLessThanOrEqual((viewport?.height ?? 900) * 0.94);
   await expect(page.getByTestId('template-gallery')).toContainText('Waving arm');
   await expect(page.getByTestId('template-gallery')).toContainText('Girl starter');
   await expect(page.getByTestId('template-gallery')).toContainText('Boy starter');
@@ -53,6 +60,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   const runOnnxButton = page.getByRole('button', { name: /Create from image/i });
   const cameraButton = page.getByRole('button', { name: /Capture Camera/i });
   const importProjectButton = page.getByRole('button', { name: /Import project/i });
+  await expect.poll(() => activeElementIsInDialog(page)).toBe(true);
   await page.keyboard.press('Tab');
   await expect(openTemplateButton).toBeFocused();
   await page.keyboard.press('Tab');
@@ -67,6 +75,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(cameraButton).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(importProjectButton).toBeFocused();
+  expect(await activeElementIsInDialog(page)).toBe(true);
 
   const forbiddenRuntimeImports = await page.locator('script[src], script[type="importmap"]').evaluateAll(nodes =>
     nodes.map(node => ({ src: node.getAttribute('src'), type: node.getAttribute('type') }))
@@ -317,7 +326,7 @@ test('Create from image upload creates a reviewed character package in browser',
   });
 
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'MechAnim' })).toBeVisible();
+  await expect(page.getByTestId('welcome-dialog').getByRole('heading', { name: 'MechAnim' })).toBeVisible();
   const runOnnxButton = page.getByRole('button', { name: /Create from image/i });
   await runOnnxButton.focus();
   await expect(runOnnxButton).toBeFocused();
@@ -349,7 +358,7 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
   });
 
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'MechAnim' })).toBeVisible();
+  await expect(page.getByTestId('welcome-dialog').getByRole('heading', { name: 'MechAnim' })).toBeVisible();
 
   const packageFiles = [
     'tests/fixtures/package/parts_info.json',
@@ -383,7 +392,7 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
 
   await page.getByRole('button', { name: /Character Selection/i }).click();
   await page.getByTestId('blank-package-input').setInputFiles('tests/fixtures/package/char_cfg.yaml');
-  await expect(page.getByRole('heading', { name: 'MechAnim' })).toBeVisible();
+  await expect(page.getByTestId('welcome-dialog').getByRole('heading', { name: 'MechAnim' })).toBeVisible();
   await expect(page.getByText('Character package import failed')).toBeVisible();
   await expect(page.getByText('Missing parts_info.json in selected package files')).toBeVisible();
 
@@ -1040,6 +1049,31 @@ test('Mobile path editor keeps Draw free path action above the canvas', async ({
   expect(drawBox, 'draw button layout box').toBeTruthy();
   expect(canvasBox, 'path canvas layout box').toBeTruthy();
   expect(drawBox!.y, 'mobile draw action appears before canvas').toBeLessThan(canvasBox!.y);
+});
+
+test('Mobile welcome modal traps focus and locks background scroll', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.getByTestId('welcome-dialog')).toBeVisible();
+  await expect.poll(() => activeElementIsInDialog(page)).toBe(true);
+  const modalState = await page.evaluate(() => ({
+    scrollLocked: document.scrollingElement!.scrollHeight <= document.scrollingElement!.clientHeight + 8,
+    htmlOverflow: getComputedStyle(document.documentElement).overflow,
+    shellInert: document.querySelector('.app-shell')?.hasAttribute('inert') ?? false,
+    shellHidden: document.querySelector('.app-shell')?.getAttribute('aria-hidden') === 'true'
+  }));
+  expect(modalState).toEqual({
+    scrollLocked: true,
+    htmlOverflow: 'hidden',
+    shellInert: true,
+    shellHidden: true
+  });
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: /Open Waving arm/i })).toBeFocused();
+  expect(await activeElementIsInDialog(page)).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('welcome-dialog')).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.classList.contains('welcome-modal-open'))).toBe(false);
 });
 
 test('Shared player dock stays inside the editor content at lower and medium desktop widths', async ({ page }) => {

@@ -118,7 +118,8 @@ const App: React.FC = () => {
         projectSelfCheck();
         return createSampleProject();
     });
-    const [stage, setStage] = useState<AppStage>('character');
+    const [stage, setStage] = useState<AppStage>('path');
+    const [showWelcome, setShowWelcome] = useState(true);
     const [angle, setAngle] = useState(0);
     const [isPlaying, setIsPlaying] = useState(true);
     const [showTrace, setShowTrace] = useState(true);
@@ -134,6 +135,7 @@ const App: React.FC = () => {
     const [commandStatus, setCommandStatus] = useState('Ready');
     const projectInputRef = useRef<HTMLInputElement>(null);
     const latestProjectRef = useRef<ProjectState | null>(null);
+    const appShellRef = useRef<HTMLDivElement>(null);
 
     const dispatch = (action: Parameters<typeof applyProjectAction>[1]) => setProject(prev => applyProjectAction(prev, action));
     const goStage = (target: AppStage) => {
@@ -270,6 +272,7 @@ const App: React.FC = () => {
         const reviewed = replaceCharacter ? mergeReplacementProject(next, project) : next;
         setPendingCharacter({ project: reviewed, summary, returnStage: replaceCharacter ? (reviewed.mechanisms.length ? 'design' : 'path') : 'path' });
         dispatch({ type: 'set_processing', processing: { stage: 'ready', message: 'Review generated character package', progress: 100 } });
+        setShowWelcome(true);
         setStage('character');
     };
 
@@ -345,6 +348,7 @@ const App: React.FC = () => {
             const raw = JSON.parse(await file.text());
             setProject(loadProjectSnapshot(raw));
             setCommandStatus(`Loaded project ${file.name}`);
+            setShowWelcome(false);
             setStage('path');
         } catch (error) {
             dispatch({
@@ -357,12 +361,14 @@ const App: React.FC = () => {
                 }
             });
             setCommandStatus(`Project import failed: ${error instanceof Error ? error.message : String(error)}`);
+            setShowWelcome(true);
             setStage('character');
         }
     };
 
     const editCharacterParts = () => {
         setCommandStatus('Opened actual parts / skeleton editor');
+        setShowWelcome(false);
         setStage('path');
     };
 
@@ -458,6 +464,7 @@ const App: React.FC = () => {
         setProject(createSampleProject());
         setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
         setCommandStatus('Started a fresh template project');
+        setShowWelcome(true);
         setStage('character');
     };
     const recoverAutosave = () => {
@@ -524,15 +531,42 @@ const App: React.FC = () => {
     };
     const disabledCommand = (reason: string) => setCommandStatus(reason);
     const themeClass = project.settings.theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-950';
+    const editorStage: AppStage = stage === 'character' ? 'path' : stage;
+    const welcomeOpen = showWelcome || stage === 'character';
+    const closeWelcome = () => {
+        setShowWelcome(false);
+        if (stage === 'character') setStage('path');
+    };
     const stageMeta = STAGES.find(s => s.id === stage);
-    const playerDock = stage !== 'character' && stage !== 'foundry'
+    const playerDock = !welcomeOpen && editorStage !== 'foundry'
         ? <WorkspacePlayerDock isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} speed={project.settings.animationSpeed} drawMode={drawMode} />
         : null;
+
+    useEffect(() => {
+        const shell = appShellRef.current;
+        if (welcomeOpen) {
+            shell?.setAttribute('inert', '');
+            shell?.setAttribute('aria-hidden', 'true');
+            document.documentElement.classList.add('welcome-modal-open');
+            document.body.classList.add('welcome-modal-open');
+        } else {
+            shell?.removeAttribute('inert');
+            shell?.removeAttribute('aria-hidden');
+            document.documentElement.classList.remove('welcome-modal-open');
+            document.body.classList.remove('welcome-modal-open');
+        }
+        return () => {
+            shell?.removeAttribute('inert');
+            shell?.removeAttribute('aria-hidden');
+            document.documentElement.classList.remove('welcome-modal-open');
+            document.body.classList.remove('welcome-modal-open');
+        };
+    }, [welcomeOpen]);
 
     return (
         <main className={`min-h-screen overflow-hidden ${themeClass}`} data-theme={project.settings.theme}>
             <div className="pointer-events-none fixed inset-0 opacity-70" style={{ background: 'radial-gradient(circle at 15% 10%, rgba(90,108,255,.12), transparent 28%), radial-gradient(circle at 85% 20%, rgba(90,108,255,.08), transparent 24%), linear-gradient(120deg, rgba(8,10,18,.04), transparent)' }} />
-            <div className={`relative grid min-h-screen app-shell ${stage === 'character' ? 'is-onboarding' : ''}`}>
+            <div ref={appShellRef} className="relative grid min-h-screen app-shell">
                 <section className="relative flex min-w-0 flex-col">
                     <header className="app-header flex items-center justify-between border-b border-slate-300/70 bg-white/50 px-7 py-4 backdrop-blur-xl">
                         <div className="flex min-w-0 items-center gap-6">
@@ -574,10 +608,9 @@ const App: React.FC = () => {
                     </header>
                     <input ref={projectInputRef} hidden type="file" accept="application/json,.mechanim.json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/>
 
-                    <div className={`stage-body editor-workbench relative min-h-0 flex-1 overflow-auto ${stage === 'character' ? 'p-0' : 'p-7'}`} data-testid="shared-workbench">
-                        {stage === 'character' && <CharacterSelection project={project} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} starterTemplates={STARTER_IMAGE_TEMPLATES} onStarterImage={loadStarterImage} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onSample={() => { setPendingCharacter(null); setProject(createSampleProject()); setStage('path'); }} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} />}
-                        {stage === 'path' && <PathEditor project={project} sortedParts={sortedParts} selectedPart={selectedPart} selectedPath={selectedPath} drawMode={drawMode} setDrawMode={setDrawMode} dispatch={dispatch} setPathPoints={setPathPoints} openTracking={() => setShowTracking(true)} isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} onNext={() => goStage('foundry')} goStage={goStage} viewport={canvasViewport} setViewport={setCanvasViewport} />}
-                        {stage === 'foundry' && <MechanismFoundry project={project} foundry={foundry} setFoundry={setFoundry} selectedPart={selectedPart} selectedPath={selectedPath} goStage={goStage} onExport={(pkg) => {
+                    <div className="stage-body editor-workbench relative min-h-0 flex-1 overflow-auto p-7" data-testid="shared-workbench">
+                        {editorStage === 'path' && <PathEditor project={project} sortedParts={sortedParts} selectedPart={selectedPart} selectedPath={selectedPath} drawMode={drawMode} setDrawMode={setDrawMode} dispatch={dispatch} setPathPoints={setPathPoints} openTracking={() => setShowTracking(true)} isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} onNext={() => goStage('foundry')} goStage={goStage} viewport={canvasViewport} setViewport={setCanvasViewport} />}
+                        {editorStage === 'foundry' && <MechanismFoundry project={project} foundry={foundry} setFoundry={setFoundry} selectedPart={selectedPart} selectedPath={selectedPath} goStage={goStage} onExport={(pkg) => {
                             const existingTarget = project.mechanisms.find(m =>
                                 m.targetPartId === pkg.targetPartId &&
                                 m.targetPathId === pkg.targetPathId &&
@@ -603,15 +636,16 @@ const App: React.FC = () => {
                             dispatch({ type: 'upsert_mechanism', mechanism: mech });
                             setStage('design');
                         }} />}
-                        {stage === 'design' && <MechanismDesign project={project} selectedMechanism={selectedMechanism} mechanismConfig={mechanismConfig} setMechanismConfig={setMechanismConfig} updateMechanism={updateMechanism} dispatch={dispatch} isPlaying={isPlaying} setIsPlaying={setIsPlaying} showTrace={showTrace} setShowTrace={setShowTrace} angle={angle} setAngle={setAngle} onOptimize={optimizeSelectedMechanism} onRecommendations={() => setShowRecommendations(true)} optimizerBusy={optimizerBusy} exportSvg={exportMechanismSvg} exportDxf={exportMechanismDxf} onBlueprint={() => goStage('blueprint')} goStage={goStage} viewport={canvasViewport} setViewport={setCanvasViewport} />}
-                        {stage === 'blueprint' && <BlueprintExport project={project} config={mechanismConfig} setConfig={setMechanismConfig} dispatch={dispatch} goStage={goStage} isPlaying={isPlaying} angle={angle} setAngle={setAngle} viewport={canvasViewport} setViewport={setCanvasViewport} />}
-                        {stage === 'options' && <Options project={project} dispatch={dispatch} goStage={goStage} />}
+                        {editorStage === 'design' && <MechanismDesign project={project} selectedMechanism={selectedMechanism} mechanismConfig={mechanismConfig} setMechanismConfig={setMechanismConfig} updateMechanism={updateMechanism} dispatch={dispatch} isPlaying={isPlaying} setIsPlaying={setIsPlaying} showTrace={showTrace} setShowTrace={setShowTrace} angle={angle} setAngle={setAngle} onOptimize={optimizeSelectedMechanism} onRecommendations={() => setShowRecommendations(true)} optimizerBusy={optimizerBusy} exportSvg={exportMechanismSvg} exportDxf={exportMechanismDxf} onBlueprint={() => goStage('blueprint')} goStage={goStage} viewport={canvasViewport} setViewport={setCanvasViewport} />}
+                        {editorStage === 'blueprint' && <BlueprintExport project={project} config={mechanismConfig} setConfig={setMechanismConfig} dispatch={dispatch} goStage={goStage} isPlaying={isPlaying} angle={angle} setAngle={setAngle} viewport={canvasViewport} setViewport={setCanvasViewport} />}
+                        {editorStage === 'options' && <Options project={project} dispatch={dispatch} goStage={goStage} />}
                         {playerDock && <div className="stage-player-row" data-testid="stage-player-row" aria-label="Shared playback controls">{playerDock}</div>}
                     </div>
-                    {stage !== 'character' && <WorkflowStatusStrip stage={stage} project={project} selectedPart={selectedPart} selectedPath={selectedPath} />}
-                    {stage !== 'character' && <footer className="status-bar" data-testid="status-bar">{commandStatus} · parts:{project.partOrder.length} · paths:{Object.keys(project.paths).length} · mechs:{project.mechanisms.length} · zoom {Math.round(canvasViewport.zoom * 100)}%</footer>}
+                    <WorkflowStatusStrip stage={editorStage} project={project} selectedPart={selectedPart} selectedPath={selectedPath} />
+                    <footer className="status-bar" data-testid="status-bar">{commandStatus} · parts:{project.partOrder.length} · paths:{Object.keys(project.paths).length} · mechs:{project.mechanisms.length} · zoom {Math.round(canvasViewport.zoom * 100)}%</footer>
                 </section>
             </div>
+            {welcomeOpen && <CharacterSelection project={project} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} starterTemplates={STARTER_IMAGE_TEMPLATES} onStarterImage={loadStarterImage} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setShowWelcome(false); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onSample={() => { setPendingCharacter(null); setProject(createSampleProject()); setShowWelcome(false); setStage('path'); }} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} onClose={closeWelcome} />}
             <CameraCaptureDialog isOpen={showCamera} onClose={() => setShowCamera(false)} onCapture={file => { setShowCamera(false); runWebOnnx(file); }} />
             <MechanismRecommendationSheet isOpen={showRecommendations} project={project} selectedPart={selectedPart} selectedPath={selectedPath} onClose={() => setShowRecommendations(false)} onApply={mechanism => { dispatch({ type: 'upsert_mechanism', mechanism }); setShowRecommendations(false); setStage('design'); }} />
             <TrackingModal isOpen={showTracking} onClose={() => setShowTracking(false)} onTransfer={path => { setPathPoints(path, 'tracked'); setShowTracking(false); setStage('path'); }} />
@@ -813,7 +847,7 @@ const WorkflowStatusStrip = ({ stage, project, selectedPart, selectedPath }: { s
     </div>;
 };
 
-const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setReplaceCharacter, starterTemplates, onStarterImage, onAccept, onDiscard, onSample, onProcess, onCamera, onPackage, onImport, onEditCharacter, onSaveSkeleton, onChooseSaveFolder }: {
+const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setReplaceCharacter, starterTemplates, onStarterImage, onAccept, onDiscard, onSample, onProcess, onCamera, onPackage, onImport, onEditCharacter, onSaveSkeleton, onChooseSaveFolder, onClose }: {
     project: ProjectState;
     pendingCharacter: { project: ProjectState; summary: string; returnStage: AppStage } | null;
     replaceCharacter: boolean;
@@ -830,6 +864,7 @@ const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setRe
     onEditCharacter: () => void;
     onSaveSkeleton: () => void;
     onChooseSaveFolder: () => void;
+    onClose: () => void;
 }) => {
     const reviewedProject = pendingCharacter?.project ?? project;
     const artifact = reviewedProject.characterPackage;
@@ -847,7 +882,55 @@ const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setRe
     const packageInputRef = useRef<HTMLInputElement>(null);
     const onnxInputRef = useRef<HTMLInputElement>(null);
     const importInputRef = useRef<HTMLInputElement>(null);
+    const dialogRef = useRef<HTMLElement>(null);
+
+    useEffect(() => {
+        const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        dialogRef.current?.focus();
+        return () => previousFocus?.isConnected && previousFocus.focus();
+    }, []);
+
+    const trapDialogFocus = (event: React.KeyboardEvent<HTMLElement>) => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            onClose();
+            return;
+        }
+        if (event.key !== 'Tab') return;
+        const dialog = dialogRef.current;
+        if (!dialog) return;
+        const focusables = Array.from(dialog.querySelectorAll(
+            'summary, button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )).filter((element): element is HTMLElement => element instanceof HTMLElement && element.offsetParent !== null);
+        if (!focusables.length) {
+            event.preventDefault();
+            dialog.focus();
+            return;
+        }
+        const first = focusables[0];
+        const last = focusables.at(-1)!;
+        const active = document.activeElement;
+        if (!dialog.contains(active)) {
+            event.preventDefault();
+            first.focus();
+        } else if (event.shiftKey && (active === first || active === dialog)) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && active === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    };
+
     return (
+    <div className="modal-backdrop welcome-backdrop" role="presentation">
+    <section ref={dialogRef} className="modal-sheet welcome-dialog animate-rise" role="dialog" aria-modal="true" aria-labelledby="welcome-dialog-title" data-testid="welcome-dialog" tabIndex={-1} onKeyDown={trapDialogFocus}>
+    <div className="welcome-titlebar">
+        <div>
+            <div className="section-title">Welcome workspace</div>
+            <h2 id="welcome-dialog-title">Start like a CAD editor</h2>
+        </div>
+    </div>
     <div className="onboarding-page">
         <section className="onboarding-hero">
             <div className="onboarding-copy animate-rise">
@@ -1003,6 +1086,9 @@ const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setRe
                 </details>
             </details>
         </section>
+    </div>
+    <div className="welcome-footer"><button type="button" className="btn-secondary" onClick={onClose}>Start editing</button></div>
+    </section>
     </div>
     );
 };

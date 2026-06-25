@@ -32,6 +32,8 @@
       button { border: 0; cursor: pointer; }
       button:disabled, input:disabled, select:disabled { cursor: not-allowed; opacity: .55; }
       body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color: var(--ms-bg-soft); color: var(--ms-text); }
+      html.welcome-modal-open, body.welcome-modal-open { height: 100%; overflow: hidden; overscroll-behavior: none; }
+      body.welcome-modal-open #root { height: 100%; overflow: hidden; }
       .min-h-screen{min-height:100vh}.min-h-0{min-height:0}.min-h-\[520px\]{min-height:520px}.min-h-\[560px\]{min-height:560px}.h-2{height:.5rem}.h-full{height:100%}.h-\[520px\]{height:520px}.h-\[calc\(100vh-160px\)\]{height:calc(100vh - 160px)}.w-2{width:.5rem}.w-full{width:100%}.max-w-xl{max-width:36rem}.max-w-3xl{max-width:48rem}.max-h-32{max-height:8rem}.flex-1{flex:1 1 0%}.min-w-0{min-width:0}
       .fixed{position:fixed}.relative{position:relative}.inset-0{inset:0}.grid{display:grid}.flex{display:flex}.inline-flex{display:inline-flex}.block{display:block}.hidden{display:none}.items-center{align-items:center}.justify-between{justify-content:space-between}.justify-center{justify-content:center}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}.gap-2{gap:.5rem}.gap-3{gap:.75rem}.gap-5{gap:1.25rem}.gap-6{gap:1.5rem}.space-y-1>*+*{margin-top:.25rem}.space-y-2>*+*{margin-top:.5rem}.space-y-3>*+*{margin-top:.75rem}.space-y-4>*+*{margin-top:1rem}.space-y-5>*+*{margin-top:1.25rem}
       .overflow-hidden{overflow:hidden}.overflow-auto{overflow:auto}.pointer-events-none{pointer-events:none}.cursor-default{cursor:default}.cursor-pointer{cursor:pointer}.cursor-grab{cursor:grab}.cursor-grabbing{cursor:grabbing}.cursor-crosshair{cursor:crosshair}.cursor-not-allowed{cursor:not-allowed}.cursor-move{cursor:move}.select-none{user-select:none}
@@ -145,6 +147,31 @@
       .modal-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 1.25rem; background: rgba(15,23,42,.28); backdrop-filter: blur(10px); }
       .modal-sheet { width: min(100%, 68rem); max-height: min(88vh, 56rem); overflow: auto; border: 1px solid var(--ms-line); border-radius: 2rem; background: rgba(255,255,255,.98); box-shadow: 0 40px 120px rgba(8,10,18,.20); padding: 1.5rem; color: var(--ms-text); }
       .modal-sheet h3 { margin: .25rem 0 0; font-size: clamp(1.6rem, 3vw, 2.4rem); line-height: 1; letter-spacing: -.055em; font-weight: 950; }
+      .welcome-backdrop { background: rgba(248,250,252,.46); backdrop-filter: blur(14px) saturate(1.05); }
+      .welcome-dialog { width: min(100%, 74rem); max-height: min(91vh, 52rem); padding: 1rem; border-color: rgba(139,92,246,.24); background: rgba(255,255,255,.96); }
+      .welcome-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--ms-line); padding: .25rem .35rem .85rem; }
+      .welcome-titlebar h2 { margin: .15rem 0 0; color: var(--ms-text); font-size: clamp(1.35rem, 2.5vw, 2rem); line-height: 1; letter-spacing: -.055em; font-weight: 950; }
+      .welcome-footer { display: flex; justify-content: flex-end; border-top: 1px solid var(--ms-line); margin-top: .85rem; padding: .85rem .35rem .1rem; }
+      .welcome-dialog .onboarding-page { height: auto; min-height: 0; padding: .9rem .2rem .2rem; overflow: visible; background: transparent; grid-template-rows: auto auto; gap: .75rem; }
+      .welcome-dialog .onboarding-hero { grid-template-columns: minmax(16rem, .62fr) minmax(0, 1.38fr); gap: 1rem; align-items: stretch; }
+      .welcome-dialog .onboarding-copy { align-self: center; max-width: 25rem; }
+      .welcome-dialog .onboarding-copy h1 { font-size: clamp(3.1rem, 6vw, 5.3rem); }
+      .welcome-dialog .onboarding-copy h3 { margin-top: .7rem; font-size: clamp(1.35rem, 2.4vw, 2.1rem); }
+      .welcome-dialog .onboarding-copy p { margin-top: .7rem; font-size: .92rem; }
+      .welcome-dialog .landing-steps { margin-top: .85rem; }
+      .welcome-dialog .landing-board { grid-template-rows: minmax(12rem, .78fr) auto; gap: .65rem; }
+      .welcome-dialog .landing-sketch { border-radius: 1.5rem; box-shadow: 0 18px 46px rgba(139,92,246,.10); }
+      .welcome-dialog .landing-sketch svg { height: min(30vh, 17rem); min-height: 12rem; }
+      .welcome-dialog .template-gallery { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .45rem; }
+      .welcome-dialog .template-tile { min-height: 5.8rem; padding: .58rem; border-radius: 1rem; box-shadow: 0 10px 30px rgba(8,10,18,.05); }
+      .welcome-dialog .template-tile strong { font-size: .98rem; }
+      .welcome-dialog .template-tile span:not(.template-kicker) { font-size: .73rem; }
+      .welcome-dialog .template-tile b { font-size: .62rem; padding: .38rem .48rem; }
+      .welcome-dialog .starter-thumb { width: 2.1rem; height: 2.1rem; }
+      .welcome-dialog .onboarding-secondary { grid-template-columns: minmax(0, 1fr) auto minmax(16rem, .7fr); gap: .6rem; align-items: start; }
+      .welcome-dialog .landing-tools { min-width: 0; padding: .65rem .75rem; }
+      .welcome-dialog .landing-tools-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .7rem; }
+      .welcome-dialog .import-status { width: auto; max-height: 15rem; overflow: auto; padding: .75rem; }
       .camera-dialog { max-width: 46rem; }
       .camera-preview { min-height: 20rem; display: grid; place-items: center; overflow: hidden; border: 1px solid var(--ms-line); border-radius: 1.5rem; background: #020617; }
       .camera-preview video { width: 100%; max-height: 56vh; object-fit: contain; }
@@ -248,6 +275,9 @@
       @media (min-width: 901px) and (max-width: 1180px) {
         .landing-board { grid-template-columns: 1fr; }
         .landing-sketch { display: none; }
+        .welcome-dialog .landing-sketch { display: grid; }
+        .welcome-dialog .onboarding-hero { grid-template-columns: minmax(14rem, .7fr) minmax(0, 1.3fr); }
+        .welcome-dialog .template-gallery { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       }
       @media (max-width: 900px) {
         .app-shell { display: block; }
@@ -273,6 +303,17 @@
         .path-panel { order: 1; }
         .path-canvas-shell { order: 2; }
         .path-canvas-shell svg { height: 58vh; min-height: 360px; }
+        .welcome-backdrop { padding: .75rem; }
+        .welcome-dialog { max-height: 94vh; padding: .85rem; border-radius: 1.4rem; }
+        .welcome-titlebar { align-items: flex-start; }
+        .welcome-dialog .onboarding-page { padding-top: .75rem; }
+        .welcome-dialog .onboarding-hero { grid-template-columns: 1fr; gap: .75rem; align-items: start; }
+        .welcome-dialog .onboarding-copy { align-self: auto; }
+        .welcome-dialog .landing-board { display: block; }
+        .welcome-dialog .landing-sketch { display: none; }
+        .welcome-dialog .template-gallery { grid-template-columns: 1fr; }
+        .welcome-dialog .onboarding-secondary { display: grid; grid-template-columns: 1fr; }
+        .welcome-dialog .import-status { max-height: none; }
       }
       .animate-rise { animation: rise .55s cubic-bezier(.22,1,.36,1) both; }
       @keyframes rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
