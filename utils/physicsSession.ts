@@ -71,7 +71,14 @@ const velocityBetween = (previous: Point, next: Point, stepMs: number): Point =>
   return { x: finite((next.x - previous.x) / seconds), y: finite((next.y - previous.y) / seconds) };
 };
 
-const forceFromVelocity = (velocity: Point): Point => ({ x: finite(velocity.x * 0.08), y: finite(velocity.y * 0.08) });
+const forceFromAcceleration = (previous: Point, current: Point, next: Point, stepMs: number): Point => {
+  const seconds = Math.max(1e-6, stepMs / 1000);
+  // Unit mass, scaled for display/export readability: F = m·a.
+  return {
+    x: finite(((next.x - 2 * current.x + previous.x) / (seconds * seconds)) * 0.001),
+    y: finite(((next.y - 2 * current.y + previous.y) / (seconds * seconds)) * 0.001)
+  };
+};
 
 const addConstraint = (constraints: PhysicsConstraintSample[], id: string, kind: PhysicsConstraintKind, a: Point, b: Point, expectedLength: number, label: string, mechanismId?: string) => {
   const currentLength = distance(a, b);
@@ -144,6 +151,7 @@ export const buildKinematicPhysicsSession = (
       if (current.aux && previous.aux && next.aux) samples.push(['aux', current.aux, previous.aux, next.aux, 'kinematic']);
       samples.forEach(([sampleId, point, prevPoint, nextPoint, kind]) => {
         const velocity = velocityBetween(prevPoint, nextPoint, stepMs);
+        const force = forceFromAcceleration(prevPoint, point, nextPoint, stepMs);
         bodies.push({
           id: `/physics/mechanisms/${mechanism.id}/${sampleId}`,
           mechanismId: mechanism.id,
@@ -153,7 +161,7 @@ export const buildKinematicPhysicsSession = (
           kind,
           position: { x: finite(point.x), y: finite(point.y), zMm: finite(depth + 0.7) },
           velocity,
-          force: forceFromVelocity(velocity)
+          force
         });
       });
       addConstraint(constraints, `/physics/constraints/${mechanism.id}/crank`, 'rod', current.p1, current.j1, finite(mechanism.crankLength), 'crank length', mechanism.id);

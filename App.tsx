@@ -74,6 +74,30 @@ const foundryCameraTransform = ({ yaw, pitch }: FoundryCamera) => {
     return `translate(180 120) translate(${drift.toFixed(2)} ${lift.toFixed(2)}) rotate(${rotation.toFixed(2)}) skewX(${skew.toFixed(2)}) scale(1 ${squash.toFixed(3)}) translate(-180 -120)`;
 };
 
+const mechanismPhysicsRule = (type: MechanismType) => ({
+    '4bar': 'pin reactions + coupler acceleration',
+    piston: 'slider thrust + guide normal force',
+    yoke: 'pin-in-slot thrust + guide reaction',
+    'quick-return': 'slotted-arm torque + uneven return velocity',
+    '5bar': 'dual crank torque + coupler acceleration',
+    cam: 'cam normal force + follower lift velocity',
+    'rack-pinion': 'gear mesh tangent force + rack velocity',
+    gear: 'gear mesh force + opposite angular velocity',
+    planetary_gear: 'sun/planet mesh force + carrier velocity',
+    crank: 'driver torque + tangential velocity'
+}[type]);
+
+const unitVector = (x: number, y: number, fallback: Point = { x: 1, y: 0 }): Point => {
+    const length = Math.hypot(x, y);
+    if (!Number.isFinite(length) || length < 0.001) return fallback;
+    return { x: x / length, y: y / length };
+};
+
+const vectorEnd = (origin: Point, vector: Point, length: number): Point => ({
+    x: origin.x + vector.x * length,
+    y: origin.y + vector.y * length
+});
+
 const STARTER_IMAGE_TEMPLATES: StarterImageTemplate[] = [
     { id: 'girl', label: 'Girl starter', fileName: 'girl.png', description: 'Flat vector pose from resources/examples/raw/girl.png.', url: girlStarterUrl },
     { id: 'boy', label: 'Boy starter', fileName: 'boy.PNG', description: 'Textured pose from resources/examples/raw/boy.PNG.', url: boyStarterUrl }
@@ -1868,8 +1892,8 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const [foundryPhase, setFoundryPhase] = useState(0);
     const [isPickingAnchor, setIsPickingAnchor] = useState(false);
     const [manualAnchor, setManualAnchor] = useState<Point | null>(null);
-    const [showForces, setShowForces] = useState(false);
-    const [showVelocity, setShowVelocity] = useState(false);
+    const [showForces, setShowForces] = useState(true);
+    const [showVelocity, setShowVelocity] = useState(true);
     const [showTrail, setShowTrail] = useState(false);
     const [showPathPreview, setShowPathPreview] = useState(true);
     const [showSensemaking, setShowSensemaking] = useState(true);
@@ -1892,10 +1916,31 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const selectedSimulation = fitMechanismSimulation(landedFoundry, foundryPhase, 360, 240, 96);
     const previewPoints = selectedSimulation.pathPoints.length ? selectedSimulation.pathPoints : fitPointsToBox(preview, 360, 240);
     const previewPath = selectedSimulation.pathD || pointsToSvgPath(previewPoints);
-    const playIndex = previewPoints.length ? Math.floor((((foundryPhase / (Math.PI * 2)) % 1 + 1) % 1) * (previewPoints.length - 1)) : 0;
+    const playIndex = previewPoints.length ? Math.floor((((foundryPhase / (Math.PI * 2)) % 1 + 1) % 1) * previewPoints.length) : 0;
     const playhead = selectedSimulation.state.effector ?? previewPoints[playIndex];
-    const previousPoint = previewPoints[Math.max(0, playIndex - 1)] ?? playhead;
-    const nextPoint = previewPoints[Math.min(previewPoints.length - 1, playIndex + 1)] ?? playhead;
+    const pointAt = (index: number) => previewPoints.length ? previewPoints[((index % previewPoints.length) + previewPoints.length) % previewPoints.length] : playhead;
+    const previousPoint = pointAt(playIndex - 1);
+    const nextPoint = pointAt(playIndex + 1);
+    const pathCenter = previewPoints.length
+        ? previewPoints.reduce((sum, point) => ({ x: sum.x + point.x, y: sum.y + point.y }), { x: 0, y: 0 })
+        : playhead;
+    const physicsCenter = previewPoints.length ? { x: pathCenter.x / previewPoints.length, y: pathCenter.y / previewPoints.length } : playhead;
+    const velocityRaw = { x: nextPoint.x - previousPoint.x, y: nextPoint.y - previousPoint.y };
+    const accelerationRaw = { x: nextPoint.x + previousPoint.x - (playhead?.x ?? 0) * 2, y: nextPoint.y + previousPoint.y - (playhead?.y ?? 0) * 2 };
+    const driveRaw = {
+        x: -(selectedSimulation.state.j1.y - selectedSimulation.state.p1.y),
+        y: selectedSimulation.state.j1.x - selectedSimulation.state.p1.x
+    };
+    const velocityUnit = unitVector(velocityRaw.x, velocityRaw.y);
+    const driveUnit = unitVector(driveRaw.x, driveRaw.y, velocityUnit);
+    const radialUnit = unitVector(physicsCenter.x - (playhead?.x ?? physicsCenter.x), physicsCenter.y - (playhead?.y ?? physicsCenter.y), driveUnit);
+    const forceUnit = unitVector(accelerationRaw.x, accelerationRaw.y, radialUnit);
+    const velocityTip = playhead ? vectorEnd(playhead, velocityUnit, 42) : undefined;
+    const forceTip = playhead ? vectorEnd(playhead, forceUnit, 38) : undefined;
+    const driveTip = vectorEnd(selectedSimulation.state.j1, driveUnit, 34);
+    const velocityMagnitude = Math.hypot(velocityRaw.x, velocityRaw.y);
+    const forceMagnitude = Math.hypot(accelerationRaw.x, accelerationRaw.y);
+    const physicsRule = mechanismPhysicsRule(foundry.type);
     const hardBlocked = !targetReady || range.percentValid === 0 || !Number.isFinite(landing.x) || !Number.isFinite(landing.y);
     const foundryCameraTransformValue = foundryCameraTransform(foundryCamera);
     const foundryCameraLabel = foundryCamera.preset === 'custom' ? 'Drag orbit' : FOUNDRY_VIEW_PRESETS[foundryCamera.preset].label;
@@ -2045,6 +2090,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                     <div className="font-bold text-slate-800">Selected: {library.label}</div>
                     <div>Sensemaking: {library.sense}.</div>
                     <div>Constraint: {library.constraint}.</div>
+                    <div>Physics: {physicsRule}.</div>
                     <div data-testid="foundry-feasibility">Feasibility: {feasibilityText}</div>
                 </div>}
             </StageLeftSummary>
@@ -2070,6 +2116,12 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                     <filter id="foundry-depth-shadow-filter" x="-30%" y="-30%" width="170%" height="170%">
                         <feDropShadow dx="8" dy="10" stdDeviation="6" floodColor="#1e293b" floodOpacity="0.18" />
                     </filter>
+                    <marker id="foundry-arrow-velocity" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth">
+                        <path d="M 0 0 L 7 3.5 L 0 7 z" fill="#10b981" />
+                    </marker>
+                    <marker id="foundry-arrow-force" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth">
+                        <path d="M 0 0 L 7 3.5 L 0 7 z" fill="#ef4444" />
+                    </marker>
                 </defs>
                 <g ref={foundryCameraRigRef} data-testid="foundry-camera-rig" data-camera-preset={foundryCamera.preset} data-camera-yaw={foundryCamera.yaw.toFixed(1)} data-camera-pitch={foundryCamera.pitch.toFixed(1)} transform={foundryCameraTransformValue}>
                     {showTrail && <path data-testid="foundry-trail-overlay" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="12" strokeLinecap="round" opacity="0.12"/>}
@@ -2077,12 +2129,15 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                     <g data-testid="foundry-depth-scene" className="foundry-depth-scene" filter="url(#foundry-depth-shadow-filter)">
                         <MechanismLinkagePreview mechanism={landedFoundry} simulation={selectedSimulation} kit={project.settings.physicalKit} testId="foundry-selected-linkage" />
                     </g>
-                    {showForces && playhead && <g data-testid="foundry-forces-overlay" stroke="#ef4444" strokeWidth="3" strokeLinecap="round">
-                        <line x1={playhead.x} y1={playhead.y} x2={180} y2={120} />
-                        <line x1={playhead.x} y1={playhead.y} x2={playhead.x} y2={Math.max(22, playhead.y - 42)} />
+                    {showForces && playhead && forceTip && <g data-testid="foundry-forces-overlay" className="physics-vector physics-force" data-physics-rule={physicsRule} data-fx={accelerationRaw.x.toFixed(3)} data-fy={accelerationRaw.y.toFixed(3)} data-force-magnitude={forceMagnitude.toFixed(3)} stroke="#ef4444" strokeWidth="3" strokeLinecap="round">
+                        <line data-testid="foundry-force-vector" x1={playhead.x} y1={playhead.y} x2={forceTip.x} y2={forceTip.y} markerEnd="url(#foundry-arrow-force)" />
+                        <line data-testid="foundry-drive-force-vector" x1={selectedSimulation.state.j1.x} y1={selectedSimulation.state.j1.y} x2={driveTip.x} y2={driveTip.y} opacity="0.68" markerEnd="url(#foundry-arrow-force)" />
+                        <text x={forceTip.x + 5} y={forceTip.y - 3}>F / a</text>
+                        <text x={driveTip.x + 5} y={driveTip.y + 9}>drive τ</text>
                     </g>}
-                    {showVelocity && playhead && <g data-testid="foundry-velocity-overlay" stroke="#10b981" strokeWidth="4" strokeLinecap="round">
-                        <line x1={playhead.x} y1={playhead.y} x2={playhead.x + (nextPoint.x - previousPoint.x) * 2.2} y2={playhead.y + (nextPoint.y - previousPoint.y) * 2.2} />
+                    {showVelocity && playhead && velocityTip && <g data-testid="foundry-velocity-overlay" className="physics-vector physics-velocity" data-vx={velocityRaw.x.toFixed(3)} data-vy={velocityRaw.y.toFixed(3)} data-speed={velocityMagnitude.toFixed(3)} stroke="#10b981" strokeWidth="4" strokeLinecap="round">
+                        <line data-testid="foundry-velocity-vector" x1={playhead.x} y1={playhead.y} x2={velocityTip.x} y2={velocityTip.y} markerEnd="url(#foundry-arrow-velocity)" />
+                        <text x={velocityTip.x + 5} y={velocityTip.y - 3}>v</text>
                     </g>}
                     {playhead && <circle data-testid="foundry-playhead" cx={playhead.x} cy={playhead.y} r="7" fill="#f472b6" stroke="white" strokeWidth="3" />}
                     {(isPickingAnchor || manualAnchor) && <g data-testid="foundry-anchor-marker" transform={`translate(${anchorMarker.x} ${anchorMarker.y})`}>
@@ -2099,6 +2154,11 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 <div className="section-title">Selected mechanism</div>
                 <h3>{library.label}</h3>
                 <p className="mt-2 text-sm text-slate-600">Fine tune the selected physical template and preview overlays.</p>
+                <div className="physics-readout mt-3" data-testid="foundry-physics-readout">
+                    <strong>Physics</strong>
+                    <span>{physicsRule}</span>
+                    <span>v {velocityMagnitude.toFixed(1)} · F {forceMagnitude.toFixed(1)}</span>
+                </div>
             </div>
             <details className="advanced-panel">
                 <summary>Mechanism options</summary>

@@ -719,6 +719,24 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await expect(page.getByTestId('foundry-cad-plane')).toHaveCount(0);
   await expect(page.getByTestId('foundry-angle-strip'), 'Foundry no longer adds extra multi-view mini canvases over the work area').toHaveCount(0);
   await expect(page.getByTestId('foundry-z-spacer')).toHaveCount(0);
+  await expect(page.getByTestId('foundry-velocity-overlay'), 'Velocity vectors are on by default in the physics sandbox').toBeVisible();
+  await expect(page.getByTestId('foundry-forces-overlay'), 'Force vectors are on by default in the physics sandbox').toBeVisible();
+  await expect(page.getByTestId('foundry-velocity-vector')).toBeVisible();
+  await expect(page.getByTestId('foundry-force-vector')).toBeVisible();
+  await expect(page.getByTestId('foundry-drive-force-vector')).toBeVisible();
+  await expect(page.getByTestId('foundry-physics-readout')).toContainText('Physics');
+  const defaultPhysics = await page.getByTestId('foundry-preview').evaluate(() => {
+    const velocity = document.querySelector('[data-testid="foundry-velocity-vector"]') as SVGLineElement | null;
+    const force = document.querySelector('[data-testid="foundry-force-vector"]') as SVGLineElement | null;
+    const overlay = document.querySelector('[data-testid="foundry-velocity-overlay"]') as SVGGElement | null;
+    const length = (line: SVGLineElement | null) => line
+      ? Math.hypot(Number(line.getAttribute('x2')) - Number(line.getAttribute('x1')), Number(line.getAttribute('y2')) - Number(line.getAttribute('y1')))
+      : 0;
+    return { velocityLength: length(velocity), forceLength: length(force), speed: Number(overlay?.getAttribute('data-speed') ?? 0) };
+  });
+  expect(defaultPhysics.velocityLength, 'Velocity vector has visible direction').toBeGreaterThan(20);
+  expect(defaultPhysics.forceLength, 'Force vector has visible direction').toBeGreaterThan(20);
+  expect(defaultPhysics.speed, 'Velocity vector is computed from live mechanism samples').toBeGreaterThan(0);
   expect(await page.getByTestId('foundry-material-thickness').count(), 'Sandbox shows material thickness under the mechanism parts').toBeGreaterThanOrEqual(4);
   expect(await page.locator('.foundry-preview .mechanism-face').count(), 'Sandbox shows cardboard/wood top faces').toBeGreaterThanOrEqual(4);
   const thicknessGeometry = await page.getByTestId('foundry-material-thickness').evaluateAll(nodes => nodes.map(node => {
@@ -728,6 +746,7 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   expect(thicknessGeometry.every(item => item.width > 0 && item.height > 0), 'Material thickness geometry is visible, not a flat line').toBe(true);
   await expect(page.getByTestId('foundry-mini-linkage-gear')).toBeVisible();
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Four-bar linkage');
+  await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Physics: pin reactions');
   await expect(page.getByTestId('foundry-feasibility')).toContainText('360° valid sampled motion');
   await expect(page.getByTestId('foundry-target-summary')).toContainText('Valid Range: 360° valid');
   await expect(page.getByTestId('foundry-anchor-marker'), 'Default sandbox keeps non-mechanism markers hidden').toHaveCount(0);
@@ -749,6 +768,8 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   for (const type of ['piston', 'yoke', 'quick-return', '5bar', 'cam', 'rack-pinion', 'gear', 'planetary_gear', '4bar']) {
     await page.getByLabel('Foundry mechanism type').selectOption(type);
     await expect(page.getByTestId(`foundry-template-${type}`), `${type} has its own physical preview template`).toBeVisible();
+    await expect(page.getByTestId('foundry-forces-overlay'), `${type} keeps live force vectors visible`).toHaveAttribute('data-physics-rule', /force|torque|velocity|acceleration|reaction/);
+    await expect(page.getByTestId('foundry-velocity-overlay'), `${type} keeps live velocity vectors visible`).toHaveAttribute('data-speed', /[0-9]+\.[0-9]+/);
     for (const [testId, minimumCount] of foundryPhysicalMarkers[type]) {
       expect(await page.getByTestId(testId).count(), `${type} preview includes ${testId}`).toBeGreaterThanOrEqual(minimumCount);
     }
@@ -925,16 +946,24 @@ test('Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking'
   await expect(page.getByTestId('foundry-path-preview')).toHaveCount(0);
   await page.getByRole('button', { name: 'Trail' }).click();
   await expect(page.getByTestId('foundry-trail-overlay')).toBeVisible();
+  await expect(page.getByTestId('foundry-forces-overlay')).toBeVisible();
+  await page.getByRole('button', { name: 'Forces' }).click();
+  await expect(page.getByTestId('foundry-forces-overlay')).toHaveCount(0);
   await page.getByRole('button', { name: 'Forces' }).click();
   await expect(page.getByTestId('foundry-forces-overlay')).toBeVisible();
+  await expect(page.getByTestId('foundry-velocity-overlay')).toBeVisible();
+  await page.getByRole('button', { name: 'Velocity' }).click();
+  await expect(page.getByTestId('foundry-velocity-overlay')).toHaveCount(0);
   await page.getByRole('button', { name: 'Velocity' }).click();
   await expect(page.getByTestId('foundry-velocity-overlay')).toBeVisible();
   await page.getByRole('button', { name: 'Show Sensemaking' }).click();
   await expect(page.getByTestId('foundry-mechanism-library')).toHaveCount(0);
   await page.getByRole('button', { name: 'Back to Gallery' }).click();
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Sensemaking:');
+  const velocityBeforePlay = await page.getByTestId('foundry-velocity-vector').evaluate((line: SVGLineElement) => [line.getAttribute('x1'), line.getAttribute('y1'), line.getAttribute('x2'), line.getAttribute('y2')].join(','));
   await page.getByRole('button', { name: 'Play' }).click();
   await expect(page.getByTestId('foundry-toolbar-state')).toContainText('playing');
+  await expect.poll(async () => page.getByTestId('foundry-velocity-vector').evaluate((line: SVGLineElement) => [line.getAttribute('x1'), line.getAttribute('y1'), line.getAttribute('x2'), line.getAttribute('y2')].join(',')), { message: 'live velocity vector follows the running mechanism' }).not.toBe(velocityBeforePlay);
   await page.getByRole('button', { name: 'Reset' }).click();
   await expect(page.getByTestId('foundry-toolbar-state')).toContainText('paused');
 });

@@ -266,6 +266,12 @@
       .foundry-preview .mechanism-gear, .foundry-preview .mechanism-cam, .mechanism-choice-sim .mechanism-gear, .mechanism-choice-sim .mechanism-cam { stroke: #5a6cff; fill: rgba(90,108,255,.08); }
       .foundry-preview .mechanism-gear.secondary, .mechanism-choice-sim .mechanism-gear.secondary { stroke: #10b981; fill: rgba(16,185,129,.08); }
       .foundry-preview .mechanism-gear.carrier, .mechanism-choice-sim .mechanism-gear.carrier { stroke: rgba(100,116,139,.42); fill: none; stroke-dasharray: 7 6; }
+      .physics-vector line { vector-effect: non-scaling-stroke; filter: drop-shadow(0 3px 6px rgba(15,23,42,.18)); }
+      .physics-vector text { paint-order: stroke; stroke: #fff; stroke-width: 3px; font-size: 8px; font-weight: 950; letter-spacing: .02em; }
+      .physics-force text { fill: #b91c1c; }
+      .physics-velocity text { fill: #047857; }
+      .physics-readout { display: grid; gap: .3rem; border: 1px solid rgba(90,108,255,.16); border-radius: 1rem; background: rgba(90,108,255,.08); padding: .75rem; color: var(--ms-muted); font-size: .78rem; font-weight: 850; }
+      .physics-readout strong { color: var(--ms-text); font-size: .82rem; }
       .mechanism-choice-grid { display: grid; gap: .75rem; }
       .mechanism-choice { width: 100%; text-align: left; }
       .mechanism-choice-sim { width: 100%; height: 86px; margin-bottom: .65rem; border-radius: 1rem; background: #f8f9ff; }
