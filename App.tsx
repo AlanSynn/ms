@@ -626,7 +626,7 @@ const App: React.FC = () => {
     return (
         <main className={`min-h-screen overflow-hidden ${themeClass}`} data-theme={project.settings.theme}>
             <div className="pointer-events-none fixed inset-0 opacity-70" style={{ background: 'radial-gradient(circle at 15% 10%, rgba(90,108,255,.12), transparent 28%), radial-gradient(circle at 85% 20%, rgba(90,108,255,.08), transparent 24%), linear-gradient(120deg, rgba(8,10,18,.04), transparent)' }} />
-            <div ref={appShellRef} className="relative grid min-h-screen app-shell">
+            <div ref={appShellRef} className={`relative grid min-h-screen app-shell ${editorStage === 'character' ? 'is-onboarding' : ''}`}>
                 <WorkflowRail stage={stage} goStage={goStage} />
                 <section className="relative flex min-w-0 flex-col">
                     <header className="app-header flex items-center justify-between border-b border-slate-300/70 bg-white/50 px-7 py-4 backdrop-blur-xl">
@@ -995,7 +995,7 @@ const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setRe
     const artifact = reviewedProject.characterPackage;
     const isPlainReview = artifact?.replacementContext?.mode !== 'replace-character';
     const isReplacementReview = artifact?.replacementContext?.mode === 'replace-character';
-    const statusOpen = Boolean(pendingCharacter || project.settings.detailedProcessingSteps || ['loading-model', 'running-model', 'normalizing', 'error'].includes(project.processing.stage));
+    const statusOpen = Boolean(pendingCharacter || project.settings.detailedProcessingSteps || ['loading-model', 'running-onnx', 'extracting-parts', 'normalizing', 'error'].includes(project.processing.stage));
     const checks = [
         { label: 'parts_info.json package artifact', ok: Boolean(artifact?.partsInfo) },
         { label: 'char_cfg.yaml skeleton artifact', ok: Boolean(artifact?.charCfg && reviewedProject.skeleton) },
@@ -1007,6 +1007,28 @@ const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setRe
     const packageInputRef = useRef<HTMLInputElement>(null);
     const onnxInputRef = useRef<HTMLInputElement>(null);
     const importInputRef = useRef<HTMLInputElement>(null);
+    const importStatusPanel = (
+        <details className="advanced-panel import-status" open={statusOpen}>
+            <summary>Import status</summary>
+            <div className="mt-3"><ProgressBlock project={project} /></div>
+            {pendingCharacter && <div className="mt-5 rounded-3xl border border-amber-200 bg-amber-50 p-4">
+                <div className="text-xs font-black uppercase tracking-[0.2em] text-amber-700">review generated package</div>
+                <div className="mt-1 font-bold">{pendingCharacter.project.metadata.name}</div>
+                <div className="text-sm text-slate-600">{pendingCharacter.summary}</div>
+                <div className="mt-2 text-xs text-slate-500">{pendingCharacter.project.characterPackage?.replacementContext?.rebindingSummary ?? 'Starts clean with no mechanisms.'}</div>
+                <div className="mt-4 flex gap-2"><button className="btn-primary" onClick={onAccept}>Accept package</button><button className="btn-secondary" onClick={onDiscard}>Discard</button></div>
+            </div>}
+            <details className="advanced-panel mt-6">
+                <summary>Technical checks</summary>
+                <div className="mt-3 grid gap-3 text-sm text-slate-600">
+                    {checks.map(item => <div key={item.label} className="flex items-center gap-2">
+                        {item.ok ? <CheckCircle2 size={16} className="text-emerald-600" /> : <AlertCircle size={16} className="text-amber-600" />}
+                        <span className={item.ok ? '' : 'font-bold text-amber-700'}>{item.label}</span>
+                    </div>)}
+                </div>
+            </details>
+        </details>
+    );
 
     return (
     <section className="character-stage animate-rise" data-testid="character-screen">
@@ -1150,28 +1172,11 @@ const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setRe
                     </div>
                 </div>
             </details>
-            <details className="advanced-panel import-status" open={statusOpen}>
-                <summary>Import status</summary>
-                <div className="mt-3"><ProgressBlock project={project} /></div>
-                {pendingCharacter && <div className="mt-5 rounded-3xl border border-amber-200 bg-amber-50 p-4">
-                    <div className="text-xs font-black uppercase tracking-[0.2em] text-amber-700">review generated package</div>
-                    <div className="mt-1 font-bold">{pendingCharacter.project.metadata.name}</div>
-                    <div className="text-sm text-slate-600">{pendingCharacter.summary}</div>
-                    <div className="mt-2 text-xs text-slate-500">{pendingCharacter.project.characterPackage?.replacementContext?.rebindingSummary ?? 'Starts clean with no mechanisms.'}</div>
-                    <div className="mt-4 flex gap-2"><button className="btn-primary" onClick={onAccept}>Accept package</button><button className="btn-secondary" onClick={onDiscard}>Discard</button></div>
-                </div>}
-                <details className="advanced-panel mt-6">
-                    <summary>Technical checks</summary>
-                    <div className="mt-3 grid gap-3 text-sm text-slate-600">
-                        {checks.map(item => <div key={item.label} className="flex items-center gap-2">
-                            {item.ok ? <CheckCircle2 size={16} className="text-emerald-600" /> : <AlertCircle size={16} className="text-amber-600" />}
-                            <span className={item.ok ? '' : 'font-bold text-amber-700'}>{item.label}</span>
-                        </div>)}
-                    </div>
-                </details>
-            </details>
         </section>
     </div>
+    {statusOpen && <aside className="character-status-dock" data-testid="character-status-dock" role="dialog" aria-label="Import status" aria-live="polite">
+        {importStatusPanel}
+    </aside>}
     </section>
     );
 };

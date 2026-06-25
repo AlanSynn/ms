@@ -73,6 +73,9 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await page.getByRole('button', { name: 'Start', exact: true }).click();
   await expect(page.getByTestId('welcome-dialog')).toHaveCount(0);
   await expect(page.getByTestId('character-screen')).toBeVisible();
+  const characterTitleBox = await page.getByRole('heading', { name: 'Start with character art' }).boundingBox();
+  expect(characterTitleBox?.y ?? -1, 'character title is not clipped at viewport top').toBeGreaterThanOrEqual(0);
+  await expect(page.getByTestId('character-status-dock')).toHaveCount(0);
   await expect(page.getByTestId('template-gallery')).toContainText('Waving arm');
   await expect(page.getByTestId('template-gallery')).toContainText('Girl starter');
   await expect(page.getByTestId('template-gallery')).toContainText('Boy starter');
@@ -344,7 +347,11 @@ test('Create from image upload creates a reviewed character package in browser',
   ]);
   await onnxChooser.setFiles('tests/fixtures/stick-character.png');
 
+  await expect(page.getByTestId('character-status-dock')).toBeVisible({ timeout: 180_000 });
   await expect(page.getByText('review generated package')).toBeVisible({ timeout: 180_000 });
+  const dockBox = await page.getByTestId('character-status-dock').boundingBox();
+  const screenBox = await page.getByTestId('character-screen').boundingBox();
+  expect(dockBox?.y ?? 0, 'character import status is docked below the main work frame').toBeGreaterThan((screenBox?.height ?? 0) * 0.62);
   await expect(page.getByText(/parts · .*joints · ready to review/i)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Accept package' })).toBeVisible();
 
@@ -381,6 +388,7 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
     page.keyboard.press('Enter')
   ]);
   await packageChooser.setFiles(packageFiles);
+  await expect(page.getByTestId('character-status-dock')).toBeVisible();
   await expect(page.getByText('review generated package')).toBeVisible();
   await expect(page.getByText('Character package ready. Review before accepting.')).toBeVisible();
   await expect(page.getByText('SVG provenance metadata present')).toBeHidden();

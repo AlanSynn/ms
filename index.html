@@ -115,8 +115,9 @@
       .app-shell:not(.is-onboarding) .path-canvas-shell { height: 100%; min-height: 0; }
       .app-shell:not(.is-onboarding) .path-canvas-shell > svg[data-testid="path-canvas"] { height: 100%; min-height: 0; }
       .app-shell.is-onboarding { grid-template-columns: minmax(0, 1fr); }
-      .app-shell.is-onboarding .app-rail, .app-shell.is-onboarding .app-header { display: none; }
-      .app-shell.is-onboarding .stage-body { margin-left: 0; padding-top: 0 !important; min-height: 100vh; background: transparent; background-image: none; }
+      .app-shell.is-onboarding .app-rail, .app-shell.is-onboarding .workflow-rail, .app-shell.is-onboarding .app-header { display: none; }
+      .app-shell.is-onboarding .stage-body { height: calc(100vh - var(--ms-bottom-bars-height)); margin-left: 0; margin-top: 0; min-height: 0; overflow: hidden; padding: .65rem .65rem 0 !important; background: transparent; background-image: none; }
+      .app-shell.is-onboarding .workflow-status-strip, .app-shell.is-onboarding .status-bar { margin-left: 0; }
       .onboarding-page { height: 100svh; min-height: 640px; padding: clamp(1rem, 2.2vw, 2rem); display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: .8rem; overflow: hidden; background: radial-gradient(circle at 82% 18%, rgba(139,92,246,.14), transparent 30%), radial-gradient(circle at 8% 85%, rgba(16,185,129,.10), transparent 25%), linear-gradient(135deg, #ffffff 0%, var(--ms-bg-soft) 100%); }
       .onboarding-hero { min-height: 0; display: grid; grid-template-columns: minmax(20rem, .8fr) minmax(34rem, 1.2fr); gap: clamp(1.25rem, 3vw, 3rem); align-items: center; }
       .onboarding-copy { max-width: 34rem; }
@@ -147,7 +148,7 @@
       .template-tile b { margin-top: .45rem; display: inline-flex; align-items: center; gap: .35rem; color: white; background: var(--ms-accent); width: fit-content; border-radius: 999px; padding: .45rem .56rem; font-size: .68rem; white-space: nowrap; }
       .template-tile.starter { position: relative; overflow: hidden; }
       .starter-thumb { width: 2.6rem; height: 2.6rem; object-fit: contain; border-radius: .85rem; background: #f5f6fa; filter: grayscale(1); opacity: .78; }
-      .onboarding-secondary { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: .75rem; align-items: center; }
+      .onboarding-secondary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .75rem; align-items: center; }
       .secondary-actions { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
       .replace-toggle { display: inline-flex; align-items: center; gap: .45rem; color: var(--ms-muted); font-size: .82rem; font-weight: 850; }
       .landing-tools { border: 1px solid var(--ms-line); border-radius: 1.25rem; background: rgba(255,255,255,.78); padding: .75rem .9rem; min-width: 15rem; }
@@ -176,9 +177,29 @@
       .welcome-simple-copy img { width: 2.25rem; height: 2.25rem; border-radius: .65rem; }
       .welcome-simple-copy h2 { margin: 0; color: var(--ms-text); font-size: clamp(2.4rem, 6vw, 4rem); line-height: .86; letter-spacing: -.08em; font-weight: 950; }
       .welcome-simple-copy p { color: var(--ms-muted); font-size: .95rem; line-height: 1.35; font-weight: 800; }
-      .character-stage { min-height: 100%; display: grid; gap: 1rem; color: var(--ms-text); }
-      .character-titlebar { border: 1px solid var(--ms-line); border-radius: 1.5rem; background: rgba(255,255,255,.86); padding: 1rem; }
-      .character-titlebar h2 { margin: .15rem 0 0; color: var(--ms-text); font-size: clamp(1.9rem, 3vw, 3rem); line-height: .95; letter-spacing: -.06em; font-weight: 950; }
+      .character-stage { height: 100%; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: .6rem; overflow: hidden; color: var(--ms-text); }
+      .character-stage .onboarding-page { height: 100%; min-height: 0; padding: clamp(.65rem, 1vw, 1rem); border: 1px solid var(--ms-line); border-radius: 1.8rem; grid-template-rows: minmax(0, 1fr) auto; gap: .6rem; overflow: hidden; }
+      .character-stage .onboarding-hero { grid-template-columns: minmax(18rem, .72fr) minmax(31rem, 1.28fr); gap: clamp(1rem, 2vw, 2rem); }
+      .character-stage .onboarding-copy h1 { font-size: clamp(3.3rem, 6.4vw, 6.1rem); }
+      .character-stage .onboarding-copy h3 { margin-top: .75rem; font-size: clamp(1.45rem, 2.55vw, 2.65rem); }
+      .character-stage .onboarding-copy p { margin-top: .75rem; font-size: .95rem; line-height: 1.35; }
+      .character-stage .landing-steps { margin-top: .8rem; }
+      .character-stage .landing-board { grid-template-rows: minmax(11rem, .9fr) auto; gap: .55rem; }
+      .character-stage .landing-sketch svg { height: min(34vh, 21rem); min-height: 13rem; }
+      .character-stage .template-gallery { gap: .45rem; }
+      .character-stage .template-tile { min-height: 5.7rem; padding: .62rem; }
+      .character-stage .template-tile strong { font-size: clamp(.92rem, 1.1vw, 1.14rem); }
+      .character-stage .template-tile span:not(.template-kicker) { font-size: .76rem; }
+      .character-stage .template-tile b { font-size: .62rem; padding: .38rem .48rem; }
+      .character-stage .starter-thumb { width: 2.1rem; height: 2.1rem; }
+      .character-titlebar { border: 1px solid var(--ms-line); border-radius: 1.35rem; background: rgba(255,255,255,.9); padding: .58rem .8rem; }
+      .character-titlebar h2 { margin: .1rem 0 0; color: var(--ms-text); font-size: clamp(1.3rem, 2.25vw, 1.9rem); line-height: .98; letter-spacing: -.055em; font-weight: 950; }
+      .character-status-dock { width: min(100%, 45rem); min-height: 0; justify-self: end; align-self: end; }
+      .character-status-dock .import-status { width: 100%; max-height: min(38vh, 18rem); overflow: auto; padding: .75rem; background: rgba(255,255,255,.96); box-shadow: 0 22px 72px rgba(8,10,18,.14); }
+      .character-status-dock .progress-card { padding: .7rem; }
+      .character-status-dock .progress-track { margin-top: .55rem; }
+      .character-status-dock .import-status > .mt-5 { margin-top: .65rem; padding: .75rem; border-radius: 1rem; }
+      .character-status-dock .import-status .mt-4.flex { margin-top: .65rem; }
       .welcome-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--ms-line); padding: .25rem .35rem .85rem; }
       .welcome-titlebar h2 { margin: .15rem 0 0; color: var(--ms-text); font-size: clamp(1.35rem, 2.5vw, 2rem); line-height: 1; letter-spacing: -.055em; font-weight: 950; }
       .welcome-footer { display: flex; justify-content: flex-end; border-top: 1px solid var(--ms-line); margin-top: .85rem; padding: .85rem .35rem .1rem; }
@@ -314,6 +335,7 @@
         .header-workflow-hint { display: none; }
         .workspace-steps { display: none; }
         .stage-body { margin-left: 0; padding-top: 1rem !important; }
+        .app-shell.is-onboarding .stage-body { height: auto; min-height: calc(100vh - var(--ms-bottom-bars-height)); overflow: auto; padding: .75rem .75rem 0 !important; }
         .app-shell:not(.is-onboarding) .stage-body { height: auto; margin-top: 0; overflow: auto; }
         .editor-stage-frame { height: auto; grid-template-columns: 1fr; grid-template-areas: "left" "canvas" "right"; }
         .stage-left-pane, .stage-canvas-pane, .stage-right-inspector { min-height: auto; overflow: visible; }
@@ -346,6 +368,10 @@
         .welcome-dialog .template-gallery { grid-template-columns: 1fr; }
         .welcome-dialog .onboarding-secondary { display: grid; grid-template-columns: 1fr; }
         .welcome-dialog .import-status { max-height: none; }
+        .character-stage { height: auto; min-height: calc(100vh - var(--ms-bottom-bars-height) - 1rem); grid-template-rows: auto auto auto; overflow: visible; }
+        .character-stage .onboarding-page { height: auto; overflow: visible; }
+        .character-status-dock { width: 100%; }
+        .character-status-dock .import-status { max-height: none; }
       }
       .animate-rise { animation: rise .55s cubic-bezier(.22,1,.36,1) both; }
       @keyframes rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
