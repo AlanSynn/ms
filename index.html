@@ -234,41 +234,28 @@
       .canvas-overlay-toolbar { position: absolute; left: .85rem; top: .85rem; z-index: 18; display: inline-flex; align-items: center; gap: .55rem; border: 1px solid var(--ms-line); border-radius: 999px; background: rgba(255,255,255,.9); box-shadow: 0 12px 32px rgba(15,23,42,.07); padding: .45rem .55rem; backdrop-filter: blur(12px); }
       .canvas-overlay-toolbar h4 { margin: 0; }
       .canvas-status-readout { position: absolute; left: .9rem; bottom: .85rem; z-index: 18; border: 1px solid var(--ms-line); border-radius: 999px; background: rgba(255,255,255,.88); color: var(--ms-muted); box-shadow: 0 12px 32px rgba(15,23,42,.06); padding: .42rem .65rem; font-size: .72rem; font-weight: 900; backdrop-filter: blur(12px); }
-      .foundry-preview { background-color: rgba(255,255,255,.72); background-size: 24px 24px; background-image: linear-gradient(to right, rgba(139,92,246,.07) 1px, transparent 1px), linear-gradient(to bottom, rgba(139,92,246,.07) 1px, transparent 1px); border: 1px solid rgba(148,163,184,.28); box-shadow: inset 0 1px 0 rgba(255,255,255,.92); cursor: grab; touch-action: none; }
+      .foundry-preview { background-color: rgba(255,255,255,.92); background-size: 24px 24px; background-image: linear-gradient(to right, rgba(90,108,255,.055) 1px, transparent 1px), linear-gradient(to bottom, rgba(90,108,255,.055) 1px, transparent 1px); border: 1px solid rgba(148,163,184,.22); box-shadow: inset 0 1px 0 rgba(255,255,255,.92); cursor: grab; touch-action: none; }
       .foundry-preview.is-orbiting { cursor: grabbing; }
       .foundry-preview.is-picking-anchor { cursor: crosshair; outline: 3px solid rgba(139,92,246,.32); outline-offset: 3px; }
       .foundry-camera-chip { color: #5b21b6; border-color: rgba(139,92,246,.25); background: rgba(139,92,246,.1); }
       .foundry-preview-label { fill: var(--ms-text); }
-      .foundry-depth-plane { fill: url(#foundry-board-plane); stroke: #cbd5e1; stroke-width: 1.4; filter: drop-shadow(10px 15px 18px rgba(15,23,42,.12)); }
-      .foundry-depth-grid { fill: none; stroke: #93c5fd; stroke-width: .7; opacity: .5; }
-      .foundry-axis-widget line { stroke-width: 3; stroke-linecap: round; }
-      .foundry-axis-widget text, .foundry-spacer-stack text, .foundry-angle-strip text { fill: #475569; font-size: 7px; font-weight: 950; letter-spacing: .04em; text-transform: uppercase; }
-      .foundry-axis-x { stroke: #ef4444; }
-      .foundry-axis-y { stroke: #10b981; }
-      .foundry-axis-z { stroke: #3b82f6; }
-      .foundry-spacer-ring { stroke: #2563eb; stroke-width: 1.4; opacity: .94; }
-      .foundry-spacer-hole { fill: #fff; stroke: #64748b; stroke-width: .75; }
-      .foundry-z-spacer line { stroke: #3b82f6; stroke-width: 1.3; stroke-linecap: round; opacity: .58; }
-      .foundry-z-spacer ellipse { fill: rgba(147,197,253,.72); stroke: #2563eb; stroke-width: .9; }
-      .foundry-angle-strip > rect { fill: rgba(255,255,255,.82); stroke: rgba(148,163,184,.36); stroke-width: 1; filter: drop-shadow(0 12px 24px rgba(15,23,42,.12)); }
-      .foundry-angle-card { overflow: visible; }
-      .foundry-angle-card text { fill: #64748b; font-size: 5px; font-weight: 950; }
       .foundry-preview .mechanism-frame, .mechanism-choice-sim .mechanism-frame { stroke: #64748b; }
       .foundry-preview .mechanism-driver, .mechanism-choice-sim .mechanism-driver { stroke: #5a6cff; }
       .foundry-preview .mechanism-link, .mechanism-choice-sim .mechanism-link { stroke: #10b981; }
       .foundry-preview .mechanism-output, .mechanism-choice-sim .mechanism-output { stroke: #f472b6; }
-      .foundry-preview .mechanism-part rect:first-child, .mechanism-choice-sim .mechanism-part rect:first-child,
+      .foundry-preview .mechanism-thickness, .mechanism-choice-sim .mechanism-thickness { fill: #8b5a2b; stroke: #6f3f1c; stroke-width: 1.8; opacity: .82; }
+      .foundry-preview .mechanism-face, .mechanism-choice-sim .mechanism-face,
       .foundry-preview .mechanism-gear-teeth, .mechanism-choice-sim .mechanism-gear-teeth,
       .foundry-preview .mechanism-rack-teeth, .mechanism-choice-sim .mechanism-rack-teeth,
-      .foundry-preview .mechanism-cam-profile, .mechanism-choice-sim .mechanism-cam-profile { fill: #f8fafc; stroke-width: 2; }
-      .foundry-preview .mechanism-driver rect:first-child, .mechanism-choice-sim .mechanism-driver rect:first-child,
-      .foundry-preview .mechanism-driver .mechanism-gear-teeth, .mechanism-choice-sim .mechanism-driver .mechanism-gear-teeth { fill: #dbe3ff; }
-      .foundry-preview .mechanism-link rect:first-child, .mechanism-choice-sim .mechanism-link rect:first-child,
-      .foundry-preview .mechanism-link .mechanism-gear-teeth, .mechanism-choice-sim .mechanism-link .mechanism-gear-teeth { fill: #d9fbe8; }
+      .foundry-preview .mechanism-cam-profile, .mechanism-choice-sim .mechanism-cam-profile { fill: #e8bc73; stroke: #7c4a21; stroke-width: 2; }
+      .foundry-preview .mechanism-driver .mechanism-face, .mechanism-choice-sim .mechanism-driver .mechanism-face,
+      .foundry-preview .mechanism-driver .mechanism-gear-teeth, .mechanism-choice-sim .mechanism-driver .mechanism-gear-teeth { fill: url(#foundry-wood); }
+      .foundry-preview .mechanism-link .mechanism-face, .mechanism-choice-sim .mechanism-link .mechanism-face,
+      .foundry-preview .mechanism-link .mechanism-gear-teeth, .mechanism-choice-sim .mechanism-link .mechanism-gear-teeth { fill: url(#foundry-cardboard); }
       .foundry-preview .mechanism-rack-teeth, .mechanism-choice-sim .mechanism-rack-teeth { fill: none; stroke: #d97706; stroke-width: 1.8; }
       .foundry-preview .mechanism-end-stop, .mechanism-choice-sim .mechanism-end-stop { fill: #64748b; stroke: #334155; stroke-width: 1.2; }
-      .foundry-preview .mechanism-output rect:first-child, .mechanism-choice-sim .mechanism-output rect:first-child { fill: #fce7f3; }
-      .foundry-preview .mechanism-frame rect:first-child, .mechanism-choice-sim .mechanism-frame rect:first-child { fill: #e2e8f0; }
+      .foundry-preview .mechanism-output .mechanism-face, .mechanism-choice-sim .mechanism-output .mechanism-face { fill: #e7c48a; }
+      .foundry-preview .mechanism-frame .mechanism-face, .mechanism-choice-sim .mechanism-frame .mechanism-face { fill: #d8b077; }
       .foundry-preview .mechanism-cam-profile, .mechanism-choice-sim .mechanism-cam-profile { fill: #fed7aa; stroke: #f59e0b; }
       .foundry-preview .mechanism-guide-bg, .mechanism-choice-sim .mechanism-guide-bg { stroke: rgba(100,116,139,.16); stroke-width: 16; }
       .mechanism-choice-sim .mechanism-guide-bg { stroke-width: 8; }

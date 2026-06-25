@@ -132,14 +132,15 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Four-bar linkage');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Sensemaking:');
   await expect(foundryTargetSummary).toContainText(/Board hole [A-Z]\d+/);
-  const beforeAnchorMarker = await page.getByTestId('foundry-anchor-marker').getAttribute('transform');
+  await expect(page.getByTestId('foundry-anchor-marker'), 'Default sandbox shows only path and mechanism').toHaveCount(0);
   await page.getByTestId('foundry-pick-anchor').click();
   await expect(page.getByTestId('foundry-anchor-status')).toContainText('Pick mode');
   const previewBox = await page.getByTestId('foundry-preview').boundingBox();
   expect(previewBox, 'foundry preview supports direct anchor picking').toBeTruthy();
   await page.mouse.click(previewBox!.x + previewBox!.width * 0.52, previewBox!.y + previewBox!.height * 0.52);
   await expect(page.getByTestId('foundry-anchor-status')).toContainText('Anchor picked visually');
-  await expect(page.getByTestId('foundry-anchor-marker')).not.toHaveAttribute('transform', beforeAnchorMarker ?? '');
+  await expect(page.getByTestId('foundry-anchor-marker')).toBeVisible();
+  await expect(page.getByTestId('foundry-anchor-marker')).toHaveAttribute('transform', /translate\(/);
   const pickedAnchorX = await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').inputValue();
   const pickedAnchorY = await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').inputValue();
   await page.getByRole('button', { name: /Use this mechanism/i }).click();
@@ -713,56 +714,23 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await expect(page.getByTestId('workspace-player-dock')).toHaveCount(0);
   expect(await page.getByTestId('foundry-fabrication-part').count(), 'Sandbox uses fabrication-style holed bars').toBeGreaterThanOrEqual(4);
   expect(await page.getByTestId('foundry-fabrication-hole').count(), 'Sandbox shows drilled holes, not abstract lines').toBeGreaterThanOrEqual(12);
-  await expect(page.getByTestId('foundry-depth-overlay'), 'Foundry sandbox has a CAD-like depth board').toBeVisible();
-  await expect(page.getByTestId('foundry-cad-plane'), 'Foundry sandbox shows the 2.5D board plane').toBeVisible();
-  await expect(page.getByTestId('foundry-axis-z'), 'Foundry sandbox exposes the Z axis').toBeVisible();
-  await expect(page.getByTestId('foundry-axis-z')).toHaveCount(1);
-  await expect(page.getByTestId('foundry-depth-scene'), 'Mechanism is rendered in a depth-aware scene group').toBeVisible();
-  await expect(page.getByTestId('foundry-angle-strip'), 'Foundry shows multi-angle mechanism simulation').toBeVisible();
-  const cadPlaneBox = await page.getByTestId('foundry-cad-plane').evaluate((element: SVGGraphicsElement) => {
-    const box = element.getBBox();
-    return { x: box.x, y: box.y, width: box.width, height: box.height };
-  });
-  expect(cadPlaneBox.width, 'Foundry CAD board plane spans the mechanism work area').toBeGreaterThan(250);
-  expect(cadPlaneBox.height, 'Foundry CAD board plane has visible perspective depth').toBeGreaterThan(40);
-  const zAxis = await page.getByTestId('foundry-axis-z').evaluate((element: SVGLineElement) => ({
-    x1: Number(element.getAttribute('x1')),
-    y1: Number(element.getAttribute('y1')),
-    x2: Number(element.getAttribute('x2')),
-    y2: Number(element.getAttribute('y2'))
+  await expect(page.getByTestId('foundry-depth-scene'), 'Mechanism is rendered in the orbiting scene group').toBeVisible();
+  await expect(page.getByTestId('foundry-depth-overlay'), 'Foundry hides the confusing floating board plane').toHaveCount(0);
+  await expect(page.getByTestId('foundry-cad-plane')).toHaveCount(0);
+  await expect(page.getByTestId('foundry-angle-strip'), 'Foundry no longer adds extra multi-view mini canvases over the work area').toHaveCount(0);
+  await expect(page.getByTestId('foundry-z-spacer')).toHaveCount(0);
+  expect(await page.getByTestId('foundry-material-thickness').count(), 'Sandbox shows material thickness under the mechanism parts').toBeGreaterThanOrEqual(4);
+  expect(await page.locator('.foundry-preview .mechanism-face').count(), 'Sandbox shows cardboard/wood top faces').toBeGreaterThanOrEqual(4);
+  const thicknessGeometry = await page.getByTestId('foundry-material-thickness').evaluateAll(nodes => nodes.map(node => {
+    const box = (node as SVGGraphicsElement).getBBox();
+    return { width: box.width, height: box.height };
   }));
-  expect(zAxis.x2, 'Foundry Z axis points into positive screen-right depth').toBeGreaterThan(zAxis.x1);
-  expect(zAxis.y2, 'Foundry Z axis points upward into depth').toBeLessThan(zAxis.y1);
-  for (const angleView of ['foundry-angle-view-0', 'foundry-angle-view-90', 'foundry-angle-view-180', 'foundry-angle-view-270']) {
-    await expect(page.getByTestId(angleView), `${angleView} is visible in the sandbox`).toBeVisible();
-    await expect(page.getByTestId(`${angleView}-linkage`), `${angleView} contains actual linkage geometry`).toBeVisible();
-  }
-  const angleCards = await Promise.all(['foundry-angle-view-0', 'foundry-angle-view-90', 'foundry-angle-view-180', 'foundry-angle-view-270'].map(testId =>
-    page.getByTestId(testId).evaluate((element: SVGSVGElement) => ({
-      angle: element.getAttribute('data-angle-deg'),
-      effector: `${element.getAttribute('data-effector-x')},${element.getAttribute('data-effector-y')}`,
-      geometryCount: element.querySelectorAll('path, rect, circle, ellipse').length
-    }))
-  ));
-  expect(angleCards.map(card => card.angle)).toEqual(['0', '90', '180', '270']);
-  expect(new Set(angleCards.map(card => card.effector)).size, 'Angle cards sample different mechanism poses').toBeGreaterThan(2);
-  expect(angleCards.every(card => card.geometryCount > 5), 'Each angle card contains mechanism and path geometry').toBe(true);
-  expect(await page.getByTestId('foundry-z-spacer').count(), 'Foundry shows spacer offsets at mechanism pivots').toBeGreaterThanOrEqual(4);
-  expect(await page.getByTestId('foundry-spacer-washer').count(), 'Foundry shows a physical spacer washer stack').toBeGreaterThanOrEqual(4);
-  const spacerGeometry = await page.getByTestId('foundry-z-spacer').evaluateAll(nodes => nodes.map(node => ({
-    x: Number(node.getAttribute('data-point-x')),
-    y: Number(node.getAttribute('data-point-y')),
-    z: Number(node.getAttribute('data-z-offset-mm')),
-    transform: node.getAttribute('transform') ?? ''
-  })));
-  expect(spacerGeometry.every(item => Number.isFinite(item.x) && Number.isFinite(item.y) && Number.isFinite(item.z)), 'Spacer washers carry finite pivot and Z-offset data').toBe(true);
-  expect(new Set(spacerGeometry.map(item => `${Math.round(item.x)},${Math.round(item.y)}`)).size, 'Spacer washers align to multiple mechanism pivots').toBeGreaterThanOrEqual(4);
-  expect(spacerGeometry.every(item => item.transform.includes(`${item.x}`) || item.transform.includes(String(Math.round(item.x)))), 'Spacer transforms use their pivot coordinates').toBe(true);
+  expect(thicknessGeometry.every(item => item.width > 0 && item.height > 0), 'Material thickness geometry is visible, not a flat line').toBe(true);
   await expect(page.getByTestId('foundry-mini-linkage-gear')).toBeVisible();
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Four-bar linkage');
   await expect(page.getByTestId('foundry-feasibility')).toContainText('360° valid sampled motion');
   await expect(page.getByTestId('foundry-target-summary')).toContainText('Valid Range: 360° valid');
-  await expect(page.getByTestId('foundry-anchor-marker')).toBeVisible();
+  await expect(page.getByTestId('foundry-anchor-marker'), 'Default sandbox keeps non-mechanism markers hidden').toHaveCount(0);
   await expect(page.getByLabel('Foundry mechanism type')).toBeHidden();
   await page.getByText('Mechanism options').click();
 

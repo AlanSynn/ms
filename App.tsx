@@ -38,7 +38,6 @@ import { processImageWithWebOnnx } from './utils/webOnnx';
 import { createFabricationPackage, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
 import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToBoardRaw, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
-import { Z_AXIS_LABEL, Z_STACK_LABEL, Z_STACK_LAYERS } from './utils/zStack';
 import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT, normalizeCanvasViewport } from './utils/viewport';
 import { AUTHORABLE_MECHANISM_TYPES, FOUNDRY_PRESETS, MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY, mechanismTemplateLabel } from './utils/mechanismTemplates';
@@ -2057,18 +2056,24 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                     <pattern id="foundry-cad-grid" width="18" height="18" patternUnits="userSpaceOnUse">
                         <path d="M 18 0 L 0 0 0 18" fill="none" stroke="#93c5fd" strokeWidth="0.55" opacity="0.38" />
                     </pattern>
-                    <linearGradient id="foundry-board-plane" x1="0" x2="1" y1="0" y2="1">
-                        <stop offset="0" stopColor="#ffffff" />
-                        <stop offset="1" stopColor="#eff6ff" />
+                    <linearGradient id="foundry-cardboard" x1="0" x2="1" y1="0" y2="1">
+                        <stop offset="0" stopColor="#f8dfaa" />
+                        <stop offset="0.48" stopColor="#e8bc73" />
+                        <stop offset="1" stopColor="#b97731" />
+                    </linearGradient>
+                    <linearGradient id="foundry-wood" x1="0" x2="1" y1="0" y2="0">
+                        <stop offset="0" stopColor="#f4d49b" />
+                        <stop offset="0.32" stopColor="#c88943" />
+                        <stop offset="0.7" stopColor="#e6b66c" />
+                        <stop offset="1" stopColor="#9b5a24" />
                     </linearGradient>
                     <filter id="foundry-depth-shadow-filter" x="-30%" y="-30%" width="170%" height="170%">
                         <feDropShadow dx="8" dy="10" stdDeviation="6" floodColor="#1e293b" floodOpacity="0.18" />
                     </filter>
                 </defs>
                 <g ref={foundryCameraRigRef} data-testid="foundry-camera-rig" data-camera-preset={foundryCamera.preset} data-camera-yaw={foundryCamera.yaw.toFixed(1)} data-camera-pitch={foundryCamera.pitch.toFixed(1)} transform={foundryCameraTransformValue}>
-                    <FoundryDepthOverlay />
                     {showTrail && <path data-testid="foundry-trail-overlay" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="12" strokeLinecap="round" opacity="0.12"/>}
-                    {showPathPreview && <path data-testid="foundry-path-preview" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="3" strokeLinecap="round" strokeDasharray="9 7" opacity="0.52"/>}
+                    {showPathPreview && <path data-testid="foundry-path-preview" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="4" strokeLinecap="round" strokeDasharray="10 8" opacity="0.72"/>}
                     <g data-testid="foundry-depth-scene" className="foundry-depth-scene" filter="url(#foundry-depth-shadow-filter)">
                         <MechanismLinkagePreview mechanism={landedFoundry} simulation={selectedSimulation} kit={project.settings.physicalKit} testId="foundry-selected-linkage" />
                     </g>
@@ -2080,15 +2085,12 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                         <line x1={playhead.x} y1={playhead.y} x2={playhead.x + (nextPoint.x - previousPoint.x) * 2.2} y2={playhead.y + (nextPoint.y - previousPoint.y) * 2.2} />
                     </g>}
                     {playhead && <circle data-testid="foundry-playhead" cx={playhead.x} cy={playhead.y} r="7" fill="#f472b6" stroke="white" strokeWidth="3" />}
-                    <g data-testid="foundry-anchor-marker" transform={`translate(${anchorMarker.x} ${anchorMarker.y})`}>
+                    {(isPickingAnchor || manualAnchor) && <g data-testid="foundry-anchor-marker" transform={`translate(${anchorMarker.x} ${anchorMarker.y})`}>
                         <circle r="8" fill="#ffffff" stroke="#8b5cf6" strokeWidth="3" />
                         <path d="M -13 0 H 13 M 0 -13 V 13" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" />
                         <text x="12" y="-10" fill="#5b21b6" fontSize="8" fontWeight="900">{landingBoard.label}</text>
-                    </g>
-                    <FoundrySpacerStack points={[selectedSimulation.state.p1, selectedSimulation.state.p2, selectedSimulation.state.j1, selectedSimulation.state.j2, selectedSimulation.state.aux, selectedSimulation.state.effector]} />
-                    <text x="22" y="38" className="foundry-preview-label" fontSize="8" fontWeight="900">{library.label} · {range.percentValid === 1 ? '360° valid' : range.warning} · {Z_STACK_LABEL}</text>
+                    </g>}
                 </g>
-                <FoundryAngleStrip mechanism={landedFoundry} phase={foundryPhase} kit={project.settings.physicalKit} />
             </svg>
             <div className="canvas-status-readout" data-testid="foundry-toolbar-state">Toolbar: {foundryPlaying ? 'playing' : 'paused'} · path {showPathPreview ? 'shown' : 'hidden'} · camera {foundryCameraLabel} · phase {Math.round(foundryPhase * 180 / Math.PI)}°</div>
         </section>),
@@ -2537,59 +2539,6 @@ const fitPointsToBox = (points: Point[], width: number, height: number) => {
 const pointsToSvgPath = (points: Point[]) => points.length ? `M ${points.map(p => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' L ')}` : '';
 const fitPathToBox = (points: Point[], width: number, height: number) => pointsToSvgPath(fitPointsToBox(points, width, height));
 
-const FoundryDepthOverlay = () => <g data-testid="foundry-depth-overlay" aria-label="Foundry CAD Z-axis and board depth overlay">
-    <path data-testid="foundry-cad-plane" className="foundry-depth-plane" d="M 24 58 L 276 34 L 342 72 L 85 102 Z" />
-    <path className="foundry-depth-grid" d="M 24 58 L 85 102 M 66 54 L 129 96 M 108 50 L 172 90 M 150 46 L 215 84 M 192 42 L 258 78 M 234 38 L 301 72 M 64 64 L 316 40 M 82 76 L 334 52 M 100 88 L 352 64" />
-    <g data-testid="foundry-axis-widget" className="foundry-axis-widget" transform="translate(42 205)">
-        <line x1="0" y1="0" x2="46" y2="0" className="foundry-axis-x" />
-        <line x1="0" y1="0" x2="0" y2="-42" className="foundry-axis-y" />
-        <line data-testid="foundry-axis-z" x1="0" y1="0" x2="28" y2="-28" className="foundry-axis-z" />
-        <text x="50" y="4">X</text>
-        <text x="-7" y="-48">Y</text>
-        <text x="32" y="-30">{Z_AXIS_LABEL}</text>
-    </g>
-    <g data-testid="foundry-spacer-stack" className="foundry-spacer-stack" transform="translate(282 156)">
-        <text x="-18" y="-42">{Z_STACK_LABEL}</text>
-        {Z_STACK_LAYERS.map((layer, index) => <g key={layer.id} data-z-layer={layer.id} transform={`translate(${index * 10} ${-index * 9})`}>
-            <ellipse data-testid="foundry-spacer-washer" className="foundry-spacer-ring" cx="0" cy="0" rx="14" ry="5.2" fill={layer.color} />
-            <ellipse className="foundry-spacer-hole" cx="0" cy="0" rx="5.2" ry="2" />
-        </g>)}
-    </g>
-</g>;
-
-const FoundrySpacerStack = ({ points }: { points: Array<Point | undefined> }) => <g data-testid="foundry-z-spacers" className="foundry-z-spacers">
-    {points.filter((point): point is Point => Boolean(point)).slice(0, 6).map((point, index) => {
-        const x = point.x.toFixed(2);
-        const y = point.y.toFixed(2);
-        return <g key={`${Math.round(point.x)}-${Math.round(point.y)}-${index}`} data-testid="foundry-z-spacer" className="foundry-z-spacer" data-point-x={x} data-point-y={y} data-z-offset-mm={(index * 2).toFixed(1)} transform={`translate(${x} ${y})`}>
-            <line x1="0" y1="0" x2="8" y2="-8" />
-            <ellipse cx="8" cy="-8" rx="5.4" ry="2.2" />
-            <ellipse cx="0" cy="0" rx="5.4" ry="2.2" />
-        </g>;
-    })}
-</g>;
-
-const FoundryAngleStrip = ({ mechanism, phase, kit }: { mechanism: MechanismConfig; phase: number; kit: PhysicalKitSettings }) => {
-    const views = [
-        { angle: 0, label: 'Front', testId: 'foundry-angle-view-0' },
-        { angle: Math.PI / 2, label: 'Iso 90°', testId: 'foundry-angle-view-90' },
-        { angle: Math.PI, label: 'Side 180°', testId: 'foundry-angle-view-180' },
-        { angle: Math.PI * 1.5, label: 'Back 270°', testId: 'foundry-angle-view-270' }
-    ];
-    return <g data-testid="foundry-angle-strip" className="foundry-angle-strip" transform="translate(20 166)">
-        <rect x="0" y="0" width="236" height="58" rx="13" />
-        <text x="10" y="16">multi-angle simulation</text>
-        {views.map((view, index) => {
-            const simulation = fitMechanismSimulation(mechanism, phase + view.angle, 54, 34, 36);
-            return <svg key={view.testId} data-testid={view.testId} data-angle-deg={Math.round(view.angle * 180 / Math.PI)} data-effector-x={simulation.state.effector.x.toFixed(2)} data-effector-y={simulation.state.effector.y.toFixed(2)} x={10 + index * 56} y="20" width="50" height="31" viewBox="0 0 54 34" className="foundry-angle-card">
-                <path d={simulation.pathD} fill="none" stroke={mechanism.color} strokeWidth="1.2" strokeDasharray="3 3" opacity="0.45" />
-                <MechanismLinkagePreview mechanism={mechanism} simulation={simulation} kit={kit} testId={`${view.testId}-linkage`} compact />
-                <text x="3" y="31">{view.label}</text>
-            </svg>;
-        })}
-    </g>;
-};
-
 const fitMechanismSimulation = (mechanism: MechanismConfig, angle: number, width: number, height: number, resolution = 72) => {
     const state = calculateLinkage(mechanism, angle);
     const pathPoints = generateCurvePoints(mechanism, resolution).points;
@@ -2639,6 +2588,8 @@ const fitMechanismSimulation = (mechanism: MechanismConfig, angle: number, width
 const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact = false }: { mechanism: MechanismConfig; simulation: ReturnType<typeof fitMechanismSimulation>; kit: PhysicalKitSettings; testId: string; compact?: boolean }) => {
     const s = simulation.state;
     const r = compact ? 2.5 : 4;
+    const depth = compact ? 2.2 : 5.5;
+    const thicknessTestId = compact ? undefined : 'foundry-material-thickness';
     const scaled = (length: number, min: number, max: number) => Math.max(min, Math.min(max, length * simulation.scale));
     const test = (name: string) => compact ? undefined : `foundry-mechanism-${name}`;
     const templateTest = compact ? undefined : `foundry-template-${mechanism.type}`;
@@ -2668,7 +2619,8 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
         if (!Number.isFinite(len) || len < 0.5) return null;
         const holeCount = Math.max(2, Math.min(10, Math.round(len / pitch) + 1));
         return <g key={key} data-testid={testIdName ? test(testIdName) : undefined} className={`mechanism-part ${className}`} transform={`translate(${a.x} ${a.y}) rotate(${Math.atan2(dy, dx) * 180 / Math.PI})`}>
-            <rect data-testid={fabricationTest('part')} x="0" y={-barWidth / 2} width={len} height={barWidth} rx={barWidth / 2} />
+            <rect data-testid={thicknessTestId} className="mechanism-thickness" x={depth} y={-barWidth / 2 + depth} width={len} height={barWidth} rx={barWidth / 2} />
+            <rect data-testid={fabricationTest('part')} className="mechanism-face" x="0" y={-barWidth / 2} width={len} height={barWidth} rx={barWidth / 2} />
             {Array.from({ length: holeCount }, (_, index) => {
                 const x = holeCount === 1 ? 0 : (len * index) / (holeCount - 1);
                 return <circle key={index} data-testid={fabricationTest('hole')} className="mechanism-hole" cx={x} cy="0" r={holeR} />;
@@ -2682,7 +2634,8 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
         const start = { x: center.x - ux * reach, y: center.y - uy * reach };
         const angle = Math.atan2(uy, ux) * 180 / Math.PI;
         return <g key={key} data-testid={test('guide')} className="mechanism-part mechanism-frame" transform={`translate(${start.x} ${start.y}) rotate(${angle})`}>
-            <rect data-testid={fabricationTest('slot')} x="0" y={-barWidth / 2} width={reach * 2} height={barWidth} rx={barWidth / 2} />
+            <rect data-testid={thicknessTestId} className="mechanism-thickness" x={depth} y={-barWidth / 2 + depth} width={reach * 2} height={barWidth} rx={barWidth / 2} />
+            <rect data-testid={fabricationTest('slot')} className="mechanism-face" x="0" y={-barWidth / 2} width={reach * 2} height={barWidth} rx={barWidth / 2} />
             <rect className="mechanism-slot" x={barWidth * 0.8} y={-holeR} width={Math.max(holeR * 2, reach * 2 - barWidth * 1.6)} height={holeR * 2} rx={holeR} />
             {endStops && [0, reach * 2].map((x, index) => <rect key={`stop-${index}`} data-testid={fabricationTest('end-stop')} className="mechanism-end-stop" x={x - holeR} y={-barWidth * 0.85} width={holeR * 2} height={barWidth * 1.7} rx={holeR * 0.45} />)}
             {[0, reach * 2].map((x, index) => <circle key={index} data-testid={fabricationTest('hole')} className="mechanism-hole" cx={x} cy="0" r={holeR} />)}
@@ -2693,7 +2646,8 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
         const len = Math.max(length, barWidth * 3);
         const angle = Math.atan2(axis.y, axis.x) * 180 / Math.PI;
         return <g key={key} data-testid={testIdName ? test(testIdName) : undefined} className={`mechanism-part ${className}`} transform={`translate(${center.x} ${center.y}) rotate(${angle})`}>
-            <rect data-testid={fabricationTest('part')} x={-len / 2} y={-barWidth / 2} width={len} height={barWidth} rx={barWidth / 2} />
+            <rect data-testid={thicknessTestId} className="mechanism-thickness" x={-len / 2 + depth} y={-barWidth / 2 + depth} width={len} height={barWidth} rx={barWidth / 2} />
+            <rect data-testid={fabricationTest('part')} className="mechanism-face" x={-len / 2} y={-barWidth / 2} width={len} height={barWidth} rx={barWidth / 2} />
             <rect data-testid={fabricationTest('slot')} className="mechanism-slot" x={-len / 2 + barWidth * 0.75} y={-holeR} width={len - barWidth * 1.5} height={holeR * 2} rx={holeR} />
             {[-len / 2, len / 2].map((x, index) => <circle key={index} data-testid={fabricationTest('hole')} className="mechanism-hole" cx={x} cy="0" r={holeR} />)}
         </g>;
@@ -2704,7 +2658,8 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
         const teeth = Math.max(8, Math.min(40, Math.round(outer / (compact ? 2.3 : 2.8))));
         const attachment = Math.max(outer * 0.48, holeR * 3);
         return <g key={key} data-mechanism-gear-key={key} data-rotation-deg={rotation.toFixed(2)} className={`mechanism-gear-part ${className}`} transform={`translate(${center.x} ${center.y}) rotate(${rotation})`}>
-            <path data-testid={fabricationTest('gear')} className="mechanism-gear-teeth" d={gearPathD(outer, teeth)} />
+            <path data-testid={thicknessTestId} className="mechanism-thickness" transform={`translate(${depth} ${depth})`} d={gearPathD(outer, teeth)} />
+            <path data-testid={fabricationTest('gear')} className="mechanism-gear-teeth mechanism-face" d={gearPathD(outer, teeth)} />
             <circle data-testid={fabricationTest('hole')} className="mechanism-hole axle-hole" cx="0" cy="0" r={holeR} />
             {[0, Math.PI / 2, Math.PI, Math.PI * 1.5].map((angle, index) => <circle key={index} data-testid={fabricationTest('hole')} className="mechanism-hole" cx={Math.cos(angle) * attachment} cy={Math.sin(angle) * attachment} r={holeR} />)}
         </g>;
@@ -2719,7 +2674,8 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
             return `M ${x} ${-barWidth / 2} L ${x + step / 2} ${-barWidth / 2 - holeR * 1.2} L ${x + step} ${-barWidth / 2}`;
         }).join(' ');
         return <g key={key} data-testid={test('rack')} className="mechanism-part mechanism-output" transform={`translate(${center.x} ${center.y}) rotate(${angle})`}>
-            <rect data-testid={fabricationTest('rack')} x={-len / 2} y={-barWidth / 2} width={len} height={barWidth} rx={barWidth / 5} />
+            <rect data-testid={thicknessTestId} className="mechanism-thickness" x={-len / 2 + depth} y={-barWidth / 2 + depth} width={len} height={barWidth} rx={barWidth / 5} />
+            <rect data-testid={fabricationTest('rack')} className="mechanism-face" x={-len / 2} y={-barWidth / 2} width={len} height={barWidth} rx={barWidth / 5} />
             <path className="mechanism-rack-teeth" d={teeth} />
             <rect data-testid={fabricationTest('slot')} className="mechanism-slot" x={-len / 2 + barWidth * 0.8} y={-holeR} width={len - barWidth * 1.6} height={holeR * 2} rx={holeR} />
             {[-len / 2, 0, len / 2].map((x, index) => <circle key={index} data-testid={fabricationTest('hole')} className="mechanism-hole" cx={x} cy="0" r={holeR} />)}
@@ -2733,13 +2689,15 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
             return `${Math.cos(angle) * base * lift} ${Math.sin(angle) * base * lift}`;
         });
         return <g key="cam-body" data-testid={fabricationTest('cam')} className="mechanism-part mechanism-cam" transform={`translate(${center.x} ${center.y}) rotate(${inputAngleDeg})`}>
-            <path className="mechanism-cam-profile" d={`M ${points.join(' L ')} Z`} />
+            <path data-testid={thicknessTestId} className="mechanism-thickness" transform={`translate(${depth} ${depth})`} d={`M ${points.join(' L ')} Z`} />
+            <path className="mechanism-cam-profile mechanism-face" d={`M ${points.join(' L ')} Z`} />
             <circle data-testid={fabricationTest('hole')} className="mechanism-hole axle-hole" cx="0" cy="0" r={holeR} />
             <circle className="mechanism-hole" cx={base * 0.45} cy="0" r={holeR} />
         </g>;
     };
     const followerBlock = (center: Point) => <g key="follower" data-testid={fabricationTest('follower')} className="mechanism-part mechanism-output" transform={`translate(${center.x} ${center.y}) rotate(${Math.atan2(normalAxis.y, normalAxis.x) * 180 / Math.PI})`}>
-        <rect data-testid={fabricationTest('part')} x={-barWidth * 1.35} y={-barWidth / 2} width={barWidth * 2.7} height={barWidth} rx={barWidth / 3} />
+        <rect data-testid={thicknessTestId} className="mechanism-thickness" x={-barWidth * 1.35 + depth} y={-barWidth / 2 + depth} width={barWidth * 2.7} height={barWidth} rx={barWidth / 3} />
+        <rect data-testid={fabricationTest('part')} className="mechanism-face" x={-barWidth * 1.35} y={-barWidth / 2} width={barWidth * 2.7} height={barWidth} rx={barWidth / 3} />
         <circle data-testid={fabricationTest('hole')} className="mechanism-hole" cx="0" cy="0" r={holeR} />
     </g>;
     const gearPreview = (mechanism.type === 'gear' || mechanism.type === 'planetary_gear' || mechanism.type === '5bar' || mechanism.type === 'rack-pinion') && <g data-testid={mechanism.type === '5bar' ? undefined : test('gear')}>
