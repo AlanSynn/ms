@@ -55,8 +55,9 @@ It should contain:
 - persistent sheet/grid/canvas viewport;
 - character, skeleton, paths, mechanisms, blueprint overlays;
 - direct manipulation handles;
-- transient in-canvas hints, zoom toolbar, playhead/trace overlays;
+- zoom toolbar plus direct manipulation handles/playhead/trace overlays;
 - foundry sandbox simulation as a canvas layer, not as a separate card-like content island.
+- no canvas lens HUD, renderer sidecar, or persistent explanatory callout may cover the work surface.
 
 It should not contain:
 

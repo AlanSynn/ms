@@ -119,9 +119,17 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(foundryTargetSummary).toContainText(/anchor/);
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Four-bar linkage');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Sensemaking:');
-  const landingText = await foundryTargetSummary.textContent();
-  const landing = landingText?.match(/Export lands at (-?\d+), (-?\d+) \(([^)]+)\)/);
-  expect(landing, 'foundry export landing summary').toBeTruthy();
+  await expect(foundryTargetSummary).toContainText(/Board hole [A-Z]\d+/);
+  const beforeAnchorMarker = await page.getByTestId('foundry-anchor-marker').getAttribute('transform');
+  await page.getByTestId('foundry-pick-anchor').click();
+  await expect(page.getByTestId('foundry-anchor-status')).toContainText('Pick mode');
+  const previewBox = await page.getByTestId('foundry-preview').boundingBox();
+  expect(previewBox, 'foundry preview supports direct anchor picking').toBeTruthy();
+  await page.mouse.click(previewBox!.x + previewBox!.width * 0.52, previewBox!.y + previewBox!.height * 0.52);
+  await expect(page.getByTestId('foundry-anchor-status')).toContainText('Anchor picked visually');
+  await expect(page.getByTestId('foundry-anchor-marker')).not.toHaveAttribute('transform', beforeAnchorMarker ?? '');
+  const pickedAnchorX = await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').inputValue();
+  const pickedAnchorY = await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').inputValue();
   await page.getByRole('button', { name: /Use this mechanism/i }).click();
 
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
@@ -132,8 +140,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
     paths.filter(path => (path.getAttribute('d') ?? '').includes('M 70.00 60.00') && (path.getAttribute('d') ?? '').includes('L 130.00 84.00')).length
   );
   expect(persistedPathCount, 'drawn path persists into mechanism design canvas').toBeGreaterThan(0);
-  await expect(page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]')).toHaveValue(landing![1]);
-  await expect(page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]')).toHaveValue(landing![2]);
+  await expect(page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]')).toHaveValue(pickedAnchorX);
+  await expect(page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]')).toHaveValue(pickedAnchorY);
   await expect(page.getByRole('button', { name: /Fit path/i })).toBeVisible();
   const playback = page.getByRole('button', { name: /Play|Pause/ }).first();
   await expect(playback).toBeVisible();
@@ -741,7 +749,7 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Four-bar linkage');
   await expect(page.getByTestId('foundry-feasibility')).toContainText('360° valid sampled motion');
   await expect(page.getByTestId('foundry-target-summary')).toContainText('Valid Range: 360° valid');
-  await expect(page.getByTestId('foundry-target-summary')).toContainText(/Motion Point: \d+, \d+/);
+  await expect(page.getByTestId('foundry-anchor-marker')).toBeVisible();
   await expect(page.getByLabel('Foundry mechanism type')).toBeHidden();
   await page.getByText('Mechanism options').click();
 
@@ -1070,22 +1078,18 @@ test('Workflow tabs keep left workflow, center canvas, and right inspector roles
     await expect(left).toContainText(leftText);
     await expect(center).toContainText(centerText);
     await expect(right).toContainText(rightText);
-    const unexpectedCenterControls = await center.locator('button, input, select, textarea').evaluateAll(nodes => nodes.filter(node => !node.closest('.canvas-zoom-toolbar') && !node.closest('[data-testid="view-lens-hud"]')).length);
-    expect(unexpectedCenterControls, 'center pane only allows canvas overlay controls').toBe(0);
+    const unexpectedCenterControls = await center.locator('button, input, select, textarea').evaluateAll(nodes => nodes.filter(node => !node.closest('.canvas-zoom-toolbar')).length);
+    expect(unexpectedCenterControls, 'center pane only allows canvas zoom controls').toBe(0);
+    await expect(center.getByTestId('view-lens-hud')).toHaveCount(0);
+    await expect(center.getByTestId('toon-renderer-shell')).toHaveCount(0);
     const centerBox = await center.boundingBox();
     const leftBox = await left.boundingBox();
     const rightBox = await right.boundingBox();
-    const hudBox = await center.getByTestId('view-lens-hud').boundingBox();
     const surfaceBox = await center.locator('svg, canvas').first().boundingBox();
     expect(centerBox, 'center pane box').toBeTruthy();
     expect(leftBox, 'left pane box').toBeTruthy();
     expect(rightBox, 'right pane box').toBeTruthy();
-    expect(hudBox, 'view lens HUD box').toBeTruthy();
     expect(surfaceBox, 'center work surface box').toBeTruthy();
-    expect(hudBox!.x, 'view lens HUD stays inside center left edge').toBeGreaterThanOrEqual(centerBox!.x - 1);
-    expect(hudBox!.x + hudBox!.width, 'view lens HUD stays inside center right edge').toBeLessThanOrEqual(centerBox!.x + centerBox!.width + 1);
-    expect(hudBox!.x, 'view lens HUD does not overlap left workflow pane').toBeGreaterThanOrEqual(leftBox!.x + leftBox!.width - 1);
-    expect(hudBox!.x + hudBox!.width, 'view lens HUD does not overlap right inspector pane').toBeLessThanOrEqual(rightBox!.x + 1);
     expect(surfaceBox!.x, 'work surface stays inside center left edge').toBeGreaterThanOrEqual(centerBox!.x - 1);
     expect(surfaceBox!.y, 'work surface stays inside center top edge').toBeGreaterThanOrEqual(centerBox!.y - 1);
     expect(surfaceBox!.x + surfaceBox!.width, 'work surface stays inside center right edge').toBeLessThanOrEqual(centerBox!.x + centerBox!.width + 1);
@@ -1107,7 +1111,7 @@ test('Workflow tabs keep left workflow, center canvas, and right inspector roles
   await assertPaneContract('Generate package', 'Letter sheet', 'Assembly guide preview');
 
   await page.getByRole('button', { name: /Options/i }).click();
-  await assertPaneContract('Studio settings', 'Settings preview', 'Appearance');
+  await assertPaneContract('Studio settings', 'Letter sheet', 'Appearance');
   const rightInspector = page.getByTestId('stage-right-inspector');
   await rightInspector.evaluate(element => { element.scrollTop = 0; });
   await page.getByTestId('stage-left-pane').getByRole('link', { name: 'Units' }).click();
@@ -1277,7 +1281,7 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   expectCleanPage(pageErrors, consoleErrors);
 });
 
-test('View lenses, toon sidecar, physics replay, and blueprint flow stay non-destructive', async ({ page }) => {
+test('Simplified shared canvas stays non-destructive and exports blueprint', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
@@ -1295,85 +1299,22 @@ test('View lenses, toon sidecar, physics replay, and blueprint flow stay non-des
     return JSON.parse(await readFile(path!, 'utf8'));
   };
 
-  await page.addInitScript(() => {
-    (window as Window & { __MECHANIM_TEST_PRESERVE_WEBGL__?: boolean }).__MECHANIM_TEST_PRESERVE_WEBGL__ = true;
-  });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await openWavingArmTemplate(page);
 
-  await expect(page.getByTestId('view-lens-hud')).toBeVisible();
-  await expect(page.getByTestId('view-lens-status')).toHaveText('2.5D Locked');
-  await expect(page.getByTestId('toon-renderer-shell')).toBeVisible();
-  await expect(page.getByTestId('toon-renderer-status')).toContainText(/WebGL active|SVG fallback/);
-  await expect(page.getByTestId('toon-cad-hud')).toContainText(/2.5D authoring plane|scene graph preview/);
-  await expect(page.getByTestId('toon-axis-legend')).toContainText('Z axis');
-  await expect(page.getByTestId('toon-depth-stack')).toContainText('spacer');
-  const cadBox = await page.getByTestId('toon-cad-viewport').boundingBox();
-  expect(cadBox, 'CAD-like 2.5D/3D viewport is mounted in the center workspace').toBeTruthy();
-  expect(cadBox!.width, 'CAD viewport has real center-workspace width').toBeGreaterThan(300);
-  expect(cadBox!.height, 'CAD viewport has real center-workspace height').toBeGreaterThan(220);
-  await expect(page.getByTestId('toon-renderer-status')).toHaveText('WebGL active');
-  const webglProbe = await page.getByTestId('toon-webgl-canvas').evaluate((canvas: HTMLCanvasElement) => {
-    const probe = document.createElement('canvas');
-    probe.width = 36;
-    probe.height = 36;
-    const ctx = probe.getContext('2d');
-    ctx?.drawImage(canvas, 0, 0, probe.width, probe.height);
-    const data = ctx?.getImageData(0, 0, probe.width, probe.height).data ?? new Uint8ClampedArray();
-    let litPixels = 0;
-    for (let i = 0; i < data.length; i += 4) {
-      const alpha = data[i + 3];
-      const colorEnergy = data[i] + data[i + 1] + data[i + 2];
-      if (alpha > 8 && colorEnergy > 24) litPixels += 1;
-    }
-    return {
-      width: canvas.width,
-      height: canvas.height,
-      litPixels,
-      renderedObjects: Number(canvas.dataset.toonRenderedObjects ?? 0),
-      renderedLens: canvas.dataset.toonRenderedLens,
-      renderedSpacers: Number(canvas.dataset.toonRenderedSpacers ?? 0)
-    };
-  });
-  expect(webglProbe.width, 'WebGL canvas receives a real drawing buffer width').toBeGreaterThan(300);
-  expect(webglProbe.height, 'WebGL canvas receives a real drawing buffer height').toBeGreaterThan(220);
-  expect(webglProbe.renderedObjects, 'WebGL renderer builds a non-empty scene graph').toBeGreaterThan(20);
-  expect(webglProbe.renderedLens, 'WebGL renderer records the active lens').toBe('studio');
-  expect(webglProbe.renderedSpacers, 'WebGL renderer includes the shared spacer stack geometry').toBe(4);
-  expect(webglProbe.litPixels, 'WebGL canvas contains non-blank rendered pixels').toBeGreaterThan(12);
+  await expect(page.getByTestId('view-lens-hud')).toHaveCount(0);
+  await expect(page.getByTestId('toon-renderer-shell')).toHaveCount(0);
+  await expect(page.getByTestId('path-canvas')).toBeVisible();
+  await expect(page.getByTestId('canvas-zoom-readout')).toHaveText('100%');
+
   const before = await saveSnapshot();
-
-  await page.getByTestId('view-lens-toy-stage').click();
-  await expect(page.getByTestId('view-lens-status')).toHaveText('Toy Stage');
-  await expect(page.getByTestId('view-lens-hud')).toContainText('orbit preview');
-  await expect(page.getByTestId('toon-cad-hud')).toContainText('3/4 toy-stage preview');
-  await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
-
-  await page.getByTestId('view-lens-blueprint').click();
-  await expect(page.getByTestId('view-lens-status')).toHaveText('Blueprint');
-  await expect(page.getByTestId('toon-cad-hud')).toContainText('Blueprint-safe locked view');
-  await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
-
-  await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
-  await expect(page.getByTestId('view-lens-status')).toHaveText('2.5D Locked');
-  await expect(page.getByTestId('view-lens-draw-guard')).toContainText('Drawing locks the camera');
-  await expect(page.getByTestId('view-lens-toy-stage')).toBeDisabled();
 
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
-  await page.getByTestId('view-lens-physics').click();
-  await expect(page.getByTestId('view-lens-status')).toHaveText('Physics');
-  await expect(page.getByTestId('toon-cad-hud')).toContainText('Physics replay overlay');
-  await expect(page.getByTestId('physics-session-summary')).toContainText(/bodies .* constraints .* active mechanisms/);
-  await expect(page.getByTestId('toon-renderer-shell')).toContainText('view-only');
-
-  await page.getByTestId('camera-front').click();
-  await expect(page.getByTestId('view-lens-status')).toHaveText('2.5D Locked');
-  await page.getByTestId('camera-iso').click();
-  await expect(page.getByTestId('view-lens-status')).toHaveText('Toy Stage');
-  await page.getByTestId('camera-lock-toggle').click();
-  await expect(page.getByTestId('view-lens-status')).toHaveText('2.5D Locked');
+  await expect(page.getByTestId('design-canvas')).toBeVisible();
+  await expect(page.getByTestId('view-lens-hud')).toHaveCount(0);
+  await expect(page.getByTestId('toon-renderer-shell')).toHaveCount(0);
 
   const after = await saveSnapshot();
   expect(after.parts).toEqual(before.parts);
@@ -1384,15 +1325,9 @@ test('View lenses, toon sidecar, physics replay, and blueprint flow stay non-des
   expect(after.lastExport).toEqual(before.lastExport);
 
   await page.setViewportSize({ width: 390, height: 820 });
-  await expect(page.getByTestId('view-lens-hud')).toBeVisible();
-  await expect(page.getByTestId('toon-renderer-shell')).toBeVisible();
-  const mobileShellBox = await page.getByTestId('toon-renderer-shell').boundingBox();
-  const mobileCadBox = await page.getByTestId('toon-cad-viewport').boundingBox();
-  expect(mobileShellBox, 'mobile toon shell has a layout box').toBeTruthy();
-  expect(mobileCadBox, 'mobile CAD viewport has a layout box').toBeTruthy();
-  expect(mobileShellBox!.width, 'mobile toon shell fits viewport width').toBeLessThanOrEqual(390);
-  expect(mobileShellBox!.height, 'mobile toon shell remains readable').toBeGreaterThan(180);
-  expect(mobileCadBox!.height, 'mobile CAD drawing area remains usable').toBeGreaterThan(110);
+  await expect(page.getByTestId('stage-canvas-pane')).toBeVisible();
+  await expect(page.getByTestId('view-lens-hud')).toHaveCount(0);
+  await expect(page.getByTestId('toon-renderer-shell')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 4)).toBe(true);
 
   await page.setViewportSize({ width: 899, height: 720 });
@@ -1400,21 +1335,16 @@ test('View lenses, toon sidecar, physics replay, and blueprint flow stay non-des
   const leftBox = await page.getByTestId('stage-left-pane').boundingBox();
   const centerBox = await page.getByTestId('stage-canvas-pane').boundingBox();
   const rightBox = await page.getByTestId('stage-right-inspector').boundingBox();
-  const narrowHudBox = await page.getByTestId('view-lens-hud').boundingBox();
   expect(leftBox).toBeTruthy();
   expect(centerBox).toBeTruthy();
   expect(rightBox).toBeTruthy();
-  expect(narrowHudBox).toBeTruthy();
   expect(centerBox!.y, 'single-column center follows left workflow').toBeGreaterThan(leftBox!.y);
   expect(rightBox!.y, 'single-column inspector follows center canvas').toBeGreaterThan(centerBox!.y);
-  expect(narrowHudBox!.x, 'single-column HUD stays inside center left edge').toBeGreaterThanOrEqual(centerBox!.x - 1);
-  expect(narrowHudBox!.x + narrowHudBox!.width, 'single-column HUD stays inside center right edge').toBeLessThanOrEqual(centerBox!.x + centerBox!.width + 1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 4)).toBe(true);
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('button', { name: /Blueprint Export/i }).click();
   await expect(page.getByRole('heading', { name: 'Blueprint Export' })).toBeVisible();
-  await expect(page.getByTestId('view-lens-status')).toHaveText('Blueprint');
   await expect(page.getByTestId('blueprint-canvas-preview')).toBeVisible();
   await page.getByRole('button', { name: /Generate package/i }).click();
   await expect(page.getByTestId('assembly-guide-preview')).toContainText('Assembly guide preview');
@@ -1423,46 +1353,26 @@ test('View lenses, toon sidecar, physics replay, and blueprint flow stay non-des
   expectCleanPage(pageErrors, consoleErrors);
 });
 
-test('Toon CAD viewport exposes fallback axes and mid-width layout', async ({ page }) => {
-  await page.addInitScript(() => {
-    (window as Window & { __MECHANIM_FORCE_TOON_FALLBACK__?: boolean }).__MECHANIM_FORCE_TOON_FALLBACK__ = true;
-  });
-  await page.setViewportSize({ width: 1024, height: 780 });
-  await page.goto('/');
-  await openWavingArmTemplate(page);
-
-  await expect(page.getByTestId('toon-renderer-status')).toHaveText('SVG fallback');
-  await expect(page.getByTestId('toon-cad-hud')).toContainText('2.5D authoring plane');
-  await expect(page.getByTestId('toon-axis-legend')).toContainText('Z axis');
-  await expect(page.getByTestId('toon-svg-spacer-stack')).toBeVisible();
-  expect(await page.getByTestId('toon-spacer-washer').count(), 'Fallback SVG includes the shared four-layer spacer stack').toBe(4);
-  await expect(page.locator('[data-testid="toon-axis-z"]')).toHaveCount(1);
-  const centerBox = await page.getByTestId('stage-canvas-pane').boundingBox();
-  const cadBox = await page.getByTestId('toon-cad-viewport').boundingBox();
-  expect(centerBox, 'center pane visible at mid-width').toBeTruthy();
-  expect(cadBox, 'fallback CAD viewport visible at mid-width').toBeTruthy();
-  expect(cadBox!.x, 'fallback viewport stays inside center left edge').toBeGreaterThanOrEqual(centerBox!.x - 1);
-  expect(cadBox!.x + cadBox!.width, 'fallback viewport stays inside center right edge').toBeLessThanOrEqual(centerBox!.x + centerBox!.width + 1);
-  expect(cadBox!.height, 'fallback viewport remains large enough to read at mid-width').toBeGreaterThan(150);
-
-  await page.getByTestId('view-lens-toy-stage').click();
-  await expect(page.getByTestId('toon-cad-hud')).toContainText('3/4 toy-stage preview');
-});
-
-test('Draw mode accepts free path strokes through the view lens overlay', async ({ page }) => {
+test('Draw mode accepts free path strokes on the simplified canvas', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await openWavingArmTemplate(page);
   await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
-  await expect(page.getByTestId('view-lens-draw-guard')).toContainText('Drawing locks the camera');
 
-  const beforeHudDraw = Number((await page.getByTestId('free-draw-status').textContent())?.match(/^(\d+)/)?.[1] ?? 0);
-  const hudBox = await page.getByTestId('view-lens-hud').boundingBox();
-  expect(hudBox, 'draw-through HUD box').toBeTruthy();
-  await page.mouse.move(hudBox!.x + hudBox!.width * 0.45, hudBox!.y + hudBox!.height * 0.45);
+  await expect(page.getByTestId('view-lens-hud')).toHaveCount(0);
+  await expect(page.getByTestId('toon-renderer-shell')).toHaveCount(0);
+
+  const beforeDraw = Number((await page.getByTestId('free-draw-status').textContent())?.match(/^(\d+)/)?.[1] ?? 0);
+  const canvasBox = await page.getByTestId('path-canvas').boundingBox();
+  expect(canvasBox, 'path canvas box').toBeTruthy();
+
+  await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.45, canvasBox!.y + canvasBox!.height * 0.45);
   await page.mouse.down();
-  await page.mouse.move(hudBox!.x + hudBox!.width * 0.45 + 34, hudBox!.y + hudBox!.height * 0.45 + 22, { steps: 4 });
+  await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.45 + 34, canvasBox!.y + canvasBox!.height * 0.45 + 22, { steps: 4 });
   await page.mouse.up();
 
-  await expect.poll(async () => Number((await page.getByTestId('free-draw-status').textContent())?.match(/^(\d+)/)?.[1] ?? 0), { message: 'draw mode accepts pointer input through HUD overlay' }).toBeGreaterThan(beforeHudDraw);
+  await expect.poll(async () =>
+    Number((await page.getByTestId('free-draw-status').textContent())?.match(/^(\d+)/)?.[1] ?? 0),
+    { message: 'draw mode accepts pointer input on simplified canvas' }
+  ).toBeGreaterThan(beforeDraw);
 });

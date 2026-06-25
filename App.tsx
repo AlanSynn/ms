@@ -41,11 +41,7 @@ import { loadCharacterPackage } from './utils/packageLoader';
 import { Z_AXIS_LABEL, Z_STACK_LABEL, Z_STACK_LAYERS } from './utils/zStack';
 import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT, normalizeCanvasViewport } from './utils/viewport';
-import { buildToonSceneProjection } from './utils/sceneProjection';
-import { buildKinematicPhysicsSession } from './utils/physicsSession';
-import { cameraForLens, lockCameraToStudio, type CameraSessionState, type ViewLensState } from './utils/viewLens';
 import { AUTHORABLE_MECHANISM_TYPES, FOUNDRY_PRESETS, MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY, mechanismTemplateLabel } from './utils/mechanismTemplates';
-import { ViewLensHud } from './components/ViewLensHud';
 import { AlertCircle, Boxes, BrainCircuit, Camera, CheckCircle2, Download, FileJson, Loader2, Play, Plus, Route, Save, Sparkles, Trash2, Upload } from 'lucide-react';
 import girlStarterUrl from './resources/examples/raw/girl.png?url';
 import boyStarterUrl from './resources/examples/raw/boy.PNG?url';
@@ -136,10 +132,6 @@ const App: React.FC = () => {
     const [optimizerBusy, setOptimizerBusy] = useState(false);
     const [canvasViewport, setCanvasViewport] = useState<CanvasViewport>(DEFAULT_CANVAS_VIEWPORT);
     const [commandStatus, setCommandStatus] = useState('Ready');
-    const toonProjection = useMemo(() => buildToonSceneProjection(project), [project]);
-    const [viewLens, setViewLens] = useState<ViewLensState>('studio');
-    const [cameraSession, setCameraSession] = useState<CameraSessionState>(() => lockCameraToStudio(toonProjection));
-    const physicsSession = useMemo(() => buildKinematicPhysicsSession(project, toonProjection, angle), [project, toonProjection, angle]);
     const projectInputRef = useRef<HTMLInputElement>(null);
     const latestProjectRef = useRef<ProjectState | null>(null);
 
@@ -184,18 +176,6 @@ const App: React.FC = () => {
     useEffect(() => {
         if (stage !== 'path' && drawMode) setDrawMode(false);
     }, [stage, drawMode]);
-
-    useEffect(() => {
-        if (!drawMode) return;
-        setViewLens('studio');
-        setCameraSession(lockCameraToStudio(toonProjection));
-    }, [drawMode, toonProjection]);
-
-    useEffect(() => {
-        if (stage !== 'blueprint') return;
-        setViewLens('blueprint');
-        setCameraSession(cameraForLens(toonProjection, 'blueprint'));
-    }, [stage, toonProjection]);
 
     const mechanismConfig: GlobalConfig = {
         speed: project.settings.animationSpeed,
@@ -548,9 +528,6 @@ const App: React.FC = () => {
     const playerDock = stage !== 'character' && stage !== 'foundry'
         ? <WorkspacePlayerDock isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} speed={project.settings.animationSpeed} drawMode={drawMode} />
         : null;
-    const canvasOverlay = stage !== 'character'
-        ? <ViewLensHud stage={stage} lens={viewLens} setLens={setViewLens} camera={cameraSession} setCamera={setCameraSession} projection={toonProjection} physics={physicsSession} selectedPart={selectedPart} selectedPath={selectedPath} selectedMechanism={selectedMechanism} drawMode={drawMode} />
-        : null;
 
     return (
         <main className={`min-h-screen overflow-hidden ${themeClass}`} data-theme={project.settings.theme}>
@@ -599,8 +576,8 @@ const App: React.FC = () => {
 
                     <div className={`stage-body editor-workbench relative min-h-0 flex-1 overflow-auto ${stage === 'character' ? 'p-0' : 'p-7'}`} data-testid="shared-workbench">
                         {stage === 'character' && <CharacterSelection project={project} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} starterTemplates={STARTER_IMAGE_TEMPLATES} onStarterImage={loadStarterImage} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onSample={() => { setPendingCharacter(null); setProject(createSampleProject()); setStage('path'); }} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} />}
-                        {stage === 'path' && <PathEditor project={project} sortedParts={sortedParts} selectedPart={selectedPart} selectedPath={selectedPath} drawMode={drawMode} setDrawMode={setDrawMode} dispatch={dispatch} setPathPoints={setPathPoints} openTracking={() => setShowTracking(true)} isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} onNext={() => goStage('foundry')} goStage={goStage} viewport={canvasViewport} setViewport={setCanvasViewport} canvasOverlay={canvasOverlay} />}
-                        {stage === 'foundry' && <MechanismFoundry project={project} foundry={foundry} setFoundry={setFoundry} selectedPart={selectedPart} selectedPath={selectedPath} goStage={goStage} canvasOverlay={canvasOverlay} onExport={(pkg) => {
+                        {stage === 'path' && <PathEditor project={project} sortedParts={sortedParts} selectedPart={selectedPart} selectedPath={selectedPath} drawMode={drawMode} setDrawMode={setDrawMode} dispatch={dispatch} setPathPoints={setPathPoints} openTracking={() => setShowTracking(true)} isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} onNext={() => goStage('foundry')} goStage={goStage} viewport={canvasViewport} setViewport={setCanvasViewport} />}
+                        {stage === 'foundry' && <MechanismFoundry project={project} foundry={foundry} setFoundry={setFoundry} selectedPart={selectedPart} selectedPath={selectedPath} goStage={goStage} onExport={(pkg) => {
                             const existingTarget = project.mechanisms.find(m =>
                                 m.targetPartId === pkg.targetPartId &&
                                 m.targetPathId === pkg.targetPathId &&
@@ -626,9 +603,9 @@ const App: React.FC = () => {
                             dispatch({ type: 'upsert_mechanism', mechanism: mech });
                             setStage('design');
                         }} />}
-                        {stage === 'design' && <MechanismDesign project={project} selectedMechanism={selectedMechanism} mechanismConfig={mechanismConfig} setMechanismConfig={setMechanismConfig} updateMechanism={updateMechanism} dispatch={dispatch} isPlaying={isPlaying} setIsPlaying={setIsPlaying} showTrace={showTrace} setShowTrace={setShowTrace} angle={angle} setAngle={setAngle} onOptimize={optimizeSelectedMechanism} onRecommendations={() => setShowRecommendations(true)} optimizerBusy={optimizerBusy} exportSvg={exportMechanismSvg} exportDxf={exportMechanismDxf} onBlueprint={() => goStage('blueprint')} goStage={goStage} viewport={canvasViewport} setViewport={setCanvasViewport} canvasOverlay={canvasOverlay} />}
-                        {stage === 'blueprint' && <BlueprintExport project={project} config={mechanismConfig} setConfig={setMechanismConfig} dispatch={dispatch} goStage={goStage} isPlaying={isPlaying} angle={angle} setAngle={setAngle} viewport={canvasViewport} setViewport={setCanvasViewport} canvasOverlay={canvasOverlay} />}
-                        {stage === 'options' && <Options project={project} dispatch={dispatch} goStage={goStage} canvasOverlay={canvasOverlay} />}
+                        {stage === 'design' && <MechanismDesign project={project} selectedMechanism={selectedMechanism} mechanismConfig={mechanismConfig} setMechanismConfig={setMechanismConfig} updateMechanism={updateMechanism} dispatch={dispatch} isPlaying={isPlaying} setIsPlaying={setIsPlaying} showTrace={showTrace} setShowTrace={setShowTrace} angle={angle} setAngle={setAngle} onOptimize={optimizeSelectedMechanism} onRecommendations={() => setShowRecommendations(true)} optimizerBusy={optimizerBusy} exportSvg={exportMechanismSvg} exportDxf={exportMechanismDxf} onBlueprint={() => goStage('blueprint')} goStage={goStage} viewport={canvasViewport} setViewport={setCanvasViewport} />}
+                        {stage === 'blueprint' && <BlueprintExport project={project} config={mechanismConfig} setConfig={setMechanismConfig} dispatch={dispatch} goStage={goStage} isPlaying={isPlaying} angle={angle} setAngle={setAngle} viewport={canvasViewport} setViewport={setCanvasViewport} />}
+                        {stage === 'options' && <Options project={project} dispatch={dispatch} goStage={goStage} />}
                         {playerDock && <div className="stage-player-row" data-testid="stage-player-row" aria-label="Shared playback controls">{playerDock}</div>}
                     </div>
                     {stage !== 'character' && <WorkflowStatusStrip stage={stage} project={project} selectedPart={selectedPart} selectedPath={selectedPath} />}
@@ -750,14 +727,13 @@ type PaneSlot<Kind extends 'workflow' | 'canvas' | 'inspector'> = Readonly<{
     kind: Kind;
     content: React.ReactNode;
 }>;
-type CanvasPaneSlot = PaneSlot<'canvas'> & Readonly<{ overlay?: React.ReactNode }>;
 type StageLayoutSpec = Readonly<{
     workflow: PaneSlot<'workflow'>;
-    canvas: CanvasPaneSlot;
+    canvas: PaneSlot<'canvas'>;
     inspector: PaneSlot<'inspector'>;
 }>;
 const workflowPane = (content: React.ReactNode): PaneSlot<'workflow'> => ({ kind: 'workflow', content });
-const canvasPane = (content: React.ReactNode, overlay?: React.ReactNode): CanvasPaneSlot => ({ kind: 'canvas', content, overlay });
+const canvasPane = (content: React.ReactNode): PaneSlot<'canvas'> => ({ kind: 'canvas', content });
 const inspectorPane = (content: React.ReactNode): PaneSlot<'inspector'> => ({ kind: 'inspector', content });
 
 const EditorStageFrame = ({ stage, layout, className = '' }: { stage: AppStage; layout: StageLayoutSpec; className?: string }) => (
@@ -765,7 +741,7 @@ const EditorStageFrame = ({ stage, layout, className = '' }: { stage: AppStage; 
         <aside className="stage-left-pane workspace p-5" data-pane-kind={layout.workflow.kind} data-testid={EDITOR_PANE_CONTRACT.left.testId} aria-label={EDITOR_PANE_CONTRACT.left.ariaLabel}>
             <div className="stage-left-pane-content" data-testid="editor-sidebar">{layout.workflow.content}</div>
         </aside>
-        <section className="stage-canvas-pane" data-pane-kind={layout.canvas.kind} data-testid={EDITOR_PANE_CONTRACT.center.testId} aria-label={EDITOR_PANE_CONTRACT.center.ariaLabel}>{layout.canvas.content}{layout.canvas.overlay}</section>
+        <section className="stage-canvas-pane" data-pane-kind={layout.canvas.kind} data-testid={EDITOR_PANE_CONTRACT.center.testId} aria-label={EDITOR_PANE_CONTRACT.center.ariaLabel}>{layout.canvas.content}</section>
         <aside className="stage-right-inspector workspace p-5" data-pane-kind={layout.inspector.kind} data-testid={EDITOR_PANE_CONTRACT.right.testId} aria-label={EDITOR_PANE_CONTRACT.right.ariaLabel}>{layout.inspector.content}</aside>
     </div>
 );
@@ -1178,7 +1154,7 @@ const ProgressBlock = ({ project }: { project: ProjectState }) => {
     </div>;
 };
 
-const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode, setDrawMode, dispatch, setPathPoints, openTracking, isPlaying, setIsPlaying, angle, setAngle, onNext, goStage, viewport, setViewport, canvasOverlay }: {
+const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode, setDrawMode, dispatch, setPathPoints, openTracking, isPlaying, setIsPlaying, angle, setAngle, onNext, goStage, viewport, setViewport }: {
     project: ProjectState;
     sortedParts: BodyPartLayer[];
     selectedPart?: BodyPartLayer;
@@ -1196,7 +1172,6 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
     goStage: (stage: AppStage) => void;
     viewport: CanvasViewport;
     setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
-    canvasOverlay?: React.ReactNode;
 }) => {
     const svgRef = useRef<SVGSVGElement>(null);
     const freeDraftRef = useRef<Point[] | null>(null);
@@ -1352,13 +1327,9 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
             </StageLeftSummary>
         </div>),
             canvas: canvasPane(<div className="path-canvas-shell workspace overflow-hidden p-0">
-            <div className="canvas-hint">
-                <strong>{drawMode ? (isFreeDrawing ? 'Drawing…' : 'Drag anywhere to draw') : 'Pick Draw free path'}</strong>
-                <span>{selectedPart?.name ?? 'No part'} · {pointCount} points</span>
-            </div>
             <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
             <SceneSketch svgRef={svgRef} project={project} selectedPath={selectedPath} dragPoint={dragPoint} selectedPoint={selectedPoint} setDragPoint={setDragPoint} setSelectedPoint={setSelectedPoint} onPointMove={movePoint} onPointUp={stopDrawing} onCanvasDown={onCanvasDown} dispatch={dispatch} drawMode={drawMode} pathLocked={pathLocked} isPlaying={isPlaying} angle={angle} viewport={viewport}/>
-        </div>, canvasOverlay),
+        </div>),
             inspector: inspectorPane(<div className="path-inspector stage-pane-stack">
             <div>
                 <div className="section-title">Selected inspector</div>
@@ -1729,20 +1700,23 @@ const MechanismRecommendationSheet = ({ isOpen, project, selectedPart, selectedP
     </div>;
 };
 
-const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selectedPath, goStage, canvasOverlay, onExport }: { project: ProjectState; foundry: FoundryState; setFoundry: (m: FoundryState) => void; selectedPart?: BodyPartLayer; selectedPath?: ProjectMotionPath; goStage: (stage: AppStage) => void; canvasOverlay?: React.ReactNode; onExport: (pkg: FoundryExportPackage) => void }) => {
+const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selectedPath, goStage, onExport }: { project: ProjectState; foundry: FoundryState; setFoundry: (m: FoundryState) => void; selectedPart?: BodyPartLayer; selectedPath?: ProjectMotionPath; goStage: (stage: AppStage) => void; onExport: (pkg: FoundryExportPackage) => void }) => {
     const [foundryPlaying, setFoundryPlaying] = useState(false);
     const [foundryPhase, setFoundryPhase] = useState(0);
+    const [isPickingAnchor, setIsPickingAnchor] = useState(false);
+    const [manualAnchor, setManualAnchor] = useState<Point | null>(null);
     const [showForces, setShowForces] = useState(false);
     const [showVelocity, setShowVelocity] = useState(false);
     const [showTrail, setShowTrail] = useState(false);
     const [showPathPreview, setShowPathPreview] = useState(true);
     const [showSensemaking, setShowSensemaking] = useState(true);
     const targetReady = Boolean(selectedPart && selectedPath && selectedPath.enabled && selectedPath.points.length >= 3);
-    const rawLanding = selectedPath?.points[0] ?? (selectedPart ? bodyPartPivotScene(selectedPart, project.skeleton) : { x: foundry.anchorX ?? 0, y: foundry.anchorY ?? 0 });
+    const rawLanding = manualAnchor ?? selectedPath?.points[0] ?? (selectedPart ? bodyPartPivotScene(selectedPart, project.skeleton) : { x: foundry.anchorX ?? 0, y: foundry.anchorY ?? 0 });
     const landingBoard = sceneToBoard(rawLanding, project.settings.physicalKit);
     const landing = boardToScene(landingBoard.col, landingBoard.row, project.settings.physicalKit);
     const snapDistance = Math.hypot(rawLanding.x - landing.x, rawLanding.y - landing.y);
     const landedFoundry = useMemo(() => ({ ...foundry, anchorX: landing.x, anchorY: landing.y, sceneAnchor: landing }), [foundry, landing.x, landing.y]);
+    const anchorMarker = { x: 180 + (landing.x / SCENE_VIEW.width) * 360, y: 120 - (landing.y / SCENE_VIEW.height) * 240 };
     const preview = useMemo(() => generateCurvePoints(landedFoundry, 96).points, [landedFoundry]);
     const range = sampleFeasibleRange(landedFoundry);
     const library = MECHANISM_LIBRARY[foundry.type];
@@ -1756,6 +1730,54 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const previousPoint = previewPoints[Math.max(0, playIndex - 1)] ?? playhead;
     const nextPoint = previewPoints[Math.min(previewPoints.length - 1, playIndex + 1)] ?? playhead;
     const hardBlocked = !targetReady || range.percentValid === 0 || !Number.isFinite(landing.x) || !Number.isFinite(landing.y);
+    const applyAnchor = (point: Point) => {
+        const board = sceneToBoard(point, project.settings.physicalKit);
+        const snapped = boardToScene(board.col, board.row, project.settings.physicalKit);
+        setManualAnchor(snapped);
+        setFoundry({
+            ...foundry,
+            anchorX: snapped.x,
+            anchorY: snapped.y,
+            sceneAnchor: snapped,
+            transform: { ...(foundry.transform ?? { x: snapped.x, y: snapped.y, rotation: foundry.groundAngle ?? 0, scale: 1 }), x: snapped.x, y: snapped.y }
+        });
+    };
+    const handleAnchorPick = (event: React.MouseEvent<SVGSVGElement>) => {
+        if (!isPickingAnchor) return;
+        const svg = event.currentTarget;
+        const matrix = svg.getScreenCTM();
+        if (!matrix) return;
+        const point = svg.createSVGPoint();
+        point.x = event.clientX;
+        point.y = event.clientY;
+        const { x, y } = point.matrixTransform(matrix.inverse());
+        applyAnchor({ x: ((x / 360) - 0.5) * SCENE_VIEW.width, y: (0.5 - (y / 240)) * SCENE_VIEW.height });
+        setIsPickingAnchor(false);
+    };
+    const updateFoundryParam = (key: keyof MechanismConfig, value: number) => {
+        if (key === 'anchorX' || key === 'anchorY') {
+            const anchor = {
+                x: key === 'anchorX' ? value : (foundry.anchorX ?? landing.x),
+                y: key === 'anchorY' ? value : (foundry.anchorY ?? landing.y)
+            };
+            setManualAnchor(anchor);
+            setFoundry({
+                ...foundry,
+                [key]: value,
+                sceneAnchor: anchor,
+                transform: { ...(foundry.transform ?? { x: anchor.x, y: anchor.y, rotation: foundry.groundAngle ?? 0, scale: 1 }), x: anchor.x, y: anchor.y }
+            });
+            return;
+        }
+        setFoundry({ ...foundry, [key]: value });
+    };
+    const keepCurrentAnchor = (mechanism: MechanismConfig): MechanismConfig => ({
+        ...mechanism,
+        anchorX: landing.x,
+        anchorY: landing.y,
+        sceneAnchor: landing,
+        transform: { ...(mechanism.transform ?? { x: landing.x, y: landing.y, rotation: mechanism.groundAngle ?? 0, scale: 1 }), x: landing.x, y: landing.y }
+    });
     useEffect(() => {
         if (!foundryPlaying) return;
         let frame = 0;
@@ -1801,12 +1823,12 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             <StageLeftSummary project={project} title="Mechanism Foundry" kicker="recipe sandbox" stage="foundry" goStage={goStage}>
                 <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600" data-testid="foundry-target-summary">
                     <div className="font-bold text-slate-800">Target: {selectedPart?.name ?? 'none'} · path {selectedPath?.points.length ?? 0} pts</div>
-                    <div>Export lands at {landing.x.toFixed(0)}, {landing.y.toFixed(0)} ({landingBoard.label}) · anchor {selectedPart?.anchorJointId ?? 'none'} · IK handle {targetIkJointId ?? 'none'}</div>
+                    <div>Board hole {landingBoard.label} · anchor {selectedPart?.anchorJointId ?? 'none'} · IK handle {targetIkJointId ?? 'none'}</div>
                     {snapDistance > 0.5 && <div>Snapped {snapDistance.toFixed(0)} scene units from target to nearest board hole for fabrication.</div>}
-                    <div>{foundry.recommendation ?? FOUNDRY_PRESETS.balanced.recommendation}</div>
                     <div><strong>Valid Range:</strong> {range.percentValid === 1 ? '360° valid' : feasibilityText}</div>
-                    <div><strong>Motion Point:</strong> {playhead ? `${playhead.x.toFixed(0)}, ${playhead.y.toFixed(0)}` : 'no preview point'}</div>
+                    <div data-testid="foundry-anchor-status">{isPickingAnchor ? 'Pick mode: click the sandbox board.' : (manualAnchor ? 'Anchor picked visually.' : (foundry.recommendation ?? FOUNDRY_PRESETS.balanced.recommendation))}</div>
                 </div>
+                <button type="button" data-testid="foundry-pick-anchor" className={`btn-secondary w-full ${isPickingAnchor ? 'active' : ''}`} onClick={() => setIsPickingAnchor(value => !value)}>{isPickingAnchor ? 'Cancel anchor pick' : 'Pick anchor on canvas'}</button>
                 <button className="btn-primary w-full" disabled={hardBlocked} onClick={() => onExport(makePackage())}><Boxes size={16}/> Use this mechanism</button>
                 {!targetReady && <div className="warning">Draw at least 3 points for a selected body part before exporting a mechanism.</div>}
                 {range.warning && <div className="warning">{range.warning}</div>}
@@ -1816,7 +1838,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                         const item = MECHANISM_LIBRARY[type];
                         const cardMechanism = { ...createDefaultMechanism(type, `foundry-card-${type}`), color: foundry.color };
                         const cardSimulation = fitMechanismSimulation(cardMechanism, foundryPhase, 180, 96, 48);
-                        return <button key={type} type="button" className={`recommendation-card mechanism-choice ${foundry.type === type ? 'active' : ''}`} onClick={() => setFoundry({ ...createDefaultMechanism(type, 'foundry-preview'), color: foundry.color, presetId: 'balanced', recommendation: FOUNDRY_PRESETS.balanced.recommendation })}>
+                        return <button key={type} type="button" className={`recommendation-card mechanism-choice ${foundry.type === type ? 'active' : ''}`} onClick={() => setFoundry(keepCurrentAnchor({ ...createDefaultMechanism(type, 'foundry-preview'), color: foundry.color, presetId: 'balanced', recommendation: FOUNDRY_PRESETS.balanced.recommendation }))}>
                             <svg viewBox="0 0 180 96" className="mechanism-choice-sim" data-testid={`foundry-mini-simulation-${type}`} aria-hidden="true">
                                 <path d={cardSimulation.pathD} fill="none" stroke={foundry.color} strokeWidth="2.5" strokeLinecap="round" opacity="0.45"/>
                                 <MechanismLinkagePreview mechanism={cardMechanism} simulation={cardSimulation} kit={project.settings.physicalKit} testId={`foundry-mini-linkage-${type}`} compact />
@@ -1836,7 +1858,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
         </div>),
             canvas: canvasPane(<section className="path-canvas-shell foundry-canvas-shell workspace p-6">
             <div className="mb-5 flex items-center justify-between"><h4 className="section-title">Sandbox preview</h4><span className="chip">{foundryPlaying ? 'Simulation active' : 'Paused'}</span></div>
-            <svg viewBox="0 0 360 240" className="foundry-preview h-[520px] w-full rounded-[2rem]" aria-label="Mechanism Foundry CAD-like 2.5D sandbox preview">
+            <svg viewBox="0 0 360 240" data-testid="foundry-preview" onClick={handleAnchorPick} className={`foundry-preview h-[520px] w-full rounded-[2rem] ${isPickingAnchor ? 'is-picking-anchor' : ''}`} aria-label="Mechanism Foundry CAD-like 2.5D sandbox preview">
                 <defs>
                     <pattern id="foundry-cad-grid" width="18" height="18" patternUnits="userSpaceOnUse">
                         <path d="M 18 0 L 0 0 0 18" fill="none" stroke="#93c5fd" strokeWidth="0.55" opacity="0.38" />
@@ -1863,12 +1885,17 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                     <line x1={playhead.x} y1={playhead.y} x2={playhead.x + (nextPoint.x - previousPoint.x) * 2.2} y2={playhead.y + (nextPoint.y - previousPoint.y) * 2.2} />
                 </g>}
                 {playhead && <circle data-testid="foundry-playhead" cx={playhead.x} cy={playhead.y} r="7" fill="#f472b6" stroke="white" strokeWidth="3" />}
+                <g data-testid="foundry-anchor-marker" transform={`translate(${anchorMarker.x} ${anchorMarker.y})`}>
+                    <circle r="8" fill="#ffffff" stroke="#8b5cf6" strokeWidth="3" />
+                    <path d="M -13 0 H 13 M 0 -13 V 13" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" />
+                    <text x="12" y="-10" fill="#5b21b6" fontSize="8" fontWeight="900">{landingBoard.label}</text>
+                </g>
                 <FoundrySpacerStack points={[selectedSimulation.state.p1, selectedSimulation.state.p2, selectedSimulation.state.j1, selectedSimulation.state.j2, selectedSimulation.state.aux, selectedSimulation.state.effector]} />
                 <FoundryAngleStrip mechanism={landedFoundry} phase={foundryPhase} kit={project.settings.physicalKit} />
                 <text x="22" y="38" className="foundry-preview-label" fontSize="16" fontWeight="800">{library.label} · {range.percentValid === 1 ? '360° valid' : range.warning} · {Z_STACK_LABEL}</text>
             </svg>
             <div className="mt-3 text-xs font-bold text-slate-500" data-testid="foundry-toolbar-state">Toolbar: {foundryPlaying ? 'playing' : 'paused'} · path {showPathPreview ? 'shown' : 'hidden'} · phase {Math.round(foundryPhase * 180 / Math.PI)}°</div>
-        </section>, canvasOverlay),
+        </section>),
             inspector: inspectorPane(<div className="stage-pane-stack">
             <div>
                 <div className="section-title">Selected mechanism</div>
@@ -1878,15 +1905,15 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             <details className="advanced-panel">
                 <summary>Mechanism options</summary>
                 <div className="mt-3 space-y-3">
-                    <select aria-label="Foundry mechanism type" className="field" value={foundry.type} onChange={e => setFoundry({ ...createDefaultMechanism(e.target.value as MechanismType, 'foundry-preview'), color: foundry.color, presetId: 'balanced', recommendation: FOUNDRY_PRESETS.balanced.recommendation })}>{AUTHORABLE_MECHANISM_TYPES.map(t => <option key={t} value={t}>{mechanismTemplateLabel(t)}</option>)}</select>
+                    <select aria-label="Foundry mechanism type" className="field" value={foundry.type} onChange={e => setFoundry(keepCurrentAnchor({ ...createDefaultMechanism(e.target.value as MechanismType, 'foundry-preview'), color: foundry.color, presetId: 'balanced', recommendation: FOUNDRY_PRESETS.balanced.recommendation }))}>{AUTHORABLE_MECHANISM_TYPES.map(t => <option key={t} value={t}>{mechanismTemplateLabel(t)}</option>)}</select>
                     <select aria-label="Foundry preset" className="field" value={foundry.presetId ?? 'balanced'} onChange={e => {
                         const presetId = e.target.value;
                         const preset = FOUNDRY_PRESETS[presetId];
                         const { label: _label, ...updates } = preset;
                         const base = presetId === 'balanced' ? createDefaultMechanism(foundry.type, 'foundry-preview') : foundry;
-                        setFoundry({ ...base, anchorX: foundry.anchorX, anchorY: foundry.anchorY, sceneAnchor: foundry.sceneAnchor, color: foundry.color, ...updates, presetId, recommendation: preset.recommendation });
+                        setFoundry(keepCurrentAnchor({ ...base, color: foundry.color, ...updates, presetId, recommendation: preset.recommendation }));
                     }}>{Object.entries(FOUNDRY_PRESETS).map(([id, preset]) => <option key={id} value={id}>{preset.label}</option>)}</select>
-                    {PARAMS.filter(p => showParam(foundry.type, p.key)).map(p => <React.Fragment key={String(p.key)}><MiniNumber label={p.label} value={Number(foundry[p.key] ?? 0)} min={p.min} max={p.max} step={p.step} onChange={value => setFoundry({ ...foundry, [p.key]: value })}/></React.Fragment>) }
+                    {PARAMS.filter(p => showParam(foundry.type, p.key)).map(p => <React.Fragment key={String(p.key)}><MiniNumber label={p.label} value={Number(foundry[p.key] ?? 0)} min={p.min} max={p.max} step={p.step} onChange={value => updateFoundryParam(p.key, value)}/></React.Fragment>) }
                 </div>
             </details>
             <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
@@ -1909,7 +1936,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     />;
 };
 
-const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMechanismConfig, updateMechanism, dispatch, isPlaying, setIsPlaying, showTrace, setShowTrace, angle, setAngle, onOptimize, onRecommendations, optimizerBusy, exportSvg, exportDxf, onBlueprint, goStage, viewport, setViewport, canvasOverlay }: {
+const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMechanismConfig, updateMechanism, dispatch, isPlaying, setIsPlaying, showTrace, setShowTrace, angle, setAngle, onOptimize, onRecommendations, optimizerBusy, exportSvg, exportDxf, onBlueprint, goStage, viewport, setViewport }: {
     project: ProjectState;
     selectedMechanism?: MechanismConfig;
     mechanismConfig: GlobalConfig;
@@ -1931,7 +1958,6 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
     goStage: (stage: AppStage) => void;
     viewport: CanvasViewport;
     setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
-    canvasOverlay?: React.ReactNode;
 }) => {
     const selectedLibrary = selectedMechanism ? MECHANISM_LIBRARY[selectedMechanism.type] : undefined;
     const selectedRange = selectedMechanism ? sampleFeasibleRange(selectedMechanism) : undefined;
@@ -1975,7 +2001,7 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
             canvas: canvasPane(<div className="path-canvas-shell workspace overflow-hidden p-0">
             <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
             <Canvas project={project} config={mechanismConfig} setConfig={setMechanismConfig} selectedId={project.selectedMechanismId ?? null} setSelectedId={id => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: id })} isPlaying={isPlaying} showTrace={showTrace} isDrawMode={false} userPath={[]} setUserPath={() => {}} angle={angle} setAngle={setAngle} viewport={viewport} setViewport={setViewport}/>
-        </div>, canvasOverlay),
+        </div>),
             inspector: inspectorPane(<div className="stage-pane-stack">
             <div>
                 <div className="section-title">Selected mechanism inspector</div>
@@ -2034,7 +2060,7 @@ const pendingRecipeForMechanism = (project: ProjectState, mechanism: MechanismCo
     };
 };
 
-const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlaying, angle, setAngle, viewport, setViewport, canvasOverlay }: {
+const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlaying, angle, setAngle, viewport, setViewport }: {
     project: ProjectState;
     config: GlobalConfig;
     setConfig: React.Dispatch<React.SetStateAction<GlobalConfig>>;
@@ -2045,7 +2071,6 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
     setAngle: React.Dispatch<React.SetStateAction<number>>;
     viewport: CanvasViewport;
     setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
-    canvasOverlay?: React.ReactNode;
 }) => {
     const validation = validateForFabrication(project);
     const create = () => {
@@ -2117,7 +2142,7 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
             canvas: canvasPane(<div className="path-canvas-shell workspace overflow-hidden p-0" data-testid="blueprint-canvas-preview">
             <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
             <Canvas project={project} config={config} setConfig={setConfig} selectedId={project.selectedMechanismId ?? null} setSelectedId={id => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: id })} isPlaying={isPlaying} showTrace={true} isDrawMode={false} userPath={[]} setUserPath={() => {}} angle={angle} setAngle={setAngle} viewport={viewport} setViewport={setViewport}/>
-        </div>, canvasOverlay),
+        </div>),
             inspector: inspectorPane(<section className="stage-pane-stack" data-testid="assembly-guide-preview">
             <div>
                 <div className="section-title">Selected recipe detail</div>
@@ -2144,7 +2169,7 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
     />;
 };
 
-const Options = ({ project, dispatch, goStage, canvasOverlay }: { project: ProjectState; dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void; goStage: (stage: AppStage) => void; canvasOverlay?: React.ReactNode }) => {
+const Options = ({ project, dispatch, goStage }: { project: ProjectState; dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void; goStage: (stage: AppStage) => void }) => {
     const kit = project.settings.physicalKit;
     const updateSettings = (settings: Partial<ProjectState['settings']>) => dispatch({ type: 'update_settings', settings });
     const updateKit = (physicalKit: Partial<ProjectState['settings']['physicalKit']>) => updateSettings({ physicalKit: { ...kit, ...physicalKit } });
@@ -2168,7 +2193,6 @@ const Options = ({ project, dispatch, goStage, canvasOverlay }: { project: Proje
             </StageLeftSummary>
         </div>),
             canvas: canvasPane(<div className="path-canvas-shell options-preview-shell workspace overflow-hidden p-6">
-            <div className="canvas-hint"><strong>Settings preview</strong><span>Shared canvas stays pinned while options scroll.</span></div>
             <svg viewBox="0 0 640 420" className="options-preview-canvas w-full h-full" role="img" aria-label="Options preview canvas">
                 <defs>
                     <pattern id="options-grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#e2e8f0" strokeWidth="1"/></pattern>
@@ -2184,7 +2208,7 @@ const Options = ({ project, dispatch, goStage, canvasOverlay }: { project: Proje
                 </g>
                 <text x="58" y="362" fill="#64748b" fontSize="14" fontWeight="800">{project.settings.theme} theme · {project.settings.animationSpeed.toFixed(1)}x speed · {project.settings.physicalKit.defaultExportFormat} export</text>
             </svg>
-        </div>, canvasOverlay),
+        </div>),
             inspector: inspectorPane(<div className="options-workspace stage-pane-stack">
         <section className="workspace space-y-5 p-6">
             <div>

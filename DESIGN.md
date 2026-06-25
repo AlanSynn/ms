@@ -54,10 +54,10 @@ The workbench must preserve `canvasViewport` across Path Editor, Mechanism Desig
 Post-onboarding workflow tabs must use a strict three-pane responsibility model:
 
 - **Left pane:** stage workflow, object lists, sensemaking, blocker/next-action status, and primary stage actions.
-- **Center pane:** pure shared work canvas only — sheet/grid, character, paths, mechanisms, blueprint overlays, handles, and short in-canvas hints.
+- **Center pane:** pure shared work canvas only — sheet/grid, character, paths, mechanisms, blueprint overlays, handles, and the zoom toolbar.
 - **Right pane:** selected-item inspector only — numeric parameters, bindings, toggles, warnings, and advanced fine tuning.
 
-Do not put broad galleries, recipe lists, onboarding choices, or primary navigation in the right inspector. Do not put parameter forms or scrollable explanation panels inside the center canvas area.
+Do not put broad galleries, recipe lists, onboarding choices, primary navigation, lens switchers, renderer sidecars, parameter forms, or scrollable explanation panels inside the center canvas area.
 
 ## Interaction principles
 
@@ -85,4 +85,3 @@ Every layout change must preserve:
 - zoom persistence across tabs;
 - blueprint/assembly guide export;
 - contract tests and production build.
-
