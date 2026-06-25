@@ -49,6 +49,16 @@ All post-onboarding workflow stages use the same shell:
 
 The workbench must preserve `canvasViewport` across Path Editor, Mechanism Design, and Blueprint Export. Stage switching must not reset zoom/pan or lose selected part/path/mechanism state.
 
+### Pane ownership amendment
+
+Post-onboarding workflow tabs must use a strict three-pane responsibility model:
+
+- **Left pane:** stage workflow, object lists, sensemaking, blocker/next-action status, and primary stage actions.
+- **Center pane:** pure shared work canvas only — sheet/grid, character, paths, mechanisms, blueprint overlays, handles, and short in-canvas hints.
+- **Right pane:** selected-item inspector only — numeric parameters, bindings, toggles, warnings, and advanced fine tuning.
+
+Do not put broad galleries, recipe lists, onboarding choices, or primary navigation in the right inspector. Do not put parameter forms or scrollable explanation panels inside the center canvas area.
+
 ## Interaction principles
 
 - **Novice first:** buttons should read like actions: “Draw free path”, “Use this mechanism”, “Generate package”.
