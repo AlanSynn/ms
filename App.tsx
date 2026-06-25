@@ -624,7 +624,7 @@ const App: React.FC = () => {
                         {stage === 'options' && <Options project={project} dispatch={dispatch} />}
                     </div>
                     {stage !== 'character' && <WorkflowStatusStrip stage={stage} project={project} selectedPart={selectedPart} selectedPath={selectedPath} />}
-                    {stage !== 'character' && <WorkspacePlayerDock isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} speed={project.settings.animationSpeed} drawMode={drawMode} />}
+                    {stage !== 'character' && stage !== 'foundry' && <WorkspacePlayerDock isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} speed={project.settings.animationSpeed} drawMode={drawMode} />}
                     {stage !== 'character' && <footer className="status-bar" data-testid="status-bar">{commandStatus} · parts:{project.partOrder.length} · paths:{Object.keys(project.paths).length} · mechs:{project.mechanisms.length} · zoom {Math.round(canvasViewport.zoom * 100)}%</footer>}
                 </section>
             </div>
@@ -1716,9 +1716,9 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 <button className="btn-primary" disabled={hardBlocked} onClick={() => onExport(makePackage())}>Add to Mechanism Tab</button>
             </div>
             <svg viewBox="0 0 360 240" className="foundry-preview h-[520px] w-full rounded-[2rem]">
-                {showTrail && <path data-testid="foundry-trail-overlay" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="12" strokeLinecap="round" opacity="0.14"/>}
-                {showPathPreview && <path data-testid="foundry-path-preview" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="4" strokeLinecap="round" opacity="0.95"/>}
-                <MechanismLinkagePreview simulation={selectedSimulation} color={foundry.color} testId="foundry-selected-linkage" />
+                {showTrail && <path data-testid="foundry-trail-overlay" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="12" strokeLinecap="round" opacity="0.12"/>}
+                {showPathPreview && <path data-testid="foundry-path-preview" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="3" strokeLinecap="round" strokeDasharray="9 7" opacity="0.48"/>}
+                <MechanismLinkagePreview mechanism={landedFoundry} simulation={selectedSimulation} testId="foundry-selected-linkage" />
                 {showForces && playhead && <g data-testid="foundry-forces-overlay" stroke="#ef4444" strokeWidth="3" strokeLinecap="round">
                     <line x1={playhead.x} y1={playhead.y} x2={180} y2={120} />
                     <line x1={playhead.x} y1={playhead.y} x2={playhead.x} y2={Math.max(22, playhead.y - 42)} />
@@ -1726,7 +1726,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 {showVelocity && playhead && <g data-testid="foundry-velocity-overlay" stroke="#10b981" strokeWidth="4" strokeLinecap="round">
                     <line x1={playhead.x} y1={playhead.y} x2={playhead.x + (nextPoint.x - previousPoint.x) * 2.2} y2={playhead.y + (nextPoint.y - previousPoint.y) * 2.2} />
                 </g>}
-                {playhead && <circle data-testid="foundry-playhead" cx={playhead.x} cy={playhead.y} r="6" fill="#5a6cff" stroke="white" strokeWidth="3" />}
+                {playhead && <circle data-testid="foundry-playhead" cx={playhead.x} cy={playhead.y} r="7" fill="#f472b6" stroke="white" strokeWidth="3" />}
                 <text x="22" y="38" className="foundry-preview-label" fontSize="16" fontWeight="800">{library.label} · {range.percentValid === 1 ? '360° valid' : range.warning}</text>
             </svg>
             <div className="mt-3 text-xs font-bold text-slate-500" data-testid="foundry-toolbar-state">Toolbar: {foundryPlaying ? 'playing' : 'paused'} · path {showPathPreview ? 'shown' : 'hidden'} · phase {Math.round(foundryPhase * 180 / Math.PI)}°</div>
@@ -1741,7 +1741,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                     return <button key={type} type="button" className={`recommendation-card mechanism-choice ${foundry.type === type ? 'active' : ''}`} onClick={() => setFoundry({ ...createDefaultMechanism(type, 'foundry-preview'), color: foundry.color, presetId: 'balanced', recommendation: FOUNDRY_PRESETS.balanced.recommendation })}>
                         <svg viewBox="0 0 180 96" className="mechanism-choice-sim" data-testid={`foundry-mini-simulation-${type}`} aria-hidden="true">
                             <path d={cardSimulation.pathD} fill="none" stroke={foundry.color} strokeWidth="2.5" strokeLinecap="round" opacity="0.45"/>
-                            <MechanismLinkagePreview simulation={cardSimulation} color={foundry.color} testId={`foundry-mini-linkage-${type}`} compact />
+                            <MechanismLinkagePreview mechanism={cardMechanism} simulation={cardSimulation} testId={`foundry-mini-linkage-${type}`} compact />
                         </svg>
                         <div className="font-bold text-slate-800">{item.label}</div>
                         <div>{item.goodFor}</div>
@@ -2115,7 +2115,7 @@ const fitMechanismSimulation = (mechanism: MechanismConfig, angle: number, width
     const pathPoints = generateCurvePoints(mechanism, resolution).points;
     const statePoints = [state.p1, state.p2, state.j1, state.j2, state.aux, state.effector].filter((point): point is Point => Boolean(point));
     const source = [...pathPoints, ...statePoints];
-    if (!source.length) return { pathPoints: [] as Point[], pathD: '', state };
+    if (!source.length) return { pathPoints: [] as Point[], pathD: '', state, scale: 1 };
     const xs = source.map(p => p.x), ys = source.map(p => p.y);
     const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
     const scale = Math.min((width - 34) / Math.max(1, maxX - minX), (height - 32) / Math.max(1, maxY - minY));
@@ -2126,6 +2126,7 @@ const fitMechanismSimulation = (mechanism: MechanismConfig, angle: number, width
     return {
         pathPoints: fittedPath,
         pathD: pointsToSvgPath(fittedPath),
+        scale,
         state: {
             ...state,
             p1: map(state.p1),
@@ -2138,15 +2139,82 @@ const fitMechanismSimulation = (mechanism: MechanismConfig, angle: number, width
     };
 };
 
-const MechanismLinkagePreview = ({ simulation, color, testId, compact = false }: { simulation: ReturnType<typeof fitMechanismSimulation>; color: string; testId: string; compact?: boolean }) => {
+const MechanismLinkagePreview = ({ mechanism, simulation, testId, compact = false }: { mechanism: MechanismConfig; simulation: ReturnType<typeof fitMechanismSimulation>; testId: string; compact?: boolean }) => {
     const s = simulation.state;
     const r = compact ? 3 : 5;
-    const stroke = compact ? 3 : 5;
-    const link = (a: Point | undefined, b: Point | undefined, key: string) => a && b ? <line key={key} x1={a.x} y1={a.y} x2={b.x} y2={b.y} /> : null;
-    return <g data-testid={testId} stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" fill="none">
-        {[link(s.p1, s.j1, 'crank'), link(s.j1, s.j2, 'coupler'), link(s.j2, s.p2, 'rocker'), link(s.p2, s.aux, 'aux-a'), link(s.aux, s.j2, 'aux-b')]}
-        {[s.p1, s.p2, s.j1, s.j2, s.aux].filter((point): point is Point => Boolean(point)).map((point, i) => <circle key={i} cx={point.x} cy={point.y} r={r} fill="white" />)}
-        <circle cx={s.effector.x} cy={s.effector.y} r={r + 1} fill={color} stroke="white" strokeWidth={compact ? 1.5 : 3}/>
+    const stroke = compact ? 3 : 4.5;
+    const scaled = (length: number, min: number, max: number) => Math.max(min, Math.min(max, length * simulation.scale));
+    const test = (name: string) => compact ? undefined : `foundry-mechanism-${name}`;
+    const radius = (length: number, min = compact ? 8 : 16, max = compact ? 28 : 58) => scaled(Math.max(1, length), min, max);
+    const link = (a: Point | undefined, b: Point | undefined, key: string, className = 'mechanism-link', testIdName?: string) =>
+        a && b ? <line key={key} data-testid={testIdName ? test(testIdName) : undefined} className={className} x1={a.x} y1={a.y} x2={b.x} y2={b.y} /> : null;
+    const guide = (center: Point, a: Point, b: Point, key: string) => {
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const reach = compact ? 42 : 95;
+        const ux = dx / len;
+        const uy = dy / len;
+        return <g key={key} data-testid={test('guide')}>
+            <line className="mechanism-guide-bg" x1={center.x - ux * reach} y1={center.y - uy * reach} x2={center.x + ux * reach} y2={center.y + uy * reach} />
+            <line className="mechanism-frame" x1={center.x - ux * reach} y1={center.y - uy * reach} x2={center.x + ux * reach} y2={center.y + uy * reach} />
+        </g>;
+    };
+    const pins = [s.p1, s.p2, s.j1, s.j2, s.aux].filter((point): point is Point => Boolean(point));
+    const gearPreview = (mechanism.type === 'gear' || mechanism.type === 'planetary_gear') && <g data-testid={test('gear')}>
+        {mechanism.type === 'gear' && <>
+            <circle className="mechanism-gear" cx={s.p1.x} cy={s.p1.y} r={radius(mechanism.crankLength)} />
+            <circle className="mechanism-gear secondary" cx={s.p2.x} cy={s.p2.y} r={radius(mechanism.rockerLength)} />
+        </>}
+        {mechanism.type === 'planetary_gear' && <>
+            <circle className="mechanism-gear" cx={s.p1.x} cy={s.p1.y} r={radius(mechanism.crankLength, compact ? 7 : 12, compact ? 22 : 42)} />
+            <circle className="mechanism-gear secondary" cx={s.p2.x} cy={s.p2.y} r={radius(mechanism.rockerLength, compact ? 7 : 12, compact ? 22 : 42)} />
+            <circle className="mechanism-gear carrier" cx={s.p1.x} cy={s.p1.y} r={Math.max(radius(mechanism.groundLength, compact ? 16 : 30, compact ? 52 : 105), radius(mechanism.crankLength))} />
+        </>}
+    </g>;
+    const links = (() => {
+        if (mechanism.type === 'crank') return [link(s.p1, s.j1, 'driver', 'mechanism-driver', 'driver'), link(s.j1, s.effector, 'output', 'mechanism-output', 'output')];
+        if (mechanism.type === '5bar') return [
+            link(s.p1, s.p2, 'frame', 'mechanism-frame', 'frame'),
+            link(s.p1, s.j1, 'driver-a', 'mechanism-driver', 'driver'),
+            link(s.p2, s.aux, 'driver-b', 'mechanism-driver'),
+            link(s.j1, s.j2, 'rod-a', 'mechanism-link', 'link'),
+            link(s.aux, s.j2, 'rod-b', 'mechanism-link'),
+            link(s.j2, s.effector, 'output', 'mechanism-output', 'output')
+        ];
+        if (mechanism.type === 'piston' || mechanism.type === 'yoke' || mechanism.type === 'cam') return [
+            guide(s.j2, s.p1, s.j2, 'guide'),
+            mechanism.type === 'cam'
+                ? <circle key="cam-body" data-testid={test('driver')} className="mechanism-cam" cx={s.p1.x} cy={s.p1.y} r={radius(mechanism.crankLength, compact ? 8 : 18, compact ? 32 : 62)} />
+                : link(s.p1, s.j1, 'driver', 'mechanism-driver', 'driver'),
+            link(s.j1, s.j2, 'slider-link', 'mechanism-link', 'link'),
+            link(s.j2, s.effector, 'output', 'mechanism-output', 'output')
+        ];
+        if (mechanism.type === 'quick-return') return [
+            link(s.p1, s.p2, 'frame', 'mechanism-frame', 'frame'),
+            link(s.p1, s.j1, 'driver', 'mechanism-driver', 'driver'),
+            link(s.p2, s.j2, 'slotted-rocker', 'mechanism-link', 'link'),
+            link(s.j2, s.effector, 'output', 'mechanism-output', 'output')
+        ];
+        if (mechanism.type === 'gear' || mechanism.type === 'planetary_gear') return [
+            link(s.p1, s.p2, 'gear-frame', 'mechanism-frame', 'frame'),
+            link(s.p1, s.j1, 'gear-driver', 'mechanism-driver', 'driver'),
+            link(s.p2, s.j2, 'gear-output-arm', 'mechanism-link', 'link'),
+            link(s.j2, s.effector, 'gear-output', 'mechanism-output', 'output')
+        ];
+        return [
+            link(s.p1, s.p2, 'frame', 'mechanism-frame', 'frame'),
+            link(s.p1, s.j1, 'driver', 'mechanism-driver', 'driver'),
+            link(s.j1, s.j2, 'coupler', 'mechanism-link', 'link'),
+            link(s.j2, s.p2, 'rocker', 'mechanism-link'),
+            link(s.j1, s.effector, 'output', 'mechanism-output', 'output')
+        ];
+    })();
+    return <g data-testid={testId} strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" fill="none">
+        {gearPreview}
+        {links}
+        {pins.map((point, i) => <circle key={i} className="mechanism-pin" cx={point.x} cy={point.y} r={r} />)}
+        <circle data-testid={test('output-point')} className="mechanism-effector" cx={s.effector.x} cy={s.effector.y} r={r + 2}/>
     </g>;
 };
 

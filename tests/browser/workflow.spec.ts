@@ -681,6 +681,10 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await expect(page.getByRole('heading', { name: 'Mechanism Foundry' })).toBeVisible();
   await expect(page.locator('[data-testid^="foundry-mini-simulation-"]')).toHaveCount(8);
   await expect(page.getByTestId('foundry-selected-linkage')).toBeVisible();
+  await expect(page.getByTestId('foundry-mechanism-driver')).toHaveCount(1);
+  await expect(page.getByTestId('foundry-mechanism-link')).toHaveCount(1);
+  await expect(page.getByTestId('foundry-mechanism-output')).toHaveCount(1);
+  await expect(page.getByTestId('workspace-player-dock')).toHaveCount(0);
   await expect(page.getByTestId('foundry-mini-linkage-gear')).toBeVisible();
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Four-bar linkage');
   await expect(page.getByTestId('foundry-feasibility')).toContainText('360° valid sampled motion');
@@ -692,6 +696,7 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await page.getByLabel('Foundry mechanism type').selectOption('gear');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Gear train');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('ratio sign');
+  await expect(page.getByTestId('foundry-mechanism-gear')).toBeVisible();
   await page.getByLabel('Foundry mechanism type').selectOption('4bar');
   await page.getByLabel('Foundry preset').selectOption('compact');
   await expect(page.getByTestId('foundry-target-summary')).toContainText('smaller footprint');
