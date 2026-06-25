@@ -5,6 +5,8 @@ Created: 2026-06-25
 Scope: MotionSmith / MechAnim web editor after current 2D workflow stabilization  
 Baseline commit: `f295cdb Pin mechanism outputs to driven joints`
 
+> Direction update (2026-06-25): this plan is refined by [`toon-25d-main-3d-unlock-plan.md`](toon-25d-main-3d-unlock-plan.md). The current preferred direction is **toon/WebGL 2.5D as the main workbench** and **3D as a camera unlock**, rather than SVG/CSS 2.5D first. The canonical 2D/fabrication boundary and physics sidecar rules below still stand.
+
 ## 0. Decision in one paragraph
 
 Build the full realistic platform as **2D-canonical authoring + derived 2.5D/3D/physics views**. The existing editor already works around `ProjectState`, SVG path drawing, mechanism kinematics, IK preview, and blueprint export. Do not replace that with a three.js editor. Instead, add a renderer/simulation boundary: the 2D scene remains the only source of truth for editing and fabrication; 2.5D, 3D, and physics are faithful lenses and sidecars that read the same state, emit warnings/samples, and write back only through explicit user actions.
