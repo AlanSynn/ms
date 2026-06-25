@@ -183,6 +183,46 @@ const makeSvg = (project: ProjectState, recipes: FabricationRecipe[]) => {
 
 const makeAssemblyGuideHtml = (project: ProjectState, recipes: FabricationRecipe[], warnings: string[]) => {
     const esc = (value: unknown) => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] ?? ch));
+    const firstRecipe = recipes[0];
+    const explodedSvg = `<svg class="exploded-guide" viewBox="0 0 900 520" role="img" aria-label="Exploded view assembly order">
+<defs>
+<pattern id="guide-grid" width="28" height="28" patternUnits="userSpaceOnUse"><path d="M 28 0 L 0 0 0 28" fill="none" stroke="#dbeafe" stroke-width="1"/></pattern>
+<linearGradient id="guide-cardboard" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#f8dfaa"/><stop offset="0.55" stop-color="#e8bc73"/><stop offset="1" stop-color="#b97731"/></linearGradient>
+<filter id="guide-shadow" x="-20%" y="-20%" width="150%" height="150%"><feDropShadow dx="12" dy="16" stdDeviation="10" flood-color="#0f172a" flood-opacity="0.18"/></filter>
+</defs>
+<rect width="900" height="520" rx="28" fill="#ffffff"/>
+<rect width="900" height="520" fill="url(#guide-grid)" opacity="0.68"/>
+<g transform="translate(110 38)" filter="url(#guide-shadow)">
+<path d="M 70 390 C 190 322, 320 298, 510 340 S 665 404, 760 330" fill="none" stroke="#6366f1" stroke-width="8" stroke-linecap="round" stroke-dasharray="18 15" opacity=".78"/>
+<text x="590" y="352" class="guide-blue">Path projection</text>
+<g transform="translate(160 338)">
+<rect x="0" y="0" width="260" height="34" rx="17" fill="#d8b077" stroke="#7c4a21" stroke-width="4"/>
+<circle cx="34" cy="17" r="10" fill="#fff" stroke="#2563eb" stroke-width="4"/><circle cx="226" cy="17" r="10" fill="#fff" stroke="#2563eb" stroke-width="4"/>
+<text x="82" y="66" class="guide-label">Z=0 Base</text>
+</g>
+<g transform="translate(154 222) rotate(-26)">
+<rect x="0" y="0" width="220" height="34" rx="17" fill="#f4d49b" stroke="#7c4a21" stroke-width="4"/>
+<circle cx="30" cy="17" r="10" fill="#fff" stroke="#2563eb" stroke-width="4"/><circle cx="190" cy="17" r="10" fill="#fff" stroke="#2563eb" stroke-width="4"/>
+</g>
+<text x="120" y="210" class="guide-label">Z=1 Input</text>
+<g transform="translate(420 178) rotate(24)">
+<rect x="0" y="0" width="250" height="34" rx="17" fill="url(#guide-cardboard)" stroke="#7c4a21" stroke-width="4"/>
+<circle cx="32" cy="17" r="10" fill="#fff" stroke="#2563eb" stroke-width="4"/><circle cx="218" cy="17" r="10" fill="#fff" stroke="#2563eb" stroke-width="4"/>
+</g>
+<text x="620" y="170" class="guide-label">Z=1 Output</text>
+<g transform="translate(324 74)">
+<rect x="0" y="0" width="245" height="34" rx="17" fill="#e7c48a" stroke="#7c4a21" stroke-width="4"/>
+<circle cx="36" cy="17" r="10" fill="#fff" stroke="#2563eb" stroke-width="4"/><circle cx="208" cy="17" r="10" fill="#fff" stroke="#2563eb" stroke-width="4"/>
+<text x="58" y="-18" class="guide-label">Z=2 Coupler</text>
+</g>
+</g>
+<g transform="translate(38 36)">
+<rect width="252" height="58" rx="20" fill="#ffffff" stroke="#c7d2fe" stroke-width="2"/>
+<text x="22" y="25" class="guide-title">Exploded view</text>
+<text x="22" y="45" class="guide-muted">Assembly → Exploded Z-axis order</text>
+</g>
+${firstRecipe ? `<text x="40" y="492" class="guide-muted">First recipe: ${esc(firstRecipe.mechanismId)} · ${esc(firstRecipe.type)} · hole ${esc(firstRecipe.boardCoordinate)}</text>` : ''}
+</svg>`;
     const recipeSections = recipes.map(recipe => `<section>
 <h2>${esc(recipe.mechanismId)} · ${esc(recipe.type)}</h2>
 <p><strong>Board coordinate:</strong> ${esc(recipe.boardCoordinate)} (${recipe.sceneAnchor.x.toFixed(1)}, ${recipe.sceneAnchor.y.toFixed(1)} scene units)</p>
@@ -191,7 +231,20 @@ ${recipe.warnings.length ? `<p><strong>Warnings:</strong> ${recipe.warnings.map(
 <h3>Required parts</h3><ul>${recipe.requiredParts.map(part => `<li>${esc(part.name)} × ${part.quantity}</li>`).join('')}</ul>
 <h3>Steps</h3><ol>${recipe.steps.map(step => `<li>${esc(step)}</li>`).join('')}</ol>
 </section>`).join('');
-    return `<!doctype html><html><meta charset="utf-8"><title>${esc(project.metadata.name)} assembly</title><body><h1>${esc(project.metadata.name)} assembly guide</h1><p>Profile ${esc(project.settings.physicalKit.profileKey)} · ${project.settings.physicalKit.gridPitchMm}mm grid.</p>${warnings.map(w => `<p><strong>Warning:</strong> ${esc(w)}</p>`).join('')}${recipeSections}</body></html>`;
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(project.metadata.name)} assembly</title><style>
+body{margin:0;background:#f8f9ff;color:#172033;font-family:Inter,Arial,sans-serif;}
+.page{max-width:980px;margin:0 auto;padding:28px;}
+.print-actions{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;gap:16px;align-items:center;margin:-28px -28px 20px;padding:14px 28px;background:rgba(255,255,255,.94);border-bottom:1px solid #dbe3f0;backdrop-filter:blur(12px);}
+button{border:1px solid #cbd5e1;border-radius:999px;background:#fff;color:#172033;padding:10px 16px;font-weight:800;cursor:pointer;}
+h1{margin:0;font-size:40px;line-height:.98;letter-spacing:-.05em;} h2{margin:0 0 10px;font-size:24px;} h3{margin:18px 0 8px;}
+.subtitle{color:#64748b;font-weight:750;}
+.exploded-guide{display:block;width:100%;margin:22px 0;border:1px solid #dbe3f0;border-radius:28px;background:#fff;box-shadow:0 22px 70px rgba(15,23,42,.10);}
+.guide-title{font-size:20px;font-weight:900;fill:#172033}.guide-label{font-size:18px;font-weight:900;fill:#64748b}.guide-muted{font-size:14px;font-weight:800;fill:#64748b}.guide-blue{font-size:18px;font-weight:900;fill:#4f46e5}
+.warning{border:1px solid #fed7aa;border-radius:14px;background:#fff7ed;padding:12px;margin:10px 0;font-weight:750;}
+section{break-inside:avoid;margin:18px 0;padding:20px;border:1px solid #dbe3f0;border-radius:22px;background:#fff;box-shadow:0 16px 46px rgba(15,23,42,.06);}
+li{margin:.32rem 0;line-height:1.42;}
+@media print{body{background:#fff}.page{max-width:none;padding:10mm}.print-actions{display:none}.exploded-guide,section{box-shadow:none}section{page-break-inside:avoid}}
+</style></head><body><main class="page"><div class="print-actions"><strong>Printable assembly guide</strong><button onclick="window.print()">Print guide</button></div><h1>${esc(project.metadata.name)} assembly guide</h1><p class="subtitle">Profile ${esc(project.settings.physicalKit.profileKey)} · ${project.settings.physicalKit.gridPitchMm}mm grid · exploded view for foundry and assembly handoff.</p>${explodedSvg}${warnings.map(w => `<p class="warning"><strong>Warning:</strong> ${esc(w)}</p>`).join('')}${recipeSections}</main></body></html>`;
 };
 
 const makePdfDocument = (content: string) => {
@@ -274,6 +327,22 @@ const makeSimplePdf = (title: string, lines: string[]) => {
     return makePdfDocument(content);
 };
 
+const makeAssemblyGuidePdf = (project: ProjectState, recipes: FabricationRecipe[], warnings: string[]) => makeSimplePdf(
+    `${project.metadata.name} Printable assembly guide`,
+    [
+        'Exploded view / Assembly -> Exploded Z-axis order',
+        'Path projection / Z=0 Base / Z=1 Input / Z=1 Output / Z=2 Coupler',
+        `Profile ${project.settings.physicalKit.profileKey} / ${project.settings.physicalKit.gridPitchMm}mm grid`,
+        ...warnings.map(warning => `Warning: ${warning}`),
+        ...recipes.flatMap(recipe => [
+            `${recipe.mechanismId} / ${recipe.type} / ${recipe.boardCoordinate}`,
+            `Target: ${recipe.targetPartName ?? recipe.targetPartId ?? 'unbound'} / path ${recipe.targetPathId ?? 'none'} / anchor ${recipe.targetAnchorJointId ?? 'part default'}`,
+            `Required parts: ${recipe.requiredParts.map(part => `${part.name} x ${part.quantity}`).join(', ')}`,
+            ...recipe.steps
+        ])
+    ]
+);
+
 export const createFabricationPackage = (project: ProjectState): FabricationPackage => {
     const validation = validateForFabrication(project);
     if (validation.errors.length) throw new Error(validation.errors.join('\n'));
@@ -329,7 +398,7 @@ export const createFabricationPackage = (project: ProjectState): FabricationPack
         svg: makeSvg(project, recipes),
         cutSheetPdf: makeCutSheetPdf(project, recipes),
         assemblyGuideHtml: makeAssemblyGuideHtml(project, recipes, validation.warnings),
-        assemblyGuidePdf: makeSimplePdf(`${project.metadata.name} assembly`, recipes.flatMap(r => [`${r.mechanismId} at ${r.boardCoordinate}`, ...r.steps])),
+        assemblyGuidePdf: makeAssemblyGuidePdf(project, recipes, validation.warnings),
         metadataJson: JSON.stringify(metadata, null, 2)
     };
 };

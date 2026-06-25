@@ -130,6 +130,9 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await page.getByRole('button', { name: /Mechanism Foundry/i }).click();
   await expect(page.getByRole('heading', { name: 'Mechanism Foundry' })).toBeVisible();
   await expect(page.getByText('Sandbox preview')).toBeVisible();
+  await expect(page.getByTestId('foundry-exploded-guide')).toContainText('Exploded view');
+  await expect(page.getByTestId('foundry-z-layer-labels')).toContainText('Z=0 Base');
+  await expect(page.getByTestId('foundry-z-layer-labels')).toContainText('Path projection');
   await page.getByText('Mechanism options').click();
   await expect(page.getByLabel('Foundry preset')).toHaveValue('balanced');
   const foundryTargetSummary = page.getByTestId('foundry-target-summary');
@@ -194,6 +197,13 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await page.getByRole('button', { name: /Generate package/i }).click();
   await expect(page.getByText(/Default export:/)).toBeVisible();
   await expect(page.getByText(/Board (?!pending)/)).toHaveCount(1);
+  await expect(page.getByTestId('assembly-guide-web-preview')).toContainText('Printable assembly guide');
+  await expect(page.getByTestId('assembly-guide-web-preview')).toContainText('Exploded view');
+  await expect(page.getByRole('button', { name: 'Print guide' })).toBeVisible();
+  const webGuideFrame = page.frameLocator('[data-testid="assembly-guide-preview-frame"]');
+  await expect(webGuideFrame.getByText('Exploded view').first()).toBeVisible();
+  await expect(webGuideFrame.getByText('Path projection')).toBeVisible();
+  await expect(webGuideFrame.getByText('Z=0 Base')).toBeVisible();
   await expect(page.getByTestId('assembly-guide-preview')).toContainText(/Target Right arm · path path-right-arm · anchor right_(hand|elbow)/);
   await expect(page.getByTestId('assembly-guide-preview')).toContainText('Warnings: none');
   await expect(page.getByRole('button', { name: 'JSON', exact: true })).toBeVisible();
@@ -244,6 +254,12 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   expect(guideText).toContain('path-right-arm');
   expect(guideText).toContain('right_');
   expect(guideText).toContain('Required parts');
+  expect(guideText).toContain('Printable assembly guide');
+  expect(guideText).toContain('Exploded view');
+  expect(guideText).toContain('Path projection');
+  expect(guideText).toContain('Z=0 Base');
+  expect(guideText).toContain('window.print');
+  expect(metadata.recipes[0].steps.every((step: string) => guideText.includes(step)), 'downloaded guide includes every recipe step').toBe(true);
 
   const [pdfDownload] = await Promise.all([
     page.waitForEvent('download'),
@@ -252,8 +268,14 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   expect(pdfDownload.suggestedFilename()).toMatch(/assembly\.pdf$/);
   const pdfPath = await pdfDownload.path();
   expect(pdfPath, 'pdf download path').toBeTruthy();
-  const pdfHeader = (await readFile(pdfPath!)).subarray(0, 5).toString('utf8');
+  const pdfBuffer = await readFile(pdfPath!);
+  const pdfHeader = pdfBuffer.subarray(0, 5).toString('utf8');
   expect(pdfHeader).toBe('%PDF-');
+  const pdfText = pdfBuffer.toString('utf8');
+  expect(pdfText).toContain('Printable assembly guide');
+  expect(pdfText).toContain('Exploded view');
+  expect(pdfText).toContain('Path projection');
+  expect(pdfText).toContain('Z=0 Base');
 
   const [cutSheetPdfDownload] = await Promise.all([
     page.waitForEvent('download'),

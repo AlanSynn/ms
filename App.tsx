@@ -2122,6 +2122,23 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                         <path d="M 0 0 L 7 3.5 L 0 7 z" fill="#ef4444" />
                     </marker>
                 </defs>
+                <rect width="360" height="240" fill="url(#foundry-cad-grid)" opacity="0.48" pointerEvents="none" />
+                <g data-testid="foundry-exploded-guide" className="foundry-exploded-guide" transform="translate(218 13)" pointerEvents="none">
+                    <rect x="0" y="0" width="126" height="38" rx="12" fill="rgba(255,255,255,.94)" stroke="#c7d2fe" strokeWidth="1.2" />
+                    <text x="12" y="14" fontSize="8" fontWeight="950" fill="#1e293b">Exploded view</text>
+                    <line x1="12" y1="24" x2="112" y2="24" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
+                    <circle cx="86" cy="24" r="5" fill="#5a6cff" stroke="#ffffff" strokeWidth="2" />
+                    <text x="10" y="35" fontSize="6" fontWeight="850" fill="#64748b">Assembly</text>
+                    <text x="80" y="35" fontSize="6" fontWeight="850" fill="#64748b">Exploded</text>
+                </g>
+                <g data-testid="foundry-z-layer-labels" className="foundry-z-layer-labels" pointerEvents="none">
+                    <path d="M 70 188 C 105 170, 132 162, 176 168 S 244 194, 286 174" fill="none" stroke="#6366f1" strokeWidth="2" strokeDasharray="5 5" opacity="0.7" />
+                    <text x="228" y="174" fontSize="8" fontWeight="950" fill="#4f46e5">Path projection</text>
+                    <text x="54" y="205" fontSize="8" fontWeight="950" fill="#64748b">Z=0 Base</text>
+                    <text x="42" y="116" fontSize="8" fontWeight="950" fill="#64748b">Z=1 Input</text>
+                    <text x="250" y="116" fontSize="8" fontWeight="950" fill="#64748b">Z=1 Output</text>
+                    <text x="146" y="48" fontSize="8" fontWeight="950" fill="#64748b">Z=2 Coupler</text>
+                </g>
                 <g ref={foundryCameraRigRef} data-testid="foundry-camera-rig" data-camera-preset={foundryCamera.preset} data-camera-yaw={foundryCamera.yaw.toFixed(1)} data-camera-pitch={foundryCamera.pitch.toFixed(1)} transform={foundryCameraTransformValue}>
                     {showTrail && <path data-testid="foundry-trail-overlay" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="12" strokeLinecap="round" opacity="0.12"/>}
                     {showPathPreview && <path data-testid="foundry-path-preview" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="4" strokeLinecap="round" strokeDasharray="10 8" opacity="0.72"/>}
@@ -2350,6 +2367,15 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
     const downloadSvg = () => pkg && downloadText(`${pkg.id}.svg`, pkg.svg, 'image/svg+xml');
     const downloadCutSheetPdf = () => pkg && downloadText(`${pkg.id}-cut-sheet.pdf`, pkg.cutSheetPdf, 'application/pdf');
     const downloadAssemblyPdf = () => pkg && downloadText(`${pkg.id}-assembly.pdf`, pkg.assemblyGuidePdf, 'application/pdf');
+    const printGuide = () => {
+        const guideFrame = document.querySelector<HTMLIFrameElement>('[data-testid="assembly-guide-preview-frame"]');
+        if (guideFrame?.contentWindow) {
+            guideFrame.contentWindow.focus();
+            guideFrame.contentWindow.print();
+            return;
+        }
+        if (pkg) downloadText(`${pkg.id}-assembly.html`, pkg.assemblyGuideHtml, 'text/html');
+    };
     const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
     const selectedRecipe = recipes.find(recipe => recipe.mechanismId === selectedRecipeId) ?? recipes[0];
     return <EditorStageFrame
@@ -2406,6 +2432,21 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
             canvas: canvasPane(<div className="path-canvas-shell canvas-workspace overflow-hidden p-0" data-testid="blueprint-canvas-preview">
             <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
             <Canvas project={project} config={config} setConfig={setConfig} selectedId={project.selectedMechanismId ?? null} setSelectedId={id => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: id })} isPlaying={isPlaying} showTrace={true} isDrawMode={false} userPath={[]} setUserPath={() => {}} angle={angle} setAngle={setAngle} viewport={viewport} setViewport={setViewport}/>
+            {pkg && <section className="assembly-guide-web-preview" data-testid="assembly-guide-web-preview" aria-label="Printable assembly guide">
+                <div className="assembly-guide-preview-head">
+                    <div>
+                        <div className="section-title">Printable assembly guide</div>
+                        <h3>Exploded view document</h3>
+                    </div>
+                    <button className="btn-secondary" onClick={printGuide}>Print guide</button>
+                </div>
+                <div className="assembly-guide-meta">
+                    <span>{recipes.length} recipe{recipes.length === 1 ? '' : 's'}</span>
+                    <span>{project.settings.physicalKit.gridPitchMm}mm grid</span>
+                    <span>{selectedRecipe?.type ?? 'mechanism'}</span>
+                </div>
+                <iframe title="Assembly guide preview" data-testid="assembly-guide-preview-frame" className="assembly-guide-preview-frame" srcDoc={pkg.assemblyGuideHtml} />
+            </section>}
         </div>),
             inspector: inspectorPane(<section className="stage-pane-stack" data-testid="assembly-guide-preview">
             <div>
