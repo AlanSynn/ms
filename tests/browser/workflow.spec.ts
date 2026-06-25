@@ -1081,7 +1081,7 @@ test('Shared player dock stays inside the editor content at lower and medium des
     await page.setViewportSize({ width, height: 768 });
     await page.goto('/');
     await openWavingArmTemplate(page);
-    await page.getByRole('button', { name: 'Rail mechanism parameters' }).click();
+    await page.getByTestId('workspace-steps').getByRole('button', { name: 'Mechanism Design' }).click();
     await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
 
     const leftBox = await page.getByTestId('stage-left-pane').boundingBox();
@@ -1119,6 +1119,15 @@ test('Workflow tabs keep left workflow, center canvas, and right inspector roles
   await page.goto('/');
   await openWavingArmTemplate(page);
 
+  const workflowRail = page.getByTestId('workspace-steps');
+  await expect(workflowRail).toBeVisible();
+  await expect(workflowRail).toContainText('Character Selection');
+  await expect(workflowRail).toContainText('Path Editor');
+  await expect(workflowRail).toContainText('Mechanism Foundry');
+  await expect(workflowRail).toContainText('Blueprint Export');
+  await expect(workflowRail.getByRole('button', { name: 'Path Editor' })).toHaveAttribute('aria-current', 'step');
+  expect(await workflowRail.evaluate(element => getComputedStyle(element).position)).toBe('fixed');
+
   const assertPaneContract = async (leftText: RegExp | string, centerText: RegExp | string, rightText: RegExp | string) => {
     const left = page.getByTestId('stage-left-pane');
     const center = page.getByTestId('stage-canvas-pane');
@@ -1151,6 +1160,8 @@ test('Workflow tabs keep left workflow, center canvas, and right inspector roles
     expect(surfaceBox!.y, 'work surface stays inside center top edge').toBeGreaterThanOrEqual(centerBox!.y - 1);
     expect(surfaceBox!.x + surfaceBox!.width, 'work surface stays inside center right edge').toBeLessThanOrEqual(centerBox!.x + centerBox!.width + 1);
     expect(surfaceBox!.y + surfaceBox!.height, 'work surface stays inside center bottom edge').toBeLessThanOrEqual(centerBox!.y + centerBox!.height + 1);
+    expect(centerBox!.width, 'center workspace dominates the side panes').toBeGreaterThan(leftBox!.width);
+    expect(centerBox!.width, 'center workspace dominates the inspector').toBeGreaterThan(rightBox!.width);
   };
 
   await assertPaneContract('Draw free path', 'Letter sheet', 'Selected inspector');
@@ -1174,6 +1185,34 @@ test('Workflow tabs keep left workflow, center canvas, and right inspector roles
   await page.getByTestId('stage-left-pane').getByRole('link', { name: 'Units' }).click();
   await expect.poll(() => rightInspector.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
   await expect(page.getByTestId('options-units')).toBeVisible();
+});
+
+test('Workflow rail remains reachable on short desktop and mobile fallback exposes every stage', async ({ page }) => {
+  await page.setViewportSize({ width: 901, height: 480 });
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  const rail = page.getByTestId('workspace-steps');
+  await expect(rail).toBeVisible();
+  await rail.getByRole('button', { name: 'Options' }).scrollIntoViewIfNeeded();
+  const optionsBox = await rail.getByRole('button', { name: 'Options' }).boundingBox();
+  expect(optionsBox, 'Options button is reachable in the fixed workflow rail').toBeTruthy();
+  expect(optionsBox!.y + optionsBox!.height, 'Options button scrolls inside short viewport').toBeLessThanOrEqual(481);
+  await rail.getByRole('button', { name: 'Options' }).click();
+  await expect(page.getByRole('heading', { name: 'Options' })).toBeVisible();
+  await expect(rail.getByRole('button', { name: 'Options' })).toHaveAttribute('aria-current', 'step');
+
+  await page.setViewportSize({ width: 390, height: 820 });
+  await page.getByRole('button', { name: 'Rail motion path' }).click();
+  const mobileNav = page.getByTestId('stage-left-pane').locator('.stage-nav-compact');
+  await expect(page.getByTestId('workspace-steps')).toBeHidden();
+  for (const name of ['Character Selection', 'Rail motion path', 'Mechanism Foundry', 'Rail mechanism parameters', 'Rail export package', 'Options']) {
+    await expect(mobileNav.getByRole('button', { name })).toBeVisible();
+  }
+  await expect(mobileNav.getByRole('button', { name: 'Rail motion path' })).toHaveAttribute('aria-current', 'step');
+  await mobileNav.getByRole('button', { name: 'Mechanism Foundry' }).click();
+  await expect(page.getByRole('heading', { name: 'Mechanism Foundry' })).toBeVisible();
+  await page.getByTestId('stage-left-pane').locator('.stage-nav-compact').getByRole('button', { name: 'Options' }).click();
+  await expect(page.getByRole('heading', { name: 'Options' })).toBeVisible();
 });
 
 test('Animation resumes after leaving path drawing mode', async ({ page }) => {

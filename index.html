@@ -19,13 +19,14 @@
         --ms-accent-soft: rgba(139, 92, 246, .10);
         --ms-accent-line: rgba(139, 92, 246, .28);
         --ms-shadow: 0 20px 40px -10px rgba(139, 92, 246, .15);
-        --ms-header-height: 5rem;
+        --ms-rail-width: 5.25rem;
+        --ms-header-height: 4.35rem;
         --ms-bottom-bars-height: 5.1rem;
         --ms-stage-body-height: calc(100vh - var(--ms-header-height) - var(--ms-bottom-bars-height));
-        --ms-stage-top-gap: 1.5rem;
-        --ms-left-pane-width: 300px;
-        --ms-right-pane-width: 360px;
-        --ms-stage-gap: 1.25rem;
+        --ms-stage-top-gap: .85rem;
+        --ms-left-pane-width: 280px;
+        --ms-right-pane-width: 324px;
+        --ms-stage-gap: .85rem;
       }
       * { box-sizing: border-box; }
       button, input, select { font: inherit; }
@@ -67,27 +68,41 @@
       .row { display: flex; justify-content: space-between; gap: 1rem; border-radius: 1.25rem; background: var(--ms-bg-soft); padding: 1rem; border: 1px solid var(--ms-line); }
       .app-shell { display: block; }
       .app-rail { position: fixed; left: 0; top: var(--ms-header-height); bottom: 0; width: 300px; z-index: 40; overflow: auto; background: rgba(255,255,255,.94); box-shadow: 0 4px 20px rgba(139,92,246,.05); }
-      .app-header { position: fixed; left: 0; right: 0; top: 0; height: var(--ms-header-height); z-index: 50; background: rgba(255,255,255,.90); box-shadow: 0 4px 20px rgba(139,92,246,.05); }
+      .workflow-rail { position: fixed; left: 0; top: 0; bottom: 0; z-index: 60; width: var(--ms-rail-width); display: flex; flex-direction: column; align-items: stretch; gap: .42rem; border-right: 1px solid var(--ms-line); border-radius: 0; border-left: 0; border-top: 0; border-bottom: 0; background: rgba(255,255,255,.94); box-shadow: 0 14px 36px rgba(15,23,42,.07); padding: .72rem .55rem; backdrop-filter: blur(18px); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+      .workflow-rail::-webkit-scrollbar { display: none; }
+      .workflow-rail-brand { display: grid; place-items: center; height: 2.85rem; border-radius: 1rem; background: var(--ms-accent); color: white; font-size: .76rem; font-weight: 950; letter-spacing: -.02em; box-shadow: 0 14px 30px rgba(139,92,246,.22); }
+      .workflow-rail button { position: relative; display: grid; grid-template-rows: auto auto auto; justify-items: center; gap: .12rem; min-height: 4.35rem; border-radius: 1.05rem; background: transparent; color: var(--ms-muted); padding: .42rem .24rem; transition: background .18s ease, color .18s ease, transform .18s ease, box-shadow .18s ease; }
+      .workflow-rail button:hover, .workflow-rail button.active { color: var(--ms-accent); background: var(--ms-accent-soft); }
+      .workflow-rail button.active { box-shadow: inset 0 0 0 1px var(--ms-accent-line); }
+      .workflow-rail-index { font-size: .66rem; font-weight: 950; color: var(--ms-line-strong); }
+      .workflow-rail-mark { display: grid; place-items: center; width: 1.75rem; height: 1.75rem; border-radius: .8rem; background: #fff; border: 1px solid var(--ms-line); color: var(--ms-text-soft); font-size: .78rem; font-weight: 950; }
+      .workflow-rail button.active .workflow-rail-mark { background: var(--ms-accent); color: white; border-color: transparent; }
+      .workflow-rail-short { max-width: 100%; color: inherit; font-size: .66rem; font-weight: 950; line-height: .84rem; text-align: center; white-space: normal; overflow-wrap: anywhere; }
+      .workflow-rail-full { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+      .app-header { position: fixed; left: var(--ms-rail-width); right: 0; top: 0; height: var(--ms-header-height); z-index: 50; background: rgba(255,255,255,.90); box-shadow: 0 4px 20px rgba(139,92,246,.05); }
       .app-header > div:first-child { gap: .9rem; }
       .app-header > div:last-child { flex-direction: row; align-items: center; gap: .75rem; }
+      .header-workflow-hint { border-left: 1px solid var(--ms-line); padding-left: 1rem; color: var(--ms-muted); font-size: .8rem; font-weight: 850; white-space: nowrap; }
       .stage-body { margin-left: 0; padding-top: calc(var(--ms-header-height) + var(--ms-stage-top-gap)) !important; min-height: calc(100vh - var(--ms-bottom-bars-height)); }
       .editor-workbench { background-color: var(--ms-bg-soft); background-size: 40px 40px; background-image: linear-gradient(to right, rgba(139,92,246,.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(139,92,246,.06) 1px, transparent 1px); }
-      .app-shell:not(.is-onboarding) .stage-body { display: flex; flex-direction: column; gap: .75rem; flex: none; height: var(--ms-stage-body-height); margin-top: var(--ms-header-height); min-height: 0; overflow: hidden; padding-top: var(--ms-stage-top-gap) !important; }
-      .editor-stage-frame { flex: 1 1 auto; min-height: 0; height: 100%; display: grid; grid-template-columns: minmax(250px, var(--ms-left-pane-width)) minmax(0, 1fr) minmax(300px, var(--ms-right-pane-width)); grid-template-areas: "left canvas right"; gap: var(--ms-stage-gap); }
+      .app-shell:not(.is-onboarding) .stage-body { display: flex; flex-direction: column; gap: .65rem; flex: none; height: var(--ms-stage-body-height); margin-left: var(--ms-rail-width); margin-top: var(--ms-header-height); min-height: 0; overflow: hidden; padding: var(--ms-stage-top-gap) var(--ms-stage-gap) .7rem !important; }
+      .editor-stage-frame { flex: 1 1 auto; min-height: 0; height: 100%; display: grid; grid-template-columns: minmax(245px, var(--ms-left-pane-width)) minmax(0, 1fr) minmax(280px, var(--ms-right-pane-width)); grid-template-areas: "left canvas right"; gap: var(--ms-stage-gap); }
       .stage-left-pane { grid-area: left; }
       .stage-canvas-pane { grid-area: canvas; }
       .stage-right-inspector { grid-area: right; }
-      .stage-left-pane, .stage-right-inspector { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+      .stage-left-pane, .stage-right-inspector { min-height: 0; overflow: auto; overscroll-behavior: contain; border-radius: 1.35rem; box-shadow: 0 12px 32px rgba(15,23,42,.06); }
       .stage-left-pane-content, .stage-pane-stack { min-height: 0; display: grid; gap: 1rem; align-content: start; }
       .stage-left-pane-content { height: 100%; }
       .path-panel { height: 100%; overflow: auto; overscroll-behavior: contain; padding-right: .15rem; }
       .stage-canvas-pane { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
-      .stage-canvas-pane > .workspace { height: 100%; min-height: 0; }
+      .stage-canvas-pane > .workspace, .stage-canvas-pane > .canvas-workspace { height: 100%; min-height: 0; }
+      .canvas-workspace { position: relative; background: transparent; border: 0; border-radius: 0; box-shadow: none; overflow: hidden; }
+      .canvas-workspace > .canvas-surface { border-radius: 0; border-color: transparent; background: transparent; box-shadow: none; }
       .stage-workflow-block, .stage-nav-compact { display: grid; gap: .75rem; }
       .stage-player-row { flex: 0 0 auto; display: flex; justify-content: center; pointer-events: none; }
-      .stage-nav-compact { border-top: 1px solid var(--ms-line); border-bottom: 1px solid var(--ms-line); padding: .9rem 0; }
+      .stage-nav-compact { display: none; border-top: 1px solid var(--ms-line); border-bottom: 1px solid var(--ms-line); padding: .9rem 0; }
       .stage-option-list { display: grid; gap: .4rem; margin-top: 1rem; }
-      .foundry-canvas-shell { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: .75rem; }
+      .foundry-canvas-shell { display: grid; place-items: stretch; }
       .foundry-canvas-shell .foundry-preview { height: 100%; min-height: 0; }
       .options-preview-shell { display: grid; place-items: stretch; }
       .options-preview-canvas { height: 100%; min-height: 0; }
@@ -190,8 +205,8 @@
       .command-menu { position: absolute; right: 0; top: calc(100% + .45rem); z-index: 20; min-width: 14rem; border: 1px solid var(--ms-line); border-radius: 1.1rem; background: rgba(255,255,255,.98); box-shadow: 0 24px 70px rgba(8,10,18,.14); padding: .45rem; display: grid; gap: .15rem; }
       .command-menu button { border-radius: .85rem; background: transparent; color: var(--ms-text-soft); padding: .55rem .7rem; text-align: left; font-size: .82rem; font-weight: 800; }
       .command-menu button:hover { background: var(--ms-bg-soft); color: var(--ms-text); }
-      .status-bar { position: relative; z-index: 30; margin-left: 0; border-top: 1px solid var(--ms-line); background: rgba(255,255,255,.72); color: var(--ms-muted); padding: .55rem 1.75rem; font-size: .76rem; font-weight: 800; backdrop-filter: blur(14px); }
-      .workflow-status-strip { position: relative; z-index: 30; margin-left: 0; display: flex; flex-wrap: wrap; gap: .5rem; border-top: 1px solid var(--ms-line); background: rgba(248,250,252,.82); padding: .55rem 1.75rem; color: var(--ms-text-soft); font-size: .76rem; font-weight: 850; backdrop-filter: blur(14px); }
+      .status-bar { position: relative; z-index: 30; margin-left: var(--ms-rail-width); border-top: 1px solid var(--ms-line); background: rgba(255,255,255,.72); color: var(--ms-muted); padding: .55rem 1.75rem; font-size: .76rem; font-weight: 800; backdrop-filter: blur(14px); }
+      .workflow-status-strip { position: relative; z-index: 30; margin-left: var(--ms-rail-width); display: flex; flex-wrap: wrap; gap: .5rem; border-top: 1px solid var(--ms-line); background: rgba(248,250,252,.82); padding: .55rem 1.75rem; color: var(--ms-text-soft); font-size: .76rem; font-weight: 850; backdrop-filter: blur(14px); }
       .workflow-status-strip span { border: 1px solid var(--ms-line); border-radius: 999px; background: #fff; padding: .35rem .65rem; }
       .workflow-status-strip strong { color: var(--ms-accent); margin-right: .25rem; }
       .canvas-zoom-toolbar { position: absolute; right: 1rem; top: 1rem; z-index: 30; display: inline-flex; align-items: center; gap: .25rem; border: 1px solid var(--ms-line); border-radius: 999px; background: rgba(255,255,255,.94); box-shadow: 0 18px 52px rgba(8,10,18,.08); padding: .35rem; pointer-events: auto; }
@@ -206,7 +221,10 @@
       .nav-active-dot { background: #fff; }
       .progress-icon { color: var(--ms-accent); }
       .body-preview-label { fill: var(--ms-accent); }
-      .foundry-preview { background: radial-gradient(circle at 32% 16%, rgba(139,92,246,.13), transparent 31%), linear-gradient(160deg, #ffffff 0%, #f8fbff 48%, #eff6ff 100%); border: 1px solid rgba(148,163,184,.38); box-shadow: inset 0 1px 0 rgba(255,255,255,.92), 0 26px 70px rgba(15,23,42,.10); }
+      .canvas-overlay-toolbar { position: absolute; left: .85rem; top: .85rem; z-index: 18; display: inline-flex; align-items: center; gap: .55rem; border: 1px solid var(--ms-line); border-radius: 999px; background: rgba(255,255,255,.9); box-shadow: 0 12px 32px rgba(15,23,42,.07); padding: .45rem .55rem; backdrop-filter: blur(12px); }
+      .canvas-overlay-toolbar h4 { margin: 0; }
+      .canvas-status-readout { position: absolute; left: .9rem; bottom: .85rem; z-index: 18; border: 1px solid var(--ms-line); border-radius: 999px; background: rgba(255,255,255,.88); color: var(--ms-muted); box-shadow: 0 12px 32px rgba(15,23,42,.06); padding: .42rem .65rem; font-size: .72rem; font-weight: 900; backdrop-filter: blur(12px); }
+      .foundry-preview { background-color: rgba(255,255,255,.72); background-size: 24px 24px; background-image: linear-gradient(to right, rgba(139,92,246,.07) 1px, transparent 1px), linear-gradient(to bottom, rgba(139,92,246,.07) 1px, transparent 1px); border: 1px solid rgba(148,163,184,.28); box-shadow: inset 0 1px 0 rgba(255,255,255,.92); }
       .foundry-preview.is-picking-anchor { cursor: crosshair; outline: 3px solid rgba(139,92,246,.32); outline-offset: 3px; }
       .foundry-preview-label { fill: var(--ms-text); }
       .foundry-depth-plane { fill: url(#foundry-board-plane); stroke: #cbd5e1; stroke-width: 1.4; filter: drop-shadow(10px 15px 18px rgba(15,23,42,.12)); }
@@ -257,11 +275,11 @@
       .progress-card .progress-stage { color: var(--ms-muted); }
       .progress-track { background: var(--ms-accent-soft); }
       .progress-bar { background: var(--ms-accent); }
-      .workspace-steps { display: flex; align-items: center; gap: .35rem; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+      .workspace-steps:not(.workflow-rail) { display: flex; align-items: center; gap: .35rem; min-width: 0; overflow-x: auto; scrollbar-width: none; }
       .current-stage-title { margin: .1rem 0 0; color: var(--ms-muted); font-size: .8rem; line-height: 1rem; font-weight: 900; letter-spacing: -.01em; }
-      .workspace-steps::-webkit-scrollbar { display: none; }
-      .workspace-steps button { white-space: nowrap; border-radius: 1rem; background: transparent; color: var(--ms-muted); padding: .58rem .72rem; font-size: .88rem; font-weight: 900; transition: background .18s ease, color .18s ease, transform .18s ease; }
-      .workspace-steps button:hover, .workspace-steps button.active { color: var(--ms-accent); background: var(--ms-accent-soft); }
+      .workspace-steps:not(.workflow-rail)::-webkit-scrollbar { display: none; }
+      .workspace-steps:not(.workflow-rail) button { white-space: nowrap; border-radius: 1rem; background: transparent; color: var(--ms-muted); padding: .58rem .72rem; font-size: .88rem; font-weight: 900; transition: background .18s ease, color .18s ease, transform .18s ease; }
+      .workspace-steps:not(.workflow-rail) button:hover, .workspace-steps:not(.workflow-rail) button.active { color: var(--ms-accent); background: var(--ms-accent-soft); }
       .workspace-side-link { width: 100%; display: flex; align-items: center; gap: .65rem; border-radius: 1rem; background: transparent; color: var(--ms-muted); padding: .78rem .9rem; text-align: left; transition: background .18s ease, color .18s ease, box-shadow .18s ease; }
       .workspace-side-link:hover, .workspace-side-link.active { color: var(--ms-secondary); background: rgba(16,185,129,.12); box-shadow: inset 0 0 0 1px rgba(16,185,129,.18); }
       .player-dock { position: relative; z-index: 5; width: min(100%, 24rem); border: 1px solid var(--ms-line); border-radius: 2rem; background: rgba(255,255,255,.86); box-shadow: var(--ms-shadow); backdrop-filter: blur(16px); padding: 1rem; pointer-events: none; }
@@ -281,13 +299,15 @@
       }
       @media (max-width: 900px) {
         .app-shell { display: block; }
-        .app-rail { display: none; }
-        .app-header { position: sticky; min-height: auto; padding: 1rem; }
+        .app-rail, .workflow-rail { display: none; }
+        .app-header { position: sticky; left: 0; right: 0; min-height: auto; padding: 1rem; }
+        .header-workflow-hint { display: none; }
         .workspace-steps { display: none; }
         .stage-body { margin-left: 0; padding-top: 1rem !important; }
         .app-shell:not(.is-onboarding) .stage-body { height: auto; margin-top: 0; overflow: auto; }
         .editor-stage-frame { height: auto; grid-template-columns: 1fr; grid-template-areas: "left" "canvas" "right"; }
         .stage-left-pane, .stage-canvas-pane, .stage-right-inspector { min-height: auto; overflow: visible; }
+        .stage-nav-compact { display: grid; }
         .workflow-status-strip, .status-bar { margin-left: 0; }
         .player-dock { width: 100%; }
         .onboarding-page { height: auto; min-height: 100svh; overflow: auto; padding: 1rem; }

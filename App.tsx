@@ -64,15 +64,29 @@ const STAGES: Array<{ id: AppStage; label: string; kicker: string }> = [
 ];
 const stageNavLabel = (stage: AppStage) => ({
     character: 'Character',
+    path: 'Path',
     foundry: 'Foundry',
+    design: 'Design',
     blueprint: 'Blueprint'
 } as Partial<Record<AppStage, string>>)[stage];
 
+const STAGE_RAIL_MARKS: Record<AppStage, string> = {
+    character: 'C',
+    path: 'P',
+    foundry: 'F',
+    design: 'D',
+    blueprint: 'B',
+    options: 'O'
+};
+
 
 const STAGE_PANE_NAV_ITEMS: Array<{ ariaLabel: string; label: string; target: AppStage; activeStages: AppStage[]; icon: 'route' | 'boxes' | 'download' }> = [
-    { ariaLabel: 'Rail motion path', label: 'Motion path', target: 'path', activeStages: ['path'], icon: 'route' },
-    { ariaLabel: 'Rail mechanism parameters', label: 'Parameters', target: 'design', activeStages: ['foundry', 'design'], icon: 'boxes' },
-    { ariaLabel: 'Rail export package', label: 'Blueprint export', target: 'blueprint', activeStages: ['blueprint'], icon: 'download' }
+    { ariaLabel: 'Character Selection', label: 'Character', target: 'character', activeStages: ['character'], icon: 'route' },
+    { ariaLabel: 'Rail motion path', label: 'Path', target: 'path', activeStages: ['path'], icon: 'route' },
+    { ariaLabel: 'Mechanism Foundry', label: 'Foundry', target: 'foundry', activeStages: ['foundry'], icon: 'boxes' },
+    { ariaLabel: 'Rail mechanism parameters', label: 'Design', target: 'design', activeStages: ['design'], icon: 'boxes' },
+    { ariaLabel: 'Rail export package', label: 'Blueprint', target: 'blueprint', activeStages: ['blueprint'], icon: 'download' },
+    { ariaLabel: 'Options', label: 'Options', target: 'options', activeStages: ['options'], icon: 'route' }
 ];
 
 const OPTIONS_SECTION_MANIFEST = [
@@ -567,6 +581,7 @@ const App: React.FC = () => {
         <main className={`min-h-screen overflow-hidden ${themeClass}`} data-theme={project.settings.theme}>
             <div className="pointer-events-none fixed inset-0 opacity-70" style={{ background: 'radial-gradient(circle at 15% 10%, rgba(90,108,255,.12), transparent 28%), radial-gradient(circle at 85% 20%, rgba(90,108,255,.08), transparent 24%), linear-gradient(120deg, rgba(8,10,18,.04), transparent)' }} />
             <div ref={appShellRef} className="relative grid min-h-screen app-shell">
+                <WorkflowRail stage={stage} goStage={goStage} />
                 <section className="relative flex min-w-0 flex-col">
                     <header className="app-header flex items-center justify-between border-b border-slate-300/70 bg-white/50 px-7 py-4 backdrop-blur-xl">
                         <div className="flex min-w-0 items-center gap-6">
@@ -575,13 +590,7 @@ const App: React.FC = () => {
                                 <h1 className="text-2xl font-black tracking-[-0.05em]">MechAnim</h1>
                                 <h2 className="current-stage-title">{stageMeta?.label}</h2>
                             </div>
-                            <nav className="workspace-steps" data-testid="workspace-steps">
-                                {STAGES.map((item, index) => (
-                                    <button key={item.id} aria-label={item.label} onClick={() => goStage(item.id)} className={stage === item.id ? 'active' : ''}>
-                                        {index + 1}. {stageNavLabel(item.id) ?? item.label}
-                                    </button>
-                                ))}
-                            </nav>
+                            <div className="header-workflow-hint" aria-hidden="true">Shared canvas · left tools · right inspector</div>
                         </div>
                         <div className="flex flex-col items-end gap-2">
                             <TopCommandBar
@@ -652,6 +661,20 @@ const App: React.FC = () => {
         </main>
     );
 };
+
+const WorkflowRail = ({ stage, goStage }: { stage: AppStage; goStage: (stage: AppStage) => void }) => (
+    <nav className="workflow-rail workspace-steps" data-testid="workspace-steps" aria-label="Workflow">
+        <div className="workflow-rail-brand" aria-hidden="true">MS</div>
+        {STAGES.map((item, index) => (
+            <button key={item.id} type="button" aria-label={item.label} aria-current={stage === item.id ? 'step' : undefined} onClick={() => goStage(item.id)} className={stage === item.id ? 'active' : ''}>
+                <span className="workflow-rail-index">{index + 1}</span>
+                <span className="workflow-rail-mark" aria-hidden="true">{STAGE_RAIL_MARKS[item.id]}</span>
+                <span className="workflow-rail-short">{stageNavLabel(item.id) ?? item.label}</span>
+                <span className="workflow-rail-full">{item.label}</span>
+            </button>
+        ))}
+    </nav>
+);
 
 const TopCommandBar = ({ onNew, onLoad, onRecoverAutosave, onSave, onExport, onZoomIn, onZoomOut, onFit, onSaveWorkspace, onRestoreWorkspace, onResetWorkspace, onOptions, onDisabled }: {
     onNew: () => void;
@@ -805,7 +828,7 @@ const StageLeftSummary = ({ project, title, kicker, stage, goStage, children }: 
         </div>
         {goStage && <nav className="stage-nav-compact">
             <div className="section-title">Workflow tabs</div>
-            {STAGE_PANE_NAV_ITEMS.map(item => <button key={item.ariaLabel} aria-label={item.ariaLabel} className={linkClass(item.activeStages)} onClick={() => goStage(item.target)}><StagePaneNavIcon icon={item.icon}/> {item.label}</button>)}
+            {STAGE_PANE_NAV_ITEMS.map(item => <button key={item.ariaLabel} aria-label={item.ariaLabel} aria-current={item.activeStages.includes(stage) ? 'step' : undefined} className={linkClass(item.activeStages)} onClick={() => goStage(item.target)}><StagePaneNavIcon icon={item.icon}/> {item.label}</button>)}
         </nav>}
         <div className="stage-workflow-block">
             <div className="section-title">{title}</div>
@@ -1412,7 +1435,7 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
                 </details> : <div className="rounded-2xl border border-slate-200 bg-white p-3 text-sm font-bold text-slate-500" data-testid="rig-structure-hidden">Part properties are hidden from Options. Free drawing stays available.</div>}
             </StageLeftSummary>
         </div>),
-            canvas: canvasPane(<div className="path-canvas-shell workspace overflow-hidden p-0">
+            canvas: canvasPane(<div className="path-canvas-shell canvas-workspace overflow-hidden p-0">
             <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
             <SceneSketch svgRef={svgRef} project={project} selectedPath={selectedPath} dragPoint={dragPoint} selectedPoint={selectedPoint} setDragPoint={setDragPoint} setSelectedPoint={setSelectedPoint} onPointMove={movePoint} onPointUp={stopDrawing} onCanvasDown={onCanvasDown} dispatch={dispatch} drawMode={drawMode} pathLocked={pathLocked} isPlaying={isPlaying} angle={angle} viewport={viewport}/>
         </div>),
@@ -1954,9 +1977,9 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 </div>}
             </StageLeftSummary>
         </div>),
-            canvas: canvasPane(<section className="path-canvas-shell foundry-canvas-shell workspace p-6">
-            <div className="mb-5 flex items-center justify-between"><h4 className="section-title">Sandbox preview</h4><span className="chip">{foundryPlaying ? 'Simulation active' : 'Paused'}</span></div>
-            <svg viewBox="0 0 360 240" data-testid="foundry-preview" onClick={handleAnchorPick} className={`foundry-preview h-[520px] w-full rounded-[2rem] ${isPickingAnchor ? 'is-picking-anchor' : ''}`} aria-label="Mechanism Foundry CAD-like 2.5D sandbox preview">
+            canvas: canvasPane(<section className="path-canvas-shell foundry-canvas-shell canvas-workspace p-0">
+            <div className="canvas-overlay-toolbar foundry-preview-toolbar"><h4 className="section-title">Sandbox preview</h4><span className="chip">{foundryPlaying ? 'Simulation active' : 'Paused'}</span></div>
+            <svg viewBox="0 0 360 240" data-testid="foundry-preview" onClick={handleAnchorPick} className={`foundry-preview h-[520px] w-full ${isPickingAnchor ? 'is-picking-anchor' : ''}`} aria-label="Mechanism Foundry CAD-like 2.5D sandbox preview">
                 <defs>
                     <pattern id="foundry-cad-grid" width="18" height="18" patternUnits="userSpaceOnUse">
                         <path d="M 18 0 L 0 0 0 18" fill="none" stroke="#93c5fd" strokeWidth="0.55" opacity="0.38" />
@@ -1990,9 +2013,9 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 </g>
                 <FoundrySpacerStack points={[selectedSimulation.state.p1, selectedSimulation.state.p2, selectedSimulation.state.j1, selectedSimulation.state.j2, selectedSimulation.state.aux, selectedSimulation.state.effector]} />
                 <FoundryAngleStrip mechanism={landedFoundry} phase={foundryPhase} kit={project.settings.physicalKit} />
-                <text x="22" y="38" className="foundry-preview-label" fontSize="16" fontWeight="800">{library.label} · {range.percentValid === 1 ? '360° valid' : range.warning} · {Z_STACK_LABEL}</text>
+                <text x="22" y="38" className="foundry-preview-label" fontSize="8" fontWeight="900">{library.label} · {range.percentValid === 1 ? '360° valid' : range.warning} · {Z_STACK_LABEL}</text>
             </svg>
-            <div className="mt-3 text-xs font-bold text-slate-500" data-testid="foundry-toolbar-state">Toolbar: {foundryPlaying ? 'playing' : 'paused'} · path {showPathPreview ? 'shown' : 'hidden'} · phase {Math.round(foundryPhase * 180 / Math.PI)}°</div>
+            <div className="canvas-status-readout" data-testid="foundry-toolbar-state">Toolbar: {foundryPlaying ? 'playing' : 'paused'} · path {showPathPreview ? 'shown' : 'hidden'} · phase {Math.round(foundryPhase * 180 / Math.PI)}°</div>
         </section>),
             inspector: inspectorPane(<div className="stage-pane-stack">
             <div>
@@ -2096,7 +2119,7 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
                 <button className="btn-primary w-full" onClick={onBlueprint}>Go to blueprint</button>
             </StageLeftSummary>
         </div>),
-            canvas: canvasPane(<div className="path-canvas-shell workspace overflow-hidden p-0">
+            canvas: canvasPane(<div className="path-canvas-shell canvas-workspace overflow-hidden p-0">
             <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
             <Canvas project={project} config={mechanismConfig} setConfig={setMechanismConfig} selectedId={project.selectedMechanismId ?? null} setSelectedId={id => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: id })} isPlaying={isPlaying} showTrace={showTrace} isDrawMode={false} userPath={[]} setUserPath={() => {}} angle={angle} setAngle={setAngle} viewport={viewport} setViewport={setViewport}/>
         </div>),
@@ -2237,7 +2260,7 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
                 </div>
             </StageLeftSummary>
         </div>),
-            canvas: canvasPane(<div className="path-canvas-shell workspace overflow-hidden p-0" data-testid="blueprint-canvas-preview">
+            canvas: canvasPane(<div className="path-canvas-shell canvas-workspace overflow-hidden p-0" data-testid="blueprint-canvas-preview">
             <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
             <Canvas project={project} config={config} setConfig={setConfig} selectedId={project.selectedMechanismId ?? null} setSelectedId={id => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: id })} isPlaying={isPlaying} showTrace={true} isDrawMode={false} userPath={[]} setUserPath={() => {}} angle={angle} setAngle={setAngle} viewport={viewport} setViewport={setViewport}/>
         </div>),

@@ -426,7 +426,7 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     return (
         <div
-            className={`w-full h-full bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden relative select-none ${isDrawMode ? 'ring-2 ring-indigo-500 ring-inset' : ''}`}
+            className={`canvas-surface w-full h-full bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden relative select-none ${isDrawMode ? 'ring-2 ring-indigo-500 ring-inset' : ''}`}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
