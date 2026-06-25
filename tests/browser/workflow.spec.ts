@@ -16,7 +16,18 @@ const downloadMetadataJson = async (page) => {
   return JSON.parse(await readFile(metadataPath!, 'utf8'));
 };
 
+const openCharacterScreen = async (page) => {
+  if (await page.getByTestId('welcome-dialog').count()) {
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
+  }
+  if (!(await page.getByTestId('character-screen').count())) {
+    await page.getByRole('button', { name: /Character Selection/i }).click();
+  }
+  await expect(page.getByTestId('character-screen')).toBeVisible();
+};
+
 const openWavingArmTemplate = async (page) => {
+  await openCharacterScreen(page);
   await page.getByRole('button', { name: /Open Waving arm/i }).click();
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
 };
@@ -38,44 +49,36 @@ test('character → path → foundry → design → blueprint runs end-to-end in
 
   await page.goto('/');
   await expect(page.getByTestId('shared-workbench')).toBeVisible();
-  await expect(page.getByTestId('welcome-dialog')).toBeVisible();
-  await expect(page.getByTestId('welcome-dialog').getByRole('heading', { name: 'MechAnim' })).toBeVisible();
-  await expect(page.getByTestId('welcome-dialog').getByText('Draw the path. Build the motion.')).toBeVisible();
-  const welcomeBox = await page.getByTestId('welcome-dialog').boundingBox();
+  const welcomeDialog = page.getByTestId('welcome-dialog');
+  await expect(welcomeDialog).toBeVisible();
+  await expect(welcomeDialog.getByRole('heading', { name: 'MechAnim' })).toBeVisible();
+  await expect(welcomeDialog.getByText('Rig a character, draw a path')).toBeVisible();
+  const welcomeVideo = welcomeDialog.getByLabel('MotionSmith preview video');
+  await expect(welcomeVideo).toBeVisible();
+  await expect(welcomeVideo).toHaveJSProperty('controls', true);
+  await expect(welcomeVideo).toHaveJSProperty('autoplay', false);
+  await expect(welcomeDialog.getByLabel('Do not show this again')).toBeVisible();
+  await expect(welcomeDialog.getByTestId('template-gallery')).toHaveCount(0);
+  const welcomeBox = await welcomeDialog.boundingBox();
   const viewport = page.viewportSize();
-  expect(welcomeBox?.height ?? 0, 'welcome dialog fits inside the editor viewport').toBeLessThanOrEqual((viewport?.height ?? 900) * 0.94);
+  expect(welcomeBox?.height ?? 0, 'simple welcome dialog fits inside the editor viewport').toBeLessThanOrEqual((viewport?.height ?? 900) * 0.94);
+  expect(await page.evaluate(() => document.scrollingElement!.scrollHeight <= document.scrollingElement!.clientHeight + 8)).toBe(true);
+  await expect.poll(() => activeElementIsInDialog(page)).toBe(true);
+  for (let i = 0; i < 4; i += 1) {
+    await page.keyboard.press('Tab');
+    expect(await activeElementIsInDialog(page)).toBe(true);
+  }
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await expect(page.getByTestId('welcome-dialog')).toHaveCount(0);
+  await expect(page.getByTestId('character-screen')).toBeVisible();
   await expect(page.getByTestId('template-gallery')).toContainText('Waving arm');
   await expect(page.getByTestId('template-gallery')).toContainText('Girl starter');
   await expect(page.getByTestId('template-gallery')).toContainText('Boy starter');
   await expect(page.getByTestId('template-gallery')).toContainText('Blank character');
   await expect(page.getByText('Local on-device processing.')).toBeVisible();
-  expect(await page.evaluate(() => document.scrollingElement!.scrollHeight <= document.scrollingElement!.clientHeight + 8)).toBe(true);
-  expect(await page.locator('.starter-thumb').evaluateAll(images => images.every(img => (img as HTMLImageElement).naturalWidth > 0))).toBe(true);
+  await expect.poll(() => page.locator('.starter-thumb').evaluateAll(images => images.every(img => (img as HTMLImageElement).naturalWidth > 0))).toBe(true);
   await expect(page.getByText('parts_info.json package artifact')).toBeHidden();
   await expect(page.getByTestId('onboarding-import-input')).toBeAttached();
-  const openTemplateButton = page.getByRole('button', { name: /Open Waving arm/i });
-  const girlStarterButton = page.getByRole('button', { name: /Create from girl/i });
-  const boyStarterButton = page.getByRole('button', { name: /Create from boy/i });
-  const loadPackageButton = page.getByRole('button', { name: /Load package/i });
-  const runOnnxButton = page.getByRole('button', { name: /Create from image/i });
-  const cameraButton = page.getByRole('button', { name: /Capture Camera/i });
-  const importProjectButton = page.getByRole('button', { name: /Import project/i });
-  await expect.poll(() => activeElementIsInDialog(page)).toBe(true);
-  await page.keyboard.press('Tab');
-  await expect(openTemplateButton).toBeFocused();
-  await page.keyboard.press('Tab');
-  await expect(girlStarterButton).toBeFocused();
-  await page.keyboard.press('Tab');
-  await expect(boyStarterButton).toBeFocused();
-  await page.keyboard.press('Tab');
-  await expect(loadPackageButton).toBeFocused();
-  await page.keyboard.press('Tab');
-  await expect(runOnnxButton).toBeFocused();
-  await page.keyboard.press('Tab');
-  await expect(cameraButton).toBeFocused();
-  await page.keyboard.press('Tab');
-  await expect(importProjectButton).toBeFocused();
-  expect(await activeElementIsInDialog(page)).toBe(true);
 
   const forbiddenRuntimeImports = await page.locator('script[src], script[type="importmap"]').evaluateAll(nodes =>
     nodes.map(node => ({ src: node.getAttribute('src'), type: node.getAttribute('type') }))
@@ -286,6 +289,7 @@ test('Character Selection processing controls route to real browser workflows', 
   });
 
   await page.goto('/');
+  await openCharacterScreen(page);
   await expect(page.getByTestId('character-processing-panel')).toContainText('Processing Steps');
   await page.getByText('Advanced import tools').click();
 
@@ -326,7 +330,7 @@ test('Create from image upload creates a reviewed character package in browser',
   });
 
   await page.goto('/');
-  await expect(page.getByTestId('welcome-dialog').getByRole('heading', { name: 'MechAnim' })).toBeVisible();
+  await openCharacterScreen(page);
   const runOnnxButton = page.getByRole('button', { name: /Create from image/i });
   await runOnnxButton.focus();
   await expect(runOnnxButton).toBeFocused();
@@ -358,7 +362,7 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
   });
 
   await page.goto('/');
-  await expect(page.getByTestId('welcome-dialog').getByRole('heading', { name: 'MechAnim' })).toBeVisible();
+  await openCharacterScreen(page);
 
   const packageFiles = [
     'tests/fixtures/package/parts_info.json',
@@ -392,7 +396,7 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
 
   await page.getByRole('button', { name: /Character Selection/i }).click();
   await page.getByTestId('blank-package-input').setInputFiles('tests/fixtures/package/char_cfg.yaml');
-  await expect(page.getByTestId('welcome-dialog').getByRole('heading', { name: 'MechAnim' })).toBeVisible();
+  await expect(page.getByTestId('character-screen')).toBeVisible();
   await expect(page.getByText('Character package import failed')).toBeVisible();
   await expect(page.getByText('Missing parts_info.json in selected package files')).toBeVisible();
 
@@ -1024,6 +1028,7 @@ test('Camera capture dialog uses browser getUserMedia and reports permission den
     });
   });
   await page.goto('/');
+  await openCharacterScreen(page);
   await page.getByRole('button', { name: /Capture Camera/i }).click();
   await expect(page.getByTestId('camera-dialog')).toBeVisible();
   await expect(page.getByTestId('camera-error')).toContainText('Camera permission denied');
@@ -1072,6 +1077,7 @@ test('Camera capture waits for live preview and stops stream after handoff', asy
     };
   });
   await page.goto('/');
+  await openCharacterScreen(page);
   await page.getByRole('button', { name: /Capture Camera/i }).click();
   await expect(page.getByTestId('camera-dialog')).toBeVisible();
   await expect(page.getByText(/Camera Ready/i)).toBeVisible();
@@ -1096,10 +1102,14 @@ test('Mobile path editor keeps Draw free path action above the canvas', async ({
   expect(drawBox!.y, 'mobile draw action appears before canvas').toBeLessThan(canvasBox!.y);
 });
 
-test('Mobile welcome modal traps focus and locks background scroll', async ({ page }) => {
+test('Mobile welcome modal is simple, traps focus, and can be hidden next time', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await expect(page.getByTestId('welcome-dialog')).toBeVisible();
+  const welcomeVideo = page.getByTestId('welcome-dialog').getByLabel('MotionSmith preview video');
+  await expect(welcomeVideo).toBeVisible();
+  await expect(welcomeVideo).toHaveJSProperty('controls', true);
+  await expect(welcomeVideo).toHaveJSProperty('autoplay', false);
   await expect.poll(() => activeElementIsInDialog(page)).toBe(true);
   const modalState = await page.evaluate(() => ({
     scrollLocked: document.scrollingElement!.scrollHeight <= document.scrollingElement!.clientHeight + 8,
@@ -1113,12 +1123,18 @@ test('Mobile welcome modal traps focus and locks background scroll', async ({ pa
     shellInert: true,
     shellHidden: true
   });
-  await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: /Open Waving arm/i })).toBeFocused();
-  expect(await activeElementIsInDialog(page)).toBe(true);
-  await page.keyboard.press('Escape');
+  for (let i = 0; i < 4; i += 1) {
+    await page.keyboard.press('Tab');
+    expect(await activeElementIsInDialog(page)).toBe(true);
+  }
+  await page.getByLabel('Do not show this again').check();
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
   await expect(page.getByTestId('welcome-dialog')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.classList.contains('welcome-modal-open'))).toBe(false);
+  await page.reload();
+  await expect(page.getByTestId('welcome-dialog')).toHaveCount(0);
+  await expect(page.getByTestId('character-screen')).toBeVisible();
+  await expect(page.getByTestId('template-gallery')).toContainText('Waving arm');
 });
 
 test('Shared player dock stays inside the editor content at lower and medium desktop widths', async ({ page }) => {

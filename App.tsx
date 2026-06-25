@@ -51,6 +51,11 @@ type FoundryViewPreset = 'front' | 'iso' | 'side' | 'top' | 'custom';
 type FoundryCamera = { yaw: number; pitch: number; preset: FoundryViewPreset };
 type StarterImageTemplate = { id: string; label: string; fileName: string; description: string; url: string };
 
+const MOTIONSMITH_SITE_URL = 'https://alansynn.com/motionsmith/';
+const MOTIONSMITH_ICON_URL = `${MOTIONSMITH_SITE_URL}static/images/favicon.ico`;
+const MOTIONSMITH_POSTER_URL = `${MOTIONSMITH_SITE_URL}static/images/motionsmith-demo-poster.png`;
+const MOTIONSMITH_VIDEO_URL = `${MOTIONSMITH_SITE_URL}static/videos/chi26c-sub4526-i62.mp4`;
+
 const FOUNDRY_VIEW_PRESETS: Record<Exclude<FoundryViewPreset, 'custom'>, { label: string; yaw: number; pitch: number }> = {
     front: { label: 'Front', yaw: 0, pitch: 0 },
     iso: { label: 'Iso', yaw: -32, pitch: 24 },
@@ -147,14 +152,15 @@ const PARAMS: Array<{ key: keyof MechanismConfig; label: string; min: number; ma
 
 const isAppStage = (value: unknown): value is AppStage => typeof value === 'string' && STAGES.some(stage => stage.id === value);
 const projectHasUserWork = (project: ProjectState) => project.partOrder.length > 0 || Object.keys(project.paths).length > 0 || project.mechanisms.length > 0;
+const shouldHideWelcome = () => localStorage.getItem('mechanim.hideWelcome') === '1';
 
 const App: React.FC = () => {
     const [project, setProject] = useState<ProjectState>(() => {
         projectSelfCheck();
         return createSampleProject();
     });
-    const [stage, setStage] = useState<AppStage>('path');
-    const [showWelcome, setShowWelcome] = useState(true);
+    const [stage, setStage] = useState<AppStage>(() => shouldHideWelcome() ? 'character' : 'path');
+    const [showWelcome, setShowWelcome] = useState(() => !shouldHideWelcome());
     const [angle, setAngle] = useState(0);
     const [isPlaying, setIsPlaying] = useState(true);
     const [showTrace, setShowTrace] = useState(true);
@@ -307,7 +313,7 @@ const App: React.FC = () => {
         const reviewed = replaceCharacter ? mergeReplacementProject(next, project) : next;
         setPendingCharacter({ project: reviewed, summary, returnStage: replaceCharacter ? (reviewed.mechanisms.length ? 'design' : 'path') : 'path' });
         dispatch({ type: 'set_processing', processing: { stage: 'ready', message: 'Review generated character package', progress: 100 } });
-        setShowWelcome(true);
+        setShowWelcome(false);
         setStage('character');
     };
 
@@ -396,7 +402,7 @@ const App: React.FC = () => {
                 }
             });
             setCommandStatus(`Project import failed: ${error instanceof Error ? error.message : String(error)}`);
-            setShowWelcome(true);
+            setShowWelcome(false);
             setStage('character');
         }
     };
@@ -499,7 +505,7 @@ const App: React.FC = () => {
         setProject(createSampleProject());
         setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
         setCommandStatus('Started a fresh template project');
-        setShowWelcome(true);
+        setShowWelcome(!shouldHideWelcome());
         setStage('character');
     };
     const recoverAutosave = () => {
@@ -566,14 +572,15 @@ const App: React.FC = () => {
     };
     const disabledCommand = (reason: string) => setCommandStatus(reason);
     const themeClass = project.settings.theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-950';
-    const editorStage: AppStage = stage === 'character' ? 'path' : stage;
-    const welcomeOpen = showWelcome || stage === 'character';
-    const closeWelcome = () => {
+    const editorStage: AppStage = stage;
+    const welcomeOpen = showWelcome;
+    const closeWelcome = (hideNextTime = false) => {
+        if (hideNextTime) localStorage.setItem('mechanim.hideWelcome', '1');
         setShowWelcome(false);
-        if (stage === 'character') setStage('path');
+        setStage('character');
     };
     const stageMeta = STAGES.find(s => s.id === stage);
-    const playerDock = !welcomeOpen && editorStage !== 'foundry'
+    const playerDock = !welcomeOpen && editorStage !== 'foundry' && editorStage !== 'character'
         ? <WorkspacePlayerDock isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} speed={project.settings.animationSpeed} drawMode={drawMode} />
         : null;
 
@@ -639,6 +646,7 @@ const App: React.FC = () => {
                     <input ref={projectInputRef} hidden type="file" accept="application/json,.mechanim.json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/>
 
                     <div className="stage-body editor-workbench relative min-h-0 flex-1 overflow-auto p-7" data-testid="shared-workbench">
+                        {editorStage === 'character' && <CharacterSelection project={project} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} starterTemplates={STARTER_IMAGE_TEMPLATES} onStarterImage={loadStarterImage} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setShowWelcome(false); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onSample={() => { setPendingCharacter(null); setProject(createSampleProject()); setShowWelcome(false); setStage('path'); }} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} />}
                         {editorStage === 'path' && <PathEditor project={project} sortedParts={sortedParts} selectedPart={selectedPart} selectedPath={selectedPath} drawMode={drawMode} setDrawMode={setDrawMode} dispatch={dispatch} setPathPoints={setPathPoints} openTracking={() => setShowTracking(true)} isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} onNext={() => goStage('foundry')} goStage={goStage} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {editorStage === 'foundry' && <MechanismFoundry project={project} foundry={foundry} setFoundry={setFoundry} selectedPart={selectedPart} selectedPath={selectedPath} goStage={goStage} onExport={(pkg) => {
                             const existingTarget = project.mechanisms.find(m =>
@@ -675,7 +683,7 @@ const App: React.FC = () => {
                     <footer className="status-bar" data-testid="status-bar">{commandStatus} · parts:{project.partOrder.length} · paths:{Object.keys(project.paths).length} · mechs:{project.mechanisms.length} · zoom {Math.round(canvasViewport.zoom * 100)}%</footer>
                 </section>
             </div>
-            {welcomeOpen && <CharacterSelection project={project} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} starterTemplates={STARTER_IMAGE_TEMPLATES} onStarterImage={loadStarterImage} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setShowWelcome(false); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onSample={() => { setPendingCharacter(null); setProject(createSampleProject()); setShowWelcome(false); setStage('path'); }} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} onClose={closeWelcome} />}
+            {welcomeOpen && <WelcomeDialog onClose={closeWelcome} />}
             <CameraCaptureDialog isOpen={showCamera} onClose={() => setShowCamera(false)} onCapture={file => { setShowCamera(false); runWebOnnx(file); }} />
             <MechanismRecommendationSheet isOpen={showRecommendations} project={project} selectedPart={selectedPart} selectedPath={selectedPath} onClose={() => setShowRecommendations(false)} onApply={mechanism => { dispatch({ type: 'upsert_mechanism', mechanism }); setShowRecommendations(false); setStage('design'); }} />
             <TrackingModal isOpen={showTracking} onClose={() => setShowTracking(false)} onTransfer={path => { setPathPoints(path, 'tracked'); setShowTracking(false); setStage('path'); }} />
@@ -891,7 +899,64 @@ const WorkflowStatusStrip = ({ stage, project, selectedPart, selectedPath }: { s
     </div>;
 };
 
-const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setReplaceCharacter, starterTemplates, onStarterImage, onAccept, onDiscard, onSample, onProcess, onCamera, onPackage, onImport, onEditCharacter, onSaveSkeleton, onChooseSaveFolder, onClose }: {
+const WelcomeDialog = ({ onClose }: { onClose: (hideNextTime?: boolean) => void }) => {
+    const [hideNextTime, setHideNextTime] = useState(false);
+    const dialogRef = useRef<HTMLElement>(null);
+
+    useEffect(() => {
+        const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        dialogRef.current?.focus();
+        return () => previousFocus?.isConnected && previousFocus.focus();
+    }, []);
+
+    const trapDialogFocus = (event: React.KeyboardEvent<HTMLElement>) => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            onClose(false);
+            return;
+        }
+        if (event.key !== 'Tab') return;
+        const dialog = dialogRef.current;
+        if (!dialog) return;
+        const focusables = Array.from(dialog.querySelectorAll(
+            'video[controls], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )).filter((element): element is HTMLElement => element instanceof HTMLElement && element.offsetParent !== null);
+        if (!focusables.length) return;
+        const first = focusables[0];
+        const last = focusables.at(-1)!;
+        const active = document.activeElement;
+        if (!dialog.contains(active)) {
+            event.preventDefault();
+            first.focus();
+        } else if (event.shiftKey && (active === first || active === dialog)) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && active === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    };
+
+    return <div className="modal-backdrop welcome-backdrop" role="presentation">
+        <section ref={dialogRef} className="modal-sheet welcome-dialog welcome-simple animate-rise" role="dialog" aria-modal="true" aria-labelledby="welcome-dialog-title" data-testid="welcome-dialog" tabIndex={-1} onKeyDown={trapDialogFocus}>
+            <div className="welcome-simple-media">
+                <video aria-label="MotionSmith preview video" poster={MOTIONSMITH_POSTER_URL} muted playsInline controls preload="metadata">
+                    <source src={MOTIONSMITH_VIDEO_URL} type="video/mp4" />
+                </video>
+            </div>
+            <div className="welcome-simple-copy">
+                <img src={MOTIONSMITH_ICON_URL} alt="" />
+                <div className="section-title">MotionSmith</div>
+                <h2 id="welcome-dialog-title">MechAnim</h2>
+                <p>Rig a character, draw a path, and build the mechanism in the editor.</p>
+                <button type="button" className="btn-primary" onClick={() => onClose(hideNextTime)}>Start</button>
+                <label className="replace-toggle"><input type="checkbox" checked={hideNextTime} onChange={event => setHideNextTime(event.target.checked)} /> Do not show this again</label>
+            </div>
+        </section>
+    </div>;
+};
+
+const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setReplaceCharacter, starterTemplates, onStarterImage, onAccept, onDiscard, onSample, onProcess, onCamera, onPackage, onImport, onEditCharacter, onSaveSkeleton, onChooseSaveFolder }: {
     project: ProjectState;
     pendingCharacter: { project: ProjectState; summary: string; returnStage: AppStage } | null;
     replaceCharacter: boolean;
@@ -908,7 +973,6 @@ const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setRe
     onEditCharacter: () => void;
     onSaveSkeleton: () => void;
     onChooseSaveFolder: () => void;
-    onClose: () => void;
 }) => {
     const reviewedProject = pendingCharacter?.project ?? project;
     const artifact = reviewedProject.characterPackage;
@@ -926,53 +990,13 @@ const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setRe
     const packageInputRef = useRef<HTMLInputElement>(null);
     const onnxInputRef = useRef<HTMLInputElement>(null);
     const importInputRef = useRef<HTMLInputElement>(null);
-    const dialogRef = useRef<HTMLElement>(null);
-
-    useEffect(() => {
-        const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-        dialogRef.current?.focus();
-        return () => previousFocus?.isConnected && previousFocus.focus();
-    }, []);
-
-    const trapDialogFocus = (event: React.KeyboardEvent<HTMLElement>) => {
-        if (event.key === 'Escape') {
-            event.preventDefault();
-            onClose();
-            return;
-        }
-        if (event.key !== 'Tab') return;
-        const dialog = dialogRef.current;
-        if (!dialog) return;
-        const focusables = Array.from(dialog.querySelectorAll(
-            'summary, button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        )).filter((element): element is HTMLElement => element instanceof HTMLElement && element.offsetParent !== null);
-        if (!focusables.length) {
-            event.preventDefault();
-            dialog.focus();
-            return;
-        }
-        const first = focusables[0];
-        const last = focusables.at(-1)!;
-        const active = document.activeElement;
-        if (!dialog.contains(active)) {
-            event.preventDefault();
-            first.focus();
-        } else if (event.shiftKey && (active === first || active === dialog)) {
-            event.preventDefault();
-            last.focus();
-        } else if (!event.shiftKey && active === last) {
-            event.preventDefault();
-            first.focus();
-        }
-    };
 
     return (
-    <div className="modal-backdrop welcome-backdrop" role="presentation">
-    <section ref={dialogRef} className="modal-sheet welcome-dialog animate-rise" role="dialog" aria-modal="true" aria-labelledby="welcome-dialog-title" data-testid="welcome-dialog" tabIndex={-1} onKeyDown={trapDialogFocus}>
-    <div className="welcome-titlebar">
+    <section className="character-stage animate-rise" data-testid="character-screen">
+    <div className="welcome-titlebar character-titlebar">
         <div>
-            <div className="section-title">Welcome workspace</div>
-            <h2 id="welcome-dialog-title">Start like a CAD editor</h2>
+            <div className="section-title">Character workspace</div>
+            <h2>Start with character art</h2>
         </div>
     </div>
     <div className="onboarding-page">
@@ -1131,9 +1155,7 @@ const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setRe
             </details>
         </section>
     </div>
-    <div className="welcome-footer"><button type="button" className="btn-secondary" onClick={onClose}>Start editing</button></div>
     </section>
-    </div>
     );
 };
 
