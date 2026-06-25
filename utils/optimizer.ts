@@ -502,16 +502,25 @@ export const generateSmartConfig = (targetPath?: Point[], forcedType?: Mechanism
         config.couplerLength = 0;
         config.rockerLength = s(0.5);
         config.sliderOffset = (Math.random() - 0.5) * s(0.4);
+    } else if (type === 'rack-pinion') {
+        config.groundAngle = 90;
+        config.groundLength = 0;
+        config.couplerLength = 0;
+        config.crankLength = s(0.2);
+        config.rockerLength = Math.max(s(0.9), config.crankLength * (2 * Math.PI + 2.2));
+        config.sliderOffset = Math.max(config.crankLength + 8, s(0.25));
+        config.couplerPointAngle = 0;
     } else if (type === 'gear') {
         config.gearRatio = Math.random() < 0.5 ? -1 : -2;
         config.speed2 = config.gearRatio;
         config.rockerLength = s(0.25);
+        config.groundLength = config.crankLength + config.rockerLength;
         config.couplerLength = 0;
     } else if (type === 'planetary_gear') {
         config.gearRatio = 2 + Math.floor(Math.random() * 4);
         config.speed2 = config.gearRatio;
-        config.groundLength = s(0.45);
         config.rockerLength = s(0.18);
+        config.groundLength = config.crankLength + config.rockerLength;
         config.couplerLength = 0;
     } else if (type === '5bar') {
         // Select gear ratio - prefer recommended ratio based on target path analysis
@@ -604,6 +613,12 @@ export const mutateConfig = (config: MechanismConfig, temperature: number = 1.0,
         } else if (newConfig.type === 'gear' || newConfig.type === 'planetary_gear') {
             newConfig.gearRatio = newConfig.type === 'gear' ? -1 : 3;
             newConfig.speed2 = newConfig.gearRatio;
+        } else if (newConfig.type === 'rack-pinion') {
+            newConfig.groundAngle = 90;
+            newConfig.groundLength = 0;
+            newConfig.couplerLength = 0;
+            newConfig.sliderOffset = Math.max(newConfig.crankLength + 8, Math.abs(newConfig.sliderOffset || 0));
+            newConfig.couplerPointAngle = 0;
         }
         }
     }
@@ -663,6 +678,19 @@ export const mutateConfig = (config: MechanismConfig, temperature: number = 1.0,
 
     if (newConfig.type === '5bar') {
         enforceFiveBarConstraints(newConfig);
+    }
+    if (newConfig.type === 'gear' || newConfig.type === 'planetary_gear') {
+        newConfig.groundLength = newConfig.crankLength + newConfig.rockerLength;
+        newConfig.couplerLength = 0;
+        newConfig.speed2 = newConfig.gearRatio ?? newConfig.speed2;
+    }
+    if (newConfig.type === 'rack-pinion') {
+        newConfig.groundLength = 0;
+        newConfig.couplerLength = 0;
+        newConfig.rockerLength = Math.max(newConfig.rockerLength, newConfig.crankLength * (2 * Math.PI + 2.2));
+        const rackOffsetSign = Math.sign(newConfig.sliderOffset || 1);
+        newConfig.sliderOffset = rackOffsetSign * Math.max(Math.abs(newConfig.sliderOffset || 0), newConfig.crankLength + 8);
+        newConfig.couplerPointAngle = 0;
     }
 
     return newConfig;

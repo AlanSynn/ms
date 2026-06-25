@@ -1,4 +1,4 @@
-export type MechanismType = 'crank' | '4bar' | 'piston' | 'yoke' | 'quick-return' | '5bar' | 'cam' | 'gear' | 'planetary_gear';
+export type MechanismType = 'crank' | '4bar' | 'piston' | 'yoke' | 'quick-return' | '5bar' | 'cam' | 'rack-pinion' | 'gear' | 'planetary_gear';
 export type AppStage = 'character' | 'path' | 'foundry' | 'design' | 'blueprint' | 'options';
 
 export interface Point {
@@ -45,6 +45,7 @@ export interface MechanismConfig {
     sliderOffset: number;
     couplerPointDist: number;
     couplerPointAngle: number;
+    assemblyMode?: 'open' | 'crossed';
 
     // 5-Bar / Advanced
     speed1?: number;

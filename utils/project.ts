@@ -130,12 +130,13 @@ export const wouldCreateCycle = (joints: Record<string, StandardJoint>, jointId:
 
 export const mechanismRequiredParts = (mechanism: Pick<MechanismConfig, 'type'>) => {
     const base = [
-        { name: 'axle pin', quantity: mechanism.type === '5bar' ? 5 : 4 },
+        { name: 'axle pin', quantity: mechanism.type === '5bar' ? 5 : mechanism.type === 'rack-pinion' ? 3 : 4 },
         { name: 'spacer washer', quantity: mechanism.type === '5bar' ? 8 : 6 },
         { name: `${mechanism.type} linkage plate`, quantity: 1 }
     ];
     if (mechanism.type === '5bar') base.push({ name: 'matched gear', quantity: 2 });
     if (mechanism.type === 'gear' || mechanism.type === 'planetary_gear') base.push({ name: 'gear pair', quantity: mechanism.type === 'planetary_gear' ? 3 : 2 });
+    if (mechanism.type === 'rack-pinion') base.push({ name: 'pinion gear', quantity: 1 }, { name: 'toothed rack', quantity: 1 }, { name: 'slider guide', quantity: 1 });
     if (mechanism.type === 'cam') base.push({ name: 'cam disk', quantity: 1 }, { name: 'follower guide', quantity: 1 });
     if (mechanism.type === 'piston' || mechanism.type === 'yoke') base.push({ name: 'slider guide', quantity: 1 });
     return base;
@@ -191,20 +192,21 @@ export const createDefaultMechanism = (type: MechanismConfig['type'] = '4bar', i
     type,
     visible: true,
     enabled: true,
-    color: type === '5bar' || type === 'gear' || type === 'planetary_gear' ? '#d97706' : type === 'piston' ? '#059669' : type === 'yoke' || type === 'cam' ? '#f59e0b' : '#3b82f6',
+    color: type === '5bar' || type === 'gear' || type === 'planetary_gear' || type === 'rack-pinion' ? '#d97706' : type === 'piston' ? '#059669' : type === 'yoke' || type === 'cam' ? '#f59e0b' : '#3b82f6',
     anchorX: -120,
     anchorY: -40,
     transform: { x: -120, y: -40, rotation: 0, scale: 1 },
     sceneAnchor: { x: -120, y: -40 },
     activeVisualPartIds: [],
-    groundAngle: type === 'cam' ? 90 : 0,
-    groundLength: type === 'gear' ? 108 : type === 'planetary_gear' ? 74 : type === 'piston' || type === 'yoke' || type === 'cam' ? 0 : 180,
-    crankLength: type === '5bar' ? 60 : type === 'gear' ? 54 : type === 'planetary_gear' ? 38 : 50,
-    couplerLength: type === 'yoke' || type === 'cam' || type === 'gear' || type === 'planetary_gear' ? 0 : 165,
-    rockerLength: type === '5bar' ? 48 : type === 'quick-return' ? 130 : type === 'gear' ? 54 : type === 'planetary_gear' ? 36 : type === 'cam' ? 80 : 110,
-    sliderOffset: type === 'piston' ? 34 : 0,
-    couplerPointDist: type === '5bar' ? 90 : 78,
-    couplerPointAngle: type === 'piston' || type === 'yoke' || type === 'cam' ? 0 : 40,
+    groundAngle: type === 'cam' || type === 'rack-pinion' ? 90 : 0,
+    groundLength: type === 'gear' ? 108 : type === 'planetary_gear' ? 74 : type === 'piston' || type === 'yoke' || type === 'cam' || type === 'rack-pinion' ? 0 : 180,
+    crankLength: type === '5bar' ? 60 : type === 'gear' ? 54 : type === 'planetary_gear' ? 38 : type === 'rack-pinion' ? 42 : 50,
+    couplerLength: type === 'yoke' || type === 'cam' || type === 'gear' || type === 'planetary_gear' || type === 'rack-pinion' ? 0 : 165,
+    rockerLength: type === '5bar' ? 48 : type === 'quick-return' ? 130 : type === 'gear' ? 54 : type === 'planetary_gear' ? 36 : type === 'cam' ? 80 : type === 'rack-pinion' ? 380 : 110,
+    sliderOffset: type === 'piston' ? 34 : type === 'rack-pinion' ? 56 : 0,
+    couplerPointDist: type === '5bar' ? 90 : type === 'rack-pinion' ? 70 : 78,
+    couplerPointAngle: type === 'piston' || type === 'yoke' || type === 'cam' || type === 'rack-pinion' ? 0 : 40,
+    assemblyMode: type === '4bar' ? 'open' : undefined,
     speed1: 1,
     speed2: type === '5bar' || type === 'gear' ? -2 : type === 'planetary_gear' ? 3 : 1,
     gearRatio: type === 'gear' ? -1 : type === 'planetary_gear' ? 3 : undefined,
@@ -294,6 +296,7 @@ export const createSampleProject = (): ProjectState => {
         rockerLength: 137,
         couplerPointDist: 180,
         couplerPointAngle: -13.2,
+        assemblyMode: 'crossed',
         source: 'optimized',
         presetId: 'sample-fitted',
         recommendation: 'sample path fit'
@@ -747,6 +750,7 @@ const normalizeMechanismSnapshot = (value: unknown): MechanismConfig => {
         sliderOffset: finiteNumber(raw.sliderOffset, base.sliderOffset),
         couplerPointDist: finiteNumber(raw.couplerPointDist, base.couplerPointDist),
         couplerPointAngle: finiteNumber(raw.couplerPointAngle, base.couplerPointAngle),
+        assemblyMode: raw.assemblyMode === 'crossed' ? 'crossed' : raw.assemblyMode === 'open' ? 'open' : base.assemblyMode,
         speed1: finiteNumber(raw.speed1, base.speed1 ?? 1),
         speed2: finiteNumber(raw.speed2, base.speed2 ?? 1),
         gearRatio: raw.gearRatio === undefined ? base.gearRatio : finiteNumber(raw.gearRatio, base.gearRatio ?? 1),

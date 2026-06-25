@@ -16,6 +16,7 @@ export const ALL_MECHANISM_TYPES: readonly MechanismType[] = [
     'quick-return',
     '5bar',
     'cam',
+    'rack-pinion',
     'gear',
     'planetary_gear'
 ] as const;
@@ -71,6 +72,13 @@ export const MECHANISM_TEMPLATE_LIBRARY: Record<MechanismType, MechanismTemplate
         sense: 'cam radius lifts a follower from a rotating disk profile',
         goodFor: 'timed bumps and repeated lifts',
         constraint: 'follower guide and cam disk must stay aligned',
+        authorable: true
+    },
+    'rack-pinion': {
+        label: 'Rack and pinion',
+        sense: 'a rotating pinion walks a toothed rack along a straight guide',
+        goodFor: 'PaperMech-style up-down or open-close linear travel',
+        constraint: 'rack stroke is open-ended, so the guide length and end stops must be visible',
         authorable: true
     },
     gear: {

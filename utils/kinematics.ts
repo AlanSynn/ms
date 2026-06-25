@@ -3,6 +3,15 @@ import { Point, MechanismConfig, JointState, AppSettings } from '../types';
 
 const toRad = (deg: number) => (deg * Math.PI) / 180;
 
+export const camProfileScale = (angleRad: number) => 0.72 + 0.2 * (1 - Math.cos(angleRad)) + 0.08 * Math.sin(angleRad * 2);
+
+export const camFollowerRise = (liftLength: number, angleRad: number) => {
+    const lift = Math.max(1, liftLength);
+    const baseScale = camProfileScale(0);
+    const fullRiseScale = camProfileScale(Math.PI) - baseScale;
+    return Math.max(0, camProfileScale(angleRad) - baseScale) * (lift / Math.max(fullRiseScale, 0.001));
+};
+
 export const animationDeltaRadians = (
     dtMs: number,
     durationMs: number,
@@ -92,17 +101,45 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
         const trackAngle = toRad(config.groundAngle ?? 90);
         const lift = Math.max(1, config.rockerLength || config.crankLength);
         const radius = Math.max(1, config.crankLength);
-        const rise = (1 - Math.cos(angle1)) * 0.5 * lift;
+        const rise = camFollowerRise(lift, angle1);
         const base = radius + (config.sliderOffset || 0);
+        const profileRadius = radius * camProfileScale(angle1);
         const p2: Point = {
             x: p1.x + Math.cos(trackAngle) * (base + rise),
             y: p1.y + Math.sin(trackAngle) * (base + rise)
         };
         const camPoint: Point = {
-            x: p1.x + radius * (1 + 0.18 * Math.sin(angle1 * 2)) * Math.cos(angle1),
-            y: p1.y + radius * (1 + 0.18 * Math.sin(angle1 * 2)) * Math.sin(angle1)
+            x: p1.x + profileRadius * Math.cos(angle1),
+            y: p1.y + profileRadius * Math.sin(angle1)
         };
         return { p1, p2, j1: camPoint, j2: p2, effector: p2, isValid: true };
+    }
+
+    // --- RACK AND PINION ---
+    else if (config.type === 'rack-pinion') {
+        const trackAngle = toRad(config.groundAngle ?? 90);
+        const radius = Math.max(1, config.crankLength);
+        const rackLength = Math.max(radius * 2, config.rockerLength || radius * 3);
+        const rackOffset = Number.isFinite(config.sliderOffset) && config.sliderOffset !== 0
+            ? config.sliderOffset
+            : radius + 12;
+        const travel = radius * (angle1 - Math.PI);
+        const axis = { x: Math.cos(trackAngle), y: Math.sin(trackAngle) };
+        const normal = { x: -Math.sin(trackAngle), y: Math.cos(trackAngle) };
+        const rackCenter: Point = {
+            x: p1.x + axis.x * travel + normal.x * rackOffset,
+            y: p1.y + axis.y * travel + normal.y * rackOffset
+        };
+        const pinionIndex: Point = {
+            x: p1.x + radius * Math.cos(angle1),
+            y: p1.y + radius * Math.sin(angle1)
+        };
+        const effector: Point = {
+            x: rackCenter.x + axis.x * Math.min(config.couplerPointDist || rackLength * 0.35, rackLength * 0.5),
+            y: rackCenter.y + axis.y * Math.min(config.couplerPointDist || rackLength * 0.35, rackLength * 0.5)
+        };
+        const maxTravel = Math.max(0, (rackLength - radius * 2) / 2);
+        return { p1, p2: rackCenter, j1: pinionIndex, j2: rackCenter, effector, isValid: Math.abs(travel) <= maxTravel + 1e-6 };
     }
 
     // --- SIMPLE GEAR OUTPUT ---
@@ -157,7 +194,7 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
             y: p1.y + config.groundLength * Math.sin(gAngle) 
         };
 
-        const j2 = getCircleIntersection(j1, config.couplerLength, p2, config.rockerLength);
+        const j2 = getCircleIntersection(j1, config.couplerLength, p2, config.rockerLength, config.assemblyMode !== 'crossed');
 
         if (!j2) {
             return { p1, p2, j1, j2: p1, effector: p1, isValid: false };

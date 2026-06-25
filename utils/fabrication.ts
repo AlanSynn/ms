@@ -7,7 +7,9 @@ import { mechanismBindingWarnings, preferredMotionJointId } from './motion';
 export const sampleFeasibleRange = (mechanism: MechanismConfig, samples = 96) => {
     let valid = 0;
     const validSamples: boolean[] = [];
-    for (let i = 0; i <= samples; i++) {
+    const loops = mechanism.type === '5bar' || mechanism.type === 'planetary_gear' ? 8 : 1;
+    const totalSamples = samples * loops;
+    for (let i = 0; i <= totalSamples; i++) {
         const angle = (i / samples) * Math.PI * 2;
         validSamples[i] = calculateLinkage(mechanism, angle).isValid;
         if (validSamples[i]) valid++;
@@ -16,19 +18,19 @@ export const sampleFeasibleRange = (mechanism: MechanismConfig, samples = 96) =>
     let start: number | null = null;
     validSamples.forEach((ok, i) => {
         if (ok && start === null) start = i;
-        if ((!ok || i === samples) && start !== null) {
-            const end = ok && i === samples ? i : i - 1;
+        if ((!ok || i === totalSamples) && start !== null) {
+            const end = ok && i === totalSamples ? i : i - 1;
             intervals.push({ startDeg: Math.round(start * 360 / samples), endDeg: Math.round(end * 360 / samples) });
             start = null;
         }
     });
     const intervalText = intervals.map(i => `${i.startDeg}°–${i.endDeg}°`).join(', ');
     return {
-        percentValid: valid / (samples + 1),
+        percentValid: valid / (totalSamples + 1),
         startDeg: intervals[0]?.startDeg ?? 0,
         endDeg: intervals.at(-1)?.endDeg ?? 0,
         intervals,
-        warning: valid === samples + 1 ? null : valid === 0 ? 'No valid sampled motion' : `Partial motion ${Math.round((valid / (samples + 1)) * 100)}% (${intervalText})`
+        warning: valid === totalSamples + 1 ? null : valid === 0 ? 'No valid sampled motion' : `Partial motion ${Math.round((valid / (totalSamples + 1)) * 100)}% (${intervalText})`
     };
 };
 
@@ -69,7 +71,19 @@ export const validateForFabrication = (project: ProjectState) => {
             if (!path) add('error', `${m.id}: target path ${m.targetPathId} is missing.`, { mechanismId: m.id, pathId: m.targetPathId, recoveryStage: 'path', recoveryAction: 'Create or select a valid path' });
             else if (m.targetPartId && path.partId !== m.targetPartId) add('error', `${m.id}: target path ${m.targetPathId} belongs to ${path.partId}, not ${m.targetPartId}.`, { mechanismId: m.id, pathId: m.targetPathId, partId: m.targetPartId, recoveryStage: 'design', recoveryAction: 'Rebind target path' });
         }
-        if (![m.crankLength, m.couplerLength, m.groundLength, m.rockerLength].every(Number.isFinite)) add('error', `${m.id}: non-finite physical dimension.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Fix mechanism dimensions' });
+        const physicalNumbers = [m.crankLength, m.couplerLength, m.groundLength, m.rockerLength, m.sliderOffset, m.couplerPointDist, m.couplerPointAngle];
+        if (m.type === '5bar' || m.type === 'piston') physicalNumbers.push(m.rodLength ?? Number.NaN);
+        if (m.type === 'gear' || m.type === 'planetary_gear') physicalNumbers.push(m.gearRatio ?? Number.NaN, m.speed2 ?? Number.NaN);
+        if (!physicalNumbers.every(Number.isFinite)) add('error', `${m.id}: non-finite physical dimension.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Fix mechanism dimensions' });
+        if ((m.type === 'gear' || m.type === 'planetary_gear') && (m.gearRatio ?? 0) === 0) add('error', `${m.id}: gear ratio cannot be zero.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Choose a non-zero gear ratio' });
+        if (m.type === 'gear' || m.type === 'planetary_gear') {
+            const expectedCenterDistance = m.crankLength + m.rockerLength;
+            if (Math.abs(m.groundLength - expectedCenterDistance) > Math.max(1, expectedCenterDistance * 0.03)) {
+                add(fabricationSeverity, `${m.id}: gear pitch centers must equal input radius + output radius.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Snap gear center distance to pitch radii' });
+            }
+        }
+        if (m.type === 'rack-pinion' && Math.abs(m.sliderOffset) < Math.max(2, m.crankLength * 0.8)) add('warning', `${m.id}: rack guide is too close to the pinion pitch circle.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Increase rack offset or reduce pinion radius' });
+        if (m.type === 'rack-pinion' && m.rockerLength < m.crankLength * (2 * Math.PI + 2)) add(fabricationSeverity, `${m.id}: rack is too short for a full pinion turn and visible end stops.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Lengthen rack/guide or reduce pinion radius' });
         const range = sampleFeasibleRange(m);
         if (range.warning?.startsWith('No valid')) add('error', `${m.id}: ${range.warning}.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Adjust mechanism parameters' });
         else if (range.warning) add('warning', `${m.id}: ${range.warning}`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Review partial motion' });
@@ -119,7 +133,13 @@ const createRecipe = (project: ProjectState, mechanism: MechanismConfig): Fabric
         requiredParts: mechanism.fabricationMetadata?.requiredParts ?? mechanismRequiredParts(mechanism),
         steps: [
             `Place ${mechanism.id} main axle at ${board.label}.`,
-            `Install ${mechanism.type} links with crank ${mechanism.crankLength.toFixed(0)} and coupler ${mechanism.couplerLength.toFixed(0)} scene units.`,
+            mechanism.type === 'cam'
+                ? `Install the cam disk and follower guide aligned to ${mechanism.groundAngle ?? 90}°; follower lift is ${(mechanism.rockerLength || mechanism.crankLength).toFixed(0)} scene units.`
+                : mechanism.type === 'rack-pinion'
+                    ? `Mesh the pinion gear with the toothed rack; keep the rack guide offset ${mechanism.sliderOffset.toFixed(0)} scene units from the axle and add end stops.`
+                    : mechanism.type === 'gear' || mechanism.type === 'planetary_gear'
+                        ? `Mesh gears at their pitch centers; ratio ${mechanism.gearRatio ?? mechanism.speed2 ?? 1} controls output direction.`
+                        : `Install ${mechanism.type} links with crank ${mechanism.crankLength.toFixed(0)} and coupler ${mechanism.couplerLength.toFixed(0)} scene units.`,
             targetPart ? `Connect output to ${targetPart.name} at anchor ${targetAnchorJointId ?? targetPart.anchorJointId} and follow path ${targetPath?.id ?? 'unassigned'}.` : 'Connect output to selected character part or leave as standalone preview.',
             warnings.length ? `Resolve warning before cutting: ${warnings.join('; ')}` : 'Run preview once, then cut and assemble.'
         ],

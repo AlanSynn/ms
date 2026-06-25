@@ -692,7 +692,7 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await openWavingArmTemplate(page);
   await page.getByRole('button', { name: /Mechanism Foundry/i }).click();
   await expect(page.getByRole('heading', { name: 'Mechanism Foundry' })).toBeVisible();
-  await expect(page.locator('[data-testid^="foundry-mini-simulation-"]')).toHaveCount(8);
+  await expect(page.locator('[data-testid^="foundry-mini-simulation-"]')).toHaveCount(9);
   await expect(page.getByTestId('foundry-selected-linkage')).toBeVisible();
   await expect(page.getByTestId('foundry-mechanism-driver')).toHaveCount(1);
   await expect(page.getByTestId('foundry-mechanism-link')).toHaveCount(1);
@@ -753,11 +753,34 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await expect(page.getByLabel('Foundry mechanism type')).toBeHidden();
   await page.getByText('Mechanism options').click();
 
-  for (const type of ['piston', 'yoke', 'quick-return', '5bar', 'cam', 'gear', 'planetary_gear', '4bar']) {
+  const foundryPhysicalMarkers: Record<string, Array<[string, number]>> = {
+    '4bar': [['foundry-fabrication-part', 4], ['foundry-fabrication-hole', 8]],
+    piston: [['foundry-fabrication-slot', 1], ['foundry-fabrication-hole', 4]],
+    yoke: [['foundry-fabrication-slot', 2], ['foundry-fabrication-hole', 4]],
+    'quick-return': [['foundry-fabrication-slot', 1], ['foundry-fabrication-hole', 4]],
+    '5bar': [['foundry-fabrication-gear', 2], ['foundry-fabrication-part', 4]],
+    cam: [['foundry-fabrication-cam', 1], ['foundry-fabrication-follower', 1]],
+    'rack-pinion': [['foundry-fabrication-gear', 1], ['foundry-fabrication-rack', 1], ['foundry-fabrication-slot', 1], ['foundry-fabrication-end-stop', 2]],
+    gear: [['foundry-fabrication-gear', 2], ['foundry-fabrication-hole', 8]],
+    planetary_gear: [['foundry-fabrication-gear', 2], ['foundry-fabrication-hole', 8]]
+  };
+
+  for (const type of ['piston', 'yoke', 'quick-return', '5bar', 'cam', 'rack-pinion', 'gear', 'planetary_gear', '4bar']) {
     await page.getByLabel('Foundry mechanism type').selectOption(type);
     await expect(page.getByTestId(`foundry-template-${type}`), `${type} has its own physical preview template`).toBeVisible();
-    expect(await page.getByTestId('foundry-fabrication-hole').count(), `${type} preview shows physical holes`).toBeGreaterThan(0);
+    for (const [testId, minimumCount] of foundryPhysicalMarkers[type]) {
+      expect(await page.getByTestId(testId).count(), `${type} preview includes ${testId}`).toBeGreaterThanOrEqual(minimumCount);
+    }
   }
+  await page.getByLabel('Foundry mechanism type').selectOption('rack-pinion');
+  await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Rack and pinion');
+  await expect(page.getByTestId('foundry-mechanism-rack')).toBeVisible();
+  await expect(page.getByTestId('foundry-fabrication-rack'), 'Rack-pinion preview shows the toothed rack fabrication part').toBeVisible();
+  const rackPinionGear = page.getByTestId('foundry-preview').locator('.foundry-depth-scene [data-mechanism-gear-key="rack-pinion-gear"]');
+  const startRotation = await rackPinionGear.getAttribute('data-rotation-deg');
+  await page.getByRole('button', { name: 'Play' }).click();
+  await expect.poll(async () => rackPinionGear.getAttribute('data-rotation-deg'), { message: 'Rack-pinion pinion rotates while rack travels' }).not.toBe(startRotation);
+  await page.getByRole('button', { name: 'Pause' }).click();
   await page.getByLabel('Foundry mechanism type').selectOption('gear');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Gear train');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('ratio sign');
