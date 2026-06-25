@@ -71,11 +71,10 @@
       .workflow-rail { position: fixed; left: 0; top: 0; bottom: 0; z-index: 60; width: var(--ms-rail-width); display: flex; flex-direction: column; align-items: stretch; gap: .42rem; border-right: 1px solid var(--ms-line); border-radius: 0; border-left: 0; border-top: 0; border-bottom: 0; background: rgba(255,255,255,.94); box-shadow: 0 14px 36px rgba(15,23,42,.07); padding: .72rem .55rem; backdrop-filter: blur(18px); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
       .workflow-rail::-webkit-scrollbar { display: none; }
       .workflow-rail-brand { display: grid; place-items: center; height: 2.85rem; border-radius: 1rem; background: var(--ms-accent); color: white; font-size: .76rem; font-weight: 950; letter-spacing: -.02em; box-shadow: 0 14px 30px rgba(139,92,246,.22); }
-      .workflow-rail button { position: relative; display: grid; grid-template-rows: auto auto auto; justify-items: center; gap: .12rem; min-height: 4.35rem; border-radius: 1.05rem; background: transparent; color: var(--ms-muted); padding: .42rem .24rem; transition: background .18s ease, color .18s ease, transform .18s ease, box-shadow .18s ease; }
+      .workflow-rail button { position: relative; display: grid; grid-template-rows: auto auto; justify-items: center; gap: .22rem; min-height: 3.85rem; border-radius: 1.05rem; background: transparent; color: var(--ms-muted); padding: .5rem .24rem; transition: background .18s ease, color .18s ease, transform .18s ease, box-shadow .18s ease; }
       .workflow-rail button:hover, .workflow-rail button.active { color: var(--ms-accent); background: var(--ms-accent-soft); }
       .workflow-rail button.active { box-shadow: inset 0 0 0 1px var(--ms-accent-line); }
-      .workflow-rail-index { font-size: .66rem; font-weight: 950; color: var(--ms-line-strong); }
-      .workflow-rail-mark { display: grid; place-items: center; width: 1.75rem; height: 1.75rem; border-radius: .8rem; background: #fff; border: 1px solid var(--ms-line); color: var(--ms-text-soft); font-size: .78rem; font-weight: 950; }
+      .workflow-rail-mark { display: grid; place-items: center; width: 1.9rem; height: 1.9rem; border-radius: .8rem; background: #fff; border: 1px solid var(--ms-line); color: var(--ms-text-soft); font-size: .78rem; font-weight: 950; }
       .workflow-rail button.active .workflow-rail-mark { background: var(--ms-accent); color: white; border-color: transparent; }
       .workflow-rail-short { max-width: 100%; color: inherit; font-size: .66rem; font-weight: 950; line-height: .84rem; text-align: center; white-space: normal; overflow-wrap: anywhere; }
       .workflow-rail-full { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
@@ -93,6 +92,12 @@
       .stage-left-pane, .stage-right-inspector { min-height: 0; overflow: auto; overscroll-behavior: contain; border-radius: 1.35rem; box-shadow: 0 12px 32px rgba(15,23,42,.06); }
       .stage-left-pane-content, .stage-pane-stack { min-height: 0; display: grid; gap: 1rem; align-content: start; }
       .stage-left-pane-content { height: 100%; }
+      .stage-project-card { display: grid; gap: .6rem; border: 1px solid var(--ms-line); border-radius: 1.15rem; background: rgba(255,255,255,.82); padding: .75rem; }
+      .project-compact-head { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+      .project-stage-icon { display: grid; place-items: center; flex: 0 0 auto; width: 2.1rem; height: 2.1rem; border-radius: .82rem; background: var(--ms-accent-soft); color: var(--ms-accent); }
+      .project-compact-title { min-width: 0; overflow: hidden; color: var(--ms-text); font-size: .9rem; font-weight: 950; letter-spacing: -.02em; text-overflow: ellipsis; white-space: nowrap; }
+      .project-compact-stats { display: flex; flex-wrap: wrap; gap: .35rem; }
+      .project-compact-stats span { display: inline-flex; align-items: center; gap: .22rem; min-height: 1.6rem; border: 1px solid var(--ms-line); border-radius: 999px; background: #fff; color: var(--ms-muted); padding: .18rem .45rem; font-size: .72rem; font-weight: 950; }
       .path-panel { height: 100%; overflow: auto; overscroll-behavior: contain; padding-right: .15rem; }
       .stage-canvas-pane { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
       .stage-canvas-pane > .workspace, .stage-canvas-pane > .canvas-workspace { height: 100%; min-height: 0; }

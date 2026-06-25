@@ -41,7 +41,7 @@ import { loadCharacterPackage } from './utils/packageLoader';
 import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT, normalizeCanvasViewport } from './utils/viewport';
 import { AUTHORABLE_MECHANISM_TYPES, FOUNDRY_PRESETS, MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY, mechanismTemplateLabel } from './utils/mechanismTemplates';
-import { AlertCircle, Boxes, BrainCircuit, Camera, CheckCircle2, Download, FileJson, Loader2, Play, Plus, Route, Save, Sparkles, Trash2, Upload } from 'lucide-react';
+import { AlertCircle, Boxes, BrainCircuit, Camera, CheckCircle2, Download, FileJson, Loader2, PenLine, Play, Plus, Route, Save, Settings, Sparkles, Trash2, Upload, UserRound, Wrench } from 'lucide-react';
 import girlStarterUrl from './resources/examples/raw/girl.png?url';
 import boyStarterUrl from './resources/examples/raw/boy.PNG?url';
 
@@ -119,23 +119,15 @@ const stageNavLabel = (stage: AppStage) => ({
     blueprint: 'Blueprint'
 } as Partial<Record<AppStage, string>>)[stage];
 
-const STAGE_RAIL_MARKS: Record<AppStage, string> = {
-    character: 'C',
-    path: 'P',
-    foundry: 'F',
-    design: 'D',
-    blueprint: 'B',
-    options: 'O'
-};
+type StageIconName = 'character' | 'path' | 'foundry' | 'design' | 'blueprint' | 'options';
 
-
-const STAGE_PANE_NAV_ITEMS: Array<{ ariaLabel: string; label: string; target: AppStage; activeStages: AppStage[]; icon: 'route' | 'boxes' | 'download' }> = [
-    { ariaLabel: 'Character Selection', label: 'Character', target: 'character', activeStages: ['character'], icon: 'route' },
-    { ariaLabel: 'Rail motion path', label: 'Path', target: 'path', activeStages: ['path'], icon: 'route' },
-    { ariaLabel: 'Mechanism Foundry', label: 'Foundry', target: 'foundry', activeStages: ['foundry'], icon: 'boxes' },
-    { ariaLabel: 'Rail mechanism parameters', label: 'Design', target: 'design', activeStages: ['design'], icon: 'boxes' },
-    { ariaLabel: 'Rail export package', label: 'Blueprint', target: 'blueprint', activeStages: ['blueprint'], icon: 'download' },
-    { ariaLabel: 'Options', label: 'Options', target: 'options', activeStages: ['options'], icon: 'route' }
+const STAGE_PANE_NAV_ITEMS: Array<{ ariaLabel: string; label: string; target: AppStage; activeStages: AppStage[]; icon: StageIconName }> = [
+    { ariaLabel: 'Character Selection', label: 'Character', target: 'character', activeStages: ['character'], icon: 'character' },
+    { ariaLabel: 'Rail motion path', label: 'Path', target: 'path', activeStages: ['path'], icon: 'path' },
+    { ariaLabel: 'Mechanism Foundry', label: 'Foundry', target: 'foundry', activeStages: ['foundry'], icon: 'foundry' },
+    { ariaLabel: 'Rail mechanism parameters', label: 'Design', target: 'design', activeStages: ['design'], icon: 'design' },
+    { ariaLabel: 'Rail export package', label: 'Blueprint', target: 'blueprint', activeStages: ['blueprint'], icon: 'blueprint' },
+    { ariaLabel: 'Options', label: 'Options', target: 'options', activeStages: ['options'], icon: 'options' }
 ];
 
 const OPTIONS_SECTION_MANIFEST = [
@@ -151,9 +143,12 @@ const OPTIONS_SECTION_MANIFEST = [
 type OptionsSectionMeta = typeof OPTIONS_SECTION_MANIFEST[number];
 const optionSection = (id: OptionsSectionMeta['id']) => OPTIONS_SECTION_MANIFEST.find(section => section.id === id)!;
 const StagePaneNavIcon = ({ icon }: { icon: typeof STAGE_PANE_NAV_ITEMS[number]['icon'] }) => {
-    if (icon === 'boxes') return <Boxes size={16}/>;
-    if (icon === 'download') return <Download size={16}/>;
-    return <Route size={16}/>;
+    if (icon === 'character') return <UserRound size={16}/>;
+    if (icon === 'path') return <PenLine size={16}/>;
+    if (icon === 'foundry') return <Boxes size={16}/>;
+    if (icon === 'design') return <Wrench size={16}/>;
+    if (icon === 'blueprint') return <Download size={16}/>;
+    return <Settings size={16}/>;
 };
 
 const PARAMS: Array<{ key: keyof MechanismConfig; label: string; min: number; max: number; step?: number }> = [
@@ -641,7 +636,6 @@ const App: React.FC = () => {
                                 <h1 className="text-2xl font-black tracking-[-0.05em]">MechAnim</h1>
                                 <h2 className="current-stage-title">{stageMeta?.label}</h2>
                             </div>
-                            <div className="header-workflow-hint" aria-hidden="true">Shared canvas · left tools · right inspector</div>
                         </div>
                         <div className="flex flex-col items-end gap-2">
                             <TopCommandBar
@@ -716,15 +710,15 @@ const App: React.FC = () => {
 
 const WorkflowRail = ({ stage, goStage }: { stage: AppStage; goStage: (stage: AppStage) => void }) => (
     <nav className="workflow-rail workspace-steps" data-testid="workspace-steps" aria-label="Workflow">
-        <div className="workflow-rail-brand" aria-hidden="true">MS</div>
-        {STAGES.map((item, index) => (
-            <button key={item.id} type="button" aria-label={item.label} aria-current={stage === item.id ? 'step' : undefined} onClick={() => goStage(item.id)} className={stage === item.id ? 'active' : ''}>
-                <span className="workflow-rail-index">{index + 1}</span>
-                <span className="workflow-rail-mark" aria-hidden="true">{STAGE_RAIL_MARKS[item.id]}</span>
+        <div className="workflow-rail-brand" aria-hidden="true"><Sparkles size={18}/></div>
+        {STAGES.map(item => {
+            const navItem = STAGE_PANE_NAV_ITEMS.find(nav => nav.target === item.id);
+            return <button key={item.id} type="button" aria-label={item.label} aria-current={stage === item.id ? 'step' : undefined} onClick={() => goStage(item.id)} className={stage === item.id ? 'active' : ''}>
+                <span className="workflow-rail-mark" aria-hidden="true">{navItem && <StagePaneNavIcon icon={navItem.icon}/>}</span>
                 <span className="workflow-rail-short">{stageNavLabel(item.id) ?? item.label}</span>
                 <span className="workflow-rail-full">{item.label}</span>
-            </button>
-        ))}
+            </button>;
+        })}
     </nav>
 );
 
@@ -864,22 +858,22 @@ const StageLeftSummary = ({ project, title, kicker, stage, goStage, children }: 
     children: React.ReactNode;
 }) => {
     const linkClass = (targets: AppStage[]) => `workspace-side-link ${targets.includes(stage) ? 'active' : ''}`;
+    const currentIcon = STAGE_PANE_NAV_ITEMS.find(item => item.activeStages.includes(stage))?.icon ?? 'options';
     return <>
-        <div className="stage-project-card rounded-3xl bg-slate-100 p-4">
-            <div className="flex items-center gap-3">
-                <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-sm font-black text-white">MS</div>
-                <div>
-                    <div className="font-black tracking-tight text-slate-900">{project.metadata.name}</div>
-                    <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">{kicker}</div>
-                </div>
+        <div className="stage-project-card" data-testid="stage-project-card" aria-label={`${project.metadata.name}: ${project.partOrder.length} parts, ${Object.keys(project.paths).length} paths, ${project.mechanisms.length} mechanisms, ${project.settings.physicalKit.gridPitchMm} millimeter grid`}>
+            <div className="project-compact-head">
+                <span className="project-stage-icon" aria-hidden="true"><StagePaneNavIcon icon={currentIcon}/></span>
+                <div className="project-compact-title" title={`${project.metadata.name} · ${kicker}`}>{project.metadata.name}</div>
             </div>
-            <div className="mt-3 text-xs font-bold text-slate-500">
-                <div>{project.partOrder.length} parts · {Object.keys(project.paths).length} paths · {project.mechanisms.length} mechanisms</div>
-                <div>Grid {project.settings.physicalKit.gridPitchMm} mm · Shared canvas</div>
+            <div className="project-compact-stats" data-testid="project-compact-stats">
+                <span title="Parts"><UserRound size={13}/>{project.partOrder.length}</span>
+                <span title="Paths"><PenLine size={13}/>{Object.keys(project.paths).length}</span>
+                <span title="Mechanisms"><Wrench size={13}/>{project.mechanisms.length}</span>
+                <span title="Grid pitch">{project.settings.physicalKit.gridPitchMm}mm</span>
             </div>
         </div>
         {goStage && <nav className="stage-nav-compact">
-            <div className="section-title">Workflow tabs</div>
+            <div className="section-title">Flow</div>
             {STAGE_PANE_NAV_ITEMS.map(item => <button key={item.ariaLabel} aria-label={item.ariaLabel} aria-current={item.activeStages.includes(stage) ? 'step' : undefined} className={linkClass(item.activeStages)} onClick={() => goStage(item.target)}><StagePaneNavIcon icon={item.icon}/> {item.label}</button>)}
         </nav>}
         <div className="stage-workflow-block">

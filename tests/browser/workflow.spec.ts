@@ -38,6 +38,8 @@ const readScenePoint = async (locator) => locator.evaluate((el: SVGElement) => (
 }));
 
 const activeElementIsInDialog = (page: Page) => page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]')));
+const expectProjectCounts = (page: Page, parts: number, paths: number, mechanisms: number) =>
+  expect(page.getByTestId('stage-project-card')).toHaveAttribute('aria-label', new RegExp(`${parts} parts, ${paths} paths, ${mechanisms} mechanisms`));
 
 test('character → path → foundry → design → blueprint runs end-to-end in browser', async ({ page }) => {
   const pageErrors: string[] = [];
@@ -88,7 +90,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
 
   await openWavingArmTemplate(page);
   await expect(page.getByTestId('workspace-steps')).toContainText('Path Editor');
-  await expect(page.getByTestId('editor-sidebar')).toContainText('Shared canvas');
+  await expect(page.getByTestId('stage-project-card')).not.toContainText('Shared canvas');
+  await expect(page.getByTestId('project-compact-stats')).toContainText('20mm');
   await expect(page.getByTestId('shared-workbench')).toBeVisible();
   await expect(page.getByTestId('workspace-player-dock')).toBeVisible();
   await expect(page.getByTestId('novice-path-panel')).toContainText('Draw the motion path');
@@ -176,7 +179,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   if ((await playback.textContent())?.includes('Pause')) await playback.click();
   await expect(page.getByRole('button', { name: 'SVG', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'DXF' })).toBeVisible();
-  await expect(page.getByText(/1 mechanisms/)).toBeVisible();
+  await expectProjectCounts(page, 6, 1, 1);
 
   await page.getByRole('button', { name: /Blueprint Export/i }).click();
   await expect(page.getByRole('heading', { name: 'Blueprint Export' })).toBeVisible();
@@ -349,7 +352,7 @@ test('Create from image upload creates a reviewed character package in browser',
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
   await expect(page.getByTestId('novice-path-panel')).toContainText('Draw the motion path');
   await expect(page.getByText('Choose a body part, press Draw free path')).toBeVisible();
-  await expect(page.getByText(/0 mechanisms/)).toBeVisible();
+  await expectProjectCounts(page, 10, 0, 0);
 
   expectCleanPage(pageErrors, consoleErrors);
 });
@@ -392,7 +395,7 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
   await expect(page.getByText('review generated package')).toBeVisible();
   await page.getByRole('button', { name: 'Accept package' }).click();
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
-  await expect(page.getByText(/1 parts .* 0 paths .* 0 mechanisms/)).toBeVisible();
+  await expectProjectCounts(page, 1, 0, 0);
   await expect(page.getByText('No path for this part yet. Draw or track a path before fitting a mechanism.')).toBeVisible();
 
   await page.getByRole('button', { name: /Character Selection/i }).click();
@@ -414,7 +417,7 @@ test('Replacement package preserves compatible mechanisms and rebound paths', as
 
   await page.goto('/');
   await openWavingArmTemplate(page);
-  await expect(page.getByText(/6 parts .* 1 paths .* 1 mechanisms/)).toBeVisible();
+  await expectProjectCounts(page, 6, 1, 1);
   await page.getByRole('button', { name: /Character Selection/i }).click();
   await page.getByLabel('Replace current character and preserve compatible mechanisms').check();
   await page.getByTestId('blank-package-input').setInputFiles([
@@ -430,7 +433,7 @@ test('Replacement package preserves compatible mechanisms and rebound paths', as
   await page.getByRole('button', { name: 'Accept package' }).click();
 
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
-  await expect(page.getByText(/1 parts .* 1 paths .* 1 mechanisms/)).toBeVisible();
+  await expectProjectCounts(page, 1, 1, 1);
   await expect(page.getByText('Mechanism instances')).toBeVisible();
   await expect(page.locator('select.field').filter({ hasText: 'Right arm replacement' })).toHaveValue('right_arm');
   await expect(page.locator('select.field').filter({ hasText: 'path-right-arm' })).toHaveValue('path-right-arm');
@@ -1393,7 +1396,7 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   await expect(page.getByTestId('design-mechanism-library')).toContainText('Four-bar linkage');
 
   await page.getByRole('button', { name: 'piston', exact: true }).click();
-  await expect(page.getByText(/2 mechanisms/)).toBeVisible();
+  await expectProjectCounts(page, 6, 1, 2);
   const selectedMechanismText = await page.getByLabel('Mechanism instance').evaluate((select: HTMLSelectElement) => select.selectedOptions[0]?.textContent ?? '');
   expect(selectedMechanismText).toContain('piston');
   await expect(page.getByTestId('design-mechanism-library')).toContainText('Slider piston');
@@ -1417,7 +1420,7 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   await page.getByLabel('Mechanism target path').selectOption('path-right-arm');
 
   await page.getByRole('button', { name: 'Delete', exact: true }).click();
-  await expect(page.getByText(/1 mechanisms/)).toBeVisible();
+  await expectProjectCounts(page, 6, 1, 1);
   const remainingOptions = await page.getByLabel('Mechanism instance').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
   expect(remainingOptions.join(' ')).not.toContain('piston');
 
