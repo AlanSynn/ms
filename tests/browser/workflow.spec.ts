@@ -932,6 +932,22 @@ test('Shared player dock stays inside the editor content at medium desktop width
   expect(dockBox!.x, 'player dock does not overlap the fixed sidebar').toBeGreaterThanOrEqual(railBox!.x + railBox!.width);
 });
 
+test('Right inspector scroll does not move the center canvas', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+
+  const canvas = page.getByTestId('path-canvas');
+  const panel = page.getByTestId('novice-path-panel');
+  const before = await canvas.boundingBox();
+  await panel.hover();
+  await page.mouse.wheel(0, 700);
+
+  await expect.poll(() => panel.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+  const after = await canvas.boundingBox();
+  expect(Math.abs(after!.y - before!.y), 'canvas stays pinned while inspector scrolls').toBeLessThan(1);
+});
+
 test('Animation resumes after leaving path drawing mode', async ({ page }) => {
   await page.goto('/');
   await openWavingArmTemplate(page);
