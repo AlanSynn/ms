@@ -128,6 +128,14 @@ assert(exporterText.includes('fabricationGearPathD'), 'SVG export gear rendering
 assert(appText.includes('fabricationGearProfileForPitchRadius'), 'Foundry gear helper uses shared fabrication gear holes/profile');
 assert(appText.includes('fabricationRingGearPathD'), '2D Foundry planetary preview uses shared ring gear geometry');
 assert(appText.includes('fabricationRingGearProfileForPitchRadius'), '3D Foundry ring uses shared fabrication ring gear geometry');
+assert(appText.includes('SHARED_PLAYBACK_STAGES') && appText.includes('!SHARED_PLAYBACK_STAGES.includes(stage)'), 'shared playback rAF only runs on stages that actually consume the animated angle');
+assert(appText.includes('FOUNDRY_ANIMATION_COMMIT_MS') && appText.includes('data-three-animation-commit-ms'), 'Foundry exposes a bounded animation commit budget for browser perf tests');
+assert(appText.includes("scene.remove(old)") && appText.includes("disposeThreeObject(old)"), 'Foundry disposes noncached dynamic resources when replacing animation groups');
+assert(appText.includes('geometryCacheRef') && appText.includes('materialCacheRef'), 'Foundry caches reusable Three geometry/material resources during playback');
+assert(appText.includes('foundryCached') && appText.includes('data-three-geometry-cache-size'), 'Foundry tags cached resources and exposes cache size for browser perf tests');
+assert(appText.includes('const geom = new THREE.BufferGeometry().setFromPoints(points.map(point => to3(point, z)))'), 'Foundry path/trail line geometry is intentionally not long-cached because it can be phase-dependent');
+assert(appText.includes('sweepBounds') && appText.includes('data-three-fit-bounds=\"phase-invariant-sweep\"'), 'Foundry fitting bounds are sampled across the mechanism sweep instead of jittering per animation frame');
+assert(appText.includes('data-three-static-grid-mode=\"persistent-scene-layer\"'), 'Foundry grid and plane live in a persistent scene layer, not the per-frame dynamic group');
 assert(!appText.includes('starShape'), 'Foundry sandbox no longer carries saw-tooth star gears');
 assert(!appText.includes('teeth * 2'), 'Foundry sandbox no longer carries sparse saw-tooth gear implementation');
 assert(appText.includes("if (key === 'gearRatio') return false"), 'Foundry hides stale gear-ratio controls when physical pitch radii define rotation');

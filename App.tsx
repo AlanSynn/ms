@@ -69,6 +69,8 @@ const clampFoundryZoom = (value: number) => Math.max(0.45, Math.min(2.4, value))
 const foundryCameraDistance = (camera: FoundryCamera) => 17 / clampFoundryZoom(camera.zoom);
 type FoundryOverlaySize = { width: number; height: number };
 const FOUNDRY_OVERLAY_SIZE: FoundryOverlaySize = { width: 360, height: 240 };
+const SHARED_PLAYBACK_STAGES: AppStage[] = ['path', 'design', 'blueprint'];
+const FOUNDRY_ANIMATION_COMMIT_MS = 1000 / 30;
 
 const foundryCameraPosition = (camera: FoundryCamera) => {
     const { yaw, pitch } = camera;
@@ -284,7 +286,7 @@ const App: React.FC = () => {
         : selectedPath?.duration ?? project.settings.animationDurationMs;
 
     useEffect(() => {
-        if (!isPlaying || drawMode || optimizerBusy) return;
+        if (!isPlaying || drawMode || optimizerBusy || showWelcome || showGettingStarted || !SHARED_PLAYBACK_STAGES.includes(stage)) return;
         let frame = 0;
         let last = performance.now();
         const tick = (time: number) => {
@@ -295,7 +297,7 @@ const App: React.FC = () => {
         };
         frame = requestAnimationFrame(tick);
         return () => cancelAnimationFrame(frame);
-    }, [isPlaying, drawMode, optimizerBusy, playbackDurationMs, project.settings.animationSpeed, project.settings.timingProfile]);
+    }, [isPlaying, drawMode, optimizerBusy, showWelcome, showGettingStarted, stage, playbackDurationMs, project.settings.animationSpeed, project.settings.timingProfile]);
 
     useEffect(() => {
         if (stage !== 'path' && drawMode) setDrawMode(false);
@@ -2269,9 +2271,11 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
         let frame = 0;
         let last = performance.now();
         const tick = (time: number) => {
-            const dt = Math.min(64, time - last);
-            last = time;
-            setFoundryPhase(prev => (prev + dt * 0.0025 * project.settings.animationSpeed) % (Math.PI * 2));
+            const elapsed = time - last;
+            if (elapsed >= FOUNDRY_ANIMATION_COMMIT_MS) {
+                last = time;
+                setFoundryPhase(prev => (prev + Math.min(96, elapsed) * 0.0025 * project.settings.animationSpeed) % (Math.PI * 2));
+            }
             frame = requestAnimationFrame(tick);
         };
         frame = requestAnimationFrame(tick);
@@ -2926,25 +2930,28 @@ const fitPathToBox = (points: Point[], width: number, height: number) => pointsT
 const fitMechanismSimulation = (mechanism: MechanismConfig, angle: number, width: number, height: number, resolution = 72) => {
     const state = calculateLinkage(mechanism, angle);
     const pathPoints = generateCurvePoints(mechanism, resolution).points;
-    const statePoints = [state.p1, state.p2, state.j1, state.j2, state.aux, state.effector].filter((point): point is Point => Boolean(point));
-    const visualBounds: Point[] = [];
-    const addRadiusBounds = (center: Point | undefined, radius: number) => {
+    const sweepBounds: Point[] = [];
+    const addRadiusBounds = (center: Point | undefined, radius: number, target = sweepBounds) => {
         if (!center || !Number.isFinite(radius) || radius <= 0) return;
-        visualBounds.push(
+        target.push(
             { x: center.x - radius, y: center.y - radius },
             { x: center.x + radius, y: center.y + radius }
         );
     };
-    if (mechanism.type === 'cam') addRadiusBounds(state.p1, mechanism.crankLength * 1.35);
-    if (mechanism.type === 'gear' || mechanism.type === '5bar' || mechanism.type === 'rack-pinion') {
-        addRadiusBounds(state.p1, mechanism.crankLength);
-        addRadiusBounds(state.p2, mechanism.rockerLength);
+    for (let i = 0; i < Math.max(12, resolution); i += 1) {
+        const sampleState = calculateLinkage(mechanism, (i / Math.max(12, resolution)) * Math.PI * 2);
+        sweepBounds.push(...[sampleState.p1, sampleState.p2, sampleState.j1, sampleState.j2, sampleState.aux, sampleState.effector].filter((point): point is Point => Boolean(point)));
+        if (mechanism.type === 'cam') addRadiusBounds(sampleState.p1, mechanism.crankLength * 1.35);
+        if (mechanism.type === 'gear' || mechanism.type === '5bar' || mechanism.type === 'rack-pinion') {
+            addRadiusBounds(sampleState.p1, mechanism.crankLength);
+            addRadiusBounds(sampleState.p2, mechanism.rockerLength);
+        }
+        if (mechanism.type === 'planetary_gear') {
+            addRadiusBounds(sampleState.p1, mechanism.groundLength + mechanism.rockerLength);
+            addRadiusBounds(sampleState.p2, mechanism.rockerLength);
+        }
     }
-    if (mechanism.type === 'planetary_gear') {
-        addRadiusBounds(state.p1, mechanism.groundLength + mechanism.rockerLength);
-        addRadiusBounds(state.p2, mechanism.rockerLength);
-    }
-    const source = [...pathPoints, ...statePoints, ...visualBounds];
+    const source = [...pathPoints, ...sweepBounds];
     if (!source.length) return { pathPoints: [] as Point[], pathD: '', state, scale: 1 };
     const xs = source.map(p => p.x), ys = source.map(p => p.y);
     const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
@@ -3016,18 +3023,24 @@ const foundryRenderedInventory = (type: MechanismType) => ({
 
 const disposeThreeObject = (object: THREE.Object3D) => object.traverse(child => {
     const mesh = child as THREE.Mesh;
-    mesh.geometry?.dispose?.();
+    if (mesh.geometry && !mesh.geometry.userData.foundryCached) mesh.geometry.dispose();
     const material = mesh.material;
-    if (Array.isArray(material)) material.forEach(item => item.dispose());
-    else material?.dispose?.();
+    if (Array.isArray(material)) material.forEach(item => {
+        if (!item.userData.foundryCached) item.dispose();
+    });
+    else if (material && !material.userData.foundryCached) material.dispose();
 });
 
 const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, color, pathPoints, showPathPreview, showTrail, showForces, showVelocity, physicsRule, velocityMagnitude, forceMagnitude, frictionCoefficient, frictionMagnitude, constraintError, cameraLabel, isPickingAnchor, isOrbiting, isZooming, onAnchorPick, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onWheel, onProjectionSizeChange, children }: ThreeFoundryPreviewProps) => {
     const hostRef = useRef<HTMLDivElement | null>(null);
+    const stateRef = useRef<HTMLDivElement | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
     const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
     const cameraStateRef = useRef(camera);
+    const dynamicBuildCountRef = useRef(0);
+    const geometryCacheRef = useRef<Map<string, THREE.BufferGeometry>>(new Map());
+    const materialCacheRef = useRef<Map<string, THREE.Material>>(new Map());
     const inv = foundryRenderedInventory(mechanism.type);
     const pinionRotation = Math.atan2(simulation.state.j1.y - simulation.state.p1.y, simulation.state.j1.x - simulation.state.p1.x) * 180 / Math.PI;
     const renderPlan = useMemo(() => fabricationRenderPlanForMechanism(mechanism), [mechanism.type]);
@@ -3080,6 +3093,17 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         key.position.set(6, 8, 10);
         key.castShadow = true;
         scene.add(key);
+        const staticRoot = new THREE.Group();
+        staticRoot.name = 'foundry-static';
+        const grid = new THREE.GridHelper(24, 24, '#c7d2fe', '#e2e8f0');
+        grid.rotation.x = Math.PI / 2;
+        grid.position.z = -0.9;
+        staticRoot.add(grid);
+        const plane = new THREE.Mesh(new THREE.PlaneGeometry(26, 16), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.9, transparent: true, opacity: 0.72 }));
+        plane.receiveShadow = true;
+        plane.position.z = -0.94;
+        staticRoot.add(plane);
+        scene.add(staticRoot);
         sceneRef.current = scene;
         rendererRef.current = renderer;
         cameraRef.current = cam;
@@ -3101,6 +3125,10 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             renderer.dispose();
             if (renderer.domElement.parentElement === host) host.removeChild(renderer.domElement);
             disposeThreeObject(scene);
+            geometryCacheRef.current.forEach(geometry => geometry.dispose());
+            materialCacheRef.current.forEach(material => material.dispose());
+            geometryCacheRef.current.clear();
+            materialCacheRef.current.clear();
         };
     }, []);
 
@@ -3122,14 +3150,36 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         const root = new THREE.Group();
         root.name = 'foundry-dynamic';
         scene.add(root);
-        const materialForLayer = (colorValue: string, roughness = 0.66, metalness = 0.03) => new THREE.MeshStandardMaterial({ color: colorValue, roughness, metalness, transparent: rigOpacity < 0.995, opacity: rigOpacity });
+        const geometryCache = geometryCacheRef.current;
+        const materialCache = materialCacheRef.current;
+        const cachedGeometry = <T extends THREE.BufferGeometry>(key: string, create: () => T): T => {
+            const existing = geometryCache.get(key) as T | undefined;
+            if (existing) return existing;
+            const geometry = create();
+            geometry.userData.foundryCached = true;
+            geometryCache.set(key, geometry);
+            return geometry;
+        };
+        const cachedMaterial = <T extends THREE.Material>(key: string, create: () => T): T => {
+            const existing = materialCache.get(key) as T | undefined;
+            if (existing) return existing;
+            const material = create();
+            material.userData.foundryCached = true;
+            materialCache.set(key, material);
+            return material;
+        };
+        const materialForLayer = (colorValue: string, roughness = 0.66, metalness = 0.03) => cachedMaterial(
+            `standard:${colorValue}:${roughness.toFixed(2)}:${metalness.toFixed(2)}:${rigOpacity.toFixed(3)}`,
+            () => new THREE.MeshStandardMaterial({ color: colorValue, roughness, metalness, transparent: rigOpacity < 0.995, opacity: rigOpacity })
+        );
         const material = {
             base: materialForLayer(renderPlan.base.color, 0.82, 0.01),
             accent: materialForLayer('#60a5fa', 0.45, 0.08),
-            hole: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.25 }),
+            hole: cachedMaterial('standard:#ffffff:0.25:0.00:1', () => new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.25 })),
             dark: materialForLayer('#334155', 0.62, 0.03),
-            path: new THREE.LineDashedMaterial({ color: new THREE.Color(color), dashSize: 0.25, gapSize: 0.16, linewidth: 2 }),
-            trail: new THREE.LineBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity: 0.18 })
+            edge: cachedMaterial('edge:#334155:0.72', () => new THREE.LineBasicMaterial({ color: '#334155', transparent: true, opacity: 0.72 })),
+            path: cachedMaterial(`path:${color}`, () => new THREE.LineDashedMaterial({ color: new THREE.Color(color), dashSize: 0.25, gapSize: 0.16, linewidth: 2 })),
+            trail: cachedMaterial(`trail:${color}`, () => new THREE.LineBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity: 0.18 }))
         };
         const to3 = (point: Point, z = 0) => new THREE.Vector3((point.x - 180) / 18, (120 - point.y) / 18, z);
         const mmToThree = SCENE_PX_PER_MM / 18;
@@ -3138,8 +3188,8 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         const holeR = Math.max(0.08, kit.holeDiameterMm / 34);
         const spacerOuterR = FABRICATION_SPACER_SPEC.outerDiameterMm * mmToThree / 2;
         const spacerInnerR = FABRICATION_SPACER_SPEC.innerDiameterMm * mmToThree / 2;
-        const addEdges = (mesh: THREE.Mesh) => {
-            const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({ color: '#334155', transparent: true, opacity: 0.72 }));
+        const addEdges = (mesh: THREE.Mesh, key = mesh.geometry.uuid) => {
+            const edges = new THREE.LineSegments(cachedGeometry(`edges:${key}`, () => new THREE.EdgesGeometry(mesh.geometry)), material.edge);
             mesh.add(edges);
         };
         const circularHole = (x: number, y: number, r = holeR) => {
@@ -3162,26 +3212,29 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             return shape;
         };
         const addHoleRing = (group: THREE.Group, x: number, y: number, z: number) => {
-            const ring = new THREE.Mesh(new THREE.TorusGeometry(holeR * 1.1, 0.025, 8, 24), material.accent);
+            const ring = new THREE.Mesh(cachedGeometry(`hole-ring:${holeR.toFixed(3)}`, () => new THREE.TorusGeometry(holeR * 1.1, 0.025, 8, 24)), material.accent);
             ring.position.set(x, y, z + thickness / 2 + 0.025);
             group.add(ring);
         };
         const addSpacerWasher = (point: Point | undefined, z: number, mat: THREE.Material) => {
             if (!point) return;
             const p = to3(point, z);
-            const shape = new THREE.Shape();
-            shape.absellipse(0, 0, spacerOuterR, spacerOuterR, 0, Math.PI * 2, false);
-            shape.holes.push(circularHole(0, 0, spacerInnerR));
-            const washer = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.012 }), mat);
+            const geometryKey = `spacer:${spacerOuterR.toFixed(3)}:${spacerInnerR.toFixed(3)}:${thickness.toFixed(3)}`;
+            const washer = new THREE.Mesh(cachedGeometry(geometryKey, () => {
+                const shape = new THREE.Shape();
+                shape.absellipse(0, 0, spacerOuterR, spacerOuterR, 0, Math.PI * 2, false);
+                shape.holes.push(circularHole(0, 0, spacerInnerR));
+                return new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.012 });
+            }), mat);
             washer.position.set(p.x, p.y, z - thickness / 2);
             washer.castShadow = true;
-            addEdges(washer);
+            addEdges(washer, geometryKey);
             root.add(washer);
         };
         const addClipCap = (point: Point | undefined, z: number, mat: THREE.Material) => {
             if (!point) return;
             const p = to3(point, z);
-            const clip = new THREE.Mesh(new THREE.CylinderGeometry(holeR * 1.35, holeR * 1.35, 0.08, 24), mat);
+            const clip = new THREE.Mesh(cachedGeometry(`clip:${holeR.toFixed(3)}`, () => new THREE.CylinderGeometry(holeR * 1.35, holeR * 1.35, 0.08, 24)), mat);
             clip.rotation.x = Math.PI / 2;
             clip.position.copy(p);
             clip.position.z = z;
@@ -3196,13 +3249,16 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             group.position.set((av.x + bv.x) / 2, (av.y + bv.y) / 2, z);
             group.rotation.z = Math.atan2(dy, dx);
             const holeXs = Array.from({ length: Math.max(2, holeCount) }, (_, index) => -len / 2 + (len * index) / (Math.max(2, holeCount) - 1));
-            const shape = roundedRectShape(len, barW);
-            shape.holes.push(...holeXs.map(x => circularHole(x, 0)));
-            const mesh = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.025, bevelThickness: 0.018 }), mat);
+            const geometryKey = `bar:${len.toFixed(3)}:${barW.toFixed(3)}:${thickness.toFixed(3)}:${holeCount}`;
+            const mesh = new THREE.Mesh(cachedGeometry(geometryKey, () => {
+                const shape = roundedRectShape(len, barW);
+                shape.holes.push(...holeXs.map(x => circularHole(x, 0)));
+                return new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.025, bevelThickness: 0.018 });
+            }), mat);
             mesh.position.z = -thickness / 2;
             mesh.castShadow = true;
             mesh.receiveShadow = true;
-            addEdges(mesh);
+            addEdges(mesh, geometryKey);
             group.add(mesh);
             holeXs.forEach(x => addHoleRing(group, x, 0, 0));
             root.add(group);
@@ -3223,13 +3279,14 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             const axleHoleRadius = Math.max(holeR * 0.7, profile.axleHoleRadius);
             shape.holes.push(circularHole(0, 0, axleHoleRadius));
             profile.attachmentHoleCenters.forEach(point => shape.holes.push(circularHole(point.x, point.y, Math.max(holeR * 0.55, profile.axleHoleRadius))));
-            const geom = new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.025, bevelThickness: 0.02 });
+            const geometryKey = `gear:${mechanism.type}:${radius.toFixed(3)}:${simulation.scale.toFixed(3)}:${thickness.toFixed(3)}`;
+            const geom = cachedGeometry(geometryKey, () => new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.025, bevelThickness: 0.02 }));
             const mesh = new THREE.Mesh(geom, mat);
             const c = to3(center, z);
             mesh.position.set(c.x, c.y, z - thickness / 2);
             mesh.rotation.z = rotation * Math.PI / 180;
             mesh.castShadow = true;
-            addEdges(mesh);
+            addEdges(mesh, geometryKey);
             root.add(mesh);
             const holes = new THREE.Group();
             holes.position.set(c.x, c.y, z);
@@ -3251,13 +3308,14 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             shape.holes.push(inner);
             const mountHoleRadius = Math.max(holeR * 0.58, 2 * (profile.pitchRadius / 70));
             profile.mountHoleCenters.forEach(point => shape.holes.push(circularHole(point.x, point.y, mountHoleRadius)));
-            const geom = new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.025, bevelThickness: 0.02 });
+            const geometryKey = `ring-gear:${radius.toFixed(3)}:${simulation.scale.toFixed(3)}:${thickness.toFixed(3)}`;
+            const geom = cachedGeometry(geometryKey, () => new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.025, bevelThickness: 0.02 }));
             const mesh = new THREE.Mesh(geom, mat);
             const c = to3(center, z);
             mesh.position.set(c.x, c.y, z - thickness / 2);
             mesh.rotation.z = rotation * Math.PI / 180;
             mesh.castShadow = true;
-            addEdges(mesh);
+            addEdges(mesh, geometryKey);
             root.add(mesh);
             const holes = new THREE.Group();
             holes.position.set(c.x, c.y, z);
@@ -3276,11 +3334,12 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             }
             shape.closePath();
             shape.holes.push(circularHole(0, 0, holeR * 1.35));
-            const mesh = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.025 }), mat);
+            const geometryKey = `cam:${mechanism.crankLength.toFixed(2)}:${simulation.scale.toFixed(3)}:${thickness.toFixed(3)}`;
+            const mesh = new THREE.Mesh(cachedGeometry(geometryKey, () => new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.025 })), mat);
             const c = to3(center, z);
             mesh.position.set(c.x, c.y, z - thickness / 2);
             mesh.castShadow = true;
-            addEdges(mesh);
+            addEdges(mesh, geometryKey);
             root.add(mesh);
         };
         const addSlotPlate = (center: Point, length: number, rotation: number, z: number, mat: THREE.Material) => {
@@ -3288,12 +3347,15 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             const group = new THREE.Group();
             group.position.copy(c);
             group.rotation.z = rotation;
-            const shape = roundedRectShape(length, barW * 1.35, barW * 0.28);
-            shape.holes.push(roundedRectShape(length * 0.7, barW * 0.46, barW * 0.23));
-            const mesh = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.015 }), mat);
+            const geometryKey = `slot:${length.toFixed(3)}:${barW.toFixed(3)}:${thickness.toFixed(3)}`;
+            const mesh = new THREE.Mesh(cachedGeometry(geometryKey, () => {
+                const shape = roundedRectShape(length, barW * 1.35, barW * 0.28);
+                shape.holes.push(roundedRectShape(length * 0.7, barW * 0.46, barW * 0.23));
+                return new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.015 });
+            }), mat);
             mesh.position.z = -thickness / 2;
             mesh.castShadow = true;
-            addEdges(mesh);
+            addEdges(mesh, geometryKey);
             group.add(mesh);
             root.add(group);
         };
@@ -3301,10 +3363,11 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             const c = to3(center, z);
             const group = new THREE.Group();
             group.position.copy(c);
-            const block = new THREE.Mesh(new THREE.BoxGeometry(barW * 1.45, barW * 1.8, thickness), mat);
-            addEdges(block);
+            const blockKey = `follower-block:${barW.toFixed(3)}:${thickness.toFixed(3)}`;
+            const block = new THREE.Mesh(cachedGeometry(blockKey, () => new THREE.BoxGeometry(barW * 1.45, barW * 1.8, thickness)), mat);
+            addEdges(block, blockKey);
             group.add(block);
-            const roller = new THREE.Mesh(new THREE.CylinderGeometry(holeR * 1.3, holeR * 1.3, thickness * 1.18, 28), material.accent);
+            const roller = new THREE.Mesh(cachedGeometry(`follower-roller:${holeR.toFixed(3)}:${thickness.toFixed(3)}`, () => new THREE.CylinderGeometry(holeR * 1.3, holeR * 1.3, thickness * 1.18, 28)), material.accent);
             roller.position.set(0, -barW * 0.74, 0.04);
             roller.rotation.x = Math.PI / 2;
             group.add(roller);
@@ -3312,20 +3375,23 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         };
         const addEndStop = (center: Point, offset: number, z: number) => {
             const c = to3(center, z);
-            const stop = new THREE.Mesh(new THREE.BoxGeometry(0.22, barW * 1.65, thickness * 1.25), material.dark);
+            const stopKey = `end-stop:${barW.toFixed(3)}:${thickness.toFixed(3)}`;
+            const stop = new THREE.Mesh(cachedGeometry(stopKey, () => new THREE.BoxGeometry(0.22, barW * 1.65, thickness * 1.25)), material.dark);
             stop.position.set(c.x + offset, c.y, z);
-            addEdges(stop);
+            addEdges(stop, stopKey);
             root.add(stop);
         };
         const addRack = (center: Point, z: number, mat: THREE.Material) => {
             const c = to3(center, z);
             const group = new THREE.Group();
             group.position.copy(c);
-            const rack = new THREE.Mesh(new THREE.BoxGeometry(4.6, barW, thickness), mat);
-            addEdges(rack);
+            const rackKey = `rack:${barW.toFixed(3)}:${thickness.toFixed(3)}`;
+            const rack = new THREE.Mesh(cachedGeometry(rackKey, () => new THREE.BoxGeometry(4.6, barW, thickness)), mat);
+            addEdges(rack, rackKey);
             group.add(rack);
             for (let i = 0; i < 10; i++) {
-                const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, thickness), mat);
+                const toothKey = `rack-tooth:${thickness.toFixed(3)}`;
+                const tooth = new THREE.Mesh(cachedGeometry(toothKey, () => new THREE.BoxGeometry(0.22, 0.18, thickness)), mat);
                 tooth.position.set(-2.1 + i * 0.46, -barW * 0.65, 0.06);
                 tooth.rotation.z = Math.PI / 4;
                 group.add(tooth);
@@ -3340,14 +3406,6 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             root.add(line);
         };
 
-        const grid = new THREE.GridHelper(24, 24, '#c7d2fe', '#e2e8f0');
-        grid.rotation.x = Math.PI / 2;
-        grid.position.z = -0.9;
-        root.add(grid);
-        const plane = new THREE.Mesh(new THREE.PlaneGeometry(26, 16), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.9, transparent: true, opacity: 0.72 }));
-        plane.receiveShadow = true;
-        plane.position.z = -0.94;
-        root.add(plane);
         if (showTrail) addPath(pathPoints, -0.72, material.trail);
         if (showPathPreview) addPath(pathPoints, -0.55, material.path);
 
@@ -3393,12 +3451,18 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         const zPin = (renderPlan.layers.at(-1)?.z ?? 0.22) + 0.34;
         [s.p1, s.p2, s.j1, s.j2, s.aux, s.effector].filter(Boolean).forEach(point => {
             const p = to3(point as Point, zPin);
-            const pin = new THREE.Mesh(new THREE.CylinderGeometry(holeR * 0.8, holeR * 0.8, Math.max(0.55, zPin - zBackClip + 0.12), 20), material.dark);
+            const pin = new THREE.Mesh(cachedGeometry(`pin:${holeR.toFixed(3)}:${Math.max(0.55, zPin - zBackClip + 0.12).toFixed(3)}`, () => new THREE.CylinderGeometry(holeR * 0.8, holeR * 0.8, Math.max(0.55, zPin - zBackClip + 0.12), 20)), material.dark);
             pin.rotation.x = Math.PI / 2;
             pin.position.copy(p);
             root.add(pin);
         });
 
+        dynamicBuildCountRef.current += 1;
+        if (stateRef.current) {
+            stateRef.current.dataset.threeDynamicBuildCount = String(dynamicBuildCountRef.current);
+            stateRef.current.dataset.threeGeometryCacheSize = String(geometryCacheRef.current.size);
+            stateRef.current.dataset.threeMaterialCacheSize = String(materialCacheRef.current.size);
+        }
         renderCamera(cameraStateRef.current);
     }, [mechanism, simulation, kit, color, pathPoints, showPathPreview, showTrail, pinionRotation, renderPlan, rigOpacity]);
 
@@ -3416,6 +3480,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
     >
         <div ref={hostRef} className="foundry-three-host" />
         <div
+            ref={stateRef}
             data-testid="foundry-camera-rig"
             data-camera-preset={camera.preset}
             data-camera-yaw={camera.yaw.toFixed(1)}
@@ -3458,6 +3523,12 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-anchor-pick-mode="three-raycaster-plane"
             data-three-hole-mode="extruded-cut-through"
             data-three-render-loop="camera-only-orbit"
+            data-three-animation-commit-ms={FOUNDRY_ANIMATION_COMMIT_MS.toFixed(1)}
+            data-three-dynamic-build-count={dynamicBuildCountRef.current}
+            data-three-geometry-cache-size={geometryCacheRef.current.size}
+            data-three-material-cache-size={materialCacheRef.current.size}
+            data-three-static-grid-mode="persistent-scene-layer"
+            data-three-fit-bounds="phase-invariant-sweep"
             data-three-inventory-source="rendered-template"
             data-three-stack-source="fabricationStackForMechanism"
             data-three-stack-mode="assembled-spacer-separated"

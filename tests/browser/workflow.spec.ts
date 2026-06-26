@@ -455,6 +455,47 @@ test('Character tab processing controls route to real browser workflows', async 
   expectCleanPage(pageErrors, consoleErrors);
 });
 
+test('animation performance: Foundry playback stays responsive without runaway Three rebuilds', async ({ page }) => {
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByRole('button', { name: /Mechanism Foundry/i }).click();
+  await expect(page.getByRole('heading', { name: 'Mechanism Foundry' })).toBeVisible();
+
+  const foundryRig = page.getByTestId('foundry-camera-rig');
+  await expect(foundryRig).toHaveAttribute('data-three-renderer', 'webgl');
+  await expect(foundryRig).toHaveAttribute('data-three-static-grid-mode', 'persistent-scene-layer');
+  await expect(foundryRig).toHaveAttribute('data-three-fit-bounds', 'phase-invariant-sweep');
+  await expect(foundryRig).toHaveAttribute('data-three-animation-commit-ms', '33.3');
+
+  const dynamicBuildsBefore = Number(await foundryRig.getAttribute('data-three-dynamic-build-count') ?? '0');
+  const geometryCacheBefore = Number(await foundryRig.getAttribute('data-three-geometry-cache-size') ?? '0');
+  const phaseControl = page.getByLabel('Foundry phase');
+  const phaseBefore = Number(await phaseControl.inputValue());
+  await page.getByTestId('foundry-toolbar').getByRole('button', { name: 'Play', exact: true }).click();
+  await expect(page.getByTestId('foundry-toolbar-state')).toContainText('playing');
+
+  await page.waitForTimeout(1400);
+
+  const phaseAfter = Number(await phaseControl.inputValue());
+  const dynamicBuildsAfter = Number(await foundryRig.getAttribute('data-three-dynamic-build-count') ?? '0');
+  const geometryCacheAfter = Number(await foundryRig.getAttribute('data-three-geometry-cache-size') ?? '0');
+  const dynamicBuildsDuringPlayback = dynamicBuildsAfter - dynamicBuildsBefore;
+  expect(dynamicBuildsDuringPlayback, 'Foundry still animates enough frames to feel alive').toBeGreaterThan(12);
+  expect(dynamicBuildsDuringPlayback, 'Foundry does not rebuild expensive Three geometry at unbounded 60fps').toBeLessThanOrEqual(48);
+  expect(geometryCacheAfter - geometryCacheBefore, 'Foundry path/trail geometry is disposed instead of leaking into the persistent cache').toBeLessThanOrEqual(12);
+  expect(Math.abs(phaseAfter - phaseBefore), 'Foundry phase advances during optimized playback').toBeGreaterThan(40);
+
+  await page.getByTestId('foundry-toolbar').getByRole('button', { name: 'Pause', exact: true }).click();
+  expectCleanPage(pageErrors, consoleErrors);
+});
+
 test('Create from image upload creates a reviewed character package in browser', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
