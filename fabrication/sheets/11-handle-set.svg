@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1"
+     width="279.4mm" height="215.9mm"
+     viewBox="0 0 279.4 215.9"
+     data-profile-key="motionsmith-ms4n"
+     data-grid-pitch-mm="20"
+     data-hole-diameter-mm="4">
+  <title>Automataii fabrication sheet 11-handle-set: Handle set</title>
+  <desc>Workshop sheet containing: handles. Nominal holes are 4 mm.</desc>
+  <defs>
+    <style>
+      .cut { fill: none; stroke: #ed1c24; stroke-width: 0.25; stroke-miterlimit: 10; }
+      .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }
+      .score { fill: none; stroke: #777777; stroke-width: 0.15; stroke-dasharray: 2 1; }
+      .label { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }
+      .tiny { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
+      .small { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
+      .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
+      .part-card-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 3.5px; font-weight: bold; }
+      .coord-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 6px; font-weight: bold; }
+      .paper { fill: #ffffff; stroke: none; }
+    </style>
+  </defs>
+  <text x="12" y="12" class="label" text-anchor="start">11 Handle set</text>
+  <text x="12" y="18" class="tiny" text-anchor="start">Simple rectangle: cut two left slits, fold the three 10 mm strips into 4 mm-hole tabs</text>
+  <text x="12" y="31" class="tiny" text-anchor="start">Triangular paper-tent glue handle</text>
+  <g transform="translate(12 34)">
+  <rect x="6" y="10" width="182" height="30" class="cut handle-outline folding-fork-tripod-outline triangular-prism-handle-outline paper-tent-handle-outline simple-rectangular-slit-handle-outline no-thin-neck-handle-outline" data-handle-key="folding-fork-tripod" data-handle-kind="folding_fork_tripod" data-hole-diameter-mm="4" data-insert-strip-width-mm="10" data-split-cut-count="2" data-manual-fold-count-per-tab="3" data-folded-panel-width-mm="2.5" data-folded-rectangular-tab-diameter-mm="3.202" data-max-material-thickness-mm="0.781" data-triangular-prism-side-mm="10"/>
+  </g>
+  <g transform="translate(12 34)">
+  <path d="M 6 20 L 48 20" class="cut tab-split-cut rectangular-tab-split-cut" data-split-cut-index="0" data-cut-role="rectangular-tab-split-cut"/>
+  </g>
+  <g transform="translate(12 34)">
+  <path d="M 6 30 L 48 30" class="cut tab-split-cut rectangular-tab-split-cut" data-split-cut-index="1" data-cut-role="rectangular-tab-split-cut"/>
+  </g>
+  <g transform="translate(12 34)">
+  <path d="M 48 20 L 188 20" class="score fold-line prism-fold-line" data-fold-index="0" data-fold-role="prism-panel-fold"/>
+  </g>
+  <g transform="translate(12 34)">
+  <path d="M 48 30 L 188 30" class="score fold-line prism-fold-line" data-fold-index="1" data-fold-role="prism-panel-fold"/>
+  </g>
+  <g transform="translate(12 34)">
+  <path d="M 176 10 L 176 40" class="score fold-line prism-fold-line" data-fold-index="2" data-fold-role="seam-glue-fold"/>
+  </g>
+  <g transform="translate(12 34)">
+  <rect x="178" y="13" width="8" height="24" class="score prism-seam-glue-zone handle-glue-zone" data-glue-zone="close-triangular-prism-seam"/>
+  </g>
+  <g transform="translate(12 34)">
+  <rect x="8" y="12" width="38" height="6" class="score glue-foot-score handle-glue-zone rectangular-tab-glue-zone" data-glue-foot-index="0" data-glue-zone="after-4mm-hole-pass-through" data-score-area-mm2="228"/>
+  </g>
+  <g transform="translate(12 34)">
+  <rect x="8" y="22" width="38" height="6" class="score glue-foot-score handle-glue-zone rectangular-tab-glue-zone" data-glue-foot-index="1" data-glue-zone="after-4mm-hole-pass-through" data-score-area-mm2="228"/>
+  </g>
+  <g transform="translate(12 34)">
+  <rect x="8" y="32" width="38" height="6" class="score glue-foot-score handle-glue-zone rectangular-tab-glue-zone" data-glue-foot-index="2" data-glue-zone="after-4mm-hole-pass-through" data-score-area-mm2="228"/>
+  </g>
+</svg>

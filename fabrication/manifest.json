@@ -1,0 +1,1110 @@
+{
+  "assembly": {
+    "board_map": "assembly/board-15x15.svg",
+    "files": [
+      "assembly/README.md",
+      "assembly/index.html",
+      "assembly/recipes.json",
+      "assembly/board-15x15.svg",
+      "assembly/parts-overview.svg",
+      "assembly/01-gear-train-basic.svg",
+      "assembly/02-cam-follower-basic.svg",
+      "assembly/03-four-bar-basic.svg",
+      "assembly/04-gear-linkage-crank.svg",
+      "assembly/05-planetary-gear-basic.svg",
+      "assembly/06-slider-crank-basic.svg"
+    ],
+    "guide_files": [
+      "assembly/01-gear-train-basic.svg",
+      "assembly/02-cam-follower-basic.svg",
+      "assembly/03-four-bar-basic.svg",
+      "assembly/04-gear-linkage-crank.svg",
+      "assembly/05-planetary-gear-basic.svg",
+      "assembly/06-slider-crank-basic.svg"
+    ],
+    "recipes_source": "assembly/recipes.json",
+    "schema_version": "automataii.fabrication.assembly.v1"
+  },
+  "board_columns": 15,
+  "board_rows": 15,
+  "complete_cut_sheet": {
+    "actual_part_area_mm2": 145167.45,
+    "actual_size": true,
+    "height_mm": 460.0,
+    "letter_area_mm2": 60322.46,
+    "letter_fit_possible": false,
+    "letter_size": false,
+    "note": "All unique parts are packed on one actual-size cutter-bed page.",
+    "part_count": 23,
+    "path": "complete-kit-cut-sheet.svg",
+    "unique_part_ids": [
+      "gears:g8",
+      "gears:g24",
+      "gears:g40",
+      "gears:g56",
+      "ring_gears:ring-g8-g24",
+      "linkages:linkage-2-cell",
+      "linkages:linkage-4-cell",
+      "linkages:linkage-6-cell",
+      "linkages:linkage-8-cell",
+      "cams:circle",
+      "cams:eccentric",
+      "cams:oval",
+      "cams:pear",
+      "followers:f3-round",
+      "followers:f4-roller",
+      "followers:f5-flat",
+      "followers:f6-linkage-output",
+      "brackets:2-hole-straight",
+      "brackets:3-hole-straight",
+      "brackets:l-3-hole",
+      "brackets:triangle-3-hole",
+      "spacers:s10",
+      "handles:folding-fork-tripod"
+    ],
+    "width_mm": 560.0
+  },
+  "generated_at": "reproducible",
+  "generated_by": "scripts/generate_fabrication_templates.py",
+  "grid_cell_cm": 2.0,
+  "grid_pitch_mm": 20.0,
+  "hole_diameter_mm": 4.0,
+  "managed_files": [
+    "README.md",
+    "assembly/01-gear-train-basic.svg",
+    "assembly/02-cam-follower-basic.svg",
+    "assembly/03-four-bar-basic.svg",
+    "assembly/04-gear-linkage-crank.svg",
+    "assembly/05-planetary-gear-basic.svg",
+    "assembly/06-slider-crank-basic.svg",
+    "assembly/README.md",
+    "assembly/board-15x15.svg",
+    "assembly/index.html",
+    "assembly/parts-overview.svg",
+    "assembly/recipes.json",
+    "brackets/bracket-2-hole-straight.svg",
+    "brackets/bracket-3-hole-straight.svg",
+    "brackets/bracket-l-3-hole.svg",
+    "brackets/bracket-triangle-3-hole.svg",
+    "cams/cam-circle.svg",
+    "cams/cam-eccentric.svg",
+    "cams/cam-oval.svg",
+    "cams/cam-pear.svg",
+    "complete-kit-cut-sheet.svg",
+    "followers/follower-f3-round.svg",
+    "followers/follower-f4-roller.svg",
+    "followers/follower-f5-flat.svg",
+    "followers/follower-f6-linkage-output.svg",
+    "gears/gear-24t.svg",
+    "gears/gear-40t.svg",
+    "gears/gear-56t.svg",
+    "gears/gear-8t.svg",
+    "handles/handle-folding-fork-tripod.svg",
+    "linkages/linkage-2-cell.svg",
+    "linkages/linkage-4-cell.svg",
+    "linkages/linkage-6-cell.svg",
+    "linkages/linkage-8-cell.svg",
+    "manifest.json",
+    "ring_gears/ring-g8-g24.svg",
+    "sheets/01-gear-set.svg",
+    "sheets/02-linkage-set.svg",
+    "sheets/03-cam-set.svg",
+    "sheets/04-prototype-set-a.svg",
+    "sheets/05-prototype-set-b.svg",
+    "sheets/06-bracket-set.svg",
+    "sheets/07-follower-set.svg",
+    "sheets/08-spacer-set.svg",
+    "sheets/09-planetary-ring-set.svg",
+    "sheets/10-gear-set-large.svg",
+    "sheets/11-handle-set.svg",
+    "spacers/spacer-s10.svg"
+  ],
+  "parts": {
+    "brackets": [
+      {
+        "hole_centers_mm": [
+          [
+            10.0,
+            10.0
+          ],
+          [
+            30.0,
+            10.0
+          ]
+        ],
+        "hole_count": 2,
+        "hole_diameter_mm": 4.0,
+        "key": "2-hole-straight",
+        "label": "2-hole straight bracket",
+        "path": "brackets/bracket-2-hole-straight.svg",
+        "pitch_mm": 20.0
+      },
+      {
+        "hole_centers_mm": [
+          [
+            10.0,
+            10.0
+          ],
+          [
+            30.0,
+            10.0
+          ],
+          [
+            50.0,
+            10.0
+          ]
+        ],
+        "hole_count": 3,
+        "hole_diameter_mm": 4.0,
+        "key": "3-hole-straight",
+        "label": "3-hole straight bracket",
+        "path": "brackets/bracket-3-hole-straight.svg",
+        "pitch_mm": 20.0
+      },
+      {
+        "hole_centers_mm": [
+          [
+            10.0,
+            10.0
+          ],
+          [
+            30.0,
+            10.0
+          ],
+          [
+            10.0,
+            30.0
+          ]
+        ],
+        "hole_count": 3,
+        "hole_diameter_mm": 4.0,
+        "key": "l-3-hole",
+        "label": "L 3-hole bracket",
+        "path": "brackets/bracket-l-3-hole.svg",
+        "pitch_mm": 20.0
+      },
+      {
+        "hole_centers_mm": [
+          [
+            10.0,
+            10.0
+          ],
+          [
+            30.0,
+            10.0
+          ],
+          [
+            10.0,
+            30.0
+          ]
+        ],
+        "hole_count": 3,
+        "hole_diameter_mm": 4.0,
+        "key": "triangle-3-hole",
+        "label": "Triangle 3-hole bracket",
+        "path": "brackets/bracket-triangle-3-hole.svg",
+        "pitch_mm": 20.0
+      }
+    ],
+    "cams": [
+      {
+        "attachment_hole_centers_mm": [
+          [
+            12.0,
+            0.0
+          ],
+          [
+            0.0,
+            12.0
+          ],
+          [
+            -12.0,
+            0.0
+          ],
+          [
+            -0.0,
+            -12.0
+          ]
+        ],
+        "attachment_hole_count": 4,
+        "attachment_kinds": [
+          "linkage",
+          "bracket",
+          "crank",
+          "handle"
+        ],
+        "base_radius_mm": 15.0,
+        "cam_lobes": 1,
+        "eccentricity_mm": 0.0,
+        "high_dwell_deg": 270.0,
+        "hole_diameter_mm": 4.0,
+        "key": "circle",
+        "label": "Circle / steady",
+        "path": "cams/cam-circle.svg",
+        "physical_cam_preset": "circle",
+        "profile_harmonic": 0.0,
+        "profile_sample_count": 144,
+        "profile_source": "automataii.domain.mechanisms.cam.profile.build_pear_cam_profile_from_params",
+        "return_deg": 45.0,
+        "rise_deg": 45.0
+      },
+      {
+        "attachment_hole_centers_mm": [
+          [
+            12.0,
+            0.0
+          ],
+          [
+            -11.087,
+            -4.592
+          ],
+          [
+            -0.0,
+            -12.0
+          ],
+          [
+            8.485,
+            -8.485
+          ]
+        ],
+        "attachment_hole_count": 4,
+        "attachment_kinds": [
+          "linkage",
+          "bracket",
+          "crank",
+          "handle"
+        ],
+        "base_radius_mm": 15.0,
+        "cam_lobes": 1,
+        "eccentricity_mm": 5.0,
+        "high_dwell_deg": 60.0,
+        "hole_diameter_mm": 4.0,
+        "key": "eccentric",
+        "label": "Eccentric / bounce",
+        "path": "cams/cam-eccentric.svg",
+        "physical_cam_preset": "eccentric",
+        "profile_harmonic": 0.0,
+        "profile_sample_count": 144,
+        "profile_source": "automataii.domain.mechanisms.cam.profile.build_pear_cam_profile_from_params",
+        "return_deg": 90.0,
+        "rise_deg": 90.0
+      },
+      {
+        "attachment_hole_centers_mm": [
+          [
+            6.582,
+            15.891
+          ],
+          [
+            -6.582,
+            15.891
+          ],
+          [
+            -6.582,
+            -15.891
+          ],
+          [
+            6.582,
+            -15.891
+          ]
+        ],
+        "attachment_hole_count": 4,
+        "attachment_kinds": [
+          "linkage",
+          "bracket",
+          "crank",
+          "handle"
+        ],
+        "base_radius_mm": 16.0,
+        "cam_lobes": 2,
+        "eccentricity_mm": 6.0,
+        "high_dwell_deg": 30.0,
+        "hole_diameter_mm": 4.0,
+        "key": "oval",
+        "label": "Oval / smooth rise",
+        "path": "cams/cam-oval.svg",
+        "physical_cam_preset": "oval",
+        "profile_harmonic": 0.2,
+        "profile_sample_count": 144,
+        "profile_source": "automataii.domain.mechanisms.cam.profile.build_pear_cam_profile_from_params",
+        "return_deg": 120.0,
+        "rise_deg": 120.0
+      },
+      {
+        "attachment_hole_centers_mm": [
+          [
+            -14.782,
+            -6.123
+          ],
+          [
+            -6.123,
+            -14.782
+          ],
+          [
+            6.123,
+            -14.782
+          ],
+          [
+            14.782,
+            -6.123
+          ]
+        ],
+        "attachment_hole_count": 4,
+        "attachment_kinds": [
+          "linkage",
+          "bracket",
+          "crank",
+          "handle"
+        ],
+        "base_radius_mm": 18.0,
+        "cam_lobes": 1,
+        "eccentricity_mm": 9.0,
+        "high_dwell_deg": 45.0,
+        "hole_diameter_mm": 4.0,
+        "key": "pear",
+        "label": "Pear / slow-fast",
+        "path": "cams/cam-pear.svg",
+        "physical_cam_preset": "pear",
+        "profile_harmonic": 0.35,
+        "profile_sample_count": 144,
+        "profile_source": "automataii.domain.mechanisms.cam.profile.build_pear_cam_profile_from_params",
+        "return_deg": 75.0,
+        "rise_deg": 150.0
+      }
+    ],
+    "followers": [
+      {
+        "body_height_mm": 60.0,
+        "body_width_mm": 14.0,
+        "contact_kind": "rounded",
+        "contact_style": "round_nose",
+        "foot_width_mm": 18.0,
+        "guide_slot_centers_mm": [
+          [
+            0.0,
+            40.0
+          ]
+        ],
+        "guide_slot_count": 1,
+        "guide_slot_travel_mm": 20.0,
+        "guide_slot_width_mm": 4.0,
+        "hole_diameter_mm": 4.0,
+        "key": "f3-round",
+        "label": "3-cell round-nose follower",
+        "output_hole_centers_mm": [
+          [
+            0.0,
+            20.0
+          ]
+        ],
+        "output_hole_count": 1,
+        "path": "followers/follower-f3-round.svg",
+        "pitch_mm": 20.0,
+        "roller_axle": false,
+        "roller_axle_hole_centers_mm": []
+      },
+      {
+        "body_height_mm": 80.0,
+        "body_width_mm": 14.0,
+        "contact_kind": "rounded",
+        "contact_style": "roller_pin",
+        "foot_width_mm": 18.0,
+        "guide_slot_centers_mm": [
+          [
+            0.0,
+            40.0
+          ]
+        ],
+        "guide_slot_count": 1,
+        "guide_slot_travel_mm": 20.0,
+        "guide_slot_width_mm": 4.0,
+        "hole_diameter_mm": 4.0,
+        "key": "f4-roller",
+        "label": "4-cell roller-pin follower",
+        "output_hole_centers_mm": [
+          [
+            0.0,
+            20.0
+          ]
+        ],
+        "output_hole_count": 1,
+        "path": "followers/follower-f4-roller.svg",
+        "pitch_mm": 20.0,
+        "roller_axle": true,
+        "roller_axle_hole_centers_mm": [
+          [
+            0.0,
+            68.0
+          ]
+        ]
+      },
+      {
+        "body_height_mm": 100.0,
+        "body_width_mm": 14.0,
+        "contact_kind": "flat",
+        "contact_style": "flat_shoe",
+        "foot_width_mm": 20.0,
+        "guide_slot_centers_mm": [
+          [
+            0.0,
+            77.5
+          ]
+        ],
+        "guide_slot_count": 1,
+        "guide_slot_travel_mm": 25.0,
+        "guide_slot_width_mm": 4.0,
+        "hole_diameter_mm": 4.0,
+        "key": "f5-flat",
+        "label": "5-cell flat-shoe follower",
+        "output_hole_centers_mm": [
+          [
+            0.0,
+            20.0
+          ],
+          [
+            0.0,
+            40.0
+          ]
+        ],
+        "output_hole_count": 2,
+        "path": "followers/follower-f5-flat.svg",
+        "pitch_mm": 20.0,
+        "roller_axle": false,
+        "roller_axle_hole_centers_mm": []
+      },
+      {
+        "body_height_mm": 120.0,
+        "body_width_mm": 14.0,
+        "contact_kind": "rounded",
+        "contact_style": "linkage_output",
+        "foot_width_mm": 18.0,
+        "guide_slot_centers_mm": [
+          [
+            0.0,
+            95.0
+          ]
+        ],
+        "guide_slot_count": 1,
+        "guide_slot_travel_mm": 30.0,
+        "guide_slot_width_mm": 4.0,
+        "hole_diameter_mm": 4.0,
+        "key": "f6-linkage-output",
+        "label": "6-cell linkage-output follower",
+        "output_hole_centers_mm": [
+          [
+            0.0,
+            20.0
+          ],
+          [
+            0.0,
+            40.0
+          ],
+          [
+            0.0,
+            60.0
+          ]
+        ],
+        "output_hole_count": 3,
+        "path": "followers/follower-f6-linkage-output.svg",
+        "pitch_mm": 20.0,
+        "roller_axle": false,
+        "roller_axle_hole_centers_mm": []
+      }
+    ],
+    "gears": [
+      {
+        "attachment_hole_centers_mm": [],
+        "attachment_hole_count": 0,
+        "attachment_hole_pattern": "none",
+        "attachment_kinds": [
+          "linkage",
+          "bracket",
+          "crank",
+          "handle"
+        ],
+        "attachment_radii_mm": [],
+        "board_space_diameter": 1.0,
+        "board_space_radius": 0.5,
+        "hole_diameter_mm": 4.0,
+        "key": "g8",
+        "label": "G1 / 1-space gear",
+        "mesh_center_distance_rule": "pitch radii sum; odd board-space pitch diameters mesh on whole board-space centers",
+        "outer_radius_mm": 11.5,
+        "path": "gears/gear-8t.svg",
+        "pitch_radius_mm": 10.0,
+        "root_radius_mm": 10.0,
+        "teeth": 8
+      },
+      {
+        "attachment_hole_centers_mm": [
+          [
+            0.0,
+            -20.0
+          ],
+          [
+            -20.0,
+            0.0
+          ],
+          [
+            20.0,
+            0.0
+          ],
+          [
+            0.0,
+            20.0
+          ]
+        ],
+        "attachment_hole_count": 4,
+        "attachment_hole_pattern": "grid",
+        "attachment_kinds": [
+          "linkage",
+          "bracket",
+          "crank",
+          "handle"
+        ],
+        "attachment_radii_mm": [
+          20.0
+        ],
+        "board_space_diameter": 3.0,
+        "board_space_radius": 1.5,
+        "hole_diameter_mm": 4.0,
+        "key": "g24",
+        "label": "G3 / 3-space gear",
+        "mesh_center_distance_rule": "pitch radii sum; odd board-space pitch diameters mesh on whole board-space centers",
+        "outer_radius_mm": 31.5,
+        "path": "gears/gear-24t.svg",
+        "pitch_radius_mm": 30.0,
+        "root_radius_mm": 28.438,
+        "teeth": 24
+      },
+      {
+        "attachment_hole_centers_mm": [
+          [
+            0.0,
+            -20.0
+          ],
+          [
+            -20.0,
+            0.0
+          ],
+          [
+            20.0,
+            0.0
+          ],
+          [
+            0.0,
+            20.0
+          ],
+          [
+            -20.0,
+            -20.0
+          ],
+          [
+            20.0,
+            -20.0
+          ],
+          [
+            -20.0,
+            20.0
+          ],
+          [
+            20.0,
+            20.0
+          ],
+          [
+            0.0,
+            -40.0
+          ],
+          [
+            -40.0,
+            0.0
+          ],
+          [
+            40.0,
+            0.0
+          ],
+          [
+            0.0,
+            40.0
+          ]
+        ],
+        "attachment_hole_count": 12,
+        "attachment_hole_pattern": "grid",
+        "attachment_kinds": [
+          "linkage",
+          "bracket",
+          "crank",
+          "handle"
+        ],
+        "attachment_radii_mm": [
+          20.0,
+          28.284,
+          40.0
+        ],
+        "board_space_diameter": 5.0,
+        "board_space_radius": 2.5,
+        "hole_diameter_mm": 4.0,
+        "key": "g40",
+        "label": "G5 / 5-space gear",
+        "mesh_center_distance_rule": "pitch radii sum; odd board-space pitch diameters mesh on whole board-space centers",
+        "outer_radius_mm": 51.5,
+        "path": "gears/gear-40t.svg",
+        "pitch_radius_mm": 50.0,
+        "root_radius_mm": 48.438,
+        "teeth": 40
+      },
+      {
+        "attachment_hole_centers_mm": [
+          [
+            0.0,
+            -20.0
+          ],
+          [
+            -20.0,
+            0.0
+          ],
+          [
+            20.0,
+            0.0
+          ],
+          [
+            0.0,
+            20.0
+          ],
+          [
+            -20.0,
+            -20.0
+          ],
+          [
+            20.0,
+            -20.0
+          ],
+          [
+            -20.0,
+            20.0
+          ],
+          [
+            20.0,
+            20.0
+          ],
+          [
+            0.0,
+            -40.0
+          ],
+          [
+            -40.0,
+            0.0
+          ],
+          [
+            40.0,
+            0.0
+          ],
+          [
+            0.0,
+            40.0
+          ],
+          [
+            -20.0,
+            -40.0
+          ],
+          [
+            20.0,
+            -40.0
+          ],
+          [
+            -40.0,
+            -20.0
+          ],
+          [
+            40.0,
+            -20.0
+          ],
+          [
+            -40.0,
+            20.0
+          ],
+          [
+            40.0,
+            20.0
+          ],
+          [
+            -20.0,
+            40.0
+          ],
+          [
+            20.0,
+            40.0
+          ],
+          [
+            -40.0,
+            -40.0
+          ],
+          [
+            40.0,
+            -40.0
+          ],
+          [
+            -40.0,
+            40.0
+          ],
+          [
+            40.0,
+            40.0
+          ],
+          [
+            0.0,
+            -60.0
+          ],
+          [
+            -60.0,
+            0.0
+          ],
+          [
+            60.0,
+            0.0
+          ],
+          [
+            0.0,
+            60.0
+          ]
+        ],
+        "attachment_hole_count": 28,
+        "attachment_hole_pattern": "grid",
+        "attachment_kinds": [
+          "linkage",
+          "bracket",
+          "crank",
+          "handle"
+        ],
+        "attachment_radii_mm": [
+          20.0,
+          28.284,
+          40.0,
+          44.721,
+          56.569,
+          60.0
+        ],
+        "board_space_diameter": 7.0,
+        "board_space_radius": 3.5,
+        "hole_diameter_mm": 4.0,
+        "key": "g56",
+        "label": "G7 / 7-space gear",
+        "mesh_center_distance_rule": "pitch radii sum; odd board-space pitch diameters mesh on whole board-space centers",
+        "outer_radius_mm": 71.5,
+        "path": "gears/gear-56t.svg",
+        "pitch_radius_mm": 70.0,
+        "root_radius_mm": 68.438,
+        "teeth": 56
+      }
+    ],
+    "handles": [
+      {
+        "attachment_style": "paper_tent_simple_rectangle_slits_fold_to_fit_4mm_then_hot_glue",
+        "double_side_fallback": false,
+        "double_sided_effective_glue_area_mm2": 1368.0,
+        "effective_glue_zone_area_mm2": 684.0,
+        "fabrication_note": "Simple rectangle handle: cut the outer rectangle and the two visible left-side slits, score the three prism folds on the right, fold each 10 mm tab strip into four layers so it fits the 4 mm hole, then hot-glue the strips.",
+        "fold_line_count": 3,
+        "fold_panel_count": 4,
+        "folded_panel_width_mm": 2.5,
+        "folded_rectangular_tab_diameter_mm": 3.202,
+        "folded_single_bundle_diameter_mm": 3.202,
+        "glue_foot_area_mm2": 1260.0,
+        "glue_foot_centers_mm": [
+          [
+            27.0,
+            15.0
+          ],
+          [
+            27.0,
+            25.0
+          ],
+          [
+            27.0,
+            35.0
+          ]
+        ],
+        "glue_foot_count": 3,
+        "glue_score_rects_mm": [
+          [
+            8.0,
+            12.0,
+            38.0,
+            6.0
+          ],
+          [
+            8.0,
+            22.0,
+            38.0,
+            6.0
+          ],
+          [
+            8.0,
+            32.0,
+            38.0,
+            6.0
+          ]
+        ],
+        "grip_width_mm": 10.0,
+        "handle_grip_length_mm": 128.0,
+        "height_mm": 50.0,
+        "hole_count": 0,
+        "hole_diameter_mm": 4.0,
+        "insert_strip_width_mm": 10.0,
+        "insert_tab_count": 3,
+        "key": "folding-fork-tripod",
+        "kind": "folding_fork_tripod",
+        "label": "Triangular paper-tent glue handle",
+        "manual_fold_count_per_tab": 3,
+        "max_material_thickness_mm": 0.781,
+        "net_height_mm": 50.0,
+        "net_width_mm": 192.0,
+        "nominal_cardstock_thickness_mm": 0.5,
+        "overall_length_mm": 192.0,
+        "pass_through_tab_length_mm": 42.0,
+        "pass_through_tab_width_mm": 10.0,
+        "path": "handles/handle-folding-fork-tripod.svg",
+        "pitch_mm": 20.0,
+        "prong_count": 0,
+        "recommended_material_thickness_mm": 0.6,
+        "rectangular_tab_width_mm": 10.0,
+        "sanity_check": {
+          "comfortable_grip_length": true,
+          "effective_glue_zone_area_ok": true,
+          "folded_rectangular_tab_fits_4mm_hole": true,
+          "four_layer_fold_to_fit": true,
+          "material_thickness_limit_ok": true,
+          "no_thin_neck": true,
+          "rectangular_insert_tabs": true,
+          "seam_tab_present": true,
+          "simple_rectangle_outline": true,
+          "single_replacement_handle": true,
+          "triangular_prism_net": true,
+          "two_visible_split_cuts": true
+        },
+        "seam_glue_tab_width_mm": 12.0,
+        "split_cut_count": 2,
+        "triangular_prism_height_mm": 8.66,
+        "triangular_prism_side_mm": 10.0,
+        "width_mm": 192.0
+      }
+    ],
+    "linkages": [
+      {
+        "cells": 2,
+        "hole_count": 3,
+        "hole_diameter_mm": 4.0,
+        "key": "linkage-2-cell",
+        "label": "2-cell linkage",
+        "length_mm": 40.0,
+        "path": "linkages/linkage-2-cell.svg",
+        "pitch_mm": 20.0
+      },
+      {
+        "cells": 4,
+        "hole_count": 5,
+        "hole_diameter_mm": 4.0,
+        "key": "linkage-4-cell",
+        "label": "4-cell linkage",
+        "length_mm": 80.0,
+        "path": "linkages/linkage-4-cell.svg",
+        "pitch_mm": 20.0
+      },
+      {
+        "cells": 6,
+        "hole_count": 7,
+        "hole_diameter_mm": 4.0,
+        "key": "linkage-6-cell",
+        "label": "6-cell linkage",
+        "length_mm": 120.0,
+        "path": "linkages/linkage-6-cell.svg",
+        "pitch_mm": 20.0
+      },
+      {
+        "cells": 8,
+        "hole_count": 9,
+        "hole_diameter_mm": 4.0,
+        "key": "linkage-8-cell",
+        "label": "8-cell linkage",
+        "length_mm": 160.0,
+        "path": "linkages/linkage-8-cell.svg",
+        "pitch_mm": 20.0
+      }
+    ],
+    "ring_gears": [
+      {
+        "compatible_planet_teeth": 24,
+        "compatible_sun_teeth": 8,
+        "hole_diameter_mm": 4.0,
+        "inner_root_radius_mm": 71.062,
+        "inner_tip_radius_mm": 68.562,
+        "internal_teeth": 56,
+        "key": "ring-g8-g24",
+        "label": "R56 internal ring gear",
+        "mount_hole_centers_mm": [
+          [
+            0.0,
+            -80.0
+          ],
+          [
+            -80.0,
+            0.0
+          ],
+          [
+            80.0,
+            0.0
+          ],
+          [
+            0.0,
+            80.0
+          ]
+        ],
+        "mount_hole_count": 4,
+        "mount_radius_mm": 80.0,
+        "outer_radius_mm": 90.0,
+        "path": "ring_gears/ring-g8-g24.svg",
+        "pitch_radius_mm": 70.0,
+        "teeth": 56
+      }
+    ],
+    "spacers": [
+      {
+        "hole_centers_mm": [
+          [
+            9.0,
+            9.0
+          ]
+        ],
+        "hole_count": 1,
+        "hole_diameter_mm": 4.0,
+        "inner_diameter_mm": 4.0,
+        "key": "s10",
+        "label": "S10 spacer",
+        "outer_diameter_mm": 10.0,
+        "path": "spacers/spacer-s10.svg",
+        "stackable": true
+      }
+    ]
+  },
+  "profile_key": "motionsmith-ms4n",
+  "schema_version": "automataii.fabrication.v1",
+  "sheets": [
+    {
+      "contains": [
+        "gears"
+      ],
+      "height_mm": 215.9,
+      "key": "01-gear-set",
+      "label": "Gear set A",
+      "path": "sheets/01-gear-set.svg",
+      "width_mm": 279.4
+    },
+    {
+      "contains": [
+        "gears"
+      ],
+      "height_mm": 279.4,
+      "key": "10-gear-set-large",
+      "label": "Gear set B",
+      "path": "sheets/10-gear-set-large.svg",
+      "width_mm": 215.9
+    },
+    {
+      "contains": [
+        "ring_gears"
+      ],
+      "height_mm": 279.4,
+      "key": "09-planetary-ring-set",
+      "label": "Planetary ring gear",
+      "path": "sheets/09-planetary-ring-set.svg",
+      "width_mm": 215.9
+    },
+    {
+      "contains": [
+        "linkages"
+      ],
+      "height_mm": 215.9,
+      "key": "02-linkage-set",
+      "label": "Linkage set",
+      "path": "sheets/02-linkage-set.svg",
+      "width_mm": 279.4
+    },
+    {
+      "contains": [
+        "cams"
+      ],
+      "height_mm": 215.9,
+      "key": "03-cam-set",
+      "label": "Cam set",
+      "path": "sheets/03-cam-set.svg",
+      "width_mm": 279.4
+    },
+    {
+      "contains": [
+        "gears",
+        "linkages",
+        "cams",
+        "brackets"
+      ],
+      "height_mm": 215.9,
+      "key": "04-prototype-set-a",
+      "label": "Prototype set A",
+      "path": "sheets/04-prototype-set-a.svg",
+      "width_mm": 279.4
+    },
+    {
+      "contains": [
+        "gears",
+        "linkages",
+        "cams",
+        "brackets"
+      ],
+      "height_mm": 279.4,
+      "key": "05-prototype-set-b",
+      "label": "Prototype set B",
+      "path": "sheets/05-prototype-set-b.svg",
+      "width_mm": 215.9
+    },
+    {
+      "contains": [
+        "brackets"
+      ],
+      "height_mm": 215.9,
+      "key": "06-bracket-set",
+      "label": "Bracket set",
+      "path": "sheets/06-bracket-set.svg",
+      "width_mm": 279.4
+    },
+    {
+      "contains": [
+        "followers"
+      ],
+      "height_mm": 215.9,
+      "key": "07-follower-set",
+      "label": "Follower set",
+      "path": "sheets/07-follower-set.svg",
+      "width_mm": 279.4
+    },
+    {
+      "contains": [
+        "spacers"
+      ],
+      "height_mm": 215.9,
+      "key": "08-spacer-set",
+      "label": "Spacer set",
+      "path": "sheets/08-spacer-set.svg",
+      "width_mm": 279.4
+    },
+    {
+      "contains": [
+        "handles"
+      ],
+      "height_mm": 215.9,
+      "key": "11-handle-set",
+      "label": "Handle set",
+      "path": "sheets/11-handle-set.svg",
+      "width_mm": 279.4
+    }
+  ],
+  "source_ssot": "automataii.shared.physical_kit"
+}

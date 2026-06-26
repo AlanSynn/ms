@@ -37,7 +37,7 @@ import {
     validatePath
 } from './utils/project';
 import { processImageWithWebOnnx } from './utils/webOnnx';
-import { createFabricationPackage, fabricationRenderPlanForMechanism, fabricationStackSummary, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
+import { createFabricationPackage, fabricationGearProfileForPitchRadius, fabricationRenderPlanForMechanism, fabricationStackSummary, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
 import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToBoardRaw, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
 import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
@@ -3281,14 +3281,13 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
     };
     const pins = [s.p1, s.p2, s.j1, s.j2, s.aux].filter((point): point is Point => Boolean(point));
     const gear = (center: Point, length: number, className: string, key: string, min = compact ? 8 : 16, max = compact ? 34 : 62, rotation = 0) => {
-        const outer = radius(length, min, max);
-        const teeth = Math.max(8, Math.min(40, Math.round(outer / (compact ? 2.3 : 2.8))));
-        const attachment = Math.max(outer * 0.48, holeR * 3);
+        const pitchRadius = radius(length, min, max);
+        const gearProfile = fabricationGearProfileForPitchRadius(pitchRadius, pitchRadius / SCENE_PX_PER_MM);
         return <g key={key} data-mechanism-gear-key={key} data-rotation-deg={rotation.toFixed(2)} className={`mechanism-gear-part ${className}`} transform={`translate(${center.x} ${center.y}) rotate(${rotation})`}>
-            <path data-testid={thicknessTestId} className="mechanism-thickness" transform={`translate(${depth} ${depth})`} d={gearPathD(outer, teeth)} />
-            <path data-testid={fabricationTest('gear')} className="mechanism-gear-teeth mechanism-face" d={gearPathD(outer, teeth)} />
+            <path data-testid={thicknessTestId} className="mechanism-thickness" transform={`translate(${depth} ${depth})`} d={gearPathD(pitchRadius)} />
+            <path data-testid={fabricationTest('gear')} className="mechanism-gear-teeth mechanism-face" d={gearPathD(pitchRadius)} />
             <circle data-testid={fabricationTest('hole')} className="mechanism-hole axle-hole" cx="0" cy="0" r={holeR} />
-            {[0, Math.PI / 2, Math.PI, Math.PI * 1.5].map((angle, index) => <circle key={index} data-testid={fabricationTest('hole')} className="mechanism-hole" cx={Math.cos(angle) * attachment} cy={Math.sin(angle) * attachment} r={holeR} />)}
+            {gearProfile.attachmentHoleCenters.map((point, index) => <circle key={index} data-testid={fabricationTest('hole')} className="mechanism-hole" cx={point.x} cy={point.y} r={holeR} />)}
         </g>;
     };
     const rackPlate = (center: Point, axis: Point, length: number, key: string) => {

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1"
+     width="34mm" height="148mm"
+     viewBox="0 0 34 148"
+     data-profile-key="motionsmith-ms4n"
+     data-grid-pitch-mm="20"
+     data-hole-diameter-mm="4">
+  <title>Automataii fabrication follower f6-linkage-output</title>
+  <desc>6-cell linkage-output follower with 4 mm output/guide geometry. Guide slots slide on fixed pegboard pins or bracket hardware.</desc>
+  <defs>
+    <style>
+      .cut { fill: none; stroke: #ed1c24; stroke-width: 0.25; stroke-miterlimit: 10; }
+      .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }
+      .score { fill: none; stroke: #777777; stroke-width: 0.15; stroke-dasharray: 2 1; }
+      .label { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }
+      .tiny { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
+      .small { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
+      .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
+      .part-card-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 3.5px; font-weight: bold; }
+      .coord-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 6px; font-weight: bold; }
+      .paper { fill: #ffffff; stroke: none; }
+    </style>
+  </defs>
+  <path d="M 10 15 A 7 7 0 0 1 24 15 L 24 121 A 7 7 0 0 1 10 121 Z" class="cut follower-outline" data-follower-key="f6-linkage-output" data-contact-style="linkage_output" data-pitch-mm="20" data-guide-slot-travel-mm="30"/>
+  <circle cx="17" cy="28" r="2" class="drill linkage-hole follower-output-hole" data-hole-role="linkage-output" data-hole-diameter-mm="4" data-hole-index="0" data-hole-y-mm="20"/>
+  <circle cx="17" cy="48" r="2" class="drill linkage-hole follower-output-hole" data-hole-role="linkage-output" data-hole-diameter-mm="4" data-hole-index="1" data-hole-y-mm="40"/>
+  <circle cx="17" cy="68" r="2" class="drill linkage-hole follower-output-hole" data-hole-role="linkage-output" data-hole-diameter-mm="4" data-hole-index="2" data-hole-y-mm="60"/>
+  <path d="M 15 88 A 2 2 0 0 1 19 88 L 19 118 A 2 2 0 0 1 15 118 Z" class="cut guide-slot follower-guide-slot" data-slot-role="guide" data-hole-role="guide-slot" data-slot-index="0" data-slot-width-mm="4" data-slot-travel-mm="30" data-slot-center-y-mm="95"/>
+  <text x="17" y="144" class="label" text-anchor="middle">6-cell linkage-output follower</text>
+</svg>

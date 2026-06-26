@@ -1,0 +1,282 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1"
+     width="300mm" height="300mm"
+     viewBox="0 0 300 300"
+     data-profile-key="motionsmith-ms4n"
+     data-grid-pitch-mm="20"
+     data-hole-diameter-mm="4">
+  <title>Automataii 15x15 hole assembly board map</title>
+  <desc>225-hole coordinate board used by Automataii fabrication assembly guides.</desc>
+  <defs>
+    <style>
+      .cut { fill: none; stroke: #ed1c24; stroke-width: 0.25; stroke-miterlimit: 10; }
+      .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }
+      .score { fill: none; stroke: #777777; stroke-width: 0.15; stroke-dasharray: 2 1; }
+      .label { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }
+      .tiny { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
+      .small { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
+      .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
+      .part-card-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 3.5px; font-weight: bold; }
+      .coord-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 6px; font-weight: bold; }
+      .paper { fill: #ffffff; stroke: none; }
+    </style>
+  </defs>
+  <g id="layer-board-grid">
+  <rect x="8" y="8" width="288" height="288" class="score board-outline"/>
+  <text x="12" y="5" class="tiny" text-anchor="middle">1</text>
+  <text x="32" y="5" class="tiny" text-anchor="middle">2</text>
+  <text x="52" y="5" class="tiny" text-anchor="middle">3</text>
+  <text x="72" y="5" class="tiny" text-anchor="middle">4</text>
+  <text x="92" y="5" class="tiny" text-anchor="middle">5</text>
+  <text x="112" y="5" class="tiny" text-anchor="middle">6</text>
+  <text x="132" y="5" class="tiny" text-anchor="middle">7</text>
+  <text x="152" y="5" class="tiny" text-anchor="middle">8</text>
+  <text x="172" y="5" class="tiny" text-anchor="middle">9</text>
+  <text x="192" y="5" class="tiny" text-anchor="middle">10</text>
+  <text x="212" y="5" class="tiny" text-anchor="middle">11</text>
+  <text x="232" y="5" class="tiny" text-anchor="middle">12</text>
+  <text x="252" y="5" class="tiny" text-anchor="middle">13</text>
+  <text x="272" y="5" class="tiny" text-anchor="middle">14</text>
+  <text x="292" y="5" class="tiny" text-anchor="middle">15</text>
+  <text x="5" y="13" class="tiny" text-anchor="middle">A</text>
+  <text x="5" y="33" class="tiny" text-anchor="middle">B</text>
+  <text x="5" y="53" class="tiny" text-anchor="middle">C</text>
+  <text x="5" y="73" class="tiny" text-anchor="middle">D</text>
+  <text x="5" y="93" class="tiny" text-anchor="middle">E</text>
+  <text x="5" y="113" class="tiny" text-anchor="middle">F</text>
+  <text x="5" y="133" class="tiny" text-anchor="middle">G</text>
+  <text x="5" y="153" class="tiny" text-anchor="middle">H</text>
+  <text x="5" y="173" class="tiny" text-anchor="middle">I</text>
+  <text x="5" y="193" class="tiny" text-anchor="middle">J</text>
+  <text x="5" y="213" class="tiny" text-anchor="middle">K</text>
+  <text x="5" y="233" class="tiny" text-anchor="middle">L</text>
+  <text x="5" y="253" class="tiny" text-anchor="middle">M</text>
+  <text x="5" y="273" class="tiny" text-anchor="middle">N</text>
+  <text x="5" y="293" class="tiny" text-anchor="middle">O</text>
+  <circle cx="12" cy="12" r="2" class="drill board-hole" data-board-coord="A1"/>
+  <circle cx="32" cy="12" r="2" class="drill board-hole" data-board-coord="A2"/>
+  <circle cx="52" cy="12" r="2" class="drill board-hole" data-board-coord="A3"/>
+  <circle cx="72" cy="12" r="2" class="drill board-hole" data-board-coord="A4"/>
+  <circle cx="92" cy="12" r="2" class="drill board-hole" data-board-coord="A5"/>
+  <circle cx="112" cy="12" r="2" class="drill board-hole" data-board-coord="A6"/>
+  <circle cx="132" cy="12" r="2" class="drill board-hole" data-board-coord="A7"/>
+  <circle cx="152" cy="12" r="2" class="drill board-hole" data-board-coord="A8"/>
+  <circle cx="172" cy="12" r="2" class="drill board-hole" data-board-coord="A9"/>
+  <circle cx="192" cy="12" r="2" class="drill board-hole" data-board-coord="A10"/>
+  <circle cx="212" cy="12" r="2" class="drill board-hole" data-board-coord="A11"/>
+  <circle cx="232" cy="12" r="2" class="drill board-hole" data-board-coord="A12"/>
+  <circle cx="252" cy="12" r="2" class="drill board-hole" data-board-coord="A13"/>
+  <circle cx="272" cy="12" r="2" class="drill board-hole" data-board-coord="A14"/>
+  <circle cx="292" cy="12" r="2" class="drill board-hole" data-board-coord="A15"/>
+  <circle cx="12" cy="32" r="2" class="drill board-hole" data-board-coord="B1"/>
+  <circle cx="32" cy="32" r="2" class="drill board-hole" data-board-coord="B2"/>
+  <circle cx="52" cy="32" r="2" class="drill board-hole" data-board-coord="B3"/>
+  <circle cx="72" cy="32" r="2" class="drill board-hole" data-board-coord="B4"/>
+  <circle cx="92" cy="32" r="2" class="drill board-hole" data-board-coord="B5"/>
+  <circle cx="112" cy="32" r="2" class="drill board-hole" data-board-coord="B6"/>
+  <circle cx="132" cy="32" r="2" class="drill board-hole" data-board-coord="B7"/>
+  <circle cx="152" cy="32" r="2" class="drill board-hole" data-board-coord="B8"/>
+  <circle cx="172" cy="32" r="2" class="drill board-hole" data-board-coord="B9"/>
+  <circle cx="192" cy="32" r="2" class="drill board-hole" data-board-coord="B10"/>
+  <circle cx="212" cy="32" r="2" class="drill board-hole" data-board-coord="B11"/>
+  <circle cx="232" cy="32" r="2" class="drill board-hole" data-board-coord="B12"/>
+  <circle cx="252" cy="32" r="2" class="drill board-hole" data-board-coord="B13"/>
+  <circle cx="272" cy="32" r="2" class="drill board-hole" data-board-coord="B14"/>
+  <circle cx="292" cy="32" r="2" class="drill board-hole" data-board-coord="B15"/>
+  <circle cx="12" cy="52" r="2" class="drill board-hole" data-board-coord="C1"/>
+  <circle cx="32" cy="52" r="2" class="drill board-hole" data-board-coord="C2"/>
+  <circle cx="52" cy="52" r="2" class="drill board-hole" data-board-coord="C3"/>
+  <circle cx="72" cy="52" r="2" class="drill board-hole" data-board-coord="C4"/>
+  <circle cx="92" cy="52" r="2" class="drill board-hole" data-board-coord="C5"/>
+  <circle cx="112" cy="52" r="2" class="drill board-hole" data-board-coord="C6"/>
+  <circle cx="132" cy="52" r="2" class="drill board-hole" data-board-coord="C7"/>
+  <circle cx="152" cy="52" r="2" class="drill board-hole" data-board-coord="C8"/>
+  <circle cx="172" cy="52" r="2" class="drill board-hole" data-board-coord="C9"/>
+  <circle cx="192" cy="52" r="2" class="drill board-hole" data-board-coord="C10"/>
+  <circle cx="212" cy="52" r="2" class="drill board-hole" data-board-coord="C11"/>
+  <circle cx="232" cy="52" r="2" class="drill board-hole" data-board-coord="C12"/>
+  <circle cx="252" cy="52" r="2" class="drill board-hole" data-board-coord="C13"/>
+  <circle cx="272" cy="52" r="2" class="drill board-hole" data-board-coord="C14"/>
+  <circle cx="292" cy="52" r="2" class="drill board-hole" data-board-coord="C15"/>
+  <circle cx="12" cy="72" r="2" class="drill board-hole" data-board-coord="D1"/>
+  <circle cx="32" cy="72" r="2" class="drill board-hole" data-board-coord="D2"/>
+  <circle cx="52" cy="72" r="2" class="drill board-hole" data-board-coord="D3"/>
+  <circle cx="72" cy="72" r="2" class="drill board-hole" data-board-coord="D4"/>
+  <circle cx="92" cy="72" r="2" class="drill board-hole" data-board-coord="D5"/>
+  <circle cx="112" cy="72" r="2" class="drill board-hole" data-board-coord="D6"/>
+  <circle cx="132" cy="72" r="2" class="drill board-hole" data-board-coord="D7"/>
+  <circle cx="152" cy="72" r="2" class="drill board-hole" data-board-coord="D8"/>
+  <circle cx="172" cy="72" r="2" class="drill board-hole" data-board-coord="D9"/>
+  <circle cx="192" cy="72" r="2" class="drill board-hole" data-board-coord="D10"/>
+  <circle cx="212" cy="72" r="2" class="drill board-hole" data-board-coord="D11"/>
+  <circle cx="232" cy="72" r="2" class="drill board-hole" data-board-coord="D12"/>
+  <circle cx="252" cy="72" r="2" class="drill board-hole" data-board-coord="D13"/>
+  <circle cx="272" cy="72" r="2" class="drill board-hole" data-board-coord="D14"/>
+  <circle cx="292" cy="72" r="2" class="drill board-hole" data-board-coord="D15"/>
+  <circle cx="12" cy="92" r="2" class="drill board-hole" data-board-coord="E1"/>
+  <circle cx="32" cy="92" r="2" class="drill board-hole" data-board-coord="E2"/>
+  <circle cx="52" cy="92" r="2" class="drill board-hole" data-board-coord="E3"/>
+  <circle cx="72" cy="92" r="2" class="drill board-hole" data-board-coord="E4"/>
+  <circle cx="92" cy="92" r="2" class="drill board-hole" data-board-coord="E5"/>
+  <circle cx="112" cy="92" r="2" class="drill board-hole" data-board-coord="E6"/>
+  <circle cx="132" cy="92" r="2" class="drill board-hole" data-board-coord="E7"/>
+  <circle cx="152" cy="92" r="2" class="drill board-hole" data-board-coord="E8"/>
+  <circle cx="172" cy="92" r="2" class="drill board-hole" data-board-coord="E9"/>
+  <circle cx="192" cy="92" r="2" class="drill board-hole" data-board-coord="E10"/>
+  <circle cx="212" cy="92" r="2" class="drill board-hole" data-board-coord="E11"/>
+  <circle cx="232" cy="92" r="2" class="drill board-hole" data-board-coord="E12"/>
+  <circle cx="252" cy="92" r="2" class="drill board-hole" data-board-coord="E13"/>
+  <circle cx="272" cy="92" r="2" class="drill board-hole" data-board-coord="E14"/>
+  <circle cx="292" cy="92" r="2" class="drill board-hole" data-board-coord="E15"/>
+  <circle cx="12" cy="112" r="2" class="drill board-hole" data-board-coord="F1"/>
+  <circle cx="32" cy="112" r="2" class="drill board-hole" data-board-coord="F2"/>
+  <circle cx="52" cy="112" r="2" class="drill board-hole" data-board-coord="F3"/>
+  <circle cx="72" cy="112" r="2" class="drill board-hole" data-board-coord="F4"/>
+  <circle cx="92" cy="112" r="2" class="drill board-hole" data-board-coord="F5"/>
+  <circle cx="112" cy="112" r="2" class="drill board-hole" data-board-coord="F6"/>
+  <circle cx="132" cy="112" r="2" class="drill board-hole" data-board-coord="F7"/>
+  <circle cx="152" cy="112" r="2" class="drill board-hole" data-board-coord="F8"/>
+  <circle cx="172" cy="112" r="2" class="drill board-hole" data-board-coord="F9"/>
+  <circle cx="192" cy="112" r="2" class="drill board-hole" data-board-coord="F10"/>
+  <circle cx="212" cy="112" r="2" class="drill board-hole" data-board-coord="F11"/>
+  <circle cx="232" cy="112" r="2" class="drill board-hole" data-board-coord="F12"/>
+  <circle cx="252" cy="112" r="2" class="drill board-hole" data-board-coord="F13"/>
+  <circle cx="272" cy="112" r="2" class="drill board-hole" data-board-coord="F14"/>
+  <circle cx="292" cy="112" r="2" class="drill board-hole" data-board-coord="F15"/>
+  <circle cx="12" cy="132" r="2" class="drill board-hole" data-board-coord="G1"/>
+  <circle cx="32" cy="132" r="2" class="drill board-hole" data-board-coord="G2"/>
+  <circle cx="52" cy="132" r="2" class="drill board-hole" data-board-coord="G3"/>
+  <circle cx="72" cy="132" r="2" class="drill board-hole" data-board-coord="G4"/>
+  <circle cx="92" cy="132" r="2" class="drill board-hole" data-board-coord="G5"/>
+  <circle cx="112" cy="132" r="2" class="drill board-hole" data-board-coord="G6"/>
+  <circle cx="132" cy="132" r="2" class="drill board-hole" data-board-coord="G7"/>
+  <circle cx="152" cy="132" r="2" class="drill board-hole" data-board-coord="G8"/>
+  <circle cx="172" cy="132" r="2" class="drill board-hole" data-board-coord="G9"/>
+  <circle cx="192" cy="132" r="2" class="drill board-hole" data-board-coord="G10"/>
+  <circle cx="212" cy="132" r="2" class="drill board-hole" data-board-coord="G11"/>
+  <circle cx="232" cy="132" r="2" class="drill board-hole" data-board-coord="G12"/>
+  <circle cx="252" cy="132" r="2" class="drill board-hole" data-board-coord="G13"/>
+  <circle cx="272" cy="132" r="2" class="drill board-hole" data-board-coord="G14"/>
+  <circle cx="292" cy="132" r="2" class="drill board-hole" data-board-coord="G15"/>
+  <circle cx="12" cy="152" r="2" class="drill board-hole" data-board-coord="H1"/>
+  <circle cx="32" cy="152" r="2" class="drill board-hole" data-board-coord="H2"/>
+  <circle cx="52" cy="152" r="2" class="drill board-hole" data-board-coord="H3"/>
+  <circle cx="72" cy="152" r="2" class="drill board-hole" data-board-coord="H4"/>
+  <circle cx="92" cy="152" r="2" class="drill board-hole" data-board-coord="H5"/>
+  <circle cx="112" cy="152" r="2" class="drill board-hole" data-board-coord="H6"/>
+  <circle cx="132" cy="152" r="2" class="drill board-hole" data-board-coord="H7"/>
+  <circle cx="152" cy="152" r="2" class="drill board-hole" data-board-coord="H8"/>
+  <circle cx="172" cy="152" r="2" class="drill board-hole" data-board-coord="H9"/>
+  <circle cx="192" cy="152" r="2" class="drill board-hole" data-board-coord="H10"/>
+  <circle cx="212" cy="152" r="2" class="drill board-hole" data-board-coord="H11"/>
+  <circle cx="232" cy="152" r="2" class="drill board-hole" data-board-coord="H12"/>
+  <circle cx="252" cy="152" r="2" class="drill board-hole" data-board-coord="H13"/>
+  <circle cx="272" cy="152" r="2" class="drill board-hole" data-board-coord="H14"/>
+  <circle cx="292" cy="152" r="2" class="drill board-hole" data-board-coord="H15"/>
+  <circle cx="12" cy="172" r="2" class="drill board-hole" data-board-coord="I1"/>
+  <circle cx="32" cy="172" r="2" class="drill board-hole" data-board-coord="I2"/>
+  <circle cx="52" cy="172" r="2" class="drill board-hole" data-board-coord="I3"/>
+  <circle cx="72" cy="172" r="2" class="drill board-hole" data-board-coord="I4"/>
+  <circle cx="92" cy="172" r="2" class="drill board-hole" data-board-coord="I5"/>
+  <circle cx="112" cy="172" r="2" class="drill board-hole" data-board-coord="I6"/>
+  <circle cx="132" cy="172" r="2" class="drill board-hole" data-board-coord="I7"/>
+  <circle cx="152" cy="172" r="2" class="drill board-hole" data-board-coord="I8"/>
+  <circle cx="172" cy="172" r="2" class="drill board-hole" data-board-coord="I9"/>
+  <circle cx="192" cy="172" r="2" class="drill board-hole" data-board-coord="I10"/>
+  <circle cx="212" cy="172" r="2" class="drill board-hole" data-board-coord="I11"/>
+  <circle cx="232" cy="172" r="2" class="drill board-hole" data-board-coord="I12"/>
+  <circle cx="252" cy="172" r="2" class="drill board-hole" data-board-coord="I13"/>
+  <circle cx="272" cy="172" r="2" class="drill board-hole" data-board-coord="I14"/>
+  <circle cx="292" cy="172" r="2" class="drill board-hole" data-board-coord="I15"/>
+  <circle cx="12" cy="192" r="2" class="drill board-hole" data-board-coord="J1"/>
+  <circle cx="32" cy="192" r="2" class="drill board-hole" data-board-coord="J2"/>
+  <circle cx="52" cy="192" r="2" class="drill board-hole" data-board-coord="J3"/>
+  <circle cx="72" cy="192" r="2" class="drill board-hole" data-board-coord="J4"/>
+  <circle cx="92" cy="192" r="2" class="drill board-hole" data-board-coord="J5"/>
+  <circle cx="112" cy="192" r="2" class="drill board-hole" data-board-coord="J6"/>
+  <circle cx="132" cy="192" r="2" class="drill board-hole" data-board-coord="J7"/>
+  <circle cx="152" cy="192" r="2" class="drill board-hole" data-board-coord="J8"/>
+  <circle cx="172" cy="192" r="2" class="drill board-hole" data-board-coord="J9"/>
+  <circle cx="192" cy="192" r="2" class="drill board-hole" data-board-coord="J10"/>
+  <circle cx="212" cy="192" r="2" class="drill board-hole" data-board-coord="J11"/>
+  <circle cx="232" cy="192" r="2" class="drill board-hole" data-board-coord="J12"/>
+  <circle cx="252" cy="192" r="2" class="drill board-hole" data-board-coord="J13"/>
+  <circle cx="272" cy="192" r="2" class="drill board-hole" data-board-coord="J14"/>
+  <circle cx="292" cy="192" r="2" class="drill board-hole" data-board-coord="J15"/>
+  <circle cx="12" cy="212" r="2" class="drill board-hole" data-board-coord="K1"/>
+  <circle cx="32" cy="212" r="2" class="drill board-hole" data-board-coord="K2"/>
+  <circle cx="52" cy="212" r="2" class="drill board-hole" data-board-coord="K3"/>
+  <circle cx="72" cy="212" r="2" class="drill board-hole" data-board-coord="K4"/>
+  <circle cx="92" cy="212" r="2" class="drill board-hole" data-board-coord="K5"/>
+  <circle cx="112" cy="212" r="2" class="drill board-hole" data-board-coord="K6"/>
+  <circle cx="132" cy="212" r="2" class="drill board-hole" data-board-coord="K7"/>
+  <circle cx="152" cy="212" r="2" class="drill board-hole" data-board-coord="K8"/>
+  <circle cx="172" cy="212" r="2" class="drill board-hole" data-board-coord="K9"/>
+  <circle cx="192" cy="212" r="2" class="drill board-hole" data-board-coord="K10"/>
+  <circle cx="212" cy="212" r="2" class="drill board-hole" data-board-coord="K11"/>
+  <circle cx="232" cy="212" r="2" class="drill board-hole" data-board-coord="K12"/>
+  <circle cx="252" cy="212" r="2" class="drill board-hole" data-board-coord="K13"/>
+  <circle cx="272" cy="212" r="2" class="drill board-hole" data-board-coord="K14"/>
+  <circle cx="292" cy="212" r="2" class="drill board-hole" data-board-coord="K15"/>
+  <circle cx="12" cy="232" r="2" class="drill board-hole" data-board-coord="L1"/>
+  <circle cx="32" cy="232" r="2" class="drill board-hole" data-board-coord="L2"/>
+  <circle cx="52" cy="232" r="2" class="drill board-hole" data-board-coord="L3"/>
+  <circle cx="72" cy="232" r="2" class="drill board-hole" data-board-coord="L4"/>
+  <circle cx="92" cy="232" r="2" class="drill board-hole" data-board-coord="L5"/>
+  <circle cx="112" cy="232" r="2" class="drill board-hole" data-board-coord="L6"/>
+  <circle cx="132" cy="232" r="2" class="drill board-hole" data-board-coord="L7"/>
+  <circle cx="152" cy="232" r="2" class="drill board-hole" data-board-coord="L8"/>
+  <circle cx="172" cy="232" r="2" class="drill board-hole" data-board-coord="L9"/>
+  <circle cx="192" cy="232" r="2" class="drill board-hole" data-board-coord="L10"/>
+  <circle cx="212" cy="232" r="2" class="drill board-hole" data-board-coord="L11"/>
+  <circle cx="232" cy="232" r="2" class="drill board-hole" data-board-coord="L12"/>
+  <circle cx="252" cy="232" r="2" class="drill board-hole" data-board-coord="L13"/>
+  <circle cx="272" cy="232" r="2" class="drill board-hole" data-board-coord="L14"/>
+  <circle cx="292" cy="232" r="2" class="drill board-hole" data-board-coord="L15"/>
+  <circle cx="12" cy="252" r="2" class="drill board-hole" data-board-coord="M1"/>
+  <circle cx="32" cy="252" r="2" class="drill board-hole" data-board-coord="M2"/>
+  <circle cx="52" cy="252" r="2" class="drill board-hole" data-board-coord="M3"/>
+  <circle cx="72" cy="252" r="2" class="drill board-hole" data-board-coord="M4"/>
+  <circle cx="92" cy="252" r="2" class="drill board-hole" data-board-coord="M5"/>
+  <circle cx="112" cy="252" r="2" class="drill board-hole" data-board-coord="M6"/>
+  <circle cx="132" cy="252" r="2" class="drill board-hole" data-board-coord="M7"/>
+  <circle cx="152" cy="252" r="2" class="drill board-hole" data-board-coord="M8"/>
+  <circle cx="172" cy="252" r="2" class="drill board-hole" data-board-coord="M9"/>
+  <circle cx="192" cy="252" r="2" class="drill board-hole" data-board-coord="M10"/>
+  <circle cx="212" cy="252" r="2" class="drill board-hole" data-board-coord="M11"/>
+  <circle cx="232" cy="252" r="2" class="drill board-hole" data-board-coord="M12"/>
+  <circle cx="252" cy="252" r="2" class="drill board-hole" data-board-coord="M13"/>
+  <circle cx="272" cy="252" r="2" class="drill board-hole" data-board-coord="M14"/>
+  <circle cx="292" cy="252" r="2" class="drill board-hole" data-board-coord="M15"/>
+  <circle cx="12" cy="272" r="2" class="drill board-hole" data-board-coord="N1"/>
+  <circle cx="32" cy="272" r="2" class="drill board-hole" data-board-coord="N2"/>
+  <circle cx="52" cy="272" r="2" class="drill board-hole" data-board-coord="N3"/>
+  <circle cx="72" cy="272" r="2" class="drill board-hole" data-board-coord="N4"/>
+  <circle cx="92" cy="272" r="2" class="drill board-hole" data-board-coord="N5"/>
+  <circle cx="112" cy="272" r="2" class="drill board-hole" data-board-coord="N6"/>
+  <circle cx="132" cy="272" r="2" class="drill board-hole" data-board-coord="N7"/>
+  <circle cx="152" cy="272" r="2" class="drill board-hole" data-board-coord="N8"/>
+  <circle cx="172" cy="272" r="2" class="drill board-hole" data-board-coord="N9"/>
+  <circle cx="192" cy="272" r="2" class="drill board-hole" data-board-coord="N10"/>
+  <circle cx="212" cy="272" r="2" class="drill board-hole" data-board-coord="N11"/>
+  <circle cx="232" cy="272" r="2" class="drill board-hole" data-board-coord="N12"/>
+  <circle cx="252" cy="272" r="2" class="drill board-hole" data-board-coord="N13"/>
+  <circle cx="272" cy="272" r="2" class="drill board-hole" data-board-coord="N14"/>
+  <circle cx="292" cy="272" r="2" class="drill board-hole" data-board-coord="N15"/>
+  <circle cx="12" cy="292" r="2" class="drill board-hole" data-board-coord="O1"/>
+  <circle cx="32" cy="292" r="2" class="drill board-hole" data-board-coord="O2"/>
+  <circle cx="52" cy="292" r="2" class="drill board-hole" data-board-coord="O3"/>
+  <circle cx="72" cy="292" r="2" class="drill board-hole" data-board-coord="O4"/>
+  <circle cx="92" cy="292" r="2" class="drill board-hole" data-board-coord="O5"/>
+  <circle cx="112" cy="292" r="2" class="drill board-hole" data-board-coord="O6"/>
+  <circle cx="132" cy="292" r="2" class="drill board-hole" data-board-coord="O7"/>
+  <circle cx="152" cy="292" r="2" class="drill board-hole" data-board-coord="O8"/>
+  <circle cx="172" cy="292" r="2" class="drill board-hole" data-board-coord="O9"/>
+  <circle cx="192" cy="292" r="2" class="drill board-hole" data-board-coord="O10"/>
+  <circle cx="212" cy="292" r="2" class="drill board-hole" data-board-coord="O11"/>
+  <circle cx="232" cy="292" r="2" class="drill board-hole" data-board-coord="O12"/>
+  <circle cx="252" cy="292" r="2" class="drill board-hole" data-board-coord="O13"/>
+  <circle cx="272" cy="292" r="2" class="drill board-hole" data-board-coord="O14"/>
+  <circle cx="292" cy="292" r="2" class="drill board-hole" data-board-coord="O15"/>
+  </g>
+</svg>

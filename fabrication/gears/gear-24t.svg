@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1"
+     width="79mm" height="89mm"
+     viewBox="0 0 79 89"
+     data-profile-key="motionsmith-ms4n"
+     data-grid-pitch-mm="20"
+     data-hole-diameter-mm="4">
+  <title>Automataii fabrication gear G3 / 3-space gear (24 teeth)</title>
+  <desc>G3 / 3-space gear with 4 mm axle. Attachment holes, when present, sit on the board grid.</desc>
+  <defs>
+    <style>
+      .cut { fill: none; stroke: #ed1c24; stroke-width: 0.25; stroke-miterlimit: 10; }
+      .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }
+      .score { fill: none; stroke: #777777; stroke-width: 0.15; stroke-dasharray: 2 1; }
+      .label { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }
+      .tiny { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
+      .small { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
+      .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
+      .part-card-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 3.5px; font-weight: bold; }
+      .coord-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 6px; font-weight: bold; }
+      .paper { fill: #ffffff; stroke: none; }
+    </style>
+  </defs>
+  <path d="M 67.938 39.5 L 70.933 41.56 L 70.731 43.612 L 67.391 45.048 L 66.969 46.86 L 69.328 49.625 L 68.602 51.555 L 65.005 52.078 L 64.128 53.719 L 65.691 57 L 64.491 58.676 L 60.88 58.25 L 59.608 59.608 L 60.269 63.183 L 58.676 64.491 L 55.299 63.145 L 53.719 64.128 L 53.432 67.751 L 51.555 68.602 L 48.641 66.428 L 46.86 66.969 L 45.645 70.395 L 43.612 70.731 L 41.36 67.877 L 39.5 67.938 L 37.44 70.933 L 35.388 70.731 L 33.952 67.391 L 32.14 66.969 L 29.375 69.328 L 27.445 68.602 L 26.922 65.005 L 25.281 64.128 L 22 65.691 L 20.324 64.491 L 20.75 60.88 L 19.392 59.608 L 15.817 60.269 L 14.509 58.676 L 15.855 55.299 L 14.872 53.719 L 11.249 53.432 L 10.398 51.555 L 12.572 48.641 L 12.031 46.86 L 8.605 45.645 L 8.269 43.612 L 11.123 41.36 L 11.062 39.5 L 8.067 37.44 L 8.269 35.388 L 11.609 33.952 L 12.031 32.14 L 9.672 29.375 L 10.398 27.445 L 13.995 26.922 L 14.872 25.281 L 13.309 22 L 14.509 20.324 L 18.12 20.75 L 19.392 19.392 L 18.731 15.817 L 20.324 14.509 L 23.701 15.855 L 25.281 14.872 L 25.568 11.249 L 27.445 10.398 L 30.359 12.572 L 32.14 12.031 L 33.355 8.605 L 35.388 8.269 L 37.64 11.123 L 39.5 11.062 L 41.56 8.067 L 43.612 8.269 L 45.048 11.609 L 46.86 12.031 L 49.625 9.672 L 51.555 10.398 L 52.078 13.995 L 53.719 14.872 L 57 13.309 L 58.676 14.509 L 58.25 18.12 L 59.608 19.392 L 63.183 18.731 L 64.491 20.324 L 63.145 23.701 L 64.128 25.281 L 67.751 25.568 L 68.602 27.445 L 66.428 30.359 L 66.969 32.14 L 70.395 33.355 L 70.731 35.388 L 67.877 37.64 Z" class="cut gear-outline" data-teeth="24" data-pitch-radius-mm="30" data-root-radius-mm="28.438" data-outer-radius-mm="31.5" data-attachment-hole-pattern="grid"/>
+  <circle cx="39.5" cy="39.5" r="2" class="drill axle-hole" data-hole-role="axle" data-hole-diameter-mm="4"/>
+  <circle cx="39.5" cy="39.5" r="30" class="score pitch-circle"/>
+  <circle cx="39.5" cy="19.5" r="2" class="drill linkage-hole bracket-hole crank-hole handle-hole" data-hole-role="linkage-bracket-crank-handle" data-attachment-kinds="linkage bracket crank handle" data-hole-diameter-mm="4" data-hole-index="0" data-hole-x-offset-mm="0" data-hole-y-offset-mm="-20" data-hole-radius-mm="20"/>
+  <circle cx="19.5" cy="39.5" r="2" class="drill linkage-hole bracket-hole crank-hole handle-hole" data-hole-role="linkage-bracket-crank-handle" data-attachment-kinds="linkage bracket crank handle" data-hole-diameter-mm="4" data-hole-index="1" data-hole-x-offset-mm="-20" data-hole-y-offset-mm="0" data-hole-radius-mm="20"/>
+  <circle cx="59.5" cy="39.5" r="2" class="drill linkage-hole bracket-hole crank-hole handle-hole" data-hole-role="linkage-bracket-crank-handle" data-attachment-kinds="linkage bracket crank handle" data-hole-diameter-mm="4" data-hole-index="2" data-hole-x-offset-mm="20" data-hole-y-offset-mm="0" data-hole-radius-mm="20"/>
+  <circle cx="39.5" cy="59.5" r="2" class="drill linkage-hole bracket-hole crank-hole handle-hole" data-hole-role="linkage-bracket-crank-handle" data-attachment-kinds="linkage bracket crank handle" data-hole-diameter-mm="4" data-hole-index="3" data-hole-x-offset-mm="0" data-hole-y-offset-mm="20" data-hole-radius-mm="20"/>
+  <text x="39.5" y="77" class="label" text-anchor="middle">G3 / 3-space gear / 24T</text>
+</svg>

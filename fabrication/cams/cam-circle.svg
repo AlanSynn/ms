@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1"
+     width="46mm" height="58mm"
+     viewBox="0 0 46 58"
+     data-profile-key="motionsmith-ms4n"
+     data-grid-pitch-mm="20"
+     data-hole-diameter-mm="4">
+  <title>Automataii fabrication cam circle</title>
+  <desc>Circle / steady cam profile with 4 mm axle and linkage/bracket/crank/handle holes.</desc>
+  <defs>
+    <style>
+      .cut { fill: none; stroke: #ed1c24; stroke-width: 0.25; stroke-miterlimit: 10; }
+      .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }
+      .score { fill: none; stroke: #777777; stroke-width: 0.15; stroke-dasharray: 2 1; }
+      .label { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }
+      .tiny { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
+      .small { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
+      .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
+      .part-card-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 3.5px; font-weight: bold; }
+      .coord-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 6px; font-weight: bold; }
+      .paper { fill: #ffffff; stroke: none; }
+    </style>
+  </defs>
+  <path d="M 23 8 L 23.654 8.014 L 24.307 8.057 L 24.958 8.128 L 25.605 8.228 L 26.247 8.356 L 26.882 8.511 L 27.511 8.694 L 28.13 8.905 L 28.74 9.142 L 29.339 9.405 L 29.926 9.695 L 30.5 10.01 L 31.059 10.349 L 31.604 10.713 L 32.131 11.1 L 32.642 11.509 L 33.134 11.941 L 33.607 12.393 L 34.059 12.866 L 34.491 13.358 L 34.9 13.869 L 35.287 14.396 L 35.651 14.941 L 35.99 15.5 L 36.305 16.074 L 36.595 16.661 L 36.858 17.26 L 37.095 17.87 L 37.306 18.489 L 37.489 19.118 L 37.644 19.753 L 37.772 20.395 L 37.872 21.042 L 37.943 21.693 L 37.986 22.346 L 38 23 L 37.986 23.654 L 37.943 24.307 L 37.872 24.958 L 37.772 25.605 L 37.644 26.247 L 37.489 26.882 L 37.306 27.511 L 37.095 28.13 L 36.858 28.74 L 36.595 29.339 L 36.305 29.926 L 35.99 30.5 L 35.651 31.059 L 35.287 31.604 L 34.9 32.131 L 34.491 32.642 L 34.059 33.134 L 33.607 33.607 L 33.134 34.059 L 32.642 34.491 L 32.131 34.9 L 31.604 35.287 L 31.059 35.651 L 30.5 35.99 L 29.926 36.305 L 29.339 36.595 L 28.74 36.858 L 28.13 37.095 L 27.511 37.306 L 26.882 37.489 L 26.247 37.644 L 25.605 37.772 L 24.958 37.872 L 24.307 37.943 L 23.654 37.986 L 23 38 L 22.346 37.986 L 21.693 37.943 L 21.042 37.872 L 20.395 37.772 L 19.753 37.644 L 19.118 37.489 L 18.489 37.306 L 17.87 37.095 L 17.26 36.858 L 16.661 36.595 L 16.074 36.305 L 15.5 35.99 L 14.941 35.651 L 14.396 35.287 L 13.869 34.9 L 13.358 34.491 L 12.866 34.059 L 12.393 33.607 L 11.941 33.134 L 11.509 32.642 L 11.1 32.131 L 10.713 31.604 L 10.349 31.059 L 10.01 30.5 L 9.695 29.926 L 9.405 29.339 L 9.142 28.74 L 8.905 28.13 L 8.694 27.511 L 8.511 26.882 L 8.356 26.247 L 8.228 25.605 L 8.128 24.958 L 8.057 24.307 L 8.014 23.654 L 8 23 L 8.014 22.346 L 8.057 21.693 L 8.128 21.042 L 8.228 20.395 L 8.356 19.753 L 8.511 19.118 L 8.694 18.489 L 8.905 17.87 L 9.142 17.26 L 9.405 16.661 L 9.695 16.074 L 10.01 15.5 L 10.349 14.941 L 10.713 14.396 L 11.1 13.869 L 11.509 13.358 L 11.941 12.866 L 12.393 12.393 L 12.866 11.941 L 13.358 11.509 L 13.869 11.1 L 14.396 10.713 L 14.941 10.349 L 15.5 10.01 L 16.074 9.695 L 16.661 9.405 L 17.26 9.142 L 17.87 8.905 L 18.489 8.694 L 19.118 8.511 L 19.753 8.356 L 20.395 8.228 L 21.042 8.128 L 21.693 8.057 L 22.346 8.014 Z" class="cut cam-outline" data-cam-key="circle" data-base-radius-mm="15" data-eccentricity-mm="0" data-cam-lobes="1" data-profile-harmonic="0" data-rise-deg="45" data-high-dwell-deg="270" data-return-deg="45" data-physical-cam-preset="circle" data-profile-source="automataii.domain.mechanisms.cam.profile.build_pear_cam_profile_from_params" data-profile-sample-count="144"/>
+  <circle cx="23" cy="23" r="2" class="drill axle-hole" data-hole-role="axle" data-hole-diameter-mm="4"/>
+  <line x1="23" y1="23" x2="38" y2="23" class="score cam-base-radius"/>
+  <circle cx="23" cy="23" r="15" class="score cam-base-circle"/>
+  <circle cx="35" cy="23" r="2" class="drill linkage-hole bracket-hole crank-hole handle-hole" data-hole-role="linkage-bracket-crank-handle" data-attachment-kinds="linkage bracket crank handle" data-hole-diameter-mm="4" data-hole-index="0" data-hole-x-offset-mm="12" data-hole-y-offset-mm="0"/>
+  <circle cx="23" cy="35" r="2" class="drill linkage-hole bracket-hole crank-hole handle-hole" data-hole-role="linkage-bracket-crank-handle" data-attachment-kinds="linkage bracket crank handle" data-hole-diameter-mm="4" data-hole-index="1" data-hole-x-offset-mm="0" data-hole-y-offset-mm="12"/>
+  <circle cx="11" cy="23" r="2" class="drill linkage-hole bracket-hole crank-hole handle-hole" data-hole-role="linkage-bracket-crank-handle" data-attachment-kinds="linkage bracket crank handle" data-hole-diameter-mm="4" data-hole-index="2" data-hole-x-offset-mm="-12" data-hole-y-offset-mm="0"/>
+  <circle cx="23" cy="11" r="2" class="drill linkage-hole bracket-hole crank-hole handle-hole" data-hole-role="linkage-bracket-crank-handle" data-attachment-kinds="linkage bracket crank handle" data-hole-diameter-mm="4" data-hole-index="3" data-hole-x-offset-mm="-0" data-hole-y-offset-mm="-12"/>
+  <text x="23" y="45" class="label" text-anchor="middle">Circle / steady</text>
+</svg>

@@ -1,9 +1,139 @@
-import { FabricationIssue, FabricationPackage, FabricationRecipe, MechanismConfig, ProjectState } from '../types';
+import { FabricationIssue, FabricationPackage, FabricationRecipe, MechanismConfig, Point, ProjectState } from '../types';
 import { calculateLinkage, generateCurvePoints } from './kinematics';
 import { boardToScene, pathFromPoints, SCENE_PX_PER_MM, sceneToBoardRaw, sceneToSvg, sceneBoundsForSheet } from './coordinates';
 import { mechanismRequiredParts } from './project';
 import { mechanismBindingWarnings, preferredMotionJointId } from './motion';
+import { svgNumber } from './sanitize';
 
+export type FabricationGearSpec = {
+    key: 'g8' | 'g24' | 'g40' | 'g56';
+    label: string;
+    path: string;
+    teeth: number;
+    pitchRadiusMm: number;
+    rootRadiusMm: number;
+    outerRadiusMm: number;
+    holeDiameterMm: number;
+    attachmentHoleCentersMm: Point[];
+};
+
+export const FABRICATION_GEAR_SPECS: readonly FabricationGearSpec[] = [
+    { key: 'g8', label: 'G1 / 1-space gear', path: 'gears/gear-8t.svg', teeth: 8, pitchRadiusMm: 10, rootRadiusMm: 10, outerRadiusMm: 11.5, holeDiameterMm: 4, attachmentHoleCentersMm: [] },
+    { key: 'g24', label: 'G3 / 3-space gear', path: 'gears/gear-24t.svg', teeth: 24, pitchRadiusMm: 30, rootRadiusMm: 28.438, outerRadiusMm: 31.5, holeDiameterMm: 4, attachmentHoleCentersMm: [{ x: 0, y: -20 }, { x: -20, y: 0 }, { x: 20, y: 0 }, { x: 0, y: 20 }] },
+    { key: 'g40', label: 'G5 / 5-space gear', path: 'gears/gear-40t.svg', teeth: 40, pitchRadiusMm: 50, rootRadiusMm: 48.438, outerRadiusMm: 51.5, holeDiameterMm: 4, attachmentHoleCentersMm: [{ x: 0, y: -20 }, { x: -20, y: 0 }, { x: 20, y: 0 }, { x: 0, y: 20 }, { x: -20, y: -20 }, { x: 20, y: -20 }, { x: -20, y: 20 }, { x: 20, y: 20 }, { x: 0, y: -40 }, { x: -40, y: 0 }, { x: 40, y: 0 }, { x: 0, y: 40 }] },
+    { key: 'g56', label: 'G7 / 7-space gear', path: 'gears/gear-56t.svg', teeth: 56, pitchRadiusMm: 70, rootRadiusMm: 68.438, outerRadiusMm: 71.5, holeDiameterMm: 4, attachmentHoleCentersMm: [{ x: 0, y: -20 }, { x: -20, y: 0 }, { x: 20, y: 0 }, { x: 0, y: 20 }, { x: -20, y: -20 }, { x: 20, y: -20 }, { x: -20, y: 20 }, { x: 20, y: 20 }, { x: 0, y: -40 }, { x: -40, y: 0 }, { x: 40, y: 0 }, { x: 0, y: 40 }, { x: -20, y: -40 }, { x: 20, y: -40 }, { x: -40, y: -20 }, { x: 40, y: -20 }, { x: -40, y: 20 }, { x: 40, y: 20 }, { x: -20, y: 40 }, { x: 20, y: 40 }, { x: -40, y: -40 }, { x: 40, y: -40 }, { x: -40, y: 40 }, { x: 40, y: 40 }, { x: 0, y: -60 }, { x: -60, y: 0 }, { x: 60, y: 0 }, { x: 0, y: 60 }] }
+] as const;
+
+export type FabricationGearProfile = {
+    source: 'fabrication/manifest.json';
+    preset: FabricationGearSpec;
+    pitchRadius: number;
+    rootRadius: number;
+    outerRadius: number;
+    teeth: number;
+    axleHoleRadius: number;
+    attachmentHoleCenters: Point[];
+    outlinePoints: Point[];
+};
+
+export const fabricationGearSpecForPitchRadius = (pitchRadius: number): FabricationGearSpec => {
+    const radius = Math.max(0, Math.abs(pitchRadius));
+    return FABRICATION_GEAR_SPECS.reduce((best, spec) =>
+        Math.abs(spec.pitchRadiusMm - radius) < Math.abs(best.pitchRadiusMm - radius) ? spec : best
+    );
+};
+
+const scalePoint = (point: Point, scale: number): Point => ({ x: point.x * scale, y: point.y * scale });
+
+export const fabricationGearProfileForPitchRadius = (pitchRadius: number, presetPitchRadiusMm = pitchRadius): FabricationGearProfile => {
+    const safePitchRadius = Math.max(0.001, Math.abs(pitchRadius));
+    const preset = fabricationGearSpecForPitchRadius(presetPitchRadiusMm);
+    const scale = safePitchRadius / preset.pitchRadiusMm;
+    const rootRadius = preset.rootRadiusMm * scale;
+    const outerRadius = preset.outerRadiusMm * scale;
+    const toothAngle = (Math.PI * 2) / preset.teeth;
+    const outlinePoints: Point[] = [];
+    for (let i = 0; i < preset.teeth; i += 1) {
+        const base = i * toothAngle;
+        [
+            { angle: base, radius: rootRadius },
+            { angle: base + toothAngle * 0.25, radius: outerRadius },
+            { angle: base + toothAngle * 0.5, radius: outerRadius },
+            { angle: base + toothAngle * 0.75, radius: rootRadius }
+        ].forEach(({ angle, radius }) => outlinePoints.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius }));
+    }
+    return {
+        source: 'fabrication/manifest.json',
+        preset,
+        pitchRadius: safePitchRadius,
+        rootRadius,
+        outerRadius,
+        teeth: preset.teeth,
+        axleHoleRadius: (preset.holeDiameterMm * scale) / 2,
+        attachmentHoleCenters: preset.attachmentHoleCentersMm.map(point => scalePoint(point, scale)),
+        outlinePoints
+    };
+};
+
+const svgPathFromPoints = (points: Point[]): string => points.length
+    ? `M ${points.map(point => `${svgNumber(point.x)} ${svgNumber(point.y)}`).join(' L ')} Z`
+    : '';
+
+const circlePathD = (radius: number, cx = 0, cy = 0): string => {
+    const r = Math.max(0.001, Math.abs(radius));
+    return `M ${svgNumber(cx + r)} ${svgNumber(cy)} A ${svgNumber(r)} ${svgNumber(r)} 0 1 0 ${svgNumber(cx - r)} ${svgNumber(cy)} A ${svgNumber(r)} ${svgNumber(r)} 0 1 0 ${svgNumber(cx + r)} ${svgNumber(cy)} Z`;
+};
+
+export const fabricationGearPathD = (pitchRadius: number, presetPitchRadiusMm = pitchRadius): string => {
+    const profile = fabricationGearProfileForPitchRadius(pitchRadius, presetPitchRadiusMm);
+    return [
+        svgPathFromPoints(profile.outlinePoints),
+        circlePathD(profile.axleHoleRadius),
+        ...profile.attachmentHoleCenters.map(point => circlePathD(profile.axleHoleRadius, point.x, point.y))
+    ].join(' ');
+};
+
+export type FabricationRingGearProfile = {
+    source: 'fabrication/manifest.json';
+    key: 'ring-g8-g24';
+    internalTeeth: number;
+    outerRadius: number;
+    pitchRadius: number;
+    tipRadius: number;
+    rootRadius: number;
+    mountHoleCenters: Point[];
+};
+
+export const fabricationRingGearProfileForPitchRadius = (pitchRadius: number): FabricationRingGearProfile => {
+    const safePitchRadius = Math.max(0.001, Math.abs(pitchRadius));
+    const scale = safePitchRadius / 70;
+    return {
+        source: 'fabrication/manifest.json',
+        key: 'ring-g8-g24',
+        internalTeeth: 56,
+        outerRadius: 90 * scale,
+        pitchRadius: safePitchRadius,
+        tipRadius: 68.562 * scale,
+        rootRadius: 71.062 * scale,
+        mountHoleCenters: [{ x: 0, y: -80 }, { x: -80, y: 0 }, { x: 80, y: 0 }, { x: 0, y: 80 }].map(point => scalePoint(point, scale))
+    };
+};
+
+export const fabricationRingInnerGearOutlinePoints = (pitchRadius: number): Point[] => {
+    const profile = fabricationRingGearProfileForPitchRadius(pitchRadius);
+    const toothAngle = (Math.PI * 2) / profile.internalTeeth;
+    const points: Point[] = [];
+    for (let i = 0; i < profile.internalTeeth; i += 1) {
+        const base = i * toothAngle;
+        [
+            { angle: base, radius: profile.rootRadius },
+            { angle: base + toothAngle * 0.25, radius: profile.tipRadius },
+            { angle: base + toothAngle * 0.5, radius: profile.tipRadius },
+            { angle: base + toothAngle * 0.75, radius: profile.rootRadius }
+        ].forEach(({ angle, radius }) => points.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius }));
+    }
+    return points;
+};
 
 export type FabricationStackLayer = {
     label: string;

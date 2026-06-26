@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { BodyPartLayer, CanvasViewport, MechanismConfig, MechanismType, Point, ProjectState, StandardSkeleton } from '../types';
-import { boardGridLines, defaultPhysicalKit, sceneBoundsForSheet } from '../utils/coordinates';
+import { boardGridLines, defaultPhysicalKit, SCENE_PX_PER_MM, sceneBoundsForSheet } from '../utils/coordinates';
 import { calculateLinkage, camProfileScale } from '../utils/kinematics';
+import { fabricationGearProfileForPitchRadius, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints } from '../utils/fabrication';
 
 const VIEW_SCALE = 35;
 const THICKNESS = 0.22;
@@ -252,18 +253,18 @@ const createCamProfile = (radius: number, material: THREE.Material, edgeMaterial
   return group;
 };
 
-const ringGearShape = (outerRadius: number, innerRadius: number, teeth = 28) => {
+const ringGearShape = (pitchRadius: number) => {
+  const profile = fabricationRingGearProfileForPitchRadius(pitchRadius);
   const shape = new THREE.Shape();
-  for (let i = 0; i < teeth * 2; i += 1) {
-    const r = i % 2 === 0 ? outerRadius : outerRadius * 0.88;
-    const a = (i / (teeth * 2)) * Math.PI * 2;
-    const x = Math.cos(a) * r;
-    const y = Math.sin(a) * r;
-    if (i === 0) shape.moveTo(x, y);
-    else shape.lineTo(x, y);
-  }
-  shape.closePath();
-  shape.holes.push(holePath(0, 0, innerRadius));
+  shape.absellipse(0, 0, profile.outerRadius, profile.outerRadius, 0, Math.PI * 2, false);
+  const inner = new THREE.Path();
+  fabricationRingInnerGearOutlinePoints(pitchRadius).forEach((point, index) => {
+    if (index === 0) inner.moveTo(point.x, point.y);
+    else inner.lineTo(point.x, point.y);
+  });
+  inner.closePath();
+  shape.holes.push(inner);
+  profile.mountHoleCenters.forEach(point => shape.holes.push(holePath(point.x, point.y, 2 * (pitchRadius / 70))));
   return shape;
 };
 
@@ -346,18 +347,16 @@ const mechanismTelemetry = (mechanism: MechanismConfig, angle: number) => {
   };
 };
 
-const gearShape = (radius: number, teeth = 16) => {
+const gearShape = (pitchRadius: number, physicalPitchRadiusMm: number) => {
+  const profile = fabricationGearProfileForPitchRadius(pitchRadius, physicalPitchRadiusMm);
   const shape = new THREE.Shape();
-  for (let i = 0; i < teeth * 2; i += 1) {
-    const r = i % 2 === 0 ? radius : radius * 0.84;
-    const a = (i / (teeth * 2)) * Math.PI * 2;
-    const x = Math.cos(a) * r;
-    const y = Math.sin(a) * r;
-    if (i === 0) shape.moveTo(x, y);
-    else shape.lineTo(x, y);
-  }
+  profile.outlinePoints.forEach((point, index) => {
+    if (index === 0) shape.moveTo(point.x, point.y);
+    else shape.lineTo(point.x, point.y);
+  });
   shape.closePath();
-  shape.holes.push(holePath(0, 0, Math.max(0.08, radius * 0.16)));
+  shape.holes.push(holePath(0, 0, profile.axleHoleRadius));
+  profile.attachmentHoleCenters.forEach(point => shape.holes.push(holePath(point.x, point.y, profile.axleHoleRadius)));
   return shape;
 };
 
@@ -654,7 +653,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
           : [mechanism.crankLength, mechanism.rockerLength];
         gearRadii.forEach((radius, index) => {
           const mesh = new THREE.Mesh(
-            new THREE.ExtrudeGeometry(gearShape(Math.max(0.38, radius / VIEW_SCALE)), { depth: 0.16, bevelEnabled: true, bevelSize: 0.015 }),
+            new THREE.ExtrudeGeometry(gearShape(Math.max(0.38, radius / VIEW_SCALE), radius / SCENE_PX_PER_MM), { depth: 0.16, bevelEnabled: true, bevelSize: 0.015 }),
             index === 0 ? materials.mechDrive : materials.mechCoupler
           );
           gears.push(mesh);
@@ -692,7 +691,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       }
       if (mechanism.type === 'planetary_gear') {
         addExtra('ringGear', createExtrudedMesh(
-          ringGearShape(Math.max(0.82, (mechanism.groundLength + mechanism.rockerLength) / VIEW_SCALE), Math.max(0.46, mechanism.groundLength / VIEW_SCALE)),
+          ringGearShape(Math.max(0.82, (mechanism.groundLength + mechanism.rockerLength) / VIEW_SCALE)),
           materials.mechBase,
           materials.edge,
           0.14

@@ -2,11 +2,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BodyPartLayer, CanvasViewport, GlobalConfig, MechanismConfig, Point, ProjectState } from '../types';
 import { calculateLinkage, generateCurvePoints } from '../utils/kinematics';
-import { boardGridLines, bodyPartPivotScene, defaultPhysicalKit, pathFromPoints, SCENE_VIEW, sceneBoundsForSheet, sceneToSvg } from '../utils/coordinates';
+import { boardGridLines, bodyPartPivotScene, defaultPhysicalKit, pathFromPoints, SCENE_PX_PER_MM, SCENE_VIEW, sceneBoundsForSheet, sceneToSvg } from '../utils/coordinates';
 import { motionPreviewForProject, pointOnProjectPath } from '../utils/motion';
 import { mechanismWithGeneratedPath } from '../utils/project';
 import { clampCanvasZoom } from '../utils/viewport';
 import { ThreePuppetPreview } from './ThreePuppetPreview';
+import { fabricationGearPathD } from '../utils/fabrication';
 
 interface CanvasProps {
     project?: ProjectState;
@@ -31,28 +32,7 @@ const SCENE_ORIGIN = sceneToSvg({ x: 0, y: 0 });
 const INITIAL_OFFSET_X = SCENE_ORIGIN.x;
 const INITIAL_OFFSET_Y = SCENE_ORIGIN.y;
 
-const GearPath = ({ radius, teeth }: { radius: number, teeth: number }) => {
-    const hole = radius * 0.2;
-    const outer = radius;
-    const inner = radius * 0.85;
-    let d = "";
-    for (let i = 0; i < teeth; i++) {
-        const angle = (Math.PI * 2 * i) / teeth;
-        const toothWidth = (Math.PI * 2) / teeth / 2;
-        const a1 = angle;
-        const a2 = angle + toothWidth * 0.3;
-        const a3 = angle + toothWidth * 0.7;
-        const a4 = angle + toothWidth;
-        const p1 = { x: Math.cos(a1) * inner, y: Math.sin(a1) * inner };
-        const p2 = { x: Math.cos(a2) * outer, y: Math.sin(a2) * outer };
-        const p3 = { x: Math.cos(a3) * outer, y: Math.sin(a3) * outer };
-        const p4 = { x: Math.cos(a4) * inner, y: Math.sin(a4) * inner };
-        d += i === 0 ? `M ${p1.x} ${p1.y} ` : `L ${p1.x} ${p1.y} `;
-        d += `L ${p2.x} ${p2.y} L ${p3.x} ${p3.y} L ${p4.x} ${p4.y} `;
-    }
-    d += `Z M ${hole} 0 A ${hole} ${hole} 0 1 0 -${hole} 0 A ${hole} ${hole} 0 1 0 ${hole} 0 Z`;
-    return <path d={d} fillRule="evenodd" />;
-};
+const GearPath = ({ radius }: { radius: number }) => <path d={fabricationGearPathD(radius, radius / SCENE_PX_PER_MM)} fillRule="evenodd" />;
 
 export const Canvas: React.FC<CanvasProps> = ({
     project, config, setConfig, selectedId, setSelectedId, isPlaying, showTrace, isDrawMode, userPath, setUserPath, angle, setAngle, viewport, setViewport
@@ -478,7 +458,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                                 <g transform={`translate(${p1.x}, ${p1.y})`}>
                                     <g transform={`rotate(${crankDeg * (m.speed1 ?? 1)})`}>
                                         <g fill="#5a6cff" stroke="#3742c6" strokeWidth="2">
-                                            <GearPath radius={m.crankLength + 10} teeth={14} />
+                                            <GearPath radius={m.crankLength} />
                                         </g>
                                         <circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />
                                     </g>
@@ -495,7 +475,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                                 {(m.type === '4bar' || m.type === 'quick-return') && m.showOutputGear && isValid && (
                                     <g transform={`translate(${p2.x}, ${p2.y}) rotate(${rockerAngleDeg})`}>
                                         <g fill="#5a6cff" stroke="#3742c6" strokeWidth="2">
-                                            <GearPath radius={m.outputGearRadius || 40} teeth={12} />
+                                            <GearPath radius={m.outputGearRadius || 40} />
                                         </g>
                                         <circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />
                                     </g>
@@ -521,10 +501,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                                             <>
                                                 <g transform={`translate(${p2.x}, ${p2.y}) rotate(${(crankDeg * (m.speed2 ?? (m.gearRatio || 1))) + ((m.phase ?? 0) * 180 / Math.PI)})`}>
                                                     <g fill="#5a6cff" stroke="#3742c6" strokeWidth="2">
-                                                        <GearPath
-                                                            radius={m.rockerLength + 10}
-                                                            teeth={Math.max(3, Math.round(14 * (m.rockerLength / m.crankLength)))}
-                                                        />
+                                                        <GearPath radius={m.rockerLength} />
                                                     </g>
                                                     <circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />
                                                 </g>

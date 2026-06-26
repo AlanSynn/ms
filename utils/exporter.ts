@@ -1,8 +1,9 @@
 
 import { GlobalConfig, MechanismConfig, Point } from '../types';
 import { calculateLinkage, generateCurvePoints } from './kinematics';
-import { SCENE_VIEW, sceneToSvg } from './coordinates';
+import { SCENE_PX_PER_MM, SCENE_VIEW, sceneToSvg } from './coordinates';
 import { finiteNumber, sanitizeHexColor, sanitizeMechanismRuntime, svgNumber } from './sanitize';
+import { fabricationGearPathD } from './fabrication';
 
 // --- DXF HELPER FUNCTIONS ---
 
@@ -28,28 +29,7 @@ const dxfPolyline = (points: Point[], layer: string = "TRACE", color: number = 3
 
 // --- SVG HELPER FUNCTIONS ---
 
-export const gearPathD = (radius: number, teeth: number) => {
-    const hole = radius * 0.2;
-    const outer = radius;
-    const inner = radius * 0.85;
-    let d = "";
-    for (let i = 0; i < teeth; i++) {
-        const angle = (Math.PI * 2 * i) / teeth;
-        const toothWidth = (Math.PI * 2) / teeth / 2;
-        const a1 = angle;
-        const a2 = angle + toothWidth * 0.3;
-        const a3 = angle + toothWidth * 0.7;
-        const a4 = angle + toothWidth;
-        const p1 = { x: Math.cos(a1) * inner, y: Math.sin(a1) * inner };
-        const p2 = { x: Math.cos(a2) * outer, y: Math.sin(a2) * outer };
-        const p3 = { x: Math.cos(a3) * outer, y: Math.sin(a3) * outer };
-        const p4 = { x: Math.cos(a4) * inner, y: Math.sin(a4) * inner };
-        d += i === 0 ? `M ${p1.x} ${p1.y} ` : `L ${p1.x} ${p1.y} `;
-        d += `L ${p2.x} ${p2.y} L ${p3.x} ${p3.y} L ${p4.x} ${p4.y} `;
-    }
-    d += `Z M ${hole} 0 A ${hole} ${hole} 0 1 0 -${hole} 0 A ${hole} ${hole} 0 1 0 ${hole} 0 Z`;
-    return d;
-};
+export const gearPathD = (radius: number) => fabricationGearPathD(radius, radius / SCENE_PX_PER_MM);
 
 const rawPath = (points: Point[]) => points.length ? `M ${points.map(p => `${svgNumber(p.x)} ${svgNumber(p.y)}`).join(' L ')}` : '';
 const activeMechanisms = (config: GlobalConfig) => config.mechanisms.map(sanitizeMechanismRuntime).filter(m => m.visible && m.enabled !== false);
@@ -159,16 +139,15 @@ export const generateSVG = (config: GlobalConfig, angle: number): string => {
 
         // Anchors & Gears
         svg += `<g transform="translate(${svgNumber(p1.x)}, ${svgNumber(p1.y)}) rotate(${svgNumber(crankDeg * (m.speed1 ?? 1))})">`;
-        svg += `<path d="${gearPathD(finiteNumber(m.crankLength, 1) + 10, 14)}" fill="#f59e0b" stroke="#b45309" stroke-width="2" />`;
+        svg += `<path d="${gearPathD(finiteNumber(m.crankLength, 1))}" fill="#f59e0b" stroke="#b45309" stroke-width="2" />`;
         svg += `<circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />`;
         svg += `</g>`;
 
         // Output Gear for 5-bar
         if (m.type === '5bar' && aux) {
              const rot = (crankDeg * (m.speed2 ?? (m.gearRatio || 1))) + ((m.phase ?? 0) * 180 / Math.PI);
-             const teeth = Math.max(3, Math.round(14 * (m.rockerLength / m.crankLength)));
              svg += `<g transform="translate(${svgNumber(p2.x)}, ${svgNumber(p2.y)}) rotate(${svgNumber(rot)})">`;
-             svg += `<path d="${gearPathD(finiteNumber(m.rockerLength, 1) + 10, teeth)}" fill="#f59e0b" stroke="#b45309" stroke-width="2" />`;
+             svg += `<path d="${gearPathD(finiteNumber(m.rockerLength, 1))}" fill="#f59e0b" stroke="#b45309" stroke-width="2" />`;
              svg += `<circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />`;
              svg += `</g>`;
         }

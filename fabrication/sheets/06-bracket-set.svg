@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1"
+     width="279.4mm" height="215.9mm"
+     viewBox="0 0 279.4 215.9"
+     data-profile-key="motionsmith-ms4n"
+     data-grid-pitch-mm="20"
+     data-hole-diameter-mm="4">
+  <title>Automataii fabrication sheet 06-bracket-set: Bracket set</title>
+  <desc>Workshop sheet containing: brackets. Nominal holes are 4 mm.</desc>
+  <defs>
+    <style>
+      .cut { fill: none; stroke: #ed1c24; stroke-width: 0.25; stroke-miterlimit: 10; }
+      .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }
+      .score { fill: none; stroke: #777777; stroke-width: 0.15; stroke-dasharray: 2 1; }
+      .label { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }
+      .tiny { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
+      .small { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
+      .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
+      .part-card-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 3.5px; font-weight: bold; }
+      .coord-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 6px; font-weight: bold; }
+      .paper { fill: #ffffff; stroke: none; }
+    </style>
+  </defs>
+  <text x="12" y="12" class="label" text-anchor="start">06 Bracket set</text>
+  <text x="12" y="18" class="tiny" text-anchor="start">Bracket plates match the 20 mm pegboard pitch and 4 mm holes</text>
+  <g transform="translate(12 30)">
+  <path d="M 10 3 L 30 3 A 7 7 0 0 1 30 17 L 10 17 A 7 7 0 0 1 10 3 Z" class="cut bracket-outline" data-bracket-key="2-hole-straight" data-pitch-mm="20" data-hole-count="2"/>
+  </g>
+  <g transform="translate(12 30)">
+  <circle cx="10" cy="10" r="2" class="drill bracket-hole linkage-hole" data-hole-role="bracket" data-hole-diameter-mm="4" data-hole-index="0" data-hole-x-mm="10" data-hole-y-mm="10"/>
+  </g>
+  <g transform="translate(12 30)">
+  <circle cx="30" cy="10" r="2" class="drill bracket-hole linkage-hole" data-hole-role="bracket" data-hole-diameter-mm="4" data-hole-index="1" data-hole-x-mm="30" data-hole-y-mm="10"/>
+  </g>
+  <g transform="translate(12 62)">
+  <path d="M 10 3 L 50 3 A 7 7 0 0 1 50 17 L 10 17 A 7 7 0 0 1 10 3 Z" class="cut bracket-outline" data-bracket-key="3-hole-straight" data-pitch-mm="20" data-hole-count="3"/>
+  </g>
+  <g transform="translate(12 62)">
+  <circle cx="10" cy="10" r="2" class="drill bracket-hole linkage-hole" data-hole-role="bracket" data-hole-diameter-mm="4" data-hole-index="0" data-hole-x-mm="10" data-hole-y-mm="10"/>
+  </g>
+  <g transform="translate(12 62)">
+  <circle cx="30" cy="10" r="2" class="drill bracket-hole linkage-hole" data-hole-role="bracket" data-hole-diameter-mm="4" data-hole-index="1" data-hole-x-mm="30" data-hole-y-mm="10"/>
+  </g>
+  <g transform="translate(12 62)">
+  <circle cx="50" cy="10" r="2" class="drill bracket-hole linkage-hole" data-hole-role="bracket" data-hole-diameter-mm="4" data-hole-index="2" data-hole-x-mm="50" data-hole-y-mm="10"/>
+  </g>
+  <g transform="translate(12 96)">
+  <path d="M 3 3 L 37 3 L 37 17 L 17 17 L 17 37 L 3 37 Z" class="cut bracket-outline" data-bracket-key="l-3-hole" data-pitch-mm="20" data-hole-count="3"/>
+  </g>
+  <g transform="translate(12 96)">
+  <circle cx="10" cy="10" r="2" class="drill bracket-hole linkage-hole" data-hole-role="bracket" data-hole-diameter-mm="4" data-hole-index="0" data-hole-x-mm="10" data-hole-y-mm="10"/>
+  </g>
+  <g transform="translate(12 96)">
+  <circle cx="30" cy="10" r="2" class="drill bracket-hole linkage-hole" data-hole-role="bracket" data-hole-diameter-mm="4" data-hole-index="1" data-hole-x-mm="30" data-hole-y-mm="10"/>
+  </g>
+  <g transform="translate(12 96)">
+  <circle cx="10" cy="30" r="2" class="drill bracket-hole linkage-hole" data-hole-role="bracket" data-hole-diameter-mm="4" data-hole-index="2" data-hole-x-mm="10" data-hole-y-mm="30"/>
+  </g>
+  <g transform="translate(72 96)">
+  <path d="M 3 3 L 39 3 L 3 39 Z" class="cut bracket-outline" data-bracket-key="triangle-3-hole" data-pitch-mm="20" data-hole-count="3"/>
+  </g>
+  <g transform="translate(72 96)">
+  <circle cx="10" cy="10" r="2" class="drill bracket-hole linkage-hole" data-hole-role="bracket" data-hole-diameter-mm="4" data-hole-index="0" data-hole-x-mm="10" data-hole-y-mm="10"/>
+  </g>
+  <g transform="translate(72 96)">
+  <circle cx="30" cy="10" r="2" class="drill bracket-hole linkage-hole" data-hole-role="bracket" data-hole-diameter-mm="4" data-hole-index="1" data-hole-x-mm="30" data-hole-y-mm="10"/>
+  </g>
+  <g transform="translate(72 96)">
+  <circle cx="10" cy="30" r="2" class="drill bracket-hole linkage-hole" data-hole-role="bracket" data-hole-diameter-mm="4" data-hole-index="2" data-hole-x-mm="10" data-hole-y-mm="30"/>
+  </g>
+</svg>

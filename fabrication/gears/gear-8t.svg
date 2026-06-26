@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1"
+     width="39mm" height="49mm"
+     viewBox="0 0 39 49"
+     data-profile-key="motionsmith-ms4n"
+     data-grid-pitch-mm="20"
+     data-hole-diameter-mm="4">
+  <title>Automataii fabrication gear G1 / 1-space gear (8 teeth)</title>
+  <desc>G1 / 1-space gear with 4 mm axle. Attachment holes, when present, sit on the board grid.</desc>
+  <defs>
+    <style>
+      .cut { fill: none; stroke: #ed1c24; stroke-width: 0.25; stroke-miterlimit: 10; }
+      .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }
+      .score { fill: none; stroke: #777777; stroke-width: 0.15; stroke-dasharray: 2 1; }
+      .label { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }
+      .tiny { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
+      .small { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
+      .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
+      .part-card-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 3.5px; font-weight: bold; }
+      .coord-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 6px; font-weight: bold; }
+      .paper { fill: #ffffff; stroke: none; }
+    </style>
+  </defs>
+  <path d="M 29.5 19.5 L 30.779 21.744 L 30.125 23.901 L 27.815 25.056 L 26.571 26.571 L 25.889 29.062 L 23.901 30.125 L 21.451 29.308 L 19.5 29.5 L 17.256 30.779 L 15.099 30.125 L 13.944 27.815 L 12.429 26.571 L 9.938 25.889 L 8.875 23.901 L 9.692 21.451 L 9.5 19.5 L 8.221 17.256 L 8.875 15.099 L 11.185 13.944 L 12.429 12.429 L 13.111 9.938 L 15.099 8.875 L 17.549 9.692 L 19.5 9.5 L 21.744 8.221 L 23.901 8.875 L 25.056 11.185 L 26.571 12.429 L 29.062 13.111 L 30.125 15.099 L 29.308 17.549 Z" class="cut gear-outline" data-teeth="8" data-pitch-radius-mm="10" data-root-radius-mm="10" data-outer-radius-mm="11.5" data-attachment-hole-pattern="none"/>
+  <circle cx="19.5" cy="19.5" r="2" class="drill axle-hole" data-hole-role="axle" data-hole-diameter-mm="4"/>
+  <circle cx="19.5" cy="19.5" r="10" class="score pitch-circle"/>
+  <text x="19.5" y="37" class="label" text-anchor="middle">G1 / 1-space gear / 8T</text>
+</svg>

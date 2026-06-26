@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1"
+     width="215.9mm" height="279.4mm"
+     viewBox="0 0 215.9 279.4"
+     data-profile-key="motionsmith-ms4n"
+     data-grid-pitch-mm="20"
+     data-hole-diameter-mm="4">
+  <title>Automataii fabrication sheet 09-planetary-ring-set: Planetary ring gear</title>
+  <desc>Workshop sheet containing: ring_gears. Nominal holes are 4 mm.</desc>
+  <defs>
+    <style>
+      .cut { fill: none; stroke: #ed1c24; stroke-width: 0.25; stroke-miterlimit: 10; }
+      .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }
+      .score { fill: none; stroke: #777777; stroke-width: 0.15; stroke-dasharray: 2 1; }
+      .label { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }
+      .tiny { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
+      .small { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
+      .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
+      .part-card-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 3.5px; font-weight: bold; }
+      .coord-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 6px; font-weight: bold; }
+      .paper { fill: #ffffff; stroke: none; }
+    </style>
+  </defs>
+  <text x="12" y="12" class="label" text-anchor="start">09 Planetary ring gear</text>
+  <text x="12" y="18" class="tiny" text-anchor="start">Fixed internal ring gear for the board-mounted planetary guide</text>
+  <g transform="translate(10 28)">
+  <circle cx="98" cy="98" r="90" class="cut ring-outer-outline" data-ring-key="ring-g8-g24" data-outer-radius-mm="90" data-internal-teeth="56"/>
+  </g>
+  <g transform="translate(10 28)">
+  <path d="M 169.062 98 L 166.536 99.923 L 166.455 101.844 L 168.811 103.973 L 168.616 105.956 L 165.889 107.584 L 165.594 109.485 L 167.697 111.864 L 167.281 113.813 L 164.389 115.125 L 163.883 116.981 L 165.707 119.58 L 165.075 121.47 L 162.054 122.451 L 161.343 124.238 L 162.865 127.025 L 162.025 128.833 L 158.914 129.469 L 158.008 131.165 L 159.207 134.105 L 158.17 135.808 L 155.008 136.091 L 153.917 137.675 L 154.78 140.731 L 153.559 142.307 L 150.384 142.235 L 149.123 143.686 L 149.638 146.82 L 148.249 148.249 L 145.102 147.822 L 143.686 149.123 L 143.848 152.294 L 142.307 153.559 L 139.228 152.782 L 137.675 153.917 L 137.48 157.086 L 135.808 158.17 L 132.835 157.054 L 131.165 158.008 L 130.616 161.135 L 128.833 162.025 L 126.004 160.583 L 124.238 161.343 L 123.342 164.39 L 121.47 165.075 L 118.821 163.325 L 116.981 163.883 L 115.75 166.81 L 113.813 167.281 L 111.376 165.245 L 109.485 165.594 L 107.934 168.365 L 105.956 168.616 L 103.763 166.32 L 101.844 166.455 L 99.993 169.035 L 98 169.062 L 96.077 166.536 L 94.156 166.455 L 92.027 168.811 L 90.044 168.616 L 88.416 165.889 L 86.515 165.594 L 84.136 167.697 L 82.187 167.281 L 80.875 164.389 L 79.019 163.883 L 76.42 165.707 L 74.53 165.075 L 73.549 162.054 L 71.762 161.343 L 68.975 162.865 L 67.167 162.025 L 66.531 158.914 L 64.835 158.008 L 61.895 159.207 L 60.192 158.17 L 59.909 155.008 L 58.325 153.917 L 55.269 154.78 L 53.693 153.559 L 53.765 150.384 L 52.314 149.123 L 49.18 149.638 L 47.751 148.249 L 48.178 145.102 L 46.877 143.686 L 43.706 143.848 L 42.441 142.307 L 43.218 139.228 L 42.083 137.675 L 38.914 137.48 L 37.83 135.808 L 38.946 132.835 L 37.992 131.165 L 34.865 130.616 L 33.975 128.833 L 35.417 126.004 L 34.657 124.238 L 31.61 123.342 L 30.925 121.47 L 32.675 118.821 L 32.117 116.981 L 29.19 115.75 L 28.719 113.813 L 30.755 111.376 L 30.406 109.485 L 27.635 107.934 L 27.384 105.956 L 29.68 103.763 L 29.545 101.844 L 26.965 99.993 L 26.938 98 L 29.464 96.077 L 29.545 94.156 L 27.189 92.027 L 27.384 90.044 L 30.111 88.416 L 30.406 86.515 L 28.303 84.136 L 28.719 82.187 L 31.611 80.875 L 32.117 79.019 L 30.293 76.42 L 30.925 74.53 L 33.946 73.549 L 34.657 71.762 L 33.135 68.975 L 33.975 67.167 L 37.086 66.531 L 37.992 64.835 L 36.793 61.895 L 37.83 60.192 L 40.992 59.909 L 42.083 58.325 L 41.22 55.269 L 42.441 53.693 L 45.616 53.765 L 46.877 52.314 L 46.362 49.18 L 47.751 47.751 L 50.898 48.178 L 52.314 46.877 L 52.152 43.706 L 53.693 42.441 L 56.772 43.218 L 58.325 42.083 L 58.52 38.914 L 60.192 37.83 L 63.165 38.946 L 64.835 37.992 L 65.384 34.865 L 67.167 33.975 L 69.996 35.417 L 71.762 34.657 L 72.658 31.61 L 74.53 30.925 L 77.179 32.675 L 79.019 32.117 L 80.25 29.19 L 82.187 28.719 L 84.624 30.755 L 86.515 30.406 L 88.066 27.635 L 90.044 27.384 L 92.237 29.68 L 94.156 29.545 L 96.007 26.965 L 98 26.938 L 99.923 29.464 L 101.844 29.545 L 103.973 27.189 L 105.956 27.384 L 107.584 30.111 L 109.485 30.406 L 111.864 28.303 L 113.813 28.719 L 115.125 31.611 L 116.981 32.117 L 119.58 30.293 L 121.47 30.925 L 122.451 33.946 L 124.238 34.657 L 127.025 33.135 L 128.833 33.975 L 129.469 37.086 L 131.165 37.992 L 134.105 36.793 L 135.808 37.83 L 136.091 40.992 L 137.675 42.083 L 140.731 41.22 L 142.307 42.441 L 142.235 45.616 L 143.686 46.877 L 146.82 46.362 L 148.249 47.751 L 147.822 50.898 L 149.123 52.314 L 152.294 52.152 L 153.559 53.693 L 152.782 56.772 L 153.917 58.325 L 157.086 58.52 L 158.17 60.192 L 157.054 63.165 L 158.008 64.835 L 161.135 65.384 L 162.025 67.167 L 160.583 69.996 L 161.343 71.762 L 164.39 72.658 L 165.075 74.53 L 163.325 77.179 L 163.883 79.019 L 166.81 80.25 L 167.281 82.187 L 165.245 84.624 L 165.594 86.515 L 168.365 88.066 L 168.616 90.044 L 166.32 92.237 L 166.455 94.156 L 169.035 96.007 Z" class="cut ring-inner-gear-outline" data-ring-key="ring-g8-g24" data-internal-teeth="56" data-pitch-radius-mm="70" data-tip-radius-mm="68.562" data-root-radius-mm="71.062"/>
+  </g>
+  <g transform="translate(10 28)">
+  <circle cx="98" cy="98" r="70" class="score ring-pitch-circle"/>
+  </g>
+  <g transform="translate(10 28)">
+  <circle cx="98" cy="18" r="2" class="drill ring-mount-hole bracket-hole" data-hole-role="ring-mount" data-hole-diameter-mm="4" data-hole-index="0" data-hole-x-offset-mm="0" data-hole-y-offset-mm="-80" data-mount-radius-mm="80"/>
+  </g>
+  <g transform="translate(10 28)">
+  <circle cx="18" cy="98" r="2" class="drill ring-mount-hole bracket-hole" data-hole-role="ring-mount" data-hole-diameter-mm="4" data-hole-index="1" data-hole-x-offset-mm="-80" data-hole-y-offset-mm="0" data-mount-radius-mm="80"/>
+  </g>
+  <g transform="translate(10 28)">
+  <circle cx="178" cy="98" r="2" class="drill ring-mount-hole bracket-hole" data-hole-role="ring-mount" data-hole-diameter-mm="4" data-hole-index="2" data-hole-x-offset-mm="80" data-hole-y-offset-mm="0" data-mount-radius-mm="80"/>
+  </g>
+  <g transform="translate(10 28)">
+  <circle cx="98" cy="178" r="2" class="drill ring-mount-hole bracket-hole" data-hole-role="ring-mount" data-hole-diameter-mm="4" data-hole-index="3" data-hole-x-offset-mm="0" data-hole-y-offset-mm="80" data-mount-radius-mm="80"/>
+  </g>
+  <g transform="translate(10 28)">
+  <text x="98" y="194" class="label" text-anchor="middle">R56 ring for G8+G24</text>
+  </g>
+</svg>
