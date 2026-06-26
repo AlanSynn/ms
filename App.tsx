@@ -50,24 +50,29 @@ import boyStarterUrl from './resources/examples/raw/boy.PNG?url';
 
 type FoundryState = MechanismConfig;
 type FoundryViewPreset = 'front' | 'iso' | 'side' | 'top' | 'custom';
-type FoundryCamera = { yaw: number; pitch: number; preset: FoundryViewPreset };
+type FoundryCamera = { yaw: number; pitch: number; zoom: number; preset: FoundryViewPreset };
+type FoundryCameraPreset = { label: string; yaw: number; pitch: number; zoom: number };
 type StarterImageTemplate = { id: string; label: string; fileName: string; description: string; url: string };
 
 const MOTIONSMITH_SITE_URL = 'https://alansynn.com/motionsmith/';
 const MOTIONSMITH_ICON_URL = `${MOTIONSMITH_SITE_URL}static/images/favicon.ico`;
 
-const FOUNDRY_VIEW_PRESETS: Record<Exclude<FoundryViewPreset, 'custom'>, { label: string; yaw: number; pitch: number }> = {
-    front: { label: 'Front', yaw: 0, pitch: 0 },
-    iso: { label: 'Iso', yaw: -32, pitch: 24 },
-    side: { label: 'Side', yaw: 64, pitch: 12 },
-    top: { label: 'Top', yaw: 0, pitch: 62 }
+const FOUNDRY_VIEW_PRESETS: Record<Exclude<FoundryViewPreset, 'custom'>, FoundryCameraPreset> = {
+    front: { label: 'Front', yaw: 0, pitch: 0, zoom: 0.86 },
+    iso: { label: 'Isometric', yaw: -32, pitch: 24, zoom: 0.82 },
+    side: { label: 'Side', yaw: 64, pitch: 12, zoom: 0.86 },
+    top: { label: 'Top', yaw: 0, pitch: 62, zoom: 0.8 }
 };
 
 const clampFoundryPitch = (value: number) => Math.max(-64, Math.min(68, value));
+const clampFoundryZoom = (value: number) => Math.max(0.45, Math.min(2.4, value));
+const foundryCameraDistance = (camera: FoundryCamera) => 17 / clampFoundryZoom(camera.zoom);
 type FoundryOverlaySize = { width: number; height: number };
 const FOUNDRY_OVERLAY_SIZE: FoundryOverlaySize = { width: 360, height: 240 };
 
-const foundryCameraPosition = ({ yaw, pitch }: FoundryCamera, distance = 17) => {
+const foundryCameraPosition = (camera: FoundryCamera) => {
+    const { yaw, pitch } = camera;
+    const distance = foundryCameraDistance(camera);
     const yawRad = yaw * Math.PI / 180;
     const pitchRad = pitch * Math.PI / 180;
     return new THREE.Vector3(
@@ -2084,9 +2089,11 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const [showPathPreview, setShowPathPreview] = useState(true);
     const [showSensemaking, setShowSensemaking] = useState(true);
     const [foundryCamera, setFoundryCamera] = useState<FoundryCamera>({ ...FOUNDRY_VIEW_PRESETS.iso, preset: 'iso' });
+    const [foundryRigOpacity, setFoundryRigOpacity] = useState(85);
     const [foundryProjectionSize, setFoundryProjectionSize] = useState<FoundryOverlaySize>(FOUNDRY_OVERLAY_SIZE);
     const [isOrbitingFoundry, setIsOrbitingFoundry] = useState(false);
-    const foundryOrbitStartRef = useRef<{ pointerId: number; x: number; y: number; yaw: number; pitch: number } | null>(null);
+    const [isZoomingFoundry, setIsZoomingFoundry] = useState(false);
+    const foundryOrbitStartRef = useRef<{ pointerId: number; x: number; y: number; yaw: number; pitch: number; zoom: number; mode: 'orbit' | 'zoom' } | null>(null);
     const targetReady = Boolean(selectedPart && selectedPath && selectedPath.enabled && selectedPath.points.length >= 3);
     const rawLanding = manualAnchor ?? selectedPath?.points[0] ?? (selectedPart ? bodyPartPivotScene(selectedPart, project.skeleton) : { x: foundry.anchorX ?? 0, y: foundry.anchorY ?? 0 });
     const landingBoard = sceneToBoard(rawLanding, project.settings.physicalKit);
@@ -2164,6 +2171,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const physicsRule = mechanismPhysicsRule(foundry.type);
     const hardBlocked = !targetReady || range.percentValid === 0 || !Number.isFinite(landing.x) || !Number.isFinite(landing.y);
     const foundryCameraLabel = foundryCamera.preset === 'custom' ? 'Drag orbit' : FOUNDRY_VIEW_PRESETS[foundryCamera.preset].label;
+    const foundryPhaseDegrees = Math.round(((((foundryPhase / (Math.PI * 2)) % 1) + 1) % 1) * 360);
     const applyAnchor = (point: Point) => {
         const board = sceneToBoard(point, project.settings.physicalKit);
         const snapped = boardToScene(board.col, board.row, project.settings.physicalKit);
@@ -2186,18 +2194,31 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     };
     const setCameraPreset = (preset: Exclude<FoundryViewPreset, 'custom'>) => setFoundryCamera({ ...FOUNDRY_VIEW_PRESETS[preset], preset });
     const handleFoundryPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-        if (isPickingAnchor || event.button !== 0) return;
-        foundryOrbitStartRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, yaw: foundryCamera.yaw, pitch: foundryCamera.pitch };
-        setIsOrbitingFoundry(true);
+        if (isPickingAnchor || (event.button !== 0 && event.button !== 1 && event.button !== 2)) return;
+        const mode = event.shiftKey || event.altKey || event.button !== 0 ? 'zoom' : 'orbit';
+        foundryOrbitStartRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, yaw: foundryCamera.yaw, pitch: foundryCamera.pitch, zoom: foundryCamera.zoom, mode };
+        setIsOrbitingFoundry(mode === 'orbit');
+        setIsZoomingFoundry(mode === 'zoom');
+        event.preventDefault();
         event.currentTarget.setPointerCapture(event.pointerId);
     };
     const handleFoundryPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
         const start = foundryOrbitStartRef.current;
         if (!start || start.pointerId !== event.pointerId) return;
         event.preventDefault();
+        if (start.mode === 'zoom') {
+            setFoundryCamera({
+                yaw: start.yaw,
+                pitch: start.pitch,
+                zoom: clampFoundryZoom(start.zoom + (start.y - event.clientY) * 0.006),
+                preset: 'custom'
+            });
+            return;
+        }
         setFoundryCamera({
             yaw: start.yaw + (event.clientX - start.x) * 0.45,
             pitch: clampFoundryPitch(start.pitch - (event.clientY - start.y) * 0.45),
+            zoom: start.zoom,
             preset: 'custom'
         });
     };
@@ -2205,8 +2226,18 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
         if (foundryOrbitStartRef.current?.pointerId === event.pointerId) {
             foundryOrbitStartRef.current = null;
             setIsOrbitingFoundry(false);
+            setIsZoomingFoundry(false);
             if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
         }
+    };
+    const handleFoundryWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+        if (isPickingAnchor) return;
+        event.preventDefault();
+        setFoundryCamera(prev => ({
+            ...prev,
+            zoom: clampFoundryZoom(prev.zoom * (event.deltaY < 0 ? 1.1 : 0.9)),
+            preset: 'custom'
+        }));
     };
     const updateFoundryParam = (key: keyof MechanismConfig, value: number) => {
         if (key === 'anchorX' || key === 'anchorY') {
@@ -2314,12 +2345,29 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             </StageLeftSummary>
         </div>),
             canvas: canvasPane(<section className="path-canvas-shell foundry-canvas-shell canvas-workspace p-0">
-            <div className="canvas-overlay-toolbar foundry-preview-toolbar"><h4 className="section-title">Sandbox preview</h4><span className="chip">{foundryPlaying ? 'Simulation active' : 'Paused'}</span><span className="chip foundry-camera-chip" data-testid="foundry-camera-readout">3D {foundryCameraLabel} · {Math.round(foundryCamera.yaw)}°/{Math.round(foundryCamera.pitch)}°</span></div>
+            <div className="foundry-sim-badge" data-testid="foundry-sim-badge"><span className={foundryPlaying ? 'status-pulse' : ''} />{foundryPlaying ? 'Active Sim' : 'Paused'}</div>
+            <div className="foundry-camera-hud" data-testid="foundry-camera-controls" aria-label="3D camera controls">
+                <span className="foundry-camera-readout" data-testid="foundry-camera-readout">3D {foundryCameraLabel} · {Math.round(foundryCamera.zoom * 100)}%</span>
+                {(Object.entries(FOUNDRY_VIEW_PRESETS) as Array<[Exclude<FoundryViewPreset, 'custom'>, FoundryCameraPreset]>).map(([preset, view]) =>
+                    <button key={preset} type="button" data-testid={`foundry-camera-preset-${preset}`} className={foundryCamera.preset === preset ? 'active' : ''} aria-pressed={foundryCamera.preset === preset} onClick={() => setCameraPreset(preset)}>{view.label}</button>
+                )}
+            </div>
+            <div className="foundry-opacity-panel" data-testid="foundry-opacity-panel">
+                <div><span>Rig Opacity</span><strong>{foundryRigOpacity}%</strong></div>
+                <input aria-label="Rig opacity" type="range" min="35" max="100" value={foundryRigOpacity} onChange={event => setFoundryRigOpacity(Number(event.target.value))} />
+            </div>
+            <div className="foundry-playback-hud foundry-toolbar" data-testid="foundry-toolbar" aria-label="Foundry playback controls">
+                <button className={`btn-secondary ${foundryPlaying ? 'active' : ''}`} onClick={() => setFoundryPlaying(!foundryPlaying)}>{foundryPlaying ? 'Pause' : 'Play'}</button>
+                <button className="btn-secondary" onClick={() => { setFoundryPhase(0); setFoundryPlaying(false); }}>Reset</button>
+                <input aria-label="Foundry phase" type="range" min="0" max="360" value={foundryPhaseDegrees} onChange={event => { setFoundryPlaying(false); setFoundryPhase(Number(event.target.value) * Math.PI / 180); }} />
+                <span>{foundryPhaseDegrees}°</span>
+            </div>
             <ThreeFoundryPreview
                 mechanism={landedFoundry}
                 simulation={selectedSimulation}
                 kit={project.settings.physicalKit}
                 camera={foundryCamera}
+                rigOpacity={foundryRigOpacity / 100}
                 color={foundry.color}
                 pathPoints={previewPoints}
                 showPathPreview={showPathPreview}
@@ -2335,11 +2383,13 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 cameraLabel={foundryCameraLabel}
                 isPickingAnchor={isPickingAnchor}
                 isOrbiting={isOrbitingFoundry}
+                isZooming={isZoomingFoundry}
                 onAnchorPick={handleAnchorPick}
                 onPointerDown={handleFoundryPointerDown}
                 onPointerMove={handleFoundryPointerMove}
                 onPointerUp={finishFoundryOrbit}
                 onPointerCancel={finishFoundryOrbit}
+                onWheel={handleFoundryWheel}
                 onProjectionSizeChange={updateFoundryProjectionSize}
             >
                 <svg data-testid="foundry-preview-overlay" viewBox={`0 0 ${foundryProjectionSize.width} ${foundryProjectionSize.height}`} className="foundry-preview-overlay" aria-hidden="true" data-projection-aspect={(foundryProjectionSize.width / Math.max(1, foundryProjectionSize.height)).toFixed(3)}>
@@ -2395,10 +2445,6 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 </div>
             </details>
             <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
-                <div className="foundry-toolbar mb-3" data-testid="foundry-toolbar">
-                    <button className={`btn-secondary ${foundryPlaying ? 'active' : ''}`} onClick={() => setFoundryPlaying(!foundryPlaying)}>{foundryPlaying ? 'Pause' : 'Play'}</button>
-                    <button className="btn-secondary" onClick={() => { setFoundryPhase(0); setFoundryPlaying(false); }}>Reset</button>
-                </div>
                 <div className="font-bold text-slate-800">Preview overlays</div>
                 <div className="foundry-toolbar mt-2">
                     <button type="button" className={`btn-secondary ${showForces ? 'active' : ''}`} aria-pressed={showForces} onClick={() => setShowForces(!showForces)}>Forces</button>
@@ -2407,13 +2453,6 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                     <button type="button" className={`btn-secondary ${showPathPreview ? 'active' : ''}`} aria-pressed={showPathPreview} onClick={() => setShowPathPreview(!showPathPreview)}>Path Preview</button>
                     <button type="button" className={`btn-secondary ${showSensemaking ? 'active' : ''}`} aria-pressed={showSensemaking} onClick={() => setShowSensemaking(!showSensemaking)}>Show Sensemaking</button>
                     <button type="button" className="btn-secondary" onClick={() => setShowSensemaking(true)}>Back to Gallery</button>
-                </div>
-                <div className="font-bold text-slate-800 mt-4">3D camera</div>
-                <p className="mt-1 text-xs font-bold uppercase tracking-wider text-slate-500">Drag the sandbox to orbit. Use presets for CAD-style inspection.</p>
-                <div className="foundry-toolbar mt-2" data-testid="foundry-camera-controls">
-                    {(Object.entries(FOUNDRY_VIEW_PRESETS) as Array<[Exclude<FoundryViewPreset, 'custom'>, { label: string; yaw: number; pitch: number }]>).map(([preset, view]) =>
-                        <button key={preset} type="button" data-testid={`foundry-camera-preset-${preset}`} className={`btn-secondary ${foundryCamera.preset === preset ? 'active' : ''}`} aria-pressed={foundryCamera.preset === preset} onClick={() => setCameraPreset(preset)}>{view.label} view</button>
-                    )}
                 </div>
             </div>
         </div>)
@@ -2935,6 +2974,7 @@ type ThreeFoundryPreviewProps = {
     simulation: ReturnType<typeof fitMechanismSimulation>;
     kit: PhysicalKitSettings;
     camera: FoundryCamera;
+    rigOpacity: number;
     color: string;
     pathPoints: Point[];
     showPathPreview: boolean;
@@ -2950,11 +2990,13 @@ type ThreeFoundryPreviewProps = {
     cameraLabel: string;
     isPickingAnchor: boolean;
     isOrbiting: boolean;
+    isZooming: boolean;
     onAnchorPick: (point: Point) => void;
     onPointerDown: React.PointerEventHandler<HTMLDivElement>;
     onPointerMove: React.PointerEventHandler<HTMLDivElement>;
     onPointerUp: React.PointerEventHandler<HTMLDivElement>;
     onPointerCancel: React.PointerEventHandler<HTMLDivElement>;
+    onWheel: React.WheelEventHandler<HTMLDivElement>;
     onProjectionSizeChange: (size: FoundryOverlaySize) => void;
     children: React.ReactNode;
 };
@@ -2980,7 +3022,7 @@ const disposeThreeObject = (object: THREE.Object3D) => object.traverse(child => 
     else material?.dispose?.();
 });
 
-const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPoints, showPathPreview, showTrail, showForces, showVelocity, physicsRule, velocityMagnitude, forceMagnitude, frictionCoefficient, frictionMagnitude, constraintError, cameraLabel, isPickingAnchor, isOrbiting, onAnchorPick, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onProjectionSizeChange, children }: ThreeFoundryPreviewProps) => {
+const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, color, pathPoints, showPathPreview, showTrail, showForces, showVelocity, physicsRule, velocityMagnitude, forceMagnitude, frictionCoefficient, frictionMagnitude, constraintError, cameraLabel, isPickingAnchor, isOrbiting, isZooming, onAnchorPick, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onWheel, onProjectionSizeChange, children }: ThreeFoundryPreviewProps) => {
     const hostRef = useRef<HTMLDivElement | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -3080,7 +3122,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
         const root = new THREE.Group();
         root.name = 'foundry-dynamic';
         scene.add(root);
-        const materialForLayer = (colorValue: string, roughness = 0.66, metalness = 0.03) => new THREE.MeshStandardMaterial({ color: colorValue, roughness, metalness });
+        const materialForLayer = (colorValue: string, roughness = 0.66, metalness = 0.03) => new THREE.MeshStandardMaterial({ color: colorValue, roughness, metalness, transparent: rigOpacity < 0.995, opacity: rigOpacity });
         const material = {
             base: materialForLayer(renderPlan.base.color, 0.82, 0.01),
             accent: materialForLayer('#60a5fa', 0.45, 0.08),
@@ -3358,7 +3400,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
         });
 
         renderCamera(cameraStateRef.current);
-    }, [mechanism, simulation, kit, color, pathPoints, showPathPreview, showTrail, pinionRotation, renderPlan]);
+    }, [mechanism, simulation, kit, color, pathPoints, showPathPreview, showTrail, pinionRotation, renderPlan, rigOpacity]);
 
     return <div
         data-testid="foundry-preview"
@@ -3367,7 +3409,9 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
-        className={`foundry-preview h-[520px] w-full ${isPickingAnchor ? 'is-picking-anchor' : ''} ${isOrbiting ? 'is-orbiting' : ''}`}
+        onWheel={onWheel}
+        onContextMenu={event => event.preventDefault()}
+        className={`foundry-preview h-[520px] w-full ${isPickingAnchor ? 'is-picking-anchor' : ''} ${isOrbiting ? 'is-orbiting' : ''} ${isZooming ? 'is-zooming' : ''}`}
         aria-label="Mechanism Foundry true WebGL 3D sandbox preview"
     >
         <div ref={hostRef} className="foundry-three-host" />
@@ -3376,6 +3420,9 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
             data-camera-preset={camera.preset}
             data-camera-yaw={camera.yaw.toFixed(1)}
             data-camera-pitch={camera.pitch.toFixed(1)}
+            data-camera-zoom={camera.zoom.toFixed(3)}
+            data-camera-distance={foundryCameraDistance(camera).toFixed(3)}
+            data-rig-opacity={rigOpacity.toFixed(2)}
             data-three-renderer="webgl"
             data-mechanism-type={mechanism.type}
             data-three-part-count={inv.parts}

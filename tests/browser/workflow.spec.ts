@@ -161,7 +161,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
 
   await page.getByRole('button', { name: /Mechanism Foundry/i }).click();
   await expect(page.getByRole('heading', { name: 'Mechanism Foundry' })).toBeVisible();
-  await expect(page.getByText('Sandbox preview')).toBeVisible();
+  await expect(page.getByTestId('foundry-camera-readout')).toContainText('3D Isometric');
   await expect(page.getByTestId('foundry-three-canvas')).toBeVisible();
   const foundryRig = page.getByTestId('foundry-camera-rig');
   await expect(foundryRig).toHaveAttribute('data-three-renderer', 'webgl');
@@ -1219,6 +1219,7 @@ test('Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking'
 });
 
 test('Mechanism Foundry supports CAD-style 3D camera presets and drag orbit', async ({ page }) => {
+  await page.setViewportSize({ width: 901, height: 720 });
   await page.goto('/');
   await openWavingArmTemplate(page);
   await page.getByRole('button', { name: /Mechanism Foundry/i }).click();
@@ -1227,8 +1228,39 @@ test('Mechanism Foundry supports CAD-style 3D camera presets and drag orbit', as
   const preview = page.getByTestId('foundry-preview');
   const overlay = page.getByTestId('foundry-preview-overlay');
   await expect(rig).toHaveAttribute('data-camera-preset', 'iso');
+  await expect(rig).toHaveAttribute('data-camera-zoom', '0.820');
   await expect(rig).toHaveAttribute('data-anchor-pick-mode', 'three-raycaster-plane');
-  await expect(page.getByTestId('foundry-camera-readout')).toContainText('3D Iso');
+  await expect(page.getByTestId('foundry-camera-readout')).toContainText('3D Isometric');
+  await expect(page.getByTestId('foundry-sim-badge')).toBeVisible();
+  await expect(page.getByTestId('foundry-opacity-panel')).toBeVisible();
+  await expect(page.getByTestId('foundry-toolbar')).toBeVisible();
+  const centerPaneBox = await page.getByTestId('stage-canvas-pane').boundingBox();
+  expect(centerPaneBox, 'center pane box for overlay containment').toBeTruthy();
+  const overlayBoxes = await Promise.all([
+    ['camera', page.getByTestId('foundry-camera-controls')] as const,
+    ['sim', page.getByTestId('foundry-sim-badge')] as const,
+    ['opacity', page.getByTestId('foundry-opacity-panel')] as const,
+    ['playback', page.getByTestId('foundry-toolbar')] as const
+  ].map(async ([name, locator]) => [name, await locator.boundingBox()] as const));
+  for (const [name, box] of overlayBoxes) {
+    expect(box, `${name} overlay box`).toBeTruthy();
+    expect(box!.x, `${name} overlay stays inside center left`).toBeGreaterThanOrEqual(centerPaneBox!.x - 1);
+    expect(box!.x + box!.width, `${name} overlay stays inside center right`).toBeLessThanOrEqual(centerPaneBox!.x + centerPaneBox!.width + 1);
+    expect(box!.y, `${name} overlay stays inside center top`).toBeGreaterThanOrEqual(centerPaneBox!.y - 1);
+    expect(box!.y + box!.height, `${name} overlay stays inside center bottom`).toBeLessThanOrEqual(centerPaneBox!.y + centerPaneBox!.height + 1);
+  }
+  const topOverlays = overlayBoxes.filter(([name]) => name !== 'playback');
+  for (let i = 0; i < topOverlays.length; i++) {
+    for (let j = i + 1; j < topOverlays.length; j++) {
+      const [aName, a] = topOverlays[i];
+      const [bName, b] = topOverlays[j];
+      const intersect = a!.x < b!.x + b!.width
+        && a!.x + a!.width > b!.x
+        && a!.y < b!.y + b!.height
+        && a!.y + a!.height > b!.y;
+      expect(intersect, `${aName} overlay does not block ${bName}`).toBe(false);
+    }
+  }
   await preview.evaluate((el: HTMLElement) => { el.style.height = '389px'; });
   await expect.poll(async () => {
     const box = await preview.boundingBox();
@@ -1257,8 +1289,24 @@ test('Mechanism Foundry supports CAD-style 3D camera presets and drag orbit', as
   expect(Math.abs(Number(pickedCoords![1]) - pickedCenter.x), 'picked board marker remains visually centered after Three camera projection').toBeLessThan(6);
   expect(Math.abs(Number(pickedCoords![2]) - pickedCenter.y), 'picked board marker remains visually centered after Three camera projection').toBeLessThan(6);
 
-  await page.getByRole('button', { name: 'Front view' }).click();
-  await expect(rig).toHaveAttribute('data-camera-preset', 'front');
+  const zoomBeforeWheel = Number(await rig.getAttribute('data-camera-zoom'));
+  await preview.hover();
+  await page.mouse.wheel(0, -360);
+  await expect.poll(async () => Number(await rig.getAttribute('data-camera-zoom')), { message: 'wheel zoom changes the actual Three camera distance' }).toBeGreaterThan(zoomBeforeWheel);
+  await expect(page.getByTestId('foundry-camera-readout')).toContainText('%');
+  const zoomAfterWheel = Number(await rig.getAttribute('data-camera-zoom'));
+  await page.keyboard.down('Shift');
+  await page.mouse.move(previewBox!.x + previewBox!.width * 0.55, previewBox!.y + previewBox!.height * 0.55);
+  await page.mouse.down();
+  await page.mouse.move(previewBox!.x + previewBox!.width * 0.55, previewBox!.y + previewBox!.height * 0.34);
+  await page.mouse.up();
+  await page.keyboard.up('Shift');
+  await expect.poll(async () => Number(await rig.getAttribute('data-camera-zoom')), { message: 'shift-drag performs CAD-style dolly zoom' }).toBeGreaterThan(zoomAfterWheel);
+
+  for (const preset of ['front', 'side', 'top', 'iso', 'front'] as const) {
+    await page.getByTestId(`foundry-camera-preset-${preset}`).click();
+    await expect(rig).toHaveAttribute('data-camera-preset', preset);
+  }
   await expect(page.getByTestId('foundry-camera-readout')).toContainText('3D Front');
   await expect(rig).not.toHaveAttribute('data-camera-yaw', isoYaw ?? '');
   await expect.poll(vectorOrigin, { message: 'physics vector origin is camera-projected with the 3D mechanism joints' }).not.toBe(isoVectorOrigin);
@@ -1458,7 +1506,7 @@ test('Workflow tabs keep left workflow, center canvas, and right inspector roles
   await expect(workflowRail.getByRole('button', { name: 'Path Editor' })).toHaveAttribute('aria-current', 'step');
   expect(await workflowRail.evaluate(element => getComputedStyle(element).position)).toBe('fixed');
 
-  const assertPaneContract = async (leftText: RegExp | string, centerText: RegExp | string, rightText: RegExp | string) => {
+  const assertPaneContract = async (leftText: RegExp | string, centerText: RegExp | string, rightText: RegExp | string, allowedCenterControlSelector = '.canvas-zoom-toolbar') => {
     const left = page.getByTestId('stage-left-pane');
     const center = page.getByTestId('stage-canvas-pane');
     const right = page.getByTestId('stage-right-inspector');
@@ -1474,8 +1522,8 @@ test('Workflow tabs keep left workflow, center canvas, and right inspector roles
     await expect(left).toContainText(leftText);
     await expect(center).toContainText(centerText);
     await expect(right).toContainText(rightText);
-    const unexpectedCenterControls = await center.locator('button, input, select, textarea').evaluateAll(nodes => nodes.filter(node => !node.closest('.canvas-zoom-toolbar')).length);
-    expect(unexpectedCenterControls, 'center pane only allows canvas zoom controls').toBe(0);
+    const unexpectedCenterControls = await center.locator('button, input, select, textarea').evaluateAll((nodes, selector) => nodes.filter(node => !node.closest(selector as string)).length, allowedCenterControlSelector);
+    expect(unexpectedCenterControls, 'center pane only allows stage-owned overlay controls').toBe(0);
     await expect(center.getByTestId('view-lens-hud')).toHaveCount(0);
     await expect(center.getByTestId('toon-renderer-shell')).toHaveCount(0);
     const centerBox = await center.boundingBox();
@@ -1499,7 +1547,7 @@ test('Workflow tabs keep left workflow, center canvas, and right inspector roles
   await expect(page.getByTestId('stage-right-inspector')).not.toContainText(/Add body part|Add layer|Remove layer|Add joint|New IK handle|Parts \+ skeleton/);
 
   await page.getByRole('button', { name: /Mechanism Foundry/i }).click();
-  await assertPaneContract('Mechanism Gallery', 'Sandbox preview', 'Mechanism options');
+  await assertPaneContract('Mechanism Gallery', '3D Isometric', 'Mechanism options', '.canvas-zoom-toolbar, .foundry-camera-hud, .foundry-opacity-panel, .foundry-playback-hud');
   await expect(page.getByTestId('stage-left-pane')).toContainText('Use this mechanism');
 
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
