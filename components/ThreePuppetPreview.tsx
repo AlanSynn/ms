@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import type { BodyPartLayer, CanvasViewport, MechanismConfig, MechanismType, Point, ProjectState, StandardSkeleton } from '../types';
 import { boardGridLines, defaultPhysicalKit, SCENE_PX_PER_MM, sceneBoundsForSheet } from '../utils/coordinates';
 import { calculateLinkage, camProfileScale, gearPairOutputRatio, planetaryPlanetSpinRatio } from '../utils/kinematics';
-import { fabricationGearProfileForPitchRadius, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints } from '../utils/fabrication';
+import { FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationRenderPlanForMechanism, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints } from '../utils/fabrication';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, pointInsideOutline } from '../utils/partGeometry';
 
 const VIEW_SCALE = 35;
@@ -371,6 +371,7 @@ const partGeometrySignature = (parts: BodyPartLayer[], project?: ProjectState, s
 const mechanismGeometrySignature = (mechanisms: MechanismConfig[]) => mechanisms.map(mechanism => [
   mechanism.id,
   mechanism.type,
+  fabricationRenderPlanForMechanism(mechanism).zSummary,
   mechanism.crankLength,
   mechanism.groundLength,
   mechanism.couplerLength,
@@ -421,6 +422,11 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
     [mechanismsToRender, project?.selectedMechanismId]
   );
   const selectedTelemetry = useMemo(() => selectedMechanism ? mechanismTelemetry(selectedMechanism, angle) : null, [selectedMechanism, angle]);
+  const selectedRenderPlan = useMemo(() => selectedMechanism ? fabricationRenderPlanForMechanism(selectedMechanism) : null, [selectedMechanism]);
+  const stackValidationErrors = useMemo(
+    () => mechanismsToRender.reduce((sum, mechanism) => sum + fabricationRenderPlanForMechanism(mechanism).validationErrors.length, 0),
+    [mechanismsToRender]
+  );
   const mechanismInventory = mechanismsToRender.reduce((sum, mechanism) => addInventory(sum, puppetMechanismInventory(mechanism.type)), zeroInventory());
   const mechanismLinkCount = mechanismInventory.parts;
   const holeCount = useMemo(() => geometryParts.reduce((sum, part) => {
@@ -712,86 +718,98 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       const visual = mechanismRefs.current.get(mechanism.id);
       if (!visual) return;
       const state = calculateLinkage(mechanism, angle);
+      const renderPlan = fabricationRenderPlanForMechanism(mechanism);
+      const zLayer = (labels: string[], fallback: number) => renderPlan.layers.find(layer => labels.includes(layer.label))?.z ?? fallback;
+      const zBackClip = zLayer(['Back Clip'], 0.22);
+      const zDriver = zLayer(['Drive linkage', 'Input linkage', 'Crank linkage', 'Left crank linkage'], 0.76);
+      const zDriverGear = zLayer(['Drive gear', 'Left timing gear', 'Pinion gear', 'Cam disk', 'Ring gear'], 0.4);
+      const zCoupler = zLayer(['Coupler linkage', 'Center coupler', 'Carrier linkage', 'Slider guide', 'Rack guide', 'Follower guide'], 0.76);
+      const zOutput = zLayer(['Output linkage', 'Right crank linkage', 'Follower linkage'], 1.12);
+      const zOutputMoving = zLayer(['Toothed rack', 'Planet gear', 'Sun gear', 'Output gear', 'Right timing gear'], zOutput);
+      const zPin = (renderPlan.layers.at(-1)?.z ?? zOutputMoving) + 0.34;
       Object.values(visual.extras).forEach(extra => hideObject(extra));
       const groundAngle = ((mechanism.groundAngle ?? 0) * Math.PI) / 180;
       const outputAngle = Math.atan2(state.j2.y - state.p2.y, state.j2.x - state.p2.x);
       const standardLinks = () => {
-        updateLink(visual.links.base, state.p1, state.p2, 0.48);
-        updateLink(visual.links.driver, state.p1, state.j1, 0.72);
-        updateLink(visual.links.coupler, state.isValid ? state.j1 : undefined, state.isValid ? state.j2 : undefined, 1.02);
-        updateLink(visual.links.output, state.isValid ? state.p2 : undefined, state.isValid ? state.j2 : undefined, 0.82);
-        updateLink(visual.links.effector, state.isValid ? state.j2 : undefined, state.isValid ? state.effector : undefined, 1.2);
+        updateLink(visual.links.base, state.p1, state.p2, zBackClip);
+        updateLink(visual.links.driver, state.p1, state.j1, zDriver);
+        updateLink(visual.links.coupler, state.isValid ? state.j1 : undefined, state.isValid ? state.j2 : undefined, zCoupler);
+        updateLink(visual.links.output, state.isValid ? state.p2 : undefined, state.isValid ? state.j2 : undefined, zOutput);
+        updateLink(visual.links.effector, state.isValid ? state.j2 : undefined, state.isValid ? state.effector : undefined, zOutput);
       };
 
       if (mechanism.type === 'piston') {
         updateLink(visual.links.base, undefined, undefined);
-        updateLink(visual.links.driver, state.p1, state.j1, 0.72);
-        updateLink(visual.links.coupler, state.isValid ? state.j1 : undefined, state.isValid ? state.j2 : undefined, 1.02);
-        updateLink(visual.links.output, state.isValid ? state.j2 : undefined, state.isValid ? state.effector : undefined, 1.2);
+        updateLink(visual.links.driver, state.p1, state.j1, zDriver);
+        updateLink(visual.links.coupler, state.isValid ? state.j1 : undefined, state.isValid ? state.j2 : undefined, zCoupler);
+        updateLink(visual.links.output, state.isValid ? state.j2 : undefined, state.isValid ? state.effector : undefined, zOutput);
         updateLink(visual.links.effector, undefined, undefined);
-        updateObject(visual.extras.sliderGuide, state.j2, 0.62, groundAngle);
-        updateObject(visual.extras.sliderBlock, state.j2, 1.28, groundAngle);
+        updateObject(visual.extras.sliderGuide, state.j2, zCoupler, groundAngle);
+        updateObject(visual.extras.sliderBlock, state.j2, zOutput, groundAngle);
       } else if (mechanism.type === 'yoke') {
         updateLink(visual.links.base, undefined, undefined);
-        updateLink(visual.links.driver, state.p1, state.j1, 0.72);
+        updateLink(visual.links.driver, state.p1, state.j1, zDriver);
         updateLink(visual.links.coupler, undefined, undefined);
-        updateLink(visual.links.output, state.isValid ? state.j2 : undefined, state.isValid ? state.effector : undefined, 1.2);
+        updateLink(visual.links.output, state.isValid ? state.j2 : undefined, state.isValid ? state.effector : undefined, zOutput);
         updateLink(visual.links.effector, undefined, undefined);
-        updateObject(visual.extras.railSlot, state.j2, 0.62, groundAngle);
-        updateObject(visual.extras.pinSlot, state.j2, 1.0, groundAngle + Math.PI / 2);
-        updateObject(visual.extras.sliderBlock, state.j2, 1.3, groundAngle);
+        updateObject(visual.extras.railSlot, state.j2, zCoupler, groundAngle);
+        updateObject(visual.extras.pinSlot, state.j2, zOutput, groundAngle + Math.PI / 2);
+        updateObject(visual.extras.sliderBlock, state.j2, zOutput, groundAngle);
       } else if (mechanism.type === 'quick-return') {
-        updateLink(visual.links.base, state.p1, state.p2, 0.48);
-        updateLink(visual.links.driver, state.p1, state.j1, 0.72);
-        updateLink(visual.links.coupler, state.p2, state.j2, 1.02);
-        updateLink(visual.links.output, state.isValid ? state.j2 : undefined, state.isValid ? state.effector : undefined, 1.2);
+        updateLink(visual.links.base, state.p1, state.p2, zBackClip);
+        updateLink(visual.links.driver, state.p1, state.j1, zDriver);
+        updateLink(visual.links.coupler, state.p2, state.j2, zCoupler);
+        updateLink(visual.links.output, state.isValid ? state.j2 : undefined, state.isValid ? state.effector : undefined, zOutput);
         updateLink(visual.links.effector, undefined, undefined);
-        updateObject(visual.extras.slottedLever, midpoint(state.p2, state.j2), 1.08, outputAngle);
+        updateObject(visual.extras.slottedLever, midpoint(state.p2, state.j2), zOutput, outputAngle);
       } else if (mechanism.type === '5bar') {
-        updateLink(visual.links.base, state.p1, state.p2, 0.48);
-        updateLink(visual.links.driver, state.p1, state.j1, 0.72);
-        updateLink(visual.links.coupler, state.isValid ? state.j1 : undefined, state.isValid ? state.j2 : undefined, 1.02);
-        updateLink(visual.links.output, state.isValid ? state.p2 : undefined, state.isValid ? state.aux : undefined, 0.82);
-        updateLink(visual.links.effector, state.isValid ? state.aux : undefined, state.isValid ? state.j2 : undefined, 1.2);
+        updateLink(visual.links.base, state.p1, state.p2, zBackClip);
+        updateLink(visual.links.driver, state.p1, state.j1, zDriver);
+        updateLink(visual.links.coupler, state.isValid ? state.j1 : undefined, state.isValid ? state.j2 : undefined, zCoupler);
+        updateLink(visual.links.output, state.isValid ? state.p2 : undefined, state.isValid ? state.aux : undefined, zOutput);
+        updateLink(visual.links.effector, state.isValid ? state.aux : undefined, state.isValid ? state.j2 : undefined, zOutput);
       } else if (mechanism.type === 'cam') {
         updateLink(visual.links.base, undefined, undefined);
         updateLink(visual.links.driver, undefined, undefined);
         updateLink(visual.links.coupler, undefined, undefined);
         updateLink(visual.links.output, undefined, undefined);
         updateLink(visual.links.effector, undefined, undefined);
-        updateObject(visual.extras.camProfile, state.p1, 0.72, angle * (mechanism.speed1 ?? 1));
-        updateObject(visual.extras.followerGuide, state.j2, 0.9, groundAngle);
-        updateObject(visual.extras.followerBlock, state.j2, 1.24, groundAngle);
+        updateObject(visual.extras.camProfile, state.p1, zDriverGear, angle * (mechanism.speed1 ?? 1));
+        updateObject(visual.extras.followerGuide, state.j2, zCoupler, groundAngle);
+        updateObject(visual.extras.followerBlock, state.j2, zOutput, groundAngle);
       } else if (mechanism.type === 'rack-pinion') {
         const rackGuide = rackGuideCenter(mechanism, state);
         updateLink(visual.links.base, undefined, undefined);
-        updateLink(visual.links.driver, state.p1, state.j1, 0.72);
+        updateLink(visual.links.driver, state.p1, state.j1, zDriver);
         updateLink(visual.links.coupler, undefined, undefined);
-        updateLink(visual.links.output, state.isValid ? state.j2 : undefined, state.isValid ? state.effector : undefined, 1.2);
+        updateLink(visual.links.output, state.isValid ? state.j2 : undefined, state.isValid ? state.effector : undefined, zOutput);
         updateLink(visual.links.effector, undefined, undefined);
-        updateObject(visual.extras.rackGuide, rackGuide.center, 0.62, rackGuide.trackAngle);
-        updateObject(visual.extras.rack, state.j2, 0.92, groundAngle);
-        updateObject(visual.extras.endStopA, shifted(rackGuide.center, rackGuide.trackAngle, -mechanism.rockerLength / 2), 1.08, rackGuide.trackAngle);
-        updateObject(visual.extras.endStopB, shifted(rackGuide.center, rackGuide.trackAngle, mechanism.rockerLength / 2), 1.08, rackGuide.trackAngle);
+        updateObject(visual.extras.rackGuide, rackGuide.center, zCoupler, rackGuide.trackAngle);
+        updateObject(visual.extras.rack, state.j2, zOutputMoving, groundAngle);
+        updateObject(visual.extras.endStopA, shifted(rackGuide.center, rackGuide.trackAngle, -mechanism.rockerLength / 2), zOutputMoving + 0.08, rackGuide.trackAngle);
+        updateObject(visual.extras.endStopB, shifted(rackGuide.center, rackGuide.trackAngle, mechanism.rockerLength / 2), zOutputMoving + 0.08, rackGuide.trackAngle);
       } else if (mechanism.type === 'gear') {
         updateLink(visual.links.base, undefined, undefined);
-        updateLink(visual.links.driver, state.j1, state.effector, 0.98);
+        updateLink(visual.links.driver, state.j1, state.effector, zCoupler);
         updateLink(visual.links.coupler, undefined, undefined);
-        updateLink(visual.links.output, state.j2, state.effector, 1.2);
+        updateLink(visual.links.output, state.j2, state.effector, zOutput);
         updateLink(visual.links.effector, undefined, undefined);
       } else if (mechanism.type === 'planetary_gear') {
-        updateLink(visual.links.base, state.p1, state.p2, 0.48);
-        updateLink(visual.links.driver, state.p1, state.j1, 0.72);
-        updateLink(visual.links.coupler, state.p2, state.j2, 1.02);
-        updateLink(visual.links.output, state.p2, state.effector, 1.2);
+        updateLink(visual.links.base, state.p1, state.p2, zBackClip);
+        updateLink(visual.links.driver, state.p1, state.j1, zDriver);
+        updateLink(visual.links.coupler, state.p2, state.j2, zCoupler);
+        updateLink(visual.links.output, state.p2, state.effector, zOutput);
         updateLink(visual.links.effector, undefined, undefined);
-        updateObject(visual.extras.ringGear, state.p1, 0.5, 0);
+        updateObject(visual.extras.ringGear, state.p1, zDriverGear, 0);
       } else {
         standardLinks();
       }
       visual.gears.forEach((gear, index) => {
         const point = index === 0 ? state.p1 : state.p2;
-        const p = to3(point, 0.62 + index * 0.18);
+        const gearZ = index === 0
+          ? zDriverGear
+          : zLayer(['Output gear', 'Right timing gear', 'Planet gear', 'Sun gear'], zOutputMoving);
+        const p = to3(point, gearZ);
         gear.position.set(p.x, p.y, p.z);
         gear.rotation.z = mechanismGearRotations(mechanism, angle)[index] ?? 0;
       });
@@ -802,7 +820,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
           pin.visible = false;
           return;
         }
-        const p = to3(point, 1.42);
+        const p = to3(point, zPin);
         pin.visible = true;
         pin.position.copy(p);
       });
@@ -838,6 +856,23 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       data-three-rebuild-mode="static-topology-dynamic-transforms"
       data-three-supported-mechanism-types={SUPPORTED_MECHANISM_TYPES.join(',')}
       data-three-selected-mechanism-type={selectedTelemetry?.type ?? ''}
+      data-three-stack-source={selectedRenderPlan ? 'fabricationStackForMechanism' : ''}
+      data-three-stack-mode="assembled-spacer-separated"
+      data-three-exploded="false"
+      data-three-base-layer={selectedRenderPlan?.base.label ?? ''}
+      data-three-stack-order={selectedRenderPlan?.stackSummary ?? ''}
+      data-three-stack-roles={selectedRenderPlan?.roleSummary ?? ''}
+      data-three-stack-colors={selectedRenderPlan?.colorSummary ?? ''}
+      data-three-stack-z={selectedRenderPlan?.zSummary ?? ''}
+      data-three-stack-layer-count={selectedRenderPlan?.layers.length ?? 0}
+      data-three-rendered-layer-labels={selectedRenderPlan?.layers.map(item => item.label).join(' → ') ?? ''}
+      data-three-rendered-layer-roles={selectedRenderPlan?.layers.map(item => item.renderKind).join('>') ?? ''}
+      data-three-rendered-layer-colors={selectedRenderPlan?.layers.map(item => item.color).join(',') ?? ''}
+      data-three-rendered-layer-z={selectedRenderPlan?.layers.map(item => item.z.toFixed(2)).join(',') ?? ''}
+      data-three-stack-validation-errors={stackValidationErrors}
+      data-three-spacer-key={FABRICATION_SPACER_SPEC.key}
+      data-three-spacer-label={FABRICATION_SPACER_SPEC.label}
+      data-three-spacer-mm={`${FABRICATION_SPACER_SPEC.outerDiameterMm}x${FABRICATION_SPACER_SPEC.innerDiameterMm}`}
       data-three-primary-rotation-deg={fixed3(selectedTelemetry?.primaryRotationDeg)}
       data-three-secondary-rotation-deg={fixed3(selectedTelemetry?.secondaryRotationDeg)}
       data-three-rack-x={fixed3(selectedTelemetry?.rackX)}

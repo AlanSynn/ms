@@ -2877,6 +2877,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
     const renderPlan = useMemo(() => fabricationRenderPlanForMechanism(mechanism), [mechanism.type]);
     const spacerLayerCount = renderPlan.layers.filter(item => item.role === 'spacer').length;
     const spacerRenderCount = spacerLayerCount * [simulation.state.p1, simulation.state.p2, simulation.state.j1, simulation.state.j2, simulation.state.aux, simulation.state.effector].filter(Boolean).length;
+    const stackZGap = renderPlan.layers.length > 1 ? renderPlan.layers[1].z - renderPlan.layers[0].z : 0;
     const renderCamera = (view: FoundryCamera) => {
         const scene = sceneRef.current;
         const renderer = rendererRef.current;
@@ -3298,6 +3299,9 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
             data-three-render-loop="camera-only-orbit"
             data-three-inventory-source="rendered-template"
             data-three-stack-source="fabricationStackForMechanism"
+            data-three-stack-mode="assembled-spacer-separated"
+            data-three-exploded="false"
+            data-three-spacer-z-gap={stackZGap.toFixed(2)}
             data-three-base-layer={renderPlan.base.label}
             data-three-stack-order={renderPlan.stackSummary}
             data-three-stack-roles={renderPlan.roleSummary}

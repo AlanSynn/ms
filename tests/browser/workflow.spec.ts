@@ -146,6 +146,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   const foundryRig = page.getByTestId('foundry-camera-rig');
   await expect(foundryRig).toHaveAttribute('data-three-renderer', 'webgl');
   await expect(foundryRig).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
+  await expect(foundryRig).toHaveAttribute('data-three-stack-mode', 'assembled-spacer-separated');
+  await expect(foundryRig).toHaveAttribute('data-three-exploded', 'false');
   await expect(foundryRig).toHaveAttribute('data-three-stack-order', /^Back Clip → .*S10 spacer.*Front Clip$/);
   await expect(foundryRig).toHaveAttribute('data-three-spacer-key', 's10');
   await expect(foundryRig).toHaveAttribute('data-three-spacer-mm', '10x4');
@@ -806,6 +808,8 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await expect(threeScene).toHaveAttribute('data-three-render-loop', 'camera-only-orbit');
   await expect(threeScene).toHaveAttribute('data-three-inventory-source', 'rendered-template');
   await expect(threeScene).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
+  await expect(threeScene).toHaveAttribute('data-three-stack-mode', 'assembled-spacer-separated');
+  await expect(threeScene).toHaveAttribute('data-three-exploded', 'false');
   await expect(threeScene).toHaveAttribute('data-three-base-layer', 'Base board');
   await expect(threeScene).toHaveAttribute('data-three-stack-order', /^Back Clip → .*S10 spacer.*Front Clip$/);
   await expect(threeScene).toHaveAttribute('data-three-spacer-key', 's10');
@@ -1593,6 +1597,17 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   const designPuppet = page.getByTestId('design-three-puppet-state');
   await expect(designPuppet).toHaveAttribute('data-three-renderer', 'webgl');
+  await expect(designPuppet).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
+  await expect(designPuppet).toHaveAttribute('data-three-stack-mode', 'assembled-spacer-separated');
+  await expect(designPuppet).toHaveAttribute('data-three-exploded', 'false');
+  await expect(designPuppet).toHaveAttribute('data-three-stack-order', /^Back Clip → .*S10 spacer.*Front Clip$/);
+  await expect(designPuppet).toHaveAttribute('data-three-spacer-key', 's10');
+  await expect(designPuppet).toHaveAttribute('data-three-spacer-mm', '10x4');
+  await expect(designPuppet).toHaveAttribute('data-three-stack-validation-errors', '0');
+  expect(await designPuppet.getAttribute('data-three-rendered-layer-labels')).toBe(await designPuppet.getAttribute('data-three-stack-order'));
+  expect(await designPuppet.getAttribute('data-three-rendered-layer-roles')).toBe(await designPuppet.getAttribute('data-three-stack-roles'));
+  expect(await designPuppet.getAttribute('data-three-rendered-layer-colors')).toBe(await designPuppet.getAttribute('data-three-stack-colors'));
+  expect(await designPuppet.getAttribute('data-three-rendered-layer-z')).toBe(await designPuppet.getAttribute('data-three-stack-z'));
   await expect(page.getByTestId('design-three-puppet-canvas')).toBeVisible();
 
   const centerPhysicalMarkers: Record<string, Array<[string, number]>> = {
@@ -1610,6 +1625,11 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
   for (const type of ['4bar', 'piston', 'yoke', 'quick-return', '5bar', 'cam', 'rack-pinion', 'gear', 'planetary_gear']) {
     const before = Object.fromEntries(await Promise.all(centerPhysicalMarkers[type].map(async ([attr]) => [attr, Number(await designPuppet.getAttribute(attr)) || 0])));
     await page.getByRole('button', { name: type, exact: true }).click();
+    await expect(designPuppet, `${type} design renderer uses the shared fabrication stack`).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
+    await expect(designPuppet, `${type} design stack stays assembled until explicitly exploded`).toHaveAttribute('data-three-exploded', 'false');
+    await expect(designPuppet, `${type} design stack has no validation errors`).toHaveAttribute('data-three-stack-validation-errors', '0');
+    expect(await designPuppet.getAttribute('data-three-rendered-layer-labels'), `${type} design rendered labels match fabrication stack labels`).toBe(await designPuppet.getAttribute('data-three-stack-order'));
+    expect(await designPuppet.getAttribute('data-three-rendered-layer-z'), `${type} design rendered z order matches fabrication stack z order`).toBe(await designPuppet.getAttribute('data-three-stack-z'));
     await expect.poll(async () => Number(await designPuppet.getAttribute('data-three-scene-object-count')), { message: `${type} adds visible WebGL mechanism geometry to the center workspace` }).toBeGreaterThan(60);
     for (const [attr, minimumCount] of centerPhysicalMarkers[type]) {
       expect(Number(await designPuppet.getAttribute(attr)), `${type} center preview includes ${attr}`).toBeGreaterThanOrEqual(before[attr] + minimumCount);
