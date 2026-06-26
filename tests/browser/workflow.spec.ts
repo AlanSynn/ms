@@ -828,6 +828,9 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await expect(page.getByTestId('foundry-force-vector')).toBeVisible();
   await expect(page.getByTestId('foundry-drive-force-vector')).toBeVisible();
   await expect(page.getByTestId('foundry-friction-vector')).toBeVisible();
+  await expect(page.getByTestId('foundry-velocity-overlay'), 'Velocity vector is projected from the same Three.js camera as the mechanism pins').toHaveAttribute('data-projection', 'three-camera');
+  await expect(page.getByTestId('foundry-forces-overlay'), 'Force vectors are projected from the same Three.js camera as the mechanism pins').toHaveAttribute('data-projection', 'three-camera');
+  await expect(page.getByTestId('foundry-playhead'), 'The live playhead is drawn at the projected effector joint, not raw path coordinates').toHaveAttribute('data-projection', 'three-camera');
   await expect(page.getByTestId('foundry-physics-readout')).toContainText('Physics');
   await expect(page.getByTestId('foundry-physics-readout')).toContainText('μ');
   await expect(page.getByTestId('foundry-physics-readout')).toContainText('constraint err');
@@ -1085,25 +1088,44 @@ test('Mechanism Foundry supports CAD-style 3D camera presets and drag orbit', as
   await page.getByRole('button', { name: /Mechanism Foundry/i }).click();
 
   const rig = page.getByTestId('foundry-camera-rig');
+  const preview = page.getByTestId('foundry-preview');
+  const overlay = page.getByTestId('foundry-preview-overlay');
   await expect(rig).toHaveAttribute('data-camera-preset', 'iso');
   await expect(rig).toHaveAttribute('data-anchor-pick-mode', 'three-raycaster-plane');
   await expect(page.getByTestId('foundry-camera-readout')).toContainText('3D Iso');
+  await preview.evaluate((el: HTMLElement) => { el.style.height = '389px'; });
+  await expect.poll(async () => {
+    const box = await preview.boundingBox();
+    const projectedAspect = Number(await overlay.getAttribute('data-projection-aspect'));
+    return box ? Math.abs(projectedAspect - (box.width / box.height)) : 1;
+  }, { message: 'overlay physics projection uses the live WebGL preview aspect, not fixed 360/240' }).toBeLessThan(0.01);
+  const nonStandardBox = await preview.boundingBox();
+  expect(nonStandardBox, 'preview was resized to exercise a non-1.5 projection aspect').toBeTruthy();
+  expect(Math.abs((nonStandardBox!.width / nonStandardBox!.height) - 1.5), 'test covers non-360/240 preview proportions').toBeGreaterThan(0.05);
+  const overlayCenter = async () => overlay.evaluate((svg: SVGSVGElement) => ({ x: svg.viewBox.baseVal.width / 2, y: svg.viewBox.baseVal.height / 2 }));
   const isoYaw = await rig.getAttribute('data-camera-yaw');
+  const vectorOrigin = async () => page.getByTestId('foundry-velocity-vector').evaluate((line: SVGLineElement) => [
+    line.getAttribute('x1'),
+    line.getAttribute('y1')
+  ].join(','));
+  const isoVectorOrigin = await vectorOrigin();
 
-  const previewBox = await page.getByTestId('foundry-preview').boundingBox();
+  const previewBox = await preview.boundingBox();
   expect(previewBox, 'foundry preview supports direct orbit dragging and anchor picking').toBeTruthy();
   await page.getByTestId('foundry-pick-anchor').click();
   await page.mouse.click(previewBox!.x + previewBox!.width * 0.5, previewBox!.y + previewBox!.height * 0.5);
   const pickedMarker = await page.getByTestId('foundry-anchor-marker').getAttribute('transform');
   const pickedCoords = pickedMarker?.match(/translate\(([-\d.]+) ([-\d.]+)/);
   expect(pickedCoords, 'anchor marker is driven by a 3D raycast into the work plane').toBeTruthy();
-  expect(Number(pickedCoords![1])).toBeCloseTo(180, 0);
-  expect(Number(pickedCoords![2])).toBeCloseTo(120, 0);
+  const pickedCenter = await overlayCenter();
+  expect(Math.abs(Number(pickedCoords![1]) - pickedCenter.x), 'picked board marker remains visually centered after Three camera projection').toBeLessThan(6);
+  expect(Math.abs(Number(pickedCoords![2]) - pickedCenter.y), 'picked board marker remains visually centered after Three camera projection').toBeLessThan(6);
 
   await page.getByRole('button', { name: 'Front view' }).click();
   await expect(rig).toHaveAttribute('data-camera-preset', 'front');
   await expect(page.getByTestId('foundry-camera-readout')).toContainText('3D Front');
   await expect(rig).not.toHaveAttribute('data-camera-yaw', isoYaw ?? '');
+  await expect.poll(vectorOrigin, { message: 'physics vector origin is camera-projected with the 3D mechanism joints' }).not.toBe(isoVectorOrigin);
 
   const yawBeforeDrag = await rig.getAttribute('data-camera-yaw');
   await page.mouse.move(previewBox!.x + previewBox!.width * 0.5, previewBox!.y + previewBox!.height * 0.5);
@@ -1120,8 +1142,9 @@ test('Mechanism Foundry supports CAD-style 3D camera presets and drag orbit', as
   const orbitPickedMarker = await page.getByTestId('foundry-anchor-marker').getAttribute('transform');
   const orbitPickedCoords = orbitPickedMarker?.match(/translate\(([-\d.]+) ([-\d.]+)/);
   expect(orbitPickedCoords, 'orbit picking remains camera-coherent after custom 3D drag').toBeTruthy();
-  expect(Number(orbitPickedCoords![1])).toBeCloseTo(180, 0);
-  expect(Number(orbitPickedCoords![2])).toBeCloseTo(120, 0);
+  const orbitPickedCenter = await overlayCenter();
+  expect(Math.abs(Number(orbitPickedCoords![1]) - orbitPickedCenter.x), 'orbit-picked marker remains visually centered after custom Three camera projection').toBeLessThan(6);
+  expect(Math.abs(Number(orbitPickedCoords![2]) - orbitPickedCenter.y), 'orbit-picked marker remains visually centered after custom Three camera projection').toBeLessThan(6);
 });
 
 test('Camera capture dialog uses browser getUserMedia and reports permission denial', async ({ page }) => {

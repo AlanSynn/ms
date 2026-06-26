@@ -65,15 +65,33 @@ const FOUNDRY_VIEW_PRESETS: Record<Exclude<FoundryViewPreset, 'custom'>, { label
 };
 
 const clampFoundryPitch = (value: number) => Math.max(-64, Math.min(68, value));
-const foundryCameraTransform = ({ yaw, pitch }: FoundryCamera) => {
+type FoundryOverlaySize = { width: number; height: number };
+const FOUNDRY_OVERLAY_SIZE: FoundryOverlaySize = { width: 360, height: 240 };
+
+const foundryCameraPosition = ({ yaw, pitch }: FoundryCamera, distance = 17) => {
     const yawRad = yaw * Math.PI / 180;
     const pitchRad = pitch * Math.PI / 180;
-    const squash = 0.58 + Math.cos(pitchRad) * 0.24;
-    const skew = Math.sin(yawRad) * 16;
-    const rotation = yaw * 0.08;
-    const lift = -Math.sin(pitchRad) * 9;
-    const drift = Math.sin(yawRad) * 11;
-    return `translate(180 120) translate(${drift.toFixed(2)} ${lift.toFixed(2)}) rotate(${rotation.toFixed(2)}) skewX(${skew.toFixed(2)}) scale(1 ${squash.toFixed(3)}) translate(-180 -120)`;
+    return new THREE.Vector3(
+        Math.sin(yawRad) * Math.cos(pitchRad) * distance,
+        Math.sin(pitchRad) * distance,
+        Math.cos(yawRad) * Math.cos(pitchRad) * distance
+    );
+};
+
+const projectFoundryOverlayPoint = (point: Point | undefined, camera: FoundryCamera, size: FoundryOverlaySize = FOUNDRY_OVERLAY_SIZE, z = 0): Point | undefined => {
+    if (!point) return undefined;
+    const width = Math.max(1, size.width);
+    const height = Math.max(1, size.height);
+    const cam = new THREE.PerspectiveCamera(38, width / height, 0.1, 100);
+    cam.position.copy(foundryCameraPosition(camera));
+    cam.lookAt(0, 0, 0.25);
+    cam.updateMatrixWorld();
+    cam.updateProjectionMatrix();
+    const projected = new THREE.Vector3((point.x - 180) / 18, (120 - point.y) / 18, z).project(cam);
+    return {
+        x: ((projected.x + 1) / 2) * width,
+        y: ((1 - projected.y) / 2) * height
+    };
 };
 
 const mechanismPhysicsRule = (type: MechanismType) => ({
@@ -1965,6 +1983,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const [showPathPreview, setShowPathPreview] = useState(true);
     const [showSensemaking, setShowSensemaking] = useState(true);
     const [foundryCamera, setFoundryCamera] = useState<FoundryCamera>({ ...FOUNDRY_VIEW_PRESETS.iso, preset: 'iso' });
+    const [foundryProjectionSize, setFoundryProjectionSize] = useState<FoundryOverlaySize>(FOUNDRY_OVERLAY_SIZE);
     const [isOrbitingFoundry, setIsOrbitingFoundry] = useState(false);
     const foundryOrbitStartRef = useRef<{ pointerId: number; x: number; y: number; yaw: number; pitch: number } | null>(null);
     const targetReady = Boolean(selectedPart && selectedPath && selectedPath.enabled && selectedPath.points.length >= 3);
@@ -2006,6 +2025,15 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const forceTip = playhead ? clampPreviewPoint(vectorEnd(playhead, forceUnit, 38)) : undefined;
     const frictionTip = playhead ? clampPreviewPoint(vectorEnd(playhead, frictionUnit, 30)) : undefined;
     const driveTip = ensureVisibleVectorTip(selectedSimulation.state.j1, clampPreviewPoint(vectorEnd(selectedSimulation.state.j1, driveUnit, 34)));
+    const foundryOverlayZ = (fabricationRenderPlanForMechanism(landedFoundry).layers.at(-1)?.z ?? 0.22) + 0.34;
+    const projectOverlay = (point: Point | undefined) => projectFoundryOverlayPoint(point, foundryCamera, foundryProjectionSize, foundryOverlayZ);
+    const projectedPlayhead = projectOverlay(playhead);
+    const projectedVelocityTip = projectOverlay(velocityTip);
+    const projectedForceTip = projectOverlay(forceTip);
+    const projectedFrictionTip = projectOverlay(frictionTip);
+    const projectedDriveOrigin = projectOverlay(selectedSimulation.state.j1);
+    const projectedDriveTip = projectOverlay(driveTip);
+    const projectedAnchorMarker = projectFoundryOverlayPoint(anchorMarker, foundryCamera, foundryProjectionSize, 0);
     const velocityMagnitude = Math.hypot(velocityRaw.x, velocityRaw.y);
     const frictionMagnitude = velocityMagnitude > 0.01 ? project.settings.simulationFriction * project.settings.simulationMassKg * 9.81 : 0;
     const forceMagnitude = (Math.hypot(accelerationRaw.x, accelerationRaw.y) * project.settings.simulationMassKg) + frictionMagnitude;
@@ -2047,6 +2075,9 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             transform: { ...(foundry.transform ?? { x: snapped.x, y: snapped.y, rotation: foundry.groundAngle ?? 0, scale: 1 }), x: snapped.x, y: snapped.y }
         });
     };
+    const updateFoundryProjectionSize = (size: FoundryOverlaySize) => setFoundryProjectionSize(prev => (
+        Math.abs(prev.width - size.width) < 1 && Math.abs(prev.height - size.height) < 1 ? prev : size
+    ));
     const handleAnchorPick = (point: Point) => {
         if (!isPickingAnchor) return;
         applyAnchor(point);
@@ -2207,25 +2238,26 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 onPointerMove={handleFoundryPointerMove}
                 onPointerUp={finishFoundryOrbit}
                 onPointerCancel={finishFoundryOrbit}
+                onProjectionSizeChange={updateFoundryProjectionSize}
             >
-                <svg viewBox="0 0 360 240" className="foundry-preview-overlay" aria-hidden="true">
-                    {showForces && playhead && forceTip && <g data-testid="foundry-forces-overlay" className="physics-vector physics-force" data-physics-rule={physicsRule} data-fx={accelerationRaw.x.toFixed(3)} data-fy={accelerationRaw.y.toFixed(3)} data-force-magnitude={forceMagnitude.toFixed(3)} data-friction-magnitude={frictionMagnitude.toFixed(3)} data-constraint-error={constraintError.toFixed(3)} stroke="#ef4444" strokeWidth="3" strokeLinecap="round">
+                <svg data-testid="foundry-preview-overlay" viewBox={`0 0 ${foundryProjectionSize.width} ${foundryProjectionSize.height}`} className="foundry-preview-overlay" aria-hidden="true" data-projection-aspect={(foundryProjectionSize.width / Math.max(1, foundryProjectionSize.height)).toFixed(3)}>
+                    {showForces && projectedPlayhead && projectedForceTip && projectedDriveOrigin && projectedDriveTip && <g data-testid="foundry-forces-overlay" className="physics-vector physics-force" data-projection="three-camera" data-origin-source="effector-joint" data-physics-rule={physicsRule} data-fx={accelerationRaw.x.toFixed(3)} data-fy={accelerationRaw.y.toFixed(3)} data-force-magnitude={forceMagnitude.toFixed(3)} data-friction-magnitude={frictionMagnitude.toFixed(3)} data-constraint-error={constraintError.toFixed(3)} stroke="#ef4444" strokeWidth="3" strokeLinecap="round">
                         <defs><marker id="foundry-arrow-force-overlay" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 7 3.5 L 0 7 z" fill="#ef4444" /></marker></defs>
                         <defs><marker id="foundry-arrow-friction-overlay" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 7 3.5 L 0 7 z" fill="#f59e0b" /></marker></defs>
-                        <line data-testid="foundry-force-vector" x1={playhead.x} y1={playhead.y} x2={forceTip.x} y2={forceTip.y} markerEnd="url(#foundry-arrow-force-overlay)" />
-                        <line data-testid="foundry-drive-force-vector" x1={selectedSimulation.state.j1.x} y1={selectedSimulation.state.j1.y} x2={driveTip.x} y2={driveTip.y} opacity="0.68" markerEnd="url(#foundry-arrow-force-overlay)" />
-                        {frictionTip && <line data-testid="foundry-friction-vector" x1={playhead.x} y1={playhead.y} x2={frictionTip.x} y2={frictionTip.y} stroke="#f59e0b" markerEnd="url(#foundry-arrow-friction-overlay)" />}
-                        <text x={forceTip.x + 5} y={forceTip.y - 3}>F / a</text>
-                        <text x={driveTip.x + 5} y={driveTip.y + 9}>drive τ</text>
-                        {frictionTip && <text x={frictionTip.x + 5} y={frictionTip.y + 9} fill="#92400e">μ</text>}
+                        <line data-testid="foundry-force-vector" x1={projectedPlayhead.x} y1={projectedPlayhead.y} x2={projectedForceTip.x} y2={projectedForceTip.y} markerEnd="url(#foundry-arrow-force-overlay)" />
+                        <line data-testid="foundry-drive-force-vector" x1={projectedDriveOrigin.x} y1={projectedDriveOrigin.y} x2={projectedDriveTip.x} y2={projectedDriveTip.y} opacity="0.68" markerEnd="url(#foundry-arrow-force-overlay)" />
+                        {projectedFrictionTip && <line data-testid="foundry-friction-vector" x1={projectedPlayhead.x} y1={projectedPlayhead.y} x2={projectedFrictionTip.x} y2={projectedFrictionTip.y} stroke="#f59e0b" markerEnd="url(#foundry-arrow-friction-overlay)" />}
+                        <text x={projectedForceTip.x + 5} y={projectedForceTip.y - 3}>F / a</text>
+                        <text x={projectedDriveTip.x + 5} y={projectedDriveTip.y + 9}>drive τ</text>
+                        {projectedFrictionTip && <text x={projectedFrictionTip.x + 5} y={projectedFrictionTip.y + 9} fill="#92400e">μ</text>}
                     </g>}
-                    {showVelocity && playhead && velocityTip && <g data-testid="foundry-velocity-overlay" className="physics-vector physics-velocity" data-vx={velocityRaw.x.toFixed(3)} data-vy={velocityRaw.y.toFixed(3)} data-speed={velocityMagnitude.toFixed(3)} stroke="#10b981" strokeWidth="4" strokeLinecap="round">
+                    {showVelocity && projectedPlayhead && projectedVelocityTip && <g data-testid="foundry-velocity-overlay" className="physics-vector physics-velocity" data-projection="three-camera" data-origin-source="effector-joint" data-vx={velocityRaw.x.toFixed(3)} data-vy={velocityRaw.y.toFixed(3)} data-speed={velocityMagnitude.toFixed(3)} stroke="#10b981" strokeWidth="4" strokeLinecap="round">
                         <defs><marker id="foundry-arrow-velocity-overlay" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 7 3.5 L 0 7 z" fill="#10b981" /></marker></defs>
-                        <line data-testid="foundry-velocity-vector" x1={playhead.x} y1={playhead.y} x2={velocityTip.x} y2={velocityTip.y} markerEnd="url(#foundry-arrow-velocity-overlay)" />
-                        <text x={velocityTip.x + 5} y={velocityTip.y - 3}>v</text>
+                        <line data-testid="foundry-velocity-vector" x1={projectedPlayhead.x} y1={projectedPlayhead.y} x2={projectedVelocityTip.x} y2={projectedVelocityTip.y} markerEnd="url(#foundry-arrow-velocity-overlay)" />
+                        <text x={projectedVelocityTip.x + 5} y={projectedVelocityTip.y - 3}>v</text>
                     </g>}
-                    {playhead && <circle data-testid="foundry-playhead" cx={playhead.x} cy={playhead.y} r="7" fill="#f472b6" stroke="white" strokeWidth="3" />}
-                    {(isPickingAnchor || manualAnchor) && <g data-testid="foundry-anchor-marker" transform={`translate(${anchorMarker.x} ${anchorMarker.y})`}>
+                    {projectedPlayhead && <circle data-testid="foundry-playhead" data-projection="three-camera" cx={projectedPlayhead.x} cy={projectedPlayhead.y} r="7" fill="#f472b6" stroke="white" strokeWidth="3" />}
+                    {(isPickingAnchor || manualAnchor) && projectedAnchorMarker && <g data-testid="foundry-anchor-marker" data-projection="three-camera" transform={`translate(${projectedAnchorMarker.x} ${projectedAnchorMarker.y})`}>
                         <circle r="8" fill="#ffffff" stroke="#8b5cf6" strokeWidth="3" />
                         <path d="M -13 0 H 13 M 0 -13 V 13" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" />
                         <text x="12" y="-10" fill="#5b21b6" fontSize="8" fontWeight="900">{landingBoard.label}</text>
@@ -2785,6 +2817,7 @@ type ThreeFoundryPreviewProps = {
     onPointerMove: React.PointerEventHandler<HTMLDivElement>;
     onPointerUp: React.PointerEventHandler<HTMLDivElement>;
     onPointerCancel: React.PointerEventHandler<HTMLDivElement>;
+    onProjectionSizeChange: (size: FoundryOverlaySize) => void;
     children: React.ReactNode;
 };
 
@@ -2809,7 +2842,7 @@ const disposeThreeObject = (object: THREE.Object3D) => object.traverse(child => 
     else material?.dispose?.();
 });
 
-const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPoints, showPathPreview, showTrail, showForces, showVelocity, physicsRule, velocityMagnitude, forceMagnitude, frictionCoefficient, frictionMagnitude, constraintError, cameraLabel, isPickingAnchor, isOrbiting, onAnchorPick, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, children }: ThreeFoundryPreviewProps) => {
+const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPoints, showPathPreview, showTrail, showForces, showVelocity, physicsRule, velocityMagnitude, forceMagnitude, frictionCoefficient, frictionMagnitude, constraintError, cameraLabel, isPickingAnchor, isOrbiting, onAnchorPick, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onProjectionSizeChange, children }: ThreeFoundryPreviewProps) => {
     const hostRef = useRef<HTMLDivElement | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -2823,10 +2856,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
         const renderer = rendererRef.current;
         const cam = cameraRef.current;
         if (!scene || !renderer || !cam) return;
-        const yaw = view.yaw * Math.PI / 180;
-        const pitch = view.pitch * Math.PI / 180;
-        const distance = 17;
-        cam.position.set(Math.sin(yaw) * Math.cos(pitch) * distance, Math.sin(pitch) * distance, Math.cos(yaw) * Math.cos(pitch) * distance);
+        cam.position.copy(foundryCameraPosition(view));
         cam.lookAt(0, 0, 0.25);
         renderer.render(scene, cam);
     };
@@ -2873,6 +2903,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
         const resize = () => {
             const width = Math.max(1, host.clientWidth);
             const height = Math.max(1, host.clientHeight);
+            onProjectionSizeChange({ width, height });
             renderer.setSize(width, height, false);
             cam.aspect = width / height;
             cam.updateProjectionMatrix();
