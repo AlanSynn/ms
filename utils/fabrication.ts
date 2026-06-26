@@ -1,5 +1,5 @@
 import { FabricationIssue, FabricationPackage, FabricationRecipe, MechanismConfig, Point, ProjectState } from '../types';
-import { calculateLinkage, generateCurvePoints } from './kinematics';
+import { calculateLinkage, gearPairOutputRatio, generateCurvePoints, planetaryPlanetSpinRatio } from './kinematics';
 import { boardToScene, pathFromPoints, SCENE_PX_PER_MM, sceneToBoardRaw, sceneToSvg, sceneBoundsForSheet } from './coordinates';
 import { mechanismRequiredParts } from './project';
 import { mechanismBindingWarnings, preferredMotionJointId } from './motion';
@@ -133,6 +133,16 @@ export const fabricationRingInnerGearOutlinePoints = (pitchRadius: number): Poin
         ].forEach(({ angle, radius }) => points.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius }));
     }
     return points;
+};
+
+export const fabricationRingGearPathD = (pitchRadius: number): string => {
+    const profile = fabricationRingGearProfileForPitchRadius(pitchRadius);
+    const mountHoleRadius = 2 * (profile.pitchRadius / 70);
+    return [
+        circlePathD(profile.outerRadius),
+        svgPathFromPoints(fabricationRingInnerGearOutlinePoints(pitchRadius)),
+        ...profile.mountHoleCenters.map(point => circlePathD(mountHoleRadius, point.x, point.y))
+    ].join(' ');
 };
 
 export type FabricationStackLayer = {
@@ -397,7 +407,7 @@ const createRecipe = (project: ProjectState, mechanism: MechanismConfig): Fabric
                 : mechanism.type === 'rack-pinion'
                     ? `Mesh the pinion gear with the toothed rack; keep the rack guide offset ${mechanism.sliderOffset.toFixed(0)} scene units from the axle and add end stops.`
                     : mechanism.type === 'gear' || mechanism.type === 'planetary_gear'
-                        ? `Mesh gears at their pitch centers; ratio ${mechanism.gearRatio ?? mechanism.speed2 ?? 1} controls output direction.`
+                        ? `Mesh gears at their pitch centers; physical pitch ratio ${mechanism.type === 'planetary_gear' ? planetaryPlanetSpinRatio(mechanism.crankLength, mechanism.rockerLength).toFixed(2) : gearPairOutputRatio(mechanism.crankLength, mechanism.rockerLength).toFixed(2)} controls output direction.`
                         : `Install ${mechanism.type} links with crank ${mechanism.crankLength.toFixed(0)} and coupler ${mechanism.couplerLength.toFixed(0)} scene units.`,
             targetPart ? `Connect output to ${targetPart.name} at anchor ${targetAnchorJointId ?? targetPart.anchorJointId} and follow path ${targetPath?.id ?? 'unassigned'}.` : 'Connect output to selected character part or leave as standalone preview.',
             warnings.length ? `Resolve warning before cutting: ${warnings.join('; ')}` : 'Run preview once, then cut and assemble.'

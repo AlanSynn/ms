@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { BodyPartLayer, CanvasViewport, MechanismConfig, MechanismType, Point, ProjectState, StandardSkeleton } from '../types';
 import { boardGridLines, defaultPhysicalKit, SCENE_PX_PER_MM, sceneBoundsForSheet } from '../utils/coordinates';
-import { calculateLinkage, camProfileScale } from '../utils/kinematics';
+import { calculateLinkage, camProfileScale, gearPairOutputRatio, planetaryPlanetSpinRatio } from '../utils/kinematics';
 import { fabricationGearProfileForPitchRadius, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints } from '../utils/fabrication';
 
 const VIEW_SCALE = 35;
@@ -322,8 +322,8 @@ const mechanismGearRotations = (mechanism: MechanismConfig, angle: number) => {
   const input = angle * (mechanism.speed1 ?? 1);
   const phase = mechanism.phase ?? 0;
   if (mechanism.type === '5bar') return [input, angle * (mechanism.speed2 ?? mechanism.gearRatio ?? 1) + phase];
-  if (mechanism.type === 'gear') return [input, input * (mechanism.gearRatio ?? mechanism.speed2 ?? -1) + phase];
-  if (mechanism.type === 'planetary_gear') return [input, -input * (mechanism.gearRatio ?? mechanism.speed2 ?? 3) + phase];
+  if (mechanism.type === 'gear') return [input, input * gearPairOutputRatio(mechanism.crankLength, mechanism.rockerLength) + phase];
+  if (mechanism.type === 'planetary_gear') return [input, input * planetaryPlanetSpinRatio(mechanism.crankLength, mechanism.rockerLength) + phase];
   return [input];
 };
 

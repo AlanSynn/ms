@@ -3,10 +3,10 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { boardGridLines, boardToScene, bodyPartPivotScene, physicalKitPreset, placeBodyPartPivotAt, SCENE_PX_PER_MM, sceneToBoard, sceneToBoardRaw, sceneToSheetMm, sceneToSvg, sheetMmToScene } from '../utils/coordinates';
 import { createDefaultMechanism, createSampleProject, handoffGate, loadProjectSnapshot, serializeProject, applyProjectAction, projectSelfCheck, mechanismRequiredParts, mechanismWithGeneratedPath } from '../utils/project';
-import { createFabricationPackage, FABRICATION_GEAR_SPECS, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationRenderPlanForMechanism, fabricationStackForMechanism, sampleFeasibleRange, validateFabricationStack, validateForFabrication } from '../utils/fabrication';
+import { createFabricationPackage, FABRICATION_GEAR_SPECS, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, sampleFeasibleRange, validateFabricationStack, validateForFabrication } from '../utils/fabrication';
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
-import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, generateCurvePoints } from '../utils/kinematics';
+import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, generateCurvePoints, planetaryPlanetSpinRatio } from '../utils/kinematics';
 import { animatedPartsForProject, describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionPreviewForPath, motionPreviewForProject, motionPreviewForTarget, preferredMotionJointId } from '../utils/motion';
 import { buildToonSceneProjection } from '../utils/sceneProjection';
 import { buildKinematicPhysicsSession } from '../utils/physicsSession';
@@ -60,6 +60,8 @@ assert.equal(g24Profile.preset.key, 'g24', 'gear profile preserves fabrication p
 assert.equal(g24Profile.outlinePoints.length, 96, 'G24 profile uses fabrication tooth segmentation, not sparse saw teeth');
 assert.equal(g24Profile.attachmentHoleCenters.length, 4, 'G24 profile carries grid attachment holes into shared renderers');
 assert(fabricationGearPathD(30, 30).startsWith('M 28.44 0 L 31.43 2.06 L 31.23 4.11'), 'shared SVG gear path matches fabrication gear outline convention');
+assert(fabricationRingGearPathD(70).includes('M 90 0 A 90 90'), 'shared SVG ring gear path carries fabrication outer ring geometry');
+assert(fabricationRingGearPathD(70).includes('68.54'), 'shared SVG ring gear path carries internal tooth geometry');
 const canvasText = readFileSync(join(process.cwd(), 'components', 'Canvas.tsx'), 'utf8');
 const threePreviewText = readFileSync(join(process.cwd(), 'components', 'ThreePuppetPreview.tsx'), 'utf8');
 const exporterText = readFileSync(join(process.cwd(), 'utils', 'exporter.ts'), 'utf8');
@@ -68,6 +70,11 @@ assert(canvasText.includes('fabricationGearPathD'), '2D canvas gear rendering us
 assert(threePreviewText.includes('fabricationGearProfileForPitchRadius'), '3D foundry gear rendering uses shared fabrication gear geometry');
 assert(exporterText.includes('fabricationGearPathD'), 'SVG export gear rendering uses shared fabrication gear geometry');
 assert(appText.includes('fabricationGearProfileForPitchRadius'), 'Foundry gear helper uses shared fabrication gear holes/profile');
+assert(appText.includes('fabricationRingGearPathD'), '2D Foundry planetary preview uses shared ring gear geometry');
+assert(appText.includes('fabricationRingGearProfileForPitchRadius'), '3D Foundry ring uses shared fabrication ring gear geometry');
+assert(!appText.includes('starShape'), 'Foundry sandbox no longer carries saw-tooth star gears');
+assert(!appText.includes('teeth * 2'), 'Foundry sandbox no longer carries sparse saw-tooth gear implementation');
+assert(appText.includes("if (key === 'gearRatio') return false"), 'Foundry hides stale gear-ratio controls when physical pitch radii define rotation');
 assert(!canvasText.includes('toothWidth'), '2D canvas no longer carries a separate saw-tooth gear implementation');
 assert(!threePreviewText.includes('teeth * 2'), '3D preview no longer carries a separate saw-tooth gear implementation');
 assert(controlsText.includes('mechanismTemplateLabel'), 'legacy Controls uses shared mechanism registry labels');
@@ -311,6 +318,7 @@ ALL_MECHANISM_TYPES.forEach(type => {
   } as Record<string, string>)[type];
   assert(constraintLabels.includes(expectedConstraint), `${type} exposes a type-specific physics constraint (${expectedConstraint})`);
   assert(templatePhysics.summary.maxSpeed >= 0 && templatePhysics.summary.maxForce >= 0, `${type} exports velocity and force magnitudes`);
+  assert(templatePhysics.summary.maxConstraintError < 1e-6, `${type} physics constraints match the sampled kinematic pose`);
   assertFiniteDeep(templatePhysics, `${type}.templatePhysics`);
 });
 
@@ -432,6 +440,10 @@ const requiredPartNames = (type: Parameters<typeof createDefaultMechanism>[0]) =
     assertDistance(state.p1, state.p2, mechanism.crankLength + mechanism.rockerLength, 'gear pitch circles remain tangent');
   });
   assert.equal(mechanism.gearRatio, -1, 'gear train default encodes reverse rotation');
+  const unequalGear = { ...mechanism, crankLength: 30, rockerLength: 60, groundLength: 90, gearRatio: -99, speed2: -99 };
+  const unequalQuarter = calculateLinkage(unequalGear, Math.PI / 2);
+  const outputAngle = Math.atan2(unequalQuarter.j2.y - unequalQuarter.p2.y, unequalQuarter.j2.x - unequalQuarter.p2.x);
+  assert(Math.abs(outputAngle - gearPairOutputRatio(30, 60) * Math.PI / 2) < 1e-6, 'gear output rotation follows pitch radii, not stale ratio fields');
   Array.from({ length: 8 }, () => generateSmartConfig(undefined, 'gear')).forEach(config => {
     assert(Math.abs(config.groundLength - (config.crankLength + config.rockerLength)) < 1e-6, 'optimizer keeps generated gear pitch circles tangent');
   });
@@ -449,7 +461,7 @@ const requiredPartNames = (type: Parameters<typeof createDefaultMechanism>[0]) =
     assertDistance(state.p2, state.j2, mechanism.rockerLength, 'planet gear radius is preserved');
     assertDistance(state.p2, state.effector, mechanism.couplerPointDist, 'planetary output arm length is preserved');
   });
-  assert.equal(mechanism.gearRatio, 3, 'planetary gear default encodes compounded spin ratio');
+  assert.equal(planetaryPlanetSpinRatio(mechanism.crankLength, mechanism.rockerLength), -(mechanism.crankLength + mechanism.rockerLength) / mechanism.rockerLength, 'planetary spin follows sun+planet pitch radii');
   Array.from({ length: 8 }, () => generateSmartConfig(undefined, 'planetary_gear')).forEach(config => {
     assert(Math.abs(config.groundLength - (config.crankLength + config.rockerLength)) < 1e-6, 'optimizer keeps generated planetary pitch circles tangent');
   });
@@ -460,7 +472,7 @@ const gearDefault = createDefaultMechanism('gear', 'contract-gear-mesh');
 const gearStart = calculateLinkage(gearDefault, 0);
 const gearQuarter = calculateLinkage(gearDefault, Math.PI / 2);
 assert(Math.abs(Math.hypot(gearStart.p2.x - gearStart.p1.x, gearStart.p2.y - gearStart.p1.y) - (gearDefault.crankLength + gearDefault.rockerLength)) < 1e-9, 'gear template defaults mesh the two pitch circles');
-assert(gearQuarter.j1.y > gearStart.j1.y && gearQuarter.j2.y < gearStart.j2.y, 'gear train reverses output rotation for a negative gear ratio');
+assert(gearQuarter.j1.y > gearStart.j1.y && gearQuarter.j2.y < gearStart.j2.y, 'gear train reverses output rotation from meshed pitch radii');
 let exportedProject = applyProjectAction(sample, { type: 'set_export', fabricationPackage: createFabricationPackage(sample) });
 assert(exportedProject.lastExport, 'set_export stores generated fabrication package');
 exportedProject = applyProjectAction(exportedProject, { type: 'upsert_mechanism', mechanism: { ...exportedProject.mechanisms[0], enabled: false } });

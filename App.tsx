@@ -19,7 +19,7 @@ import {
     ProjectState
 } from './types';
 import { gearPathD, generateDXF, generateSVG } from './utils/exporter';
-import { animationDeltaRadians, calculateLinkage, camProfileScale, generateCurvePoints } from './utils/kinematics';
+import { animationDeltaRadians, calculateLinkage, camProfileScale, generateCurvePoints, gearPairOutputRatio, planetaryPlanetSpinRatio } from './utils/kinematics';
 import { evaluateFitness, generateSmartConfig, mutateConfig } from './utils/optimizer';
 import {
     applyProjectAction,
@@ -37,7 +37,7 @@ import {
     validatePath
 } from './utils/project';
 import { processImageWithWebOnnx } from './utils/webOnnx';
-import { createFabricationPackage, fabricationGearProfileForPitchRadius, fabricationRenderPlanForMechanism, fabricationStackSummary, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
+import { createFabricationPackage, fabricationGearProfileForPitchRadius, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
 import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToBoardRaw, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
 import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
@@ -2692,7 +2692,9 @@ const MiniNumber = ({ label, value, min, max, step = 1, disabled = false, onChan
 const Toggle = ({ label, checked, disabled = false, onChange }: { label: string; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void }) => <label className={`flex items-center justify-between rounded-2xl bg-slate-100 px-3 py-2 text-sm font-bold ${disabled ? 'opacity-50' : ''}`}><span>{label}</span><input type="checkbox" disabled={disabled} checked={checked} onChange={e => onChange(e.target.checked)} /></label>;
 
 const showParam = (type: MechanismType, key: keyof MechanismConfig) => {
-    if (['speed2', 'phase', 'gearRatio'].includes(String(key))) return ['5bar', 'gear', 'planetary_gear'].includes(type);
+    if (key === 'speed2') return type === '5bar';
+    if (key === 'phase') return ['5bar', 'gear', 'planetary_gear'].includes(type);
+    if (key === 'gearRatio') return false;
     if (key === 'rodLength') return ['5bar', 'piston'].includes(type);
     if (key === 'groundLength') return !['cam', 'yoke', 'rack-pinion'].includes(type);
     if (key === 'couplerLength') return !['cam', 'gear', 'planetary_gear', 'yoke', 'rack-pinion'].includes(type);
@@ -2985,26 +2987,22 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
             holeXs.forEach(x => addHoleRing(group, x, 0, 0));
             root.add(group);
         };
-        const starShape = (outer: number, inner: number, teeth: number) => {
+        const shapeFromPoints = (points: Point[]) => {
             const shape = new THREE.Shape();
-            for (let i = 0; i < teeth * 2; i++) {
-                const r = i % 2 ? inner : outer;
-                const a = (i / (teeth * 2)) * Math.PI * 2;
-                const x = Math.cos(a) * r, y = Math.sin(a) * r;
-                if (i === 0) shape.moveTo(x, y);
-                else shape.lineTo(x, y);
-            }
+            points.forEach((point, index) => {
+                if (index === 0) shape.moveTo(point.x, point.y);
+                else shape.lineTo(point.x, point.y);
+            });
             shape.closePath();
             return shape;
         };
         const addGear = (center: Point, radius: number, z: number, rotation: number, mat: THREE.Material) => {
             const r = Math.max(0.38, radius * simulation.scale / 18);
-            const shape = starShape(r, r * 0.83, Math.max(10, Math.round(r * 8)));
-            shape.holes.push(circularHole(0, 0, holeR * 1.45));
-            for (let i = 0; i < 4; i += 1) {
-                const a = i * Math.PI / 2;
-                shape.holes.push(circularHole(Math.cos(a) * r * 0.52, Math.sin(a) * r * 0.52, holeR * 0.62));
-            }
+            const profile = fabricationGearProfileForPitchRadius(r, radius / SCENE_PX_PER_MM);
+            const shape = shapeFromPoints(profile.outlinePoints);
+            const axleHoleRadius = Math.max(holeR * 0.7, profile.axleHoleRadius);
+            shape.holes.push(circularHole(0, 0, axleHoleRadius));
+            profile.attachmentHoleCenters.forEach(point => shape.holes.push(circularHole(point.x, point.y, Math.max(holeR * 0.55, profile.axleHoleRadius))));
             const geom = new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.025, bevelThickness: 0.02 });
             const mesh = new THREE.Mesh(geom, mat);
             const c = to3(center, z);
@@ -3016,6 +3014,34 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
             const holes = new THREE.Group();
             holes.position.set(c.x, c.y, z);
             addHoleRing(holes, 0, 0, 0);
+            profile.attachmentHoleCenters.forEach(point => addHoleRing(holes, point.x, point.y, 0));
+            root.add(holes);
+        };
+        const addRingGear = (center: Point, radius: number, z: number, rotation: number, mat: THREE.Material) => {
+            const r = Math.max(0.82, radius * simulation.scale / 18);
+            const profile = fabricationRingGearProfileForPitchRadius(r);
+            const shape = new THREE.Shape();
+            shape.absellipse(0, 0, profile.outerRadius, profile.outerRadius, 0, Math.PI * 2, false);
+            const inner = new THREE.Path();
+            fabricationRingInnerGearOutlinePoints(r).forEach((point, index) => {
+                if (index === 0) inner.moveTo(point.x, point.y);
+                else inner.lineTo(point.x, point.y);
+            });
+            inner.closePath();
+            shape.holes.push(inner);
+            const mountHoleRadius = Math.max(holeR * 0.58, 2 * (profile.pitchRadius / 70));
+            profile.mountHoleCenters.forEach(point => shape.holes.push(circularHole(point.x, point.y, mountHoleRadius)));
+            const geom = new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.025, bevelThickness: 0.02 });
+            const mesh = new THREE.Mesh(geom, mat);
+            const c = to3(center, z);
+            mesh.position.set(c.x, c.y, z - thickness / 2);
+            mesh.rotation.z = rotation * Math.PI / 180;
+            mesh.castShadow = true;
+            addEdges(mesh);
+            root.add(mesh);
+            const holes = new THREE.Group();
+            holes.position.set(c.x, c.y, z);
+            profile.mountHoleCenters.forEach(point => addHoleRing(holes, point.x, point.y, 0));
             root.add(holes);
         };
         const addCam = (center: Point, z: number, mat: THREE.Material) => {
@@ -3117,8 +3143,9 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
             else addBar(s.j1, s.j2, z, mat, 3);
         };
         const renderGearLayer = (label: string, z: number, mat: THREE.Material) => {
-            if (/output|right|ring/i.test(label)) addGear(s.p2, mechanism.rockerLength, z, -angle, mat);
-            else if (/planet/i.test(label)) addGear(s.j1, Math.max(16, mechanism.crankLength * 0.55), z, angle * 1.6, mat);
+            if (/ring/i.test(label)) addRingGear(s.p1, mechanism.groundLength + mechanism.rockerLength, z, 0, mat);
+            else if (/planet/i.test(label)) addGear(s.p2, mechanism.rockerLength, z, angle * planetaryPlanetSpinRatio(mechanism.crankLength, mechanism.rockerLength), mat);
+            else if (/output|right/i.test(label)) addGear(s.p2, mechanism.rockerLength, z, angle * gearPairOutputRatio(mechanism.crankLength, mechanism.rockerLength), mat);
             else addGear(s.p1, mechanism.crankLength, z, angle, mat);
         };
         renderPlan.layers.forEach(layerItem => {
@@ -3290,6 +3317,15 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
             {gearProfile.attachmentHoleCenters.map((point, index) => <circle key={index} data-testid={fabricationTest('hole')} className="mechanism-hole" cx={point.x} cy={point.y} r={holeR} />)}
         </g>;
     };
+    const ringGear = (center: Point, length: number, className: string, key: string) => {
+        const pitchRadius = radius(length, compact ? 18 : 34, compact ? 62 : 120);
+        const ringProfile = fabricationRingGearProfileForPitchRadius(pitchRadius);
+        return <g key={key} data-mechanism-gear-key={key} className={`mechanism-gear-part ${className}`} transform={`translate(${center.x} ${center.y})`}>
+            <path data-testid={thicknessTestId} className="mechanism-thickness" transform={`translate(${depth} ${depth})`} d={fabricationRingGearPathD(pitchRadius)} fillRule="evenodd" />
+            <path data-testid={fabricationTest('gear')} className="mechanism-gear-teeth mechanism-face" d={fabricationRingGearPathD(pitchRadius)} fillRule="evenodd" />
+            {ringProfile.mountHoleCenters.map((point, index) => <circle key={index} data-testid={fabricationTest('hole')} className="mechanism-hole" cx={point.x} cy={point.y} r={holeR} />)}
+        </g>;
+    };
     const rackPlate = (center: Point, axis: Point, length: number, key: string) => {
         const len = Math.max(length, barWidth * 6);
         const angle = Math.atan2(axis.y, axis.x) * 180 / Math.PI;
@@ -3335,9 +3371,9 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
             {gear(s.p2, mechanism.rockerLength, 'mechanism-link secondary', 'gear-b', compact ? 8 : 16, compact ? 34 : 62, outputAngleDeg)}
         </>}
         {mechanism.type === 'planetary_gear' && <>
-            {gear(s.p1, mechanism.crankLength, 'mechanism-driver', 'sun', compact ? 7 : 12, compact ? 22 : 42, 0)}
+            {ringGear(s.p1, mechanism.groundLength + mechanism.rockerLength, 'mechanism-frame carrier', 'ring')}
+            {gear(s.p1, mechanism.crankLength, 'mechanism-driver', 'sun', compact ? 7 : 12, compact ? 22 : 42, inputAngleDeg)}
             {gear(s.p2, mechanism.rockerLength, 'mechanism-link secondary', 'planet', compact ? 7 : 12, compact ? 22 : 42, outputAngleDeg)}
-            <circle className="mechanism-gear carrier" cx={s.p1.x} cy={s.p1.y} r={Math.max(radius(mechanism.groundLength, compact ? 16 : 30, compact ? 52 : 105), radius(mechanism.crankLength))} />
         </>}
         {mechanism.type === '5bar' && <>
             {gear(s.p1, mechanism.crankLength, 'mechanism-driver', 'fivebar-gear-a', compact ? 7 : 12, compact ? 22 : 42, inputAngleDeg)}

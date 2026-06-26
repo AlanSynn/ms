@@ -12,6 +12,19 @@ export const camFollowerRise = (liftLength: number, angleRad: number) => {
     return Math.max(0, camProfileScale(angleRad) - baseScale) * (lift / Math.max(fullRiseScale, 0.001));
 };
 
+const safeRadiusRatio = (numerator: number, denominator: number, fallback: number) => {
+    const n = Math.max(0.001, Math.abs(numerator));
+    const d = Math.max(0.001, Math.abs(denominator));
+    const ratio = n / d;
+    return Number.isFinite(ratio) ? ratio : fallback;
+};
+
+export const gearPairOutputRatio = (inputPitchRadius: number, outputPitchRadius: number) =>
+    -safeRadiusRatio(inputPitchRadius, outputPitchRadius, 1);
+
+export const planetaryPlanetSpinRatio = (sunPitchRadius: number, planetPitchRadius: number) =>
+    -safeRadiusRatio(sunPitchRadius + planetPitchRadius, planetPitchRadius, 3);
+
 export const animationDeltaRadians = (
     dtMs: number,
     durationMs: number,
@@ -149,7 +162,7 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
             x: p1.x + config.groundLength * Math.cos(gAngle),
             y: p1.y + config.groundLength * Math.sin(gAngle)
         };
-        const ratio = config.gearRatio ?? config.speed2 ?? -1;
+        const ratio = gearPairOutputRatio(config.crankLength, config.rockerLength);
         const outAngle = angle1 * ratio + (config.phase ?? 0);
         const j2: Point = {
             x: p2.x + config.rockerLength * Math.cos(outAngle),
@@ -167,12 +180,12 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
         const carrier = Math.max(1, config.groundLength || 90);
         const planet = Math.max(1, config.rockerLength || 36);
         const arm = config.couplerPointDist || 65;
-        const ratio = config.gearRatio ?? config.speed2 ?? 3;
+        const ratio = planetaryPlanetSpinRatio(config.crankLength, planet);
         const center: Point = {
             x: p1.x + carrier * Math.cos(angle1),
             y: p1.y + carrier * Math.sin(angle1)
         };
-        const spin = -angle1 * ratio + (config.phase ?? 0);
+        const spin = angle1 * ratio + (config.phase ?? 0);
         const j2: Point = {
             x: center.x + planet * Math.cos(spin),
             y: center.y + planet * Math.sin(spin)

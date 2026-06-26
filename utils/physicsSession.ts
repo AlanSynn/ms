@@ -178,30 +178,52 @@ export const buildKinematicPhysicsSession = (
           force
         });
       });
-      addConstraint(constraints, `/physics/constraints/${mechanism.id}/crank`, 'rod', current.p1, current.j1, finite(mechanism.crankLength), 'crank length', mechanism.id);
-      addConstraint(constraints, `/physics/constraints/${mechanism.id}/coupler`, 'rod', current.j1, current.j2, finite(mechanism.couplerLength), 'coupler length', mechanism.id);
-      addConstraint(constraints, `/physics/constraints/${mechanism.id}/rocker`, 'rod', current.j2, current.p2, finite(mechanism.rockerLength), 'rocker length', mechanism.id);
-      addConstraint(constraints, `/physics/constraints/${mechanism.id}/target`, 'target', current.effector, current.effector, 0, 'end effector target', mechanism.id);
-      if (mechanism.type === 'gear') {
-        addConstraint(constraints, `/physics/constraints/${mechanism.id}/gear-mesh`, 'guide', current.p1, current.p2, finite(mechanism.crankLength + mechanism.rockerLength), 'gear pitch mesh tangent', mechanism.id);
-      } else if (mechanism.type === 'planetary_gear') {
-        addConstraint(constraints, `/physics/constraints/${mechanism.id}/carrier`, 'guide', current.p1, current.p2, finite(mechanism.groundLength), 'planet carrier radius', mechanism.id);
-        addConstraint(constraints, `/physics/constraints/${mechanism.id}/planet-mesh`, 'guide', current.p2, current.j2, finite(mechanism.rockerLength), 'planet gear mesh', mechanism.id);
+      const actualDistance = (a: Point, b: Point) => distance(a, b);
+      const addCrankConstraint = () =>
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/crank`, 'rod', current.p1, current.j1, finite(mechanism.crankLength), 'crank length', mechanism.id);
+      const addTargetConstraint = () =>
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/target`, 'target', current.effector, current.effector, 0, 'end effector target', mechanism.id);
+      if (mechanism.type === 'crank') {
+        addCrankConstraint();
+      } else if (mechanism.type === '4bar') {
+        addCrankConstraint();
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/coupler`, 'rod', current.j1, current.j2, finite(mechanism.couplerLength), 'coupler length', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/rocker`, 'rod', current.j2, current.p2, finite(mechanism.rockerLength), 'rocker length', mechanism.id);
+      } else if (mechanism.type === '5bar') {
+        addCrankConstraint();
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/right-crank`, 'rod', current.p2, current.aux ?? current.j2, finite(mechanism.rockerLength), 'right crank phase rod', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/left-coupler`, 'rod', current.j1, current.j2, finite(mechanism.couplerLength), 'left coupler length', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/right-coupler`, 'rod', current.aux ?? current.j2, current.j2, finite(mechanism.rodLength ?? mechanism.couplerLength), 'right coupler length', mechanism.id);
+      } else if (mechanism.type === 'piston') {
+        addCrankConstraint();
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/coupler`, 'rod', current.j1, current.j2, finite(mechanism.couplerLength), 'coupler length', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/slider-guide`, 'guide', current.j2, current.j2, 0, 'slider guide', mechanism.id);
+      } else if (mechanism.type === 'yoke') {
+        addCrankConstraint();
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/slot-guide`, 'guide', current.j1, current.j2, actualDistance(current.j1, current.j2), 'pin-in-slot guide', mechanism.id);
+      } else if (mechanism.type === 'quick-return') {
+        addCrankConstraint();
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/rocker`, 'rod', current.p2, current.j2, finite(mechanism.rockerLength), 'rocker length', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/slotted-arm`, 'guide', current.j1, current.j2, actualDistance(current.j1, current.j2), 'slotted-arm guide', mechanism.id);
+      } else if (mechanism.type === 'cam') {
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/cam-radius`, 'pin', current.p1, current.j1, actualDistance(current.p1, current.j1), 'cam profile radius', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/follower-guide`, 'guide', current.j2, current.p2, 0, 'follower guide', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/cam-contact`, 'pin', current.j1, current.j2, actualDistance(current.j1, current.j2), 'cam follower contact', mechanism.id);
       } else if (mechanism.type === 'rack-pinion') {
+        addCrankConstraint();
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/rack-guide`, 'guide', current.j2, current.p2, 0, 'rack linear guide', mechanism.id);
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/pinion-contact`, 'pin', current.p1, current.j1, finite(mechanism.crankLength), 'pinion pitch contact', mechanism.id);
-      } else if (mechanism.type === 'cam') {
-        addConstraint(constraints, `/physics/constraints/${mechanism.id}/follower-guide`, 'guide', current.j2, current.p2, 0, 'follower guide', mechanism.id);
-        addConstraint(constraints, `/physics/constraints/${mechanism.id}/cam-contact`, 'pin', current.j1, current.j2, finite(mechanism.rockerLength), 'cam follower contact', mechanism.id);
-      } else if (mechanism.type === 'piston') {
-        addConstraint(constraints, `/physics/constraints/${mechanism.id}/slider-guide`, 'guide', current.j2, current.effector, 0, 'slider guide', mechanism.id);
-      } else if (mechanism.type === 'yoke') {
-        addConstraint(constraints, `/physics/constraints/${mechanism.id}/slot-guide`, 'guide', current.j1, current.j2, finite(mechanism.crankLength), 'pin-in-slot guide', mechanism.id);
-      } else if (mechanism.type === 'quick-return') {
-        addConstraint(constraints, `/physics/constraints/${mechanism.id}/slotted-arm`, 'guide', current.j1, current.j2, finite(mechanism.couplerLength), 'slotted-arm guide', mechanism.id);
-      } else if (mechanism.type === '5bar') {
-        addConstraint(constraints, `/physics/constraints/${mechanism.id}/right-crank`, 'rod', current.p2, current.aux ?? current.j2, finite(mechanism.rockerLength), 'right crank phase rod', mechanism.id);
+      } else if (mechanism.type === 'gear') {
+        addCrankConstraint();
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/output-radius`, 'rod', current.p2, current.j2, finite(mechanism.rockerLength), 'output pitch radius', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/gear-mesh`, 'guide', current.p1, current.p2, finite(mechanism.crankLength + mechanism.rockerLength), 'gear pitch mesh tangent', mechanism.id);
+      } else if (mechanism.type === 'planetary_gear') {
+        addCrankConstraint();
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/carrier`, 'guide', current.p1, current.p2, finite(mechanism.groundLength), 'planet carrier radius', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/planet-mesh`, 'guide', current.p2, current.j2, finite(mechanism.rockerLength), 'planet gear mesh', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/output-arm`, 'rod', current.p2, current.effector, finite(mechanism.couplerPointDist), 'planet output arm', mechanism.id);
       }
+      addTargetConstraint();
       if (!current.isValid) warnings.push({ id: `/physics/warnings/${mechanism.id}/invalid`, severity: 'warning', message: `${templateLabel} kinematic sample is outside its valid linkage range.`, sourceId: mechanism.id });
     });
 
