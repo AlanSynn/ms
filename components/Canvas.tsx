@@ -177,6 +177,7 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     const handleWheel = (e: React.WheelEvent) => {
         if (!svgRef.current) return;
+        e.preventDefault();
 
         const zoomSensitivity = 0.001;
         // Calculate new zoom
@@ -275,6 +276,12 @@ export const Canvas: React.FC<CanvasProps> = ({
                     return;
                 }
             }
+        }
+
+        if (!isDrawMode && 'button' in e && (e as React.MouseEvent).button === 0) {
+            setIsPanning(true);
+            e.preventDefault();
+            return;
         }
 
         if (isDrawMode) {

@@ -129,8 +129,10 @@ export const wouldCreateCycle = (joints: Record<string, StandardJoint>, jointId:
 };
 
 export const mechanismRequiredParts = (mechanism: Pick<MechanismConfig, 'type'>) => {
+    const axleCount = mechanism.type === '5bar' ? 5 : mechanism.type === 'rack-pinion' ? 3 : 4;
     const base = [
-        { name: 'axle pin', quantity: mechanism.type === '5bar' ? 5 : mechanism.type === 'rack-pinion' ? 3 : 4 },
+        { name: 'axle pin', quantity: axleCount },
+        { name: 'retaining clip', quantity: axleCount },
         { name: 'spacer washer', quantity: mechanism.type === '5bar' ? 8 : 6 },
         { name: `${mechanism.type} linkage plate`, quantity: 1 }
     ];

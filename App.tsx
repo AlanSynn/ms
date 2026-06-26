@@ -37,7 +37,7 @@ import {
     validatePath
 } from './utils/project';
 import { processImageWithWebOnnx } from './utils/webOnnx';
-import { createFabricationPackage, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
+import { createFabricationPackage, fabricationRenderPlanForMechanism, fabricationStackSummary, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
 import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToBoardRaw, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
 import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
@@ -1522,7 +1522,7 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
         </div>),
             canvas: canvasPane(<div className="path-canvas-shell canvas-workspace overflow-hidden p-0">
             <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
-            <SceneSketch svgRef={svgRef} project={project} selectedPath={selectedPath} dragPoint={dragPoint} selectedPoint={selectedPoint} setDragPoint={setDragPoint} setSelectedPoint={setSelectedPoint} onPointMove={movePoint} onPointUp={stopDrawing} onCanvasDown={onCanvasDown} dispatch={dispatch} drawMode={drawMode} pathLocked={pathLocked} isPlaying={isPlaying} angle={angle} viewport={viewport}/>
+            <SceneSketch svgRef={svgRef} project={project} selectedPath={selectedPath} dragPoint={dragPoint} selectedPoint={selectedPoint} setDragPoint={setDragPoint} setSelectedPoint={setSelectedPoint} onPointMove={movePoint} onPointUp={stopDrawing} onCanvasDown={onCanvasDown} dispatch={dispatch} drawMode={drawMode} pathLocked={pathLocked} isPlaying={isPlaying} angle={angle} viewport={viewport} setViewport={setViewport}/>
             <ThreePuppetPreview project={project} animatedParts={pathPreview?.parts ?? {}} skeleton={pathPreview?.skeleton ?? project.skeleton} angle={angle} viewport={viewport} testId="path-three-puppet" />
         </div>),
             inspector: inspectorPane(<div className="path-inspector stage-pane-stack">
@@ -1566,7 +1566,7 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
     />;
 };
 
-const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, setDragPoint, setSelectedPoint, onPointMove, onPointUp, onCanvasDown, dispatch, drawMode, pathLocked, isPlaying, angle, viewport }: { project: ProjectState; svgRef: React.RefObject<SVGSVGElement | null>; selectedPath?: ProjectMotionPath; dragPoint: number | null; selectedPoint: number | null; setDragPoint: (i: number | null) => void; setSelectedPoint: (i: number | null) => void; onPointMove: (e: React.MouseEvent<SVGSVGElement>) => void; onPointUp: () => void; onCanvasDown: (e: React.MouseEvent<SVGSVGElement>) => void; dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void; drawMode?: boolean; pathLocked?: boolean; isPlaying: boolean; angle: number; viewport: CanvasViewport }) => {
+const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, setDragPoint, setSelectedPoint, onPointMove, onPointUp, onCanvasDown, dispatch, drawMode, pathLocked, isPlaying, angle, viewport, setViewport }: { project: ProjectState; svgRef: React.RefObject<SVGSVGElement | null>; selectedPath?: ProjectMotionPath; dragPoint: number | null; selectedPoint: number | null; setDragPoint: (i: number | null) => void; setSelectedPoint: (i: number | null) => void; onPointMove: (e: React.MouseEvent<SVGSVGElement>) => void; onPointUp: () => void; onCanvasDown: (e: React.MouseEvent<SVGSVGElement>) => void; dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void; drawMode?: boolean; pathLocked?: boolean; isPlaying: boolean; angle: number; viewport: CanvasViewport; setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>> }) => {
     const kit = project.settings.physicalKit;
     const sheet = sceneBoundsForSheet(kit);
     const pathMechanism = selectedPath ? project.mechanisms.find(m => m.targetPathId === selectedPath.id && m.targetPartId === selectedPath.partId) : undefined;
@@ -1588,7 +1588,53 @@ const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, 
     const viewHeight = SCENE_VIEW.height / viewport.zoom;
     const viewX = (SCENE_VIEW.width - viewWidth) / 2 - viewport.offset.x / viewport.zoom;
     const viewY = (SCENE_VIEW.height - viewHeight) / 2 - viewport.offset.y / viewport.zoom;
-    return <svg ref={svgRef} aria-label="Path editor canvas" data-testid="path-canvas" viewBox={`${viewX} ${viewY} ${viewWidth} ${viewHeight}`} className={`h-[calc(100vh-160px)] min-h-[560px] w-full bg-[#f8fbff] ${drawMode ? 'cursor-crosshair' : ''}`} onMouseDown={onCanvasDown} onMouseMove={onPointMove} onMouseUp={onPointUp} onMouseLeave={onPointUp}>
+    const [panStart, setPanStart] = useState<{ x: number; y: number; offset: Point } | null>(null);
+    const scalePan = (e: React.MouseEvent<SVGSVGElement>) => {
+        const rect = svgRef.current?.getBoundingClientRect();
+        return rect ? { x: (e.clientX - (panStart?.x ?? e.clientX)) * SCENE_VIEW.width / rect.width, y: (e.clientY - (panStart?.y ?? e.clientY)) * SCENE_VIEW.height / rect.height } : { x: 0, y: 0 };
+    };
+    const handlePanOrDrawDown = (e: React.MouseEvent<SVGSVGElement>) => {
+        if (!drawMode && e.button === 0 && !(e.target instanceof Element && e.target.closest('[data-canvas-interactive="true"]'))) {
+            setPanStart({ x: e.clientX, y: e.clientY, offset: viewport.offset });
+            e.preventDefault();
+            return;
+        }
+        onCanvasDown(e);
+    };
+    const handleMove = (e: React.MouseEvent<SVGSVGElement>) => {
+        if (panStart) {
+            const delta = scalePan(e);
+            setViewport(prev => ({ ...prev, offset: { x: panStart.offset.x + delta.x, y: panStart.offset.y + delta.y } }));
+            return;
+        }
+        onPointMove(e);
+    };
+    const finishInteraction = () => {
+        setPanStart(null);
+        onPointUp();
+    };
+    const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
+        const rect = svgRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        e.preventDefault();
+        const nextZoom = clampCanvasZoom(viewport.zoom * (1 - e.deltaY * 0.001));
+        const fx = (e.clientX - rect.left) / rect.width;
+        const fy = (e.clientY - rect.top) / rect.height;
+        const worldX = viewX + fx * viewWidth;
+        const worldY = viewY + fy * viewHeight;
+        const nextViewWidth = SCENE_VIEW.width / nextZoom;
+        const nextViewHeight = SCENE_VIEW.height / nextZoom;
+        const nextViewX = worldX - fx * nextViewWidth;
+        const nextViewY = worldY - fy * nextViewHeight;
+        setViewport({
+            zoom: nextZoom,
+            offset: {
+                x: ((SCENE_VIEW.width - nextViewWidth) / 2 - nextViewX) * nextZoom,
+                y: ((SCENE_VIEW.height - nextViewHeight) / 2 - nextViewY) * nextZoom
+            }
+        });
+    };
+    return <svg ref={svgRef} aria-label="Path editor canvas" data-testid="path-canvas" viewBox={`${viewX} ${viewY} ${viewWidth} ${viewHeight}`} className={`h-[calc(100vh-160px)] min-h-[560px] w-full bg-[#f8fbff] ${drawMode ? 'cursor-crosshair' : panStart ? 'cursor-grabbing' : 'cursor-grab'}`} onMouseDown={handlePanOrDrawDown} onMouseMove={handleMove} onMouseUp={finishInteraction} onMouseLeave={finishInteraction} onWheel={handleWheel}>
         <defs><filter id="soft"><feDropShadow dx="0" dy="10" stdDeviation="10" floodOpacity="0.13"/></filter></defs>
         <rect x={sheetSvg.x} y={sheetSvg.y} width={sheetSvg.width} height={sheetSvg.height} rx="18" fill="white" stroke="#d6dbe8" strokeWidth="1.5"/>
         {gridLines}
@@ -1614,7 +1660,7 @@ const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, 
         {selectedPath?.visible && selectedPath.points.map((pt, i) => {
             const p = sceneToSvg(pt);
             const active = dragPoint === i || selectedPoint === i;
-            return <circle key={`${selectedPath.id}-${i}`} cx={p.x} cy={p.y} r={active ? 8 : 6} fill={active ? '#5a6cff' : '#fff'} stroke="#5a6cff" strokeWidth="3" pointerEvents={drawMode ? 'none' : undefined} className={pathLocked ? 'cursor-not-allowed' : 'cursor-grab'} onClick={e => e.stopPropagation()} onMouseDown={e => { e.stopPropagation(); if (!pathLocked) { setSelectedPoint(i); setDragPoint(i); } }} />;
+            return <circle data-canvas-interactive="true" key={`${selectedPath.id}-${i}`} cx={p.x} cy={p.y} r={active ? 8 : 6} fill={active ? '#5a6cff' : '#fff'} stroke="#5a6cff" strokeWidth="3" pointerEvents={drawMode ? 'none' : undefined} className={pathLocked ? 'cursor-not-allowed' : 'cursor-grab'} onClick={e => e.stopPropagation()} onMouseDown={e => { e.stopPropagation(); if (!pathLocked) { setSelectedPoint(i); setDragPoint(i); } }} />;
         })}
         {pathPreview?.target && (() => {
             const target = pathPreview.target;
@@ -1632,7 +1678,7 @@ const PartShape = ({ part, selected, drawMode, onSelect }: { part: BodyPartLayer
     const w = part.bounds.width * part.transform.scale;
     const h = part.bounds.height * part.transform.scale;
     const stroke = selected ? '#5a6cff' : '#94a3b8';
-    return <g data-testid={`path-part-${part.id}`} transform={`translate(${p.x} ${p.y}) rotate(${-part.transform.rotation})`} onClick={e => { if (!drawMode) { e.stopPropagation(); onSelect(); } }} className={`${drawMode ? 'cursor-crosshair' : 'cursor-pointer'} transition-opacity`} opacity={part.opacity} filter="url(#soft)">
+    return <g data-canvas-interactive="true" data-testid={`path-part-${part.id}`} transform={`translate(${p.x} ${p.y}) rotate(${-part.transform.rotation})`} onClick={e => { if (!drawMode) { e.stopPropagation(); onSelect(); } }} className={`${drawMode ? 'cursor-crosshair' : 'cursor-pointer'} transition-opacity`} opacity={part.opacity} filter="url(#soft)">
         {part.textureUrl ? <image href={part.textureUrl} x={-w / 2} y={-h / 2} width={w} height={h} preserveAspectRatio="xMidYMid meet" opacity=".5" style={{ filter: 'grayscale(1) saturate(0.2)' }}/> : <rect x={-w/2} y={-h/2} width={w} height={h} rx="22" fill="#cbd5e1" opacity=".42"/>}
         <rect x={-w/2} y={-h/2} width={w} height={h} rx="22" fill="none" stroke={stroke} strokeWidth={selected ? 4 : 1.5} strokeDasharray={selected ? '0' : '5 5'}/>
         {part.localPivotOffset && <circle cx={part.localPivotOffset.x * part.transform.scale} cy={-part.localPivotOffset.y * part.transform.scale} r={5} fill="#64748b" stroke="white" strokeWidth="2"><title>local pivot</title></circle>}
@@ -2103,6 +2149,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                     <div>Sensemaking: {library.sense}.</div>
                     <div>Constraint: {library.constraint}.</div>
                     <div>Physics: {physicsRule}.</div>
+                    <div data-testid="foundry-fabrication-stack">Fabrication stack: {fabricationStackSummary(foundry)}.</div>
                     <div data-testid="foundry-feasibility">Feasibility: {feasibilityText}</div>
                 </div>}
             </StageLeftSummary>
@@ -2133,21 +2180,6 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 onPointerCancel={finishFoundryOrbit}
             >
                 <svg viewBox="0 0 360 240" className="foundry-preview-overlay" aria-hidden="true">
-                    <g data-testid="foundry-exploded-guide" className="foundry-exploded-guide" transform="translate(218 13)" pointerEvents="none">
-                        <rect x="0" y="0" width="126" height="38" rx="12" fill="rgba(255,255,255,.94)" stroke="#c7d2fe" strokeWidth="1.2" />
-                        <text x="12" y="14" fontSize="8" fontWeight="950" fill="#1e293b">Exploded view</text>
-                        <line x1="12" y1="24" x2="112" y2="24" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
-                        <circle cx="86" cy="24" r="5" fill="#5a6cff" stroke="#ffffff" strokeWidth="2" />
-                        <text x="10" y="35" fontSize="6" fontWeight="850" fill="#64748b">Assembly</text>
-                        <text x="80" y="35" fontSize="6" fontWeight="850" fill="#64748b">Exploded</text>
-                    </g>
-                    <g data-testid="foundry-z-layer-labels" className="foundry-z-layer-labels" pointerEvents="none">
-                        <text x="228" y="174" fontSize="8" fontWeight="950" fill="#4f46e5">Path projection</text>
-                        <text x="54" y="205" fontSize="8" fontWeight="950" fill="#64748b">Z=0 Base</text>
-                        <text x="42" y="116" fontSize="8" fontWeight="950" fill="#64748b">Z=1 Input</text>
-                        <text x="250" y="116" fontSize="8" fontWeight="950" fill="#64748b">Z=1 Output</text>
-                        <text x="146" y="48" fontSize="8" fontWeight="950" fill="#64748b">Z=2 Coupler</text>
-                    </g>
                     {showForces && playhead && forceTip && <g data-testid="foundry-forces-overlay" className="physics-vector physics-force" data-physics-rule={physicsRule} data-fx={accelerationRaw.x.toFixed(3)} data-fy={accelerationRaw.y.toFixed(3)} data-force-magnitude={forceMagnitude.toFixed(3)} stroke="#ef4444" strokeWidth="3" strokeLinecap="round">
                         <defs><marker id="foundry-arrow-force-overlay" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 7 3.5 L 0 7 z" fill="#ef4444" /></marker></defs>
                         <line data-testid="foundry-force-vector" x1={playhead.x} y1={playhead.y} x2={forceTip.x} y2={forceTip.y} markerEnd="url(#foundry-arrow-force-overlay)" />
@@ -2341,7 +2373,7 @@ const pendingRecipeForMechanism = (project: ProjectState, mechanism: MechanismCo
         sceneAnchor: { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 },
         offsetFromBoardMm: { x: ((mechanism.anchorX ?? 0) - boardScene.x) / SCENE_PX_PER_MM, y: ((mechanism.anchorY ?? 0) - boardScene.y) / SCENE_PX_PER_MM },
         requiredParts: mechanismRequiredParts(mechanism),
-        steps: ['Generate package to lock the final cut sheet and detailed assembly sequence.'],
+        steps: [`Exploded moving stack order: ${fabricationStackSummary(mechanism)} above the base board.`, 'Generate package to lock the final cut sheet and detailed assembly sequence.'],
         warnings: [...(mechanism.warnings ?? []), ...(range.warning ? [range.warning] : [])]
     };
 };
@@ -2469,6 +2501,7 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
                     <button className="chip" onClick={() => goStage('design')}>Edit</button>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">{selectedRecipe.requiredParts.map(part => <span className="blueprint-pill" key={`${selectedRecipe.mechanismId}-${part.name}`}>{part.name} × {part.quantity}</span>)}</div>
+                <div className="mt-3 rounded-2xl bg-slate-100 p-3 text-sm font-bold text-slate-700" data-testid="assembly-stack-summary">Stack: {fabricationStackSummary(selectedRecipe)}</div>
                 {selectedRecipe.warnings.length ? <div className="warning mt-3">Warnings: {selectedRecipe.warnings.join('; ')}</div> : <div className="ok mt-3">Warnings: none</div>}
                 <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-slate-600">{selectedRecipe.steps.map(step => <li key={step}>{step}</li>)}</ol>
             </article> : <div className="warning">No recipe yet. Return to Mechanism Design or generate a package.</div>}
@@ -2744,6 +2777,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
     const cameraStateRef = useRef(camera);
     const inv = foundryRenderedInventory(mechanism.type);
     const pinionRotation = Math.atan2(simulation.state.j1.y - simulation.state.p1.y, simulation.state.j1.x - simulation.state.p1.x) * 180 / Math.PI;
+    const renderPlan = useMemo(() => fabricationRenderPlanForMechanism(mechanism), [mechanism.type]);
     const renderCamera = (view: FoundryCamera) => {
         const scene = sceneRef.current;
         const renderer = rendererRef.current;
@@ -2834,14 +2868,12 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
         const root = new THREE.Group();
         root.name = 'foundry-dynamic';
         scene.add(root);
+        const materialForLayer = (colorValue: string, roughness = 0.66, metalness = 0.03) => new THREE.MeshStandardMaterial({ color: colorValue, roughness, metalness });
         const material = {
-            base: new THREE.MeshStandardMaterial({ color: '#d8b077', roughness: 0.72, metalness: 0.02 }),
-            wood: new THREE.MeshStandardMaterial({ color: '#c88943', roughness: 0.64, metalness: 0.02 }),
-            card: new THREE.MeshStandardMaterial({ color: '#e8bc73', roughness: 0.7, metalness: 0.02 }),
-            output: new THREE.MeshStandardMaterial({ color: '#e7c48a', roughness: 0.7, metalness: 0.02 }),
-            blue: new THREE.MeshStandardMaterial({ color: '#5a6cff', roughness: 0.45, metalness: 0.08 }),
+            base: materialForLayer(renderPlan.base.color, 0.82, 0.01),
+            accent: materialForLayer('#60a5fa', 0.45, 0.08),
             hole: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.25 }),
-            dark: new THREE.MeshStandardMaterial({ color: '#334155', roughness: 0.62 }),
+            dark: materialForLayer('#334155', 0.62, 0.03),
             path: new THREE.LineDashedMaterial({ color: new THREE.Color(color), dashSize: 0.25, gapSize: 0.16, linewidth: 2 }),
             trail: new THREE.LineBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity: 0.18 })
         };
@@ -2850,7 +2882,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
         const barW = Math.max(0.34, kit.holeDiameterMm / 8);
         const holeR = Math.max(0.08, kit.holeDiameterMm / 34);
         const addEdges = (mesh: THREE.Mesh) => {
-            const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({ color: '#7c4a21', transparent: true, opacity: 0.75 }));
+            const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({ color: '#334155', transparent: true, opacity: 0.72 }));
             mesh.add(edges);
         };
         const circularHole = (x: number, y: number, r = holeR) => {
@@ -2873,9 +2905,27 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
             return shape;
         };
         const addHoleRing = (group: THREE.Group, x: number, y: number, z: number) => {
-            const ring = new THREE.Mesh(new THREE.TorusGeometry(holeR * 1.1, 0.025, 8, 24), material.blue);
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(holeR * 1.1, 0.025, 8, 24), material.accent);
             ring.position.set(x, y, z + thickness / 2 + 0.025);
             group.add(ring);
+        };
+        const addSpacerWasher = (point: Point | undefined, z: number, mat: THREE.Material) => {
+            if (!point) return;
+            const p = to3(point, z);
+            const washer = new THREE.Mesh(new THREE.TorusGeometry(holeR * 2.3, 0.055, 12, 30), mat);
+            washer.position.copy(p);
+            washer.position.z = z + thickness / 2 + 0.055;
+            washer.castShadow = true;
+            root.add(washer);
+        };
+        const addClipCap = (point: Point | undefined, z: number, mat: THREE.Material) => {
+            if (!point) return;
+            const p = to3(point, z);
+            const clip = new THREE.Mesh(new THREE.CylinderGeometry(holeR * 1.35, holeR * 1.35, 0.08, 24), mat);
+            clip.rotation.x = Math.PI / 2;
+            clip.position.copy(p);
+            clip.position.z = z;
+            root.add(clip);
         };
         const addBar = (a: Point | undefined, b: Point | undefined, z: number, mat: THREE.Material, holeCount = 2) => {
             if (!a || !b) return;
@@ -2909,7 +2959,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
             shape.closePath();
             return shape;
         };
-        const addGear = (center: Point, radius: number, z: number, rotation = 0) => {
+        const addGear = (center: Point, radius: number, z: number, rotation: number, mat: THREE.Material) => {
             const r = Math.max(0.38, radius * simulation.scale / 18);
             const shape = starShape(r, r * 0.83, Math.max(10, Math.round(r * 8)));
             shape.holes.push(circularHole(0, 0, holeR * 1.45));
@@ -2918,7 +2968,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
                 shape.holes.push(circularHole(Math.cos(a) * r * 0.52, Math.sin(a) * r * 0.52, holeR * 0.62));
             }
             const geom = new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.025, bevelThickness: 0.02 });
-            const mesh = new THREE.Mesh(geom, material.card);
+            const mesh = new THREE.Mesh(geom, mat);
             const c = to3(center, z);
             mesh.position.set(c.x, c.y, z - thickness / 2);
             mesh.rotation.z = rotation * Math.PI / 180;
@@ -2930,7 +2980,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
             addHoleRing(holes, 0, 0, 0);
             root.add(holes);
         };
-        const addCam = (center: Point, z: number) => {
+        const addCam = (center: Point, z: number, mat: THREE.Material) => {
             const r = Math.max(0.5, mechanism.crankLength * simulation.scale / 22);
             const shape = new THREE.Shape();
             for (let i = 0; i < 56; i++) {
@@ -2942,35 +2992,35 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
             }
             shape.closePath();
             shape.holes.push(circularHole(0, 0, holeR * 1.35));
-            const mesh = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.025 }), material.wood);
+            const mesh = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.025 }), mat);
             const c = to3(center, z);
             mesh.position.set(c.x, c.y, z - thickness / 2);
             mesh.castShadow = true;
             addEdges(mesh);
             root.add(mesh);
         };
-        const addSlotPlate = (center: Point, length: number, rotation: number, z: number) => {
+        const addSlotPlate = (center: Point, length: number, rotation: number, z: number, mat: THREE.Material) => {
             const c = to3(center, z);
             const group = new THREE.Group();
             group.position.copy(c);
             group.rotation.z = rotation;
             const shape = roundedRectShape(length, barW * 1.35, barW * 0.28);
             shape.holes.push(roundedRectShape(length * 0.7, barW * 0.46, barW * 0.23));
-            const mesh = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.015 }), material.output);
+            const mesh = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.015 }), mat);
             mesh.position.z = -thickness / 2;
             mesh.castShadow = true;
             addEdges(mesh);
             group.add(mesh);
             root.add(group);
         };
-        const addFollowerBlock = (center: Point, z: number) => {
+        const addFollowerBlock = (center: Point, z: number, mat: THREE.Material) => {
             const c = to3(center, z);
             const group = new THREE.Group();
             group.position.copy(c);
-            const block = new THREE.Mesh(new THREE.BoxGeometry(barW * 1.45, barW * 1.8, thickness), material.output);
+            const block = new THREE.Mesh(new THREE.BoxGeometry(barW * 1.45, barW * 1.8, thickness), mat);
             addEdges(block);
             group.add(block);
-            const roller = new THREE.Mesh(new THREE.CylinderGeometry(holeR * 1.3, holeR * 1.3, thickness * 1.18, 28), material.blue);
+            const roller = new THREE.Mesh(new THREE.CylinderGeometry(holeR * 1.3, holeR * 1.3, thickness * 1.18, 28), material.accent);
             roller.position.set(0, -barW * 0.74, 0.04);
             roller.rotation.x = Math.PI / 2;
             group.add(roller);
@@ -2983,15 +3033,15 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
             addEdges(stop);
             root.add(stop);
         };
-        const addRack = (center: Point, z: number) => {
+        const addRack = (center: Point, z: number, mat: THREE.Material) => {
             const c = to3(center, z);
             const group = new THREE.Group();
             group.position.copy(c);
-            const rack = new THREE.Mesh(new THREE.BoxGeometry(4.6, barW, thickness), material.output);
+            const rack = new THREE.Mesh(new THREE.BoxGeometry(4.6, barW, thickness), mat);
             addEdges(rack);
             group.add(rack);
             for (let i = 0; i < 10; i++) {
-                const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, thickness), material.output);
+                const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, thickness), mat);
                 tooth.position.set(-2.1 + i * 0.46, -barW * 0.65, 0.06);
                 tooth.rotation.z = Math.PI / 4;
                 group.add(tooth);
@@ -3019,45 +3069,50 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
 
         const s = simulation.state;
         const angle = pinionRotation;
-        if (mechanism.type === 'gear' || mechanism.type === 'planetary_gear' || mechanism.type === '5bar' || mechanism.type === 'rack-pinion') {
-            addGear(s.p1, mechanism.crankLength, 0.42, angle);
-            if (mechanism.type !== 'rack-pinion') addGear(s.p2, mechanism.rockerLength, 0.62, -angle);
-        }
-        if (mechanism.type === 'cam') addCam(s.p1, 0.42);
-        if (mechanism.type === 'piston') addSlotPlate(s.j2, 3.2, 0, 0.78);
-        if (mechanism.type === 'yoke') {
-            addSlotPlate(s.j2, 3.0, Math.PI / 2, 0.78);
-            addSlotPlate(s.j1, 2.6, 0, 1.02);
-        }
-        if (mechanism.type === 'quick-return') {
-            const mid = { x: (s.p2.x + s.j2.x) / 2, y: (s.p2.y + s.j2.y) / 2 };
-            addSlotPlate(mid, 3.3, Math.atan2(s.j2.y - s.p2.y, s.j2.x - s.p2.x), 0.84);
-        }
-        if (mechanism.type === 'cam') {
-            addSlotPlate(s.j2, 3.0, Math.PI / 2, 0.78);
-            addFollowerBlock(s.j2, 1.05);
-        }
-        if (mechanism.type === 'rack-pinion') {
-            addSlotPlate(s.j2, 4.8, 0, 0.7);
-            addRack(s.j2, 0.82);
-            addEndStop(s.j2, -2.55, 0.86);
-            addEndStop(s.j2, 2.55, 0.86);
-        }
         addBar(s.p1, s.p2, 0, material.base, 3);
-        addBar(s.p1, s.j1, 0.42, material.wood, 3);
-        addBar(s.j1, s.j2, 0.92, material.card, 4);
-        addBar(s.p2, s.j2, 0.52, material.output, 3);
-        addBar(s.j2, s.effector, 1.12, material.output, 2);
+        const layerPoints = [s.p1, s.p2, s.j1, s.j2, s.aux, s.effector].filter(Boolean) as Point[];
+        const renderLinkageLayer = (label: string, z: number, mat: THREE.Material) => {
+            if (/input|crank|left/i.test(label)) addBar(s.p1, s.j1, z, mat, 3);
+            else if (/right/i.test(label)) addBar(s.p2, s.j2, z, mat, 3);
+            else if (/coupler|center|carrier/i.test(label)) addBar(s.j1, s.j2, z, mat, 4);
+            else if (/output|follower/i.test(label)) addBar(s.j2, s.effector, z, mat, 2);
+            else addBar(s.j1, s.j2, z, mat, 3);
+        };
+        const renderGearLayer = (label: string, z: number, mat: THREE.Material) => {
+            if (/output|right|ring/i.test(label)) addGear(s.p2, mechanism.rockerLength, z, -angle, mat);
+            else if (/planet/i.test(label)) addGear(s.j1, Math.max(16, mechanism.crankLength * 0.55), z, angle * 1.6, mat);
+            else addGear(s.p1, mechanism.crankLength, z, angle, mat);
+        };
+        renderPlan.layers.forEach(layerItem => {
+            const mat = materialForLayer(layerItem.color, layerItem.role === 'spacer' ? 0.55 : 0.66, layerItem.role === 'spacer' ? 0.06 : 0.03);
+            if (layerItem.renderKind === 'clip') layerPoints.forEach(point => addClipCap(point, layerItem.z, mat));
+            else if (layerItem.renderKind === 'spacer') layerPoints.forEach(point => addSpacerWasher(point, layerItem.z, mat));
+            else if (layerItem.renderKind === 'linkage') renderLinkageLayer(layerItem.label, layerItem.z, mat);
+            else if (layerItem.renderKind === 'gear') renderGearLayer(layerItem.label, layerItem.z, mat);
+            else if (layerItem.renderKind === 'cam') addCam(s.p1, layerItem.z, mat);
+            else if (layerItem.renderKind === 'guide') {
+                const slotRotation = /follower|slider|rack/i.test(layerItem.label) ? Math.PI / 2 : Math.atan2(s.j2.y - s.p2.y, s.j2.x - s.p2.x);
+                addSlotPlate(/quick/i.test(layerItem.label) ? { x: (s.p2.x + s.j2.x) / 2, y: (s.p2.y + s.j2.y) / 2 } : s.j2, /rack/i.test(layerItem.label) ? 4.8 : 3.2, slotRotation, layerItem.z, mat);
+            }
+            else if (layerItem.renderKind === 'rack') {
+                addRack(s.j2, layerItem.z, mat);
+                addEndStop(s.j2, -2.55, layerItem.z + 0.04);
+                addEndStop(s.j2, 2.55, layerItem.z + 0.04);
+            }
+            else if (layerItem.renderKind === 'follower') addFollowerBlock(s.j2, layerItem.z, mat);
+        });
+        const zBackClip = renderPlan.layers.find(item => item.role === 'clip')?.z ?? 0.22;
+        const zPin = (renderPlan.layers.at(-1)?.z ?? 0.22) + 0.34;
         [s.p1, s.p2, s.j1, s.j2, s.aux, s.effector].filter(Boolean).forEach(point => {
-            const p = to3(point as Point, 1.28);
-            const pin = new THREE.Mesh(new THREE.CylinderGeometry(holeR * 0.8, holeR * 0.8, 0.55, 20), material.dark);
+            const p = to3(point as Point, zPin);
+            const pin = new THREE.Mesh(new THREE.CylinderGeometry(holeR * 0.8, holeR * 0.8, Math.max(0.55, zPin - zBackClip + 0.12), 20), material.dark);
             pin.rotation.x = Math.PI / 2;
             pin.position.copy(p);
             root.add(pin);
         });
 
         renderCamera(cameraStateRef.current);
-    }, [mechanism, simulation, kit, color, pathPoints, showPathPreview, showTrail, pinionRotation]);
+    }, [mechanism, simulation, kit, color, pathPoints, showPathPreview, showTrail, pinionRotation, renderPlan]);
 
     return <div
         data-testid="foundry-preview"
@@ -3098,6 +3153,18 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
             data-three-hole-mode="extruded-cut-through"
             data-three-render-loop="camera-only-orbit"
             data-three-inventory-source="rendered-template"
+            data-three-stack-source="fabricationStackForMechanism"
+            data-three-base-layer={renderPlan.base.label}
+            data-three-stack-order={renderPlan.stackSummary}
+            data-three-stack-roles={renderPlan.roleSummary}
+            data-three-stack-colors={renderPlan.colorSummary}
+            data-three-stack-z={renderPlan.zSummary}
+            data-three-stack-layer-count={renderPlan.layers.length}
+            data-three-rendered-layer-labels={renderPlan.layers.map(item => item.label).join(' → ')}
+            data-three-rendered-layer-roles={renderPlan.layers.map(item => item.renderKind).join('>')}
+            data-three-rendered-layer-colors={renderPlan.layers.map(item => item.color).join(',')}
+            data-three-rendered-layer-z={renderPlan.layers.map(item => item.z.toFixed(2)).join(',')}
+            data-three-stack-validation-errors={renderPlan.validationErrors.length}
             className="foundry-three-scene-state"
         />
         {children}

@@ -4,6 +4,134 @@ import { boardToScene, pathFromPoints, SCENE_PX_PER_MM, sceneToBoardRaw, sceneTo
 import { mechanismRequiredParts } from './project';
 import { mechanismBindingWarnings, preferredMotionJointId } from './motion';
 
+
+export type FabricationStackLayer = {
+    label: string;
+    role: 'base' | 'clip' | 'linkage' | 'spacer' | 'gear' | 'guide' | 'cam' | 'rack' | 'follower';
+    color: string;
+};
+
+export type FabricationRenderKind = 'base' | 'clip' | 'linkage' | 'spacer' | 'gear' | 'guide' | 'cam' | 'rack' | 'follower';
+
+export type FabricationRenderLayer = FabricationStackLayer & {
+    source: 'fabrication-stack';
+    stackIndex: number;
+    occurrence: number;
+    z: number;
+    renderKind: FabricationRenderKind;
+};
+
+export type FabricationRenderPlan = {
+    base: FabricationRenderLayer;
+    layers: FabricationRenderLayer[];
+    stackSummary: string;
+    roleSummary: string;
+    colorSummary: string;
+    zSummary: string;
+    validationErrors: string[];
+};
+
+export const STACK_COLORS: Record<FabricationStackLayer['role'], string> = {
+    base: '#e2e8f0',
+    clip: '#334155',
+    linkage: '#60a5fa',
+    spacer: '#f59e0b',
+    gear: '#8b5cf6',
+    guide: '#10b981',
+    cam: '#f97316',
+    rack: '#14b8a6',
+    follower: '#f472b6'
+};
+
+const layer = (label: string, role: FabricationStackLayer['role']): FabricationStackLayer => ({ label, role, color: STACK_COLORS[role] });
+
+export const fabricationBaseLayer = (): FabricationStackLayer => layer('Base board', 'base');
+
+export const fabricationStackForMechanism = (mechanism: Pick<MechanismConfig, 'type'>): FabricationStackLayer[] => {
+    const linked = (...middle: FabricationStackLayer[]) => [layer('Back Clip', 'clip'), ...middle, layer('Front Clip', 'clip')];
+    const spacer = () => layer('Spacer washer', 'spacer');
+    switch (mechanism.type) {
+        case 'gear':
+            return linked(layer('Drive gear', 'gear'), spacer(), layer('Output gear', 'gear'), spacer(), layer('Output linkage', 'linkage'));
+        case 'planetary_gear':
+            return linked(layer('Ring gear', 'gear'), spacer(), layer('Carrier linkage', 'linkage'), spacer(), layer('Planet gear', 'gear'), spacer(), layer('Sun gear', 'gear'));
+        case 'rack-pinion':
+            return linked(layer('Pinion gear', 'gear'), spacer(), layer('Rack guide', 'guide'), spacer(), layer('Toothed rack', 'rack'), spacer(), layer('Output linkage', 'linkage'));
+        case 'cam':
+            return linked(layer('Cam disk', 'cam'), spacer(), layer('Follower guide', 'guide'), spacer(), layer('Follower linkage', 'follower'));
+        case 'piston':
+        case 'yoke':
+        case 'quick-return':
+            return linked(layer('Crank linkage', 'linkage'), spacer(), layer('Slider guide', 'guide'), spacer(), layer('Output linkage', 'linkage'));
+        case '5bar':
+            return linked(layer('Left timing gear', 'gear'), spacer(), layer('Left crank linkage', 'linkage'), spacer(), layer('Right timing gear', 'gear'), spacer(), layer('Right crank linkage', 'linkage'), spacer(), layer('Center coupler', 'linkage'));
+        default:
+            return linked(layer('Input linkage', 'linkage'), spacer(), layer('Coupler linkage', 'linkage'), spacer(), layer('Output linkage', 'linkage'));
+    }
+};
+
+export const fabricationStackSummary = (mechanism: Pick<MechanismConfig, 'type'>) => fabricationStackForMechanism(mechanism).map(item => item.label).join(' → ');
+
+const isMovingStackLayer = (item: FabricationStackLayer) => !['clip', 'spacer', 'base'].includes(item.role);
+
+export const validateFabricationStack = (mechanism: Pick<MechanismConfig, 'type'> | FabricationStackLayer[]) => {
+    const stack = Array.isArray(mechanism) ? mechanism : fabricationStackForMechanism(mechanism);
+    const errors: string[] = [];
+    if (stack.some(item => item.role === 'base')) errors.push('moving stack must not include Base board');
+    if (stack[0]?.role !== 'clip') errors.push('moving stack must start with a back clip');
+    if (stack.at(-1)?.role !== 'clip') errors.push('moving stack must end with a front clip');
+    if (!stack.some(item => item.role === 'spacer')) errors.push('moving stack must include at least one spacer washer');
+    stack.slice(1, -1).forEach((item, index, middle) => {
+        if (item.role === 'clip') errors.push(`${item.label} clip may only appear at stack ends`);
+        if (item.role === 'spacer') {
+            const prev = index > 0 ? middle[index - 1] : stack[0];
+            const next = index < middle.length - 1 ? middle[index + 1] : stack.at(-1);
+            if (!prev || !next || !isMovingStackLayer(prev) || !isMovingStackLayer(next)) errors.push(`${item.label} must sit between two moving layers`);
+        }
+        const next = index < middle.length - 1 ? middle[index + 1] : stack.at(-1);
+        if (isMovingStackLayer(item) && next && isMovingStackLayer(next)) errors.push(`${item.label} and ${next.label} need a spacer washer between them`);
+    });
+    return errors;
+};
+
+const renderKindForRole = (role: FabricationStackLayer['role']): FabricationRenderKind => role === 'base' ? 'base' : role;
+
+export const fabricationRenderPlanForMechanism = (mechanism: Pick<MechanismConfig, 'type'>): FabricationRenderPlan => {
+    const stack = fabricationStackForMechanism(mechanism);
+    const validationErrors = validateFabricationStack(stack);
+    const occurrenceByRole = new Map<FabricationStackLayer['role'], number>();
+    const makeRenderLayer = (item: FabricationStackLayer, stackIndex: number): FabricationRenderLayer => {
+        const occurrence = occurrenceByRole.get(item.role) ?? 0;
+        occurrenceByRole.set(item.role, occurrence + 1);
+        return {
+            ...item,
+            source: 'fabrication-stack',
+            stackIndex,
+            occurrence,
+            z: stackIndex === -1 ? 0 : 0.22 + stackIndex * 0.18,
+            renderKind: renderKindForRole(item.role)
+        };
+    };
+    const base: FabricationRenderLayer = {
+        ...fabricationBaseLayer(),
+        source: 'fabrication-stack',
+        stackIndex: -1,
+        occurrence: 0,
+        z: 0,
+        renderKind: 'base'
+    };
+    const layers = stack.map(makeRenderLayer);
+    return {
+        base,
+        layers,
+        stackSummary: layers.map(item => item.label).join(' → '),
+        roleSummary: layers.map(item => item.role).join('>'),
+        colorSummary: layers.map(item => item.color).join(','),
+        zSummary: layers.map(item => item.z.toFixed(2)).join(','),
+        validationErrors
+    };
+};
+
 export const sampleFeasibleRange = (mechanism: MechanismConfig, samples = 96) => {
     let valid = 0;
     const validSamples: boolean[] = [];
@@ -133,6 +261,7 @@ const createRecipe = (project: ProjectState, mechanism: MechanismConfig): Fabric
         requiredParts: mechanism.fabricationMetadata?.requiredParts ?? mechanismRequiredParts(mechanism),
         steps: [
             `Place ${mechanism.id} main axle at ${board.label}.`,
+            `Exploded moving stack order: ${fabricationStackSummary(mechanism)} above the base board.`,
             mechanism.type === 'cam'
                 ? `Install the cam disk and follower guide aligned to ${mechanism.groundAngle ?? 90}°; follower lift is ${(mechanism.rockerLength || mechanism.crankLength).toFixed(0)} scene units.`
                 : mechanism.type === 'rack-pinion'
@@ -181,48 +310,62 @@ const makeSvg = (project: ProjectState, recipes: FabricationRecipe[]) => {
     return svg;
 };
 
+
+const makeExplodedStackSvg = (recipe: FabricationRecipe | undefined, esc: (value: unknown) => string) => {
+    const stack = recipe ? fabricationStackForMechanism(recipe) : [];
+    const base = fabricationBaseLayer();
+    const rows = stack.length ? stack : [layer('Back Clip', 'clip'), layer('Input linkage', 'linkage'), layer('Spacer washer', 'spacer'), layer('Output linkage', 'linkage'), layer('Front Clip', 'clip')];
+    const shapeFor = (item: FabricationStackLayer, x: number, y: number) => {
+        const fill = item.color;
+        const stroke = item.role === 'clip' ? '#0f172a' : '#334155';
+        if (item.role === 'gear' || item.role === 'cam') return `<circle cx="${x + 72}" cy="${y + 18}" r="30" fill="${fill}" stroke="${stroke}" stroke-width="4"/><circle cx="${x + 72}" cy="${y + 18}" r="8" fill="#fff" stroke="#334155" stroke-width="3"/>`;
+        if (item.role === 'spacer') return `<circle cx="${x + 72}" cy="${y + 18}" r="20" fill="${fill}" stroke="${stroke}" stroke-width="4"/><circle cx="${x + 72}" cy="${y + 18}" r="8" fill="#fff"/>`;
+        if (item.role === 'base' || item.role === 'guide') return `<rect x="${x}" y="${y}" width="180" height="36" rx="8" fill="${fill}" stroke="${stroke}" stroke-width="3"/>`;
+        if (item.role === 'rack') return `<rect x="${x}" y="${y + 5}" width="170" height="26" rx="7" fill="${fill}" stroke="${stroke}" stroke-width="3"/><path d="M ${x + 14} ${y + 5} ${Array.from({ length: 12 }, (_, i) => `L ${x + 24 + i * 12} ${i % 2 ? y + 5 : y - 6}`).join(' ')}" fill="none" stroke="#334155" stroke-width="2"/>`;
+        return `<rect x="${x}" y="${y}" width="190" height="36" rx="18" fill="${fill}" stroke="${stroke}" stroke-width="4"/><circle cx="${x + 28}" cy="${y + 18}" r="8" fill="#fff" stroke="#334155" stroke-width="3"/><circle cx="${x + 162}" cy="${y + 18}" r="8" fill="#fff" stroke="#334155" stroke-width="3"/>`;
+    };
+    const items = rows.map((item, index) => {
+        const x = 110 + index * 44;
+        const y = 360 - index * 38;
+        const labelX = 565;
+        const labelY = 410 - index * 31;
+        return `<g>
+<line x1="${x + 72}" y1="${y + 18}" x2="${labelX - 22}" y2="${labelY - 4}" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="6 8"/>
+${shapeFor(item, x, y)}
+	<text x="${labelX}" y="${labelY}" class="guide-label">Z+${index + 1} ${esc(item.label)}</text>
+	<text x="${labelX}" y="${labelY + 18}" class="guide-muted">${esc(item.role)}</text>
+	</g>`;
+    }).join('');
+    return `<svg class="exploded-guide" viewBox="0 0 900 520" role="img" aria-label="Exploded view assembly order">
+<defs>
+<pattern id="guide-grid" width="28" height="28" patternUnits="userSpaceOnUse"><path d="M 28 0 L 0 0 0 28" fill="none" stroke="#dbeafe" stroke-width="1"/></pattern>
+<filter id="guide-shadow" x="-20%" y="-20%" width="150%" height="150%"><feDropShadow dx="10" dy="14" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.14"/></filter>
+</defs>
+<rect width="900" height="520" rx="28" fill="#ffffff"/>
+<rect width="900" height="520" fill="url(#guide-grid)" opacity="0.55"/>
+<path d="M 80 462 C 230 410, 330 356, 490 382 S 660 444, 818 356" fill="none" stroke="#6366f1" stroke-width="7" stroke-linecap="round" stroke-dasharray="18 15" opacity=".62"/>
+<text x="646" y="354" class="guide-blue">Path projection</text>
+<g transform="translate(38 36)">
+<rect width="330" height="74" rx="20" fill="#ffffff" stroke="#c7d2fe" stroke-width="2"/>
+<text x="22" y="25" class="guide-title">Exploded view</text>
+	<text x="22" y="47" class="guide-muted">Base board below · moving stack: Clip → Linkage/Gear → Spacer → Linkage → Clip</text>
+	<text x="22" y="64" class="guide-muted">Z=0 Base board · ${recipe ? esc(recipe.mechanismId) : 'pending recipe'}</text>
+	</g>
+	<g transform="translate(86 426)">
+	<rect width="310" height="36" rx="9" fill="${base.color}" stroke="#334155" stroke-width="3"/>
+	<text x="18" y="24" class="guide-muted">Z=0 ${esc(base.label)} · all moving parts float above with spacers</text>
+	</g>
+	<g filter="url(#guide-shadow)">${items}</g>
+<line x1="92" y1="458" x2="438" y2="130" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 10"/>
+<text x="70" y="486" class="guide-muted">Assembly stack separates moving layers with spacers so clips do not bind.</text>
+${recipe ? `<text x="40" y="505" class="guide-muted">First recipe: ${esc(recipe.mechanismId)} · ${esc(recipe.type)} · hole ${esc(recipe.boardCoordinate)}</text>` : ''}
+</svg>`;
+};
+
 const makeAssemblyGuideHtml = (project: ProjectState, recipes: FabricationRecipe[], warnings: string[]) => {
     const esc = (value: unknown) => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] ?? ch));
     const firstRecipe = recipes[0];
-    const explodedSvg = `<svg class="exploded-guide" viewBox="0 0 900 520" role="img" aria-label="Exploded view assembly order">
-<defs>
-<pattern id="guide-grid" width="28" height="28" patternUnits="userSpaceOnUse"><path d="M 28 0 L 0 0 0 28" fill="none" stroke="#dbeafe" stroke-width="1"/></pattern>
-<linearGradient id="guide-cardboard" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#f8dfaa"/><stop offset="0.55" stop-color="#e8bc73"/><stop offset="1" stop-color="#b97731"/></linearGradient>
-<filter id="guide-shadow" x="-20%" y="-20%" width="150%" height="150%"><feDropShadow dx="12" dy="16" stdDeviation="10" flood-color="#0f172a" flood-opacity="0.18"/></filter>
-</defs>
-<rect width="900" height="520" rx="28" fill="#ffffff"/>
-<rect width="900" height="520" fill="url(#guide-grid)" opacity="0.68"/>
-<g transform="translate(110 38)" filter="url(#guide-shadow)">
-<path d="M 70 390 C 190 322, 320 298, 510 340 S 665 404, 760 330" fill="none" stroke="#6366f1" stroke-width="8" stroke-linecap="round" stroke-dasharray="18 15" opacity=".78"/>
-<text x="590" y="352" class="guide-blue">Path projection</text>
-<g transform="translate(160 338)">
-<rect x="0" y="0" width="260" height="34" rx="17" fill="#d8b077" stroke="#7c4a21" stroke-width="4"/>
-<circle cx="34" cy="17" r="10" fill="#fff" stroke="#2563eb" stroke-width="4"/><circle cx="226" cy="17" r="10" fill="#fff" stroke="#2563eb" stroke-width="4"/>
-<text x="82" y="66" class="guide-label">Z=0 Base</text>
-</g>
-<g transform="translate(154 222) rotate(-26)">
-<rect x="0" y="0" width="220" height="34" rx="17" fill="#f4d49b" stroke="#7c4a21" stroke-width="4"/>
-<circle cx="30" cy="17" r="10" fill="#fff" stroke="#2563eb" stroke-width="4"/><circle cx="190" cy="17" r="10" fill="#fff" stroke="#2563eb" stroke-width="4"/>
-</g>
-<text x="120" y="210" class="guide-label">Z=1 Input</text>
-<g transform="translate(420 178) rotate(24)">
-<rect x="0" y="0" width="250" height="34" rx="17" fill="url(#guide-cardboard)" stroke="#7c4a21" stroke-width="4"/>
-<circle cx="32" cy="17" r="10" fill="#fff" stroke="#2563eb" stroke-width="4"/><circle cx="218" cy="17" r="10" fill="#fff" stroke="#2563eb" stroke-width="4"/>
-</g>
-<text x="620" y="170" class="guide-label">Z=1 Output</text>
-<g transform="translate(324 74)">
-<rect x="0" y="0" width="245" height="34" rx="17" fill="#e7c48a" stroke="#7c4a21" stroke-width="4"/>
-<circle cx="36" cy="17" r="10" fill="#fff" stroke="#2563eb" stroke-width="4"/><circle cx="208" cy="17" r="10" fill="#fff" stroke="#2563eb" stroke-width="4"/>
-<text x="58" y="-18" class="guide-label">Z=2 Coupler</text>
-</g>
-</g>
-<g transform="translate(38 36)">
-<rect width="252" height="58" rx="20" fill="#ffffff" stroke="#c7d2fe" stroke-width="2"/>
-<text x="22" y="25" class="guide-title">Exploded view</text>
-<text x="22" y="45" class="guide-muted">Assembly → Exploded Z-axis order</text>
-</g>
-${firstRecipe ? `<text x="40" y="492" class="guide-muted">First recipe: ${esc(firstRecipe.mechanismId)} · ${esc(firstRecipe.type)} · hole ${esc(firstRecipe.boardCoordinate)}</text>` : ''}
-</svg>`;
+    const explodedSvg = makeExplodedStackSvg(firstRecipe, esc);
     const recipeSections = recipes.map(recipe => `<section>
 <h2>${esc(recipe.mechanismId)} · ${esc(recipe.type)}</h2>
 <p><strong>Board coordinate:</strong> ${esc(recipe.boardCoordinate)} (${recipe.sceneAnchor.x.toFixed(1)}, ${recipe.sceneAnchor.y.toFixed(1)} scene units)</p>
@@ -330,8 +473,9 @@ const makeSimplePdf = (title: string, lines: string[]) => {
 const makeAssemblyGuidePdf = (project: ProjectState, recipes: FabricationRecipe[], warnings: string[]) => makeSimplePdf(
     `${project.metadata.name} Printable assembly guide`,
     [
-        'Exploded view / Assembly -> Exploded Z-axis order',
-        'Path projection / Z=0 Base / Z=1 Input / Z=1 Output / Z=2 Coupler',
+        'Exploded view / Base board below / Clip -> Linkage or Gear -> Spacer -> Linkage -> Clip',
+        `Stack: ${recipes[0] ? fabricationStackSummary(recipes[0]) : 'pending recipe'}`,
+        'Path projection / Z=0 Base / spacer-separated moving layers',
         `Profile ${project.settings.physicalKit.profileKey} / ${project.settings.physicalKit.gridPitchMm}mm grid`,
         ...warnings.map(warning => `Warning: ${warning}`),
         ...recipes.flatMap(recipe => [

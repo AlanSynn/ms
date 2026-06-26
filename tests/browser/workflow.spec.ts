@@ -143,10 +143,19 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByRole('heading', { name: 'Mechanism Foundry' })).toBeVisible();
   await expect(page.getByText('Sandbox preview')).toBeVisible();
   await expect(page.getByTestId('foundry-three-canvas')).toBeVisible();
-  await expect(page.getByTestId('foundry-camera-rig')).toHaveAttribute('data-three-renderer', 'webgl');
-  await expect(page.getByTestId('foundry-exploded-guide')).toContainText('Exploded view');
-  await expect(page.getByTestId('foundry-z-layer-labels')).toContainText('Z=0 Base');
-  await expect(page.getByTestId('foundry-z-layer-labels')).toContainText('Path projection');
+  const foundryRig = page.getByTestId('foundry-camera-rig');
+  await expect(foundryRig).toHaveAttribute('data-three-renderer', 'webgl');
+  await expect(foundryRig).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
+  await expect(foundryRig).toHaveAttribute('data-three-stack-order', /^Back Clip → .*Spacer.*Front Clip$/);
+  await expect(foundryRig).toHaveAttribute('data-three-stack-colors', /#334155.*#f59e0b/);
+  await expect(foundryRig).toHaveAttribute('data-three-stack-validation-errors', '0');
+  expect(await foundryRig.getAttribute('data-three-rendered-layer-labels')).toBe(await foundryRig.getAttribute('data-three-stack-order'));
+  expect(await foundryRig.getAttribute('data-three-rendered-layer-roles')).toBe(await foundryRig.getAttribute('data-three-stack-roles'));
+  expect(await foundryRig.getAttribute('data-three-rendered-layer-colors')).toBe(await foundryRig.getAttribute('data-three-stack-colors'));
+  expect(await foundryRig.getAttribute('data-three-rendered-layer-z')).toBe(await foundryRig.getAttribute('data-three-stack-z'));
+  expect(await foundryRig.getAttribute('data-three-stack-order')).not.toContain('Base board');
+  await expect(page.getByTestId('foundry-exploded-guide')).toHaveCount(0);
+  await expect(page.getByTestId('foundry-z-layer-labels')).toHaveCount(0);
   await page.getByText('Mechanism options').click();
   await expect(page.getByLabel('Foundry preset')).toHaveValue('balanced');
   const foundryTargetSummary = page.getByTestId('foundry-target-summary');
@@ -154,6 +163,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(foundryTargetSummary).toContainText(/anchor/);
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Four-bar linkage');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Sensemaking:');
+  await expect(page.getByTestId('foundry-fabrication-stack')).toContainText(/^Fabrication stack: Back Clip.*Spacer.*Front Clip/);
+  await expect(page.getByTestId('foundry-fabrication-stack')).not.toContainText(/Base board/);
   await expect(foundryTargetSummary).toContainText(/Board hole [A-Z]\d+/);
   await expect(page.getByTestId('foundry-anchor-marker'), 'Default sandbox shows only path and mechanism').toHaveCount(0);
   await page.getByTestId('foundry-pick-anchor').click();
@@ -229,9 +240,12 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   const webGuideFrame = page.frameLocator('[data-testid="assembly-guide-preview-frame"]');
   await expect(webGuideFrame.getByText('Exploded view').first()).toBeVisible();
   await expect(webGuideFrame.getByText('Path projection')).toBeVisible();
-  await expect(webGuideFrame.getByText('Z=0 Base')).toBeVisible();
+  await expect(webGuideFrame.getByText('Z=0 Base').first()).toBeVisible();
+  await expect(webGuideFrame.getByText(/Base board below .* Clip → Linkage\/Gear → Spacer/)).toBeVisible();
   await expect(page.getByTestId('assembly-guide-preview')).toContainText(/Target Right arm · path path-right-arm · anchor right_(hand|elbow)/);
   await expect(page.getByTestId('assembly-guide-preview')).toContainText('Warnings: none');
+  await expect(page.getByTestId('assembly-stack-summary')).toContainText(/^Stack: Back Clip.*Spacer.*Front Clip/);
+  await expect(page.getByTestId('assembly-stack-summary')).not.toContainText(/Base board/);
   await expect(page.getByRole('button', { name: 'JSON', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'SVG', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Guide', exact: true })).toBeVisible();
@@ -754,7 +768,7 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
 });
 
 test('Mechanism Foundry sensemaking shows library, partial range, and exported metadata', async ({ page }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(360_000);
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
@@ -774,6 +788,16 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await expect(threeScene).toHaveAttribute('data-three-hole-mode', 'extruded-cut-through');
   await expect(threeScene).toHaveAttribute('data-three-render-loop', 'camera-only-orbit');
   await expect(threeScene).toHaveAttribute('data-three-inventory-source', 'rendered-template');
+  await expect(threeScene).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
+  await expect(threeScene).toHaveAttribute('data-three-base-layer', 'Base board');
+  await expect(threeScene).toHaveAttribute('data-three-stack-order', /^Back Clip → .*Spacer.*Front Clip$/);
+  await expect(threeScene).toHaveAttribute('data-three-stack-roles', /^clip>.*spacer.*>clip$/);
+  await expect(threeScene).toHaveAttribute('data-three-stack-colors', /#334155.*#f59e0b/);
+  await expect(threeScene).toHaveAttribute('data-three-stack-validation-errors', '0');
+  expect(await threeScene.getAttribute('data-three-rendered-layer-labels')).toBe(await threeScene.getAttribute('data-three-stack-order'));
+  expect(await threeScene.getAttribute('data-three-rendered-layer-roles')).toBe(await threeScene.getAttribute('data-three-stack-roles'));
+  expect(await threeScene.getAttribute('data-three-rendered-layer-colors')).toBe(await threeScene.getAttribute('data-three-stack-colors'));
+  expect(await threeScene.getAttribute('data-three-rendered-layer-z')).toBe(await threeScene.getAttribute('data-three-stack-z'));
   await expect(threeScene).toHaveAttribute('data-anchor-pick-mode', 'three-raycaster-plane');
   const hasWebgl = await page.getByTestId('foundry-three-canvas').evaluate((canvas: HTMLCanvasElement) => Boolean(canvas.getContext('webgl2') || canvas.getContext('webgl')));
   expect(hasWebgl, 'Foundry uses an actual WebGL canvas, not a flat SVG-only preview').toBe(true);
@@ -827,6 +851,15 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   for (const type of ['piston', 'yoke', 'quick-return', '5bar', 'cam', 'rack-pinion', 'gear', 'planetary_gear', '4bar']) {
     await page.getByLabel('Foundry mechanism type').selectOption(type);
     await expect(threeScene, `${type} has its own physical 3D preview template`).toHaveAttribute('data-mechanism-type', type);
+    await expect(threeScene, `${type} uses the fabrication stack as the 3D render source`).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
+    await expect(threeScene, `${type} stack has no validation errors`).toHaveAttribute('data-three-stack-validation-errors', '0');
+    const stackRoles = await threeScene.getAttribute('data-three-stack-roles');
+    expect(stackRoles, `${type} stack starts with a back clip and ends with a front clip`).toMatch(/^clip>.*>clip$/);
+    expect(stackRoles, `${type} stack has at least one spacer separating moving layers`).toContain('spacer');
+    expect(await threeScene.getAttribute('data-three-rendered-layer-labels'), `${type} rendered labels match fabrication stack labels`).toBe(await threeScene.getAttribute('data-three-stack-order'));
+    expect(await threeScene.getAttribute('data-three-rendered-layer-roles'), `${type} rendered roles match fabrication stack roles`).toBe(await threeScene.getAttribute('data-three-stack-roles'));
+    expect(await threeScene.getAttribute('data-three-rendered-layer-colors'), `${type} rendered colors match fabrication stack colors`).toBe(await threeScene.getAttribute('data-three-stack-colors'));
+    expect(await threeScene.getAttribute('data-three-rendered-layer-z'), `${type} rendered z order matches fabrication stack z order`).toBe(await threeScene.getAttribute('data-three-stack-z'));
     await expect(page.getByTestId('foundry-forces-overlay'), `${type} keeps live force vectors visible`).toHaveAttribute('data-physics-rule', /force|torque|velocity|acceleration|reaction/);
     await expect(page.getByTestId('foundry-velocity-overlay'), `${type} keeps live velocity vectors visible`).toHaveAttribute('data-speed', /[0-9]+\.[0-9]+/);
     for (const [attr, minimumCount] of foundryPhysicalMarkers[type]) {
@@ -1646,6 +1679,30 @@ test('Simplified shared canvas stays non-destructive and exports blueprint', asy
   await expect(page.getByRole('button', { name: 'Metadata', exact: true })).toBeVisible();
 
   expectCleanPage(pageErrors, consoleErrors);
+});
+
+test('Shared canvas supports wheel zoom and direct drag pan', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+
+  const canvas = page.getByTestId('path-canvas');
+  const box = await canvas.boundingBox();
+  expect(box, 'path canvas can receive direct viewport gestures').toBeTruthy();
+  const zoomBefore = await page.getByTestId('canvas-zoom-readout').textContent();
+  const viewBeforeZoom = await canvas.getAttribute('viewBox');
+
+  await page.mouse.move(box!.x + box!.width * 0.22, box!.y + box!.height * 0.22);
+  await page.mouse.wheel(0, -500);
+  await expect(page.getByTestId('canvas-zoom-readout')).not.toHaveText(zoomBefore ?? '100%');
+  await expect(canvas).not.toHaveAttribute('viewBox', viewBeforeZoom ?? '');
+
+  const viewBeforePan = await canvas.getAttribute('viewBox');
+  await page.mouse.move(box!.x + box!.width * 0.18, box!.y + box!.height * 0.2);
+  await page.mouse.down();
+  await page.mouse.move(box!.x + box!.width * 0.31, box!.y + box!.height * 0.28, { steps: 6 });
+  await page.mouse.up();
+  await expect(canvas).not.toHaveAttribute('viewBox', viewBeforePan ?? '');
 });
 
 test('Draw mode accepts free path strokes on the simplified canvas', async ({ page }) => {

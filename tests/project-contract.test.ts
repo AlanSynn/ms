@@ -3,7 +3,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { boardGridLines, boardToScene, bodyPartPivotScene, physicalKitPreset, placeBodyPartPivotAt, SCENE_PX_PER_MM, sceneToBoard, sceneToBoardRaw, sceneToSheetMm, sceneToSvg, sheetMmToScene } from '../utils/coordinates';
 import { createDefaultMechanism, createSampleProject, handoffGate, loadProjectSnapshot, serializeProject, applyProjectAction, projectSelfCheck, mechanismRequiredParts, mechanismWithGeneratedPath } from '../utils/project';
-import { createFabricationPackage, sampleFeasibleRange, validateForFabrication } from '../utils/fabrication';
+import { createFabricationPackage, fabricationRenderPlanForMechanism, fabricationStackForMechanism, sampleFeasibleRange, validateFabricationStack, validateForFabrication } from '../utils/fabrication';
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
 import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, generateCurvePoints } from '../utils/kinematics';
@@ -97,6 +97,28 @@ assert(pkg.assemblyGuidePdf.startsWith('%PDF-'), 'fabrication package includes a
 assert(pkg.metadataJson.includes('validationIssues'), 'fabrication metadata includes structured validation issues');
 assert(pkg.recipes.every(r => r.requiredParts.length > 0), 'fabrication recipes include explicit required parts');
 assert.deepEqual(pkg.recipes[0].requiredParts, mechanismRequiredParts(twoFourBars.mechanisms[0]), 'recipe required parts mirror mechanism metadata defaults');
+
+ALL_MECHANISM_TYPES.forEach(type => {
+  const stack = fabricationStackForMechanism({ type });
+  assert.equal(validateFabricationStack(stack).join('; '), '', `${type} fabrication stack obeys clip/layer/spacer/layer/clip invariant`);
+  assert.equal(stack[0].role, 'clip', `${type} moving stack starts with a clip`);
+  assert.equal(stack.at(-1)?.role, 'clip', `${type} moving stack ends with a clip`);
+  assert(!stack.some(layer => layer.role === 'base'), `${type} moving stack excludes the base board`);
+  const moving = (role: string) => !['clip', 'spacer', 'base'].includes(role);
+  stack.slice(1, -1).forEach((layer, index, middle) => {
+    const next = index < middle.length - 1 ? middle[index + 1] : stack.at(-1);
+    assert(!(moving(layer.role) && next && moving(next.role)), `${type} stack separates adjacent moving layers with spacers`);
+  });
+  const plan = fabricationRenderPlanForMechanism({ type });
+  assert.equal(plan.validationErrors.join('; '), '', `${type} render plan is validated against fabrication stack`);
+  assert.equal(plan.base.label, 'Base board', `${type} render plan keeps base board separate`);
+  assert.deepEqual(plan.layers.map(layer => layer.label), stack.map(layer => layer.label), `${type} render plan labels mirror fabrication stack`);
+  assert.deepEqual(plan.layers.map(layer => layer.role), stack.map(layer => layer.role), `${type} render plan roles mirror fabrication stack`);
+  assert.deepEqual(plan.layers.map(layer => layer.color), stack.map(layer => layer.color), `${type} render plan colors mirror fabrication stack`);
+  assert(plan.layers.every(layer => layer.source === 'fabrication-stack'), `${type} render layers declare fabrication stack source`);
+  const zValues = plan.layers.map(layer => layer.z);
+  assert.deepEqual(zValues, [...zValues].sort((a, b) => a - b), `${type} render plan z order follows stack order`);
+});
 
 const assertFiniteDeep = (value: unknown, label: string): void => {
   if (typeof value === 'number') {
