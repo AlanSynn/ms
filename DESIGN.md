@@ -1,8 +1,9 @@
 # MotionSmith / MechAnim Design Contract
 
-Status: active  
-Last refreshed: 2026-06-25  
+Status: active
+Last refreshed: 2026-06-26
 Primary reference: user-provided Stitch MotionSmith editor HTML + `docs/ui-to-web/*`
+Project governance: `AGENTS.md` defines the standing tinkerable-workbench, 3D physics, and fabrication rules for all agents.
 
 ## Product promise
 
