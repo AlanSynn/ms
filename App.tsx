@@ -37,7 +37,7 @@ import {
     validatePath
 } from './utils/project';
 import { processImageWithWebOnnx } from './utils/webOnnx';
-import { createFabricationPackage, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
+import { createFabricationPackage, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, prefabAssemblySteps, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
 import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToBoardRaw, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
 import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
@@ -2463,6 +2463,7 @@ const pendingRecipeForMechanism = (project: ProjectState, mechanism: MechanismCo
         offsetFromBoardMm: { x: ((mechanism.anchorX ?? 0) - boardScene.x) / SCENE_PX_PER_MM, y: ((mechanism.anchorY ?? 0) - boardScene.y) / SCENE_PX_PER_MM },
         requiredParts: mechanismRequiredParts(mechanism),
         steps: [`Exploded moving stack order: ${fabricationStackSummary(mechanism)} above the base board.`, 'Generate package to lock the final cut sheet and detailed assembly sequence.'],
+        assemblySteps: prefabAssemblySteps(mechanism, board.label),
         warnings: [...(mechanism.warnings ?? []), ...(range.warning ? [range.warning] : [])]
     };
 };
@@ -2485,6 +2486,7 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
         dispatch({ type: 'set_export', fabricationPackage: pkg });
     };
     const pkg = project.lastExport;
+    const exportMode = project.settings.physicalKit.exportMode;
     const defaultFormat = project.settings.physicalKit.defaultExportFormat;
     const cutSheetFileType = project.settings.physicalKit.cutSheetFileType;
     const activeMechanisms = project.mechanisms.filter(m => m.visible && m.enabled !== false);
@@ -2492,6 +2494,9 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
     const downloadJson = () => pkg && downloadText(`${pkg.id}.json`, JSON.stringify(pkg, null, 2));
     const downloadSvg = () => pkg && downloadText(`${pkg.id}.svg`, pkg.svg, 'image/svg+xml');
     const downloadCutSheetPdf = () => pkg && downloadText(`${pkg.id}-cut-sheet.pdf`, pkg.cutSheetPdf, 'application/pdf');
+    const downloadCustomSvg = () => pkg && downloadText(`${pkg.id}-custom-parts.svg`, pkg.customPartsSvg, 'image/svg+xml');
+    const downloadCustomPdf = () => pkg && downloadText(`${pkg.id}-custom-parts.pdf`, pkg.customPartsPdf, 'application/pdf');
+    const downloadCustomStl = () => pkg && downloadText(`${pkg.id}-custom-parts.stl`, pkg.customPartsStl, 'model/stl');
     const downloadAssemblyPdf = () => pkg && downloadText(`${pkg.id}-assembly.pdf`, pkg.assemblyGuidePdf, 'application/pdf');
     const printGuide = () => {
         const guideFrame = document.querySelector<HTMLIFrameElement>('[data-testid="assembly-guide-preview-frame"]');
@@ -2519,13 +2524,31 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
                 <button className="btn-primary mt-5" disabled={!!validation.errors.length} onClick={create}><FileJson size={16}/> Generate package</button>
                 {pkg && <div className="mt-5 space-y-3">
                     <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
-                        <div className="font-bold text-slate-800">Default export: {defaultFormat}</div>
+                        <div className="font-bold text-slate-800">Default export: {defaultFormat} · workflow {exportMode}</div>
                         <div className="mt-2 flex flex-wrap gap-2">
                             {defaultFormat !== 'svg' && <button className="btn-primary" onClick={downloadJson}>Download JSON default</button>}
                             {defaultFormat !== 'json' && <button className="btn-primary" onClick={downloadSvg}>Download SVG default</button>}
                         </div>
                         <div className="mt-2 text-xs">Full package artifacts remain available for handoff and archival.</div>
                     </div>
+                    {exportMode !== 'prefab-board' && <div className="rounded-2xl bg-white p-3 text-sm text-slate-600 shadow-sm" data-testid="custom-parts-export-lane">
+                        <div className="font-bold text-slate-800">1. Custom parts output</div>
+                        <div className="mt-1 text-xs">Project-specific outlines with joint holes for cutting or CAD handoff.</div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                            <button className="btn-secondary" onClick={downloadCustomSvg}>Custom SVG</button>
+                            <button className="btn-secondary" onClick={downloadCustomPdf}>Custom PDF</button>
+                            <button className="btn-secondary" data-testid="download-custom-stl" onClick={downloadCustomStl}>Custom STL</button>
+                        </div>
+                    </div>}
+                    {exportMode !== 'custom-parts' && <div className="rounded-2xl bg-white p-3 text-sm text-slate-600 shadow-sm" data-testid="prefab-board-export-lane">
+                        <div className="font-bold text-slate-800">2. Prefab 15×15 board kit</div>
+                        <div className="mt-1 text-xs">Use pre-fabricated modules, then follow the animated exploded stack one step at a time.</div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                            <button className="btn-secondary" onClick={() => downloadText(`${pkg.id}-assembly.html`, pkg.assemblyGuideHtml, 'text/html')}>Kit guide</button>
+                            <button className="btn-secondary" onClick={downloadAssemblyPdf}>Kit PDF</button>
+                            <button className="btn-secondary" onClick={printGuide}>Print kit</button>
+                        </div>
+                    </div>}
                     <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
                         <div className="font-bold text-slate-800">Cut-sheet default: {cutSheetFileType.toUpperCase()}</div>
                         <div className="mt-2 flex flex-wrap gap-2">
@@ -2592,6 +2615,14 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
                 <div className="mt-3 flex flex-wrap gap-2">{selectedRecipe.requiredParts.map(part => <span className="blueprint-pill" key={`${selectedRecipe.mechanismId}-${part.name}`}>{part.name} × {part.quantity}</span>)}</div>
                 <div className="mt-3 rounded-2xl bg-slate-100 p-3 text-sm font-bold text-slate-700" data-testid="assembly-stack-summary">Stack: {fabricationStackSummary(selectedRecipe)}</div>
                 {selectedRecipe.warnings.length ? <div className="warning mt-3">Warnings: {selectedRecipe.warnings.join('; ')}</div> : <div className="ok mt-3">Warnings: none</div>}
+                <div className="mt-3 rounded-2xl bg-white p-3 shadow-sm" data-testid="prefab-assembly-steps">
+                    <div className="section-title">Prefab board steps</div>
+                    <ol className="mt-2 space-y-2 text-sm text-slate-600">{selectedRecipe.assemblySteps.map(step => <li key={`${selectedRecipe.mechanismId}-${step.index}`} className="rounded-xl bg-slate-50 p-2">
+                        <strong className="text-slate-800">{step.index}. {step.label}</strong>
+                        <div>{step.instruction}</div>
+                        <div className="text-xs font-bold uppercase tracking-wide text-slate-500">{step.role} · {step.boardCoordinate} · Z {step.zMm.toFixed(1)}mm</div>
+                    </li>)}</ol>
+                </div>
                 <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-slate-600">{selectedRecipe.steps.map(step => <li key={step}>{step}</li>)}</ol>
             </article> : <div className="warning">No recipe yet. Return to Mechanism Design or generate a package.</div>}
             {pkg && <img className="mt-5 rounded-3xl border border-slate-200 bg-white p-3" alt="fabrication SVG preview" src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(pkg.svg)}`} />}
@@ -2695,6 +2726,11 @@ const Options = ({ project, dispatch, goStage }: { project: ProjectState; dispat
                 <MiniNumber label="Autosave interval seconds" value={project.settings.autosaveIntervalSeconds} min={1} max={600} step={1} disabled={!project.settings.autosave} onChange={autosaveIntervalSeconds => updateSettings({ autosaveIntervalSeconds })}/>
             </SettingsSection>
             <SettingsSection section={optionSection('fabrication')}>
+                <SelectField label="Export workflow" value={kit.exportMode} onChange={exportMode => updateKit({ exportMode: exportMode as ProjectState['settings']['physicalKit']['exportMode'] })}>
+                    <option value="both">Both · custom parts + prefab board</option>
+                    <option value="custom-parts">Custom parts only · SVG/PDF/STL</option>
+                    <option value="prefab-board">Prefab board kit only · 15×15 assembly</option>
+                </SelectField>
                 <SelectField label="Default export format" value={kit.defaultExportFormat} onChange={defaultExportFormat => updateKit({ defaultExportFormat: defaultExportFormat as ProjectState['settings']['physicalKit']['defaultExportFormat'] })}>
                     <option value="both">Export SVG + JSON</option>
                     <option value="svg">Export SVG only</option>

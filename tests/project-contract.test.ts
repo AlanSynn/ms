@@ -175,10 +175,17 @@ assert.equal(pkg.recipes.length, 2, 'duplicate same-type mechanisms create separ
 assert(pkg.sceneSnapshot.skeleton, 'fabrication snapshot includes skeleton');
 assert(pkg.cutSheetPdf.startsWith('%PDF-') && pkg.cutSheetPdf.includes('Cut sheet'), 'fabrication package includes a real PDF cut sheet artifact');
 assert(pkg.assemblyGuidePdf.startsWith('%PDF-'), 'fabrication package includes a PDF assembly artifact');
+assert(pkg.customPartsSvg.startsWith('<svg') && pkg.customPartsSvg.includes('custom-parts'), 'fabrication package includes custom parts SVG artifact');
+assert(pkg.customPartsPdf.startsWith('%PDF-'), 'fabrication package includes custom parts PDF artifact');
+assert(pkg.customPartsStl.startsWith('solid motionsmith_custom_parts'), 'fabrication package includes custom parts STL artifact');
+assert(pkg.customPartsStl.includes('mm_holes') && (pkg.customPartsStl.match(/facet normal/g) ?? []).length > 100, 'custom parts STL meshes extruded plates with joint-hole voids');
 assert(pkg.metadataJson.includes('validationIssues'), 'fabrication metadata includes structured validation issues');
 assert(pkg.recipes.every(r => r.requiredParts.length > 0), 'fabrication recipes include explicit required parts');
 assert.deepEqual(pkg.recipes[0].requiredParts, mechanismRequiredParts(twoFourBars.mechanisms[0]), 'recipe required parts mirror mechanism metadata defaults');
 assert(pkg.recipes[0].requiredParts.some(part => part.name === FABRICATION_SPACER_SPEC.label), 'required parts name the S10 spacer explicitly');
+assert(pkg.recipes[0].assemblySteps.some(step => step.instruction.includes('pre-fabricated')), 'prefab board workflow starts from a beginner prebuilt module');
+assert(pkg.recipes[0].assemblySteps.some(step => step.label === FABRICATION_SPACER_SPEC.label && step.instruction.includes('Insert')), 'prefab board workflow calls out S10 spacer insertion');
+assert(pkg.metadataJson.includes('assemblySteps'), 'fabrication metadata includes structured kit assembly steps');
 
 ALL_MECHANISM_TYPES.forEach(type => {
   const stack = fabricationStackForMechanism({ type });
@@ -546,6 +553,7 @@ assert.equal(sample.settings.detailedProcessingSteps, false, 'settings default h
 assert.equal(sample.settings.autosaveIntervalSeconds, 60, 'settings default includes autosave interval seconds');
 assert.equal(sample.settings.fabricationReadyMode, true, 'settings default keeps fabrication validation strict');
 assert.equal(sample.settings.gridUnit, 'cm', 'settings default labels grid in centimeters');
+assert.equal(sample.settings.physicalKit.exportMode, 'both', 'physical kit default exposes both custom parts and prefab board kit workflows');
 assert.equal(sample.settings.physicalKit.cutSheetFileType, 'pdf', 'physical kit default is PDF-first for cut sheets');
 assert.equal(animationDeltaRadians(1600, 3200, 1, 'linear'), Math.PI, 'linear animation duration drives playback phase');
 assert.equal(animationDeltaRadians(1600, 3200, 1, 'realtime'), Math.PI, 'animation duration drives playback phase');
@@ -572,6 +580,7 @@ assert.equal(legacySettingsProject.settings.performancePreset, 'balanced', 'lega
 assert.equal(legacySettingsProject.settings.simulationFriction, 0.18, 'legacy snapshots receive simulation friction default');
 assert.equal(legacySettingsProject.settings.simulationMassKg, 1, 'legacy snapshots receive simulation mass default');
 assert.equal(legacySettingsProject.settings.autosaveIntervalSeconds, 60, 'legacy snapshots receive M3 autosave interval default');
+assert.equal(legacySettingsProject.settings.physicalKit.exportMode, 'both', 'legacy physical kit receives both-workflows default');
 assert.equal(legacySettingsProject.settings.physicalKit.cutSheetFileType, 'pdf', 'legacy physical kit receives cut-sheet default');
 const optionsRoundTrip = loadProjectSnapshot(JSON.parse(serializeProject({
   ...sample,
@@ -587,7 +596,7 @@ const optionsRoundTrip = loadProjectSnapshot(JSON.parse(serializeProject({
     autosaveIntervalSeconds: 3,
     gridUnit: 'inch',
     fabricationReadyMode: false,
-    physicalKit: { ...sample.settings.physicalKit, cutSheetFileType: 'svg' }
+    physicalKit: { ...sample.settings.physicalKit, exportMode: 'prefab-board', cutSheetFileType: 'svg' }
   }
 })));
 assert.equal(optionsRoundTrip.settings.performancePreset, 'high', 'M3 performance setting serializes and reloads');
@@ -599,6 +608,7 @@ assert.equal(optionsRoundTrip.settings.detailedProcessingSteps, true, 'detailed 
 assert.equal(optionsRoundTrip.settings.autosaveIntervalSeconds, 3, 'autosave interval round-trips');
 assert.equal(optionsRoundTrip.settings.gridUnit, 'inch', 'grid unit setting round-trips');
 assert.equal(optionsRoundTrip.settings.fabricationReadyMode, false, 'fabrication-ready mode round-trips');
+assert.equal(optionsRoundTrip.settings.physicalKit.exportMode, 'prefab-board', 'blueprint export workflow mode round-trips');
 assert.equal(optionsRoundTrip.settings.physicalKit.cutSheetFileType, 'svg', 'cut-sheet file type round-trips');
 assert(sample.characterPackage?.partsInfo && sample.characterPackage.charCfg, 'sample project carries character package review artifacts');
 const detachedMechanismProject = { ...sample, mechanisms: [createDefaultMechanism('4bar', 'detached')] };

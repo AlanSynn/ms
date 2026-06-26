@@ -182,6 +182,7 @@ export interface PhysicalKitSettings {
     sheetHeightMm: number;
     boardCells: number;
     holeDiameterMm: number;
+    exportMode: 'custom-parts' | 'prefab-board' | 'both';
     defaultExportFormat: 'svg' | 'json' | 'both';
     cutSheetFileType: 'pdf' | 'svg';
 }
@@ -227,6 +228,14 @@ export interface FabricationRecipe {
     offsetFromBoardMm: Point;
     requiredParts: Array<{ name: string; quantity: number }>;
     steps: string[];
+    assemblySteps: Array<{
+        index: number;
+        label: string;
+        role: string;
+        boardCoordinate: string;
+        zMm: number;
+        instruction: string;
+    }>;
     warnings: string[];
 }
 
@@ -241,6 +250,9 @@ export interface FabricationPackage {
     validationIssues: FabricationIssue[];
     svg: string;
     cutSheetPdf: string;
+    customPartsSvg: string;
+    customPartsPdf: string;
+    customPartsStl: string;
     assemblyGuideHtml: string;
     assemblyGuidePdf: string;
     metadataJson: string;

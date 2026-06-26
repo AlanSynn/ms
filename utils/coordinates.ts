@@ -13,6 +13,7 @@ export const defaultPhysicalKit = (): PhysicalKitSettings => ({
     sheetHeightMm: LETTER_SHEET.heightMm,
     boardCells: DEFAULT_BOARD_CELLS,
     holeDiameterMm: 4,
+    exportMode: 'both',
     defaultExportFormat: 'both',
     cutSheetFileType: 'pdf'
 });

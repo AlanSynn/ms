@@ -1,9 +1,10 @@
-import { FabricationIssue, FabricationPackage, FabricationRecipe, MechanismConfig, Point, ProjectState } from '../types';
+import { BodyPartLayer, FabricationIssue, FabricationPackage, FabricationRecipe, MechanismConfig, Point, ProjectState } from '../types';
 import { calculateLinkage, gearPairOutputRatio, generateCurvePoints, planetaryPlanetSpinRatio } from './kinematics';
 import { boardToScene, pathFromPoints, SCENE_PX_PER_MM, sceneToBoardRaw, sceneToSvg, sceneBoundsForSheet } from './coordinates';
 import { mechanismRequiredParts } from './project';
 import { mechanismBindingWarnings, preferredMotionJointId } from './motion';
 import { svgNumber } from './sanitize';
+import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlineBounds, pointInsideOutline } from './partGeometry';
 
 export type FabricationGearSpec = {
     key: 'g8' | 'g24' | 'g40' | 'g56';
@@ -284,6 +285,33 @@ export const fabricationRenderPlanForMechanism = (mechanism: Pick<MechanismConfi
     };
 };
 
+export const prefabAssemblySteps = (mechanism: MechanismConfig, boardCoordinate: string): FabricationRecipe['assemblySteps'] => {
+    const plan = fabricationRenderPlanForMechanism(mechanism);
+    const moduleLabel = `${mechanism.type} prebuilt module`;
+    return [
+        {
+            index: 1,
+            label: moduleLabel,
+            role: 'prefab-module',
+            boardCoordinate,
+            zMm: 0,
+            instruction: `Snap the pre-fabricated ${mechanism.type} module onto board hole ${boardCoordinate}; use this as the beginner default before cutting custom parts.`
+        },
+        ...plan.layers.map((layer, index) => ({
+            index: index + 2,
+            label: layer.label,
+            role: layer.role,
+            boardCoordinate,
+            zMm: Number((layer.z * 10).toFixed(1)),
+            instruction: layer.role === 'clip'
+                ? `Lock ${layer.label} at ${boardCoordinate} to keep the stack captured without binding.`
+                : layer.role === 'spacer'
+                    ? `Insert ${layer.label} at ${boardCoordinate} to separate moving plates along Z.`
+                    : `Place ${layer.label} at ${boardCoordinate} on top of the previous layer.`
+        }))
+    ];
+};
+
 export const sampleFeasibleRange = (mechanism: MechanismConfig, samples = 96) => {
     let valid = 0;
     const validSamples: boolean[] = [];
@@ -392,6 +420,7 @@ const createRecipe = (project: ProjectState, mechanism: MechanismConfig): Fabric
     const targetPath = mechanism.targetPathId ? project.paths[mechanism.targetPathId] : undefined;
     const targetAnchorJointId = preferredMotionJointId(project, mechanism.targetPartId, mechanism.targetAnchorJointId);
     const range = sampleFeasibleRange(mechanism);
+    const assemblySteps = prefabAssemblySteps(mechanism, board.label);
     const warnings = [...new Set([
         ...(mechanism.warnings ?? []),
         ...((mechanism.fabricationMetadata as { warnings?: string[] } | undefined)?.warnings ?? []),
@@ -413,6 +442,7 @@ const createRecipe = (project: ProjectState, mechanism: MechanismConfig): Fabric
         requiredParts: mechanism.fabricationMetadata?.requiredParts ?? mechanismRequiredParts(mechanism),
         steps: [
             `Place ${mechanism.id} main axle at ${board.label}.`,
+            `Beginner kit mode: use the pre-fabricated ${mechanism.type} module on the ${project.settings.physicalKit.boardCells}×${project.settings.physicalKit.boardCells} hole board when available.`,
             `Exploded moving stack order: ${fabricationStackSummary(mechanism)} above the base board.`,
             mechanism.type === 'cam'
                 ? `Install the cam disk and follower guide aligned to ${mechanism.groundAngle ?? 90}°; follower lift is ${(mechanism.rockerLength || mechanism.crankLength).toFixed(0)} scene units.`
@@ -424,6 +454,7 @@ const createRecipe = (project: ProjectState, mechanism: MechanismConfig): Fabric
             targetPart ? `Connect output to ${targetPart.name} at anchor ${targetAnchorJointId ?? targetPart.anchorJointId} and follow path ${targetPath?.id ?? 'unassigned'}.` : 'Connect output to selected character part or leave as standalone preview.',
             warnings.length ? `Resolve warning before cutting: ${warnings.join('; ')}` : 'Run preview once, then cut and assemble.'
         ],
+        assemblySteps,
         warnings
     };
 };
@@ -460,6 +491,158 @@ const makeSvg = (project: ProjectState, recipes: FabricationRecipe[]) => {
     });
     svg += `</svg>`;
     return svg;
+};
+
+const makeCustomPartsSvg = (project: ProjectState) => {
+    const kit = project.settings.physicalKit;
+    const esc = (value: unknown) => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[ch] ?? ch));
+    const parts = project.partOrder.map(id => project.parts[id]).filter((part): part is BodyPartLayer => Boolean(part?.visible));
+    const margin = 10;
+    let cursorX = margin;
+    let cursorY = 18;
+    let rowHeight = 0;
+    const items: string[] = [];
+    parts.forEach(part => {
+        const landmarks = partLandmarkLocalPoints(part, project.skeleton);
+        const outline = fabricablePartOutlinePoints(part, landmarks);
+        if (outline.length < 3) return;
+        const bounds = partOutlineBounds(outline);
+        const widthMm = bounds.width / SCENE_PX_PER_MM + 18;
+        const heightMm = bounds.height / SCENE_PX_PER_MM + 22;
+        if (cursorX + widthMm > kit.sheetWidthMm - margin) {
+            cursorX = margin;
+            cursorY += rowHeight + 10;
+            rowHeight = 0;
+        }
+        const ox = cursorX + 9 - bounds.minX / SCENE_PX_PER_MM;
+        const oy = cursorY + 9 + bounds.maxY / SCENE_PX_PER_MM;
+        const point = (p: Point) => `${svgNumber(ox + p.x / SCENE_PX_PER_MM)} ${svgNumber(oy - p.y / SCENE_PX_PER_MM)}`;
+        const d = `M ${point(outline[0])} ${outline.slice(1).map(p => `L ${point(p)}`).join(' ')} Z`;
+        const holes = landmarks
+            .filter(p => p.x >= bounds.minX - 1 && p.x <= bounds.maxX + 1 && p.y >= bounds.minY - 1 && p.y <= bounds.maxY + 1)
+            .map(p => `<circle cx="${svgNumber(ox + p.x / SCENE_PX_PER_MM)}" cy="${svgNumber(oy - p.y / SCENE_PX_PER_MM)}" r="${svgNumber(kit.holeDiameterMm / 2)}" fill="none" stroke="#334155" stroke-width="0.35"/>`)
+            .join('');
+        items.push(`<g data-part-id="${esc(part.id)}"><path d="${d}" fill="#f8fafc" stroke="#172033" stroke-width="0.45"/><path d="${d}" fill="${esc(part.fillColor)}" opacity="0.16"/><text x="${svgNumber(cursorX + 8)}" y="${svgNumber(cursorY + heightMm - 5)}" font-family="Inter,Arial" font-size="4" font-weight="700" fill="#475569">${esc(part.name)}</text>${holes}</g>`);
+        cursorX += widthMm + 8;
+        rowHeight = Math.max(rowHeight, heightMm);
+    });
+    const height = Math.max(kit.sheetHeightMm, cursorY + rowHeight + margin);
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${kit.sheetWidthMm}mm" height="${height}mm" viewBox="0 0 ${kit.sheetWidthMm} ${height}">
+<metadata>${esc(JSON.stringify({ project: project.metadata.name, mode: 'custom-parts', units: 'mm', source: 'fabricablePartOutlinePoints' }))}</metadata>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="10" y="10" font-family="Inter,Arial" font-size="5" font-weight="900" fill="#172033">MotionSmith custom parts · SVG/PDF/STL export</text>
+<text x="10" y="15" font-family="Inter,Arial" font-size="3.5" font-weight="700" fill="#64748b">Cut outlines and ${kit.holeDiameterMm}mm joint holes. Kit mode can use prefabricated modules instead.</text>
+${items.join('\n')}
+</svg>`;
+};
+
+const stlNum = (value: number) => Number.isFinite(value) ? Number(value.toFixed(4)) : 0;
+
+const makeCustomPartsStl = (project: ProjectState) => {
+    const thicknessMm = 2.4;
+    const holeRadiusMm = Math.max(0.5, project.settings.physicalKit.holeDiameterMm / 2);
+    const cellMm = Math.max(1, Math.min(2, holeRadiusMm * 0.75));
+    const facets: string[] = [];
+    const vertex = (x: number, y: number, z: number) => `      vertex ${stlNum(x)} ${stlNum(y)} ${stlNum(z)}`;
+    const tri = (a: [number, number, number], b: [number, number, number], c: [number, number, number]) => {
+        facets.push(`  facet normal 0 0 0\n    outer loop\n${vertex(...a)}\n${vertex(...b)}\n${vertex(...c)}\n    endloop\n  endfacet`);
+    };
+    const edge = (a: [number, number], b: [number, number]) => {
+        tri([a[0], a[1], 0], [b[0], b[1], 0], [b[0], b[1], thicknessMm]);
+        tri([a[0], a[1], 0], [b[0], b[1], thicknessMm], [a[0], a[1], thicknessMm]);
+    };
+    let cursorX = 0;
+    project.partOrder.forEach(partId => {
+        const part = project.parts[partId];
+        if (!part?.visible) return;
+        const landmarks = partLandmarkLocalPoints(part, project.skeleton);
+        const outline = fabricablePartOutlinePoints(part, landmarks);
+        if (outline.length < 3) return;
+        const bounds = partOutlineBounds(outline);
+        const outlineMm = outline.map(p => ({ x: (p.x - bounds.minX) / SCENE_PX_PER_MM, y: (p.y - bounds.minY) / SCENE_PX_PER_MM }));
+        const holesMm = landmarks
+            .filter(p => pointInsideOutline(p, outline, 0.5))
+            .map(p => ({ x: (p.x - bounds.minX) / SCENE_PX_PER_MM, y: (p.y - bounds.minY) / SCENE_PX_PER_MM }));
+        const cols = Math.ceil(bounds.width / SCENE_PX_PER_MM / cellMm);
+        const rows = Math.ceil(bounds.height / SCENE_PX_PER_MM / cellMm);
+        const occupied = new Set<string>();
+        const inside = (x: number, y: number) => pointInsideOutline({ x, y }, outlineMm, cellMm * 0.75)
+            && !holesMm.some(hole => Math.hypot(x - hole.x, y - hole.y) < holeRadiusMm);
+        for (let col = 0; col < cols; col += 1) {
+            for (let row = 0; row < rows; row += 1) {
+                const cx = (col + 0.5) * cellMm;
+                const cy = (row + 0.5) * cellMm;
+                if (inside(cx, cy)) occupied.add(`${col}:${row}`);
+            }
+        }
+        const hasCell = (col: number, row: number) => occupied.has(`${col}:${row}`);
+        occupied.forEach(key => {
+            const [col, row] = key.split(':').map(Number);
+            const x0 = cursorX + col * cellMm;
+            const y0 = row * cellMm;
+            const x1 = cursorX + (col + 1) * cellMm;
+            const y1 = (row + 1) * cellMm;
+            tri([x0, y0, thicknessMm], [x1, y0, thicknessMm], [x1, y1, thicknessMm]);
+            tri([x0, y0, thicknessMm], [x1, y1, thicknessMm], [x0, y1, thicknessMm]);
+            tri([x0, y0, 0], [x1, y1, 0], [x1, y0, 0]);
+            tri([x0, y0, 0], [x0, y1, 0], [x1, y1, 0]);
+            if (!hasCell(col - 1, row)) edge([x0, y0], [x0, y1]);
+            if (!hasCell(col + 1, row)) edge([x1, y1], [x1, y0]);
+            if (!hasCell(col, row - 1)) edge([x1, y0], [x0, y0]);
+            if (!hasCell(col, row + 1)) edge([x0, y1], [x1, y1]);
+        });
+        cursorX += bounds.width / SCENE_PX_PER_MM + 12;
+    });
+    return `solid motionsmith_custom_parts_with_${project.settings.physicalKit.holeDiameterMm}mm_holes\n${facets.join('\n')}\nendsolid motionsmith_custom_parts\n`;
+};
+
+const makeCustomPartsPdf = (project: ProjectState) => {
+    const kit = project.settings.physicalKit;
+    const placements: Array<{ part: BodyPartLayer; outline: Point[]; landmarks: Point[]; bounds: ReturnType<typeof partOutlineBounds>; cursorX: number; cursorY: number; widthMm: number; heightMm: number }> = [];
+    let cursorX = 10;
+    let cursorY = 18;
+    let rowHeight = 0;
+    project.partOrder.forEach(partId => {
+        const part = project.parts[partId];
+        if (!part?.visible) return;
+        const landmarks = partLandmarkLocalPoints(part, project.skeleton);
+        const outline = fabricablePartOutlinePoints(part, landmarks);
+        if (outline.length < 3) return;
+        const bounds = partOutlineBounds(outline);
+        const widthMm = bounds.width / SCENE_PX_PER_MM + 18;
+        const heightMm = bounds.height / SCENE_PX_PER_MM + 22;
+        if (cursorX + widthMm > kit.sheetWidthMm - 10) {
+            cursorX = 10;
+            cursorY += rowHeight + 10;
+            rowHeight = 0;
+        }
+        placements.push({ part, outline, landmarks, bounds, cursorX, cursorY, widthMm, heightMm });
+        cursorX += widthMm + 8;
+        rowHeight = Math.max(rowHeight, heightMm);
+    });
+    const heightMm = Math.max(kit.sheetHeightMm, cursorY + rowHeight + 10);
+    const page = { width: 612, height: 792, margin: 38 };
+    const scale = Math.min((page.width - page.margin * 2) / kit.sheetWidthMm, (page.height - 120) / heightMm);
+    const toPdf = (xMm: number, yMm: number) => ({ x: page.margin + xMm * scale, y: page.height - page.margin - yMm * scale });
+    const commands: string[] = [
+        `BT /F1 14 Tf ${page.margin} 760 Td (${pdfText(`${project.metadata.name} custom parts`)}) Tj ET`,
+        `BT /F1 9 Tf ${page.margin} 742 Td (${pdfText(`SVG/PDF/STL outlines / ${kit.profileKey} / ${kit.holeDiameterMm}mm holes`)}) Tj ET`,
+        '0.10 0.16 0.28 RG 0.97 0.98 1.00 rg 0.8 w'
+    ];
+    placements.forEach(({ part, outline, landmarks, bounds, cursorX, cursorY, heightMm }) => {
+        const ox = cursorX + 9 - bounds.minX / SCENE_PX_PER_MM;
+        const oy = cursorY + 9 + bounds.maxY / SCENE_PX_PER_MM;
+        const mapped = outline.map(p => toPdf(ox + p.x / SCENE_PX_PER_MM, oy - p.y / SCENE_PX_PER_MM));
+        commands.push(`${num(mapped[0].x)} ${num(mapped[0].y)} m ${mapped.slice(1).map(p => `${num(p.x)} ${num(p.y)} l`).join(' ')} h B`);
+        commands.push(`0.29 0.33 0.43 rg BT /F1 7 Tf ${num(toPdf(cursorX + 8, cursorY + heightMm - 4).x)} ${num(toPdf(cursorX + 8, cursorY + heightMm - 4).y)} Td (${pdfText(part.name)}) Tj ET`);
+        landmarks.forEach(p => {
+            const center = toPdf(ox + p.x / SCENE_PX_PER_MM, oy - p.y / SCENE_PX_PER_MM);
+            commands.push('0.10 0.16 0.28 RG 1 1 1 rg 0.6 w');
+            commands.push(`${circlePath(center.x, center.y, Math.max(1.5, kit.holeDiameterMm * scale / 2))} B`);
+        });
+        commands.push('0.10 0.16 0.28 RG 0.97 0.98 1.00 rg 0.8 w');
+    });
+    return makePdfDocument(commands.join('\n'));
 };
 
 
@@ -524,6 +707,7 @@ const makeAssemblyGuideHtml = (project: ProjectState, recipes: FabricationRecipe
 <p><strong>Target:</strong> ${esc(recipe.targetPartName ?? recipe.targetPartId ?? 'unbound')} · path ${esc(recipe.targetPathId ?? 'none')} · anchor ${esc(recipe.targetAnchorJointId ?? 'part default')} · ${recipe.targetPathPointCount ?? 0} path points</p>
 ${recipe.warnings.length ? `<p><strong>Warnings:</strong> ${recipe.warnings.map(esc).join('; ')}</p>` : '<p><strong>Warnings:</strong> none</p>'}
 <h3>Required parts</h3><ul>${recipe.requiredParts.map(part => `<li>${esc(part.name)} × ${part.quantity}</li>`).join('')}</ul>
+<h3>15×15 board kit assembly</h3><ol class="stepper" data-testid="prefab-assembly-steps">${recipe.assemblySteps.map(step => `<li class="assembly-step" style="--i:${step.index}"><strong>${step.index}. ${esc(step.label)}</strong><span>${esc(step.instruction)}</span><em>${esc(step.role)} · ${esc(step.boardCoordinate)} · Z ${step.zMm.toFixed(1)}mm</em></li>`).join('')}</ol>
 <h3>Steps</h3><ol>${recipe.steps.map(step => `<li>${esc(step)}</li>`).join('')}</ol>
 </section>`).join('');
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(project.metadata.name)} assembly</title><style>
@@ -538,6 +722,7 @@ h1{margin:0;font-size:40px;line-height:.98;letter-spacing:-.05em;} h2{margin:0 0
 .warning{border:1px solid #fed7aa;border-radius:14px;background:#fff7ed;padding:12px;margin:10px 0;font-weight:750;}
 section{break-inside:avoid;margin:18px 0;padding:20px;border:1px solid #dbe3f0;border-radius:22px;background:#fff;box-shadow:0 16px 46px rgba(15,23,42,.06);}
 li{margin:.32rem 0;line-height:1.42;}
+.stepper{display:grid;gap:10px;padding-left:0;list-style:none}.assembly-step{display:grid;gap:3px;border:1px solid #dbe3f0;border-radius:16px;padding:10px 12px;background:linear-gradient(135deg,#fff,#f8f9ff);animation:step-rise .8s ease both;animation-delay:calc(var(--i) * 90ms)}.assembly-step span{font-weight:750;color:#334155}.assembly-step em{font-style:normal;color:#64748b;font-weight:800;font-size:12px}@keyframes step-rise{from{opacity:.25;transform:translateY(12px)}to{opacity:1;transform:none}}
 @media print{body{background:#fff}.page{max-width:none;padding:10mm}.print-actions{display:none}.exploded-guide,section{box-shadow:none}section{page-break-inside:avoid}}
 </style></head><body><main class="page"><div class="print-actions"><strong>Printable assembly guide</strong><button onclick="window.print()">Print guide</button></div><h1>${esc(project.metadata.name)} assembly guide</h1><p class="subtitle">Profile ${esc(project.settings.physicalKit.profileKey)} · ${project.settings.physicalKit.gridPitchMm}mm grid · exploded view for foundry and assembly handoff.</p>${explodedSvg}${warnings.map(w => `<p class="warning"><strong>Warning:</strong> ${esc(w)}</p>`).join('')}${recipeSections}</main></body></html>`;
 };
@@ -634,6 +819,7 @@ const makeAssemblyGuidePdf = (project: ProjectState, recipes: FabricationRecipe[
             `${recipe.mechanismId} / ${recipe.type} / ${recipe.boardCoordinate}`,
             `Target: ${recipe.targetPartName ?? recipe.targetPartId ?? 'unbound'} / path ${recipe.targetPathId ?? 'none'} / anchor ${recipe.targetAnchorJointId ?? 'part default'}`,
             `Required parts: ${recipe.requiredParts.map(part => `${part.name} x ${part.quantity}`).join(', ')}`,
+            ...recipe.assemblySteps.map(step => `Kit step ${step.index}: ${step.label} / ${step.boardCoordinate} / Z ${step.zMm.toFixed(1)}mm`),
             ...recipe.steps
         ])
     ]
@@ -670,7 +856,8 @@ export const createFabricationPackage = (project: ProjectState): FabricationPack
             sceneAnchor: r.sceneAnchor,
             requiredParts: r.requiredParts,
             warnings: r.warnings,
-            steps: r.steps
+            steps: r.steps,
+            assemblySteps: r.assemblySteps
         }))
     };
     const createdAt = metadata.createdAt;
@@ -693,6 +880,9 @@ export const createFabricationPackage = (project: ProjectState): FabricationPack
         validationIssues: validation.issues,
         svg: makeSvg(project, recipes),
         cutSheetPdf: makeCutSheetPdf(project, recipes),
+        customPartsSvg: makeCustomPartsSvg(project),
+        customPartsPdf: makeCustomPartsPdf(project),
+        customPartsStl: makeCustomPartsStl(project),
         assemblyGuideHtml: makeAssemblyGuideHtml(project, recipes, validation.warnings),
         assemblyGuidePdf: makeAssemblyGuidePdf(project, recipes, validation.warnings),
         metadataJson: JSON.stringify(metadata, null, 2)

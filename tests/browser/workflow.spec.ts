@@ -236,8 +236,12 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('assembly-guide-preview')).toContainText('Assembly guide preview');
   await expect(page.getByText('Validation')).toBeVisible();
   await expect(page.getByText('Fabrication state ready.')).toBeVisible();
+  await expect(page.getByTestId('prefab-assembly-steps')).toContainText('pre-fabricated');
   await page.getByRole('button', { name: /Generate package/i }).click();
   await expect(page.getByText(/Default export:/)).toBeVisible();
+  await expect(page.getByTestId('custom-parts-export-lane')).toBeVisible();
+  await expect(page.getByTestId('prefab-board-export-lane')).toBeVisible();
+  await expect(page.getByTestId('download-custom-stl')).toBeEnabled();
   await expect(page.getByText(/Board (?!pending)/)).toHaveCount(1);
   await expect(page.getByTestId('assembly-guide-web-preview')).toContainText('Printable assembly guide');
   await expect(page.getByTestId('assembly-guide-web-preview')).toContainText('Exploded view');
@@ -251,6 +255,9 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('assembly-guide-preview')).toContainText('Warnings: none');
   await expect(page.getByTestId('assembly-stack-summary')).toContainText(/^Stack: Back Clip.*S10 spacer.*Front Clip/);
   await expect(page.getByTestId('assembly-stack-summary')).not.toContainText(/Base board/);
+  await expect(page.getByTestId('prefab-assembly-steps')).toContainText('pre-fabricated');
+  await expect(page.getByTestId('prefab-assembly-steps')).toContainText('S10 spacer');
+  await expect(page.getByTestId('prefab-assembly-steps')).toContainText(/Z \d+\.\dmm/);
   await expect(page.getByRole('button', { name: 'JSON', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'SVG', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Guide', exact: true })).toBeVisible();
@@ -269,18 +276,21 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   const metadataText = await readFile(metadataPath!, 'utf8');
   expect(metadataText).toContain('validationIssues');
   expect(metadataText).toContain('requiredParts');
+  expect(metadataText).toContain('assemblySteps');
   const metadata = JSON.parse(metadataText);
   expect(metadata.profile.gridPitchMm).toBe(20);
   expect(metadata.profile.profileKey).toBe('letter-15x15-2cm');
+  expect(metadata.profile.exportMode).toBe('both');
   expect(metadata.recipes).toHaveLength(1);
   expect(new Set(metadata.recipes.map((recipe: { mechanismId: string }) => recipe.mechanismId)).size).toBe(1);
   expect(metadata.recipes.every((recipe: { board: unknown; sceneAnchor: unknown; boardCoordinate?: string; requiredParts?: unknown[] }) => recipe.board && recipe.sceneAnchor && recipe.boardCoordinate && recipe.requiredParts?.length)).toBe(true);
-  expect(metadata.recipes.some((recipe: { targetPartId?: string; targetPathId?: string; targetAnchorJointId?: string; targetPartName?: string; steps?: string[]; warnings?: string[] }) =>
+  expect(metadata.recipes.some((recipe: { targetPartId?: string; targetPathId?: string; targetAnchorJointId?: string; targetPartName?: string; steps?: string[]; assemblySteps?: Array<{ instruction?: string }>; warnings?: string[] }) =>
     recipe.targetPartId === 'right_arm' &&
     recipe.targetPathId === 'path-right-arm' &&
     /^right_(hand|elbow)$/.test(recipe.targetAnchorJointId ?? '') &&
     recipe.targetPartName === 'Right arm' &&
     recipe.steps?.some(step => step.includes('Connect output')) &&
+    recipe.assemblySteps?.some((step: { instruction?: string }) => step.instruction?.includes('pre-fabricated')) &&
     Array.isArray(recipe.warnings)
   )).toBe(true);
 
@@ -299,6 +309,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   expect(guideText).toContain('path-right-arm');
   expect(guideText).toContain('right_');
   expect(guideText).toContain('Required parts');
+  expect(guideText).toContain('15×15 board kit assembly');
   expect(guideText).toContain('Printable assembly guide');
   expect(guideText).toContain('Exploded view');
   expect(guideText).toContain('Path projection');
@@ -333,6 +344,17 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   expect(cutSheetPdfText.slice(0, 5)).toBe('%PDF-');
   expect(cutSheetPdfText).toContain('Cut sheet');
 
+  const [stlDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByTestId('download-custom-stl').click()
+  ]);
+  expect(stlDownload.suggestedFilename()).toMatch(/custom-parts\.stl$/);
+  const stlPath = await stlDownload.path();
+  expect(stlPath, 'custom STL download path').toBeTruthy();
+  const stlText = await readFile(stlPath!, 'utf8');
+  expect(stlText).toContain('solid motionsmith_custom_parts');
+  expect(stlText).toContain('facet normal');
+
   const [svgDownload] = await Promise.all([
     page.waitForEvent('download'),
     page.getByRole('button', { name: 'SVG', exact: true }).click()
@@ -349,6 +371,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await page.getByRole('button', { name: /Options/i }).click();
   await expect(page.getByRole('heading', { name: 'Options' })).toBeVisible();
   await expect(page.getByTestId('options-fabrication')).toBeVisible();
+  await expect(page.getByLabel('Export workflow')).toHaveValue('both');
   await expect(page.getByLabel('Default export format')).toHaveValue('both');
 
   expectCleanPage(pageErrors, consoleErrors);

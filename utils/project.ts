@@ -60,6 +60,7 @@ const normalizePhysicalKitSettings = (value: unknown, fallback = defaultPhysical
         sheetHeightMm: clampNumber(raw.sheetHeightMm, fallback.sheetHeightMm, 80, 1600),
         boardCells: Math.round(clampNumber(raw.boardCells, fallback.boardCells, 4, 40)),
         holeDiameterMm: clampNumber(raw.holeDiameterMm, fallback.holeDiameterMm, 1, 20),
+        exportMode: pickOne(raw.exportMode, ['custom-parts', 'prefab-board', 'both'] as const, fallback.exportMode),
         defaultExportFormat: pickOne(raw.defaultExportFormat, ['svg', 'json', 'both'] as const, fallback.defaultExportFormat),
         cutSheetFileType: pickOne(raw.cutSheetFileType, ['pdf', 'svg'] as const, fallback.cutSheetFileType)
     };
