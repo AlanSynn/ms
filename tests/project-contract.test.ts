@@ -11,6 +11,7 @@ import { animatedPartsForProject, describeMotionChain, mechanismBindingWarnings,
 import { buildToonSceneProjection } from '../utils/sceneProjection';
 import { buildKinematicPhysicsSession } from '../utils/physicsSession';
 import { fabricablePartOutlinePoints, partLandmarkJointIds, partLandmarkLocalPoints, partOutlineBounds, pointInsideOutline } from '../utils/partGeometry';
+import { MECHANISM_FEATURE_REGISTRY, mechanismFeature, validateMechanismFeatureRegistry } from '../utils/mechanismFeatureRegistry';
 import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, mechanismTemplateLabel } from '../utils/mechanismTemplates';
 import { MECHANISM_TYPES as SANITIZE_MECHANISM_TYPES } from '../utils/sanitize';
 import { generateSmartConfig, mutateConfig, OPTIMIZER_MECHANISM_TYPES } from '../utils/optimizer';
@@ -46,9 +47,12 @@ const brandStaticFiles = [
   'docs/prd/novice-canva-style-ui-plan.md',
   'docs/prd/realistic-25d-3d-physics-platform-plan.md',
   'docs/prd/canva-video-editor-workspace-plan.md',
-  'docs/prd/toon-25d-main-3d-unlock-plan.md'
+  'docs/prd/toon-25d-main-3d-unlock-plan.md',
+  'docs/subsystem-governance-and-mechanism-contracts.md',
+  'docs/subsystem-governance-execution-log.md'
 ];
 const brandStaticText = brandStaticFiles.map(file => readFileSync(join(process.cwd(), file), 'utf8')).join('\n');
+const subsystemGovernanceContract = readFileSync(join(process.cwd(), 'docs', 'subsystem-governance-and-mechanism-contracts.md'), 'utf8');
 const legacyBrand = ['Mech', 'Anim'].join('');
 const legacySlug = ['mech', 'anim'].join('');
 assert(!brandStaticText.includes(legacyBrand), 'legacy product name is absent from static project files');
@@ -78,6 +82,12 @@ assert(agentsContract.includes('canonical `ProjectState`'), 'AGENTS.md requires 
 assert(agentsContract.includes('Foundry preview'), 'AGENTS.md locks foundry simulation preview expectations');
 assert(agentsContract.includes('Do not add artificial test time limits'), 'AGENTS.md forbids artificial test time limits');
 assert(agentsContract.includes('Simulation verification may be rigorous'), 'AGENTS.md allows rigorous simulation verification');
+assert(subsystemGovernanceContract.includes('ProjectState'), 'subsystem governance keeps ProjectState as the canonical app document');
+assert(subsystemGovernanceContract.includes('MechanismFeatureRegistry'), 'subsystem governance names the single mechanism feature registry seam');
+assert(subsystemGovernanceContract.includes('MechanismSnapshot'), 'subsystem governance names deterministic mechanism snapshots');
+assert(subsystemGovernanceContract.includes('ToonSceneProjection'), 'subsystem governance keeps ToonSceneProjection as the scene projection contract');
+assert(subsystemGovernanceContract.includes('Do not create duplicate mechanism registries'), 'subsystem governance forbids duplicate mechanism registries');
+assert(subsystemGovernanceContract.includes('Performance governance'), 'subsystem governance includes the performance-governance rules');
 assert(Object.keys(sample.skeleton?.joints ?? {}).length >= 17, 'sample placeholder exposes the full editable joint set');
 assert(sample.partOrder.every(id => ['#cbd5e1', '#e2e8f0', '#b6c2d2', '#94a3b8'].includes(sample.parts[id].fillColor)), 'sample character uses muted placeholder part colors');
 assert.equal(sample.mechanisms[0].targetAnchorJointId, 'right_hand', 'sample waving arm drives the hand, not the shoulder root');
@@ -88,6 +98,22 @@ assert.deepEqual(OPTIMIZER_MECHANISM_TYPES, [...AUTHORABLE_MECHANISM_TYPES], 'op
 assert(!AUTHORABLE_MECHANISM_TYPES.includes('crank'), 'bare crank stays a low-level driver, not a novice authoring template');
 ALL_MECHANISM_TYPES.forEach(type => {
   assert(MECHANISM_TEMPLATE_LIBRARY[type].label && MECHANISM_TEMPLATE_LIBRARY[type].sense, `${type} has shared template metadata`);
+});
+assert.deepEqual(Object.keys(MECHANISM_FEATURE_REGISTRY).sort(), [...ALL_MECHANISM_TYPES].sort(), 'feature registry covers every mechanism type exactly once');
+assert.deepEqual(validateMechanismFeatureRegistry(), [], 'feature registry passes static self-checks');
+ALL_MECHANISM_TYPES.forEach(type => {
+  const feature = mechanismFeature(type);
+  const mechanism = feature.defaults(`${type}-registry-test`);
+  assert.equal(mechanism.type, type, `${type} feature creates a default mechanism of the same type`);
+  assert.equal(feature.label, MECHANISM_TEMPLATE_LIBRARY[type].label, `${type} feature label mirrors shared metadata`);
+  assert.deepEqual(feature.requiredParts(mechanism), mechanismRequiredParts(mechanism), `${type} feature required parts use canonical project helper`);
+  assert.deepEqual(feature.fabricationStack(mechanism), fabricationStackForMechanism(mechanism), `${type} feature stack uses canonical fabrication helper`);
+  assert.equal(feature.fabricationPlan(mechanism).roleSummary, fabricationRenderPlanForMechanism(mechanism).roleSummary, `${type} feature render plan uses canonical fabrication helper`);
+  assert.equal(feature.sampleKinematics(mechanism, 0).isValid, calculateLinkage(mechanism, 0).isValid, `${type} feature kinematics use canonical solver`);
+  assert.equal(feature.sampleFeasibleRange(mechanism, 12).percentValid, sampleFeasibleRange(mechanism, 12).percentValid, `${type} feature feasible range uses canonical sampler`);
+  assert(feature.interactionPolicy(mechanism).writesProjectState, `${type} feature declares ProjectState-backed edits`);
+  assert(feature.projectionHints(mechanism).every(hint => hint.source === 'mechanism-feature-registry' && hint.zStackUsesFabricationPlan), `${type} feature declares fabrication-backed projection`);
+  assert(feature.physicsHints(mechanism).every(hint => hint.solver === 'kinematic-derived' && hint.preservesProjectState), `${type} feature declares derived physics sidecar behavior`);
 });
 const controlsText = readFileSync(join(process.cwd(), 'components', 'Controls.tsx'), 'utf8');
 const fabricationManifest = JSON.parse(readFileSync(join(process.cwd(), 'fabrication', 'manifest.json'), 'utf8')) as { parts: {

@@ -1,0 +1,196 @@
+import type { JointState, MechanismConfig, MechanismType } from '../types';
+import type { FabricationRenderPlan, FabricationStackLayer } from './fabrication';
+import { fabricationRenderPlanForMechanism, fabricationStackForMechanism, sampleFeasibleRange } from './fabrication';
+import { calculateLinkage } from './kinematics';
+import { ALL_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY } from './mechanismTemplates';
+import { createDefaultMechanism, mechanismRequiredParts } from './project';
+
+export type MechanismFeatureRole = 'driver' | 'linkage' | 'linear-guide' | 'gear-train' | 'cam-follower' | 'compound';
+export type MechanismProjectionRole = 'rotary' | 'linear' | 'compound';
+export type MechanismFeasibleRange = ReturnType<typeof sampleFeasibleRange>;
+
+export type MechanismFeatureIssue = {
+    severity: 'error' | 'warning';
+    message: string;
+};
+
+export type MechanismInteractionPolicy = {
+    role: MechanismFeatureRole;
+    editableParameters: Array<keyof MechanismConfig>;
+    draggableHandles: string[];
+    writesProjectState: true;
+};
+
+export type MechanismProjectionHint = {
+    role: MechanismProjectionRole;
+    source: 'mechanism-feature-registry';
+    zStackUsesFabricationPlan: true;
+};
+
+export type MechanismPhysicsHint = {
+    role: MechanismFeatureRole;
+    source: 'mechanism-feature-registry';
+    solver: 'kinematic-derived';
+    preservesProjectState: true;
+};
+
+export interface MechanismFeatureContract {
+    type: MechanismType;
+    label: string;
+    sense: string;
+    goodFor: string;
+    constraint: string;
+    authorable: boolean;
+    defaults: (id?: string) => MechanismConfig;
+    requiredParts: (mechanism: Pick<MechanismConfig, 'type'>) => Array<{ name: string; quantity: number }>;
+    sampleKinematics: (mechanism: MechanismConfig, angleRad: number) => JointState;
+    sampleFeasibleRange: (mechanism: MechanismConfig, samples?: number) => MechanismFeasibleRange;
+    fabricationStack: (mechanism: Pick<MechanismConfig, 'type'>) => FabricationStackLayer[];
+    fabricationPlan: (mechanism: Pick<MechanismConfig, 'type'>) => FabricationRenderPlan;
+    interactionPolicy: (mechanism: MechanismConfig) => MechanismInteractionPolicy;
+    projectionHints: (mechanism: MechanismConfig) => MechanismProjectionHint[];
+    physicsHints: (mechanism: MechanismConfig) => MechanismPhysicsHint[];
+    validate: (mechanism: MechanismConfig) => MechanismFeatureIssue[];
+}
+
+const roleForType = (type: MechanismType): MechanismFeatureRole => {
+    switch (type) {
+        case 'crank':
+            return 'driver';
+        case 'piston':
+        case 'yoke':
+        case 'rack-pinion':
+            return 'linear-guide';
+        case 'gear':
+        case 'planetary_gear':
+            return 'gear-train';
+        case 'cam':
+            return 'cam-follower';
+        case '5bar':
+            return 'compound';
+        default:
+            return 'linkage';
+    }
+};
+
+const projectionRoleForType = (type: MechanismType): MechanismProjectionRole => {
+    switch (roleForType(type)) {
+        case 'linear-guide':
+            return 'linear';
+        case 'compound':
+            return 'compound';
+        default:
+            return 'rotary';
+    }
+};
+
+const editableParametersForType = (type: MechanismType): Array<keyof MechanismConfig> => {
+    const base: Array<keyof MechanismConfig> = ['crankLength', 'groundLength', 'couplerLength', 'rockerLength', 'phase'];
+    switch (type) {
+        case 'piston':
+        case 'yoke':
+        case 'rack-pinion':
+            return ['crankLength', 'sliderOffset', 'rodLength', 'rockerLength', 'phase'];
+        case 'gear':
+        case 'planetary_gear':
+            return ['crankLength', 'groundLength', 'rockerLength', 'speed2', 'phase'];
+        case 'cam':
+            return ['crankLength', 'rockerLength', 'sliderOffset', 'phase'];
+        case '5bar':
+            return [...base, 'rodLength', 'speed1', 'speed2'];
+        default:
+            return base;
+    }
+};
+
+const draggableHandlesForType = (type: MechanismType): string[] => {
+    switch (roleForType(type)) {
+        case 'driver':
+            return ['driver'];
+        case 'linear-guide':
+            return ['driver', 'guide', 'effector'];
+        case 'gear-train':
+            return ['drive-gear', 'output-gear'];
+        case 'cam-follower':
+            return ['cam', 'follower'];
+        case 'compound':
+            return ['left-driver', 'right-driver', 'effector'];
+        default:
+            return ['driver', 'coupler', 'rocker', 'effector'];
+    }
+};
+
+const validateFeature = (type: MechanismType, mechanism: MechanismConfig): MechanismFeatureIssue[] => {
+    const issues: MechanismFeatureIssue[] = [];
+    if (mechanism.type !== type) {
+        issues.push({ severity: 'error', message: `Feature ${type} cannot validate ${mechanism.type}` });
+        return issues;
+    }
+
+    fabricationRenderPlanForMechanism(mechanism).validationErrors.forEach(message => {
+        issues.push({ severity: 'error', message });
+    });
+
+    const range = sampleFeasibleRange(mechanism, 24);
+    if (range.warning) issues.push({ severity: 'warning', message: range.warning });
+
+    return issues;
+};
+
+const buildFeature = (type: MechanismType): MechanismFeatureContract => {
+    const metadata = MECHANISM_TEMPLATE_LIBRARY[type];
+    return {
+        type,
+        ...metadata,
+        defaults: (id = `${type}-default`) => createDefaultMechanism(type, id),
+        requiredParts: mechanismRequiredParts,
+        sampleKinematics: calculateLinkage,
+        sampleFeasibleRange,
+        fabricationStack: fabricationStackForMechanism,
+        fabricationPlan: fabricationRenderPlanForMechanism,
+        interactionPolicy: () => ({
+            role: roleForType(type),
+            editableParameters: editableParametersForType(type),
+            draggableHandles: draggableHandlesForType(type),
+            writesProjectState: true
+        }),
+        projectionHints: () => [{
+            role: projectionRoleForType(type),
+            source: 'mechanism-feature-registry',
+            zStackUsesFabricationPlan: true
+        }],
+        physicsHints: () => [{
+            role: roleForType(type),
+            source: 'mechanism-feature-registry',
+            solver: 'kinematic-derived',
+            preservesProjectState: true
+        }],
+        validate: mechanism => validateFeature(type, mechanism)
+    };
+};
+
+export const MECHANISM_FEATURE_REGISTRY = Object.fromEntries(
+    ALL_MECHANISM_TYPES.map(type => [type, buildFeature(type)])
+) as Record<MechanismType, MechanismFeatureContract>;
+
+export const mechanismFeature = (type: MechanismType): MechanismFeatureContract => MECHANISM_FEATURE_REGISTRY[type];
+
+export const validateMechanismFeatureRegistry = (): string[] => {
+    const expected = new Set(ALL_MECHANISM_TYPES);
+    const actual = Object.keys(MECHANISM_FEATURE_REGISTRY) as MechanismType[];
+    const errors: string[] = [];
+
+    ALL_MECHANISM_TYPES.forEach(type => {
+        const feature = MECHANISM_FEATURE_REGISTRY[type];
+        const metadata = MECHANISM_TEMPLATE_LIBRARY[type];
+        if (!feature) errors.push(`${type}: missing feature contract`);
+        if (!metadata) errors.push(`${type}: missing template metadata`);
+        if (feature && metadata && feature.label !== metadata.label) errors.push(`${type}: label must mirror template metadata`);
+    });
+
+    actual.forEach(type => {
+        if (!expected.has(type)) errors.push(`${type}: feature registry has an unknown mechanism type`);
+    });
+
+    return errors;
+};
