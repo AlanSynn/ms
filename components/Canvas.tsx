@@ -1,11 +1,12 @@
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BodyPartLayer, CanvasViewport, GlobalConfig, MechanismConfig, Point, ProjectState } from '../types';
 import { calculateLinkage, generateCurvePoints } from '../utils/kinematics';
 import { boardGridLines, bodyPartPivotScene, defaultPhysicalKit, pathFromPoints, SCENE_VIEW, sceneBoundsForSheet, sceneToSvg } from '../utils/coordinates';
 import { motionPreviewForProject, pointOnProjectPath } from '../utils/motion';
 import { mechanismWithGeneratedPath } from '../utils/project';
 import { clampCanvasZoom } from '../utils/viewport';
+import { ThreePuppetPreview } from './ThreePuppetPreview';
 
 interface CanvasProps {
     project?: ProjectState;
@@ -83,8 +84,8 @@ export const Canvas: React.FC<CanvasProps> = ({
     const canDragJ2 = (m: MechanismConfig) => ['4bar', 'piston', 'yoke', 'quick-return', '5bar', 'gear', 'planetary_gear'].includes(m.type);
     const canDragP2 = (m: MechanismConfig) => ['4bar', '5bar', 'piston', 'yoke', 'quick-return', 'cam', 'gear'].includes(m.type);
     const canDragEffector = (m: MechanismConfig) => !['crank', 'cam'].includes(m.type);
-    const activeMechanisms = config.mechanisms.filter(m => m.visible && m.enabled !== false);
-    const activeMechanismIds = new Set(activeMechanisms.map(m => m.id));
+    const activeMechanisms = useMemo(() => config.mechanisms.filter(m => m.visible && m.enabled !== false), [config.mechanisms]);
+    const activeMechanismIds = useMemo(() => new Set(activeMechanisms.map(m => m.id)), [activeMechanisms]);
     const motionPreview = project ? motionPreviewForProject(project, activeMechanisms, angle) : undefined;
     const animatedParts = motionPreview?.parts ?? {};
     const groundDragHandle = (m: MechanismConfig, state: ReturnType<typeof calculateLinkage>) => {
@@ -112,7 +113,8 @@ export const Canvas: React.FC<CanvasProps> = ({
     // Trace Logic
     useEffect(() => {
         if (!isPlaying) {
-            // Generate full static traces
+            // Generate full static traces once when paused. During playback, traces are derived from angle below
+            // instead of appended through React state on every animation frame.
             const newTraces: Record<string, Point[]> = {};
             activeMechanisms.forEach(m => {
                 if (m.type !== 'crank') {
@@ -121,27 +123,27 @@ export const Canvas: React.FC<CanvasProps> = ({
             });
             setTraces(newTraces);
         } else {
-            // Clear for realtime
-            setTraces({});
+            setTraces(prev => Object.keys(prev).length ? {} : prev);
         }
-    }, [config, isPlaying]);
+    }, [activeMechanisms, isPlaying]);
 
-    useEffect(() => {
-        if (isPlaying && !isDrawMode && showTrace) {
-            // Realtime appending
-            activeMechanisms.forEach(m => {
-                const state = calculateLinkage(m, angle);
-                if (state.isValid && m.type !== 'crank') {
-                    setTraces(prev => {
-                        const current = prev[m.id] || [];
-                        const updated = [...current, state.effector];
-                        if (updated.length > 300) updated.shift();
-                        return { ...prev, [m.id]: updated };
-                    });
-                }
-            });
-        }
-    }, [angle, showTrace, isPlaying, isDrawMode]);
+    const displayedTraces = useMemo(() => {
+        if (!isPlaying || isDrawMode || !showTrace) return traces;
+        const result: Record<string, Point[]> = {};
+        const progress = ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+        const ratio = Math.max(0.04, progress / (Math.PI * 2));
+        const samples = Math.max(4, Math.round(80 * ratio));
+        activeMechanisms.forEach(m => {
+            if (m.type === 'crank') return;
+            const points: Point[] = [];
+            for (let i = 0; i <= samples; i += 1) {
+                const state = calculateLinkage(m, (progress * i) / samples);
+                if (state.isValid) points.push(state.effector);
+            }
+            result[m.id] = points;
+        });
+        return result;
+    }, [activeMechanisms, angle, isDrawMode, isPlaying, showTrace, traces]);
 
     const getWorldPoint = (e: React.MouseEvent | React.TouchEvent): Point | null => {
         if (!svgRef.current) return null;
@@ -623,7 +625,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                         );
                     })}
 
-                    {showTrace && Object.entries(traces).filter(([id]) => activeMechanismIds.has(id)).map(([id, trace]: [string, Point[]]) => (
+                    {showTrace && Object.entries(displayedTraces).filter(([id]) => activeMechanismIds.has(id)).map(([id, trace]: [string, Point[]]) => (
                         trace.length > 1 && (
                             <path
                                 key={id}
@@ -758,6 +760,15 @@ export const Canvas: React.FC<CanvasProps> = ({
 
                 </g>
             </svg>
+            {project && <ThreePuppetPreview
+                project={project}
+                animatedParts={animatedParts}
+                skeleton={motionPreview?.skeleton ?? project.skeleton}
+                mechanisms={activeMechanisms}
+                angle={angle}
+                viewport={activeViewport}
+                testId="design-three-puppet"
+            />}
         </div>
     );
 };

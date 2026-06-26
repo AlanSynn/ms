@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Canvas } from './components/Canvas';
+import { ThreePuppetPreview } from './components/ThreePuppetPreview';
 import { TrackingModal } from './components/TrackingModal';
 import {
     AppStage,
@@ -249,11 +250,11 @@ const App: React.FC = () => {
         if (stage !== 'path' && drawMode) setDrawMode(false);
     }, [stage, drawMode]);
 
-    const mechanismConfig: GlobalConfig = {
+    const mechanismConfig: GlobalConfig = useMemo(() => ({
         speed: project.settings.animationSpeed,
         rotation: 0,
         mechanisms: project.mechanisms
-    };
+    }), [project.settings.animationSpeed, project.mechanisms]);
 
     const setMechanismConfig: React.Dispatch<React.SetStateAction<GlobalConfig>> = update => {
         setProject(prev => {
@@ -1451,6 +1452,14 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
             }
         });
     };
+    const pathMechanism = selectedPath ? project.mechanisms.find(m => m.targetPathId === selectedPath.id && m.targetPartId === selectedPath.partId) : undefined;
+    const previewTargetJointId = selectedPath
+        ? preferredMotionJointId(project, selectedPath.partId, pathMechanism?.targetAnchorJointId ?? selectedPath.targetAnchorJointId, { preferDistalWhenRoot: !selectedPath.targetAnchorJointId })
+        : undefined;
+    const previewAngle = isPlaying ? angle : 0;
+    const pathPreview = selectedPath?.visible && selectedPath.enabled && selectedPath.points.length > 1
+        ? motionPreviewForPath(project, selectedPath, previewAngle, previewTargetJointId)
+        : undefined;
     return <EditorStageFrame
         stage="path"
         className="path-stage-frame"
@@ -1514,6 +1523,7 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
             canvas: canvasPane(<div className="path-canvas-shell canvas-workspace overflow-hidden p-0">
             <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
             <SceneSketch svgRef={svgRef} project={project} selectedPath={selectedPath} dragPoint={dragPoint} selectedPoint={selectedPoint} setDragPoint={setDragPoint} setSelectedPoint={setSelectedPoint} onPointMove={movePoint} onPointUp={stopDrawing} onCanvasDown={onCanvasDown} dispatch={dispatch} drawMode={drawMode} pathLocked={pathLocked} isPlaying={isPlaying} angle={angle} viewport={viewport}/>
+            <ThreePuppetPreview project={project} animatedParts={pathPreview?.parts ?? {}} skeleton={pathPreview?.skeleton ?? project.skeleton} angle={angle} viewport={viewport} testId="path-three-puppet" />
         </div>),
             inspector: inspectorPane(<div className="path-inspector stage-pane-stack">
             <div>
@@ -1562,8 +1572,9 @@ const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, 
     const pathMechanism = selectedPath ? project.mechanisms.find(m => m.targetPathId === selectedPath.id && m.targetPartId === selectedPath.partId) : undefined;
     const requestedTargetJointId = pathMechanism?.targetAnchorJointId ?? selectedPath?.targetAnchorJointId;
     const targetJointId = selectedPath ? preferredMotionJointId(project, selectedPath.partId, requestedTargetJointId, { preferDistalWhenRoot: !requestedTargetJointId }) : undefined;
-    const pathPreview = isPlaying && selectedPath?.visible && selectedPath.enabled && selectedPath.points.length > 1
-        ? motionPreviewForPath(project, selectedPath, angle, targetJointId)
+    const previewAngle = isPlaying ? angle : 0;
+    const pathPreview = selectedPath?.visible && selectedPath.enabled && selectedPath.points.length > 1
+        ? motionPreviewForPath(project, selectedPath, previewAngle, targetJointId)
         : undefined;
     const previewSkeleton = pathPreview?.skeleton ?? project.skeleton;
     const previewParts = pathPreview?.parts ?? {};

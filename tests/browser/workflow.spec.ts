@@ -101,6 +101,18 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByText('Choose a body part, press Draw free path')).toBeVisible();
   await expect(page.getByTestId('free-draw-status')).toContainText(/5 points .*path-right-arm/);
   await expect(page.getByTestId('path-canvas').getByText('Letter sheet · 2cm grid')).toBeVisible();
+  await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
+  const pathPuppet = page.getByTestId('path-three-puppet-state');
+  await expect(pathPuppet).toHaveAttribute('data-three-renderer', 'webgl');
+  await expect(pathPuppet).toHaveAttribute('data-puppet-mode', 'thick-flat-assembly');
+  await expect(pathPuppet).toHaveAttribute('data-joint-placement', 'skeleton-anchors');
+  await expect(pathPuppet).toHaveAttribute('data-three-rebuild-mode', 'static-topology-dynamic-transforms');
+  const pathHasWebgl = await page.getByTestId('path-three-puppet-canvas').evaluate((canvas: HTMLCanvasElement) => Boolean(canvas.getContext('webgl2') || canvas.getContext('webgl')));
+  expect(pathHasWebgl, 'path editor mounts a real WebGL canvas').toBeTruthy();
+  expect(Number(await pathPuppet.getAttribute('data-three-joint-count')), 'path editor uses skeleton joints in the 3D puppet').toBeGreaterThanOrEqual(17);
+  expect(Number(await pathPuppet.getAttribute('data-three-part-hole-count')), '3D puppet body pieces include cut-through joint holes').toBeGreaterThan(0);
+  await expect.poll(async () => Number(await pathPuppet.getAttribute('data-three-scene-object-count')), { message: '3D puppet scene has rendered geometry beyond a dummy canvas' }).toBeGreaterThan(40);
+  await expect.poll(async () => Number(await pathPuppet.getAttribute('data-three-render-triangles')), { message: 'path WebGL renderer drew real triangles' }).toBeGreaterThan(0);
   await expect(page.getByTestId('skeleton-joint-right_elbow')).toBeVisible();
   expect(await page.locator('[data-testid^="skeleton-joint-"]').count()).toBeGreaterThanOrEqual(17);
 
@@ -160,6 +172,18 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByText('Mechanism instances')).toBeVisible();
   await expect(page.getByTestId('design-mechanism-library')).toContainText('Four-bar linkage');
   await expect(page.getByTestId('design-canvas').getByText('Letter sheet · 2cm grid')).toBeVisible();
+  await expect(page.getByTestId('design-three-puppet-canvas')).toBeVisible();
+  const designPuppet = page.getByTestId('design-three-puppet-state');
+  await expect(designPuppet).toHaveAttribute('data-three-renderer', 'webgl');
+  await expect(designPuppet).toHaveAttribute('data-puppet-mode', 'thick-flat-assembly');
+  await expect(designPuppet).toHaveAttribute('data-three-rebuild-mode', 'static-topology-dynamic-transforms');
+  const designHasWebgl = await page.getByTestId('design-three-puppet-canvas').evaluate((canvas: HTMLCanvasElement) => Boolean(canvas.getContext('webgl2') || canvas.getContext('webgl')));
+  expect(designHasWebgl, 'design stage mounts a real WebGL canvas').toBeTruthy();
+  expect(Number(await designPuppet.getAttribute('data-three-part-count')), 'mechanism design keeps the character as a 3D flat puppet').toBeGreaterThanOrEqual(6);
+  expect(Number(await designPuppet.getAttribute('data-three-mechanism-count')), 'mechanism design renders attached mechanisms in WebGL 3D').toBeGreaterThanOrEqual(1);
+  expect(Number(await designPuppet.getAttribute('data-three-mechanism-link-count')), '3D mechanism overlay contains physical link bars').toBeGreaterThanOrEqual(5);
+  await expect.poll(async () => Number(await designPuppet.getAttribute('data-three-scene-object-count')), { message: 'design 3D scene includes character, joints, and mechanism geometry' }).toBeGreaterThan(60);
+  await expect.poll(async () => Number(await designPuppet.getAttribute('data-three-render-triangles')), { message: 'design WebGL renderer drew real triangles' }).toBeGreaterThan(0);
   const persistedPathCount = await page.getByTestId('design-canvas').locator('path').evaluateAll(paths =>
     paths.filter(path => (path.getAttribute('d') ?? '').includes('M 70.00 60.00') && (path.getAttribute('d') ?? '').includes('L 130.00 84.00')).length
   );
