@@ -8,6 +8,7 @@ import { mechanismWithGeneratedPath } from '../utils/project';
 import { clampCanvasZoom } from '../utils/viewport';
 import { ThreePuppetPreview } from './ThreePuppetPreview';
 import { fabricationGearPathD } from '../utils/fabrication';
+import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlinePathD, pointInsideOutline } from '../utils/partGeometry';
 
 interface CanvasProps {
     project?: ProjectState;
@@ -785,7 +786,7 @@ const SceneUnderlay = ({ project, animatedParts = {}, previewSkeleton }: { proje
         </g>}
         <line x1={sheet.x} y1="0" x2={sheet.x + sheet.width} y2="0" stroke="#d6dbe8" strokeWidth="1" opacity="0.25" />
         <line x1="0" y1={sheet.y} x2="0" y2={sheet.y + sheet.height} stroke="#d6dbe8" strokeWidth="1" opacity="0.25" />
-        {project?.partOrder.map(id => animatedParts[id] ?? project.parts[id]).filter(Boolean).map(part => <React.Fragment key={part.id}><WorldPart part={part} selected={project.selectedPartId === part.id} /></React.Fragment>)}
+        {project?.partOrder.map(id => animatedParts[id] ?? project.parts[id]).filter(Boolean).map(part => <React.Fragment key={part.id}><WorldPart part={part} skeleton={skeleton} selected={project.selectedPartId === part.id} /></React.Fragment>)}
         {skeleton?.bones.map(([a, b]) => {
             const ja = skeleton?.joints[a];
             const jb = skeleton?.joints[b];
@@ -811,15 +812,31 @@ const SceneUnderlay = ({ project, animatedParts = {}, previewSkeleton }: { proje
     </g>;
 };
 
-const WorldPart = ({ part, selected }: { part: BodyPartLayer; selected: boolean }) => {
+const WorldPart = ({ part, skeleton, selected }: { part: BodyPartLayer; skeleton?: ProjectState['skeleton']; selected: boolean }) => {
     if (!part.visible) return null;
     const w = part.bounds.width * part.transform.scale;
     const h = part.bounds.height * part.transform.scale;
+    const artX = part.bounds.x * part.transform.scale;
+    const artY = -(part.bounds.y + part.bounds.height) * part.transform.scale;
+    const landmarks = partLandmarkLocalPoints(part, skeleton);
+    const outline = fabricablePartOutlinePoints(part, landmarks);
+    const outlineD = partOutlinePathD(part, landmarks, { scale: part.transform.scale, flipY: true });
+    const localHoles = landmarks.filter(local => pointInsideOutline(local, outline, 0.5));
+    const holeRadius = Math.max(5, 7.2 * part.transform.scale);
+    const maskId = `design-part-surface-mask-${part.id.replace(/[^A-Za-z0-9_-]/g, '-')}`;
     const stroke = selected ? '#5a6cff' : '#94a3b8';
-    return <g data-testid={`design-part-${part.id}`} data-assembly-underlay="grid-hit-layer" transform={`translate(${part.transform.x} ${part.transform.y}) rotate(${part.transform.rotation})`} opacity={part.opacity}>
+    return <g data-testid={`design-part-${part.id}`} data-assembly-underlay="plate-art-layer" transform={`translate(${part.transform.x} ${part.transform.y}) rotate(${part.transform.rotation})`} opacity={part.opacity}>
         <g transform="scale(1,-1)">
-            {part.textureUrl ? <image href={part.textureUrl} x={-w / 2} y={-h / 2} width={w} height={h} preserveAspectRatio="xMidYMid meet" opacity="0.02" style={{ filter: 'grayscale(1) saturate(0.2)' }} /> : <rect x={-w / 2} y={-h / 2} width={w} height={h} rx="20" fill="#cbd5e1" opacity="0.02" />}
-            <rect x={-w / 2} y={-h / 2} width={w} height={h} rx="20" fill="none" stroke={stroke} strokeWidth={selected ? 3 : 1.2} strokeDasharray={selected ? undefined : '5 5'} opacity={selected ? 0.28 : 0.05} />
+            <defs>
+                <mask id={maskId} maskUnits="userSpaceOnUse">
+                    <rect x="-1000" y="-1000" width="2000" height="2000" fill="black" />
+                    <path d={outlineD} fill="white" />
+                    {localHoles.map((local, index) => <circle key={index} cx={local.x * part.transform.scale} cy={-local.y * part.transform.scale} r={holeRadius} fill="black" />)}
+                </mask>
+            </defs>
+            <rect x={artX} y={artY} width={w} height={h} fill="#eef2f7" opacity="0.72" mask={`url(#${maskId})`} />
+            {part.textureUrl ? <image data-testid={`design-part-art-${part.id}`} href={part.textureUrl} x={artX} y={artY} width={w} height={h} preserveAspectRatio="xMidYMid meet" opacity="0.52" mask={`url(#${maskId})`} style={{ filter: 'saturate(0.82) contrast(0.96)' }} /> : <rect data-testid={`design-part-art-${part.id}`} x={artX} y={artY} width={w} height={h} rx="20" fill={part.fillColor} opacity="0.52" mask={`url(#${maskId})`} />}
+            <path data-testid={`design-part-plate-${part.id}`} data-art-offset-x={artX} d={outlineD} fill="none" stroke={stroke} strokeWidth={selected ? 3 : 1.2} strokeDasharray={selected ? undefined : '5 5'} opacity={selected ? 0.72 : 0.28} />
         </g>
         {part.localPivotOffset && <circle cx={part.localPivotOffset.x * part.transform.scale} cy={part.localPivotOffset.y * part.transform.scale} r="5" fill="#64748b" stroke="white" strokeWidth="2" />}
     </g>;

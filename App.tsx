@@ -41,6 +41,7 @@ import { createFabricationPackage, FABRICATION_SPACER_SPEC, fabricationGearProfi
 import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToBoardRaw, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
 import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
+import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlinePathD, pointInsideOutline } from './utils/partGeometry';
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT, normalizeCanvasViewport } from './utils/viewport';
 import { AUTHORABLE_MECHANISM_TYPES, FOUNDRY_PRESETS, MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY, mechanismTemplateLabel } from './utils/mechanismTemplates';
 import { AlertCircle, Boxes, BrainCircuit, Camera, CheckCircle2, Download, FileJson, Loader2, PenLine, Play, Plus, Route, Save, Settings, Sparkles, Trash2, Upload, UserRound, Wrench } from 'lucide-react';
@@ -693,7 +694,7 @@ const App: React.FC = () => {
                     <input ref={projectInputRef} hidden type="file" accept="application/json,.mechanim.json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/>
 
                     <div className="stage-body editor-workbench relative min-h-0 flex-1 overflow-auto p-7" data-testid="shared-workbench">
-                        {editorStage === 'character' && <CharacterSelection project={project} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} starterTemplates={STARTER_IMAGE_TEMPLATES} onStarterImage={loadStarterImage} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setShowWelcome(false); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onSample={() => { setPendingCharacter(null); setProject(createSampleProject()); setShowWelcome(false); setStage('path'); }} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} />}
+                        {editorStage === 'character' && <CharacterSelection project={project} dispatch={dispatch} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} starterTemplates={STARTER_IMAGE_TEMPLATES} onStarterImage={loadStarterImage} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setShowWelcome(false); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onSample={() => { setPendingCharacter(null); setProject(createSampleProject()); setShowWelcome(false); setStage('path'); }} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} />}
                         {editorStage === 'path' && <PathEditor project={project} sortedParts={sortedParts} selectedPart={selectedPart} selectedPath={selectedPath} drawMode={drawMode} setDrawMode={setDrawMode} dispatch={dispatch} setPathPoints={setPathPoints} openTracking={() => setShowTracking(true)} isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} onNext={() => goStage('foundry')} goStage={goStage} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {editorStage === 'foundry' && <MechanismFoundry project={project} foundry={foundry} setFoundry={setFoundry} selectedPart={selectedPart} selectedPath={selectedPath} goStage={goStage} onExport={(pkg) => {
                             const existingTarget = project.mechanisms.find(m =>
@@ -1003,8 +1004,9 @@ const WelcomeDialog = ({ onClose }: { onClose: (hideNextTime?: boolean) => void 
     </div>;
 };
 
-const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setReplaceCharacter, starterTemplates, onStarterImage, onAccept, onDiscard, onSample, onProcess, onCamera, onPackage, onImport, onEditCharacter, onSaveSkeleton, onChooseSaveFolder }: {
+const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharacter, setReplaceCharacter, starterTemplates, onStarterImage, onAccept, onDiscard, onSample, onProcess, onCamera, onPackage, onImport, onEditCharacter, onSaveSkeleton, onChooseSaveFolder }: {
     project: ProjectState;
+    dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void;
     pendingCharacter: { project: ProjectState; summary: string; returnStage: AppStage } | null;
     replaceCharacter: boolean;
     setReplaceCharacter: (v: boolean) => void;
@@ -1037,6 +1039,10 @@ const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setRe
     const packageInputRef = useRef<HTMLInputElement>(null);
     const onnxInputRef = useRef<HTMLInputElement>(null);
     const importInputRef = useRef<HTMLInputElement>(null);
+    const partPanelProject = pendingCharacter ? reviewedProject : project;
+    const partPanelDisabled = Boolean(pendingCharacter);
+    const editableParts = partPanelProject.partOrder.map(id => partPanelProject.parts[id]).filter((part): part is BodyPartLayer => Boolean(part));
+    const selectedEditablePart = (!partPanelDisabled && project.selectedPartId ? project.parts[project.selectedPartId] : undefined) ?? editableParts[0];
     const importStatusPanel = (
         <details className="advanced-panel import-status" open={statusOpen}>
             <summary>Import status</summary>
@@ -1119,50 +1125,68 @@ const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setRe
                     </div>
                 </div>
 
-                <div className="template-gallery" data-testid="template-gallery">
-                    <button type="button" className="template-tile primary" onClick={onSample}>
-                        <span className="template-kicker">Start fastest</span>
-                        <strong>Waving arm</strong>
-                        <span>Ready path + four-bar.</span>
-                        <b><Sparkles size={16}/> Open Waving arm</b>
-                    </button>
-                    {starterTemplates.map(template => (
-                        <button key={template.id} type="button" className="template-tile starter cursor-pointer" onClick={() => onStarterImage(template)}>
-                            <img className="starter-thumb" src={template.url} alt="" />
-                            <span className="template-kicker">Image</span>
-                            <strong>{template.label}</strong>
-                            <span>Browser ONNX rigging.</span>
-                            <b><BrainCircuit size={16}/> Create from {template.id}</b>
+                <div className="landing-lower-grid">
+                    <div className="template-gallery" data-testid="template-gallery">
+                        <button type="button" className="template-tile primary" onClick={onSample}>
+                            <span className="template-kicker">Start fastest</span>
+                            <strong>Waving arm</strong>
+                            <span>Ready path + four-bar.</span>
+                            <b><Sparkles size={16}/> Open Waving arm</b>
                         </button>
-                    ))}
-                    <button type="button" className="template-tile cursor-pointer" onClick={() => packageInputRef.current?.click()}>
-                        <span className="template-kicker">Package</span>
-                        <strong>Blank character</strong>
-                        <span>Load art + skeleton.</span>
-                        <b><FileJson size={16}/> Load package</b>
-                    </button>
-                    <input ref={packageInputRef} data-testid="blank-package-input" hidden type="file" multiple accept=".json,.yaml,.yml,image/png,image/jpeg,image/webp,image/svg+xml" onChange={e => {
-                        const files = e.currentTarget.files ? Array.from(e.currentTarget.files) as File[] : [];
-                        e.currentTarget.value = '';
-                        if (files.length) onPackage(files);
-                    }}/>
-                    <button type="button" className="template-tile cursor-pointer" onClick={() => onnxInputRef.current?.click()}>
-                        <span className="template-kicker">Private</span>
-                        <strong>Create from image</strong>
-                        <span>Local on-device processing.</span>
-                        <b><BrainCircuit size={16}/> Choose image</b>
-                    </button>
-                    <input ref={onnxInputRef} data-testid="onnx-input" hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={e => {
-                        const file = e.currentTarget.files?.[0];
-                        e.currentTarget.value = '';
-                        if (file) onProcess(file);
-                    }}/>
-                    <button type="button" className="template-tile cursor-pointer" onClick={onCamera}>
-                        <span className="template-kicker">Camera</span>
-                        <strong>Capture Camera</strong>
-                        <span>Capture one frame.</span>
-                        <b><Camera size={16}/> Capture Camera</b>
-                    </button>
+                        {starterTemplates.map(template => (
+                            <button key={template.id} type="button" className="template-tile starter cursor-pointer" onClick={() => onStarterImage(template)}>
+                                <img className="starter-thumb" src={template.url} alt="" />
+                                <span className="template-kicker">Image</span>
+                                <strong>{template.label}</strong>
+                                <span>Browser ONNX rigging.</span>
+                                <b><BrainCircuit size={16}/> Create from {template.id}</b>
+                            </button>
+                        ))}
+                        <button type="button" className="template-tile cursor-pointer" onClick={() => packageInputRef.current?.click()}>
+                            <span className="template-kicker">Package</span>
+                            <strong>Blank character</strong>
+                            <span>Load art + skeleton.</span>
+                            <b><FileJson size={16}/> Load package</b>
+                        </button>
+                        <input ref={packageInputRef} data-testid="blank-package-input" hidden type="file" multiple accept=".json,.yaml,.yml,image/png,image/jpeg,image/webp,image/svg+xml" onChange={e => {
+                            const files = e.currentTarget.files ? Array.from(e.currentTarget.files) as File[] : [];
+                            e.currentTarget.value = '';
+                            if (files.length) onPackage(files);
+                        }}/>
+                        <button type="button" className="template-tile cursor-pointer" onClick={() => onnxInputRef.current?.click()}>
+                            <span className="template-kicker">Private</span>
+                            <strong>Create from image</strong>
+                            <span>Local on-device processing.</span>
+                            <b><BrainCircuit size={16}/> Choose image</b>
+                        </button>
+                        <input ref={onnxInputRef} data-testid="onnx-input" hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={e => {
+                            const file = e.currentTarget.files?.[0];
+                            e.currentTarget.value = '';
+                            if (file) onProcess(file);
+                        }}/>
+                        <button type="button" className="template-tile cursor-pointer" onClick={onCamera}>
+                            <span className="template-kicker">Camera</span>
+                            <strong>Capture Camera</strong>
+                            <span>Capture one frame.</span>
+                            <b><Camera size={16}/> Capture Camera</b>
+                        </button>
+                    </div>
+                    <section className="character-setup-panel" data-testid="character-setup-panel" aria-label="Character part settings">
+                        <div className="section-title">Parts + artwork</div>
+                        <div className="mt-1 text-sm font-extrabold text-slate-800">Surface art sits on each cut plate.</div>
+                        <label className="mt-3 block text-xs font-black uppercase tracking-wider text-slate-500">Character part
+                            <select aria-label="Character part" className="field mt-1" disabled={partPanelDisabled} value={selectedEditablePart?.id ?? ''} onChange={e => dispatch({ type: 'select_part', partId: e.target.value })}>
+                                {editableParts.map(part => <option key={part.id} value={part.id}>{part.name}</option>)}
+                            </select>
+                        </label>
+                        {partPanelDisabled
+                            ? <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">Accept or discard the reviewed package before fine-tuning part artwork, so edits apply to the active character.</div>
+                            : selectedEditablePart && <PartInspector part={selectedEditablePart} dispatch={dispatch} compact />}
+                        <details className="advanced-panel mt-3" open={!partPanelDisabled}>
+                            <summary>Skeleton anchors</summary>
+                            {partPanelDisabled ? <div className="mt-2 text-xs font-bold text-slate-500">Skeleton editing is available after package acceptance.</div> : <SkeletonInspector project={project} dispatch={dispatch} />}
+                        </details>
+                    </section>
                 </div>
             </div>
         </section>
@@ -1178,21 +1202,22 @@ const CharacterSelection = ({ project, pendingCharacter, replaceCharacter, setRe
             </div>
             <details className="advanced-panel landing-tools" data-testid="character-processing-panel">
                 <summary>Advanced import tools</summary>
+                {partPanelDisabled && <p className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">Review is pending. Accept or discard it before editing the active character setup.</p>}
                 <div className="landing-tools-grid">
                     <div>
                         <h4 className="section-title">Processing Steps</h4>
                         <div className="mt-3 flex flex-wrap gap-2">
-                            <button className="btn-primary" onClick={() => onnxInputRef.current?.click()}>Process Image (Skeleton)</button>
-                            <button className="btn-secondary" onClick={onEditCharacter}>Edit Skeleton</button>
-                            <button className="btn-secondary" onClick={onSaveSkeleton}>Save Skeleton</button>
-                            <button className="btn-secondary" onClick={() => onnxInputRef.current?.click()}>Generate Body Parts</button>
+                            <button className="btn-primary" disabled={partPanelDisabled} onClick={() => onnxInputRef.current?.click()}>Process Image (Skeleton)</button>
+                            <button className="btn-secondary" disabled={partPanelDisabled} onClick={onEditCharacter}>Edit Skeleton</button>
+                            <button className="btn-secondary" disabled={partPanelDisabled} onClick={onSaveSkeleton}>Save Skeleton</button>
+                            <button className="btn-secondary" disabled={partPanelDisabled} onClick={() => onnxInputRef.current?.click()}>Generate Body Parts</button>
                         </div>
                     </div>
                     <div>
                         <h4 className="section-title">Recognition Editing</h4>
                         <div className="mt-3 flex flex-wrap gap-2">
-                            <button className="btn-secondary" onClick={onEditCharacter}>Edit Parts / Skeleton / Boxes</button>
-                            <button className="btn-secondary" onClick={onEditCharacter}>Edit Skeleton Joints</button>
+                            <button className="btn-secondary" disabled={partPanelDisabled} onClick={onEditCharacter}>Edit Parts / Skeleton / Boxes</button>
+                            <button className="btn-secondary" disabled={partPanelDisabled} onClick={onEditCharacter}>Edit Skeleton Joints</button>
                         </div>
                     </div>
                     <div>
@@ -1669,7 +1694,7 @@ const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, 
             const pa = sceneToSvg(ja.position); const pb = sceneToSvg(jb.position);
             return <line key={`${a}-${b}`} x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke="#434a59" strokeWidth="2" opacity="0.12"/>;
         })}
-        {project.partOrder.map(id => previewParts[id] ?? project.parts[id]).filter(Boolean).map(part => <React.Fragment key={part.id}><PartShape part={part} selected={project.selectedPartId === part.id} drawMode={drawMode} onSelect={() => dispatch({ type: 'select_part', partId: part.id })}/></React.Fragment>) }
+        {project.partOrder.map(id => previewParts[id] ?? project.parts[id]).filter(Boolean).map(part => <React.Fragment key={part.id}><PartShape part={part} skeleton={previewSkeleton} selected={project.selectedPartId === part.id} drawMode={drawMode} onSelect={() => dispatch({ type: 'select_part', partId: part.id })}/></React.Fragment>) }
         {previewSkeleton && Object.values(previewSkeleton.joints).map(j => {
             const p = sceneToSvg(j.position);
             return <g key={j.id}><circle data-testid={`skeleton-joint-${j.id}`} cx={p.x} cy={p.y} r={j.locked ? 6 : 4.5} fill={j.locked ? '#64748b' : '#94a3b8'} stroke="white" strokeWidth="2" opacity="0.3"/><title>{j.id} bend {j.bendDirection}</title></g>;
@@ -1690,28 +1715,58 @@ const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, 
     </svg>;
 };
 
-const PartShape = ({ part, selected, drawMode, onSelect }: { part: BodyPartLayer; selected: boolean; drawMode?: boolean; onSelect: () => void }) => {
+const PartShape = ({ part, skeleton, selected, drawMode, onSelect }: { part: BodyPartLayer; skeleton?: ProjectState['skeleton']; selected: boolean; drawMode?: boolean; onSelect: () => void }) => {
     if (!part.visible) return null;
     const p = sceneToSvg(part.transform);
     const w = part.bounds.width * part.transform.scale;
     const h = part.bounds.height * part.transform.scale;
+    const artX = part.bounds.x * part.transform.scale;
+    const artY = -(part.bounds.y + part.bounds.height) * part.transform.scale;
+    const landmarks = partLandmarkLocalPoints(part, skeleton);
+    const outline = fabricablePartOutlinePoints(part, landmarks);
+    const outlineD = partOutlinePathD(part, landmarks, { scale: part.transform.scale, flipY: true });
+    const localHoles = landmarks.filter(local => pointInsideOutline(local, outline, 0.5));
+    const holeRadius = Math.max(5, 7.2 * part.transform.scale);
+    const maskId = `path-part-surface-mask-${part.id.replace(/[^A-Za-z0-9_-]/g, '-')}`;
     const stroke = selected ? '#5a6cff' : '#94a3b8';
-    return <g data-canvas-interactive="true" data-testid={`path-part-${part.id}`} data-assembly-underlay="grid-hit-layer" transform={`translate(${p.x} ${p.y}) rotate(${-part.transform.rotation})`} onClick={e => { if (!drawMode) { e.stopPropagation(); onSelect(); } }} className={`${drawMode ? 'cursor-crosshair' : 'cursor-pointer'} transition-opacity`} opacity={part.opacity} filter="url(#soft)">
-        {part.textureUrl ? <image href={part.textureUrl} x={-w / 2} y={-h / 2} width={w} height={h} preserveAspectRatio="xMidYMid meet" opacity=".02" style={{ filter: 'grayscale(1) saturate(0.2)' }}/> : <rect x={-w/2} y={-h/2} width={w} height={h} rx="22" fill="#cbd5e1" opacity=".02"/>}
-        <rect x={-w/2} y={-h/2} width={w} height={h} rx="22" fill="none" stroke={stroke} strokeWidth={selected ? 3 : 1.2} strokeDasharray={selected ? '0' : '5 5'} opacity={selected ? 0.28 : 0.05}/>
+    return <g data-canvas-interactive="true" data-testid={`path-part-${part.id}`} data-assembly-underlay="plate-art-layer" transform={`translate(${p.x} ${p.y}) rotate(${-part.transform.rotation})`} onClick={e => { if (!drawMode) { e.stopPropagation(); onSelect(); } }} className={`${drawMode ? 'cursor-crosshair' : 'cursor-pointer'} transition-opacity`} opacity={part.opacity} filter="url(#soft)">
+        <defs>
+            <mask id={maskId} maskUnits="userSpaceOnUse">
+                <rect x="-1000" y="-1000" width="2000" height="2000" fill="black" />
+                <path d={outlineD} fill="white" />
+                {localHoles.map((local, index) => <circle key={index} cx={local.x * part.transform.scale} cy={-local.y * part.transform.scale} r={holeRadius} fill="black" />)}
+            </mask>
+        </defs>
+        <rect x={artX} y={artY} width={w} height={h} fill="#eef2f7" opacity=".72" mask={`url(#${maskId})`} />
+        {part.textureUrl ? <image data-testid={`path-part-art-${part.id}`} href={part.textureUrl} x={artX} y={artY} width={w} height={h} preserveAspectRatio="xMidYMid meet" opacity=".52" mask={`url(#${maskId})`} style={{ filter: 'saturate(0.82) contrast(0.96)' }}/> : <rect data-testid={`path-part-art-${part.id}`} x={artX} y={artY} width={w} height={h} rx="22" fill={part.fillColor} opacity=".52" mask={`url(#${maskId})`}/>}
+        <path data-testid={`path-part-plate-${part.id}`} data-art-offset-x={artX} d={outlineD} fill="none" stroke={stroke} strokeWidth={selected ? 3 : 1.2} strokeDasharray={selected ? '0' : '5 5'} opacity={selected ? 0.72 : 0.28}/>
         {part.localPivotOffset && <circle cx={part.localPivotOffset.x * part.transform.scale} cy={-part.localPivotOffset.y * part.transform.scale} r={5} fill="#64748b" stroke="white" strokeWidth="2"><title>local pivot</title></circle>}
     </g>;
 };
 
-const PartInspector = ({ part, dispatch }: { part: BodyPartLayer; dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void }) => {
+const PartInspector = ({ part, dispatch, compact = false }: { part: BodyPartLayer; dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void; compact?: boolean }) => {
     const updateTransform = (updates: Partial<BodyPartLayer['transform']>) => dispatch({ type: 'update_part', partId: part.id, updates: { transform: { ...part.transform, ...updates } } });
-    return <div className="mt-4 space-y-3">
+    const updateBounds = (updates: Partial<BodyPartLayer['bounds']>) => dispatch({ type: 'update_part', partId: part.id, updates: { bounds: { ...part.bounds, ...updates } } });
+    return <div className={`${compact ? 'mt-3' : 'mt-4'} space-y-3`}>
         <Toggle label="Visible" checked={part.visible} disabled={part.locked} onChange={visible => dispatch({ type: 'update_part', partId: part.id, updates: { visible } })}/>
         <Toggle label="Locked" checked={part.locked} onChange={locked => dispatch({ type: 'update_part', partId: part.id, updates: { locked } })}/>
-        <MiniNumber label="X" value={part.transform.x} min={-320} max={320} disabled={part.locked} onChange={x => updateTransform({ x })}/>
-        <MiniNumber label="Y" value={part.transform.y} min={-320} max={320} disabled={part.locked} onChange={y => updateTransform({ y })}/>
-        <MiniNumber label="Rotation" value={part.transform.rotation} min={-180} max={180} disabled={part.locked} onChange={rotation => updateTransform({ rotation })}/>
-        <MiniNumber label="Scale" value={part.transform.scale} min={0.2} max={2.5} step={0.05} disabled={part.locked} onChange={scale => updateTransform({ scale })}/>
+        <div className="part-art-controls" data-testid="part-art-controls">
+            <div className="section-title">Artwork surface</div>
+            <p className="mt-1 text-xs font-bold text-slate-500">Tune the image/decal area that is printed on top of the cut plate.</p>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+                <MiniNumber label="Art opacity" value={part.opacity} min={0.15} max={1} step={0.05} disabled={part.locked} onChange={opacity => dispatch({ type: 'update_part', partId: part.id, updates: { opacity } })}/>
+                <MiniNumber label="Scale" value={part.transform.scale} min={0.2} max={2.5} step={0.05} disabled={part.locked} onChange={scale => updateTransform({ scale })}/>
+                <MiniNumber label="Art width" value={part.bounds.width} min={8} max={520} disabled={part.locked} onChange={width => updateBounds({ width })}/>
+                <MiniNumber label="Art height" value={part.bounds.height} min={8} max={520} disabled={part.locked} onChange={height => updateBounds({ height })}/>
+                <MiniNumber label="Art offset X" value={part.bounds.x} min={-260} max={260} disabled={part.locked} onChange={x => updateBounds({ x })}/>
+                <MiniNumber label="Art offset Y" value={part.bounds.y} min={-260} max={260} disabled={part.locked} onChange={y => updateBounds({ y })}/>
+            </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+            <MiniNumber label="X" value={part.transform.x} min={-320} max={320} disabled={part.locked} onChange={x => updateTransform({ x })}/>
+            <MiniNumber label="Y" value={part.transform.y} min={-320} max={320} disabled={part.locked} onChange={y => updateTransform({ y })}/>
+            <MiniNumber label="Rotation" value={part.transform.rotation} min={-180} max={180} disabled={part.locked} onChange={rotation => updateTransform({ rotation })}/>
+        </div>
         <div className="flex gap-2"><button className="btn-secondary" disabled={part.locked} onClick={() => dispatch({ type: 'reorder_part', partId: part.id, direction: -1 })}>Back</button><button className="btn-secondary" disabled={part.locked} onClick={() => dispatch({ type: 'reorder_part', partId: part.id, direction: 1 })}>Front</button></div>
     </div>;
 };

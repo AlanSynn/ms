@@ -67,11 +67,43 @@ const disposeObject = (object: THREE.Object3D, disposeMaterials = false) => obje
   else material?.dispose?.();
 });
 
+const disposeOwnedMaterials = (object: THREE.Object3D) => object.traverse(child => {
+  const material = (child as THREE.Mesh).material;
+  const materials = Array.isArray(material) ? material : material ? [material] : [];
+  materials.forEach(item => {
+    if (!item.userData?.ownedByPartArt) return;
+    const map = (item as THREE.MeshBasicMaterial).map;
+    map?.dispose();
+    item.dispose();
+  });
+});
+
 const clearGroup = (group: THREE.Group) => {
   [...group.children].forEach(child => {
     group.remove(child);
+    disposeOwnedMaterials(child);
     disposeObject(child, false);
   });
+};
+
+const createPartArtMaterial = (part: BodyPartLayer, onLoaded: () => void) => {
+  const material = new THREE.MeshBasicMaterial({
+    color: part.textureUrl ? '#ffffff' : part.fillColor,
+    transparent: true,
+    opacity: part.textureUrl ? Math.max(0.35, Math.min(1, part.opacity ?? 1)) : 0.6,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1
+  });
+  material.userData.ownedByPartArt = true;
+  if (part.textureUrl) {
+    const texture = new THREE.TextureLoader().load(part.textureUrl, () => onLoaded());
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 4;
+    material.map = texture;
+    material.needsUpdate = true;
+  }
+  return material;
 };
 
 const disposeMaterials = (materials: MaterialKit | null) => {
@@ -363,7 +395,7 @@ const gearShape = (pitchRadius: number, physicalPitchRadiusMm: number) => {
 const partGeometrySignature = (parts: BodyPartLayer[], project?: ProjectState, skeleton?: StandardSkeleton | null) => [
   parts.map(part => {
     const base = project?.parts[part.id] ?? part;
-    return `${base.id}:${base.bounds.width}:${base.bounds.height}:${base.bounds.x}:${base.bounds.y}:${base.transform.x}:${base.transform.y}:${base.transform.rotation}:${base.transform.scale}:${base.visible}`;
+    return `${base.id}:${base.bounds.width}:${base.bounds.height}:${base.bounds.x}:${base.bounds.y}:${base.transform.x}:${base.transform.y}:${base.transform.rotation}:${base.transform.scale}:${base.visible}:${base.textureUrl ?? ''}:${base.fillColor}:${base.opacity}`;
   }).join('|'),
   Object.values((project?.skeleton ?? skeleton)?.joints ?? {})
     .map(joint => `${joint.id}:${joint.position.x.toFixed(2)}:${joint.position.y.toFixed(2)}`)
@@ -437,7 +469,9 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
     const outline = fabricablePartOutlinePoints(base, landmarks);
     return sum + landmarks.filter(local => pointInsideOutline(local, outline, 0.5)).length;
   }, 0), [canonicalSkeleton, geometryParts, project?.parts]);
-  const estimatedObjectCount = boardGridLines(kit).length + 1 + geometryParts.length * 3 + holeCount + joints.length * 2 + bones.length + mechanismLinkCount * 2 + mechanismsToRender.length * 8 + mechanismInventory.holes + mechanismInventory.gears * 2;
+  const partTextureCount = geometryParts.reduce((sum, part) => sum + ((project?.parts[part.id] ?? part).textureUrl ? 1 : 0), 0);
+  const partArtCount = geometryParts.length;
+  const estimatedObjectCount = boardGridLines(kit).length + 1 + geometryParts.length * 4 + holeCount + joints.length * 2 + bones.length + mechanismLinkCount * 2 + mechanismsToRender.length * 8 + mechanismInventory.holes + mechanismInventory.gears * 2;
 
   const render = () => {
     const scene = sceneRef.current;
@@ -511,6 +545,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
 
     return () => {
       ro.disconnect();
+      disposeOwnedMaterials(scene);
       disposeObject(scene, false);
       disposeMaterials(materialsRef.current);
       renderer.dispose();
@@ -565,17 +600,32 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), materials.edge));
+      const artGeometry = new THREE.ShapeGeometry(shape);
+      const artPositions = artGeometry.getAttribute('position');
+      const uvs: number[] = [];
+      const artWidth = Math.max(1, base.bounds.width);
+      const artHeight = Math.max(1, base.bounds.height);
+      for (let i = 0; i < artPositions.count; i += 1) {
+        const x = artPositions.getX(i) * VIEW_SCALE;
+        const y = artPositions.getY(i) * VIEW_SCALE;
+        uvs.push((x - base.bounds.x) / artWidth, (y - base.bounds.y) / artHeight);
+      }
+      artGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+      const art = new THREE.Mesh(artGeometry, createPartArtMaterial(base, render));
+      art.name = `part-art-decal-${part.id}`;
+      art.position.set(0, 0, THICKNESS + 0.018);
+      mesh.add(art);
       if (outline.length > 1) {
         const topOutline = new THREE.BufferGeometry().setFromPoints([
-          ...outline.map(point => new THREE.Vector3(point.x / VIEW_SCALE, point.y / VIEW_SCALE, THICKNESS + 0.016)),
-          new THREE.Vector3(outline[0].x / VIEW_SCALE, outline[0].y / VIEW_SCALE, THICKNESS + 0.016)
+          ...outline.map(point => new THREE.Vector3(point.x / VIEW_SCALE, point.y / VIEW_SCALE, THICKNESS + 0.034)),
+          new THREE.Vector3(outline[0].x / VIEW_SCALE, outline[0].y / VIEW_SCALE, THICKNESS + 0.034)
         ]);
         mesh.add(new THREE.Line(topOutline, materials.edge));
       }
       localHoles.forEach(local => {
         const ring = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.014, 8, 28), materials.cutRing);
         ring.name = `cut-hole-ring-${part.id}`;
-        ring.position.set(local.x / VIEW_SCALE, local.y / VIEW_SCALE, THICKNESS + 0.02);
+        ring.position.set(local.x / VIEW_SCALE, local.y / VIEW_SCALE, THICKNESS + 0.04);
         mesh.add(ring);
       });
       roots.partsLayer.add(mesh);
@@ -875,9 +925,12 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       data-three-stack-source={selectedRenderPlan ? 'fabricationStackForMechanism' : ''}
       data-three-stack-mode="assembled-spacer-separated"
       data-three-part-surface="solid-cut-plates"
+      data-three-part-art="top-texture-decal"
+      data-three-part-art-count={partArtCount}
+      data-three-part-texture-count={partTextureCount}
       data-three-part-opacity="1"
       data-three-part-edge-opacity="0.95"
-      data-three-assembly-underlay="grid-only"
+      data-three-assembly-underlay="plate-art-decal"
       data-three-exploded="false"
       data-three-base-layer={selectedRenderPlan?.base.label ?? ''}
       data-three-stack-order={selectedRenderPlan?.stackSummary ?? ''}

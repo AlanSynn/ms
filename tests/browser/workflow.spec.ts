@@ -81,6 +81,10 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('template-gallery')).toContainText('Boy starter');
   await expect(page.getByTestId('template-gallery')).toContainText('Blank character');
   await expect(page.getByText('Local on-device processing.')).toBeVisible();
+  await expect(page.getByTestId('character-setup-panel')).toContainText('Parts + artwork');
+  await expect(page.getByTestId('character-setup-panel').getByLabel('Character part', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('part-art-controls')).toContainText('Artwork surface');
+  await expect(page.getByLabel('Art width number')).toBeVisible();
   await expect.poll(() => page.locator('.starter-thumb').evaluateAll(images => images.every(img => (img as HTMLImageElement).naturalWidth > 0))).toBe(true);
   await expect(page.getByText('parts_info.json package artifact')).toBeHidden();
   await expect(page.getByTestId('onboarding-import-input')).toBeAttached();
@@ -106,8 +110,9 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(pathPuppet).toHaveAttribute('data-three-renderer', 'webgl');
   await expect(pathPuppet).toHaveAttribute('data-puppet-mode', 'thick-flat-assembly');
   await expect(pathPuppet).toHaveAttribute('data-three-part-surface', 'solid-cut-plates');
+  await expect(pathPuppet).toHaveAttribute('data-three-part-art', 'top-texture-decal');
   await expect(pathPuppet).toHaveAttribute('data-three-part-opacity', '1');
-  await expect(pathPuppet).toHaveAttribute('data-three-assembly-underlay', 'grid-only');
+  await expect(pathPuppet).toHaveAttribute('data-three-assembly-underlay', 'plate-art-decal');
   await expect(pathPuppet).toHaveAttribute('data-joint-placement', 'skeleton-anchors');
   await expect(pathPuppet).toHaveAttribute('data-three-rebuild-mode', 'static-topology-dynamic-transforms');
   const pathHasWebgl = await page.getByTestId('path-three-puppet-canvas').evaluate((canvas: HTMLCanvasElement) => Boolean(canvas.getContext('webgl2') || canvas.getContext('webgl')));
@@ -196,8 +201,9 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(designPuppet).toHaveAttribute('data-three-renderer', 'webgl');
   await expect(designPuppet).toHaveAttribute('data-puppet-mode', 'thick-flat-assembly');
   await expect(designPuppet).toHaveAttribute('data-three-part-surface', 'solid-cut-plates');
+  await expect(designPuppet).toHaveAttribute('data-three-part-art', 'top-texture-decal');
   await expect(designPuppet).toHaveAttribute('data-three-part-opacity', '1');
-  await expect(designPuppet).toHaveAttribute('data-three-assembly-underlay', 'grid-only');
+  await expect(designPuppet).toHaveAttribute('data-three-assembly-underlay', 'plate-art-decal');
   await expect(designPuppet).toHaveAttribute('data-three-rebuild-mode', 'static-topology-dynamic-transforms');
   const designHasWebgl = await page.getByTestId('design-three-puppet-canvas').evaluate((canvas: HTMLCanvasElement) => Boolean(canvas.getContext('webgl2') || canvas.getContext('webgl')));
   expect(designHasWebgl, 'design stage mounts a real WebGL canvas').toBeTruthy();
@@ -424,7 +430,6 @@ test('Character Selection processing controls route to real browser workflows', 
 });
 
 test('Create from image upload creates a reviewed character package in browser', async ({ page }) => {
-  test.setTimeout(180_000);
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
@@ -446,8 +451,8 @@ test('Create from image upload creates a reviewed character package in browser',
   await expect(page.getByTestId('character-status-dock')).toBeVisible({ timeout: 180_000 });
   await expect(page.getByText('review generated package')).toBeVisible({ timeout: 180_000 });
   const dockBox = await page.getByTestId('character-status-dock').boundingBox();
-  const screenBox = await page.getByTestId('character-screen').boundingBox();
-  expect(dockBox?.y ?? 0, 'character import status is docked below the main work frame').toBeGreaterThan((screenBox?.height ?? 0) * 0.62);
+  const workFrameBox = await page.locator('.character-stage .onboarding-page').boundingBox();
+  expect(dockBox?.y ?? 0, 'character import status is docked below the main work frame').toBeGreaterThanOrEqual(((workFrameBox?.y ?? 0) + (workFrameBox?.height ?? 0)) - 4);
   await expect(page.getByText(/parts · .*joints · ready to review/i)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Accept package' })).toBeVisible();
 
@@ -461,6 +466,7 @@ test('Create from image upload creates a reviewed character package in browser',
   await expect(generatedPuppet).toHaveAttribute('data-part-outline-mode', 'fabrication-fit-joint-chain');
   await expect(generatedPuppet).toHaveAttribute('data-puppet-mode', 'thick-flat-assembly');
   await expect(generatedPuppet).toHaveAttribute('data-three-part-surface', 'solid-cut-plates');
+  await expect(generatedPuppet).toHaveAttribute('data-three-part-art', 'top-texture-decal');
   await expect(generatedPuppet).toHaveAttribute('data-three-part-opacity', '1');
   expect(Number(await generatedPuppet.getAttribute('data-three-part-hole-count')), 'generated character 3D puppet keeps cut-through joint holes').toBeGreaterThan(0);
   await expect.poll(async () => Number(await generatedPuppet.getAttribute('data-three-render-triangles')), { message: 'accepted ONNX character renders as real 3D fabrication geometry' }).toBeGreaterThan(0);
@@ -497,11 +503,23 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
   await expect(page.getByText('Character package ready. Review before accepting.')).toBeVisible();
   await expect(page.getByText('SVG provenance metadata present')).toBeHidden();
   await expect(page.getByText('Technical checks')).toBeVisible();
+  await expect(page.getByText('Accept or discard the reviewed package before fine-tuning part artwork')).toBeVisible();
+  await page.getByTestId('character-processing-panel').locator('summary').click();
+  await expect(page.getByText('Accept or discard it before editing the active character setup.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Edit Skeleton', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Edit Parts / Skeleton / Boxes' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Edit Skeleton Joints' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Save Skeleton' })).toBeDisabled();
+  await expect(page.getByRole('heading', { name: 'Path Editor' })).toHaveCount(0);
   await page.getByText('Technical checks').click();
   await expect(page.getByText('SVG provenance metadata present')).toBeVisible();
   await expect(page.getByText('plain load clears stale mechanisms')).toBeVisible();
   await page.getByRole('button', { name: 'Discard' }).click();
   await expect(page.getByText('review generated package')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Edit Skeleton', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
+  await expectProjectCounts(page, 6, 1, 1);
+  await page.getByRole('button', { name: /Character Selection/i }).click();
 
   await page.getByTestId('blank-package-input').setInputFiles(packageFiles);
   await expect(page.getByText('review generated package')).toBeVisible();
@@ -771,13 +789,14 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await expect(page.getByTestId('ik-chain-summary')).toContainText('2-joint direct');
   await expect(page.getByTestId('fold-direction-control')).toContainText('Direct handle has no fold joint');
   await expect(page.getByTestId('path-shape-controls')).toBeVisible();
+  const selectedMotionPath = pathCanvas.locator('path[stroke="#5a6cff"][stroke-width="4"]').first();
   await page.getByRole('button', { name: 'Closed', exact: true }).click();
-  await expect(pathCanvas.locator('path[stroke="#5a6cff"]').first()).toHaveAttribute('d', /Z$/);
+  await expect(selectedMotionPath).toHaveAttribute('d', /Z$/);
   await page.getByLabel('Smoothness number').fill('70');
   await page.getByLabel('Smoothness number').press('Enter');
-  await expect(pathCanvas.locator('path[stroke="#5a6cff"]').first()).toHaveAttribute('d', /Q/);
+  await expect(selectedMotionPath).toHaveAttribute('d', /Q/);
   await page.getByRole('button', { name: 'Open', exact: true }).click();
-  await expect(pathCanvas.locator('path[stroke="#5a6cff"]').first()).not.toHaveAttribute('d', /Z$/);
+  await expect(selectedMotionPath).not.toHaveAttribute('d', /Z$/);
 
   await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
   const firstArmPoint = pathCanvas.locator('circle[stroke="#5a6cff"]').first();
@@ -798,6 +817,12 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await expect(page.getByTestId('path-part-right_arm')).not.toHaveAttribute('transform', armTransformBeforePlay ?? '');
   await page.getByRole('button', { name: /Stop/i }).click();
   await page.getByText('Advanced part setup').click();
+  const artXBefore = await page.getByTestId('path-part-art-right_arm').getAttribute('x');
+  await page.getByLabel('Art offset X number').fill('-12');
+  await page.getByLabel('Art offset X number').press('Enter');
+  await expect(page.getByTestId('path-part-art-right_arm')).toHaveAttribute('x', '-12');
+  await expect(page.getByTestId('path-part-plate-right_arm')).toHaveAttribute('data-art-offset-x', '-12');
+  expect(await page.getByTestId('path-part-art-right_arm').getAttribute('x'), 'art offset control moves the visible path-editor artwork').not.toBe(artXBefore);
   const partLocked = page.locator('label').filter({ hasText: 'Locked' }).first().locator('input[type="checkbox"]');
   await partLocked.check();
   await expect(page.getByRole('button', { name: 'Drawing free path', exact: true })).toBeDisabled();
@@ -818,7 +843,6 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
 });
 
 test('Mechanism Foundry sensemaking shows library, partial range, and exported metadata', async ({ page }) => {
-  test.setTimeout(360_000);
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
@@ -1615,7 +1639,6 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
 });
 
 test('Mechanism Design center workspace renders physical 3D templates for every mechanism type', async ({ page }) => {
-  test.setTimeout(180_000);
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
@@ -1631,7 +1654,8 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
   await expect(designPuppet).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
   await expect(designPuppet).toHaveAttribute('data-three-stack-mode', 'assembled-spacer-separated');
   await expect(designPuppet).toHaveAttribute('data-three-part-surface', 'solid-cut-plates');
-  await expect(designPuppet).toHaveAttribute('data-three-assembly-underlay', 'grid-only');
+  await expect(designPuppet).toHaveAttribute('data-three-part-art', 'top-texture-decal');
+  await expect(designPuppet).toHaveAttribute('data-three-assembly-underlay', 'plate-art-decal');
   await expect(designPuppet).toHaveAttribute('data-three-exploded', 'false');
   await expect(designPuppet).toHaveAttribute('data-three-stack-order', /^Back Clip → .*S10 spacer.*Front Clip$/);
   await expect(designPuppet).toHaveAttribute('data-three-spacer-key', 's10');

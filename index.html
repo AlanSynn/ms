@@ -134,7 +134,10 @@
       .landing-sketch-label { position: absolute; left: 1rem; bottom: 1rem; display: inline-flex; align-items: center; gap: .55rem; border: 1px solid var(--ms-line); border-radius: 999px; background: rgba(255,255,255,.86); padding: .55rem .75rem; backdrop-filter: blur(12px); }
       .landing-sketch-label strong { font-size: .78rem; font-weight: 950; color: var(--ms-text); }
       .landing-sketch-label span { font-size: .74rem; font-weight: 850; color: var(--ms-muted); }
+      .landing-lower-grid { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, .46fr); gap: .55rem; align-items: stretch; }
       .template-gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .55rem; align-content: end; }
+      .character-setup-panel { min-height: 0; max-height: 100%; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--ms-line); border-radius: 1.2rem; background: rgba(255,255,255,.9); padding: .78rem; box-shadow: 0 14px 42px rgba(8,10,18,.06); }
+      .part-art-controls { border: 1px solid var(--ms-line); border-radius: 1rem; background: var(--ms-bg-soft); padding: .7rem; }
       .template-tile { min-height: 6.6rem; border: 1px solid var(--ms-line); border-radius: 1.2rem; background: rgba(255,255,255,.88); padding: .72rem; text-align: left; box-shadow: 0 14px 42px rgba(8,10,18,.06); display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; transition: transform .18s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease; }
       .template-tile.primary { background: linear-gradient(180deg, #ffffff, #f9faff); color: var(--ms-text); border-color: var(--ms-accent-line); box-shadow: 0 22px 70px rgba(139,92,246,.15); }
       .template-tile:hover { transform: translateY(-2px); box-shadow: 0 24px 70px rgba(8,10,18,.10); background: white; border-color: var(--ms-line-strong); }
@@ -362,6 +365,7 @@
         .onboarding-hero { min-height: auto; grid-template-columns: 1fr; }
         .landing-board { grid-template-columns: 1fr; }
         .landing-sketch svg { height: 18rem; min-height: 18rem; }
+        .landing-lower-grid { grid-template-columns: 1fr; }
         .template-gallery { grid-template-columns: 1fr; }
         .template-tile.primary { min-height: 0; }
         .onboarding-secondary { display: block; }
