@@ -9,6 +9,7 @@ import { clampCanvasZoom } from '../utils/viewport';
 import { ThreePuppetPreview } from './ThreePuppetPreview';
 import { fabricationGearPathD } from '../utils/fabrication';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlinePathD, pointInsideOutline } from '../utils/partGeometry';
+import { mechanismFeature, type MechanismDragHandle } from '../utils/mechanismFeatureRegistry';
 
 interface CanvasProps {
     project?: ProjectState;
@@ -62,11 +63,17 @@ export const Canvas: React.FC<CanvasProps> = ({
     const [pathDragStart, setPathDragStart] = useState<Point | null>(null);
     const [isHoveringPath, setIsHoveringPath] = useState(false);
 
-    const canDragJ2 = (m: MechanismConfig) => ['4bar', 'piston', 'yoke', 'quick-return', '5bar', 'gear', 'planetary_gear'].includes(m.type);
-    const canDragP2 = (m: MechanismConfig) => ['4bar', '5bar', 'piston', 'yoke', 'quick-return', 'cam', 'gear'].includes(m.type);
-    const canDragEffector = (m: MechanismConfig) => !['crank', 'cam'].includes(m.type);
     const activeMechanisms = useMemo(() => config.mechanisms.filter(m => m.visible && m.enabled !== false), [config.mechanisms]);
     const activeMechanismIds = useMemo(() => new Set(activeMechanisms.map(m => m.id)), [activeMechanisms]);
+    const mechanismInteractionPolicies = useMemo(
+        () => new Map(activeMechanisms.map(m => [m.id, mechanismFeature(m.type).interactionPolicy(m)])),
+        [activeMechanisms]
+    );
+    const canDragHandle = (m: MechanismConfig, handle: MechanismDragHandle) =>
+        mechanismInteractionPolicies.get(m.id)?.draggableHandles.includes(handle) ?? mechanismFeature(m.type).interactionPolicy(m).draggableHandles.includes(handle);
+    const canDragJ2 = (m: MechanismConfig) => canDragHandle(m, 'J2');
+    const canDragP2 = (m: MechanismConfig) => canDragHandle(m, 'P2');
+    const canDragEffector = (m: MechanismConfig) => canDragHandle(m, 'Effector');
     const motionPreview = project ? motionPreviewForProject(project, activeMechanisms, angle) : undefined;
     const animatedParts = motionPreview?.parts ?? {};
     const groundDragHandle = (m: MechanismConfig, state: ReturnType<typeof calculateLinkage>) => {
@@ -222,7 +229,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 }
 
                 // Check Aux (Secondary Crank Tip for 5-bar)
-                if (m.type === '5bar' && state.aux && dist(p, state.aux) < HIT_RADIUS) {
+                if (canDragHandle(m, 'Aux') && state.aux && dist(p, state.aux) < HIT_RADIUS) {
                     setDragTarget({ mechId: m.id, type: 'Aux' });
                     setSelectedId(m.id);
                     return;
@@ -235,7 +242,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                     return;
                 }
                 // Check J1 (Crank Pin)
-                if (dist(p, state.j1) < HIT_RADIUS) {
+                if (canDragHandle(m, 'J1') && dist(p, state.j1) < HIT_RADIUS) {
                     setDragTarget({ mechId: m.id, type: 'J1' });
                     setSelectedId(m.id);
                     return;
@@ -251,7 +258,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 }
 
                 // Check P1 (Anchor/Crank Pivot)
-                if (dist(p, state.p1) < HIT_RADIUS * 1.5) {
+                if (canDragHandle(m, 'P1') && dist(p, state.p1) < HIT_RADIUS * 1.5) {
                     setDragTarget({ mechId: m.id, type: 'P1' });
                     setSelectedId(m.id);
                     return;

@@ -11,12 +11,12 @@ import { animatedPartsForProject, describeMotionChain, mechanismBindingWarnings,
 import { buildToonSceneProjection } from '../utils/sceneProjection';
 import { buildKinematicPhysicsSession } from '../utils/physicsSession';
 import { fabricablePartOutlinePoints, partLandmarkJointIds, partLandmarkLocalPoints, partOutlineBounds, pointInsideOutline } from '../utils/partGeometry';
-import { MECHANISM_FEATURE_REGISTRY, mechanismFeature, validateMechanismFeatureRegistry } from '../utils/mechanismFeatureRegistry';
+import { MECHANISM_FEATURE_REGISTRY, mechanismFeature, validateMechanismFeatureRegistry, type MechanismDragHandle } from '../utils/mechanismFeatureRegistry';
 import { buildMechanismSnapshot, buildMechanismSnapshots } from '../utils/mechanismSnapshot';
 import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, mechanismTemplateLabel } from '../utils/mechanismTemplates';
 import { MECHANISM_TYPES as SANITIZE_MECHANISM_TYPES } from '../utils/sanitize';
 import { generateSmartConfig, mutateConfig, OPTIMIZER_MECHANISM_TYPES } from '../utils/optimizer';
-import type { BodyPartLayer, ProjectState } from '../types';
+import type { BodyPartLayer, MechanismType, ProjectState } from '../types';
 
 projectSelfCheck();
 
@@ -26,6 +26,18 @@ assert(statSync(onnxPath).size > 1_000_000, 'web ONNX asset is real model data, 
 assert(!readFileSync(onnxPath).subarray(0, 64).toString('utf8').startsWith('version https://git-lfs'), 'web ONNX asset is checked out from Git LFS before tests run');
 
 const sample = createSampleProject();
+const expectedCanvasDragHandles: Record<MechanismType, MechanismDragHandle[]> = {
+  crank: ['P1', 'J1'],
+  '4bar': ['P1', 'J1', 'P2', 'J2', 'Effector'],
+  piston: ['P1', 'J1', 'P2', 'J2', 'Effector'],
+  yoke: ['P1', 'J1', 'P2', 'J2', 'Effector'],
+  'quick-return': ['P1', 'J1', 'P2', 'J2', 'Effector'],
+  '5bar': ['P1', 'J1', 'P2', 'J2', 'Aux', 'Effector'],
+  cam: ['P1', 'J1', 'P2'],
+  'rack-pinion': ['P1', 'J1', 'Effector'],
+  gear: ['P1', 'J1', 'P2', 'J2', 'Effector'],
+  planetary_gear: ['P1', 'J1', 'J2', 'Effector']
+};
 assert(existsSync(join(process.cwd(), 'resources/examples/raw/girl.png')), 'girl starter source image is present');
 assert(existsSync(join(process.cwd(), 'resources/examples/raw/boy.PNG')), 'boy starter source image is present');
 const designContract = readFileSync(join(process.cwd(), 'DESIGN.md'), 'utf8');
@@ -113,6 +125,7 @@ ALL_MECHANISM_TYPES.forEach(type => {
   assert.equal(feature.sampleKinematics(mechanism, 0).isValid, calculateLinkage(mechanism, 0).isValid, `${type} feature kinematics use canonical solver`);
   assert.equal(feature.sampleFeasibleRange(mechanism, 12).percentValid, sampleFeasibleRange(mechanism, 12).percentValid, `${type} feature feasible range uses canonical sampler`);
   assert(feature.interactionPolicy(mechanism).writesProjectState, `${type} feature declares ProjectState-backed edits`);
+  assert.deepEqual(feature.interactionPolicy(mechanism).draggableHandles, expectedCanvasDragHandles[type], `${type} feature preserves legacy Canvas drag handles`);
   assert(feature.projectionHints(mechanism).every(hint => hint.source === 'mechanism-feature-registry' && hint.zStackUsesFabricationPlan), `${type} feature declares fabrication-backed projection`);
   assert(feature.physicsHints(mechanism).every(hint => hint.solver === 'kinematic-derived' && hint.preservesProjectState), `${type} feature declares derived physics sidecar behavior`);
 });

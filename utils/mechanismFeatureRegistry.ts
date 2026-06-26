@@ -7,6 +7,7 @@ import { createDefaultMechanism, mechanismRequiredParts } from './project';
 
 export type MechanismFeatureRole = 'driver' | 'linkage' | 'linear-guide' | 'gear-train' | 'cam-follower' | 'compound';
 export type MechanismProjectionRole = 'rotary' | 'linear' | 'compound';
+export type MechanismDragHandle = 'P1' | 'P2' | 'J1' | 'J2' | 'Effector' | 'Aux';
 export type MechanismFeasibleRange = ReturnType<typeof sampleFeasibleRange>;
 
 export type MechanismFeatureIssue = {
@@ -17,7 +18,7 @@ export type MechanismFeatureIssue = {
 export type MechanismInteractionPolicy = {
     role: MechanismFeatureRole;
     editableParameters: Array<keyof MechanismConfig>;
-    draggableHandles: string[];
+    draggableHandles: MechanismDragHandle[];
     writesProjectState: true;
 };
 
@@ -103,20 +104,25 @@ const editableParametersForType = (type: MechanismType): Array<keyof MechanismCo
     }
 };
 
-const draggableHandlesForType = (type: MechanismType): string[] => {
-    switch (roleForType(type)) {
-        case 'driver':
-            return ['driver'];
-        case 'linear-guide':
-            return ['driver', 'guide', 'effector'];
-        case 'gear-train':
-            return ['drive-gear', 'output-gear'];
-        case 'cam-follower':
-            return ['cam', 'follower'];
-        case 'compound':
-            return ['left-driver', 'right-driver', 'effector'];
+const draggableHandlesForType = (type: MechanismType): MechanismDragHandle[] => {
+    const base: MechanismDragHandle[] = ['P1', 'J1'];
+    switch (type) {
+        case '4bar':
+        case 'piston':
+        case 'yoke':
+        case 'quick-return':
+        case 'gear':
+            return [...base, 'P2', 'J2', 'Effector'];
+        case '5bar':
+            return [...base, 'P2', 'J2', 'Aux', 'Effector'];
+        case 'cam':
+            return [...base, 'P2'];
+        case 'planetary_gear':
+            return [...base, 'J2', 'Effector'];
+        case 'rack-pinion':
+            return [...base, 'Effector'];
         default:
-            return ['driver', 'coupler', 'rocker', 'effector'];
+            return base;
     }
 };
 

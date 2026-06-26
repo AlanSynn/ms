@@ -64,6 +64,7 @@ Current local dependency check used `package.json`; latest version check used `n
 - M2: snapshot fingerprint now changes for mechanism parameters, output gear display/radius fields, target ids, relevant path data, and physical-kit changes while preserving the input `ProjectState`.
 - M2 rework: expanded the snapshot mechanism payload to carry the complete persisted behavior/rendering parameter set from `MechanismConfig` before stage adapters consume snapshots.
 - M2: contract coverage now checks deterministic snapshots, recursive freeze behavior, every mechanism type, fabrication plan validation results, adapter hints, and missing-id null behavior.
+- M3 slice 1: moved Canvas drag-handle availability into `MechanismFeatureRegistry.interactionPolicy` and kept `Canvas.tsx` as a policy consumer instead of another mechanism-type registry.
 
 ## Verification
 
@@ -78,3 +79,8 @@ Current local dependency check used `package.json`; latest version check used `n
 - M2 `git diff --check` — pass.
 - M2 code-review gate — pass (`APPROVE`, architectural status `CLEAR`).
 - M2 `npm run test:browser` — pass (`31 passed`, 6.3m).
+- M3 slice 1 `npm test` — pass (`project contracts ok`).
+- M3 slice 1 `npm run build` — pass (`tsc && vite build`).
+- M3 slice 1 `git diff --check` — pass.
+- M3 slice 1 code-review gate — pass (`APPROVE`, architectural status `CLEAR`).
+- M3 slice 1 `npm run test:browser` — pass (`31 passed`, 6.2m).
