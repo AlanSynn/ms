@@ -18,6 +18,7 @@ type MaterialKit = {
   selected: THREE.MeshStandardMaterial;
   edge: THREE.LineBasicMaterial;
   grid: THREE.LineBasicMaterial;
+  cutRing: THREE.MeshStandardMaterial;
   joint: THREE.MeshStandardMaterial;
   pin: THREE.MeshStandardMaterial;
   bone: THREE.MeshStandardMaterial;
@@ -105,14 +106,15 @@ const addInventory = (sum: MechanismInventory, item: MechanismInventory): Mechan
 });
 
 const createMaterials = (): MaterialKit => ({
-  sheet: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.9, transparent: true, opacity: 0.5 }),
-  part: new THREE.MeshStandardMaterial({ color: '#cbd5e1', roughness: 0.68, metalness: 0.02, transparent: true, opacity: 0.94 }),
-  selected: new THREE.MeshStandardMaterial({ color: '#a78bfa', roughness: 0.58, metalness: 0.04, transparent: true, opacity: 0.96 }),
-  edge: new THREE.LineBasicMaterial({ color: '#64748b', transparent: true, opacity: 0.72 }),
-  grid: new THREE.LineBasicMaterial({ color: '#dbe4f0', transparent: true, opacity: 0.32 }),
+  sheet: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.9, transparent: true, opacity: 0.34 }),
+  part: new THREE.MeshStandardMaterial({ color: '#d7dee8', roughness: 0.66, metalness: 0.015, transparent: false, opacity: 1 }),
+  selected: new THREE.MeshStandardMaterial({ color: '#a78bfa', roughness: 0.56, metalness: 0.035, transparent: false, opacity: 1 }),
+  edge: new THREE.LineBasicMaterial({ color: '#334155', transparent: true, opacity: 0.95 }),
+  grid: new THREE.LineBasicMaterial({ color: '#dbe4f0', transparent: true, opacity: 0.2 }),
+  cutRing: new THREE.MeshStandardMaterial({ color: '#f8fafc', roughness: 0.38, metalness: 0.02 }),
   joint: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.35 }),
   pin: new THREE.MeshStandardMaterial({ color: '#5a6cff', roughness: 0.42, metalness: 0.05 }),
-  bone: new THREE.MeshStandardMaterial({ color: '#94a3b8', roughness: 0.6, transparent: true, opacity: 0.68 }),
+  bone: new THREE.MeshStandardMaterial({ color: '#94a3b8', roughness: 0.6, transparent: true, opacity: 0.42 }),
   mechBase: new THREE.MeshStandardMaterial({ color: '#d8b077', roughness: 0.76, metalness: 0.02 }),
   mechDrive: new THREE.MeshStandardMaterial({ color: '#5a6cff', roughness: 0.48, metalness: 0.05 }),
   mechCoupler: new THREE.MeshStandardMaterial({ color: '#e8bc73', roughness: 0.68, metalness: 0.02 }),
@@ -435,7 +437,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
     const outline = fabricablePartOutlinePoints(base, landmarks);
     return sum + landmarks.filter(local => pointInsideOutline(local, outline, 0.5)).length;
   }, 0), [canonicalSkeleton, geometryParts, project?.parts]);
-  const estimatedObjectCount = boardGridLines(kit).length + 1 + geometryParts.length * 2 + joints.length * 2 + bones.length + mechanismLinkCount * 2 + mechanismsToRender.length * 8 + mechanismInventory.holes + mechanismInventory.gears * 2;
+  const estimatedObjectCount = boardGridLines(kit).length + 1 + geometryParts.length * 3 + holeCount + joints.length * 2 + bones.length + mechanismLinkCount * 2 + mechanismsToRender.length * 8 + mechanismInventory.holes + mechanismInventory.gears * 2;
 
   const render = () => {
     const scene = sceneRef.current;
@@ -561,7 +563,21 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       const geometry = new THREE.ExtrudeGeometry(shape, { depth: THICKNESS, bevelEnabled: true, bevelSize: 0.018, bevelThickness: 0.012 });
       const mesh = new THREE.Mesh(geometry, materials.part);
       mesh.castShadow = true;
+      mesh.receiveShadow = true;
       mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), materials.edge));
+      if (outline.length > 1) {
+        const topOutline = new THREE.BufferGeometry().setFromPoints([
+          ...outline.map(point => new THREE.Vector3(point.x / VIEW_SCALE, point.y / VIEW_SCALE, THICKNESS + 0.016)),
+          new THREE.Vector3(outline[0].x / VIEW_SCALE, outline[0].y / VIEW_SCALE, THICKNESS + 0.016)
+        ]);
+        mesh.add(new THREE.Line(topOutline, materials.edge));
+      }
+      localHoles.forEach(local => {
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.014, 8, 28), materials.cutRing);
+        ring.name = `cut-hole-ring-${part.id}`;
+        ring.position.set(local.x / VIEW_SCALE, local.y / VIEW_SCALE, THICKNESS + 0.02);
+        mesh.add(ring);
+      });
       roots.partsLayer.add(mesh);
       partMeshesRef.current.set(part.id, mesh);
     });
@@ -858,6 +874,10 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       data-three-selected-mechanism-type={selectedTelemetry?.type ?? ''}
       data-three-stack-source={selectedRenderPlan ? 'fabricationStackForMechanism' : ''}
       data-three-stack-mode="assembled-spacer-separated"
+      data-three-part-surface="solid-cut-plates"
+      data-three-part-opacity="1"
+      data-three-part-edge-opacity="0.95"
+      data-three-assembly-underlay="grid-only"
       data-three-exploded="false"
       data-three-base-layer={selectedRenderPlan?.base.label ?? ''}
       data-three-stack-order={selectedRenderPlan?.stackSummary ?? ''}

@@ -95,6 +95,9 @@ assert(appText.includes("if (key === 'gearRatio') return false"), 'Foundry hides
 assert(!canvasText.includes('toothWidth'), '2D canvas no longer carries a separate saw-tooth gear implementation');
 assert(!threePreviewText.includes('teeth * 2'), '3D preview no longer carries a separate saw-tooth gear implementation');
 assert(threePreviewText.includes('fabricablePartOutlinePoints'), '3D puppet preview uses fabrication-fit part outlines instead of raw image crop rectangles');
+assert(threePreviewText.includes('data-three-part-surface="solid-cut-plates"'), '3D puppet preview exposes the solid cut-plate surface contract');
+assert(threePreviewText.includes('cut-hole-ring'), '3D puppet preview draws raised joint-hole rings on part surfaces');
+assert(threePreviewText.includes('transparent: false, opacity: 1'), '3D puppet body plates are opaque assembled solids, not ghost overlays');
 const oversizedCutPart: BodyPartLayer = {
   id: 'right_arm_lower',
   name: 'Right lower arm',

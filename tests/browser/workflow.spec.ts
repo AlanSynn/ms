@@ -105,6 +105,9 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   const pathPuppet = page.getByTestId('path-three-puppet-state');
   await expect(pathPuppet).toHaveAttribute('data-three-renderer', 'webgl');
   await expect(pathPuppet).toHaveAttribute('data-puppet-mode', 'thick-flat-assembly');
+  await expect(pathPuppet).toHaveAttribute('data-three-part-surface', 'solid-cut-plates');
+  await expect(pathPuppet).toHaveAttribute('data-three-part-opacity', '1');
+  await expect(pathPuppet).toHaveAttribute('data-three-assembly-underlay', 'grid-only');
   await expect(pathPuppet).toHaveAttribute('data-joint-placement', 'skeleton-anchors');
   await expect(pathPuppet).toHaveAttribute('data-three-rebuild-mode', 'static-topology-dynamic-transforms');
   const pathHasWebgl = await page.getByTestId('path-three-puppet-canvas').evaluate((canvas: HTMLCanvasElement) => Boolean(canvas.getContext('webgl2') || canvas.getContext('webgl')));
@@ -192,6 +195,9 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   const designPuppet = page.getByTestId('design-three-puppet-state');
   await expect(designPuppet).toHaveAttribute('data-three-renderer', 'webgl');
   await expect(designPuppet).toHaveAttribute('data-puppet-mode', 'thick-flat-assembly');
+  await expect(designPuppet).toHaveAttribute('data-three-part-surface', 'solid-cut-plates');
+  await expect(designPuppet).toHaveAttribute('data-three-part-opacity', '1');
+  await expect(designPuppet).toHaveAttribute('data-three-assembly-underlay', 'grid-only');
   await expect(designPuppet).toHaveAttribute('data-three-rebuild-mode', 'static-topology-dynamic-transforms');
   const designHasWebgl = await page.getByTestId('design-three-puppet-canvas').evaluate((canvas: HTMLCanvasElement) => Boolean(canvas.getContext('webgl2') || canvas.getContext('webgl')));
   expect(designHasWebgl, 'design stage mounts a real WebGL canvas').toBeTruthy();
@@ -454,6 +460,8 @@ test('Create from image upload creates a reviewed character package in browser',
   const generatedPuppet = page.getByTestId('path-three-puppet-state');
   await expect(generatedPuppet).toHaveAttribute('data-part-outline-mode', 'fabrication-fit-joint-chain');
   await expect(generatedPuppet).toHaveAttribute('data-puppet-mode', 'thick-flat-assembly');
+  await expect(generatedPuppet).toHaveAttribute('data-three-part-surface', 'solid-cut-plates');
+  await expect(generatedPuppet).toHaveAttribute('data-three-part-opacity', '1');
   expect(Number(await generatedPuppet.getAttribute('data-three-part-hole-count')), 'generated character 3D puppet keeps cut-through joint holes').toBeGreaterThan(0);
   await expect.poll(async () => Number(await generatedPuppet.getAttribute('data-three-render-triangles')), { message: 'accepted ONNX character renders as real 3D fabrication geometry' }).toBeGreaterThan(0);
 
@@ -1622,6 +1630,8 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
   await expect(designPuppet).toHaveAttribute('data-three-renderer', 'webgl');
   await expect(designPuppet).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
   await expect(designPuppet).toHaveAttribute('data-three-stack-mode', 'assembled-spacer-separated');
+  await expect(designPuppet).toHaveAttribute('data-three-part-surface', 'solid-cut-plates');
+  await expect(designPuppet).toHaveAttribute('data-three-assembly-underlay', 'grid-only');
   await expect(designPuppet).toHaveAttribute('data-three-exploded', 'false');
   await expect(designPuppet).toHaveAttribute('data-three-stack-order', /^Back Clip → .*S10 spacer.*Front Clip$/);
   await expect(designPuppet).toHaveAttribute('data-three-spacer-key', 's10');

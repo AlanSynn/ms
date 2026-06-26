@@ -1667,12 +1667,12 @@ const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, 
             const ja = previewSkeleton?.joints[a]; const jb = previewSkeleton?.joints[b];
             if (!ja || !jb) return null;
             const pa = sceneToSvg(ja.position); const pb = sceneToSvg(jb.position);
-            return <line key={`${a}-${b}`} x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke="#434a59" strokeWidth="2" opacity="0.35"/>;
+            return <line key={`${a}-${b}`} x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke="#434a59" strokeWidth="2" opacity="0.12"/>;
         })}
         {project.partOrder.map(id => previewParts[id] ?? project.parts[id]).filter(Boolean).map(part => <React.Fragment key={part.id}><PartShape part={part} selected={project.selectedPartId === part.id} drawMode={drawMode} onSelect={() => dispatch({ type: 'select_part', partId: part.id })}/></React.Fragment>) }
         {previewSkeleton && Object.values(previewSkeleton.joints).map(j => {
             const p = sceneToSvg(j.position);
-            return <g key={j.id}><circle data-testid={`skeleton-joint-${j.id}`} cx={p.x} cy={p.y} r={j.locked ? 6 : 4.5} fill={j.locked ? '#64748b' : '#94a3b8'} stroke="white" strokeWidth="2"/><title>{j.id} bend {j.bendDirection}</title></g>;
+            return <g key={j.id}><circle data-testid={`skeleton-joint-${j.id}`} cx={p.x} cy={p.y} r={j.locked ? 6 : 4.5} fill={j.locked ? '#64748b' : '#94a3b8'} stroke="white" strokeWidth="2" opacity="0.3"/><title>{j.id} bend {j.bendDirection}</title></g>;
         })}
         {Object.values(project.paths).filter(p => p.visible).map(path => <path key={path.id} d={pathFromPoints(path.points, path.closed, path.smoothness)} fill="none" stroke={path.enabled ? '#5a6cff' : '#94a3b8'} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" opacity="0.8"/>)}
         {selectedPath?.visible && selectedPath.points.map((pt, i) => {
@@ -1696,9 +1696,9 @@ const PartShape = ({ part, selected, drawMode, onSelect }: { part: BodyPartLayer
     const w = part.bounds.width * part.transform.scale;
     const h = part.bounds.height * part.transform.scale;
     const stroke = selected ? '#5a6cff' : '#94a3b8';
-    return <g data-canvas-interactive="true" data-testid={`path-part-${part.id}`} transform={`translate(${p.x} ${p.y}) rotate(${-part.transform.rotation})`} onClick={e => { if (!drawMode) { e.stopPropagation(); onSelect(); } }} className={`${drawMode ? 'cursor-crosshair' : 'cursor-pointer'} transition-opacity`} opacity={part.opacity} filter="url(#soft)">
-        {part.textureUrl ? <image href={part.textureUrl} x={-w / 2} y={-h / 2} width={w} height={h} preserveAspectRatio="xMidYMid meet" opacity=".5" style={{ filter: 'grayscale(1) saturate(0.2)' }}/> : <rect x={-w/2} y={-h/2} width={w} height={h} rx="22" fill="#cbd5e1" opacity=".42"/>}
-        <rect x={-w/2} y={-h/2} width={w} height={h} rx="22" fill="none" stroke={stroke} strokeWidth={selected ? 4 : 1.5} strokeDasharray={selected ? '0' : '5 5'}/>
+    return <g data-canvas-interactive="true" data-testid={`path-part-${part.id}`} data-assembly-underlay="grid-hit-layer" transform={`translate(${p.x} ${p.y}) rotate(${-part.transform.rotation})`} onClick={e => { if (!drawMode) { e.stopPropagation(); onSelect(); } }} className={`${drawMode ? 'cursor-crosshair' : 'cursor-pointer'} transition-opacity`} opacity={part.opacity} filter="url(#soft)">
+        {part.textureUrl ? <image href={part.textureUrl} x={-w / 2} y={-h / 2} width={w} height={h} preserveAspectRatio="xMidYMid meet" opacity=".02" style={{ filter: 'grayscale(1) saturate(0.2)' }}/> : <rect x={-w/2} y={-h/2} width={w} height={h} rx="22" fill="#cbd5e1" opacity=".02"/>}
+        <rect x={-w/2} y={-h/2} width={w} height={h} rx="22" fill="none" stroke={stroke} strokeWidth={selected ? 3 : 1.2} strokeDasharray={selected ? '0' : '5 5'} opacity={selected ? 0.28 : 0.05}/>
         {part.localPivotOffset && <circle cx={part.localPivotOffset.x * part.transform.scale} cy={-part.localPivotOffset.y * part.transform.scale} r={5} fill="#64748b" stroke="white" strokeWidth="2"><title>local pivot</title></circle>}
     </g>;
 };
