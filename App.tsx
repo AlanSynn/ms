@@ -37,7 +37,7 @@ import {
     validatePath
 } from './utils/project';
 import { processImageWithWebOnnx } from './utils/webOnnx';
-import { createFabricationPackage, fabricationGearProfileForPitchRadius, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
+import { createFabricationPackage, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
 import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToBoardRaw, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
 import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
@@ -2875,6 +2875,8 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
     const inv = foundryRenderedInventory(mechanism.type);
     const pinionRotation = Math.atan2(simulation.state.j1.y - simulation.state.p1.y, simulation.state.j1.x - simulation.state.p1.x) * 180 / Math.PI;
     const renderPlan = useMemo(() => fabricationRenderPlanForMechanism(mechanism), [mechanism.type]);
+    const spacerLayerCount = renderPlan.layers.filter(item => item.role === 'spacer').length;
+    const spacerRenderCount = spacerLayerCount * [simulation.state.p1, simulation.state.p2, simulation.state.j1, simulation.state.j2, simulation.state.aux, simulation.state.effector].filter(Boolean).length;
     const renderCamera = (view: FoundryCamera) => {
         const scene = sceneRef.current;
         const renderer = rendererRef.current;
@@ -2973,9 +2975,12 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
             trail: new THREE.LineBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity: 0.18 })
         };
         const to3 = (point: Point, z = 0) => new THREE.Vector3((point.x - 180) / 18, (120 - point.y) / 18, z);
+        const mmToThree = SCENE_PX_PER_MM / 18;
         const thickness = Math.max(0.2, kit.holeDiameterMm / 10);
         const barW = Math.max(0.34, kit.holeDiameterMm / 8);
         const holeR = Math.max(0.08, kit.holeDiameterMm / 34);
+        const spacerOuterR = FABRICATION_SPACER_SPEC.outerDiameterMm * mmToThree / 2;
+        const spacerInnerR = FABRICATION_SPACER_SPEC.innerDiameterMm * mmToThree / 2;
         const addEdges = (mesh: THREE.Mesh) => {
             const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({ color: '#334155', transparent: true, opacity: 0.72 }));
             mesh.add(edges);
@@ -3007,10 +3012,13 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
         const addSpacerWasher = (point: Point | undefined, z: number, mat: THREE.Material) => {
             if (!point) return;
             const p = to3(point, z);
-            const washer = new THREE.Mesh(new THREE.TorusGeometry(holeR * 2.3, 0.055, 12, 30), mat);
-            washer.position.copy(p);
-            washer.position.z = z + thickness / 2 + 0.055;
+            const shape = new THREE.Shape();
+            shape.absellipse(0, 0, spacerOuterR, spacerOuterR, 0, Math.PI * 2, false);
+            shape.holes.push(circularHole(0, 0, spacerInnerR));
+            const washer = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.012 }), mat);
+            washer.position.set(p.x, p.y, z - thickness / 2);
             washer.castShadow = true;
+            addEdges(washer);
             root.add(washer);
         };
         const addClipCap = (point: Point | undefined, z: number, mat: THREE.Material) => {
@@ -3268,6 +3276,11 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
             data-three-gear-pitch-sum={(mechanism.crankLength + mechanism.rockerLength).toFixed(2)}
             data-three-gear-output-ratio={gearPairOutputRatio(mechanism.crankLength, mechanism.rockerLength).toFixed(3)}
             data-three-gear-train-linkage-mode={mechanism.type === 'gear' ? 'drive-and-output-rods' : 'template-specific'}
+            data-three-spacer-key={FABRICATION_SPACER_SPEC.key}
+            data-three-spacer-label={FABRICATION_SPACER_SPEC.label}
+            data-three-spacer-mm={`${FABRICATION_SPACER_SPEC.outerDiameterMm}x${FABRICATION_SPACER_SPEC.innerDiameterMm}`}
+            data-three-spacer-layers={spacerLayerCount}
+            data-three-spacer-render-count={spacerRenderCount}
             data-path-preview={showPathPreview ? 'shown' : 'hidden'}
             data-trail={showTrail ? 'shown' : 'hidden'}
             data-forces={showForces ? 'shown' : 'hidden'}

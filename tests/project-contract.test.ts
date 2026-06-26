@@ -3,7 +3,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { boardGridLines, boardToScene, bodyPartPivotScene, physicalKitPreset, placeBodyPartPivotAt, SCENE_PX_PER_MM, sceneToBoard, sceneToBoardRaw, sceneToSheetMm, sceneToSvg, sheetMmToScene } from '../utils/coordinates';
 import { createDefaultMechanism, createSampleProject, handoffGate, loadProjectSnapshot, serializeProject, applyProjectAction, projectSelfCheck, mechanismRequiredParts, mechanismWithGeneratedPath } from '../utils/project';
-import { createFabricationPackage, FABRICATION_GEAR_SPECS, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, sampleFeasibleRange, validateFabricationStack, validateForFabrication } from '../utils/fabrication';
+import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_SPACER_SPEC, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, sampleFeasibleRange, validateFabricationStack, validateForFabrication } from '../utils/fabrication';
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
 import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, generateCurvePoints, planetaryPlanetSpinRatio } from '../utils/kinematics';
@@ -52,8 +52,22 @@ ALL_MECHANISM_TYPES.forEach(type => {
   assert(MECHANISM_TEMPLATE_LIBRARY[type].label && MECHANISM_TEMPLATE_LIBRARY[type].sense, `${type} has shared template metadata`);
 });
 const controlsText = readFileSync(join(process.cwd(), 'components', 'Controls.tsx'), 'utf8');
-const fabricationManifest = JSON.parse(readFileSync(join(process.cwd(), 'fabrication', 'manifest.json'), 'utf8')) as { parts: { gears: Array<{ key: string; teeth: number; pitch_radius_mm: number; root_radius_mm: number; outer_radius_mm: number; hole_diameter_mm: number; path: string; attachment_hole_centers_mm: number[][] }> } };
+const fabricationManifest = JSON.parse(readFileSync(join(process.cwd(), 'fabrication', 'manifest.json'), 'utf8')) as { parts: {
+  gears: Array<{ key: string; teeth: number; pitch_radius_mm: number; root_radius_mm: number; outer_radius_mm: number; hole_diameter_mm: number; path: string; attachment_hole_centers_mm: number[][] }>;
+  spacers: Array<{ key: string; label: string; path: string; outer_diameter_mm: number; inner_diameter_mm: number; hole_diameter_mm: number; hole_centers_mm: number[][]; stackable: boolean }>;
+} };
 assert.deepEqual(FABRICATION_GEAR_SPECS.map(spec => ({ key: spec.key, teeth: spec.teeth, pitchRadiusMm: spec.pitchRadiusMm, rootRadiusMm: spec.rootRadiusMm, outerRadiusMm: spec.outerRadiusMm, holeDiameterMm: spec.holeDiameterMm, path: spec.path, attachmentHoleCentersMm: spec.attachmentHoleCentersMm.map(point => [point.x, point.y]) })), fabricationManifest.parts.gears.map(spec => ({ key: spec.key, teeth: spec.teeth, pitchRadiusMm: spec.pitch_radius_mm, rootRadiusMm: spec.root_radius_mm, outerRadiusMm: spec.outer_radius_mm, holeDiameterMm: spec.hole_diameter_mm, path: spec.path, attachmentHoleCentersMm: spec.attachment_hole_centers_mm })), 'runtime gear primitives mirror fabrication/manifest.json');
+assert.deepEqual(FABRICATION_SPACER_SPEC, {
+  source: 'fabrication/manifest.json',
+  key: fabricationManifest.parts.spacers[0].key,
+  label: fabricationManifest.parts.spacers[0].label,
+  path: fabricationManifest.parts.spacers[0].path,
+  outerDiameterMm: fabricationManifest.parts.spacers[0].outer_diameter_mm,
+  innerDiameterMm: fabricationManifest.parts.spacers[0].inner_diameter_mm,
+  holeDiameterMm: fabricationManifest.parts.spacers[0].hole_diameter_mm,
+  holeCentersMm: fabricationManifest.parts.spacers[0].hole_centers_mm.map(point => ({ x: point[0], y: point[1] })),
+  stackable: fabricationManifest.parts.spacers[0].stackable
+}, 'runtime S10 spacer primitive mirrors fabrication/manifest.json');
 assert.equal(fabricationGearSpecForPitchRadius(27).key, 'g24', 'gear display chooses the nearest fabrication preset by physical pitch radius');
 const g24Profile = fabricationGearProfileForPitchRadius(60, 30);
 assert.equal(g24Profile.source, 'fabrication/manifest.json', 'gear profile declares fabrication source');
@@ -162,6 +176,7 @@ assert(pkg.assemblyGuidePdf.startsWith('%PDF-'), 'fabrication package includes a
 assert(pkg.metadataJson.includes('validationIssues'), 'fabrication metadata includes structured validation issues');
 assert(pkg.recipes.every(r => r.requiredParts.length > 0), 'fabrication recipes include explicit required parts');
 assert.deepEqual(pkg.recipes[0].requiredParts, mechanismRequiredParts(twoFourBars.mechanisms[0]), 'recipe required parts mirror mechanism metadata defaults');
+assert(pkg.recipes[0].requiredParts.some(part => part.name === FABRICATION_SPACER_SPEC.label), 'required parts name the S10 spacer explicitly');
 
 ALL_MECHANISM_TYPES.forEach(type => {
   const stack = fabricationStackForMechanism({ type });
@@ -169,6 +184,7 @@ ALL_MECHANISM_TYPES.forEach(type => {
   assert.equal(stack[0].role, 'clip', `${type} moving stack starts with a clip`);
   assert.equal(stack.at(-1)?.role, 'clip', `${type} moving stack ends with a clip`);
   assert(!stack.some(layer => layer.role === 'base'), `${type} moving stack excludes the base board`);
+  assert(stack.filter(layer => layer.role === 'spacer').every(layer => layer.label === FABRICATION_SPACER_SPEC.label), `${type} stack uses the S10 spacer convention`);
   const moving = (role: string) => !['clip', 'spacer', 'base'].includes(role);
   stack.slice(1, -1).forEach((layer, index, middle) => {
     const next = index < middle.length - 1 ? middle[index + 1] : stack.at(-1);

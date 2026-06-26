@@ -140,7 +140,7 @@ export const mechanismRequiredParts = (mechanism: Pick<MechanismConfig, 'type'>)
     const base = [
         { name: 'axle pin', quantity: axleCount },
         { name: 'retaining clip', quantity: axleCount },
-        { name: 'spacer washer', quantity: mechanism.type === '5bar' ? 8 : 6 },
+        { name: 'S10 spacer', quantity: mechanism.type === '5bar' ? 8 : 6 },
         { name: `${mechanism.type} linkage plate`, quantity: 1 }
     ];
     if (mechanism.type === '5bar') base.push({ name: 'matched gear', quantity: 2 });

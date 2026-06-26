@@ -146,7 +146,10 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   const foundryRig = page.getByTestId('foundry-camera-rig');
   await expect(foundryRig).toHaveAttribute('data-three-renderer', 'webgl');
   await expect(foundryRig).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
-  await expect(foundryRig).toHaveAttribute('data-three-stack-order', /^Back Clip → .*Spacer.*Front Clip$/);
+  await expect(foundryRig).toHaveAttribute('data-three-stack-order', /^Back Clip → .*S10 spacer.*Front Clip$/);
+  await expect(foundryRig).toHaveAttribute('data-three-spacer-key', 's10');
+  await expect(foundryRig).toHaveAttribute('data-three-spacer-mm', '10x4');
+  expect(Number(await foundryRig.getAttribute('data-three-spacer-render-count'))).toBeGreaterThan(0);
   await expect(foundryRig).toHaveAttribute('data-three-stack-colors', /#334155.*#f59e0b/);
   await expect(foundryRig).toHaveAttribute('data-three-stack-validation-errors', '0');
   expect(await foundryRig.getAttribute('data-three-rendered-layer-labels')).toBe(await foundryRig.getAttribute('data-three-stack-order'));
@@ -163,7 +166,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(foundryTargetSummary).toContainText(/anchor/);
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Four-bar linkage');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Sensemaking:');
-  await expect(page.getByTestId('foundry-fabrication-stack')).toContainText(/^Fabrication stack: Back Clip.*Spacer.*Front Clip/);
+  await expect(page.getByTestId('foundry-fabrication-stack')).toContainText(/^Fabrication stack: Back Clip.*S10 spacer.*Front Clip/);
   await expect(page.getByTestId('foundry-fabrication-stack')).not.toContainText(/Base board/);
   await expect(foundryTargetSummary).toContainText(/Board hole [A-Z]\d+/);
   await expect(page.getByTestId('foundry-anchor-marker'), 'Default sandbox shows only path and mechanism').toHaveCount(0);
@@ -244,7 +247,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(webGuideFrame.getByText(/Base board below .* Clip → Linkage\/Gear → Spacer/)).toBeVisible();
   await expect(page.getByTestId('assembly-guide-preview')).toContainText(/Target Right arm · path path-right-arm · anchor right_(hand|elbow)/);
   await expect(page.getByTestId('assembly-guide-preview')).toContainText('Warnings: none');
-  await expect(page.getByTestId('assembly-stack-summary')).toContainText(/^Stack: Back Clip.*Spacer.*Front Clip/);
+  await expect(page.getByTestId('assembly-stack-summary')).toContainText(/^Stack: Back Clip.*S10 spacer.*Front Clip/);
   await expect(page.getByTestId('assembly-stack-summary')).not.toContainText(/Base board/);
   await expect(page.getByRole('button', { name: 'JSON', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'SVG', exact: true })).toBeVisible();
@@ -804,7 +807,10 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await expect(threeScene).toHaveAttribute('data-three-inventory-source', 'rendered-template');
   await expect(threeScene).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
   await expect(threeScene).toHaveAttribute('data-three-base-layer', 'Base board');
-  await expect(threeScene).toHaveAttribute('data-three-stack-order', /^Back Clip → .*Spacer.*Front Clip$/);
+  await expect(threeScene).toHaveAttribute('data-three-stack-order', /^Back Clip → .*S10 spacer.*Front Clip$/);
+  await expect(threeScene).toHaveAttribute('data-three-spacer-key', 's10');
+  await expect(threeScene).toHaveAttribute('data-three-spacer-mm', '10x4');
+  expect(Number(await threeScene.getAttribute('data-three-spacer-render-count'))).toBeGreaterThan(0);
   await expect(threeScene).toHaveAttribute('data-three-stack-roles', /^clip>.*spacer.*>clip$/);
   await expect(threeScene).toHaveAttribute('data-three-stack-colors', /#334155.*#f59e0b/);
   await expect(threeScene).toHaveAttribute('data-three-stack-validation-errors', '0');

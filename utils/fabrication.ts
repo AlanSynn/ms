@@ -24,6 +24,18 @@ export const FABRICATION_GEAR_SPECS: readonly FabricationGearSpec[] = [
     { key: 'g56', label: 'G7 / 7-space gear', path: 'gears/gear-56t.svg', teeth: 56, pitchRadiusMm: 70, rootRadiusMm: 68.438, outerRadiusMm: 71.5, holeDiameterMm: 4, attachmentHoleCentersMm: [{ x: 0, y: -20 }, { x: -20, y: 0 }, { x: 20, y: 0 }, { x: 0, y: 20 }, { x: -20, y: -20 }, { x: 20, y: -20 }, { x: -20, y: 20 }, { x: 20, y: 20 }, { x: 0, y: -40 }, { x: -40, y: 0 }, { x: 40, y: 0 }, { x: 0, y: 40 }, { x: -20, y: -40 }, { x: 20, y: -40 }, { x: -40, y: -20 }, { x: 40, y: -20 }, { x: -40, y: 20 }, { x: 40, y: 20 }, { x: -20, y: 40 }, { x: 20, y: 40 }, { x: -40, y: -40 }, { x: 40, y: -40 }, { x: -40, y: 40 }, { x: 40, y: 40 }, { x: 0, y: -60 }, { x: -60, y: 0 }, { x: 60, y: 0 }, { x: 0, y: 60 }] }
 ] as const;
 
+export const FABRICATION_SPACER_SPEC = {
+    source: 'fabrication/manifest.json',
+    key: 's10',
+    label: 'S10 spacer',
+    path: 'spacers/spacer-s10.svg',
+    outerDiameterMm: 10,
+    innerDiameterMm: 4,
+    holeDiameterMm: 4,
+    holeCentersMm: [{ x: 9, y: 9 }],
+    stackable: true
+} as const;
+
 export type FabricationGearProfile = {
     source: 'fabrication/manifest.json';
     preset: FabricationGearSpec;
@@ -189,7 +201,7 @@ export const fabricationBaseLayer = (): FabricationStackLayer => layer('Base boa
 
 export const fabricationStackForMechanism = (mechanism: Pick<MechanismConfig, 'type'>): FabricationStackLayer[] => {
     const linked = (...middle: FabricationStackLayer[]) => [layer('Back Clip', 'clip'), ...middle, layer('Front Clip', 'clip')];
-    const spacer = () => layer('Spacer washer', 'spacer');
+    const spacer = () => layer(FABRICATION_SPACER_SPEC.label, 'spacer');
     switch (mechanism.type) {
         case 'gear':
             return linked(layer('Drive gear', 'gear'), spacer(), layer('Drive linkage', 'linkage'), spacer(), layer('Output gear', 'gear'), spacer(), layer('Output linkage', 'linkage'));
@@ -220,7 +232,7 @@ export const validateFabricationStack = (mechanism: Pick<MechanismConfig, 'type'
     if (stack.some(item => item.role === 'base')) errors.push('moving stack must not include Base board');
     if (stack[0]?.role !== 'clip') errors.push('moving stack must start with a back clip');
     if (stack.at(-1)?.role !== 'clip') errors.push('moving stack must end with a front clip');
-    if (!stack.some(item => item.role === 'spacer')) errors.push('moving stack must include at least one spacer washer');
+    if (!stack.some(item => item.role === 'spacer')) errors.push(`moving stack must include at least one ${FABRICATION_SPACER_SPEC.label}`);
     stack.slice(1, -1).forEach((item, index, middle) => {
         if (item.role === 'clip') errors.push(`${item.label} clip may only appear at stack ends`);
         if (item.role === 'spacer') {
@@ -229,7 +241,7 @@ export const validateFabricationStack = (mechanism: Pick<MechanismConfig, 'type'
             if (!prev || !next || !isMovingStackLayer(prev) || !isMovingStackLayer(next)) errors.push(`${item.label} must sit between two moving layers`);
         }
         const next = index < middle.length - 1 ? middle[index + 1] : stack.at(-1);
-        if (isMovingStackLayer(item) && next && isMovingStackLayer(next)) errors.push(`${item.label} and ${next.label} need a spacer washer between them`);
+        if (isMovingStackLayer(item) && next && isMovingStackLayer(next)) errors.push(`${item.label} and ${next.label} need a ${FABRICATION_SPACER_SPEC.label} between them`);
     });
     return errors;
 };
@@ -454,7 +466,7 @@ const makeSvg = (project: ProjectState, recipes: FabricationRecipe[]) => {
 const makeExplodedStackSvg = (recipe: FabricationRecipe | undefined, esc: (value: unknown) => string) => {
     const stack = recipe ? fabricationStackForMechanism(recipe) : [];
     const base = fabricationBaseLayer();
-    const rows = stack.length ? stack : [layer('Back Clip', 'clip'), layer('Input linkage', 'linkage'), layer('Spacer washer', 'spacer'), layer('Output linkage', 'linkage'), layer('Front Clip', 'clip')];
+    const rows = stack.length ? stack : [layer('Back Clip', 'clip'), layer('Input linkage', 'linkage'), layer(FABRICATION_SPACER_SPEC.label, 'spacer'), layer('Output linkage', 'linkage'), layer('Front Clip', 'clip')];
     const shapeFor = (item: FabricationStackLayer, x: number, y: number) => {
         const fill = item.color;
         const stroke = item.role === 'clip' ? '#0f172a' : '#334155';
