@@ -51,6 +51,9 @@ export interface PhysicsSession {
     activeMechanismCount: number;
     maxSpeed: number;
     maxForce: number;
+    maxConstraintError: number;
+    frictionCoefficient: number;
+    massKg: number;
   };
 }
 
@@ -71,14 +74,23 @@ const velocityBetween = (previous: Point, next: Point, stepMs: number): Point =>
   return { x: finite((next.x - previous.x) / seconds), y: finite((next.y - previous.y) / seconds) };
 };
 
-const forceFromAcceleration = (previous: Point, current: Point, next: Point, stepMs: number): Point => {
+const forceFromAcceleration = (previous: Point, current: Point, next: Point, stepMs: number, massKg: number): Point => {
   const seconds = Math.max(1e-6, stepMs / 1000);
-  // Unit mass, scaled for display/export readability: F = m·a.
+  // Scaled for display/export readability while preserving F = m·a direction.
   return {
-    x: finite(((next.x - 2 * current.x + previous.x) / (seconds * seconds)) * 0.001),
-    y: finite(((next.y - 2 * current.y + previous.y) / (seconds * seconds)) * 0.001)
+    x: finite(((next.x - 2 * current.x + previous.x) / (seconds * seconds)) * 0.001 * massKg),
+    y: finite(((next.y - 2 * current.y + previous.y) / (seconds * seconds)) * 0.001 * massKg)
   };
 };
+
+const frictionForce = (velocity: Point, massKg: number, coefficient: number): Point => {
+  const speed = Math.hypot(velocity.x, velocity.y);
+  if (!Number.isFinite(speed) || speed < 1e-6 || coefficient <= 0) return { x: 0, y: 0 };
+  const magnitude = coefficient * massKg * 9.81;
+  return { x: finite((-velocity.x / speed) * magnitude), y: finite((-velocity.y / speed) * magnitude) };
+};
+
+const add = (a: Point, b: Point): Point => ({ x: finite(a.x + b.x), y: finite(a.y + b.y) });
 
 const addConstraint = (constraints: PhysicsConstraintSample[], id: string, kind: PhysicsConstraintKind, a: Point, b: Point, expectedLength: number, label: string, mechanismId?: string) => {
   const currentLength = distance(a, b);
@@ -107,6 +119,8 @@ export const buildKinematicPhysicsSession = (
 ): PhysicsSession => {
   const bodies: PhysicsBodySample[] = [];
   const constraints: PhysicsConstraintSample[] = [];
+  const frictionCoefficient = finite(project.settings.simulationFriction, 0.18);
+  const massKg = finite(project.settings.simulationMassKg, 1);
   const warnings: PhysicsSessionWarning[] = projection.warnings.map(warning => ({
     id: `/physics${warning.id}`,
     severity: warning.severity,
@@ -151,7 +165,7 @@ export const buildKinematicPhysicsSession = (
       if (current.aux && previous.aux && next.aux) samples.push(['aux', current.aux, previous.aux, next.aux, 'kinematic']);
       samples.forEach(([sampleId, point, prevPoint, nextPoint, kind]) => {
         const velocity = velocityBetween(prevPoint, nextPoint, stepMs);
-        const force = forceFromAcceleration(prevPoint, point, nextPoint, stepMs);
+        const force = add(forceFromAcceleration(prevPoint, point, nextPoint, stepMs, massKg), frictionForce(velocity, massKg, frictionCoefficient));
         bodies.push({
           id: `/physics/mechanisms/${mechanism.id}/${sampleId}`,
           mechanismId: mechanism.id,
@@ -168,11 +182,32 @@ export const buildKinematicPhysicsSession = (
       addConstraint(constraints, `/physics/constraints/${mechanism.id}/coupler`, 'rod', current.j1, current.j2, finite(mechanism.couplerLength), 'coupler length', mechanism.id);
       addConstraint(constraints, `/physics/constraints/${mechanism.id}/rocker`, 'rod', current.j2, current.p2, finite(mechanism.rockerLength), 'rocker length', mechanism.id);
       addConstraint(constraints, `/physics/constraints/${mechanism.id}/target`, 'target', current.effector, current.effector, 0, 'end effector target', mechanism.id);
+      if (mechanism.type === 'gear') {
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/gear-mesh`, 'guide', current.p1, current.p2, finite(mechanism.crankLength + mechanism.rockerLength), 'gear pitch mesh tangent', mechanism.id);
+      } else if (mechanism.type === 'planetary_gear') {
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/carrier`, 'guide', current.p1, current.p2, finite(mechanism.groundLength), 'planet carrier radius', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/planet-mesh`, 'guide', current.p2, current.j2, finite(mechanism.rockerLength), 'planet gear mesh', mechanism.id);
+      } else if (mechanism.type === 'rack-pinion') {
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/rack-guide`, 'guide', current.j2, current.p2, 0, 'rack linear guide', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/pinion-contact`, 'pin', current.p1, current.j1, finite(mechanism.crankLength), 'pinion pitch contact', mechanism.id);
+      } else if (mechanism.type === 'cam') {
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/follower-guide`, 'guide', current.j2, current.p2, 0, 'follower guide', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/cam-contact`, 'pin', current.j1, current.j2, finite(mechanism.rockerLength), 'cam follower contact', mechanism.id);
+      } else if (mechanism.type === 'piston') {
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/slider-guide`, 'guide', current.j2, current.effector, 0, 'slider guide', mechanism.id);
+      } else if (mechanism.type === 'yoke') {
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/slot-guide`, 'guide', current.j1, current.j2, finite(mechanism.crankLength), 'pin-in-slot guide', mechanism.id);
+      } else if (mechanism.type === 'quick-return') {
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/slotted-arm`, 'guide', current.j1, current.j2, finite(mechanism.couplerLength), 'slotted-arm guide', mechanism.id);
+      } else if (mechanism.type === '5bar') {
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/right-crank`, 'rod', current.p2, current.aux ?? current.j2, finite(mechanism.rockerLength), 'right crank phase rod', mechanism.id);
+      }
       if (!current.isValid) warnings.push({ id: `/physics/warnings/${mechanism.id}/invalid`, severity: 'warning', message: `${templateLabel} kinematic sample is outside its valid linkage range.`, sourceId: mechanism.id });
     });
 
   const maxSpeed = bodies.reduce((max, body) => Math.max(max, Math.hypot(body.velocity.x, body.velocity.y)), 0);
   const maxForce = bodies.reduce((max, body) => Math.max(max, Math.hypot(body.force.x, body.force.y)), 0);
+  const maxConstraintError = constraints.reduce((max, constraint) => Math.max(max, constraint.error), 0);
   return {
     version: 1,
     sourceProjectionVersion: projection.version,
@@ -186,7 +221,10 @@ export const buildKinematicPhysicsSession = (
       constraintCount: constraints.length,
       activeMechanismCount: project.mechanisms.filter(mechanism => mechanism.visible && mechanism.enabled !== false).length,
       maxSpeed: finite(maxSpeed),
-      maxForce: finite(maxForce)
+      maxForce: finite(maxForce),
+      maxConstraintError: finite(maxConstraintError),
+      frictionCoefficient,
+      massKg
     }
   };
 };

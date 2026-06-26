@@ -91,7 +91,7 @@ export interface FoundryExportPackage {
     simulationSummary: string;
     visual: { color: string; scale: number; constraintsVisible: boolean };
     animation: { duration: number; steps: number; loop: boolean };
-    metadata: { sourceTab: string; selectedPreset?: string; recommendation?: string };
+    metadata: { sourceTab: string; selectedPreset?: string; recommendation?: string; simulationFriction?: number; simulationMassKg?: number };
     targetPartId?: string;
     targetPathId?: string;
     targetAnchorJointId?: string;
@@ -197,6 +197,8 @@ export interface AppSettings {
     autosaveIntervalSeconds: number;
     performancePreset: 'fast' | 'balanced' | 'high';
     physicsSnapMode: 'fast' | 'balanced' | 'high';
+    simulationFriction: number;
+    simulationMassKg: number;
     debugVisuals: boolean;
     detailedProcessingSteps: boolean;
     gridUnit: 'cm' | 'inch' | 'px';

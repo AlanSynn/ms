@@ -35,6 +35,8 @@ export const defaultSettings = (): AppSettings => ({
     autosaveIntervalSeconds: 60,
     performancePreset: 'balanced',
     physicsSnapMode: 'balanced',
+    simulationFriction: 0.18,
+    simulationMassKg: 1,
     debugVisuals: false,
     detailedProcessingSteps: false,
     gridUnit: 'cm',
@@ -74,6 +76,8 @@ const normalizeAppSettings = (value: unknown, fallback = defaultSettings()): App
         autosaveIntervalSeconds: Math.round(clampNumber(raw.autosaveIntervalSeconds, fallback.autosaveIntervalSeconds, 1, 600)),
         performancePreset: pickOne(raw.performancePreset, ['fast', 'balanced', 'high'] as const, fallback.performancePreset),
         physicsSnapMode: pickOne(raw.physicsSnapMode, ['fast', 'balanced', 'high'] as const, fallback.physicsSnapMode),
+        simulationFriction: clampNumber(raw.simulationFriction, fallback.simulationFriction, 0, 2),
+        simulationMassKg: clampNumber(raw.simulationMassKg, fallback.simulationMassKg, 0.05, 10),
         debugVisuals: typeof raw.debugVisuals === 'boolean' ? raw.debugVisuals : fallback.debugVisuals,
         detailedProcessingSteps: typeof raw.detailedProcessingSteps === 'boolean' ? raw.detailedProcessingSteps : fallback.detailedProcessingSteps,
         gridUnit: pickOne(raw.gridUnit, ['cm', 'inch', 'px'] as const, fallback.gridUnit),
@@ -595,7 +599,7 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
                 ...action.settings,
                 physicalKit: { ...project.settings.physicalKit, ...(action.settings.physicalKit ?? {}) }
             }, project.settings);
-            const invalidatesExport = Boolean(action.settings.physicalKit || action.settings.fabricationReadyMode !== undefined || action.settings.physicsSnapMode !== undefined);
+            const invalidatesExport = Boolean(action.settings.physicalKit || action.settings.fabricationReadyMode !== undefined || action.settings.physicsSnapMode !== undefined || action.settings.simulationFriction !== undefined || action.settings.simulationMassKg !== undefined);
             return invalidatesExport ? touch({ ...project, settings }) : { ...project, settings };
         }
         case 'set_export':

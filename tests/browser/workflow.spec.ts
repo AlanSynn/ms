@@ -610,6 +610,10 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await page.getByLabel('Animation Duration number').fill('6');
   await page.getByLabel('Animation Duration number').press('Enter');
   await page.getByLabel('Timing profile').selectOption('ease-in-out');
+  await page.getByLabel('Simulation friction μ number').fill('0.42');
+  await page.getByLabel('Simulation friction μ number').press('Enter');
+  await page.getByLabel('Simulation mass kg number').fill('1.75');
+  await page.getByLabel('Simulation mass kg number').press('Enter');
   await page.getByLabel('Performance preset').selectOption('high');
   await page.getByLabel('Physics snap mode').selectOption('high');
   await page.getByLabel('Show Detailed Processing Steps').check();
@@ -628,6 +632,8 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
       interval: saved.settings?.autosaveIntervalSeconds,
       duration: saved.settings?.animationDurationMs,
       timing: saved.settings?.timingProfile,
+      friction: saved.settings?.simulationFriction,
+      mass: saved.settings?.simulationMassKg,
       performance: saved.settings?.performancePreset,
       snap: saved.settings?.physicsSnapMode,
       detailed: saved.settings?.detailedProcessingSteps,
@@ -641,6 +647,8 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
     interval: 1,
     duration: 6000,
     timing: 'ease-in-out',
+    friction: 0.42,
+    mass: 1.75,
     performance: 'high',
     snap: 'high',
     detailed: true,
@@ -813,18 +821,25 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await expect(page.getByTestId('foundry-velocity-vector')).toBeVisible();
   await expect(page.getByTestId('foundry-force-vector')).toBeVisible();
   await expect(page.getByTestId('foundry-drive-force-vector')).toBeVisible();
+  await expect(page.getByTestId('foundry-friction-vector')).toBeVisible();
   await expect(page.getByTestId('foundry-physics-readout')).toContainText('Physics');
+  await expect(page.getByTestId('foundry-physics-readout')).toContainText('μ');
+  await expect(page.getByTestId('foundry-physics-readout')).toContainText('constraint err');
+  await expect(threeScene).toHaveAttribute('data-friction-coefficient', /0\.\d+/);
+  await expect(threeScene).toHaveAttribute('data-constraint-error', /[0-9]+\.[0-9]+/);
   const defaultPhysics = await page.getByTestId('foundry-preview').evaluate(() => {
     const velocity = document.querySelector('[data-testid="foundry-velocity-vector"]') as SVGLineElement | null;
     const force = document.querySelector('[data-testid="foundry-force-vector"]') as SVGLineElement | null;
+    const friction = document.querySelector('[data-testid="foundry-friction-vector"]') as SVGLineElement | null;
     const overlay = document.querySelector('[data-testid="foundry-velocity-overlay"]') as SVGGElement | null;
     const length = (line: SVGLineElement | null) => line
       ? Math.hypot(Number(line.getAttribute('x2')) - Number(line.getAttribute('x1')), Number(line.getAttribute('y2')) - Number(line.getAttribute('y1')))
       : 0;
-    return { velocityLength: length(velocity), forceLength: length(force), speed: Number(overlay?.getAttribute('data-speed') ?? 0) };
+    return { velocityLength: length(velocity), forceLength: length(force), frictionLength: length(friction), speed: Number(overlay?.getAttribute('data-speed') ?? 0) };
   });
   expect(defaultPhysics.velocityLength, 'Velocity vector has visible direction').toBeGreaterThan(20);
   expect(defaultPhysics.forceLength, 'Force vector has visible direction').toBeGreaterThan(20);
+  expect(defaultPhysics.frictionLength, 'Friction vector opposes the live motion').toBeGreaterThan(10);
   expect(defaultPhysics.speed, 'Velocity vector is computed from live mechanism samples').toBeGreaterThan(0);
   expect(Number(await threeScene.getAttribute('data-three-part-count')), 'Sandbox scene contains extruded cardboard/wood parts').toBeGreaterThanOrEqual(4);
   await expect(page.getByTestId('foundry-mini-linkage-gear')).toBeVisible();

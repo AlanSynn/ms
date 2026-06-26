@@ -144,7 +144,7 @@ const STAGE_PANE_NAV_ITEMS: Array<{ ariaLabel: string; label: string; target: Ap
 
 const OPTIONS_SECTION_MANIFEST = [
     { id: 'appearance', label: 'Appearance', description: 'Keep the interface light and show only the panels you need.' },
-    { id: 'simulation', label: 'Simulation', description: 'Preview timing for one full motion loop.' },
+    { id: 'simulation', label: 'Simulation', description: 'Timing plus the physical mass/friction used by force previews.' },
     { id: 'performance', label: 'Performance', description: 'Choose how hard path fitting and snap checks work.' },
     { id: 'debugging', label: 'Debugging', description: 'Turn on labels when something feels off.' },
     { id: 'workflow', label: 'Workflow', description: 'Autosave is local to this browser.' },
@@ -2001,11 +2001,37 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const driveUnit = unitVector(driveRaw.x, driveRaw.y, velocityUnit);
     const radialUnit = unitVector(physicsCenter.x - (playhead?.x ?? physicsCenter.x), physicsCenter.y - (playhead?.y ?? physicsCenter.y), driveUnit);
     const forceUnit = unitVector(accelerationRaw.x, accelerationRaw.y, radialUnit);
+    const frictionUnit = unitVector(-velocityRaw.x, -velocityRaw.y, { x: -velocityUnit.x, y: -velocityUnit.y });
     const velocityTip = playhead ? clampPreviewPoint(vectorEnd(playhead, velocityUnit, 42)) : undefined;
     const forceTip = playhead ? clampPreviewPoint(vectorEnd(playhead, forceUnit, 38)) : undefined;
+    const frictionTip = playhead ? clampPreviewPoint(vectorEnd(playhead, frictionUnit, 30)) : undefined;
     const driveTip = ensureVisibleVectorTip(selectedSimulation.state.j1, clampPreviewPoint(vectorEnd(selectedSimulation.state.j1, driveUnit, 34)));
     const velocityMagnitude = Math.hypot(velocityRaw.x, velocityRaw.y);
-    const forceMagnitude = Math.hypot(accelerationRaw.x, accelerationRaw.y);
+    const frictionMagnitude = velocityMagnitude > 0.01 ? project.settings.simulationFriction * project.settings.simulationMassKg * 9.81 : 0;
+    const forceMagnitude = (Math.hypot(accelerationRaw.x, accelerationRaw.y) * project.settings.simulationMassKg) + frictionMagnitude;
+    const scaledLength = (length: number) => Math.max(0, length) * selectedSimulation.scale;
+    const fittedDistance = (a?: Point, b?: Point) => a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+    const constraintError = (() => {
+        const s = selectedSimulation.state;
+        const errors = foundry.type === 'gear'
+            ? [Math.abs(fittedDistance(s.p1, s.p2) - scaledLength(foundry.crankLength + foundry.rockerLength))]
+            : foundry.type === 'planetary_gear'
+                ? [Math.abs(fittedDistance(s.p1, s.p2) - scaledLength(foundry.groundLength)), Math.abs(fittedDistance(s.p2, s.j2) - scaledLength(foundry.rockerLength))]
+                : foundry.type === 'rack-pinion'
+                    ? [Math.abs(fittedDistance(s.p1, s.j1) - scaledLength(foundry.crankLength)), fittedDistance(s.j2, s.p2)]
+                    : foundry.type === 'cam'
+                        ? [fittedDistance(s.j2, s.p2), Math.abs(fittedDistance(s.j1, s.j2) - scaledLength(foundry.rockerLength))]
+                        : foundry.type === 'piston'
+                            ? [fittedDistance(s.j2, s.effector)]
+                            : foundry.type === 'yoke'
+                                ? [Math.abs(fittedDistance(s.j1, s.j2) - scaledLength(foundry.crankLength))]
+                                : foundry.type === 'quick-return'
+                                    ? [Math.abs(fittedDistance(s.j1, s.j2) - scaledLength(foundry.couplerLength))]
+                                    : foundry.type === '5bar'
+                                        ? [Math.abs(fittedDistance(s.p2, s.aux ?? s.j2) - scaledLength(foundry.rockerLength)), Math.abs(fittedDistance(s.j1, s.j2) - scaledLength(foundry.couplerLength)), Math.abs(fittedDistance(s.aux ?? s.j2, s.j2) - scaledLength(foundry.rodLength ?? 0))]
+                                        : [Math.abs(fittedDistance(s.p1, s.j1) - scaledLength(foundry.crankLength)), Math.abs(fittedDistance(s.j1, s.j2) - scaledLength(foundry.couplerLength)), Math.abs(fittedDistance(s.j2, s.p2) - scaledLength(foundry.rockerLength))];
+        return Math.max(0, ...errors.filter(Number.isFinite));
+    })();
     const physicsRule = mechanismPhysicsRule(foundry.type);
     const hardBlocked = !targetReady || range.percentValid === 0 || !Number.isFinite(landing.x) || !Number.isFinite(landing.y);
     const foundryCameraLabel = foundryCamera.preset === 'custom' ? 'Drag orbit' : FOUNDRY_VIEW_PRESETS[foundryCamera.preset].label;
@@ -2106,7 +2132,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             targetPartId: selectedPart?.id,
             targetPathId: selectedPath?.id,
             targetAnchorJointId: targetIkJointId,
-            metadata: { sourceTab: 'mechanism-foundry', selectedPreset: preset, recommendation: foundry.recommendation ?? FOUNDRY_PRESETS[preset]?.recommendation },
+            metadata: { sourceTab: 'mechanism-foundry', selectedPreset: preset, recommendation: foundry.recommendation ?? FOUNDRY_PRESETS[preset]?.recommendation, simulationFriction: project.settings.simulationFriction, simulationMassKg: project.settings.simulationMassKg },
             warnings: range.warning ? [range.warning] : [],
             source: 'mechanism-foundry'
         };
@@ -2170,6 +2196,9 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 physicsRule={physicsRule}
                 velocityMagnitude={velocityMagnitude}
                 forceMagnitude={forceMagnitude}
+                frictionCoefficient={project.settings.simulationFriction}
+                frictionMagnitude={frictionMagnitude}
+                constraintError={constraintError}
                 cameraLabel={foundryCameraLabel}
                 isPickingAnchor={isPickingAnchor}
                 isOrbiting={isOrbitingFoundry}
@@ -2180,12 +2209,15 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 onPointerCancel={finishFoundryOrbit}
             >
                 <svg viewBox="0 0 360 240" className="foundry-preview-overlay" aria-hidden="true">
-                    {showForces && playhead && forceTip && <g data-testid="foundry-forces-overlay" className="physics-vector physics-force" data-physics-rule={physicsRule} data-fx={accelerationRaw.x.toFixed(3)} data-fy={accelerationRaw.y.toFixed(3)} data-force-magnitude={forceMagnitude.toFixed(3)} stroke="#ef4444" strokeWidth="3" strokeLinecap="round">
+                    {showForces && playhead && forceTip && <g data-testid="foundry-forces-overlay" className="physics-vector physics-force" data-physics-rule={physicsRule} data-fx={accelerationRaw.x.toFixed(3)} data-fy={accelerationRaw.y.toFixed(3)} data-force-magnitude={forceMagnitude.toFixed(3)} data-friction-magnitude={frictionMagnitude.toFixed(3)} data-constraint-error={constraintError.toFixed(3)} stroke="#ef4444" strokeWidth="3" strokeLinecap="round">
                         <defs><marker id="foundry-arrow-force-overlay" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 7 3.5 L 0 7 z" fill="#ef4444" /></marker></defs>
+                        <defs><marker id="foundry-arrow-friction-overlay" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 7 3.5 L 0 7 z" fill="#f59e0b" /></marker></defs>
                         <line data-testid="foundry-force-vector" x1={playhead.x} y1={playhead.y} x2={forceTip.x} y2={forceTip.y} markerEnd="url(#foundry-arrow-force-overlay)" />
                         <line data-testid="foundry-drive-force-vector" x1={selectedSimulation.state.j1.x} y1={selectedSimulation.state.j1.y} x2={driveTip.x} y2={driveTip.y} opacity="0.68" markerEnd="url(#foundry-arrow-force-overlay)" />
+                        {frictionTip && <line data-testid="foundry-friction-vector" x1={playhead.x} y1={playhead.y} x2={frictionTip.x} y2={frictionTip.y} stroke="#f59e0b" markerEnd="url(#foundry-arrow-friction-overlay)" />}
                         <text x={forceTip.x + 5} y={forceTip.y - 3}>F / a</text>
                         <text x={driveTip.x + 5} y={driveTip.y + 9}>drive τ</text>
+                        {frictionTip && <text x={frictionTip.x + 5} y={frictionTip.y + 9} fill="#92400e">μ</text>}
                     </g>}
                     {showVelocity && playhead && velocityTip && <g data-testid="foundry-velocity-overlay" className="physics-vector physics-velocity" data-vx={velocityRaw.x.toFixed(3)} data-vy={velocityRaw.y.toFixed(3)} data-speed={velocityMagnitude.toFixed(3)} stroke="#10b981" strokeWidth="4" strokeLinecap="round">
                         <defs><marker id="foundry-arrow-velocity-overlay" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 7 3.5 L 0 7 z" fill="#10b981" /></marker></defs>
@@ -2210,7 +2242,8 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 <div className="physics-readout mt-3" data-testid="foundry-physics-readout">
                     <strong>Physics</strong>
                     <span>{physicsRule}</span>
-                    <span>v {velocityMagnitude.toFixed(1)} · F {forceMagnitude.toFixed(1)}</span>
+                    <span>v {velocityMagnitude.toFixed(1)} · F {forceMagnitude.toFixed(1)} · μ {project.settings.simulationFriction.toFixed(2)}</span>
+                    <span>constraint err {constraintError.toFixed(2)} · mass {project.settings.simulationMassKg.toFixed(1)}kg</span>
                 </div>
             </div>
             <details className="advanced-panel">
@@ -2580,6 +2613,8 @@ const Options = ({ project, dispatch, goStage }: { project: ProjectState; dispat
                     <option value="slow">Slow inspection legacy</option>
                     <option value="presentation">Presentation legacy</option>
                 </SelectField>
+                <MiniNumber label="Simulation friction μ" value={project.settings.simulationFriction} min={0} max={2} step={0.01} onChange={simulationFriction => updateSettings({ simulationFriction })}/>
+                <MiniNumber label="Simulation mass kg" value={project.settings.simulationMassKg} min={0.05} max={10} step={0.05} onChange={simulationMassKg => updateSettings({ simulationMassKg })}/>
             </SettingsSection>
         </section>
         <section className="space-y-5">
@@ -2737,6 +2772,9 @@ type ThreeFoundryPreviewProps = {
     physicsRule: string;
     velocityMagnitude: number;
     forceMagnitude: number;
+    frictionCoefficient: number;
+    frictionMagnitude: number;
+    constraintError: number;
     cameraLabel: string;
     isPickingAnchor: boolean;
     isOrbiting: boolean;
@@ -2769,7 +2807,7 @@ const disposeThreeObject = (object: THREE.Object3D) => object.traverse(child => 
     else material?.dispose?.();
 });
 
-const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPoints, showPathPreview, showTrail, showForces, showVelocity, physicsRule, velocityMagnitude, forceMagnitude, cameraLabel, isPickingAnchor, isOrbiting, onAnchorPick, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, children }: ThreeFoundryPreviewProps) => {
+const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPoints, showPathPreview, showTrail, showForces, showVelocity, physicsRule, velocityMagnitude, forceMagnitude, frictionCoefficient, frictionMagnitude, constraintError, cameraLabel, isPickingAnchor, isOrbiting, onAnchorPick, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, children }: ThreeFoundryPreviewProps) => {
     const hostRef = useRef<HTMLDivElement | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -3148,6 +3186,9 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
             data-physics-rule={physicsRule}
             data-velocity-magnitude={velocityMagnitude.toFixed(3)}
             data-force-magnitude={forceMagnitude.toFixed(3)}
+            data-friction-coefficient={frictionCoefficient.toFixed(3)}
+            data-friction-magnitude={frictionMagnitude.toFixed(3)}
+            data-constraint-error={constraintError.toFixed(3)}
             data-camera-label={cameraLabel}
             data-anchor-pick-mode="three-raycaster-plane"
             data-three-hole-mode="extruded-cut-through"

@@ -201,6 +201,9 @@ assert(physicsSession.summary.constraintCount >= projectionProject.mechanisms.fi
 assert(physicsSession.bodies.some(body => body.sourceType === 'mechanism-state' && body.label.includes('effector')), 'physics session includes kinematic end-effector samples');
 assert(physicsSession.summary.maxSpeed > 0, 'physics session derives non-zero kinematic velocity from the current mechanism animation');
 assert(physicsSession.summary.maxForce > 0, 'physics session derives non-zero acceleration/force from the current mechanism animation');
+assert.equal(physicsSession.summary.frictionCoefficient, sample.settings.simulationFriction, 'physics session records project friction');
+assert.equal(physicsSession.summary.massKg, sample.settings.simulationMassKg, 'physics session records project mass');
+assert(physicsSession.summary.maxConstraintError >= 0, 'physics session reports mechanism constraint error');
 assertFiniteDeep(physicsSession, 'physicsSession');
 const warningProjection = buildToonSceneProjection({ ...sample, mechanisms: [{ ...sample.mechanisms[0], warnings: ['projection warning'] }] });
 assert(warningProjection.warnings.some(warning => warning.message === 'projection warning' && warning.sourceType === 'mechanism' && warning.recoveryStage === 'design'), 'projection warning maps to source and recovery stage');
@@ -264,6 +267,20 @@ ALL_MECHANISM_TYPES.forEach(type => {
   const templatePhysics = buildKinematicPhysicsSession(templateProject, templateProjection, Math.PI / 4);
   assert(templatePhysics.bodies.some(body => body.mechanismId === mechanism.id && body.sourceType === 'mechanism-state'), `${type} creates physics mechanism-state bodies`);
   assert(templatePhysics.constraints.some(constraint => constraint.mechanismId === mechanism.id), `${type} creates physics mechanism constraints`);
+  const constraintLabels = templatePhysics.constraints.filter(constraint => constraint.mechanismId === mechanism.id).map(constraint => constraint.label).join(' | ');
+  const expectedConstraint = ({
+    cam: 'cam follower contact',
+    'rack-pinion': 'rack linear guide',
+    gear: 'gear pitch mesh tangent',
+    planetary_gear: 'planet gear mesh',
+    piston: 'slider guide',
+    yoke: 'pin-in-slot guide',
+    'quick-return': 'slotted-arm guide',
+    '5bar': 'right crank phase rod',
+    '4bar': 'coupler length',
+    crank: 'crank length'
+  } as Record<string, string>)[type];
+  assert(constraintLabels.includes(expectedConstraint), `${type} exposes a type-specific physics constraint (${expectedConstraint})`);
   assert(templatePhysics.summary.maxSpeed >= 0 && templatePhysics.summary.maxForce >= 0, `${type} exports velocity and force magnitudes`);
   assertFiniteDeep(templatePhysics, `${type}.templatePhysics`);
 });
@@ -430,6 +447,8 @@ assert.equal(sample.settings.timingProfile, 'linear', 'options include a persist
 assert.equal(sample.settings.theme, 'light', 'settings default to the light novice UI theme');
 assert.equal(sample.settings.performancePreset, 'balanced', 'settings default includes performance preset');
 assert.equal(sample.settings.physicsSnapMode, 'balanced', 'settings default includes physics snap mode');
+assert.equal(sample.settings.simulationFriction, 0.18, 'settings default includes physical friction coefficient');
+assert.equal(sample.settings.simulationMassKg, 1, 'settings default includes mechanism mass');
 assert.equal(sample.settings.debugVisuals, false, 'settings default hides debug visuals');
 assert.equal(sample.settings.detailedProcessingSteps, false, 'settings default hides detailed processing steps');
 assert.equal(sample.settings.autosaveIntervalSeconds, 60, 'settings default includes autosave interval seconds');
@@ -458,6 +477,8 @@ const legacySettingsProject = loadProjectSnapshot({
   }
 });
 assert.equal(legacySettingsProject.settings.performancePreset, 'balanced', 'legacy snapshots receive M3 performance default');
+assert.equal(legacySettingsProject.settings.simulationFriction, 0.18, 'legacy snapshots receive simulation friction default');
+assert.equal(legacySettingsProject.settings.simulationMassKg, 1, 'legacy snapshots receive simulation mass default');
 assert.equal(legacySettingsProject.settings.autosaveIntervalSeconds, 60, 'legacy snapshots receive M3 autosave interval default');
 assert.equal(legacySettingsProject.settings.physicalKit.cutSheetFileType, 'pdf', 'legacy physical kit receives cut-sheet default');
 const optionsRoundTrip = loadProjectSnapshot(JSON.parse(serializeProject({
@@ -466,6 +487,8 @@ const optionsRoundTrip = loadProjectSnapshot(JSON.parse(serializeProject({
     ...sample.settings,
     performancePreset: 'high',
     physicsSnapMode: 'fast',
+    simulationFriction: 0.42,
+    simulationMassKg: 1.75,
     debugVisuals: true,
     detailedProcessingSteps: true,
     autosave: true,
@@ -477,6 +500,8 @@ const optionsRoundTrip = loadProjectSnapshot(JSON.parse(serializeProject({
 })));
 assert.equal(optionsRoundTrip.settings.performancePreset, 'high', 'M3 performance setting serializes and reloads');
 assert.equal(optionsRoundTrip.settings.physicsSnapMode, 'fast', 'physics snap mode round-trips');
+assert.equal(optionsRoundTrip.settings.simulationFriction, 0.42, 'simulation friction round-trips');
+assert.equal(optionsRoundTrip.settings.simulationMassKg, 1.75, 'simulation mass round-trips');
 assert.equal(optionsRoundTrip.settings.debugVisuals, true, 'debug visuals round-trip');
 assert.equal(optionsRoundTrip.settings.detailedProcessingSteps, true, 'detailed processing setting round-trips');
 assert.equal(optionsRoundTrip.settings.autosaveIntervalSeconds, 3, 'autosave interval round-trips');
@@ -764,6 +789,8 @@ const gridSettingsProject = applyProjectAction(exportedForSettings, { type: 'upd
 assert.equal(gridSettingsProject.lastExport, undefined, 'physical kit options invalidate export package');
 const snapSettingsProject = applyProjectAction(exportedForSettings, { type: 'update_settings', settings: { physicsSnapMode: 'high' } });
 assert.equal(snapSettingsProject.lastExport, undefined, 'physics snap settings invalidate fabrication export package');
+const simulationSettingsProject = applyProjectAction(exportedForSettings, { type: 'update_settings', settings: { simulationFriction: 0.5, simulationMassKg: 2 } });
+assert.equal(simulationSettingsProject.lastExport, undefined, 'simulation physics settings invalidate fabrication export package');
 const indexHtml = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
 assert(!/https?:\/\//.test(indexHtml), 'index.html has no external CDN URLs');
 assert(!/importmap|tailwindcss/i.test(indexHtml), 'index.html does not rely on importmap or Tailwind CDN');
