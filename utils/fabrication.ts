@@ -192,7 +192,7 @@ export const fabricationStackForMechanism = (mechanism: Pick<MechanismConfig, 't
     const spacer = () => layer('Spacer washer', 'spacer');
     switch (mechanism.type) {
         case 'gear':
-            return linked(layer('Drive gear', 'gear'), spacer(), layer('Output gear', 'gear'), spacer(), layer('Output linkage', 'linkage'));
+            return linked(layer('Drive gear', 'gear'), spacer(), layer('Drive linkage', 'linkage'), spacer(), layer('Output gear', 'gear'), spacer(), layer('Output linkage', 'linkage'));
         case 'planetary_gear':
             return linked(layer('Ring gear', 'gear'), spacer(), layer('Carrier linkage', 'linkage'), spacer(), layer('Planet gear', 'gear'), spacer(), layer('Sun gear', 'gear'));
         case 'rack-pinion':

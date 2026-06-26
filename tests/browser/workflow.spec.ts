@@ -901,6 +901,10 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Gear train');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('ratio sign');
   expect(Number(await threeScene.getAttribute('data-three-gear-count')), 'Gear preview uses toothed 3D fabrication geometry').toBeGreaterThanOrEqual(2);
+  await expect(threeScene, 'Gear train uses separate drive/output rods instead of a fake center bar').toHaveAttribute('data-three-gear-train-linkage-mode', 'drive-and-output-rods');
+  await expect(threeScene, 'Gear train fabrication stack exposes both linkage rods').toHaveAttribute('data-three-stack-order', /Drive linkage.*Output linkage/);
+  expect(Number(await threeScene.getAttribute('data-three-gear-pitch-center')), 'Gear pitch centers are snapped to the sum of fabrication gear radii').toBeCloseTo(Number(await threeScene.getAttribute('data-three-gear-pitch-sum')), 2);
+  await expect(threeScene, 'Default gear train is a visible G5-to-G3 ratio, not two identical gears').toHaveAttribute('data-three-gear-radii', '100.00,60.00');
   await page.getByLabel('Foundry mechanism type').selectOption('cam');
   expect(Number(await threeScene.getAttribute('data-three-cam-count')), 'Cam follower uses a cam profile, not a generic gear').toBeGreaterThanOrEqual(1);
   expect(Number(await threeScene.getAttribute('data-three-follower-count')), 'Cam follower shows its follower block').toBeGreaterThanOrEqual(1);
@@ -1619,7 +1623,7 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
   await expect.poll(async () => Math.abs(await numAttr('data-three-primary-rotation-deg') - gearStart), { message: 'gear animation updates the selected central 3D preview' }).toBeGreaterThan(6);
   const gearPrimary = await numAttr('data-three-primary-rotation-deg');
   const gearSecondary = await numAttr('data-three-secondary-rotation-deg');
-  expect(Math.abs(gearPrimary + gearSecondary), 'default gear train rotates the second gear opposite the driver').toBeLessThan(0.75);
+  expect(Math.abs(gearSecondary - gearPrimary * (-100 / 60)), 'default G5-to-G3 gear train rotates by the physical pitch-radius ratio').toBeLessThan(1.25);
   await stagePlayButton().click();
 
   await page.getByRole('button', { name: '5bar', exact: true }).click();

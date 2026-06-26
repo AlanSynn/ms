@@ -13,11 +13,14 @@ import {
     StandardSkeleton,
     Transform
 } from '../types';
-import { defaultPhysicalKit, localPivotOffsetForScene, sceneBoundsForSheet } from './coordinates';
-import { generateCurvePoints } from './kinematics';
+import { defaultPhysicalKit, localPivotOffsetForScene, SCENE_PX_PER_MM, sceneBoundsForSheet } from './coordinates';
+import { gearPairOutputRatio, generateCurvePoints, planetaryPlanetSpinRatio } from './kinematics';
 import { clampNumber, finiteNumber, sanitizeHexColor, sanitizeMechanismType, sanitizePoint } from './sanitize';
 
 export const APP_STATE_VERSION = 1;
+
+const DEFAULT_DRIVE_GEAR_RADIUS = 50 * SCENE_PX_PER_MM; // fabrication G5 / 40T
+const DEFAULT_OUTPUT_GEAR_RADIUS = 30 * SCENE_PX_PER_MM; // fabrication G3 / 24T
 
 export const nowIso = () => new Date().toISOString();
 export const uid = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 8)}-${Date.now().toString(36)}`;
@@ -142,6 +145,7 @@ export const mechanismRequiredParts = (mechanism: Pick<MechanismConfig, 'type'>)
     ];
     if (mechanism.type === '5bar') base.push({ name: 'matched gear', quantity: 2 });
     if (mechanism.type === 'gear' || mechanism.type === 'planetary_gear') base.push({ name: 'gear pair', quantity: mechanism.type === 'planetary_gear' ? 3 : 2 });
+    if (mechanism.type === 'gear') base.push({ name: 'gear train linkage rod', quantity: 2 });
     if (mechanism.type === 'rack-pinion') base.push({ name: 'pinion gear', quantity: 1 }, { name: 'toothed rack', quantity: 1 }, { name: 'slider guide', quantity: 1 });
     if (mechanism.type === 'cam') base.push({ name: 'cam disk', quantity: 1 }, { name: 'follower guide', quantity: 1 });
     if (mechanism.type === 'piston' || mechanism.type === 'yoke') base.push({ name: 'slider guide', quantity: 1 });
@@ -205,17 +209,17 @@ export const createDefaultMechanism = (type: MechanismConfig['type'] = '4bar', i
     sceneAnchor: { x: -120, y: -40 },
     activeVisualPartIds: [],
     groundAngle: type === 'cam' || type === 'rack-pinion' ? 90 : 0,
-    groundLength: type === 'gear' ? 108 : type === 'planetary_gear' ? 74 : type === 'piston' || type === 'yoke' || type === 'cam' || type === 'rack-pinion' ? 0 : 180,
-    crankLength: type === '5bar' ? 60 : type === 'gear' ? 54 : type === 'planetary_gear' ? 38 : type === 'rack-pinion' ? 42 : 50,
+    groundLength: type === 'gear' ? DEFAULT_DRIVE_GEAR_RADIUS + DEFAULT_OUTPUT_GEAR_RADIUS : type === 'planetary_gear' ? 74 : type === 'piston' || type === 'yoke' || type === 'cam' || type === 'rack-pinion' ? 0 : 180,
+    crankLength: type === '5bar' ? 60 : type === 'gear' ? DEFAULT_DRIVE_GEAR_RADIUS : type === 'planetary_gear' ? 38 : type === 'rack-pinion' ? 42 : 50,
     couplerLength: type === 'yoke' || type === 'cam' || type === 'gear' || type === 'planetary_gear' || type === 'rack-pinion' ? 0 : 165,
-    rockerLength: type === '5bar' ? 48 : type === 'quick-return' ? 130 : type === 'gear' ? 54 : type === 'planetary_gear' ? 36 : type === 'cam' ? 80 : type === 'rack-pinion' ? 380 : 110,
+    rockerLength: type === '5bar' ? 48 : type === 'quick-return' ? 130 : type === 'gear' ? DEFAULT_OUTPUT_GEAR_RADIUS : type === 'planetary_gear' ? 36 : type === 'cam' ? 80 : type === 'rack-pinion' ? 380 : 110,
     sliderOffset: type === 'piston' ? 34 : type === 'rack-pinion' ? 56 : 0,
     couplerPointDist: type === '5bar' ? 90 : type === 'rack-pinion' ? 70 : 78,
     couplerPointAngle: type === 'piston' || type === 'yoke' || type === 'cam' || type === 'rack-pinion' ? 0 : 40,
     assemblyMode: type === '4bar' ? 'open' : undefined,
     speed1: 1,
-    speed2: type === '5bar' || type === 'gear' ? -2 : type === 'planetary_gear' ? 3 : 1,
-    gearRatio: type === 'gear' ? -1 : type === 'planetary_gear' ? 3 : undefined,
+    speed2: type === '5bar' ? -2 : type === 'gear' ? gearPairOutputRatio(DEFAULT_DRIVE_GEAR_RADIUS, DEFAULT_OUTPUT_GEAR_RADIUS) : type === 'planetary_gear' ? planetaryPlanetSpinRatio(38, 36) : 1,
+    gearRatio: type === 'gear' ? gearPairOutputRatio(DEFAULT_DRIVE_GEAR_RADIUS, DEFAULT_OUTPUT_GEAR_RADIUS) : type === 'planetary_gear' ? planetaryPlanetSpinRatio(38, 36) : undefined,
     rodLength: 110,
     phase: 0,
     source: 'manual',

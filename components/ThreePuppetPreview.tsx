@@ -89,7 +89,7 @@ const puppetMechanismInventory = (type: MechanismType): MechanismInventory => ({
   '5bar': { parts: 6, holes: 18, slots: 0, gears: 2, racks: 0, cams: 0, followers: 0, endStops: 0 },
   cam: { parts: 4, holes: 6, slots: 1, gears: 0, racks: 0, cams: 1, followers: 1, endStops: 0 },
   'rack-pinion': { parts: 5, holes: 6, slots: 1, gears: 1, racks: 1, cams: 0, followers: 1, endStops: 2 },
-  gear: { parts: 5, holes: 14, slots: 0, gears: 2, racks: 0, cams: 0, followers: 0, endStops: 0 },
+  gear: { parts: 6, holes: 18, slots: 0, gears: 2, racks: 0, cams: 0, followers: 0, endStops: 0 },
   planetary_gear: { parts: 5, holes: 14, slots: 0, gears: 3, racks: 0, cams: 0, followers: 0, endStops: 0 }
 }[type]);
 
@@ -166,6 +166,7 @@ const updateUnitBar = (mesh: THREE.Object3D, a?: Point, b?: Point, z = 0) => {
 
 const createHoledLink = (length: number, width: number, material: THREE.Material, edgeMaterial: THREE.Material, holeCount = 2) => {
   const group = new THREE.Group();
+  group.userData.baseLength = Math.max(0.08, length);
   const shape = roundedRect(Math.max(0.08, length), width, width / 2);
   const count = Math.max(2, holeCount);
   for (let i = 0; i < count; i += 1) {
@@ -275,6 +276,7 @@ const updateLink = (group: THREE.Object3D, a?: Point, b?: Point, z = 0) => {
   group.visible = len >= 0.03;
   group.position.set((av.x + bv.x) / 2, (av.y + bv.y) / 2, z);
   group.rotation.z = Math.atan2(bv.y - av.y, bv.x - av.x);
+  group.scale.x = len / Math.max(0.01, Number(group.userData.baseLength ?? len));
 };
 
 const updateObject = (object: THREE.Object3D | undefined, center?: Point, z = 0, rotation = 0) => {
@@ -772,11 +774,11 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
         updateObject(visual.extras.endStopA, shifted(rackGuide.center, rackGuide.trackAngle, -mechanism.rockerLength / 2), 1.08, rackGuide.trackAngle);
         updateObject(visual.extras.endStopB, shifted(rackGuide.center, rackGuide.trackAngle, mechanism.rockerLength / 2), 1.08, rackGuide.trackAngle);
       } else if (mechanism.type === 'gear') {
-        updateLink(visual.links.base, state.p1, state.p2, 0.48);
-        updateLink(visual.links.driver, state.p1, state.j1, 0.72);
+        updateLink(visual.links.base, undefined, undefined);
+        updateLink(visual.links.driver, state.j1, state.effector, 0.98);
         updateLink(visual.links.coupler, undefined, undefined);
-        updateLink(visual.links.output, state.p2, state.j2, 0.92);
-        updateLink(visual.links.effector, state.j2, state.effector, 1.2);
+        updateLink(visual.links.output, state.j2, state.effector, 1.2);
+        updateLink(visual.links.effector, undefined, undefined);
       } else if (mechanism.type === 'planetary_gear') {
         updateLink(visual.links.base, state.p1, state.p2, 0.48);
         updateLink(visual.links.driver, state.p1, state.j1, 0.72);

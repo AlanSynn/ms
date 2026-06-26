@@ -1823,6 +1823,24 @@ const fabricationErrorsForCandidate = (project: ProjectState, mechanism: Mechani
     return validateForFabrication(candidateProject).errors.filter(error => !baseline.has(error));
 };
 
+const normalizeGearMeshMechanism = (mechanism: MechanismConfig): MechanismConfig => {
+    if (mechanism.type !== 'gear' && mechanism.type !== 'planetary_gear') return mechanism;
+    const crankLength = Math.max(1, mechanism.crankLength);
+    const rockerLength = Math.max(1, mechanism.rockerLength);
+    const physicalRatio = mechanism.type === 'gear'
+        ? gearPairOutputRatio(crankLength, rockerLength)
+        : planetaryPlanetSpinRatio(crankLength, rockerLength);
+    return {
+        ...mechanism,
+        crankLength,
+        rockerLength,
+        groundLength: crankLength + rockerLength,
+        couplerLength: 0,
+        gearRatio: physicalRatio,
+        speed2: physicalRatio
+    };
+};
+
 const availableMotionAnchorForRecommendation = (project: ProjectState, partId: string) => {
     const anchors = motionAnchorJointIds(project, partId);
     const occupied = new Set(project.mechanisms
@@ -1853,6 +1871,11 @@ const createRecommendedMechanism = (project: ProjectState, selectedPart: BodyPar
         : type === 'gear' || type === 'planetary_gear'
             ? tunedCrankLength + tunedRockerLength
             : Math.max(60, Math.min(220, span * 0.85));
+    const tunedGearRatio = type === 'gear'
+        ? gearPairOutputRatio(tunedCrankLength, tunedRockerLength)
+        : type === 'planetary_gear'
+            ? planetaryPlanetSpinRatio(tunedCrankLength, tunedRockerLength)
+            : undefined;
     const tuned: MechanismConfig = {
         ...base,
         ...smart,
@@ -1871,8 +1894,8 @@ const createRecommendedMechanism = (project: ProjectState, selectedPart: BodyPar
         sliderOffset: type === 'piston' || type === 'yoke' ? Math.max(-80, Math.min(80, metrics.height * 0.2)) : type === 'rack-pinion' ? Math.max(30, Math.min(100, span * 0.28)) : base.sliderOffset,
         couplerPointDist: Math.max(35, Math.min(190, span * 0.72)),
         couplerPointAngle: type === 'piston' || type === 'rack-pinion' ? 0 : base.couplerPointAngle,
-        gearRatio: type === 'gear' ? -1 : type === 'planetary_gear' ? 3 : undefined,
-        speed2: type === 'gear' ? -1 : type === 'planetary_gear' ? 3 : base.speed2,
+        gearRatio: tunedGearRatio,
+        speed2: tunedGearRatio ?? base.speed2,
         phase: 0,
         targetPartId: selectedPart.id,
         targetPathId: selectedPath.id,
@@ -2114,15 +2137,15 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 y: key === 'anchorY' ? value : (foundry.anchorY ?? landing.y)
             };
             setManualAnchor(anchor);
-            setFoundry({
+            setFoundry(normalizeGearMeshMechanism({
                 ...foundry,
                 [key]: value,
                 sceneAnchor: anchor,
                 transform: { ...(foundry.transform ?? { x: anchor.x, y: anchor.y, rotation: foundry.groundAngle ?? 0, scale: 1 }), x: anchor.x, y: anchor.y }
-            });
+            }));
             return;
         }
-        setFoundry({ ...foundry, [key]: value });
+        setFoundry(normalizeGearMeshMechanism({ ...foundry, [key]: value }));
     };
     const keepCurrentAnchor = (mechanism: MechanismConfig): MechanismConfig => ({
         ...mechanism,
@@ -2131,6 +2154,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
         sceneAnchor: landing,
         transform: { ...(mechanism.transform ?? { x: landing.x, y: landing.y, rotation: mechanism.groundAngle ?? 0, scale: 1 }), x: landing.x, y: landing.y }
     });
+    const setAnchoredFoundry = (mechanism: MechanismConfig) => setFoundry(normalizeGearMeshMechanism(keepCurrentAnchor(mechanism)));
     useEffect(() => {
         if (!foundryPlaying) return;
         let frame = 0;
@@ -2191,7 +2215,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                         const item = MECHANISM_LIBRARY[type];
                         const cardMechanism = { ...createDefaultMechanism(type, `foundry-card-${type}`), color: foundry.color };
                         const cardSimulation = fitMechanismSimulation(cardMechanism, foundryPhase, 180, 96, 48);
-                        return <button key={type} type="button" className={`recommendation-card mechanism-choice ${foundry.type === type ? 'active' : ''}`} onClick={() => setFoundry(keepCurrentAnchor({ ...createDefaultMechanism(type, 'foundry-preview'), color: foundry.color, presetId: 'balanced', recommendation: FOUNDRY_PRESETS.balanced.recommendation }))}>
+                        return <button key={type} type="button" className={`recommendation-card mechanism-choice ${foundry.type === type ? 'active' : ''}`} onClick={() => setAnchoredFoundry({ ...createDefaultMechanism(type, 'foundry-preview'), color: foundry.color, presetId: 'balanced', recommendation: FOUNDRY_PRESETS.balanced.recommendation })}>
                             <svg viewBox="0 0 180 96" className="mechanism-choice-sim" data-testid={`foundry-mini-simulation-${type}`} aria-hidden="true">
                                 <path d={cardSimulation.pathD} fill="none" stroke={foundry.color} strokeWidth="2.5" strokeLinecap="round" opacity="0.45"/>
                                 <MechanismLinkagePreview mechanism={cardMechanism} simulation={cardSimulation} kit={project.settings.physicalKit} testId={`foundry-mini-linkage-${type}`} compact />
@@ -2281,13 +2305,13 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             <details className="advanced-panel">
                 <summary>Mechanism options</summary>
                 <div className="mt-3 space-y-3">
-                    <select aria-label="Foundry mechanism type" className="field" value={foundry.type} onChange={e => setFoundry(keepCurrentAnchor({ ...createDefaultMechanism(e.target.value as MechanismType, 'foundry-preview'), color: foundry.color, presetId: 'balanced', recommendation: FOUNDRY_PRESETS.balanced.recommendation }))}>{AUTHORABLE_MECHANISM_TYPES.map(t => <option key={t} value={t}>{mechanismTemplateLabel(t)}</option>)}</select>
+                    <select aria-label="Foundry mechanism type" className="field" value={foundry.type} onChange={e => setAnchoredFoundry({ ...createDefaultMechanism(e.target.value as MechanismType, 'foundry-preview'), color: foundry.color, presetId: 'balanced', recommendation: FOUNDRY_PRESETS.balanced.recommendation })}>{AUTHORABLE_MECHANISM_TYPES.map(t => <option key={t} value={t}>{mechanismTemplateLabel(t)}</option>)}</select>
                     <select aria-label="Foundry preset" className="field" value={foundry.presetId ?? 'balanced'} onChange={e => {
                         const presetId = e.target.value;
                         const preset = FOUNDRY_PRESETS[presetId];
                         const { label: _label, ...updates } = preset;
                         const base = presetId === 'balanced' ? createDefaultMechanism(foundry.type, 'foundry-preview') : foundry;
-                        setFoundry(keepCurrentAnchor({ ...base, color: foundry.color, ...updates, presetId, recommendation: preset.recommendation }));
+                        setAnchoredFoundry({ ...base, color: foundry.color, ...updates, presetId, recommendation: preset.recommendation });
                     }}>{Object.entries(FOUNDRY_PRESETS).map(([id, preset]) => <option key={id} value={id}>{preset.label}</option>)}</select>
                     {PARAMS.filter(p => showParam(foundry.type, p.key)).map(p => <React.Fragment key={String(p.key)}><MiniNumber label={p.label} value={Number(foundry[p.key] ?? 0)} min={p.min} max={p.max} step={p.step} onChange={value => updateFoundryParam(p.key, value)}/></React.Fragment>) }
                 </div>
@@ -2728,7 +2752,7 @@ const showParam = (type: MechanismType, key: keyof MechanismConfig) => {
     if (key === 'phase') return ['5bar', 'gear', 'planetary_gear'].includes(type);
     if (key === 'gearRatio') return false;
     if (key === 'rodLength') return ['5bar', 'piston'].includes(type);
-    if (key === 'groundLength') return !['cam', 'yoke', 'rack-pinion'].includes(type);
+    if (key === 'groundLength') return !['cam', 'yoke', 'rack-pinion', 'gear', 'planetary_gear'].includes(type);
     if (key === 'couplerLength') return !['cam', 'gear', 'planetary_gear', 'yoke', 'rack-pinion'].includes(type);
     return true;
 };
@@ -2829,7 +2853,7 @@ const foundryRenderedInventory = (type: MechanismType) => ({
     '5bar': { parts: 7, holes: 25, slots: 0, gears: 2, racks: 0, cams: 0, followers: 0, endStops: 0 },
     cam: { parts: 8, holes: 16, slots: 1, gears: 0, racks: 0, cams: 1, followers: 1, endStops: 0 },
     'rack-pinion': { parts: 10, holes: 20, slots: 1, gears: 1, racks: 1, cams: 0, followers: 0, endStops: 2 },
-    gear: { parts: 7, holes: 25, slots: 0, gears: 2, racks: 0, cams: 0, followers: 0, endStops: 0 },
+    gear: { parts: 8, holes: 29, slots: 0, gears: 2, racks: 0, cams: 0, followers: 0, endStops: 0 },
     planetary_gear: { parts: 7, holes: 25, slots: 0, gears: 2, racks: 0, cams: 0, followers: 0, endStops: 0 },
     crank: { parts: 5, holes: 15, slots: 0, gears: 0, racks: 0, cams: 0, followers: 0, endStops: 0 }
 }[type]);
@@ -3164,10 +3188,13 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
 
         const s = simulation.state;
         const angle = pinionRotation;
-        addBar(s.p1, s.p2, 0, material.base, 3);
+        const usesMeshedPitchCenters = ['gear', 'planetary_gear', 'rack-pinion', 'cam'].includes(mechanism.type);
+        if (!usesMeshedPitchCenters) addBar(s.p1, s.p2, 0, material.base, 3);
         const layerPoints = [s.p1, s.p2, s.j1, s.j2, s.aux, s.effector].filter(Boolean) as Point[];
         const renderLinkageLayer = (label: string, z: number, mat: THREE.Material) => {
-            if (/input|crank|left/i.test(label)) addBar(s.p1, s.j1, z, mat, 3);
+            if (mechanism.type === 'gear' && /drive/i.test(label)) addBar(s.j1, s.effector, z, mat, 4);
+            else if (mechanism.type === 'gear' && /output/i.test(label)) addBar(s.j2, s.effector, z, mat, 3);
+            else if (/input|crank|left/i.test(label)) addBar(s.p1, s.j1, z, mat, 3);
             else if (/right/i.test(label)) addBar(s.p2, s.j2, z, mat, 3);
             else if (/coupler|center|carrier/i.test(label)) addBar(s.j1, s.j2, z, mat, 4);
             else if (/output|follower/i.test(label)) addBar(s.j2, s.effector, z, mat, 2);
@@ -3236,6 +3263,11 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPo
             data-three-cam-count={inv.cams}
             data-three-follower-count={inv.followers}
             data-three-end-stop-count={inv.endStops}
+            data-three-gear-radii={`${mechanism.crankLength.toFixed(2)},${mechanism.rockerLength.toFixed(2)}`}
+            data-three-gear-pitch-center={mechanism.groundLength.toFixed(2)}
+            data-three-gear-pitch-sum={(mechanism.crankLength + mechanism.rockerLength).toFixed(2)}
+            data-three-gear-output-ratio={gearPairOutputRatio(mechanism.crankLength, mechanism.rockerLength).toFixed(3)}
+            data-three-gear-train-linkage-mode={mechanism.type === 'gear' ? 'drive-and-output-rods' : 'template-specific'}
             data-path-preview={showPathPreview ? 'shown' : 'hidden'}
             data-trail={showTrail ? 'shown' : 'hidden'}
             data-forces={showForces ? 'shown' : 'hidden'}
@@ -3458,9 +3490,8 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
             link(s.j2, s.effector, 'output', 'mechanism-output', 'output')
         ];
         if (mechanism.type === 'gear') return [
-            link(s.p1, s.p2, 'gear-frame', 'mechanism-frame', 'frame'),
-            link(s.p2, s.j2, 'gear-output-arm', 'mechanism-link', 'link'),
-            link(s.j2, s.effector, 'gear-output', 'mechanism-output', 'output')
+            link(s.j1, s.effector, 'gear-drive-rod', 'mechanism-link', 'link'),
+            link(s.j2, s.effector, 'gear-output-rod', 'mechanism-output', 'output')
         ];
         if (mechanism.type === 'planetary_gear') return [
             link(s.p1, s.p2, 'carrier', 'mechanism-driver', 'driver'),

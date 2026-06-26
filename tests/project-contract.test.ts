@@ -468,7 +468,9 @@ const requiredPartNames = (type: Parameters<typeof createDefaultMechanism>[0]) =
     assertDistance(state.p2, state.j2, mechanism.rockerLength, 'gear output pitch radius is preserved');
     assertDistance(state.p1, state.p2, mechanism.crankLength + mechanism.rockerLength, 'gear pitch circles remain tangent');
   });
-  assert.equal(mechanism.gearRatio, -1, 'gear train default encodes reverse rotation');
+  assert.equal(mechanism.crankLength, 50 * SCENE_PX_PER_MM, 'gear train default uses the fabrication G5 drive gear pitch radius');
+  assert.equal(mechanism.rockerLength, 30 * SCENE_PX_PER_MM, 'gear train default uses the fabrication G3 output gear pitch radius');
+  assert.equal(mechanism.gearRatio, gearPairOutputRatio(mechanism.crankLength, mechanism.rockerLength), 'gear train default ratio is derived from meshed pitch radii');
   const unequalGear = { ...mechanism, crankLength: 30, rockerLength: 60, groundLength: 90, gearRatio: -99, speed2: -99 };
   const unequalQuarter = calculateLinkage(unequalGear, Math.PI / 2);
   const outputAngle = Math.atan2(unequalQuarter.j2.y - unequalQuarter.p2.y, unequalQuarter.j2.x - unequalQuarter.p2.x);
@@ -478,7 +480,9 @@ const requiredPartNames = (type: Parameters<typeof createDefaultMechanism>[0]) =
   });
   const mutatedGear = mutateConfig({ ...mechanism, groundLength: 999 }, 1, true);
   assert(Math.abs(mutatedGear.groundLength - (mutatedGear.crankLength + mutatedGear.rockerLength)) < 1e-6, 'optimizer keeps mutated gear pitch circles tangent');
+  assert.equal(mutatedGear.gearRatio, gearPairOutputRatio(mutatedGear.crankLength, mutatedGear.rockerLength), 'optimizer keeps gear ratio derived from pitch radii');
   assert(requiredPartNames('gear').includes('gear pair'), 'gear train recipe includes a gear pair');
+  assert(requiredPartNames('gear').includes('gear train linkage rod'), 'gear train recipe includes paired linkage rods');
 }
 
 {

@@ -1,6 +1,6 @@
 
 import { GlobalConfig, MechanismConfig, Point } from '../types';
-import { calculateLinkage, generateCurvePoints } from './kinematics';
+import { calculateLinkage, gearPairOutputRatio, generateCurvePoints } from './kinematics';
 import { SCENE_PX_PER_MM, SCENE_VIEW, sceneToSvg } from './coordinates';
 import { finiteNumber, sanitizeHexColor, sanitizeMechanismRuntime, svgNumber } from './sanitize';
 import { fabricationGearPathD } from './fabrication';
@@ -93,7 +93,11 @@ export const generateDXF = (config: GlobalConfig, angle: number): string => {
         else if (m.type === 'yoke') {
             content += dxfLine(j2.x - 40, j2.y, j2.x + 40, j2.y, MECH_LAYER, 1); // Plate
         }
-        else if (m.type === 'quick-return' || m.type === 'cam' || m.type === 'gear' || m.type === 'planetary_gear') {
+        else if (m.type === 'gear') {
+            content += dxfLine(j1.x, j1.y, effector.x, effector.y, MECH_LAYER, 1);
+            content += dxfLine(j2.x, j2.y, effector.x, effector.y, MECH_LAYER, 1);
+        }
+        else if (m.type === 'quick-return' || m.type === 'cam' || m.type === 'planetary_gear') {
             content += dxfLine(p1.x, p1.y, p2.x, p2.y, "GROUND", 8);
             content += dxfLine(p2.x, p2.y, j2.x, j2.y, MECH_LAYER, 1);
             content += dxfLine(j2.x, j2.y, effector.x, effector.y, MECH_LAYER, 1);
@@ -143,9 +147,11 @@ export const generateSVG = (config: GlobalConfig, angle: number): string => {
         svg += `<circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />`;
         svg += `</g>`;
 
-        // Output Gear for 5-bar
-        if (m.type === '5bar' && aux) {
-             const rot = (crankDeg * (m.speed2 ?? (m.gearRatio || 1))) + ((m.phase ?? 0) * 180 / Math.PI);
+        // Output Gear for 5-bar / meshed gear train
+        if ((m.type === '5bar' && aux) || m.type === 'gear') {
+             const rot = m.type === 'gear'
+                ? crankDeg * gearPairOutputRatio(m.crankLength, m.rockerLength) + ((m.phase ?? 0) * 180 / Math.PI)
+                : (crankDeg * (m.speed2 ?? (m.gearRatio || 1))) + ((m.phase ?? 0) * 180 / Math.PI);
              svg += `<g transform="translate(${svgNumber(p2.x)}, ${svgNumber(p2.y)}) rotate(${svgNumber(rot)})">`;
              svg += `<path d="${gearPathD(finiteNumber(m.rockerLength, 1))}" fill="#f59e0b" stroke="#b45309" stroke-width="2" />`;
              svg += `<circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />`;
@@ -172,7 +178,11 @@ export const generateSVG = (config: GlobalConfig, angle: number): string => {
              svg += `<line x1="${svgNumber(j1.x)}" y1="${svgNumber(j1.y)}" x2="${svgNumber(j2.x)}" y2="${svgNumber(j2.y)}" stroke="${color}" stroke-width="8" stroke-linecap="round" />`;
              svg += `<rect x="${svgNumber(j2.x - 20)}" y="${svgNumber(j2.y - 10)}" width="40" height="20" fill="#334155" rx="2" transform="rotate(${svgNumber(m.groundAngle || 0)} ${svgNumber(j2.x)} ${svgNumber(j2.y)})" />`;
         }
-        else if (m.type === 'quick-return' || m.type === 'cam' || m.type === 'gear' || m.type === 'planetary_gear') {
+        else if (m.type === 'gear') {
+            svg += `<line x1="${svgNumber(j1.x)}" y1="${svgNumber(j1.y)}" x2="${svgNumber(effector.x)}" y2="${svgNumber(effector.y)}" stroke="${color}" stroke-width="6" stroke-linecap="round" />`;
+            svg += `<line x1="${svgNumber(j2.x)}" y1="${svgNumber(j2.y)}" x2="${svgNumber(effector.x)}" y2="${svgNumber(effector.y)}" stroke="#475569" stroke-width="4" stroke-linecap="round" />`;
+        }
+        else if (m.type === 'quick-return' || m.type === 'cam' || m.type === 'planetary_gear') {
             svg += `<line x1="${svgNumber(p1.x)}" y1="${svgNumber(p1.y)}" x2="${svgNumber(p2.x)}" y2="${svgNumber(p2.y)}" stroke="#cbd5e1" stroke-width="8" stroke-linecap="round" />`;
             svg += `<line x1="${svgNumber(j2.x)}" y1="${svgNumber(j2.y)}" x2="${svgNumber(effector.x)}" y2="${svgNumber(effector.y)}" stroke="${color}" stroke-width="4" stroke-linecap="round" />`;
             svg += `<path d="M ${svgNumber(p2.x)} ${svgNumber(p2.y)} L ${svgNumber(j2.x)} ${svgNumber(j2.y)} L ${svgNumber(effector.x)} ${svgNumber(effector.y)} Z" fill="${color}" fill-opacity="0.1" />`;

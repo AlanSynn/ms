@@ -520,13 +520,22 @@ export const Canvas: React.FC<CanvasProps> = ({
                                             </>
                                         )}
 
-                                        {(m.type === 'cam' || m.type === 'gear' || m.type === 'planetary_gear') && (
+                                        {m.type === 'gear' && (
+                                            <>
+                                                <line x1={j1.x} y1={j1.y} x2={effector.x} y2={effector.y} stroke={color} strokeWidth="6" strokeLinecap="round" />
+                                                <line x1={j2.x} y1={j2.y} x2={effector.x} y2={effector.y} stroke="#475569" strokeWidth="4" strokeLinecap="round" />
+                                                <circle cx={p2.x} cy={p2.y} r={8} fill="#94a3b8" stroke="white" strokeWidth="2" className="cursor-grab" />
+                                                <circle cx={j2.x} cy={j2.y} r={5} fill="white" stroke="#334155" strokeWidth="2" className={canDragJ2(m) ? 'cursor-grab' : ''} opacity={canDragJ2(m) ? 1 : 0.65} />
+                                            </>
+                                        )}
+
+                                        {(m.type === 'cam' || m.type === 'planetary_gear') && (
                                             <>
                                                 {aux && <circle cx={aux.x} cy={aux.y} r={m.rockerLength || 20} fill="none" stroke="#5a6cff" strokeWidth="2" strokeDasharray="6 6" />}
                                                 <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="#cbd5e1" strokeWidth="7" strokeLinecap="round" />
                                                 <line x1={p2.x} y1={p2.y} x2={j2.x} y2={j2.y} stroke={color} strokeWidth="6" strokeLinecap="round" />
                                                 <line x1={j2.x} y1={j2.y} x2={effector.x} y2={effector.y} stroke="#475569" strokeWidth="4" strokeLinecap="round" />
-                                                <circle cx={p2.x} cy={p2.y} r={8} fill="#94a3b8" stroke="white" strokeWidth="2" className={m.type === 'gear' ? 'cursor-grab' : ''} opacity={m.type === 'gear' ? 1 : 0.65} />
+                                                <circle cx={p2.x} cy={p2.y} r={8} fill="#94a3b8" stroke="white" strokeWidth="2" opacity={0.65} />
                                                 <circle cx={j2.x} cy={j2.y} r={5} fill="white" stroke="#334155" strokeWidth="2" className={canDragJ2(m) ? 'cursor-grab' : ''} opacity={canDragJ2(m) ? 1 : 0.65} />
                                             </>
                                         )}

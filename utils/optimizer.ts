@@ -1,6 +1,6 @@
 
 import { MechanismConfig, Point, MechanismType } from '../types';
-import { generateCurvePoints } from './kinematics';
+import { gearPairOutputRatio, generateCurvePoints, planetaryPlanetSpinRatio } from './kinematics';
 import { AUTHORABLE_MECHANISM_TYPES } from './mechanismTemplates';
 
 export const OPTIMIZER_MECHANISM_TYPES: MechanismType[] = [...AUTHORABLE_MECHANISM_TYPES];
@@ -511,16 +511,16 @@ export const generateSmartConfig = (targetPath?: Point[], forcedType?: Mechanism
         config.sliderOffset = Math.max(config.crankLength + 8, s(0.25));
         config.couplerPointAngle = 0;
     } else if (type === 'gear') {
-        config.gearRatio = Math.random() < 0.5 ? -1 : -2;
-        config.speed2 = config.gearRatio;
         config.rockerLength = s(0.25);
         config.groundLength = config.crankLength + config.rockerLength;
+        config.gearRatio = gearPairOutputRatio(config.crankLength, config.rockerLength);
+        config.speed2 = config.gearRatio;
         config.couplerLength = 0;
     } else if (type === 'planetary_gear') {
-        config.gearRatio = 2 + Math.floor(Math.random() * 4);
-        config.speed2 = config.gearRatio;
         config.rockerLength = s(0.18);
         config.groundLength = config.crankLength + config.rockerLength;
+        config.gearRatio = planetaryPlanetSpinRatio(config.crankLength, config.rockerLength);
+        config.speed2 = config.gearRatio;
         config.couplerLength = 0;
     } else if (type === '5bar') {
         // Select gear ratio - prefer recommended ratio based on target path analysis
@@ -610,9 +610,6 @@ export const mutateConfig = (config: MechanismConfig, temperature: number = 1.0,
             newConfig.speed2 = ratio.s2;
             newConfig.phase = PHASE_SAMPLES[Math.floor(Math.random() * PHASE_SAMPLES.length)];
             newConfig.rodLength = newConfig.couplerLength;
-        } else if (newConfig.type === 'gear' || newConfig.type === 'planetary_gear') {
-            newConfig.gearRatio = newConfig.type === 'gear' ? -1 : 3;
-            newConfig.speed2 = newConfig.gearRatio;
         } else if (newConfig.type === 'rack-pinion') {
             newConfig.groundAngle = 90;
             newConfig.groundLength = 0;
@@ -682,6 +679,9 @@ export const mutateConfig = (config: MechanismConfig, temperature: number = 1.0,
     if (newConfig.type === 'gear' || newConfig.type === 'planetary_gear') {
         newConfig.groundLength = newConfig.crankLength + newConfig.rockerLength;
         newConfig.couplerLength = 0;
+        newConfig.gearRatio = newConfig.type === 'gear'
+            ? gearPairOutputRatio(newConfig.crankLength, newConfig.rockerLength)
+            : planetaryPlanetSpinRatio(newConfig.crankLength, newConfig.rockerLength);
         newConfig.speed2 = newConfig.gearRatio ?? newConfig.speed2;
     }
     if (newConfig.type === 'rack-pinion') {
