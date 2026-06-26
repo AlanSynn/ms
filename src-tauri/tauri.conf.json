@@ -1,7 +1,7 @@
 {
-    "productName": "mechanim",
+    "productName": "MotionSmith",
     "version": "0.1.0",
-    "identifier": "com.mechanim.app",
+    "identifier": "com.motionsmith.app",
     "build": {
         "beforeDevCommand": "npm run dev",
         "beforeBuildCommand": "npm run build:tauri-frontend",
@@ -11,7 +11,7 @@
     "app": {
         "windows": [
             {
-                "title": "MechAnim",
+                "title": "MotionSmith",
                 "width": 1200,
                 "height": 800
             }

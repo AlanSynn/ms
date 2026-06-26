@@ -1,4 +1,4 @@
-# MotionSmith / MechAnim Design Contract
+# MotionSmith Design Contract
 
 Status: active
 Last refreshed: 2026-06-26
@@ -9,14 +9,14 @@ Project governance: `AGENTS.md` defines the standing tinkerable-workbench, 3D ph
 
 MotionSmith should feel like a friendly in-browser editor: Canva-simple for novices, video-player-familiar for playback, and precise enough for mechanism/blueprint work. The interface must make the core workflow obvious:
 
-1. Choose or load a character.
+1. Open the compact Getting Started dialog to choose a starter or load a character.
 2. Select a body part.
 3. Draw a free motion path directly on the shared canvas.
 4. Pick/simulate a mechanism.
 5. Tune parameters while the character, path, and mechanism stay aligned.
 6. Export a blueprint and assembly guide from the same scene state.
 
-No tab should feel like a separate app. Except for the onboarding/character import screen, workflow tabs share the same workbench shell, viewport, grid, status strip, and animation controls.
+No tab should feel like a separate app. The logo splash and Getting Started dialog may float above the editor, but every workflow tab shares the same workbench shell, viewport, grid, status strip, and animation controls.
 
 ## Visual direction
 
@@ -33,15 +33,21 @@ Avoid: dark CAD chrome, tiny low-contrast controls, dense ungrouped lists, fake 
 
 ## Layout contract
 
-### Onboarding
+### Splash and Getting Started
 
-The Character Selection stage may be full-screen. It should remain template-led and novice-friendly, with starter images visibly grey/placeholder-like and package/import actions close by.
+The first-run splash is logo-only: MotionSmith mark, Start, and Do not show again. It must not teach, show galleries, embed videos, or replace the editor shell.
+
+Getting Started is a compact modal dialog, not a full-screen stage. It is the only place for novice starter choices before editing: Waving arm, Girl starter, Boy starter, Load character, Create from image, Capture Camera, Import project, and preserve-compatible-mechanisms. Closing it always lands on the Character tab with the editor shell still visible underneath.
+
+### Character tab
+
+The Character tab is functional, not promotional. It exposes body-part selection, artwork surface controls, skeleton anchors, package review status, import actions, and a 2.5D/3D character preview. It must not contain starter galleries, hero copy, full-screen onboarding, videos, or duplicate Getting Started templates.
 
 ### Shared editor workbench
 
 All post-onboarding workflow stages use the same shell:
 
-- **Top header:** MotionSmith/MechAnim brand, numbered workflow steps, command menus, quick import/save/export.
+- **Top header:** MotionSmith brand, numbered workflow steps, command menus, quick import/save/export.
 - **Left rail:** project card, high-level workspace shortcuts, and compact scene stats.
 - **Center workbench:** shared canvas-feeling viewport with 2cm grid styling and persistent viewport state.
 - **Context panels:** each stage may render its own path/foundry/design/blueprint controls inside the workbench, but not replace the global app shell.

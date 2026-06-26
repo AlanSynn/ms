@@ -1,8 +1,8 @@
 # Realistic 2.5D / 3D / Physics Platform Plan
 
-Status: planning source of truth  
-Created: 2026-06-25  
-Scope: MotionSmith / MechAnim web editor after current 2D workflow stabilization  
+Status: planning source of truth
+Created: 2026-06-25
+Scope: MotionSmith web editor after current 2D workflow stabilization
 Baseline commit: `f295cdb Pin mechanism outputs to driven joints`
 
 > Direction update (2026-06-25): this plan is refined by [`toon-25d-main-3d-unlock-plan.md`](toon-25d-main-3d-unlock-plan.md). The current preferred direction is **toon/WebGL 2.5D as the main workbench** and **3D as a camera unlock**, rather than SVG/CSS 2.5D first. The canonical 2D/fabrication boundary and physics sidecar rules below still stand.

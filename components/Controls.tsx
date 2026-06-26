@@ -327,7 +327,7 @@ export const Controls: React.FC<ControlsProps> = ({
                     <div className="p-1.5 bg-indigo-100 rounded-md">
                         <RefreshCw className="w-5 h-5 text-indigo-600" />
                     </div>
-                    MechAnim
+                    MotionSmith
                 </h1>
             </div>
 

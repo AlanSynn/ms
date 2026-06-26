@@ -90,7 +90,7 @@ Viser is useful as a structural reference, not as a runtime to embed. Its public
 
 ### Copy these concepts
 
-| Viser concept | Evidence | MechAnim adaptation |
+| Viser concept | Evidence | MotionSmith adaptation |
 | --- | --- | --- |
 | Hierarchical scene tree | Viser scene names like `/base_link/shoulder/wrist` define parent/child nodes; parent transforms affect children. | Use stable node paths such as `/character/right_arm/lower`, `/mechanism/m1/output`, `/labels/m1/warning`. |
 | Node handles | Viser handles expose position/orientation/visibility/remove/callback semantics. | Make a local `SceneNodeHandle`-like adapter for selection, visibility, transforms, labels, and undoable commands. |
@@ -108,7 +108,7 @@ Viser is useful as a structural reference, not as a runtime to embed. Its public
 - Viser's OpenCV/robotics camera convention unless it is explicitly mapped to MotionSmith coordinates.
 - R3F/Mantine/Zustand dependency stack as a package bundle.
 
-MechAnim is a client-side React/Vite editor. Copy **scene graph discipline**, not Viser's deployment architecture.
+MotionSmith is a client-side React/Vite editor. Copy **scene graph discipline**, not Viser's deployment architecture.
 
 ## 5. Minimal dependency direction
 

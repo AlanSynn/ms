@@ -1,5 +1,5 @@
 [package]
-name = "mechanim"
+name = "motionsmith"
 version = "0.1.0"
 description = "A portable character motion designer"
 authors = ["you"]

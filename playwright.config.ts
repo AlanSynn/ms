@@ -1,10 +1,21 @@
 import { defineConfig, devices } from '@playwright/test';
+import { availableParallelism } from 'node:os';
+
+const MAX_BROWSER_WORKERS = 4;
+const parseWorkerCount = (value: string | undefined) => {
+  if (!value) return Math.max(1, Math.min(MAX_BROWSER_WORKERS, availableParallelism()));
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) throw new Error('PLAYWRIGHT_WORKERS must be a positive integer');
+  return parsed;
+};
+const workerCount = parseWorkerCount(process.env.PLAYWRIGHT_WORKERS);
 
 export default defineConfig({
   testDir: './tests/browser',
   timeout: 0,
   expect: { timeout: 10_000 },
-  fullyParallel: false,
+  fullyParallel: true,
+  workers: workerCount,
   reporter: [['list']],
   use: {
     baseURL: 'http://127.0.0.1:5173',

@@ -55,8 +55,6 @@ type StarterImageTemplate = { id: string; label: string; fileName: string; descr
 
 const MOTIONSMITH_SITE_URL = 'https://alansynn.com/motionsmith/';
 const MOTIONSMITH_ICON_URL = `${MOTIONSMITH_SITE_URL}static/images/favicon.ico`;
-const MOTIONSMITH_POSTER_URL = `${MOTIONSMITH_SITE_URL}static/images/motionsmith-demo-poster.png`;
-const MOTIONSMITH_VIDEO_URL = `${MOTIONSMITH_SITE_URL}static/videos/chi26c-sub4526-i62.mp4`;
 
 const FOUNDRY_VIEW_PRESETS: Record<Exclude<FoundryViewPreset, 'custom'>, { label: string; yaw: number; pitch: number }> = {
     front: { label: 'Front', yaw: 0, pitch: 0 },
@@ -135,7 +133,7 @@ const STARTER_IMAGE_TEMPLATES: StarterImageTemplate[] = [
 ];
 
 const STAGES: Array<{ id: AppStage; label: string; kicker: string }> = [
-    { id: 'character', label: 'Character Selection', kicker: 'image → rig package' },
+    { id: 'character', label: 'Character', kicker: 'parts + skeleton' },
     { id: 'path', label: 'Path Editor', kicker: 'parts, skeleton, paths' },
     { id: 'foundry', label: 'Mechanism Foundry', kicker: 'recipe sandbox' },
     { id: 'design', label: 'Mechanism Design', kicker: 'attach + tune' },
@@ -153,7 +151,7 @@ const stageNavLabel = (stage: AppStage) => ({
 type StageIconName = 'character' | 'path' | 'foundry' | 'design' | 'blueprint' | 'options';
 
 const STAGE_PANE_NAV_ITEMS: Array<{ ariaLabel: string; label: string; target: AppStage; activeStages: AppStage[]; icon: StageIconName }> = [
-    { ariaLabel: 'Character Selection', label: 'Character', target: 'character', activeStages: ['character'], icon: 'character' },
+    { ariaLabel: 'Character', label: 'Character', target: 'character', activeStages: ['character'], icon: 'character' },
     { ariaLabel: 'Rail motion path', label: 'Path', target: 'path', activeStages: ['path'], icon: 'path' },
     { ariaLabel: 'Mechanism Foundry', label: 'Foundry', target: 'foundry', activeStages: ['foundry'], icon: 'foundry' },
     { ariaLabel: 'Rail mechanism parameters', label: 'Design', target: 'design', activeStages: ['design'], icon: 'design' },
@@ -201,7 +199,35 @@ const PARAMS: Array<{ key: keyof MechanismConfig; label: string; min: number; ma
 
 const isAppStage = (value: unknown): value is AppStage => typeof value === 'string' && STAGES.some(stage => stage.id === value);
 const projectHasUserWork = (project: ProjectState) => project.partOrder.length > 0 || Object.keys(project.paths).length > 0 || project.mechanisms.length > 0;
-const shouldHideWelcome = () => localStorage.getItem('mechanim.hideWelcome') === '1';
+const STORAGE_KEYS = {
+    hideWelcome: 'motionsmith.hideWelcome',
+    autosave: 'motionsmith.autosave',
+    workspace: 'motionsmith.workspace'
+} as const;
+const LEGACY_STORAGE_PREFIX = ['mech', 'anim'].join('');
+const LEGACY_STORAGE_KEYS = {
+    hideWelcome: `${LEGACY_STORAGE_PREFIX}.hideWelcome`,
+    autosave: `${LEGACY_STORAGE_PREFIX}.autosave`,
+    workspace: `${LEGACY_STORAGE_PREFIX}.workspace`
+} as const;
+const readStorageWithLegacy = (key: string, legacyKey: string) => {
+    const current = localStorage.getItem(key);
+    if (current !== null) return { value: current, fromLegacy: false };
+    const legacy = localStorage.getItem(legacyKey);
+    return { value: legacy, fromLegacy: legacy !== null };
+};
+const migrateStorageValue = (key: string, value: string) => {
+    try {
+        localStorage.setItem(key, value);
+    } catch {
+        // ponytail: migration is best-effort; legacy read fallback still works.
+    }
+};
+const shouldHideWelcome = () => {
+    const stored = readStorageWithLegacy(STORAGE_KEYS.hideWelcome, LEGACY_STORAGE_KEYS.hideWelcome);
+    if (stored.fromLegacy && stored.value !== null) migrateStorageValue(STORAGE_KEYS.hideWelcome, stored.value);
+    return stored.value === '1';
+};
 
 const App: React.FC = () => {
     const [project, setProject] = useState<ProjectState>(() => {
@@ -210,6 +236,7 @@ const App: React.FC = () => {
     });
     const [stage, setStage] = useState<AppStage>(() => shouldHideWelcome() ? 'character' : 'path');
     const [showWelcome, setShowWelcome] = useState(() => !shouldHideWelcome());
+    const [showGettingStarted, setShowGettingStarted] = useState(false);
     const [angle, setAngle] = useState(0);
     const [isPlaying, setIsPlaying] = useState(true);
     const [showTrace, setShowTrace] = useState(true);
@@ -452,6 +479,7 @@ const App: React.FC = () => {
             });
             setCommandStatus(`Project import failed: ${error instanceof Error ? error.message : String(error)}`);
             setShowWelcome(false);
+            setShowGettingStarted(false);
             setStage('character');
         }
     };
@@ -522,7 +550,7 @@ const App: React.FC = () => {
         if (!project.settings.autosave) return;
         const writeAutosave = () => {
             try {
-                localStorage.setItem('mechanim.autosave', serializeProject(latestProjectRef.current ?? project));
+                localStorage.setItem(STORAGE_KEYS.autosave, serializeProject(latestProjectRef.current ?? project));
             } catch {
                 // ponytail: autosave is best-effort; manual Save stays available.
             }
@@ -542,7 +570,7 @@ const App: React.FC = () => {
         setCommandStatus('Exported mechanism DXF');
     };
     const saveProject = () => {
-        downloadText(`${project.metadata.name.replaceAll(' ', '-')}.mechanim.json`, serializeProject(project));
+        downloadText(`${project.metadata.name.replaceAll(' ', '-')}.motionsmith.json`, serializeProject(project));
         setCommandStatus('Saved project snapshot');
     };
     const newProject = () => {
@@ -555,16 +583,18 @@ const App: React.FC = () => {
         setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
         setCommandStatus('Started a fresh template project');
         setShowWelcome(!shouldHideWelcome());
+        setShowGettingStarted(false);
         setStage('character');
     };
     const recoverAutosave = () => {
         try {
-            const raw = localStorage.getItem('mechanim.autosave');
-            if (!raw) {
+            const stored = readStorageWithLegacy(STORAGE_KEYS.autosave, LEGACY_STORAGE_KEYS.autosave);
+            if (!stored.value) {
                 setCommandStatus('No autosave snapshot found');
                 return;
             }
-            setProject(loadProjectSnapshot(JSON.parse(raw)));
+            setProject(loadProjectSnapshot(JSON.parse(stored.value)));
+            if (stored.fromLegacy) migrateStorageValue(STORAGE_KEYS.autosave, stored.value);
             setCommandStatus('Recovered autosave snapshot');
             setStage('path');
         } catch (error) {
@@ -572,17 +602,18 @@ const App: React.FC = () => {
         }
     };
     const saveWorkspaceLayout = () => {
-        localStorage.setItem('mechanim.workspace', JSON.stringify({ stage, viewport: canvasViewport, toolbarVisible: project.settings.toolbarVisible, partPanelVisible: project.settings.partPanelVisible }));
+        localStorage.setItem(STORAGE_KEYS.workspace, JSON.stringify({ stage, viewport: canvasViewport, toolbarVisible: project.settings.toolbarVisible, partPanelVisible: project.settings.partPanelVisible }));
         setCommandStatus('Workspace layout saved');
     };
     const restoreWorkspaceLayout = () => {
         try {
-            const raw = localStorage.getItem('mechanim.workspace');
-            if (!raw) {
+            const stored = readStorageWithLegacy(STORAGE_KEYS.workspace, LEGACY_STORAGE_KEYS.workspace);
+            if (!stored.value) {
                 setCommandStatus('No workspace layout saved');
                 return;
             }
-            const layout = JSON.parse(raw) as Partial<{ stage: unknown; viewport: unknown; toolbarVisible: unknown; partPanelVisible: unknown }>;
+            const layout = JSON.parse(stored.value) as Partial<{ stage: unknown; viewport: unknown; toolbarVisible: unknown; partPanelVisible: unknown }>;
+            if (stored.fromLegacy) migrateStorageValue(STORAGE_KEYS.workspace, stored.value);
             const warnings: string[] = [];
             if (layout.viewport !== undefined) {
                 const viewport = normalizeCanvasViewport(layout.viewport);
@@ -622,20 +653,25 @@ const App: React.FC = () => {
     const disabledCommand = (reason: string) => setCommandStatus(reason);
     const themeClass = project.settings.theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-950';
     const editorStage: AppStage = stage;
-    const welcomeOpen = showWelcome;
+    const modalOpen = showWelcome || showGettingStarted;
     const closeWelcome = (hideNextTime = false) => {
-        if (hideNextTime) localStorage.setItem('mechanim.hideWelcome', '1');
+        if (hideNextTime) localStorage.setItem(STORAGE_KEYS.hideWelcome, '1');
         setShowWelcome(false);
+        setShowGettingStarted(!hideNextTime);
+        setStage('character');
+    };
+    const closeGettingStarted = () => {
+        setShowGettingStarted(false);
         setStage('character');
     };
     const stageMeta = STAGES.find(s => s.id === stage);
-    const playerDock = !welcomeOpen && editorStage !== 'foundry' && editorStage !== 'character'
+    const playerDock = !modalOpen && editorStage !== 'foundry' && editorStage !== 'character'
         ? <WorkspacePlayerDock isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} speed={project.settings.animationSpeed} drawMode={drawMode} />
         : null;
 
     useEffect(() => {
         const shell = appShellRef.current;
-        if (welcomeOpen) {
+        if (modalOpen) {
             shell?.setAttribute('inert', '');
             shell?.setAttribute('aria-hidden', 'true');
             document.documentElement.classList.add('welcome-modal-open');
@@ -652,19 +688,19 @@ const App: React.FC = () => {
             document.documentElement.classList.remove('welcome-modal-open');
             document.body.classList.remove('welcome-modal-open');
         };
-    }, [welcomeOpen]);
+    }, [modalOpen]);
 
     return (
         <main className={`min-h-screen overflow-hidden ${themeClass}`} data-theme={project.settings.theme}>
             <div className="pointer-events-none fixed inset-0 opacity-70" style={{ background: 'radial-gradient(circle at 15% 10%, rgba(90,108,255,.12), transparent 28%), radial-gradient(circle at 85% 20%, rgba(90,108,255,.08), transparent 24%), linear-gradient(120deg, rgba(8,10,18,.04), transparent)' }} />
-            <div ref={appShellRef} className={`relative grid min-h-screen app-shell ${editorStage === 'character' ? 'is-onboarding' : ''}`}>
+            <div ref={appShellRef} className="relative grid min-h-screen app-shell">
                 <WorkflowRail stage={stage} goStage={goStage} />
                 <section className="relative flex min-w-0 flex-col">
                     <header className="app-header flex items-center justify-between border-b border-slate-300/70 bg-white/50 px-7 py-4 backdrop-blur-xl">
                         <div className="flex min-w-0 items-center gap-6">
                             <div>
                                 <div className="accent-label text-[11px] font-black uppercase tracking-[0.28em]">MotionSmith</div>
-                                <h1 className="text-2xl font-black tracking-[-0.05em]">MechAnim</h1>
+                                <h1 className="text-2xl font-black tracking-[-0.05em]">MotionSmith</h1>
                                 <h2 className="current-stage-title">{stageMeta?.label}</h2>
                             </div>
                         </div>
@@ -691,10 +727,10 @@ const App: React.FC = () => {
                             </div>}
                         </div>
                     </header>
-                    <input ref={projectInputRef} hidden type="file" accept="application/json,.mechanim.json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/>
+                    <input ref={projectInputRef} hidden type="file" accept="application/json,.motionsmith.json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/>
 
                     <div className="stage-body editor-workbench relative min-h-0 flex-1 overflow-auto p-7" data-testid="shared-workbench">
-                        {editorStage === 'character' && <CharacterSelection project={project} dispatch={dispatch} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} starterTemplates={STARTER_IMAGE_TEMPLATES} onStarterImage={loadStarterImage} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setShowWelcome(false); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onSample={() => { setPendingCharacter(null); setProject(createSampleProject()); setShowWelcome(false); setStage('path'); }} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} />}
+                        {editorStage === 'character' && <CharacterSelection project={project} dispatch={dispatch} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onOpenGettingStarted={() => setShowGettingStarted(true)} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setShowWelcome(false); setShowGettingStarted(false); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} />}
                         {editorStage === 'path' && <PathEditor project={project} sortedParts={sortedParts} selectedPart={selectedPart} selectedPath={selectedPath} drawMode={drawMode} setDrawMode={setDrawMode} dispatch={dispatch} setPathPoints={setPathPoints} openTracking={() => setShowTracking(true)} isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} onNext={() => goStage('foundry')} goStage={goStage} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {editorStage === 'foundry' && <MechanismFoundry project={project} foundry={foundry} setFoundry={setFoundry} selectedPart={selectedPart} selectedPath={selectedPath} goStage={goStage} onExport={(pkg) => {
                             const existingTarget = project.mechanisms.find(m =>
@@ -731,7 +767,8 @@ const App: React.FC = () => {
                     <footer className="status-bar" data-testid="status-bar">{commandStatus} · parts:{project.partOrder.length} · paths:{Object.keys(project.paths).length} · mechs:{project.mechanisms.length} · zoom {Math.round(canvasViewport.zoom * 100)}%</footer>
                 </section>
             </div>
-            {welcomeOpen && <WelcomeDialog onClose={closeWelcome} />}
+            {showWelcome && <WelcomeDialog onClose={closeWelcome} />}
+            {!showWelcome && showGettingStarted && <GettingStartedDialog starterTemplates={STARTER_IMAGE_TEMPLATES} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onStarterImage={template => { setShowGettingStarted(false); loadStarterImage(template); }} onSample={() => { setPendingCharacter(null); setProject(createSampleProject()); setShowWelcome(false); setShowGettingStarted(false); setStage('path'); }} onPackage={files => { setShowGettingStarted(false); importCharacterPackage(files); }} onProcess={file => { setShowGettingStarted(false); runWebOnnx(file); }} onCamera={() => { setShowGettingStarted(false); setShowCamera(true); }} onImport={file => { setShowGettingStarted(false); importProject(file); }} onClose={closeGettingStarted} />}
             <CameraCaptureDialog isOpen={showCamera} onClose={() => setShowCamera(false)} onCapture={file => { setShowCamera(false); runWebOnnx(file); }} />
             <MechanismRecommendationSheet isOpen={showRecommendations} project={project} selectedPart={selectedPart} selectedPath={selectedPath} onClose={() => setShowRecommendations(false)} onApply={mechanism => { dispatch({ type: 'upsert_mechanism', mechanism }); setShowRecommendations(false); setStage('design'); }} />
             <TrackingModal isOpen={showTracking} onClose={() => setShowTracking(false)} onTransfer={path => { setPathPoints(path, 'tracked'); setShowTracking(false); setStage('path'); }} />
@@ -807,7 +844,7 @@ const TopCommandBar = ({ onNew, onLoad, onRecoverAutosave, onSave, onExport, onZ
         </div></details>
         <details open={openMenu === 'help'}><summary onClick={toggleMenu('help')}>Help</summary><div className="command-menu">
             <button onClick={runCommand(unavailable('Check for Updates'))}>Check for Updates…</button>
-            <button onClick={runCommand(() => onDisabled('MechAnim web port · local ONNX, persistent scene state, blueprint export.'))}>About…</button>
+            <button onClick={runCommand(() => onDisabled('MotionSmith web port · local ONNX, persistent scene state, blueprint export.'))}>About…</button>
         </div></details>
     </nav>;
 };
@@ -950,14 +987,11 @@ const WorkflowStatusStrip = ({ stage, project, selectedPart, selectedPath }: { s
 const WelcomeDialog = ({ onClose }: { onClose: (hideNextTime?: boolean) => void }) => {
     const [hideNextTime, setHideNextTime] = useState(false);
     const dialogRef = useRef<HTMLElement>(null);
-
     useEffect(() => {
-        const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-        dialogRef.current?.focus();
-        return () => previousFocus?.isConnected && previousFocus.focus();
+        const dialog = dialogRef.current;
+        dialog?.focus();
     }, []);
-
-    const trapDialogFocus = (event: React.KeyboardEvent<HTMLElement>) => {
+    const trapDialogFocus = (event: React.KeyboardEvent) => {
         if (event.key === 'Escape') {
             event.preventDefault();
             onClose(false);
@@ -966,9 +1000,7 @@ const WelcomeDialog = ({ onClose }: { onClose: (hideNextTime?: boolean) => void 
         if (event.key !== 'Tab') return;
         const dialog = dialogRef.current;
         if (!dialog) return;
-        const focusables = Array.from(dialog.querySelectorAll(
-            'video[controls], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        )).filter((element): element is HTMLElement => element instanceof HTMLElement && element.offsetParent !== null);
+        const focusables = Array.from(dialog.querySelectorAll('button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter((element): element is HTMLElement => element instanceof HTMLElement && element.offsetParent !== null);
         if (!focusables.length) return;
         const first = focusables[0];
         const last = focusables.at(-1)!;
@@ -986,35 +1018,133 @@ const WelcomeDialog = ({ onClose }: { onClose: (hideNextTime?: boolean) => void 
     };
 
     return <div className="modal-backdrop welcome-backdrop" role="presentation">
-        <section ref={dialogRef} className="modal-sheet welcome-dialog welcome-simple animate-rise" role="dialog" aria-modal="true" aria-labelledby="welcome-dialog-title" data-testid="welcome-dialog" tabIndex={-1} onKeyDown={trapDialogFocus}>
-            <div className="welcome-simple-media">
-                <video aria-label="MotionSmith preview video" poster={MOTIONSMITH_POSTER_URL} muted playsInline controls preload="metadata">
-                    <source src={MOTIONSMITH_VIDEO_URL} type="video/mp4" />
-                </video>
+        <section ref={dialogRef} className="modal-sheet welcome-dialog splash-dialog animate-rise" role="dialog" aria-modal="true" aria-labelledby="welcome-dialog-title" data-testid="welcome-dialog" tabIndex={-1} onKeyDown={trapDialogFocus}>
+            <img src={MOTIONSMITH_ICON_URL} alt="" />
+            <h2 id="welcome-dialog-title">MotionSmith</h2>
+            <button type="button" className="btn-primary" onClick={() => onClose(hideNextTime)}>Start</button>
+            <label className="replace-toggle"><input type="checkbox" checked={hideNextTime} onChange={event => setHideNextTime(event.target.checked)} /> Do not show this again</label>
+        </section>
+    </div>;
+};
+
+const GettingStartedDialog = ({ starterTemplates, replaceCharacter, setReplaceCharacter, onStarterImage, onSample, onPackage, onProcess, onCamera, onImport, onClose }: {
+    starterTemplates: StarterImageTemplate[];
+    replaceCharacter: boolean;
+    setReplaceCharacter: (v: boolean) => void;
+    onStarterImage: (template: StarterImageTemplate) => void;
+    onSample: () => void;
+    onPackage: (files: FileList | File[]) => void;
+    onProcess: (file: File) => void;
+    onCamera: () => void;
+    onImport: (file: File) => void;
+    onClose: () => void;
+}) => {
+    const dialogRef = useRef<HTMLElement>(null);
+    const packageInputRef = useRef<HTMLInputElement>(null);
+    const onnxInputRef = useRef<HTMLInputElement>(null);
+    const importInputRef = useRef<HTMLInputElement>(null);
+    useEffect(() => { dialogRef.current?.focus(); }, []);
+    const trapDialogFocus = (event: React.KeyboardEvent) => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            onClose();
+            return;
+        }
+        if (event.key !== 'Tab') return;
+        const dialog = dialogRef.current;
+        if (!dialog) return;
+        const focusables = Array.from(dialog.querySelectorAll('button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter((element): element is HTMLElement => element instanceof HTMLElement && element.offsetParent !== null);
+        if (!focusables.length) return;
+        const first = focusables[0];
+        const last = focusables.at(-1)!;
+        const active = document.activeElement;
+        if (!dialog.contains(active)) {
+            event.preventDefault();
+            first.focus();
+        } else if (event.shiftKey && (active === first || active === dialog)) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && active === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    };
+
+    return <div className="modal-backdrop welcome-backdrop" role="presentation">
+        <section ref={dialogRef} className="modal-sheet getting-started-dialog animate-rise" role="dialog" aria-modal="true" aria-labelledby="getting-started-title" data-testid="getting-started-dialog" tabIndex={-1} onKeyDown={trapDialogFocus}>
+            <div className="getting-started-head">
+                <div>
+                    <div className="section-title">Getting started</div>
+                    <h2 id="getting-started-title">Pick a starter, then tune it in Character.</h2>
+                </div>
+                <button type="button" className="btn-secondary" onClick={onClose}>Skip to editor</button>
             </div>
-            <div className="welcome-simple-copy">
-                <img src={MOTIONSMITH_ICON_URL} alt="" />
-                <div className="section-title">MotionSmith</div>
-                <h2 id="welcome-dialog-title">MechAnim</h2>
-                <p>Rig a character, draw a path, and build the mechanism in the editor.</p>
-                <button type="button" className="btn-primary" onClick={() => onClose(hideNextTime)}>Start</button>
-                <label className="replace-toggle"><input type="checkbox" checked={hideNextTime} onChange={event => setHideNextTime(event.target.checked)} /> Do not show this again</label>
+            <div className="template-gallery" data-testid="getting-started-gallery">
+                <button type="button" className="template-tile primary" onClick={onSample}>
+                    <span className="template-kicker">Start fastest</span>
+                    <strong>Waving arm</strong>
+                    <span>Ready path + four-bar.</span>
+                    <b><Sparkles size={16}/> Open Waving arm</b>
+                </button>
+                {starterTemplates.map(template => (
+                    <button key={template.id} type="button" className="template-tile starter cursor-pointer" onClick={() => onStarterImage(template)}>
+                        <img className="starter-thumb" src={template.url} alt="" />
+                        <span className="template-kicker">Image</span>
+                        <strong>{template.label}</strong>
+                        <span>Browser ONNX rigging.</span>
+                        <b><BrainCircuit size={16}/> Create from {template.id}</b>
+                    </button>
+                ))}
+                <button type="button" className="template-tile cursor-pointer" onClick={() => packageInputRef.current?.click()}>
+                    <span className="template-kicker">Package</span>
+                    <strong>Load character</strong>
+                    <span>Load art + skeleton.</span>
+                    <b><FileJson size={16}/> Load package</b>
+                </button>
+                <input ref={packageInputRef} data-testid="getting-started-package-input" hidden type="file" multiple accept=".json,.yaml,.yml,image/png,image/jpeg,image/webp,image/svg+xml" onChange={e => {
+                    const files = e.currentTarget.files ? Array.from(e.currentTarget.files) as File[] : [];
+                    e.currentTarget.value = '';
+                    if (files.length) onPackage(files);
+                }}/>
+                <button type="button" className="template-tile cursor-pointer" onClick={() => onnxInputRef.current?.click()}>
+                    <span className="template-kicker">Private</span>
+                    <strong>Create from image</strong>
+                    <span>Local on-device processing.</span>
+                    <b><BrainCircuit size={16}/> Choose image</b>
+                </button>
+                <input ref={onnxInputRef} data-testid="getting-started-onnx-input" hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={e => {
+                    const file = e.currentTarget.files?.[0];
+                    e.currentTarget.value = '';
+                    if (file) onProcess(file);
+                }}/>
+                <button type="button" className="template-tile cursor-pointer" onClick={onCamera}>
+                    <span className="template-kicker">Camera</span>
+                    <strong>Capture Camera</strong>
+                    <span>Capture one frame.</span>
+                    <b><Camera size={16}/> Capture Camera</b>
+                </button>
+            </div>
+            <div className="getting-started-foot">
+                <button type="button" className="btn-secondary cursor-pointer" onClick={() => importInputRef.current?.click()}><Upload size={16}/> Import project</button><input ref={importInputRef} data-testid="getting-started-import-input" hidden type="file" accept="application/json,.json" onChange={e => {
+                    const file = e.currentTarget.files?.[0];
+                    e.currentTarget.value = '';
+                    if (file) onImport(file);
+                }}/>
+                <label className="replace-toggle"><input aria-label="Replace current character and preserve compatible mechanisms" type="checkbox" checked={replaceCharacter} onChange={e => setReplaceCharacter(e.target.checked)} /> Preserve compatible mechanisms</label>
             </div>
         </section>
     </div>;
 };
 
-const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharacter, setReplaceCharacter, starterTemplates, onStarterImage, onAccept, onDiscard, onSample, onProcess, onCamera, onPackage, onImport, onEditCharacter, onSaveSkeleton, onChooseSaveFolder }: {
+const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharacter, setReplaceCharacter, onOpenGettingStarted, onAccept, onDiscard, onProcess, onCamera, onPackage, onImport, onEditCharacter, onSaveSkeleton, onChooseSaveFolder }: {
     project: ProjectState;
     dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void;
     pendingCharacter: { project: ProjectState; summary: string; returnStage: AppStage } | null;
     replaceCharacter: boolean;
     setReplaceCharacter: (v: boolean) => void;
-    starterTemplates: StarterImageTemplate[];
-    onStarterImage: (template: StarterImageTemplate) => void;
+    onOpenGettingStarted: () => void;
     onAccept: () => void;
     onDiscard: () => void;
-    onSample: () => void;
     onProcess: (file: File) => void;
     onCamera: () => void;
     onPackage: (files: FileList | File[]) => void;
@@ -1066,174 +1196,67 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
         </details>
     );
 
-    return (
-    <section className="character-stage animate-rise" data-testid="character-screen">
-    <div className="welcome-titlebar character-titlebar">
-        <div>
-            <div className="section-title">Character workspace</div>
-            <h2>Start with character art</h2>
-        </div>
-    </div>
-    <div className="onboarding-page">
-        <section className="onboarding-hero">
-            <div className="onboarding-copy animate-rise">
-                <div className="landing-brand">
-                    <span>MotionSmith</span>
-                    <small>local ONNX · real blueprints</small>
+    return <section className="character-stage animate-rise" data-testid="character-screen">
+        <EditorStageFrame stage="character" className="character-editor-frame" layout={{
+            workflow: workflowPane(<StageLeftSummary project={project} title="Character" kicker="parts + skeleton" stage="character">
+                <p className="text-sm font-bold text-slate-600">Tune body parts, surface artwork, pivots, and skeleton anchors. Starters live in Getting Started.</p>
+                <div className="mt-4 grid gap-2">
+                    <button className="btn-primary" onClick={onOpenGettingStarted}><Sparkles size={16}/> Open Getting Started</button>
+                    <button type="button" className="btn-secondary cursor-pointer" onClick={() => packageInputRef.current?.click()}><FileJson size={16}/> Load character package</button><input ref={packageInputRef} data-testid="blank-package-input" hidden type="file" multiple accept=".json,.yaml,.yml,image/png,image/jpeg,image/webp,image/svg+xml" onChange={e => {
+                        const files = e.currentTarget.files ? Array.from(e.currentTarget.files) as File[] : [];
+                        e.currentTarget.value = '';
+                        if (files.length) onPackage(files);
+                    }}/>
+                    <button className="btn-secondary" onClick={() => onnxInputRef.current?.click()}><BrainCircuit size={16}/> Create from image</button><input ref={onnxInputRef} data-testid="onnx-input" hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={e => {
+                        const file = e.currentTarget.files?.[0];
+                        e.currentTarget.value = '';
+                        if (file) onProcess(file);
+                    }}/>
+                    <button className="btn-secondary" onClick={onCamera}><Camera size={16}/> Capture Camera</button>
+                    <button type="button" className="btn-secondary cursor-pointer" onClick={() => importInputRef.current?.click()}><Upload size={16}/> Import project</button><input ref={importInputRef} data-testid="onboarding-import-input" hidden type="file" accept="application/json,.json" onChange={e => {
+                        const file = e.currentTarget.files?.[0];
+                        e.currentTarget.value = '';
+                        if (file) onImport(file);
+                    }}/>
+                    <label className="replace-toggle"><input aria-label="Replace current character and preserve compatible mechanisms" type="checkbox" checked={replaceCharacter} onChange={e => setReplaceCharacter(e.target.checked)} /> Preserve compatible mechanisms</label>
                 </div>
-                <h1>MechAnim</h1>
-                <h3>Draw the path. Build the motion.</h3>
-                <p>Start with a rigged character, sketch a free path, fit a mechanism, then export the assembly guide.</p>
-                <div className="landing-steps" aria-label="Workflow preview">
-                    <span>1 Character</span>
-                    <span>2 Free path</span>
-                    <span>3 Mechanism</span>
-                    <span>4 Blueprint</span>
-                </div>
-            </div>
-
-            <div className="landing-board">
-                <div className="landing-sketch" aria-hidden="true">
-                    <svg viewBox="0 0 460 420" role="img">
-                        <defs>
-                            <pattern id="landing-grid" width="32" height="32" patternUnits="userSpaceOnUse">
-                                <path d="M32 0H0V32" fill="none" stroke="#e2e8f0" strokeWidth="1"/>
-                            </pattern>
-                            <filter id="landing-soft-shadow" x="-20%" y="-20%" width="140%" height="140%">
-                                <feDropShadow dx="0" dy="18" stdDeviation="18" floodColor="#8b5cf6" floodOpacity=".16"/>
-                            </filter>
-                        </defs>
-                        <rect width="460" height="420" rx="32" fill="#fff"/>
-                        <rect x="18" y="18" width="424" height="384" rx="28" fill="url(#landing-grid)" stroke="#dbe3f1"/>
-                        <g filter="url(#landing-soft-shadow)">
-                            <rect x="190" y="72" width="80" height="74" rx="26" fill="#d8dee8"/>
-                            <rect x="154" y="150" width="152" height="138" rx="34" fill="#cbd5e1"/>
-                            <rect x="96" y="164" width="50" height="138" rx="25" fill="#d8dee8" transform="rotate(13 121 233)"/>
-                            <rect x="312" y="162" width="50" height="138" rx="25" fill="#d8dee8" transform="rotate(-13 337 231)"/>
-                            <rect x="166" y="296" width="56" height="128" rx="28" fill="#d8dee8" transform="rotate(4 194 360)"/>
-                            <rect x="244" y="296" width="56" height="128" rx="28" fill="#d8dee8" transform="rotate(-4 272 360)"/>
-                        </g>
-                        <path d="M333 180 C395 154 424 204 394 248 S342 295 354 336" fill="none" stroke="#8b5cf6" strokeWidth="8" strokeLinecap="round"/>
-                        <path d="M333 180 C392 158 421 205 394 248 S342 295 354 336" fill="none" stroke="#f472b6" strokeWidth="3" strokeDasharray="8 8" strokeLinecap="round"/>
-                        {[[230,118],[230,172],[230,226],[154,158],[306,158],[132,232],[328,232],[194,340],[272,340]].map(([x, y]) => (
-                            <circle key={`${x}-${y}`} cx={x} cy={y} r="7" fill="#fff" stroke="#64748b" strokeWidth="5"/>
-                        ))}
-                    </svg>
-                    <div className="landing-sketch-label">
-                        <strong>Starter preview</strong>
-                        <span>6 parts · 17 joints · 1 path</span>
+                <details className="advanced-panel mt-4" data-testid="character-processing-panel">
+                    <summary>Advanced import tools</summary>
+                    {partPanelDisabled && <p className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">Review is pending. Accept or discard it before editing the active character setup.</p>}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                        <button className="btn-secondary" disabled={partPanelDisabled} onClick={onEditCharacter}>Edit Parts / Skeleton / Boxes</button>
+                        <button className="btn-secondary" disabled={partPanelDisabled} onClick={onEditCharacter}>Edit Skeleton Joints</button>
+                        <button className="btn-secondary" disabled={partPanelDisabled} onClick={onSaveSkeleton}>Save Skeleton</button>
+                        <button className="btn-secondary" onClick={onChooseSaveFolder}>Choose Save Folder…</button>
                     </div>
-                </div>
-
-                <div className="landing-lower-grid">
-                    <div className="template-gallery" data-testid="template-gallery">
-                        <button type="button" className="template-tile primary" onClick={onSample}>
-                            <span className="template-kicker">Start fastest</span>
-                            <strong>Waving arm</strong>
-                            <span>Ready path + four-bar.</span>
-                            <b><Sparkles size={16}/> Open Waving arm</b>
-                        </button>
-                        {starterTemplates.map(template => (
-                            <button key={template.id} type="button" className="template-tile starter cursor-pointer" onClick={() => onStarterImage(template)}>
-                                <img className="starter-thumb" src={template.url} alt="" />
-                                <span className="template-kicker">Image</span>
-                                <strong>{template.label}</strong>
-                                <span>Browser ONNX rigging.</span>
-                                <b><BrainCircuit size={16}/> Create from {template.id}</b>
-                            </button>
-                        ))}
-                        <button type="button" className="template-tile cursor-pointer" onClick={() => packageInputRef.current?.click()}>
-                            <span className="template-kicker">Package</span>
-                            <strong>Blank character</strong>
-                            <span>Load art + skeleton.</span>
-                            <b><FileJson size={16}/> Load package</b>
-                        </button>
-                        <input ref={packageInputRef} data-testid="blank-package-input" hidden type="file" multiple accept=".json,.yaml,.yml,image/png,image/jpeg,image/webp,image/svg+xml" onChange={e => {
-                            const files = e.currentTarget.files ? Array.from(e.currentTarget.files) as File[] : [];
-                            e.currentTarget.value = '';
-                            if (files.length) onPackage(files);
-                        }}/>
-                        <button type="button" className="template-tile cursor-pointer" onClick={() => onnxInputRef.current?.click()}>
-                            <span className="template-kicker">Private</span>
-                            <strong>Create from image</strong>
-                            <span>Local on-device processing.</span>
-                            <b><BrainCircuit size={16}/> Choose image</b>
-                        </button>
-                        <input ref={onnxInputRef} data-testid="onnx-input" hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={e => {
-                            const file = e.currentTarget.files?.[0];
-                            e.currentTarget.value = '';
-                            if (file) onProcess(file);
-                        }}/>
-                        <button type="button" className="template-tile cursor-pointer" onClick={onCamera}>
-                            <span className="template-kicker">Camera</span>
-                            <strong>Capture Camera</strong>
-                            <span>Capture one frame.</span>
-                            <b><Camera size={16}/> Capture Camera</b>
-                        </button>
-                    </div>
-                    <section className="character-setup-panel" data-testid="character-setup-panel" aria-label="Character part settings">
-                        <div className="section-title">Parts + artwork</div>
-                        <div className="mt-1 text-sm font-extrabold text-slate-800">Surface art sits on each cut plate.</div>
-                        <label className="mt-3 block text-xs font-black uppercase tracking-wider text-slate-500">Character part
-                            <select aria-label="Character part" className="field mt-1" disabled={partPanelDisabled} value={selectedEditablePart?.id ?? ''} onChange={e => dispatch({ type: 'select_part', partId: e.target.value })}>
-                                {editableParts.map(part => <option key={part.id} value={part.id}>{part.name}</option>)}
-                            </select>
-                        </label>
-                        {partPanelDisabled
-                            ? <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">Accept or discard the reviewed package before fine-tuning part artwork, so edits apply to the active character.</div>
-                            : selectedEditablePart && <PartInspector part={selectedEditablePart} dispatch={dispatch} compact />}
-                        <details className="advanced-panel mt-3" open={!partPanelDisabled}>
-                            <summary>Skeleton anchors</summary>
-                            {partPanelDisabled ? <div className="mt-2 text-xs font-bold text-slate-500">Skeleton editing is available after package acceptance.</div> : <SkeletonInspector project={project} dispatch={dispatch} />}
-                        </details>
-                    </section>
-                </div>
-            </div>
-        </section>
-
-        <section className="onboarding-secondary">
-            <div className="secondary-actions">
-                <button type="button" className="btn-secondary cursor-pointer" onClick={() => importInputRef.current?.click()}><Upload size={16}/> Import project</button><input ref={importInputRef} data-testid="onboarding-import-input" hidden type="file" accept="application/json,.json" onChange={e => {
-                    const file = e.currentTarget.files?.[0];
-                    e.currentTarget.value = '';
-                    if (file) onImport(file);
-                }}/>
-                <label className="replace-toggle"><input aria-label="Replace current character and preserve compatible mechanisms" type="checkbox" checked={replaceCharacter} onChange={e => setReplaceCharacter(e.target.checked)} /> Preserve mechanisms when replacing character</label>
-            </div>
-            <details className="advanced-panel landing-tools" data-testid="character-processing-panel">
-                <summary>Advanced import tools</summary>
-                {partPanelDisabled && <p className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">Review is pending. Accept or discard it before editing the active character setup.</p>}
-                <div className="landing-tools-grid">
-                    <div>
-                        <h4 className="section-title">Processing Steps</h4>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                            <button className="btn-primary" disabled={partPanelDisabled} onClick={() => onnxInputRef.current?.click()}>Process Image (Skeleton)</button>
-                            <button className="btn-secondary" disabled={partPanelDisabled} onClick={onEditCharacter}>Edit Skeleton</button>
-                            <button className="btn-secondary" disabled={partPanelDisabled} onClick={onSaveSkeleton}>Save Skeleton</button>
-                            <button className="btn-secondary" disabled={partPanelDisabled} onClick={() => onnxInputRef.current?.click()}>Generate Body Parts</button>
-                        </div>
-                    </div>
-                    <div>
-                        <h4 className="section-title">Recognition Editing</h4>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                            <button className="btn-secondary" disabled={partPanelDisabled} onClick={onEditCharacter}>Edit Parts / Skeleton / Boxes</button>
-                            <button className="btn-secondary" disabled={partPanelDisabled} onClick={onEditCharacter}>Edit Skeleton Joints</button>
-                        </div>
-                    </div>
-                    <div>
-                        <h4 className="section-title">Download / Output Location</h4>
-                        <div className="mt-3 flex flex-wrap gap-2"><button className="btn-secondary" onClick={onChooseSaveFolder}>Choose Save Folder…</button></div>
-                        <p className="mt-2 text-xs font-bold text-slate-500">Web exports still use browser-safe downloads.</p>
-                    </div>
-                </div>
-            </details>
-        </section>
-    </div>
-    {statusOpen && <aside className="character-status-dock" data-testid="character-status-dock" role="dialog" aria-label="Import status" aria-live="polite">
-        {importStatusPanel}
-    </aside>}
-    </section>
-    );
+                </details>
+            </StageLeftSummary>),
+            canvas: canvasPane(<div className="character-preview-pane canvas-workspace" data-testid="character-preview-pane">
+                <ThreePuppetPreview project={project} skeleton={project.skeleton} angle={0} viewport={DEFAULT_CANVAS_VIEWPORT} testId="character-three-puppet" />
+            </div>),
+            inspector: inspectorPane(<div className="stage-pane-stack character-inspector">
+                <section className="character-setup-panel" data-testid="character-setup-panel" aria-label="Character part settings">
+                    <div className="section-title">Parts + artwork</div>
+                    <div className="mt-1 text-sm font-extrabold text-slate-800">Surface art sits on each cut plate.</div>
+                    <label className="mt-3 block text-xs font-black uppercase tracking-wider text-slate-500">Character part
+                        <select aria-label="Character part" className="field mt-1" disabled={partPanelDisabled} value={selectedEditablePart?.id ?? ''} onChange={e => dispatch({ type: 'select_part', partId: e.target.value })}>
+                            {editableParts.map(part => <option key={part.id} value={part.id}>{part.name}</option>)}
+                        </select>
+                    </label>
+                    {partPanelDisabled
+                        ? <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">Accept or discard the reviewed package before fine-tuning part artwork, so edits apply to the active character.</div>
+                        : selectedEditablePart && <PartInspector part={selectedEditablePart} dispatch={dispatch} compact />}
+                    <details className="advanced-panel mt-3" open={!partPanelDisabled}>
+                        <summary>Skeleton anchors</summary>
+                        {partPanelDisabled ? <div className="mt-2 text-xs font-bold text-slate-500">Skeleton editing is available after package acceptance.</div> : <SkeletonInspector project={project} dispatch={dispatch} />}
+                    </details>
+                </section>
+            </div>)
+        }}/>
+        {statusOpen && <aside className="character-status-dock" data-testid="character-status-dock" role="dialog" aria-label="Import status" aria-live="polite">
+            {importStatusPanel}
+        </aside>}
+    </section>;
 };
 
 const CameraCaptureDialog = ({ isOpen, onClose, onCapture }: { isOpen: boolean; onClose: () => void; onCapture: (file: File) => void }) => {

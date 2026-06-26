@@ -28,6 +28,44 @@ assert(existsSync(join(process.cwd(), 'resources/examples/raw/girl.png')), 'girl
 assert(existsSync(join(process.cwd(), 'resources/examples/raw/boy.PNG')), 'boy starter source image is present');
 const designContract = readFileSync(join(process.cwd(), 'DESIGN.md'), 'utf8');
 const agentsContract = readFileSync(join(process.cwd(), 'AGENTS.md'), 'utf8');
+const brandStaticFiles = [
+  'App.tsx',
+  'index.html',
+  'package.json',
+  'package-lock.json',
+  'metadata.json',
+  'README.md',
+  'DESIGN.md',
+  'vite.config.ts',
+  'run_browser.bat',
+  'build_portable_exe.bat',
+  'src-tauri/Cargo.toml',
+  'src-tauri/Cargo.lock',
+  'src-tauri/tauri.conf.json',
+  'docs/mechanism-blueprint-manual.md',
+  'docs/prd/novice-canva-style-ui-plan.md',
+  'docs/prd/realistic-25d-3d-physics-platform-plan.md',
+  'docs/prd/canva-video-editor-workspace-plan.md',
+  'docs/prd/toon-25d-main-3d-unlock-plan.md'
+];
+const brandStaticText = brandStaticFiles.map(file => readFileSync(join(process.cwd(), file), 'utf8')).join('\n');
+const legacyBrand = ['Mech', 'Anim'].join('');
+const legacySlug = ['mech', 'anim'].join('');
+assert(!brandStaticText.includes(legacyBrand), 'legacy product name is absent from static project files');
+assert(!brandStaticText.includes(legacySlug), 'legacy package/storage slug is absent from static project files');
+assert(brandStaticText.includes('MotionSmith'), 'MotionSmith appears across static project files');
+assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')).name, 'motionsmith-character-motion-designer', 'npm package name uses the MotionSmith slug');
+assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'metadata.json'), 'utf8')).name, 'MotionSmith: Character Motion Designer', 'metadata product name uses MotionSmith');
+assert(readFileSync(join(process.cwd(), 'index.html'), 'utf8').includes('<title>MotionSmith - Mechanical Character Designer</title>'), 'HTML title uses MotionSmith');
+assert(readFileSync(join(process.cwd(), 'vite.config.ts'), 'utf8').includes("'/MotionSmith/'"), 'web deployment base path uses MotionSmith');
+assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
+assert(readFileSync(join(process.cwd(), 'App.tsx'), 'utf8').includes('motionsmith.hideWelcome'), 'local storage namespace uses the MotionSmith slug');
+assert(readFileSync(join(process.cwd(), 'playwright.config.ts'), 'utf8').includes('fullyParallel: true'), 'browser tests default to full parallel execution without reducing coverage');
+assert(readFileSync(join(process.cwd(), 'playwright.config.ts'), 'utf8').includes('PLAYWRIGHT_WORKERS'), 'browser worker count can be tuned by environment instead of weakening tests');
+assert(readFileSync(join(process.cwd(), 'playwright.config.ts'), 'utf8').includes('MAX_BROWSER_WORKERS'), 'browser worker defaults are bounded to avoid local over-parallelization');
+assert(readFileSync(join(process.cwd(), 'playwright.config.ts'), 'utf8').includes('Number.isInteger'), 'browser worker override validates positive integer input');
+assert(agentsContract.includes('preserve coverage while optimizing wall time'), 'AGENTS.md requires test speedups to preserve test quality');
+assert(agentsContract.includes('bounded Playwright parallel workers'), 'AGENTS.md requires bounded browser test parallelism');
 assert(designContract.includes('Shared editor workbench'), 'DESIGN.md documents the shared editor workbench');
 assert(designContract.includes('Project governance: `AGENTS.md`'), 'DESIGN.md points contributors at the project agent contract');
 assert(designContract.includes('#8b5cf6'), 'DESIGN.md uses the MotionSmith light primary color');
@@ -81,6 +119,7 @@ const canvasText = readFileSync(join(process.cwd(), 'components', 'Canvas.tsx'),
 const threePreviewText = readFileSync(join(process.cwd(), 'components', 'ThreePuppetPreview.tsx'), 'utf8');
 const exporterText = readFileSync(join(process.cwd(), 'utils', 'exporter.ts'), 'utf8');
 const appText = readFileSync(join(process.cwd(), 'App.tsx'), 'utf8');
+const indexText = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
 assert(canvasText.includes('fabricationGearPathD'), '2D canvas gear rendering uses shared fabrication gear geometry');
 assert(threePreviewText.includes('fabricationGearProfileForPitchRadius'), '3D foundry gear rendering uses shared fabrication gear geometry');
 assert(threePreviewText.includes('fabricationRenderPlanForMechanism'), 'Mechanism Design 3D preview uses the same fabrication stack plan as Foundry');
@@ -103,6 +142,18 @@ assert(threePreviewText.includes('part-art-decal'), '3D puppet preview names sur
 assert(threePreviewText.includes('cut-hole-ring'), '3D puppet preview draws raised joint-hole rings on part surfaces');
 assert(threePreviewText.includes('transparent: false, opacity: 1'), '3D puppet body plates are opaque assembled solids, not ghost overlays');
 assert(threePreviewText.includes('disposeOwnedMaterials(scene)'), '3D puppet preview disposes owned decal textures on unmount');
+assert(designContract.includes('Getting Started is a compact modal dialog'), 'DESIGN.md separates Getting Started from full-screen onboarding');
+assert(designContract.includes('The Character tab is functional'), 'DESIGN.md defines Character as a functional editor tab');
+assert(appText.includes('splash-dialog') && appText.includes('MotionSmith'), 'first-run welcome is a logo-only splash dialog');
+assert(appText.includes('readStorageWithLegacy') && appText.includes('migrateStorageValue'), 'MotionSmith storage rename keeps legacy autosave/workspace migration hooks');
+assert(!appText.includes('MOTIONSMITH_VIDEO_URL'), 'welcome splash does not embed the old preview video');
+assert(appText.includes('getting-started-dialog') && appText.includes('getting-started-gallery'), 'Getting Started is an explicit compact starter dialog');
+assert(appText.includes('Pick a starter, then tune it in Character.'), 'Getting Started copy routes users into the Character tab');
+assert(appText.includes('setShowGettingStarted(!hideNextTime)'), 'Start opens Getting Started unless the splash is hidden for next time');
+assert(appText.includes('onOpenGettingStarted'), 'Character tab can reopen Getting Started without owning its starter gallery');
+assert(!appText.includes('Start with character art'), 'Character tab no longer carries the old hero/onboarding copy');
+assert(!indexText.includes('.onboarding-page'), 'CSS no longer keeps a full-screen onboarding page mode');
+assert(!indexText.includes('.welcome-simple'), 'CSS no longer keeps the old welcome video layout');
 assert(appText.includes('character-setup-panel'), 'Character tab exposes direct part settings instead of only getting-started cards');
 assert(appText.includes('Art width') && appText.includes('Art offset X'), 'Character part inspector exposes artwork extent and offset controls');
 assert(appText.includes('data-testid={`path-part-art-${part.id}`}') && appText.includes('part.bounds.x * part.transform.scale'), 'Path Editor renders artwork from the editable part bounds offset');

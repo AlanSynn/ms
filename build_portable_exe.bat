@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 echo ============================================
-echo   MechAnim - Building Portable EXE
+echo   MotionSmith - Building Portable EXE
 echo ============================================
 echo.
 
@@ -47,7 +47,7 @@ if errorlevel 1 (
 
 echo.
 echo [3/3] Copying executable to "exe build" folder...
-copy /Y "src-tauri\target\release\mechanim.exe" "exe build\MechAnim.exe"
+copy /Y "src-tauri\target\release\motionsmith.exe" "exe build\MotionSmith.exe"
 if errorlevel 1 (
     echo ERROR: Failed to copy executable!
     pause
@@ -57,12 +57,12 @@ if errorlevel 1 (
 echo.
 echo ============================================
 echo   BUILD COMPLETE! Version: %VERSION%
-echo   Output: exe build\MechAnim.exe
+echo   Output: exe build\MotionSmith.exe
 echo ============================================
 echo.
 
 REM Show file size
-for %%A in ("exe build\MechAnim.exe") do echo File size: %%~zA bytes
+for %%A in ("exe build\MotionSmith.exe") do echo File size: %%~zA bytes
 
 pause
 endlocal

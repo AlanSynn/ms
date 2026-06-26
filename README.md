@@ -1,11 +1,11 @@
-# MechAnim: Character Motion Designer
+# MotionSmith: Character Motion Designer
 
-![MechAnim Dashboard](https://github.com/moh-d-m4x/MechAnim/blob/main/ref/MechAnim_Dashboard.png?raw=true)
+![MotionSmith Dashboard](https://github.com/moh-d-m4x/MotionSmith/blob/main/ref/MotionSmith_Dashboard.png?raw=true)
 
-**MechAnim** is a powerful web-based tool for designing, simulating, and optimizing mechanical linkages and character motion. It combines interactive 2D physics simulation with genetic algorithms to help users create complex mechanisms that follow specific motion paths.
+**MotionSmith** is a powerful web-based tool for designing, simulating, and optimizing mechanical linkages and character motion. It combines interactive 2D physics simulation with genetic algorithms to help users create complex mechanisms that follow specific motion paths.
 
 <p align="center">
-  <a href="https://moh-d-m4x.github.io/MechAnim/">
+  <a href="https://moh-d-m4x.github.io/MotionSmith/">
     <img src="https://img.shields.io/badge/🚀_Try_it-live!-blue?style=for-the-badge" alt="Try it live!" height="50">
   </a>
 </p>
@@ -18,7 +18,7 @@
 - **Real-time Simulation**: Visualize motion instantly as you modify the design.
 - **Parametric Controls**: Fine-tune specific values like crank length, ground distance, and speed ratios.
 
-![Draw Mode](https://github.com/moh-d-m4x/MechAnim/blob/main/ref/Draw_Mode.png?raw=true)
+![Draw Mode](https://github.com/moh-d-m4x/MotionSmith/blob/main/ref/Draw_Mode.png?raw=true)
 
 ### 🧬 Machine Optimization
 - **Path Drawing**: Draw a desired motion path directly on the canvas.
@@ -33,8 +33,8 @@
 - **Path Extraction**: Convert your annotated path into a target for mechanism optimization.
 - **Loop Closing**: Option to automatically connect the start and end points for cyclic motion.
 
-![Tracking Modal](https://github.com/moh-d-m4x/MechAnim/blob/main/ref/Tracking_Modal_1.png?raw=true)
-![Tracking Moda2](https://github.com/moh-d-m4x/MechAnim/blob/main/ref/Tracking_Modal_2.png?raw=true)
+![Tracking Modal](https://github.com/moh-d-m4x/MotionSmith/blob/main/ref/Tracking_Modal_1.png?raw=true)
+![Tracking Moda2](https://github.com/moh-d-m4x/MotionSmith/blob/main/ref/Tracking_Modal_2.png?raw=true)
 
 ### 📤 Export & Integration (alpha)
 - **SVG Export**: Export your mechanism and path as scalable vector graphics.
@@ -50,8 +50,8 @@
 
 1.  **Clone the repository**
     ```bash
-    git clone https://github.com/yourusername/mechanim.git
-    cd mechanim
+    git clone https://github.com/yourusername/motionsmith.git
+    cd motionsmith
     ```
 
 2.  **Install Dependencies**

@@ -1,6 +1,6 @@
 # Novice Canva-Style UI Plan
 
-Goal: make MechAnim feel like a guided design tool, not an engineering console.
+Goal: make MotionSmith feel like a guided design tool, not an engineering console.
 The user should understand the next action in 5 seconds: pick a template or
 character, draw a free path, choose a mechanism, export a blueprint.
 

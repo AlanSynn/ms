@@ -83,6 +83,8 @@ Before claiming completion, run the smallest checks that prove the changed contr
 
 - Contract/docs changes: `npm test`, `npm run build`, and contract assertions that lock the new rule.
 - UI/workbench changes: add or update browser tests, then run the relevant Playwright flow plus build/contracts.
+- Browser tests should preserve coverage while optimizing wall time: prefer bounded Playwright parallel workers (`fullyParallel`) and `PLAYWRIGHT_WORKERS=<n>` / `--workers=<n>` over deleting assertions, shortening workflows, or weakening checks. Use `--workers=1` only to reproduce order-dependent failures.
+- If a browser test cannot run in parallel, fix the shared-state leak or isolate test data before choosing serial execution.
 - Physics/mechanism changes: test kinematic sampling, constraint validity, force/velocity/friction reporting, and fabrication stack compatibility. Simulation verification may be rigorous; prefer correctness over speed.
 - Do not add artificial test time limits, timeout wrappers, or shortened runner timeouts. Let tests finish unless an external tool has truly hung, then fix the hang or record the blocker.
 - Fabrication/export changes: test generated stacks, z-order/exploded data, printable/export artifacts, and round-trip project state.

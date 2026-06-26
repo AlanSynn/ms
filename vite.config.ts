@@ -7,7 +7,7 @@ export default defineConfig(() => {
   const isTauri = process.env.TAURI_PLATFORM !== undefined;
 
   return {
-    base: isTauri ? './' : '/MechAnim/',
+    base: isTauri ? './' : '/MotionSmith/',
     server: {
       port: 1420,
       strictPort: true,

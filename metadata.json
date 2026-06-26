@@ -1,5 +1,5 @@
 {
-  "name": "MechAnim: Character Motion Designer",
+  "name": "MotionSmith: Character Motion Designer",
   "description": "An interactive mechanical design tool inspired by computational design principles. Create complex motion curves using optimized 4-bar linkages to design animated mechanical characters.",
   "requestFramePermissions": []
 }

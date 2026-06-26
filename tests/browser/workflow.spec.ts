@@ -20,14 +20,24 @@ const openCharacterScreen = async (page) => {
   if (await page.getByTestId('welcome-dialog').count()) {
     await page.getByRole('button', { name: 'Start', exact: true }).click();
   }
+  if (await page.getByTestId('getting-started-dialog').count()) {
+    await page.getByRole('button', { name: 'Skip to editor' }).click();
+  }
   if (!(await page.getByTestId('character-screen').count())) {
-    await page.getByRole('button', { name: /Character Selection/i }).click();
+    await page.getByRole('button', { name: /^Character$/i }).click();
   }
   await expect(page.getByTestId('character-screen')).toBeVisible();
 };
 
 const openWavingArmTemplate = async (page) => {
-  await openCharacterScreen(page);
+  if (await page.getByTestId('welcome-dialog').count()) {
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
+  }
+  if (!(await page.getByTestId('getting-started-dialog').count())) {
+    await openCharacterScreen(page);
+    await page.getByRole('button', { name: /Open Getting Started/i }).click();
+  }
+  await expect(page.getByTestId('getting-started-dialog')).toBeVisible();
   await page.getByRole('button', { name: /Open Waving arm/i }).click();
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
 };
@@ -53,17 +63,13 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('shared-workbench')).toBeVisible();
   const welcomeDialog = page.getByTestId('welcome-dialog');
   await expect(welcomeDialog).toBeVisible();
-  await expect(welcomeDialog.getByRole('heading', { name: 'MechAnim' })).toBeVisible();
-  await expect(welcomeDialog.getByText('Rig a character, draw a path')).toBeVisible();
-  const welcomeVideo = welcomeDialog.getByLabel('MotionSmith preview video');
-  await expect(welcomeVideo).toBeVisible();
-  await expect(welcomeVideo).toHaveJSProperty('controls', true);
-  await expect(welcomeVideo).toHaveJSProperty('autoplay', false);
+  await expect(welcomeDialog.getByRole('heading', { name: 'MotionSmith' })).toBeVisible();
+  await expect(welcomeDialog.getByLabel('MotionSmith preview video')).toHaveCount(0);
+  await expect(welcomeDialog.getByText('Rig a character, draw a path')).toHaveCount(0);
   await expect(welcomeDialog.getByLabel('Do not show this again')).toBeVisible();
-  await expect(welcomeDialog.getByTestId('template-gallery')).toHaveCount(0);
   const welcomeBox = await welcomeDialog.boundingBox();
   const viewport = page.viewportSize();
-  expect(welcomeBox?.height ?? 0, 'simple welcome dialog fits inside the editor viewport').toBeLessThanOrEqual((viewport?.height ?? 900) * 0.94);
+  expect(welcomeBox?.height ?? 0, 'logo-only splash fits inside the editor viewport').toBeLessThanOrEqual((viewport?.height ?? 900) * 0.58);
   expect(await page.evaluate(() => document.scrollingElement!.scrollHeight <= document.scrollingElement!.clientHeight + 8)).toBe(true);
   await expect.poll(() => activeElementIsInDialog(page)).toBe(true);
   for (let i = 0; i < 4; i += 1) {
@@ -72,20 +78,26 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   }
   await page.getByRole('button', { name: 'Start', exact: true }).click();
   await expect(page.getByTestId('welcome-dialog')).toHaveCount(0);
+
+  const gettingStarted = page.getByTestId('getting-started-dialog');
+  await expect(gettingStarted).toBeVisible();
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Waving arm');
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Girl starter');
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Boy starter');
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Load character');
+  await expect.poll(() => gettingStarted.locator('.starter-thumb').evaluateAll(images => images.every(img => (img as HTMLImageElement).naturalWidth > 0))).toBe(true);
+  await page.getByRole('button', { name: 'Skip to editor' }).click();
+
   await expect(page.getByTestId('character-screen')).toBeVisible();
-  const characterTitleBox = await page.getByRole('heading', { name: 'Start with character art' }).boundingBox();
-  expect(characterTitleBox?.y ?? -1, 'character title is not clipped at viewport top').toBeGreaterThanOrEqual(0);
+  await expect(page.getByTestId('workspace-steps')).toBeVisible();
+  await expect(page.getByTestId('character-preview-pane')).toBeVisible();
+  await expect(page.getByTestId('getting-started-gallery')).toHaveCount(0);
+  await expect(page.getByText('Start with character art')).toHaveCount(0);
   await expect(page.getByTestId('character-status-dock')).toHaveCount(0);
-  await expect(page.getByTestId('template-gallery')).toContainText('Waving arm');
-  await expect(page.getByTestId('template-gallery')).toContainText('Girl starter');
-  await expect(page.getByTestId('template-gallery')).toContainText('Boy starter');
-  await expect(page.getByTestId('template-gallery')).toContainText('Blank character');
-  await expect(page.getByText('Local on-device processing.')).toBeVisible();
   await expect(page.getByTestId('character-setup-panel')).toContainText('Parts + artwork');
   await expect(page.getByTestId('character-setup-panel').getByLabel('Character part', { exact: true })).toBeVisible();
   await expect(page.getByTestId('part-art-controls')).toContainText('Artwork surface');
   await expect(page.getByLabel('Art width number')).toBeVisible();
-  await expect.poll(() => page.locator('.starter-thumb').evaluateAll(images => images.every(img => (img as HTMLImageElement).naturalWidth > 0))).toBe(true);
   await expect(page.getByText('parts_info.json package artifact')).toBeHidden();
   await expect(page.getByTestId('onboarding-import-input')).toBeAttached();
 
@@ -128,7 +140,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
     page.waitForEvent('download'),
     page.getByRole('button', { name: /Save/i }).click()
   ]);
-  expect(projectDownload.suggestedFilename()).toMatch(/\.mechanim\.json$/);
+  expect(projectDownload.suggestedFilename()).toMatch(/\.motionsmith\.json$/);
   const projectDownloadPath = await projectDownload.path();
   expect(projectDownloadPath, 'project download path').toBeTruthy();
   const projectSnapshot = JSON.parse(await readFile(projectDownloadPath!, 'utf8'));
@@ -389,7 +401,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   expectCleanPage(pageErrors, consoleErrors);
 });
 
-test('Character Selection processing controls route to real browser workflows', async ({ page }) => {
+test('Character tab processing controls route to real browser workflows', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
@@ -399,16 +411,30 @@ test('Character Selection processing controls route to real browser workflows', 
 
   await page.goto('/');
   await openCharacterScreen(page);
-  await expect(page.getByTestId('character-processing-panel')).toContainText('Processing Steps');
+  await expect(page.getByTestId('character-processing-panel')).toContainText('Advanced import tools');
+  await expect(page.getByTestId('character-preview-pane')).toBeVisible();
+
+  const packageChooserPromise = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Load character package', exact: true }).click();
+  const packageChooser = await packageChooserPromise;
+  expect(packageChooser.isMultiple()).toBe(true);
+  await packageChooser.setFiles([]);
+
+  const imageChooserPromise = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Create from image', exact: true }).click();
+  const imageChooser = await imageChooserPromise;
+  expect(imageChooser.isMultiple()).toBe(false);
+  await imageChooser.setFiles([]);
+
+  await page.getByRole('button', { name: /Open Getting Started/i }).click();
+  await expect(page.getByTestId('getting-started-dialog')).toBeVisible();
+  const starterPackageChooserPromise = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: /Load package/i }).click();
+  const starterPackageChooser = await starterPackageChooserPromise;
+  expect(starterPackageChooser.isMultiple()).toBe(true);
+  await starterPackageChooser.setFiles([]);
+  await page.getByRole('button', { name: 'Skip to editor' }).click();
   await page.getByText('Advanced import tools').click();
-
-  const skeletonChooserPromise = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Process Image (Skeleton)', exact: true }).click();
-  expect((await skeletonChooserPromise).isMultiple()).toBe(false);
-
-  const bodyPartsChooserPromise = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Generate Body Parts', exact: true }).click();
-  expect((await bodyPartsChooserPromise).isMultiple()).toBe(false);
 
   const [skeletonDownload] = await Promise.all([
     page.waitForEvent('download'),
@@ -451,7 +477,7 @@ test('Create from image upload creates a reviewed character package in browser',
   await expect(page.getByTestId('character-status-dock')).toBeVisible({ timeout: 180_000 });
   await expect(page.getByText('review generated package')).toBeVisible({ timeout: 180_000 });
   const dockBox = await page.getByTestId('character-status-dock').boundingBox();
-  const workFrameBox = await page.locator('.character-stage .onboarding-page').boundingBox();
+  const workFrameBox = await page.getByTestId('stage-canvas-pane').boundingBox();
   expect(dockBox?.y ?? 0, 'character import status is docked below the main work frame').toBeGreaterThanOrEqual(((workFrameBox?.y ?? 0) + (workFrameBox?.height ?? 0)) - 4);
   await expect(page.getByText(/parts · .*joints · ready to review/i)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Accept package' })).toBeVisible();
@@ -490,7 +516,7 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
     'tests/fixtures/package/char_cfg.yaml',
     'tests/fixtures/package/body.png'
   ];
-  const loadPackageButton = page.getByRole('button', { name: /Load package/i });
+  const loadPackageButton = page.getByRole('button', { name: 'Load character package', exact: true });
   await loadPackageButton.focus();
   await expect(loadPackageButton).toBeFocused();
   const [packageChooser] = await Promise.all([
@@ -506,7 +532,6 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
   await expect(page.getByText('Accept or discard the reviewed package before fine-tuning part artwork')).toBeVisible();
   await page.getByTestId('character-processing-panel').locator('summary').click();
   await expect(page.getByText('Accept or discard it before editing the active character setup.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Edit Skeleton', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Edit Parts / Skeleton / Boxes' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Edit Skeleton Joints' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Save Skeleton' })).toBeDisabled();
@@ -516,10 +541,10 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
   await expect(page.getByText('plain load clears stale mechanisms')).toBeVisible();
   await page.getByRole('button', { name: 'Discard' }).click();
   await expect(page.getByText('review generated package')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Edit Skeleton', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit Skeleton Joints', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
   await expectProjectCounts(page, 6, 1, 1);
-  await page.getByRole('button', { name: /Character Selection/i }).click();
+  await page.getByRole('button', { name: /^Character$/i }).click();
 
   await page.getByTestId('blank-package-input').setInputFiles(packageFiles);
   await expect(page.getByText('review generated package')).toBeVisible();
@@ -528,7 +553,7 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
   await expectProjectCounts(page, 1, 0, 0);
   await expect(page.getByText('No path for this part yet. Draw or track a path before fitting a mechanism.')).toBeVisible();
 
-  await page.getByRole('button', { name: /Character Selection/i }).click();
+  await page.getByRole('button', { name: /^Character$/i }).click();
   await page.getByTestId('blank-package-input').setInputFiles('tests/fixtures/package/char_cfg.yaml');
   await expect(page.getByTestId('character-screen')).toBeVisible();
   await expect(page.getByText('Character package import failed')).toBeVisible();
@@ -548,7 +573,7 @@ test('Replacement package preserves compatible mechanisms and rebound paths', as
   await page.goto('/');
   await openWavingArmTemplate(page);
   await expectProjectCounts(page, 6, 1, 1);
-  await page.getByRole('button', { name: /Character Selection/i }).click();
+  await page.getByRole('button', { name: /^Character$/i }).click();
   await page.getByLabel('Replace current character and preserve compatible mechanisms').check();
   await page.getByTestId('blank-package-input').setInputFiles([
     'tests/fixtures/package-compatible/parts_info.json',
@@ -686,7 +711,7 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await expect(page.getByTestId('grid-cell-readout')).toContainText('0.98 in');
 
   await expect.poll(async () => page.evaluate(() => {
-    const saved = JSON.parse(localStorage.getItem('mechanim.autosave') ?? '{}');
+    const saved = JSON.parse(localStorage.getItem('motionsmith.autosave') ?? '{}');
     return {
       autosave: saved.settings?.autosave,
       interval: saved.settings?.autosaveIntervalSeconds,
@@ -726,7 +751,7 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').press('Enter');
   await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').fill('100');
   await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').press('Enter');
-  await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('mechanim.autosave') ?? '{}')?.mechanisms?.[0]?.anchorX), { timeout: 5000 }).toBe(0);
+  await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('motionsmith.autosave') ?? '{}')?.mechanisms?.[0]?.anchorX), { timeout: 5000 }).toBe(0);
   await page.getByRole('button', { name: /Blueprint Export/i }).click();
   await page.getByRole('button', { name: /Generate package/i }).click();
   await expect(page.getByRole('button', { name: 'Download JSON default' })).toBeVisible();
@@ -737,8 +762,50 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   expect(metadata.profile.boardCells).toBe(12);
   expect(metadata.profile.gridPitchMm).toBe(25);
   expect(metadata.profile.cutSheetFileType).toBe('svg');
-  await page.getByRole('button', { name: /Character Selection/i }).click();
+  await page.getByRole('button', { name: /^Character$/i }).click();
   await expect(page.getByTestId('processing-step-details')).toContainText('Normalize to the physical sheet');
+
+  expectCleanPage(pageErrors, consoleErrors);
+});
+
+test('Legacy storage namespace migrates to MotionSmith keys without losing autosave or workspace layout', async ({ page }) => {
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  await page.goto('/');
+  await openCharacterScreen(page);
+  await page.getByRole('button', { name: /Options/i }).click();
+  const autosaveToggle = page.getByLabel('Enable autosave');
+  if (!(await autosaveToggle.isChecked())) await autosaveToggle.check();
+  await expect.poll(async () => page.evaluate(() => localStorage.getItem('motionsmith.autosave') ?? ''), { timeout: 5000 }).not.toBe('');
+  await page.evaluate(() => {
+    const current = localStorage.getItem('motionsmith.autosave') ?? '';
+    const legacyPrefix = ['mech', 'anim'].join('');
+    localStorage.removeItem('motionsmith.autosave');
+    localStorage.removeItem('motionsmith.workspace');
+    localStorage.setItem(`${legacyPrefix}.autosave`, current);
+    localStorage.setItem(`${legacyPrefix}.workspace`, JSON.stringify({
+      stage: 'character',
+      viewport: { offset: { x: 24, y: -12 }, zoom: 1.25 },
+      toolbarVisible: false,
+      partPanelVisible: false
+    }));
+  });
+
+  await page.getByTestId('top-command-bar').getByText('File', { exact: true }).click();
+  await page.getByRole('button', { name: 'Recover Autosave…' }).click();
+  await expect(page.getByTestId('status-bar')).toContainText('Recovered autosave snapshot');
+  await expect.poll(async () => page.evaluate(() => Boolean(localStorage.getItem('motionsmith.autosave'))), { timeout: 5000 }).toBe(true);
+
+  await page.getByTestId('top-command-bar').getByText('View', { exact: true }).click();
+  await page.getByRole('button', { name: 'Restore Workspace Layout' }).click();
+  await expect(page.getByTestId('status-bar')).toContainText('Workspace layout restored');
+  await expect.poll(async () => page.evaluate(() => Boolean(localStorage.getItem('motionsmith.workspace'))), { timeout: 5000 }).toBe(true);
+  await expect(page.getByTestId('quick-toolbar')).toHaveCount(0);
 
   expectCleanPage(pageErrors, consoleErrors);
 });
@@ -1305,11 +1372,10 @@ test('Mobile path editor keeps Draw free path action above the canvas', async ({
 test('Mobile welcome modal is simple, traps focus, and can be hidden next time', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await expect(page.getByTestId('welcome-dialog')).toBeVisible();
-  const welcomeVideo = page.getByTestId('welcome-dialog').getByLabel('MotionSmith preview video');
-  await expect(welcomeVideo).toBeVisible();
-  await expect(welcomeVideo).toHaveJSProperty('controls', true);
-  await expect(welcomeVideo).toHaveJSProperty('autoplay', false);
+  const splash = page.getByTestId('welcome-dialog');
+  await expect(splash).toBeVisible();
+  await expect(splash.getByRole('heading', { name: 'MotionSmith' })).toBeVisible();
+  await expect(splash.getByLabel('MotionSmith preview video')).toHaveCount(0);
   await expect.poll(() => activeElementIsInDialog(page)).toBe(true);
   const modalState = await page.evaluate(() => ({
     scrollLocked: document.scrollingElement!.scrollHeight <= document.scrollingElement!.clientHeight + 8,
@@ -1330,11 +1396,13 @@ test('Mobile welcome modal is simple, traps focus, and can be hidden next time',
   await page.getByLabel('Do not show this again').check();
   await page.getByRole('button', { name: 'Start', exact: true }).click();
   await expect(page.getByTestId('welcome-dialog')).toHaveCount(0);
+  await expect(page.getByTestId('getting-started-dialog')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.classList.contains('welcome-modal-open'))).toBe(false);
   await page.reload();
   await expect(page.getByTestId('welcome-dialog')).toHaveCount(0);
+  await expect(page.getByTestId('getting-started-dialog')).toHaveCount(0);
   await expect(page.getByTestId('character-screen')).toBeVisible();
-  await expect(page.getByTestId('template-gallery')).toContainText('Waving arm');
+  await expect(page.getByTestId('character-setup-panel')).toBeVisible();
 });
 
 test('Shared player dock stays inside the editor content at lower and medium desktop widths', async ({ page }) => {
@@ -1382,7 +1450,8 @@ test('Workflow tabs keep left workflow, center canvas, and right inspector roles
 
   const workflowRail = page.getByTestId('workspace-steps');
   await expect(workflowRail).toBeVisible();
-  await expect(workflowRail).toContainText('Character Selection');
+  await expect(workflowRail).toContainText('Character');
+  await expect(workflowRail).not.toContainText('Character Selection');
   await expect(workflowRail).toContainText('Path Editor');
   await expect(workflowRail).toContainText('Mechanism Foundry');
   await expect(workflowRail).toContainText('Blueprint Export');
@@ -1466,7 +1535,7 @@ test('Workflow rail remains reachable on short desktop and mobile fallback expos
   await page.getByRole('button', { name: 'Rail motion path' }).click();
   const mobileNav = page.getByTestId('stage-left-pane').locator('.stage-nav-compact');
   await expect(page.getByTestId('workspace-steps')).toBeHidden();
-  for (const name of ['Character Selection', 'Rail motion path', 'Mechanism Foundry', 'Rail mechanism parameters', 'Rail export package', 'Options']) {
+  for (const name of ['Character', 'Rail motion path', 'Mechanism Foundry', 'Rail mechanism parameters', 'Rail export package', 'Options']) {
     await expect(mobileNav.getByRole('button', { name })).toBeVisible();
   }
   await expect(mobileNav.getByRole('button', { name: 'Rail motion path' })).toHaveAttribute('aria-current', 'step');
@@ -1528,7 +1597,7 @@ test('Command menu and shared canvas zoom persist across workflow stages', async
   await expect(page.getByTestId('canvas-zoom-readout')).toHaveText('100%');
   await expect(page.getByTestId('status-bar')).toContainText('Canvas fitted to sheet');
 
-  await page.evaluate(() => localStorage.setItem('mechanim.workspace', JSON.stringify({
+  await page.evaluate(() => localStorage.setItem('motionsmith.workspace', JSON.stringify({
     stage: 'not-a-stage',
     viewport: { offset: { x: 'bad', y: 0 }, zoom: -10 },
     toolbarVisible: 'yes'

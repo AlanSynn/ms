@@ -1,6 +1,6 @@
 # Mechanism Blueprint Manual
 
-This manual describes the exported fabrication package produced by MechAnim.
+This manual describes the exported fabrication package produced by MotionSmith.
 
 ## Package contents
 

@@ -1,6 +1,6 @@
 @echo off
 echo ============================================
-echo   MechAnim - Character Motion Designer
+echo   MotionSmith - Character Motion Designer
 echo   Manual Tracking Mode Only
 echo ============================================
 echo.
