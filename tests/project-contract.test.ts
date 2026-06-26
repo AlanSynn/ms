@@ -12,6 +12,7 @@ import { buildToonSceneProjection } from '../utils/sceneProjection';
 import { buildKinematicPhysicsSession } from '../utils/physicsSession';
 import { fabricablePartOutlinePoints, partLandmarkJointIds, partLandmarkLocalPoints, partOutlineBounds, pointInsideOutline } from '../utils/partGeometry';
 import { MECHANISM_FEATURE_REGISTRY, mechanismFeature, validateMechanismFeatureRegistry } from '../utils/mechanismFeatureRegistry';
+import { buildMechanismSnapshot, buildMechanismSnapshots } from '../utils/mechanismSnapshot';
 import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, mechanismTemplateLabel } from '../utils/mechanismTemplates';
 import { MECHANISM_TYPES as SANITIZE_MECHANISM_TYPES } from '../utils/sanitize';
 import { generateSmartConfig, mutateConfig, OPTIMIZER_MECHANISM_TYPES } from '../utils/optimizer';
@@ -115,6 +116,81 @@ ALL_MECHANISM_TYPES.forEach(type => {
   assert(feature.projectionHints(mechanism).every(hint => hint.source === 'mechanism-feature-registry' && hint.zStackUsesFabricationPlan), `${type} feature declares fabrication-backed projection`);
   assert(feature.physicsHints(mechanism).every(hint => hint.solver === 'kinematic-derived' && hint.preservesProjectState), `${type} feature declares derived physics sidecar behavior`);
 });
+const sampleMechanismId = sample.mechanisms[0].id;
+const snapshotBeforeProject = serializeProject(sample);
+const snapshotA = buildMechanismSnapshot(sample, sampleMechanismId);
+const snapshotB = buildMechanismSnapshot(sample, sampleMechanismId);
+assert(snapshotA && snapshotB, 'mechanism snapshot builder returns a snapshot for an existing mechanism id');
+assert.deepEqual(snapshotA, snapshotB, 'mechanism snapshot builder is deterministic for the same project and mechanism');
+assert.equal(serializeProject(sample), snapshotBeforeProject, 'mechanism snapshot builder does not mutate ProjectState');
+assert(Object.isFrozen(snapshotA) && Object.isFrozen(snapshotA.fabricationPlan.layers), 'mechanism snapshot is recursively frozen for adapter safety');
+assert.equal(snapshotA.sourceIds.mechanismId, sampleMechanismId, 'mechanism snapshot records mechanism source id');
+assert(snapshotA.feasibleRange.percentValid >= 0 && snapshotA.feasibleRange.percentValid <= 1, 'mechanism snapshot includes feasible range');
+assert(snapshotA.interactionPolicy.writesProjectState, 'mechanism snapshot includes interaction policy');
+assert(snapshotA.projectionHints.every(hint => hint.zStackUsesFabricationPlan), 'mechanism snapshot includes fabrication-backed projection hints');
+assert(snapshotA.physicsHints.every(hint => hint.preservesProjectState), 'mechanism snapshot includes derived physics hints');
+assert(Array.isArray(snapshotA.fabricationPlan.validationErrors), 'mechanism snapshot includes fabrication plan validation result');
+const snapshotParamChanged = buildMechanismSnapshot({
+  ...sample,
+  mechanisms: sample.mechanisms.map(mechanism => mechanism.id === sampleMechanismId ? { ...mechanism, crankLength: mechanism.crankLength + 1 } : mechanism)
+}, sampleMechanismId);
+assert(snapshotParamChanged && snapshotParamChanged.fingerprint !== snapshotA.fingerprint, 'snapshot fingerprint changes when mechanism params change');
+const snapshotOutputGearChanged = buildMechanismSnapshot({
+  ...sample,
+  mechanisms: sample.mechanisms.map(mechanism => mechanism.id === sampleMechanismId ? { ...mechanism, showOutputGear: !(mechanism.showOutputGear ?? false) } : mechanism)
+}, sampleMechanismId);
+assert(snapshotOutputGearChanged && snapshotOutputGearChanged.fingerprint !== snapshotA.fingerprint, 'snapshot fingerprint changes when showOutputGear changes');
+const snapshotOutputGearRadiusChanged = buildMechanismSnapshot({
+  ...sample,
+  mechanisms: sample.mechanisms.map(mechanism => mechanism.id === sampleMechanismId ? { ...mechanism, outputGearRadius: (mechanism.outputGearRadius ?? 42) + 1 } : mechanism)
+}, sampleMechanismId);
+assert(snapshotOutputGearRadiusChanged && snapshotOutputGearRadiusChanged.fingerprint !== snapshotA.fingerprint, 'snapshot fingerprint changes when outputGearRadius changes');
+const snapshotTargetChanged = buildMechanismSnapshot({
+  ...sample,
+  mechanisms: sample.mechanisms.map(mechanism => mechanism.id === sampleMechanismId ? { ...mechanism, targetAnchorJointId: 'right_elbow' } : mechanism)
+}, sampleMechanismId);
+assert(snapshotTargetChanged && snapshotTargetChanged.fingerprint !== snapshotA.fingerprint, 'snapshot fingerprint changes when target ids change');
+if (snapshotA.sourceIds.targetPathId) {
+  const pathId = snapshotA.sourceIds.targetPathId;
+  const snapshotPathChanged = buildMechanismSnapshot({
+    ...sample,
+    paths: {
+      ...sample.paths,
+      [pathId]: {
+        ...sample.paths[pathId],
+        points: sample.paths[pathId].points.map((point, index) => index === 0 ? { ...point, x: point.x + 1 } : point)
+      }
+    }
+  }, sampleMechanismId);
+  assert(snapshotPathChanged && snapshotPathChanged.fingerprint !== snapshotA.fingerprint, 'snapshot fingerprint changes when the relevant target path changes');
+}
+const snapshotKitChanged = buildMechanismSnapshot({
+  ...sample,
+  settings: {
+    ...sample.settings,
+    physicalKit: { ...sample.settings.physicalKit, gridPitchMm: sample.settings.physicalKit.gridPitchMm + 1 }
+  }
+}, sampleMechanismId);
+assert(snapshotKitChanged && snapshotKitChanged.fingerprint !== snapshotA.fingerprint, 'snapshot fingerprint changes when physical kit changes');
+const allMechanismSnapshotProject: ProjectState = {
+  ...sample,
+  mechanisms: ALL_MECHANISM_TYPES.map(type => ({
+    ...createDefaultMechanism(type, `${type}-snapshot`),
+    targetPartId: 'right_arm',
+    targetPathId: 'path-right-arm',
+    targetAnchorJointId: 'right_hand',
+    activeVisualPartIds: ['right_arm']
+  }))
+};
+const allMechanismSnapshots = buildMechanismSnapshots(allMechanismSnapshotProject);
+assert.equal(allMechanismSnapshots.length, ALL_MECHANISM_TYPES.length, 'snapshot builder covers every mechanism type');
+allMechanismSnapshots.forEach(snapshot => {
+  assert.equal(snapshot.version, 1, `${snapshot.mechanism.type} snapshot carries schema version`);
+  assert(snapshot.fingerprint.startsWith('ms-'), `${snapshot.mechanism.type} snapshot carries a stable fingerprint`);
+  assert(Array.isArray(snapshot.fabricationPlan.validationErrors), `${snapshot.mechanism.type} snapshot carries fabrication validation results`);
+  assert(snapshot.projectionHints.length > 0 && snapshot.physicsHints.length > 0, `${snapshot.mechanism.type} snapshot carries adapter hints`);
+});
+assert.equal(buildMechanismSnapshot(sample, 'missing-mechanism'), null, 'missing mechanism snapshot returns null instead of fabricating data');
 const controlsText = readFileSync(join(process.cwd(), 'components', 'Controls.tsx'), 'utf8');
 const fabricationManifest = JSON.parse(readFileSync(join(process.cwd(), 'fabrication', 'manifest.json'), 'utf8')) as { parts: {
   gears: Array<{ key: string; teeth: number; pitch_radius_mm: number; root_radius_mm: number; outer_radius_mm: number; hole_diameter_mm: number; path: string; attachment_hole_centers_mm: number[][] }>;

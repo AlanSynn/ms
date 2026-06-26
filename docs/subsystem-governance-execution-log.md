@@ -41,7 +41,8 @@ Current local dependency check used `package.json`; latest version check used `n
 - [x] Agent consensus review: Architect approved after revision; Critic approved execution.
 - [x] M0 contract assertion.
 - [x] M1 registry seam.
-- [ ] M2 snapshot seam.
+- [x] M2 snapshot seam.
+- [ ] M3 stage/domain branch replacement.
 
 ## Consensus review notes
 
@@ -50,6 +51,8 @@ Current local dependency check used `package.json`; latest version check used `n
 - Architect review round 2: approve.
 - Critic review: approve. Confirmed milestones are scoped, verifiable, feature-preserving, and dependency/performance gated.
 - Runtime note: Codex native subagent notifications did not mirror into the OMX tracker; the tracker was repaired with the completed native subagent IDs before Autopilot state moved to `ultragoal`.
+- M2 code-review round 1: request changes / architectural block. The snapshot fingerprint covered core dimensions but missed persisted mechanism fields `showOutputGear` and `outputGearRadius`.
+- M2 code-review round 2: approve / architectural clear after persisted output-gear fields were added to the snapshot payload and fingerprint path.
 
 ## Implementation log
 
@@ -57,6 +60,10 @@ Current local dependency check used `package.json`; latest version check used `n
 - M0: locked the governance contract strings for `ProjectState`, `MechanismFeatureRegistry`, `MechanismSnapshot`, `ToonSceneProjection`, duplicate-registry prohibition, and performance governance.
 - M1: added `utils/mechanismFeatureRegistry.ts` as a thin source-module seam over the existing mechanism metadata, default factory, kinematics solver, feasible-range sampler, required-parts helper, fabrication stack, and fabrication render plan.
 - M1: added contract coverage proving the registry covers every `ALL_MECHANISM_TYPES` entry exactly once and delegates to canonical helpers rather than duplicating mechanism logic.
+- M2: added `utils/mechanismSnapshot.ts` as an immutable derived DTO builder from `ProjectState` + mechanism id.
+- M2: snapshot fingerprint now changes for mechanism parameters, output gear display/radius fields, target ids, relevant path data, and physical-kit changes while preserving the input `ProjectState`.
+- M2 rework: expanded the snapshot mechanism payload to carry the complete persisted behavior/rendering parameter set from `MechanismConfig` before stage adapters consume snapshots.
+- M2: contract coverage now checks deterministic snapshots, recursive freeze behavior, every mechanism type, fabrication plan validation results, adapter hints, and missing-id null behavior.
 
 ## Verification
 
@@ -66,3 +73,8 @@ Current local dependency check used `package.json`; latest version check used `n
 - `npm audit --audit-level=high` — pass (`found 0 vulnerabilities`).
 - `npm run test:browser` — pass (`31 passed`, 6.0m). Covered character, free path drawing, foundry, mechanism design 3D templates, blueprint, camera, layout, zoom/pan, and workflow-stage regression tests.
 - Code-review gate — pass (`APPROVE`, architectural status `CLEAR`).
+- M2 `npm test` — pass (`project contracts ok`).
+- M2 `npm run build` — pass (`tsc && vite build`).
+- M2 `git diff --check` — pass.
+- M2 code-review gate — pass (`APPROVE`, architectural status `CLEAR`).
+- M2 `npm run test:browser` — pass (`31 passed`, 6.3m).
