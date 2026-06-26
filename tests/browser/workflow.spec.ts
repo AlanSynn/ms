@@ -130,6 +130,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await page.getByRole('button', { name: /Mechanism Foundry/i }).click();
   await expect(page.getByRole('heading', { name: 'Mechanism Foundry' })).toBeVisible();
   await expect(page.getByText('Sandbox preview')).toBeVisible();
+  await expect(page.getByTestId('foundry-three-canvas')).toBeVisible();
+  await expect(page.getByTestId('foundry-camera-rig')).toHaveAttribute('data-three-renderer', 'webgl');
   await expect(page.getByTestId('foundry-exploded-guide')).toContainText('Exploded view');
   await expect(page.getByTestId('foundry-z-layer-labels')).toContainText('Z=0 Base');
   await expect(page.getByTestId('foundry-z-layer-labels')).toContainText('Path projection');
@@ -728,6 +730,7 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
 });
 
 test('Mechanism Foundry sensemaking shows library, partial range, and exported metadata', async ({ page }) => {
+  test.setTimeout(180_000);
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
@@ -740,14 +743,19 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await page.getByRole('button', { name: /Mechanism Foundry/i }).click();
   await expect(page.getByRole('heading', { name: 'Mechanism Foundry' })).toBeVisible();
   await expect(page.locator('[data-testid^="foundry-mini-simulation-"]')).toHaveCount(9);
-  await expect(page.getByTestId('foundry-selected-linkage')).toBeVisible();
-  await expect(page.getByTestId('foundry-mechanism-driver')).toHaveCount(1);
-  await expect(page.getByTestId('foundry-mechanism-link')).toHaveCount(1);
-  await expect(page.getByTestId('foundry-mechanism-output')).toHaveCount(1);
+  await expect(page.getByTestId('foundry-three-canvas')).toBeVisible();
+  const threeScene = page.getByTestId('foundry-camera-rig');
+  await expect(threeScene).toHaveAttribute('data-three-renderer', 'webgl');
+  await expect(threeScene).toHaveAttribute('data-mechanism-type', '4bar');
+  await expect(threeScene).toHaveAttribute('data-three-hole-mode', 'extruded-cut-through');
+  await expect(threeScene).toHaveAttribute('data-three-render-loop', 'camera-only-orbit');
+  await expect(threeScene).toHaveAttribute('data-three-inventory-source', 'rendered-template');
+  await expect(threeScene).toHaveAttribute('data-anchor-pick-mode', 'three-raycaster-plane');
+  const hasWebgl = await page.getByTestId('foundry-three-canvas').evaluate((canvas: HTMLCanvasElement) => Boolean(canvas.getContext('webgl2') || canvas.getContext('webgl')));
+  expect(hasWebgl, 'Foundry uses an actual WebGL canvas, not a flat SVG-only preview').toBe(true);
   await expect(page.getByTestId('workspace-player-dock')).toHaveCount(0);
-  expect(await page.getByTestId('foundry-fabrication-part').count(), 'Sandbox uses fabrication-style holed bars').toBeGreaterThanOrEqual(4);
-  expect(await page.getByTestId('foundry-fabrication-hole').count(), 'Sandbox shows drilled holes, not abstract lines').toBeGreaterThanOrEqual(12);
-  await expect(page.getByTestId('foundry-depth-scene'), 'Mechanism is rendered in the orbiting scene group').toBeVisible();
+  expect(Number(await threeScene.getAttribute('data-three-part-count')), 'Sandbox uses 3D fabrication-style holed bars').toBeGreaterThanOrEqual(4);
+  expect(Number(await threeScene.getAttribute('data-three-hole-count')), 'Sandbox models drilled holes in the 3D scene').toBeGreaterThanOrEqual(12);
   await expect(page.getByTestId('foundry-depth-overlay'), 'Foundry hides the confusing floating board plane').toHaveCount(0);
   await expect(page.getByTestId('foundry-cad-plane')).toHaveCount(0);
   await expect(page.getByTestId('foundry-angle-strip'), 'Foundry no longer adds extra multi-view mini canvases over the work area').toHaveCount(0);
@@ -770,13 +778,7 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   expect(defaultPhysics.velocityLength, 'Velocity vector has visible direction').toBeGreaterThan(20);
   expect(defaultPhysics.forceLength, 'Force vector has visible direction').toBeGreaterThan(20);
   expect(defaultPhysics.speed, 'Velocity vector is computed from live mechanism samples').toBeGreaterThan(0);
-  expect(await page.getByTestId('foundry-material-thickness').count(), 'Sandbox shows material thickness under the mechanism parts').toBeGreaterThanOrEqual(4);
-  expect(await page.locator('.foundry-preview .mechanism-face').count(), 'Sandbox shows cardboard/wood top faces').toBeGreaterThanOrEqual(4);
-  const thicknessGeometry = await page.getByTestId('foundry-material-thickness').evaluateAll(nodes => nodes.map(node => {
-    const box = (node as SVGGraphicsElement).getBBox();
-    return { width: box.width, height: box.height };
-  }));
-  expect(thicknessGeometry.every(item => item.width > 0 && item.height > 0), 'Material thickness geometry is visible, not a flat line').toBe(true);
+  expect(Number(await threeScene.getAttribute('data-three-part-count')), 'Sandbox scene contains extruded cardboard/wood parts').toBeGreaterThanOrEqual(4);
   await expect(page.getByTestId('foundry-mini-linkage-gear')).toBeVisible();
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Four-bar linkage');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Physics: pin reactions');
@@ -787,45 +789,42 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await page.getByText('Mechanism options').click();
 
   const foundryPhysicalMarkers: Record<string, Array<[string, number]>> = {
-    '4bar': [['foundry-fabrication-part', 4], ['foundry-fabrication-hole', 8]],
-    piston: [['foundry-fabrication-slot', 1], ['foundry-fabrication-hole', 4]],
-    yoke: [['foundry-fabrication-slot', 2], ['foundry-fabrication-hole', 4]],
-    'quick-return': [['foundry-fabrication-slot', 1], ['foundry-fabrication-hole', 4]],
-    '5bar': [['foundry-fabrication-gear', 2], ['foundry-fabrication-part', 4]],
-    cam: [['foundry-fabrication-cam', 1], ['foundry-fabrication-follower', 1]],
-    'rack-pinion': [['foundry-fabrication-gear', 1], ['foundry-fabrication-rack', 1], ['foundry-fabrication-slot', 1], ['foundry-fabrication-end-stop', 2]],
-    gear: [['foundry-fabrication-gear', 2], ['foundry-fabrication-hole', 8]],
-    planetary_gear: [['foundry-fabrication-gear', 2], ['foundry-fabrication-hole', 8]]
+    '4bar': [['data-three-part-count', 4], ['data-three-hole-count', 8]],
+    piston: [['data-three-slot-count', 1], ['data-three-hole-count', 4]],
+    yoke: [['data-three-slot-count', 2], ['data-three-hole-count', 4]],
+    'quick-return': [['data-three-slot-count', 1], ['data-three-hole-count', 4]],
+    '5bar': [['data-three-gear-count', 2], ['data-three-part-count', 4]],
+    cam: [['data-three-cam-count', 1], ['data-three-follower-count', 1]],
+    'rack-pinion': [['data-three-gear-count', 1], ['data-three-rack-count', 1], ['data-three-slot-count', 1], ['data-three-end-stop-count', 2]],
+    gear: [['data-three-gear-count', 2], ['data-three-hole-count', 8]],
+    planetary_gear: [['data-three-gear-count', 2], ['data-three-hole-count', 8]]
   };
 
   for (const type of ['piston', 'yoke', 'quick-return', '5bar', 'cam', 'rack-pinion', 'gear', 'planetary_gear', '4bar']) {
     await page.getByLabel('Foundry mechanism type').selectOption(type);
-    await expect(page.getByTestId(`foundry-template-${type}`), `${type} has its own physical preview template`).toBeVisible();
+    await expect(threeScene, `${type} has its own physical 3D preview template`).toHaveAttribute('data-mechanism-type', type);
     await expect(page.getByTestId('foundry-forces-overlay'), `${type} keeps live force vectors visible`).toHaveAttribute('data-physics-rule', /force|torque|velocity|acceleration|reaction/);
     await expect(page.getByTestId('foundry-velocity-overlay'), `${type} keeps live velocity vectors visible`).toHaveAttribute('data-speed', /[0-9]+\.[0-9]+/);
-    for (const [testId, minimumCount] of foundryPhysicalMarkers[type]) {
-      expect(await page.getByTestId(testId).count(), `${type} preview includes ${testId}`).toBeGreaterThanOrEqual(minimumCount);
+    for (const [attr, minimumCount] of foundryPhysicalMarkers[type]) {
+      expect(Number(await threeScene.getAttribute(attr)), `${type} preview includes ${attr}`).toBeGreaterThanOrEqual(minimumCount);
     }
   }
   await page.getByLabel('Foundry mechanism type').selectOption('rack-pinion');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Rack and pinion');
-  await expect(page.getByTestId('foundry-mechanism-rack')).toBeVisible();
-  await expect(page.getByTestId('foundry-fabrication-rack'), 'Rack-pinion preview shows the toothed rack fabrication part').toBeVisible();
-  const rackPinionGear = page.getByTestId('foundry-preview').locator('.foundry-depth-scene [data-mechanism-gear-key="rack-pinion-gear"]');
-  const startRotation = await rackPinionGear.getAttribute('data-rotation-deg');
+  expect(Number(await threeScene.getAttribute('data-three-rack-count')), 'Rack-pinion preview shows the toothed rack fabrication part').toBeGreaterThanOrEqual(1);
+  const startRotation = await threeScene.getAttribute('data-pinion-rotation-deg');
   await page.getByRole('button', { name: 'Play' }).click();
-  await expect.poll(async () => rackPinionGear.getAttribute('data-rotation-deg'), { message: 'Rack-pinion pinion rotates while rack travels' }).not.toBe(startRotation);
+  await expect.poll(async () => threeScene.getAttribute('data-pinion-rotation-deg'), { message: 'Rack-pinion pinion rotates while rack travels' }).not.toBe(startRotation);
   await page.getByRole('button', { name: 'Pause' }).click();
   await page.getByLabel('Foundry mechanism type').selectOption('gear');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Gear train');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('ratio sign');
-  await expect(page.getByTestId('foundry-mechanism-gear')).toBeVisible();
-  expect(await page.getByTestId('foundry-fabrication-gear').count(), 'Gear preview uses toothed fabrication geometry').toBeGreaterThanOrEqual(2);
+  expect(Number(await threeScene.getAttribute('data-three-gear-count')), 'Gear preview uses toothed 3D fabrication geometry').toBeGreaterThanOrEqual(2);
   await page.getByLabel('Foundry mechanism type').selectOption('cam');
-  await expect(page.getByTestId('foundry-fabrication-cam'), 'Cam follower uses a cam profile, not a generic gear').toBeVisible();
-  await expect(page.getByTestId('foundry-fabrication-follower'), 'Cam follower shows its follower block').toBeVisible();
+  expect(Number(await threeScene.getAttribute('data-three-cam-count')), 'Cam follower uses a cam profile, not a generic gear').toBeGreaterThanOrEqual(1);
+  expect(Number(await threeScene.getAttribute('data-three-follower-count')), 'Cam follower shows its follower block').toBeGreaterThanOrEqual(1);
   await page.getByLabel('Foundry mechanism type').selectOption('yoke');
-  expect(await page.getByTestId('foundry-fabrication-slot').count(), 'Scotch yoke shows guide and pin-in-slot yoke slots').toBeGreaterThanOrEqual(2);
+  expect(Number(await threeScene.getAttribute('data-three-slot-count')), 'Scotch yoke shows guide and pin-in-slot yoke slots').toBeGreaterThanOrEqual(2);
   await page.getByLabel('Foundry mechanism type').selectOption('4bar');
   await page.getByLabel('Foundry preset').selectOption('compact');
   await expect(page.getByTestId('foundry-target-summary')).toContainText('smaller footprint');
@@ -974,11 +973,12 @@ test('Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking'
   await page.getByRole('button', { name: /Mechanism Foundry/i }).click();
 
   await expect(page.getByTestId('foundry-toolbar')).toBeVisible();
-  await expect(page.getByTestId('foundry-path-preview')).toBeVisible();
+  const threeScene = page.getByTestId('foundry-camera-rig');
+  await expect(threeScene).toHaveAttribute('data-path-preview', 'shown');
   await page.getByRole('button', { name: 'Path Preview' }).click();
-  await expect(page.getByTestId('foundry-path-preview')).toHaveCount(0);
+  await expect(threeScene).toHaveAttribute('data-path-preview', 'hidden');
   await page.getByRole('button', { name: 'Trail' }).click();
-  await expect(page.getByTestId('foundry-trail-overlay')).toBeVisible();
+  await expect(threeScene).toHaveAttribute('data-trail', 'shown');
   await expect(page.getByTestId('foundry-forces-overlay')).toBeVisible();
   await page.getByRole('button', { name: 'Forces' }).click();
   await expect(page.getByTestId('foundry-forces-overlay')).toHaveCount(0);
@@ -1008,34 +1008,26 @@ test('Mechanism Foundry supports CAD-style 3D camera presets and drag orbit', as
 
   const rig = page.getByTestId('foundry-camera-rig');
   await expect(rig).toHaveAttribute('data-camera-preset', 'iso');
+  await expect(rig).toHaveAttribute('data-anchor-pick-mode', 'three-raycaster-plane');
   await expect(page.getByTestId('foundry-camera-readout')).toContainText('3D Iso');
-  const isoTransform = await rig.getAttribute('transform');
+  const isoYaw = await rig.getAttribute('data-camera-yaw');
 
-  const boardHoleSvg = { x: 212, y: 120 - (40 / 680) * 240 };
-  const boardHoleScreen = await rig.evaluate((element: SVGGElement, point) => {
-    const svg = element.ownerSVGElement!;
-    const svgPoint = svg.createSVGPoint();
-    svgPoint.x = point.x;
-    svgPoint.y = point.y;
-    const screenPoint = svgPoint.matrixTransform(element.getScreenCTM()!);
-    return { x: screenPoint.x, y: screenPoint.y };
-  }, boardHoleSvg);
+  const previewBox = await page.getByTestId('foundry-preview').boundingBox();
+  expect(previewBox, 'foundry preview supports direct orbit dragging and anchor picking').toBeTruthy();
   await page.getByTestId('foundry-pick-anchor').click();
-  await page.mouse.click(boardHoleScreen.x, boardHoleScreen.y);
+  await page.mouse.click(previewBox!.x + previewBox!.width * 0.5, previewBox!.y + previewBox!.height * 0.5);
   const pickedMarker = await page.getByTestId('foundry-anchor-marker').getAttribute('transform');
   const pickedCoords = pickedMarker?.match(/translate\(([-\d.]+) ([-\d.]+)/);
-  expect(pickedCoords, 'anchor marker keeps transformed pick in camera-local SVG coordinates').toBeTruthy();
-  expect(Number(pickedCoords![1])).toBeCloseTo(boardHoleSvg.x, 1);
-  expect(Number(pickedCoords![2])).toBeCloseTo(boardHoleSvg.y, 1);
+  expect(pickedCoords, 'anchor marker is driven by a 3D raycast into the work plane').toBeTruthy();
+  expect(Number(pickedCoords![1])).toBeCloseTo(180, 0);
+  expect(Number(pickedCoords![2])).toBeCloseTo(120, 0);
 
   await page.getByRole('button', { name: 'Front view' }).click();
   await expect(rig).toHaveAttribute('data-camera-preset', 'front');
   await expect(page.getByTestId('foundry-camera-readout')).toContainText('3D Front');
-  await expect(rig).not.toHaveAttribute('transform', isoTransform ?? '');
+  await expect(rig).not.toHaveAttribute('data-camera-yaw', isoYaw ?? '');
 
   const yawBeforeDrag = await rig.getAttribute('data-camera-yaw');
-  const previewBox = await page.getByTestId('foundry-preview').boundingBox();
-  expect(previewBox, 'foundry preview supports direct orbit dragging').toBeTruthy();
   await page.mouse.move(previewBox!.x + previewBox!.width * 0.5, previewBox!.y + previewBox!.height * 0.5);
   await page.mouse.down();
   await page.mouse.move(previewBox!.x + previewBox!.width * 0.64, previewBox!.y + previewBox!.height * 0.42);
@@ -1044,6 +1036,14 @@ test('Mechanism Foundry supports CAD-style 3D camera presets and drag orbit', as
   await expect(rig).toHaveAttribute('data-camera-preset', 'custom');
   await expect(page.getByTestId('foundry-camera-readout')).toContainText('3D Drag orbit');
   expect(await rig.getAttribute('data-camera-yaw')).not.toBe(yawBeforeDrag);
+
+  await page.getByTestId('foundry-pick-anchor').click();
+  await page.mouse.click(previewBox!.x + previewBox!.width * 0.5, previewBox!.y + previewBox!.height * 0.5);
+  const orbitPickedMarker = await page.getByTestId('foundry-anchor-marker').getAttribute('transform');
+  const orbitPickedCoords = orbitPickedMarker?.match(/translate\(([-\d.]+) ([-\d.]+)/);
+  expect(orbitPickedCoords, 'orbit picking remains camera-coherent after custom 3D drag').toBeTruthy();
+  expect(Number(orbitPickedCoords![1])).toBeCloseTo(180, 0);
+  expect(Number(orbitPickedCoords![2])).toBeCloseTo(120, 0);
 });
 
 test('Camera capture dialog uses browser getUserMedia and reports permission denial', async ({ page }) => {

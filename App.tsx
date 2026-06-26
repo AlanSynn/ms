@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import * as THREE from 'three';
 import { Canvas } from './components/Canvas';
 import { TrackingModal } from './components/TrackingModal';
 import {
@@ -96,6 +97,16 @@ const unitVector = (x: number, y: number, fallback: Point = { x: 1, y: 0 }): Poi
 const vectorEnd = (origin: Point, vector: Point, length: number): Point => ({
     x: origin.x + vector.x * length,
     y: origin.y + vector.y * length
+});
+
+const clampPreviewPoint = (point: Point): Point => ({
+    x: Math.max(10, Math.min(350, point.x)),
+    y: Math.max(10, Math.min(230, point.y))
+});
+
+const ensureVisibleVectorTip = (origin: Point, tip: Point): Point => ({
+    x: Math.abs(tip.x - origin.x) < 1 ? Math.min(350, origin.x + 8) : tip.x,
+    y: Math.abs(tip.y - origin.y) < 1 ? Math.max(10, origin.y - 8) : tip.y
 });
 
 const STARTER_IMAGE_TEMPLATES: StarterImageTemplate[] = [
@@ -1899,7 +1910,6 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const [foundryCamera, setFoundryCamera] = useState<FoundryCamera>({ ...FOUNDRY_VIEW_PRESETS.iso, preset: 'iso' });
     const [isOrbitingFoundry, setIsOrbitingFoundry] = useState(false);
     const foundryOrbitStartRef = useRef<{ pointerId: number; x: number; y: number; yaw: number; pitch: number } | null>(null);
-    const foundryCameraRigRef = useRef<SVGGElement | null>(null);
     const targetReady = Boolean(selectedPart && selectedPath && selectedPath.enabled && selectedPath.points.length >= 3);
     const rawLanding = manualAnchor ?? selectedPath?.points[0] ?? (selectedPart ? bodyPartPivotScene(selectedPart, project.skeleton) : { x: foundry.anchorX ?? 0, y: foundry.anchorY ?? 0 });
     const landingBoard = sceneToBoard(rawLanding, project.settings.physicalKit);
@@ -1934,14 +1944,13 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const driveUnit = unitVector(driveRaw.x, driveRaw.y, velocityUnit);
     const radialUnit = unitVector(physicsCenter.x - (playhead?.x ?? physicsCenter.x), physicsCenter.y - (playhead?.y ?? physicsCenter.y), driveUnit);
     const forceUnit = unitVector(accelerationRaw.x, accelerationRaw.y, radialUnit);
-    const velocityTip = playhead ? vectorEnd(playhead, velocityUnit, 42) : undefined;
-    const forceTip = playhead ? vectorEnd(playhead, forceUnit, 38) : undefined;
-    const driveTip = vectorEnd(selectedSimulation.state.j1, driveUnit, 34);
+    const velocityTip = playhead ? clampPreviewPoint(vectorEnd(playhead, velocityUnit, 42)) : undefined;
+    const forceTip = playhead ? clampPreviewPoint(vectorEnd(playhead, forceUnit, 38)) : undefined;
+    const driveTip = ensureVisibleVectorTip(selectedSimulation.state.j1, clampPreviewPoint(vectorEnd(selectedSimulation.state.j1, driveUnit, 34)));
     const velocityMagnitude = Math.hypot(velocityRaw.x, velocityRaw.y);
     const forceMagnitude = Math.hypot(accelerationRaw.x, accelerationRaw.y);
     const physicsRule = mechanismPhysicsRule(foundry.type);
     const hardBlocked = !targetReady || range.percentValid === 0 || !Number.isFinite(landing.x) || !Number.isFinite(landing.y);
-    const foundryCameraTransformValue = foundryCameraTransform(foundryCamera);
     const foundryCameraLabel = foundryCamera.preset === 'custom' ? 'Drag orbit' : FOUNDRY_VIEW_PRESETS[foundryCamera.preset].label;
     const applyAnchor = (point: Point) => {
         const board = sceneToBoard(point, project.settings.physicalKit);
@@ -1955,26 +1964,19 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             transform: { ...(foundry.transform ?? { x: snapped.x, y: snapped.y, rotation: foundry.groundAngle ?? 0, scale: 1 }), x: snapped.x, y: snapped.y }
         });
     };
-    const handleAnchorPick = (event: React.MouseEvent<SVGSVGElement>) => {
+    const handleAnchorPick = (point: Point) => {
         if (!isPickingAnchor) return;
-        const svg = event.currentTarget;
-        const matrix = foundryCameraRigRef.current?.getScreenCTM() ?? svg.getScreenCTM();
-        if (!matrix) return;
-        const point = svg.createSVGPoint();
-        point.x = event.clientX;
-        point.y = event.clientY;
-        const { x, y } = point.matrixTransform(matrix.inverse());
-        applyAnchor({ x: ((x / 360) - 0.5) * SCENE_VIEW.width, y: (0.5 - (y / 240)) * SCENE_VIEW.height });
+        applyAnchor(point);
         setIsPickingAnchor(false);
     };
     const setCameraPreset = (preset: Exclude<FoundryViewPreset, 'custom'>) => setFoundryCamera({ ...FOUNDRY_VIEW_PRESETS[preset], preset });
-    const handleFoundryPointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
+    const handleFoundryPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
         if (isPickingAnchor || event.button !== 0) return;
         foundryOrbitStartRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, yaw: foundryCamera.yaw, pitch: foundryCamera.pitch };
         setIsOrbitingFoundry(true);
         event.currentTarget.setPointerCapture(event.pointerId);
     };
-    const handleFoundryPointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
+    const handleFoundryPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
         const start = foundryOrbitStartRef.current;
         if (!start || start.pointerId !== event.pointerId) return;
         event.preventDefault();
@@ -1984,7 +1986,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             preset: 'custom'
         });
     };
-    const finishFoundryOrbit = (event: React.PointerEvent<SVGSVGElement>) => {
+    const finishFoundryOrbit = (event: React.PointerEvent<HTMLDivElement>) => {
         if (foundryOrbitStartRef.current?.pointerId === event.pointerId) {
             foundryOrbitStartRef.current = null;
             setIsOrbitingFoundry(false);
@@ -2096,63 +2098,55 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
         </div>),
             canvas: canvasPane(<section className="path-canvas-shell foundry-canvas-shell canvas-workspace p-0">
             <div className="canvas-overlay-toolbar foundry-preview-toolbar"><h4 className="section-title">Sandbox preview</h4><span className="chip">{foundryPlaying ? 'Simulation active' : 'Paused'}</span><span className="chip foundry-camera-chip" data-testid="foundry-camera-readout">3D {foundryCameraLabel} · {Math.round(foundryCamera.yaw)}°/{Math.round(foundryCamera.pitch)}°</span></div>
-            <svg viewBox="0 0 360 240" data-testid="foundry-preview" onClick={handleAnchorPick} onPointerDown={handleFoundryPointerDown} onPointerMove={handleFoundryPointerMove} onPointerUp={finishFoundryOrbit} onPointerCancel={finishFoundryOrbit} className={`foundry-preview h-[520px] w-full ${isPickingAnchor ? 'is-picking-anchor' : ''} ${isOrbitingFoundry ? 'is-orbiting' : ''}`} aria-label="Mechanism Foundry CAD-like 2.5D sandbox preview">
-                <defs>
-                    <pattern id="foundry-cad-grid" width="18" height="18" patternUnits="userSpaceOnUse">
-                        <path d="M 18 0 L 0 0 0 18" fill="none" stroke="#93c5fd" strokeWidth="0.55" opacity="0.38" />
-                    </pattern>
-                    <linearGradient id="foundry-cardboard" x1="0" x2="1" y1="0" y2="1">
-                        <stop offset="0" stopColor="#f8dfaa" />
-                        <stop offset="0.48" stopColor="#e8bc73" />
-                        <stop offset="1" stopColor="#b97731" />
-                    </linearGradient>
-                    <linearGradient id="foundry-wood" x1="0" x2="1" y1="0" y2="0">
-                        <stop offset="0" stopColor="#f4d49b" />
-                        <stop offset="0.32" stopColor="#c88943" />
-                        <stop offset="0.7" stopColor="#e6b66c" />
-                        <stop offset="1" stopColor="#9b5a24" />
-                    </linearGradient>
-                    <filter id="foundry-depth-shadow-filter" x="-30%" y="-30%" width="170%" height="170%">
-                        <feDropShadow dx="8" dy="10" stdDeviation="6" floodColor="#1e293b" floodOpacity="0.18" />
-                    </filter>
-                    <marker id="foundry-arrow-velocity" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth">
-                        <path d="M 0 0 L 7 3.5 L 0 7 z" fill="#10b981" />
-                    </marker>
-                    <marker id="foundry-arrow-force" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth">
-                        <path d="M 0 0 L 7 3.5 L 0 7 z" fill="#ef4444" />
-                    </marker>
-                </defs>
-                <rect width="360" height="240" fill="url(#foundry-cad-grid)" opacity="0.48" pointerEvents="none" />
-                <g data-testid="foundry-exploded-guide" className="foundry-exploded-guide" transform="translate(218 13)" pointerEvents="none">
-                    <rect x="0" y="0" width="126" height="38" rx="12" fill="rgba(255,255,255,.94)" stroke="#c7d2fe" strokeWidth="1.2" />
-                    <text x="12" y="14" fontSize="8" fontWeight="950" fill="#1e293b">Exploded view</text>
-                    <line x1="12" y1="24" x2="112" y2="24" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
-                    <circle cx="86" cy="24" r="5" fill="#5a6cff" stroke="#ffffff" strokeWidth="2" />
-                    <text x="10" y="35" fontSize="6" fontWeight="850" fill="#64748b">Assembly</text>
-                    <text x="80" y="35" fontSize="6" fontWeight="850" fill="#64748b">Exploded</text>
-                </g>
-                <g data-testid="foundry-z-layer-labels" className="foundry-z-layer-labels" pointerEvents="none">
-                    <path d="M 70 188 C 105 170, 132 162, 176 168 S 244 194, 286 174" fill="none" stroke="#6366f1" strokeWidth="2" strokeDasharray="5 5" opacity="0.7" />
-                    <text x="228" y="174" fontSize="8" fontWeight="950" fill="#4f46e5">Path projection</text>
-                    <text x="54" y="205" fontSize="8" fontWeight="950" fill="#64748b">Z=0 Base</text>
-                    <text x="42" y="116" fontSize="8" fontWeight="950" fill="#64748b">Z=1 Input</text>
-                    <text x="250" y="116" fontSize="8" fontWeight="950" fill="#64748b">Z=1 Output</text>
-                    <text x="146" y="48" fontSize="8" fontWeight="950" fill="#64748b">Z=2 Coupler</text>
-                </g>
-                <g ref={foundryCameraRigRef} data-testid="foundry-camera-rig" data-camera-preset={foundryCamera.preset} data-camera-yaw={foundryCamera.yaw.toFixed(1)} data-camera-pitch={foundryCamera.pitch.toFixed(1)} transform={foundryCameraTransformValue}>
-                    {showTrail && <path data-testid="foundry-trail-overlay" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="12" strokeLinecap="round" opacity="0.12"/>}
-                    {showPathPreview && <path data-testid="foundry-path-preview" d={previewPath} fill="none" stroke={foundry.color} strokeWidth="4" strokeLinecap="round" strokeDasharray="10 8" opacity="0.72"/>}
-                    <g data-testid="foundry-depth-scene" className="foundry-depth-scene" filter="url(#foundry-depth-shadow-filter)">
-                        <MechanismLinkagePreview mechanism={landedFoundry} simulation={selectedSimulation} kit={project.settings.physicalKit} testId="foundry-selected-linkage" />
+            <ThreeFoundryPreview
+                mechanism={landedFoundry}
+                simulation={selectedSimulation}
+                kit={project.settings.physicalKit}
+                camera={foundryCamera}
+                color={foundry.color}
+                pathPoints={previewPoints}
+                showPathPreview={showPathPreview}
+                showTrail={showTrail}
+                showForces={showForces}
+                showVelocity={showVelocity}
+                physicsRule={physicsRule}
+                velocityMagnitude={velocityMagnitude}
+                forceMagnitude={forceMagnitude}
+                cameraLabel={foundryCameraLabel}
+                isPickingAnchor={isPickingAnchor}
+                isOrbiting={isOrbitingFoundry}
+                onAnchorPick={handleAnchorPick}
+                onPointerDown={handleFoundryPointerDown}
+                onPointerMove={handleFoundryPointerMove}
+                onPointerUp={finishFoundryOrbit}
+                onPointerCancel={finishFoundryOrbit}
+            >
+                <svg viewBox="0 0 360 240" className="foundry-preview-overlay" aria-hidden="true">
+                    <g data-testid="foundry-exploded-guide" className="foundry-exploded-guide" transform="translate(218 13)" pointerEvents="none">
+                        <rect x="0" y="0" width="126" height="38" rx="12" fill="rgba(255,255,255,.94)" stroke="#c7d2fe" strokeWidth="1.2" />
+                        <text x="12" y="14" fontSize="8" fontWeight="950" fill="#1e293b">Exploded view</text>
+                        <line x1="12" y1="24" x2="112" y2="24" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
+                        <circle cx="86" cy="24" r="5" fill="#5a6cff" stroke="#ffffff" strokeWidth="2" />
+                        <text x="10" y="35" fontSize="6" fontWeight="850" fill="#64748b">Assembly</text>
+                        <text x="80" y="35" fontSize="6" fontWeight="850" fill="#64748b">Exploded</text>
+                    </g>
+                    <g data-testid="foundry-z-layer-labels" className="foundry-z-layer-labels" pointerEvents="none">
+                        <text x="228" y="174" fontSize="8" fontWeight="950" fill="#4f46e5">Path projection</text>
+                        <text x="54" y="205" fontSize="8" fontWeight="950" fill="#64748b">Z=0 Base</text>
+                        <text x="42" y="116" fontSize="8" fontWeight="950" fill="#64748b">Z=1 Input</text>
+                        <text x="250" y="116" fontSize="8" fontWeight="950" fill="#64748b">Z=1 Output</text>
+                        <text x="146" y="48" fontSize="8" fontWeight="950" fill="#64748b">Z=2 Coupler</text>
                     </g>
                     {showForces && playhead && forceTip && <g data-testid="foundry-forces-overlay" className="physics-vector physics-force" data-physics-rule={physicsRule} data-fx={accelerationRaw.x.toFixed(3)} data-fy={accelerationRaw.y.toFixed(3)} data-force-magnitude={forceMagnitude.toFixed(3)} stroke="#ef4444" strokeWidth="3" strokeLinecap="round">
-                        <line data-testid="foundry-force-vector" x1={playhead.x} y1={playhead.y} x2={forceTip.x} y2={forceTip.y} markerEnd="url(#foundry-arrow-force)" />
-                        <line data-testid="foundry-drive-force-vector" x1={selectedSimulation.state.j1.x} y1={selectedSimulation.state.j1.y} x2={driveTip.x} y2={driveTip.y} opacity="0.68" markerEnd="url(#foundry-arrow-force)" />
+                        <defs><marker id="foundry-arrow-force-overlay" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 7 3.5 L 0 7 z" fill="#ef4444" /></marker></defs>
+                        <line data-testid="foundry-force-vector" x1={playhead.x} y1={playhead.y} x2={forceTip.x} y2={forceTip.y} markerEnd="url(#foundry-arrow-force-overlay)" />
+                        <line data-testid="foundry-drive-force-vector" x1={selectedSimulation.state.j1.x} y1={selectedSimulation.state.j1.y} x2={driveTip.x} y2={driveTip.y} opacity="0.68" markerEnd="url(#foundry-arrow-force-overlay)" />
                         <text x={forceTip.x + 5} y={forceTip.y - 3}>F / a</text>
                         <text x={driveTip.x + 5} y={driveTip.y + 9}>drive τ</text>
                     </g>}
                     {showVelocity && playhead && velocityTip && <g data-testid="foundry-velocity-overlay" className="physics-vector physics-velocity" data-vx={velocityRaw.x.toFixed(3)} data-vy={velocityRaw.y.toFixed(3)} data-speed={velocityMagnitude.toFixed(3)} stroke="#10b981" strokeWidth="4" strokeLinecap="round">
-                        <line data-testid="foundry-velocity-vector" x1={playhead.x} y1={playhead.y} x2={velocityTip.x} y2={velocityTip.y} markerEnd="url(#foundry-arrow-velocity)" />
+                        <defs><marker id="foundry-arrow-velocity-overlay" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 7 3.5 L 0 7 z" fill="#10b981" /></marker></defs>
+                        <line data-testid="foundry-velocity-vector" x1={playhead.x} y1={playhead.y} x2={velocityTip.x} y2={velocityTip.y} markerEnd="url(#foundry-arrow-velocity-overlay)" />
                         <text x={velocityTip.x + 5} y={velocityTip.y - 3}>v</text>
                     </g>}
                     {playhead && <circle data-testid="foundry-playhead" cx={playhead.x} cy={playhead.y} r="7" fill="#f472b6" stroke="white" strokeWidth="3" />}
@@ -2161,8 +2155,8 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                         <path d="M -13 0 H 13 M 0 -13 V 13" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" />
                         <text x="12" y="-10" fill="#5b21b6" fontSize="8" fontWeight="900">{landingBoard.label}</text>
                     </g>}
-                </g>
-            </svg>
+                </svg>
+            </ThreeFoundryPreview>
             <div className="canvas-status-readout" data-testid="foundry-toolbar-state">Toolbar: {foundryPlaying ? 'playing' : 'paused'} · path {showPathPreview ? 'shown' : 'hidden'} · camera {foundryCameraLabel} · phase {Math.round(foundryPhase * 180 / Math.PI)}°</div>
         </section>),
             inspector: inspectorPane(<div className="stage-pane-stack">
@@ -2683,6 +2677,420 @@ const fitMechanismSimulation = (mechanism: MechanismConfig, angle: number, width
             effector: map(state.effector)
         }
     };
+};
+
+type ThreeFoundryPreviewProps = {
+    mechanism: MechanismConfig;
+    simulation: ReturnType<typeof fitMechanismSimulation>;
+    kit: PhysicalKitSettings;
+    camera: FoundryCamera;
+    color: string;
+    pathPoints: Point[];
+    showPathPreview: boolean;
+    showTrail: boolean;
+    showForces: boolean;
+    showVelocity: boolean;
+    physicsRule: string;
+    velocityMagnitude: number;
+    forceMagnitude: number;
+    cameraLabel: string;
+    isPickingAnchor: boolean;
+    isOrbiting: boolean;
+    onAnchorPick: (point: Point) => void;
+    onPointerDown: React.PointerEventHandler<HTMLDivElement>;
+    onPointerMove: React.PointerEventHandler<HTMLDivElement>;
+    onPointerUp: React.PointerEventHandler<HTMLDivElement>;
+    onPointerCancel: React.PointerEventHandler<HTMLDivElement>;
+    children: React.ReactNode;
+};
+
+const foundryRenderedInventory = (type: MechanismType) => ({
+    '4bar': { parts: 5, holes: 15, slots: 0, gears: 0, racks: 0, cams: 0, followers: 0, endStops: 0 },
+    piston: { parts: 6, holes: 15, slots: 1, gears: 0, racks: 0, cams: 0, followers: 0, endStops: 0 },
+    yoke: { parts: 7, holes: 15, slots: 2, gears: 0, racks: 0, cams: 0, followers: 0, endStops: 0 },
+    'quick-return': { parts: 6, holes: 15, slots: 1, gears: 0, racks: 0, cams: 0, followers: 0, endStops: 0 },
+    '5bar': { parts: 7, holes: 25, slots: 0, gears: 2, racks: 0, cams: 0, followers: 0, endStops: 0 },
+    cam: { parts: 8, holes: 16, slots: 1, gears: 0, racks: 0, cams: 1, followers: 1, endStops: 0 },
+    'rack-pinion': { parts: 10, holes: 20, slots: 1, gears: 1, racks: 1, cams: 0, followers: 0, endStops: 2 },
+    gear: { parts: 7, holes: 25, slots: 0, gears: 2, racks: 0, cams: 0, followers: 0, endStops: 0 },
+    planetary_gear: { parts: 7, holes: 25, slots: 0, gears: 2, racks: 0, cams: 0, followers: 0, endStops: 0 },
+    crank: { parts: 5, holes: 15, slots: 0, gears: 0, racks: 0, cams: 0, followers: 0, endStops: 0 }
+}[type]);
+
+const disposeThreeObject = (object: THREE.Object3D) => object.traverse(child => {
+    const mesh = child as THREE.Mesh;
+    mesh.geometry?.dispose?.();
+    const material = mesh.material;
+    if (Array.isArray(material)) material.forEach(item => item.dispose());
+    else material?.dispose?.();
+});
+
+const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, color, pathPoints, showPathPreview, showTrail, showForces, showVelocity, physicsRule, velocityMagnitude, forceMagnitude, cameraLabel, isPickingAnchor, isOrbiting, onAnchorPick, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, children }: ThreeFoundryPreviewProps) => {
+    const hostRef = useRef<HTMLDivElement | null>(null);
+    const sceneRef = useRef<THREE.Scene | null>(null);
+    const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+    const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+    const cameraStateRef = useRef(camera);
+    const inv = foundryRenderedInventory(mechanism.type);
+    const pinionRotation = Math.atan2(simulation.state.j1.y - simulation.state.p1.y, simulation.state.j1.x - simulation.state.p1.x) * 180 / Math.PI;
+    const renderCamera = (view: FoundryCamera) => {
+        const scene = sceneRef.current;
+        const renderer = rendererRef.current;
+        const cam = cameraRef.current;
+        if (!scene || !renderer || !cam) return;
+        const yaw = view.yaw * Math.PI / 180;
+        const pitch = view.pitch * Math.PI / 180;
+        const distance = 17;
+        cam.position.set(Math.sin(yaw) * Math.cos(pitch) * distance, Math.sin(pitch) * distance, Math.cos(yaw) * Math.cos(pitch) * distance);
+        cam.lookAt(0, 0, 0.25);
+        renderer.render(scene, cam);
+    };
+    const handleAnchorClick: React.MouseEventHandler<HTMLDivElement> = event => {
+        if (!isPickingAnchor) return;
+        const renderer = rendererRef.current;
+        const cam = cameraRef.current;
+        if (!renderer || !cam) return;
+        const rect = renderer.domElement.getBoundingClientRect();
+        const pointer = new THREE.Vector2(
+            ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1,
+            -(((event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1)
+        );
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(pointer, cam);
+        const hit = new THREE.Vector3();
+        if (!raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 0, 1), 0), hit)) return;
+        const previewX = 180 + hit.x * 18;
+        const previewY = 120 - hit.y * 18;
+        onAnchorPick({ x: ((previewX / 360) - 0.5) * SCENE_VIEW.width, y: (0.5 - (previewY / 240)) * SCENE_VIEW.height });
+    };
+
+    useEffect(() => {
+        const host = hostRef.current;
+        if (!host) return;
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.domElement.className = 'foundry-three-canvas';
+        renderer.domElement.dataset.testid = 'foundry-three-canvas';
+        host.appendChild(renderer.domElement);
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color('#f8f9ff');
+        const cam = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+        scene.add(new THREE.AmbientLight(0xffffff, 1.8));
+        const key = new THREE.DirectionalLight(0xffffff, 2.2);
+        key.position.set(6, 8, 10);
+        key.castShadow = true;
+        scene.add(key);
+        sceneRef.current = scene;
+        rendererRef.current = renderer;
+        cameraRef.current = cam;
+        const resize = () => {
+            const width = Math.max(1, host.clientWidth);
+            const height = Math.max(1, host.clientHeight);
+            renderer.setSize(width, height, false);
+            cam.aspect = width / height;
+            cam.updateProjectionMatrix();
+            renderCamera(cameraStateRef.current);
+        };
+        resize();
+        const ro = new ResizeObserver(resize);
+        ro.observe(host);
+        renderCamera(cameraStateRef.current);
+        return () => {
+            ro.disconnect();
+            renderer.dispose();
+            if (renderer.domElement.parentElement === host) host.removeChild(renderer.domElement);
+            disposeThreeObject(scene);
+        };
+    }, []);
+
+    useEffect(() => {
+        cameraStateRef.current = camera;
+        renderCamera(camera);
+    }, [camera]);
+
+    useEffect(() => {
+        const scene = sceneRef.current;
+        const renderer = rendererRef.current;
+        const cam = cameraRef.current;
+        if (!scene || !renderer || !cam) return;
+        const old = scene.getObjectByName('foundry-dynamic');
+        if (old) {
+            scene.remove(old);
+            disposeThreeObject(old);
+        }
+        const root = new THREE.Group();
+        root.name = 'foundry-dynamic';
+        scene.add(root);
+        const material = {
+            base: new THREE.MeshStandardMaterial({ color: '#d8b077', roughness: 0.72, metalness: 0.02 }),
+            wood: new THREE.MeshStandardMaterial({ color: '#c88943', roughness: 0.64, metalness: 0.02 }),
+            card: new THREE.MeshStandardMaterial({ color: '#e8bc73', roughness: 0.7, metalness: 0.02 }),
+            output: new THREE.MeshStandardMaterial({ color: '#e7c48a', roughness: 0.7, metalness: 0.02 }),
+            blue: new THREE.MeshStandardMaterial({ color: '#5a6cff', roughness: 0.45, metalness: 0.08 }),
+            hole: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.25 }),
+            dark: new THREE.MeshStandardMaterial({ color: '#334155', roughness: 0.62 }),
+            path: new THREE.LineDashedMaterial({ color: new THREE.Color(color), dashSize: 0.25, gapSize: 0.16, linewidth: 2 }),
+            trail: new THREE.LineBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity: 0.18 })
+        };
+        const to3 = (point: Point, z = 0) => new THREE.Vector3((point.x - 180) / 18, (120 - point.y) / 18, z);
+        const thickness = Math.max(0.2, kit.holeDiameterMm / 10);
+        const barW = Math.max(0.34, kit.holeDiameterMm / 8);
+        const holeR = Math.max(0.08, kit.holeDiameterMm / 34);
+        const addEdges = (mesh: THREE.Mesh) => {
+            const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({ color: '#7c4a21', transparent: true, opacity: 0.75 }));
+            mesh.add(edges);
+        };
+        const circularHole = (x: number, y: number, r = holeR) => {
+            const hole = new THREE.Path();
+            hole.absellipse(x, y, r, r, 0, Math.PI * 2, true);
+            return hole;
+        };
+        const roundedRectShape = (width: number, height: number, radius = height / 2) => {
+            const r = Math.min(radius, width / 2, height / 2);
+            const shape = new THREE.Shape();
+            shape.moveTo(-width / 2 + r, -height / 2);
+            shape.lineTo(width / 2 - r, -height / 2);
+            shape.quadraticCurveTo(width / 2, -height / 2, width / 2, -height / 2 + r);
+            shape.lineTo(width / 2, height / 2 - r);
+            shape.quadraticCurveTo(width / 2, height / 2, width / 2 - r, height / 2);
+            shape.lineTo(-width / 2 + r, height / 2);
+            shape.quadraticCurveTo(-width / 2, height / 2, -width / 2, height / 2 - r);
+            shape.lineTo(-width / 2, -height / 2 + r);
+            shape.quadraticCurveTo(-width / 2, -height / 2, -width / 2 + r, -height / 2);
+            return shape;
+        };
+        const addHoleRing = (group: THREE.Group, x: number, y: number, z: number) => {
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(holeR * 1.1, 0.025, 8, 24), material.blue);
+            ring.position.set(x, y, z + thickness / 2 + 0.025);
+            group.add(ring);
+        };
+        const addBar = (a: Point | undefined, b: Point | undefined, z: number, mat: THREE.Material, holeCount = 2) => {
+            if (!a || !b) return;
+            const av = to3(a, z), bv = to3(b, z);
+            const dx = bv.x - av.x, dy = bv.y - av.y, len = Math.hypot(dx, dy);
+            if (len < 0.05) return;
+            const group = new THREE.Group();
+            group.position.set((av.x + bv.x) / 2, (av.y + bv.y) / 2, z);
+            group.rotation.z = Math.atan2(dy, dx);
+            const holeXs = Array.from({ length: Math.max(2, holeCount) }, (_, index) => -len / 2 + (len * index) / (Math.max(2, holeCount) - 1));
+            const shape = roundedRectShape(len, barW);
+            shape.holes.push(...holeXs.map(x => circularHole(x, 0)));
+            const mesh = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.025, bevelThickness: 0.018 }), mat);
+            mesh.position.z = -thickness / 2;
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            addEdges(mesh);
+            group.add(mesh);
+            holeXs.forEach(x => addHoleRing(group, x, 0, 0));
+            root.add(group);
+        };
+        const starShape = (outer: number, inner: number, teeth: number) => {
+            const shape = new THREE.Shape();
+            for (let i = 0; i < teeth * 2; i++) {
+                const r = i % 2 ? inner : outer;
+                const a = (i / (teeth * 2)) * Math.PI * 2;
+                const x = Math.cos(a) * r, y = Math.sin(a) * r;
+                if (i === 0) shape.moveTo(x, y);
+                else shape.lineTo(x, y);
+            }
+            shape.closePath();
+            return shape;
+        };
+        const addGear = (center: Point, radius: number, z: number, rotation = 0) => {
+            const r = Math.max(0.38, radius * simulation.scale / 18);
+            const shape = starShape(r, r * 0.83, Math.max(10, Math.round(r * 8)));
+            shape.holes.push(circularHole(0, 0, holeR * 1.45));
+            for (let i = 0; i < 4; i += 1) {
+                const a = i * Math.PI / 2;
+                shape.holes.push(circularHole(Math.cos(a) * r * 0.52, Math.sin(a) * r * 0.52, holeR * 0.62));
+            }
+            const geom = new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.025, bevelThickness: 0.02 });
+            const mesh = new THREE.Mesh(geom, material.card);
+            const c = to3(center, z);
+            mesh.position.set(c.x, c.y, z - thickness / 2);
+            mesh.rotation.z = rotation * Math.PI / 180;
+            mesh.castShadow = true;
+            addEdges(mesh);
+            root.add(mesh);
+            const holes = new THREE.Group();
+            holes.position.set(c.x, c.y, z);
+            addHoleRing(holes, 0, 0, 0);
+            root.add(holes);
+        };
+        const addCam = (center: Point, z: number) => {
+            const r = Math.max(0.5, mechanism.crankLength * simulation.scale / 22);
+            const shape = new THREE.Shape();
+            for (let i = 0; i < 56; i++) {
+                const a = (i / 56) * Math.PI * 2;
+                const rr = r * camProfileScale(a);
+                const x = Math.cos(a) * rr, y = Math.sin(a) * rr;
+                if (i === 0) shape.moveTo(x, y);
+                else shape.lineTo(x, y);
+            }
+            shape.closePath();
+            shape.holes.push(circularHole(0, 0, holeR * 1.35));
+            const mesh = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.025 }), material.wood);
+            const c = to3(center, z);
+            mesh.position.set(c.x, c.y, z - thickness / 2);
+            mesh.castShadow = true;
+            addEdges(mesh);
+            root.add(mesh);
+        };
+        const addSlotPlate = (center: Point, length: number, rotation: number, z: number) => {
+            const c = to3(center, z);
+            const group = new THREE.Group();
+            group.position.copy(c);
+            group.rotation.z = rotation;
+            const shape = roundedRectShape(length, barW * 1.35, barW * 0.28);
+            shape.holes.push(roundedRectShape(length * 0.7, barW * 0.46, barW * 0.23));
+            const mesh = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.015 }), material.output);
+            mesh.position.z = -thickness / 2;
+            mesh.castShadow = true;
+            addEdges(mesh);
+            group.add(mesh);
+            root.add(group);
+        };
+        const addFollowerBlock = (center: Point, z: number) => {
+            const c = to3(center, z);
+            const group = new THREE.Group();
+            group.position.copy(c);
+            const block = new THREE.Mesh(new THREE.BoxGeometry(barW * 1.45, barW * 1.8, thickness), material.output);
+            addEdges(block);
+            group.add(block);
+            const roller = new THREE.Mesh(new THREE.CylinderGeometry(holeR * 1.3, holeR * 1.3, thickness * 1.18, 28), material.blue);
+            roller.position.set(0, -barW * 0.74, 0.04);
+            roller.rotation.x = Math.PI / 2;
+            group.add(roller);
+            root.add(group);
+        };
+        const addEndStop = (center: Point, offset: number, z: number) => {
+            const c = to3(center, z);
+            const stop = new THREE.Mesh(new THREE.BoxGeometry(0.22, barW * 1.65, thickness * 1.25), material.dark);
+            stop.position.set(c.x + offset, c.y, z);
+            addEdges(stop);
+            root.add(stop);
+        };
+        const addRack = (center: Point, z: number) => {
+            const c = to3(center, z);
+            const group = new THREE.Group();
+            group.position.copy(c);
+            const rack = new THREE.Mesh(new THREE.BoxGeometry(4.6, barW, thickness), material.output);
+            addEdges(rack);
+            group.add(rack);
+            for (let i = 0; i < 10; i++) {
+                const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, thickness), material.output);
+                tooth.position.set(-2.1 + i * 0.46, -barW * 0.65, 0.06);
+                tooth.rotation.z = Math.PI / 4;
+                group.add(tooth);
+            }
+            root.add(group);
+        };
+        const addPath = (points: Point[], z: number, mat: THREE.Material) => {
+            if (points.length < 2) return;
+            const geom = new THREE.BufferGeometry().setFromPoints(points.map(point => to3(point, z)));
+            const line = new THREE.Line(geom, mat);
+            if ('computeLineDistances' in line) line.computeLineDistances();
+            root.add(line);
+        };
+
+        const grid = new THREE.GridHelper(24, 24, '#c7d2fe', '#e2e8f0');
+        grid.rotation.x = Math.PI / 2;
+        grid.position.z = -0.9;
+        root.add(grid);
+        const plane = new THREE.Mesh(new THREE.PlaneGeometry(26, 16), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.9, transparent: true, opacity: 0.72 }));
+        plane.receiveShadow = true;
+        plane.position.z = -0.94;
+        root.add(plane);
+        if (showTrail) addPath(pathPoints, -0.72, material.trail);
+        if (showPathPreview) addPath(pathPoints, -0.55, material.path);
+
+        const s = simulation.state;
+        const angle = pinionRotation;
+        if (mechanism.type === 'gear' || mechanism.type === 'planetary_gear' || mechanism.type === '5bar' || mechanism.type === 'rack-pinion') {
+            addGear(s.p1, mechanism.crankLength, 0.42, angle);
+            if (mechanism.type !== 'rack-pinion') addGear(s.p2, mechanism.rockerLength, 0.62, -angle);
+        }
+        if (mechanism.type === 'cam') addCam(s.p1, 0.42);
+        if (mechanism.type === 'piston') addSlotPlate(s.j2, 3.2, 0, 0.78);
+        if (mechanism.type === 'yoke') {
+            addSlotPlate(s.j2, 3.0, Math.PI / 2, 0.78);
+            addSlotPlate(s.j1, 2.6, 0, 1.02);
+        }
+        if (mechanism.type === 'quick-return') {
+            const mid = { x: (s.p2.x + s.j2.x) / 2, y: (s.p2.y + s.j2.y) / 2 };
+            addSlotPlate(mid, 3.3, Math.atan2(s.j2.y - s.p2.y, s.j2.x - s.p2.x), 0.84);
+        }
+        if (mechanism.type === 'cam') {
+            addSlotPlate(s.j2, 3.0, Math.PI / 2, 0.78);
+            addFollowerBlock(s.j2, 1.05);
+        }
+        if (mechanism.type === 'rack-pinion') {
+            addSlotPlate(s.j2, 4.8, 0, 0.7);
+            addRack(s.j2, 0.82);
+            addEndStop(s.j2, -2.55, 0.86);
+            addEndStop(s.j2, 2.55, 0.86);
+        }
+        addBar(s.p1, s.p2, 0, material.base, 3);
+        addBar(s.p1, s.j1, 0.42, material.wood, 3);
+        addBar(s.j1, s.j2, 0.92, material.card, 4);
+        addBar(s.p2, s.j2, 0.52, material.output, 3);
+        addBar(s.j2, s.effector, 1.12, material.output, 2);
+        [s.p1, s.p2, s.j1, s.j2, s.aux, s.effector].filter(Boolean).forEach(point => {
+            const p = to3(point as Point, 1.28);
+            const pin = new THREE.Mesh(new THREE.CylinderGeometry(holeR * 0.8, holeR * 0.8, 0.55, 20), material.dark);
+            pin.rotation.x = Math.PI / 2;
+            pin.position.copy(p);
+            root.add(pin);
+        });
+
+        renderCamera(cameraStateRef.current);
+    }, [mechanism, simulation, kit, color, pathPoints, showPathPreview, showTrail, pinionRotation]);
+
+    return <div
+        data-testid="foundry-preview"
+        onClick={handleAnchorClick}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
+        className={`foundry-preview h-[520px] w-full ${isPickingAnchor ? 'is-picking-anchor' : ''} ${isOrbiting ? 'is-orbiting' : ''}`}
+        aria-label="Mechanism Foundry true WebGL 3D sandbox preview"
+    >
+        <div ref={hostRef} className="foundry-three-host" />
+        <div
+            data-testid="foundry-camera-rig"
+            data-camera-preset={camera.preset}
+            data-camera-yaw={camera.yaw.toFixed(1)}
+            data-camera-pitch={camera.pitch.toFixed(1)}
+            data-three-renderer="webgl"
+            data-mechanism-type={mechanism.type}
+            data-three-part-count={inv.parts}
+            data-three-hole-count={inv.holes}
+            data-three-slot-count={inv.slots}
+            data-three-gear-count={inv.gears}
+            data-three-rack-count={inv.racks}
+            data-three-cam-count={inv.cams}
+            data-three-follower-count={inv.followers}
+            data-three-end-stop-count={inv.endStops}
+            data-path-preview={showPathPreview ? 'shown' : 'hidden'}
+            data-trail={showTrail ? 'shown' : 'hidden'}
+            data-forces={showForces ? 'shown' : 'hidden'}
+            data-velocity={showVelocity ? 'shown' : 'hidden'}
+            data-pinion-rotation-deg={pinionRotation.toFixed(2)}
+            data-physics-rule={physicsRule}
+            data-velocity-magnitude={velocityMagnitude.toFixed(3)}
+            data-force-magnitude={forceMagnitude.toFixed(3)}
+            data-camera-label={cameraLabel}
+            data-anchor-pick-mode="three-raycaster-plane"
+            data-three-hole-mode="extruded-cut-through"
+            data-three-render-loop="camera-only-orbit"
+            data-three-inventory-source="rendered-template"
+            className="foundry-three-scene-state"
+        />
+        {children}
+    </div>;
 };
 
 const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact = false }: { mechanism: MechanismConfig; simulation: ReturnType<typeof fitMechanismSimulation>; kit: PhysicalKitSettings; testId: string; compact?: boolean }) => {
