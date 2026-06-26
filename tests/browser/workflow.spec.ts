@@ -1492,6 +1492,90 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   expectCleanPage(pageErrors, consoleErrors);
 });
 
+test('Mechanism Design center workspace renders physical 3D templates for every mechanism type', async ({ page }) => {
+  test.setTimeout(180_000);
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByRole('button', { name: /Mechanism Design/i }).click();
+  const designPuppet = page.getByTestId('design-three-puppet-state');
+  await expect(designPuppet).toHaveAttribute('data-three-renderer', 'webgl');
+  await expect(page.getByTestId('design-three-puppet-canvas')).toBeVisible();
+
+  const centerPhysicalMarkers: Record<string, Array<[string, number]>> = {
+    '4bar': [['data-three-mechanism-link-count', 5], ['data-three-mechanism-hole-count', 15]],
+    piston: [['data-three-slot-count', 1], ['data-three-follower-count', 1]],
+    yoke: [['data-three-slot-count', 2], ['data-three-follower-count', 1]],
+    'quick-return': [['data-three-slot-count', 1], ['data-three-mechanism-hole-count', 11]],
+    '5bar': [['data-three-gear-count', 2], ['data-three-mechanism-link-count', 6]],
+    cam: [['data-three-cam-count', 1], ['data-three-follower-count', 1]],
+    'rack-pinion': [['data-three-gear-count', 1], ['data-three-rack-count', 1], ['data-three-slot-count', 1], ['data-three-end-stop-count', 2]],
+    gear: [['data-three-gear-count', 2], ['data-three-mechanism-hole-count', 14]],
+    planetary_gear: [['data-three-gear-count', 3], ['data-three-mechanism-hole-count', 14]]
+  };
+
+  for (const type of ['4bar', 'piston', 'yoke', 'quick-return', '5bar', 'cam', 'rack-pinion', 'gear', 'planetary_gear']) {
+    const before = Object.fromEntries(await Promise.all(centerPhysicalMarkers[type].map(async ([attr]) => [attr, Number(await designPuppet.getAttribute(attr)) || 0])));
+    await page.getByRole('button', { name: type, exact: true }).click();
+    await expect.poll(async () => Number(await designPuppet.getAttribute('data-three-scene-object-count')), { message: `${type} adds visible WebGL mechanism geometry to the center workspace` }).toBeGreaterThan(60);
+    for (const [attr, minimumCount] of centerPhysicalMarkers[type]) {
+      expect(Number(await designPuppet.getAttribute(attr)), `${type} center preview includes ${attr}`).toBeGreaterThanOrEqual(before[attr] + minimumCount);
+    }
+  }
+
+  expect(Number(await designPuppet.getAttribute('data-three-physical-template-count')), 'Center workspace tracks physical templates, not dummy overlays').toBeGreaterThanOrEqual(10);
+  await expect(designPuppet, 'Preview advertises the full mechanism renderer union, including the internal crank primitive').toHaveAttribute('data-three-supported-mechanism-types', /crank/);
+  await expect.poll(async () => Number(await designPuppet.getAttribute('data-three-render-triangles')), { message: 'center WebGL renderer draws real 3D fabrication triangles' }).toBeGreaterThan(0);
+
+  const numAttr = async (attr: string) => Number(await designPuppet.getAttribute(attr));
+  const stagePlayButton = () => page.getByTestId('stage-left-pane').getByRole('button', { name: /Play/ }).first();
+  await page.getByRole('button', { name: 'gear', exact: true }).click();
+  await expect(designPuppet).toHaveAttribute('data-three-selected-mechanism-type', 'gear');
+  const gearStart = await numAttr('data-three-primary-rotation-deg');
+  await stagePlayButton().click();
+  await expect.poll(async () => Math.abs(await numAttr('data-three-primary-rotation-deg') - gearStart), { message: 'gear animation updates the selected central 3D preview' }).toBeGreaterThan(6);
+  const gearPrimary = await numAttr('data-three-primary-rotation-deg');
+  const gearSecondary = await numAttr('data-three-secondary-rotation-deg');
+  expect(Math.abs(gearPrimary + gearSecondary), 'default gear train rotates the second gear opposite the driver').toBeLessThan(0.75);
+  await stagePlayButton().click();
+
+  await page.getByRole('button', { name: '5bar', exact: true }).click();
+  await expect(designPuppet).toHaveAttribute('data-three-selected-mechanism-type', '5bar');
+  const fiveStart = await numAttr('data-three-primary-rotation-deg');
+  await stagePlayButton().click();
+  await expect.poll(async () => Math.abs(await numAttr('data-three-primary-rotation-deg') - fiveStart), { message: 'five-bar animation updates secondary crank phase' }).toBeGreaterThan(6);
+  const fivePrimary = await numAttr('data-three-primary-rotation-deg');
+  const fiveSecondary = await numAttr('data-three-secondary-rotation-deg');
+  expect(Math.abs(fiveSecondary + 2 * fivePrimary), 'five-bar second crank follows speed2=-2 rather than generic opposite rotation').toBeLessThan(0.75);
+  await stagePlayButton().click();
+
+  await page.getByRole('button', { name: 'rack-pinion', exact: true }).click();
+  await expect(designPuppet).toHaveAttribute('data-three-selected-mechanism-type', 'rack-pinion');
+  const rackStart = {
+    x: await numAttr('data-three-rack-x'),
+    y: await numAttr('data-three-rack-y'),
+    guideX: await numAttr('data-three-rack-guide-x'),
+    guideY: await numAttr('data-three-rack-guide-y'),
+    stopAX: await numAttr('data-three-end-stop-a-x'),
+    stopAY: await numAttr('data-three-end-stop-a-y'),
+    stopBX: await numAttr('data-three-end-stop-b-x'),
+    stopBY: await numAttr('data-three-end-stop-b-y')
+  };
+  await stagePlayButton().click();
+  await expect.poll(async () => Math.hypot(await numAttr('data-three-rack-x') - rackStart.x, await numAttr('data-three-rack-y') - rackStart.y), { message: 'rack travels through a fixed guide' }).toBeGreaterThan(4);
+  expect(Math.hypot(await numAttr('data-three-rack-guide-x') - rackStart.guideX, await numAttr('data-three-rack-guide-y') - rackStart.guideY), 'rack guide stays fixed while the rack slides').toBeLessThan(0.01);
+  expect(Math.hypot(await numAttr('data-three-end-stop-a-x') - rackStart.stopAX, await numAttr('data-three-end-stop-a-y') - rackStart.stopAY), 'rack end stop A stays fixed').toBeLessThan(0.01);
+  expect(Math.hypot(await numAttr('data-three-end-stop-b-x') - rackStart.stopBX, await numAttr('data-three-end-stop-b-y') - rackStart.stopBY), 'rack end stop B stays fixed').toBeLessThan(0.01);
+  await stagePlayButton().click();
+  expectCleanPage(pageErrors, consoleErrors);
+});
+
 test('Simplified shared canvas stays non-destructive and exports blueprint', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
