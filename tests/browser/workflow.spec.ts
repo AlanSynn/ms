@@ -422,6 +422,12 @@ test('Create from image upload creates a reviewed character package in browser',
   await expect(page.getByTestId('novice-path-panel')).toContainText('Draw the motion path');
   await expect(page.getByText('Choose a body part, press Draw free path')).toBeVisible();
   await expectProjectCounts(page, 10, 0, 0);
+  await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
+  const generatedPuppet = page.getByTestId('path-three-puppet-state');
+  await expect(generatedPuppet).toHaveAttribute('data-part-outline-mode', 'fabrication-fit-joint-chain');
+  await expect(generatedPuppet).toHaveAttribute('data-puppet-mode', 'thick-flat-assembly');
+  expect(Number(await generatedPuppet.getAttribute('data-three-part-hole-count')), 'generated character 3D puppet keeps cut-through joint holes').toBeGreaterThan(0);
+  await expect.poll(async () => Number(await generatedPuppet.getAttribute('data-three-render-triangles')), { message: 'accepted ONNX character renders as real 3D fabrication geometry' }).toBeGreaterThan(0);
 
   expectCleanPage(pageErrors, consoleErrors);
 });

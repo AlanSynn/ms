@@ -4,6 +4,7 @@ import type { BodyPartLayer, CanvasViewport, MechanismConfig, MechanismType, Poi
 import { boardGridLines, defaultPhysicalKit, SCENE_PX_PER_MM, sceneBoundsForSheet } from '../utils/coordinates';
 import { calculateLinkage, camProfileScale, gearPairOutputRatio, planetaryPlanetSpinRatio } from '../utils/kinematics';
 import { fabricationGearProfileForPitchRadius, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints } from '../utils/fabrication';
+import { fabricablePartOutlinePoints, partLandmarkLocalPoints, pointInsideOutline } from '../utils/partGeometry';
 
 const VIEW_SCALE = 35;
 const THICKNESS = 0.22;
@@ -105,8 +106,8 @@ const addInventory = (sum: MechanismInventory, item: MechanismInventory): Mechan
 
 const createMaterials = (): MaterialKit => ({
   sheet: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.9, transparent: true, opacity: 0.5 }),
-  part: new THREE.MeshStandardMaterial({ color: '#cbd5e1', roughness: 0.64, metalness: 0.02, transparent: true, opacity: 0.78 }),
-  selected: new THREE.MeshStandardMaterial({ color: '#a78bfa', roughness: 0.58, metalness: 0.04, transparent: true, opacity: 0.82 }),
+  part: new THREE.MeshStandardMaterial({ color: '#cbd5e1', roughness: 0.68, metalness: 0.02, transparent: true, opacity: 0.94 }),
+  selected: new THREE.MeshStandardMaterial({ color: '#a78bfa', roughness: 0.58, metalness: 0.04, transparent: true, opacity: 0.96 }),
   edge: new THREE.LineBasicMaterial({ color: '#64748b', transparent: true, opacity: 0.72 }),
   grid: new THREE.LineBasicMaterial({ color: '#dbe4f0', transparent: true, opacity: 0.32 }),
   joint: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.35 }),
@@ -140,16 +141,11 @@ const holePath = (x: number, y: number, r = 0.09) => {
   return hole;
 };
 
-const localJoint = (part: BodyPartLayer, point: Point) => {
-  const rotation = -(part.transform.rotation * Math.PI) / 180;
-  const dx = point.x - part.transform.x;
-  const dy = point.y - part.transform.y;
-  const cos = Math.cos(rotation);
-  const sin = Math.sin(rotation);
-  return {
-    x: (dx * cos - dy * sin) / Math.max(0.001, part.transform.scale),
-    y: (dx * sin + dy * cos) / Math.max(0.001, part.transform.scale)
-  };
+const shapeFromLocalOutline = (points: Point[]) => {
+  const vectors = points.map(point => new THREE.Vector2(point.x / VIEW_SCALE, point.y / VIEW_SCALE));
+  const shape = new THREE.Shape(vectors);
+  shape.closePath();
+  return shape;
 };
 
 const makeUnitBar = (width: number, depth: number, material: THREE.Material) => new THREE.Mesh(new THREE.BoxGeometry(1, width, depth), material);
@@ -363,7 +359,7 @@ const gearShape = (pitchRadius: number, physicalPitchRadiusMm: number) => {
 const partGeometrySignature = (parts: BodyPartLayer[], project?: ProjectState, skeleton?: StandardSkeleton | null) => [
   parts.map(part => {
     const base = project?.parts[part.id] ?? part;
-    return `${base.id}:${base.bounds.width}:${base.bounds.height}:${base.bounds.x}:${base.bounds.y}:${base.visible}`;
+    return `${base.id}:${base.bounds.width}:${base.bounds.height}:${base.bounds.x}:${base.bounds.y}:${base.transform.x}:${base.transform.y}:${base.transform.rotation}:${base.transform.scale}:${base.visible}`;
   }).join('|'),
   Object.values((project?.skeleton ?? skeleton)?.joints ?? {})
     .map(joint => `${joint.id}:${joint.position.x.toFixed(2)}:${joint.position.y.toFixed(2)}`)
@@ -427,10 +423,9 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
   const mechanismLinkCount = mechanismInventory.parts;
   const holeCount = useMemo(() => geometryParts.reduce((sum, part) => {
     const base = project?.parts[part.id] ?? part;
-    return sum + Object.values(canonicalSkeleton?.joints ?? {}).filter(joint => {
-      const local = localJoint(base, joint.position);
-      return Math.abs(local.x) <= base.bounds.width / 2 + 2 && Math.abs(local.y) <= base.bounds.height / 2 + 2;
-    }).length;
+    const landmarks = partLandmarkLocalPoints(base, canonicalSkeleton);
+    const outline = fabricablePartOutlinePoints(base, landmarks);
+    return sum + landmarks.filter(local => pointInsideOutline(local, outline, 0.5)).length;
   }, 0), [canonicalSkeleton, geometryParts, project?.parts]);
   const estimatedObjectCount = boardGridLines(kit).length + 1 + geometryParts.length * 2 + joints.length * 2 + bones.length + mechanismLinkCount * 2 + mechanismsToRender.length * 8 + mechanismInventory.holes + mechanismInventory.gears * 2;
 
@@ -548,12 +543,12 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
     partMeshesRef.current.clear();
     geometryParts.forEach(part => {
       const base = project?.parts[part.id] ?? part;
-      const shape = roundedRect(base.bounds.width / VIEW_SCALE, base.bounds.height / VIEW_SCALE);
-      Object.values(canonicalSkeleton?.joints ?? {}).forEach(joint => {
-        const local = localJoint(base, joint.position);
-        if (Math.abs(local.x) <= base.bounds.width / 2 + 2 && Math.abs(local.y) <= base.bounds.height / 2 + 2) {
-          shape.holes.push(holePath(local.x / VIEW_SCALE, local.y / VIEW_SCALE));
-        }
+      const landmarks = partLandmarkLocalPoints(base, canonicalSkeleton);
+      const outline = fabricablePartOutlinePoints(base, landmarks);
+      const localHoles = landmarks.filter(local => pointInsideOutline(local, outline, 0.5));
+      const shape = shapeFromLocalOutline(outline);
+      localHoles.forEach(local => {
+        shape.holes.push(holePath(local.x / VIEW_SCALE, local.y / VIEW_SCALE));
       });
       const geometry = new THREE.ExtrudeGeometry(shape, { depth: THICKNESS, bevelEnabled: true, bevelSize: 0.018, bevelThickness: 0.012 });
       const mesh = new THREE.Mesh(geometry, materials.part);
@@ -836,6 +831,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       className="three-puppet-state"
       data-three-renderer={rendererStatus === 'pending' ? 'webgl' : rendererStatus}
       data-puppet-mode="thick-flat-assembly"
+      data-part-outline-mode="fabrication-fit-joint-chain"
       data-joint-placement="skeleton-anchors"
       data-three-rebuild-mode="static-topology-dynamic-transforms"
       data-three-supported-mechanism-types={SUPPORTED_MECHANISM_TYPES.join(',')}

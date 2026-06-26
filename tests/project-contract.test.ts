@@ -10,6 +10,7 @@ import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileSca
 import { animatedPartsForProject, describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionPreviewForPath, motionPreviewForProject, motionPreviewForTarget, preferredMotionJointId } from '../utils/motion';
 import { buildToonSceneProjection } from '../utils/sceneProjection';
 import { buildKinematicPhysicsSession } from '../utils/physicsSession';
+import { fabricablePartOutlinePoints, partLandmarkJointIds, partLandmarkLocalPoints, partOutlineBounds, pointInsideOutline } from '../utils/partGeometry';
 import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, mechanismTemplateLabel } from '../utils/mechanismTemplates';
 import { MECHANISM_TYPES as SANITIZE_MECHANISM_TYPES } from '../utils/sanitize';
 import { generateSmartConfig, mutateConfig, OPTIMIZER_MECHANISM_TYPES } from '../utils/optimizer';
@@ -77,6 +78,34 @@ assert(!appText.includes('teeth * 2'), 'Foundry sandbox no longer carries sparse
 assert(appText.includes("if (key === 'gearRatio') return false"), 'Foundry hides stale gear-ratio controls when physical pitch radii define rotation');
 assert(!canvasText.includes('toothWidth'), '2D canvas no longer carries a separate saw-tooth gear implementation');
 assert(!threePreviewText.includes('teeth * 2'), '3D preview no longer carries a separate saw-tooth gear implementation');
+assert(threePreviewText.includes('fabricablePartOutlinePoints'), '3D puppet preview uses fabrication-fit part outlines instead of raw image crop rectangles');
+const oversizedCutPart: BodyPartLayer = {
+  id: 'right_arm_lower',
+  name: 'Right lower arm',
+  anchorJointId: 'right_elbow',
+  transform: { x: 0, y: 0, rotation: 0, scale: 1 },
+  zIndex: 0,
+  opacity: 1,
+  visible: true,
+  locked: false,
+  selectable: true,
+  bounds: { x: -250, y: -250, width: 500, height: 500 },
+  fillColor: '#cbd5e1'
+};
+const oversizedLocalJoints = [{ x: 0, y: 84 }, { x: 0, y: -84 }];
+const oversizedOutlineBounds = partOutlineBounds(fabricablePartOutlinePoints(oversizedCutPart, oversizedLocalJoints));
+assert(oversizedOutlineBounds.width < 90 && oversizedOutlineBounds.height < 260, 'fabrication-fit outline follows the limb joint chain rather than the full raw ONNX crop');
+const sampleWideArm: BodyPartLayer = { ...oversizedCutPart, transform: { x: 0, y: 0, rotation: 0, scale: 1 }, anchorJointId: 'right_elbow' };
+assert.deepEqual(partLandmarkJointIds(sampleWideArm, sample.skeleton), ['right_elbow', 'right_hand'], 'oversized lower-arm crop selects only the intended elbow/hand landmarks');
+const productionArmLandmarks = partLandmarkLocalPoints(sampleWideArm, sample.skeleton);
+const productionArmOutline = fabricablePartOutlinePoints(sampleWideArm, productionArmLandmarks);
+const productionArmBounds = partOutlineBounds(productionArmOutline);
+assert(productionArmLandmarks.length === 2, 'production 3D outline path ignores unrelated joints inside an oversized ONNX crop');
+assert(productionArmBounds.width < 120 && productionArmBounds.height < 140, 'production lower-arm outline stays limb-sized even when the crop contains the full character');
+assert(productionArmLandmarks.every(point => pointInsideOutline(point, productionArmOutline, 0.5)), '3D puppet only cuts joint holes inside the generated part outline');
+const torsoCutPart: BodyPartLayer = { ...oversizedCutPart, id: 'torso', name: 'Torso', anchorJointId: 'torso' };
+const torsoOutlineBounds = partOutlineBounds(fabricablePartOutlinePoints(torsoCutPart, [{ x: -70, y: 90 }, { x: 70, y: 90 }, { x: -42, y: -74 }, { x: 42, y: -74 }, { x: 0, y: 16 }]));
+assert(torsoOutlineBounds.width < 230 && torsoOutlineBounds.height < 250, 'torso fabrication outline is compact around skeleton landmarks rather than a background image slab');
 assert(controlsText.includes('mechanismTemplateLabel'), 'legacy Controls uses shared mechanism registry labels');
 assert(!controlsText.includes('Drawing Machine'), 'legacy Controls no longer hardcodes stale mechanism labels');
 assert(!controlsText.includes("m.type === '5bar' ? '5-Bar'"), 'legacy Controls active mechanism chips use shared labels');
