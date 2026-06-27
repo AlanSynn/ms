@@ -15,6 +15,7 @@ import { buildFoundryPhysicsOverlay, buildKinematicPhysicsSession, mechanismPhys
 import { fabricablePartOutlinePoints, partLandmarkJointIds, partLandmarkLocalPoints, partOutlineBounds, pointInsideOutline } from '../utils/partGeometry';
 import { MECHANISM_FEATURE_REGISTRY, mechanismFeature, validateMechanismFeatureRegistry, type MechanismDragHandle } from '../utils/mechanismFeatureRegistry';
 import { buildMechanismSnapshot, buildMechanismSnapshots } from '../utils/mechanismSnapshot';
+import { createMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext } from '../utils/mechanismPreview';
 import { WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_KERNEL_IMPORT, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, physicsKernelCapability, runRapierFrictionProbe } from '../utils/physicsKernel';
 import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, mechanismTemplateLabel } from '../utils/mechanismTemplates';
@@ -338,6 +339,7 @@ assert(appText.includes('fabricationRingGearPathD'), '2D Foundry planetary previ
 assert(appText.includes('fabricationRingGearProfileForPitchRadius'), '3D Foundry ring uses shared fabrication ring gear geometry');
 assert(appText.includes('SHARED_PLAYBACK_STAGES') && appText.includes('!SHARED_PLAYBACK_STAGES.includes(stage)'), 'shared playback rAF only runs on stages that actually consume the animated angle');
 assert(appText.includes('FOUNDRY_ANIMATION_COMMIT_MS') && appText.includes('data-three-animation-commit-ms'), 'Foundry exposes a bounded animation commit budget for browser perf tests');
+assert(appText.includes('time - (elapsed % FOUNDRY_ANIMATION_COMMIT_MS)'), 'Foundry playback carries requestAnimationFrame remainder instead of dropping animation time under load');
 assert(appText.includes("scene.remove(old)") && appText.includes("disposeThreeObject(old)"), 'Foundry disposes noncached dynamic resources when replacing animation groups');
 assert(appText.includes('geometryCacheRef') && appText.includes('materialCacheRef'), 'Foundry caches reusable Three geometry/material resources during playback');
 assert(appText.includes('foundryCached') && appText.includes('data-three-geometry-cache-size'), 'Foundry tags cached resources and exposes cache size for browser perf tests');
@@ -345,6 +347,7 @@ assert(appText.includes('const geom = new THREE.BufferGeometry().setFromPoints(p
 assert(mechanismPreviewText.includes('sweepBounds') && appText.includes('data-three-fit-bounds=\"phase-invariant-sweep\"'), 'Foundry fitting bounds are sampled in the shared preview utility instead of jittering per animation frame');
 assert(appText.includes('data-three-static-grid-mode=\"persistent-scene-layer\"'), 'Foundry grid and plane live in a persistent scene layer, not the per-frame dynamic group');
 assert(mechanismPreviewText.includes('export const fitMechanismSimulation'), 'Foundry fitting/sweep simulation lives in the mechanism preview utility, not as stage-local UI code');
+assert(mechanismPreviewText.includes('createMechanismFitContext') && appText.includes('createMechanismFitContext(landedFoundry, 360, 240, 96)'), 'Foundry caches phase-invariant fit bounds instead of resampling the sweep every animation tick');
 assert(appText.includes('buildFoundryPhysicsOverlay') && physicsSessionText.includes('export const buildFoundryPhysicsOverlay'), 'Foundry force/velocity/constraint overlay math lives in PhysicsSession, not the React stage');
 assert(appText.includes('useMemo(() => sampleFeasibleRange(landedFoundry), [landedFoundry])'), 'Foundry feasible-range sampling is memoized by mechanism, not re-run on every animation render');
 assert(viewportText.includes('WEBGL_PIXEL_RATIO_CAP') && appText.includes('WEBGL_PIXEL_RATIO_CAP') && threePreviewText.includes('WEBGL_PIXEL_RATIO_CAP'), 'WebGL renderer pixel ratio cap is shared across Foundry and puppet previews');
@@ -356,6 +359,11 @@ assert.equal(WEBGL_PIXEL_RATIO_CAP, 1.5, 'WebGL pixel-ratio cap avoids high-DPI 
 assert(!appText.includes('starShape'), 'Foundry sandbox no longer carries saw-tooth star gears');
 assert(!appText.includes('teeth * 2'), 'Foundry sandbox no longer carries sparse saw-tooth gear implementation');
 assert(appText.includes("if (key === 'gearRatio') return false"), 'Foundry hides stale gear-ratio controls when physical pitch radii define rotation');
+const fitContext = createMechanismFitContext(sample.mechanisms[0], 360, 240, 96);
+const directFit = fitMechanismSimulation(sample.mechanisms[0], 1.234, 360, 240, 96);
+const cachedFit = fitMechanismSimulationWithContext(sample.mechanisms[0], 1.234, fitContext);
+assert.deepEqual(cachedFit.pathPoints, directFit.pathPoints, 'cached Foundry fit preserves the direct preview path exactly');
+assert(Math.hypot(cachedFit.state.effector.x - directFit.state.effector.x, cachedFit.state.effector.y - directFit.state.effector.y) < 1e-9, 'cached Foundry fit maps the live effector exactly like direct fit');
 assert(!canvasText.includes('toothWidth'), '2D canvas no longer carries a separate saw-tooth gear implementation');
 assert(!threePreviewText.includes('teeth * 2'), '3D preview no longer carries a separate saw-tooth gear implementation');
 assert(threePreviewText.includes('fabricablePartOutlinePoints'), '3D puppet preview uses shared model/user contour outlines instead of raw image crop rectangles');
@@ -651,7 +659,9 @@ const foundryOverlaySimulation = {
 const foundryOverlay = buildFoundryPhysicsOverlay(foundryOverlayMechanism, foundryOverlaySimulation, Math.PI / 3, sample.settings);
 assert.equal(foundryOverlay.rule, mechanismPhysicsRule('4bar'), 'Foundry overlay uses the same type-specific PhysicsSession rule text');
 assert(foundryOverlay.playhead && foundryOverlay.velocityTip && foundryOverlay.forceTip && foundryOverlay.driveTip, 'Foundry overlay derives visible playhead, velocity, force, and drive vectors from sampled kinematics');
-assert(foundryOverlay.forceMagnitude >= foundryOverlay.frictionMagnitude, 'Foundry overlay combines acceleration force with friction contribution');
+assert(Math.abs(foundryOverlay.velocityMagnitude - Math.hypot(foundryOverlay.velocityRaw.x, foundryOverlay.velocityRaw.y)) < 1e-9, 'Foundry velocity readout matches the displayed velocity vector');
+assert(Math.abs(foundryOverlay.forceMagnitude - Math.hypot(foundryOverlay.forceRaw.x, foundryOverlay.forceRaw.y)) < 1e-9, 'Foundry force readout matches the displayed total force vector');
+assert(foundryOverlay.playhead && foundryOverlay.forceTip && ((foundryOverlay.forceTip.x - foundryOverlay.playhead.x) * foundryOverlay.forceRaw.x + (foundryOverlay.forceTip.y - foundryOverlay.playhead.y) * foundryOverlay.forceRaw.y) > 0, 'Foundry force arrow points along the live total force vector');
 assert(foundryOverlay.constraintError < 1e-6, 'Foundry overlay constraint error matches the sampled 4-bar pose');
 assertFiniteDeep(foundryOverlay, 'foundryPhysicsOverlay');
 const warningProjection = buildToonSceneProjection({ ...sample, mechanisms: [{ ...sample.mechanisms[0], warnings: ['projection warning'] }] });

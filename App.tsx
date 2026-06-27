@@ -47,7 +47,7 @@ import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlinePathD,
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT, normalizeCanvasViewport, WEBGL_PIXEL_RATIO_CAP } from './utils/viewport';
 import { VIEWER3D_CAMERA_PRESETS, VIEWER3D_CONTRACT_VERSION, createViewer3DContract, viewer3DLayerDataValue, type Viewer3DCameraPreset } from './utils/viewer3d';
 import { AUTHORABLE_MECHANISM_TYPES, FOUNDRY_PRESETS, MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY, mechanismTemplateLabel } from './utils/mechanismTemplates';
-import { fitMechanismSimulation, fitPathToBox, fitPointsToBox, pointsToSvgPath } from './utils/mechanismPreview';
+import { createMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext, fitPathToBox, fitPointsToBox, pointsToSvgPath } from './utils/mechanismPreview';
 import { AlertCircle, Boxes, BrainCircuit, Camera, CheckCircle2, Download, FileJson, Loader2, PenLine, Play, Plus, Route, Save, Settings, Sparkles, Trash2, Upload, UserRound, Wrench } from 'lucide-react';
 import girlStarterUrl from './resources/examples/raw/girl.png?url';
 import boyStarterUrl from './resources/examples/raw/boy.PNG?url';
@@ -2153,14 +2153,15 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const library = MECHANISM_LIBRARY[foundry.type];
     const targetIkJointId = selectedPart ? preferredMotionJointId(project, selectedPart.id, selectedPath?.targetAnchorJointId, { preferDistalWhenRoot: !selectedPath?.targetAnchorJointId }) : undefined;
     const feasibilityText = range.warning ?? '360° valid sampled motion';
-    const selectedSimulation = useMemo(() => fitMechanismSimulation(landedFoundry, foundryPhase, 360, 240, 96), [landedFoundry, foundryPhase]);
+    const foundryFitContext = useMemo(() => createMechanismFitContext(landedFoundry, 360, 240, 96), [landedFoundry]);
+    const selectedSimulation = useMemo(() => fitMechanismSimulationWithContext(landedFoundry, foundryPhase, foundryFitContext), [landedFoundry, foundryPhase, foundryFitContext]);
     const previewPoints = selectedSimulation.pathPoints.length ? selectedSimulation.pathPoints : fitPointsToBox(preview, 360, 240);
     const previewPath = selectedSimulation.pathD || pointsToSvgPath(previewPoints);
     const physicsOverlay = useMemo(
         () => buildFoundryPhysicsOverlay(landedFoundry, selectedSimulation, foundryPhase, project.settings, previewPoints),
         [landedFoundry, selectedSimulation, foundryPhase, project.settings, previewPoints]
     );
-    const { playhead, velocityRaw, accelerationRaw, velocityTip, forceTip, frictionTip, driveTip, velocityMagnitude, frictionMagnitude, forceMagnitude, constraintError, rule: physicsRule } = physicsOverlay;
+    const { playhead, velocityRaw, forceRaw, velocityTip, forceTip, frictionTip, driveTip, velocityMagnitude, frictionMagnitude, forceMagnitude, constraintError, rule: physicsRule } = physicsOverlay;
     const foundryOverlayZ = (fabricationRenderPlanForMechanism(landedFoundry).layers.at(-1)?.z ?? 0.22) + 0.34;
     const projectOverlay = (point: Point | undefined) => projectFoundryOverlayPoint(point, foundryCamera, foundryProjectionSize, foundryOverlayZ);
     const projectedPlayhead = projectOverlay(playhead);
@@ -2271,7 +2272,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
         const tick = (time: number) => {
             const elapsed = time - last;
             if (elapsed >= FOUNDRY_ANIMATION_COMMIT_MS) {
-                last = time;
+                last = time - (elapsed % FOUNDRY_ANIMATION_COMMIT_MS);
                 setFoundryPhase(prev => (prev + Math.min(96, elapsed) * 0.0025 * project.settings.animationSpeed) % (Math.PI * 2));
             }
             frame = requestAnimationFrame(tick);
@@ -2403,7 +2404,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 onProjectionSizeChange={updateFoundryProjectionSize}
             >
                 <svg data-testid="foundry-preview-overlay" viewBox={`0 0 ${foundryProjectionSize.width} ${foundryProjectionSize.height}`} className="foundry-preview-overlay" aria-hidden="true" data-projection-aspect={(foundryProjectionSize.width / Math.max(1, foundryProjectionSize.height)).toFixed(3)}>
-                    {showForces && projectedPlayhead && projectedForceTip && projectedDriveOrigin && projectedDriveTip && <g data-testid="foundry-forces-overlay" className="physics-vector physics-force" data-projection="three-camera" data-origin-source="effector-joint" data-physics-rule={physicsRule} data-fx={accelerationRaw.x.toFixed(3)} data-fy={accelerationRaw.y.toFixed(3)} data-force-magnitude={forceMagnitude.toFixed(3)} data-friction-magnitude={frictionMagnitude.toFixed(3)} data-constraint-error={constraintError.toFixed(3)} stroke="#ef4444" strokeWidth="3" strokeLinecap="round">
+                    {showForces && projectedPlayhead && projectedForceTip && projectedDriveOrigin && projectedDriveTip && <g data-testid="foundry-forces-overlay" className="physics-vector physics-force" data-projection="three-camera" data-origin-source="effector-joint" data-physics-rule={physicsRule} data-fx={forceRaw.x.toFixed(3)} data-fy={forceRaw.y.toFixed(3)} data-force-magnitude={forceMagnitude.toFixed(3)} data-friction-magnitude={frictionMagnitude.toFixed(3)} data-constraint-error={constraintError.toFixed(3)} stroke="#ef4444" strokeWidth="3" strokeLinecap="round">
                         <defs><marker id="foundry-arrow-force-overlay" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 7 3.5 L 0 7 z" fill="#ef4444" /></marker></defs>
                         <defs><marker id="foundry-arrow-friction-overlay" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 7 3.5 L 0 7 z" fill="#f59e0b" /></marker></defs>
                         <line data-testid="foundry-force-vector" x1={projectedPlayhead.x} y1={projectedPlayhead.y} x2={projectedForceTip.x} y2={projectedForceTip.y} markerEnd="url(#foundry-arrow-force-overlay)" />
@@ -3058,8 +3059,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         if (!host) return;
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, WEBGL_PIXEL_RATIO_CAP));
-        renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.shadowMap.enabled = false;
         renderer.domElement.className = 'foundry-three-canvas';
         renderer.domElement.dataset.testid = 'foundry-three-canvas';
         host.appendChild(renderer.domElement);

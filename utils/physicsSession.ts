@@ -108,6 +108,7 @@ export interface FoundryPhysicsOverlay {
   playhead?: Point;
   velocityRaw: Point;
   accelerationRaw: Point;
+  forceRaw: Point;
   velocityMagnitude: number;
   frictionMagnitude: number;
   forceMagnitude: number;
@@ -143,11 +144,6 @@ const unitVector = (x: number, y: number, fallback: Point = { x: 1, y: 0 }): Poi
 const vectorEnd = (origin: Point, vector: Point, length: number): Point => ({
   x: origin.x + vector.x * length,
   y: origin.y + vector.y * length
-});
-
-const clampPreviewPoint = (point: Point): Point => ({
-  x: Math.max(10, Math.min(350, point.x)),
-  y: Math.max(10, Math.min(230, point.y))
 });
 
 const ensureVisibleVectorTip = (origin: Point, tip: Point): Point => ({
@@ -195,15 +191,17 @@ export const buildFoundryPhysicsOverlay = (
   const pointAt = (index: number) => previewPoints.length ? previewPoints[((index % previewPoints.length) + previewPoints.length) % previewPoints.length] : playhead;
   const previousPoint = pointAt(playIndex - 1) ?? playhead ?? { x: 0, y: 0 };
   const nextPoint = pointAt(playIndex + 1) ?? playhead ?? { x: 0, y: 0 };
+  const stepMs = 16.667;
   const centerSum = previewPoints.length
     ? previewPoints.reduce((sum, point) => ({ x: sum.x + point.x, y: sum.y + point.y }), { x: 0, y: 0 })
     : playhead ?? { x: 0, y: 0 };
   const physicsCenter = previewPoints.length ? { x: centerSum.x / previewPoints.length, y: centerSum.y / previewPoints.length } : centerSum;
-  const velocityRaw = { x: nextPoint.x - previousPoint.x, y: nextPoint.y - previousPoint.y };
-  const accelerationRaw = {
-    x: nextPoint.x + previousPoint.x - (playhead?.x ?? 0) * 2,
-    y: nextPoint.y + previousPoint.y - (playhead?.y ?? 0) * 2
-  };
+  const frictionCoefficient = finite(settings.simulationFriction, 0.18);
+  const massKg = finite(settings.simulationMassKg, 1);
+  const velocityRaw = velocityBetween(previousPoint, nextPoint, stepMs);
+  const accelerationRaw = forceFromAcceleration(previousPoint, playhead ?? { x: 0, y: 0 }, nextPoint, stepMs, massKg);
+  const frictionRaw = frictionForce(velocityRaw, massKg, frictionCoefficient);
+  const forceRaw = add(accelerationRaw, frictionRaw);
   const driveRaw = {
     x: -(simulation.state.j1.y - simulation.state.p1.y),
     y: simulation.state.j1.x - simulation.state.p1.x
@@ -211,22 +209,21 @@ export const buildFoundryPhysicsOverlay = (
   const velocityUnit = unitVector(velocityRaw.x, velocityRaw.y);
   const driveUnit = unitVector(driveRaw.x, driveRaw.y, velocityUnit);
   const radialUnit = unitVector(physicsCenter.x - (playhead?.x ?? physicsCenter.x), physicsCenter.y - (playhead?.y ?? physicsCenter.y), driveUnit);
-  const forceUnit = unitVector(accelerationRaw.x, accelerationRaw.y, radialUnit);
-  const frictionUnit = unitVector(-velocityRaw.x, -velocityRaw.y, { x: -velocityUnit.x, y: -velocityUnit.y });
-  const velocityTip = playhead ? clampPreviewPoint(vectorEnd(playhead, velocityUnit, 42)) : undefined;
-  const forceTip = playhead ? clampPreviewPoint(vectorEnd(playhead, forceUnit, 38)) : undefined;
-  const frictionTip = playhead ? clampPreviewPoint(vectorEnd(playhead, frictionUnit, 30)) : undefined;
-  const driveTip = ensureVisibleVectorTip(simulation.state.j1, clampPreviewPoint(vectorEnd(simulation.state.j1, driveUnit, 34)));
+  const forceUnit = unitVector(forceRaw.x, forceRaw.y, radialUnit);
+  const frictionUnit = unitVector(frictionRaw.x, frictionRaw.y, { x: -velocityUnit.x, y: -velocityUnit.y });
+  const velocityTip = playhead ? vectorEnd(playhead, velocityUnit, 42) : undefined;
+  const forceTip = playhead ? vectorEnd(playhead, forceUnit, 38) : undefined;
+  const frictionTip = playhead ? vectorEnd(playhead, frictionUnit, 30) : undefined;
+  const driveTip = ensureVisibleVectorTip(simulation.state.j1, vectorEnd(simulation.state.j1, driveUnit, 34));
   const velocityMagnitude = Math.hypot(velocityRaw.x, velocityRaw.y);
-  const frictionCoefficient = finite(settings.simulationFriction, 0.18);
-  const massKg = finite(settings.simulationMassKg, 1);
-  const frictionMagnitude = velocityMagnitude > 0.01 ? frictionCoefficient * massKg * 9.81 : 0;
-  const forceMagnitude = (Math.hypot(accelerationRaw.x, accelerationRaw.y) * massKg) + frictionMagnitude;
+  const frictionMagnitude = Math.hypot(frictionRaw.x, frictionRaw.y);
+  const forceMagnitude = Math.hypot(forceRaw.x, forceRaw.y);
   return {
     playIndex,
     playhead,
     velocityRaw: cleanPoint(velocityRaw),
     accelerationRaw: cleanPoint(accelerationRaw),
+    forceRaw: cleanPoint(forceRaw),
     velocityMagnitude: finite(velocityMagnitude),
     frictionMagnitude: finite(frictionMagnitude),
     forceMagnitude: finite(forceMagnitude),

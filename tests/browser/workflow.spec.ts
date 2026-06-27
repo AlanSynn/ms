@@ -1080,16 +1080,29 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
     const velocity = document.querySelector('[data-testid="foundry-velocity-vector"]') as SVGLineElement | null;
     const force = document.querySelector('[data-testid="foundry-force-vector"]') as SVGLineElement | null;
     const friction = document.querySelector('[data-testid="foundry-friction-vector"]') as SVGLineElement | null;
-    const overlay = document.querySelector('[data-testid="foundry-velocity-overlay"]') as SVGGElement | null;
+    const velocityOverlay = document.querySelector('[data-testid="foundry-velocity-overlay"]') as SVGGElement | null;
+    const forceOverlay = document.querySelector('[data-testid="foundry-forces-overlay"]') as SVGGElement | null;
     const length = (line: SVGLineElement | null) => line
       ? Math.hypot(Number(line.getAttribute('x2')) - Number(line.getAttribute('x1')), Number(line.getAttribute('y2')) - Number(line.getAttribute('y1')))
       : 0;
-    return { velocityLength: length(velocity), forceLength: length(force), frictionLength: length(friction), speed: Number(overlay?.getAttribute('data-speed') ?? 0) };
+    return {
+      velocityLength: length(velocity),
+      forceLength: length(force),
+      frictionLength: length(friction),
+      vx: Number(velocityOverlay?.getAttribute('data-vx') ?? 0),
+      vy: Number(velocityOverlay?.getAttribute('data-vy') ?? 0),
+      speed: Number(velocityOverlay?.getAttribute('data-speed') ?? 0),
+      fx: Number(forceOverlay?.getAttribute('data-fx') ?? 0),
+      fy: Number(forceOverlay?.getAttribute('data-fy') ?? 0),
+      forceMagnitude: Number(forceOverlay?.getAttribute('data-force-magnitude') ?? 0)
+    };
   });
   expect(defaultPhysics.velocityLength, 'Velocity vector has visible direction').toBeGreaterThan(20);
   expect(defaultPhysics.forceLength, 'Force vector has visible direction').toBeGreaterThan(20);
   expect(defaultPhysics.frictionLength, 'Friction vector opposes the live motion').toBeGreaterThan(10);
   expect(defaultPhysics.speed, 'Velocity vector is computed from live mechanism samples').toBeGreaterThan(0);
+  expect(defaultPhysics.speed, 'Velocity readout matches the data vector on screen').toBeCloseTo(Math.hypot(defaultPhysics.vx, defaultPhysics.vy), 2);
+  expect(defaultPhysics.forceMagnitude, 'Force readout matches the data vector on screen').toBeCloseTo(Math.hypot(defaultPhysics.fx, defaultPhysics.fy), 2);
   expect(Number(await threeScene.getAttribute('data-three-part-count')), 'Sandbox scene contains extruded cardboard/wood parts').toBeGreaterThanOrEqual(4);
   await expect(page.getByTestId('foundry-mini-linkage-gear')).toBeVisible();
   await expect(page.getByTestId('foundry-mechanism-library')).toHaveCount(0);
