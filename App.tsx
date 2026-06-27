@@ -781,7 +781,7 @@ const App: React.FC = () => {
                         {playerDock && <div className="stage-player-row" data-testid="stage-player-row" aria-label="Shared playback controls">{playerDock}</div>}
                     </div>
                     <WorkflowStatusStrip stage={editorStage} project={project} selectedPart={selectedPart} selectedPath={selectedPath} />
-                    <footer className="status-bar" data-testid="status-bar"><span>{commandStatus} · parts:{project.partOrder.length} · paths:{Object.keys(project.paths).length} · mechs:{project.mechanisms.length} · zoom {Math.round(canvasViewport.zoom * 100)}%</span><OnnxCacheStatusPill status={onnxCacheStatus} onDownload={cacheOnnxModel} /></footer>
+                    <footer className="status-bar" data-testid="status-bar"><span>{commandStatus}</span><OnnxCacheStatusPill status={onnxCacheStatus} onDownload={cacheOnnxModel} /></footer>
                 </section>
             </div>
             {showWelcome && <WelcomeDialog onClose={closeWelcome} />}

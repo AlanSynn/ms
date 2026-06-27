@@ -64,6 +64,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.locator('#boot-loader')).toHaveCount(0);
   await expect(page.getByTestId('onnx-cache-status')).toBeVisible();
   await expect(page.getByTestId('onnx-cache-status')).toContainText(/AI model|Download AI model/);
+  await expect(page.getByTestId('status-bar')).not.toContainText(/parts:|paths:|mechs:|zoom/);
   const welcomeDialog = page.getByTestId('welcome-dialog');
   await expect(welcomeDialog).toBeVisible();
   await expect(welcomeDialog.getByRole('heading', { name: 'MotionSmith' })).toBeVisible();
@@ -562,8 +563,8 @@ test('Create from image upload creates a reviewed character package in browser',
   await expect(page.getByTestId('character-status-dock')).toBeVisible({ timeout: 180_000 });
   await expect(page.getByText('review generated package')).toBeVisible({ timeout: 180_000 });
   const dockBox = await page.getByTestId('character-status-dock').boundingBox();
-  const workFrameBox = await page.getByTestId('stage-canvas-pane').boundingBox();
-  expect(dockBox?.y ?? 0, 'character import status is docked below the main work frame').toBeGreaterThanOrEqual(((workFrameBox?.y ?? 0) + (workFrameBox?.height ?? 0)) - 4);
+  const canvasBox = await page.getByTestId('stage-canvas-pane').boundingBox();
+  expect(dockBox?.x ?? 0, 'character import status floats outside the center canvas').toBeGreaterThanOrEqual((canvasBox?.x ?? 0) + (canvasBox?.width ?? 0) - 8);
   await expect(page.getByText(/parts · .*joints · ready to review/i)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Accept package' })).toBeVisible();
 
