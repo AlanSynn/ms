@@ -39,9 +39,9 @@ Implemented and verified:
 
 Verified before this plan:
 
-- `npm test`
-- `npm run build`
-- `npm run test:browser` (10/10)
+- `bun run test`
+- `bun run build`
+- `bun run test:browser` (10/10)
 - `git diff --cached --check`
 
 ## Gap map against `docs/ui-to-web`
@@ -108,7 +108,7 @@ Deliverables:
 Acceptance:
 
 - Browser test toggles toolbar, part panel, debug visuals, autosave interval, export default, grid pitch/profile, and sees canvas/status changes.
-- `npm test` validates settings serialization/default migration.
+- `bun run test` validates settings serialization/default migration.
 
 ### M4 — Dialog/control parity for novice workflow
 

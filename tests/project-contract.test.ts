@@ -47,7 +47,7 @@ const brandStaticFiles = [
   'App.tsx',
   'index.html',
   'package.json',
-  'package-lock.json',
+  'bun.lock',
   'metadata.json',
   'README.md',
   'DESIGN.md',
@@ -72,22 +72,36 @@ const legacySlug = ['mech', 'anim'].join('');
 assert(!brandStaticText.includes(legacyBrand), 'legacy product name is absent from static project files');
 assert(!brandStaticText.includes(legacySlug), 'legacy package/storage slug is absent from static project files');
 assert(brandStaticText.includes('MotionSmith'), 'MotionSmith appears across static project files');
-assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')).name, 'motionsmith-character-motion-designer', 'npm package name uses the MotionSmith slug');
+assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')).name, 'motionsmith-character-motion-designer', 'package name uses the MotionSmith slug');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'metadata.json'), 'utf8')).name, 'MotionSmith: Character Motion Designer', 'metadata product name uses MotionSmith');
 assert(readFileSync(join(process.cwd(), 'index.html'), 'utf8').includes('<title>MotionSmith - Mechanical Character Designer</title>'), 'HTML title uses MotionSmith');
 assert(readFileSync(join(process.cwd(), 'vite.config.ts'), 'utf8').includes("'/MotionSmith/'"), 'web deployment base path uses MotionSmith');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
 assert(readFileSync(join(process.cwd(), 'App.tsx'), 'utf8').includes('motionsmith.hideWelcome'), 'local storage namespace uses the MotionSmith slug');
 const packageJson = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8'));
+const dockerfileText = readFileSync(join(process.cwd(), 'Dockerfile'), 'utf8');
+const deployWorkflowText = readFileSync(join(process.cwd(), '.github', 'workflows', 'deploy.yml'), 'utf8');
+const tauriConfig = JSON.parse(readFileSync(join(process.cwd(), 'src-tauri', 'tauri.conf.json'), 'utf8'));
+const deploymentDocs = readFileSync(join(process.cwd(), 'docs', 'deployment.md'), 'utf8');
+const macosDocs = readFileSync(join(process.cwd(), 'docs', 'macos-distribution.md'), 'utf8');
 const playwrightConfigText = readFileSync(join(process.cwd(), 'playwright.config.ts'), 'utf8');
 assert(playwrightConfigText.includes('fullyParallel: true'), 'browser tests default to full parallel execution without reducing coverage');
 assert(playwrightConfigText.includes('PLAYWRIGHT_WORKERS'), 'browser worker count can be tuned by environment instead of weakening tests');
 assert(playwrightConfigText.includes('MAX_BROWSER_WORKERS'), 'browser worker defaults are bounded to avoid local over-parallelization');
 assert(playwrightConfigText.includes('Number.isInteger'), 'browser worker override validates positive integer input');
 assert(playwrightConfigText.includes('PLAYWRIGHT_SERVER') && playwrightConfigText.includes('preview'), 'browser tests can run against production preview without Vite HMR noise');
-assert(packageJson.scripts['test:browser'].includes('npm run build') && packageJson.scripts['test:browser'].includes('PLAYWRIGHT_SERVER=preview'), 'browser test script validates the production build through preview mode');
+assert.equal(packageJson.packageManager, 'bun@1.3.14', 'Bun is the canonical package manager');
+assert(!existsSync(join(process.cwd(), 'package-lock.json')), 'npm lockfile is absent after Bun migration');
+assert(packageJson.scripts['test:browser'].includes('bun run build') && packageJson.scripts['test:browser'].includes('PLAYWRIGHT_SERVER=preview'), 'browser test script validates the production build through preview mode');
+assert(deployWorkflowText.includes('oven-sh/setup-bun@v2') && deployWorkflowText.includes('bun install --frozen-lockfile') && deployWorkflowText.includes('bun run build'), 'GitHub Pages workflow uses Bun install and build');
+assert(dockerfileText.includes('FROM oven/bun:1.3.14-alpine') && dockerfileText.includes('bun install --frozen-lockfile') && dockerfileText.includes('\"preview\"'), 'Docker image uses Bun install, build, and preview runtime');
+assert.equal(tauriConfig.build.beforeDevCommand, 'bun run dev', 'Tauri dev hook uses Bun');
+assert.equal(tauriConfig.build.beforeBuildCommand, 'bun run build:tauri-frontend', 'Tauri build hook uses Bun');
+assert(deploymentDocs.includes('bun install --frozen-lockfile') && !deploymentDocs.includes('npm '), 'deployment docs use Bun commands');
+assert(macosDocs.includes('bun run build:exe') && !macosDocs.includes('npm '), 'macOS distribution docs use Bun commands');
 assert(agentsContract.includes('preserve coverage while optimizing wall time'), 'AGENTS.md requires test speedups to preserve test quality');
 assert(agentsContract.includes('bounded Playwright parallel workers'), 'AGENTS.md requires bounded browser test parallelism');
+assert(agentsContract.includes('bun run test') && agentsContract.includes('bun run build') && !agentsContract.includes('npm test'), 'AGENTS.md verification gates use Bun commands');
 assert(designContract.includes('Shared editor workbench'), 'DESIGN.md documents the shared editor workbench');
 assert(designContract.includes('Project governance: `AGENTS.md`'), 'DESIGN.md points contributors at the project agent contract');
 assert(designContract.includes('#8b5cf6'), 'DESIGN.md uses the MotionSmith light primary color');
@@ -1102,10 +1116,12 @@ assert(Math.hypot((mechanismPreview.skeleton?.joints.right_hand.position.x ?? 0)
 assert(Math.hypot((mechanismPreview.skeleton?.joints.right_hand.position.x ?? 0) - drivenProject.paths['path-right-arm'].points[0].x, (mechanismPreview.skeleton?.joints.right_hand.position.y ?? 0) - drivenProject.paths['path-right-arm'].points[0].y) > 20, 'mechanism design does not fake success by directly following the target path');
 assert.notEqual(animated.right_arm.transform.rotation, drivenProject.parts.right_arm.transform.rotation, 'IK preview rotates the limb instead of only offsetting it');
 assert(Math.hypot(bodyPartPivotScene(animated.right_hand_part, mechanismPreview.skeleton).x - (mechanismPreview.skeleton?.joints.right_hand.position.x ?? 0), bodyPartPivotScene(animated.right_hand_part, mechanismPreview.skeleton).y - (mechanismPreview.skeleton?.joints.right_hand.position.y ?? 0)) < 1e-9, 'descendant part anchor follows animated skeleton');
+const sampleMechanism = sample.mechanisms[0];
+assert(sampleMechanism, 'sample has a mechanism for driven-target checks');
 for (const phase of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
-  const state = calculateLinkage(sample.mechanisms[0], phase);
+  const state = calculateLinkage(sampleMechanism, phase);
   const preview = motionPreviewForProject(sample, sample.mechanisms, phase);
-  const targetJointId = preferredMotionJointId(sample, sample.mechanisms[0].targetPartId, sample.mechanisms[0].targetAnchorJointId)!;
+  const targetJointId: string = preferredMotionJointId(sample, sampleMechanism.targetPartId, sampleMechanism.targetAnchorJointId)!;
   const targetJoint = preview.skeleton?.joints[targetJointId]?.position;
   assert(state.isValid && targetJoint, 'sample mechanism has a valid driven target joint');
   assert(Math.hypot(targetJoint!.x - state.effector.x, targetJoint!.y - state.effector.y) < 1e-9, 'sample mechanism keeps its driven joint pinned to the linkage effector through the whole scrub range');

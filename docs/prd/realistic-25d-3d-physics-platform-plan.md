@@ -62,9 +62,9 @@ The current app is 2D-first and already has valuable invariants:
 Any 2.5D/3D/physics work must pass these existing checks before it is trusted:
 
 ```bash
-npm run test:contracts
-npm run build
-npm run test:browser
+bun run test:contracts
+bun run build
+bun run test:browser
 ```
 
 ## 3. External references and why they matter
@@ -357,7 +357,7 @@ Deliverables:
 
 Acceptance:
 
-- `npm run test:contracts` passes;
+- `bun run test:contracts` passes;
 - no schema change breaks old project snapshots.
 
 ### M2 — SceneProjection foundation

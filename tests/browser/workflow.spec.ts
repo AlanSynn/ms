@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
 const expectCleanPage = (pageErrors: string[], consoleErrors: string[]) => {
@@ -6,7 +6,7 @@ const expectCleanPage = (pageErrors: string[], consoleErrors: string[]) => {
   expect(consoleErrors, 'no browser console errors').toEqual([]);
 };
 
-const downloadMetadataJson = async (page) => {
+const downloadMetadataJson = async (page: Page) => {
   const [metadataDownload] = await Promise.all([
     page.waitForEvent('download'),
     page.getByRole('button', { name: 'Metadata', exact: true }).click()
@@ -16,7 +16,7 @@ const downloadMetadataJson = async (page) => {
   return JSON.parse(await readFile(metadataPath!, 'utf8'));
 };
 
-const openCharacterScreen = async (page) => {
+const openCharacterScreen = async (page: Page) => {
   if (await page.getByTestId('welcome-dialog').count()) {
     await page.getByRole('button', { name: 'Start', exact: true }).click();
   }
@@ -29,7 +29,7 @@ const openCharacterScreen = async (page) => {
   await expect(page.getByTestId('character-screen')).toBeVisible();
 };
 
-const openWavingArmTemplate = async (page) => {
+const openWavingArmTemplate = async (page: Page) => {
   if (await page.getByTestId('welcome-dialog').count()) {
     await page.getByRole('button', { name: 'Start', exact: true }).click();
   }
@@ -42,7 +42,7 @@ const openWavingArmTemplate = async (page) => {
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
 };
 
-const readScenePoint = async (locator) => locator.evaluate((el: SVGElement) => ({
+const readScenePoint = async (locator: Locator) => locator.evaluate((el: SVGElement) => ({
   x: Number(el.getAttribute('cx')),
   y: Number(el.getAttribute('cy'))
 }));
@@ -1444,7 +1444,7 @@ test('Camera capture waits for live preview and stops stream after handoff', asy
     });
     HTMLMediaElement.prototype.play = async () => undefined;
     const originalGetContext = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = function(type: string, options?: unknown) {
+    HTMLCanvasElement.prototype.getContext = function(this: HTMLCanvasElement, type: string, options?: unknown) {
       const ctx = originalGetContext.call(this, type, options as CanvasRenderingContext2DSettings) as CanvasRenderingContext2D | null;
       if (type === '2d' && ctx) ctx.drawImage = (() => undefined) as CanvasRenderingContext2D['drawImage'];
       return ctx;

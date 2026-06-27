@@ -263,9 +263,9 @@ Already mostly done.
 
 Acceptance:
 
-- `npm test`
-- `npm run build`
-- `npm run test:browser`
+- `bun run test`
+- `bun run build`
+- `bun run test:browser`
 - docs/ui-to-web Playwright parity audit has `Missing/renamed: 0`.
 
 ### M1 — editor shell and global player

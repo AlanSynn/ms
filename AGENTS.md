@@ -79,7 +79,7 @@ The app must always trend toward real buildable artifacts, not illustration-only
 
 ## 8. Subsystem / package governance
 
-- Keep one app package until `docs/subsystem-governance-and-mechanism-contracts.md` says a measured ADR justifies a real npm/workspace split.
+- Keep one app package until `docs/subsystem-governance-and-mechanism-contracts.md` says a measured ADR justifies a real package/workspace split.
 - Treat source modules as package seams now: mechanism registry, snapshots, scene projection, physics session, fabrication/export, and UI stage adapters must not duplicate each other’s rules.
 - Mechanism Foundry, Mechanism Design, Blueprint, Assembly Guide, 2D canvas, and 3D viewport must consume the same fabrication and physics contracts for a mechanism.
 - Stage components may compose controls, but mechanism defaults, required parts, drag handles, z-stacks, and fabrication validation belong behind shared registry/facade helpers.
@@ -89,7 +89,7 @@ The app must always trend toward real buildable artifacts, not illustration-only
 
 Before claiming completion, run the smallest checks that prove the changed contract.
 
-- Contract/docs changes: `npm test`, `npm run build`, and contract assertions that lock the new rule.
+- Contract/docs changes: `bun run test`, `bun run build`, and contract assertions that lock the new rule.
 - UI/workbench changes: add or update browser tests, then run the relevant Playwright flow plus build/contracts.
 - Browser tests should preserve coverage while optimizing wall time: prefer bounded Playwright parallel workers (`fullyParallel`) and `PLAYWRIGHT_WORKERS=<n>` / `--workers=<n>` over deleting assertions, shortening workflows, or weakening checks. Use `--workers=1` only to reproduce order-dependent failures.
 - Run the default browser suite against the production preview build, not the Vite HMR dev server, so full-suite failures reflect shipped UI behavior rather than transient websocket/HMR teardown noise. Use `PLAYWRIGHT_SERVER=dev` only for local interactive debugging.

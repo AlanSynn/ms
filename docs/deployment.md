@@ -5,9 +5,9 @@ The web build is fully local/offline after install.
 ## Build
 
 ```bash
-npm ci
-npm run build
-npm test
+bun install --frozen-lockfile
+bun run build
+bun run test
 ```
 
 `vite build` copies static ONNX assets from `public/onnx/` into `dist/onnx/`. The contract test asserts `dist/onnx/pose_model.onnx` exists after a production build.

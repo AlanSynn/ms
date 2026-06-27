@@ -4,7 +4,7 @@ import { dirname } from 'node:path';
 
 const [cmd, ...args] = process.argv.slice(2);
 if (!cmd) {
-  console.error('usage: node scripts/with-rustup-cargo.mjs <command> [...args]');
+  console.error('usage: bun scripts/with-rustup-cargo.mjs <command> [...args]');
   process.exit(64);
 }
 

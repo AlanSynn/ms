@@ -44,7 +44,7 @@
 ## 📦 Getting Started
 
 ### Prerequisites
-- **Node.js**: v16 or higher
+- **Bun**: v1.3.14 or newer
 
 ### Installation
 
@@ -56,7 +56,7 @@
 
 2.  **Install Dependencies**
     ```bash
-    npm install
+    bun install
     ```
 
 ### Running the Application
@@ -70,9 +70,9 @@ run_browser.bat
 
 ```bash
 # In the root directory
-npm run dev
+bun run dev
 ```
-Open `http://localhost:3000` in your browser.
+Open `http://localhost:1420` in your browser.
 
 ## 📖 Usage Guide
 
@@ -100,8 +100,9 @@ Open `http://localhost:3000` in your browser.
 
 ## 🛠️ Technology Stack
 
-- **Frontend**: React 19, TypeScript, Vite, TailwindCSS, Lucide React
-- **Simulation**: Custom kinematic solvers
+- **Runtime / package manager**: Bun 1.3
+- **Frontend**: React 19, TypeScript 6, Vite 8, TailwindCSS, Lucide React
+- **Simulation**: Custom kinematic solvers, Three.js 0.185, browser ONNX runtime
 
 ## 📄 License
 

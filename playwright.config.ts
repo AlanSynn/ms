@@ -11,8 +11,8 @@ const parseWorkerCount = (value: string | undefined) => {
 const workerCount = parseWorkerCount(process.env.PLAYWRIGHT_WORKERS);
 const serverMode = process.env.PLAYWRIGHT_SERVER ?? 'dev';
 const webServerCommand = serverMode === 'preview'
-  ? 'npm run preview -- --host 127.0.0.1 --port 5173 --strictPort'
-  : 'npm run dev -- --host 127.0.0.1 --port 5173';
+  ? 'bun run preview -- --host 127.0.0.1 --port 5173 --strictPort'
+  : 'bun run dev -- --host 127.0.0.1 --port 5173';
 
 export default defineConfig({
   testDir: './tests/browser',

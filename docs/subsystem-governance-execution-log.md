@@ -17,16 +17,18 @@ Date: 2026-06-27
 
 ## Library evaluation snapshot
 
-Current local dependency check used `package.json`; latest version check used `npm view` on 2026-06-27.
+Current local dependency check uses `package.json` + `bun.lock`; latest version check used `npm view` plus the official Bun GitHub latest release (`bun-v1.3.14`, published 2026-05-13) on 2026-06-27, and the repo now installs with Bun 1.3.14.
 
 | Area | Current | Latest observed | Decision |
 |---|---:|---:|---|
-| React / React DOM | 19.2.0 | 19.2.7 | Defer patch until implementation branch is stable; low value for contract work. |
-| Three | 0.184.0 | 0.185.0 | Defer patch; use existing Three first. |
+| Bun | 1.3.14 | 1.3.14 | Canonical package manager; `bun.lock` replaces `package-lock.json`. |
+| React / React DOM | 19.2.7 | 19.2.7 | Keep current. |
+| Three | 0.185.0 | 0.185.0 | Keep current. |
 | onnxruntime-web | 1.27.0 | 1.27.0 | Keep. |
-| @playwright/test | 1.61.1 | 1.61.1 | Keep; move browser suite to production preview mode to remove HMR noise without weakening coverage. |
-| Vite | 6.2.0 | 8.1.0 | Defer major upgrade; risky until test/build branch is clean. |
-| TypeScript | 5.8.2 | 6.0.3 | Defer major upgrade; no current blocker. |
+| @playwright/test | 1.61.1 | 1.61.1 | Keep; browser suite runs against production preview mode without weakening coverage. |
+| Vite | 8.1.0 | 8.1.0 | Keep current after build/test verification. |
+| TypeScript | 6.0.3 | 6.0.3 | Keep current after typecheck verification. |
+| esbuild | 0.28.1 | 0.28.1 | Direct devDependency because contract tests invoke the CLI. |
 | @react-three/fiber | not installed | 9.6.1 | Defer/avoid for now; current imperative Three has cache/perf tests. Add only if renderer complexity becomes the bottleneck. |
 | @react-three/drei | not installed | 10.7.7 | Defer; depends on R3F adoption. |
 | @dimforge/rapier3d-compat | not installed | 0.19.3 | Candidate for future dynamic physics only behind `PhysicsSession`; not needed for deterministic kinematic contract seam. |
@@ -46,6 +48,7 @@ Current local dependency check used `package.json`; latest version check used `n
 - [ ] M3 stage/domain branch replacement.
   - [x] M3 slice 2: pane ownership / compact workbench corrections.
   - [x] M3 slice 3: Foundry preview/physics extraction and WebGL pixel-ratio cap.
+  - [x] M3 slice 4: Bun-first modern toolchain.
 
 ## Consensus review notes
 
@@ -78,6 +81,9 @@ Current local dependency check used `package.json`; latest version check used `n
 - M3 slice 3: Foundry fitting/sweep preview now lives in `utils/mechanismPreview.ts`, and force, velocity, friction, and constraint-error overlay math now lives in `utils/physicsSession.ts` through `buildFoundryPhysicsOverlay`; the React Foundry stage only projects sampled physics points into the current camera overlay.
 - M3 slice 3: Foundry feasible-range sampling is memoized by mechanism instead of recalculated on every animation commit.
 - M3 slice 3: `utils/viewport.ts` owns the shared `WEBGL_PIXEL_RATIO_CAP`; both Foundry and 3D puppet previews use it and expose the cap through testable `data-three-pixel-ratio-cap` attributes.
+- M3 slice 4: promoted Bun 1.3.14 to the canonical package manager, replaced `package-lock.json` with `bun.lock`, and updated CI, Docker, Tauri hooks, Windows helper scripts, README, and distribution docs to use Bun.
+- M3 slice 4: upgraded the web stack to current registry-observed versions for React, Vite, TypeScript, Three, Lucide, Tauri CLI, esbuild, and type packages while preserving existing browser workflow coverage.
+- M3 slice 4: updated AGENTS verification gates and planning docs to use Bun commands while keeping browser-test parallelization bounded and coverage-preserving.
 
 ## Verification
 
@@ -109,3 +115,11 @@ Current local dependency check used `package.json`; latest version check used `n
 - M3 slice 3 `npm test` — pass (`project contracts ok`).
 - M3 slice 3 `npm run build` — pass (`tsc && vite build`).
 - M3 slice 3 full browser QA — pass: `npm run test:browser` (`31 passed`, 4.7m) in production preview mode, including Foundry physics vectors, WebGL 3D camera/orbit, design 3D templates, free path drawing, and blueprint workflows.
+- M3 slice 4 `bun install --frozen-lockfile` — pass.
+- M3 slice 4 `bun outdated` — pass: no outdated dependency table emitted after the Bun/latest-stack update.
+- M3 slice 4 `bun audit` — pass (`No vulnerabilities found`).
+- M3 slice 4 `bun run test` — pass (`project contracts ok`).
+- M3 slice 4 `bun run build` — pass (`tsc && vite build`) with the existing large-chunk warning from the ONNX/browser bundle.
+- M3 slice 4 targeted browser QA — pass: `bun run test:browser -- --grep "Mechanism Design center workspace renders physical 3D templates"` (`1 passed`, 2.0m).
+- M3 slice 4 full browser QA — pass: `bun run test:browser` (`31 passed`, 4.6m) in production preview mode, preserving character, path, foundry, mechanism design, blueprint, camera, zoom/pan, and free-path workflows.
+- M3 slice 4 `git diff --check` — pass.

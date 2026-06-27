@@ -6,8 +6,8 @@ echo ============================================
 echo.
 cd /d "%~dp0"
 
-echo Checking for existing frontend on port 3000...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr :3000 ^| findstr LISTENING') do (
+echo Checking for existing frontend on port 1420...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :1420 ^| findstr LISTENING') do (
     echo Killing existing process %%a
     taskkill /F /PID %%a 2>nul
 )
@@ -15,8 +15,8 @@ for /f "tokens=5" %%a in ('netstat -ano ^| findstr :3000 ^| findstr LISTENING') 
 echo Starting Frontend Dev Server...
 echo.
 echo ============================================
-echo   Opening http://localhost:3000
+echo   Opening http://localhost:1420
 echo ============================================
 echo.
-start http://localhost:3000
-call npm run dev
+start http://localhost:1420
+call bun run dev

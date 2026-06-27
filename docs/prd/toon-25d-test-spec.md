@@ -15,7 +15,7 @@ Prove the boundary before proving pixels:
 
 ## 2. M1 projection contract tests
 
-Run with `npm run test:contracts`.
+Run with `bun run test:contracts`.
 
 Required assertions:
 
@@ -57,7 +57,7 @@ Required assertions:
 
 ## 3. M2 shell/browser tests
 
-Run with `npm run test:browser` after M2.
+Run with `bun run test:browser` after M2.
 
 Required browser scenarios:
 
@@ -120,17 +120,17 @@ Required checks:
 For docs/contract-only milestones:
 
 ```bash
-npm run test:contracts
-npm run build
+bun run test:contracts
+bun run build
 git diff --check
 ```
 
 For UI or renderer milestones:
 
 ```bash
-npm run test:contracts
-npm run build
-npm run test:browser
+bun run test:contracts
+bun run build
+bun run test:browser
 git diff --check
 ```
 

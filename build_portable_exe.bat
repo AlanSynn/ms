@@ -29,7 +29,7 @@ REM Set TAURI_PLATFORM so vite uses the relative base path
 set TAURI_PLATFORM=windows
 
 echo [1/3] Running TypeScript check and Vite build...
-call npm run build
+call bun run build
 if errorlevel 1 (
     echo ERROR: Build failed!
     pause
@@ -38,7 +38,7 @@ if errorlevel 1 (
 
 echo.
 echo [2/3] Building Tauri application (this may take a while)...
-call npx tauri build
+call bunx tauri build
 if errorlevel 1 (
     echo ERROR: Tauri build failed!
     pause

@@ -249,8 +249,8 @@ const addConstraint = (constraints: PhysicsConstraintSample[], id: string, kind:
 };
 
 const resolvedAnchor = (mechanism: ProjectState['mechanisms'][number]): Point => ({
-  x: finite(mechanism.anchorX ?? mechanism.sceneAnchor?.x ?? mechanism.transform?.x),
-  y: finite(mechanism.anchorY ?? mechanism.sceneAnchor?.y ?? mechanism.transform?.y)
+  x: finite(mechanism.anchorX ?? mechanism.sceneAnchor?.x ?? mechanism.transform?.x ?? 0),
+  y: finite(mechanism.anchorY ?? mechanism.sceneAnchor?.y ?? mechanism.transform?.y ?? 0)
 });
 
 export const buildKinematicPhysicsSession = (

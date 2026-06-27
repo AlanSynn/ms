@@ -1,24 +1,12 @@
-# Use official Node.js image
-FROM node:22-alpine
+FROM oven/bun:1.3.14-alpine
 
-
-# Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
 
-# Install dependencies
-RUN npm install
-
-# Copy rest of the source code
 COPY . .
+RUN bun run build
 
-# Build the project (if you use a build step)
-RUN npm run build
-
-# Expose port (adjust if needed)
-EXPOSE 3000
-
-# Start the app (adjust start command if different)
-CMD ["npm", "run", "dev", "--", "--host"]
+EXPOSE 1420
+CMD ["bun", "run", "preview", "--", "--host", "0.0.0.0", "--port", "1420"]
