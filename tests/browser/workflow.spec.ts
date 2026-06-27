@@ -29,6 +29,36 @@ const openCharacterScreen = async (page: Page) => {
   await expect(page.getByTestId('character-screen')).toBeVisible();
 };
 
+test('Character part cut outline editor bakes and edits contour points', async ({ page }) => {
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  await page.goto('/');
+  await openCharacterScreen(page);
+  await page.getByTestId('character-part-item-head').click();
+  await expect(page.getByTestId('part-cut-controls')).toBeVisible();
+  await expect(page.getByTestId('part-cut-summary')).toContainText(/cut .* pts/i);
+
+  await page.getByTestId('part-cut-bake').click();
+  await expect(page.getByTestId('part-cut-summary')).toContainText('user cut');
+  const xInput = page.getByLabel('Cut point X number');
+  const beforeX = Number(await xInput.inputValue());
+  await xInput.fill(String(beforeX + 6));
+  await expect(xInput).toHaveValue(String(beforeX + 6));
+  await page.getByTestId('part-cut-add-point').click();
+  await expect(page.getByTestId('part-cut-summary')).toContainText('user cut');
+
+  const puppet = page.getByTestId('character-three-puppet-state');
+  await expect(puppet).toHaveAttribute('data-part-outline-mode', 'model-or-user-contour-with-fabrication-fallback');
+  await expect.poll(async () => Number(await puppet.getAttribute('data-three-render-triangles')), { message: 'edited cut contour still renders as 3D solid plates' }).toBeGreaterThan(0);
+  expectCleanPage(pageErrors, consoleErrors);
+});
+
+
 const openWavingArmTemplate = async (page: Page) => {
   if (await page.getByTestId('welcome-dialog').count()) {
     await page.getByRole('button', { name: 'Start', exact: true }).click();

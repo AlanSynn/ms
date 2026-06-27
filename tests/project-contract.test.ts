@@ -425,6 +425,8 @@ assert(appText.includes('character-part-list') && appText.includes('character-pa
 assert(appText.includes('viewport={viewport} setViewport={setViewport} inputMode="always" testId="character-three-puppet"'), 'Character preview uses the shared canvas viewport and direct 2D/3D input instead of a detached default viewport');
 assert(appText.includes("setStage('character')"), 'Character edit controls stay in the functional Character tab');
 assert(appText.includes('Art width') && appText.includes('Art offset X'), 'Character part inspector exposes artwork extent and offset controls');
+assert(appText.includes('data-testid="part-cut-controls"') && appText.includes('Cut point X') && appText.includes('Edit current cut'), 'Character part inspector exposes detailed editable cut-outline controls');
+assert(appText.includes("contourSource: 'user'") && appText.includes('Use joint-chain cut') && appText.includes('Add midpoint'), 'Character cut editor writes user contours and can bake/add contour points');
 assert(appText.includes('data-testid={`path-part-art-${part.id}`}') && appText.includes('part.bounds.x * part.transform.scale'), 'Path Editor renders artwork from the editable part bounds offset');
 assert(canvasText.includes('data-testid={`design-part-art-${part.id}`}') && canvasText.includes('part.bounds.x * part.transform.scale'), 'Mechanism Design renders artwork from the same editable part bounds offset');
 assert(appText.includes('partOutlinePathD(part, landmarks') && appText.includes('path-part-surface-mask'), 'Path Editor clips part art to the shared fabrication outline and hole mask');
@@ -476,6 +478,8 @@ const contourRoundTripProject = loadProjectSnapshot(JSON.parse(serializeProject(
   parts: { ...sample.parts, head: { ...sample.parts.head, contourSource: 'user', contourPoints: userContourPart.contourPoints } }
 })));
 assert.deepEqual(contourRoundTripProject.parts.head.contourPoints, userContourPart.contourPoints, 'project save/load preserves user-defined part contour points');
+const editedContourProject = applyProjectAction(sample, { type: 'update_part', partId: 'head', updates: { contourSource: 'user', contourPoints: [{ x: -18, y: -24 }, { x: 24, y: -18 }, { x: 30, y: 28 }, { x: -20, y: 30 }] } });
+assert.deepEqual(fabricablePartOutlinePoints(editedContourProject.parts.head, partLandmarkLocalPoints(editedContourProject.parts.head, editedContourProject.skeleton)), editedContourProject.parts.head.contourPoints, 'character cut editor updates the shared fabrication outline used by every renderer/exporter');
 const packageContourProject = createProjectFromPackageData(
   { parts: { head: { name: 'Head', roi: [0, 0, 80, 80], anchor_joint_id: 'neck', contour_points: userContourPart.contourPoints, contour_source: 'user' } } },
   { width: 160, height: 160, joints: sample.skeleton!.joints, bones: sample.skeleton!.bones, root_joint_ids: sample.skeleton!.rootJointIds },
