@@ -1000,6 +1000,7 @@ assert.equal(sample.settings.performancePreset, 'balanced', 'settings default in
 assert.equal(sample.settings.physicsSnapMode, 'balanced', 'settings default includes physics snap mode');
 assert.equal(sample.settings.simulationFriction, 0.18, 'settings default includes physical friction coefficient');
 assert.equal(sample.settings.simulationMassKg, 1, 'settings default includes mechanism mass');
+assert.equal(sample.settings.toolbarVisible, false, 'settings default hides duplicate quick toolbar chrome');
 assert.equal(sample.settings.debugVisuals, false, 'settings default hides debug visuals');
 assert.equal(sample.settings.detailedProcessingSteps, false, 'settings default hides detailed processing steps');
 assert.equal(sample.settings.autosaveIntervalSeconds, 60, 'settings default includes autosave interval seconds');

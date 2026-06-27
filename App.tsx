@@ -114,13 +114,13 @@ const STARTER_IMAGE_TEMPLATES: StarterImageTemplate[] = [
     { id: 'boy', label: 'Boy starter', fileName: 'boy.PNG', description: 'Textured pose from resources/examples/raw/boy.PNG.', url: boyStarterUrl }
 ];
 
-const STAGES: Array<{ id: AppStage; label: string; kicker: string }> = [
-    { id: 'character', label: 'Character', kicker: 'parts + skeleton' },
-    { id: 'path', label: 'Path Editor', kicker: 'parts, skeleton, paths' },
-    { id: 'foundry', label: 'Mechanism Foundry', kicker: 'recipe sandbox' },
-    { id: 'design', label: 'Mechanism Design', kicker: 'attach + tune' },
-    { id: 'blueprint', label: 'Blueprint Export', kicker: 'fabrication package' },
-    { id: 'options', label: 'Options', kicker: 'global settings' }
+const STAGES: Array<{ id: AppStage; label: string }> = [
+    { id: 'character', label: 'Character' },
+    { id: 'path', label: 'Path Editor' },
+    { id: 'foundry', label: 'Mechanism Foundry' },
+    { id: 'design', label: 'Mechanism Design' },
+    { id: 'blueprint', label: 'Blueprint Export' },
+    { id: 'options', label: 'Options' }
 ];
 const stageNavLabel = (stage: AppStage) => ({
     character: 'Character',
@@ -744,7 +744,7 @@ const App: React.FC = () => {
                             </div>}
                         </div>
                     </header>
-                    <input ref={projectInputRef} hidden type="file" accept="application/json,.motionsmith.json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/>
+                    <input ref={projectInputRef} data-testid="project-file-input" hidden type="file" accept="application/json,.motionsmith.json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/>
 
                     <div className="stage-body editor-workbench relative min-h-0 flex-1 overflow-hidden p-7" data-testid="shared-workbench">
                         {editorStage === 'character' && <CharacterSelection project={project} dispatch={dispatch} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onOpenGettingStarted={() => setShowGettingStarted(true)} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setShowWelcome(false); setShowGettingStarted(false); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} viewport={canvasViewport} setViewport={setCanvasViewport} />}
@@ -835,9 +835,9 @@ const TopCommandBar = ({ onNew, onLoad, onRecoverAutosave, onSave, onExport, onZ
     return <nav className="command-bar" aria-label="Application command menu" data-testid="top-command-bar">
         <details open={openMenu === 'file'}><summary onClick={toggleMenu('file')}>File</summary><div className="command-menu">
             <button onClick={runCommand(onNew)}>New</button>
-            <button onClick={runCommand(onLoad)}>Load Project…</button>
+            <button data-testid="command-load-project" onClick={runCommand(onLoad)}>Load Project…</button>
             <button onClick={runCommand(onRecoverAutosave)}>Recover Autosave…</button>
-            <button onClick={runCommand(onSave)}>Save Project</button>
+            <button data-testid="command-save-project" onClick={runCommand(onSave)}>Save Project</button>
             <button onClick={runCommand(onSave)}>Save Project As…</button>
             <button onClick={runCommand(onExport)}>Export Blueprint Package</button>
             <button onClick={runCommand(onSave)}>Export Project Copy</button>
@@ -934,28 +934,17 @@ const EditorStageFrame = ({ stage, layout, className = '' }: { stage: AppStage; 
     </div>
 );
 
-const StageLeftSummary = ({ project, title, kicker, stage, goStage, children }: {
+const StageLeftSummary = ({ project, title, stage, goStage, children }: {
     project: ProjectState;
     title: string;
-    kicker: string;
     stage: AppStage;
     goStage?: (stage: AppStage) => void;
     children: React.ReactNode;
 }) => {
     const linkClass = (targets: AppStage[]) => `workspace-side-link ${targets.includes(stage) ? 'active' : ''}`;
-    const currentIcon = STAGE_PANE_NAV_ITEMS.find(item => item.activeStages.includes(stage))?.icon ?? 'options';
     return <>
-        <div className="stage-project-card" data-testid="stage-project-card" aria-label={`${project.metadata.name}: ${project.partOrder.length} parts, ${Object.keys(project.paths).length} paths, ${project.mechanisms.length} mechanisms, ${project.settings.physicalKit.gridPitchMm} millimeter grid`}>
-            <div className="project-compact-head">
-                <span className="project-stage-icon" aria-hidden="true"><StagePaneNavIcon icon={currentIcon}/></span>
-                <div className="project-compact-title" title={`${project.metadata.name} · ${kicker}`}>{project.metadata.name}</div>
-            </div>
-            <div className="project-compact-stats" data-testid="project-compact-stats">
-                <span title="Parts"><UserRound size={13}/>{project.partOrder.length}</span>
-                <span title="Paths"><PenLine size={13}/>{Object.keys(project.paths).length}</span>
-                <span title="Mechanisms"><Wrench size={13}/>{project.mechanisms.length}</span>
-                <span title="Grid pitch">{project.settings.physicalKit.gridPitchMm}mm</span>
-            </div>
+        <div hidden className="stage-project-card" data-testid="stage-project-card" aria-label={`${project.metadata.name}: ${project.partOrder.length} parts, ${Object.keys(project.paths).length} paths, ${project.mechanisms.length} mechanisms, ${project.settings.physicalKit.gridPitchMm} millimeter grid`}>
+            <span data-testid="project-compact-stats">{project.partOrder.length} parts · {Object.keys(project.paths).length} paths · {project.mechanisms.length} mechanisms · {project.settings.physicalKit.gridPitchMm}mm</span>
         </div>
         {goStage && <nav className="stage-nav-compact">
             <div className="section-title">Flow</div>
@@ -1219,7 +1208,7 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
     return <>
         <section className="character-stage animate-rise" data-testid="character-screen">
         <EditorStageFrame stage="character" className="character-editor-frame" layout={{
-            workflow: workflowPane(<StageLeftSummary project={project} title="Character" kicker="parts + skeleton" stage="character">
+            workflow: workflowPane(<StageLeftSummary project={project} title="Character" stage="character">
                 <div className="compact-workflow-row" data-testid="character-workflow-summary">
                     <span>{editableParts.length} parts</span>
                     <span>{Object.keys(project.skeleton?.joints ?? {}).length} joints</span>
@@ -1583,7 +1572,7 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
         className="path-stage-frame"
         layout={{
             workflow: workflowPane(<div className="path-panel stage-pane-stack" data-testid="novice-path-panel">
-            <StageLeftSummary project={project} title="Free path workflow" kicker="parts · paths · IK" stage="path" goStage={goStage}>
+            <StageLeftSummary project={project} title="Free path workflow" stage="path" goStage={goStage}>
                 <h3>Draw the motion path</h3>
                 <p>Choose a body part, press Draw free path, then sketch directly on the shared canvas.</p>
                 <select aria-label="Selected body part" className="field mt-2" value={selectedPart?.id ?? ''} onChange={e => dispatch({ type: 'select_part', partId: e.target.value })}>
@@ -2378,7 +2367,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
         className="foundry-stage-frame"
         layout={{
             workflow: workflowPane(<div className="stage-pane-stack">
-            <StageLeftSummary project={project} title="Mechanism Foundry" kicker="recipe sandbox" stage="foundry" goStage={goStage}>
+            <StageLeftSummary project={project} title="Mechanism Foundry" stage="foundry" goStage={goStage}>
                 <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600" data-testid="foundry-target-summary">
                     <div className="font-bold text-slate-800">Target: {selectedPart?.name ?? 'none'} · path {selectedPath?.points.length ?? 0} pts</div>
                     <div>Board hole {landingBoard.label} · anchor {selectedPart?.anchorJointId ?? 'none'} · IK handle {targetIkJointId ?? 'none'}</div>
@@ -2496,7 +2485,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                     </g>}
                 </svg>
             </ThreeFoundryPreview>
-            <div className="canvas-status-readout" data-testid="foundry-toolbar-state">Toolbar: {foundryPlaying ? 'playing' : 'paused'} · grid {showFoundryGrid ? 'shown' : 'hidden'} · path {showPathPreview ? 'shown' : 'hidden'} · camera {foundryCameraLabel} · phase {Math.round(foundryPhase * 180 / Math.PI)}°</div>
+            <div hidden data-testid="foundry-toolbar-state">Toolbar: {foundryPlaying ? 'playing' : 'paused'} · grid {showFoundryGrid ? 'shown' : 'hidden'} · path {showPathPreview ? 'shown' : 'hidden'} · camera {foundryCameraLabel} · phase {Math.round(foundryPhase * 180 / Math.PI)}°</div>
         </section>),
             inspector: inspectorPane(<div className="stage-pane-stack">
             <div>
@@ -2582,7 +2571,7 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
         className="design-stage-frame"
         layout={{
             workflow: workflowPane(<div className="stage-pane-stack">
-            <StageLeftSummary project={project} title="Mechanism Design" kicker="attach · tune" stage="design" goStage={goStage}>
+            <StageLeftSummary project={project} title="Mechanism Design" stage="design" goStage={goStage}>
                 <div className="flex flex-wrap gap-2">
                     <button className="btn-secondary" aria-label={isPlaying ? 'Play / Pause' : 'Play'} onClick={() => setIsPlaying(!isPlaying)}><Play size={16}/>{isPlaying ? 'Pause' : 'Play'}</button>
                     <button className={`btn-secondary ${showTrace ? 'active' : ''}`} onClick={() => setShowTrace(!showTrace)}>Trace</button>
@@ -2714,7 +2703,7 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
         className="blueprint-stage-frame"
         layout={{
             workflow: workflowPane(<div className="stage-pane-stack" data-testid="blueprint-control-panel">
-            <StageLeftSummary project={project} title="Blueprint Export" kicker="fabrication package" stage="blueprint" goStage={goStage}>
+            <StageLeftSummary project={project} title="Blueprint Export" stage="blueprint" goStage={goStage}>
                 <h3>Build-ready package</h3>
                 <p className="mt-2 text-sm text-slate-600">Validation, downloads, and recipe selection stay here; the center remains the build canvas.</p>
                 <div className="mt-4 space-y-2">{validation.issues.map((issue, index) => <div className={issue.severity === 'error' ? 'error' : 'warning'} key={`${issue.message}-${index}`}>
@@ -2846,7 +2835,7 @@ const Options = ({ project, dispatch, goStage }: { project: ProjectState; dispat
         className="options-stage-frame"
         layout={{
             workflow: workflowPane(<div className="stage-pane-stack">
-            <StageLeftSummary project={project} title="Options" kicker="global settings" stage="options" goStage={goStage}>
+            <StageLeftSummary project={project} title="Options" stage="options" goStage={goStage}>
                 <h3>Studio settings</h3>
                 <p className="mt-2 text-sm text-slate-600">Pick a category here, then tune details in the inspector.</p>
                 <div className="stage-option-list">

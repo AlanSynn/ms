@@ -33,7 +33,7 @@ export const defaultSettings = (): AppSettings => ({
     animationDurationMs: 3200,
     timingProfile: 'linear',
     theme: 'light',
-    toolbarVisible: true,
+    toolbarVisible: false,
     partPanelVisible: true,
     autosave: false,
     autosaveIntervalSeconds: 60,

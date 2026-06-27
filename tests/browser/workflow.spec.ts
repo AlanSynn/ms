@@ -78,8 +78,10 @@ const readScenePoint = async (locator: Locator) => locator.evaluate((el: SVGElem
 }));
 
 const activeElementIsInDialog = (page: Page) => page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]')));
-const expectProjectCounts = (page: Page, parts: number, paths: number, mechanisms: number) =>
-  expect(page.getByTestId('stage-project-card')).toHaveAttribute('aria-label', new RegExp(`${parts} parts, ${paths} paths, ${mechanisms} mechanisms`));
+const expectProjectCounts = async (page: Page, parts: number, paths: number, mechanisms: number) => {
+  await expect(page.getByTestId('stage-project-card')).toHaveAttribute('aria-label', new RegExp(`${parts} parts, ${paths} paths, ${mechanisms} mechanisms`));
+  await expect(page.getByTestId('stage-project-card')).not.toBeVisible();
+};
 
 test('character → path → foundry → design → blueprint runs end-to-end in browser', async ({ page }) => {
   const pageErrors: string[] = [];
@@ -144,7 +146,9 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await openWavingArmTemplate(page);
   await expect(page.getByTestId('workspace-steps')).toContainText('Path Editor');
   await expect(page.getByTestId('stage-project-card')).not.toContainText('Shared canvas');
+  await expect(page.getByTestId('stage-project-card')).not.toBeVisible();
   await expect(page.getByTestId('project-compact-stats')).toContainText('20mm');
+  await expect(page.getByTestId('project-compact-stats')).not.toBeVisible();
   await expect(page.getByTestId('shared-workbench')).toBeVisible();
   await expect(page.getByTestId('workspace-player-dock')).toBeVisible();
   await expect(page.getByTestId('novice-path-panel')).toContainText('Draw the motion path');
@@ -206,10 +210,10 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('skeleton-joint-right_elbow')).toBeVisible();
   expect(await page.locator('[data-testid^="skeleton-joint-"]').count()).toBeGreaterThanOrEqual(17);
 
-  const [projectDownload] = await Promise.all([
-    page.waitForEvent('download'),
-    page.getByRole('button', { name: /Save/i }).click()
-  ]);
+  const projectDownloadPromise = page.waitForEvent('download');
+  await page.getByTestId('top-command-bar').getByText('File', { exact: true }).click();
+  await page.getByTestId('command-save-project').click();
+  const projectDownload = await projectDownloadPromise;
   expect(projectDownload.suggestedFilename()).toMatch(/\.motionsmith\.json$/);
   const projectDownloadPath = await projectDownload.path();
   expect(projectDownloadPath, 'project download path').toBeTruthy();
@@ -219,7 +223,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   expect(projectSnapshot.paths).toBeTruthy();
   expect(projectSnapshot.mechanisms).toBeTruthy();
   expect(projectSnapshot.settings).toBeTruthy();
-  await page.locator('header label').filter({ hasText: 'Import' }).locator('input[type="file"]').setInputFiles(projectDownloadPath!);
+  await page.getByTestId('project-file-input').setInputFiles(projectDownloadPath!);
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
@@ -567,6 +571,7 @@ test('animation performance: Foundry playback stays responsive without runaway T
   const phaseBefore = Number(await phaseControl.inputValue());
   await page.getByTestId('foundry-toolbar').getByRole('button', { name: 'Play', exact: true }).click();
   await expect(page.getByTestId('foundry-toolbar-state')).toContainText('playing');
+  await expect(page.getByTestId('foundry-toolbar-state')).not.toBeVisible();
   const playbackStartedAt = Date.now();
 
   await expect.poll(async () => {
@@ -803,10 +808,11 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
 
   await page.getByLabel('Theme').selectOption('dark');
   await expect(page.locator('main[data-theme="dark"]')).toBeVisible();
-  await page.getByLabel('Show toolbar').uncheck();
   await expect(page.getByTestId('quick-toolbar')).toHaveCount(0);
   await page.getByLabel('Show toolbar').check();
   await expect(page.getByTestId('quick-toolbar')).toBeVisible();
+  await page.getByLabel('Show toolbar').uncheck();
+  await expect(page.getByTestId('quick-toolbar')).toHaveCount(0);
 
   await page.getByLabel('Show Part Properties Panel').uncheck();
   await page.getByRole('button', { name: /Path Editor/i }).click();
@@ -1373,9 +1379,11 @@ test('Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking'
   const velocityBeforePlay = await page.getByTestId('foundry-velocity-vector').evaluate((line: SVGLineElement) => [line.getAttribute('x1'), line.getAttribute('y1'), line.getAttribute('x2'), line.getAttribute('y2')].join(','));
   await page.getByRole('button', { name: 'Play' }).click();
   await expect(page.getByTestId('foundry-toolbar-state')).toContainText('playing');
+  await expect(page.getByTestId('foundry-toolbar-state')).not.toBeVisible();
   await expect.poll(async () => page.getByTestId('foundry-velocity-vector').evaluate((line: SVGLineElement) => [line.getAttribute('x1'), line.getAttribute('y1'), line.getAttribute('x2'), line.getAttribute('y2')].join(',')), { message: 'live velocity vector follows the running mechanism' }).not.toBe(velocityBeforePlay);
   await page.getByRole('button', { name: 'Reset' }).click();
   await expect(page.getByTestId('foundry-toolbar-state')).toContainText('paused');
+  await expect(page.getByTestId('foundry-toolbar-state')).not.toBeVisible();
 });
 
 test('Mechanism Foundry supports CAD-style 3D camera presets and drag orbit', async ({ page }) => {
