@@ -1,5 +1,5 @@
 import type { MechanismConfig, MechanismType, Point, ProjectState } from '../types';
-import { calculateLinkage } from './kinematics';
+import { calculateLinkage, gearTrainPitchCenterDistance } from './kinematics';
 import { mechanismTemplateLabel } from './mechanismTemplates';
 import type { ProjectionSourceType, ToonSceneProjection } from './sceneProjection';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY } from './physicsKernel';
@@ -126,6 +126,7 @@ const MECHANISM_PHYSICS_RULES: Record<MechanismType, string> = {
   yoke: 'pin-in-slot thrust + guide reaction',
   'quick-return': 'slotted-arm torque + uneven return velocity',
   '5bar': 'dual crank torque + coupler acceleration',
+  '6bar': 'four-bar base + dyad follower reactions',
   cam: 'cam normal force + follower lift velocity',
   'rack-pinion': 'gear mesh tangent force + rack velocity',
   gear: 'gear mesh force + opposite angular velocity',
@@ -159,7 +160,7 @@ const foundryConstraintError = (mechanism: MechanismConfig, simulation: FoundryP
   const s = simulation.state;
   const scaledLength = (length: number | undefined) => Math.max(0, finite(length ?? 0)) * simulation.scale;
   const errors = mechanism.type === 'gear'
-    ? [Math.abs(fittedDistance(s.p1, s.p2) - scaledLength((mechanism.crankLength ?? 0) + (mechanism.rockerLength ?? 0)))]
+    ? [Math.abs(fittedDistance(s.p1, s.p2) - scaledLength(gearTrainPitchCenterDistance(mechanism)))]
     : mechanism.type === 'planetary_gear'
       ? [Math.abs(fittedDistance(s.p1, s.p2) - scaledLength(mechanism.groundLength)), Math.abs(fittedDistance(s.p2, s.j2) - scaledLength(mechanism.rockerLength))]
       : mechanism.type === 'rack-pinion'
@@ -174,6 +175,8 @@ const foundryConstraintError = (mechanism: MechanismConfig, simulation: FoundryP
                 ? [Math.abs(fittedDistance(s.j1, s.j2) - scaledLength(mechanism.couplerLength))]
                 : mechanism.type === '5bar'
                   ? [Math.abs(fittedDistance(s.p2, s.aux ?? s.j2) - scaledLength(mechanism.rockerLength)), Math.abs(fittedDistance(s.j1, s.j2) - scaledLength(mechanism.couplerLength)), Math.abs(fittedDistance(s.aux ?? s.j2, s.j2) - scaledLength(mechanism.rodLength ?? 0))]
+                  : mechanism.type === '6bar'
+                    ? [Math.abs(fittedDistance(s.p1, s.j1) - scaledLength(mechanism.crankLength)), Math.abs(fittedDistance(s.j1, s.j2) - scaledLength(mechanism.couplerLength)), Math.abs(fittedDistance(s.j2, s.p2) - scaledLength(mechanism.rockerLength)), Math.abs(fittedDistance(s.j2, s.aux ?? s.effector) - scaledLength(mechanism.rodLength ?? 0)), Math.abs(fittedDistance(s.p2, s.aux ?? s.effector) - scaledLength(mechanism.couplerPointDist))]
                   : [Math.abs(fittedDistance(s.p1, s.j1) - scaledLength(mechanism.crankLength)), Math.abs(fittedDistance(s.j1, s.j2) - scaledLength(mechanism.couplerLength)), Math.abs(fittedDistance(s.j2, s.p2) - scaledLength(mechanism.rockerLength))];
   return Math.max(0, ...errors.filter(Number.isFinite));
 };
@@ -333,6 +336,12 @@ export const buildKinematicPhysicsSession = (
         addCrankConstraint();
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/coupler`, 'rod', current.j1, current.j2, finite(mechanism.couplerLength), 'coupler length', mechanism.id);
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/rocker`, 'rod', current.j2, current.p2, finite(mechanism.rockerLength), 'rocker length', mechanism.id);
+      } else if (mechanism.type === '6bar') {
+        addCrankConstraint();
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/coupler`, 'rod', current.j1, current.j2, finite(mechanism.couplerLength), 'coupler length', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/rocker`, 'rod', current.j2, current.p2, finite(mechanism.rockerLength), 'rocker length', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/dyad`, 'rod', current.j2, current.aux ?? current.effector, finite(mechanism.rodLength ?? mechanism.couplerLength), 'six-bar dyad link length', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/follower`, 'rod', current.p2, current.aux ?? current.effector, finite(mechanism.couplerPointDist), 'six-bar follower link length', mechanism.id);
       } else if (mechanism.type === '5bar') {
         addCrankConstraint();
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/right-crank`, 'rod', current.p2, current.aux ?? current.j2, finite(mechanism.rockerLength), 'right crank phase rod', mechanism.id);
@@ -360,7 +369,7 @@ export const buildKinematicPhysicsSession = (
       } else if (mechanism.type === 'gear') {
         addCrankConstraint();
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/output-radius`, 'rod', current.p2, current.j2, finite(mechanism.rockerLength), 'output pitch radius', mechanism.id);
-        addConstraint(constraints, `/physics/constraints/${mechanism.id}/gear-mesh`, 'guide', current.p1, current.p2, finite(mechanism.crankLength + mechanism.rockerLength), 'gear pitch mesh tangent', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/gear-mesh`, 'guide', current.p1, current.p2, finite(gearTrainPitchCenterDistance(mechanism)), 'gear pitch mesh tangent', mechanism.id);
       } else if (mechanism.type === 'planetary_gear') {
         addCrankConstraint();
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/carrier`, 'guide', current.p1, current.p2, finite(mechanism.groundLength), 'planet carrier radius', mechanism.id);

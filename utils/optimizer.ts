@@ -1,6 +1,6 @@
 
 import { MechanismConfig, Point, MechanismType } from '../types';
-import { gearPairOutputRatio, generateCurvePoints, planetaryPlanetSpinRatio } from './kinematics';
+import { gearTrainOutputRatio, gearTrainPitchCenterDistance, generateCurvePoints, planetaryPlanetSpinRatio } from './kinematics';
 import { AUTHORABLE_MECHANISM_TYPES } from './mechanismTemplates';
 
 export const OPTIMIZER_MECHANISM_TYPES: MechanismType[] = [...AUTHORABLE_MECHANISM_TYPES];
@@ -335,7 +335,7 @@ const direction = (p1: Point, p2: Point, p3: Point): number => {
 
 export const evaluateFitness = (config: MechanismConfig, targetPath: Point[]): number => {
     // For 5-bar, we need more points to check for loop closure and detail
-    const resolution = config.type === '5bar' ? 120 : 60;
+    const resolution = config.type === '5bar' || config.type === '6bar' ? 120 : 60;
     const { points: generatedPath, percentValid } = generateCurvePoints(config, resolution);
 
     // CRITICAL: Heavy penalty for any invalidity (breaking/locking)
@@ -436,6 +436,23 @@ const enforceFiveBarConstraints = (conf: MechanismConfig) => {
     return conf;
 };
 
+const enforceSixBarConstraints = (conf: MechanismConfig) => {
+    if (conf.type !== '6bar') return conf;
+    const minCoupler = Math.max(20, Math.abs(conf.groundLength - conf.rockerLength) - conf.crankLength + 12);
+    if (conf.couplerLength < minCoupler) conf.couplerLength = minCoupler;
+    const follower = Math.max(20, conf.couplerPointDist || 90);
+    const dyad = Math.max(20, conf.rodLength || 90);
+    const minReach = Math.abs(conf.rockerLength - follower) + 12;
+    if (dyad < minReach) conf.rodLength = minReach;
+    if ((conf.rodLength || 0) + follower < conf.rockerLength + 12) {
+        const needed = conf.rockerLength + 12 - ((conf.rodLength || 0) + follower);
+        conf.rodLength = (conf.rodLength || dyad) + needed / 2;
+        conf.couplerPointDist = follower + needed / 2;
+    }
+    conf.assemblyMode = conf.assemblyMode ?? 'open';
+    return conf;
+};
+
 export const generateSmartConfig = (targetPath?: Point[], forcedType?: MechanismType, excludedType?: MechanismType): MechanismConfig => {
     let cx = 0, cy = 0, scale = 100;
 
@@ -512,8 +529,9 @@ export const generateSmartConfig = (targetPath?: Point[], forcedType?: Mechanism
         config.couplerPointAngle = 0;
     } else if (type === 'gear') {
         config.rockerLength = s(0.25);
-        config.groundLength = config.crankLength + config.rockerLength;
-        config.gearRatio = gearPairOutputRatio(config.crankLength, config.rockerLength);
+        config.gearTrainRadii = [config.crankLength, config.rockerLength];
+        config.groundLength = gearTrainPitchCenterDistance(config);
+        config.gearRatio = gearTrainOutputRatio(config);
         config.speed2 = config.gearRatio;
         config.couplerLength = 0;
     } else if (type === 'planetary_gear') {
@@ -522,6 +540,31 @@ export const generateSmartConfig = (targetPath?: Point[], forcedType?: Mechanism
         config.gearRatio = planetaryPlanetSpinRatio(config.crankLength, config.rockerLength);
         config.speed2 = config.gearRatio;
         config.couplerLength = 0;
+    } else if (type === '6bar') {
+        if (targetPath && targetPath.length > 0) {
+            const bounds = getBounds(targetPath);
+            const pathDiagonal = Math.hypot(bounds.w, bounds.h) || 100;
+            config.anchorX = bounds.cx - pathDiagonal * 0.35;
+            config.anchorY = bounds.cy - pathDiagonal * 0.25;
+            config.groundLength = pathDiagonal * 0.72;
+            config.crankLength = pathDiagonal * 0.24;
+            config.rockerLength = pathDiagonal * 0.48;
+            config.couplerLength = pathDiagonal * 0.78;
+            config.rodLength = pathDiagonal * 0.46;
+            config.couplerPointDist = pathDiagonal * 0.48;
+        } else {
+            config.groundLength = s(0.72);
+            config.crankLength = s(0.24);
+            config.rockerLength = s(0.48);
+            config.couplerLength = s(0.78);
+            config.rodLength = s(0.46);
+            config.couplerPointDist = s(0.48);
+        }
+        config.speed1 = 1;
+        config.speed2 = 1;
+        config.phase = 0;
+        config.assemblyMode = 'open';
+        enforceSixBarConstraints(config);
     } else if (type === '5bar') {
         // Select gear ratio - prefer recommended ratio based on target path analysis
         let selectedRatio: { s1: number; s2: number };
@@ -610,6 +653,12 @@ export const mutateConfig = (config: MechanismConfig, temperature: number = 1.0,
             newConfig.speed2 = ratio.s2;
             newConfig.phase = PHASE_SAMPLES[Math.floor(Math.random() * PHASE_SAMPLES.length)];
             newConfig.rodLength = newConfig.couplerLength;
+        } else if (newConfig.type === '6bar') {
+            newConfig.speed1 = 1;
+            newConfig.speed2 = 1;
+            newConfig.phase = 0;
+            newConfig.rodLength = newConfig.rodLength || Math.max(60, newConfig.couplerLength * 0.65);
+            newConfig.assemblyMode = 'open';
         } else if (newConfig.type === 'rack-pinion') {
             newConfig.groundAngle = 90;
             newConfig.groundLength = 0;
@@ -663,6 +712,10 @@ export const mutateConfig = (config: MechanismConfig, temperature: number = 1.0,
             newConfig.phase = PHASE_SAMPLES[Math.floor(Math.random() * PHASE_SAMPLES.length)];
         }
     }
+    if (newConfig.type === '6bar') {
+        if (Math.random() < 0.65) newConfig.rodLength = mutate(newConfig.rodLength || newConfig.couplerLength * 0.65);
+        newConfig.assemblyMode = 'open';
+    }
 
     if (Math.random() < 0.7) newConfig.sliderOffset = mutateAbs(newConfig.sliderOffset, 30);
     if (Math.random() < 0.7) newConfig.couplerPointAngle = mutateAbs(newConfig.couplerPointAngle, 60);
@@ -676,12 +729,22 @@ export const mutateConfig = (config: MechanismConfig, temperature: number = 1.0,
     if (newConfig.type === '5bar') {
         enforceFiveBarConstraints(newConfig);
     }
+    if (newConfig.type === '6bar') {
+        enforceSixBarConstraints(newConfig);
+    }
     if (newConfig.type === 'gear' || newConfig.type === 'planetary_gear') {
-        newConfig.groundLength = newConfig.crankLength + newConfig.rockerLength;
         newConfig.couplerLength = 0;
-        newConfig.gearRatio = newConfig.type === 'gear'
-            ? gearPairOutputRatio(newConfig.crankLength, newConfig.rockerLength)
-            : planetaryPlanetSpinRatio(newConfig.crankLength, newConfig.rockerLength);
+        if (newConfig.type === 'gear') {
+            const idlers = Array.isArray(newConfig.gearTrainRadii) && newConfig.gearTrainRadii.length > 2
+                ? newConfig.gearTrainRadii.slice(1, -1)
+                : [];
+            newConfig.gearTrainRadii = [newConfig.crankLength, ...idlers, newConfig.rockerLength];
+            newConfig.groundLength = gearTrainPitchCenterDistance(newConfig);
+            newConfig.gearRatio = gearTrainOutputRatio(newConfig);
+        } else {
+            newConfig.groundLength = newConfig.crankLength + newConfig.rockerLength;
+            newConfig.gearRatio = planetaryPlanetSpinRatio(newConfig.crankLength, newConfig.rockerLength);
+        }
         newConfig.speed2 = newConfig.gearRatio ?? newConfig.speed2;
     }
     if (newConfig.type === 'rack-pinion') {

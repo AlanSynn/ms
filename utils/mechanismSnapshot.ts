@@ -43,6 +43,9 @@ export interface MechanismSnapshotMechanism {
     speed1: number;
     speed2: number;
     gearRatio?: number;
+    gearTrainRadii?: number[];
+    driverGroupId?: string;
+    driverPhaseOffset: number;
     rodLength?: number;
     phase: number;
     source?: MechanismConfig['source'];
@@ -157,6 +160,9 @@ const snapshotMechanism = (mechanism: MechanismConfig): MechanismSnapshotMechani
     speed1: finite(mechanism.speed1, 1),
     speed2: finite(mechanism.speed2, 1),
     gearRatio: mechanism.gearRatio,
+    gearTrainRadii: mechanism.gearTrainRadii?.map(value => finite(value, 1)),
+    driverGroupId: mechanism.driverGroupId,
+    driverPhaseOffset: finite(mechanism.driverPhaseOffset),
     rodLength: mechanism.rodLength,
     phase: finite(mechanism.phase),
     source: mechanism.source,
@@ -202,6 +208,11 @@ export const buildMechanismSnapshot = (project: ProjectState, mechanismId: strin
         groundAngle: normalizedMechanism.groundAngle,
         speed1: normalizedMechanism.speed1,
         speed2: normalizedMechanism.speed2,
+        gearRatio: normalizedMechanism.gearRatio,
+        gearTrainRadii: normalizedMechanism.gearTrainRadii,
+        driverGroupId: normalizedMechanism.driverGroupId,
+        driverPhaseOffset: normalizedMechanism.driverPhaseOffset,
+        rodLength: normalizedMechanism.rodLength,
         phase: normalizedMechanism.phase
     };
     const sourceIds: MechanismSnapshotSourceIds = {

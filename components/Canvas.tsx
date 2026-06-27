@@ -308,7 +308,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 const dy = p.y - state.p1.y;
                 const newAngle = toDeg(Math.atan2(dy, dx));
 
-                if (m.type === '4bar' || m.type === '5bar' || m.type === 'gear') {
+                if (m.type === '4bar' || m.type === '5bar' || m.type === '6bar' || m.type === 'gear') {
                     const newGround = Math.hypot(dx, dy);
                     updateMechanism(m.id, { groundLength: newGround, groundAngle: newAngle });
                 } else {
@@ -322,8 +322,12 @@ export const Canvas: React.FC<CanvasProps> = ({
                 setAngle(newAngle);
             }
             else if (dragTarget.type === 'Aux') {
-                const newRadius = dist(state.p2, p);
-                updateMechanism(m.id, { rockerLength: newRadius });
+                if (m.type === '6bar') {
+                    updateMechanism(m.id, { rodLength: dist(state.j2, p), couplerPointDist: dist(state.p2, p) });
+                } else {
+                    const newRadius = dist(state.p2, p);
+                    updateMechanism(m.id, { rockerLength: newRadius });
+                }
             }
             else if (dragTarget.type === 'J2') {
                 if (m.type === '4bar') {
@@ -342,6 +346,11 @@ export const Canvas: React.FC<CanvasProps> = ({
                     const newCoupler = dist(state.j1, p);
                     const newRod = state.aux ? dist(state.aux, p) : 100;
                     updateMechanism(m.id, { couplerLength: newCoupler, rodLength: newRod });
+                } else if (m.type === '6bar') {
+                    const newCoupler = dist(state.j1, p);
+                    const newRocker = dist(state.p2, p);
+                    const newDyad = state.aux ? dist(state.aux, p) : (m.rodLength ?? 95);
+                    updateMechanism(m.id, { couplerLength: newCoupler, rockerLength: newRocker, rodLength: newDyad });
                 } else if (m.type === 'quick-return' || m.type === 'gear' || m.type === 'planetary_gear') {
                     updateMechanism(m.id, { rockerLength: dist(state.p2, p) });
                 }
@@ -351,6 +360,8 @@ export const Canvas: React.FC<CanvasProps> = ({
                     if (m.type === '5bar') {
                         const newExtension = dist(state.j2, p);
                         updateMechanism(m.id, { couplerPointDist: newExtension });
+                    } else if (m.type === '6bar') {
+                        updateMechanism(m.id, { rodLength: dist(state.j2, p), couplerPointDist: dist(state.p2, p) });
                     } else if (m.type === 'gear' || m.type === 'planetary_gear') {
                         const baseAngle = Math.atan2(state.j2.y - state.p2.y, state.j2.x - state.p2.x);
                         const mouseAngle = Math.atan2(p.y - state.j2.y, p.x - state.j2.x);
@@ -524,6 +535,19 @@ export const Canvas: React.FC<CanvasProps> = ({
 
                                                 <circle cx={p2.x} cy={p2.y} r={8} fill="transparent" stroke="#94a3b8" strokeWidth="2" className="cursor-grab" />
                                                 <circle cx={j2.x} cy={j2.y} r={5} fill="white" stroke="#334155" strokeWidth="2" className="cursor-grab" />
+                                            </>
+                                        )}
+
+                                        {m.type === '6bar' && aux && (
+                                            <>
+                                                <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="#cbd5e1" strokeWidth="12" strokeLinecap="round" />
+                                                <line x1={p2.x} y1={p2.y} x2={j2.x} y2={j2.y} stroke="#475569" strokeWidth="8" strokeLinecap="round" />
+                                                <line x1={j1.x} y1={j1.y} x2={j2.x} y2={j2.y} stroke={color} strokeWidth="8" strokeLinecap="round" />
+                                                <line x1={j2.x} y1={j2.y} x2={aux.x} y2={aux.y} stroke="#64748b" strokeWidth="6" strokeLinecap="round" />
+                                                <line x1={p2.x} y1={p2.y} x2={aux.x} y2={aux.y} stroke="#94a3b8" strokeWidth="6" strokeLinecap="round" />
+                                                <circle cx={p2.x} cy={p2.y} r={8} fill="#94a3b8" stroke="white" strokeWidth="2" className="cursor-grab" />
+                                                <circle cx={j2.x} cy={j2.y} r={6} fill="white" stroke="#334155" strokeWidth="2" className="cursor-grab" />
+                                                <circle cx={aux.x} cy={aux.y} r={5} fill="white" stroke={color} strokeWidth="2" className="cursor-grab" />
                                             </>
                                         )}
 

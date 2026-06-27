@@ -60,6 +60,11 @@ export const sanitizeMechanismRuntime = (mechanism: MechanismConfig): MechanismC
     speed1: finiteNumber(mechanism.speed1, 1),
     speed2: finiteNumber(mechanism.speed2, 1),
     gearRatio: mechanism.gearRatio === undefined ? undefined : finiteNumber(mechanism.gearRatio, 1),
+    gearTrainRadii: Array.isArray(mechanism.gearTrainRadii)
+        ? mechanism.gearTrainRadii.map(value => Math.max(1, Math.abs(finiteNumber(value, 1)))).filter(Number.isFinite).slice(0, 8)
+        : mechanism.gearTrainRadii,
+    driverGroupId: typeof mechanism.driverGroupId === 'string' && mechanism.driverGroupId.trim() ? mechanism.driverGroupId.slice(0, 80) : undefined,
+    driverPhaseOffset: finiteNumber(mechanism.driverPhaseOffset, 0),
     rodLength: mechanism.rodLength === undefined ? undefined : finiteNumber(mechanism.rodLength, 0),
     phase: finiteNumber(mechanism.phase, 0)
 });

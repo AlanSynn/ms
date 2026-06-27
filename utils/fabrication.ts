@@ -1,5 +1,5 @@
 import { BodyPartLayer, FabricationIssue, FabricationPackage, FabricationRecipe, MechanismConfig, Point, ProjectState } from '../types';
-import { calculateLinkage, gearPairOutputRatio, generateCurvePoints, planetaryPlanetSpinRatio } from './kinematics';
+import { calculateLinkage, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, generateCurvePoints, planetaryPlanetSpinRatio } from './kinematics';
 import { boardToScene, pathFromPoints, SCENE_PX_PER_MM, sceneToBoardRaw, sceneToSvg, sceneBoundsForSheet } from './coordinates';
 import { mechanismRequiredParts } from './project';
 import { mechanismBindingWarnings, preferredMotionJointId } from './motion';
@@ -200,12 +200,24 @@ const layer = (label: string, role: FabricationStackLayer['role']): FabricationS
 
 export const fabricationBaseLayer = (): FabricationStackLayer => layer('Base board', 'base');
 
-export const fabricationStackForMechanism = (mechanism: Pick<MechanismConfig, 'type'>): FabricationStackLayer[] => {
+export const fabricationStackForMechanism = (mechanism: Pick<MechanismConfig, 'type'> & Partial<Pick<MechanismConfig, 'gearTrainRadii'>>): FabricationStackLayer[] => {
     const linked = (...middle: FabricationStackLayer[]) => [layer('Back Clip', 'clip'), ...middle, layer('Front Clip', 'clip')];
     const spacer = () => layer(FABRICATION_SPACER_SPEC.label, 'spacer');
     switch (mechanism.type) {
-        case 'gear':
-            return linked(layer('Drive gear', 'gear'), spacer(), layer('Drive linkage', 'linkage'), spacer(), layer('Output gear', 'gear'), spacer(), layer('Output linkage', 'linkage'));
+        case 'gear': {
+            const radii = gearTrainPitchRadii({
+                crankLength: 50 * SCENE_PX_PER_MM,
+                rockerLength: 30 * SCENE_PX_PER_MM,
+                gearTrainRadii: mechanism.gearTrainRadii
+            });
+            if (radii.length <= 2) {
+                return linked(layer('Drive gear', 'gear'), spacer(), layer('Drive linkage', 'linkage'), spacer(), layer('Output gear', 'gear'), spacer(), layer('Output linkage', 'linkage'));
+            }
+            const gearLayers: FabricationStackLayer[] = [layer('Drive gear', 'gear'), spacer(), layer('Drive linkage', 'linkage')];
+            radii.slice(1, -1).forEach((_, index) => gearLayers.push(spacer(), layer(`Idler gear ${index + 1}`, 'gear')));
+            gearLayers.push(spacer(), layer('Output gear', 'gear'), spacer(), layer('Output linkage', 'linkage'));
+            return linked(...gearLayers);
+        }
         case 'planetary_gear':
             return linked(layer('Ring gear', 'gear'), spacer(), layer('Carrier linkage', 'linkage'), spacer(), layer('Planet gear', 'gear'), spacer(), layer('Sun gear', 'gear'));
         case 'rack-pinion':
@@ -218,16 +230,18 @@ export const fabricationStackForMechanism = (mechanism: Pick<MechanismConfig, 't
             return linked(layer('Crank linkage', 'linkage'), spacer(), layer('Slider guide', 'guide'), spacer(), layer('Output linkage', 'linkage'));
         case '5bar':
             return linked(layer('Left timing gear', 'gear'), spacer(), layer('Left crank linkage', 'linkage'), spacer(), layer('Right timing gear', 'gear'), spacer(), layer('Right crank linkage', 'linkage'), spacer(), layer('Center coupler', 'linkage'));
+        case '6bar':
+            return linked(layer('Input linkage', 'linkage'), spacer(), layer('Coupler linkage', 'linkage'), spacer(), layer('Output rocker', 'linkage'), spacer(), layer('Dyad link', 'linkage'), spacer(), layer('Follower link', 'linkage'));
         default:
             return linked(layer('Input linkage', 'linkage'), spacer(), layer('Coupler linkage', 'linkage'), spacer(), layer('Output linkage', 'linkage'));
     }
 };
 
-export const fabricationStackSummary = (mechanism: Pick<MechanismConfig, 'type'>) => fabricationStackForMechanism(mechanism).map(item => item.label).join(' → ');
+export const fabricationStackSummary = (mechanism: Pick<MechanismConfig, 'type'> & Partial<Pick<MechanismConfig, 'gearTrainRadii'>>) => fabricationStackForMechanism(mechanism).map(item => item.label).join(' → ');
 
 const isMovingStackLayer = (item: FabricationStackLayer) => !['clip', 'spacer', 'base'].includes(item.role);
 
-export const validateFabricationStack = (mechanism: Pick<MechanismConfig, 'type'> | FabricationStackLayer[]) => {
+export const validateFabricationStack = (mechanism: (Pick<MechanismConfig, 'type'> & Partial<Pick<MechanismConfig, 'gearTrainRadii'>>) | FabricationStackLayer[]) => {
     const stack = Array.isArray(mechanism) ? mechanism : fabricationStackForMechanism(mechanism);
     const errors: string[] = [];
     if (stack.some(item => item.role === 'base')) errors.push('moving stack must not include Base board');
@@ -249,7 +263,7 @@ export const validateFabricationStack = (mechanism: Pick<MechanismConfig, 'type'
 
 const renderKindForRole = (role: FabricationStackLayer['role']): FabricationRenderKind => role === 'base' ? 'base' : role;
 
-export const fabricationRenderPlanForMechanism = (mechanism: Pick<MechanismConfig, 'type'>): FabricationRenderPlan => {
+export const fabricationRenderPlanForMechanism = (mechanism: Pick<MechanismConfig, 'type'> & Partial<Pick<MechanismConfig, 'gearTrainRadii'>>): FabricationRenderPlan => {
     const stack = fabricationStackForMechanism(mechanism);
     const validationErrors = validateFabricationStack(stack);
     const occurrenceByRole = new Map<FabricationStackLayer['role'], number>();
@@ -315,7 +329,7 @@ export const prefabAssemblySteps = (mechanism: MechanismConfig, boardCoordinate:
 export const sampleFeasibleRange = (mechanism: MechanismConfig, samples = 96) => {
     let valid = 0;
     const validSamples: boolean[] = [];
-    const loops = mechanism.type === '5bar' || mechanism.type === 'planetary_gear' ? 8 : 1;
+    const loops = mechanism.type === '5bar' || mechanism.type === '6bar' || mechanism.type === 'planetary_gear' ? 8 : 1;
     const totalSamples = samples * loops;
     for (let i = 0; i <= totalSamples; i++) {
         const angle = (i / samples) * Math.PI * 2;
@@ -380,14 +394,14 @@ export const validateForFabrication = (project: ProjectState) => {
             else if (m.targetPartId && path.partId !== m.targetPartId) add('error', `${m.id}: target path ${m.targetPathId} belongs to ${path.partId}, not ${m.targetPartId}.`, { mechanismId: m.id, pathId: m.targetPathId, partId: m.targetPartId, recoveryStage: 'design', recoveryAction: 'Rebind target path' });
         }
         const physicalNumbers = [m.crankLength, m.couplerLength, m.groundLength, m.rockerLength, m.sliderOffset, m.couplerPointDist, m.couplerPointAngle];
-        if (m.type === '5bar' || m.type === 'piston') physicalNumbers.push(m.rodLength ?? Number.NaN);
+        if (m.type === '5bar' || m.type === '6bar' || m.type === 'piston') physicalNumbers.push(m.rodLength ?? Number.NaN);
         if (m.type === 'gear' || m.type === 'planetary_gear') physicalNumbers.push(m.gearRatio ?? Number.NaN, m.speed2 ?? Number.NaN);
         if (!physicalNumbers.every(Number.isFinite)) add('error', `${m.id}: non-finite physical dimension.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Fix mechanism dimensions' });
         if ((m.type === 'gear' || m.type === 'planetary_gear') && (m.gearRatio ?? 0) === 0) add('error', `${m.id}: gear ratio cannot be zero.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Choose a non-zero gear ratio' });
         if (m.type === 'gear' || m.type === 'planetary_gear') {
-            const expectedCenterDistance = m.crankLength + m.rockerLength;
+            const expectedCenterDistance = m.type === 'gear' ? gearTrainPitchCenterDistance(m) : m.crankLength + m.rockerLength;
             if (Math.abs(m.groundLength - expectedCenterDistance) > Math.max(1, expectedCenterDistance * 0.03)) {
-                add(fabricationSeverity, `${m.id}: gear pitch centers must equal input radius + output radius.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Snap gear center distance to pitch radii' });
+                add(fabricationSeverity, `${m.id}: gear pitch centers must equal the ordered pitch train adjacent-radius sum.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Snap gear center distance to pitch radii' });
             }
         }
         if (m.type === 'rack-pinion' && Math.abs(m.sliderOffset) < Math.max(2, m.crankLength * 0.8)) add('warning', `${m.id}: rack guide is too close to the pinion pitch circle.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Increase rack offset or reduce pinion radius' });
@@ -449,7 +463,7 @@ const createRecipe = (project: ProjectState, mechanism: MechanismConfig): Fabric
                 : mechanism.type === 'rack-pinion'
                     ? `Mesh the pinion gear with the toothed rack; keep the rack guide offset ${mechanism.sliderOffset.toFixed(0)} scene units from the axle and add end stops.`
                     : mechanism.type === 'gear' || mechanism.type === 'planetary_gear'
-                        ? `Mesh gears at their pitch centers; physical pitch ratio ${mechanism.type === 'planetary_gear' ? planetaryPlanetSpinRatio(mechanism.crankLength, mechanism.rockerLength).toFixed(2) : gearPairOutputRatio(mechanism.crankLength, mechanism.rockerLength).toFixed(2)} controls output direction.`
+                        ? `Mesh gears at their pitch centers; physical pitch ratio ${mechanism.type === 'planetary_gear' ? planetaryPlanetSpinRatio(mechanism.crankLength, mechanism.rockerLength).toFixed(2) : gearTrainOutputRatio(mechanism).toFixed(2)} controls output direction.`
                         : `Install ${mechanism.type} links with crank ${mechanism.crankLength.toFixed(0)} and coupler ${mechanism.couplerLength.toFixed(0)} scene units.`,
             targetPart ? `Connect output to ${targetPart.name} at anchor ${targetAnchorJointId ?? targetPart.anchorJointId} and follow path ${targetPath?.id ?? 'unassigned'}.` : 'Connect output to selected character part or leave as standalone preview.',
             warnings.length ? `Resolve warning before cutting: ${warnings.join('; ')}` : 'Run preview once, then cut and assemble.'

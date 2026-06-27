@@ -1,6 +1,6 @@
 
 import { GlobalConfig, MechanismConfig, Point } from '../types';
-import { calculateLinkage, gearPairOutputRatio, generateCurvePoints } from './kinematics';
+import { calculateLinkage, gearTrainCenters, gearTrainOutputRatio, gearTrainPitchRadii, generateCurvePoints } from './kinematics';
 import { SCENE_PX_PER_MM, SCENE_VIEW, sceneToSvg } from './coordinates';
 import { finiteNumber, sanitizeHexColor, sanitizeMechanismRuntime, svgNumber } from './sanitize';
 import { fabricationGearPathD } from './fabrication';
@@ -82,6 +82,14 @@ export const generateDXF = (config: GlobalConfig, angle: number): string => {
             content += dxfLine(j2.x, j2.y, effector.x, effector.y, MECH_LAYER, 1);
             content += dxfCircle(p2.x, p2.y, 5, "JOINTS", 7);
         }
+        else if (m.type === '6bar' && aux) {
+            content += dxfLine(p1.x, p1.y, p2.x, p2.y, "GROUND", 8);
+            content += dxfLine(p2.x, p2.y, j2.x, j2.y, MECH_LAYER, 1);
+            content += dxfLine(j1.x, j1.y, j2.x, j2.y, MECH_LAYER, 1);
+            content += dxfLine(j2.x, j2.y, aux.x, aux.y, MECH_LAYER, 1);
+            content += dxfLine(p2.x, p2.y, aux.x, aux.y, MECH_LAYER, 1);
+            content += dxfCircle(p2.x, p2.y, 5, "JOINTS", 7);
+        }
         else if (m.type === 'piston') {
             content += dxfLine(j1.x, j1.y, j2.x, j2.y, MECH_LAYER, 1);
             // Track line
@@ -94,6 +102,9 @@ export const generateDXF = (config: GlobalConfig, angle: number): string => {
             content += dxfLine(j2.x - 40, j2.y, j2.x + 40, j2.y, MECH_LAYER, 1); // Plate
         }
         else if (m.type === 'gear') {
+            gearTrainCenters(m).forEach((center, index) => {
+                content += dxfCircle(center.x, center.y, gearTrainPitchRadii(m)[index] ?? m.rockerLength, `${MECH_LAYER}_GEARS`, 5);
+            });
             content += dxfLine(j1.x, j1.y, effector.x, effector.y, MECH_LAYER, 1);
             content += dxfLine(j2.x, j2.y, effector.x, effector.y, MECH_LAYER, 1);
         }
@@ -148,10 +159,23 @@ export const generateSVG = (config: GlobalConfig, angle: number): string => {
         svg += `</g>`;
 
         // Output Gear for 5-bar / meshed gear train
-        if ((m.type === '5bar' && aux) || m.type === 'gear') {
-             const rot = m.type === 'gear'
-                ? crankDeg * gearPairOutputRatio(m.crankLength, m.rockerLength) + ((m.phase ?? 0) * 180 / Math.PI)
-                : (crankDeg * (m.speed2 ?? (m.gearRatio || 1))) + ((m.phase ?? 0) * 180 / Math.PI);
+        if (m.type === 'gear') {
+             const centers = gearTrainCenters(m);
+             const radii = gearTrainPitchRadii(m);
+             centers.slice(1).forEach((center, index) => {
+                 const gearIndex = index + 1;
+                 const ratio = gearIndex === radii.length - 1
+                    ? gearTrainOutputRatio(m)
+                    : (gearIndex % 2 === 1 ? -1 : 1) * radii[0] / radii[gearIndex];
+                 const rot = crankDeg * ratio + (gearIndex === radii.length - 1 ? ((m.phase ?? 0) * 180 / Math.PI) : 0);
+                 svg += `<g transform="translate(${svgNumber(center.x)}, ${svgNumber(center.y)}) rotate(${svgNumber(rot)})">`;
+                 svg += `<path d="${gearPathD(finiteNumber(radii[gearIndex], 1))}" fill="#f59e0b" stroke="#b45309" stroke-width="2" />`;
+                 svg += `<circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />`;
+                 svg += `</g>`;
+             });
+        }
+        else if (m.type === '5bar' && aux) {
+             const rot = (crankDeg * (m.speed2 ?? (m.gearRatio || 1))) + ((m.phase ?? 0) * 180 / Math.PI);
              svg += `<g transform="translate(${svgNumber(p2.x)}, ${svgNumber(p2.y)}) rotate(${svgNumber(rot)})">`;
              svg += `<path d="${gearPathD(finiteNumber(m.rockerLength, 1))}" fill="#f59e0b" stroke="#b45309" stroke-width="2" />`;
              svg += `<circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />`;
@@ -171,7 +195,14 @@ export const generateSVG = (config: GlobalConfig, angle: number): string => {
         else if (m.type === '5bar' && aux) {
              svg += `<line x1="${svgNumber(p2.x)}" y1="${svgNumber(p2.y)}" x2="${svgNumber(aux.x)}" y2="${svgNumber(aux.y)}" stroke="#78350f" stroke-width="4" stroke-linecap="round" />`;
              svg += `<line x1="${svgNumber(j1.x)}" y1="${svgNumber(j1.y)}" x2="${svgNumber(effector.x)}" y2="${svgNumber(effector.y)}" stroke="#475569" stroke-width="6" stroke-linecap="round" />`;
-             svg += `<line x1="${svgNumber(aux.x)}" y1="${svgNumber(aux.y)}" x2="${svgNumber(j2.x)}" y2="${svgNumber(j2.y)}" stroke="#475569" stroke-width="6" stroke-linecap="round" />`;
+	             svg += `<line x1="${svgNumber(aux.x)}" y1="${svgNumber(aux.y)}" x2="${svgNumber(j2.x)}" y2="${svgNumber(j2.y)}" stroke="#475569" stroke-width="6" stroke-linecap="round" />`;
+	        }
+        else if (m.type === '6bar' && aux) {
+            svg += `<line x1="${svgNumber(p1.x)}" y1="${svgNumber(p1.y)}" x2="${svgNumber(p2.x)}" y2="${svgNumber(p2.y)}" stroke="#cbd5e1" stroke-width="12" stroke-linecap="round" />`;
+            svg += `<line x1="${svgNumber(p2.x)}" y1="${svgNumber(p2.y)}" x2="${svgNumber(j2.x)}" y2="${svgNumber(j2.y)}" stroke="#475569" stroke-width="8" stroke-linecap="round" />`;
+            svg += `<line x1="${svgNumber(j1.x)}" y1="${svgNumber(j1.y)}" x2="${svgNumber(j2.x)}" y2="${svgNumber(j2.y)}" stroke="${color}" stroke-width="8" stroke-linecap="round" />`;
+            svg += `<line x1="${svgNumber(j2.x)}" y1="${svgNumber(j2.y)}" x2="${svgNumber(aux.x)}" y2="${svgNumber(aux.y)}" stroke="#64748b" stroke-width="6" stroke-linecap="round" />`;
+            svg += `<line x1="${svgNumber(p2.x)}" y1="${svgNumber(p2.y)}" x2="${svgNumber(aux.x)}" y2="${svgNumber(aux.y)}" stroke="#94a3b8" stroke-width="6" stroke-linecap="round" />`;
         }
         else if (m.type === 'piston') {
              svg += `<path d="M ${svgNumber(j1.x)} ${svgNumber(j1.y)} L ${svgNumber(j2.x)} ${svgNumber(j2.y)} L ${svgNumber(effector.x)} ${svgNumber(effector.y)} Z" fill="${color}" fill-opacity="0.2" stroke="${color}" stroke-width="1" />`;

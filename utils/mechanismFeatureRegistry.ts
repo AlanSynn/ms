@@ -43,11 +43,11 @@ export interface MechanismFeatureContract {
     constraint: string;
     authorable: boolean;
     defaults: (id?: string) => MechanismConfig;
-    requiredParts: (mechanism: Pick<MechanismConfig, 'type'>) => Array<{ name: string; quantity: number }>;
+    requiredParts: (mechanism: MechanismConfig) => Array<{ name: string; quantity: number }>;
     sampleKinematics: (mechanism: MechanismConfig, angleRad: number) => JointState;
     sampleFeasibleRange: (mechanism: MechanismConfig, samples?: number) => MechanismFeasibleRange;
-    fabricationStack: (mechanism: Pick<MechanismConfig, 'type'>) => FabricationStackLayer[];
-    fabricationPlan: (mechanism: Pick<MechanismConfig, 'type'>) => FabricationRenderPlan;
+    fabricationStack: (mechanism: MechanismConfig) => FabricationStackLayer[];
+    fabricationPlan: (mechanism: MechanismConfig) => FabricationRenderPlan;
     interactionPolicy: (mechanism: MechanismConfig) => MechanismInteractionPolicy;
     projectionHints: (mechanism: MechanismConfig) => MechanismProjectionHint[];
     physicsHints: (mechanism: MechanismConfig) => MechanismPhysicsHint[];
@@ -68,6 +68,7 @@ const roleForType = (type: MechanismType): MechanismFeatureRole => {
         case 'cam':
             return 'cam-follower';
         case '5bar':
+        case '6bar':
             return 'compound';
         default:
             return 'linkage';
@@ -94,11 +95,13 @@ const editableParametersForType = (type: MechanismType): Array<keyof MechanismCo
             return ['crankLength', 'sliderOffset', 'rodLength', 'rockerLength', 'phase'];
         case 'gear':
         case 'planetary_gear':
-            return ['crankLength', 'groundLength', 'rockerLength', 'speed2', 'phase'];
+            return ['crankLength', 'groundLength', 'rockerLength', 'gearTrainRadii', 'driverGroupId', 'driverPhaseOffset', 'phase'];
         case 'cam':
             return ['crankLength', 'rockerLength', 'sliderOffset', 'phase'];
         case '5bar':
             return [...base, 'rodLength', 'speed1', 'speed2'];
+        case '6bar':
+            return [...base, 'rodLength'];
         default:
             return base;
     }
@@ -114,6 +117,7 @@ const draggableHandlesForType = (type: MechanismType): MechanismDragHandle[] => 
         case 'gear':
             return [...base, 'P2', 'J2', 'Effector'];
         case '5bar':
+        case '6bar':
             return [...base, 'P2', 'J2', 'Aux', 'Effector'];
         case 'cam':
             return [...base, 'P2'];

@@ -1029,7 +1029,7 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await openWavingArmTemplate(page);
   await page.getByRole('button', { name: /Mechanism Foundry/i }).click();
   await expect(page.getByRole('heading', { name: 'Mechanism Foundry' })).toBeVisible();
-  await expect(page.locator('[data-testid^="foundry-mini-simulation-"]')).toHaveCount(9);
+  await expect(page.locator('[data-testid^="foundry-mini-simulation-"]')).toHaveCount(10);
   await expect(page.getByTestId('foundry-three-canvas')).toBeVisible();
   const threeScene = page.getByTestId('foundry-camera-rig');
   await expect(threeScene).toHaveAttribute('data-three-renderer', 'webgl');
@@ -1122,13 +1122,14 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
     yoke: [['data-three-slot-count', 2], ['data-three-hole-count', 4]],
     'quick-return': [['data-three-slot-count', 1], ['data-three-hole-count', 4]],
     '5bar': [['data-three-gear-count', 2], ['data-three-part-count', 4]],
+    '6bar': [['data-three-part-count', 7], ['data-three-hole-count', 22]],
     cam: [['data-three-cam-count', 1], ['data-three-follower-count', 1]],
     'rack-pinion': [['data-three-gear-count', 1], ['data-three-rack-count', 1], ['data-three-slot-count', 1], ['data-three-end-stop-count', 2]],
     gear: [['data-three-gear-count', 2], ['data-three-hole-count', 8]],
     planetary_gear: [['data-three-gear-count', 2], ['data-three-hole-count', 8]]
   };
 
-  for (const type of ['piston', 'yoke', 'quick-return', '5bar', 'cam', 'rack-pinion', 'gear', 'planetary_gear', '4bar']) {
+  for (const type of ['piston', 'yoke', 'quick-return', '5bar', '6bar', 'cam', 'rack-pinion', 'gear', 'planetary_gear', '4bar']) {
     await page.getByLabel('Foundry mechanism type').selectOption(type);
     await expect(threeScene, `${type} has its own physical 3D preview template`).toHaveAttribute('data-mechanism-type', type);
     await expect(threeScene, `${type} uses the fabrication stack as the 3D render source`).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
@@ -1943,13 +1944,14 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
     yoke: [['data-three-slot-count', 2], ['data-three-follower-count', 1]],
     'quick-return': [['data-three-slot-count', 1], ['data-three-mechanism-hole-count', 11]],
     '5bar': [['data-three-gear-count', 2], ['data-three-mechanism-link-count', 6]],
+    '6bar': [['data-three-mechanism-link-count', 7], ['data-three-mechanism-hole-count', 22]],
     cam: [['data-three-cam-count', 1], ['data-three-follower-count', 1]],
     'rack-pinion': [['data-three-gear-count', 1], ['data-three-rack-count', 1], ['data-three-slot-count', 1], ['data-three-end-stop-count', 2]],
     gear: [['data-three-gear-count', 2], ['data-three-mechanism-hole-count', 14]],
     planetary_gear: [['data-three-gear-count', 3], ['data-three-mechanism-hole-count', 14]]
   };
 
-  for (const type of ['4bar', 'piston', 'yoke', 'quick-return', '5bar', 'cam', 'rack-pinion', 'gear', 'planetary_gear']) {
+  for (const type of ['4bar', 'piston', 'yoke', 'quick-return', '5bar', '6bar', 'cam', 'rack-pinion', 'gear', 'planetary_gear']) {
     const before = Object.fromEntries(await Promise.all(centerPhysicalMarkers[type].map(async ([attr]) => [attr, Number(await designPuppet.getAttribute(attr)) || 0])));
     await page.getByRole('button', { name: type, exact: true }).click();
     await expect(designPuppet, `${type} design renderer uses the shared fabrication stack`).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');

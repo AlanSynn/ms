@@ -15,6 +15,7 @@ export const ALL_MECHANISM_TYPES: readonly MechanismType[] = [
     'yoke',
     'quick-return',
     '5bar',
+    '6bar',
     'cam',
     'rack-pinion',
     'gear',
@@ -65,6 +66,13 @@ export const MECHANISM_TEMPLATE_LIBRARY: Record<MechanismType, MechanismTemplate
         sense: 'two cranks combine phases for wider two-arm tracing',
         goodFor: 'complex foot or hand trajectories',
         constraint: 'phase and second speed decide path shape and collision risk',
+        authorable: true
+    },
+    '6bar': {
+        label: 'Six-bar linkage',
+        sense: 'a four-bar base drives a second dyad so a follower point traces richer compound arcs',
+        goodFor: 'hands, feet, and character parts that need more nuanced paths than a simple four-bar',
+        constraint: 'base A-D, input A-B, coupler B-C, rocker C-D, dyad C-E, and follower D-E must all stay pinned',
         authorable: true
     },
     cam: {

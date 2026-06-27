@@ -1,4 +1,4 @@
-export type MechanismType = 'crank' | '4bar' | 'piston' | 'yoke' | 'quick-return' | '5bar' | 'cam' | 'rack-pinion' | 'gear' | 'planetary_gear';
+export type MechanismType = 'crank' | '4bar' | 'piston' | 'yoke' | 'quick-return' | '5bar' | '6bar' | 'cam' | 'rack-pinion' | 'gear' | 'planetary_gear';
 export type AppStage = 'character' | 'path' | 'foundry' | 'design' | 'blueprint' | 'options';
 
 export interface Point {
@@ -51,6 +51,13 @@ export interface MechanismConfig {
     speed1?: number;
     speed2?: number;
     gearRatio?: number;
+    /**
+     * Ordered pitch radii for an external spur gear train.
+     * Two entries are the legacy drive/output pair; extra entries are idlers.
+     */
+    gearTrainRadii?: number[];
+    driverGroupId?: string;
+    driverPhaseOffset?: number;
     rodLength?: number;
     phase?: number;
 

@@ -22,6 +22,52 @@ const safeRadiusRatio = (numerator: number, denominator: number, fallback: numbe
 export const gearPairOutputRatio = (inputPitchRadius: number, outputPitchRadius: number) =>
     -safeRadiusRatio(inputPitchRadius, outputPitchRadius, 1);
 
+const positiveRadius = (value: number, fallback = 1) => {
+    const radius = Math.abs(Number.isFinite(value) ? value : fallback);
+    return Math.max(1, radius);
+};
+
+export const gearTrainPitchRadii = (config: Pick<MechanismConfig, 'crankLength' | 'rockerLength' | 'gearTrainRadii'>) => {
+    const explicit = Array.isArray(config.gearTrainRadii)
+        ? config.gearTrainRadii
+            .filter(value => Number.isFinite(value) && Math.abs(value) >= 1)
+            .slice(0, 8)
+            .map(value => positiveRadius(value))
+        : [];
+    return explicit.length >= 2
+        ? [positiveRadius(config.crankLength), ...explicit.slice(1, -1), positiveRadius(config.rockerLength)]
+        : [positiveRadius(config.crankLength), positiveRadius(config.rockerLength)];
+};
+
+export const gearTrainOutputRatio = (configOrRadii: Pick<MechanismConfig, 'crankLength' | 'rockerLength' | 'gearTrainRadii'> | number[]) => {
+    const radii = (Array.isArray(configOrRadii)
+        ? configOrRadii.filter(value => Number.isFinite(value) && Math.abs(value) >= 1).map(value => positiveRadius(value))
+        : gearTrainPitchRadii(configOrRadii));
+    if (radii.length < 2) return gearPairOutputRatio(radii[0] ?? 1, radii[1] ?? 1);
+    const meshCount = radii.length - 1;
+    const sign = meshCount % 2 === 1 ? -1 : 1;
+    return sign * safeRadiusRatio(radii[0], radii.at(-1) ?? radii[0], 1);
+};
+
+export const gearTrainPitchCenterDistance = (config: Pick<MechanismConfig, 'crankLength' | 'rockerLength' | 'gearTrainRadii'>) => {
+    const radii = gearTrainPitchRadii(config);
+    return radii.slice(1).reduce((sum, radius, index) => sum + radii[index] + radius, 0);
+};
+
+export const gearTrainCenters = (config: Pick<MechanismConfig, 'anchorX' | 'anchorY' | 'groundAngle' | 'crankLength' | 'rockerLength' | 'gearTrainRadii'>): Point[] => {
+    const radii = gearTrainPitchRadii(config);
+    const angle = toRad(config.groundAngle ?? 0);
+    const origin = { x: config.anchorX ?? 0, y: config.anchorY ?? 0 };
+    let distance = 0;
+    return radii.map((radius, index) => {
+        if (index > 0) distance += radii[index - 1] + radius;
+        return {
+            x: origin.x + distance * Math.cos(angle),
+            y: origin.y + distance * Math.sin(angle)
+        };
+    });
+};
+
 export const planetaryPlanetSpinRatio = (sunPitchRadius: number, planetPitchRadius: number) =>
     -safeRadiusRatio(sunPitchRadius + planetPitchRadius, planetPitchRadius, 3);
 
@@ -97,7 +143,8 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
     // J1: Crank Tip
     // Rotates around P1 based on speed1
     const s1 = config.speed1 ?? 1;
-    const angle1 = crankAngleRad * s1;
+    const driverPhaseOffset = config.driverPhaseOffset ?? 0;
+    const angle1 = crankAngleRad * s1 + driverPhaseOffset;
 
     const j1: Point = {
         x: p1.x + config.crankLength * Math.cos(angle1),
@@ -157,22 +204,26 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
 
     // --- SIMPLE GEAR OUTPUT ---
     else if (config.type === 'gear') {
-        const gAngle = toRad(config.groundAngle ?? 0);
-        const p2: Point = {
-            x: p1.x + config.groundLength * Math.cos(gAngle),
-            y: p1.y + config.groundLength * Math.sin(gAngle)
+        const radii = gearTrainPitchRadii(config);
+        const centers = gearTrainCenters(config);
+        const inputRadius = radii[0];
+        const outputRadius = radii.at(-1) ?? config.rockerLength;
+        const p2 = centers.at(-1) ?? p1;
+        const drivePoint: Point = {
+            x: p1.x + inputRadius * Math.cos(angle1),
+            y: p1.y + inputRadius * Math.sin(angle1)
         };
-        const ratio = gearPairOutputRatio(config.crankLength, config.rockerLength);
+        const ratio = gearTrainOutputRatio(radii);
         const outAngle = angle1 * ratio + (config.phase ?? 0);
         const j2: Point = {
-            x: p2.x + config.rockerLength * Math.cos(outAngle),
-            y: p2.y + config.rockerLength * Math.sin(outAngle)
+            x: p2.x + outputRadius * Math.cos(outAngle),
+            y: p2.y + outputRadius * Math.sin(outAngle)
         };
         const effector: Point = {
             x: j2.x + config.couplerPointDist * Math.cos(outAngle + toRad(config.couplerPointAngle)),
             y: j2.y + config.couplerPointDist * Math.sin(outAngle + toRad(config.couplerPointAngle))
         };
-        return { p1, p2, j1, j2, effector, isValid: true };
+        return { p1, p2, j1: drivePoint, j2, aux: centers.length > 2 ? centers[1] : undefined, effector, isValid: true };
     }
 
     // --- PLANETARY GEAR / EPITROCHOID OUTPUT ---
@@ -224,6 +275,28 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
         return { p1, p2, j1, j2, effector, isValid: true };
     }
 
+    // --- 6-BAR LINKAGE ---
+    else if (config.type === '6bar') {
+        // Watt-style novice contract:
+        // A=P1 and D=P2 are fixed ground pivots. A-B, B-C, C-D form the
+        // base four-bar; C-E and D-E add the second dyad/follower.
+        const gAngle = toRad(config.groundAngle ?? 0);
+        const p2: Point = {
+            x: p1.x + config.groundLength * Math.cos(gAngle),
+            y: p1.y + config.groundLength * Math.sin(gAngle)
+        };
+
+        const j2 = getCircleIntersection(j1, config.couplerLength, p2, config.rockerLength, config.assemblyMode !== 'crossed');
+        if (!j2) return { p1, p2, j1, j2: p1, effector: p1, isValid: false };
+
+        const dyadLength = config.rodLength || 95;
+        const followerLength = config.couplerPointDist || 95;
+        const aux = getCircleIntersection(j2, dyadLength, p2, followerLength, config.assemblyMode !== 'crossed');
+        if (!aux) return { p1, p2, j1, j2, effector: p1, isValid: false };
+
+        return { p1, p2, j1, j2, aux, effector: aux, isValid: true };
+    }
+
     // --- GEARED 5-BAR LINKAGE ---
     else if (config.type === '5bar') {
         // P2: Secondary Gear Center
@@ -237,7 +310,7 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
         // Rotates at speed2 + phase offset
         const s2 = config.speed2 ?? (config.gearRatio ?? 1);
         const ph = config.phase ?? 0;
-        const angle2 = (crankAngleRad * s2) + ph;
+        const angle2 = (crankAngleRad * s2) + ph + driverPhaseOffset;
         
         // RockerLength is reused as the radius of the second gear/crank
         const aux: Point = {
@@ -376,7 +449,7 @@ export const generateCurvePoints = (config: MechanismConfig, resolution: number 
     
     // For 5-bar, use more loops to ensure closure for complex ratios
     let loops = 1;
-    if (config.type === '5bar' || config.type === 'planetary_gear') loops = 8;
+    if (config.type === '5bar' || config.type === '6bar' || config.type === 'planetary_gear') loops = 8;
 
     const res = resolution * loops;
 

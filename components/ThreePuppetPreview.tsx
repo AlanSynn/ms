@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { BodyPartLayer, CanvasViewport, MechanismConfig, MechanismType, Point, ProjectState, StandardSkeleton } from '../types';
 import { boardGridLines, defaultPhysicalKit, SCENE_PX_PER_MM, sceneBoundsForSheet } from '../utils/coordinates';
-import { calculateLinkage, camProfileScale, gearPairOutputRatio, planetaryPlanetSpinRatio } from '../utils/kinematics';
+import { calculateLinkage, camProfileScale, gearPairOutputRatio, gearTrainCenters, gearTrainOutputRatio, gearTrainPitchRadii, planetaryPlanetSpinRatio } from '../utils/kinematics';
 import { FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationRenderPlanForMechanism, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints } from '../utils/fabrication';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, pointInsideOutline } from '../utils/partGeometry';
 import { clampCanvasZoom, WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
@@ -11,10 +11,10 @@ import { DEFAULT_PUPPET_VIEWER_LAYERS, VIEWER3D_CAMERA_PRESETS, VIEWER3D_CONTRAC
 
 const VIEW_SCALE = 35;
 const THICKNESS = 0.22;
-const SUPPORTED_MECHANISM_TYPES: MechanismType[] = ['crank', '4bar', 'piston', 'yoke', 'quick-return', '5bar', 'cam', 'rack-pinion', 'gear', 'planetary_gear'];
+const SUPPORTED_MECHANISM_TYPES: MechanismType[] = ['crank', '4bar', 'piston', 'yoke', 'quick-return', '5bar', '6bar', 'cam', 'rack-pinion', 'gear', 'planetary_gear'];
 const PUPPET_CAMERA_PRESETS: Viewer3DCameraPreset[] = ['front', 'iso'];
 type RendererStatus = 'pending' | 'webgl' | 'unavailable';
-type LinkKey = 'base' | 'driver' | 'coupler' | 'output' | 'effector';
+type LinkKey = 'base' | 'driver' | 'coupler' | 'output' | 'effector' | 'follower';
 
 type MaterialKit = {
   sheet: THREE.MeshStandardMaterial;
@@ -145,18 +145,19 @@ const disposeMaterials = (materials: MaterialKit | null) => {
 
 const zeroInventory = (): MechanismInventory => ({ parts: 0, holes: 0, slots: 0, gears: 0, racks: 0, cams: 0, followers: 0, endStops: 0 });
 
-const puppetMechanismInventory = (type: MechanismType): MechanismInventory => ({
+const puppetMechanismInventory = (mechanism: MechanismConfig): MechanismInventory => ({
   crank: { parts: 2, holes: 4, slots: 0, gears: 0, racks: 0, cams: 0, followers: 0, endStops: 0 },
   '4bar': { parts: 5, holes: 15, slots: 0, gears: 0, racks: 0, cams: 0, followers: 0, endStops: 0 },
   piston: { parts: 5, holes: 10, slots: 1, gears: 0, racks: 0, cams: 0, followers: 1, endStops: 0 },
   yoke: { parts: 5, holes: 9, slots: 2, gears: 0, racks: 0, cams: 0, followers: 1, endStops: 0 },
   'quick-return': { parts: 5, holes: 11, slots: 1, gears: 0, racks: 0, cams: 0, followers: 0, endStops: 0 },
   '5bar': { parts: 6, holes: 18, slots: 0, gears: 2, racks: 0, cams: 0, followers: 0, endStops: 0 },
+  '6bar': { parts: 7, holes: 22, slots: 0, gears: 0, racks: 0, cams: 0, followers: 0, endStops: 0 },
   cam: { parts: 4, holes: 6, slots: 1, gears: 0, racks: 0, cams: 1, followers: 1, endStops: 0 },
   'rack-pinion': { parts: 5, holes: 6, slots: 1, gears: 1, racks: 1, cams: 0, followers: 1, endStops: 2 },
-  gear: { parts: 6, holes: 18, slots: 0, gears: 2, racks: 0, cams: 0, followers: 0, endStops: 0 },
+  gear: { parts: Math.max(6, gearTrainPitchRadii(mechanism).length + 4), holes: Math.max(18, gearTrainPitchRadii(mechanism).length * 8 + 2), slots: 0, gears: gearTrainPitchRadii(mechanism).length, racks: 0, cams: 0, followers: 0, endStops: 0 },
   planetary_gear: { parts: 5, holes: 14, slots: 0, gears: 3, racks: 0, cams: 0, followers: 0, endStops: 0 }
-}[type]);
+}[mechanism.type]);
 
 const addInventory = (sum: MechanismInventory, item: MechanismInventory): MechanismInventory => ({
   parts: sum.parts + item.parts,
@@ -386,7 +387,10 @@ const mechanismGearRotations = (mechanism: MechanismConfig, angle: number) => {
   const input = angle * (mechanism.speed1 ?? 1);
   const phase = mechanism.phase ?? 0;
   if (mechanism.type === '5bar') return [input, angle * (mechanism.speed2 ?? mechanism.gearRatio ?? 1) + phase];
-  if (mechanism.type === 'gear') return [input, input * gearPairOutputRatio(mechanism.crankLength, mechanism.rockerLength) + phase];
+  if (mechanism.type === 'gear') {
+    const radii = gearTrainPitchRadii(mechanism);
+    return radii.map((radius, index) => input * ((index % 2 === 1 ? -1 : 1) * radii[0] / radius) + (index === radii.length - 1 ? phase : 0));
+  }
   if (mechanism.type === 'planetary_gear') return [input, input * planetaryPlanetSpinRatio(mechanism.crankLength, mechanism.rockerLength) + phase];
   return [input];
 };
@@ -443,8 +447,10 @@ const mechanismGeometrySignature = (mechanisms: MechanismConfig[]) => mechanisms
   mechanism.groundLength,
   mechanism.couplerLength,
   mechanism.rockerLength,
+  mechanism.rodLength,
   mechanism.couplerPointDist,
   mechanism.outputGearRadius,
+  mechanism.gearTrainRadii?.join(',') ?? '',
   mechanism.showOutputGear
 ].join(':')).join('|');
 
@@ -523,7 +529,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
     () => mechanismsToRender.reduce((sum, mechanism) => sum + fabricationRenderPlanForMechanism(mechanism).validationErrors.length, 0),
     [mechanismsToRender]
   );
-  const mechanismInventory = mechanismsToRender.reduce((sum, mechanism) => addInventory(sum, puppetMechanismInventory(mechanism.type)), zeroInventory());
+  const mechanismInventory = mechanismsToRender.reduce((sum, mechanism) => addInventory(sum, puppetMechanismInventory(mechanism)), zeroInventory());
   const mechanismLinkCount = mechanismInventory.parts;
   const holeCount = useMemo(() => geometryParts.reduce((sum, part) => {
     const base = project?.parts[part.id] ?? part;
@@ -768,21 +774,25 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
         driver: Math.max(0.08, mechanism.crankLength / VIEW_SCALE),
         coupler: Math.max(0.08, mechanism.couplerLength / VIEW_SCALE),
         output: Math.max(0.08, mechanism.rockerLength / VIEW_SCALE),
-        effector: Math.max(0.08, Math.max(20, mechanism.couplerPointDist) / VIEW_SCALE)
+        effector: Math.max(0.08, Math.max(20, mechanism.couplerPointDist) / VIEW_SCALE),
+        follower: Math.max(0.08, Math.max(20, mechanism.rodLength ?? mechanism.couplerPointDist) / VIEW_SCALE)
       };
       const links: Record<LinkKey, THREE.Group> = {
         base: createHoledLink(linkLengths.base, 0.16, materials.mechBase, materials.edge, 3),
         driver: createHoledLink(linkLengths.driver, 0.18, materials.mechDrive, materials.edge, 3),
         coupler: createHoledLink(linkLengths.coupler, 0.2, materials.mechCoupler, materials.edge, 4),
         output: createHoledLink(linkLengths.output, 0.18, materials.mechOutput, materials.edge, 3),
-        effector: createHoledLink(linkLengths.effector, 0.16, materials.mechOutput, materials.edge, 2)
+        effector: createHoledLink(linkLengths.effector, 0.16, materials.mechOutput, materials.edge, 2),
+        follower: createHoledLink(linkLengths.follower, 0.16, materials.mechOutput, materials.edge, 2)
       };
       Object.values(links).forEach(link => group.add(link));
       const gears: THREE.Mesh[] = [];
       if (['gear', 'planetary_gear', '5bar', 'rack-pinion'].includes(mechanism.type)) {
         const gearRadii = mechanism.type === 'rack-pinion'
           ? [mechanism.crankLength]
-          : [mechanism.crankLength, mechanism.rockerLength];
+          : mechanism.type === 'gear'
+            ? gearTrainPitchRadii(mechanism)
+            : [mechanism.crankLength, mechanism.rockerLength];
         gearRadii.forEach((radius, index) => {
           const mesh = new THREE.Mesh(
             new THREE.ExtrudeGeometry(gearShape(Math.max(0.38, radius / VIEW_SCALE), radius / SCENE_PX_PER_MM), { depth: 0.16, bevelEnabled: true, bevelSize: 0.015 }),
@@ -854,9 +864,12 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       const zDriverGear = zLayer(['Drive gear', 'Left timing gear', 'Pinion gear', 'Cam disk', 'Ring gear'], 0.4);
       const zCoupler = zLayer(['Coupler linkage', 'Center coupler', 'Carrier linkage', 'Slider guide', 'Rack guide', 'Follower guide'], 0.76);
       const zOutput = zLayer(['Output linkage', 'Right crank linkage', 'Follower linkage'], 1.12);
+      const zDyad = zLayer(['Dyad link'], zOutput + 0.18);
+      const zFollower = zLayer(['Follower link'], zOutput + 0.36);
       const zOutputMoving = zLayer(['Toothed rack', 'Planet gear', 'Sun gear', 'Output gear', 'Right timing gear'], zOutput);
       const zPin = (renderPlan.layers.at(-1)?.z ?? zOutputMoving) + 0.34;
       Object.values(visual.extras).forEach(extra => hideObject(extra));
+      updateLink(visual.links.follower, undefined, undefined);
       const groundAngle = ((mechanism.groundAngle ?? 0) * Math.PI) / 180;
       const outputAngle = Math.atan2(state.j2.y - state.p2.y, state.j2.x - state.p2.x);
       const standardLinks = () => {
@@ -897,6 +910,13 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
         updateLink(visual.links.coupler, state.isValid ? state.j1 : undefined, state.isValid ? state.j2 : undefined, zCoupler);
         updateLink(visual.links.output, state.isValid ? state.p2 : undefined, state.isValid ? state.aux : undefined, zOutput);
         updateLink(visual.links.effector, state.isValid ? state.aux : undefined, state.isValid ? state.j2 : undefined, zOutput);
+      } else if (mechanism.type === '6bar') {
+        updateLink(visual.links.base, state.p1, state.p2, zBackClip);
+        updateLink(visual.links.driver, state.p1, state.j1, zDriver);
+        updateLink(visual.links.coupler, state.isValid ? state.j1 : undefined, state.isValid ? state.j2 : undefined, zCoupler);
+        updateLink(visual.links.output, state.isValid ? state.p2 : undefined, state.isValid ? state.j2 : undefined, zOutput);
+        updateLink(visual.links.effector, state.isValid ? state.j2 : undefined, state.isValid ? state.aux : undefined, zDyad);
+        updateLink(visual.links.follower, state.isValid ? state.p2 : undefined, state.isValid ? state.aux : undefined, zFollower);
       } else if (mechanism.type === 'cam') {
         updateLink(visual.links.base, undefined, undefined);
         updateLink(visual.links.driver, undefined, undefined);
@@ -934,10 +954,13 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
         standardLinks();
       }
       visual.gears.forEach((gear, index) => {
-        const point = index === 0 ? state.p1 : state.p2;
+        const gearCenters = mechanism.type === 'gear' ? gearTrainCenters(mechanism) : [];
+        const point = mechanism.type === 'gear' ? (gearCenters[index] ?? state.p2) : index === 0 ? state.p1 : state.p2;
         const gearZ = index === 0
           ? zDriverGear
-          : zLayer(['Output gear', 'Right timing gear', 'Planet gear', 'Sun gear'], zOutputMoving);
+          : mechanism.type === 'gear' && index < visual.gears.length - 1
+            ? zLayer([`Idler gear ${index}`], zOutputMoving)
+            : zLayer(['Output gear', 'Right timing gear', 'Planet gear', 'Sun gear'], zOutputMoving);
         const p = to3(point, gearZ);
         gear.position.set(p.x, p.y, p.z);
         gear.rotation.z = mechanismGearRotations(mechanism, angle)[index] ?? 0;
@@ -1163,8 +1186,8 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       data-three-spacer-mm={`${FABRICATION_SPACER_SPEC.outerDiameterMm}x${FABRICATION_SPACER_SPEC.innerDiameterMm}`}
       data-three-primary-rotation-deg={fixed3(selectedTelemetry?.primaryRotationDeg)}
       data-three-secondary-rotation-deg={fixed3(selectedTelemetry?.secondaryRotationDeg)}
-      data-three-gear-radii={selectedMechanism ? `${selectedMechanism.crankLength.toFixed(2)},${selectedMechanism.rockerLength.toFixed(2)}` : ''}
-      data-three-gear-output-ratio={selectedMechanism ? gearPairOutputRatio(selectedMechanism.crankLength, selectedMechanism.rockerLength).toFixed(3) : ''}
+      data-three-gear-radii={selectedMechanism ? (selectedMechanism.type === 'gear' ? gearTrainPitchRadii(selectedMechanism).map(radius => radius.toFixed(2)).join(',') : `${selectedMechanism.crankLength.toFixed(2)},${selectedMechanism.rockerLength.toFixed(2)}`) : ''}
+      data-three-gear-output-ratio={selectedMechanism ? (selectedMechanism.type === 'gear' ? gearTrainOutputRatio(selectedMechanism) : gearPairOutputRatio(selectedMechanism.crankLength, selectedMechanism.rockerLength)).toFixed(3) : ''}
       data-three-secondary-speed={selectedMechanism ? (selectedMechanism.speed2 ?? selectedMechanism.gearRatio ?? 1).toFixed(3) : ''}
       data-three-rack-x={fixed3(selectedTelemetry?.rackX)}
       data-three-rack-y={fixed3(selectedTelemetry?.rackY)}

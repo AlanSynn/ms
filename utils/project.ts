@@ -14,7 +14,7 @@ import {
     Transform
 } from '../types';
 import { defaultPhysicalKit, localPivotOffsetForScene, SCENE_PX_PER_MM, sceneBoundsForSheet } from './coordinates';
-import { gearPairOutputRatio, generateCurvePoints, planetaryPlanetSpinRatio } from './kinematics';
+import { gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, generateCurvePoints, planetaryPlanetSpinRatio } from './kinematics';
 import { clampNumber, finiteNumber, sanitizeHexColor, sanitizeMechanismType, sanitizePoint } from './sanitize';
 import { isUsableContourPoints } from './partGeometry';
 
@@ -137,16 +137,24 @@ export const wouldCreateCycle = (joints: Record<string, StandardJoint>, jointId:
     return false;
 };
 
-export const mechanismRequiredParts = (mechanism: Pick<MechanismConfig, 'type'>) => {
-    const axleCount = mechanism.type === '5bar' ? 5 : mechanism.type === 'rack-pinion' ? 3 : 4;
+export const mechanismRequiredParts = (mechanism: Pick<MechanismConfig, 'type'> & Partial<Pick<MechanismConfig, 'gearTrainRadii'>>) => {
+    const gearTrainCount = mechanism.type === 'gear'
+        ? gearTrainPitchRadii({
+            crankLength: DEFAULT_DRIVE_GEAR_RADIUS,
+            rockerLength: DEFAULT_OUTPUT_GEAR_RADIUS,
+            gearTrainRadii: mechanism.gearTrainRadii
+        }).length
+        : 0;
+    const axleCount = mechanism.type === '6bar' ? 6 : mechanism.type === '5bar' ? 5 : mechanism.type === 'rack-pinion' ? 3 : mechanism.type === 'gear' ? Math.max(4, gearTrainCount + 2) : 4;
     const base = [
         { name: 'axle pin', quantity: axleCount },
         { name: 'retaining clip', quantity: axleCount },
-        { name: 'S10 spacer', quantity: mechanism.type === '5bar' ? 8 : 6 },
+        { name: 'S10 spacer', quantity: mechanism.type === '6bar' ? 10 : mechanism.type === '5bar' ? 8 : mechanism.type === 'gear' ? Math.max(6, gearTrainCount * 2 + 2) : 6 },
         { name: `${mechanism.type} linkage plate`, quantity: 1 }
     ];
     if (mechanism.type === '5bar') base.push({ name: 'matched gear', quantity: 2 });
-    if (mechanism.type === 'gear' || mechanism.type === 'planetary_gear') base.push({ name: 'gear pair', quantity: mechanism.type === 'planetary_gear' ? 3 : 2 });
+    if (mechanism.type === '6bar') base.push({ name: 'dyad linkage plate', quantity: 1 }, { name: 'follower linkage plate', quantity: 1 });
+    if (mechanism.type === 'gear' || mechanism.type === 'planetary_gear') base.push({ name: 'gear pair', quantity: mechanism.type === 'planetary_gear' ? 3 : Math.max(2, gearTrainCount) });
     if (mechanism.type === 'gear') base.push({ name: 'gear train linkage rod', quantity: 2 });
     if (mechanism.type === 'rack-pinion') base.push({ name: 'pinion gear', quantity: 1 }, { name: 'toothed rack', quantity: 1 }, { name: 'slider guide', quantity: 1 });
     if (mechanism.type === 'cam') base.push({ name: 'cam disk', quantity: 1 }, { name: 'follower guide', quantity: 1 });
@@ -204,25 +212,28 @@ export const createDefaultMechanism = (type: MechanismConfig['type'] = '4bar', i
     type,
     visible: true,
     enabled: true,
-    color: type === '5bar' || type === 'gear' || type === 'planetary_gear' || type === 'rack-pinion' ? '#d97706' : type === 'piston' ? '#059669' : type === 'yoke' || type === 'cam' ? '#f59e0b' : '#3b82f6',
+    color: type === '5bar' || type === '6bar' || type === 'gear' || type === 'planetary_gear' || type === 'rack-pinion' ? '#d97706' : type === 'piston' ? '#059669' : type === 'yoke' || type === 'cam' ? '#f59e0b' : '#3b82f6',
     anchorX: -120,
     anchorY: -40,
     transform: { x: -120, y: -40, rotation: 0, scale: 1 },
     sceneAnchor: { x: -120, y: -40 },
     activeVisualPartIds: [],
     groundAngle: type === 'cam' || type === 'rack-pinion' ? 90 : 0,
-    groundLength: type === 'gear' ? DEFAULT_DRIVE_GEAR_RADIUS + DEFAULT_OUTPUT_GEAR_RADIUS : type === 'planetary_gear' ? 74 : type === 'piston' || type === 'yoke' || type === 'cam' || type === 'rack-pinion' ? 0 : 180,
-    crankLength: type === '5bar' ? 60 : type === 'gear' ? DEFAULT_DRIVE_GEAR_RADIUS : type === 'planetary_gear' ? 38 : type === 'rack-pinion' ? 42 : 50,
-    couplerLength: type === 'yoke' || type === 'cam' || type === 'gear' || type === 'planetary_gear' || type === 'rack-pinion' ? 0 : 165,
-    rockerLength: type === '5bar' ? 48 : type === 'quick-return' ? 130 : type === 'gear' ? DEFAULT_OUTPUT_GEAR_RADIUS : type === 'planetary_gear' ? 36 : type === 'cam' ? 80 : type === 'rack-pinion' ? 380 : 110,
+    groundLength: type === 'gear' ? gearTrainPitchCenterDistance({ crankLength: DEFAULT_DRIVE_GEAR_RADIUS, rockerLength: DEFAULT_OUTPUT_GEAR_RADIUS }) : type === 'planetary_gear' ? 74 : type === 'piston' || type === 'yoke' || type === 'cam' || type === 'rack-pinion' ? 0 : 180,
+    crankLength: type === '6bar' ? 55 : type === '5bar' ? 60 : type === 'gear' ? DEFAULT_DRIVE_GEAR_RADIUS : type === 'planetary_gear' ? 38 : type === 'rack-pinion' ? 42 : 50,
+    couplerLength: type === '6bar' ? 145 : type === 'yoke' || type === 'cam' || type === 'gear' || type === 'planetary_gear' || type === 'rack-pinion' ? 0 : 165,
+    rockerLength: type === '6bar' ? 110 : type === '5bar' ? 48 : type === 'quick-return' ? 130 : type === 'gear' ? DEFAULT_OUTPUT_GEAR_RADIUS : type === 'planetary_gear' ? 36 : type === 'cam' ? 80 : type === 'rack-pinion' ? 380 : 110,
     sliderOffset: type === 'piston' ? 34 : type === 'rack-pinion' ? 56 : 0,
-    couplerPointDist: type === '5bar' ? 90 : type === 'rack-pinion' ? 70 : 78,
+    couplerPointDist: type === '6bar' ? 100 : type === '5bar' ? 90 : type === 'rack-pinion' ? 70 : 78,
     couplerPointAngle: type === 'piston' || type === 'yoke' || type === 'cam' || type === 'rack-pinion' ? 0 : 40,
-    assemblyMode: type === '4bar' ? 'open' : undefined,
+    assemblyMode: type === '4bar' || type === '6bar' ? 'open' : undefined,
     speed1: 1,
-    speed2: type === '5bar' ? -2 : type === 'gear' ? gearPairOutputRatio(DEFAULT_DRIVE_GEAR_RADIUS, DEFAULT_OUTPUT_GEAR_RADIUS) : type === 'planetary_gear' ? planetaryPlanetSpinRatio(38, 36) : 1,
-    gearRatio: type === 'gear' ? gearPairOutputRatio(DEFAULT_DRIVE_GEAR_RADIUS, DEFAULT_OUTPUT_GEAR_RADIUS) : type === 'planetary_gear' ? planetaryPlanetSpinRatio(38, 36) : undefined,
-    rodLength: 110,
+    speed2: type === '5bar' ? -2 : type === 'gear' ? gearTrainOutputRatio([DEFAULT_DRIVE_GEAR_RADIUS, DEFAULT_OUTPUT_GEAR_RADIUS]) : type === 'planetary_gear' ? planetaryPlanetSpinRatio(38, 36) : 1,
+    gearRatio: type === 'gear' ? gearTrainOutputRatio([DEFAULT_DRIVE_GEAR_RADIUS, DEFAULT_OUTPUT_GEAR_RADIUS]) : type === 'planetary_gear' ? planetaryPlanetSpinRatio(38, 36) : undefined,
+    gearTrainRadii: type === 'gear' ? [DEFAULT_DRIVE_GEAR_RADIUS, DEFAULT_OUTPUT_GEAR_RADIUS] : undefined,
+    driverGroupId: 'driver-1',
+    driverPhaseOffset: 0,
+    rodLength: type === '6bar' ? 95 : 110,
     phase: 0,
     source: 'manual',
     presetId: 'balanced',
@@ -757,6 +768,14 @@ const normalizeMechanismSnapshot = (value: unknown): MechanismConfig => {
     };
     const anchor = { x: optionalNumber(raw.anchorX) ?? base.anchorX ?? 0, y: optionalNumber(raw.anchorY) ?? base.anchorY ?? 0 };
     const activeVisualPartIds = Array.isArray(raw.activeVisualPartIds) ? raw.activeVisualPartIds.map(String).slice(0, 50) : (typeof raw.targetPartId === 'string' ? [raw.targetPartId] : []);
+    const crankLength = clampNumber(raw.crankLength, base.crankLength, 1, 10000);
+    const rockerLength = clampNumber(raw.rockerLength, base.rockerLength, 1, 10000);
+    const gearTrainRadii = Array.isArray(raw.gearTrainRadii)
+        ? raw.gearTrainRadii.map(value => finiteNumber(value, Number.NaN)).filter(Number.isFinite).map(value => Math.max(1, Math.abs(value))).slice(0, 8)
+        : (type === 'gear' ? [crankLength, rockerLength] : base.gearTrainRadii);
+    const gearRatio = type === 'gear'
+        ? gearTrainOutputRatio({ crankLength, rockerLength, gearTrainRadii })
+        : raw.gearRatio === undefined ? base.gearRatio : finiteNumber(raw.gearRatio, base.gearRatio ?? 1);
     return {
         ...base,
         id: typeof raw.id === 'string' && raw.id.trim() ? raw.id.slice(0, 80) : base.id,
@@ -773,16 +792,19 @@ const normalizeMechanismSnapshot = (value: unknown): MechanismConfig => {
         foundryExport: raw.foundryExport && typeof raw.foundryExport === 'object' ? raw.foundryExport as FoundryExportPackage : undefined,
         groundAngle: finiteNumber(raw.groundAngle, base.groundAngle ?? 0),
         groundLength: finiteNumber(raw.groundLength, base.groundLength),
-        crankLength: clampNumber(raw.crankLength, base.crankLength, 1, 10000),
+        crankLength,
         couplerLength: clampNumber(raw.couplerLength, base.couplerLength, 0, 10000),
-        rockerLength: clampNumber(raw.rockerLength, base.rockerLength, 1, 10000),
+        rockerLength,
         sliderOffset: finiteNumber(raw.sliderOffset, base.sliderOffset),
         couplerPointDist: finiteNumber(raw.couplerPointDist, base.couplerPointDist),
         couplerPointAngle: finiteNumber(raw.couplerPointAngle, base.couplerPointAngle),
         assemblyMode: raw.assemblyMode === 'crossed' ? 'crossed' : raw.assemblyMode === 'open' ? 'open' : base.assemblyMode,
         speed1: finiteNumber(raw.speed1, base.speed1 ?? 1),
-        speed2: finiteNumber(raw.speed2, base.speed2 ?? 1),
-        gearRatio: raw.gearRatio === undefined ? base.gearRatio : finiteNumber(raw.gearRatio, base.gearRatio ?? 1),
+        speed2: type === 'gear' ? gearRatio : finiteNumber(raw.speed2, base.speed2 ?? 1),
+        gearRatio,
+        gearTrainRadii,
+        driverGroupId: typeof raw.driverGroupId === 'string' && raw.driverGroupId.trim() ? raw.driverGroupId.slice(0, 80) : base.driverGroupId,
+        driverPhaseOffset: finiteNumber(raw.driverPhaseOffset, base.driverPhaseOffset ?? 0),
         rodLength: raw.rodLength === undefined ? base.rodLength : finiteNumber(raw.rodLength, base.rodLength ?? 0),
         phase: finiteNumber(raw.phase, base.phase ?? 0),
         showOutputGear: typeof raw.showOutputGear === 'boolean' ? raw.showOutputGear : base.showOutputGear,
