@@ -9,10 +9,11 @@ import { createProjectFromPackageData, parseCharConfig } from '../utils/packageL
 import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, generateCurvePoints, planetaryPlanetSpinRatio } from '../utils/kinematics';
 import { animatedPartsForProject, describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionPreviewForPath, motionPreviewForProject, motionPreviewForTarget, preferredMotionJointId } from '../utils/motion';
 import { buildToonSceneProjection } from '../utils/sceneProjection';
-import { buildKinematicPhysicsSession } from '../utils/physicsSession';
+import { buildFoundryPhysicsOverlay, buildKinematicPhysicsSession, mechanismPhysicsRule } from '../utils/physicsSession';
 import { fabricablePartOutlinePoints, partLandmarkJointIds, partLandmarkLocalPoints, partOutlineBounds, pointInsideOutline } from '../utils/partGeometry';
 import { MECHANISM_FEATURE_REGISTRY, mechanismFeature, validateMechanismFeatureRegistry, type MechanismDragHandle } from '../utils/mechanismFeatureRegistry';
 import { buildMechanismSnapshot, buildMechanismSnapshots } from '../utils/mechanismSnapshot';
+import { WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
 import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, mechanismTemplateLabel } from '../utils/mechanismTemplates';
 import { MECHANISM_TYPES as SANITIZE_MECHANISM_TYPES } from '../utils/sanitize';
 import { generateSmartConfig, mutateConfig, OPTIMIZER_MECHANISM_TYPES } from '../utils/optimizer';
@@ -238,6 +239,9 @@ assert(fabricationRingGearPathD(70).includes('68.54'), 'shared SVG ring gear pat
 const canvasText = readFileSync(join(process.cwd(), 'components', 'Canvas.tsx'), 'utf8');
 const threePreviewText = readFileSync(join(process.cwd(), 'components', 'ThreePuppetPreview.tsx'), 'utf8');
 const exporterText = readFileSync(join(process.cwd(), 'utils', 'exporter.ts'), 'utf8');
+const physicsSessionText = readFileSync(join(process.cwd(), 'utils', 'physicsSession.ts'), 'utf8');
+const mechanismPreviewText = readFileSync(join(process.cwd(), 'utils', 'mechanismPreview.ts'), 'utf8');
+const viewportText = readFileSync(join(process.cwd(), 'utils', 'viewport.ts'), 'utf8');
 const appText = readFileSync(join(process.cwd(), 'App.tsx'), 'utf8');
 const indexText = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
 assert(canvasText.includes('fabricationGearPathD'), '2D canvas gear rendering uses shared fabrication gear geometry');
@@ -254,8 +258,14 @@ assert(appText.includes("scene.remove(old)") && appText.includes("disposeThreeOb
 assert(appText.includes('geometryCacheRef') && appText.includes('materialCacheRef'), 'Foundry caches reusable Three geometry/material resources during playback');
 assert(appText.includes('foundryCached') && appText.includes('data-three-geometry-cache-size'), 'Foundry tags cached resources and exposes cache size for browser perf tests');
 assert(appText.includes('const geom = new THREE.BufferGeometry().setFromPoints(points.map(point => to3(point, z)))'), 'Foundry path/trail line geometry is intentionally not long-cached because it can be phase-dependent');
-assert(appText.includes('sweepBounds') && appText.includes('data-three-fit-bounds=\"phase-invariant-sweep\"'), 'Foundry fitting bounds are sampled across the mechanism sweep instead of jittering per animation frame');
+assert(mechanismPreviewText.includes('sweepBounds') && appText.includes('data-three-fit-bounds=\"phase-invariant-sweep\"'), 'Foundry fitting bounds are sampled in the shared preview utility instead of jittering per animation frame');
 assert(appText.includes('data-three-static-grid-mode=\"persistent-scene-layer\"'), 'Foundry grid and plane live in a persistent scene layer, not the per-frame dynamic group');
+assert(mechanismPreviewText.includes('export const fitMechanismSimulation'), 'Foundry fitting/sweep simulation lives in the mechanism preview utility, not as stage-local UI code');
+assert(appText.includes('buildFoundryPhysicsOverlay') && physicsSessionText.includes('export const buildFoundryPhysicsOverlay'), 'Foundry force/velocity/constraint overlay math lives in PhysicsSession, not the React stage');
+assert(appText.includes('useMemo(() => sampleFeasibleRange(landedFoundry), [landedFoundry])'), 'Foundry feasible-range sampling is memoized by mechanism, not re-run on every animation render');
+assert(viewportText.includes('WEBGL_PIXEL_RATIO_CAP') && appText.includes('WEBGL_PIXEL_RATIO_CAP') && threePreviewText.includes('WEBGL_PIXEL_RATIO_CAP'), 'WebGL renderer pixel ratio cap is shared across Foundry and puppet previews');
+assert(appText.includes('data-three-pixel-ratio-cap') && threePreviewText.includes('data-three-pixel-ratio-cap'), '3D previews expose the pixel-ratio cap for browser performance checks');
+assert.equal(WEBGL_PIXEL_RATIO_CAP, 1.5, 'WebGL pixel-ratio cap avoids high-DPI overdraw while preserving sharp CAD-style previews');
 assert(!appText.includes('starShape'), 'Foundry sandbox no longer carries saw-tooth star gears');
 assert(!appText.includes('teeth * 2'), 'Foundry sandbox no longer carries sparse saw-tooth gear implementation');
 assert(appText.includes("if (key === 'gearRatio') return false"), 'Foundry hides stale gear-ratio controls when physical pitch radii define rotation');
@@ -504,6 +514,19 @@ assert.equal(physicsSession.summary.frictionCoefficient, sample.settings.simulat
 assert.equal(physicsSession.summary.massKg, sample.settings.simulationMassKg, 'physics session records project mass');
 assert(physicsSession.summary.maxConstraintError >= 0, 'physics session reports mechanism constraint error');
 assertFiniteDeep(physicsSession, 'physicsSession');
+
+const foundryOverlayMechanism = createDefaultMechanism('4bar', 'contract-foundry-overlay');
+const foundryOverlaySimulation = {
+  state: calculateLinkage(foundryOverlayMechanism, Math.PI / 3),
+  scale: 1,
+  pathPoints: generateCurvePoints(foundryOverlayMechanism, 96).points
+};
+const foundryOverlay = buildFoundryPhysicsOverlay(foundryOverlayMechanism, foundryOverlaySimulation, Math.PI / 3, sample.settings);
+assert.equal(foundryOverlay.rule, mechanismPhysicsRule('4bar'), 'Foundry overlay uses the same type-specific PhysicsSession rule text');
+assert(foundryOverlay.playhead && foundryOverlay.velocityTip && foundryOverlay.forceTip && foundryOverlay.driveTip, 'Foundry overlay derives visible playhead, velocity, force, and drive vectors from sampled kinematics');
+assert(foundryOverlay.forceMagnitude >= foundryOverlay.frictionMagnitude, 'Foundry overlay combines acceleration force with friction contribution');
+assert(foundryOverlay.constraintError < 1e-6, 'Foundry overlay constraint error matches the sampled 4-bar pose');
+assertFiniteDeep(foundryOverlay, 'foundryPhysicsOverlay');
 const warningProjection = buildToonSceneProjection({ ...sample, mechanisms: [{ ...sample.mechanisms[0], warnings: ['projection warning'] }] });
 assert(warningProjection.warnings.some(warning => warning.message === 'projection warning' && warning.sourceType === 'mechanism' && warning.recoveryStage === 'design'), 'projection warning maps to source and recovery stage');
 assert(warningProjection.labels.some(label => label.text === 'projection warning' && label.severity === 'warning'), 'projection creates warning label chips');

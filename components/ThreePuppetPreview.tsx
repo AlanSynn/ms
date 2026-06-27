@@ -5,6 +5,7 @@ import { boardGridLines, defaultPhysicalKit, SCENE_PX_PER_MM, sceneBoundsForShee
 import { calculateLinkage, camProfileScale, gearPairOutputRatio, planetaryPlanetSpinRatio } from '../utils/kinematics';
 import { FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationRenderPlanForMechanism, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints } from '../utils/fabrication';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, pointInsideOutline } from '../utils/partGeometry';
+import { WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
 
 const VIEW_SCALE = 35;
 const THICKNESS = 0.22;
@@ -503,7 +504,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       return;
     }
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, WEBGL_PIXEL_RATIO_CAP));
     renderer.domElement.dataset.testid = `${testId}-canvas`;
     renderer.domElement.className = 'three-puppet-canvas';
     host.appendChild(renderer.domElement);
@@ -916,6 +917,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       data-testid={`${testId}-state`}
       className="three-puppet-state"
       data-three-renderer={rendererStatus === 'pending' ? 'webgl' : rendererStatus}
+      data-three-pixel-ratio-cap={WEBGL_PIXEL_RATIO_CAP.toFixed(1)}
       data-puppet-mode="thick-flat-assembly"
       data-part-outline-mode="fabrication-fit-joint-chain"
       data-joint-placement="skeleton-anchors"

@@ -1,4 +1,4 @@
-import type { Point, ProjectState } from '../types';
+import type { MechanismConfig, MechanismType, Point, ProjectState } from '../types';
 import { calculateLinkage } from './kinematics';
 import { mechanismTemplateLabel } from './mechanismTemplates';
 import type { ProjectionSourceType, ToonSceneProjection } from './sceneProjection';
@@ -91,6 +91,148 @@ const frictionForce = (velocity: Point, massKg: number, coefficient: number): Po
 };
 
 const add = (a: Point, b: Point): Point => ({ x: finite(a.x + b.x), y: finite(a.y + b.y) });
+
+export interface FoundryPhysicsSimulation {
+  state: ReturnType<typeof calculateLinkage>;
+  scale: number;
+  pathPoints: Point[];
+}
+
+export interface FoundryPhysicsOverlay {
+  playIndex: number;
+  playhead?: Point;
+  velocityRaw: Point;
+  accelerationRaw: Point;
+  velocityMagnitude: number;
+  frictionMagnitude: number;
+  forceMagnitude: number;
+  velocityTip?: Point;
+  forceTip?: Point;
+  frictionTip?: Point;
+  driveTip?: Point;
+  constraintError: number;
+  rule: string;
+}
+
+const MECHANISM_PHYSICS_RULES: Record<MechanismType, string> = {
+  '4bar': 'pin reactions + coupler acceleration',
+  piston: 'slider thrust + guide normal force',
+  yoke: 'pin-in-slot thrust + guide reaction',
+  'quick-return': 'slotted-arm torque + uneven return velocity',
+  '5bar': 'dual crank torque + coupler acceleration',
+  cam: 'cam normal force + follower lift velocity',
+  'rack-pinion': 'gear mesh tangent force + rack velocity',
+  gear: 'gear mesh force + opposite angular velocity',
+  planetary_gear: 'sun/planet mesh force + carrier velocity',
+  crank: 'driver torque + tangential velocity'
+};
+
+export const mechanismPhysicsRule = (type: MechanismType) => MECHANISM_PHYSICS_RULES[type];
+
+const unitVector = (x: number, y: number, fallback: Point = { x: 1, y: 0 }): Point => {
+  const length = Math.hypot(x, y);
+  if (!Number.isFinite(length) || length < 0.001) return fallback;
+  return { x: x / length, y: y / length };
+};
+
+const vectorEnd = (origin: Point, vector: Point, length: number): Point => ({
+  x: origin.x + vector.x * length,
+  y: origin.y + vector.y * length
+});
+
+const clampPreviewPoint = (point: Point): Point => ({
+  x: Math.max(10, Math.min(350, point.x)),
+  y: Math.max(10, Math.min(230, point.y))
+});
+
+const ensureVisibleVectorTip = (origin: Point, tip: Point): Point => ({
+  x: Math.abs(tip.x - origin.x) < 1 ? Math.min(350, origin.x + 8) : tip.x,
+  y: Math.abs(tip.y - origin.y) < 1 ? Math.max(10, origin.y - 8) : tip.y
+});
+
+const normalizedPhase = (phaseRad: number) => ((((phaseRad / (Math.PI * 2)) % 1) + 1) % 1);
+
+const fittedDistance = (a?: Point, b?: Point) => a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+
+const foundryConstraintError = (mechanism: MechanismConfig, simulation: FoundryPhysicsSimulation): number => {
+  const s = simulation.state;
+  const scaledLength = (length: number | undefined) => Math.max(0, finite(length ?? 0)) * simulation.scale;
+  const errors = mechanism.type === 'gear'
+    ? [Math.abs(fittedDistance(s.p1, s.p2) - scaledLength((mechanism.crankLength ?? 0) + (mechanism.rockerLength ?? 0)))]
+    : mechanism.type === 'planetary_gear'
+      ? [Math.abs(fittedDistance(s.p1, s.p2) - scaledLength(mechanism.groundLength)), Math.abs(fittedDistance(s.p2, s.j2) - scaledLength(mechanism.rockerLength))]
+      : mechanism.type === 'rack-pinion'
+        ? [Math.abs(fittedDistance(s.p1, s.j1) - scaledLength(mechanism.crankLength)), fittedDistance(s.j2, s.p2)]
+        : mechanism.type === 'cam'
+          ? [fittedDistance(s.j2, s.p2), Math.abs(fittedDistance(s.j1, s.j2) - scaledLength(mechanism.rockerLength))]
+          : mechanism.type === 'piston'
+            ? [fittedDistance(s.j2, s.effector)]
+            : mechanism.type === 'yoke'
+              ? [Math.abs(fittedDistance(s.j1, s.j2) - scaledLength(mechanism.crankLength))]
+              : mechanism.type === 'quick-return'
+                ? [Math.abs(fittedDistance(s.j1, s.j2) - scaledLength(mechanism.couplerLength))]
+                : mechanism.type === '5bar'
+                  ? [Math.abs(fittedDistance(s.p2, s.aux ?? s.j2) - scaledLength(mechanism.rockerLength)), Math.abs(fittedDistance(s.j1, s.j2) - scaledLength(mechanism.couplerLength)), Math.abs(fittedDistance(s.aux ?? s.j2, s.j2) - scaledLength(mechanism.rodLength ?? 0))]
+                  : [Math.abs(fittedDistance(s.p1, s.j1) - scaledLength(mechanism.crankLength)), Math.abs(fittedDistance(s.j1, s.j2) - scaledLength(mechanism.couplerLength)), Math.abs(fittedDistance(s.j2, s.p2) - scaledLength(mechanism.rockerLength))];
+  return Math.max(0, ...errors.filter(Number.isFinite));
+};
+
+export const buildFoundryPhysicsOverlay = (
+  mechanism: MechanismConfig,
+  simulation: FoundryPhysicsSimulation,
+  phaseRad: number,
+  settings: Pick<ProjectState['settings'], 'simulationFriction' | 'simulationMassKg'>,
+  fallbackPathPoints: Point[] = []
+): FoundryPhysicsOverlay => {
+  const previewPoints = simulation.pathPoints.length ? simulation.pathPoints : fallbackPathPoints;
+  const playIndex = previewPoints.length ? Math.floor(normalizedPhase(phaseRad) * previewPoints.length) : 0;
+  const playhead = simulation.state.effector ?? previewPoints[playIndex];
+  const pointAt = (index: number) => previewPoints.length ? previewPoints[((index % previewPoints.length) + previewPoints.length) % previewPoints.length] : playhead;
+  const previousPoint = pointAt(playIndex - 1) ?? playhead ?? { x: 0, y: 0 };
+  const nextPoint = pointAt(playIndex + 1) ?? playhead ?? { x: 0, y: 0 };
+  const centerSum = previewPoints.length
+    ? previewPoints.reduce((sum, point) => ({ x: sum.x + point.x, y: sum.y + point.y }), { x: 0, y: 0 })
+    : playhead ?? { x: 0, y: 0 };
+  const physicsCenter = previewPoints.length ? { x: centerSum.x / previewPoints.length, y: centerSum.y / previewPoints.length } : centerSum;
+  const velocityRaw = { x: nextPoint.x - previousPoint.x, y: nextPoint.y - previousPoint.y };
+  const accelerationRaw = {
+    x: nextPoint.x + previousPoint.x - (playhead?.x ?? 0) * 2,
+    y: nextPoint.y + previousPoint.y - (playhead?.y ?? 0) * 2
+  };
+  const driveRaw = {
+    x: -(simulation.state.j1.y - simulation.state.p1.y),
+    y: simulation.state.j1.x - simulation.state.p1.x
+  };
+  const velocityUnit = unitVector(velocityRaw.x, velocityRaw.y);
+  const driveUnit = unitVector(driveRaw.x, driveRaw.y, velocityUnit);
+  const radialUnit = unitVector(physicsCenter.x - (playhead?.x ?? physicsCenter.x), physicsCenter.y - (playhead?.y ?? physicsCenter.y), driveUnit);
+  const forceUnit = unitVector(accelerationRaw.x, accelerationRaw.y, radialUnit);
+  const frictionUnit = unitVector(-velocityRaw.x, -velocityRaw.y, { x: -velocityUnit.x, y: -velocityUnit.y });
+  const velocityTip = playhead ? clampPreviewPoint(vectorEnd(playhead, velocityUnit, 42)) : undefined;
+  const forceTip = playhead ? clampPreviewPoint(vectorEnd(playhead, forceUnit, 38)) : undefined;
+  const frictionTip = playhead ? clampPreviewPoint(vectorEnd(playhead, frictionUnit, 30)) : undefined;
+  const driveTip = ensureVisibleVectorTip(simulation.state.j1, clampPreviewPoint(vectorEnd(simulation.state.j1, driveUnit, 34)));
+  const velocityMagnitude = Math.hypot(velocityRaw.x, velocityRaw.y);
+  const frictionCoefficient = finite(settings.simulationFriction, 0.18);
+  const massKg = finite(settings.simulationMassKg, 1);
+  const frictionMagnitude = velocityMagnitude > 0.01 ? frictionCoefficient * massKg * 9.81 : 0;
+  const forceMagnitude = (Math.hypot(accelerationRaw.x, accelerationRaw.y) * massKg) + frictionMagnitude;
+  return {
+    playIndex,
+    playhead,
+    velocityRaw: cleanPoint(velocityRaw),
+    accelerationRaw: cleanPoint(accelerationRaw),
+    velocityMagnitude: finite(velocityMagnitude),
+    frictionMagnitude: finite(frictionMagnitude),
+    forceMagnitude: finite(forceMagnitude),
+    velocityTip,
+    forceTip,
+    frictionTip,
+    driveTip,
+    constraintError: finite(foundryConstraintError(mechanism, simulation)),
+    rule: mechanismPhysicsRule(mechanism.type)
+  };
+};
 
 const addConstraint = (constraints: PhysicsConstraintSample[], id: string, kind: PhysicsConstraintKind, a: Point, b: Point, expectedLength: number, label: string, mechanismId?: string) => {
   const currentLength = distance(a, b);

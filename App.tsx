@@ -37,13 +37,15 @@ import {
     validatePath
 } from './utils/project';
 import { processImageWithWebOnnx } from './utils/webOnnx';
+import { buildFoundryPhysicsOverlay } from './utils/physicsSession';
 import { createFabricationPackage, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, prefabAssemblySteps, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
 import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToBoardRaw, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
 import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlinePathD, pointInsideOutline } from './utils/partGeometry';
-import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT, normalizeCanvasViewport } from './utils/viewport';
+import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT, normalizeCanvasViewport, WEBGL_PIXEL_RATIO_CAP } from './utils/viewport';
 import { AUTHORABLE_MECHANISM_TYPES, FOUNDRY_PRESETS, MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY, mechanismTemplateLabel } from './utils/mechanismTemplates';
+import { fitMechanismSimulation, fitPathToBox, fitPointsToBox, pointsToSvgPath } from './utils/mechanismPreview';
 import { AlertCircle, Boxes, BrainCircuit, Camera, CheckCircle2, Download, FileJson, Loader2, PenLine, Play, Plus, Route, Save, Settings, Sparkles, Trash2, Upload, UserRound, Wrench } from 'lucide-react';
 import girlStarterUrl from './resources/examples/raw/girl.png?url';
 import boyStarterUrl from './resources/examples/raw/boy.PNG?url';
@@ -99,40 +101,6 @@ const projectFoundryOverlayPoint = (point: Point | undefined, camera: FoundryCam
         y: ((1 - projected.y) / 2) * height
     };
 };
-
-const mechanismPhysicsRule = (type: MechanismType) => ({
-    '4bar': 'pin reactions + coupler acceleration',
-    piston: 'slider thrust + guide normal force',
-    yoke: 'pin-in-slot thrust + guide reaction',
-    'quick-return': 'slotted-arm torque + uneven return velocity',
-    '5bar': 'dual crank torque + coupler acceleration',
-    cam: 'cam normal force + follower lift velocity',
-    'rack-pinion': 'gear mesh tangent force + rack velocity',
-    gear: 'gear mesh force + opposite angular velocity',
-    planetary_gear: 'sun/planet mesh force + carrier velocity',
-    crank: 'driver torque + tangential velocity'
-}[type]);
-
-const unitVector = (x: number, y: number, fallback: Point = { x: 1, y: 0 }): Point => {
-    const length = Math.hypot(x, y);
-    if (!Number.isFinite(length) || length < 0.001) return fallback;
-    return { x: x / length, y: y / length };
-};
-
-const vectorEnd = (origin: Point, vector: Point, length: number): Point => ({
-    x: origin.x + vector.x * length,
-    y: origin.y + vector.y * length
-});
-
-const clampPreviewPoint = (point: Point): Point => ({
-    x: Math.max(10, Math.min(350, point.x)),
-    y: Math.max(10, Math.min(230, point.y))
-});
-
-const ensureVisibleVectorTip = (origin: Point, tip: Point): Point => ({
-    x: Math.abs(tip.x - origin.x) < 1 ? Math.min(350, origin.x + 8) : tip.x,
-    y: Math.abs(tip.y - origin.y) < 1 ? Math.max(10, origin.y - 8) : tip.y
-});
 
 const STARTER_IMAGE_TEMPLATES: StarterImageTemplate[] = [
     { id: 'girl', label: 'Girl starter', fileName: 'girl.png', description: 'Flat vector pose from resources/examples/raw/girl.png.', url: girlStarterUrl },
@@ -2136,37 +2104,18 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const landedFoundry = useMemo(() => ({ ...foundry, anchorX: landing.x, anchorY: landing.y, sceneAnchor: landing }), [foundry, landing.x, landing.y]);
     const anchorMarker = { x: 180 + (landing.x / SCENE_VIEW.width) * 360, y: 120 - (landing.y / SCENE_VIEW.height) * 240 };
     const preview = useMemo(() => generateCurvePoints(landedFoundry, 96).points, [landedFoundry]);
-    const range = sampleFeasibleRange(landedFoundry);
+    const range = useMemo(() => sampleFeasibleRange(landedFoundry), [landedFoundry]);
     const library = MECHANISM_LIBRARY[foundry.type];
     const targetIkJointId = selectedPart ? preferredMotionJointId(project, selectedPart.id, selectedPath?.targetAnchorJointId, { preferDistalWhenRoot: !selectedPath?.targetAnchorJointId }) : undefined;
     const feasibilityText = range.warning ?? '360° valid sampled motion';
-    const selectedSimulation = fitMechanismSimulation(landedFoundry, foundryPhase, 360, 240, 96);
+    const selectedSimulation = useMemo(() => fitMechanismSimulation(landedFoundry, foundryPhase, 360, 240, 96), [landedFoundry, foundryPhase]);
     const previewPoints = selectedSimulation.pathPoints.length ? selectedSimulation.pathPoints : fitPointsToBox(preview, 360, 240);
     const previewPath = selectedSimulation.pathD || pointsToSvgPath(previewPoints);
-    const playIndex = previewPoints.length ? Math.floor((((foundryPhase / (Math.PI * 2)) % 1 + 1) % 1) * previewPoints.length) : 0;
-    const playhead = selectedSimulation.state.effector ?? previewPoints[playIndex];
-    const pointAt = (index: number) => previewPoints.length ? previewPoints[((index % previewPoints.length) + previewPoints.length) % previewPoints.length] : playhead;
-    const previousPoint = pointAt(playIndex - 1);
-    const nextPoint = pointAt(playIndex + 1);
-    const pathCenter = previewPoints.length
-        ? previewPoints.reduce((sum, point) => ({ x: sum.x + point.x, y: sum.y + point.y }), { x: 0, y: 0 })
-        : playhead;
-    const physicsCenter = previewPoints.length ? { x: pathCenter.x / previewPoints.length, y: pathCenter.y / previewPoints.length } : playhead;
-    const velocityRaw = { x: nextPoint.x - previousPoint.x, y: nextPoint.y - previousPoint.y };
-    const accelerationRaw = { x: nextPoint.x + previousPoint.x - (playhead?.x ?? 0) * 2, y: nextPoint.y + previousPoint.y - (playhead?.y ?? 0) * 2 };
-    const driveRaw = {
-        x: -(selectedSimulation.state.j1.y - selectedSimulation.state.p1.y),
-        y: selectedSimulation.state.j1.x - selectedSimulation.state.p1.x
-    };
-    const velocityUnit = unitVector(velocityRaw.x, velocityRaw.y);
-    const driveUnit = unitVector(driveRaw.x, driveRaw.y, velocityUnit);
-    const radialUnit = unitVector(physicsCenter.x - (playhead?.x ?? physicsCenter.x), physicsCenter.y - (playhead?.y ?? physicsCenter.y), driveUnit);
-    const forceUnit = unitVector(accelerationRaw.x, accelerationRaw.y, radialUnit);
-    const frictionUnit = unitVector(-velocityRaw.x, -velocityRaw.y, { x: -velocityUnit.x, y: -velocityUnit.y });
-    const velocityTip = playhead ? clampPreviewPoint(vectorEnd(playhead, velocityUnit, 42)) : undefined;
-    const forceTip = playhead ? clampPreviewPoint(vectorEnd(playhead, forceUnit, 38)) : undefined;
-    const frictionTip = playhead ? clampPreviewPoint(vectorEnd(playhead, frictionUnit, 30)) : undefined;
-    const driveTip = ensureVisibleVectorTip(selectedSimulation.state.j1, clampPreviewPoint(vectorEnd(selectedSimulation.state.j1, driveUnit, 34)));
+    const physicsOverlay = useMemo(
+        () => buildFoundryPhysicsOverlay(landedFoundry, selectedSimulation, foundryPhase, project.settings, previewPoints),
+        [landedFoundry, selectedSimulation, foundryPhase, project.settings, previewPoints]
+    );
+    const { playhead, velocityRaw, accelerationRaw, velocityTip, forceTip, frictionTip, driveTip, velocityMagnitude, frictionMagnitude, forceMagnitude, constraintError, rule: physicsRule } = physicsOverlay;
     const foundryOverlayZ = (fabricationRenderPlanForMechanism(landedFoundry).layers.at(-1)?.z ?? 0.22) + 0.34;
     const projectOverlay = (point: Point | undefined) => projectFoundryOverlayPoint(point, foundryCamera, foundryProjectionSize, foundryOverlayZ);
     const projectedPlayhead = projectOverlay(playhead);
@@ -2176,33 +2125,6 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const projectedDriveOrigin = projectOverlay(selectedSimulation.state.j1);
     const projectedDriveTip = projectOverlay(driveTip);
     const projectedAnchorMarker = projectFoundryOverlayPoint(anchorMarker, foundryCamera, foundryProjectionSize, 0);
-    const velocityMagnitude = Math.hypot(velocityRaw.x, velocityRaw.y);
-    const frictionMagnitude = velocityMagnitude > 0.01 ? project.settings.simulationFriction * project.settings.simulationMassKg * 9.81 : 0;
-    const forceMagnitude = (Math.hypot(accelerationRaw.x, accelerationRaw.y) * project.settings.simulationMassKg) + frictionMagnitude;
-    const scaledLength = (length: number) => Math.max(0, length) * selectedSimulation.scale;
-    const fittedDistance = (a?: Point, b?: Point) => a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
-    const constraintError = (() => {
-        const s = selectedSimulation.state;
-        const errors = foundry.type === 'gear'
-            ? [Math.abs(fittedDistance(s.p1, s.p2) - scaledLength(foundry.crankLength + foundry.rockerLength))]
-            : foundry.type === 'planetary_gear'
-                ? [Math.abs(fittedDistance(s.p1, s.p2) - scaledLength(foundry.groundLength)), Math.abs(fittedDistance(s.p2, s.j2) - scaledLength(foundry.rockerLength))]
-                : foundry.type === 'rack-pinion'
-                    ? [Math.abs(fittedDistance(s.p1, s.j1) - scaledLength(foundry.crankLength)), fittedDistance(s.j2, s.p2)]
-                    : foundry.type === 'cam'
-                        ? [fittedDistance(s.j2, s.p2), Math.abs(fittedDistance(s.j1, s.j2) - scaledLength(foundry.rockerLength))]
-                        : foundry.type === 'piston'
-                            ? [fittedDistance(s.j2, s.effector)]
-                            : foundry.type === 'yoke'
-                                ? [Math.abs(fittedDistance(s.j1, s.j2) - scaledLength(foundry.crankLength))]
-                                : foundry.type === 'quick-return'
-                                    ? [Math.abs(fittedDistance(s.j1, s.j2) - scaledLength(foundry.couplerLength))]
-                                    : foundry.type === '5bar'
-                                        ? [Math.abs(fittedDistance(s.p2, s.aux ?? s.j2) - scaledLength(foundry.rockerLength)), Math.abs(fittedDistance(s.j1, s.j2) - scaledLength(foundry.couplerLength)), Math.abs(fittedDistance(s.aux ?? s.j2, s.j2) - scaledLength(foundry.rodLength ?? 0))]
-                                        : [Math.abs(fittedDistance(s.p1, s.j1) - scaledLength(foundry.crankLength)), Math.abs(fittedDistance(s.j1, s.j2) - scaledLength(foundry.couplerLength)), Math.abs(fittedDistance(s.j2, s.p2) - scaledLength(foundry.rockerLength))];
-        return Math.max(0, ...errors.filter(Number.isFinite));
-    })();
-    const physicsRule = mechanismPhysicsRule(foundry.type);
     const hardBlocked = !targetReady || range.percentValid === 0 || !Number.isFinite(landing.x) || !Number.isFinite(landing.y);
     const foundryCameraLabel = foundryCamera.preset === 'custom' ? 'Drag orbit' : FOUNDRY_VIEW_PRESETS[foundryCamera.preset].label;
     const foundryPhaseDegrees = Math.round(((((foundryPhase / (Math.PI * 2)) % 1) + 1) % 1) * 360);
@@ -2949,68 +2871,6 @@ const showParam = (type: MechanismType, key: keyof MechanismConfig) => {
     return true;
 };
 
-const fitPointsToBox = (points: Point[], width: number, height: number) => {
-    if (!points.length) return [];
-    const xs = points.map(p => p.x), ys = points.map(p => p.y);
-    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-    const scale = Math.min((width - 60) / Math.max(1, maxX - minX), (height - 70) / Math.max(1, maxY - minY));
-    const tx = width / 2 - ((minX + maxX) / 2) * scale;
-    const ty = height / 2 + ((minY + maxY) / 2) * scale;
-    return points.map(p => ({ x: p.x * scale + tx, y: ty - p.y * scale }));
-};
-
-const pointsToSvgPath = (points: Point[]) => points.length ? `M ${points.map(p => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' L ')}` : '';
-const fitPathToBox = (points: Point[], width: number, height: number) => pointsToSvgPath(fitPointsToBox(points, width, height));
-
-const fitMechanismSimulation = (mechanism: MechanismConfig, angle: number, width: number, height: number, resolution = 72) => {
-    const state = calculateLinkage(mechanism, angle);
-    const pathPoints = generateCurvePoints(mechanism, resolution).points;
-    const sweepBounds: Point[] = [];
-    const addRadiusBounds = (center: Point | undefined, radius: number, target = sweepBounds) => {
-        if (!center || !Number.isFinite(radius) || radius <= 0) return;
-        target.push(
-            { x: center.x - radius, y: center.y - radius },
-            { x: center.x + radius, y: center.y + radius }
-        );
-    };
-    for (let i = 0; i < Math.max(12, resolution); i += 1) {
-        const sampleState = calculateLinkage(mechanism, (i / Math.max(12, resolution)) * Math.PI * 2);
-        sweepBounds.push(...[sampleState.p1, sampleState.p2, sampleState.j1, sampleState.j2, sampleState.aux, sampleState.effector].filter((point): point is Point => Boolean(point)));
-        if (mechanism.type === 'cam') addRadiusBounds(sampleState.p1, mechanism.crankLength * 1.35);
-        if (mechanism.type === 'gear' || mechanism.type === '5bar' || mechanism.type === 'rack-pinion') {
-            addRadiusBounds(sampleState.p1, mechanism.crankLength);
-            addRadiusBounds(sampleState.p2, mechanism.rockerLength);
-        }
-        if (mechanism.type === 'planetary_gear') {
-            addRadiusBounds(sampleState.p1, mechanism.groundLength + mechanism.rockerLength);
-            addRadiusBounds(sampleState.p2, mechanism.rockerLength);
-        }
-    }
-    const source = [...pathPoints, ...sweepBounds];
-    if (!source.length) return { pathPoints: [] as Point[], pathD: '', state, scale: 1 };
-    const xs = source.map(p => p.x), ys = source.map(p => p.y);
-    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-    const scale = Math.min((width - 34) / Math.max(1, maxX - minX), (height - 32) / Math.max(1, maxY - minY));
-    const tx = width / 2 - ((minX + maxX) / 2) * scale;
-    const ty = height / 2 + ((minY + maxY) / 2) * scale;
-    const map = (point: Point): Point => ({ x: point.x * scale + tx, y: ty - point.y * scale });
-    const fittedPath = pathPoints.map(map);
-    return {
-        pathPoints: fittedPath,
-        pathD: pointsToSvgPath(fittedPath),
-        scale,
-        state: {
-            ...state,
-            p1: map(state.p1),
-            p2: map(state.p2),
-            j1: map(state.j1),
-            j2: map(state.j2),
-            aux: state.aux ? map(state.aux) : undefined,
-            effector: map(state.effector)
-        }
-    };
-};
-
 type ThreeFoundryPreviewProps = {
     mechanism: MechanismConfig;
     simulation: ReturnType<typeof fitMechanismSimulation>;
@@ -3114,7 +2974,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         const host = hostRef.current;
         if (!host) return;
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, WEBGL_PIXEL_RATIO_CAP));
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         renderer.domElement.className = 'foundry-three-canvas';
@@ -3558,6 +3418,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-anchor-pick-mode="three-raycaster-plane"
             data-three-hole-mode="extruded-cut-through"
             data-three-render-loop="camera-only-orbit"
+            data-three-pixel-ratio-cap={WEBGL_PIXEL_RATIO_CAP.toFixed(1)}
             data-three-animation-commit-ms={FOUNDRY_ANIMATION_COMMIT_MS.toFixed(1)}
             data-three-dynamic-build-count={dynamicBuildCountRef.current}
             data-three-geometry-cache-size={geometryCacheRef.current.size}

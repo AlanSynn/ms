@@ -45,6 +45,7 @@ Current local dependency check used `package.json`; latest version check used `n
 - [x] M2 snapshot seam.
 - [ ] M3 stage/domain branch replacement.
   - [x] M3 slice 2: pane ownership / compact workbench corrections.
+  - [x] M3 slice 3: Foundry preview/physics extraction and WebGL pixel-ratio cap.
 
 ## Consensus review notes
 
@@ -74,6 +75,9 @@ Current local dependency check used `package.json`; latest version check used `n
 - M3 slice 2: Blueprint keeps the center as the cut-sheet/work canvas and moves the printable assembly guide iframe into the right inspector.
 - M3 slice 2: updated AGENTS.md with subsystem/package governance: single app package for now, shared source-module seams, and measured-library adoption rules.
 - M3 slice 2: `test:browser` now builds once and runs Playwright against Vite production preview (`PLAYWRIGHT_SERVER=preview`) so the full browser suite validates the shipped bundle without Vite HMR websocket teardown noise. Dev-server browser testing remains available through `PLAYWRIGHT_SERVER=dev playwright test`.
+- M3 slice 3: Foundry fitting/sweep preview now lives in `utils/mechanismPreview.ts`, and force, velocity, friction, and constraint-error overlay math now lives in `utils/physicsSession.ts` through `buildFoundryPhysicsOverlay`; the React Foundry stage only projects sampled physics points into the current camera overlay.
+- M3 slice 3: Foundry feasible-range sampling is memoized by mechanism instead of recalculated on every animation commit.
+- M3 slice 3: `utils/viewport.ts` owns the shared `WEBGL_PIXEL_RATIO_CAP`; both Foundry and 3D puppet previews use it and expose the cap through testable `data-three-pixel-ratio-cap` attributes.
 
 ## Verification
 
@@ -102,3 +106,6 @@ Current local dependency check used `package.json`; latest version check used `n
 - M3 slice 2 full browser QA — pass: `npm run test:browser` (`31 passed`, 4.7m) in production preview mode after confirming the prior dev-server run failed only from Vite HMR/webserver teardown (`ERR_CONNECTION_REFUSED`) rather than app assertions.
 - M3 slice 2 test-engineer review — pass: no coverage gaps for Character, shared viewport, Foundry compact/sensemaking state, right-inspector opacity, and Blueprint guide placement.
 - M3 slice 2 code-review gate — pass (`APPROVE`, architectural status `CLEAR`).
+- M3 slice 3 `npm test` — pass (`project contracts ok`).
+- M3 slice 3 `npm run build` — pass (`tsc && vite build`).
+- M3 slice 3 full browser QA — pass: `npm run test:browser` (`31 passed`, 4.7m) in production preview mode, including Foundry physics vectors, WebGL 3D camera/orbit, design 3D templates, free path drawing, and blueprint workflows.
