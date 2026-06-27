@@ -223,8 +223,11 @@
       .three-puppet-overlay { position: absolute; inset: 0; z-index: 12; pointer-events: none; opacity: .96; mix-blend-mode: normal; }
       .three-puppet-host, .three-puppet-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
       .three-puppet-canvas { display: block; }
-      .three-puppet-view-toolbar { left: 50%; right: auto; top: 1rem; transform: translateX(-50%); z-index: 31; pointer-events: auto; }
+      .three-puppet-view-toolbar { left: calc(50% - 7rem); right: auto; top: 1rem; transform: translateX(-50%); z-index: 31; pointer-events: auto; }
+      .three-puppet-view-toolbar { gap: .16rem; padding: .3rem; }
+      .three-puppet-view-toolbar button, .three-puppet-view-toolbar span { min-width: 1.75rem; padding: .38rem .42rem; font-size: .72rem; }
       .three-puppet-view-toolbar button.active { background: var(--ms-accent); color: #fff; border-color: var(--ms-accent); box-shadow: 0 10px 26px rgba(79,70,229,.22); }
+      .viewer-toolbar-divider { width: 1px; min-width: 1px !important; height: 1.4rem; padding: 0 !important; margin: 0 .2rem; background: var(--ms-line); }
       .three-puppet-state { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
       .path-canvas-shell > svg[data-testid="path-canvas"], .canvas-surface > svg[data-testid="design-canvas"] { position: relative; z-index: 10; }
       .foundry-preview { position: relative; overflow: hidden; background-color: rgba(255,255,255,.92); background-size: 24px 24px; background-image: linear-gradient(to right, rgba(90,108,255,.055) 1px, transparent 1px), linear-gradient(to bottom, rgba(90,108,255,.055) 1px, transparent 1px); border: 1px solid rgba(148,163,184,.22); box-shadow: inset 0 1px 0 rgba(255,255,255,.92); cursor: grab; touch-action: none; }
@@ -233,7 +236,7 @@
       .foundry-camera-hud button { flex: 0 0 auto; border-radius: 999px; background: transparent; color: var(--ms-text-soft); padding: .38rem .56rem; font-size: .74rem; font-weight: 950; }
       .foundry-camera-hud button.active { background: var(--ms-accent); color: #fff; box-shadow: 0 10px 26px rgba(79,70,229,.22); }
       .foundry-camera-readout { border-right: 1px solid var(--ms-line); color: var(--ms-muted); padding: .35rem .75rem .35rem .5rem; font-size: .72rem; font-weight: 950; white-space: nowrap; }
-      .foundry-sim-badge { left: .85rem; top: 5.6rem; display: inline-flex; align-items: center; gap: .45rem; border-radius: 999px; color: var(--ms-text-soft); padding: .45rem .68rem; font-size: .72rem; font-weight: 950; }
+      .foundry-sim-badge { left: .85rem; top: auto; bottom: 5.4rem; display: inline-flex; align-items: center; gap: .45rem; border-radius: 999px; color: var(--ms-text-soft); padding: .45rem .68rem; font-size: .72rem; font-weight: 950; }
       .foundry-sim-badge span { width: .5rem; height: .5rem; border-radius: 999px; background: #94a3b8; }
       .foundry-sim-badge span.status-pulse { background: #10b981; animation: pulse-dot 1.6s ease-in-out infinite; }
       .foundry-opacity-panel { right: .85rem; top: 5.6rem; display: grid; gap: .45rem; width: 10.5rem; border-radius: 1rem; padding: .65rem .75rem; }
@@ -251,7 +254,7 @@
         .foundry-camera-hud { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: min(13.5rem, calc(100% - 1.7rem)); }
         .foundry-camera-hud button { width: 100%; padding: .35rem .5rem; }
         .foundry-camera-readout { display: none; }
-        .foundry-sim-badge { top: 5.65rem; }
+        .foundry-sim-badge { top: auto; bottom: 5.4rem; }
         .foundry-opacity-panel { left: .85rem; right: auto; top: 8.15rem; width: min(8.5rem, calc(100% - 1.7rem)); }
         .foundry-playback-hud { flex-wrap: wrap; justify-content: center; width: min(18rem, calc(100% - 2rem)); }
         .foundry-playback-hud input { flex-basis: 6rem; min-width: 6rem; }

@@ -130,6 +130,16 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await page.getByTestId('path-three-puppet-view-top').click();
   await expect(pathPuppet).toHaveAttribute('data-camera-preset', 'top');
   await expect(pathPuppet).toHaveAttribute('data-view-mode', '3d');
+  await expect(pathPuppet).toHaveAttribute('data-viewer-contract', 'shared-viewer3d:v1');
+  await expect(pathPuppet).toHaveAttribute('data-layer-skeleton', 'shown');
+  await page.getByTestId('path-three-puppet-toggle-skeleton').click();
+  await expect(pathPuppet).toHaveAttribute('data-layer-skeleton', 'hidden');
+  await page.getByTestId('path-three-puppet-toggle-skeleton').click();
+  await expect(pathPuppet).toHaveAttribute('data-layer-skeleton', 'shown');
+  await page.getByTestId('path-three-puppet-toggle-grid').click();
+  await expect(pathPuppet).toHaveAttribute('data-layer-grid', 'hidden');
+  await page.getByTestId('path-three-puppet-toggle-grid').click();
+  await expect(pathPuppet).toHaveAttribute('data-layer-grid', 'shown');
   await expect(pathPuppet).toHaveAttribute('data-puppet-mode', 'thick-flat-assembly');
   await expect(pathPuppet).toHaveAttribute('data-three-part-surface', 'solid-cut-plates');
   await expect(pathPuppet).toHaveAttribute('data-three-part-art', 'top-texture-decal');
@@ -1309,6 +1319,9 @@ test('Mechanism Foundry supports CAD-style 3D camera presets and drag orbit', as
   const preview = page.getByTestId('foundry-preview');
   const overlay = page.getByTestId('foundry-preview-overlay');
   await expect(rig).toHaveAttribute('data-camera-preset', 'iso');
+  await expect(rig).toHaveAttribute('data-viewer-contract', 'shared-viewer3d:v1');
+  await expect(rig).toHaveAttribute('data-layer-grid', 'shown');
+  await expect(rig).toHaveAttribute('data-layer-paths', 'shown');
   await expect(rig).toHaveAttribute('data-camera-zoom', '0.820');
   await expect(rig).toHaveAttribute('data-anchor-pick-mode', 'three-raycaster-plane');
   await expect(page.getByTestId('foundry-camera-readout')).toContainText('3D Isometric');
@@ -1387,8 +1400,19 @@ test('Mechanism Foundry supports CAD-style 3D camera presets and drag orbit', as
   for (const preset of ['front', 'side', 'top', 'iso', 'front'] as const) {
     await page.getByTestId(`foundry-camera-preset-${preset}`).click();
     await expect(rig).toHaveAttribute('data-camera-preset', preset);
+    if (preset === 'side') {
+      const contract = JSON.parse(await rig.getAttribute('data-viewer-contract-state') ?? '{}');
+      expect(contract).toMatchObject({ tab: 'foundry', cameraPreset: 'side', mode: '3d' });
+    }
   }
   await expect(page.getByTestId('foundry-camera-readout')).toContainText('3D Front');
+  await page.getByTestId('foundry-toggle-grid').click();
+  await expect(rig).toHaveAttribute('data-layer-grid', 'hidden');
+  await page.getByTestId('foundry-toggle-paths').click();
+  await expect(rig).toHaveAttribute('data-layer-paths', 'hidden');
+  await page.getByTestId('foundry-toggle-paths').click();
+  await page.getByTestId('foundry-toggle-grid').click();
+  await expect(rig).toHaveAttribute('data-layer-grid', 'shown');
   await expect(rig).not.toHaveAttribute('data-camera-yaw', isoYaw ?? '');
   await expect.poll(vectorOrigin, { message: 'physics vector origin is camera-projected with the 3D mechanism joints' }).not.toBe(isoVectorOrigin);
 

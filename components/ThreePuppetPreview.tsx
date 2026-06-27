@@ -7,19 +7,13 @@ import { FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricat
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, pointInsideOutline } from '../utils/partGeometry';
 import { WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, loadRapierPhysicsKernel, physicsKernelErrorMessage } from '../utils/physicsKernel';
+import { DEFAULT_PUPPET_VIEWER_LAYERS, VIEWER3D_CAMERA_PRESETS, VIEWER3D_CONTRACT_VERSION, createViewer3DContract, viewer3DLayerDataValue, type Viewer3DCameraPreset, type Viewer3DTabKey } from '../utils/viewer3d';
 
 const VIEW_SCALE = 35;
 const THICKNESS = 0.22;
 const SUPPORTED_MECHANISM_TYPES: MechanismType[] = ['crank', '4bar', 'piston', 'yoke', 'quick-return', '5bar', 'cam', 'rack-pinion', 'gear', 'planetary_gear'];
 type RendererStatus = 'pending' | 'webgl' | 'unavailable';
 type LinkKey = 'base' | 'driver' | 'coupler' | 'output' | 'effector';
-type PuppetCameraPreset = 'front' | 'top' | 'iso';
-
-const PUPPET_CAMERA_PRESETS: Record<PuppetCameraPreset, { label: string; mode: '2d' | '3d'; position: [number, number, number]; up: [number, number, number]; distance: number }> = {
-  front: { label: '2D', mode: '2d', position: [0, 0, 1], up: [0, 1, 0], distance: 16 },
-  top: { label: 'Top', mode: '3d', position: [0, -1, 0.08], up: [0, 0, 1], distance: 14 },
-  iso: { label: '3D', mode: '3d', position: [0.62, -0.86, 0.72], up: [0, 0, 1], distance: 15 }
-};
 
 type MaterialKit = {
   sheet: THREE.MeshStandardMaterial;
@@ -113,6 +107,13 @@ const createPartArtMaterial = (part: BodyPartLayer, onLoaded: () => void) => {
     material.needsUpdate = true;
   }
   return material;
+};
+
+const viewerTabFromTestId = (testId: string): Viewer3DTabKey => {
+  if (testId.startsWith('character')) return 'character';
+  if (testId.startsWith('design')) return 'design';
+  if (testId.startsWith('blueprint')) return 'blueprint';
+  return 'path';
 };
 
 const disposeMaterials = (materials: MaterialKit | null) => {
@@ -449,7 +450,9 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
   const [physicsKernelRuntime, setPhysicsKernelRuntime] = useState<'loading' | 'ready' | 'unavailable'>('loading');
   const [physicsKernelVersion, setPhysicsKernelVersion] = useState('pending');
   const [physicsKernelError, setPhysicsKernelError] = useState('none');
-  const [cameraPreset, setCameraPreset] = useState<PuppetCameraPreset>('iso');
+  const [cameraPreset, setCameraPreset] = useState<Viewer3DCameraPreset>('iso');
+  const [visibleLayers, setVisibleLayers] = useState(DEFAULT_PUPPET_VIEWER_LAYERS);
+  const toggleLayer = (layer: keyof typeof DEFAULT_PUPPET_VIEWER_LAYERS) => setVisibleLayers(prev => ({ ...prev, [layer]: !prev[layer] }));
 
   useEffect(() => {
     let active = true;
@@ -928,10 +931,20 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
 
   useEffect(() => {
     const roots = rootsRef.current;
+    if (!roots || rendererStatus !== 'webgl') return;
+    roots.staticLayer.visible = visibleLayers.grid;
+    roots.partsLayer.visible = visibleLayers.character;
+    roots.skeletonLayer.visible = visibleLayers.skeleton;
+    roots.mechanismsLayer.visible = visibleLayers.mechanisms;
+    render();
+  }, [rendererStatus, visibleLayers.grid, visibleLayers.character, visibleLayers.skeleton, visibleLayers.mechanisms]);
+
+  useEffect(() => {
+    const roots = rootsRef.current;
     const camera = cameraRef.current;
     if (!roots || !camera || rendererStatus !== 'webgl') return;
     const zoom = viewport?.zoom ?? 1;
-    const preset = PUPPET_CAMERA_PRESETS[cameraPreset];
+    const preset = VIEWER3D_CAMERA_PRESETS[cameraPreset];
     const [px, py, pz] = preset.position;
     const [ux, uy, uz] = preset.up;
     const distance = preset.distance / zoom;
@@ -946,17 +959,40 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
     if (stateRef.current) stateRef.current.dataset.threeObjectCount = String(estimatedObjectCount);
   }, [estimatedObjectCount]);
 
-  const activeCamera = PUPPET_CAMERA_PRESETS[cameraPreset];
-  return <div className="three-puppet-overlay" data-testid={testId} aria-label="3D character view" data-camera-preset={cameraPreset} data-view-mode={activeCamera.mode}>
+  const activeCamera = VIEWER3D_CAMERA_PRESETS[cameraPreset];
+  const viewerContract = useMemo(() => createViewer3DContract(viewerTabFromTestId(testId), cameraPreset, {
+    grid: visibleLayers.grid,
+    character: visibleLayers.character,
+    skeleton: visibleLayers.skeleton,
+    mechanisms: visibleLayers.mechanisms,
+    paths: 'external',
+    forces: 'absent',
+    velocity: 'absent'
+  }, activeCamera.mode), [activeCamera.mode, cameraPreset, testId, visibleLayers.character, visibleLayers.grid, visibleLayers.mechanisms, visibleLayers.skeleton]);
+  return <div
+    className="three-puppet-overlay"
+    data-testid={testId}
+    aria-label="3D character view"
+    data-camera-preset={cameraPreset}
+    data-view-mode={activeCamera.mode}
+    data-viewer-contract={VIEWER3D_CONTRACT_VERSION}
+    data-viewer-contract-state={JSON.stringify(viewerContract)}
+    data-viewer-tab={viewerContract.tab}
+    data-layer-grid={viewer3DLayerDataValue(visibleLayers.grid)}
+    data-layer-character={viewer3DLayerDataValue(visibleLayers.character)}
+    data-layer-skeleton={viewer3DLayerDataValue(visibleLayers.skeleton)}
+    data-layer-mechanisms={viewer3DLayerDataValue(visibleLayers.mechanisms)}
+  >
     <div ref={hostRef} className="three-puppet-host" />
     <div
       className="canvas-zoom-toolbar three-puppet-view-toolbar"
       data-testid={`${testId}-view-toolbar`}
-      aria-label="2D and 3D view switcher"
+      aria-label="Shared 3D viewer toolbar"
+      data-viewer-contract={VIEWER3D_CONTRACT_VERSION}
       onMouseDown={event => event.stopPropagation()}
       onPointerDown={event => event.stopPropagation()}
     >
-      {(Object.keys(PUPPET_CAMERA_PRESETS) as PuppetCameraPreset[]).map(preset => (
+      {(Object.keys(VIEWER3D_CAMERA_PRESETS) as Viewer3DCameraPreset[]).map(preset => (
         <button
           key={preset}
           type="button"
@@ -964,7 +1000,19 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
           className={cameraPreset === preset ? 'active' : ''}
           aria-pressed={cameraPreset === preset}
           onClick={() => setCameraPreset(preset)}
-        >{PUPPET_CAMERA_PRESETS[preset].label}</button>
+        >{VIEWER3D_CAMERA_PRESETS[preset].label}</button>
+      ))}
+      <span className="viewer-toolbar-divider" aria-hidden="true" />
+      {(['grid', 'character', 'skeleton', 'mechanisms'] as Array<keyof typeof DEFAULT_PUPPET_VIEWER_LAYERS>).map(layer => (
+        <button
+          key={layer}
+          type="button"
+          data-testid={`${testId}-toggle-${layer}`}
+          className={visibleLayers[layer] ? 'active' : ''}
+          aria-pressed={visibleLayers[layer]}
+          aria-label={`Toggle ${layer} layer`}
+          onClick={() => toggleLayer(layer)}
+        >{layer === 'character' ? 'Body' : layer === 'skeleton' ? 'Rig' : layer === 'mechanisms' ? 'Mech' : layer}</button>
       ))}
     </div>
     <div
@@ -973,6 +1021,16 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       className="three-puppet-state"
       data-camera-preset={cameraPreset}
       data-view-mode={activeCamera.mode}
+      data-viewer-contract={VIEWER3D_CONTRACT_VERSION}
+      data-viewer-contract-state={JSON.stringify(viewerContract)}
+      data-viewer-tab={viewerContract.tab}
+      data-layer-grid={viewer3DLayerDataValue(visibleLayers.grid)}
+      data-layer-character={viewer3DLayerDataValue(visibleLayers.character)}
+      data-layer-skeleton={viewer3DLayerDataValue(visibleLayers.skeleton)}
+      data-layer-mechanisms={viewer3DLayerDataValue(visibleLayers.mechanisms)}
+      data-layer-paths={viewer3DLayerDataValue(undefined, 'external')}
+      data-layer-forces={viewer3DLayerDataValue(undefined)}
+      data-layer-velocity={viewer3DLayerDataValue(undefined)}
       data-three-renderer={rendererStatus === 'pending' ? 'webgl' : rendererStatus}
       data-three-engine-stack={PHYSICS_RENDER_STACK}
       data-physics-kernel={PHYSICS_KERNEL_ENGINE}

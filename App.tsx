@@ -45,6 +45,7 @@ import { loadCharacterPackage } from './utils/packageLoader';
 import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlinePathD, pointInsideOutline } from './utils/partGeometry';
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT, normalizeCanvasViewport, WEBGL_PIXEL_RATIO_CAP } from './utils/viewport';
+import { VIEWER3D_CAMERA_PRESETS, VIEWER3D_CONTRACT_VERSION, createViewer3DContract, viewer3DLayerDataValue, type Viewer3DCameraPreset } from './utils/viewer3d';
 import { AUTHORABLE_MECHANISM_TYPES, FOUNDRY_PRESETS, MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY, mechanismTemplateLabel } from './utils/mechanismTemplates';
 import { fitMechanismSimulation, fitPathToBox, fitPointsToBox, pointsToSvgPath } from './utils/mechanismPreview';
 import { AlertCircle, Boxes, BrainCircuit, Camera, CheckCircle2, Download, FileJson, Loader2, PenLine, Play, Plus, Route, Save, Settings, Sparkles, Trash2, Upload, UserRound, Wrench } from 'lucide-react';
@@ -52,7 +53,7 @@ import girlStarterUrl from './resources/examples/raw/girl.png?url';
 import boyStarterUrl from './resources/examples/raw/boy.PNG?url';
 
 type FoundryState = MechanismConfig;
-type FoundryViewPreset = 'front' | 'iso' | 'side' | 'top' | 'custom';
+type FoundryViewPreset = Viewer3DCameraPreset | 'side' | 'custom';
 type FoundryCamera = { yaw: number; pitch: number; zoom: number; preset: FoundryViewPreset };
 type FoundryCameraPreset = { label: string; yaw: number; pitch: number; zoom: number };
 type StarterImageTemplate = { id: string; label: string; fileName: string; description: string; url: string };
@@ -60,11 +61,16 @@ type StarterImageTemplate = { id: string; label: string; fileName: string; descr
 const MOTIONSMITH_SITE_URL = 'https://alansynn.com/motionsmith/';
 const MOTIONSMITH_ICON_URL = `${MOTIONSMITH_SITE_URL}static/images/favicon.ico`;
 
+const foundryPreset = (preset: Viewer3DCameraPreset): FoundryCameraPreset => ({
+    label: VIEWER3D_CAMERA_PRESETS[preset].foundryLabel,
+    ...VIEWER3D_CAMERA_PRESETS[preset].foundry
+});
+
 const FOUNDRY_VIEW_PRESETS: Record<Exclude<FoundryViewPreset, 'custom'>, FoundryCameraPreset> = {
-    front: { label: 'Front', yaw: 0, pitch: 0, zoom: 0.86 },
-    iso: { label: 'Isometric', yaw: -32, pitch: 24, zoom: 0.82 },
+    front: foundryPreset('front'),
+    iso: foundryPreset('iso'),
     side: { label: 'Side', yaw: 64, pitch: 12, zoom: 0.86 },
-    top: { label: 'Top', yaw: 0, pitch: 62, zoom: 0.8 }
+    top: foundryPreset('top')
 };
 
 const clampFoundryPitch = (value: number) => Math.max(-64, Math.min(68, value));
@@ -2090,6 +2096,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const [showVelocity, setShowVelocity] = useState(true);
     const [showTrail, setShowTrail] = useState(false);
     const [showPathPreview, setShowPathPreview] = useState(true);
+    const [showFoundryGrid, setShowFoundryGrid] = useState(true);
     const [showSensemaking, setShowSensemaking] = useState(false);
     const [foundryCamera, setFoundryCamera] = useState<FoundryCamera>({ ...FOUNDRY_VIEW_PRESETS.iso, preset: 'iso' });
     const [foundryRigOpacity, setFoundryRigOpacity] = useState(85);
@@ -2310,11 +2317,17 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
         </div>),
             canvas: canvasPane(<section className="path-canvas-shell foundry-canvas-shell canvas-workspace p-0">
             <div className="foundry-sim-badge" data-testid="foundry-sim-badge"><span className={foundryPlaying ? 'status-pulse' : ''} />{foundryPlaying ? 'Active Sim' : 'Paused'}</div>
-            <div className="foundry-camera-hud" data-testid="foundry-camera-controls" aria-label="3D camera controls">
+            <div className="foundry-camera-hud" data-testid="foundry-camera-controls" aria-label="Shared 3D viewer toolbar" data-viewer-contract={VIEWER3D_CONTRACT_VERSION}>
                 <span className="foundry-camera-readout" data-testid="foundry-camera-readout">3D {foundryCameraLabel} · {Math.round(foundryCamera.zoom * 100)}%</span>
                 {(Object.entries(FOUNDRY_VIEW_PRESETS) as Array<[Exclude<FoundryViewPreset, 'custom'>, FoundryCameraPreset]>).map(([preset, view]) =>
                     <button key={preset} type="button" data-testid={`foundry-camera-preset-${preset}`} className={foundryCamera.preset === preset ? 'active' : ''} aria-pressed={foundryCamera.preset === preset} onClick={() => setCameraPreset(preset)}>{view.label}</button>
                 )}
+                <span className="viewer-toolbar-divider" aria-hidden="true" />
+                <button type="button" data-testid="foundry-toggle-grid" className={showFoundryGrid ? 'active' : ''} aria-label="Grid layer" aria-pressed={showFoundryGrid} onClick={() => setShowFoundryGrid(!showFoundryGrid)}>Grid</button>
+                <button type="button" data-testid="foundry-toggle-paths" className={showPathPreview ? 'active' : ''} aria-label="Path layer" aria-pressed={showPathPreview} onClick={() => setShowPathPreview(!showPathPreview)}>Path</button>
+                <button type="button" data-testid="foundry-toggle-forces" className={showForces ? 'active' : ''} aria-label="Force vector layer" aria-pressed={showForces} onClick={() => setShowForces(!showForces)}>Force</button>
+                <button type="button" data-testid="foundry-toggle-velocity" className={showVelocity ? 'active' : ''} aria-label="Speed vector layer" aria-pressed={showVelocity} onClick={() => setShowVelocity(!showVelocity)}>v</button>
+                <button type="button" data-testid="foundry-toggle-trail" className={showTrail ? 'active' : ''} aria-label="Motion trace layer" aria-pressed={showTrail} onClick={() => setShowTrail(!showTrail)}>Trace</button>
             </div>
             <div className="foundry-playback-hud foundry-toolbar" data-testid="foundry-toolbar" aria-label="Foundry playback controls">
                 <button className={`btn-secondary ${foundryPlaying ? 'active' : ''}`} onClick={() => setFoundryPlaying(!foundryPlaying)}>{foundryPlaying ? 'Pause' : 'Play'}</button>
@@ -2330,6 +2343,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 rigOpacity={foundryRigOpacity / 100}
                 color={foundry.color}
                 pathPoints={previewPoints}
+                showGrid={showFoundryGrid}
                 showPathPreview={showPathPreview}
                 showTrail={showTrail}
                 showForces={showForces}
@@ -2376,7 +2390,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                     </g>}
                 </svg>
             </ThreeFoundryPreview>
-            <div className="canvas-status-readout" data-testid="foundry-toolbar-state">Toolbar: {foundryPlaying ? 'playing' : 'paused'} · path {showPathPreview ? 'shown' : 'hidden'} · camera {foundryCameraLabel} · phase {Math.round(foundryPhase * 180 / Math.PI)}°</div>
+            <div className="canvas-status-readout" data-testid="foundry-toolbar-state">Toolbar: {foundryPlaying ? 'playing' : 'paused'} · grid {showFoundryGrid ? 'shown' : 'hidden'} · path {showPathPreview ? 'shown' : 'hidden'} · camera {foundryCameraLabel} · phase {Math.round(foundryPhase * 180 / Math.PI)}°</div>
         </section>),
             inspector: inspectorPane(<div className="stage-pane-stack">
             <div>
@@ -2880,6 +2894,7 @@ type ThreeFoundryPreviewProps = {
     rigOpacity: number;
     color: string;
     pathPoints: Point[];
+    showGrid: boolean;
     showPathPreview: boolean;
     showTrail: boolean;
     showForces: boolean;
@@ -2927,7 +2942,7 @@ const disposeThreeObject = (object: THREE.Object3D) => object.traverse(child => 
     else if (material && !material.userData.foundryCached) material.dispose();
 });
 
-const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, color, pathPoints, showPathPreview, showTrail, showForces, showVelocity, physicsRule, velocityMagnitude, forceMagnitude, frictionCoefficient, frictionMagnitude, constraintError, cameraLabel, isPickingAnchor, isOrbiting, isZooming, onAnchorPick, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onWheel, onProjectionSizeChange, children }: ThreeFoundryPreviewProps) => {
+const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, color, pathPoints, showGrid, showPathPreview, showTrail, showForces, showVelocity, physicsRule, velocityMagnitude, forceMagnitude, frictionCoefficient, frictionMagnitude, constraintError, cameraLabel, isPickingAnchor, isOrbiting, isZooming, onAnchorPick, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onWheel, onProjectionSizeChange, children }: ThreeFoundryPreviewProps) => {
     const hostRef = useRef<HTMLDivElement | null>(null);
     const stateRef = useRef<HTMLDivElement | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
@@ -2943,6 +2958,16 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
     const inv = foundryRenderedInventory(mechanism.type);
     const pinionRotation = Math.atan2(simulation.state.j1.y - simulation.state.p1.y, simulation.state.j1.x - simulation.state.p1.x) * 180 / Math.PI;
     const renderPlan = useMemo(() => fabricationRenderPlanForMechanism(mechanism), [mechanism.type]);
+    const viewerContract = useMemo(() => createViewer3DContract('foundry', camera.preset, {
+        grid: showGrid,
+        character: 'absent',
+        skeleton: 'absent',
+        mechanisms: true,
+        paths: showPathPreview,
+        forces: showForces,
+        velocity: showVelocity,
+        trail: showTrail
+    }), [camera.preset, showForces, showGrid, showPathPreview, showTrail, showVelocity]);
     const spacerLayerCount = renderPlan.layers.filter(item => item.role === 'spacer').length;
     const spacerRenderCount = spacerLayerCount * [simulation.state.p1, simulation.state.p2, simulation.state.j1, simulation.state.j2, simulation.state.aux, simulation.state.effector].filter(Boolean).length;
     const stackZGap = renderPlan.layers.length > 1 ? renderPlan.layers[1].z - renderPlan.layers[0].z : 0;
@@ -3053,6 +3078,14 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         cameraStateRef.current = camera;
         renderCamera(camera);
     }, [camera]);
+
+    useEffect(() => {
+        const scene = sceneRef.current;
+        const staticRoot = scene?.getObjectByName('foundry-static');
+        if (!staticRoot) return;
+        staticRoot.visible = showGrid;
+        renderCamera(cameraStateRef.current);
+    }, [showGrid]);
 
     useEffect(() => {
         const scene = sceneRef.current;
@@ -3394,12 +3427,32 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         onContextMenu={event => event.preventDefault()}
         className={`foundry-preview h-[520px] w-full ${isPickingAnchor ? 'is-picking-anchor' : ''} ${isOrbiting ? 'is-orbiting' : ''} ${isZooming ? 'is-zooming' : ''}`}
         aria-label="Mechanism Foundry true WebGL 3D sandbox preview"
+        data-viewer-contract={VIEWER3D_CONTRACT_VERSION}
+        data-viewer-contract-state={JSON.stringify(viewerContract)}
+        data-viewer-tab={viewerContract.tab}
+        data-layer-grid={viewer3DLayerDataValue(showGrid)}
+        data-layer-mechanisms={viewer3DLayerDataValue(true)}
+        data-layer-paths={viewer3DLayerDataValue(showPathPreview)}
+        data-layer-forces={viewer3DLayerDataValue(showForces)}
+        data-layer-velocity={viewer3DLayerDataValue(showVelocity)}
+        data-layer-trail={viewer3DLayerDataValue(showTrail)}
     >
         <div ref={hostRef} className="foundry-three-host" />
         <div
             ref={stateRef}
             data-testid="foundry-camera-rig"
+            data-viewer-contract={VIEWER3D_CONTRACT_VERSION}
+            data-viewer-contract-state={JSON.stringify(viewerContract)}
+            data-viewer-tab={viewerContract.tab}
             data-camera-preset={camera.preset}
+            data-layer-grid={viewer3DLayerDataValue(showGrid)}
+            data-layer-mechanisms={viewer3DLayerDataValue(true)}
+            data-layer-character={viewer3DLayerDataValue(undefined)}
+            data-layer-skeleton={viewer3DLayerDataValue(undefined)}
+            data-layer-paths={viewer3DLayerDataValue(showPathPreview)}
+            data-layer-forces={viewer3DLayerDataValue(showForces)}
+            data-layer-velocity={viewer3DLayerDataValue(showVelocity)}
+            data-layer-trail={viewer3DLayerDataValue(showTrail)}
             data-camera-yaw={camera.yaw.toFixed(1)}
             data-camera-pitch={camera.pitch.toFixed(1)}
             data-camera-zoom={camera.zoom.toFixed(3)}
