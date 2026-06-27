@@ -125,15 +125,31 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   const pathPuppet = page.getByTestId('path-three-puppet-state');
   await expect(pathPuppet).toHaveAttribute('data-three-renderer', 'webgl');
   await expect(pathPuppet).toHaveAttribute('data-camera-preset', 'iso');
+  await expect(page.getByTestId('path-three-puppet-view-top')).toHaveCount(0);
   await page.getByTestId('path-three-puppet-view-2d').click();
   await expect(pathPuppet).toHaveAttribute('data-camera-preset', 'front');
   await expect(pathPuppet).toHaveAttribute('data-view-mode', '2d');
+  const zoomReadout = page.getByTestId('canvas-zoom-readout');
+  const readZoomPercent = async () => Number((await zoomReadout.textContent())?.replace('%', '') ?? '0');
+  const zoomBefore = await readZoomPercent();
+  const pathCanvasForZoom = page.getByTestId('path-canvas');
+  const pathBox = await pathCanvasForZoom.boundingBox();
+  if (!pathBox) throw new Error('path canvas box missing');
+  await page.mouse.move(pathBox.x + pathBox.width * 0.55, pathBox.y + pathBox.height * 0.45);
+  await page.mouse.wheel(0, -360);
+  await expect.poll(readZoomPercent).toBeGreaterThan(zoomBefore);
   await page.getByTestId('path-three-puppet-view-3d').click();
   await expect(pathPuppet).toHaveAttribute('data-camera-preset', 'iso');
   await expect(pathPuppet).toHaveAttribute('data-view-mode', '3d');
-  await page.getByTestId('path-three-puppet-view-top').click();
-  await expect(pathPuppet).toHaveAttribute('data-camera-preset', 'top');
-  await expect(pathPuppet).toHaveAttribute('data-view-mode', '3d');
+  const yawBefore = Number(await pathPuppet.getAttribute('data-camera-yaw'));
+  const puppetCanvas = page.getByTestId('path-three-puppet-canvas');
+  const puppetBox = await puppetCanvas.boundingBox();
+  if (!puppetBox) throw new Error('3D puppet canvas box missing');
+  await page.mouse.move(puppetBox.x + puppetBox.width * 0.5, puppetBox.y + puppetBox.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.move(puppetBox.x + puppetBox.width * 0.65, puppetBox.y + puppetBox.height * 0.42);
+  await page.mouse.up();
+  await expect.poll(async () => Number(await pathPuppet.getAttribute('data-camera-yaw'))).toBeGreaterThan(yawBefore + 5);
   await expect(pathPuppet).toHaveAttribute('data-viewer-contract', 'shared-viewer3d:v1');
   await expect(pathPuppet).toHaveAttribute('data-layer-skeleton', 'shown');
   await page.getByTestId('path-three-puppet-toggle-skeleton').click();
@@ -177,6 +193,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
+  await expect(pathPuppet).toHaveAttribute('data-input-mode', 'none');
   const pathCanvas = page.getByTestId('path-canvas');
   await expect(pathCanvas).toBeVisible();
   await pathCanvas.click({ position: { x: 260, y: 220 } });
@@ -564,7 +581,9 @@ test('Create from image upload creates a reviewed character package in browser',
   await expect(page.getByText('review generated package')).toBeVisible({ timeout: 180_000 });
   const dockBox = await page.getByTestId('character-status-dock').boundingBox();
   const canvasBox = await page.getByTestId('stage-canvas-pane').boundingBox();
+  const statusStripBox = await page.getByTestId('workflow-status-strip').boundingBox();
   expect(dockBox?.x ?? 0, 'character import status floats outside the center canvas').toBeGreaterThanOrEqual((canvasBox?.x ?? 0) + (canvasBox?.width ?? 0) - 8);
+  expect(Math.abs(((statusStripBox?.y ?? 0) - ((dockBox?.y ?? 0) + (dockBox?.height ?? 0))) - 10), 'character import status floats 10px above the bottom status area').toBeLessThanOrEqual(2);
   await expect(page.getByText(/parts · .*joints · ready to review/i)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Accept package' })).toBeVisible();
 
@@ -915,7 +934,9 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await expect(page.getByTestId('free-draw-status')).toContainText('0 points · none');
   await expect(page.getByText('No path for this part yet. Draw or track a path before fitting a mechanism.')).toBeVisible();
 
+  const pathPuppet = page.getByTestId('path-three-puppet-state');
   await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
+  await expect(pathPuppet).toHaveAttribute('data-input-mode', 'none');
   const pathCanvas = page.getByTestId('path-canvas');
   const canvasBox = await pathCanvas.boundingBox();
   expect(canvasBox, 'path canvas box for free-draw gesture').toBeTruthy();
@@ -1740,6 +1761,8 @@ test('Command menu and shared canvas zoom persist across workflow stages', async
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
   await expect(page.getByTestId('canvas-zoom-readout')).toHaveText('120%');
+  await page.getByTestId('design-three-puppet-view-2d').click();
+  await expect(page.getByTestId('design-three-puppet-state')).toHaveAttribute('data-view-mode', '2d');
 
   await page.getByTestId('design-canvas').hover();
   await page.mouse.wheel(0, -10000);
@@ -1947,6 +1970,24 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
     return delta;
   };
   const circularDeltaError = (actual: number, expected: number) => Math.abs(deltaDeg(actual, expected));
+  const waitForPrimaryMotionSample = async (start: number, message: string) => {
+    let motionSample = await readTelemetry();
+    await expect.poll(async () => {
+      let maxDelta = 0;
+      for (let sample = 0; sample < 6; sample += 1) {
+        const telemetry = await readTelemetry();
+        const delta = Math.abs(deltaDeg(telemetry.primary, start));
+        if (delta > maxDelta) {
+          maxDelta = delta;
+          motionSample = telemetry;
+        }
+        if (maxDelta > 6) break;
+        await page.waitForTimeout(90);
+      }
+      return maxDelta;
+    }, { message, timeout: 60_000 }).toBeGreaterThan(6);
+    return motionSample;
+  };
   const stageTransportButton = () => page.getByTestId('stage-left-pane').getByRole('button', { name: /Play|Pause/ }).first();
   const ensureDesignPaused = async () => {
     const button = stageTransportButton();
@@ -1965,9 +2006,8 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
   const gearStart = gearStartTelemetry.primary;
   const gearSecondaryStart = gearStartTelemetry.secondary;
   await ensureDesignPlaying();
-  await expect.poll(async () => Math.abs(deltaDeg((await readTelemetry()).primary, gearStart)), { message: 'gear animation updates the selected central 3D preview' }).toBeGreaterThan(6);
+  const gearTelemetry = await waitForPrimaryMotionSample(gearStart, 'gear animation updates the selected central 3D preview');
   await ensureDesignPaused();
-  const gearTelemetry = await readTelemetry();
   const gearPrimaryDelta = deltaDeg(gearTelemetry.primary, gearStart);
   const gearSecondaryDelta = deltaDeg(gearTelemetry.secondary, gearSecondaryStart);
   expect(circularDeltaError(gearSecondaryDelta, gearPrimaryDelta * gearTelemetry.gearRatio), 'gear train rotates by the live physical pitch-radius ratio').toBeLessThan(1.25);
@@ -1978,9 +2018,8 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
   const fiveStart = fiveStartTelemetry.primary;
   const fiveSecondaryStart = fiveStartTelemetry.secondary;
   await ensureDesignPlaying();
-  await expect.poll(async () => Math.abs(deltaDeg((await readTelemetry()).primary, fiveStart)), { message: 'five-bar animation updates secondary crank phase' }).toBeGreaterThan(6);
+  const fiveTelemetry = await waitForPrimaryMotionSample(fiveStart, 'five-bar animation updates secondary crank phase');
   await ensureDesignPaused();
-  const fiveTelemetry = await readTelemetry();
   const fivePrimaryDelta = deltaDeg(fiveTelemetry.primary, fiveStart);
   const fiveSecondaryDelta = deltaDeg(fiveTelemetry.secondary, fiveSecondaryStart);
   expect(circularDeltaError(fiveSecondaryDelta, fiveTelemetry.secondarySpeed * fivePrimaryDelta), 'five-bar second crank follows speed2 rather than generic opposite rotation').toBeLessThan(0.75);
@@ -2086,6 +2125,8 @@ test('Shared canvas supports wheel zoom and direct drag pan', async ({ page }) =
   await page.goto('/');
   await openWavingArmTemplate(page);
 
+  await page.getByTestId('path-three-puppet-view-2d').click();
+  await expect(page.getByTestId('path-three-puppet-state')).toHaveAttribute('data-view-mode', '2d');
   const canvas = page.getByTestId('path-canvas');
   const box = await canvas.boundingBox();
   expect(box, 'path canvas can receive direct viewport gestures').toBeTruthy();

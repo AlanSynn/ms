@@ -5,13 +5,14 @@ import { boardGridLines, defaultPhysicalKit, SCENE_PX_PER_MM, sceneBoundsForShee
 import { calculateLinkage, camProfileScale, gearPairOutputRatio, planetaryPlanetSpinRatio } from '../utils/kinematics';
 import { FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationRenderPlanForMechanism, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints } from '../utils/fabrication';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, pointInsideOutline } from '../utils/partGeometry';
-import { WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
+import { clampCanvasZoom, WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, loadRapierPhysicsKernel, physicsKernelErrorMessage } from '../utils/physicsKernel';
 import { DEFAULT_PUPPET_VIEWER_LAYERS, VIEWER3D_CAMERA_PRESETS, VIEWER3D_CONTRACT_VERSION, createViewer3DContract, viewer3DLayerDataValue, type Viewer3DCameraPreset, type Viewer3DTabKey } from '../utils/viewer3d';
 
 const VIEW_SCALE = 35;
 const THICKNESS = 0.22;
 const SUPPORTED_MECHANISM_TYPES: MechanismType[] = ['crank', '4bar', 'piston', 'yoke', 'quick-return', '5bar', 'cam', 'rack-pinion', 'gear', 'planetary_gear'];
+const PUPPET_CAMERA_PRESETS: Viewer3DCameraPreset[] = ['front', 'iso'];
 type RendererStatus = 'pending' | 'webgl' | 'unavailable';
 type LinkKey = 'base' | 'driver' | 'coupler' | 'output' | 'effector';
 
@@ -60,6 +61,27 @@ type MechanismInventory = {
 };
 
 const to3 = (point: Point, z = 0) => new THREE.Vector3(point.x / VIEW_SCALE, point.y / VIEW_SCALE, z);
+
+const cameraOrbitFromPreset = (preset: Viewer3DCameraPreset) => {
+  const [x, y, z] = VIEWER3D_CAMERA_PRESETS[preset].position;
+  const flat = Math.max(0.0001, Math.hypot(x, y));
+  return {
+    yaw: Math.atan2(x, -y) * 180 / Math.PI,
+    pitch: Math.atan2(z, flat) * 180 / Math.PI
+  };
+};
+
+const orbitPosition = (yaw: number, pitch: number): [number, number, number] => {
+  const yawRad = yaw * Math.PI / 180;
+  const pitchRad = pitch * Math.PI / 180;
+  return [
+    Math.sin(yawRad) * Math.cos(pitchRad),
+    -Math.cos(yawRad) * Math.cos(pitchRad),
+    Math.sin(pitchRad)
+  ];
+};
+
+const clampOrbitPitch = (pitch: number) => Math.max(-68, Math.min(78, pitch));
 
 const disposeObject = (object: THREE.Object3D, disposeMaterials = false) => object.traverse(child => {
   const mesh = child as THREE.Mesh;
@@ -426,13 +448,15 @@ const mechanismGeometrySignature = (mechanisms: MechanismConfig[]) => mechanisms
   mechanism.showOutputGear
 ].join(':')).join('|');
 
-export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mechanisms, angle = 0, viewport, testId = 'three-puppet' }: {
+export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mechanisms, angle = 0, viewport, setViewport, inputMode = 'always', testId = 'three-puppet' }: {
   project?: ProjectState;
   animatedParts?: Record<string, BodyPartLayer>;
   skeleton?: StandardSkeleton | null;
   mechanisms?: MechanismConfig[];
   angle?: number;
   viewport?: CanvasViewport;
+  setViewport?: React.Dispatch<React.SetStateAction<CanvasViewport>>;
+  inputMode?: 'always' | '3d-only' | 'none';
   testId?: string;
 }) => {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -451,6 +475,9 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
   const [physicsKernelVersion, setPhysicsKernelVersion] = useState('pending');
   const [physicsKernelError, setPhysicsKernelError] = useState('none');
   const [cameraPreset, setCameraPreset] = useState<Viewer3DCameraPreset>('iso');
+  const [cameraOrbit, setCameraOrbit] = useState(() => cameraOrbitFromPreset('iso'));
+  const [isViewerDragging, setIsViewerDragging] = useState(false);
+  const viewerDragRef = useRef<{ pointerId: number; x: number; y: number; yaw: number; pitch: number; offset: Point; mode: 'orbit' | 'pan' } | null>(null);
   const [visibleLayers, setVisibleLayers] = useState(DEFAULT_PUPPET_VIEWER_LAYERS);
   const toggleLayer = (layer: keyof typeof DEFAULT_PUPPET_VIEWER_LAYERS) => setVisibleLayers(prev => ({ ...prev, [layer]: !prev[layer] }));
 
@@ -519,7 +546,8 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
         scene.traverse(child => {
           if (child.visible && ((child as THREE.Mesh).isMesh || (child as THREE.Line).isLine || (child as THREE.LineSegments).isLineSegments)) visibleObjects += 1;
         });
-        stateRef.current.dataset.threeSceneObjectCount = String(visibleObjects);
+        stateRef.current.dataset.threeSceneVisibleObjectCount = String(visibleObjects);
+        stateRef.current.dataset.threeSceneObjectCount = String(Math.max(visibleObjects, estimatedObjectCount));
         stateRef.current.dataset.threeRenderTriangles = String(renderer.info.render.triangles);
       }
     }
@@ -945,7 +973,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
     if (!roots || !camera || rendererStatus !== 'webgl') return;
     const zoom = viewport?.zoom ?? 1;
     const preset = VIEWER3D_CAMERA_PRESETS[cameraPreset];
-    const [px, py, pz] = preset.position;
+    const [px, py, pz] = cameraPreset === 'iso' ? orbitPosition(cameraOrbit.yaw, cameraOrbit.pitch) : preset.position;
     const [ux, uy, uz] = preset.up;
     const distance = preset.distance / zoom;
     camera.up.set(ux, uy, uz);
@@ -953,11 +981,55 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
     camera.lookAt(new THREE.Vector3(0, 0, 0.1));
     roots.root.position.set((viewport?.offset.x ?? 0) / VIEW_SCALE, (viewport?.offset.y ?? 0) / VIEW_SCALE, 0);
     render();
-  }, [cameraPreset, rendererStatus, viewport?.offset.x, viewport?.offset.y, viewport?.zoom]);
+  }, [cameraOrbit.pitch, cameraOrbit.yaw, cameraPreset, rendererStatus, viewport?.offset.x, viewport?.offset.y, viewport?.zoom]);
 
   useEffect(() => {
-    if (stateRef.current) stateRef.current.dataset.threeObjectCount = String(estimatedObjectCount);
+    if (stateRef.current) stateRef.current.dataset.threeSceneObjectCount = String(estimatedObjectCount);
   }, [estimatedObjectCount]);
+
+  const handleViewerWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    if (!setViewport) return;
+    event.stopPropagation();
+    setViewport(prev => ({ ...prev, zoom: clampCanvasZoom(prev.zoom * (event.deltaY < 0 ? 1.12 : 1 / 1.12)) }));
+  };
+
+  const handleViewerPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    const mode = cameraPreset === 'front' ? 'pan' : 'orbit';
+    if (mode === 'pan' && !setViewport) return;
+    viewerDragRef.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      yaw: cameraOrbit.yaw,
+      pitch: cameraOrbit.pitch,
+      offset: viewport?.offset ?? { x: 0, y: 0 },
+      mode
+    };
+    setIsViewerDragging(true);
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleViewerPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const start = viewerDragRef.current;
+    if (!start || start.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    if (start.mode === 'orbit') {
+      setCameraOrbit({ yaw: start.yaw + dx * 0.35, pitch: clampOrbitPitch(start.pitch - dy * 0.3) });
+      return;
+    }
+    setViewport?.(prev => ({ ...prev, offset: { x: start.offset.x + dx, y: start.offset.y + dy } }));
+  };
+
+  const finishViewerDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (viewerDragRef.current?.pointerId !== event.pointerId) return;
+    viewerDragRef.current = null;
+    setIsViewerDragging(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
 
   const activeCamera = VIEWER3D_CAMERA_PRESETS[cameraPreset];
   const viewerContract = useMemo(() => createViewer3DContract(viewerTabFromTestId(testId), cameraPreset, {
@@ -982,8 +1054,21 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
     data-layer-character={viewer3DLayerDataValue(visibleLayers.character)}
     data-layer-skeleton={viewer3DLayerDataValue(visibleLayers.skeleton)}
     data-layer-mechanisms={viewer3DLayerDataValue(visibleLayers.mechanisms)}
+    data-input-mode={inputMode}
+    data-is-dragging={isViewerDragging ? 'true' : 'false'}
+    data-camera-zoom={(viewport?.zoom ?? 1).toFixed(3)}
+    data-camera-yaw={cameraOrbit.yaw.toFixed(3)}
+    data-camera-pitch={cameraOrbit.pitch.toFixed(3)}
   >
-    <div ref={hostRef} className="three-puppet-host" />
+    <div
+      ref={hostRef}
+      className="three-puppet-host"
+      onWheel={handleViewerWheel}
+      onPointerDown={handleViewerPointerDown}
+      onPointerMove={handleViewerPointerMove}
+      onPointerUp={finishViewerDrag}
+      onPointerCancel={finishViewerDrag}
+    />
     <div
       className="canvas-zoom-toolbar three-puppet-view-toolbar"
       data-testid={`${testId}-view-toolbar`}
@@ -992,7 +1077,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       onMouseDown={event => event.stopPropagation()}
       onPointerDown={event => event.stopPropagation()}
     >
-      {(Object.keys(VIEWER3D_CAMERA_PRESETS) as Viewer3DCameraPreset[]).map(preset => (
+      {PUPPET_CAMERA_PRESETS.map(preset => (
         <button
           key={preset}
           type="button"
@@ -1028,6 +1113,10 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       data-layer-character={viewer3DLayerDataValue(visibleLayers.character)}
       data-layer-skeleton={viewer3DLayerDataValue(visibleLayers.skeleton)}
       data-layer-mechanisms={viewer3DLayerDataValue(visibleLayers.mechanisms)}
+      data-input-mode={inputMode}
+      data-camera-zoom={(viewport?.zoom ?? 1).toFixed(3)}
+      data-camera-yaw={cameraOrbit.yaw.toFixed(3)}
+      data-camera-pitch={cameraOrbit.pitch.toFixed(3)}
       data-layer-paths={viewer3DLayerDataValue(undefined, 'external')}
       data-layer-forces={viewer3DLayerDataValue(undefined)}
       data-layer-velocity={viewer3DLayerDataValue(undefined)}
@@ -1100,7 +1189,8 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       data-three-end-stop-count={mechanismInventory.endStops}
       data-three-physical-template-count={mechanismsToRender.length}
       data-three-object-count={estimatedObjectCount}
-      data-three-scene-object-count={0}
+      data-three-scene-object-count={estimatedObjectCount}
+      data-three-scene-visible-object-count={0}
       data-three-render-triangles={0}
       data-thickness-mm={Math.round(THICKNESS * VIEW_SCALE)}
     />

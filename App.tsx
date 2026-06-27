@@ -1216,7 +1216,8 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
         </details>
     );
 
-    return <section className="character-stage animate-rise" data-testid="character-screen">
+    return <>
+        <section className="character-stage animate-rise" data-testid="character-screen">
         <EditorStageFrame stage="character" className="character-editor-frame" layout={{
             workflow: workflowPane(<StageLeftSummary project={project} title="Character" kicker="parts + skeleton" stage="character">
                 <div className="compact-workflow-row" data-testid="character-workflow-summary">
@@ -1286,7 +1287,7 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
             </StageLeftSummary>),
             canvas: canvasPane(<div className="character-preview-pane canvas-workspace" data-testid="character-preview-pane">
                 <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
-                <ThreePuppetPreview project={project} skeleton={project.skeleton} angle={0} viewport={viewport} testId="character-three-puppet" />
+                <ThreePuppetPreview project={project} skeleton={project.skeleton} angle={0} viewport={viewport} setViewport={setViewport} inputMode="always" testId="character-three-puppet" />
             </div>),
             inspector: inspectorPane(<div className="stage-pane-stack character-inspector">
                 <section className="character-setup-panel" data-testid="character-setup-panel" aria-label="Character part settings">
@@ -1302,10 +1303,11 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
                 </section>
             </div>)
         }}/>
+        </section>
         {statusOpen && <aside className="character-status-dock" data-testid="character-status-dock" role="dialog" aria-label="Import status" aria-live="polite">
             {importStatusPanel}
         </aside>}
-    </section>;
+    </>;
 };
 
 const CameraCaptureDialog = ({ isOpen, onClose, onCapture }: { isOpen: boolean; onClose: () => void; onCapture: (file: File) => void }) => {
@@ -1639,7 +1641,7 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
             canvas: canvasPane(<div className="path-canvas-shell canvas-workspace overflow-hidden p-0">
             <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
             <SceneSketch svgRef={svgRef} project={project} selectedPath={selectedPath} dragPoint={dragPoint} selectedPoint={selectedPoint} setDragPoint={setDragPoint} setSelectedPoint={setSelectedPoint} onPointMove={movePoint} onPointUp={stopDrawing} onCanvasDown={onCanvasDown} dispatch={dispatch} drawMode={drawMode} pathLocked={pathLocked} isPlaying={isPlaying} angle={angle} viewport={viewport} setViewport={setViewport}/>
-            <ThreePuppetPreview project={project} animatedParts={pathPreview?.parts ?? {}} skeleton={pathPreview?.skeleton ?? project.skeleton} angle={angle} viewport={viewport} testId="path-three-puppet" />
+            <ThreePuppetPreview project={project} animatedParts={pathPreview?.parts ?? {}} skeleton={pathPreview?.skeleton ?? project.skeleton} angle={angle} viewport={viewport} setViewport={setViewport} inputMode={drawMode ? 'none' : '3d-only'} testId="path-three-puppet" />
         </div>),
             inspector: inspectorPane(<div className="path-inspector stage-pane-stack">
             <div>
@@ -1732,7 +1734,6 @@ const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, 
     const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
         const rect = svgRef.current?.getBoundingClientRect();
         if (!rect) return;
-        e.preventDefault();
         const nextZoom = clampCanvasZoom(viewport.zoom * (1 - e.deltaY * 0.001));
         const fx = (e.clientX - rect.left) / rect.width;
         const fy = (e.clientY - rect.top) / rect.height;
@@ -2232,7 +2233,6 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     };
     const handleFoundryWheel = (event: React.WheelEvent<HTMLDivElement>) => {
         if (isPickingAnchor) return;
-        event.preventDefault();
         setFoundryCamera(prev => ({
             ...prev,
             zoom: clampFoundryZoom(prev.zoom * (event.deltaY < 0 ? 1.1 : 0.9)),

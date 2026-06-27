@@ -180,7 +180,7 @@
       .part-list-badges { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: .2rem; }
       .part-list-badges b { border: 1px solid var(--ms-line); border-radius: 999px; background: rgba(255,255,255,.82); color: var(--ms-muted); padding: .1rem .28rem; font-size: .58rem; font-weight: 950; text-transform: uppercase; }
       .character-stage { height: 100%; min-height: 0; position: relative; overflow: hidden; color: var(--ms-text); }
-      .character-status-dock { position: fixed; right: .85rem; bottom: calc(var(--ms-bottom-bars-height) + .8rem); z-index: 70; width: min(20rem, calc(100vw - var(--ms-rail-width) - 1.7rem)); min-height: 0; pointer-events: auto; }
+      .character-status-dock { position: fixed; right: .85rem; bottom: calc(var(--ms-bottom-bars-height) + 10px); z-index: 70; width: min(20rem, calc(100vw - var(--ms-rail-width) - 1.7rem)); min-height: 0; pointer-events: auto; }
       .character-status-dock .import-status { width: 100%; max-height: min(42vh, 20rem); overflow: auto; padding: .6rem; background: rgba(255,255,255,.97); box-shadow: 0 22px 72px rgba(8,10,18,.16); }
       .character-status-dock .progress-card { padding: .7rem; }
       .character-status-dock .progress-track { margin-top: .55rem; }
@@ -238,7 +238,9 @@
       .three-puppet-overlay { position: absolute; inset: 0; z-index: 12; pointer-events: none; opacity: .96; mix-blend-mode: normal; }
       .three-puppet-host, .three-puppet-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
       .three-puppet-canvas { display: block; }
-      .three-puppet-view-toolbar { left: calc(50% - 7rem); right: auto; top: 1rem; transform: translateX(-50%); z-index: 31; pointer-events: auto; }
+      .three-puppet-overlay[data-input-mode="always"] .three-puppet-host, .three-puppet-overlay[data-input-mode="always"] .three-puppet-canvas, .three-puppet-overlay[data-input-mode="3d-only"][data-view-mode="3d"] .three-puppet-host, .three-puppet-overlay[data-input-mode="3d-only"][data-view-mode="3d"] .three-puppet-canvas { pointer-events: auto; touch-action: none; cursor: grab; }
+      .three-puppet-overlay[data-is-dragging="true"] .three-puppet-host, .three-puppet-overlay[data-is-dragging="true"] .three-puppet-canvas { cursor: grabbing; }
+      .three-puppet-view-toolbar { left: 50%; right: auto; top: 1rem; transform: translateX(-50%); z-index: 31; pointer-events: auto; }
       .three-puppet-view-toolbar { gap: .16rem; padding: .3rem; }
       .three-puppet-view-toolbar button, .three-puppet-view-toolbar span { min-width: 1.75rem; padding: .38rem .42rem; font-size: .72rem; }
       .three-puppet-view-toolbar button.active { background: var(--ms-accent); color: #fff; border-color: var(--ms-accent); box-shadow: 0 10px 26px rgba(79,70,229,.22); }
@@ -366,7 +368,7 @@
         .welcome-backdrop { padding: .75rem; }
         .welcome-dialog { max-height: 94vh; padding: .85rem; border-radius: 1.4rem; }
         .character-stage { height: auto; min-height: calc(100vh - var(--ms-bottom-bars-height) - 1rem); overflow: visible; }
-        .character-status-dock { left: .75rem; right: .75rem; bottom: calc(var(--ms-bottom-bars-height) + .6rem); width: auto; }
+        .character-status-dock { left: .75rem; right: .75rem; bottom: calc(var(--ms-bottom-bars-height) + 10px); width: auto; }
         .character-status-dock .import-status { max-height: 46vh; }
       }
       .animate-rise { animation: rise .55s cubic-bezier(.22,1,.36,1) both; }

@@ -303,6 +303,9 @@ assert(mechanismPreviewText.includes('export const fitMechanismSimulation'), 'Fo
 assert(appText.includes('buildFoundryPhysicsOverlay') && physicsSessionText.includes('export const buildFoundryPhysicsOverlay'), 'Foundry force/velocity/constraint overlay math lives in PhysicsSession, not the React stage');
 assert(appText.includes('useMemo(() => sampleFeasibleRange(landedFoundry), [landedFoundry])'), 'Foundry feasible-range sampling is memoized by mechanism, not re-run on every animation render');
 assert(viewportText.includes('WEBGL_PIXEL_RATIO_CAP') && appText.includes('WEBGL_PIXEL_RATIO_CAP') && threePreviewText.includes('WEBGL_PIXEL_RATIO_CAP'), 'WebGL renderer pixel ratio cap is shared across Foundry and puppet previews');
+assert(threePreviewText.includes("const PUPPET_CAMERA_PRESETS: Viewer3DCameraPreset[] = ['front', 'iso']"), 'puppet viewer toolbar exposes only the fixed 2D and orbitable 3D modes');
+assert(threePreviewText.includes('onWheel={handleViewerWheel}') && threePreviewText.includes('data-camera-yaw'), 'puppet 3D canvas exposes direct wheel zoom and orbit state for browser verification');
+assert(indexText.includes('bottom: calc(var(--ms-bottom-bars-height) + 10px)') && !indexText.includes('--ms-status-bar-height'), 'character import status dock floats 10px above the bottom status area instead of covering the canvas');
 assert(appText.includes('data-three-pixel-ratio-cap') && threePreviewText.includes('data-three-pixel-ratio-cap'), '3D previews expose the pixel-ratio cap for browser performance checks');
 assert.equal(WEBGL_PIXEL_RATIO_CAP, 1.5, 'WebGL pixel-ratio cap avoids high-DPI overdraw while preserving sharp CAD-style previews');
 assert(!appText.includes('starShape'), 'Foundry sandbox no longer carries saw-tooth star gears');
@@ -344,7 +347,7 @@ assert(!indexText.includes('.onboarding-page'), 'CSS no longer keeps a full-scre
 assert(!indexText.includes('.welcome-simple'), 'CSS no longer keeps the old welcome video layout');
 assert(appText.includes('character-setup-panel'), 'Character tab exposes direct part settings instead of only getting-started cards');
 assert(appText.includes('character-part-list') && appText.includes('character-part-item-${part.id}'), 'Character tab owns body-part selection in the left workflow pane');
-assert(appText.includes('viewport={viewport} testId="character-three-puppet"'), 'Character preview uses the shared canvas viewport instead of a detached default viewport');
+assert(appText.includes('viewport={viewport} setViewport={setViewport} inputMode="always" testId="character-three-puppet"'), 'Character preview uses the shared canvas viewport and direct 2D/3D input instead of a detached default viewport');
 assert(appText.includes("setStage('character')"), 'Character edit controls stay in the functional Character tab');
 assert(appText.includes('Art width') && appText.includes('Art offset X'), 'Character part inspector exposes artwork extent and offset controls');
 assert(appText.includes('data-testid={`path-part-art-${part.id}`}') && appText.includes('part.bounds.x * part.transform.scale'), 'Path Editor renders artwork from the editable part bounds offset');

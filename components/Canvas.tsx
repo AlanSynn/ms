@@ -165,7 +165,6 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     const handleWheel = (e: React.WheelEvent) => {
         if (!svgRef.current) return;
-        e.preventDefault();
 
         const zoomSensitivity = 0.001;
         // Calculate new zoom
@@ -768,6 +767,8 @@ export const Canvas: React.FC<CanvasProps> = ({
                 mechanisms={activeMechanisms}
                 angle={angle}
                 viewport={activeViewport}
+                setViewport={writeViewport}
+                inputMode="3d-only"
                 testId="design-three-puppet"
             />}
         </div>
