@@ -1,7 +1,7 @@
 # MotionSmith Project Agents Contract
 
 Status: active
-Last refreshed: 2026-06-26
+Last refreshed: 2026-06-27
 Scope: every implementation, design, test, and documentation change in this repository.
 
 This file is the project-level rulebook for future agents. If older docs or UI copy drift from this contract, update the product to match this file and `DESIGN.md`; do not add another explanatory layer.
@@ -77,13 +77,22 @@ The app must always trend toward real buildable artifacts, not illustration-only
 - Keep code paths boring and testable: `ProjectState` -> projection/simulation -> viewport/export.
 - Avoid large UI copy rewrites when a smaller control, icon, handle, or state chip solves the problem.
 
-## 8. Verification gates
+## 8. Subsystem / package governance
+
+- Keep one app package until `docs/subsystem-governance-and-mechanism-contracts.md` says a measured ADR justifies a real npm/workspace split.
+- Treat source modules as package seams now: mechanism registry, snapshots, scene projection, physics session, fabrication/export, and UI stage adapters must not duplicate each other’s rules.
+- Mechanism Foundry, Mechanism Design, Blueprint, Assembly Guide, 2D canvas, and 3D viewport must consume the same fabrication and physics contracts for a mechanism.
+- Stage components may compose controls, but mechanism defaults, required parts, drag handles, z-stacks, and fabrication validation belong behind shared registry/facade helpers.
+- If a new library is adopted, document the measured performance/maintainability reason and keep the dependency behind a replaceable subsystem boundary.
+
+## 9. Verification gates
 
 Before claiming completion, run the smallest checks that prove the changed contract.
 
 - Contract/docs changes: `npm test`, `npm run build`, and contract assertions that lock the new rule.
 - UI/workbench changes: add or update browser tests, then run the relevant Playwright flow plus build/contracts.
 - Browser tests should preserve coverage while optimizing wall time: prefer bounded Playwright parallel workers (`fullyParallel`) and `PLAYWRIGHT_WORKERS=<n>` / `--workers=<n>` over deleting assertions, shortening workflows, or weakening checks. Use `--workers=1` only to reproduce order-dependent failures.
+- Run the default browser suite against the production preview build, not the Vite HMR dev server, so full-suite failures reflect shipped UI behavior rather than transient websocket/HMR teardown noise. Use `PLAYWRIGHT_SERVER=dev` only for local interactive debugging.
 - If a browser test cannot run in parallel, fix the shared-state leak or isolate test data before choosing serial execution.
 - Physics/mechanism changes: test kinematic sampling, constraint validity, force/velocity/friction reporting, and fabrication stack compatibility. Simulation verification may be rigorous; prefer correctness over speed.
 - Do not add artificial test time limits, timeout wrappers, or shortened runner timeouts. Let tests finish unless an external tool has truly hung, then fix the hang or record the blocker.

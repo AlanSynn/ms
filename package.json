@@ -12,7 +12,7 @@
         "test": "npm run test:contracts",
         "test:contracts": "esbuild tests/project-contract.test.ts --bundle --platform=node --format=esm --outfile=/tmp/motionsmith-contract.mjs && node /tmp/motionsmith-contract.mjs",
         "build:dmg": "node scripts/with-rustup-cargo.mjs tauri build --bundles dmg",
-        "test:browser": "playwright test",
+        "test:browser": "npm run build && PLAYWRIGHT_SERVER=preview playwright test",
         "build:tauri-frontend": "tsc && vite build --base ./"
     },
     "dependencies": {

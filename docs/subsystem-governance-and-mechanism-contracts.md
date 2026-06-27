@@ -525,6 +525,8 @@ Add or keep assertions for:
 
 ### Browser tests
 
+Default browser QA runs against the production preview build. The dev/HMR server is only a local debugging mode, because full-suite pass/fail evidence should come from the shipped bundle and should not be polluted by transient websocket teardown noise.
+
 Required flows:
 
 - Character -> Path -> Foundry -> Design -> Blueprint;
@@ -542,6 +544,16 @@ Required flows:
 - `AGENTS.md`, `DESIGN.md`, and this document must not disagree on source-of-truth and pane rules.
 - Any new hard architectural rule must have an executable assertion.
 - Any new dependency/package split must have an ADR and measured reason.
+
+## 9.1 M3 pane / adapter enforcement notes
+
+The current M3 implementation work treats UI stages as adapters over the shared source-module seams, not as independent domains.
+
+- Character tab owns functional body-part selection/editing and skeleton controls; Getting Started remains a compact starter dialog only.
+- Center pane may contain only canvas/viewport/simulation surfaces and minimal orbit/zoom/playback overlays. Printable documents, long descriptions, opacity sliders, import status, and selected-item details belong outside the center.
+- Foundry left pane may expose compact action state such as target, blocker, and fabrication stack; detailed sensemaking is collapsed by default and inspector controls stay in the right pane.
+- Blueprint center renders the cut sheet / mechanism canvas only. The printable assembly guide iframe and selected recipe details live in the right inspector.
+- These UI corrections are still a transitional adapter layer. The remaining M3/M4 goal is to make Foundry, Design, Blueprint, physics overlays, and exporters consume one `MechanismSnapshot` / fabrication-plan facade instead of stage-local mechanism semantics.
 
 ## 10. Migration plan
 

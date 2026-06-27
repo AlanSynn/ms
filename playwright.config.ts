@@ -9,6 +9,10 @@ const parseWorkerCount = (value: string | undefined) => {
   return parsed;
 };
 const workerCount = parseWorkerCount(process.env.PLAYWRIGHT_WORKERS);
+const serverMode = process.env.PLAYWRIGHT_SERVER ?? 'dev';
+const webServerCommand = serverMode === 'preview'
+  ? 'npm run preview -- --host 127.0.0.1 --port 5173 --strictPort'
+  : 'npm run dev -- --host 127.0.0.1 --port 5173';
 
 export default defineConfig({
   testDir: './tests/browser',
@@ -25,7 +29,7 @@ export default defineConfig({
     ...devices['Desktop Chrome']
   },
   webServer: {
-    command: 'npm run dev -- --host 127.0.0.1 --port 5173',
+    command: webServerCommand,
     url: 'http://127.0.0.1:5173',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000

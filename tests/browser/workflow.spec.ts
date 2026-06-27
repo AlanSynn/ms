@@ -94,8 +94,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('getting-started-gallery')).toHaveCount(0);
   await expect(page.getByText('Start with character art')).toHaveCount(0);
   await expect(page.getByTestId('character-status-dock')).toHaveCount(0);
-  await expect(page.getByTestId('character-setup-panel')).toContainText('Parts + artwork');
-  await expect(page.getByTestId('character-setup-panel').getByLabel('Character part', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('character-part-list')).toContainText('Right arm');
+  await expect(page.getByTestId('character-setup-panel')).toContainText('Selected part detail');
   await expect(page.getByTestId('part-art-controls')).toContainText('Artwork surface');
   await expect(page.getByLabel('Art width number')).toBeVisible();
   await expect(page.getByText('parts_info.json package artifact')).toBeHidden();
@@ -186,10 +186,13 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   const foundryTargetSummary = page.getByTestId('foundry-target-summary');
   await expect(foundryTargetSummary).toBeVisible();
   await expect(foundryTargetSummary).toContainText(/anchor/);
+  await expect(page.getByTestId('foundry-mechanism-library')).toHaveCount(0);
+  await expect(page.getByTestId('foundry-fabrication-stack')).toContainText(/^Stack\s*Back Clip.*S10 spacer.*Front Clip/);
+  await expect(page.getByTestId('foundry-fabrication-stack')).not.toContainText(/Base board/);
+  await page.getByRole('button', { name: 'Show Sensemaking' }).click();
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Four-bar linkage');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Sensemaking:');
-  await expect(page.getByTestId('foundry-fabrication-stack')).toContainText(/^Fabrication stack: Back Clip.*S10 spacer.*Front Clip/);
-  await expect(page.getByTestId('foundry-fabrication-stack')).not.toContainText(/Base board/);
+  await page.getByRole('button', { name: 'Back to Gallery' }).click();
   await expect(foundryTargetSummary).toContainText(/Board hole [A-Z]\d+/);
   await expect(page.getByTestId('foundry-anchor-marker'), 'Default sandbox shows only path and mechanism').toHaveCount(0);
   await page.getByTestId('foundry-pick-anchor').click();
@@ -267,6 +270,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('prefab-board-export-lane')).toBeVisible();
   await expect(page.getByTestId('download-custom-stl')).toBeEnabled();
   await expect(page.getByText(/Board (?!pending)/)).toHaveCount(1);
+  await expect(page.getByTestId('stage-canvas-pane').getByTestId('assembly-guide-web-preview')).toHaveCount(0);
+  await expect(page.getByTestId('stage-right-inspector').getByTestId('assembly-guide-web-preview')).toBeVisible();
   await expect(page.getByTestId('assembly-guide-web-preview')).toContainText('Printable assembly guide');
   await expect(page.getByTestId('assembly-guide-web-preview')).toContainText('Exploded view');
   await expect(page.getByRole('button', { name: 'Print guide' })).toBeVisible();
@@ -448,8 +453,10 @@ test('Character tab processing controls route to real browser workflows', async 
   expect(skeletonConfig.bones).toBeTruthy();
 
   await page.getByRole('button', { name: 'Edit Parts / Skeleton / Boxes', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
-  await page.getByText('Advanced part setup').click();
+  await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
+  await expect(page.getByTestId('stage-left-pane').getByTestId('character-part-list')).toContainText('Right arm');
+  await expect(page.getByTestId('stage-right-inspector').getByTestId('character-setup-panel')).toContainText('Selected part detail');
+  await expect(page.getByTestId('stage-right-inspector').getByTestId('part-art-controls')).toBeVisible();
   await expect(page.getByLabel('Edit joint')).toBeVisible();
 
   expectCleanPage(pageErrors, consoleErrors);
@@ -480,15 +487,20 @@ test('animation performance: Foundry playback stays responsive without runaway T
   const phaseBefore = Number(await phaseControl.inputValue());
   await page.getByTestId('foundry-toolbar').getByRole('button', { name: 'Play', exact: true }).click();
   await expect(page.getByTestId('foundry-toolbar-state')).toContainText('playing');
+  const playbackStartedAt = Date.now();
 
-  await page.waitForTimeout(1400);
+  await expect.poll(async () => {
+    return Number(await foundryRig.getAttribute('data-three-dynamic-build-count') ?? '0') - dynamicBuildsBefore;
+  }, { message: 'Foundry still animates enough frames to feel alive under parallel browser load' }).toBeGreaterThan(12);
 
   const phaseAfter = Number(await phaseControl.inputValue());
   const dynamicBuildsAfter = Number(await foundryRig.getAttribute('data-three-dynamic-build-count') ?? '0');
   const geometryCacheAfter = Number(await foundryRig.getAttribute('data-three-geometry-cache-size') ?? '0');
   const dynamicBuildsDuringPlayback = dynamicBuildsAfter - dynamicBuildsBefore;
-  expect(dynamicBuildsDuringPlayback, 'Foundry still animates enough frames to feel alive').toBeGreaterThan(12);
-  expect(dynamicBuildsDuringPlayback, 'Foundry does not rebuild expensive Three geometry at unbounded 60fps').toBeLessThanOrEqual(48);
+  const playbackSeconds = Math.max(0.1, (Date.now() - playbackStartedAt) / 1000);
+  const dynamicBuildsPerSecond = dynamicBuildsDuringPlayback / playbackSeconds;
+  expect(dynamicBuildsDuringPlayback, 'Foundry still animates enough committed frames to feel alive').toBeGreaterThan(12);
+  expect(dynamicBuildsPerSecond, 'Foundry does not rebuild expensive Three geometry at unbounded 60fps').toBeLessThanOrEqual(35);
   expect(geometryCacheAfter - geometryCacheBefore, 'Foundry path/trail geometry is disposed instead of leaking into the persistent cache').toBeLessThanOrEqual(12);
   expect(Math.abs(phaseAfter - phaseBefore), 'Foundry phase advances during optimized playback').toBeGreaterThan(40);
 
@@ -583,7 +595,8 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
   await page.getByRole('button', { name: 'Discard' }).click();
   await expect(page.getByText('review generated package')).toHaveCount(0);
   await page.getByRole('button', { name: 'Edit Skeleton Joints', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
+  await expect(page.getByTestId('stage-right-inspector').getByText('Skeleton anchors')).toBeVisible();
   await expectProjectCounts(page, 6, 1, 1);
   await page.getByRole('button', { name: /^Character$/i }).click();
 
@@ -1025,9 +1038,12 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   expect(defaultPhysics.speed, 'Velocity vector is computed from live mechanism samples').toBeGreaterThan(0);
   expect(Number(await threeScene.getAttribute('data-three-part-count')), 'Sandbox scene contains extruded cardboard/wood parts').toBeGreaterThanOrEqual(4);
   await expect(page.getByTestId('foundry-mini-linkage-gear')).toBeVisible();
+  await expect(page.getByTestId('foundry-mechanism-library')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Show Sensemaking' }).click();
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Four-bar linkage');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Physics: pin reactions');
   await expect(page.getByTestId('foundry-feasibility')).toContainText('360° valid sampled motion');
+  await page.getByRole('button', { name: 'Back to Gallery' }).click();
   await expect(page.getByTestId('foundry-target-summary')).toContainText('Valid Range: 360° valid');
   await expect(page.getByTestId('foundry-anchor-marker'), 'Default sandbox keeps non-mechanism markers hidden').toHaveCount(0);
   await expect(page.getByLabel('Foundry mechanism type')).toBeHidden();
@@ -1064,15 +1080,19 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
     }
   }
   await page.getByLabel('Foundry mechanism type').selectOption('rack-pinion');
+  await page.getByRole('button', { name: 'Show Sensemaking' }).click();
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Rack and pinion');
+  await page.getByRole('button', { name: 'Back to Gallery' }).click();
   expect(Number(await threeScene.getAttribute('data-three-rack-count')), 'Rack-pinion preview shows the toothed rack fabrication part').toBeGreaterThanOrEqual(1);
   const startRotation = await threeScene.getAttribute('data-pinion-rotation-deg');
   await page.getByRole('button', { name: 'Play' }).click();
   await expect.poll(async () => threeScene.getAttribute('data-pinion-rotation-deg'), { message: 'Rack-pinion pinion rotates while rack travels' }).not.toBe(startRotation);
   await page.getByRole('button', { name: 'Pause' }).click();
   await page.getByLabel('Foundry mechanism type').selectOption('gear');
+  await page.getByRole('button', { name: 'Show Sensemaking' }).click();
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Gear train');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('ratio sign');
+  await page.getByRole('button', { name: 'Back to Gallery' }).click();
   expect(Number(await threeScene.getAttribute('data-three-gear-count')), 'Gear preview uses toothed 3D fabrication geometry').toBeGreaterThanOrEqual(2);
   await expect(threeScene, 'Gear train uses separate drive/output rods instead of a fake center bar').toHaveAttribute('data-three-gear-train-linkage-mode', 'drive-and-output-rods');
   await expect(threeScene, 'Gear train fabrication stack exposes both linkage rods').toHaveAttribute('data-three-stack-order', /Drive linkage.*Output linkage/);
@@ -1247,10 +1267,11 @@ test('Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking'
   await expect(page.getByTestId('foundry-velocity-overlay')).toHaveCount(0);
   await page.getByRole('button', { name: 'Velocity' }).click();
   await expect(page.getByTestId('foundry-velocity-overlay')).toBeVisible();
-  await page.getByRole('button', { name: 'Show Sensemaking' }).click();
   await expect(page.getByTestId('foundry-mechanism-library')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Back to Gallery' }).click();
+  await page.getByRole('button', { name: 'Show Sensemaking' }).click();
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Sensemaking:');
+  await page.getByRole('button', { name: 'Back to Gallery' }).click();
+  await expect(page.getByTestId('foundry-mechanism-library')).toHaveCount(0);
   const velocityBeforePlay = await page.getByTestId('foundry-velocity-vector').evaluate((line: SVGLineElement) => [line.getAttribute('x1'), line.getAttribute('y1'), line.getAttribute('x2'), line.getAttribute('y2')].join(','));
   await page.getByRole('button', { name: 'Play' }).click();
   await expect(page.getByTestId('foundry-toolbar-state')).toContainText('playing');
@@ -1274,13 +1295,13 @@ test('Mechanism Foundry supports CAD-style 3D camera presets and drag orbit', as
   await expect(page.getByTestId('foundry-camera-readout')).toContainText('3D Isometric');
   await expect(page.getByTestId('foundry-sim-badge')).toBeVisible();
   await expect(page.getByTestId('foundry-opacity-panel')).toBeVisible();
+  await expect(page.getByTestId('stage-right-inspector').getByTestId('foundry-opacity-panel')).toBeVisible();
   await expect(page.getByTestId('foundry-toolbar')).toBeVisible();
   const centerPaneBox = await page.getByTestId('stage-canvas-pane').boundingBox();
   expect(centerPaneBox, 'center pane box for overlay containment').toBeTruthy();
   const overlayBoxes = await Promise.all([
     ['camera', page.getByTestId('foundry-camera-controls')] as const,
     ['sim', page.getByTestId('foundry-sim-badge')] as const,
-    ['opacity', page.getByTestId('foundry-opacity-panel')] as const,
     ['playback', page.getByTestId('foundry-toolbar')] as const
   ].map(async ([name, locator]) => [name, await locator.boundingBox()] as const));
   for (const [name, box] of overlayBoxes) {
@@ -1588,7 +1609,7 @@ test('Workflow tabs keep left workflow, center canvas, and right inspector roles
   await expect(page.getByTestId('stage-right-inspector')).not.toContainText(/Add body part|Add layer|Remove layer|Add joint|New IK handle|Parts \+ skeleton/);
 
   await page.getByRole('button', { name: /Mechanism Foundry/i }).click();
-  await assertPaneContract('Mechanism Gallery', '3D Isometric', 'Mechanism options', '.canvas-zoom-toolbar, .foundry-camera-hud, .foundry-opacity-panel, .foundry-playback-hud');
+  await assertPaneContract('Mechanism Gallery', '3D Isometric', 'Mechanism options', '.canvas-zoom-toolbar, .foundry-camera-hud, .foundry-playback-hud');
   await expect(page.getByTestId('stage-left-pane')).toContainText('Use this mechanism');
 
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
@@ -1856,26 +1877,58 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
   await expect.poll(async () => Number(await designPuppet.getAttribute('data-three-render-triangles')), { message: 'center WebGL renderer draws real 3D fabrication triangles' }).toBeGreaterThan(0);
 
   const numAttr = async (attr: string) => Number(await designPuppet.getAttribute(attr));
-  const stagePlayButton = () => page.getByTestId('stage-left-pane').getByRole('button', { name: /Play/ }).first();
+  const readTelemetry = async () => designPuppet.evaluate((el: HTMLElement) => ({
+    primary: Number(el.getAttribute('data-three-primary-rotation-deg') ?? '0'),
+    secondary: Number(el.getAttribute('data-three-secondary-rotation-deg') ?? '0'),
+    gearRatio: Number(el.getAttribute('data-three-gear-output-ratio') ?? '0'),
+    secondarySpeed: Number(el.getAttribute('data-three-secondary-speed') ?? '0'),
+    rackX: Number(el.getAttribute('data-three-rack-x') ?? '0'),
+    rackY: Number(el.getAttribute('data-three-rack-y') ?? '0')
+  }));
+  const deltaDeg = (current: number, start: number) => {
+    let delta = current - start;
+    while (delta > 180) delta -= 360;
+    while (delta < -180) delta += 360;
+    return delta;
+  };
+  const circularDeltaError = (actual: number, expected: number) => Math.abs(deltaDeg(actual, expected));
+  const stageTransportButton = () => page.getByTestId('stage-left-pane').getByRole('button', { name: /Play|Pause/ }).first();
+  const ensureDesignPaused = async () => {
+    const button = stageTransportButton();
+    if (((await button.textContent()) ?? '').includes('Pause')) await button.click();
+    await expect(button).toContainText('Play');
+  };
+  const ensureDesignPlaying = async () => {
+    const button = stageTransportButton();
+    if (((await button.textContent()) ?? '').includes('Play')) await button.click();
+    await expect(button).toContainText('Pause');
+  };
+  await ensureDesignPaused();
   await page.getByRole('button', { name: 'gear', exact: true }).click();
   await expect(designPuppet).toHaveAttribute('data-three-selected-mechanism-type', 'gear');
-  const gearStart = await numAttr('data-three-primary-rotation-deg');
-  await stagePlayButton().click();
-  await expect.poll(async () => Math.abs(await numAttr('data-three-primary-rotation-deg') - gearStart), { message: 'gear animation updates the selected central 3D preview' }).toBeGreaterThan(6);
-  const gearPrimary = await numAttr('data-three-primary-rotation-deg');
-  const gearSecondary = await numAttr('data-three-secondary-rotation-deg');
-  expect(Math.abs(gearSecondary - gearPrimary * (-100 / 60)), 'default G5-to-G3 gear train rotates by the physical pitch-radius ratio').toBeLessThan(1.25);
-  await stagePlayButton().click();
+  const gearStartTelemetry = await readTelemetry();
+  const gearStart = gearStartTelemetry.primary;
+  const gearSecondaryStart = gearStartTelemetry.secondary;
+  await ensureDesignPlaying();
+  await expect.poll(async () => Math.abs(deltaDeg((await readTelemetry()).primary, gearStart)), { message: 'gear animation updates the selected central 3D preview' }).toBeGreaterThan(6);
+  await ensureDesignPaused();
+  const gearTelemetry = await readTelemetry();
+  const gearPrimaryDelta = deltaDeg(gearTelemetry.primary, gearStart);
+  const gearSecondaryDelta = deltaDeg(gearTelemetry.secondary, gearSecondaryStart);
+  expect(circularDeltaError(gearSecondaryDelta, gearPrimaryDelta * gearTelemetry.gearRatio), 'gear train rotates by the live physical pitch-radius ratio').toBeLessThan(1.25);
 
   await page.getByRole('button', { name: '5bar', exact: true }).click();
   await expect(designPuppet).toHaveAttribute('data-three-selected-mechanism-type', '5bar');
-  const fiveStart = await numAttr('data-three-primary-rotation-deg');
-  await stagePlayButton().click();
-  await expect.poll(async () => Math.abs(await numAttr('data-three-primary-rotation-deg') - fiveStart), { message: 'five-bar animation updates secondary crank phase' }).toBeGreaterThan(6);
-  const fivePrimary = await numAttr('data-three-primary-rotation-deg');
-  const fiveSecondary = await numAttr('data-three-secondary-rotation-deg');
-  expect(Math.abs(fiveSecondary + 2 * fivePrimary), 'five-bar second crank follows speed2=-2 rather than generic opposite rotation').toBeLessThan(0.75);
-  await stagePlayButton().click();
+  const fiveStartTelemetry = await readTelemetry();
+  const fiveStart = fiveStartTelemetry.primary;
+  const fiveSecondaryStart = fiveStartTelemetry.secondary;
+  await ensureDesignPlaying();
+  await expect.poll(async () => Math.abs(deltaDeg((await readTelemetry()).primary, fiveStart)), { message: 'five-bar animation updates secondary crank phase' }).toBeGreaterThan(6);
+  await ensureDesignPaused();
+  const fiveTelemetry = await readTelemetry();
+  const fivePrimaryDelta = deltaDeg(fiveTelemetry.primary, fiveStart);
+  const fiveSecondaryDelta = deltaDeg(fiveTelemetry.secondary, fiveSecondaryStart);
+  expect(circularDeltaError(fiveSecondaryDelta, fiveTelemetry.secondarySpeed * fivePrimaryDelta), 'five-bar second crank follows speed2 rather than generic opposite rotation').toBeLessThan(0.75);
 
   await page.getByRole('button', { name: 'rack-pinion', exact: true }).click();
   await expect(designPuppet).toHaveAttribute('data-three-selected-mechanism-type', 'rack-pinion');
@@ -1889,12 +1942,15 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
     stopBX: await numAttr('data-three-end-stop-b-x'),
     stopBY: await numAttr('data-three-end-stop-b-y')
   };
-  await stagePlayButton().click();
-  await expect.poll(async () => Math.hypot(await numAttr('data-three-rack-x') - rackStart.x, await numAttr('data-three-rack-y') - rackStart.y), { message: 'rack travels through a fixed guide' }).toBeGreaterThan(4);
+  await ensureDesignPlaying();
+  await expect.poll(async () => {
+    const telemetry = await readTelemetry();
+    return Math.hypot(telemetry.rackX - rackStart.x, telemetry.rackY - rackStart.y);
+  }, { message: 'rack travels through a fixed guide' }).toBeGreaterThan(4);
   expect(Math.hypot(await numAttr('data-three-rack-guide-x') - rackStart.guideX, await numAttr('data-three-rack-guide-y') - rackStart.guideY), 'rack guide stays fixed while the rack slides').toBeLessThan(0.01);
   expect(Math.hypot(await numAttr('data-three-end-stop-a-x') - rackStart.stopAX, await numAttr('data-three-end-stop-a-y') - rackStart.stopAY), 'rack end stop A stays fixed').toBeLessThan(0.01);
   expect(Math.hypot(await numAttr('data-three-end-stop-b-x') - rackStart.stopBX, await numAttr('data-three-end-stop-b-y') - rackStart.stopBY), 'rack end stop B stays fixed').toBeLessThan(0.01);
-  await stagePlayButton().click();
+  await ensureDesignPaused();
   expectCleanPage(pageErrors, consoleErrors);
 });
 

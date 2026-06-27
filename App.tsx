@@ -241,7 +241,7 @@ const App: React.FC = () => {
         projectSelfCheck();
         return createSampleProject();
     });
-    const [stage, setStage] = useState<AppStage>(() => shouldHideWelcome() ? 'character' : 'path');
+    const [stage, setStage] = useState<AppStage>('character');
     const [showWelcome, setShowWelcome] = useState(() => !shouldHideWelcome());
     const [showGettingStarted, setShowGettingStarted] = useState(false);
     const [angle, setAngle] = useState(0);
@@ -492,9 +492,9 @@ const App: React.FC = () => {
     };
 
     const editCharacterParts = () => {
-        setCommandStatus('Opened actual parts / skeleton editor');
+        setCommandStatus('Opened Character part, outline, and skeleton tools');
         setShowWelcome(false);
-        setStage('path');
+        setStage('character');
     };
 
     const saveSkeleton = () => {
@@ -736,8 +736,8 @@ const App: React.FC = () => {
                     </header>
                     <input ref={projectInputRef} hidden type="file" accept="application/json,.motionsmith.json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/>
 
-                    <div className="stage-body editor-workbench relative min-h-0 flex-1 overflow-auto p-7" data-testid="shared-workbench">
-                        {editorStage === 'character' && <CharacterSelection project={project} dispatch={dispatch} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onOpenGettingStarted={() => setShowGettingStarted(true)} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setShowWelcome(false); setShowGettingStarted(false); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} />}
+                    <div className="stage-body editor-workbench relative min-h-0 flex-1 overflow-hidden p-7" data-testid="shared-workbench">
+                        {editorStage === 'character' && <CharacterSelection project={project} dispatch={dispatch} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onOpenGettingStarted={() => setShowGettingStarted(true)} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setShowWelcome(false); setShowGettingStarted(false); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {editorStage === 'path' && <PathEditor project={project} sortedParts={sortedParts} selectedPart={selectedPart} selectedPath={selectedPath} drawMode={drawMode} setDrawMode={setDrawMode} dispatch={dispatch} setPathPoints={setPathPoints} openTracking={() => setShowTracking(true)} isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} onNext={() => goStage('foundry')} goStage={goStage} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {editorStage === 'foundry' && <MechanismFoundry project={project} foundry={foundry} setFoundry={setFoundry} selectedPart={selectedPart} selectedPath={selectedPath} goStage={goStage} onExport={(pkg) => {
                             const existingTarget = project.mechanisms.find(m =>
@@ -1143,7 +1143,7 @@ const GettingStartedDialog = ({ starterTemplates, replaceCharacter, setReplaceCh
     </div>;
 };
 
-const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharacter, setReplaceCharacter, onOpenGettingStarted, onAccept, onDiscard, onProcess, onCamera, onPackage, onImport, onEditCharacter, onSaveSkeleton, onChooseSaveFolder }: {
+const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharacter, setReplaceCharacter, onOpenGettingStarted, onAccept, onDiscard, onProcess, onCamera, onPackage, onImport, onEditCharacter, onSaveSkeleton, onChooseSaveFolder, viewport, setViewport }: {
     project: ProjectState;
     dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void;
     pendingCharacter: { project: ProjectState; summary: string; returnStage: AppStage } | null;
@@ -1159,6 +1159,8 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
     onEditCharacter: () => void;
     onSaveSkeleton: () => void;
     onChooseSaveFolder: () => void;
+    viewport: CanvasViewport;
+    setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
 }) => {
     const reviewedProject = pendingCharacter?.project ?? project;
     const artifact = reviewedProject.characterPackage;
@@ -1180,6 +1182,7 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
     const partPanelDisabled = Boolean(pendingCharacter);
     const editableParts = partPanelProject.partOrder.map(id => partPanelProject.parts[id]).filter((part): part is BodyPartLayer => Boolean(part));
     const selectedEditablePart = (!partPanelDisabled && project.selectedPartId ? project.parts[project.selectedPartId] : undefined) ?? editableParts[0];
+    const selectedPartId = selectedEditablePart?.id ?? '';
     const importStatusPanel = (
         <details className="advanced-panel import-status" open={statusOpen}>
             <summary>Import status</summary>
@@ -1206,7 +1209,11 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
     return <section className="character-stage animate-rise" data-testid="character-screen">
         <EditorStageFrame stage="character" className="character-editor-frame" layout={{
             workflow: workflowPane(<StageLeftSummary project={project} title="Character" kicker="parts + skeleton" stage="character">
-                <p className="text-sm font-bold text-slate-600">Tune body parts, surface artwork, pivots, and skeleton anchors. Starters live in Getting Started.</p>
+                <div className="compact-workflow-row" data-testid="character-workflow-summary">
+                    <span>{editableParts.length} parts</span>
+                    <span>{Object.keys(project.skeleton?.joints ?? {}).length} joints</span>
+                    <span>{reviewedProject.partOrder.some(id => Boolean(reviewedProject.parts[id]?.textureUrl)) ? 'art on plates' : 'placeholder plates'}</span>
+                </div>
                 <div className="mt-4 grid gap-2">
                     <button className="btn-primary" onClick={onOpenGettingStarted}><Sparkles size={16}/> Open Getting Started</button>
                     <button type="button" className="btn-secondary cursor-pointer" onClick={() => packageInputRef.current?.click()}><FileJson size={16}/> Load character package</button><input ref={packageInputRef} data-testid="blank-package-input" hidden type="file" multiple accept=".json,.yaml,.yml,image/png,image/jpeg,image/webp,image/svg+xml" onChange={e => {
@@ -1237,19 +1244,44 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
                         <button className="btn-secondary" onClick={onChooseSaveFolder}>Choose Save Folder…</button>
                     </div>
                 </details>
+                <section className="character-part-list mt-4" data-testid="character-part-list" aria-label="Character body part list">
+                    <div className="section-title">Body parts</div>
+                    <div className="mt-2 grid gap-2">
+                        {editableParts.map(part => {
+                            const isActive = part.id === selectedPartId;
+                            const joints = partLandmarkLocalPoints(part, partPanelProject.skeleton);
+                            const outline = fabricablePartOutlinePoints(part, joints);
+                            return <button
+                                key={part.id}
+                                type="button"
+                                data-testid={`character-part-item-${part.id}`}
+                                className={`character-part-list-item ${isActive ? 'active' : ''}`}
+                                disabled={partPanelDisabled}
+                                aria-pressed={isActive}
+                                onClick={() => dispatch({ type: 'select_part', partId: part.id })}
+                            >
+                                <span className="part-list-dot" aria-hidden="true" style={{ background: part.fillColor }} />
+                                <span className="min-w-0">
+                                    <strong>{part.name}</strong>
+                                    <small>{part.anchorJointId} · {outline.length} outline pts</small>
+                                </span>
+                                <span className="part-list-badges">
+                                    {part.textureUrl ? <b>art</b> : <b>plate</b>}
+                                    {part.locked && <b>lock</b>}
+                                </span>
+                            </button>;
+                        })}
+                    </div>
+                </section>
             </StageLeftSummary>),
             canvas: canvasPane(<div className="character-preview-pane canvas-workspace" data-testid="character-preview-pane">
-                <ThreePuppetPreview project={project} skeleton={project.skeleton} angle={0} viewport={DEFAULT_CANVAS_VIEWPORT} testId="character-three-puppet" />
+                <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
+                <ThreePuppetPreview project={project} skeleton={project.skeleton} angle={0} viewport={viewport} testId="character-three-puppet" />
             </div>),
             inspector: inspectorPane(<div className="stage-pane-stack character-inspector">
                 <section className="character-setup-panel" data-testid="character-setup-panel" aria-label="Character part settings">
-                    <div className="section-title">Parts + artwork</div>
-                    <div className="mt-1 text-sm font-extrabold text-slate-800">Surface art sits on each cut plate.</div>
-                    <label className="mt-3 block text-xs font-black uppercase tracking-wider text-slate-500">Character part
-                        <select aria-label="Character part" className="field mt-1" disabled={partPanelDisabled} value={selectedEditablePart?.id ?? ''} onChange={e => dispatch({ type: 'select_part', partId: e.target.value })}>
-                            {editableParts.map(part => <option key={part.id} value={part.id}>{part.name}</option>)}
-                        </select>
-                    </label>
+                    <div className="section-title">Selected part detail</div>
+                    <div className="mt-1 text-sm font-extrabold text-slate-800">{selectedEditablePart?.name ?? 'No part selected'}</div>
                     {partPanelDisabled
                         ? <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">Accept or discard the reviewed package before fine-tuning part artwork, so edits apply to the active character.</div>
                         : selectedEditablePart && <PartInspector part={selectedEditablePart} dispatch={dispatch} compact />}
@@ -2089,7 +2121,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const [showVelocity, setShowVelocity] = useState(true);
     const [showTrail, setShowTrail] = useState(false);
     const [showPathPreview, setShowPathPreview] = useState(true);
-    const [showSensemaking, setShowSensemaking] = useState(true);
+    const [showSensemaking, setShowSensemaking] = useState(false);
     const [foundryCamera, setFoundryCamera] = useState<FoundryCamera>({ ...FOUNDRY_VIEW_PRESETS.iso, preset: 'iso' });
     const [foundryRigOpacity, setFoundryRigOpacity] = useState(85);
     const [foundryProjectionSize, setFoundryProjectionSize] = useState<FoundryOverlaySize>(FOUNDRY_OVERLAY_SIZE);
@@ -2316,12 +2348,17 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                     <div>Board hole {landingBoard.label} · anchor {selectedPart?.anchorJointId ?? 'none'} · IK handle {targetIkJointId ?? 'none'}</div>
                     {snapDistance > 0.5 && <div>Snapped {snapDistance.toFixed(0)} scene units from target to nearest board hole for fabrication.</div>}
                     <div><strong>Valid Range:</strong> {range.percentValid === 1 ? '360° valid' : feasibilityText}</div>
+                    <div data-testid="foundry-feasibility"><strong>Feasibility:</strong> {feasibilityText}</div>
                     <div data-testid="foundry-anchor-status">{isPickingAnchor ? 'Pick mode: click the sandbox board.' : (manualAnchor ? 'Anchor picked visually.' : (foundry.recommendation ?? FOUNDRY_PRESETS.balanced.recommendation))}</div>
                 </div>
                 <button type="button" data-testid="foundry-pick-anchor" className={`btn-secondary w-full ${isPickingAnchor ? 'active' : ''}`} onClick={() => setIsPickingAnchor(value => !value)}>{isPickingAnchor ? 'Cancel anchor pick' : 'Pick anchor on canvas'}</button>
                 <button className="btn-primary w-full" disabled={hardBlocked} onClick={() => onExport(makePackage())}><Boxes size={16}/> Use this mechanism</button>
                 {!targetReady && <div className="warning">Draw at least 3 points for a selected body part before exporting a mechanism.</div>}
                 {range.warning && <div className="warning">{range.warning}</div>}
+                <div className="compact-fabrication-stack" data-testid="foundry-fabrication-stack">
+                    <strong>Stack</strong>
+                    <span>{fabricationStackSummary(foundry)}</span>
+                </div>
                 <h4 className="section-title mt-4">Mechanism Gallery</h4>
                 <div className="mechanism-choice-grid" data-testid="foundry-mechanism-gallery">
                     {AUTHORABLE_MECHANISM_TYPES.map(type => {
@@ -2343,8 +2380,8 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                     <div>Sensemaking: {library.sense}.</div>
                     <div>Constraint: {library.constraint}.</div>
                     <div>Physics: {physicsRule}.</div>
-                    <div data-testid="foundry-fabrication-stack">Fabrication stack: {fabricationStackSummary(foundry)}.</div>
-                    <div data-testid="foundry-feasibility">Feasibility: {feasibilityText}</div>
+                    <div>Fabrication stack: {fabricationStackSummary(foundry)}.</div>
+                    <div>Feasibility: {feasibilityText}</div>
                 </div>}
             </StageLeftSummary>
         </div>),
@@ -2355,10 +2392,6 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 {(Object.entries(FOUNDRY_VIEW_PRESETS) as Array<[Exclude<FoundryViewPreset, 'custom'>, FoundryCameraPreset]>).map(([preset, view]) =>
                     <button key={preset} type="button" data-testid={`foundry-camera-preset-${preset}`} className={foundryCamera.preset === preset ? 'active' : ''} aria-pressed={foundryCamera.preset === preset} onClick={() => setCameraPreset(preset)}>{view.label}</button>
                 )}
-            </div>
-            <div className="foundry-opacity-panel" data-testid="foundry-opacity-panel">
-                <div><span>Rig Opacity</span><strong>{foundryRigOpacity}%</strong></div>
-                <input aria-label="Rig opacity" type="range" min="35" max="100" value={foundryRigOpacity} onChange={event => setFoundryRigOpacity(Number(event.target.value))} />
             </div>
             <div className="foundry-playback-hud foundry-toolbar" data-testid="foundry-toolbar" aria-label="Foundry playback controls">
                 <button className={`btn-secondary ${foundryPlaying ? 'active' : ''}`} onClick={() => setFoundryPlaying(!foundryPlaying)}>{foundryPlaying ? 'Pause' : 'Play'}</button>
@@ -2426,13 +2459,16 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             <div>
                 <div className="section-title">Selected mechanism</div>
                 <h3>{library.label}</h3>
-                <p className="mt-2 text-sm text-slate-600">Fine tune the selected physical template and preview overlays.</p>
                 <div className="physics-readout mt-3" data-testid="foundry-physics-readout">
                     <strong>Physics</strong>
                     <span>{physicsRule}</span>
                     <span>v {velocityMagnitude.toFixed(1)} · F {forceMagnitude.toFixed(1)} · μ {project.settings.simulationFriction.toFixed(2)}</span>
                     <span>constraint err {constraintError.toFixed(2)} · mass {project.settings.simulationMassKg.toFixed(1)}kg</span>
                 </div>
+            </div>
+            <div className="foundry-opacity-panel inspector-control-card" data-testid="foundry-opacity-panel">
+                <div><span>Rig Opacity</span><strong>{foundryRigOpacity}%</strong></div>
+                <input aria-label="Rig opacity" type="range" min="35" max="100" value={foundryRigOpacity} onChange={event => setFoundryRigOpacity(Number(event.target.value))} />
             </div>
             <details className="advanced-panel">
                 <summary>Mechanism options</summary>
@@ -2456,7 +2492,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                     <button type="button" className={`btn-secondary ${showTrail ? 'active' : ''}`} aria-pressed={showTrail} onClick={() => setShowTrail(!showTrail)}>Trail</button>
                     <button type="button" className={`btn-secondary ${showPathPreview ? 'active' : ''}`} aria-pressed={showPathPreview} onClick={() => setShowPathPreview(!showPathPreview)}>Path Preview</button>
                     <button type="button" className={`btn-secondary ${showSensemaking ? 'active' : ''}`} aria-pressed={showSensemaking} onClick={() => setShowSensemaking(!showSensemaking)}>Show Sensemaking</button>
-                    <button type="button" className="btn-secondary" onClick={() => setShowSensemaking(true)}>Back to Gallery</button>
+                    <button type="button" className="btn-secondary" onClick={() => setShowSensemaking(false)}>Back to Gallery</button>
                 </div>
             </div>
         </div>)
@@ -2702,6 +2738,12 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
             canvas: canvasPane(<div className="path-canvas-shell canvas-workspace overflow-hidden p-0" data-testid="blueprint-canvas-preview">
             <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
             <Canvas project={project} config={config} setConfig={setConfig} selectedId={project.selectedMechanismId ?? null} setSelectedId={id => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: id })} isPlaying={isPlaying} showTrace={true} isDrawMode={false} userPath={[]} setUserPath={() => {}} angle={angle} setAngle={setAngle} viewport={viewport} setViewport={setViewport}/>
+        </div>),
+            inspector: inspectorPane(<section className="stage-pane-stack" data-testid="assembly-guide-preview">
+            <div>
+                <div className="section-title">Selected recipe detail</div>
+                <h3>Assembly guide preview</h3>
+            </div>
             {pkg && <section className="assembly-guide-web-preview" data-testid="assembly-guide-web-preview" aria-label="Printable assembly guide">
                 <div className="assembly-guide-preview-head">
                     <div>
@@ -2717,13 +2759,6 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
                 </div>
                 <iframe title="Assembly guide preview" data-testid="assembly-guide-preview-frame" className="assembly-guide-preview-frame" srcDoc={pkg.assemblyGuideHtml} />
             </section>}
-        </div>),
-            inspector: inspectorPane(<section className="stage-pane-stack" data-testid="assembly-guide-preview">
-            <div>
-                <div className="section-title">Selected recipe detail</div>
-                <h3>Assembly guide preview</h3>
-                <p className="mt-2 text-sm text-slate-600">Inspect the selected recipe without moving the shared work canvas.</p>
-            </div>
             {selectedRecipe ? <article className="assembly-recipe-card" data-testid={`assembly-recipe-${selectedRecipe.mechanismId}`}>
                 <div className="flex items-start justify-between gap-3">
                     <div>

@@ -948,6 +948,9 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       data-three-spacer-mm={`${FABRICATION_SPACER_SPEC.outerDiameterMm}x${FABRICATION_SPACER_SPEC.innerDiameterMm}`}
       data-three-primary-rotation-deg={fixed3(selectedTelemetry?.primaryRotationDeg)}
       data-three-secondary-rotation-deg={fixed3(selectedTelemetry?.secondaryRotationDeg)}
+      data-three-gear-radii={selectedMechanism ? `${selectedMechanism.crankLength.toFixed(2)},${selectedMechanism.rockerLength.toFixed(2)}` : ''}
+      data-three-gear-output-ratio={selectedMechanism ? gearPairOutputRatio(selectedMechanism.crankLength, selectedMechanism.rockerLength).toFixed(3) : ''}
+      data-three-secondary-speed={selectedMechanism ? (selectedMechanism.speed2 ?? selectedMechanism.gearRatio ?? 1).toFixed(3) : ''}
       data-three-rack-x={fixed3(selectedTelemetry?.rackX)}
       data-three-rack-y={fixed3(selectedTelemetry?.rackY)}
       data-three-rack-guide-x={fixed3(selectedTelemetry?.rackGuideX)}

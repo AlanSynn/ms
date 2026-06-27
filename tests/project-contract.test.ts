@@ -77,10 +77,14 @@ assert(readFileSync(join(process.cwd(), 'index.html'), 'utf8').includes('<title>
 assert(readFileSync(join(process.cwd(), 'vite.config.ts'), 'utf8').includes("'/MotionSmith/'"), 'web deployment base path uses MotionSmith');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
 assert(readFileSync(join(process.cwd(), 'App.tsx'), 'utf8').includes('motionsmith.hideWelcome'), 'local storage namespace uses the MotionSmith slug');
-assert(readFileSync(join(process.cwd(), 'playwright.config.ts'), 'utf8').includes('fullyParallel: true'), 'browser tests default to full parallel execution without reducing coverage');
-assert(readFileSync(join(process.cwd(), 'playwright.config.ts'), 'utf8').includes('PLAYWRIGHT_WORKERS'), 'browser worker count can be tuned by environment instead of weakening tests');
-assert(readFileSync(join(process.cwd(), 'playwright.config.ts'), 'utf8').includes('MAX_BROWSER_WORKERS'), 'browser worker defaults are bounded to avoid local over-parallelization');
-assert(readFileSync(join(process.cwd(), 'playwright.config.ts'), 'utf8').includes('Number.isInteger'), 'browser worker override validates positive integer input');
+const packageJson = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8'));
+const playwrightConfigText = readFileSync(join(process.cwd(), 'playwright.config.ts'), 'utf8');
+assert(playwrightConfigText.includes('fullyParallel: true'), 'browser tests default to full parallel execution without reducing coverage');
+assert(playwrightConfigText.includes('PLAYWRIGHT_WORKERS'), 'browser worker count can be tuned by environment instead of weakening tests');
+assert(playwrightConfigText.includes('MAX_BROWSER_WORKERS'), 'browser worker defaults are bounded to avoid local over-parallelization');
+assert(playwrightConfigText.includes('Number.isInteger'), 'browser worker override validates positive integer input');
+assert(playwrightConfigText.includes('PLAYWRIGHT_SERVER') && playwrightConfigText.includes('preview'), 'browser tests can run against production preview without Vite HMR noise');
+assert(packageJson.scripts['test:browser'].includes('npm run build') && packageJson.scripts['test:browser'].includes('PLAYWRIGHT_SERVER=preview'), 'browser test script validates the production build through preview mode');
 assert(agentsContract.includes('preserve coverage while optimizing wall time'), 'AGENTS.md requires test speedups to preserve test quality');
 assert(agentsContract.includes('bounded Playwright parallel workers'), 'AGENTS.md requires bounded browser test parallelism');
 assert(designContract.includes('Shared editor workbench'), 'DESIGN.md documents the shared editor workbench');
@@ -101,6 +105,7 @@ assert(subsystemGovernanceContract.includes('MechanismSnapshot'), 'subsystem gov
 assert(subsystemGovernanceContract.includes('ToonSceneProjection'), 'subsystem governance keeps ToonSceneProjection as the scene projection contract');
 assert(subsystemGovernanceContract.includes('Do not create duplicate mechanism registries'), 'subsystem governance forbids duplicate mechanism registries');
 assert(subsystemGovernanceContract.includes('Performance governance'), 'subsystem governance includes the performance-governance rules');
+assert(subsystemGovernanceContract.includes('production preview build'), 'subsystem governance locks browser QA to shipped production preview evidence');
 assert(Object.keys(sample.skeleton?.joints ?? {}).length >= 17, 'sample placeholder exposes the full editable joint set');
 assert(sample.partOrder.every(id => ['#cbd5e1', '#e2e8f0', '#b6c2d2', '#94a3b8'].includes(sample.parts[id].fillColor)), 'sample character uses muted placeholder part colors');
 assert.equal(sample.mechanisms[0].targetAnchorJointId, 'right_hand', 'sample waving arm drives the hand, not the shoulder root');
@@ -278,6 +283,9 @@ assert(!appText.includes('Start with character art'), 'Character tab no longer c
 assert(!indexText.includes('.onboarding-page'), 'CSS no longer keeps a full-screen onboarding page mode');
 assert(!indexText.includes('.welcome-simple'), 'CSS no longer keeps the old welcome video layout');
 assert(appText.includes('character-setup-panel'), 'Character tab exposes direct part settings instead of only getting-started cards');
+assert(appText.includes('character-part-list') && appText.includes('character-part-item-${part.id}'), 'Character tab owns body-part selection in the left workflow pane');
+assert(appText.includes('viewport={viewport} testId="character-three-puppet"'), 'Character preview uses the shared canvas viewport instead of a detached default viewport');
+assert(appText.includes("setStage('character')"), 'Character edit controls stay in the functional Character tab');
 assert(appText.includes('Art width') && appText.includes('Art offset X'), 'Character part inspector exposes artwork extent and offset controls');
 assert(appText.includes('data-testid={`path-part-art-${part.id}`}') && appText.includes('part.bounds.x * part.transform.scale'), 'Path Editor renders artwork from the editable part bounds offset');
 assert(canvasText.includes('data-testid={`design-part-art-${part.id}`}') && canvasText.includes('part.bounds.x * part.transform.scale'), 'Mechanism Design renders artwork from the same editable part bounds offset');
@@ -286,6 +294,16 @@ assert(canvasText.includes('partOutlinePathD(part, landmarks') && canvasText.inc
 assert(appText.includes('Accept or discard the reviewed package before fine-tuning part artwork'), 'Character tab disables active-project artwork edits while a package review is pending');
 assert(appText.includes('disabled={partPanelDisabled} onClick={onEditCharacter}'), 'Pending package review disables active-character edit buttons');
 assert(appText.includes('disabled={partPanelDisabled} onClick={onSaveSkeleton}'), 'Pending package review disables active skeleton save controls');
+assert(appText.includes('stage-body editor-workbench relative min-h-0 flex-1 overflow-hidden'), 'shared workbench prevents right-pane scroll from moving the center canvas');
+assert(appText.includes('const [showSensemaking, setShowSensemaking] = useState(false)'), 'Foundry starts in compact tinkerable mode with sensemaking collapsed');
+assert(appText.includes('compact-fabrication-stack') && appText.includes('data-testid="foundry-fabrication-stack"'), 'Foundry keeps fabrication stack visible as a compact action datum');
+const blueprintCanvasStart = appText.indexOf('canvas: canvasPane(<div className="path-canvas-shell canvas-workspace overflow-hidden p-0" data-testid="blueprint-canvas-preview">');
+const blueprintInspectorStart = appText.indexOf('inspector: inspectorPane(<section className="stage-pane-stack" data-testid="assembly-guide-preview">', blueprintCanvasStart);
+assert(blueprintCanvasStart >= 0 && blueprintInspectorStart > blueprintCanvasStart, 'Blueprint layout exposes parseable canvas and inspector slots');
+const blueprintCanvasBlock = appText.slice(blueprintCanvasStart, blueprintInspectorStart);
+const blueprintInspectorBlock = appText.slice(blueprintInspectorStart, appText.indexOf('        }}', blueprintInspectorStart));
+assert(!blueprintCanvasBlock.includes('assembly-guide-web-preview'), 'Blueprint center canvas does not embed the printable guide document');
+assert(blueprintInspectorBlock.includes('assembly-guide-web-preview'), 'Blueprint printable guide preview lives in the right inspector');
 const oversizedCutPart: BodyPartLayer = {
   id: 'right_arm_lower',
   name: 'Right lower arm',
