@@ -426,6 +426,26 @@ No hidden writeback from renderer, physics, or camera.
 
 ## 7. Performance governance
 
+### 7.0 3D engine decision — 2026-06-27
+
+The selected stack is **imperative Three.js/WebGL2 + Rapier 3D WASM (`@dimforge/rapier3d-compat`)**, with MotionSmith's kinematic/fabrication contracts kept authoritative. Rapier is a contact/friction validation kernel, not a replacement for mechanism equations or fabrication geometry. The seam is `utils/physicsKernel.ts`; UI components expose the selected stack through telemetry attributes so browser tests can fail if a stage drifts.
+
+Why not switch the whole renderer now:
+
+- Viser's public architecture is not a browser-local physics engine; it is a Python-authored visualization server with a React/Three browser client, hierarchical scene paths, WebSocket sync, batched update messages, and batched scene primitives. The transferable idea is **Viser-style transform tree + batched updates + instancing**, not Viser itself as a runtime dependency.
+- React Three Fiber and `@react-three/rapier` are still reasonable future adapters, but adding them now would duplicate the existing tested imperative renderer and create two scene ownership models.
+- Babylon/WebGPU/worker rendering are deferred until profiling proves the Three/Rapier boundary cannot satisfy the scene size or frame-rate target.
+- Rapier browser builds must go through `tsc && vite build` with a literal dynamic `import('@dimforge/rapier3d-compat')`; do not switch this path to `bun build` unless a new ADR and browser production-preview evidence replace the guard.
+
+High-performance scene policy:
+
+1. Keep one Three renderer per viewport and persistent static scene layers.
+2. Update transforms/material uniforms first; recreate geometry only when the render-plan fingerprint changes.
+3. Use shared `BufferGeometry`, shared materials, object pools, and `InstancedMesh` for repeated pins, spacers, holes, grid marks, path samples, and hardware.
+4. Keep physics sampling and Rapier probes behind serializable contracts; move them to a worker only after measured long tasks.
+5. Keep `ProjectState -> MechanismSnapshot -> ToonSceneProjection/PhysicsSession/FabricationPlan -> renderer` as the dependency direction.
+6. Never let Rapier, Three, camera, orbit, or exploded-view state write canonical mechanism geometry without an explicit project action.
+
 ### 7.1 Hot-path rules
 
 Do not do these in `requestAnimationFrame`, pointer move, or React render:
@@ -492,7 +512,7 @@ Allowed only as another adapter over `ToonSceneProjection` and `PhysicsSession`.
 
 ### New physics engine
 
-Allowed only behind `PhysicsSession` or a versioned replacement contract. It cannot write `ProjectState` except through explicit commands.
+Allowed only behind `PhysicsSession`, `utils/physicsKernel.ts`, or a versioned replacement contract. Rapier is currently the installed contact/friction kernel; any replacement must pass the same deterministic contract probe, keep MotionSmith kinematics authoritative, and cannot write `ProjectState` except through explicit commands.
 
 ### New AI/ONNX pipeline
 

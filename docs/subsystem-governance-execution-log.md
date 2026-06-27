@@ -31,8 +31,8 @@ Current local dependency check uses `package.json` + `bun.lock`; latest version 
 | esbuild | 0.28.1 | 0.28.1 | Direct devDependency because contract tests invoke the CLI. |
 | @react-three/fiber | not installed | 9.6.1 | Defer/avoid for now; current imperative Three has cache/perf tests. Add only if renderer complexity becomes the bottleneck. |
 | @react-three/drei | not installed | 10.7.7 | Defer; depends on R3F adoption. |
-| @dimforge/rapier3d-compat | not installed | 0.19.3 | Candidate for future dynamic physics only behind `PhysicsSession`; not needed for deterministic kinematic contract seam. |
-| @react-three/rapier | not installed | 2.2.0 | Defer; only if R3F + Rapier both become justified. |
+| @dimforge/rapier3d-compat | 0.19.3 | 0.19.3 | Installed behind `utils/physicsKernel.ts` as the Rapier contact/friction validation kernel; MotionSmith kinematics/fabrication remain authoritative. |
+| @react-three/rapier | not installed | 2.2.0 | Defer; Rapier is used directly so no R3F renderer stack is introduced. |
 | comlink | not installed | 4.4.2 | Defer; native Worker first if heavy computation needs off-main-thread execution. |
 
 ## Progress
@@ -49,6 +49,7 @@ Current local dependency check uses `package.json` + `bun.lock`; latest version 
   - [x] M3 slice 2: pane ownership / compact workbench corrections.
   - [x] M3 slice 3: Foundry preview/physics extraction and WebGL pixel-ratio cap.
   - [x] M3 slice 4: Bun-first modern toolchain.
+  - [x] M3 slice 5: Rapier/Three high-performance physics kernel boundary and Viser-style scene policy.
 
 ## Consensus review notes
 
@@ -84,6 +85,9 @@ Current local dependency check uses `package.json` + `bun.lock`; latest version 
 - M3 slice 4: promoted Bun 1.3.14 to the canonical package manager, replaced `package-lock.json` with `bun.lock`, and updated CI, Docker, Tauri hooks, Windows helper scripts, README, and distribution docs to use Bun.
 - M3 slice 4: upgraded the web stack to current registry-observed versions for React, Vite, TypeScript, Three, Lucide, Tauri CLI, esbuild, and type packages while preserving existing browser workflow coverage.
 - M3 slice 4: updated AGENTS verification gates and planning docs to use Bun commands while keeping browser-test parallelization bounded and coverage-preserving.
+- M3 slice 5: researched Viser as a Python-authored React/Three visualization server with hierarchical scene paths, batched updates, and batched primitives; adopted the transferable policy (`Viser-style transform tree + batched updates + instancing`) without adding Viser as an app runtime.
+- M3 slice 5: installed `@dimforge/rapier3d-compat@0.19.3`, added `utils/physicsKernel.ts` as the replaceable Rapier WASM contact/friction kernel seam, and kept MotionSmith mechanism kinematics/fabrication constraints as the source of truth.
+- M3 slice 5: Foundry and Design 3D telemetry now advertise `three-webgl2-imperative`, `rapier3d-compat`, the kinematic-authority update policy, and the high-throughput scene policy for browser-test enforcement.
 
 ## Verification
 
@@ -123,3 +127,12 @@ Current local dependency check uses `package.json` + `bun.lock`; latest version 
 - M3 slice 4 targeted browser QA — pass: `bun run test:browser -- --grep "Mechanism Design center workspace renders physical 3D templates"` (`1 passed`, 2.0m).
 - M3 slice 4 full browser QA — pass: `bun run test:browser` (`31 passed`, 4.6m) in production preview mode, preserving character, path, foundry, mechanism design, blueprint, camera, zoom/pan, and free-path workflows.
 - M3 slice 4 `git diff --check` — pass.
+- M3 slice 5 `bun run test` — pass (`project contracts ok`) and executes a real Rapier WASM friction/contact probe.
+- M3 slice 5 `bun run build` — pass (`tsc && vite build`) with Rapier emitted as a lazy `rapier-*.js` chunk and the existing ONNX/browser large-chunk warning.
+- M3 slice 5 `bun run test:browser` — pass (`31 passed`, 4.4m) in production preview mode, including Foundry animation performance, CAD-style 3D camera/orbit, Mechanism Design physical 3D templates, shared zoom/pan, free path drawing, blueprint, camera, layout regressions, and Rapier runtime error telemetry (`data-physics-kernel-error="none"`).
+- M3 slice 5 `bun audit` — pass (`No vulnerabilities found`).
+- M3 slice 5 registry/latest check — pass: `@dimforge/rapier3d-compat@0.19.3`, `three@0.185.0`, `vite@8.1.0`, `typescript@6.0.3`, and Bun `1.3.14` match current registry-observed versions.
+- M3 slice 5 `git diff --check` — pass.
+- M3 slice 5 code-review round 1 — request changes / architectural block: ensure `utils/physicsKernel.ts` and the high-performance ADR are included in the tracked change, and preserve Rapier load failure diagnostics.
+- M3 slice 5 rework: added `data-physics-kernel-error` telemetry on Foundry and Design 3D viewports, browser assertions for the healthy `none` state, and staged the new physics seam plus ADR for review.
+- M3 slice 5 final code-review gate — pass (`APPROVE`, architectural status `CLEAR`) after locking the Vite Rapier bundle guard and staging the physics seam/ADR.

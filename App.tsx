@@ -38,6 +38,7 @@ import {
 } from './utils/project';
 import { processImageWithWebOnnx } from './utils/webOnnx';
 import { buildFoundryPhysicsOverlay } from './utils/physicsSession';
+import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, loadRapierPhysicsKernel, physicsKernelErrorMessage } from './utils/physicsKernel';
 import { createFabricationPackage, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, prefabAssemblySteps, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
 import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToBoardRaw, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
@@ -2936,12 +2937,33 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
     const dynamicBuildCountRef = useRef(0);
     const geometryCacheRef = useRef<Map<string, THREE.BufferGeometry>>(new Map());
     const materialCacheRef = useRef<Map<string, THREE.Material>>(new Map());
+    const [physicsKernelRuntime, setPhysicsKernelRuntime] = useState<'loading' | 'ready' | 'unavailable'>('loading');
+    const [physicsKernelVersion, setPhysicsKernelVersion] = useState('pending');
+    const [physicsKernelError, setPhysicsKernelError] = useState('none');
     const inv = foundryRenderedInventory(mechanism.type);
     const pinionRotation = Math.atan2(simulation.state.j1.y - simulation.state.p1.y, simulation.state.j1.x - simulation.state.p1.x) * 180 / Math.PI;
     const renderPlan = useMemo(() => fabricationRenderPlanForMechanism(mechanism), [mechanism.type]);
     const spacerLayerCount = renderPlan.layers.filter(item => item.role === 'spacer').length;
     const spacerRenderCount = spacerLayerCount * [simulation.state.p1, simulation.state.p2, simulation.state.j1, simulation.state.j2, simulation.state.aux, simulation.state.effector].filter(Boolean).length;
     const stackZGap = renderPlan.layers.length > 1 ? renderPlan.layers[1].z - renderPlan.layers[0].z : 0;
+    useEffect(() => {
+        let active = true;
+        loadRapierPhysicsKernel()
+            .then(kernel => {
+                if (!active) return;
+                setPhysicsKernelRuntime('ready');
+                setPhysicsKernelVersion(kernel.version());
+                setPhysicsKernelError('none');
+            })
+            .catch(error => {
+                if (!active) return;
+                setPhysicsKernelRuntime('unavailable');
+                setPhysicsKernelVersion('unavailable');
+                setPhysicsKernelError(physicsKernelErrorMessage(error));
+            });
+        return () => { active = false; };
+    }, []);
+
     const renderCamera = (view: FoundryCamera) => {
         const scene = sceneRef.current;
         const renderer = rendererRef.current;
@@ -3384,6 +3406,15 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-camera-distance={foundryCameraDistance(camera).toFixed(3)}
             data-rig-opacity={rigOpacity.toFixed(2)}
             data-three-renderer="webgl"
+            data-three-engine-stack={PHYSICS_RENDER_STACK}
+            data-physics-kernel={PHYSICS_KERNEL_ENGINE}
+            data-physics-update-policy={PHYSICS_UPDATE_POLICY}
+            data-high-throughput-scene-policy={HIGH_THROUGHPUT_SCENE_POLICY}
+            data-physics-contact-mode="rapier-friction-contact-kernel"
+            data-physics-kernel-runtime={physicsKernelRuntime}
+            data-physics-kernel-version={physicsKernelVersion}
+            data-physics-kernel-error={physicsKernelError}
+            data-physics-authority="motionsmith-kinematics"
             data-mechanism-type={mechanism.type}
             data-three-part-count={inv.parts}
             data-three-hole-count={inv.holes}

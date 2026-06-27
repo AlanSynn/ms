@@ -477,6 +477,14 @@ test('animation performance: Foundry playback stays responsive without runaway T
 
   const foundryRig = page.getByTestId('foundry-camera-rig');
   await expect(foundryRig).toHaveAttribute('data-three-renderer', 'webgl');
+  await expect(foundryRig).toHaveAttribute('data-three-engine-stack', 'three-webgl2-imperative');
+  await expect(foundryRig).toHaveAttribute('data-physics-kernel', 'rapier3d-compat');
+  await expect(foundryRig).toHaveAttribute('data-physics-kernel-runtime', 'ready', { timeout: 60_000 });
+  await expect(foundryRig).toHaveAttribute('data-physics-kernel-version', /\d+\.\d+\.\d+/);
+  await expect(foundryRig).toHaveAttribute('data-physics-kernel-error', 'none');
+  await expect(foundryRig).toHaveAttribute('data-physics-update-policy', 'kinematic-authority-rapier-contact-validation');
+  await expect(foundryRig).toHaveAttribute('data-high-throughput-scene-policy', 'viser-style-transform-tree-batched-updates-instancing');
+  await expect(foundryRig).toHaveAttribute('data-physics-authority', 'motionsmith-kinematics');
   await expect(foundryRig).toHaveAttribute('data-three-static-grid-mode', 'persistent-scene-layer');
   await expect(foundryRig).toHaveAttribute('data-three-fit-bounds', 'phase-invariant-sweep');
   await expect(foundryRig).toHaveAttribute('data-three-animation-commit-ms', '33.3');
@@ -1831,6 +1839,14 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   const designPuppet = page.getByTestId('design-three-puppet-state');
   await expect(designPuppet).toHaveAttribute('data-three-renderer', 'webgl');
+  await expect(designPuppet).toHaveAttribute('data-three-engine-stack', 'three-webgl2-imperative');
+  await expect(designPuppet).toHaveAttribute('data-physics-kernel', 'rapier3d-compat');
+  await expect(designPuppet).toHaveAttribute('data-physics-kernel-runtime', 'ready', { timeout: 60_000 });
+  await expect(designPuppet).toHaveAttribute('data-physics-kernel-version', /\d+\.\d+\.\d+/);
+  await expect(designPuppet).toHaveAttribute('data-physics-kernel-error', 'none');
+  await expect(designPuppet).toHaveAttribute('data-physics-update-policy', 'kinematic-authority-rapier-contact-validation');
+  await expect(designPuppet).toHaveAttribute('data-high-throughput-scene-policy', 'viser-style-transform-tree-batched-updates-instancing');
+  await expect(designPuppet).toHaveAttribute('data-physics-authority', 'motionsmith-kinematics');
   await expect(designPuppet).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
   await expect(designPuppet).toHaveAttribute('data-three-stack-mode', 'assembled-spacer-separated');
   await expect(designPuppet).toHaveAttribute('data-three-part-surface', 'solid-cut-plates');

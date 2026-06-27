@@ -2,6 +2,7 @@ import type { MechanismConfig, MechanismType, Point, ProjectState } from '../typ
 import { calculateLinkage } from './kinematics';
 import { mechanismTemplateLabel } from './mechanismTemplates';
 import type { ProjectionSourceType, ToonSceneProjection } from './sceneProjection';
+import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY } from './physicsKernel';
 
 export type PhysicsBodyKind = 'fixed' | 'kinematic' | 'joint' | 'driver';
 export type PhysicsConstraintKind = 'pin' | 'rod' | 'guide' | 'target';
@@ -54,6 +55,10 @@ export interface PhysicsSession {
     maxConstraintError: number;
     frictionCoefficient: number;
     massKg: number;
+    renderStack: typeof PHYSICS_RENDER_STACK;
+    physicsKernel: typeof PHYSICS_KERNEL_ENGINE;
+    updatePolicy: typeof PHYSICS_UPDATE_POLICY;
+    scenePolicy: typeof HIGH_THROUGHPUT_SCENE_POLICY;
   };
 }
 
@@ -388,7 +393,11 @@ export const buildKinematicPhysicsSession = (
       maxForce: finite(maxForce),
       maxConstraintError: finite(maxConstraintError),
       frictionCoefficient,
-      massKg
+      massKg,
+      renderStack: PHYSICS_RENDER_STACK,
+      physicsKernel: PHYSICS_KERNEL_ENGINE,
+      updatePolicy: PHYSICS_UPDATE_POLICY,
+      scenePolicy: HIGH_THROUGHPUT_SCENE_POLICY
     }
   };
 };

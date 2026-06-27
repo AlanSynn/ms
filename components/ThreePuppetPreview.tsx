@@ -6,6 +6,7 @@ import { calculateLinkage, camProfileScale, gearPairOutputRatio, planetaryPlanet
 import { FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationRenderPlanForMechanism, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints } from '../utils/fabrication';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, pointInsideOutline } from '../utils/partGeometry';
 import { WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
+import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, loadRapierPhysicsKernel, physicsKernelErrorMessage } from '../utils/physicsKernel';
 
 const VIEW_SCALE = 35;
 const THICKNESS = 0.22;
@@ -437,6 +438,27 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
   const boneRefs = useRef<Map<string, THREE.Mesh>>(new Map());
   const mechanismRefs = useRef<Map<string, MechanismVisual>>(new Map());
   const [rendererStatus, setRendererStatus] = useState<RendererStatus>('pending');
+  const [physicsKernelRuntime, setPhysicsKernelRuntime] = useState<'loading' | 'ready' | 'unavailable'>('loading');
+  const [physicsKernelVersion, setPhysicsKernelVersion] = useState('pending');
+  const [physicsKernelError, setPhysicsKernelError] = useState('none');
+
+  useEffect(() => {
+    let active = true;
+    loadRapierPhysicsKernel()
+      .then(kernel => {
+        if (!active) return;
+        setPhysicsKernelRuntime('ready');
+        setPhysicsKernelVersion(kernel.version());
+        setPhysicsKernelError('none');
+      })
+      .catch(error => {
+        if (!active) return;
+        setPhysicsKernelRuntime('unavailable');
+        setPhysicsKernelVersion('unavailable');
+        setPhysicsKernelError(physicsKernelErrorMessage(error));
+      });
+    return () => { active = false; };
+  }, []);
 
   const activeSkeleton = skeleton ?? project?.skeleton ?? null;
   const canonicalSkeleton = project?.skeleton ?? activeSkeleton;
@@ -917,6 +939,15 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       data-testid={`${testId}-state`}
       className="three-puppet-state"
       data-three-renderer={rendererStatus === 'pending' ? 'webgl' : rendererStatus}
+      data-three-engine-stack={PHYSICS_RENDER_STACK}
+      data-physics-kernel={PHYSICS_KERNEL_ENGINE}
+      data-physics-update-policy={PHYSICS_UPDATE_POLICY}
+      data-high-throughput-scene-policy={HIGH_THROUGHPUT_SCENE_POLICY}
+      data-physics-contact-mode="rapier-friction-contact-kernel"
+      data-physics-kernel-runtime={physicsKernelRuntime}
+      data-physics-kernel-version={physicsKernelVersion}
+      data-physics-kernel-error={physicsKernelError}
+      data-physics-authority="motionsmith-kinematics"
       data-three-pixel-ratio-cap={WEBGL_PIXEL_RATIO_CAP.toFixed(1)}
       data-puppet-mode="thick-flat-assembly"
       data-part-outline-mode="fabrication-fit-joint-chain"

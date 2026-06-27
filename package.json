@@ -16,6 +16,7 @@
     "build:tauri-frontend": "tsc && vite build --base ./"
   },
   "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.19.3",
     "gifuct-js": "^2.1.2",
     "lucide-react": "^1.21.0",
     "onnxruntime-web": "^1.27.0",

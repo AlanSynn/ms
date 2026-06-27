@@ -43,7 +43,10 @@ The editor follows a Canva/CAD-like shell with one shared scene state.
 
 2.5D is the main authoring mode: a locked camera looking at the same real 3D scene. 3D mode only unlocks orbit/pan/inspect; it must not switch to a separate fake representation.
 
-- Use the existing `three` dependency and existing kinematics/physics utilities before adding dependencies.
+- The selected high-performance stack is `three` + Rapier WASM (`@dimforge/rapier3d-compat`) behind `utils/physicsKernel.ts`; mechanism kinematics/fabrication constraints remain authoritative, and Rapier handles contact/friction validation.
+- Use a Viser-style transform tree, batched transform updates, object pooling, shared geometries/materials, and `InstancedMesh` before adding another renderer or scene framework.
+- Do not add React Three Fiber, Babylon, WebGPU, or a new physics engine unless profiling or contract tests prove the current Three/Rapier boundary cannot meet the requirement.
+- Do not bundle the browser Rapier runtime with `bun build`; the app build path must remain `tsc && vite build`, with a literal dynamic Rapier import so Vite emits the lazy physics chunk and Playwright validates it through production preview.
 - A mechanism preview must show the physical parts that would be built: links, holes, slots, pivots, pins, gears, cams, followers, racks, guides, spacers, clips, and base board where relevant.
 - Real thickness must be visible on parts. Avoid confusing transparent planes unless they are temporary hover/selection affordances.
 - Force, velocity, friction, contact, and constraint-error overlays must come from sampled kinematic/physics state.
