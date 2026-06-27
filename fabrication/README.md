@@ -45,7 +45,7 @@ These files are nominal geometry, not material-specific kerf compensation. Befor
 
 - `kit/` contains the existing educational/module-oriented MS4N activity sheets, prompt cards, checks, and broad classroom materials.
 - `fabrication/` is the nominal-millimetre manufacturing package for the constrained physical parts requested here: gears, planetary ring gears, linkage bars, cams, followers, brackets, spacers, handles, and workshop cut sheets.
-- Shared physical assumptions should come from `automataii.shared.physical_kit`; do not hand-edit generated `fabrication/` SVGs without updating the generator and sync test.
+- Shared physical assumptions come from `fabrication/generate_fabrication_templates.py` and are mirrored by `utils/fabrication.ts`; do not hand-edit generated `fabrication/` SVGs without updating the generator and drift test.
 
 ## Contents
 
@@ -70,11 +70,11 @@ Managed files in this generated package: 48.
 ## Regeneration
 
 ```bash
-uv run python scripts/generate_fabrication_templates.py --output fabrication
+python3 fabrication/generate_fabrication_templates.py --output fabrication
 ```
 
 For a custom 2.5 cm board pitch, generate to a separate directory instead of overwriting the committed package:
 
 ```bash
-uv run python scripts/generate_fabrication_templates.py --output /tmp/automataii-fabrication-2_5cm --grid-cell-cm 2.5
+python3 fabrication/generate_fabrication_templates.py --output /tmp/automataii-fabrication-2_5cm --grid-cell-cm 2.5
 ```

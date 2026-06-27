@@ -65,7 +65,7 @@
     "width_mm": 560.0
   },
   "generated_at": "reproducible",
-  "generated_by": "scripts/generate_fabrication_templates.py",
+  "generated_by": "fabrication/generate_fabrication_templates.py",
   "grid_cell_cm": 2.0,
   "grid_pitch_mm": 20.0,
   "hole_diameter_mm": 4.0,
@@ -1106,5 +1106,5 @@
       "width_mm": 279.4
     }
   ],
-  "source_ssot": "automataii.shared.physical_kit"
+  "source_ssot": "fabrication/generate_fabrication_templates.py"
 }
