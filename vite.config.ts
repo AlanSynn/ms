@@ -3,11 +3,11 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(() => {
-  // Use relative path for Tauri builds, absolute for web deployment
+  // Use relative path for Tauri builds, root path for web deployment.
   const isTauri = process.env.TAURI_PLATFORM !== undefined;
 
   return {
-    base: isTauri ? './' : '/MotionSmith/',
+    base: isTauri ? './' : '/',
     server: {
       port: 1420,
       strictPort: true,

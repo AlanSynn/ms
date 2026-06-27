@@ -5,7 +5,7 @@
 **MotionSmith** is a powerful web-based tool for designing, simulating, and optimizing mechanical linkages and character motion. It combines interactive 2D physics simulation with genetic algorithms to help users create complex mechanisms that follow specific motion paths.
 
 <p align="center">
-  <a href="https://moh-d-m4x.github.io/MotionSmith/">
+  <a href="https://alansynn.com/">
     <img src="https://img.shields.io/badge/🚀_Try_it-live!-blue?style=for-the-badge" alt="Try it live!" height="50">
   </a>
 </p>

@@ -76,7 +76,7 @@ assert(brandStaticText.includes('MotionSmith'), 'MotionSmith appears across stat
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')).name, 'motionsmith-character-motion-designer', 'package name uses the MotionSmith slug');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'metadata.json'), 'utf8')).name, 'MotionSmith: Character Motion Designer', 'metadata product name uses MotionSmith');
 assert(readFileSync(join(process.cwd(), 'index.html'), 'utf8').includes('<title>MotionSmith - Mechanical Character Designer</title>'), 'HTML title uses MotionSmith');
-assert(readFileSync(join(process.cwd(), 'vite.config.ts'), 'utf8').includes("'/MotionSmith/'"), 'web deployment base path uses MotionSmith');
+assert(readFileSync(join(process.cwd(), 'vite.config.ts'), 'utf8').includes("base: isTauri ? './' : '/'"), 'web deployment base path uses root');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
 assert(readFileSync(join(process.cwd(), 'App.tsx'), 'utf8').includes('motionsmith.hideWelcome'), 'local storage namespace uses the MotionSmith slug');
 const packageJson = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8'));

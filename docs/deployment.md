@@ -1,6 +1,6 @@
 # Deployment
 
-The web build is fully local/offline after install.
+The web build is fully local/offline after install. Production web deployment is rooted at `/` so the editor can load from the domain root; Tauri builds keep relative `./` assets.
 
 ## Build
 
