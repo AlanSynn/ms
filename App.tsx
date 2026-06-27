@@ -39,7 +39,7 @@ import {
 import { checkWebOnnxCache, processImageWithWebOnnx, warmWebOnnxCache, type WebOnnxCacheStatus } from './utils/webOnnx';
 import { buildFoundryPhysicsOverlay } from './utils/physicsSession';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, loadRapierPhysicsKernel, physicsKernelErrorMessage } from './utils/physicsKernel';
-import { createFabricationPackage, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, prefabAssemblySteps, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
+import { createFabricationPackage, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, prefabAssemblySteps, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
 import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToBoardRaw, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
 import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
@@ -3245,8 +3245,8 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         const to3 = (point: Point, z = 0) => new THREE.Vector3((point.x - 180) / 18, (120 - point.y) / 18, z);
         const mmToThree = SCENE_PX_PER_MM / 18;
         const thickness = Math.max(0.2, kit.holeDiameterMm / 10);
-        const barW = Math.max(0.34, kit.holeDiameterMm / 8);
-        const holeR = Math.max(0.08, kit.holeDiameterMm / 34);
+        const barW = Math.max(0.34, FABRICATION_LINKAGE_WIDTH_MM * mmToThree);
+        const holeR = Math.max(0.08, FABRICATION_HOLE_RADIUS_MM * mmToThree);
         const spacerOuterR = FABRICATION_SPACER_SPEC.outerDiameterMm * mmToThree / 2;
         const spacerInnerR = FABRICATION_SPACER_SPEC.innerDiameterMm * mmToThree / 2;
         const addEdges = (mesh: THREE.Mesh, key = mesh.geometry.uuid) => {
@@ -3367,7 +3367,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             });
             inner.closePath();
             shape.holes.push(inner);
-            const mountHoleRadius = Math.max(holeR * 0.58, 2 * (profile.pitchRadius / 70));
+            const mountHoleRadius = Math.max(holeR * 0.58, profile.mountHoleRadius);
             profile.mountHoleCenters.forEach(point => shape.holes.push(circularHole(point.x, point.y, mountHoleRadius)));
             const geometryKey = `ring-gear:${radius.toFixed(3)}:${simulation.scale.toFixed(3)}:${thickness.toFixed(3)}`;
             const geom = cachedGeometry(geometryKey, () => new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.025, bevelThickness: 0.02 }));
@@ -3660,9 +3660,9 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
     const templateTest = compact ? undefined : `foundry-template-${mechanism.type}`;
     const fabricationTest = (name: string) => compact ? undefined : `foundry-fabrication-${name}`;
     const radius = (length: number, min = compact ? 8 : 16, max = compact ? 28 : 58) => scaled(Math.max(1, length), min, max);
-    const holeR = Math.max(compact ? 1.8 : 2.6, Math.min(compact ? 3.4 : 5.6, (kit.holeDiameterMm * SCENE_PX_PER_MM * simulation.scale) / 2));
+    const holeR = Math.max(compact ? 1.8 : 2.6, Math.min(compact ? 3.4 : 5.6, FABRICATION_HOLE_RADIUS_MM * SCENE_PX_PER_MM * simulation.scale));
     const pitch = Math.max(holeR * 3.5, kit.gridPitchMm * SCENE_PX_PER_MM * simulation.scale);
-    const barWidth = Math.max(holeR * 4.2, compact ? 8 : 14);
+    const barWidth = Math.max(FABRICATION_LINKAGE_WIDTH_MM * SCENE_PX_PER_MM * simulation.scale, holeR * 3.5, compact ? 8 : 14);
     const degToRad = (deg: number) => (deg * Math.PI) / 180;
     const axisForAngle = (deg: number) => ({ x: Math.cos(degToRad(deg)), y: -Math.sin(degToRad(deg)) });
     const trackAxis = axisForAngle(mechanism.groundAngle ?? 0);

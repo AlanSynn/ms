@@ -6,39 +6,35 @@ import { mechanismBindingWarnings, preferredMotionJointId } from './motion';
 import { svgNumber } from './sanitize';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlineBounds, pointInsideOutline } from './partGeometry';
 
-export type FabricationGearSpec = {
-    key: 'g8' | 'g24' | 'g40' | 'g56';
-    label: string;
-    path: string;
-    teeth: number;
-    pitchRadiusMm: number;
-    rootRadiusMm: number;
-    outerRadiusMm: number;
-    holeDiameterMm: number;
-    attachmentHoleCentersMm: Point[];
+import {
+    FABRICATION_GEAR_SPECS,
+    FABRICATION_HOLE_RADIUS_MM,
+    FABRICATION_LINKAGE_SPECS,
+    FABRICATION_LINKAGE_WIDTH_MM,
+    FABRICATION_RING_GEAR_SPEC,
+    FABRICATION_SOURCE_SSOT,
+    FABRICATION_SPACER_SPEC,
+    fabricationGearSpecForPitchRadius as sharedFabricationGearSpecForPitchRadius,
+    fabricationRingGearSpecForPitchRadius,
+    type FabricationGearSpec,
+    type FabricationLinkageSpec,
+    type FabricationRingGearSpec,
+    type FabricationSpacerSpec
+} from './fabricationContract';
+
+export {
+    FABRICATION_GEAR_SPECS,
+    FABRICATION_HOLE_RADIUS_MM,
+    FABRICATION_LINKAGE_SPECS,
+    FABRICATION_LINKAGE_WIDTH_MM,
+    FABRICATION_RING_GEAR_SPEC,
+    FABRICATION_SOURCE_SSOT,
+    FABRICATION_SPACER_SPEC
 };
-
-export const FABRICATION_GEAR_SPECS: readonly FabricationGearSpec[] = [
-    { key: 'g8', label: 'G1 / 1-space gear', path: 'gears/gear-8t.svg', teeth: 8, pitchRadiusMm: 10, rootRadiusMm: 10, outerRadiusMm: 11.5, holeDiameterMm: 4, attachmentHoleCentersMm: [] },
-    { key: 'g24', label: 'G3 / 3-space gear', path: 'gears/gear-24t.svg', teeth: 24, pitchRadiusMm: 30, rootRadiusMm: 28.438, outerRadiusMm: 31.5, holeDiameterMm: 4, attachmentHoleCentersMm: [{ x: 0, y: -20 }, { x: -20, y: 0 }, { x: 20, y: 0 }, { x: 0, y: 20 }] },
-    { key: 'g40', label: 'G5 / 5-space gear', path: 'gears/gear-40t.svg', teeth: 40, pitchRadiusMm: 50, rootRadiusMm: 48.438, outerRadiusMm: 51.5, holeDiameterMm: 4, attachmentHoleCentersMm: [{ x: 0, y: -20 }, { x: -20, y: 0 }, { x: 20, y: 0 }, { x: 0, y: 20 }, { x: -20, y: -20 }, { x: 20, y: -20 }, { x: -20, y: 20 }, { x: 20, y: 20 }, { x: 0, y: -40 }, { x: -40, y: 0 }, { x: 40, y: 0 }, { x: 0, y: 40 }] },
-    { key: 'g56', label: 'G7 / 7-space gear', path: 'gears/gear-56t.svg', teeth: 56, pitchRadiusMm: 70, rootRadiusMm: 68.438, outerRadiusMm: 71.5, holeDiameterMm: 4, attachmentHoleCentersMm: [{ x: 0, y: -20 }, { x: -20, y: 0 }, { x: 20, y: 0 }, { x: 0, y: 20 }, { x: -20, y: -20 }, { x: 20, y: -20 }, { x: -20, y: 20 }, { x: 20, y: 20 }, { x: 0, y: -40 }, { x: -40, y: 0 }, { x: 40, y: 0 }, { x: 0, y: 40 }, { x: -20, y: -40 }, { x: 20, y: -40 }, { x: -40, y: -20 }, { x: 40, y: -20 }, { x: -40, y: 20 }, { x: 40, y: 20 }, { x: -20, y: 40 }, { x: 20, y: 40 }, { x: -40, y: -40 }, { x: 40, y: -40 }, { x: -40, y: 40 }, { x: 40, y: 40 }, { x: 0, y: -60 }, { x: -60, y: 0 }, { x: 60, y: 0 }, { x: 0, y: 60 }] }
-] as const;
-
-export const FABRICATION_SPACER_SPEC = {
-    source: 'fabrication/manifest.json',
-    key: 's10',
-    label: 'S10 spacer',
-    path: 'spacers/spacer-s10.svg',
-    outerDiameterMm: 10,
-    innerDiameterMm: 4,
-    holeDiameterMm: 4,
-    holeCentersMm: [{ x: 9, y: 9 }],
-    stackable: true
-} as const;
+export type { FabricationGearSpec, FabricationLinkageSpec, FabricationRingGearSpec, FabricationSpacerSpec };
 
 export type FabricationGearProfile = {
-    source: 'fabrication/manifest.json';
+    source: typeof FABRICATION_SOURCE_SSOT;
     preset: FabricationGearSpec;
     pitchRadius: number;
     rootRadius: number;
@@ -49,12 +45,7 @@ export type FabricationGearProfile = {
     outlinePoints: Point[];
 };
 
-export const fabricationGearSpecForPitchRadius = (pitchRadius: number): FabricationGearSpec => {
-    const radius = Math.max(0, Math.abs(pitchRadius));
-    return FABRICATION_GEAR_SPECS.reduce((best, spec) =>
-        Math.abs(spec.pitchRadiusMm - radius) < Math.abs(best.pitchRadiusMm - radius) ? spec : best
-    );
-};
+export const fabricationGearSpecForPitchRadius = sharedFabricationGearSpecForPitchRadius;
 
 const scalePoint = (point: Point, scale: number): Point => ({ x: point.x * scale, y: point.y * scale });
 
@@ -76,7 +67,7 @@ export const fabricationGearProfileForPitchRadius = (pitchRadius: number, preset
         ].forEach(({ angle, radius }) => outlinePoints.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius }));
     }
     return {
-        source: 'fabrication/manifest.json',
+        source: FABRICATION_SOURCE_SSOT,
         preset,
         pitchRadius: safePitchRadius,
         rootRadius,
@@ -107,7 +98,7 @@ export const fabricationGearPathD = (pitchRadius: number, presetPitchRadiusMm = 
 };
 
 export type FabricationRingGearProfile = {
-    source: 'fabrication/manifest.json';
+    source: typeof FABRICATION_SOURCE_SSOT;
     key: 'ring-g8-g24';
     internalTeeth: number;
     outerRadius: number;
@@ -115,20 +106,22 @@ export type FabricationRingGearProfile = {
     tipRadius: number;
     rootRadius: number;
     mountHoleCenters: Point[];
+    mountHoleRadius: number;
 };
 
 export const fabricationRingGearProfileForPitchRadius = (pitchRadius: number): FabricationRingGearProfile => {
     const safePitchRadius = Math.max(0.001, Math.abs(pitchRadius));
-    const scale = safePitchRadius / 70;
+    const preset = fabricationRingGearSpecForPitchRadius(safePitchRadius);
     return {
-        source: 'fabrication/manifest.json',
-        key: 'ring-g8-g24',
-        internalTeeth: 56,
-        outerRadius: 90 * scale,
-        pitchRadius: safePitchRadius,
-        tipRadius: 68.562 * scale,
-        rootRadius: 71.062 * scale,
-        mountHoleCenters: [{ x: 0, y: -80 }, { x: -80, y: 0 }, { x: 80, y: 0 }, { x: 0, y: 80 }].map(point => scalePoint(point, scale))
+        source: FABRICATION_SOURCE_SSOT,
+        key: preset.key,
+        internalTeeth: preset.internalTeeth,
+        outerRadius: preset.outerRadiusMm,
+        pitchRadius: preset.pitchRadiusMm,
+        tipRadius: preset.innerTipRadiusMm,
+        rootRadius: preset.innerRootRadiusMm,
+        mountHoleCenters: preset.mountHoleCentersMm,
+        mountHoleRadius: FABRICATION_HOLE_RADIUS_MM * (preset.pitchRadiusMm / FABRICATION_RING_GEAR_SPEC.pitchRadiusMm)
     };
 };
 
@@ -150,7 +143,7 @@ export const fabricationRingInnerGearOutlinePoints = (pitchRadius: number): Poin
 
 export const fabricationRingGearPathD = (pitchRadius: number): string => {
     const profile = fabricationRingGearProfileForPitchRadius(pitchRadius);
-    const mountHoleRadius = 2 * (profile.pitchRadius / 70);
+    const mountHoleRadius = profile.mountHoleRadius;
     return [
         circlePathD(profile.outerRadius),
         svgPathFromPoints(fabricationRingInnerGearOutlinePoints(pitchRadius)),

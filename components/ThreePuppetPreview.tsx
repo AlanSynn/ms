@@ -3,13 +3,15 @@ import * as THREE from 'three';
 import type { BodyPartLayer, CanvasViewport, MechanismConfig, MechanismType, Point, ProjectState, StandardSkeleton } from '../types';
 import { boardGridLines, defaultPhysicalKit, SCENE_PX_PER_MM, sceneBoundsForSheet } from '../utils/coordinates';
 import { calculateLinkage, camProfileScale, gearPairOutputRatio, gearTrainCenters, gearTrainOutputRatio, gearTrainPitchRadii, planetaryPlanetSpinRatio } from '../utils/kinematics';
-import { FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationRenderPlanForMechanism, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints } from '../utils/fabrication';
+import { FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationRenderPlanForMechanism, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints } from '../utils/fabrication';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, pointInsideOutline } from '../utils/partGeometry';
 import { clampCanvasZoom, WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, loadRapierPhysicsKernel, physicsKernelErrorMessage } from '../utils/physicsKernel';
 import { DEFAULT_PUPPET_VIEWER_LAYERS, VIEWER3D_CAMERA_PRESETS, VIEWER3D_CONTRACT_VERSION, createViewer3DContract, viewer3DLayerDataValue, type Viewer3DCameraPreset, type Viewer3DTabKey } from '../utils/viewer3d';
 
 const VIEW_SCALE = 35;
+const FABRICATION_LINKAGE_WIDTH_3D = Math.max(0.16, (FABRICATION_LINKAGE_WIDTH_MM * SCENE_PX_PER_MM) / VIEW_SCALE);
+const FABRICATION_HOLE_RADIUS_3D = Math.max(0.04, (FABRICATION_HOLE_RADIUS_MM * SCENE_PX_PER_MM) / VIEW_SCALE);
 const THICKNESS = 0.22;
 const SUPPORTED_MECHANISM_TYPES: MechanismType[] = ['crank', '4bar', 'piston', 'yoke', 'quick-return', '5bar', '6bar', 'cam', 'rack-pinion', 'gear', 'planetary_gear'];
 const PUPPET_CAMERA_PRESETS: Viewer3DCameraPreset[] = ['front', 'iso'];
@@ -83,9 +85,27 @@ const orbitPosition = (yaw: number, pitch: number): [number, number, number] => 
 
 const clampOrbitPitch = (pitch: number) => Math.max(-68, Math.min(78, pitch));
 
+const sharedGeometryCache = new Map<string, THREE.BufferGeometry>();
+
+const cachedGeometry = <T extends THREE.BufferGeometry>(key: string, factory: () => T): T => {
+  const cached = sharedGeometryCache.get(key);
+  if (cached) return cached as T;
+  const geometry = factory();
+  geometry.userData.sharedFabricationGeometry = true;
+  sharedGeometryCache.set(key, geometry);
+  return geometry;
+};
+
+const geometryKeyNumber = (value: number) => Number.isFinite(value) ? value.toFixed(3) : 'nan';
+
+const attachCachedEdges = (mesh: THREE.Mesh, geometry: THREE.BufferGeometry, edgeMaterial: THREE.Material, key: string) => {
+  const edgeGeometry = cachedGeometry(`edges:${key}`, () => new THREE.EdgesGeometry(geometry));
+  mesh.add(new THREE.LineSegments(edgeGeometry, edgeMaterial));
+};
+
 const disposeObject = (object: THREE.Object3D, disposeMaterials = false) => object.traverse(child => {
   const mesh = child as THREE.Mesh;
-  mesh.geometry?.dispose?.();
+  if (mesh.geometry && !mesh.geometry.userData?.sharedFabricationGeometry) mesh.geometry.dispose();
   if (!disposeMaterials) return;
   const material = mesh.material;
   if (Array.isArray(material)) material.forEach(item => item.dispose());
@@ -215,7 +235,10 @@ const shapeFromLocalOutline = (points: Point[]) => {
   return shape;
 };
 
-const makeUnitBar = (width: number, depth: number, material: THREE.Material) => new THREE.Mesh(new THREE.BoxGeometry(1, width, depth), material);
+const makeUnitBar = (width: number, depth: number, material: THREE.Material) => new THREE.Mesh(
+  cachedGeometry(`unit-bar:${geometryKeyNumber(width)}:${geometryKeyNumber(depth)}`, () => new THREE.BoxGeometry(1, width, depth)),
+  material
+);
 
 const updateUnitBar = (mesh: THREE.Object3D, a?: Point, b?: Point, z = 0) => {
   if (!a || !b) {
@@ -233,42 +256,52 @@ const updateUnitBar = (mesh: THREE.Object3D, a?: Point, b?: Point, z = 0) => {
 
 const createHoledLink = (length: number, width: number, material: THREE.Material, edgeMaterial: THREE.Material, holeCount = 2) => {
   const group = new THREE.Group();
-  group.userData.baseLength = Math.max(0.08, length);
-  const shape = roundedRect(Math.max(0.08, length), width, width / 2);
+  const safeLength = Math.max(0.08, length);
   const count = Math.max(2, holeCount);
-  for (let i = 0; i < count; i += 1) {
-    shape.holes.push(holePath(-length / 2 + (length * i) / (count - 1), 0, Math.min(0.11, width * 0.22)));
-  }
-  const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.11, bevelEnabled: true, bevelSize: 0.014, bevelThickness: 0.01 });
+  group.userData.baseLength = safeLength;
+  const key = `holed-link:${geometryKeyNumber(safeLength)}:${geometryKeyNumber(width)}:${count}:${geometryKeyNumber(FABRICATION_HOLE_RADIUS_3D)}`;
+  const geometry = cachedGeometry(key, () => {
+    const shape = roundedRect(safeLength, width, width / 2);
+    for (let i = 0; i < count; i += 1) {
+      shape.holes.push(holePath(-safeLength / 2 + (safeLength * i) / (count - 1), 0, Math.min(FABRICATION_HOLE_RADIUS_3D, width * 0.34)));
+    }
+    return new THREE.ExtrudeGeometry(shape, { depth: 0.11, bevelEnabled: false, steps: 1, curveSegments: 6 });
+  });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.z = -0.055;
-  mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), edgeMaterial));
+  attachCachedEdges(mesh, geometry, edgeMaterial, key);
   group.add(mesh);
   return group;
 };
 
-const createExtrudedMesh = (shape: THREE.Shape, material: THREE.Material, edgeMaterial: THREE.Material, depth = 0.14) => {
-  const geometry = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelSize: 0.014, bevelThickness: 0.01 });
+const createExtrudedMesh = (shape: THREE.Shape, material: THREE.Material, edgeMaterial: THREE.Material, depth = 0.14, cacheKey?: string) => {
+  const key = cacheKey ? `extrude:${cacheKey}:${geometryKeyNumber(depth)}` : undefined;
+  const geometry = key
+    ? cachedGeometry(key, () => new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, steps: 1, curveSegments: 6 }))
+    : new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, steps: 1, curveSegments: 6 });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.z = -depth / 2;
-  mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), edgeMaterial));
+  if (key) attachCachedEdges(mesh, geometry, edgeMaterial, key);
+  else mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), edgeMaterial));
   return mesh;
 };
 
 const createSlotPlate = (length: number, width: number, material: THREE.Material, edgeMaterial: THREE.Material) => {
   const group = new THREE.Group();
-  const shape = roundedRect(Math.max(0.4, length), width, width / 2);
-  shape.holes.push(roundedRect(Math.max(0.18, length * 0.68), width * 0.38, width * 0.19));
-  group.add(createExtrudedMesh(shape, material, edgeMaterial));
+  const safeLength = Math.max(0.4, length);
+  const key = `slot:${geometryKeyNumber(safeLength)}:${geometryKeyNumber(width)}`;
+  const shape = roundedRect(safeLength, width, width / 2);
+  shape.holes.push(roundedRect(Math.max(0.18, safeLength * 0.68), width * 0.38, width * 0.19));
+  group.add(createExtrudedMesh(shape, material, edgeMaterial, 0.14, key));
   return group;
 };
 
 const createFollowerBlock = (material: THREE.Material, edgeMaterial: THREE.Material) => {
   const group = new THREE.Group();
-  const blockGeometry = new THREE.BoxGeometry(0.46, 0.62, 0.18);
+  const blockGeometry = cachedGeometry('follower-block:0.46:0.62:0.18', () => new THREE.BoxGeometry(0.46, 0.62, 0.18));
   const block = new THREE.Mesh(blockGeometry, material);
-  block.add(new THREE.LineSegments(new THREE.EdgesGeometry(blockGeometry), edgeMaterial));
-  const roller = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.24, 24), material);
+  attachCachedEdges(block, blockGeometry, edgeMaterial, 'follower-block:0.46:0.62:0.18');
+  const roller = new THREE.Mesh(cachedGeometry('follower-roller:0.13:0.24:24', () => new THREE.CylinderGeometry(0.13, 0.13, 0.24, 24)), material);
   roller.rotation.x = Math.PI / 2;
   roller.position.set(0, -0.42, 0.12);
   group.add(block, roller);
@@ -277,26 +310,27 @@ const createFollowerBlock = (material: THREE.Material, edgeMaterial: THREE.Mater
 
 const createRack = (length: number, width: number, material: THREE.Material, edgeMaterial: THREE.Material) => {
   const group = new THREE.Group();
-  const bodyGeometry = new THREE.BoxGeometry(length, width, 0.16);
+  const bodyKey = `rack-body:${geometryKeyNumber(length)}:${geometryKeyNumber(width)}`;
+  const bodyGeometry = cachedGeometry(bodyKey, () => new THREE.BoxGeometry(length, width, 0.16));
   const body = new THREE.Mesh(bodyGeometry, material);
-  body.add(new THREE.LineSegments(new THREE.EdgesGeometry(bodyGeometry), edgeMaterial));
+  attachCachedEdges(body, bodyGeometry, edgeMaterial, bodyKey);
   group.add(body);
   const toothCount = Math.max(6, Math.round(length / 0.34));
   for (let i = 0; i < toothCount; i += 1) {
-    const toothGeometry = new THREE.BoxGeometry(0.18, 0.16, 0.16);
+    const toothGeometry = cachedGeometry('rack-tooth:0.18:0.16:0.16', () => new THREE.BoxGeometry(0.18, 0.16, 0.16));
     const tooth = new THREE.Mesh(toothGeometry, material);
     tooth.position.set(-length / 2 + 0.18 + i * ((length - 0.36) / Math.max(1, toothCount - 1)), -width * 0.72, 0.08);
     tooth.rotation.z = Math.PI / 4;
-    tooth.add(new THREE.LineSegments(new THREE.EdgesGeometry(toothGeometry), edgeMaterial));
+    attachCachedEdges(tooth, toothGeometry, edgeMaterial, 'rack-tooth:0.18:0.16:0.16');
     group.add(tooth);
   }
   return group;
 };
 
 const createEndStop = (material: THREE.Material, edgeMaterial: THREE.Material) => {
-  const geometry = new THREE.BoxGeometry(0.2, 0.72, 0.22);
+  const geometry = cachedGeometry('end-stop:0.2:0.72:0.22', () => new THREE.BoxGeometry(0.2, 0.72, 0.22));
   const mesh = new THREE.Mesh(geometry, material);
-  mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), edgeMaterial));
+  attachCachedEdges(mesh, geometry, edgeMaterial, 'end-stop:0.2:0.72:0.22');
   return mesh;
 };
 
@@ -313,7 +347,7 @@ const createCamProfile = (radius: number, material: THREE.Material, edgeMaterial
   shape.closePath();
   shape.holes.push(holePath(0, 0, Math.max(0.08, radius * 0.15)));
   const group = new THREE.Group();
-  group.add(createExtrudedMesh(shape, material, edgeMaterial, 0.2));
+  group.add(createExtrudedMesh(shape, material, edgeMaterial, 0.2, `cam:${geometryKeyNumber(radius)}`));
   return group;
 };
 
@@ -328,7 +362,7 @@ const ringGearShape = (pitchRadius: number) => {
   });
   inner.closePath();
   shape.holes.push(inner);
-  profile.mountHoleCenters.forEach(point => shape.holes.push(holePath(point.x, point.y, 2 * (pitchRadius / 70))));
+  profile.mountHoleCenters.forEach(point => shape.holes.push(holePath(point.x, point.y, profile.mountHoleRadius)));
   return shape;
 };
 
@@ -523,6 +557,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
     () => mechanismsToRender.find(mechanism => mechanism.id === project?.selectedMechanismId) ?? mechanismsToRender[0],
     [mechanismsToRender, project?.selectedMechanismId]
   );
+  const renderedMechanisms = useMemo(() => selectedMechanism ? [selectedMechanism] : [], [selectedMechanism]);
   const selectedTelemetry = useMemo(() => selectedMechanism ? mechanismTelemetry(selectedMechanism, angle) : null, [selectedMechanism, angle]);
   const selectedRenderPlan = useMemo(() => selectedMechanism ? fabricationRenderPlanForMechanism(selectedMechanism) : null, [selectedMechanism]);
   const stackValidationErrors = useMemo(
@@ -548,12 +583,8 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
     if (scene && camera && renderer) {
       renderer.render(scene, camera);
       if (stateRef.current) {
-        let visibleObjects = 0;
-        scene.traverse(child => {
-          if (child.visible && ((child as THREE.Mesh).isMesh || (child as THREE.Line).isLine || (child as THREE.LineSegments).isLineSegments)) visibleObjects += 1;
-        });
-        stateRef.current.dataset.threeSceneVisibleObjectCount = String(visibleObjects);
-        stateRef.current.dataset.threeSceneObjectCount = String(Math.max(visibleObjects, estimatedObjectCount));
+        stateRef.current.dataset.threeSceneVisibleObjectCount = String(estimatedObjectCount);
+        stateRef.current.dataset.threeSceneObjectCount = String(estimatedObjectCount);
         stateRef.current.dataset.threeRenderTriangles = String(renderer.info.render.triangles);
       }
     }
@@ -760,14 +791,14 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
     render();
   }, [activeSkeleton, bones, joints, rendererStatus]);
 
-  const mechanismSignature = useMemo(() => mechanismGeometrySignature(mechanismsToRender), [mechanismsToRender]);
+  const mechanismSignature = useMemo(() => mechanismGeometrySignature(renderedMechanisms), [renderedMechanisms]);
   useEffect(() => {
     const roots = rootsRef.current;
     const materials = materialsRef.current;
     if (!roots || !materials || rendererStatus !== 'webgl') return;
     clearGroup(roots.mechanismsLayer);
     mechanismRefs.current.clear();
-    mechanismsToRender.forEach(mechanism => {
+    renderedMechanisms.forEach(mechanism => {
       const group = new THREE.Group();
       const linkLengths = {
         base: Math.max(0.08, mechanism.groundLength / VIEW_SCALE),
@@ -778,12 +809,12 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
         follower: Math.max(0.08, Math.max(20, mechanism.rodLength ?? mechanism.couplerPointDist) / VIEW_SCALE)
       };
       const links: Record<LinkKey, THREE.Group> = {
-        base: createHoledLink(linkLengths.base, 0.16, materials.mechBase, materials.edge, 3),
-        driver: createHoledLink(linkLengths.driver, 0.18, materials.mechDrive, materials.edge, 3),
-        coupler: createHoledLink(linkLengths.coupler, 0.2, materials.mechCoupler, materials.edge, 4),
-        output: createHoledLink(linkLengths.output, 0.18, materials.mechOutput, materials.edge, 3),
-        effector: createHoledLink(linkLengths.effector, 0.16, materials.mechOutput, materials.edge, 2),
-        follower: createHoledLink(linkLengths.follower, 0.16, materials.mechOutput, materials.edge, 2)
+        base: createHoledLink(linkLengths.base, FABRICATION_LINKAGE_WIDTH_3D, materials.mechBase, materials.edge, 3),
+        driver: createHoledLink(linkLengths.driver, FABRICATION_LINKAGE_WIDTH_3D, materials.mechDrive, materials.edge, 3),
+        coupler: createHoledLink(linkLengths.coupler, FABRICATION_LINKAGE_WIDTH_3D, materials.mechCoupler, materials.edge, 4),
+        output: createHoledLink(linkLengths.output, FABRICATION_LINKAGE_WIDTH_3D, materials.mechOutput, materials.edge, 3),
+        effector: createHoledLink(linkLengths.effector, FABRICATION_LINKAGE_WIDTH_3D, materials.mechOutput, materials.edge, 2),
+        follower: createHoledLink(linkLengths.follower, FABRICATION_LINKAGE_WIDTH_3D, materials.mechOutput, materials.edge, 2)
       };
       Object.values(links).forEach(link => group.add(link));
       const gears: THREE.Mesh[] = [];
@@ -795,7 +826,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
             : [mechanism.crankLength, mechanism.rockerLength];
         gearRadii.forEach((radius, index) => {
           const mesh = new THREE.Mesh(
-            new THREE.ExtrudeGeometry(gearShape(Math.max(0.38, radius / VIEW_SCALE), radius / SCENE_PX_PER_MM), { depth: 0.16, bevelEnabled: true, bevelSize: 0.015 }),
+            cachedGeometry(`gear:${geometryKeyNumber(Math.max(0.38, radius / VIEW_SCALE))}:${geometryKeyNumber(radius / SCENE_PX_PER_MM)}:0.16`, () => new THREE.ExtrudeGeometry(gearShape(Math.max(0.38, radius / VIEW_SCALE), radius / SCENE_PX_PER_MM), { depth: 0.16, bevelEnabled: false, steps: 1, curveSegments: 6 })),
             index === 0 ? materials.mechDrive : materials.mechCoupler
           );
           gears.push(mesh);
@@ -832,12 +863,16 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
         addExtra('endStopB', createEndStop(materials.mechPin, materials.edge));
       }
       if (mechanism.type === 'planetary_gear') {
-        addExtra('ringGear', createExtrudedMesh(
-          ringGearShape(Math.max(0.82, (mechanism.groundLength + mechanism.rockerLength) / VIEW_SCALE)),
-          materials.mechBase,
-          materials.edge,
-          0.14
-        ));
+        {
+          const ringRadius = Math.max(0.82, (mechanism.groundLength + mechanism.rockerLength) / VIEW_SCALE);
+          addExtra('ringGear', createExtrudedMesh(
+            ringGearShape(ringRadius),
+            materials.mechBase,
+            materials.edge,
+            0.14,
+            `ring-gear:${geometryKeyNumber(ringRadius)}`
+          ));
+        }
       }
       const pins = Array.from({ length: 6 }, () => {
         const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.36, 20), materials.mechPin);
@@ -849,11 +884,11 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       mechanismRefs.current.set(mechanism.id, { links, gears, pins, extras });
     });
     render();
-  }, [mechanismSignature, rendererStatus]);
+  }, [mechanismSignature, renderedMechanisms, rendererStatus]);
 
   useEffect(() => {
     if (rendererStatus !== 'webgl') return;
-    mechanismsToRender.forEach(mechanism => {
+    renderedMechanisms.forEach(mechanism => {
       const visual = mechanismRefs.current.get(mechanism.id);
       if (!visual) return;
       const state = calculateLinkage(mechanism, angle);
@@ -978,7 +1013,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       });
     });
     render();
-  }, [angle, mechanismsToRender, rendererStatus]);
+  }, [angle, renderedMechanisms, rendererStatus]);
 
   useEffect(() => {
     const roots = rootsRef.current;

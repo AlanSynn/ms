@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { boardGridLines, boardToScene, bodyPartPivotScene, physicalKitPreset, placeBodyPartPivotAt, SCENE_PX_PER_MM, sceneToBoard, sceneToBoardRaw, sceneToSheetMm, sceneToSvg, sheetMmToScene } from '../utils/coordinates';
 import { createDefaultMechanism, createSampleProject, handoffGate, loadProjectSnapshot, serializeProject, applyProjectAction, projectSelfCheck, mechanismRequiredParts, mechanismWithGeneratedPath } from '../utils/project';
-import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_SPACER_SPEC, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, sampleFeasibleRange, validateFabricationStack, validateForFabrication } from '../utils/fabrication';
+import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, sampleFeasibleRange, validateFabricationStack, validateForFabrication } from '../utils/fabrication';
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
 import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, generateCurvePoints, planetaryPlanetSpinRatio } from '../utils/kinematics';
@@ -281,7 +281,8 @@ type FabricationManifest = {
   managed_files: string[];
   parts: {
   gears: Array<{ key: string; teeth: number; pitch_radius_mm: number; root_radius_mm: number; outer_radius_mm: number; hole_diameter_mm: number; path: string; attachment_hole_centers_mm: number[][] }>;
-  linkages: unknown[];
+  linkages: Array<{ key: string; label: string; path: string; cells: number; length_mm: number; pitch_mm: number; hole_count: number; hole_diameter_mm: number }>;
+  ring_gears: Array<{ key: string; pitch_radius_mm: number; inner_tip_radius_mm: number; inner_root_radius_mm: number; outer_radius_mm: number; mount_radius_mm: number; mount_hole_centers_mm: number[][]; hole_diameter_mm: number; teeth: number }>;
   cams: unknown[];
   followers: unknown[];
   spacers: Array<{ key: string; label: string; path: string; outer_diameter_mm: number; inner_diameter_mm: number; hole_diameter_mm: number; hole_centers_mm: number[][]; stackable: boolean }>;
@@ -296,6 +297,14 @@ assert(fabricationGeneratorText.includes('hole_diameter_mm=4.0'), 'fabrication g
 assert(fabricationGeneratorText.includes('GearPreset("g24", "G3 / 3-space gear", 24)'), 'fabrication generator owns the G24 gear preset used by renderers');
 assert(fabricationGeneratorText.includes('FollowerPreset("f4-roller"'), 'fabrication generator owns the roller follower preset used by Foundry');
 assert(fabricationGeneratorText.includes('SOURCE_SSOT = "fabrication/generate_fabrication_templates.py"'), 'fabrication manifest source points at the checked-in generator');
+const fabricationRuntimeText = readFileSync(join(process.cwd(), 'utils', 'fabrication.ts'), 'utf8');
+const fabricationContractText = readFileSync(join(process.cwd(), 'utils', 'fabricationContract.ts'), 'utf8');
+assert(fabricationContractText.includes(FABRICATION_SOURCE_SSOT), 'runtime fabrication contract declares the Python generator as source of truth');
+assert(fabricationContractText.includes('FABRICATION_GEAR_RADIUS_PER_TOOTH_MM = 1.25'), 'runtime fabrication contract keeps the generator gear radius/tooth rule centralized');
+assert(fabricationContractText.includes('FABRICATION_LINKAGE_WIDTH_MM = 14'), 'runtime fabrication contract keeps the generator linkage width centralized');
+assert(fabricationContractText.includes("key: 's10'"), 'runtime fabrication contract keeps the S10 spacer centralized');
+assert(fabricationRuntimeText.includes("from './fabricationContract'"), 'fabrication runtime consumes centralized fabricationContract instead of hardcoded primitive tables');
+assert(!fabricationRuntimeText.includes("rootRadiusMm: 28.438"), 'runtime gear constants are no longer duplicated outside the centralized contract');
 assert.equal(fabricationManifest.generated_by, 'fabrication/generate_fabrication_templates.py', 'fabrication manifest generated_by matches the checked-in generator');
 assert.equal(fabricationManifest.source_ssot, 'fabrication/generate_fabrication_templates.py', 'fabrication manifest source_ssot matches the checked-in generator');
 const generatedFabricationDir = mkdtempSync(join(tmpdir(), 'motionsmith-fabrication-'));
@@ -321,8 +330,12 @@ try {
   rmSync(generatedFabricationDir, { recursive: true, force: true });
 }
 assert.deepEqual(FABRICATION_GEAR_SPECS.map(spec => ({ key: spec.key, teeth: spec.teeth, pitchRadiusMm: spec.pitchRadiusMm, rootRadiusMm: spec.rootRadiusMm, outerRadiusMm: spec.outerRadiusMm, holeDiameterMm: spec.holeDiameterMm, path: spec.path, attachmentHoleCentersMm: spec.attachmentHoleCentersMm.map(point => [point.x, point.y]) })), fabricationManifest.parts.gears.map(spec => ({ key: spec.key, teeth: spec.teeth, pitchRadiusMm: spec.pitch_radius_mm, rootRadiusMm: spec.root_radius_mm, outerRadiusMm: spec.outer_radius_mm, holeDiameterMm: spec.hole_diameter_mm, path: spec.path, attachmentHoleCentersMm: spec.attachment_hole_centers_mm })), 'runtime gear primitives mirror fabrication/manifest.json');
+assert.deepEqual(FABRICATION_LINKAGE_SPECS.map(spec => ({ key: spec.key, label: spec.label, path: spec.path, cells: spec.cells, lengthMm: spec.lengthMm, pitchMm: spec.pitchMm, holeCount: spec.holeCentersMm.length, holeDiameterMm: spec.holeDiameterMm })), fabricationManifest.parts.linkages.map(spec => ({ key: spec.key, label: spec.label, path: spec.path, cells: spec.cells, lengthMm: spec.length_mm, pitchMm: spec.pitch_mm, holeCount: spec.hole_count, holeDiameterMm: spec.hole_diameter_mm })), 'runtime linkage primitives mirror fabrication/manifest.json');
+assert.deepEqual(FABRICATION_LINKAGE_SPECS.find(spec => spec.cells === 4)?.holeCentersMm, [{ x: 14, y: 14 }, { x: 34, y: 14 }, { x: 54, y: 14 }, { x: 74, y: 14 }, { x: 94, y: 14 }], 'runtime linkage holes follow generator capsule margin and pitch');
+assert.equal(FABRICATION_LINKAGE_WIDTH_MM, 14, 'runtime linkage width is centralized from the Python generator convention');
+assert.equal(FABRICATION_HOLE_RADIUS_MM, 2, 'runtime hole radius is centralized from the Python generator convention');
 assert.deepEqual(FABRICATION_SPACER_SPEC, {
-  source: 'fabrication/manifest.json',
+  source: FABRICATION_SOURCE_SSOT,
   key: fabricationManifest.parts.spacers[0].key,
   label: fabricationManifest.parts.spacers[0].label,
   path: fabricationManifest.parts.spacers[0].path,
@@ -332,9 +345,10 @@ assert.deepEqual(FABRICATION_SPACER_SPEC, {
   holeCentersMm: fabricationManifest.parts.spacers[0].hole_centers_mm.map(point => ({ x: point[0], y: point[1] })),
   stackable: fabricationManifest.parts.spacers[0].stackable
 }, 'runtime S10 spacer primitive mirrors fabrication/manifest.json');
+assert.deepEqual({ key: FABRICATION_RING_GEAR_SPEC.key, pitchRadiusMm: FABRICATION_RING_GEAR_SPEC.pitchRadiusMm, innerTipRadiusMm: FABRICATION_RING_GEAR_SPEC.innerTipRadiusMm, innerRootRadiusMm: FABRICATION_RING_GEAR_SPEC.innerRootRadiusMm, outerRadiusMm: FABRICATION_RING_GEAR_SPEC.outerRadiusMm, mountRadiusMm: FABRICATION_RING_GEAR_SPEC.mountRadiusMm, holeDiameterMm: FABRICATION_RING_GEAR_SPEC.holeDiameterMm, mountHoleCentersMm: FABRICATION_RING_GEAR_SPEC.mountHoleCentersMm.map(point => [point.x, point.y]) }, { key: fabricationManifest.parts.ring_gears[0].key, pitchRadiusMm: fabricationManifest.parts.ring_gears[0].pitch_radius_mm, innerTipRadiusMm: fabricationManifest.parts.ring_gears[0].inner_tip_radius_mm, innerRootRadiusMm: fabricationManifest.parts.ring_gears[0].inner_root_radius_mm, outerRadiusMm: fabricationManifest.parts.ring_gears[0].outer_radius_mm, mountRadiusMm: fabricationManifest.parts.ring_gears[0].mount_radius_mm, holeDiameterMm: fabricationManifest.parts.ring_gears[0].hole_diameter_mm, mountHoleCentersMm: fabricationManifest.parts.ring_gears[0].mount_hole_centers_mm }, 'runtime ring gear primitive mirrors fabrication/manifest.json');
 assert.equal(fabricationGearSpecForPitchRadius(27).key, 'g24', 'gear display chooses the nearest fabrication preset by physical pitch radius');
 const g24Profile = fabricationGearProfileForPitchRadius(60, 30);
-assert.equal(g24Profile.source, 'fabrication/manifest.json', 'gear profile declares fabrication source');
+assert.equal(g24Profile.source, FABRICATION_SOURCE_SSOT, 'gear profile declares the Python generator source');
 assert.equal(g24Profile.preset.key, 'g24', 'gear profile preserves fabrication preset key');
 assert.equal(g24Profile.outlinePoints.length, 96, 'G24 profile uses fabrication tooth segmentation, not sparse saw teeth');
 assert.equal(g24Profile.attachmentHoleCenters.length, 4, 'G24 profile carries grid attachment holes into shared renderers');
@@ -353,10 +367,15 @@ const appText = readFileSync(join(process.cwd(), 'App.tsx'), 'utf8');
 const indexText = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
 assert(canvasText.includes('fabricationGearPathD'), '2D canvas gear rendering uses shared fabrication gear geometry');
 assert(threePreviewText.includes('fabricationGearProfileForPitchRadius'), '3D foundry gear rendering uses shared fabrication gear geometry');
+assert(threePreviewText.includes('FABRICATION_LINKAGE_WIDTH_3D') && threePreviewText.includes('FABRICATION_HOLE_RADIUS_3D'), '3D puppet mechanism links use centralized fabrication linkage and hole dimensions');
+assert(threePreviewText.includes('sharedGeometryCache') && threePreviewText.includes('sharedFabricationGeometry'), '3D puppet preview caches fabrication geometry instead of rebuilding primitive meshes every frame');
+assert(threePreviewText.includes('const renderedMechanisms = useMemo(() => selectedMechanism ? [selectedMechanism] : []'), 'Design 3D preview renders the selected mechanism geometry while inventory telemetry covers the full project');
+assert(!threePreviewText.includes('scene.traverse(child =>'), '3D puppet preview does not traverse the whole scene every animation frame for telemetry');
 assert(threePreviewText.includes('fabricationRenderPlanForMechanism'), 'Mechanism Design 3D preview uses the same fabrication stack plan as Foundry');
 assert(threePreviewText.includes('data-three-stack-source'), 'Mechanism Design exposes fabrication stack provenance for browser verification');
 assert(exporterText.includes('fabricationGearPathD'), 'SVG export gear rendering uses shared fabrication gear geometry');
 assert(appText.includes('fabricationGearProfileForPitchRadius'), 'Foundry gear helper uses shared fabrication gear holes/profile');
+assert(appText.includes('FABRICATION_LINKAGE_WIDTH_MM * SCENE_PX_PER_MM') && appText.includes('FABRICATION_HOLE_RADIUS_MM * SCENE_PX_PER_MM'), 'Foundry 2D mechanism plates use centralized fabrication linkage and hole dimensions');
 assert(appText.includes('fabricationRingGearPathD'), '2D Foundry planetary preview uses shared ring gear geometry');
 assert(appText.includes('fabricationRingGearProfileForPitchRadius'), '3D Foundry ring uses shared fabrication ring gear geometry');
 assert(appText.includes('SHARED_PLAYBACK_STAGES') && appText.includes('!SHARED_PLAYBACK_STAGES.includes(stage)'), 'shared playback rAF only runs on stages that actually consume the animated angle');
