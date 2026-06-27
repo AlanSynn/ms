@@ -61,6 +61,9 @@ test('character → path → foundry → design → blueprint runs end-to-end in
 
   await page.goto('/');
   await expect(page.getByTestId('shared-workbench')).toBeVisible();
+  await expect(page.locator('#boot-loader')).toHaveCount(0);
+  await expect(page.getByTestId('onnx-cache-status')).toBeVisible();
+  await expect(page.getByTestId('onnx-cache-status')).toContainText(/AI model|Download AI model/);
   const welcomeDialog = page.getByTestId('welcome-dialog');
   await expect(welcomeDialog).toBeVisible();
   await expect(welcomeDialog.getByRole('heading', { name: 'MotionSmith' })).toBeVisible();

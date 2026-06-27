@@ -36,7 +36,7 @@ import {
     uid,
     validatePath
 } from './utils/project';
-import { processImageWithWebOnnx } from './utils/webOnnx';
+import { checkWebOnnxCache, processImageWithWebOnnx, warmWebOnnxCache, type WebOnnxCacheStatus } from './utils/webOnnx';
 import { buildFoundryPhysicsOverlay } from './utils/physicsSession';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, loadRapierPhysicsKernel, physicsKernelErrorMessage } from './utils/physicsKernel';
 import { createFabricationPackage, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, prefabAssemblySteps, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
@@ -211,6 +211,21 @@ const shouldHideWelcome = () => {
     return stored.value === '1';
 };
 
+const initialOnnxCacheStatus = (): WebOnnxCacheStatus => ({ stage: 'checking', label: 'AI pose model', progress: 0 });
+const formatBytes = (bytes?: number) => bytes ? `${Math.round(bytes / 1024 / 1024)}MB` : '';
+
+const OnnxCacheStatusPill = ({ status, onDownload }: { status: WebOnnxCacheStatus; onDownload: () => void }) => {
+    const busy = status.stage === 'checking' || status.stage === 'downloading';
+    const label = status.stage === 'cached'
+        ? 'AI model ready'
+        : status.stage === 'downloading'
+            ? `AI model ${status.progress}% ${formatBytes(status.bytesLoaded)}`
+            : status.stage === 'error'
+                ? 'AI model retry'
+                : 'Download AI model';
+    return <button type="button" className={`status-cache-pill ${status.stage}`} data-testid="onnx-cache-status" disabled={busy || status.stage === 'cached'} onClick={onDownload} title={status.error ?? 'Cache ONNX model for faster image imports'}>{label}</button>;
+};
+
 const App: React.FC = () => {
     const [project, setProject] = useState<ProjectState>(() => {
         projectSelfCheck();
@@ -232,9 +247,27 @@ const App: React.FC = () => {
     const [optimizerBusy, setOptimizerBusy] = useState(false);
     const [canvasViewport, setCanvasViewport] = useState<CanvasViewport>(DEFAULT_CANVAS_VIEWPORT);
     const [commandStatus, setCommandStatus] = useState('Ready');
+    const [onnxCacheStatus, setOnnxCacheStatus] = useState<WebOnnxCacheStatus>(initialOnnxCacheStatus);
     const projectInputRef = useRef<HTMLInputElement>(null);
     const latestProjectRef = useRef<ProjectState | null>(null);
     const appShellRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        document.body.classList.add('app-ready');
+        const bootTimer = window.setTimeout(() => document.getElementById('boot-loader')?.remove(), 320);
+        let active = true;
+        checkWebOnnxCache().then(status => { if (active) setOnnxCacheStatus(status); });
+        return () => {
+            active = false;
+            window.clearTimeout(bootTimer);
+        };
+    }, []);
+
+    const cacheOnnxModel = async () => {
+        setCommandStatus('Downloading AI pose model for offline imports');
+        const result = await warmWebOnnxCache(setOnnxCacheStatus);
+        setCommandStatus(result.stage === 'cached' ? 'AI pose model cached for image imports' : `AI model cache failed: ${result.error ?? 'download error'}`);
+    };
 
     const dispatch = (action: Parameters<typeof applyProjectAction>[1]) => setProject(prev => applyProjectAction(prev, action));
     const goStage = (target: AppStage) => {
@@ -379,6 +412,8 @@ const App: React.FC = () => {
         dispatch({ type: 'set_processing', processing: { stage: 'loading-model', message: 'Loading local image analyzer', progress: 10 } });
         try {
             const result = await processImageWithWebOnnx(file, (stageName, progress) => {
+                if (stageName === 'downloading-model') setOnnxCacheStatus(prev => ({ ...prev, stage: 'downloading', progress }));
+                if (stageName === 'loading-model') setOnnxCacheStatus(prev => ({ ...prev, stage: 'cached', progress: 100 }));
                 dispatch({ type: 'set_processing', processing: { stage: stageName as ProjectState['processing']['stage'], message: stageName.replaceAll('-', ' '), progress } });
             });
             const next = createProjectFromProcessed({
@@ -746,7 +781,7 @@ const App: React.FC = () => {
                         {playerDock && <div className="stage-player-row" data-testid="stage-player-row" aria-label="Shared playback controls">{playerDock}</div>}
                     </div>
                     <WorkflowStatusStrip stage={editorStage} project={project} selectedPart={selectedPart} selectedPath={selectedPath} />
-                    <footer className="status-bar" data-testid="status-bar">{commandStatus} · parts:{project.partOrder.length} · paths:{Object.keys(project.paths).length} · mechs:{project.mechanisms.length} · zoom {Math.round(canvasViewport.zoom * 100)}%</footer>
+                    <footer className="status-bar" data-testid="status-bar"><span>{commandStatus} · parts:{project.partOrder.length} · paths:{Object.keys(project.paths).length} · mechs:{project.mechanisms.length} · zoom {Math.round(canvasViewport.zoom * 100)}%</span><OnnxCacheStatusPill status={onnxCacheStatus} onDownload={cacheOnnxModel} /></footer>
                 </section>
             </div>
             {showWelcome && <WelcomeDialog onClose={closeWelcome} />}
@@ -1141,7 +1176,7 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
     const artifact = reviewedProject.characterPackage;
     const isPlainReview = artifact?.replacementContext?.mode !== 'replace-character';
     const isReplacementReview = artifact?.replacementContext?.mode === 'replace-character';
-    const statusOpen = Boolean(pendingCharacter || project.settings.detailedProcessingSteps || ['loading-model', 'running-onnx', 'extracting-parts', 'normalizing', 'error'].includes(project.processing.stage));
+    const statusOpen = Boolean(pendingCharacter || project.settings.detailedProcessingSteps || ['downloading-model', 'loading-model', 'running-onnx', 'extracting-parts', 'normalizing', 'error'].includes(project.processing.stage));
     const checks = [
         { label: 'parts_info.json package artifact', ok: Boolean(artifact?.partsInfo) },
         { label: 'char_cfg.yaml skeleton artifact', ok: Boolean(artifact?.charCfg && reviewedProject.skeleton) },
@@ -1394,6 +1429,7 @@ const ProgressBlock = ({ project }: { project: ProjectState }) => {
     const p = project.processing;
     const steps: Array<{ stage: ProjectState['processing']['stage']; label: string }> = [
         { stage: 'selecting', label: 'Choose source files' },
+        { stage: 'downloading-model', label: 'Download/cache ONNX model' },
         { stage: 'loading-model', label: 'Load local model or package' },
         { stage: 'running-onnx', label: 'Run browser ONNX analysis' },
         { stage: 'extracting-parts', label: 'Extract character parts' },

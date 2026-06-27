@@ -312,6 +312,11 @@ assert(!canvasText.includes('toothWidth'), '2D canvas no longer carries a separa
 assert(!threePreviewText.includes('teeth * 2'), '3D preview no longer carries a separate saw-tooth gear implementation');
 assert(threePreviewText.includes('fabricablePartOutlinePoints'), '3D puppet preview uses shared model/user contour outlines instead of raw image crop rectangles');
 assert(webOnnxText.includes('contourFromCropMask') && webOnnxText.includes("contourSource: crop.contourPoints.length >= 3 ? 'onnx-mask'"), 'browser ONNX preserves mask-derived part contours for fabrication plates');
+assert(webOnnxText.includes('MODEL_CACHE_NAME') && webOnnxText.includes('caches.open') && webOnnxText.includes('warmWebOnnxCache'), 'browser ONNX model can be separately downloaded and cached');
+assert(webOnnxText.includes('InferenceSession.create(new Uint8Array(modelBuffer)'), 'browser ONNX creates sessions from cached model bytes');
+assert(webOnnxText.includes("import('onnxruntime-web')") && !webOnnxText.includes("import * as ort from 'onnxruntime-web'"), 'ONNX Runtime JS is lazy-loaded outside the initial editor shell bundle');
+assert(appText.includes('data-testid="onnx-cache-status"') && appText.includes('checkWebOnnxCache'), 'status bar exposes ONNX cache/download status');
+assert(indexText.includes('id="boot-loader"') && indexText.includes('Loading editor shell'), 'static boot loader covers slow bundle startup');
 assert(viewer3dText.includes('VIEWER3D_CAMERA_PRESETS') && threePreviewText.includes('three-puppet-view-toolbar') && appText.includes('foundryPreset'), '3D puppet and foundry previews share one viewer camera preset contract');
 assert(viewer3dText.includes('type Viewer3DContract') && viewer3dText.includes('createViewer3DContract'), '3D viewers expose one shared OOP-style contract object for tab adapters');
 assert(threePreviewText.includes('DEFAULT_PUPPET_VIEWER_LAYERS') && threePreviewText.includes('data-testid={`${testId}-toggle-${layer}`}') && appText.includes('foundry-toggle-grid'), '3D viewer top overlay toolbar wires shared layer toggles instead of decorative buttons');

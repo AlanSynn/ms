@@ -1,4 +1,4 @@
-import * as ort from 'onnxruntime-web';
+import type { Tensor as OrtTensor } from 'onnxruntime-web';
 import ortWasmJsepUrl from 'onnxruntime-web/ort-wasm-simd-threaded.jsep.wasm?url';
 import { BodyPartLayer, Bounds, Point, StandardJoint, StandardSkeleton } from '../types';
 import { buildSkeleton } from './project';
@@ -31,7 +31,8 @@ const PARTS: Array<{ id: string; name: string; joints: string[]; anchor: string;
 ];
 
 type ImageMask = { width: number; height: number; data: Uint8Array; url: string; bbox: Bounds };
-type PoseInput = { tensor: ort.Tensor; bbox: Bounds };
+type OrtRuntime = typeof import('onnxruntime-web');
+type PoseInput = { tensor: OrtTensor; bbox: Bounds };
 
 const readImage = async (file: File) => {
     const url = URL.createObjectURL(file);
@@ -143,7 +144,7 @@ const poseBbox = (mask: ImageMask): Bounds => {
     return { x, y, width: Math.max(1, right - x), height: Math.max(1, bottom - y) };
 };
 
-const preprocessForPose = (img: HTMLImageElement, mask: ImageMask): PoseInput => {
+const preprocessForPose = (img: HTMLImageElement, mask: ImageMask, ort: OrtRuntime): PoseInput => {
     const width = 192;
     const height = 256;
     const bbox = poseBbox(mask);
@@ -169,7 +170,7 @@ const preprocessForPose = (img: HTMLImageElement, mask: ImageMask): PoseInput =>
     return { tensor: new ort.Tensor('float32', data, [1, 3, height, width]), bbox };
 };
 
-const extractKeypoints = (output: ort.Tensor, pose: PoseInput) => {
+const extractKeypoints = (output: OrtTensor, pose: PoseInput) => {
     const dims = output.dims.map(Number);
     const data = output.data as Float32Array;
     const offset = dims.length === 4 ? 1 : 0;
@@ -457,7 +458,119 @@ const bundledAssetUrl = (path: string) => new URL(path, window.location.href).hr
 export const modelUrl = () => publicAssetUrl('onnx/pose_model.onnx');
 export const ortWasmUrl = () => bundledAssetUrl(ortWasmJsepUrl);
 
-const configureOrtWasm = () => {
+export type WebOnnxCacheStage = 'checking' | 'missing' | 'downloading' | 'cached' | 'error';
+
+export interface WebOnnxCacheStatus {
+    stage: WebOnnxCacheStage;
+    label: string;
+    progress: number;
+    bytesLoaded?: number;
+    bytesTotal?: number;
+    error?: string;
+}
+
+const MODEL_CACHE_NAME = 'motionsmith-web-onnx-v1';
+const MODEL_LABEL = 'AI pose model';
+const supportsCacheApi = () => typeof window !== 'undefined' && 'caches' in window;
+
+const cacheStatus = (stage: WebOnnxCacheStage, progress: number, extra: Partial<WebOnnxCacheStatus> = {}): WebOnnxCacheStatus => ({
+    stage,
+    label: MODEL_LABEL,
+    progress,
+    ...extra
+});
+
+const cachedModelResponse = async () => {
+    if (!supportsCacheApi()) return undefined;
+    const cache = await caches.open(MODEL_CACHE_NAME);
+    return cache.match(modelUrl());
+};
+
+const readCachedModel = async () => (await cachedModelResponse())?.arrayBuffer();
+
+const fetchModelWithProgress = async (onStatus: (status: WebOnnxCacheStatus) => void = () => {}) => {
+    const response = await fetch(modelUrl(), { cache: 'force-cache' });
+    if (!response.ok) throw new Error(`Could not download ${MODEL_LABEL}: ${response.status}`);
+    const total = Number(response.headers.get('content-length')) || undefined;
+    if (!response.body) {
+        const buffer = await response.arrayBuffer();
+        onStatus(cacheStatus('downloading', 100, { bytesLoaded: buffer.byteLength, bytesTotal: total }));
+        return buffer;
+    }
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let loaded = 0;
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!value) continue;
+        chunks.push(value);
+        loaded += value.byteLength;
+        onStatus(cacheStatus('downloading', total ? Math.round((loaded / total) * 100) : 50, { bytesLoaded: loaded, bytesTotal: total }));
+    }
+    const bytes = new Uint8Array(loaded);
+    let offset = 0;
+    for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.byteLength;
+    }
+    return bytes.buffer;
+};
+
+const cacheModelBuffer = async (buffer: ArrayBuffer) => {
+    if (!supportsCacheApi()) return;
+    const cache = await caches.open(MODEL_CACHE_NAME);
+    await cache.put(modelUrl(), new Response(buffer.slice(0), { headers: { 'content-type': 'application/octet-stream' } }));
+};
+
+export const checkWebOnnxCache = async (): Promise<WebOnnxCacheStatus> => {
+    try {
+        return await cachedModelResponse() ? cacheStatus('cached', 100) : cacheStatus('missing', 0);
+    } catch (error) {
+        return cacheStatus('error', 0, { error: error instanceof Error ? error.message : String(error) });
+    }
+};
+
+export const warmWebOnnxCache = async (onStatus: (status: WebOnnxCacheStatus) => void = () => {}): Promise<WebOnnxCacheStatus> => {
+    try {
+        onStatus(cacheStatus('checking', 0));
+        if (await cachedModelResponse()) {
+            const ready = cacheStatus('cached', 100);
+            onStatus(ready);
+            return ready;
+        }
+        const buffer = await fetchModelWithProgress(onStatus);
+        await cacheModelBuffer(buffer);
+        const ready = cacheStatus('cached', 100, { bytesLoaded: buffer.byteLength, bytesTotal: buffer.byteLength });
+        onStatus(ready);
+        return ready;
+    } catch (error) {
+        const failed = cacheStatus('error', 0, { error: error instanceof Error ? error.message : String(error) });
+        onStatus(failed);
+        return failed;
+    }
+};
+
+const loadWebOnnxModelBuffer = async (onStatus: (status: WebOnnxCacheStatus) => void = () => {}) => {
+    const cached = await readCachedModel();
+    if (cached) {
+        onStatus(cacheStatus('cached', 100, { bytesLoaded: cached.byteLength, bytesTotal: cached.byteLength }));
+        return cached;
+    }
+    const buffer = await fetchModelWithProgress(onStatus);
+    await cacheModelBuffer(buffer);
+    onStatus(cacheStatus('cached', 100, { bytesLoaded: buffer.byteLength, bytesTotal: buffer.byteLength }));
+    return buffer;
+};
+
+
+let ortRuntimePromise: Promise<OrtRuntime> | null = null;
+const loadOrtRuntime = () => {
+    ortRuntimePromise ??= import('onnxruntime-web');
+    return ortRuntimePromise;
+};
+
+const configureOrtWasm = (ort: OrtRuntime) => {
     ort.env.wasm.numThreads = 1;
     ort.env.wasm.proxy = false;
     ort.env.wasm.wasmPaths = { wasm: ortWasmUrl() };
@@ -472,12 +585,16 @@ export const processImageWithWebOnnx = async (
     try {
         runtimeStage = 'segment-character';
         const mask = makeCharacterMask(img);
+        runtimeStage = 'downloading-model';
+        onProgress('downloading-model', 12);
+        const modelBuffer = await loadWebOnnxModelBuffer(status => onProgress('downloading-model', Math.max(12, Math.min(34, Math.round(status.progress * 0.22 + 12)))));
         runtimeStage = 'loading-model';
-        onProgress('loading-model', 15);
-        configureOrtWasm();
-        const session = await ort.InferenceSession.create(modelUrl(), { executionProviders: ['wasm'] });
+        onProgress('loading-model', 35);
+        const ort = await loadOrtRuntime();
+        configureOrtWasm(ort);
+        const session = await ort.InferenceSession.create(new Uint8Array(modelBuffer), { executionProviders: ['wasm'] });
         runtimeStage = 'preprocess-image';
-        const input = preprocessForPose(img, mask);
+        const input = preprocessForPose(img, mask, ort);
         runtimeStage = 'running-onnx';
         onProgress('running-onnx', 45);
         const outputs = await session.run({ [session.inputNames[0]]: input.tensor });
