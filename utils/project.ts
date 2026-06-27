@@ -16,6 +16,7 @@ import {
 import { defaultPhysicalKit, localPivotOffsetForScene, SCENE_PX_PER_MM, sceneBoundsForSheet } from './coordinates';
 import { gearPairOutputRatio, generateCurvePoints, planetaryPlanetSpinRatio } from './kinematics';
 import { clampNumber, finiteNumber, sanitizeHexColor, sanitizeMechanismType, sanitizePoint } from './sanitize';
+import { isUsableContourPoints } from './partGeometry';
 
 export const APP_STATE_VERSION = 1;
 
@@ -431,6 +432,8 @@ export const createProjectFromProcessed = (input: {
                 visible: p.visible,
                 fixed: p.locked,
                 roi: [p.bounds.x, p.bounds.y, p.bounds.width, p.bounds.height],
+                contour_points: p.contourPoints,
+                contour_source: p.contourSource,
                 local_pivot_offset: p.localPivotOffset ? [p.localPivotOffset.x, p.localPivotOffset.y] : undefined,
                 local_pivot_joint_id: p.localPivotJointId ?? p.anchorJointId,
                 fill_color: p.fillColor
@@ -691,6 +694,16 @@ const normalizeTransformSnapshot = (value: unknown, fallback: Transform = { x: 0
     };
 };
 
+const normalizeContourPoints = (value: unknown): Point[] | undefined => {
+    const points = Array.isArray(value) ? value.flatMap(point => {
+        const raw = Array.isArray(point) ? { x: point[0], y: point[1] } : asRecord(point);
+        const x = Number(raw.x);
+        const y = Number(raw.y);
+        return Number.isFinite(x) && Number.isFinite(y) ? [{ x, y }] : [];
+    }).slice(0, 256) : [];
+    return isUsableContourPoints(points) ? points : undefined;
+};
+
 const normalizePartSnapshot = (id: string, value: unknown, skeleton: StandardSkeleton | null): BodyPartLayer => {
     const raw = asRecord(value);
     const fallbackAnchor = skeleton?.rootJointIds[0] ?? Object.keys(skeleton?.joints ?? {})[0] ?? 'root';
@@ -700,11 +713,16 @@ const normalizePartSnapshot = (id: string, value: unknown, skeleton: StandardSke
     const rawPivot = raw.localPivotOffset;
     const textureUrl = typeof raw.textureUrl === 'string' && raw.textureUrl.startsWith('data:image/') ? raw.textureUrl : undefined;
     const maskUrl = typeof raw.maskUrl === 'string' && raw.maskUrl.startsWith('data:image/') ? raw.maskUrl : undefined;
+    const contourPoints = normalizeContourPoints(raw.contourPoints ?? raw.contour_points ?? raw.outlinePoints ?? raw.outline_points);
+    const rawContourSource = raw.contourSource ?? raw.contour_source;
+    const contourSource = rawContourSource === 'onnx-mask' || rawContourSource === 'user' || rawContourSource === 'imported' ? rawContourSource : contourPoints ? 'imported' : undefined;
     return {
         id,
         name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.slice(0, 80) : id,
         textureUrl,
         maskUrl,
+        contourPoints,
+        contourSource,
         originalSvgPath: typeof raw.originalSvgPath === 'string' ? raw.originalSvgPath : typeof raw.original_svg_path === 'string' ? raw.original_svg_path : undefined,
         enhancedSvgPath: typeof raw.enhancedSvgPath === 'string' ? raw.enhancedSvgPath : typeof raw.enhanced_svg_path === 'string' ? raw.enhanced_svg_path : undefined,
         anchorJointId,

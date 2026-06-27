@@ -1,5 +1,6 @@
 import { BodyPartLayer, Point, StandardJoint } from '../types';
 import { buildSkeleton, createProjectFromProcessed } from './project';
+import { isUsableContourPoints } from './partGeometry';
 import { clampNumber, finiteNumber, sanitizeHexColor } from './sanitize';
 
 type Dict = Record<string, unknown>;
@@ -91,6 +92,17 @@ const resolveAsset = (assets: Record<string, string>, path: unknown) => {
     return assets[normPath(path)] ?? assets[basename(path)];
 };
 
+const contourPointsFromPartInfo = (part: Dict): Point[] | undefined => {
+    const raw = part.contour_points ?? part.contourPoints ?? part.outline_points ?? part.outlinePoints;
+    const points = Array.isArray(raw) ? raw.flatMap(point => {
+        const source = Array.isArray(point) ? { x: point[0], y: point[1] } : asDict(point);
+        const x = Number(source.x);
+        const y = Number(source.y);
+        return Number.isFinite(x) && Number.isFinite(y) ? [{ x, y }] : [];
+    }).slice(0, 256) : [];
+    return isUsableContourPoints(points) ? points : undefined;
+};
+
 const pointFrom = (value: unknown): Point | null => {
     if (Array.isArray(value) && value.length >= 2 && Number.isFinite(Number(value[0])) && Number.isFinite(Number(value[1]))) {
         return { x: Number(value[0]), y: Number(value[1]) };
@@ -154,11 +166,16 @@ export const createProjectFromPackageData = (
         if (explicitAssetPath && !textureUrl) throw new Error(`${id}: missing asset file ${normPath(explicitAssetPath)}`);
         const originalSvgPath = typeof (p.original_svg_path ?? p.originalSvgPath) === 'string' ? normPath(String(p.original_svg_path ?? p.originalSvgPath)) : undefined;
         const enhancedSvgPath = typeof (p.enhanced_svg_path ?? p.enhancedSvgPath) === 'string' ? normPath(String(p.enhanced_svg_path ?? p.enhancedSvgPath)) : undefined;
+        const contourPoints = contourPointsFromPartInfo(p);
+        const rawContourSource = p.contour_source ?? p.contourSource;
+        const contourSource = rawContourSource === 'onnx-mask' || rawContourSource === 'user' || rawContourSource === 'imported' ? rawContourSource : contourPoints ? 'imported' : undefined;
         return {
             id,
             name: String(p.name || id),
             textureUrl,
             maskUrl: resolveAsset(assets, p.mask_path),
+            contourPoints,
+            contourSource,
             originalSvgPath,
             enhancedSvgPath,
             anchorJointId: skeleton.joints[requestedAnchor] ? requestedAnchor : skeleton.rootJointIds[0] || 'root',

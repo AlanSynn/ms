@@ -120,6 +120,16 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
   const pathPuppet = page.getByTestId('path-three-puppet-state');
   await expect(pathPuppet).toHaveAttribute('data-three-renderer', 'webgl');
+  await expect(pathPuppet).toHaveAttribute('data-camera-preset', 'iso');
+  await page.getByTestId('path-three-puppet-view-2d').click();
+  await expect(pathPuppet).toHaveAttribute('data-camera-preset', 'front');
+  await expect(pathPuppet).toHaveAttribute('data-view-mode', '2d');
+  await page.getByTestId('path-three-puppet-view-3d').click();
+  await expect(pathPuppet).toHaveAttribute('data-camera-preset', 'iso');
+  await expect(pathPuppet).toHaveAttribute('data-view-mode', '3d');
+  await page.getByTestId('path-three-puppet-view-top').click();
+  await expect(pathPuppet).toHaveAttribute('data-camera-preset', 'top');
+  await expect(pathPuppet).toHaveAttribute('data-view-mode', '3d');
   await expect(pathPuppet).toHaveAttribute('data-puppet-mode', 'thick-flat-assembly');
   await expect(pathPuppet).toHaveAttribute('data-three-part-surface', 'solid-cut-plates');
   await expect(pathPuppet).toHaveAttribute('data-three-part-art', 'top-texture-decal');
@@ -551,7 +561,7 @@ test('Create from image upload creates a reviewed character package in browser',
   await expectProjectCounts(page, 10, 0, 0);
   await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
   const generatedPuppet = page.getByTestId('path-three-puppet-state');
-  await expect(generatedPuppet).toHaveAttribute('data-part-outline-mode', 'fabrication-fit-joint-chain');
+  await expect(generatedPuppet).toHaveAttribute('data-part-outline-mode', 'model-or-user-contour-with-fabrication-fallback');
   await expect(generatedPuppet).toHaveAttribute('data-puppet-mode', 'thick-flat-assembly');
   await expect(generatedPuppet).toHaveAttribute('data-three-part-surface', 'solid-cut-plates');
   await expect(generatedPuppet).toHaveAttribute('data-three-part-art', 'top-texture-decal');

@@ -144,6 +144,8 @@ export interface BodyPartLayer {
     name: string;
     textureUrl?: string;
     maskUrl?: string;
+    contourPoints?: Point[];
+    contourSource?: 'onnx-mask' | 'user' | 'imported';
     originalSvgPath?: string;
     enhancedSvgPath?: string;
     anchorJointId: string;

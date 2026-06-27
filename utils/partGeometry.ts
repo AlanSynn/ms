@@ -162,7 +162,37 @@ export const partOutlineBounds = (points: Point[]) => {
     return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) };
 };
 
+export const contourPolygonArea = (points: Point[]) => {
+    if (points.length < 3) return 0;
+    let sum = 0;
+    for (let i = 0; i < points.length; i += 1) {
+        const a = points[i];
+        const b = points[(i + 1) % points.length];
+        sum += a.x * b.y - b.x * a.y;
+    }
+    return Math.abs(sum) / 2;
+};
+
+export const isUsableContourPoints = (points: Point[], minArea = 1): boolean => {
+    const unique = new Set(points.map(point => `${point.x.toFixed(3)}:${point.y.toFixed(3)}`));
+    return unique.size >= 3 && contourPolygonArea(points) >= minArea;
+};
+
+const sourceContourPoints = (part: BodyPartLayer): Point[] => {
+    const points = part.contourPoints?.filter(point => Number.isFinite(point.x) && Number.isFinite(point.y)) ?? [];
+    if (points.length < 3) return [];
+    const margin = Math.max(18, Math.min(part.bounds.width, part.bounds.height) * 0.25);
+    const clamped = points.map(point => ({
+        x: clamp(point.x, part.bounds.x - margin, part.bounds.x + part.bounds.width + margin),
+        y: clamp(point.y, part.bounds.y - margin, part.bounds.y + part.bounds.height + margin)
+    }));
+    return isUsableContourPoints(clamped) ? clamped : [];
+};
+
 export const fabricablePartOutlinePoints = (part: BodyPartLayer, localJoints: Point[] = []): Point[] => {
+    const sourceContour = sourceContourPoints(part);
+    if (sourceContour.length >= 3) return sourceContour;
+
     const cx = part.bounds.x + part.bounds.width / 2;
     const cy = part.bounds.y + part.bounds.height / 2;
     const minDim = Math.min(part.bounds.width, part.bounds.height);

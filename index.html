@@ -223,6 +223,8 @@
       .three-puppet-overlay { position: absolute; inset: 0; z-index: 12; pointer-events: none; opacity: .96; mix-blend-mode: normal; }
       .three-puppet-host, .three-puppet-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
       .three-puppet-canvas { display: block; }
+      .three-puppet-view-toolbar { left: 50%; right: auto; top: 1rem; transform: translateX(-50%); z-index: 31; pointer-events: auto; }
+      .three-puppet-view-toolbar button.active { background: var(--ms-accent); color: #fff; border-color: var(--ms-accent); box-shadow: 0 10px 26px rgba(79,70,229,.22); }
       .three-puppet-state { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
       .path-canvas-shell > svg[data-testid="path-canvas"], .canvas-surface > svg[data-testid="design-canvas"] { position: relative; z-index: 10; }
       .foundry-preview { position: relative; overflow: hidden; background-color: rgba(255,255,255,.92); background-size: 24px 24px; background-image: linear-gradient(to right, rgba(90,108,255,.055) 1px, transparent 1px), linear-gradient(to bottom, rgba(90,108,255,.055) 1px, transparent 1px); border: 1px solid rgba(148,163,184,.22); box-shadow: inset 0 1px 0 rgba(255,255,255,.92); cursor: grab; touch-action: none; }

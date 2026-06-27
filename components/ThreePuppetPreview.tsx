@@ -13,6 +13,13 @@ const THICKNESS = 0.22;
 const SUPPORTED_MECHANISM_TYPES: MechanismType[] = ['crank', '4bar', 'piston', 'yoke', 'quick-return', '5bar', 'cam', 'rack-pinion', 'gear', 'planetary_gear'];
 type RendererStatus = 'pending' | 'webgl' | 'unavailable';
 type LinkKey = 'base' | 'driver' | 'coupler' | 'output' | 'effector';
+type PuppetCameraPreset = 'front' | 'top' | 'iso';
+
+const PUPPET_CAMERA_PRESETS: Record<PuppetCameraPreset, { label: string; mode: '2d' | '3d'; position: [number, number, number]; up: [number, number, number]; distance: number }> = {
+  front: { label: '2D', mode: '2d', position: [0, 0, 1], up: [0, 1, 0], distance: 16 },
+  top: { label: 'Top', mode: '3d', position: [0, -1, 0.08], up: [0, 0, 1], distance: 14 },
+  iso: { label: '3D', mode: '3d', position: [0.62, -0.86, 0.72], up: [0, 0, 1], distance: 15 }
+};
 
 type MaterialKit = {
   sheet: THREE.MeshStandardMaterial;
@@ -397,7 +404,8 @@ const gearShape = (pitchRadius: number, physicalPitchRadiusMm: number) => {
 const partGeometrySignature = (parts: BodyPartLayer[], project?: ProjectState, skeleton?: StandardSkeleton | null) => [
   parts.map(part => {
     const base = project?.parts[part.id] ?? part;
-    return `${base.id}:${base.bounds.width}:${base.bounds.height}:${base.bounds.x}:${base.bounds.y}:${base.transform.x}:${base.transform.y}:${base.transform.rotation}:${base.transform.scale}:${base.visible}:${base.textureUrl ?? ''}:${base.fillColor}:${base.opacity}`;
+    const contour = base.contourPoints?.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(';') ?? '';
+    return `${base.id}:${base.bounds.width}:${base.bounds.height}:${base.bounds.x}:${base.bounds.y}:${base.transform.x}:${base.transform.y}:${base.transform.rotation}:${base.transform.scale}:${base.visible}:${base.textureUrl ?? ''}:${base.contourSource ?? ''}:${contour}:${base.fillColor}:${base.opacity}`;
   }).join('|'),
   Object.values((project?.skeleton ?? skeleton)?.joints ?? {})
     .map(joint => `${joint.id}:${joint.position.x.toFixed(2)}:${joint.position.y.toFixed(2)}`)
@@ -441,6 +449,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
   const [physicsKernelRuntime, setPhysicsKernelRuntime] = useState<'loading' | 'ready' | 'unavailable'>('loading');
   const [physicsKernelVersion, setPhysicsKernelVersion] = useState('pending');
   const [physicsKernelError, setPhysicsKernelError] = useState('none');
+  const [cameraPreset, setCameraPreset] = useState<PuppetCameraPreset>('iso');
 
   useEffect(() => {
     let active = true;
@@ -922,22 +931,48 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
     const camera = cameraRef.current;
     if (!roots || !camera || rendererStatus !== 'webgl') return;
     const zoom = viewport?.zoom ?? 1;
-    camera.position.set(0, -12 / zoom, 12 / zoom);
+    const preset = PUPPET_CAMERA_PRESETS[cameraPreset];
+    const [px, py, pz] = preset.position;
+    const [ux, uy, uz] = preset.up;
+    const distance = preset.distance / zoom;
+    camera.up.set(ux, uy, uz);
+    camera.position.set(px * distance, py * distance, pz * distance);
     camera.lookAt(new THREE.Vector3(0, 0, 0.1));
     roots.root.position.set((viewport?.offset.x ?? 0) / VIEW_SCALE, (viewport?.offset.y ?? 0) / VIEW_SCALE, 0);
     render();
-  }, [rendererStatus, viewport?.offset.x, viewport?.offset.y, viewport?.zoom]);
+  }, [cameraPreset, rendererStatus, viewport?.offset.x, viewport?.offset.y, viewport?.zoom]);
 
   useEffect(() => {
     if (stateRef.current) stateRef.current.dataset.threeObjectCount = String(estimatedObjectCount);
   }, [estimatedObjectCount]);
 
-  return <div className="three-puppet-overlay" data-testid={testId} aria-hidden="true">
+  const activeCamera = PUPPET_CAMERA_PRESETS[cameraPreset];
+  return <div className="three-puppet-overlay" data-testid={testId} aria-label="3D character view" data-camera-preset={cameraPreset} data-view-mode={activeCamera.mode}>
     <div ref={hostRef} className="three-puppet-host" />
+    <div
+      className="canvas-zoom-toolbar three-puppet-view-toolbar"
+      data-testid={`${testId}-view-toolbar`}
+      aria-label="2D and 3D view switcher"
+      onMouseDown={event => event.stopPropagation()}
+      onPointerDown={event => event.stopPropagation()}
+    >
+      {(Object.keys(PUPPET_CAMERA_PRESETS) as PuppetCameraPreset[]).map(preset => (
+        <button
+          key={preset}
+          type="button"
+          data-testid={`${testId}-view-${preset === 'front' ? '2d' : preset === 'iso' ? '3d' : preset}`}
+          className={cameraPreset === preset ? 'active' : ''}
+          aria-pressed={cameraPreset === preset}
+          onClick={() => setCameraPreset(preset)}
+        >{PUPPET_CAMERA_PRESETS[preset].label}</button>
+      ))}
+    </div>
     <div
       ref={stateRef}
       data-testid={`${testId}-state`}
       className="three-puppet-state"
+      data-camera-preset={cameraPreset}
+      data-view-mode={activeCamera.mode}
       data-three-renderer={rendererStatus === 'pending' ? 'webgl' : rendererStatus}
       data-three-engine-stack={PHYSICS_RENDER_STACK}
       data-physics-kernel={PHYSICS_KERNEL_ENGINE}
@@ -950,7 +985,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       data-physics-authority="motionsmith-kinematics"
       data-three-pixel-ratio-cap={WEBGL_PIXEL_RATIO_CAP.toFixed(1)}
       data-puppet-mode="thick-flat-assembly"
-      data-part-outline-mode="fabrication-fit-joint-chain"
+      data-part-outline-mode="model-or-user-contour-with-fabrication-fallback"
       data-joint-placement="skeleton-anchors"
       data-three-rebuild-mode="static-topology-dynamic-transforms"
       data-three-supported-mechanism-types={SUPPORTED_MECHANISM_TYPES.join(',')}

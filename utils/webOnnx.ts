@@ -329,6 +329,60 @@ const partMaskBBox = (partMask: Uint8Array, width: number, height: number, scale
     return { x: Math.max(0, Math.min(...xs) - pad), y: Math.max(0, Math.min(...ys) - pad), width: Math.max(24, Math.max(...xs) - Math.min(...xs) + pad * 2), height: Math.max(24, Math.max(...ys) - Math.min(...ys) + pad * 2) };
 };
 
+const contourFromCropMask = (
+    mask: ImageMask,
+    partMask: Uint8Array,
+    maskWidth: number,
+    maskHeight: number,
+    scale: number,
+    crop: Bounds,
+    sampleCount = 48
+): Point[] => {
+    const x0 = Math.max(0, Math.floor(crop.x));
+    const y0 = Math.max(0, Math.floor(crop.y));
+    const width = Math.max(24, Math.ceil(crop.width));
+    const height = Math.max(24, Math.ceil(crop.height));
+    const alphaAt = (px: number, py: number) => {
+        const ix = Math.min(mask.width - 1, x0 + px);
+        const iy = Math.min(mask.height - 1, y0 + py);
+        const sx = Math.min(maskWidth - 1, Math.round(ix * scale));
+        const sy = Math.min(maskHeight - 1, Math.round(iy * scale));
+        return Boolean(partMask[sy * maskWidth + sx] && mask.data[iy * mask.width + ix]);
+    };
+    let minX = width, minY = height, maxX = -1, maxY = -1;
+    for (let py = 0; py < height; py += 1) for (let px = 0; px < width; px += 1) {
+        if (!alphaAt(px, py)) continue;
+        minX = Math.min(minX, px);
+        minY = Math.min(minY, py);
+        maxX = Math.max(maxX, px);
+        maxY = Math.max(maxY, py);
+    }
+    if (maxX < 0) return [];
+    const center = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+    const bins: Array<{ x: number; y: number; d2: number } | null> = Array(sampleCount).fill(null);
+    for (let py = minY; py <= maxY; py += 1) for (let px = minX; px <= maxX; px += 1) {
+        if (!alphaAt(px, py)) continue;
+        const dx = px - center.x;
+        const dy = py - center.y;
+        const d2 = dx * dx + dy * dy;
+        const angle = (Math.atan2(dy, dx) + Math.PI * 2) % (Math.PI * 2);
+        const index = Math.min(sampleCount - 1, Math.floor((angle / (Math.PI * 2)) * sampleCount));
+        if (!bins[index] || d2 > bins[index]!.d2) bins[index] = { x: px, y: py, d2 };
+    }
+    if (bins.filter(Boolean).length < 3) return [];
+    return bins.map((point, index) => {
+        if (point) return point;
+        for (let radius = 1; radius < sampleCount; radius += 1) {
+            const left = bins[(index - radius + sampleCount) % sampleCount];
+            const right = bins[(index + radius) % sampleCount];
+            if (left && right) return { x: (left.x + right.x) / 2, y: (left.y + right.y) / 2, d2: 0 };
+            if (left) return left;
+            if (right) return right;
+        }
+        return { x: center.x, y: center.y, d2: 0 };
+    }).map(point => ({ x: point.x - width / 2, y: height / 2 - point.y }));
+};
+
 const cropPart = (img: HTMLImageElement, mask: ImageMask, partMask: Uint8Array, maskWidth: number, maskHeight: number, scale: number, bbox: Bounds) => {
     const x = Math.max(0, Math.floor(bbox.x));
     const y = Math.max(0, Math.floor(bbox.y));
@@ -360,7 +414,8 @@ const cropPart = (img: HTMLImageElement, mask: ImageMask, partMask: Uint8Array, 
     }
     ctx.putImageData(image, 0, 0);
     maskCtx.putImageData(maskImage, 0, 0);
-    return { textureUrl: canvas.toDataURL('image/png'), maskUrl: maskCanvas.toDataURL('image/png'), x, y, width, height };
+    const contourPoints = contourFromCropMask(mask, partMask, maskWidth, maskHeight, scale, { x, y, width, height });
+    return { textureUrl: canvas.toDataURL('image/png'), maskUrl: maskCanvas.toDataURL('image/png'), contourPoints, x, y, width, height };
 };
 
 const buildParts = (skeleton: StandardSkeleton, img: HTMLImageElement, mask: ImageMask): BodyPartLayer[] => {
@@ -378,6 +433,8 @@ const buildParts = (skeleton: StandardSkeleton, img: HTMLImageElement, mask: Ima
             name: def.name,
             textureUrl: crop.textureUrl,
             maskUrl: crop.maskUrl,
+            contourPoints: crop.contourPoints,
+            contourSource: crop.contourPoints.length >= 3 ? 'onnx-mask' : undefined,
             anchorJointId: def.anchor,
             transform: { ...toScene(center, img), rotation: 0, scale: 1 },
             zIndex: def.z,

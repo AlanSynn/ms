@@ -279,6 +279,7 @@ const exporterText = readFileSync(join(process.cwd(), 'utils', 'exporter.ts'), '
 const physicsSessionText = readFileSync(join(process.cwd(), 'utils', 'physicsSession.ts'), 'utf8');
 const mechanismPreviewText = readFileSync(join(process.cwd(), 'utils', 'mechanismPreview.ts'), 'utf8');
 const viewportText = readFileSync(join(process.cwd(), 'utils', 'viewport.ts'), 'utf8');
+const webOnnxText = readFileSync(join(process.cwd(), 'utils', 'webOnnx.ts'), 'utf8');
 const appText = readFileSync(join(process.cwd(), 'App.tsx'), 'utf8');
 const indexText = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
 assert(canvasText.includes('fabricationGearPathD'), '2D canvas gear rendering uses shared fabrication gear geometry');
@@ -308,7 +309,9 @@ assert(!appText.includes('teeth * 2'), 'Foundry sandbox no longer carries sparse
 assert(appText.includes("if (key === 'gearRatio') return false"), 'Foundry hides stale gear-ratio controls when physical pitch radii define rotation');
 assert(!canvasText.includes('toothWidth'), '2D canvas no longer carries a separate saw-tooth gear implementation');
 assert(!threePreviewText.includes('teeth * 2'), '3D preview no longer carries a separate saw-tooth gear implementation');
-assert(threePreviewText.includes('fabricablePartOutlinePoints'), '3D puppet preview uses fabrication-fit part outlines instead of raw image crop rectangles');
+assert(threePreviewText.includes('fabricablePartOutlinePoints'), '3D puppet preview uses shared model/user contour outlines instead of raw image crop rectangles');
+assert(webOnnxText.includes('contourFromCropMask') && webOnnxText.includes("contourSource: crop.contourPoints.length >= 3 ? 'onnx-mask'"), 'browser ONNX preserves mask-derived part contours for fabrication plates');
+assert(threePreviewText.includes('PUPPET_CAMERA_PRESETS') && threePreviewText.includes('three-puppet-view-toolbar'), '3D puppet preview exposes an overlay 2D/3D camera switcher');
 assert(threePreviewText.includes('data-three-part-surface="solid-cut-plates"'), '3D puppet preview exposes the solid cut-plate surface contract');
 assert(threePreviewText.includes('data-three-part-art="top-texture-decal"'), '3D puppet preview exposes that artwork is rendered on top of plates');
 assert(threePreviewText.includes('TextureLoader'), '3D puppet preview loads character part images as surface decals');
@@ -367,6 +370,31 @@ const oversizedCutPart: BodyPartLayer = {
 const oversizedLocalJoints = [{ x: 0, y: 84 }, { x: 0, y: -84 }];
 const oversizedOutlineBounds = partOutlineBounds(fabricablePartOutlinePoints(oversizedCutPart, oversizedLocalJoints));
 assert(oversizedOutlineBounds.width < 90 && oversizedOutlineBounds.height < 260, 'fabrication-fit outline follows the limb joint chain rather than the full raw ONNX crop');
+const userContourPart: BodyPartLayer = {
+  ...oversizedCutPart,
+  contourSource: 'user',
+  contourPoints: [{ x: -12, y: -18 }, { x: 30, y: -10 }, { x: 20, y: 28 }, { x: -22, y: 18 }]
+};
+assert.deepEqual(fabricablePartOutlinePoints(userContourPart, oversizedLocalJoints), userContourPart.contourPoints, 'user/model contour overrides fallback joint-chain plate generation');
+const invalidContourPart: BodyPartLayer = {
+  ...oversizedCutPart,
+  contourSource: 'user',
+  contourPoints: [{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }]
+};
+const invalidFallbackBounds = partOutlineBounds(fabricablePartOutlinePoints(invalidContourPart, oversizedLocalJoints));
+assert(invalidFallbackBounds.width > 20 && invalidFallbackBounds.height > 100, 'degenerate imported contours fall back to the joint-chain plate instead of creating invisible geometry');
+const contourRoundTripProject = loadProjectSnapshot(JSON.parse(serializeProject({
+  ...sample,
+  parts: { ...sample.parts, head: { ...sample.parts.head, contourSource: 'user', contourPoints: userContourPart.contourPoints } }
+})));
+assert.deepEqual(contourRoundTripProject.parts.head.contourPoints, userContourPart.contourPoints, 'project save/load preserves user-defined part contour points');
+const packageContourProject = createProjectFromPackageData(
+  { parts: { head: { name: 'Head', roi: [0, 0, 80, 80], anchor_joint_id: 'neck', contour_points: userContourPart.contourPoints, contour_source: 'user' } } },
+  { width: 160, height: 160, joints: sample.skeleton!.joints, bones: sample.skeleton!.bones, root_joint_ids: sample.skeleton!.rootJointIds },
+  {},
+  'contour package'
+);
+assert.deepEqual(packageContourProject.parts.head.contourPoints, userContourPart.contourPoints, 'package import preserves explicit contour points from parts_info');
 const sampleWideArm: BodyPartLayer = { ...oversizedCutPart, transform: { x: 0, y: 0, rotation: 0, scale: 1 }, anchorJointId: 'right_elbow' };
 assert.deepEqual(partLandmarkJointIds(sampleWideArm, sample.skeleton), ['right_elbow', 'right_hand'], 'oversized lower-arm crop selects only the intended elbow/hand landmarks');
 const productionArmLandmarks = partLandmarkLocalPoints(sampleWideArm, sample.skeleton);
