@@ -106,7 +106,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('shared-workbench')).toBeVisible();
   await expect(page.locator('#boot-loader')).toHaveCount(0);
   await expect(page.getByTestId('onnx-cache-status')).toBeVisible();
-  await expect(page.getByTestId('onnx-cache-status')).toContainText(/AI model|Download AI model/);
+  await expect(page.getByTestId('onnx-cache-status')).toContainText(/AI ready|Get AI|AI \d+%|Try again/);
   await expect(page.getByTestId('status-bar')).not.toContainText(/parts:|paths:|mechs:|zoom/);
   const welcomeDialog = page.getByTestId('welcome-dialog');
   await expect(welcomeDialog).toBeVisible();
@@ -163,7 +163,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('shared-workbench')).toBeVisible();
   await expect(page.getByTestId('workspace-player-dock')).toBeVisible();
   await expect(page.getByTestId('novice-path-panel')).toContainText('Draw path');
-  await expect(page.getByText('Draw path')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Draw path' })).toBeVisible();
   await expect(page.getByTestId('free-draw-status')).toContainText(/5 points .*path-right-arm/);
   await expect(page.getByTestId('path-canvas')).toHaveCount(0);
   await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
@@ -325,7 +325,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   const playback = page.getByRole('button', { name: /Play|Pause/ }).first();
   await expect(playback).toBeVisible();
   await expect(page.getByTestId('design-part-right_arm')).not.toHaveAttribute('transform', 'translate(98 24) rotate(18)');
-  const sharedTransport = page.getByRole('button', { name: 'Shared transport toggle' });
+  const sharedTransport = page.getByTestId('workspace-player-dock').getByRole('button', { name: /Pause|Play/ });
   if ((await sharedTransport.textContent())?.includes('Ⅱ')) await sharedTransport.click();
   const scrubber = page.getByLabel('Workspace scrubber');
   const effectorSamples: Array<{ x: number; y: number }> = [];
@@ -634,19 +634,19 @@ test('Create from image upload creates a reviewed character package in browser',
   await onnxChooser.setFiles('tests/fixtures/stick-character.png');
 
   await expect(page.getByTestId('character-status-dock')).toBeVisible({ timeout: 180_000 });
-  await expect(page.getByText('package ready', { exact: true })).toBeVisible({ timeout: 180_000 });
+  await expect(page.getByTestId('character-status-dock').getByText('Ready', { exact: true })).toBeVisible({ timeout: 180_000 });
   const dockBox = await page.getByTestId('character-status-dock').boundingBox();
   const canvasBox = await page.getByTestId('stage-canvas-pane').boundingBox();
   const statusStripBox = await page.getByTestId('workflow-status-strip').boundingBox();
   expect(dockBox?.x ?? 0, 'character import status floats outside the center canvas').toBeGreaterThanOrEqual((canvasBox?.x ?? 0) + (canvasBox?.width ?? 0) - 8);
   expect(Math.abs(((statusStripBox?.y ?? 0) - ((dockBox?.y ?? 0) + (dockBox?.height ?? 0))) - 10), 'character import status floats 10px above the bottom status area').toBeLessThanOrEqual(2);
-  await expect(page.getByText(/parts · .*joints · ready to review/i)).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Accept package' })).toBeVisible();
+  await expect(page.getByTestId('character-status-dock').getByText(/parts · .*joints/i)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Use it' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Accept package' }).click();
+  await page.getByRole('button', { name: 'Use it' }).click();
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
   await expect(page.getByTestId('novice-path-panel')).toContainText('Draw path');
-  await expect(page.getByText('Draw path')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Draw path' })).toBeVisible();
   await expectProjectCounts(page, 10, 0, 0);
   await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
   const generatedPuppet = page.getByTestId('path-three-puppet-state');
@@ -686,13 +686,14 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
   ]);
   await packageChooser.setFiles(packageFiles);
   await expect(page.getByTestId('character-status-dock')).toBeVisible();
-  await expect(page.getByText('package ready', { exact: true })).toBeVisible();
-  await expect(page.getByText('Review before accepting.')).toBeVisible();
+  await expect(page.getByTestId('character-status-dock').getByText('Ready', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('character-status-dock')).toContainText('Use?');
+  await expect(page.getByTestId('character-status-dock')).toContainText('1 parts · 2 joints');
   await expect(page.getByText('SVG provenance metadata present')).toBeHidden();
   await expect(page.getByText('Checks')).toBeVisible();
-  await expect(page.getByText('Accept or discard the reviewed package before fine-tuning part artwork')).toBeVisible();
+  await expect(page.getByTestId('character-setup-panel').getByText('Use or skip the new character first.')).toBeVisible();
   await page.getByTestId('character-processing-panel').locator('summary').click();
-  await expect(page.getByText('Accept or discard it before editing the active character setup.')).toBeVisible();
+  await expect(page.getByTestId('character-processing-panel').getByText('Use or skip the new character first.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Edit Parts / Skeleton / Boxes' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Edit Parts / Skeleton / Boxes' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Save Skeleton' })).toBeDisabled();
@@ -700,8 +701,8 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
   await page.getByText('Checks').click();
   await expect(page.getByText('SVG provenance metadata present')).toBeVisible();
   await expect(page.getByText('plain load clears stale mechanisms')).toBeVisible();
-  await page.getByRole('button', { name: 'Discard' }).click();
-  await expect(page.getByText('package ready', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Skip' }).click();
+  await expect(page.getByTestId('character-status-dock').getByText('Ready', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Edit Parts / Skeleton / Boxes', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
   await expect(page.getByTestId('stage-right-inspector').getByText('Anchors')).toBeVisible();
@@ -709,8 +710,8 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
   await page.getByRole('button', { name: /^Character$/i }).click();
 
   await page.getByTestId('blank-package-input').setInputFiles(packageFiles);
-  await expect(page.getByText('package ready', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Accept package' }).click();
+  await expect(page.getByTestId('character-status-dock').getByText('Ready', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Use it' }).click();
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
   await expectProjectCounts(page, 1, 0, 0);
   await expect(page.getByText('Draw or track a path.')).toBeVisible();
@@ -718,7 +719,7 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
   await page.getByRole('button', { name: /^Character$/i }).click();
   await page.getByTestId('blank-package-input').setInputFiles('tests/fixtures/package/char_cfg.yaml');
   await expect(page.getByTestId('character-screen')).toBeVisible();
-  await expect(page.getByText('Character package import failed')).toBeVisible();
+  await expect(page.getByText('Couldn’t load character')).toBeVisible();
   await expect(page.getByText('Missing parts_info.json in selected package files')).toBeVisible();
 
   expectCleanPage(pageErrors, consoleErrors);
@@ -742,12 +743,12 @@ test('Replacement package preserves compatible mechanisms and rebound paths', as
     'tests/fixtures/package-compatible/char_cfg.yaml',
     'tests/fixtures/package-compatible/body.png'
   ]);
-  await expect(page.getByText('package ready', { exact: true })).toBeVisible();
-  await expect(page.getByText('1 mechanisms preserved; 1 matching paths rebound.')).toBeVisible();
+  await expect(page.getByTestId('character-status-dock').getByText('Ready', { exact: true })).toBeVisible();
+  await expect(page.getByText('Preserve matches.')).toBeVisible();
   await expect(page.getByText('replacement preserves compatible mechanisms')).toBeHidden();
   await page.getByText('Checks').click();
   await expect(page.getByText('replacement preserves compatible mechanisms')).toBeVisible();
-  await page.getByRole('button', { name: 'Accept package' }).click();
+  await page.getByRole('button', { name: 'Use it' }).click();
 
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
   await expectProjectCounts(page, 1, 1, 1);
@@ -930,7 +931,7 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   expect(metadata.profile.gridPitchMm).toBe(25);
   expect(metadata.profile.cutSheetFileType).toBe('svg');
   await page.getByRole('button', { name: /^Character$/i }).click();
-  await expect(page.getByTestId('processing-step-details')).toContainText('Normalize to the physical sheet');
+  await expect(page.getByTestId('processing-step-details')).toContainText('Fit sheet');
 
   expectCleanPage(pageErrors, consoleErrors);
 });
@@ -1012,10 +1013,10 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await page.getByLabel('Selected body part').selectOption('right_arm');
   await expect(page.getByTestId('free-draw-status')).toContainText(/5 points .*path-right-arm/);
   await expect(page.getByText('Draw or track a path.')).toHaveCount(0);
-  await expect(page.getByTestId('quick-rig-helper')).toContainText('IK');
+  await expect(page.getByTestId('quick-rig-helper')).toContainText('Move joint');
   await expect(page.getByLabel('IK chain root')).toHaveValue('right_shoulder');
   await expect(page.getByLabel('IK handle')).toHaveValue('right_hand');
-  await expect(page.getByTestId('ik-chain-summary')).toContainText('3-joint IK');
+  await expect(page.getByTestId('ik-chain-summary')).toContainText('3 joints');
   await page.getByRole('button', { name: 'Fold left', exact: true }).click();
   await expect(page.getByTestId('fold-direction-control')).toContainText('left');
   await page.getByTestId('ik-chain-root-options').getByRole('button', { name: 'right elbow' }).click();
@@ -1023,8 +1024,8 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await page.getByLabel('IK handle').selectOption('right_elbow');
   await expect(page.getByLabel('IK handle')).toHaveValue('right_elbow');
   await expect(page.getByLabel('IK chain root')).toHaveValue('right_elbow');
-  await expect(page.getByTestId('ik-chain-summary')).toContainText('Root-only');
-  await expect(page.getByTestId('fold-direction-control')).toContainText('Choose a limb');
+  await expect(page.getByTestId('ik-chain-summary')).toContainText('Whole part');
+  await expect(page.getByTestId('fold-direction-control')).toContainText('Pick elbow/knee');
   await expect(page.getByTestId('path-shape-controls')).toBeVisible();
   const selectedMotionPath = pathCanvas.locator('path[stroke="#5a6cff"][stroke-width="4"]').first();
   await page.getByRole('button', { name: 'Closed', exact: true }).click();
@@ -1045,13 +1046,13 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await expect(page.getByTestId('free-draw-status')).toContainText(/7 points .*path-right-arm/);
 
   await page.getByTestId('novice-path-panel').getByText('More', { exact: true }).click();
-  const stopButtonBeforePreview = page.getByRole('button', { name: /Stop/i });
+  const stopButtonBeforePreview = page.getByTestId('novice-path-panel').getByRole('button', { name: /Stop/i });
   if (await stopButtonBeforePreview.count()) await stopButtonBeforePreview.click();
   const armTransformBeforePlay = await page.getByTestId('path-part-right_arm').getAttribute('transform');
-  await page.getByRole('button', { name: /Play/i }).click();
+  await page.getByTestId('novice-path-panel').getByRole('button', { name: /Play/i }).click();
   await expect(page.getByText('IK target')).toBeVisible();
   await expect(page.getByTestId('path-part-right_arm')).not.toHaveAttribute('transform', armTransformBeforePlay ?? '');
-  await page.getByRole('button', { name: /Stop/i }).click();
+  await page.getByTestId('novice-path-panel').getByRole('button', { name: /Stop/i }).click();
   await page.getByText('Rig setup').click();
   const artXBefore = await page.getByTestId('path-part-art-right_arm').getAttribute('x');
   await page.getByLabel('Art offset X number').fill('-12');
@@ -2026,10 +2027,10 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   const anchorOptionValues = await page.getByLabel('Mechanism target anchor').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));
   expect(anchorOptionValues).toEqual(['', 'right_shoulder', 'right_elbow', 'right_hand']);
   const anchorOptions = await page.getByLabel('Mechanism target anchor').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
-  expect(anchorOptions.join(' ')).toContain('3-joint IK');
+  expect(anchorOptions.join(' ')).toContain('3 joints');
   expect(anchorOptions.join(' ')).not.toContain('left hand');
   await expect(page.getByLabel('Mechanism target anchor')).toHaveValue('right_hand');
-  await expect(page.getByTestId('mechanism-ik-chain-summary')).toContainText('3-joint IK');
+  await expect(page.getByTestId('mechanism-ik-chain-summary')).toContainText('3 joints');
   await page.getByLabel('Mechanism target path').selectOption('path-right-arm');
 
   await page.getByRole('button', { name: 'Delete', exact: true }).click();

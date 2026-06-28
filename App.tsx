@@ -224,14 +224,28 @@ const formatBytes = (bytes?: number) => bytes ? `${Math.round(bytes / 1024 / 102
 const OnnxCacheStatusPill = ({ status, onDownload }: { status: WebOnnxCacheStatus; onDownload: () => void }) => {
     const busy = status.stage === 'checking' || status.stage === 'downloading';
     const label = status.stage === 'cached'
-        ? 'AI model ready'
+        ? 'AI ready'
         : status.stage === 'downloading'
-            ? `AI model ${status.progress}% ${formatBytes(status.bytesLoaded)}`
+            ? `AI ${status.progress}% ${formatBytes(status.bytesLoaded)}`
             : status.stage === 'error'
-                ? 'AI model retry'
-                : 'Download AI model';
+                ? 'Try again'
+                : 'Get AI';
     return <button type="button" className={`status-cache-pill ${status.stage}`} data-testid="onnx-cache-status" disabled={busy || status.stage === 'cached'} onClick={onDownload} title={status.error ?? 'Cache ONNX model for faster image imports'}>{label}</button>;
 };
+
+const processingLabel = (stage: ProjectState['processing']['stage'], message: string) => {
+    if (stage === 'error') return message || 'Fix needed';
+    if (stage === 'ready') return 'Ready';
+    if (stage === 'downloading-model') return 'Getting AI…';
+    if (stage === 'loading-model') return 'Opening…';
+    if (stage === 'running-onnx') return 'Finding joints…';
+    if (stage === 'extracting-parts') return 'Cutting parts…';
+    if (stage === 'normalizing') return 'Fitting sheet…';
+    return message || 'Pick file';
+};
+
+const compactPackageSummary = (summary: string) =>
+    summary.replace(/ready to review/gi, 'ready');
 
 const PROJECT_HISTORY_LIMIT = 80;
 type ProjectHistoryState = { present: ProjectState; past: ProjectState[]; future: ProjectState[] };
@@ -290,9 +304,9 @@ const App: React.FC = () => {
     }, []);
 
     const cacheOnnxModel = async () => {
-        setCommandStatus('Downloading AI pose model for offline imports');
+        setCommandStatus('Getting AI…');
         const result = await warmWebOnnxCache(setOnnxCacheStatus);
-        setCommandStatus(result.stage === 'cached' ? 'AI pose model cached for image imports' : `AI model cache failed: ${result.error ?? 'download error'}`);
+        setCommandStatus(result.stage === 'cached' ? 'AI ready' : `AI failed: ${result.error ?? 'download error'}`);
     };
 
     const dispatch = (action: ProjectAction) => setProject(prev => applyProjectAction(prev, action), { history: isUndoableProjectAction(action) });
@@ -430,18 +444,19 @@ const App: React.FC = () => {
     const queueCharacterReview = (next: ProjectState, summary: string) => {
         const reviewed = replaceCharacter ? mergeReplacementProject(next, project) : next;
         setPendingCharacter({ project: reviewed, summary, returnStage: replaceCharacter ? (reviewed.mechanisms.length ? 'design' : 'path') : 'path' });
-        dispatch({ type: 'set_processing', processing: { stage: 'ready', message: 'Review generated character package', progress: 100 } });
+        dispatch({ type: 'set_processing', processing: { stage: 'ready', message: 'Check character', progress: 100 } });
         setShowWelcome(false);
         setStage('character');
     };
 
     const runWebOnnx = async (file: File) => {
-        dispatch({ type: 'set_processing', processing: { stage: 'loading-model', message: 'Loading local image analyzer', progress: 10 } });
+        dispatch({ type: 'set_processing', processing: { stage: 'loading-model', message: 'Reading picture…', progress: 10 } });
         try {
             const result = await processImageWithWebOnnx(file, (stageName, progress) => {
                 if (stageName === 'downloading-model') setOnnxCacheStatus(prev => ({ ...prev, stage: 'downloading', progress }));
                 if (stageName === 'loading-model') setOnnxCacheStatus(prev => ({ ...prev, stage: 'cached', progress: 100 }));
-                dispatch({ type: 'set_processing', processing: { stage: stageName as ProjectState['processing']['stage'], message: stageName.replaceAll('-', ' '), progress } });
+                const stageId = stageName as ProjectState['processing']['stage'];
+                dispatch({ type: 'set_processing', processing: { stage: stageId, message: processingLabel(stageId, ''), progress } });
             });
             const next = createProjectFromProcessed({
                 name: file.name.replace(/\.[^.]+$/, '') || 'Processed character',
@@ -454,10 +469,10 @@ const App: React.FC = () => {
                 replacementContext: {
                     mode: replaceCharacter ? 'replace-character' : 'plain-load',
                     previousStage: stage,
-                    rebindingSummary: replaceCharacter ? 'Review before preserving compatible mechanisms.' : 'Starts clean with no mechanisms.'
+                    rebindingSummary: replaceCharacter ? 'Check before preserving mechanisms.' : 'Clean start.'
                 }
             });
-            queueCharacterReview(next, `${next.partOrder.length} parts · ${Object.keys(next.skeleton?.joints ?? {}).length} joints · ready to review`);
+            queueCharacterReview(next, `${next.partOrder.length} parts · ${Object.keys(next.skeleton?.joints ?? {}).length} joints · ready`);
         } catch (error) {
             dispatch({
                 type: 'set_processing',
@@ -472,8 +487,8 @@ const App: React.FC = () => {
     };
 
     const loadStarterImage = async (template: StarterImageTemplate) => {
-        setCommandStatus(`Processing ${template.label} with local ONNX`);
-        dispatch({ type: 'set_processing', processing: { stage: 'loading-model', message: `Loading ${template.label}`, progress: 8 } });
+        setCommandStatus(`Opening ${template.label}`);
+        dispatch({ type: 'set_processing', processing: { stage: 'loading-model', message: `Opening ${template.label}`, progress: 8 } });
         try {
             const response = await fetch(template.url);
             if (!response.ok) throw new Error(`Could not load ${template.fileName}`);
@@ -487,15 +502,15 @@ const App: React.FC = () => {
     };
 
     const importCharacterPackage = async (files: FileList | File[]) => {
-        dispatch({ type: 'set_processing', processing: { stage: 'loading-model', message: 'Loading character package', progress: 20 } });
+        dispatch({ type: 'set_processing', processing: { stage: 'loading-model', message: 'Loading character…', progress: 20 } });
         try {
-            queueCharacterReview(await loadCharacterPackage(files), 'Review before accepting.');
+            queueCharacterReview(await loadCharacterPackage(files), 'Ready to use.');
         } catch (error) {
             dispatch({
                 type: 'set_processing',
                 processing: {
                     stage: 'error',
-                    message: 'Character package import failed',
+                    message: 'Couldn’t load character',
                     progress: 0,
                     error: error instanceof Error ? error.message : String(error)
                 }
@@ -1002,12 +1017,12 @@ const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, speed, 
         aria-label="Shared animation controls"
         style={{ '--player-x': `${offset.x}px`, '--player-y': `${offset.y}px` } as React.CSSProperties}
     >
-        <button type="button" className="player-drag-handle" data-testid="workspace-player-drag-handle" aria-label="Move animation controls" onPointerDown={startDrag}>
-            <span className="section-title">Animation</span><span aria-hidden="true">⋮⋮</span>
+        <button type="button" className="player-drag-handle" data-testid="workspace-player-drag-handle" aria-label="Move controls" title="Drag controls" onPointerDown={startDrag}>
+            <span aria-hidden="true">⋮⋮</span>
         </button>
         <div className="player-actions">
-            <button type="button" aria-label="Shared transport toggle" onClick={() => setIsPlaying(!isPlaying)}>{isPlaying ? 'Ⅱ' : '▶'}</button>
-            <button type="button" aria-label="Shared scrub restart" onClick={() => setAngle(0)}>↺</button>
+            <button type="button" aria-label={isPlaying ? 'Pause' : 'Play'} onClick={() => setIsPlaying(!isPlaying)}>{isPlaying ? 'Ⅱ' : '▶'}</button>
+            <button type="button" aria-label="Start over" onClick={() => setAngle(0)}>↺</button>
             <span>{speed.toFixed(1)}x</span>
         </div>
         <input
@@ -1077,34 +1092,34 @@ const WorkflowStatusStrip = ({ stage, project, selectedPart, selectedPath }: { s
     const validation = validateForFabrication(project);
     const enabledMechanisms = project.mechanisms.filter(m => m.visible && m.enabled !== false);
     const stageLabel = STAGES.find(item => item.id === stage)?.label ?? stage;
-    let blocker = 'No blocker';
+    let blocker = 'OK';
     let nextAction = 'Keep going';
     if (!project.partOrder.length) {
-        blocker = 'No character loaded';
+        blocker = 'No character';
         nextAction = 'Load character.';
     } else if (stage === 'path') {
-        blocker = selectedPart?.locked ? `${selectedPart.name} is locked` : (selectedPath && selectedPath.points.length >= 3 ? 'No blocker' : 'Need at least 3 path points');
-        nextAction = selectedPath && selectedPath.points.length >= 3 ? 'Open Foundry or Design.' : 'Draw 3+ points.';
+        blocker = selectedPart?.locked ? `${selectedPart.name} locked` : (selectedPath && selectedPath.points.length >= 3 ? 'OK' : 'Need 3 dots');
+        nextAction = selectedPath && selectedPath.points.length >= 3 ? 'Open Foundry.' : 'Draw path.';
     } else if (stage === 'foundry') {
-        blocker = selectedPath && selectedPath.points.length >= 3 ? 'No blocker' : 'Path is not ready';
-        nextAction = selectedPath && selectedPath.points.length >= 3 ? 'Pick template, use mechanism.' : 'Draw a path.';
+        blocker = selectedPath && selectedPath.points.length >= 3 ? 'OK' : 'No path';
+        nextAction = selectedPath && selectedPath.points.length >= 3 ? 'Pick one.' : 'Draw path.';
     } else if (stage === 'design') {
-        blocker = enabledMechanisms.length ? 'No blocker' : 'No enabled mechanism';
-        nextAction = enabledMechanisms.length ? 'Check target, export.' : 'Recommend or use Foundry.';
+        blocker = enabledMechanisms.length ? 'OK' : 'No mechanism';
+        nextAction = enabledMechanisms.length ? 'Check target.' : 'Pick mechanism.';
     } else if (stage === 'blueprint') {
-        blocker = validation.errors[0] ?? validation.warnings[0] ?? 'No blocker';
-        nextAction = validation.errors.length ? 'Fix blockers.' : 'Generate cut sheets.';
+        blocker = validation.errors[0] ?? validation.warnings[0] ?? 'OK';
+        nextAction = validation.errors.length ? 'Fix.' : 'Make sheets.';
     } else if (stage === 'assembly') {
-        blocker = validation.errors[0] ?? validation.warnings[0] ?? 'No blocker';
-        nextAction = validation.errors.length ? 'Fix blueprint blockers.' : 'Build, then print.';
+        blocker = validation.errors[0] ?? validation.warnings[0] ?? 'OK';
+        nextAction = validation.errors.length ? 'Fix blueprint.' : 'Build.';
     } else if (stage === 'options') {
         nextAction = 'Tune settings.';
     } else {
         nextAction = 'Choose starter.';
     }
     return <div className="workflow-status-strip" data-testid="workflow-status-strip">
-        <span><strong>Step</strong> {stageLabel}</span>
-        <span><strong>Blocker</strong> {blocker}</span>
+        <span><strong>Now</strong> {stageLabel}</span>
+        <span><strong>Fix</strong> {blocker}</span>
         <span><strong>Next</strong> {nextAction}</span>
     </div>;
 };
@@ -1301,16 +1316,19 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
     const editableParts = partPanelProject.partOrder.map(id => partPanelProject.parts[id]).filter((part): part is BodyPartLayer => Boolean(part));
     const selectedEditablePart = (!partPanelDisabled && project.selectedPartId ? project.parts[project.selectedPartId] : undefined) ?? editableParts[0];
     const selectedPartId = selectedEditablePart?.id ?? '';
+    const pendingStats = pendingCharacter
+        ? `${pendingCharacter.project.partOrder.length} parts · ${Object.keys(pendingCharacter.project.skeleton?.joints ?? {}).length} joints`
+        : '';
     const importStatusPanel = (
         <details className="advanced-panel import-status" open={statusOpen}>
-            <summary>Import status</summary>
+            <summary>Import</summary>
             <div className="mt-3"><ProgressBlock project={project} /></div>
             {pendingCharacter && <div className="mt-5 rounded-3xl border border-amber-200 bg-amber-50 p-4">
-                <div className="text-xs font-black uppercase tracking-[0.2em] text-amber-700">package ready</div>
+                <div className="text-xs font-black uppercase tracking-[0.2em] text-amber-700">Use?</div>
                 <div className="mt-1 font-bold">{pendingCharacter.project.metadata.name}</div>
-                <div className="text-sm text-slate-600">{pendingCharacter.summary}</div>
-                <div className="mt-2 text-xs text-slate-500">{pendingCharacter.project.characterPackage?.replacementContext?.rebindingSummary ?? 'Starts clean with no mechanisms.'}</div>
-                <div className="mt-4 flex gap-2"><button className="btn-primary" onClick={onAccept}>Accept package</button><button className="btn-secondary" onClick={onDiscard}>Discard</button></div>
+                <div className="text-sm text-slate-600">{pendingStats || compactPackageSummary(pendingCharacter.summary)}</div>
+                <div className="mt-2 text-xs text-slate-500" title={pendingCharacter.project.characterPackage?.replacementContext?.rebindingSummary}>{pendingCharacter.project.characterPackage?.replacementContext?.mode === 'replace-character' ? 'Preserve matches.' : 'Clean start.'}</div>
+                <div className="mt-4 flex gap-2"><button className="btn-primary" onClick={onAccept}>Use it</button><button className="btn-secondary" onClick={onDiscard}>Skip</button></div>
             </div>}
             <details className="advanced-panel mt-6">
                 <summary>Checks</summary>
@@ -1355,7 +1373,7 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
                 </div>
                 <details className="advanced-panel mt-4" data-testid="character-processing-panel">
                     <summary>Import tools</summary>
-                    {partPanelDisabled && <p className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">Review is pending. Accept or discard it before editing the active character setup.</p>}
+                    {partPanelDisabled && <p className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">Use or skip the new character first.</p>}
                     <div className="mt-3 flex flex-wrap gap-2">
                         <button className="btn-secondary" aria-label="Edit Parts / Skeleton / Boxes" disabled={partPanelDisabled} onClick={onEditCharacter}>Edit rig</button>
                         <button className="btn-secondary" disabled={partPanelDisabled} onClick={onSaveSkeleton}>Save Skeleton</button>
@@ -1401,7 +1419,7 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
                     <div className="section-title">Part</div>
                     <div className="mt-1 text-sm font-extrabold text-slate-800">{selectedEditablePart?.name ?? 'No part selected'}</div>
                     {partPanelDisabled
-                        ? <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">Accept or discard the reviewed package before fine-tuning part artwork, so edits apply to the active character.</div>
+                        ? <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">Use or skip the new character first.</div>
                         : selectedEditablePart && <PartInspector part={selectedEditablePart} skeleton={partPanelProject.skeleton} dispatch={dispatch} compact />}
                     <details className="advanced-panel mt-3" open={!partPanelDisabled}>
                         <summary>Anchors</summary>
@@ -1411,7 +1429,7 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
             </div>)
         }}/>
         </section>
-        {statusOpen && <aside className="character-status-dock" data-testid="character-status-dock" role="dialog" aria-label="Import status" aria-live="polite">
+        {statusOpen && <aside className="character-status-dock" data-testid="character-status-dock" role="dialog" aria-label="Import" aria-live="polite">
             {importStatusPanel}
         </aside>}
     </>;
@@ -1537,21 +1555,21 @@ const CameraCaptureDialog = ({ isOpen, onClose, onCapture }: { isOpen: boolean; 
 const ProgressBlock = ({ project }: { project: ProjectState }) => {
     const p = project.processing;
     const steps: Array<{ stage: ProjectState['processing']['stage']; label: string }> = [
-        { stage: 'selecting', label: 'Choose source files' },
-        { stage: 'downloading-model', label: 'Download/cache ONNX model' },
-        { stage: 'loading-model', label: 'Load local model or package' },
-        { stage: 'running-onnx', label: 'Run browser ONNX analysis' },
-        { stage: 'extracting-parts', label: 'Extract character parts' },
-        { stage: 'normalizing', label: 'Normalize to the physical sheet' },
-        { stage: 'ready', label: 'Ready for review' }
+        { stage: 'selecting', label: 'Pick file' },
+        { stage: 'downloading-model', label: 'Get AI' },
+        { stage: 'loading-model', label: 'Open' },
+        { stage: 'running-onnx', label: 'Find joints' },
+        { stage: 'extracting-parts', label: 'Cut parts' },
+        { stage: 'normalizing', label: 'Fit sheet' },
+        { stage: 'ready', label: 'Ready' }
     ];
     const activeIndex = Math.max(0, steps.findIndex(step => step.stage === p.stage));
     return <div className="progress-card rounded-3xl p-5">
         <div className="flex items-center gap-3">
             {p.stage === 'error' ? <AlertCircle className="text-red-400"/> : p.stage === 'ready' ? <CheckCircle2 className="text-emerald-400"/> : <Loader2 className="progress-icon animate-spin"/>}
             <div>
-                <div className="font-bold capitalize">{p.message}</div>
-                <div className="progress-stage text-xs">{p.stage}</div>
+                <div className="font-bold">{processingLabel(p.stage, p.message)}</div>
+                <div className="progress-stage text-xs" title={p.stage}>{p.progress}%</div>
             </div>
         </div>
         <div className="progress-track mt-4 h-2 rounded-full"><div className="progress-bar h-2 rounded-full transition-all" style={{ width: `${p.progress}%` }}/></div>
@@ -1767,29 +1785,28 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
                 <div>{selectedPoint !== null && selectedPath.points[selectedPoint] ? `Point ${selectedPoint + 1}: ${selectedPath.points[selectedPoint].x.toFixed(0)}, ${selectedPath.points[selectedPoint].y.toFixed(0)}` : 'Select a point on the canvas for point-level edits.'}</div>
             </div>}
             <div className="rig-helper" data-testid="quick-rig-helper">
-                <h4 className="section-title">Body rig</h4>
-                <h3>IK</h3>
-                {selectedPart && <label className={`block text-xs font-black uppercase tracking-wider text-slate-500 ${pathLocked || !selectedPath ? 'opacity-50' : ''}`}>Chain root<select aria-label="IK chain root" className="field mt-1" disabled={pathLocked || !selectedPath} value={selectedChainRootId ?? ''} onChange={e => updateChainRoot(e.target.value)}>
+                <h4 className="section-title">Bones</h4>
+                <h3>Move joint</h3>
+                {selectedPart && <label className={`block text-xs font-black uppercase tracking-wider text-slate-500 ${pathLocked || !selectedPath ? 'opacity-50' : ''}`}>Start<select aria-label="IK chain root" className="field mt-1" disabled={pathLocked || !selectedPath} value={selectedChainRootId ?? ''} onChange={e => updateChainRoot(e.target.value)}>
                     {chainRootOptions.map(id => <option key={id} value={id}>{jointLabel(id)}</option>)}
                 </select></label>}
                 {selectedPart && selectedPath && <div className="flex flex-wrap gap-2" data-testid="ik-chain-root-options">
                     {chainRootOptions.map(id => <button type="button" key={id} className={`btn-secondary ${id === selectedChainRootId ? 'active' : ''}`} disabled={pathLocked} onClick={() => updateChainRoot(id)}>{jointLabel(id)}</button>)}
                 </div>}
-                {selectedPart && <label className={`block text-xs font-black uppercase tracking-wider text-slate-500 ${pathLocked || !selectedPath ? 'opacity-50' : ''}`}>IK handle<select aria-label="IK handle" className="field mt-1" disabled={pathLocked || !selectedPath} value={selectedIkJointId ?? ''} onChange={e => updateIkHandle(e.target.value)}>
+                {selectedPart && <label className={`block text-xs font-black uppercase tracking-wider text-slate-500 ${pathLocked || !selectedPath ? 'opacity-50' : ''}`}>Handle<select aria-label="IK handle" className="field mt-1" disabled={pathLocked || !selectedPath} value={selectedIkJointId ?? ''} onChange={e => updateIkHandle(e.target.value)}>
                     {jointOptions.map(id => <option key={id} value={id}>{motionChainOptionLabel(project, selectedPart.id, id)}</option>)}
                 </select></label>}
-                {selectedPart && <div className="rounded-2xl border border-violet-100 bg-violet-50/70 p-3 text-sm text-slate-600" data-testid="ik-chain-summary">
-                    <div className="font-bold text-slate-800">{ikDescriptor?.label ?? 'No IK chain'}</div>
-                    <div>{ikDescriptor?.helper ?? 'Pick IK handle.'}</div>
+                {selectedPart && <div className="rounded-2xl border border-violet-100 bg-violet-50/70 p-3 text-sm text-slate-600" data-testid="ik-chain-summary" title={ikDescriptor?.helper ?? 'Pick handle.'}>
+                    <div className="font-bold text-slate-800">{ikDescriptor?.label ?? 'No limb'}</div>
                 </div>}
                 <div className="fold-picker" data-testid="fold-direction-control">
                     <div>
-                        <div className="text-xs font-black uppercase tracking-wider text-slate-500">Fold direction</div>
-                        <div className="text-sm text-slate-600">{bendJoint ? `${jointLabel(bendJoint.id)} bends ${bendJoint.bendDirection < 0 ? 'left' : 'right'}` : ikDescriptor?.kind === 'two-joint-direct' ? 'Direct handle has no fold joint' : 'Choose a limb with elbow/knee joint'}</div>
+                        <div className="text-xs font-black uppercase tracking-wider text-slate-500">Bend</div>
+                        <div className="text-sm text-slate-600">{bendJoint ? `${jointLabel(bendJoint.id)} → ${bendJoint.bendDirection < 0 ? 'left' : 'right'}` : ikDescriptor?.kind === 'two-joint-direct' ? 'No bend' : 'Pick elbow/knee'}</div>
                     </div>
                     <div className="flex gap-2">
-                        <button className={`btn-secondary ${bendJoint && bendJoint.bendDirection < 0 ? 'active' : ''}`} disabled={!bendJoint || bendJoint.locked} onClick={() => setBendDirection(-1)}>Fold left</button>
-                        <button className={`btn-secondary ${bendJoint && bendJoint.bendDirection >= 0 ? 'active' : ''}`} disabled={!bendJoint || bendJoint.locked} onClick={() => setBendDirection(1)}>Fold right</button>
+                        <button aria-label="Fold left" className={`btn-secondary ${bendJoint && bendJoint.bendDirection < 0 ? 'active' : ''}`} disabled={!bendJoint || bendJoint.locked} onClick={() => setBendDirection(-1)}>Left</button>
+                        <button aria-label="Fold right" className={`btn-secondary ${bendJoint && bendJoint.bendDirection >= 0 ? 'active' : ''}`} disabled={!bendJoint || bendJoint.locked} onClick={() => setBendDirection(1)}>Right</button>
                     </div>
                 </div>
             </div>
@@ -2884,9 +2901,8 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
                     <option value="">Part anchor default</option>
                     {targetAnchorOptions.map(id => <option key={id} value={id}>{motionChainOptionLabel(project, selectedMechanism.targetPartId, id)}</option>)}
                 </select>}
-                {selectedTargetChain && <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3 text-sm text-slate-600" data-testid="mechanism-ik-chain-summary">
+                {selectedTargetChain && <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3 text-sm text-slate-600" data-testid="mechanism-ik-chain-summary" title={selectedTargetChain.helper}>
                     <div className="font-bold text-slate-800">{selectedTargetChain.label}</div>
-                    <div>{selectedTargetChain.helper}</div>
                 </div>}
                 <div className="section-title">Parameters</div>
                 {PARAMS.filter(p => showParam(selectedMechanism.type, p.key)).map(p => <React.Fragment key={String(p.key)}><MiniNumber label={p.label} value={Number(selectedMechanism[p.key] ?? 0)} min={p.min} max={p.max} step={p.step} onChange={value => updateMechanism(selectedMechanism.id, { [p.key]: value } as Partial<MechanismConfig>)}/></React.Fragment>) }

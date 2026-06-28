@@ -527,7 +527,7 @@ assert(webOnnxText.includes('MODEL_CACHE_NAME') && webOnnxText.includes('caches.
 assert(webOnnxText.includes('InferenceSession.create(new Uint8Array(modelBuffer)'), 'browser ONNX creates sessions from cached model bytes');
 assert(webOnnxText.includes("import('onnxruntime-web')") && !webOnnxText.includes("import * as ort from 'onnxruntime-web'"), 'ONNX Runtime JS is lazy-loaded outside the initial editor shell bundle');
 assert(appText.includes('data-testid="onnx-cache-status"') && appText.includes('checkWebOnnxCache'), 'status bar exposes ONNX cache/download status');
-assert(indexText.includes('id="boot-loader"') && indexText.includes('Loading editor shell'), 'static boot loader covers slow bundle startup');
+assert(indexText.includes('id="boot-loader"') && indexText.includes('Loading…'), 'static boot loader covers slow startup');
 assert(viewer3dText.includes('VIEWER3D_CAMERA_PRESETS') && threePreviewText.includes('three-puppet-view-toolbar') && appText.includes('foundryPreset'), '3D puppet and foundry previews share one viewer camera preset contract');
 assert(viewer3dText.includes('type Viewer3DContract') && viewer3dText.includes('createViewer3DContract'), '3D viewers expose one shared OOP-style contract object for tab adapters');
 assert(threePreviewText.includes('DEFAULT_PUPPET_VIEWER_LAYERS') && threePreviewText.includes('data-testid={`${testId}-toggle-${layer}`}') && appText.includes('foundry-toggle-grid'), '3D viewer top overlay toolbar wires shared layer toggles instead of decorative buttons');
@@ -564,7 +564,7 @@ assert(appText.includes('data-testid={`path-part-art-${part.id}`}') && appText.i
 assert(canvasText.includes('data-testid={`design-part-art-${part.id}`}') && canvasText.includes('part.bounds.x * part.transform.scale'), 'Mechanism Design renders artwork from the same editable part bounds offset');
 assert(appText.includes('partOutlinePathD(part, landmarks') && appText.includes('path-part-surface-mask'), 'Path Editor clips part art to the shared fabrication outline and hole mask');
 assert(canvasText.includes('partOutlinePathD(part, landmarks') && canvasText.includes('design-part-surface-mask'), 'Mechanism Design clips part art to the shared fabrication outline and hole mask');
-assert(appText.includes('Accept or discard the reviewed package before fine-tuning part artwork'), 'Character tab disables active-project artwork edits while a package review is pending');
+assert(appText.includes('Use or skip the new character first.'), 'Character tab disables active-project artwork edits while a package review is pending');
 assert(appText.includes('disabled={partPanelDisabled} onClick={onEditCharacter}'), 'Pending package review disables active-character edit buttons');
 assert(appText.includes('disabled={partPanelDisabled} onClick={onSaveSkeleton}'), 'Pending package review disables active skeleton save controls');
 assert(appText.includes('stage-body editor-workbench relative min-h-0 flex-1 overflow-hidden'), 'shared workbench prevents right-pane scroll from moving the center canvas');

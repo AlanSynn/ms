@@ -174,8 +174,8 @@ export const describeMotionChain = (project: ProjectState, partId: string | unde
             jointIds: [],
             jointCount: 0,
             segmentCount: 0,
-            label: 'No IK chain',
-            helper: 'Choose a body part with skeleton joints before assigning motion.',
+            label: 'No limb',
+            helper: 'Pick a part with joints.',
             canFold: false,
             warning: 'Missing part or skeleton'
         };
@@ -194,8 +194,8 @@ export const describeMotionChain = (project: ProjectState, partId: string | unde
             jointIds: [],
             jointCount: 0,
             segmentCount: 0,
-            label: 'Invalid IK chain',
-            helper: `${jointDisplayName(skeleton, resolvedTargetJointId)} is not inside ${jointDisplayName(skeleton, rootJointId)}'s limb chain.`,
+            label: 'Can’t reach',
+            helper: `${jointDisplayName(skeleton, resolvedTargetJointId)} is outside this limb.`,
             canFold: false,
             warning: 'Target joint is outside this part chain'
         };
@@ -208,8 +208,8 @@ export const describeMotionChain = (project: ProjectState, partId: string | unde
             jointIds,
             jointCount,
             segmentCount,
-            label: 'Root-only anchor',
-            helper: 'No bend: handle equals chain root. Pick a distal handle to bend.',
+            label: 'Whole part',
+            helper: 'Pick a farther handle to bend.',
             canFold: false
         };
     }
@@ -221,8 +221,8 @@ export const describeMotionChain = (project: ProjectState, partId: string | unde
             jointIds,
             jointCount,
             segmentCount,
-            label: '2-joint direct handle',
-            helper: 'One straight segment follows the path. Mechanisms pin the handle exactly; there is no fold joint.',
+            label: '1 segment',
+            helper: 'Straight move.',
             canFold: false
         };
     }
@@ -236,8 +236,8 @@ export const describeMotionChain = (project: ProjectState, partId: string | unde
             jointIds,
             jointCount,
             segmentCount,
-            label: '3-joint IK',
-            helper: `${jointDisplayName(skeleton, foldJointId)} is the elbow/knee. Fold direction decides which side it bends.`,
+            label: '3 joints',
+            helper: `${jointDisplayName(skeleton, foldJointId)} bends.`,
             canFold: true
         };
     }
@@ -249,8 +249,8 @@ export const describeMotionChain = (project: ProjectState, partId: string | unde
         jointIds,
         jointCount,
         segmentCount,
-        label: `Multi-joint IK (${jointCount} joints)`,
-        helper: `${jointDisplayName(skeleton, foldJointId)} acts as the visible bend control while extra child joints follow the handle.`,
+        label: `${jointCount} joints`,
+        helper: `${jointDisplayName(skeleton, foldJointId)} bends; extra joints follow.`,
         canFold: true,
         warning: 'Multi-joint chains currently use the distal bend joint as the solver control.'
     };
@@ -258,7 +258,8 @@ export const describeMotionChain = (project: ProjectState, partId: string | unde
 
 export const motionChainOptionLabel = (project: ProjectState, partId: string | undefined, jointId: string): string => {
     const descriptor = describeMotionChain(project, partId, jointId);
-    return `${jointDisplayName(project.skeleton, jointId)} · ${descriptor.label}`;
+    const jointWord = descriptor.jointCount === 1 ? 'joint' : 'joints';
+    return `${jointDisplayName(project.skeleton, jointId)} · ${descriptor.jointCount || 0} ${jointWord}`;
 };
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
