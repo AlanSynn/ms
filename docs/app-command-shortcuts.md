@@ -9,7 +9,7 @@ MotionSmith uses `utils/appCommands.ts` as the single source of truth for app-wi
 | File | New Project, Load Project, Recover Autosave, Save Project, Save Project As, Export Project Copy, Export Blueprint Package | Only stable project/document actions get global shortcuts. |
 | Edit | Back (Undo), Forward (Redo) | Project-state history only; processing/status/export metadata is not recorded as undoable work. |
 | View | Zoom In, Zoom Out, Zoom to Fit, Reset View, Save/Restore/Reset Workspace Layout | Canvas zoom shortcuts are global; layout actions stay menu-only. |
-| Go | Character, Path Editor, Mechanism Foundry, Mechanism Design, Blueprint, Assembly Guide | `Alt+1` through `Alt+6` navigate the novice workflow. |
+| Go | Character, Path Editor, Mechanism Foundry, Mechanism Design, Blueprint, Assembly | `Alt+1` through `Alt+6` navigate the novice workflow. |
 | Options | Preferences | `Cmd/Ctrl+,` opens the Options tab. |
 | Help | Keyboard Shortcuts, About MotionSmith | `?` opens the generated shortcut reference. |
 
@@ -33,6 +33,8 @@ MotionSmith uses `utils/appCommands.ts` as the single source of truth for app-wi
 | `?` | Keyboard Shortcuts |
 
 Shortcuts are ignored while focus is inside `input`, `textarea`, `select`, or content-editable controls so direct manipulation and numeric editing are not interrupted. App-wide shortcuts are also suspended while a modal dialog is open; modal-local buttons and focus traps own that interaction until the dialog closes.
+
+Canvas-local controls such as part sliders, path handles, camera orbit/zoom, foundry overlay toggles, and export recipe selectors stay local unless they become repeated app-shell actions. This keeps the novice workbench tinkerable instead of turning every small knob into a global command.
 
 ## Retired placeholder items
 

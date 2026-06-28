@@ -87,7 +87,47 @@ assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.j
 assert(readFileSync(join(process.cwd(), 'App.tsx'), 'utf8').includes('motionsmith.hideWelcome'), 'local storage namespace uses the MotionSmith slug');
 assert.deepEqual(validateAppCommandRegistry(), [], 'application command registry is internally consistent');
 const commandIds = new Set(APP_COMMANDS.map(command => command.id));
+const expectedAppCommandIds = [
+  'project.new',
+  'project.open',
+  'project.recoverAutosave',
+  'project.save',
+  'project.saveAs',
+  'project.exportCopy',
+  'project.exportBlueprint',
+  'edit.undo',
+  'edit.redo',
+  'view.zoomIn',
+  'view.zoomOut',
+  'view.fit',
+  'view.reset',
+  'workspace.saveLayout',
+  'workspace.restoreLayout',
+  'workspace.resetLayout',
+  'stage.character',
+  'stage.path',
+  'stage.foundry',
+  'stage.design',
+  'stage.blueprint',
+  'stage.assembly',
+  'options.preferences',
+  'help.shortcuts',
+  'help.about'
+] as const;
 assert.equal(commandIds.size, APP_COMMANDS.length, 'application command ids are unique');
+assert.deepEqual(APP_COMMANDS.map(command => command.id), expectedAppCommandIds, 'app command registry keeps the complete shell command inventory');
+assert.deepEqual(APP_MENU_GROUPS.map(group => ({
+  id: group.id,
+  label: group.label,
+  commandIds: [...group.commandIds]
+})), [
+  { id: 'file', label: 'File', commandIds: ['project.new', 'project.open', 'project.recoverAutosave', 'project.save', 'project.saveAs', 'project.exportCopy', 'project.exportBlueprint'] },
+  { id: 'edit', label: 'Edit', commandIds: ['edit.undo', 'edit.redo'] },
+  { id: 'view', label: 'View', commandIds: ['view.zoomIn', 'view.zoomOut', 'view.fit', 'view.reset', 'workspace.saveLayout', 'workspace.restoreLayout', 'workspace.resetLayout'] },
+  { id: 'go', label: 'Go', commandIds: ['stage.character', 'stage.path', 'stage.foundry', 'stage.design', 'stage.blueprint', 'stage.assembly'] },
+  { id: 'options', label: 'Options', commandIds: ['options.preferences'] },
+  { id: 'help', label: 'Help', commandIds: ['help.shortcuts', 'help.about'] }
+], 'shell menu groups keep the complete command inventory');
 assert(APP_MENU_GROUPS.every(group => group.commandIds.length > 0), 'each app menu group has commands');
 assert(APP_MENU_GROUPS.flatMap(group => group.commandIds).every(id => commandIds.has(id)), 'all menu command ids resolve to registry commands');
 assert(APP_COMMANDS.every(command => APP_MENU_GROUPS.some(group => group.commandIds.some(id => id === command.id))), 'every command is rendered by a menu group');
@@ -102,7 +142,44 @@ assert(!APP_COMMANDS.some(command => /exit|updates/i.test(command.label)), 'brow
 APP_MENU_GROUPS.forEach(group => group.commandIds.forEach(id => assert.equal(commandById(id).menu, group.id, `${id} belongs to its declared menu group`)));
 const appCommandSource = readFileSync(join(process.cwd(), 'App.tsx'), 'utf8');
 assert(appCommandSource.includes('satisfies Record<AppCommandId, () => void>'), 'App command handlers are type-exhaustive against AppCommandId');
-APP_COMMANDS.forEach(command => assert(appCommandSource.includes(`'${command.id}'`), `${command.id} has an App.tsx handler entry`));
+const commandHandlerBlock = appCommandSource.match(/const commandHandlers = \{([\s\S]*?)\n\s*\} satisfies Record<AppCommandId, \(\) => void>;/)?.[1] ?? '';
+assert(commandHandlerBlock, 'App.tsx exposes the typed command handler map');
+assert.deepEqual(
+  [...commandHandlerBlock.matchAll(/'([^']+)':/g)].map(match => match[1]).sort(),
+  [...commandIds].sort(),
+  'every visible shell command has exactly one App.tsx handler'
+);
+const visibleUiSource = [
+  'App.tsx',
+  'components/Canvas.tsx',
+  'components/Controls.tsx',
+  'components/TrackingModal.tsx'
+].map(file => readFileSync(join(process.cwd(), file), 'utf8')).join('\n');
+assert(!/Easy IK Setup/i.test(visibleUiSource), 'visible UI does not reintroduce sugar text like Easy IK Setup');
+[
+  'Mechanism Gallery',
+  'Selected part detail',
+  'Skeleton anchors',
+  'Advanced import tools',
+  'Technical checks',
+  'review generated package',
+  'Warnings: none',
+  'Studio settings',
+  'Enable Debug Visuals',
+  'Show Detailed Processing Steps',
+  'Parametric Edit',
+  'Build steps',
+  'Cut sheet package',
+  'Selected blueprint detail',
+  'Selected mechanism inspector',
+  'Free path workflow',
+  'Draw the motion path',
+  'Next: choose mechanism',
+  'Use this mechanism',
+  'Anchor picked visually',
+  'Open a small canvas overlay',
+  'Tune the image/decal area'
+].forEach(phrase => assert(!visibleUiSource.includes(phrase), `visible UI omits over-explaining legacy copy: ${phrase}`));
 assert(readFileSync(join(process.cwd(), 'docs', 'app-command-shortcuts.md'), 'utf8').includes('utils/appCommands.ts'), 'command registry documentation points to the executable registry');
 const packageJson = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8'));
 const physicsKernel = physicsKernelCapability();
@@ -492,7 +569,7 @@ assert(appText.includes('stage-body editor-workbench relative min-h-0 flex-1 ove
 assert(appText.includes('const [showSensemaking, setShowSensemaking] = useState(false)'), 'Foundry starts in compact tinkerable mode with sensemaking collapsed');
 assert(appText.includes('compact-fabrication-stack') && appText.includes('data-testid="foundry-fabrication-stack"'), 'Foundry keeps fabrication stack visible as a compact action datum');
 assert(typesText.includes("'assembly'"), 'AppStage includes a dedicated Assembly tab');
-assert(appText.includes("{ id: 'assembly', label: 'Assembly Guide' }"), 'workflow rail exposes Assembly as a separate stage');
+assert(appText.includes("{ id: 'assembly', label: 'Assembly' }"), 'workflow rail exposes Assembly as a separate stage');
 const blueprintCanvasStart = appText.indexOf('canvas: canvasPane(<div className="blueprint-document-preview canvas-workspace" data-testid="blueprint-canvas-preview">');
 const blueprintInspectorStart = appText.indexOf('inspector: inspectorPane(<section className="stage-pane-stack" data-testid="blueprint-detail-preview">', blueprintCanvasStart);
 assert(blueprintCanvasStart >= 0 && blueprintInspectorStart > blueprintCanvasStart, 'Blueprint layout exposes printable 2D canvas and cut-sheet inspector slots');

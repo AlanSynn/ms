@@ -37,7 +37,7 @@ const APP_COMMAND_DEFINITIONS = [
   { id: 'stage.foundry', menu: 'go', label: 'Mechanism Foundry', description: 'Go to mechanism foundry.', shortcuts: ['Alt+3'], stageTarget: 'foundry' },
   { id: 'stage.design', menu: 'go', label: 'Mechanism Design', description: 'Go to mechanism design.', shortcuts: ['Alt+4'], stageTarget: 'design' },
   { id: 'stage.blueprint', menu: 'go', label: 'Blueprint', description: 'Go to blueprint output.', shortcuts: ['Alt+5'], stageTarget: 'blueprint' },
-  { id: 'stage.assembly', menu: 'go', label: 'Assembly Guide', description: 'Go to assembly guide.', shortcuts: ['Alt+6'], stageTarget: 'assembly' },
+  { id: 'stage.assembly', menu: 'go', label: 'Assembly', description: 'Go to assembly.', shortcuts: ['Alt+6'], stageTarget: 'assembly' },
 
   { id: 'options.preferences', menu: 'options', label: 'Preferences…', description: 'Open MotionSmith preferences.', shortcuts: ['Mod+,'], stageTarget: 'options' },
 

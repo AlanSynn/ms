@@ -503,7 +503,7 @@ export const handoffGate = (project: ProjectState, targetStage: import('../types
     if (targetStage === 'path') return project.skeleton || project.metadata.status === 'sample' ? { ok: true as const, message: 'Parts ready' } : fail('Skeleton missing or unreadable.');
     if (targetStage === 'foundry') return { ok: true as const, message: 'Parts ready for mechanism search' };
     if (targetStage === 'design') return { ok: true as const, message: mechanisms.length ? 'Mechanisms ready' : 'Parts ready; add a mechanism in Design' };
-    if (targetStage === 'blueprint' || targetStage === 'assembly') return mechanisms.every(m => m.id && Number.isFinite(m.anchorX) && Number.isFinite(m.anchorY)) ? { ok: true as const, message: 'Fabrication inputs ready' } : fail('Each enabled mechanism needs an id and board anchor before Blueprint Export.', 'design');
+    if (targetStage === 'blueprint' || targetStage === 'assembly') return mechanisms.every(m => m.id && Number.isFinite(m.anchorX) && Number.isFinite(m.anchorY)) ? { ok: true as const, message: 'Fabrication inputs ready' } : fail('Each enabled mechanism needs an id and board anchor before Blueprint.', 'design');
     return { ok: true as const, message: 'Ready' };
 };
 

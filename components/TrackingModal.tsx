@@ -685,7 +685,7 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
                 <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
                     <div className="flex items-center gap-3">
                         <Crosshair className="w-5 h-5 text-blue-400" />
-                        <h2 className="text-lg font-semibold text-white">Motion Tracking (Manual)</h2>
+                        <h2 className="text-lg font-semibold text-white">Track video</h2>
                     </div>
 
                     <button onClick={onClose} className="p-1 hover:bg-slate-700 rounded">
@@ -713,10 +713,10 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
                             >
                                 <Upload className={`w-16 h-16 mb-4 ${isDraggingFile ? 'animate-bounce' : ''}`} />
                                 <p className="text-lg font-medium mb-2">
-                                    {isDraggingFile ? 'Drop file here!' : 'Drag & drop media here'}
+                                    {isDraggingFile ? 'Drop' : 'Drop media'}
                                 </p>
-                                <p className="text-sm opacity-70">or click to browse</p>
-                                <p className="text-xs mt-3 opacity-50">Supports: MP4, WebM, GIF</p>
+                                <p className="text-sm opacity-70">Browse</p>
+                                <p className="text-xs mt-3 opacity-50">MP4 · WebM · GIF</p>
                             </div>
                         ) : (
                             <>
@@ -892,16 +892,6 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
                     </div>
 
                     <div className="flex gap-2">
-
-                        {/* Path Info - show tracked or manual points count */}
-                        {manualPoints.length > 0 && (
-                            <span className="text-cyan-400 text-sm px-3">
-                                ✓ {manualPoints.length} manual points
-                            </span>
-                        )}
-                    </div>
-
-                    <div className="flex gap-2">
                         {/* Smoothing checkbox for manual mode - next to Transfer button */}
                         <label className="flex items-center gap-2 px-3 cursor-pointer">
                             <input
@@ -910,7 +900,7 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
                                 onChange={(e) => setEnableSmoothing(e.target.checked)}
                                 className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500 accent-blue-500"
                             />
-                            <span className="text-sm text-slate-300">Smooth Path</span>
+                            <span className="text-sm text-slate-300">Smooth</span>
                         </label>
 
                         {/* Connect end points checkbox */}
@@ -921,7 +911,7 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
                                 onChange={(e) => setConnectEndPoints(e.target.checked)}
                                 className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500 accent-blue-500"
                             />
-                            <span className="text-sm text-slate-300">Connect Ends</span>
+                            <span className="text-sm text-slate-300">Close loop</span>
                         </label>
 
                         <button
@@ -930,7 +920,7 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
                             className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
                         >
                             <ArrowRight className="w-4 h-4" />
-                            Transfer as Drawing
+                            Use path
                         </button>
                     </div>
                 </div>
