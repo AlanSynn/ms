@@ -43,7 +43,7 @@ import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STA
 import { createFabricationPackage, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationLinkageSpecForSceneLength, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, prefabAssemblySteps, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
 import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToBoardRaw, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
-import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
+import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionChainRootJointIds, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
 import { fabricablePartOutlinePoints, isUsableContourPoints, partLandmarkLocalPoints, partOutlineBounds, partOutlinePathD, pointInsideOutline } from './utils/partGeometry';
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT, normalizeCanvasViewport, WEBGL_PIXEL_RATIO_CAP } from './utils/viewport';
 import { VIEWER3D_CAMERA_PRESETS, VIEWER3D_CONTRACT_VERSION, createViewer3DContract, viewer3DLayerDataValue, type Viewer3DCameraPreset } from './utils/viewer3d';
@@ -389,6 +389,7 @@ const App: React.FC = () => {
                 id,
                 partId,
                 targetAnchorJointId: current?.targetAnchorJointId,
+                chainRootJointId: current?.chainRootJointId,
                 smoothness: current?.smoothness ?? 0,
                 points,
                 timedPoints: points.map((p, i) => ({ ...p, time: points.length <= 1 ? 0 : (i / (points.length - 1)) * (current?.duration ?? project.settings.animationDurationMs) })),
@@ -1557,7 +1558,11 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
     const selectedIkJointId = selectedPart
         ? preferredMotionJointId(project, selectedPart.id, selectedPath?.targetAnchorJointId, { preferDistalWhenRoot: !selectedPath?.targetAnchorJointId })
         : undefined;
-    const ikDescriptor = selectedPart ? describeMotionChain(project, selectedPart.id, selectedIkJointId) : undefined;
+    const chainRootOptions = selectedPart ? motionChainRootJointIds(project, selectedPart.id, selectedIkJointId) : [];
+    const selectedChainRootId = selectedPath?.chainRootJointId && chainRootOptions.includes(selectedPath.chainRootJointId)
+        ? selectedPath.chainRootJointId
+        : selectedPart?.anchorJointId;
+    const ikDescriptor = selectedPart ? describeMotionChain(project, selectedPart.id, selectedIkJointId, { rootJointId: selectedChainRootId }) : undefined;
     const bendJoint = ikDescriptor?.foldJointId ? project.skeleton?.joints[ikDescriptor.foldJointId] : undefined;
     const jointLabel = (id?: string) => id ? id.replaceAll('_', ' ') : 'none';
     useEffect(() => {
@@ -1582,12 +1587,17 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
         appendFreePoint(p, true);
     };
     const updatePath = (updates: Partial<ProjectMotionPath>) => selectedPath && !pathLocked && dispatch({ type: 'upsert_path', path: { ...selectedPath, ...updates } });
-    const updateSelectedAnchor = (anchorJointId: string) => {
-        if (!selectedPart || pathLocked) return;
-        const anchor = project.skeleton?.joints[anchorJointId]?.position;
-        dispatch({ type: 'update_part', partId: selectedPart.id, updates: { anchorJointId, localPivotOffset: anchor ? localPivotOffsetForScene(selectedPart, anchor) : selectedPart.localPivotOffset, localPivotJointId: anchorJointId } });
+    const updateChainRoot = (chainRootJointId: string) => updatePath({ chainRootJointId });
+    const updateIkHandle = (targetAnchorJointId: string) => {
+        if (!selectedPart) return;
+        const roots = motionChainRootJointIds(project, selectedPart.id, targetAnchorJointId);
+        updatePath({ targetAnchorJointId, chainRootJointId: selectedPath?.chainRootJointId && roots.includes(selectedPath.chainRootJointId) ? selectedPath.chainRootJointId : selectedPart.anchorJointId });
     };
-    const updateIkHandle = (targetAnchorJointId: string) => updatePath({ targetAnchorJointId });
+    const pickIkJoint = (jointId: string) => {
+        if (!selectedPath || !selectedPart || pathLocked) return;
+        if (selectedIkJointId && jointId !== selectedIkJointId && chainRootOptions.includes(jointId)) updateChainRoot(jointId);
+        else updateIkHandle(jointId);
+    };
     const setBendDirection = (bendDirection: number) => bendJoint && dispatch({ type: 'update_joint', jointId: bendJoint.id, updates: { bendDirection } });
     const addJointAtIkHandle = () => {
         if (!project.skeleton || !selectedPart || !selectedIkJointId) return;
@@ -1707,7 +1717,7 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
         </div>),
             canvas: canvasPane(<div className="path-canvas-shell canvas-workspace overflow-hidden p-0">
             <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
-            <SceneSketch svgRef={svgRef} project={project} selectedPath={selectedPath} dragPoint={dragPoint} selectedPoint={selectedPoint} setDragPoint={setDragPoint} setSelectedPoint={setSelectedPoint} onPointMove={movePoint} onPointUp={stopDrawing} onCanvasDown={onCanvasDown} dispatch={dispatch} drawMode={drawMode} pathLocked={pathLocked} isPlaying={isPlaying} angle={angle} viewport={viewport} setViewport={setViewport}/>
+            <SceneSketch svgRef={svgRef} project={project} selectedPath={selectedPath} dragPoint={dragPoint} selectedPoint={selectedPoint} setDragPoint={setDragPoint} setSelectedPoint={setSelectedPoint} onPointMove={movePoint} onPointUp={stopDrawing} onCanvasDown={onCanvasDown} onJointPick={pickIkJoint} dispatch={dispatch} drawMode={drawMode} pathLocked={pathLocked} isPlaying={isPlaying} angle={angle} viewport={viewport} setViewport={setViewport}/>
             <ThreePuppetPreview project={project} animatedParts={pathPreview?.parts ?? {}} skeleton={pathPreview?.skeleton ?? project.skeleton} angle={angle} viewport={viewport} setViewport={setViewport} inputMode={drawMode ? 'none' : '3d-only'} testId="path-three-puppet" />
         </div>),
             inspector: inspectorPane(<div className="path-inspector stage-pane-stack">
@@ -1723,9 +1733,12 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
             <div className="rig-helper" data-testid="quick-rig-helper">
                 <h4 className="section-title">Body rig</h4>
                 <h3>IK</h3>
-                {selectedPart && <label className={`block text-xs font-black uppercase tracking-wider text-slate-500 ${pathLocked ? 'opacity-50' : ''}`}>Anchor point<select aria-label="Anchor point" className="field mt-1" disabled={pathLocked} value={selectedPart.anchorJointId} onChange={e => updateSelectedAnchor(e.target.value)}>
-                    {Object.keys(project.skeleton?.joints ?? {}).map(id => <option key={id} value={id}>{jointLabel(id)}</option>)}
+                {selectedPart && <label className={`block text-xs font-black uppercase tracking-wider text-slate-500 ${pathLocked || !selectedPath ? 'opacity-50' : ''}`}>Chain root<select aria-label="IK chain root" className="field mt-1" disabled={pathLocked || !selectedPath} value={selectedChainRootId ?? ''} onChange={e => updateChainRoot(e.target.value)}>
+                    {chainRootOptions.map(id => <option key={id} value={id}>{jointLabel(id)}</option>)}
                 </select></label>}
+                {selectedPart && selectedPath && <div className="flex flex-wrap gap-2" data-testid="ik-chain-root-options">
+                    {chainRootOptions.map(id => <button type="button" key={id} className={`btn-secondary ${id === selectedChainRootId ? 'active' : ''}`} disabled={pathLocked} onClick={() => updateChainRoot(id)}>{jointLabel(id)}</button>)}
+                </div>}
                 {selectedPart && <label className={`block text-xs font-black uppercase tracking-wider text-slate-500 ${pathLocked || !selectedPath ? 'opacity-50' : ''}`}>IK handle<select aria-label="IK handle" className="field mt-1" disabled={pathLocked || !selectedPath} value={selectedIkJointId ?? ''} onChange={e => updateIkHandle(e.target.value)}>
                     {jointOptions.map(id => <option key={id} value={id}>{motionChainOptionLabel(project, selectedPart.id, id)}</option>)}
                 </select></label>}
@@ -1749,7 +1762,7 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
     />;
 };
 
-const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, setDragPoint, setSelectedPoint, onPointMove, onPointUp, onCanvasDown, dispatch, drawMode, pathLocked, isPlaying, angle, viewport, setViewport }: { project: ProjectState; svgRef: React.RefObject<SVGSVGElement | null>; selectedPath?: ProjectMotionPath; dragPoint: number | null; selectedPoint: number | null; setDragPoint: (i: number | null) => void; setSelectedPoint: (i: number | null) => void; onPointMove: (e: React.MouseEvent<SVGSVGElement>) => void; onPointUp: () => void; onCanvasDown: (e: React.MouseEvent<SVGSVGElement>) => void; dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void; drawMode?: boolean; pathLocked?: boolean; isPlaying: boolean; angle: number; viewport: CanvasViewport; setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>> }) => {
+const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, setDragPoint, setSelectedPoint, onPointMove, onPointUp, onCanvasDown, onJointPick, dispatch, drawMode, pathLocked, isPlaying, angle, viewport, setViewport }: { project: ProjectState; svgRef: React.RefObject<SVGSVGElement | null>; selectedPath?: ProjectMotionPath; dragPoint: number | null; selectedPoint: number | null; setDragPoint: (i: number | null) => void; setSelectedPoint: (i: number | null) => void; onPointMove: (e: React.MouseEvent<SVGSVGElement>) => void; onPointUp: () => void; onCanvasDown: (e: React.MouseEvent<SVGSVGElement>) => void; onJointPick: (jointId: string) => void; dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void; drawMode?: boolean; pathLocked?: boolean; isPlaying: boolean; angle: number; viewport: CanvasViewport; setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>> }) => {
     const kit = project.settings.physicalKit;
     const sheet = sceneBoundsForSheet(kit);
     const pathMechanism = selectedPath ? project.mechanisms.find(m => m.targetPathId === selectedPath.id && m.targetPartId === selectedPath.partId) : undefined;
@@ -1836,7 +1849,15 @@ const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, 
         {project.partOrder.map(id => previewParts[id] ?? project.parts[id]).filter(Boolean).map(part => <React.Fragment key={part.id}><PartShape part={part} skeleton={previewSkeleton} selected={project.selectedPartId === part.id} drawMode={drawMode} onSelect={() => dispatch({ type: 'select_part', partId: part.id })}/></React.Fragment>) }
         {previewSkeleton && Object.values(previewSkeleton.joints).map(j => {
             const p = sceneToSvg(j.position);
-            return <g key={j.id}><circle data-testid={`skeleton-joint-${j.id}`} cx={p.x} cy={p.y} r={j.locked ? 6 : 4.5} fill={j.locked ? '#64748b' : '#94a3b8'} stroke="white" strokeWidth="2" opacity="0.3"/><title>{j.id} bend {j.bendDirection}</title></g>;
+            const pickable = Boolean(selectedPath && !pathLocked && !drawMode);
+            return <g key={j.id} data-canvas-interactive={pickable ? 'true' : undefined} className={pickable ? 'cursor-pointer' : undefined} onClick={e => {
+                if (!pickable) return;
+                e.stopPropagation();
+                onJointPick(j.id);
+            }}>
+                <circle data-testid={`skeleton-joint-${j.id}`} cx={p.x} cy={p.y} r={j.locked ? 6 : 4.5} fill={j.locked ? '#64748b' : '#94a3b8'} stroke="white" strokeWidth="2" opacity={pickable ? 0.85 : 0.3}/>
+                <title>{j.id} bend {j.bendDirection}</title>
+            </g>;
         })}
         {Object.values(project.paths).filter(p => p.visible).map(path => <path key={path.id} d={pathFromPoints(path.points, path.closed, path.smoothness)} fill="none" stroke={path.enabled ? '#5a6cff' : '#94a3b8'} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" opacity="0.8"/>)}
         {selectedPath?.visible && selectedPath.points.map((pt, i) => {
@@ -2426,6 +2447,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const range = useMemo(() => sampleFeasibleRange(landedFoundry), [landedFoundry]);
     const library = MECHANISM_LIBRARY[foundry.type];
     const targetIkJointId = selectedPart ? preferredMotionJointId(project, selectedPart.id, selectedPath?.targetAnchorJointId, { preferDistalWhenRoot: !selectedPath?.targetAnchorJointId }) : undefined;
+    const targetChainRootJointId = selectedPath?.chainRootJointId ?? selectedPart?.anchorJointId;
     const feasibilityText = range.warning ?? '360° valid sampled motion';
     const foundryFitContext = useMemo(() => createMechanismFitContext(landedFoundry, 360, 240, 96), [landedFoundry]);
     const selectedSimulation = useMemo(() => fitMechanismSimulationWithContext(landedFoundry, foundryPhase, foundryFitContext), [landedFoundry, foundryPhase, foundryFitContext]);
@@ -2586,7 +2608,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             <StageLeftSummary project={project} title="Foundry" stage="foundry" goStage={goStage}>
                 <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600" data-testid="foundry-target-summary">
                     <div className="font-bold text-slate-800">Target {selectedPart?.name ?? 'none'} · {selectedPath?.points.length ?? 0} pts</div>
-                    <div>Board hole {landingBoard.label} · anchor {selectedPart?.anchorJointId ?? 'none'} · IK handle {targetIkJointId ?? 'none'}</div>
+                    <div>Board hole {landingBoard.label} · chain {targetChainRootJointId ?? 'none'} → {targetIkJointId ?? 'none'}</div>
                     {snapDistance > 0.5 && <div>Snapped {snapDistance.toFixed(0)} scene units from target to nearest board hole for fabrication.</div>}
                     <div><strong>Range:</strong> {range.percentValid === 1 ? '360° valid' : feasibilityText}</div>
                     <div data-testid="foundry-feasibility"><strong>Status:</strong> {feasibilityText}</div>

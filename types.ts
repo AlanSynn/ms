@@ -173,6 +173,7 @@ export interface ProjectMotionPath {
     id: string;
     partId: string;
     targetAnchorJointId?: string;
+    chainRootJointId?: string;
     smoothness?: number;
     points: Point[];
     timedPoints?: Array<Point & { time: number }>;

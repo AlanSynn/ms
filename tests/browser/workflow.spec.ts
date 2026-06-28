@@ -1009,15 +1009,18 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await expect(page.getByTestId('free-draw-status')).toContainText(/5 points .*path-right-arm/);
   await expect(page.getByText('Draw or track a path.')).toHaveCount(0);
   await expect(page.getByTestId('quick-rig-helper')).toContainText('IK');
-  await expect(page.getByLabel('Anchor point')).toHaveValue('right_shoulder');
+  await expect(page.getByLabel('IK chain root')).toHaveValue('right_shoulder');
   await expect(page.getByLabel('IK handle')).toHaveValue('right_hand');
   await expect(page.getByTestId('ik-chain-summary')).toContainText('3-joint IK');
   await page.getByRole('button', { name: 'Fold left', exact: true }).click();
   await expect(page.getByTestId('fold-direction-control')).toContainText('left');
+  await page.getByTestId('ik-chain-root-options').getByRole('button', { name: 'right elbow' }).click();
+  await expect(page.getByLabel('IK chain root')).toHaveValue('right_elbow');
   await page.getByLabel('IK handle').selectOption('right_elbow');
   await expect(page.getByLabel('IK handle')).toHaveValue('right_elbow');
-  await expect(page.getByTestId('ik-chain-summary')).toContainText('2-joint direct');
-  await expect(page.getByTestId('fold-direction-control')).toContainText('Direct handle has no fold joint');
+  await expect(page.getByLabel('IK chain root')).toHaveValue('right_elbow');
+  await expect(page.getByTestId('ik-chain-summary')).toContainText('Root-only');
+  await expect(page.getByTestId('fold-direction-control')).toContainText('Choose a limb');
   await expect(page.getByTestId('path-shape-controls')).toBeVisible();
   const selectedMotionPath = pathCanvas.locator('path[stroke="#5a6cff"][stroke-width="4"]').first();
   await page.getByRole('button', { name: 'Closed', exact: true }).click();
@@ -1066,8 +1069,7 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await page.locator('label').filter({ hasText: 'Selected part anchor' }).locator('select').selectOption('right_elbow');
   await expect(page.locator('label').filter({ hasText: 'Selected part anchor' }).locator('select')).toHaveValue('right_elbow');
   await page.getByRole('button', { name: /Mechanism Foundry/i }).click();
-  await expect(page.getByTestId('foundry-target-summary')).toContainText('anchor right_elbow');
-  await expect(page.getByTestId('foundry-target-summary')).toContainText('IK handle right_elbow');
+  await expect(page.getByTestId('foundry-target-summary')).toContainText('chain right_elbow → right_elbow');
 
   expectCleanPage(pageErrors, consoleErrors);
 });

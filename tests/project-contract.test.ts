@@ -9,7 +9,7 @@ import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADI
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
 import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, generateCurvePoints, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius } from '../utils/kinematics';
-import { animatedPartsForProject, describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionPreviewForPath, motionPreviewForProject, motionPreviewForTarget, preferredMotionJointId } from '../utils/motion';
+import { animatedPartsForProject, describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainRootJointIds, motionPreviewForPath, motionPreviewForProject, motionPreviewForTarget, preferredMotionJointId } from '../utils/motion';
 import { buildToonSceneProjection } from '../utils/sceneProjection';
 import { buildFoundryPhysicsOverlay, buildKinematicPhysicsSession, mechanismPhysicsRule } from '../utils/physicsSession';
 import { fabricablePartOutlinePoints, partLandmarkJointIds, partLandmarkLocalPoints, partOutlineBounds, pointInsideOutline } from '../utils/partGeometry';
@@ -250,6 +250,7 @@ assert(Object.keys(sample.skeleton?.joints ?? {}).length >= 17, 'sample placehol
 assert(sample.partOrder.every(id => ['#cbd5e1', '#e2e8f0', '#b6c2d2', '#94a3b8'].includes(sample.parts[id].fillColor)), 'sample character uses muted placeholder part colors');
 assert.equal(sample.mechanisms[0].targetAnchorJointId, 'right_hand', 'sample waving arm drives the hand, not the shoulder root');
 assert.deepEqual(motionAnchorJointIds(sample, 'right_arm'), ['right_shoulder', 'right_elbow', 'right_hand'], 'IK anchor choices stay within the target limb chain');
+assert.deepEqual(motionChainRootJointIds(sample, 'right_arm', 'right_hand'), ['right_shoulder', 'right_elbow', 'right_hand'], 'IK chain root choices expose every ancestor from part root to handle');
 assert.equal(preferredMotionJointId(sample, 'right_arm', 'left_hand'), 'right_shoulder', 'invalid IK anchor falls back to the target part root');
 assert.deepEqual(SANITIZE_MECHANISM_TYPES, [...ALL_MECHANISM_TYPES], 'import sanitizer accepts every low-level mechanism template including crank');
 assert.deepEqual(OPTIMIZER_MECHANISM_TYPES, [...AUTHORABLE_MECHANISM_TYPES], 'optimizer searches authorable mechanism templates only');
@@ -644,6 +645,8 @@ assert(!controlsText.includes("m.type === 'crank' ? 'Gear'"), 'legacy Controls n
 assert.equal(describeMotionChain(sample, 'right_arm', 'right_shoulder').kind, 'root-only', 'root anchor is labeled as a root-only chain');
 assert.equal(describeMotionChain(sample, 'right_arm', 'right_elbow').kind, 'two-joint-direct', 'elbow handle is labeled as a 2-joint direct chain');
 assert.equal(describeMotionChain(sample, 'right_arm', 'right_hand').kind, 'three-joint-ik', 'hand handle is labeled as a 3-joint IK chain');
+assert.equal(describeMotionChain(sample, 'right_arm', 'right_hand', { rootJointId: 'right_elbow' }).kind, 'two-joint-direct', 'path-specific chain roots shorten the solver chain');
+assert.equal(describeMotionChain(sample, 'right_arm', 'right_elbow', { rootJointId: 'right_elbow' }).kind, 'root-only', 'path-specific root equal to handle is explicitly root-only');
 const directPinnedPreview = motionPreviewForTarget(sample, 'right_arm', 'right_elbow', { x: 210, y: 40 }, { parts: {}, skeleton: sample.skeleton }, { pinTarget: true });
 const directPinnedElbow = directPinnedPreview.skeleton?.joints.right_elbow.position;
 assert(directPinnedElbow && Math.hypot(directPinnedElbow.x - 210, directPinnedElbow.y - 40) < 1e-9, '2-joint direct mechanism drive pins the handle exactly');
@@ -1424,6 +1427,13 @@ const pathPreview = motionPreviewForPath(ikProject, ikProject.paths['path-right-
 assert(pathPreview.parts.right_arm, 'path editor preview moves selected limb at current frame');
 assert.deepEqual(pathPreview.skeleton?.joints.right_shoulder.position, ikProject.skeleton?.joints.right_shoulder.position, 'IK preview keeps the shoulder root attached');
 assert(Math.hypot((pathPreview.skeleton?.joints.right_hand.position.x ?? 0) - ikProject.paths['path-right-arm'].points[0].x, (pathPreview.skeleton?.joints.right_hand.position.y ?? 0) - ikProject.paths['path-right-arm'].points[0].y) < 1e-9, 'path editor IK target reaches the path point');
+const elbowRootPath = { ...ikProject.paths['path-right-arm'], chainRootJointId: 'right_elbow', targetAnchorJointId: 'right_hand' };
+const elbowRootPreview = motionPreviewForPath(ikProject, elbowRootPath, 0);
+assert.deepEqual(elbowRootPreview.skeleton?.joints.right_elbow.position, ikProject.skeleton?.joints.right_elbow.position, 'path-specific IK root keeps the chosen elbow/knee joint attached');
+assert(Math.hypot((elbowRootPreview.skeleton?.joints.right_hand.position.x ?? 0) - elbowRootPath.points[0].x, (elbowRootPreview.skeleton?.joints.right_hand.position.y ?? 0) - elbowRootPath.points[0].y) > 1, 'non-pinned path preview with shortened chain preserves segment length instead of teleporting');
+const rootOnlyPath = { ...ikProject.paths['path-right-arm'], chainRootJointId: 'right_elbow', targetAnchorJointId: 'right_elbow' };
+const rootOnlyPreview = motionPreviewForPath(ikProject, rootOnlyPath, 0);
+assert.deepEqual(rootOnlyPreview.skeleton?.joints.right_elbow.position, ikProject.skeleton?.joints.right_elbow.position, 'root-only IK no longer translates the body part off the rig');
 const drivenMechanism = {
   ...createDefaultMechanism('crank', 'drive-effector'),
   anchorX: ikProject.paths['path-right-arm'].points[0].x + 30,
@@ -1458,8 +1468,8 @@ for (const phase of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
 }
 const conflictProject: ProjectState = { ...drivenProject, mechanisms: [drivenMechanism, { ...drivenMechanism, id: 'second-driver', anchorX: drivenMechanism.anchorX + 8 }] };
 const conflicts = mechanismBindingWarnings(conflictProject);
-assert(conflicts['drive-effector']?.some(w => w.includes('also drives right_arm:right_hand')), 'first duplicate driver receives explicit conflict warning');
-assert(conflicts['second-driver']?.some(w => w.includes('also drives right_arm:right_hand')), 'second duplicate driver receives explicit conflict warning');
+assert(conflicts['drive-effector']?.some(w => w.includes('also drives right_arm:right_shoulder:right_hand')), 'first duplicate driver receives explicit conflict warning');
+assert(conflicts['second-driver']?.some(w => w.includes('also drives right_arm:right_shoulder:right_hand')), 'second duplicate driver receives explicit conflict warning');
 assert(validateForFabrication(conflictProject).errors.some(e => e.includes('only one mechanism can own a target anchor')), 'blueprint export blocks ambiguous duplicate target drivers');
 const exportedForSettings = applyProjectAction(sample, { type: 'set_export', fabricationPackage: createFabricationPackage(sample) });
 const uiSettingsProject = applyProjectAction(exportedForSettings, { type: 'update_settings', settings: { toolbarVisible: !exportedForSettings.settings.toolbarVisible, debugVisuals: true, detailedProcessingSteps: true } });

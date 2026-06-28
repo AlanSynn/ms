@@ -644,6 +644,7 @@ export const validatePath = (path: ProjectMotionPath): ProjectMotionPath => {
         id: typeof raw.id === 'string' && raw.id.trim() ? raw.id.slice(0, 80) : uid('path'),
         partId: typeof raw.partId === 'string' ? raw.partId : '',
         targetAnchorJointId: typeof raw.targetAnchorJointId === 'string' && raw.targetAnchorJointId.trim() ? raw.targetAnchorJointId.slice(0, 80) : undefined,
+        chainRootJointId: typeof raw.chainRootJointId === 'string' && raw.chainRootJointId.trim() ? raw.chainRootJointId.slice(0, 80) : undefined,
         smoothness: clampNumber(raw.smoothness, 0, 0, 100),
         points,
         timedPoints: Array.isArray(raw.timedPoints) ? raw.timedPoints.map(p => ({ ...sanitizePoint(p), time: finiteNumber(asRecord(p).time, 0) })).slice(0, 2000) : undefined,

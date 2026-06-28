@@ -1,6 +1,6 @@
 import { BodyPartLayer, MechanismConfig, Point, ProjectMotionPath, ProjectState, StandardJoint, StandardSkeleton } from '../types';
 import { calculateLinkage } from './kinematics';
-import { placeBodyPartPivotAt } from './coordinates';
+import { localPivotOffsetForScene, placeBodyPartPivotAt } from './coordinates';
 
 export interface MotionPreview {
     parts: Record<string, BodyPartLayer>;
@@ -90,6 +90,15 @@ export const motionAnchorJointIds = (project: ProjectState, partId: string | und
     return ordered.length ? ordered : [part.anchorJointId];
 };
 
+export const motionChainRootJointIds = (project: ProjectState, partId: string | undefined, targetJointId: string | undefined): string[] => {
+    const part = partId ? project.parts[partId] : undefined;
+    const skeleton = project.skeleton;
+    if (!part || !skeleton) return [];
+    const target = preferredMotionJointId(project, partId, targetJointId, { preferDistalWhenRoot: !targetJointId }) ?? part.anchorJointId;
+    const chain = motionJointChain(skeleton, part.anchorJointId, target);
+    return chain.length ? chain : [part.anchorJointId];
+};
+
 export const preferredMotionJointId = (
     project: ProjectState,
     partId: string | undefined,
@@ -149,7 +158,14 @@ export const motionJointChain = (skeleton: StandardSkeleton, rootJointId: string
 const jointDisplayName = (skeleton: StandardSkeleton | null | undefined, id?: string) =>
     id ? (skeleton?.joints[id]?.name || id).replaceAll('_', ' ') : 'none';
 
-export const describeMotionChain = (project: ProjectState, partId: string | undefined, targetJointId?: string): MotionChainDescriptor => {
+const resolveMotionRootJointId = (skeleton: StandardSkeleton, partRootJointId: string, targetJointId: string, requestedRootJointId?: string) =>
+    requestedRootJointId
+    && motionJointChain(skeleton, partRootJointId, requestedRootJointId).length
+    && motionJointChain(skeleton, requestedRootJointId, targetJointId).length
+        ? requestedRootJointId
+        : partRootJointId;
+
+export const describeMotionChain = (project: ProjectState, partId: string | undefined, targetJointId?: string, options: { rootJointId?: string } = {}): MotionChainDescriptor => {
     const part = partId ? project.parts[partId] : undefined;
     const skeleton = project.skeleton;
     if (!part || !skeleton) {
@@ -164,8 +180,9 @@ export const describeMotionChain = (project: ProjectState, partId: string | unde
             warning: 'Missing part or skeleton'
         };
     }
-    const rootJointId = part.anchorJointId;
-    const resolvedTargetJointId = preferredMotionJointId(project, partId, targetJointId) ?? rootJointId;
+    const partRootJointId = part.anchorJointId;
+    const resolvedTargetJointId = preferredMotionJointId(project, partId, targetJointId) ?? partRootJointId;
+    const rootJointId = resolveMotionRootJointId(skeleton, partRootJointId, resolvedTargetJointId, options.rootJointId);
     const jointIds = motionJointChain(skeleton, rootJointId, resolvedTargetJointId);
     const jointCount = jointIds.length;
     const segmentCount = Math.max(0, jointCount - 1);
@@ -192,7 +209,7 @@ export const describeMotionChain = (project: ProjectState, partId: string | unde
             jointCount,
             segmentCount,
             label: 'Root-only anchor',
-            helper: 'Moves the whole part from its anchor. Add or choose a distal IK handle for elbow/knee bending.',
+            helper: 'No bend: handle equals chain root. Pick a distal handle to bend.',
             canFold: false
         };
     }
@@ -301,38 +318,20 @@ export const motionPreviewForTarget = (
     targetJointId: string | undefined,
     target: Point,
     existing: MotionPreview = { parts: {}, skeleton: project.skeleton },
-    options: { pinTarget?: boolean } = {}
+    options: { pinTarget?: boolean; rootJointId?: string } = {}
 ): MotionPreview => {
     const targetPart = targetPartId ? project.parts[targetPartId] : undefined;
     const skeleton = existing.skeleton ?? project.skeleton;
     if (!targetPart) return existing;
 
-    const rootJointId = targetPart.anchorJointId;
-    const resolvedTargetJointId = preferredMotionJointId(project, targetPartId, targetJointId) ?? rootJointId;
+    const partRootJointId = targetPart.anchorJointId;
+    const resolvedTargetJointId = preferredMotionJointId(project, targetPartId, targetJointId) ?? partRootJointId;
+    const rootJointId = skeleton ? resolveMotionRootJointId(skeleton, partRootJointId, resolvedTargetJointId, options.rootJointId) : partRootJointId;
     const rootJoint = skeleton?.joints[rootJointId];
     const targetJoint = skeleton?.joints[resolvedTargetJointId];
 
-    if (!skeleton || !rootJoint || !targetJoint || resolvedTargetJointId === rootJointId) {
-        const anchorPart = { ...targetPart, anchorJointId: resolvedTargetJointId };
-        const placedTarget = placeBodyPartPivotAt(anchorPart, target, skeleton);
-        const dx = placedTarget.transform.x - targetPart.transform.x;
-        const dy = placedTarget.transform.y - targetPart.transform.y;
-        const affectedJoints = descendantJoints(skeleton, resolvedTargetJointId);
-        const jointUpdates: Record<string, Point> = {};
-        affectedJoints.forEach(id => {
-            const joint = skeleton?.joints[id];
-            if (joint) jointUpdates[id] = { x: joint.position.x + dx, y: joint.position.y + dy };
-        });
-        const nextSkeleton = withJointUpdates(skeleton, jointUpdates);
-        const parts = { ...existing.parts };
-        visualPartIdsForJoints(project, targetPart.id, affectedJoints).forEach(partId => {
-            const part = project.parts[partId];
-            parts[partId] = partId === targetPart.id
-                ? placedTarget
-                : { ...part, transform: { ...part.transform, x: part.transform.x + dx, y: part.transform.y + dy } };
-        });
-        return { parts, skeleton: nextSkeleton, target, targetJointId: resolvedTargetJointId, rootJointId };
-    }
+    if (!skeleton || !rootJoint || !targetJoint) return existing;
+    if (resolvedTargetJointId === rootJointId) return { ...existing, target: rootJoint.position, targetJointId: resolvedTargetJointId, rootJointId };
 
     const jointUpdates = solveChainTargets(skeleton, rootJointId, resolvedTargetJointId, target, options.pinTarget === true);
     const solvedTarget = jointUpdates[resolvedTargetJointId] ?? targetJoint.position;
@@ -349,6 +348,9 @@ export const motionPreviewForTarget = (
     const rotationDelta = Math.atan2(newVector.y, newVector.x) - Math.atan2(oldVector.y, oldVector.x);
     const rotatedTarget = {
         ...targetPart,
+        anchorJointId: rootJointId,
+        localPivotOffset: localPivotOffsetForScene(targetPart, rootJoint.position),
+        localPivotJointId: rootJointId,
         transform: { ...targetPart.transform, rotation: targetPart.transform.rotation + rotationDelta * 180 / Math.PI }
     };
     const placedTarget = placeBodyPartPivotAt(rotatedTarget, rootJoint.position, nextSkeleton);
@@ -371,7 +373,7 @@ export const motionPreviewForPath = (
     path: ProjectMotionPath,
     angle: number,
     targetJointId = preferredMotionJointId(project, path.partId, path.targetAnchorJointId, { preferDistalWhenRoot: !path.targetAnchorJointId })
-): MotionPreview => motionPreviewForTarget(project, path.partId, targetJointId, pointOnProjectPath(path, angle));
+): MotionPreview => motionPreviewForTarget(project, path.partId, targetJointId, pointOnProjectPath(path, angle), { parts: {}, skeleton: project.skeleton }, { rootJointId: path.chainRootJointId });
 
 export const mechanismBindingWarnings = (project: ProjectState, mechanisms: MechanismConfig[] = project.mechanisms) => {
     const warnings: Record<string, string[]> = {};
@@ -394,8 +396,12 @@ export const mechanismBindingWarnings = (project: ProjectState, mechanisms: Mech
         if (m.targetAnchorJointId && !motionAnchorJointIds(project, m.targetPartId).includes(m.targetAnchorJointId)) {
             add(m.id, `Target anchor ${m.targetAnchorJointId} is outside ${m.targetPartId}'s skeleton chain.`);
         }
-        const targetJointId = preferredMotionJointId(project, m.targetPartId, m.targetAnchorJointId);
-        const key = `${m.targetPartId}:${targetJointId ?? part.anchorJointId}`;
+        const path = m.targetPathId ? project.paths[m.targetPathId] : undefined;
+        const targetJointId = preferredMotionJointId(project, m.targetPartId, m.targetAnchorJointId ?? path?.targetAnchorJointId);
+        const rootOptions = motionChainRootJointIds(project, m.targetPartId, targetJointId);
+        if (path?.chainRootJointId && !rootOptions.includes(path.chainRootJointId)) add(m.id, `Chain root ${path.chainRootJointId} is outside ${m.targetPartId}'s IK path.`);
+        const rootJointId = path?.chainRootJointId && rootOptions.includes(path.chainRootJointId) ? path.chainRootJointId : part.anchorJointId;
+        const key = `${m.targetPartId}:${rootJointId}:${targetJointId ?? part.anchorJointId}`;
         const owner = drivenTargets.get(key);
         if (owner) {
             add(owner, `${m.id} also drives ${key}; only one mechanism can own a target anchor.`);
@@ -418,11 +424,14 @@ export const motionPreviewForProject = (project: ProjectState, mechanisms: Mecha
             warnings[m.id] = [...(warnings[m.id] ?? []), 'Current mechanism angle is outside the valid motion range.'];
             return;
         }
-        const targetJointId = preferredMotionJointId(project, m.targetPartId, m.targetAnchorJointId);
-        const key = `${m.targetPartId}:${targetJointId ?? project.parts[m.targetPartId].anchorJointId}`;
+        const path = m.targetPathId ? project.paths[m.targetPathId] : undefined;
+        const targetJointId = preferredMotionJointId(project, m.targetPartId, m.targetAnchorJointId ?? path?.targetAnchorJointId);
+        const rootOptions = motionChainRootJointIds(project, m.targetPartId, targetJointId);
+        const rootJointId = path?.chainRootJointId && rootOptions.includes(path.chainRootJointId) ? path.chainRootJointId : undefined;
+        const key = `${m.targetPartId}:${rootJointId ?? project.parts[m.targetPartId].anchorJointId}:${targetJointId ?? project.parts[m.targetPartId].anchorJointId}`;
         if (drivenTargets.has(key)) return;
         drivenTargets.add(key);
-        preview = motionPreviewForTarget(project, m.targetPartId, targetJointId, state.effector, preview, { pinTarget: true });
+        preview = motionPreviewForTarget(project, m.targetPartId, targetJointId, state.effector, preview, { pinTarget: true, rootJointId });
     });
     return { ...preview, warnings };
 };
