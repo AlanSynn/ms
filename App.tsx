@@ -43,7 +43,7 @@ import { createFabricationPackage, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKA
 import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToBoardRaw, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
 import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
-import { fabricablePartOutlinePoints, isUsableContourPoints, partLandmarkLocalPoints, partOutlinePathD, pointInsideOutline } from './utils/partGeometry';
+import { fabricablePartOutlinePoints, isUsableContourPoints, partLandmarkLocalPoints, partOutlineBounds, partOutlinePathD, pointInsideOutline } from './utils/partGeometry';
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT, normalizeCanvasViewport, WEBGL_PIXEL_RATIO_CAP } from './utils/viewport';
 import { VIEWER3D_CAMERA_PRESETS, VIEWER3D_CONTRACT_VERSION, createViewer3DContract, viewer3DLayerDataValue, type Viewer3DCameraPreset } from './utils/viewer3d';
 import { AUTHORABLE_MECHANISM_TYPES, FOUNDRY_PRESETS, MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY, mechanismTemplateLabel } from './utils/mechanismTemplates';
@@ -1817,6 +1817,140 @@ const scaleContour = (points: Point[], factor: number): Point[] => {
     return points.map(point => ({ x: center.x + (point.x - center.x) * factor, y: center.y + (point.y - center.y) * factor }));
 };
 
+const contourPathD = (points: Point[]) => points.length ? `M ${points.map(point => `${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' L ')} Z` : '';
+
+const CutOutlineEditorDialog = ({ part, points, autoPoints, selectedIndex, selectedPoint, setSelectedIndex, updatePoint, updatePointAt, addPoint, removePoint, onUseAuto, onExpand, onShrink, onClose }: {
+    part: BodyPartLayer;
+    points: Point[];
+    autoPoints: Point[];
+    selectedIndex: number;
+    selectedPoint: Point;
+    setSelectedIndex: (index: number) => void;
+    updatePoint: (updates: Partial<Point>) => void;
+    updatePointAt: (index: number, updates: Partial<Point>) => void;
+    addPoint: () => void;
+    removePoint: () => void;
+    onUseAuto: () => void;
+    onExpand: () => void;
+    onShrink: () => void;
+    onClose: () => void;
+}) => {
+    const svgRef = useRef<SVGSVGElement | null>(null);
+    const dragIndexRef = useRef<number | null>(null);
+    const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+    const viewport = useMemo(() => {
+        const merged = [...autoPoints, ...points].filter(point => Number.isFinite(point.x) && Number.isFinite(point.y));
+        if (!merged.length) return { minX: -80, minY: -80, width: 160, height: 160 };
+        const bounds = partOutlineBounds(merged);
+        const pad = Math.max(24, Math.min(64, Math.max(bounds.width, bounds.height) * 0.12));
+        return {
+            minX: bounds.minX - pad,
+            minY: bounds.minY - pad,
+            width: Math.max(90, bounds.width + pad * 2),
+            height: Math.max(90, bounds.height + pad * 2)
+        };
+    }, [autoPoints, points]);
+    const cutMinX = Math.floor(part.bounds.x - 120);
+    const cutMaxX = Math.ceil(part.bounds.x + part.bounds.width + 120);
+    const cutMinY = Math.floor(part.bounds.y - 120);
+    const cutMaxY = Math.ceil(part.bounds.y + part.bounds.height + 120);
+    const pointFromPointer = (event: React.PointerEvent<SVGSVGElement>): Point | undefined => {
+        const rect = svgRef.current?.getBoundingClientRect();
+        if (!rect || rect.width <= 0 || rect.height <= 0) return undefined;
+        return {
+            x: Number((viewport.minX + ((event.clientX - rect.left) / rect.width) * viewport.width).toFixed(1)),
+            y: Number((viewport.minY + ((event.clientY - rect.top) / rect.height) * viewport.height).toFixed(1))
+        };
+    };
+    const movePointFromPointer = (event: React.PointerEvent<SVGSVGElement>, index = selectedIndex) => {
+        if (part.locked || !points.length) return;
+        const point = pointFromPointer(event);
+        if (!point) return;
+        updatePointAt(index, point);
+    };
+    const stopDrag = (event?: React.PointerEvent<SVGSVGElement>) => {
+        if (event && svgRef.current?.hasPointerCapture(event.pointerId)) svgRef.current.releasePointerCapture(event.pointerId);
+        dragIndexRef.current = null;
+        setDraggingIndex(null);
+    };
+    return <div className="modal-backdrop cut-outline-backdrop" role="presentation" onPointerDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+        <section className="modal-sheet cut-outline-dialog" role="dialog" aria-modal="true" aria-labelledby="cut-outline-title" data-testid="cut-outline-dialog">
+            <div className="cut-outline-head">
+                <div>
+                    <div className="section-title">Cut outline canvas</div>
+                    <h3 id="cut-outline-title">Edit {part.name}</h3>
+                    <p>Drag a point, or click the canvas to move the selected point. This exact contour drives 2D preview, 3D plates, and exported cut sheets.</p>
+                </div>
+                <button type="button" className="btn-secondary" data-testid="cut-outline-close" onClick={onClose}>Done</button>
+            </div>
+            <svg
+                ref={svgRef}
+                className="cut-outline-canvas"
+                data-testid="cut-outline-canvas"
+                viewBox={`${viewport.minX} ${viewport.minY} ${viewport.width} ${viewport.height}`}
+                role="img"
+                aria-label="Cut outline editing canvas"
+                onPointerDown={event => {
+                    const target = event.target as Element;
+                    if (target.closest('[data-cut-point]')) return;
+                    movePointFromPointer(event);
+                }}
+                onPointerMove={event => {
+                    const index = dragIndexRef.current;
+                    if (index === null) return;
+                    movePointFromPointer(event, index);
+                }}
+                onPointerUp={stopDrag}
+                onPointerCancel={stopDrag}
+                onPointerLeave={stopDrag}
+            >
+                <defs>
+                    <pattern id={`cut-grid-${part.id}`} width="20" height="20" patternUnits="userSpaceOnUse">
+                        <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#d8dfec" strokeWidth="0.7" opacity="0.9"/>
+                    </pattern>
+                </defs>
+                <rect x={viewport.minX} y={viewport.minY} width={viewport.width} height={viewport.height} fill={`url(#cut-grid-${part.id})`}/>
+                {autoPoints.length >= 3 && <path className="cut-outline-auto" d={contourPathD(autoPoints)}/>}
+                {points.length >= 3 && <path className="cut-outline-user" d={contourPathD(points)}/>}
+                {points.map((point, index) => <circle
+                    key={`${index}-${point.x}-${point.y}`}
+                    data-cut-point="true"
+                    data-testid={`cut-outline-point-${index}`}
+                    className={`cut-outline-point ${index === selectedIndex ? 'active' : ''} ${draggingIndex === index ? 'dragging' : ''}`}
+                    cx={point.x}
+                    cy={point.y}
+                    r={index === selectedIndex ? 5.8 : 4.8}
+                    onPointerDown={event => {
+                        event.stopPropagation();
+                        setSelectedIndex(index);
+                        dragIndexRef.current = index;
+                        setDraggingIndex(index);
+                        svgRef.current?.setPointerCapture(event.pointerId);
+                    }}
+                />)}
+            </svg>
+            <div className="cut-outline-tools">
+                <div className="cut-outline-actions">
+                    <button type="button" data-testid="part-cut-auto" className="btn-secondary" disabled={part.locked} onClick={onUseAuto}>Use joint-chain cut</button>
+                    <button type="button" data-testid="part-cut-expand" className="btn-secondary" disabled={part.locked} onClick={onExpand}>Expand</button>
+                    <button type="button" data-testid="part-cut-shrink" className="btn-secondary" disabled={part.locked} onClick={onShrink}>Shrink</button>
+                </div>
+                <label className={`block text-xs font-black uppercase tracking-wider text-slate-500 ${part.locked ? 'opacity-50' : ''}`}>Cut point<select data-testid="part-cut-point-select" className="field mt-1" disabled={part.locked || !points.length} value={selectedIndex} onChange={event => setSelectedIndex(Number(event.currentTarget.value))}>
+                    {points.map((point, index) => <option key={index} value={index}>{index + 1}: {point.x.toFixed(0)}, {point.y.toFixed(0)}</option>)}
+                </select></label>
+                <div className="grid grid-cols-2 gap-3">
+                    <MiniNumber label="Cut point X" value={selectedPoint.x} min={cutMinX} max={cutMaxX} step={0.5} disabled={part.locked || !points.length} onChange={x => updatePoint({ x })}/>
+                    <MiniNumber label="Cut point Y" value={selectedPoint.y} min={cutMinY} max={cutMaxY} step={0.5} disabled={part.locked || !points.length} onChange={y => updatePoint({ y })}/>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    <button type="button" data-testid="part-cut-add-point" className="btn-secondary" disabled={part.locked || points.length < 2} onClick={addPoint}>Add midpoint</button>
+                    <button type="button" data-testid="part-cut-remove-point" className="btn-secondary" disabled={part.locked || points.length <= 3} onClick={removePoint}>Remove point</button>
+                </div>
+            </div>
+        </section>
+    </div>;
+};
+
 const PartInspector = ({ part, skeleton, dispatch, compact = false }: { part: BodyPartLayer; skeleton?: ProjectState['skeleton']; dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void; compact?: boolean }) => {
     const updateTransform = (updates: Partial<BodyPartLayer['transform']>) => dispatch({ type: 'update_part', partId: part.id, updates: { transform: { ...part.transform, ...updates } } });
     const updateBounds = (updates: Partial<BodyPartLayer['bounds']>) => dispatch({ type: 'update_part', partId: part.id, updates: { bounds: { ...part.bounds, ...updates } } });
@@ -1827,11 +1961,17 @@ const PartInspector = ({ part, skeleton, dispatch, compact = false }: { part: Bo
     const [selectedCutPointIndex, setSelectedCutPointIndex] = useState(0);
     const selectedIndex = editableCutPoints.length ? Math.min(selectedCutPointIndex, editableCutPoints.length - 1) : 0;
     const selectedCutPoint = editableCutPoints[selectedIndex] ?? { x: 0, y: 0 };
+    const [cutEditorOpen, setCutEditorOpen] = useState(false);
     useEffect(() => {
         if (selectedCutPointIndex >= editableCutPoints.length) setSelectedCutPointIndex(Math.max(0, editableCutPoints.length - 1));
     }, [editableCutPoints.length, selectedCutPointIndex]);
     const commitCut = (points: Point[]) => dispatch({ type: 'update_part', partId: part.id, updates: { contourPoints: points, contourSource: 'user' } });
-    const updateCutPoint = (updates: Partial<Point>) => commitCut(editableCutPoints.map((point, index) => index === selectedIndex ? { ...point, ...updates } : point));
+    const updateCutPointAt = (targetIndex: number, updates: Partial<Point>) => commitCut(editableCutPoints.map((point, index) => index === targetIndex ? { ...point, ...updates } : point));
+    const updateCutPoint = (updates: Partial<Point>) => updateCutPointAt(selectedIndex, updates);
+    const openCutEditor = () => {
+        commitCut(editableCutPoints);
+        setCutEditorOpen(true);
+    };
     const addCutPoint = () => {
         if (editableCutPoints.length < 2) return;
         const nextIndex = (selectedIndex + 1) % editableCutPoints.length;
@@ -1847,32 +1987,31 @@ const PartInspector = ({ part, skeleton, dispatch, compact = false }: { part: Bo
         setSelectedCutPointIndex(Math.max(0, selectedIndex - 1));
     };
     const cutSource = part.contourSource === 'user' ? 'user cut' : part.contourSource === 'onnx-mask' ? 'ONNX cut' : part.contourSource === 'imported' ? 'imported cut' : 'auto joint cut';
-    const cutMinX = Math.floor(part.bounds.x - 120);
-    const cutMaxX = Math.ceil(part.bounds.x + part.bounds.width + 120);
-    const cutMinY = Math.floor(part.bounds.y - 120);
-    const cutMaxY = Math.ceil(part.bounds.y + part.bounds.height + 120);
     return <div className={`${compact ? 'mt-3' : 'mt-4'} space-y-3`}>
         <Toggle label="Visible" checked={part.visible} disabled={part.locked} onChange={visible => dispatch({ type: 'update_part', partId: part.id, updates: { visible } })}/>
         <Toggle label="Locked" checked={part.locked} onChange={locked => dispatch({ type: 'update_part', partId: part.id, updates: { locked } })}/>
         <div className="part-art-controls" data-testid="part-cut-controls">
             <div className="section-title">Cut outline</div>
-            <p className="mt-1 text-xs font-bold text-slate-500">Edit the exact fabrication contour used by 2D preview, 3D plates, and exported cut sheets.</p>
-            <div className="mt-2 text-xs font-black uppercase tracking-wider text-slate-500" data-testid="part-cut-summary">{cutSource} · {editableCutPoints.length} pts · editing point {selectedIndex + 1}</div>
-            <div className="mt-3 flex flex-wrap gap-2">
-                <button type="button" data-testid="part-cut-bake" className="btn-secondary" disabled={part.locked} onClick={() => commitCut(editableCutPoints)}>Edit current cut</button>
-                <button type="button" data-testid="part-cut-auto" className="btn-secondary" disabled={part.locked} onClick={() => dispatch({ type: 'update_part', partId: part.id, updates: { contourPoints: autoCutPoints, contourSource: 'user' } })}>Use joint-chain cut</button>
-                <button type="button" data-testid="part-cut-expand" className="btn-secondary" disabled={part.locked} onClick={() => commitCut(scaleContour(editableCutPoints, 1.06))}>Expand</button>
-                <button type="button" data-testid="part-cut-shrink" className="btn-secondary" disabled={part.locked} onClick={() => commitCut(scaleContour(editableCutPoints, 0.94))}>Shrink</button>
-            </div>
-            <label className={`mt-3 block text-xs font-black uppercase tracking-wider text-slate-500 ${part.locked ? 'opacity-50' : ''}`}>Cut point<select data-testid="part-cut-point-select" className="field mt-1" disabled={part.locked || !editableCutPoints.length} value={selectedIndex} onChange={event => setSelectedCutPointIndex(Number(event.currentTarget.value))}>
-                {editableCutPoints.map((point, index) => <option key={index} value={index}>{index + 1}: {point.x.toFixed(0)}, {point.y.toFixed(0)}</option>)}
-            </select></label>
-            <div className="mt-3 grid grid-cols-2 gap-3">
-                <MiniNumber label="Cut point X" value={selectedCutPoint.x} min={cutMinX} max={cutMaxX} step={0.5} disabled={part.locked || !editableCutPoints.length} onChange={x => updateCutPoint({ x })}/>
-                <MiniNumber label="Cut point Y" value={selectedCutPoint.y} min={cutMinY} max={cutMaxY} step={0.5} disabled={part.locked || !editableCutPoints.length} onChange={y => updateCutPoint({ y })}/>
-            </div>
-            <div className="mt-3 flex gap-2"><button type="button" data-testid="part-cut-add-point" className="btn-secondary" disabled={part.locked || editableCutPoints.length < 2} onClick={addCutPoint}>Add midpoint</button><button type="button" data-testid="part-cut-remove-point" className="btn-secondary" disabled={part.locked || editableCutPoints.length <= 3} onClick={removeCutPoint}>Remove point</button></div>
+            <p className="mt-1 text-xs font-bold text-slate-500">Open a small canvas overlay to directly reshape the fabrication contour.</p>
+            <div className="mt-2 text-xs font-black uppercase tracking-wider text-slate-500" data-testid="part-cut-summary">{cutSource} · {editableCutPoints.length} pts · selected {selectedIndex + 1}</div>
+            <button type="button" data-testid="part-cut-bake" className="btn-secondary mt-3" disabled={part.locked} onClick={openCutEditor}>Edit current cut</button>
         </div>
+        {cutEditorOpen && <CutOutlineEditorDialog
+            part={part}
+            points={editableCutPoints}
+            autoPoints={autoCutPoints}
+            selectedIndex={selectedIndex}
+            selectedPoint={selectedCutPoint}
+            setSelectedIndex={setSelectedCutPointIndex}
+            updatePoint={updateCutPoint}
+            updatePointAt={updateCutPointAt}
+            addPoint={addCutPoint}
+            removePoint={removeCutPoint}
+            onUseAuto={() => commitCut(autoCutPoints)}
+            onExpand={() => commitCut(scaleContour(editableCutPoints, 1.06))}
+            onShrink={() => commitCut(scaleContour(editableCutPoints, 0.94))}
+            onClose={() => setCutEditorOpen(false)}
+        />}
         <div className="part-art-controls" data-testid="part-art-controls">
             <div className="section-title">Artwork surface</div>
             <p className="mt-1 text-xs font-bold text-slate-500">Tune the image/decal area that is printed on top of the cut plate.</p>

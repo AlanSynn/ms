@@ -44,13 +44,21 @@ test('Character part cut outline editor bakes and edits contour points', async (
   await expect(page.getByTestId('part-cut-summary')).toContainText(/cut .* pts/i);
 
   await page.getByTestId('part-cut-bake').click();
+  const cutDialog = page.getByTestId('cut-outline-dialog');
+  await expect(cutDialog).toBeVisible();
   await expect(page.getByTestId('part-cut-summary')).toContainText('user cut');
-  const xInput = page.getByLabel('Cut point X number');
+  const xInput = cutDialog.getByLabel('Cut point X number');
   const beforeX = Number(await xInput.inputValue());
   await xInput.fill(String(beforeX + 6));
   await expect(xInput).toHaveValue(String(beforeX + 6));
-  await page.getByTestId('part-cut-add-point').click();
+  await cutDialog.getByTestId('part-cut-add-point').click();
   await expect(page.getByTestId('part-cut-summary')).toContainText('user cut');
+  const canvas = page.getByTestId('cut-outline-canvas');
+  const afterInputEdit = Number(await xInput.inputValue());
+  await canvas.click({ position: { x: 260, y: 140 } });
+  await expect.poll(async () => Number(await xInput.inputValue()), { message: 'canvas click moves the selected cut point' }).not.toBe(afterInputEdit);
+  await cutDialog.getByRole('button', { name: 'Done' }).click();
+  await expect(cutDialog).toHaveCount(0);
 
   const puppet = page.getByTestId('character-three-puppet-state');
   await expect(puppet).toHaveAttribute('data-part-outline-mode', 'model-or-user-contour-with-fabrication-fallback');

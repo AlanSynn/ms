@@ -148,6 +148,19 @@
       .modal-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 1.25rem; background: rgba(15,23,42,.28); backdrop-filter: blur(10px); }
       .modal-sheet { width: min(100%, 68rem); max-height: min(88vh, 56rem); overflow: auto; border: 1px solid var(--ms-line); border-radius: 2rem; background: rgba(255,255,255,.98); box-shadow: 0 40px 120px rgba(8,10,18,.20); padding: 1.5rem; color: var(--ms-text); }
       .modal-sheet h3 { margin: .25rem 0 0; font-size: clamp(1.6rem, 3vw, 2.4rem); line-height: 1; letter-spacing: -.055em; font-weight: 950; }
+      .cut-outline-backdrop { z-index: 95; background: rgba(248,250,252,.52); place-items: center; }
+      .cut-outline-dialog { width: min(94vw, 36rem); max-height: min(88vh, 48rem); display: grid; gap: .85rem; padding: 1rem; border-radius: 1.45rem; }
+      .cut-outline-dialog h3 { margin-top: .2rem; font-size: clamp(1.45rem, 4vw, 2.15rem); }
+      .cut-outline-dialog p { margin: .35rem 0 0; color: var(--ms-muted); font-size: .82rem; line-height: 1.35; font-weight: 750; }
+      .cut-outline-head { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; }
+      .cut-outline-canvas { width: 100%; height: min(52vh, 22rem); border: 1px solid var(--ms-line); border-radius: 1.1rem; background: #fff; box-shadow: inset 0 0 0 1px rgba(139,92,246,.08); touch-action: none; cursor: crosshair; user-select: none; }
+      .cut-outline-auto { fill: none; stroke: #94a3b8; stroke-width: 2; stroke-dasharray: 7 6; opacity: .72; }
+      .cut-outline-user { fill: rgba(139,92,246,.08); stroke: var(--ms-accent); stroke-width: 2.5; }
+      .cut-outline-point { fill: white; stroke: var(--ms-accent); stroke-width: 2.2; cursor: grab; filter: drop-shadow(0 4px 10px rgba(139,92,246,.18)); }
+      .cut-outline-point.active { fill: var(--ms-accent); stroke: white; stroke-width: 2.6; }
+      .cut-outline-point.dragging { cursor: grabbing; }
+      .cut-outline-tools { display: grid; gap: .72rem; border: 1px solid var(--ms-line); border-radius: 1.1rem; background: var(--ms-bg-soft); padding: .75rem; }
+      .cut-outline-actions { display: flex; flex-wrap: wrap; gap: .45rem; }
       .welcome-backdrop { background: rgba(248,250,252,.46); backdrop-filter: blur(14px) saturate(1.05); }
       .welcome-dialog { width: min(100%, 74rem); max-height: min(91vh, 52rem); padding: 1rem; border-color: rgba(139,92,246,.24); background: rgba(255,255,255,.96); }
       .splash-dialog { width: min(92vw, 22rem); max-height: none; display: grid; justify-items: center; gap: .85rem; padding: 1.35rem; text-align: center; overflow: hidden; }
