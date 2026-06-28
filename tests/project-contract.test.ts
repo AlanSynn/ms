@@ -17,6 +17,7 @@ import { MECHANISM_FEATURE_REGISTRY, mechanismFeature, validateMechanismFeatureR
 import { buildMechanismSnapshot, buildMechanismSnapshots } from '../utils/mechanismSnapshot';
 import { createMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext } from '../utils/mechanismPreview';
 import { WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
+import { APP_COMMANDS, APP_MENU_GROUPS, commandById, commandIdForKeyboardEvent, validateAppCommandRegistry } from '../utils/appCommands';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_KERNEL_IMPORT, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, physicsKernelCapability, runRapierFrictionProbe } from '../utils/physicsKernel';
 import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, mechanismTemplateLabel } from '../utils/mechanismTemplates';
 import { MECHANISM_TYPES as SANITIZE_MECHANISM_TYPES, sanitizeMechanismRuntime } from '../utils/sanitize';
@@ -68,7 +69,8 @@ const brandStaticFiles = [
   'docs/prd/canva-video-editor-workspace-plan.md',
   'docs/prd/toon-25d-main-3d-unlock-plan.md',
   'docs/subsystem-governance-and-mechanism-contracts.md',
-  'docs/subsystem-governance-execution-log.md'
+  'docs/subsystem-governance-execution-log.md',
+  'docs/app-command-shortcuts.md'
 ];
 const brandStaticText = brandStaticFiles.map(file => readFileSync(join(process.cwd(), file), 'utf8')).join('\n');
 const subsystemGovernanceContract = readFileSync(join(process.cwd(), 'docs', 'subsystem-governance-and-mechanism-contracts.md'), 'utf8');
@@ -83,6 +85,25 @@ assert(readFileSync(join(process.cwd(), 'index.html'), 'utf8').includes('<title>
 assert(readFileSync(join(process.cwd(), 'vite.config.ts'), 'utf8').includes("base: isTauri ? './' : '/'"), 'web deployment base path uses root');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
 assert(readFileSync(join(process.cwd(), 'App.tsx'), 'utf8').includes('motionsmith.hideWelcome'), 'local storage namespace uses the MotionSmith slug');
+assert.deepEqual(validateAppCommandRegistry(), [], 'application command registry is internally consistent');
+const commandIds = new Set(APP_COMMANDS.map(command => command.id));
+assert.equal(commandIds.size, APP_COMMANDS.length, 'application command ids are unique');
+assert(APP_MENU_GROUPS.every(group => group.commandIds.length > 0), 'each app menu group has commands');
+assert(APP_MENU_GROUPS.flatMap(group => group.commandIds).every(id => commandIds.has(id)), 'all menu command ids resolve to registry commands');
+assert(APP_COMMANDS.every(command => APP_MENU_GROUPS.some(group => group.commandIds.some(id => id === command.id))), 'every command is rendered by a menu group');
+assert(APP_COMMANDS.some(command => command.id === 'edit.undo' && command.shortcuts?.includes('Mod+Z')), 'undo is a real registered shortcut command');
+assert(APP_COMMANDS.some(command => command.id === 'edit.redo' && command.shortcuts?.includes('Mod+Shift+Z')), 'redo is a real registered shortcut command');
+assert(APP_COMMANDS.some(command => command.id === 'help.shortcuts' && command.shortcuts?.includes('?')), 'shortcut help command is globally reachable');
+assert.equal(commandIdForKeyboardEvent({ key: '=', ctrlKey: true, metaKey: false, shiftKey: false, altKey: false }), 'view.zoomIn', 'zoom-in shortcut handles unshifted equals key');
+assert.equal(commandIdForKeyboardEvent({ key: '+', ctrlKey: true, metaKey: false, shiftKey: true, altKey: false }), 'view.zoomIn', 'zoom-in shortcut handles shifted plus key');
+assert.equal(commandIdForKeyboardEvent({ key: '=', ctrlKey: true, metaKey: false, shiftKey: true, altKey: false }), 'view.zoomIn', 'zoom-in shortcut handles Playwright/browser shifted equals encoding');
+assert.equal(commandIdForKeyboardEvent({ key: '5', ctrlKey: false, metaKey: false, shiftKey: false, altKey: true }), 'stage.blueprint', 'stage shortcuts resolve through the registry');
+assert(!APP_COMMANDS.some(command => /exit|updates/i.test(command.label)), 'browser menu omits old placeholder Exit and Check for Updates items');
+APP_MENU_GROUPS.forEach(group => group.commandIds.forEach(id => assert.equal(commandById(id).menu, group.id, `${id} belongs to its declared menu group`)));
+const appCommandSource = readFileSync(join(process.cwd(), 'App.tsx'), 'utf8');
+assert(appCommandSource.includes('satisfies Record<AppCommandId, () => void>'), 'App command handlers are type-exhaustive against AppCommandId');
+APP_COMMANDS.forEach(command => assert(appCommandSource.includes(`'${command.id}'`), `${command.id} has an App.tsx handler entry`));
+assert(readFileSync(join(process.cwd(), 'docs', 'app-command-shortcuts.md'), 'utf8').includes('utils/appCommands.ts'), 'command registry documentation points to the executable registry');
 const packageJson = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8'));
 const physicsKernel = physicsKernelCapability();
 const rapierProbe = await runRapierFrictionProbe({ frictionCoefficient: 0.74, steps: 150 });

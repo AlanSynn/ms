@@ -488,7 +488,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   expect(svgText).toContain('Sample articulated character');
   metadata.recipes.forEach((recipe: { mechanismId: string }) => expect(svgText).toContain(recipe.mechanismId));
 
-  await page.getByRole('button', { name: /Options/i }).click();
+  await page.getByTestId('workspace-steps').getByRole('button', { name: 'Options' }).click();
   await expect(page.getByRole('heading', { name: 'Options' })).toBeVisible();
   await expect(page.getByTestId('options-fabrication')).toBeVisible();
   await expect(page.getByLabel('Export workflow')).toHaveValue('both');
@@ -1906,7 +1906,7 @@ test('Command menu and shared canvas zoom persist across workflow stages', async
     dialogMessage = dialog.message();
     await dialog.dismiss();
   });
-  await page.getByRole('button', { name: 'New', exact: true }).click();
+  await page.getByRole('button', { name: 'New Project', exact: true }).click();
   expect(dialogMessage).toContain('Start a new project');
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
   await expect(page.getByTestId('status-bar')).toContainText('New project cancelled');
@@ -1915,9 +1915,49 @@ test('Command menu and shared canvas zoom persist across workflow stages', async
   await page.getByRole('button', { name: 'Recover Autosave…' }).click();
   await expect(page.getByTestId('status-bar')).toContainText(/No autosave snapshot found|Recovered autosave snapshot/);
 
+  await page.getByRole('button', { name: /Options/i }).click();
+  await expect(page.getByRole('heading', { name: 'Options' })).toBeVisible();
+  await page.getByLabel('Show toolbar').uncheck();
+  await expect(page.getByTestId('quick-toolbar')).toHaveCount(0);
+  await page.getByLabel('Show toolbar').check();
+  await expect(page.getByTestId('quick-toolbar')).toBeVisible();
+
   await page.getByTestId('top-command-bar').getByText('Edit', { exact: true }).click();
   await page.getByRole('button', { name: 'Back (Undo)' }).click();
-  await expect(page.getByTestId('status-bar')).toContainText('Undo is not available in the browser build yet.');
+  await expect(page.getByTestId('status-bar')).toContainText('Undo applied');
+  await expect(page.getByLabel('Show toolbar')).not.toBeChecked();
+  await expect(page.getByTestId('quick-toolbar')).toHaveCount(0);
+  await page.getByTestId('top-command-bar').getByText('Edit', { exact: true }).click();
+  await page.getByRole('button', { name: 'Forward (Redo)' }).click();
+  await expect(page.getByTestId('status-bar')).toContainText('Redo applied');
+  await expect(page.getByLabel('Show toolbar')).toBeChecked();
+  await expect(page.getByTestId('quick-toolbar')).toBeVisible();
+
+  await page.getByTestId('workspace-steps').getByRole('button', { name: 'Mechanism Design' }).click();
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+  await expect(page.getByTestId('canvas-zoom-readout')).toBeVisible();
+
+  await page.getByTestId('top-command-bar').getByText('Help', { exact: true }).click();
+  await page.getByRole('button', { name: 'Keyboard Shortcuts' }).click();
+  await expect(page.getByTestId('shortcut-help-dialog')).toBeVisible();
+  await expect(page.getByTestId('shortcut-help-dialog')).toContainText('New Project');
+  await expect(page.getByTestId('shortcut-help-dialog')).toContainText('Back (Undo)');
+  const zoomBeforeModalShortcuts = await page.getByTestId('canvas-zoom-readout').textContent();
+  await page.keyboard.press('Alt+5');
+  await page.keyboard.press('Control+=');
+  await expect(page.getByTestId('shortcut-help-dialog')).toBeVisible();
+  await expect(page.getByTestId('canvas-zoom-readout')).toHaveText(zoomBeforeModalShortcuts ?? '');
+  await page.getByTestId('shortcut-help-dialog').getByRole('button', { name: 'Close' }).click();
+  await expect(page.getByTestId('shortcut-help-dialog')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+
+  const zoomBeforeShiftPlus = await page.getByTestId('canvas-zoom-readout').textContent();
+  await page.keyboard.press('Control+Shift+=');
+  await expect.poll(async () => page.getByTestId('canvas-zoom-readout').textContent(), { message: 'shifted plus zoom shortcut updates the shared canvas' }).not.toBe(zoomBeforeShiftPlus);
+  await page.keyboard.press('Control+=');
+  await expect(page.getByTestId('status-bar')).toContainText(/Canvas zoom/);
+  await page.keyboard.press('Alt+5');
+  await expect(page.getByRole('heading', { name: 'Blueprint' })).toBeVisible();
 });
 
 test('Detached visible mechanisms block browser blueprint generation', async ({ page }) => {

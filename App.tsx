@@ -16,7 +16,8 @@ import {
     PhysicalKitSettings,
     Point,
     ProjectMotionPath,
-    ProjectState
+    ProjectState,
+    ProjectAction
 } from './types';
 import { gearPathD, generateDXF, generateSVG } from './utils/exporter';
 import { animationDeltaRadians, calculateLinkage, camProfileScale, generateCurvePoints, gearPairOutputRatio, gearTrainCenters, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from './utils/kinematics';
@@ -46,6 +47,7 @@ import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, mo
 import { fabricablePartOutlinePoints, isUsableContourPoints, partLandmarkLocalPoints, partOutlineBounds, partOutlinePathD, pointInsideOutline } from './utils/partGeometry';
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT, normalizeCanvasViewport, WEBGL_PIXEL_RATIO_CAP } from './utils/viewport';
 import { VIEWER3D_CAMERA_PRESETS, VIEWER3D_CONTRACT_VERSION, createViewer3DContract, viewer3DLayerDataValue, type Viewer3DCameraPreset } from './utils/viewer3d';
+import { APP_MENU_GROUPS, commandById, commandIdForKeyboardEvent, commandShortcutListText, commandShortcutText, type AppCommandId } from './utils/appCommands';
 import { AUTHORABLE_MECHANISM_TYPES, FOUNDRY_PRESETS, MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY, mechanismTemplateLabel } from './utils/mechanismTemplates';
 import { createMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext, fitPathToBox, fitPointsToBox, pointsToSvgPath } from './utils/mechanismPreview';
 import { AlertCircle, Boxes, BrainCircuit, Camera, CheckCircle2, Download, FileJson, Loader2, PenLine, Play, Plus, Route, Save, Settings, Sparkles, Trash2, Upload, UserRound, Wrench } from 'lucide-react';
@@ -231,11 +233,27 @@ const OnnxCacheStatusPill = ({ status, onDownload }: { status: WebOnnxCacheStatu
     return <button type="button" className={`status-cache-pill ${status.stage}`} data-testid="onnx-cache-status" disabled={busy || status.stage === 'cached'} onClick={onDownload} title={status.error ?? 'Cache ONNX model for faster image imports'}>{label}</button>;
 };
 
+const PROJECT_HISTORY_LIMIT = 80;
+type ProjectHistoryState = { present: ProjectState; past: ProjectState[]; future: ProjectState[] };
+const isUndoableProjectAction = (action: ProjectAction) => !['set_processing', 'select_part', 'set_export', 'set_foundry_export'].includes(action.type);
+const projectFileStem = (name: string) => (name.trim() || 'MotionSmith-project').replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '') || 'MotionSmith-project';
+const isTypingShortcutTarget = (target: EventTarget | null) => target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+
 const App: React.FC = () => {
-    const [project, setProject] = useState<ProjectState>(() => {
+    const [projectHistory, setProjectHistory] = useState<ProjectHistoryState>(() => {
         projectSelfCheck();
-        return createSampleProject();
+        return { present: createSampleProject(), past: [], future: [] };
     });
+    const project = projectHistory.present;
+    const setProject = (update: React.SetStateAction<ProjectState>, options: { history?: boolean; resetHistory?: boolean } = {}) => {
+        setProjectHistory(prev => {
+            const next = typeof update === 'function' ? (update as (previous: ProjectState) => ProjectState)(prev.present) : update;
+            if (next === prev.present) return prev;
+            if (options.resetHistory) return { present: next, past: [], future: [] };
+            if (options.history) return { present: next, past: [...prev.past.slice(-(PROJECT_HISTORY_LIMIT - 1)), prev.present], future: [] };
+            return { ...prev, present: next };
+        });
+    };
     const [stage, setStage] = useState<AppStage>('character');
     const [showWelcome, setShowWelcome] = useState(() => !shouldHideWelcome());
     const [showGettingStarted, setShowGettingStarted] = useState(false);
@@ -246,6 +264,8 @@ const App: React.FC = () => {
     const [showTracking, setShowTracking] = useState(false);
     const [showCamera, setShowCamera] = useState(false);
     const [showRecommendations, setShowRecommendations] = useState(false);
+    const [showShortcuts, setShowShortcuts] = useState(false);
+    const modalOpen = showWelcome || showGettingStarted || showShortcuts;
     const [foundry, setFoundry] = useState<FoundryState>(() => createDefaultMechanism('4bar', 'foundry-preview'));
     const [pendingCharacter, setPendingCharacter] = useState<{ project: ProjectState; summary: string; returnStage: AppStage } | null>(null);
     const [replaceCharacter, setReplaceCharacter] = useState(false);
@@ -256,6 +276,7 @@ const App: React.FC = () => {
     const projectInputRef = useRef<HTMLInputElement>(null);
     const latestProjectRef = useRef<ProjectState | null>(null);
     const appShellRef = useRef<HTMLDivElement>(null);
+    const commandHandlersRef = useRef<Record<AppCommandId, () => void> | null>(null);
 
     useEffect(() => {
         document.body.classList.add('app-ready');
@@ -274,7 +295,7 @@ const App: React.FC = () => {
         setCommandStatus(result.stage === 'cached' ? 'AI pose model cached for image imports' : `AI model cache failed: ${result.error ?? 'download error'}`);
     };
 
-    const dispatch = (action: Parameters<typeof applyProjectAction>[1]) => setProject(prev => applyProjectAction(prev, action));
+    const dispatch = (action: ProjectAction) => setProject(prev => applyProjectAction(prev, action), { history: isUndoableProjectAction(action) });
     const goStage = (target: AppStage) => {
         const gate = handoffGate(project, target);
         if (!gate.ok && 'recoveryStage' in gate) {
@@ -331,7 +352,7 @@ const App: React.FC = () => {
                 mechanisms: next.mechanisms,
                 selectedMechanismId: prev.selectedMechanismId ?? next.mechanisms[0]?.id
             });
-        });
+        }, { history: true });
     };
 
     const updateMechanism = (id: string, updates: Partial<MechanismConfig>) => {
@@ -485,7 +506,7 @@ const App: React.FC = () => {
     const importProject = async (file: File) => {
         try {
             const raw = JSON.parse(await file.text());
-            setProject(loadProjectSnapshot(raw));
+            setProject(loadProjectSnapshot(raw), { resetHistory: true });
             setCommandStatus(`Loaded project ${file.name}`);
             setShowWelcome(false);
             setStage('path');
@@ -591,17 +612,21 @@ const App: React.FC = () => {
         downloadText(`mechanisms-${Date.now()}.dxf`, generateDXF(mechanismConfig, angle), 'application/dxf');
         setCommandStatus('Exported mechanism DXF');
     };
-    const saveProject = () => {
-        downloadText(`${project.metadata.name.replaceAll(' ', '-')}.motionsmith.json`, serializeProject(project));
-        setCommandStatus('Saved project snapshot');
+    const downloadProjectSnapshot = (suffix: string, status: string) => {
+        const stem = projectFileStem(project.metadata.name);
+        downloadText(`${stem}${suffix}.motionsmith.json`, serializeProject(project));
+        setCommandStatus(status);
     };
+    const saveProject = () => downloadProjectSnapshot('', 'Saved project snapshot');
+    const saveProjectAs = () => downloadProjectSnapshot(`-${Date.now()}`, 'Saved timestamped project snapshot');
+    const exportProjectCopy = () => downloadProjectSnapshot('-copy', 'Exported portable project copy');
     const newProject = () => {
         if (projectHasUserWork(project) && !window.confirm('Start a new project? Unsaved paths, mechanisms, and blueprint work will be discarded.')) {
             setCommandStatus('New project cancelled');
             return;
         }
         setPendingCharacter(null);
-        setProject(createSampleProject());
+        setProject(createSampleProject(), { resetHistory: true });
         setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
         setCommandStatus('Started a fresh template project');
         setShowWelcome(!shouldHideWelcome());
@@ -615,7 +640,7 @@ const App: React.FC = () => {
                 setCommandStatus('No autosave snapshot found');
                 return;
             }
-            setProject(loadProjectSnapshot(JSON.parse(stored.value)));
+            setProject(loadProjectSnapshot(JSON.parse(stored.value)), { resetHistory: true });
             if (stored.fromLegacy) migrateStorageValue(STORAGE_KEYS.autosave, stored.value);
             setCommandStatus('Recovered autosave snapshot');
             setStage('path');
@@ -672,10 +697,73 @@ const App: React.FC = () => {
         setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
         setCommandStatus('Canvas fitted to sheet');
     };
-    const disabledCommand = (reason: string) => setCommandStatus(reason);
+    const undoProject = () => {
+        if (!projectHistory.past.length) {
+            setCommandStatus('Nothing to undo');
+            return;
+        }
+        setProjectHistory(prev => {
+            if (!prev.past.length) return prev;
+            const previous = prev.past[prev.past.length - 1];
+            return { present: previous, past: prev.past.slice(0, -1), future: [prev.present, ...prev.future].slice(0, PROJECT_HISTORY_LIMIT) };
+        });
+        setCommandStatus('Undo applied');
+    };
+    const redoProject = () => {
+        if (!projectHistory.future.length) {
+            setCommandStatus('Nothing to redo');
+            return;
+        }
+        setProjectHistory(prev => {
+            if (!prev.future.length) return prev;
+            const [next, ...future] = prev.future;
+            return { present: next, past: [...prev.past.slice(-(PROJECT_HISTORY_LIMIT - 1)), prev.present], future };
+        });
+        setCommandStatus('Redo applied');
+    };
+    const aboutMotionSmith = () => setCommandStatus('MotionSmith web port · local ONNX, shared command registry, blueprint export.');
+    const commandHandlers = {
+        'project.new': newProject,
+        'project.open': () => projectInputRef.current?.click(),
+        'project.recoverAutosave': recoverAutosave,
+        'project.save': saveProject,
+        'project.saveAs': saveProjectAs,
+        'project.exportCopy': exportProjectCopy,
+        'project.exportBlueprint': () => goStage('blueprint'),
+        'edit.undo': undoProject,
+        'edit.redo': redoProject,
+        'view.zoomIn': () => zoomCanvas(1.2),
+        'view.zoomOut': () => zoomCanvas(1 / 1.2),
+        'view.fit': fitCanvas,
+        'view.reset': fitCanvas,
+        'workspace.saveLayout': saveWorkspaceLayout,
+        'workspace.restoreLayout': restoreWorkspaceLayout,
+        'workspace.resetLayout': resetWorkspaceLayout,
+        'stage.character': () => goStage('character'),
+        'stage.path': () => goStage('path'),
+        'stage.foundry': () => goStage('foundry'),
+        'stage.design': () => goStage('design'),
+        'stage.blueprint': () => goStage('blueprint'),
+        'stage.assembly': () => goStage('assembly'),
+        'options.preferences': () => goStage('options'),
+        'help.shortcuts': () => setShowShortcuts(true),
+        'help.about': aboutMotionSmith
+    } satisfies Record<AppCommandId, () => void>;
+    commandHandlersRef.current = commandHandlers;
+    useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (modalOpen) return;
+            if (isTypingShortcutTarget(event.target)) return;
+            const commandId = commandIdForKeyboardEvent(event);
+            if (!commandId) return;
+            event.preventDefault();
+            commandHandlersRef.current?.[commandId]?.();
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [modalOpen]);
     const themeClass = project.settings.theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-950';
     const editorStage: AppStage = stage;
-    const modalOpen = showWelcome || showGettingStarted;
     const closeWelcome = (hideNextTime = false) => {
         if (hideNextTime) localStorage.setItem(STORAGE_KEYS.hideWelcome, '1');
         setShowWelcome(false);
@@ -727,21 +815,7 @@ const App: React.FC = () => {
                             </div>
                         </div>
                         <div className="flex flex-col items-end gap-2">
-                            <TopCommandBar
-                                onNew={newProject}
-                                onLoad={() => projectInputRef.current?.click()}
-                                onRecoverAutosave={recoverAutosave}
-                                onSave={saveProject}
-                                onExport={() => goStage('blueprint')}
-                                onZoomIn={() => zoomCanvas(1.2)}
-                                onZoomOut={() => zoomCanvas(1 / 1.2)}
-                                onFit={fitCanvas}
-                                onSaveWorkspace={saveWorkspaceLayout}
-                                onRestoreWorkspace={restoreWorkspaceLayout}
-                                onResetWorkspace={resetWorkspaceLayout}
-                                onOptions={() => goStage('options')}
-                                onDisabled={disabledCommand}
-                            />
+                            <TopCommandBar commandHandlers={commandHandlers} />
                             {project.settings.toolbarVisible && <div className="flex gap-2" data-testid="quick-toolbar">
                                 <label className="btn-secondary cursor-pointer"><Upload size={16}/> Import<input hidden type="file" accept="application/json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/></label>
                                 <button className="btn-secondary" onClick={saveProject}><Save size={16}/> Save</button>
@@ -752,7 +826,7 @@ const App: React.FC = () => {
                     <input ref={projectInputRef} data-testid="project-file-input" hidden type="file" accept="application/json,.motionsmith.json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/>
 
                     <div className="stage-body editor-workbench relative min-h-0 flex-1 overflow-hidden p-7" data-testid="shared-workbench">
-                        {editorStage === 'character' && <CharacterSelection project={project} dispatch={dispatch} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onOpenGettingStarted={() => setShowGettingStarted(true)} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project); setPendingCharacter(null); setShowWelcome(false); setShowGettingStarted(false); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} viewport={canvasViewport} setViewport={setCanvasViewport} />}
+                        {editorStage === 'character' && <CharacterSelection project={project} dispatch={dispatch} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onOpenGettingStarted={() => setShowGettingStarted(true)} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project, { resetHistory: true }); setPendingCharacter(null); setShowWelcome(false); setShowGettingStarted(false); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {editorStage === 'path' && <PathEditor project={project} sortedParts={sortedParts} selectedPart={selectedPart} selectedPath={selectedPath} drawMode={drawMode} setDrawMode={setDrawMode} dispatch={dispatch} setPathPoints={setPathPoints} openTracking={() => setShowTracking(true)} isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} onNext={() => goStage('foundry')} goStage={goStage} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {editorStage === 'foundry' && <MechanismFoundry project={project} foundry={foundry} setFoundry={setFoundry} selectedPart={selectedPart} selectedPath={selectedPath} goStage={goStage} onExport={(pkg) => {
                             const existingTarget = project.mechanisms.find(m =>
@@ -791,7 +865,8 @@ const App: React.FC = () => {
                 </section>
             </div>
             {showWelcome && <WelcomeDialog onClose={closeWelcome} />}
-            {!showWelcome && showGettingStarted && <GettingStartedDialog starterTemplates={STARTER_IMAGE_TEMPLATES} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onStarterImage={template => { setShowGettingStarted(false); loadStarterImage(template); }} onSample={() => { setPendingCharacter(null); setProject(createSampleProject()); setShowWelcome(false); setShowGettingStarted(false); setStage('path'); }} onPackage={files => { setShowGettingStarted(false); importCharacterPackage(files); }} onProcess={file => { setShowGettingStarted(false); runWebOnnx(file); }} onCamera={() => { setShowGettingStarted(false); setShowCamera(true); }} onImport={file => { setShowGettingStarted(false); importProject(file); }} onClose={closeGettingStarted} />}
+            {!showWelcome && showGettingStarted && <GettingStartedDialog starterTemplates={STARTER_IMAGE_TEMPLATES} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onStarterImage={template => { setShowGettingStarted(false); loadStarterImage(template); }} onSample={() => { setPendingCharacter(null); setProject(createSampleProject(), { resetHistory: true }); setShowWelcome(false); setShowGettingStarted(false); setStage('path'); }} onPackage={files => { setShowGettingStarted(false); importCharacterPackage(files); }} onProcess={file => { setShowGettingStarted(false); runWebOnnx(file); }} onCamera={() => { setShowGettingStarted(false); setShowCamera(true); }} onImport={file => { setShowGettingStarted(false); importProject(file); }} onClose={closeGettingStarted} />}
+            {showShortcuts && <ShortcutHelpDialog onClose={() => setShowShortcuts(false)} />}
             <CameraCaptureDialog isOpen={showCamera} onClose={() => setShowCamera(false)} onCapture={file => { setShowCamera(false); runWebOnnx(file); }} />
             <MechanismRecommendationSheet isOpen={showRecommendations} project={project} selectedPart={selectedPart} selectedPath={selectedPath} onClose={() => setShowRecommendations(false)} onApply={mechanism => { dispatch({ type: 'upsert_mechanism', mechanism }); setShowRecommendations(false); setStage('design'); }} />
             <TrackingModal isOpen={showTracking} onClose={() => setShowTracking(false)} onTransfer={path => { setPathPoints(path, 'tracked'); setShowTracking(false); setStage('path'); }} />
@@ -813,64 +888,61 @@ const WorkflowRail = ({ stage, goStage }: { stage: AppStage; goStage: (stage: Ap
     </nav>
 );
 
-const TopCommandBar = ({ onNew, onLoad, onRecoverAutosave, onSave, onExport, onZoomIn, onZoomOut, onFit, onSaveWorkspace, onRestoreWorkspace, onResetWorkspace, onOptions, onDisabled }: {
-    onNew: () => void;
-    onLoad: () => void;
-    onRecoverAutosave: () => void;
-    onSave: () => void;
-    onExport: () => void;
-    onZoomIn: () => void;
-    onZoomOut: () => void;
-    onFit: () => void;
-    onSaveWorkspace: () => void;
-    onRestoreWorkspace: () => void;
-    onResetWorkspace: () => void;
-    onOptions: () => void;
-    onDisabled: (reason: string) => void;
-}) => {
-    const unavailable = (label: string) => () => onDisabled(`${label} is not available in the browser build yet.`);
+const TopCommandBar = ({ commandHandlers }: { commandHandlers: Record<AppCommandId, () => void> }) => {
     const [openMenu, setOpenMenu] = useState<string | null>(null);
     const toggleMenu = (id: string) => (event: React.MouseEvent) => {
         event.preventDefault();
         setOpenMenu(openMenu === id ? null : id);
     };
-    const runCommand = (fn: () => void) => () => {
-        fn();
+    const runCommand = (id: AppCommandId) => () => {
+        commandHandlers[id]();
         setOpenMenu(null);
     };
     return <nav className="command-bar" aria-label="Application command menu" data-testid="top-command-bar">
-        <details open={openMenu === 'file'}><summary onClick={toggleMenu('file')}>File</summary><div className="command-menu">
-            <button onClick={runCommand(onNew)}>New</button>
-            <button data-testid="command-load-project" onClick={runCommand(onLoad)}>Load Project…</button>
-            <button onClick={runCommand(onRecoverAutosave)}>Recover Autosave…</button>
-            <button data-testid="command-save-project" onClick={runCommand(onSave)}>Save Project</button>
-            <button onClick={runCommand(onSave)}>Save Project As…</button>
-            <button onClick={runCommand(onExport)}>Export Blueprint Package</button>
-            <button onClick={runCommand(onSave)}>Export Project Copy</button>
-            <button onClick={runCommand(unavailable('Exit'))}>Exit</button>
-        </div></details>
-        <details open={openMenu === 'view'}><summary onClick={toggleMenu('view')}>View</summary><div className="command-menu">
-            <button onClick={runCommand(onZoomIn)}>Zoom In</button>
-            <button onClick={runCommand(onZoomOut)}>Zoom Out</button>
-            <button onClick={runCommand(onFit)}>Zoom to Fit</button>
-            <button onClick={runCommand(onFit)}>Reset View</button>
-            <button onClick={runCommand(onSaveWorkspace)}>Save Workspace Layout</button>
-            <button onClick={runCommand(onRestoreWorkspace)}>Restore Workspace Layout</button>
-            <button onClick={runCommand(onResetWorkspace)}>Reset Workspace Layout</button>
-        </div></details>
-        <details open={openMenu === 'edit'}><summary onClick={toggleMenu('edit')}>Edit</summary><div className="command-menu">
-            <button onClick={runCommand(unavailable('Undo'))}>Back (Undo)</button>
-            <button onClick={runCommand(unavailable('Redo'))}>Forward (Redo)</button>
-        </div></details>
-        <details open={openMenu === 'options'}><summary onClick={toggleMenu('options')}>Options</summary><div className="command-menu">
-            <button onClick={runCommand(onOptions)}>Preferences…</button>
-        </div></details>
-        <details open={openMenu === 'help'}><summary onClick={toggleMenu('help')}>Help</summary><div className="command-menu">
-            <button onClick={runCommand(unavailable('Check for Updates'))}>Check for Updates…</button>
-            <button onClick={runCommand(() => onDisabled('MotionSmith web port · local ONNX, persistent scene state, blueprint export.'))}>About…</button>
-        </div></details>
+        {APP_MENU_GROUPS.map(group => <details key={group.id} open={openMenu === group.id}>
+            <summary onClick={toggleMenu(group.id)}>{group.label}</summary>
+            <div className="command-menu">
+                {group.commandIds.map(id => {
+                    const command = commandById(id);
+                    const shortcut = commandShortcutText(command);
+                    return <button key={id} data-command-id={id} data-testid={command.testId ?? `command-${id.replaceAll('.', '-')}`} onClick={runCommand(id)} title={command.description}>
+                        <span>{command.label}</span>
+                        {shortcut && <kbd aria-hidden="true">{shortcut}</kbd>}
+                    </button>;
+                })}
+            </div>
+        </details>)}
     </nav>;
 };
+
+const ShortcutHelpDialog = ({ onClose }: { onClose: () => void }) => <div className="modal-backdrop" onMouseDown={event => {
+    if (event.target === event.currentTarget) onClose();
+}}>
+    <section role="dialog" aria-modal="true" aria-labelledby="shortcut-help-title" className="modal-sheet shortcut-help-dialog" data-testid="shortcut-help-dialog">
+        <div className="flex items-start justify-between gap-4">
+            <div>
+                <div className="accent-label">Application commands</div>
+                <h3 id="shortcut-help-title">Keyboard Shortcuts</h3>
+                <p className="mt-2 text-sm font-bold text-slate-500">One registry drives the menu bar, shortcuts, and this reference.</p>
+            </div>
+            <button className="btn-secondary" onClick={onClose}>Close</button>
+        </div>
+        <div className="shortcut-help-grid">
+            {APP_MENU_GROUPS.map(group => <section key={group.id} className="shortcut-help-group">
+                <h4>{group.label}</h4>
+                {group.commandIds.map(id => {
+                    const command = commandById(id);
+                    const shortcuts = commandShortcutListText(command);
+                    return <div key={id} className="shortcut-help-row">
+                        <span>{command.label}</span>
+                        <kbd>{shortcuts || 'menu'}</kbd>
+                    </div>;
+                })}
+            </section>)}
+        </div>
+    </section>
+</div>;
+
 
 const CanvasZoomToolbar = ({ viewport, setViewport }: { viewport: CanvasViewport; setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>> }) => {
     const zoomBy = (factor: number) => setViewport(prev => ({ ...prev, zoom: clampCanvasZoom(prev.zoom * factor) }));

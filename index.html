@@ -208,8 +208,14 @@
       .command-bar summary::-webkit-details-marker { display: none; }
       .command-bar details[open] summary, .command-bar summary:hover { background: var(--ms-accent-soft); color: var(--ms-accent); }
       .command-menu { position: absolute; right: 0; top: calc(100% + .45rem); z-index: 20; min-width: 14rem; border: 1px solid var(--ms-line); border-radius: 1.1rem; background: rgba(255,255,255,.98); box-shadow: 0 24px 70px rgba(8,10,18,.14); padding: .45rem; display: grid; gap: .15rem; }
-      .command-menu button { border-radius: .85rem; background: transparent; color: var(--ms-text-soft); padding: .55rem .7rem; text-align: left; font-size: .82rem; font-weight: 800; }
+      .command-menu button { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-radius: .85rem; background: transparent; color: var(--ms-text-soft); padding: .55rem .7rem; text-align: left; font-size: .82rem; font-weight: 800; }
       .command-menu button:hover { background: var(--ms-bg-soft); color: var(--ms-text); }
+      .command-menu kbd, .shortcut-help-row kbd { border: 1px solid var(--ms-line); border-radius: .55rem; background: #fff; color: var(--ms-muted); padding: .12rem .36rem; font-size: .68rem; font-weight: 950; white-space: nowrap; }
+      .shortcut-help-dialog { width: min(94vw, 52rem); max-height: min(88vh, 40rem); }
+      .shortcut-help-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: .85rem; margin-top: 1rem; }
+      .shortcut-help-group { border: 1px solid var(--ms-line); border-radius: 1rem; background: var(--ms-bg-soft); padding: .85rem; }
+      .shortcut-help-group h4 { margin: 0 0 .55rem; color: var(--ms-text); font-size: .86rem; font-weight: 950; }
+      .shortcut-help-row { display: flex; align-items: center; justify-content: space-between; gap: .65rem; padding: .36rem 0; color: var(--ms-text-soft); font-size: .78rem; font-weight: 850; }
       .status-bar { position: relative; z-index: 30; margin-left: var(--ms-rail-width); display: flex; align-items: center; justify-content: space-between; gap: .75rem; border-top: 1px solid var(--ms-line); background: rgba(255,255,255,.72); color: var(--ms-muted); padding: .26rem 1rem; font-size: .72rem; font-weight: 800; backdrop-filter: blur(14px); }
       .status-bar > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .status-cache-pill { flex: 0 0 auto; border: 1px solid var(--ms-line); border-radius: 999px; background: #fff; color: var(--ms-text-soft); padding: .22rem .5rem; font-size: .68rem; font-weight: 950; box-shadow: 0 8px 22px rgba(15,23,42,.05); }
