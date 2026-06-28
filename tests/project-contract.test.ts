@@ -377,6 +377,7 @@ const viewportText = readFileSync(join(process.cwd(), 'utils', 'viewport.ts'), '
 const viewer3dText = readFileSync(join(process.cwd(), 'utils', 'viewer3d.ts'), 'utf8');
 const webOnnxText = readFileSync(join(process.cwd(), 'utils', 'webOnnx.ts'), 'utf8');
 const appText = readFileSync(join(process.cwd(), 'App.tsx'), 'utf8');
+const typesText = readFileSync(join(process.cwd(), 'types.ts'), 'utf8');
 const indexText = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
 assert(canvasText.includes('fabricationGearPathD'), '2D canvas gear rendering uses shared fabrication gear geometry');
 assert(threePreviewText.includes('fabricationGearProfileForPitchRadius'), '3D foundry gear rendering uses shared fabrication gear geometry');
@@ -469,13 +470,21 @@ assert(appText.includes('disabled={partPanelDisabled} onClick={onSaveSkeleton}')
 assert(appText.includes('stage-body editor-workbench relative min-h-0 flex-1 overflow-hidden'), 'shared workbench prevents right-pane scroll from moving the center canvas');
 assert(appText.includes('const [showSensemaking, setShowSensemaking] = useState(false)'), 'Foundry starts in compact tinkerable mode with sensemaking collapsed');
 assert(appText.includes('compact-fabrication-stack') && appText.includes('data-testid="foundry-fabrication-stack"'), 'Foundry keeps fabrication stack visible as a compact action datum');
-const blueprintCanvasStart = appText.indexOf('canvas: canvasPane(<div className="path-canvas-shell canvas-workspace overflow-hidden p-0" data-testid="blueprint-canvas-preview">');
-const blueprintInspectorStart = appText.indexOf('inspector: inspectorPane(<section className="stage-pane-stack" data-testid="assembly-guide-preview">', blueprintCanvasStart);
-assert(blueprintCanvasStart >= 0 && blueprintInspectorStart > blueprintCanvasStart, 'Blueprint layout exposes parseable canvas and inspector slots');
+assert(typesText.includes("'assembly'"), 'AppStage includes a dedicated Assembly tab');
+assert(appText.includes("{ id: 'assembly', label: 'Assembly Guide' }"), 'workflow rail exposes Assembly as a separate stage');
+const blueprintCanvasStart = appText.indexOf('canvas: canvasPane(<div className="blueprint-document-preview canvas-workspace" data-testid="blueprint-canvas-preview">');
+const blueprintInspectorStart = appText.indexOf('inspector: inspectorPane(<section className="stage-pane-stack" data-testid="blueprint-detail-preview">', blueprintCanvasStart);
+assert(blueprintCanvasStart >= 0 && blueprintInspectorStart > blueprintCanvasStart, 'Blueprint layout exposes printable 2D canvas and cut-sheet inspector slots');
 const blueprintCanvasBlock = appText.slice(blueprintCanvasStart, blueprintInspectorStart);
 const blueprintInspectorBlock = appText.slice(blueprintInspectorStart, appText.indexOf('        }}', blueprintInspectorStart));
-assert(!blueprintCanvasBlock.includes('assembly-guide-web-preview'), 'Blueprint center canvas does not embed the printable guide document');
-assert(blueprintInspectorBlock.includes('assembly-guide-web-preview'), 'Blueprint printable guide preview lives in the right inspector');
+assert(blueprintCanvasBlock.includes('blueprint-svg-preview'), 'Blueprint center canvas previews the printable SVG cut sheet');
+assert(!blueprintCanvasBlock.includes('<Canvas project={project}'), 'Blueprint center canvas is a static output sheet, not the animated 3D/2.5D workbench');
+assert(!blueprintCanvasBlock.includes('assembly-guide-web-preview') && !blueprintInspectorBlock.includes('assembly-guide-web-preview'), 'Blueprint no longer embeds the assembly guide document');
+const assemblyStart = appText.indexOf('const AssemblyGuide =');
+assert(assemblyStart >= 0, 'AssemblyGuide component owns the assembly document workflow');
+const assemblyBlock = appText.slice(assemblyStart, appText.indexOf('const Options =', assemblyStart));
+assert(assemblyBlock.includes('data-testid="assembly-canvas-preview"') && assemblyBlock.includes('data-testid="assembly-guide-web-preview"'), 'Assembly tab renders the printable guide in the center canvas');
+assert(assemblyBlock.includes('data-testid="assembly-guide-preview"'), 'Assembly tab keeps selected recipe detail in the right inspector');
 const oversizedCutPart: BodyPartLayer = {
   id: 'right_arm_lower',
   name: 'Right lower arm',
@@ -1292,6 +1301,7 @@ assert(validateForFabrication(wrongTarget).errors.some(e => e.includes('belongs 
 assert.equal(handoffGate({ ...sample, parts: {}, partOrder: [], skeleton: null, paths: {}, mechanisms: [] }, 'path').ok, false, 'stage handoff blocks path work before character data');
 assert.equal(handoffGate({ ...sample, mechanisms: [] }, 'design').ok, true, 'stage handoff allows Design to add the first mechanism after character load');
 assert.equal(handoffGate(sample, 'blueprint').ok, true, 'stage handoff permits blueprint when mechanisms are valid');
+assert.equal(handoffGate(sample, 'assembly').ok, true, 'stage handoff permits assembly guide when mechanisms are valid');
 assert.deepEqual(bodyPartPivotScene({ ...sample.parts.right_arm, anchorJointId: 'right_elbow' }, sample.skeleton), sample.skeleton?.joints.right_elbow.position, 'pivot can follow reassigned skeleton anchor');
 const placed = placeBodyPartPivotAt({ ...sample.parts.right_arm, anchorJointId: 'right_elbow' }, { x: 12, y: 34 }, sample.skeleton);
 assert(Math.abs(bodyPartPivotScene(placed, sample.skeleton).x - 12) < 1e-9 && Math.abs(bodyPartPivotScene(placed, sample.skeleton).y - 34) < 1e-9, 'anchor-aware placement moves visual transform');

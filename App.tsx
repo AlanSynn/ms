@@ -79,7 +79,7 @@ const degToRad = (deg: number) => (deg * Math.PI) / 180;
 const foundryCameraDistance = (camera: FoundryCamera) => 17 / clampFoundryZoom(camera.zoom);
 type FoundryOverlaySize = { width: number; height: number };
 const FOUNDRY_OVERLAY_SIZE: FoundryOverlaySize = { width: 360, height: 240 };
-const SHARED_PLAYBACK_STAGES: AppStage[] = ['path', 'design', 'blueprint'];
+const SHARED_PLAYBACK_STAGES: AppStage[] = ['path', 'design'];
 const FOUNDRY_ANIMATION_COMMIT_MS = 1000 / 30;
 
 const foundryCameraPosition = (camera: FoundryCamera) => {
@@ -121,6 +121,7 @@ const STAGES: Array<{ id: AppStage; label: string }> = [
     { id: 'foundry', label: 'Mechanism Foundry' },
     { id: 'design', label: 'Mechanism Design' },
     { id: 'blueprint', label: 'Blueprint Export' },
+    { id: 'assembly', label: 'Assembly Guide' },
     { id: 'options', label: 'Options' }
 ];
 const stageNavLabel = (stage: AppStage) => ({
@@ -128,10 +129,11 @@ const stageNavLabel = (stage: AppStage) => ({
     path: 'Path',
     foundry: 'Foundry',
     design: 'Design',
-    blueprint: 'Blueprint'
+    blueprint: 'Blueprint',
+    assembly: 'Assembly'
 } as Partial<Record<AppStage, string>>)[stage];
 
-type StageIconName = 'character' | 'path' | 'foundry' | 'design' | 'blueprint' | 'options';
+type StageIconName = 'character' | 'path' | 'foundry' | 'design' | 'blueprint' | 'assembly' | 'options';
 
 const STAGE_PANE_NAV_ITEMS: Array<{ ariaLabel: string; label: string; target: AppStage; activeStages: AppStage[]; icon: StageIconName }> = [
     { ariaLabel: 'Character', label: 'Character', target: 'character', activeStages: ['character'], icon: 'character' },
@@ -139,6 +141,7 @@ const STAGE_PANE_NAV_ITEMS: Array<{ ariaLabel: string; label: string; target: Ap
     { ariaLabel: 'Mechanism Foundry', label: 'Foundry', target: 'foundry', activeStages: ['foundry'], icon: 'foundry' },
     { ariaLabel: 'Rail mechanism parameters', label: 'Design', target: 'design', activeStages: ['design'], icon: 'design' },
     { ariaLabel: 'Rail export package', label: 'Blueprint', target: 'blueprint', activeStages: ['blueprint'], icon: 'blueprint' },
+    { ariaLabel: 'Rail assembly guide', label: 'Assembly', target: 'assembly', activeStages: ['assembly'], icon: 'assembly' },
     { ariaLabel: 'Options', label: 'Options', target: 'options', activeStages: ['options'], icon: 'options' }
 ];
 
@@ -160,6 +163,7 @@ const StagePaneNavIcon = ({ icon }: { icon: typeof STAGE_PANE_NAV_ITEMS[number][
     if (icon === 'foundry') return <Boxes size={16}/>;
     if (icon === 'design') return <Wrench size={16}/>;
     if (icon === 'blueprint') return <Download size={16}/>;
+    if (icon === 'assembly') return <FileJson size={16}/>;
     return <Settings size={16}/>;
 };
 
@@ -777,7 +781,8 @@ const App: React.FC = () => {
                             setStage('design');
                         }} />}
                         {editorStage === 'design' && <MechanismDesign project={project} selectedMechanism={selectedMechanism} mechanismConfig={mechanismConfig} setMechanismConfig={setMechanismConfig} updateMechanism={updateMechanism} dispatch={dispatch} isPlaying={isPlaying} setIsPlaying={setIsPlaying} showTrace={showTrace} setShowTrace={setShowTrace} angle={angle} setAngle={setAngle} onOptimize={optimizeSelectedMechanism} onRecommendations={() => setShowRecommendations(true)} optimizerBusy={optimizerBusy} exportSvg={exportMechanismSvg} exportDxf={exportMechanismDxf} onBlueprint={() => goStage('blueprint')} goStage={goStage} viewport={canvasViewport} setViewport={setCanvasViewport} />}
-                        {editorStage === 'blueprint' && <BlueprintExport project={project} config={mechanismConfig} setConfig={setMechanismConfig} dispatch={dispatch} goStage={goStage} isPlaying={isPlaying} angle={angle} setAngle={setAngle} viewport={canvasViewport} setViewport={setCanvasViewport} />}
+                        {editorStage === 'blueprint' && <BlueprintExport project={project} dispatch={dispatch} goStage={goStage} />}
+                        {editorStage === 'assembly' && <AssemblyGuide project={project} dispatch={dispatch} goStage={goStage} />}
                         {editorStage === 'options' && <Options project={project} dispatch={dispatch} goStage={goStage} />}
                         {playerDock && <div className="stage-player-row" data-testid="stage-player-row" aria-label="Shared playback controls">{playerDock}</div>}
                     </div>
@@ -978,7 +983,10 @@ const WorkflowStatusStrip = ({ stage, project, selectedPart, selectedPath }: { s
         nextAction = enabledMechanisms.length ? 'Review target part/path/anchor, then Blueprint Export.' : 'Use Get recommendations or add from Foundry.';
     } else if (stage === 'blueprint') {
         blocker = validation.errors[0] ?? validation.warnings[0] ?? 'No blocker';
-        nextAction = validation.errors.length ? 'Use the recovery action or return to Mechanism Design.' : 'Generate package, then download the guide and cut sheet.';
+        nextAction = validation.errors.length ? 'Use recovery or return to Design.' : 'Generate/download cut sheets, then open Assembly.';
+    } else if (stage === 'assembly') {
+        blocker = validation.errors[0] ?? validation.warnings[0] ?? 'No blocker';
+        nextAction = validation.errors.length ? 'Fix blueprint blockers first.' : 'Follow the visual guide, then print if needed.';
     } else if (stage === 'options') {
         nextAction = 'Tune settings, then return to the current workflow stage.';
     } else {
@@ -2800,29 +2808,21 @@ const pendingRecipeForMechanism = (project: ProjectState, mechanism: MechanismCo
     };
 };
 
-const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlaying, angle, setAngle, viewport, setViewport }: {
+const BlueprintExport = ({ project, dispatch, goStage }: {
     project: ProjectState;
-    config: GlobalConfig;
-    setConfig: React.Dispatch<React.SetStateAction<GlobalConfig>>;
     dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void;
     goStage: (stage: AppStage) => void;
-    isPlaying: boolean;
-    angle: number;
-    setAngle: React.Dispatch<React.SetStateAction<number>>;
-    viewport: CanvasViewport;
-    setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
 }) => {
     const validation = validateForFabrication(project);
-    const create = () => {
-        const pkg = createFabricationPackage(project);
-        dispatch({ type: 'set_export', fabricationPackage: pkg });
-    };
+    const create = () => dispatch({ type: 'set_export', fabricationPackage: createFabricationPackage(project) });
     const pkg = project.lastExport;
     const exportMode = project.settings.physicalKit.exportMode;
     const defaultFormat = project.settings.physicalKit.defaultExportFormat;
     const cutSheetFileType = project.settings.physicalKit.cutSheetFileType;
     const activeMechanisms = project.mechanisms.filter(m => m.visible && m.enabled !== false);
     const recipes = pkg?.recipes ?? activeMechanisms.map(mechanism => pendingRecipeForMechanism(project, mechanism));
+    const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
+    const selectedRecipe = recipes.find(recipe => recipe.mechanismId === selectedRecipeId) ?? recipes[0];
     const downloadJson = () => pkg && downloadText(`${pkg.id}.json`, JSON.stringify(pkg, null, 2));
     const downloadSvg = () => pkg && downloadText(`${pkg.id}.svg`, pkg.svg, 'image/svg+xml');
     const downloadCutSheetPdf = () => pkg && downloadText(`${pkg.id}-cut-sheet.pdf`, pkg.cutSheetPdf, 'application/pdf');
@@ -2830,25 +2830,14 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
     const downloadCustomPdf = () => pkg && downloadText(`${pkg.id}-custom-parts.pdf`, pkg.customPartsPdf, 'application/pdf');
     const downloadCustomStl = () => pkg && downloadText(`${pkg.id}-custom-parts.stl`, pkg.customPartsStl, 'model/stl');
     const downloadAssemblyPdf = () => pkg && downloadText(`${pkg.id}-assembly.pdf`, pkg.assemblyGuidePdf, 'application/pdf');
-    const printGuide = () => {
-        const guideFrame = document.querySelector<HTMLIFrameElement>('[data-testid="assembly-guide-preview-frame"]');
-        if (guideFrame?.contentWindow) {
-            guideFrame.contentWindow.focus();
-            guideFrame.contentWindow.print();
-            return;
-        }
-        if (pkg) downloadText(`${pkg.id}-assembly.html`, pkg.assemblyGuideHtml, 'text/html');
-    };
-    const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
-    const selectedRecipe = recipes.find(recipe => recipe.mechanismId === selectedRecipeId) ?? recipes[0];
     return <EditorStageFrame
         stage="blueprint"
         className="blueprint-stage-frame"
         layout={{
             workflow: workflowPane(<div className="stage-pane-stack" data-testid="blueprint-control-panel">
             <StageLeftSummary project={project} title="Blueprint Export" stage="blueprint" goStage={goStage}>
-                <h3>Build-ready package</h3>
-                <p className="mt-2 text-sm text-slate-600">Validation, downloads, and recipe selection stay here; the center remains the build canvas.</p>
+                <h3>Cut sheet package</h3>
+                <p className="mt-2 text-sm text-slate-600">Generate once, then download the 2D cut sheet. Assembly lives in its own tab.</p>
                 <div className="mt-4 space-y-2">{validation.issues.map((issue, index) => <div className={issue.severity === 'error' ? 'error' : 'warning'} key={`${issue.message}-${index}`}>
                     <div>{issue.message}</div>
                     <button className="mt-2 underline" onClick={() => goStage(issue.recoveryStage)}>{issue.recoveryAction}</button>
@@ -2860,12 +2849,11 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
                         <div className="mt-2 flex flex-wrap gap-2">
                             {defaultFormat !== 'svg' && <button className="btn-primary" onClick={downloadJson}>Download JSON default</button>}
                             {defaultFormat !== 'json' && <button className="btn-primary" onClick={downloadSvg}>Download SVG default</button>}
+                            <button className="btn-secondary" onClick={() => goStage('assembly')}>Open Assembly</button>
                         </div>
-                        <div className="mt-2 text-xs">Full package artifacts remain available for handoff and archival.</div>
                     </div>
                     {exportMode !== 'prefab-board' && <div className="rounded-2xl bg-white p-3 text-sm text-slate-600 shadow-sm" data-testid="custom-parts-export-lane">
-                        <div className="font-bold text-slate-800">1. Custom parts output</div>
-                        <div className="mt-1 text-xs">Project-specific outlines with joint holes for cutting or CAD handoff.</div>
+                        <div className="font-bold text-slate-800">Custom parts output</div>
                         <div className="mt-2 flex flex-wrap gap-2">
                             <button className="btn-secondary" onClick={downloadCustomSvg}>Custom SVG</button>
                             <button className="btn-secondary" onClick={downloadCustomPdf}>Custom PDF</button>
@@ -2873,12 +2861,10 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
                         </div>
                     </div>}
                     {exportMode !== 'custom-parts' && <div className="rounded-2xl bg-white p-3 text-sm text-slate-600 shadow-sm" data-testid="prefab-board-export-lane">
-                        <div className="font-bold text-slate-800">2. Prefab 15×15 board kit</div>
-                        <div className="mt-1 text-xs">Use pre-fabricated modules, then follow the animated exploded stack one step at a time.</div>
+                        <div className="font-bold text-slate-800">Prefab 15×15 board kit</div>
                         <div className="mt-2 flex flex-wrap gap-2">
-                            <button className="btn-secondary" onClick={() => downloadText(`${pkg.id}-assembly.html`, pkg.assemblyGuideHtml, 'text/html')}>Kit guide</button>
+                            <button className="btn-secondary" onClick={() => goStage('assembly')}>Assembly guide</button>
                             <button className="btn-secondary" onClick={downloadAssemblyPdf}>Kit PDF</button>
-                            <button className="btn-secondary" onClick={printGuide}>Print kit</button>
                         </div>
                     </div>}
                     <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
@@ -2888,7 +2874,6 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
                                 ? <button className="btn-primary" onClick={downloadCutSheetPdf}>Download PDF cut sheet default</button>
                                 : <button className="btn-primary" onClick={downloadSvg}>Download SVG cut sheet default</button>}
                         </div>
-                        <div className="mt-2 text-xs">Assembly guide stays bundled even when SVG is the preferred cut sheet.</div>
                     </div>
                     <div className="flex flex-wrap gap-2">
                         <button className="btn-secondary" onClick={downloadJson}>JSON</button>
@@ -2904,22 +2889,78 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
                         {recipes.map(recipe => <button key={recipe.mechanismId} type="button" className={`assembly-recipe-card text-left ${selectedRecipe?.mechanismId === recipe.mechanismId ? 'ring-2 ring-inset' : ''}`} onClick={() => setSelectedRecipeId(recipe.mechanismId)}>
                             <div className="font-bold text-slate-800">{recipe.mechanismId} · {recipe.type}</div>
                             <div className="text-sm text-slate-600">Hole {recipe.boardCoordinate}</div>
-                            <div className="text-xs text-slate-500">Target {recipe.targetPartName ?? recipe.targetPartId ?? 'unbound'} · {recipe.targetPathPointCount ?? 0} points</div>
                         </button>)}
                     </div>
                 </div>
             </StageLeftSummary>
         </div>),
-            canvas: canvasPane(<div className="path-canvas-shell canvas-workspace overflow-hidden p-0" data-testid="blueprint-canvas-preview">
-            <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
-            <Canvas project={project} config={config} setConfig={setConfig} selectedId={project.selectedMechanismId ?? null} setSelectedId={id => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: id ?? undefined })} isPlaying={isPlaying} showTrace={true} isDrawMode={false} userPath={[]} setUserPath={() => {}} angle={angle} setAngle={setAngle} viewport={viewport} setViewport={setViewport}/>
+            canvas: canvasPane(<div className="blueprint-document-preview canvas-workspace" data-testid="blueprint-canvas-preview">
+            <div className="blueprint-document-title">Letter sheet · 2D cut blueprint</div>
+            {pkg ? <img data-testid="blueprint-svg-preview" alt="Printable cut sheet blueprint" src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(pkg.svg)}`} /> : <div className="blueprint-empty-state">Generate package to preview the printable SVG/PDF cut sheet here.</div>}
         </div>),
-            inspector: inspectorPane(<section className="stage-pane-stack" data-testid="assembly-guide-preview">
+            inspector: inspectorPane(<section className="stage-pane-stack" data-testid="blueprint-detail-preview">
             <div>
-                <div className="section-title">Selected recipe detail</div>
-                <h3>Assembly guide preview</h3>
+                <div className="section-title">Selected blueprint detail</div>
+                <h3>Cut sheet detail</h3>
             </div>
-            {pkg && <section className="assembly-guide-web-preview" data-testid="assembly-guide-web-preview" aria-label="Printable assembly guide">
+            {selectedRecipe ? <article className="assembly-recipe-card" data-testid={`blueprint-recipe-${selectedRecipe.mechanismId}`}>
+                <div className="font-bold text-slate-800">{selectedRecipe.mechanismId} · {selectedRecipe.type}</div>
+                <div className="mt-1 text-sm text-slate-600">Board {selectedRecipe.boardCoordinate}</div>
+                <div className="mt-3 flex flex-wrap gap-2">{selectedRecipe.requiredParts.map(part => <span className="blueprint-pill" key={`${selectedRecipe.mechanismId}-${part.name}`}>{part.name} × {part.quantity}</span>)}</div>
+                <div className="mt-3 rounded-2xl bg-slate-100 p-3 text-sm font-bold text-slate-700" data-testid="blueprint-stack-summary">{fabricationStackSummary(selectedRecipe)}</div>
+                {selectedRecipe.warnings.length ? <div className="warning mt-3">Warnings: {selectedRecipe.warnings.join('; ')}</div> : <div className="ok mt-3">Warnings: none</div>}
+            </article> : <div className="warning">No recipe yet. Generate a package first.</div>}
+            {pkg && <div className="rounded-2xl bg-white p-3 text-sm text-slate-600 shadow-sm">Grid {project.settings.physicalKit.gridPitchMm}mm · holes {project.settings.physicalKit.holeDiameterMm}mm · {recipes.length} recipe{recipes.length === 1 ? '' : 's'}</div>}
+        </section>)
+        }}
+    />;
+};
+
+const AssemblyGuide = ({ project, dispatch, goStage }: {
+    project: ProjectState;
+    dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void;
+    goStage: (stage: AppStage) => void;
+}) => {
+    const validation = validateForFabrication(project);
+    const create = () => dispatch({ type: 'set_export', fabricationPackage: createFabricationPackage(project) });
+    const pkg = project.lastExport;
+    const activeMechanisms = project.mechanisms.filter(m => m.visible && m.enabled !== false);
+    const recipes = pkg?.recipes ?? activeMechanisms.map(mechanism => pendingRecipeForMechanism(project, mechanism));
+    const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
+    const selectedRecipe = recipes.find(recipe => recipe.mechanismId === selectedRecipeId) ?? recipes[0];
+    const downloadAssemblyPdf = () => pkg && downloadText(`${pkg.id}-assembly.pdf`, pkg.assemblyGuidePdf, 'application/pdf');
+    const printGuide = () => {
+        const guideFrame = document.querySelector<HTMLIFrameElement>('[data-testid="assembly-guide-preview-frame"]');
+        if (guideFrame?.contentWindow) {
+            guideFrame.contentWindow.focus();
+            guideFrame.contentWindow.print();
+            return;
+        }
+        if (pkg) downloadText(`${pkg.id}-assembly.html`, pkg.assemblyGuideHtml, 'text/html');
+    };
+    return <EditorStageFrame
+        stage="assembly"
+        className="assembly-stage-frame"
+        layout={{
+            workflow: workflowPane(<div className="stage-pane-stack" data-testid="assembly-control-panel">
+            <StageLeftSummary project={project} title="Assembly Guide" stage="assembly" goStage={goStage}>
+                <h3>Build steps</h3>
+                <p className="mt-2 text-sm text-slate-600">Visual guide only. Cut sheets stay in Blueprint.</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                    <button className="btn-secondary" onClick={() => goStage('blueprint')}>Back to Blueprint</button>
+                    <button className="btn-primary" disabled={!!validation.errors.length} onClick={pkg ? printGuide : create}>{pkg ? 'Print guide' : 'Generate package'}</button>
+                    {pkg && <button className="btn-secondary" onClick={downloadAssemblyPdf}>PDF</button>}
+                </div>
+                <div className="mt-5 grid gap-2">
+                    {recipes.map(recipe => <button key={recipe.mechanismId} type="button" className={`assembly-recipe-card text-left ${selectedRecipe?.mechanismId === recipe.mechanismId ? 'ring-2 ring-inset' : ''}`} onClick={() => setSelectedRecipeId(recipe.mechanismId)}>
+                        <div className="font-bold text-slate-800">{recipe.mechanismId} · {recipe.type}</div>
+                        <div className="text-sm text-slate-600">Board {recipe.boardCoordinate}</div>
+                    </button>)}
+                </div>
+            </StageLeftSummary>
+        </div>),
+            canvas: canvasPane(<div className="assembly-canvas-document canvas-workspace" data-testid="assembly-canvas-preview">
+            {pkg ? <section className="assembly-guide-web-preview" data-testid="assembly-guide-web-preview" aria-label="Printable assembly guide">
                 <div className="assembly-guide-preview-head">
                     <div>
                         <div className="section-title">Printable assembly guide</div>
@@ -2933,13 +2974,19 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
                     <span>{selectedRecipe?.type ?? 'mechanism'}</span>
                 </div>
                 <iframe title="Assembly guide preview" data-testid="assembly-guide-preview-frame" className="assembly-guide-preview-frame" srcDoc={pkg.assemblyGuideHtml} />
-            </section>}
+            </section> : <div className="blueprint-empty-state">Generate a package in Blueprint or here to view assembly steps.</div>}
+        </div>),
+            inspector: inspectorPane(<section className="stage-pane-stack" data-testid="assembly-guide-preview">
+            <div>
+                <div className="section-title">Selected step detail</div>
+                <h3>Assembly guide preview</h3>
+            </div>
             {selectedRecipe ? <article className="assembly-recipe-card" data-testid={`assembly-recipe-${selectedRecipe.mechanismId}`}>
                 <div className="flex items-start justify-between gap-3">
                     <div>
                         <div className="font-bold text-slate-800">{selectedRecipe.mechanismId} · {selectedRecipe.type}</div>
                         <div className="text-sm text-slate-600">Board {selectedRecipe.boardCoordinate}</div>
-                        <div className="text-xs text-slate-500">Target {selectedRecipe.targetPartName ?? selectedRecipe.targetPartId ?? 'unbound'} · path {selectedRecipe.targetPathId ?? 'none'} · anchor {selectedRecipe.targetAnchorJointId ?? 'part default'} · {selectedRecipe.targetPathPointCount ?? 0} points</div>
+                        <div className="text-xs text-slate-500">Target {selectedRecipe.targetPartName ?? selectedRecipe.targetPartId ?? 'unbound'} · path {selectedRecipe.targetPathId ?? 'none'} · anchor {selectedRecipe.targetAnchorJointId ?? 'part default'}</div>
                     </div>
                     <button className="chip" onClick={() => goStage('design')}>Edit</button>
                 </div>
@@ -2954,10 +3001,7 @@ const BlueprintExport = ({ project, config, setConfig, dispatch, goStage, isPlay
                         <div className="text-xs font-bold uppercase tracking-wide text-slate-500">{step.role} · {step.boardCoordinate} · Z {step.zMm.toFixed(1)}mm</div>
                     </li>)}</ol>
                 </div>
-                <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-slate-600">{selectedRecipe.steps.map(step => <li key={step}>{step}</li>)}</ol>
-            </article> : <div className="warning">No recipe yet. Return to Mechanism Design or generate a package.</div>}
-            {pkg && <img className="mt-5 rounded-3xl border border-slate-200 bg-white p-3" alt="fabrication SVG preview" src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(pkg.svg)}`} />}
-            {!pkg && <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">Generate package to lock downloadable cut sheets, metadata, and the final assembly guide.</div>}
+            </article> : <div className="warning">No recipe yet. Generate a package first.</div>}
         </section>)
         }}
     />;

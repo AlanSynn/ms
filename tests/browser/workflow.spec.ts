@@ -343,21 +343,28 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByRole('heading', { name: 'Blueprint Export' })).toBeVisible();
   await expect(page.getByTestId('workflow-status-strip')).toContainText('Blueprint Export');
   await expect(page.getByTestId('blueprint-canvas-preview')).toBeVisible();
-  await expect(page.getByTestId('assembly-guide-preview')).toContainText('Assembly guide preview');
-  await expect(page.getByText('Validation')).toBeVisible();
+  await expect(page.getByTestId('blueprint-detail-preview')).toContainText('Cut sheet detail');
+  await expect(page.getByTestId('blueprint-control-panel')).toContainText('Cut sheet package');
   await expect(page.getByText('Fabrication state ready.')).toBeVisible();
-  await expect(page.getByTestId('prefab-assembly-steps')).toContainText('pre-fabricated');
+  await expect(page.getByTestId('stage-canvas-pane').getByTestId('assembly-guide-web-preview')).toHaveCount(0);
+  await expect(page.getByTestId('stage-right-inspector').getByTestId('assembly-guide-web-preview')).toHaveCount(0);
   await page.getByRole('button', { name: /Generate package/i }).click();
   await expect(page.getByText(/Default export:/)).toBeVisible();
   await expect(page.getByTestId('custom-parts-export-lane')).toBeVisible();
   await expect(page.getByTestId('prefab-board-export-lane')).toBeVisible();
   await expect(page.getByTestId('download-custom-stl')).toBeEnabled();
   await expect(page.getByText(/Board (?!pending)/)).toHaveCount(1);
-  await expect(page.getByTestId('stage-canvas-pane').getByTestId('assembly-guide-web-preview')).toHaveCount(0);
-  await expect(page.getByTestId('stage-right-inspector').getByTestId('assembly-guide-web-preview')).toBeVisible();
+  await expect(page.getByTestId('blueprint-svg-preview')).toBeVisible();
+  await expect(page.getByAltText('Printable cut sheet blueprint')).toBeVisible();
+  await page.getByRole('button', { name: 'Assembly guide', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Assembly Guide', exact: true })).toBeVisible();
+  await expect(page.getByTestId('workflow-status-strip')).toContainText('Assembly Guide');
+  await expect(page.getByTestId('assembly-canvas-preview')).toBeVisible();
+  await expect(page.getByTestId('stage-canvas-pane').getByTestId('assembly-guide-web-preview')).toBeVisible();
+  await expect(page.getByTestId('stage-right-inspector').getByTestId('assembly-guide-web-preview')).toHaveCount(0);
   await expect(page.getByTestId('assembly-guide-web-preview')).toContainText('Printable assembly guide');
   await expect(page.getByTestId('assembly-guide-web-preview')).toContainText('Exploded view');
-  await expect(page.getByRole('button', { name: 'Print guide' })).toBeVisible();
+  await expect(page.getByTestId('assembly-guide-web-preview').getByRole('button', { name: 'Print guide' })).toBeVisible();
   const webGuideFrame = page.frameLocator('[data-testid="assembly-guide-preview-frame"]');
   await expect(webGuideFrame.getByText('Exploded view').first()).toBeVisible();
   await expect(webGuideFrame.getByText('Path projection')).toBeVisible();
@@ -370,13 +377,14 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('prefab-assembly-steps')).toContainText('pre-fabricated');
   await expect(page.getByTestId('prefab-assembly-steps')).toContainText('S10 spacer');
   await expect(page.getByTestId('prefab-assembly-steps')).toContainText(/Z \d+\.\dmm/);
+  await page.getByRole('button', { name: /Blueprint Export/i }).click();
   await expect(page.getByRole('button', { name: 'JSON', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'SVG', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Guide', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Metadata', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'PDF', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Download PDF cut sheet default' })).toBeVisible();
-  await expect(page.getByAltText('fabrication SVG preview')).toBeVisible();
+  await expect(page.getByAltText('Printable cut sheet blueprint')).toBeVisible();
 
   const [metadataDownload] = await Promise.all([
     page.waitForEvent('download'),
@@ -1728,7 +1736,7 @@ test('Workflow tabs keep left workflow, center canvas, and right inspector roles
   await expect(workflowRail.getByRole('button', { name: 'Path Editor' })).toHaveAttribute('aria-current', 'step');
   expect(await workflowRail.evaluate(element => getComputedStyle(element).position)).toBe('fixed');
 
-  const assertPaneContract = async (leftText: RegExp | string, centerText: RegExp | string, rightText: RegExp | string, allowedCenterControlSelector = '.canvas-zoom-toolbar') => {
+  const assertPaneContract = async (leftText: RegExp | string, centerText: RegExp | string, rightText: RegExp | string, allowedCenterControlSelector = '.canvas-zoom-toolbar', surfaceSelector = 'svg, canvas') => {
     const left = page.getByTestId('stage-left-pane');
     const center = page.getByTestId('stage-canvas-pane');
     const right = page.getByTestId('stage-right-inspector');
@@ -1751,7 +1759,7 @@ test('Workflow tabs keep left workflow, center canvas, and right inspector roles
     const centerBox = await center.boundingBox();
     const leftBox = await left.boundingBox();
     const rightBox = await right.boundingBox();
-    const surfaceBox = await center.locator('svg, canvas').first().boundingBox();
+    const surfaceBox = await center.locator(surfaceSelector).first().boundingBox();
     expect(centerBox, 'center pane box').toBeTruthy();
     expect(leftBox, 'left pane box').toBeTruthy();
     expect(rightBox, 'right pane box').toBeTruthy();
@@ -1776,7 +1784,10 @@ test('Workflow tabs keep left workflow, center canvas, and right inspector roles
   await assertPaneContract('Mechanism instances', 'Letter sheet', 'Parametric Edit');
 
   await page.getByRole('button', { name: /Blueprint Export/i }).click();
-  await assertPaneContract('Generate package', 'Letter sheet', 'Assembly guide preview');
+  await assertPaneContract('Generate package', 'Letter sheet', 'Cut sheet detail', '.blueprint-document-preview', '.blueprint-document-preview');
+  await page.getByRole('button', { name: /Generate package/i }).click();
+  await page.getByRole('button', { name: 'Assembly guide', exact: true }).click();
+  await assertPaneContract('Build steps', 'Exploded view', 'Assembly guide preview', '.assembly-guide-web-preview', '.assembly-guide-web-preview');
 
   await page.getByRole('button', { name: /Options/i }).click();
   await assertPaneContract('Studio settings', 'Letter sheet', 'Appearance');
@@ -2235,7 +2246,8 @@ test('Simplified shared canvas stays non-destructive and exports blueprint', asy
   await expect(page.getByRole('heading', { name: 'Blueprint Export' })).toBeVisible();
   await expect(page.getByTestId('blueprint-canvas-preview')).toBeVisible();
   await page.getByRole('button', { name: /Generate package/i }).click();
-  await expect(page.getByTestId('assembly-guide-preview')).toContainText('Assembly guide preview');
+  await expect(page.getByTestId('blueprint-detail-preview')).toContainText('Cut sheet detail');
+  await expect(page.getByTestId('blueprint-svg-preview')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Metadata', exact: true })).toBeVisible();
 
   expectCleanPage(pageErrors, consoleErrors);

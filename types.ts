@@ -1,5 +1,5 @@
 export type MechanismType = 'crank' | '4bar' | 'piston' | 'yoke' | 'quick-return' | '5bar' | '6bar' | 'cam' | 'rack-pinion' | 'gear' | 'planetary_gear';
-export type AppStage = 'character' | 'path' | 'foundry' | 'design' | 'blueprint' | 'options';
+export type AppStage = 'character' | 'path' | 'foundry' | 'design' | 'blueprint' | 'assembly' | 'options';
 
 export interface Point {
     x: number;
