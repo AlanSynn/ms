@@ -1143,6 +1143,8 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
     data-camera-zoom={(viewport?.zoom ?? 1).toFixed(3)}
     data-camera-yaw={cameraOrbit.yaw.toFixed(3)}
     data-camera-pitch={cameraOrbit.pitch.toFixed(3)}
+    data-camera-offset-x={(viewport?.offset.x ?? 0).toFixed(2)}
+    data-camera-offset-y={(viewport?.offset.y ?? 0).toFixed(2)}
   >
     <div
       ref={hostRef}
@@ -1201,6 +1203,8 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       data-camera-zoom={(viewport?.zoom ?? 1).toFixed(3)}
       data-camera-yaw={cameraOrbit.yaw.toFixed(3)}
       data-camera-pitch={cameraOrbit.pitch.toFixed(3)}
+      data-camera-offset-x={(viewport?.offset.x ?? 0).toFixed(2)}
+      data-camera-offset-y={(viewport?.offset.y ?? 0).toFixed(2)}
       data-layer-paths={viewer3DLayerDataValue(undefined, 'external')}
       data-layer-forces={viewer3DLayerDataValue(undefined)}
       data-layer-velocity={viewer3DLayerDataValue(undefined)}

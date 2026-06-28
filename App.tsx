@@ -1668,7 +1668,7 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
                     {sortedParts.map(p => <option value={p.id} key={p.id}>{p.name}</option>)}
                 </select>
                 <div className="mt-3 flex flex-col gap-2">
-                    <button className={`btn-primary ${drawMode ? 'active' : ''}`} aria-label={drawMode ? 'Drawing free path' : 'Draw free path'} disabled={pathLocked} onClick={() => setDrawMode(!drawMode)}><Route size={16}/>{drawMode ? 'Drawing' : 'Draw'}</button>
+                    <button className={drawMode ? 'btn-primary active' : 'btn-secondary'} aria-label={drawMode ? 'Drawing free path' : 'Draw free path'} disabled={pathLocked} onClick={() => setDrawMode(!drawMode)}><Route size={16}/>{drawMode ? 'Drawing' : 'Draw'}</button>
                     <button className="btn-secondary" disabled={!selectedPath || pathLocked} onClick={clearPath}><Trash2 size={16}/> Clear path</button>
                     <button className="btn-secondary" disabled={pointCount < 3 || pathLocked} onClick={onNext}>Foundry</button>
                 </div>
@@ -1717,8 +1717,7 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
         </div>),
             canvas: canvasPane(<div className="path-canvas-shell canvas-workspace overflow-hidden p-0">
             <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
-            <SceneSketch svgRef={svgRef} project={project} selectedPath={selectedPath} dragPoint={dragPoint} selectedPoint={selectedPoint} setDragPoint={setDragPoint} setSelectedPoint={setSelectedPoint} onPointMove={movePoint} onPointUp={stopDrawing} onCanvasDown={onCanvasDown} onJointPick={pickIkJoint} dispatch={dispatch} drawMode={drawMode} pathLocked={pathLocked} isPlaying={isPlaying} angle={angle} viewport={viewport} setViewport={setViewport}/>
-            <ThreePuppetPreview project={project} animatedParts={pathPreview?.parts ?? {}} skeleton={pathPreview?.skeleton ?? project.skeleton} angle={angle} viewport={viewport} setViewport={setViewport} inputMode={drawMode ? 'none' : '3d-only'} testId="path-three-puppet" />
+            {drawMode ? <SceneSketch svgRef={svgRef} project={project} selectedPath={selectedPath} dragPoint={dragPoint} selectedPoint={selectedPoint} setDragPoint={setDragPoint} setSelectedPoint={setSelectedPoint} onPointMove={movePoint} onPointUp={stopDrawing} onCanvasDown={onCanvasDown} onJointPick={pickIkJoint} dispatch={dispatch} drawMode={drawMode} pathLocked={pathLocked} isPlaying={isPlaying} angle={angle} viewport={viewport} setViewport={setViewport}/> : <ThreePuppetPreview project={project} animatedParts={pathPreview?.parts ?? {}} skeleton={pathPreview?.skeleton ?? project.skeleton} angle={angle} viewport={viewport} setViewport={setViewport} inputMode="always" testId="path-three-puppet" />}
         </div>),
             inspector: inspectorPane(<div className="path-inspector stage-pane-stack">
             <div>
