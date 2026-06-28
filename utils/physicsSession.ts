@@ -162,7 +162,7 @@ const foundryConstraintError = (mechanism: MechanismConfig, simulation: FoundryP
   const errors = mechanism.type === 'gear'
     ? [Math.abs(fittedDistance(s.p1, s.p2) - scaledLength(gearTrainPitchCenterDistance(mechanism)))]
     : mechanism.type === 'planetary_gear'
-      ? [Math.abs(fittedDistance(s.p1, s.p2) - scaledLength(mechanism.groundLength)), Math.abs(fittedDistance(s.p2, s.j2) - scaledLength(mechanism.rockerLength))]
+      ? [Math.abs(fittedDistance(s.p1, s.p2) - scaledLength(mechanism.groundLength)), Math.abs(fittedDistance(s.p2, s.j2) - scaledLength(mechanism.rockerLength)), Math.abs(fittedDistance(s.p1, s.effector) - scaledLength(mechanism.couplerPointDist))]
       : mechanism.type === 'rack-pinion'
         ? [Math.abs(fittedDistance(s.p1, s.j1) - scaledLength(mechanism.crankLength)), fittedDistance(s.j2, s.p2)]
         : mechanism.type === 'cam'
@@ -374,7 +374,7 @@ export const buildKinematicPhysicsSession = (
         addCrankConstraint();
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/carrier`, 'guide', current.p1, current.p2, finite(mechanism.groundLength), 'planet carrier radius', mechanism.id);
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/planet-mesh`, 'guide', current.p2, current.j2, finite(mechanism.rockerLength), 'planet gear mesh', mechanism.id);
-        addConstraint(constraints, `/physics/constraints/${mechanism.id}/output-arm`, 'rod', current.p2, current.effector, finite(mechanism.couplerPointDist), 'planet output arm', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/output-arm`, 'rod', current.p1, current.effector, finite(mechanism.couplerPointDist), 'carrier output radius', mechanism.id);
       }
       addTargetConstraint();
       if (!current.isValid) warnings.push({ id: `/physics/warnings/${mechanism.id}/invalid`, severity: 'warning', message: `${templateLabel} kinematic sample is outside its valid linkage range.`, sourceId: mechanism.id });

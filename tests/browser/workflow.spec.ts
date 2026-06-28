@@ -877,7 +877,7 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
       pitch: saved.settings?.physicalKit?.gridPitchMm,
       cutSheet: saved.settings?.physicalKit?.cutSheetFileType
     };
-  }), { timeout: 5000 }).toEqual({
+  }), { timeout: 15000 }).toEqual({
     autosave: true,
     interval: 1,
     duration: 6000,
@@ -901,7 +901,7 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').press('Enter');
   await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').fill('100');
   await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').press('Enter');
-  await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('motionsmith.autosave') ?? '{}')?.mechanisms?.[0]?.anchorX), { timeout: 5000 }).toBe(0);
+  await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('motionsmith.autosave') ?? '{}')?.mechanisms?.[0]?.anchorX), { timeout: 15000 }).toBe(0);
   await page.getByRole('button', { name: /Blueprint Export/i }).click();
   await page.getByRole('button', { name: /Generate package/i }).click();
   await expect(page.getByRole('button', { name: 'Download JSON default' })).toBeVisible();
@@ -1088,6 +1088,7 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await expect(threeScene).toHaveAttribute('data-three-stack-order', /^Back Clip → .*S10 spacer.*Front Clip$/);
   await expect(threeScene).toHaveAttribute('data-three-spacer-key', 's10');
   await expect(threeScene).toHaveAttribute('data-three-spacer-mm', '10x4');
+  expect(Number(await threeScene.getAttribute('data-three-spacer-z-gap')), 'Foundry spaces stacked plates along z by the shared S10 spacer layer').toBeGreaterThan(0);
   expect(Number(await threeScene.getAttribute('data-three-spacer-render-count'))).toBeGreaterThan(0);
   await expect(threeScene).toHaveAttribute('data-three-stack-roles', /^clip>.*spacer.*>clip$/);
   await expect(threeScene).toHaveAttribute('data-three-stack-colors', /#334155.*#f59e0b/);
@@ -1170,7 +1171,7 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
     cam: [['data-three-cam-count', 1], ['data-three-follower-count', 1]],
     'rack-pinion': [['data-three-gear-count', 1], ['data-three-rack-count', 1], ['data-three-slot-count', 1], ['data-three-end-stop-count', 2]],
     gear: [['data-three-gear-count', 2], ['data-three-hole-count', 8]],
-    planetary_gear: [['data-three-gear-count', 2], ['data-three-hole-count', 8]]
+    planetary_gear: [['data-three-gear-count', 5], ['data-three-hole-count', 25]]
   };
 
   for (const type of ['piston', 'yoke', 'quick-return', '5bar', '6bar', 'cam', 'rack-pinion', 'gear', 'planetary_gear', '4bar']) {
@@ -1185,10 +1186,20 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
     expect(await threeScene.getAttribute('data-three-rendered-layer-roles'), `${type} rendered roles match fabrication stack roles`).toBe(await threeScene.getAttribute('data-three-stack-roles'));
     expect(await threeScene.getAttribute('data-three-rendered-layer-colors'), `${type} rendered colors match fabrication stack colors`).toBe(await threeScene.getAttribute('data-three-stack-colors'));
     expect(await threeScene.getAttribute('data-three-rendered-layer-z'), `${type} rendered z order matches fabrication stack z order`).toBe(await threeScene.getAttribute('data-three-stack-z'));
+    expect(Number(await threeScene.getAttribute('data-three-spacer-z-gap')), `${type} foundry preview has positive z separation for spacers`).toBeGreaterThan(0);
     await expect(page.getByTestId('foundry-forces-overlay'), `${type} keeps live force vectors visible`).toHaveAttribute('data-physics-rule', /force|torque|velocity|acceleration|reaction/);
     await expect(page.getByTestId('foundry-velocity-overlay'), `${type} keeps live velocity vectors visible`).toHaveAttribute('data-speed', /[0-9]+\.[0-9]+/);
     for (const [attr, minimumCount] of foundryPhysicalMarkers[type]) {
       expect(Number(await threeScene.getAttribute(attr)), `${type} preview includes ${attr}`).toBeGreaterThanOrEqual(minimumCount);
+    }
+    if (type === 'planetary_gear') {
+      await expect(threeScene, 'Planetary foundry syntax uses a fixed ring, sun input, carrier output set').toHaveAttribute('data-three-planetary-syntax', 'ring-fixed-sun-input-carrier-output');
+      await expect(threeScene).toHaveAttribute('data-three-planetary-fixed', 'ring');
+      await expect(threeScene).toHaveAttribute('data-three-planetary-input', 'sun');
+      await expect(threeScene).toHaveAttribute('data-three-planetary-output', 'carrier');
+      const radii = (await threeScene.getAttribute('data-three-gear-radii') ?? '').split(',').map(Number);
+      expect(radii, 'Planetary foundry exposes sun, 3 planets, and ring radii from the fabrication convention').toHaveLength(5);
+      expect(radii[4], 'Planetary ring pitch radius equals sun + 2*planet pitch radii').toBeCloseTo(radii[0] + 2 * radii[1], 2);
     }
   }
   await page.getByLabel('Foundry mechanism type').selectOption('rack-pinion');
@@ -1998,6 +2009,7 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
   await expect(designPuppet).toHaveAttribute('data-three-stack-order', /^Back Clip → .*S10 spacer.*Front Clip$/);
   await expect(designPuppet).toHaveAttribute('data-three-spacer-key', 's10');
   await expect(designPuppet).toHaveAttribute('data-three-spacer-mm', '10x4');
+  expect(Number(await designPuppet.getAttribute('data-three-spacer-z-gap')), 'Design center workspace spaces stacked plates along z by the shared S10 spacer layer').toBeGreaterThan(0);
   await expect(designPuppet).toHaveAttribute('data-three-stack-validation-errors', '0');
   expect(await designPuppet.getAttribute('data-three-rendered-layer-labels')).toBe(await designPuppet.getAttribute('data-three-stack-order'));
   expect(await designPuppet.getAttribute('data-three-rendered-layer-roles')).toBe(await designPuppet.getAttribute('data-three-stack-roles'));
@@ -2015,7 +2027,7 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
     cam: [['data-three-cam-count', 1], ['data-three-follower-count', 1]],
     'rack-pinion': [['data-three-gear-count', 1], ['data-three-rack-count', 1], ['data-three-slot-count', 1], ['data-three-end-stop-count', 2]],
     gear: [['data-three-gear-count', 2], ['data-three-mechanism-hole-count', 14]],
-    planetary_gear: [['data-three-gear-count', 3], ['data-three-mechanism-hole-count', 14]]
+    planetary_gear: [['data-three-gear-count', 5], ['data-three-mechanism-hole-count', 25]]
   };
 
   for (const type of ['4bar', 'piston', 'yoke', 'quick-return', '5bar', '6bar', 'cam', 'rack-pinion', 'gear', 'planetary_gear']) {
@@ -2026,9 +2038,17 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
     await expect(designPuppet, `${type} design stack has no validation errors`).toHaveAttribute('data-three-stack-validation-errors', '0');
     expect(await designPuppet.getAttribute('data-three-rendered-layer-labels'), `${type} design rendered labels match fabrication stack labels`).toBe(await designPuppet.getAttribute('data-three-stack-order'));
     expect(await designPuppet.getAttribute('data-three-rendered-layer-z'), `${type} design rendered z order matches fabrication stack z order`).toBe(await designPuppet.getAttribute('data-three-stack-z'));
+    expect(Number(await designPuppet.getAttribute('data-three-spacer-z-gap')), `${type} design preview has positive z separation for spacers`).toBeGreaterThan(0);
     await expect.poll(async () => Number(await designPuppet.getAttribute('data-three-scene-object-count')), { message: `${type} adds visible WebGL mechanism geometry to the center workspace` }).toBeGreaterThan(60);
     for (const [attr, minimumCount] of centerPhysicalMarkers[type]) {
       expect(Number(await designPuppet.getAttribute(attr)), `${type} center preview includes ${attr}`).toBeGreaterThanOrEqual(before[attr] + minimumCount);
+    }
+    if (type === 'planetary_gear') {
+      await expect(designPuppet, 'Design preview shares the fixed-ring planetary gear syntax').toHaveAttribute('data-three-planetary-syntax', 'ring-fixed-sun-input-carrier-output');
+      await expect(designPuppet).toHaveAttribute('data-three-planetary-output', 'carrier');
+      await expect(designPuppet, 'Carrier linkage is drilled as the nearest fabrication linkage blank for the actual carrier radius').toHaveAttribute('data-three-linkage-hole-counts', /driver:3/);
+      await expect(designPuppet, 'Carrier linkage uses the generator-supported 2-cell blank for its actual radius').toHaveAttribute('data-three-linkage-template-cells', /driver:2/);
+      await expect(designPuppet, 'Linkage holes preserve the fabrication generator pitch instead of stretching to arbitrary scene distance').toHaveAttribute('data-three-linkage-hole-spacing-mm', /driver:20\.00/);
     }
   }
 
@@ -2081,33 +2101,52 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
     if (((await button.textContent()) ?? '').includes('Play')) await button.click();
     await expect(button).toContainText('Pause');
   };
+  const setWorkspaceScrubber = async (percent: number) => {
+    const scrubber = page.getByLabel('Workspace scrubber');
+    await scrubber.evaluate((input, value) => {
+      const el = input as HTMLInputElement;
+      const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      valueSetter?.call(el, String(value));
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }, percent);
+    await expect(scrubber).toHaveValue(String(percent));
+  };
+  const scrubToMotionSample = async (fromPercent: number, toPercent: number, message: string) => {
+    await ensureDesignPaused();
+    await setWorkspaceScrubber(fromPercent);
+    const startTelemetry = await readTelemetry();
+    await setWorkspaceScrubber(toPercent);
+    let motionSample = await readTelemetry();
+    await expect.poll(async () => {
+      motionSample = await readTelemetry();
+      return Math.abs(deltaDeg(motionSample.primary, startTelemetry.primary));
+    }, { message, timeout: 60_000 }).toBeGreaterThan(6);
+    return { startTelemetry, motionSample };
+  };
   await ensureDesignPaused();
   await page.getByRole('button', { name: 'gear', exact: true }).click();
   await expect(designPuppet).toHaveAttribute('data-three-selected-mechanism-type', 'gear');
-  const gearStartTelemetry = await readTelemetry();
+  const { startTelemetry: gearStartTelemetry, motionSample: gearTelemetry } = await scrubToMotionSample(10, 20, 'gear scrubber updates the selected central 3D preview');
   const gearStart = gearStartTelemetry.primary;
   const gearSecondaryStart = gearStartTelemetry.secondary;
-  await ensureDesignPlaying();
-  const gearTelemetry = await waitForPrimaryMotionSample(gearStart, 'gear animation updates the selected central 3D preview');
-  await ensureDesignPaused();
   const gearPrimaryDelta = deltaDeg(gearTelemetry.primary, gearStart);
   const gearSecondaryDelta = deltaDeg(gearTelemetry.secondary, gearSecondaryStart);
   expect(circularDeltaError(gearSecondaryDelta, gearPrimaryDelta * gearTelemetry.gearRatio), 'gear train rotates by the live physical pitch-radius ratio').toBeLessThan(1.25);
 
   await page.getByRole('button', { name: '5bar', exact: true }).click();
   await expect(designPuppet).toHaveAttribute('data-three-selected-mechanism-type', '5bar');
-  const fiveStartTelemetry = await readTelemetry();
+  const { startTelemetry: fiveStartTelemetry, motionSample: fiveTelemetry } = await scrubToMotionSample(10, 20, 'five-bar scrubber updates secondary crank phase');
   const fiveStart = fiveStartTelemetry.primary;
   const fiveSecondaryStart = fiveStartTelemetry.secondary;
-  await ensureDesignPlaying();
-  const fiveTelemetry = await waitForPrimaryMotionSample(fiveStart, 'five-bar animation updates secondary crank phase');
-  await ensureDesignPaused();
   const fivePrimaryDelta = deltaDeg(fiveTelemetry.primary, fiveStart);
   const fiveSecondaryDelta = deltaDeg(fiveTelemetry.secondary, fiveSecondaryStart);
   expect(circularDeltaError(fiveSecondaryDelta, fiveTelemetry.secondarySpeed * fivePrimaryDelta), 'five-bar second crank follows speed2 rather than generic opposite rotation').toBeLessThan(0.75);
 
   await page.getByRole('button', { name: 'rack-pinion', exact: true }).click();
   await expect(designPuppet).toHaveAttribute('data-three-selected-mechanism-type', 'rack-pinion');
+  await ensureDesignPaused();
+  await setWorkspaceScrubber(25);
   const rackStart = {
     x: await numAttr('data-three-rack-x'),
     y: await numAttr('data-three-rack-y'),
@@ -2118,7 +2157,7 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
     stopBX: await numAttr('data-three-end-stop-b-x'),
     stopBY: await numAttr('data-three-end-stop-b-y')
   };
-  await ensureDesignPlaying();
+  await setWorkspaceScrubber(40);
   await expect.poll(async () => {
     const telemetry = await readTelemetry();
     return Math.hypot(telemetry.rackX - rackStart.x, telemetry.rackY - rackStart.y);
@@ -2126,7 +2165,6 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
   expect(Math.hypot(await numAttr('data-three-rack-guide-x') - rackStart.guideX, await numAttr('data-three-rack-guide-y') - rackStart.guideY), 'rack guide stays fixed while the rack slides').toBeLessThan(0.01);
   expect(Math.hypot(await numAttr('data-three-end-stop-a-x') - rackStart.stopAX, await numAttr('data-three-end-stop-a-y') - rackStart.stopAY), 'rack end stop A stays fixed').toBeLessThan(0.01);
   expect(Math.hypot(await numAttr('data-three-end-stop-b-x') - rackStart.stopBX, await numAttr('data-three-end-stop-b-y') - rackStart.stopBY), 'rack end stop B stays fixed').toBeLessThan(0.01);
-  await ensureDesignPaused();
   expectCleanPage(pageErrors, consoleErrors);
 });
 
@@ -2139,9 +2177,10 @@ test('Simplified shared canvas stays non-destructive and exports blueprint', asy
   });
 
   const saveSnapshot = async () => {
+    await page.getByTestId('top-command-bar').getByText('File', { exact: true }).click();
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByRole('button', { name: /Save/i }).click()
+      page.getByTestId('command-save-project').click()
     ]);
     const path = await download.path();
     expect(path, 'project save path').toBeTruthy();

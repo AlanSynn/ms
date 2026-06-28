@@ -1,6 +1,6 @@
 
 import { MechanismConfig, Point, MechanismType } from '../types';
-import { gearTrainOutputRatio, gearTrainPitchCenterDistance, generateCurvePoints, planetaryPlanetSpinRatio } from './kinematics';
+import { gearTrainOutputRatio, gearTrainPitchCenterDistance, generateCurvePoints, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from './kinematics';
 import { AUTHORABLE_MECHANISM_TYPES } from './mechanismTemplates';
 
 export const OPTIMIZER_MECHANISM_TYPES: MechanismType[] = [...AUTHORABLE_MECHANISM_TYPES];
@@ -537,8 +537,8 @@ export const generateSmartConfig = (targetPath?: Point[], forcedType?: Mechanism
     } else if (type === 'planetary_gear') {
         config.rockerLength = s(0.18);
         config.groundLength = config.crankLength + config.rockerLength;
-        config.gearRatio = planetaryPlanetSpinRatio(config.crankLength, config.rockerLength);
-        config.speed2 = config.gearRatio;
+        config.gearRatio = planetaryCarrierOutputRatio(config.crankLength, config.rockerLength);
+        config.speed2 = planetaryPlanetSpinRatio(config.crankLength, config.rockerLength);
         config.couplerLength = 0;
     } else if (type === '6bar') {
         if (targetPath && targetPath.length > 0) {
@@ -743,9 +743,10 @@ export const mutateConfig = (config: MechanismConfig, temperature: number = 1.0,
             newConfig.gearRatio = gearTrainOutputRatio(newConfig);
         } else {
             newConfig.groundLength = newConfig.crankLength + newConfig.rockerLength;
-            newConfig.gearRatio = planetaryPlanetSpinRatio(newConfig.crankLength, newConfig.rockerLength);
+            newConfig.gearRatio = planetaryCarrierOutputRatio(newConfig.crankLength, newConfig.rockerLength);
+            newConfig.speed2 = planetaryPlanetSpinRatio(newConfig.crankLength, newConfig.rockerLength);
         }
-        newConfig.speed2 = newConfig.gearRatio ?? newConfig.speed2;
+        if (newConfig.type === 'gear') newConfig.speed2 = newConfig.gearRatio ?? newConfig.speed2;
     }
     if (newConfig.type === 'rack-pinion') {
         newConfig.groundLength = 0;

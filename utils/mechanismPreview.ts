@@ -1,5 +1,5 @@
 import type { MechanismConfig, Point } from '../types';
-import { calculateLinkage, generateCurvePoints } from './kinematics';
+import { calculateLinkage, generateCurvePoints, planetaryRingPitchRadius } from './kinematics';
 
 export const pointsToSvgPath = (points: Point[]) => points.length ? `M ${points.map(p => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' L ')}` : '';
 
@@ -41,7 +41,7 @@ export const createMechanismFitContext = (mechanism: MechanismConfig, width: num
       addRadiusBounds(sampleState.p2, mechanism.rockerLength);
     }
     if (mechanism.type === 'planetary_gear') {
-      addRadiusBounds(sampleState.p1, mechanism.groundLength + mechanism.rockerLength);
+      addRadiusBounds(sampleState.p1, planetaryRingPitchRadius(mechanism.crankLength, mechanism.rockerLength));
       addRadiusBounds(sampleState.p2, mechanism.rockerLength);
     }
   }

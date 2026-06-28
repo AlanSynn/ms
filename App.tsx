@@ -19,7 +19,7 @@ import {
     ProjectState
 } from './types';
 import { gearPathD, generateDXF, generateSVG } from './utils/exporter';
-import { animationDeltaRadians, calculateLinkage, camProfileScale, generateCurvePoints, gearPairOutputRatio, gearTrainCenters, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, planetaryPlanetSpinRatio } from './utils/kinematics';
+import { animationDeltaRadians, calculateLinkage, camProfileScale, generateCurvePoints, gearPairOutputRatio, gearTrainCenters, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from './utils/kinematics';
 import { evaluateFitness, generateSmartConfig, mutateConfig } from './utils/optimizer';
 import {
     applyProjectAction,
@@ -39,7 +39,7 @@ import {
 import { checkWebOnnxCache, processImageWithWebOnnx, warmWebOnnxCache, type WebOnnxCacheStatus } from './utils/webOnnx';
 import { buildFoundryPhysicsOverlay } from './utils/physicsSession';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, loadRapierPhysicsKernel, physicsKernelErrorMessage } from './utils/physicsKernel';
-import { createFabricationPackage, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, prefabAssemblySteps, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
+import { createFabricationPackage, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationLinkageSpecForSceneLength, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, prefabAssemblySteps, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
 import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToBoardRaw, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
 import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
@@ -75,6 +75,7 @@ const FOUNDRY_VIEW_PRESETS: Record<Exclude<FoundryViewPreset, 'custom'>, Foundry
 
 const clampFoundryPitch = (value: number) => Math.max(-64, Math.min(68, value));
 const clampFoundryZoom = (value: number) => Math.max(0.45, Math.min(2.4, value));
+const degToRad = (deg: number) => (deg * Math.PI) / 180;
 const foundryCameraDistance = (camera: FoundryCamera) => 17 / clampFoundryZoom(camera.zoom);
 type FoundryOverlaySize = { width: number; height: number };
 const FOUNDRY_OVERLAY_SIZE: FoundryOverlaySize = { width: 360, height: 240 };
@@ -2150,7 +2151,10 @@ const normalizeGearMeshMechanism = (mechanism: MechanismConfig): MechanismConfig
         : undefined;
     const physicalRatio = mechanism.type === 'gear'
         ? gearTrainOutputRatio({ crankLength, rockerLength, gearTrainRadii })
-        : planetaryPlanetSpinRatio(crankLength, rockerLength);
+        : planetaryCarrierOutputRatio(crankLength, rockerLength);
+    const secondarySpeed = mechanism.type === 'planetary_gear'
+        ? planetaryPlanetSpinRatio(crankLength, rockerLength)
+        : physicalRatio;
     return {
         ...mechanism,
         crankLength,
@@ -2159,7 +2163,7 @@ const normalizeGearMeshMechanism = (mechanism: MechanismConfig): MechanismConfig
         couplerLength: 0,
         gearTrainRadii,
         gearRatio: physicalRatio,
-        speed2: physicalRatio
+        speed2: secondarySpeed
     };
 };
 
@@ -2196,7 +2200,7 @@ const createRecommendedMechanism = (project: ProjectState, selectedPart: BodyPar
     const tunedGearRatio = type === 'gear'
         ? gearTrainOutputRatio([tunedCrankLength, tunedRockerLength])
         : type === 'planetary_gear'
-            ? planetaryPlanetSpinRatio(tunedCrankLength, tunedRockerLength)
+            ? planetaryCarrierOutputRatio(tunedCrankLength, tunedRockerLength)
             : undefined;
     const tuned: MechanismConfig = {
         ...base,
@@ -2218,7 +2222,7 @@ const createRecommendedMechanism = (project: ProjectState, selectedPart: BodyPar
         couplerPointAngle: type === 'piston' || type === 'rack-pinion' ? 0 : base.couplerPointAngle,
         gearRatio: tunedGearRatio,
         gearTrainRadii: type === 'gear' ? [tunedCrankLength, tunedRockerLength] : undefined,
-        speed2: tunedGearRatio ?? base.speed2,
+        speed2: type === 'planetary_gear' ? planetaryPlanetSpinRatio(tunedCrankLength, tunedRockerLength) : tunedGearRatio ?? base.speed2,
         rodLength: type === '6bar' ? Math.max(55, Math.min(180, span * 0.52)) : (smart.rodLength ?? base.rodLength),
         assemblyMode: type === '6bar' ? 'open' : base.assemblyMode,
         phase: 0,
@@ -3163,7 +3167,7 @@ const foundryRenderedInventory = (type: MechanismType) => ({
     cam: { parts: 8, holes: 16, slots: 1, gears: 0, racks: 0, cams: 1, followers: 1, endStops: 0 },
     'rack-pinion': { parts: 10, holes: 20, slots: 1, gears: 1, racks: 1, cams: 0, followers: 0, endStops: 2 },
     gear: { parts: 8, holes: 29, slots: 0, gears: 2, racks: 0, cams: 0, followers: 0, endStops: 0 },
-    planetary_gear: { parts: 7, holes: 25, slots: 0, gears: 2, racks: 0, cams: 0, followers: 0, endStops: 0 },
+    planetary_gear: { parts: 9, holes: 25, slots: 0, gears: 5, racks: 0, cams: 0, followers: 0, endStops: 0 },
     crank: { parts: 5, holes: 15, slots: 0, gears: 0, racks: 0, cams: 0, followers: 0, endStops: 0 }
 }[type]);
 
@@ -3190,12 +3194,15 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
     const [physicsKernelRuntime, setPhysicsKernelRuntime] = useState<'loading' | 'ready' | 'unavailable'>('loading');
     const [physicsKernelVersion, setPhysicsKernelVersion] = useState('pending');
     const [physicsKernelError, setPhysicsKernelError] = useState('none');
-    const gearRadii = mechanism.type === 'gear' ? gearTrainPitchRadii(mechanism) : [mechanism.crankLength, mechanism.rockerLength];
+    const gearRadii = mechanism.type === 'gear' ? gearTrainPitchRadii(mechanism) : mechanism.type === 'planetary_gear' ? planetaryGearRadii(mechanism) : [mechanism.crankLength, mechanism.rockerLength];
     const gearCenters = mechanism.type === 'gear' ? gearTrainCenters(mechanism) : [];
+    const planetaryConvention = mechanism.type === 'planetary_gear' ? planetaryGearConventionForMechanism(mechanism) : null;
     const baseInv = foundryRenderedInventory(mechanism.type);
     const inv = mechanism.type === 'gear'
         ? { ...baseInv, gears: gearRadii.length, parts: Math.max(baseInv.parts, gearRadii.length + 4), holes: Math.max(baseInv.holes, gearRadii.length * 8 + 13) }
-        : baseInv;
+        : mechanism.type === 'planetary_gear'
+            ? { ...baseInv, gears: gearRadii.length, parts: Math.max(baseInv.parts, gearRadii.length + 4) }
+            : baseInv;
     const pinionRotation = Math.atan2(simulation.state.j1.y - simulation.state.p1.y, simulation.state.j1.x - simulation.state.p1.x) * 180 / Math.PI;
     const renderPlan = useMemo(() => fabricationRenderPlanForMechanism(mechanism), [mechanism]);
     const viewerContract = useMemo(() => createViewer3DContract('foundry', camera.preset, {
@@ -3434,13 +3441,18 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             const av = to3(a, z), bv = to3(b, z);
             const dx = bv.x - av.x, dy = bv.y - av.y, len = Math.hypot(dx, dy);
             if (len < 0.05) return;
+            const sceneLength = Math.hypot(b.x - a.x, b.y - a.y);
+            const linkageSpec = fabricationLinkageSpecForSceneLength(sceneLength, kit.gridPitchMm, holeCount);
+            const templateLen = linkageSpec.lengthMm * mmToThree;
+            const firstHoleX = linkageSpec.holeCentersMm[0]?.x ?? 0;
+            const holeXs = linkageSpec.holeCentersMm.map(point => ((point.x - firstHoleX) - linkageSpec.lengthMm / 2) * mmToThree);
+            const outlineLen = templateLen + barW;
             const group = new THREE.Group();
             group.position.set((av.x + bv.x) / 2, (av.y + bv.y) / 2, z);
             group.rotation.z = Math.atan2(dy, dx);
-            const holeXs = Array.from({ length: Math.max(2, holeCount) }, (_, index) => -len / 2 + (len * index) / (Math.max(2, holeCount) - 1));
-            const geometryKey = `bar:${len.toFixed(3)}:${barW.toFixed(3)}:${thickness.toFixed(3)}:${holeCount}`;
+            const geometryKey = `bar:${linkageSpec.key}:${kit.gridPitchMm}:${outlineLen.toFixed(3)}:${barW.toFixed(3)}:${thickness.toFixed(3)}`;
             const mesh = new THREE.Mesh(cachedGeometry(geometryKey, () => {
-                const shape = roundedRectShape(len, barW);
+                const shape = roundedRectShape(outlineLen, barW);
                 shape.holes.push(...holeXs.map(x => circularHole(x, 0)));
                 return new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.025, bevelThickness: 0.018 });
             }), mat);
@@ -3609,6 +3621,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             else if (mechanism.type === '6bar' && /output rocker/i.test(label)) addBar(s.p2, s.j2, z, mat, 3);
             else if (mechanism.type === '6bar' && /dyad/i.test(label)) addBar(s.j2, s.aux, z, mat, 2);
             else if (mechanism.type === '6bar' && /follower/i.test(label)) addBar(s.p2, s.aux, z, mat, 2);
+            else if (mechanism.type === 'planetary_gear' && /carrier/i.test(label)) planetaryPlanetCenters(s.p1, mechanism, degToRad(angle) * planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength)).forEach(center => addBar(s.p1, center, z, mat, 3));
             else if (/input|crank|left/i.test(label)) addBar(s.p1, s.j1, z, mat, 3);
             else if (/right/i.test(label)) addBar(s.p2, s.j2, z, mat, 3);
             else if (/coupler|center|carrier/i.test(label)) addBar(s.j1, s.j2, z, mat, 4);
@@ -3616,8 +3629,8 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             else addBar(s.j1, s.j2, z, mat, 3);
         };
         const renderGearLayer = (label: string, z: number, mat: THREE.Material) => {
-            if (/ring/i.test(label)) addRingGear(s.p1, mechanism.groundLength + mechanism.rockerLength, z, 0, mat);
-            else if (/planet/i.test(label)) addGear(s.p2, mechanism.rockerLength, z, angle * planetaryPlanetSpinRatio(mechanism.crankLength, mechanism.rockerLength), mat);
+            if (/ring/i.test(label)) addRingGear(s.p1, planetaryRingPitchRadius(mechanism), z, 0, mat);
+            else if (/planet/i.test(label)) planetaryPlanetCenters(s.p1, mechanism, degToRad(angle) * planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength)).forEach((center, index) => addGear(center, mechanism.rockerLength, z, angle * planetaryPlanetSpinRatio(mechanism.crankLength, mechanism.rockerLength) + index * 120, mat));
             else if (mechanism.type === 'gear' && /idler gear/i.test(label)) {
                 const index = Math.max(1, Number(label.match(/(\d+)/)?.[1] ?? 1));
                 const ratio = (index % 2 === 1 ? -1 : 1) * gearRadii[0] / gearRadii[index];
@@ -3725,9 +3738,15 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-three-follower-count={inv.followers}
             data-three-end-stop-count={inv.endStops}
             data-three-gear-radii={gearRadii.map(radius => radius.toFixed(2)).join(',')}
-            data-three-gear-pitch-center={mechanism.groundLength.toFixed(2)}
-            data-three-gear-pitch-sum={(mechanism.type === 'gear' ? gearTrainPitchCenterDistance(mechanism) : mechanism.crankLength + mechanism.rockerLength).toFixed(2)}
-            data-three-gear-output-ratio={(mechanism.type === 'gear' ? gearTrainOutputRatio(mechanism) : gearPairOutputRatio(mechanism.crankLength, mechanism.rockerLength)).toFixed(3)}
+            data-three-gear-pitch-center={(mechanism.type === 'planetary_gear' ? planetaryGearConventionForMechanism(mechanism).carrierPitchRadius : mechanism.groundLength).toFixed(2)}
+            data-three-gear-pitch-sum={(mechanism.type === 'gear' ? gearTrainPitchCenterDistance(mechanism) : mechanism.type === 'planetary_gear' ? planetaryGearConventionForMechanism(mechanism).ringPitchRadius : mechanism.crankLength + mechanism.rockerLength).toFixed(2)}
+            data-three-gear-output-ratio={(mechanism.type === 'gear' ? gearTrainOutputRatio(mechanism) : mechanism.type === 'planetary_gear' ? planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength) : gearPairOutputRatio(mechanism.crankLength, mechanism.rockerLength)).toFixed(3)}
+            data-three-planetary-syntax={planetaryConvention?.syntax ?? ''}
+            data-three-planetary-fixed={planetaryConvention?.fixedMember ?? ''}
+            data-three-planetary-input={planetaryConvention?.inputMember ?? ''}
+            data-three-planetary-output={planetaryConvention?.outputMember ?? ''}
+            data-three-planetary-ring-radius={planetaryConvention?.ringPitchRadius.toFixed(2) ?? ''}
+            data-three-planetary-carrier-radius={planetaryConvention?.carrierPitchRadius.toFixed(2) ?? ''}
             data-three-gear-train-linkage-mode={mechanism.type === 'gear' ? 'drive-and-output-rods' : 'template-specific'}
             data-three-spacer-key={FABRICATION_SPACER_SPEC.key}
             data-three-spacer-label={FABRICATION_SPACER_SPEC.label}
@@ -3791,7 +3810,6 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
     const holeR = Math.max(compact ? 1.8 : 2.6, Math.min(compact ? 3.4 : 5.6, FABRICATION_HOLE_RADIUS_MM * SCENE_PX_PER_MM * simulation.scale));
     const pitch = Math.max(holeR * 3.5, kit.gridPitchMm * SCENE_PX_PER_MM * simulation.scale);
     const barWidth = Math.max(FABRICATION_LINKAGE_WIDTH_MM * SCENE_PX_PER_MM * simulation.scale, holeR * 3.5, compact ? 8 : 14);
-    const degToRad = (deg: number) => (deg * Math.PI) / 180;
     const axisForAngle = (deg: number) => ({ x: Math.cos(degToRad(deg)), y: -Math.sin(degToRad(deg)) });
     const trackAxis = axisForAngle(mechanism.groundAngle ?? 0);
     const normalAxis = { x: -trackAxis.y, y: trackAxis.x };
@@ -3812,14 +3830,18 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
         const dy = b.y - a.y;
         const len = Math.hypot(dx, dy);
         if (!Number.isFinite(len) || len < 0.5) return null;
-        const holeCount = Math.max(2, Math.min(10, Math.round(len / pitch) + 1));
-        return <g key={key} data-testid={testIdName ? test(testIdName) : undefined} className={`mechanism-part ${className}`} transform={`translate(${a.x} ${a.y}) rotate(${Math.atan2(dy, dx) * 180 / Math.PI})`}>
-            <rect data-testid={thicknessTestId} className="mechanism-thickness" x={depth} y={-barWidth / 2 + depth} width={len} height={barWidth} rx={barWidth / 2} />
-            <rect data-testid={fabricationTest('part')} className="mechanism-face" x="0" y={-barWidth / 2} width={len} height={barWidth} rx={barWidth / 2} />
-            {Array.from({ length: holeCount }, (_, index) => {
-                const x = holeCount === 1 ? 0 : (len * index) / (holeCount - 1);
-                return <circle key={index} data-testid={fabricationTest('hole')} className="mechanism-hole" cx={x} cy="0" r={holeR} />;
-            })}
+        const sceneLength = len / Math.max(0.0001, simulation.scale);
+        const minHoleCount = key === 'coupler' ? 4 : key.includes('carrier') || key === 'frame' || key === 'driver' || key === 'output' ? 3 : 2;
+        const linkageSpec = fabricationLinkageSpecForSceneLength(sceneLength, kit.gridPitchMm, minHoleCount);
+        const templateLen = linkageSpec.lengthMm * SCENE_PX_PER_MM * simulation.scale;
+        const outlineLen = templateLen + barWidth;
+        const firstHoleX = linkageSpec.holeCentersMm[0]?.x ?? 0;
+        const holeXs = linkageSpec.holeCentersMm.map(point => ((point.x - firstHoleX) - linkageSpec.lengthMm / 2) * SCENE_PX_PER_MM * simulation.scale);
+        const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        return <g key={key} data-testid={testIdName ? test(testIdName) : undefined} className={`mechanism-part ${className}`} transform={`translate(${mid.x} ${mid.y}) rotate(${Math.atan2(dy, dx) * 180 / Math.PI})`}>
+            <rect data-testid={thicknessTestId} className="mechanism-thickness" x={-outlineLen / 2 + depth} y={-barWidth / 2 + depth} width={outlineLen} height={barWidth} rx={barWidth / 2} />
+            <rect data-testid={fabricationTest('part')} className="mechanism-face" x={-outlineLen / 2} y={-barWidth / 2} width={outlineLen} height={barWidth} rx={barWidth / 2} />
+            {holeXs.map((x, index) => <circle key={index} data-testid={fabricationTest('hole')} className="mechanism-hole" cx={x} cy="0" r={holeR} />)}
         </g>;
     };
     const guideAxis = (center: Point, axis: Point, key: string, reach = compact ? 42 : 95, endStops = false) => {
@@ -3914,9 +3936,11 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
             })}
         </>}
         {mechanism.type === 'planetary_gear' && <>
-            {ringGear(s.p1, mechanism.groundLength + mechanism.rockerLength, 'mechanism-frame carrier', 'ring')}
+            {ringGear(s.p1, planetaryRingPitchRadius(mechanism), 'mechanism-frame carrier', 'ring')}
             {gear(s.p1, mechanism.crankLength, 'mechanism-driver', 'sun', compact ? 7 : 12, compact ? 22 : 42, inputAngleDeg)}
-            {gear(s.p2, mechanism.rockerLength, 'mechanism-link secondary', 'planet', compact ? 7 : 12, compact ? 22 : 42, outputAngleDeg)}
+            {planetaryPlanetCenters(s.p1, mechanism, degToRad(inputAngleDeg) * planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength)).map((center, index) =>
+                gear(center, mechanism.rockerLength, 'mechanism-link secondary', `planet-${index + 1}`, compact ? 7 : 12, compact ? 22 : 42, outputAngleDeg + index * 120)
+            )}
         </>}
         {mechanism.type === '5bar' && <>
             {gear(s.p1, mechanism.crankLength, 'mechanism-driver', 'fivebar-gear-a', compact ? 7 : 12, compact ? 22 : 42, inputAngleDeg)}
@@ -3981,11 +4005,13 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
             link(s.j1, s.effector, 'gear-drive-rod', 'mechanism-link', 'link'),
             link(s.j2, s.effector, 'gear-output-rod', 'mechanism-output', 'output')
         ];
-        if (mechanism.type === 'planetary_gear') return [
-            link(s.p1, s.p2, 'carrier', 'mechanism-driver', 'driver'),
-            link(s.p2, s.j2, 'planet-output-arm', 'mechanism-link', 'link'),
-            link(s.j2, s.effector, 'planet-output', 'mechanism-output', 'output')
-        ];
+        if (mechanism.type === 'planetary_gear') {
+            const planetCenters = planetaryPlanetCenters(s.p1, mechanism, degToRad(inputAngleDeg) * planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength));
+            return [
+                ...planetCenters.map((center, index) => link(s.p1, center, `carrier-${index + 1}`, 'mechanism-driver', index === 0 ? 'driver' : undefined)),
+                link(s.p2, s.effector, 'carrier-output', 'mechanism-output', 'output')
+            ];
+        }
         return [
             link(s.p1, s.p2, 'frame', 'mechanism-frame', 'frame'),
             link(s.p1, s.j1, 'driver', 'mechanism-driver', 'driver'),

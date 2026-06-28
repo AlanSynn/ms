@@ -68,8 +68,21 @@ export const gearTrainCenters = (config: Pick<MechanismConfig, 'anchorX' | 'anch
     });
 };
 
-export const planetaryPlanetSpinRatio = (sunPitchRadius: number, planetPitchRadius: number) =>
-    -safeRadiusRatio(sunPitchRadius + planetPitchRadius, planetPitchRadius, 3);
+export const planetaryRingPitchRadius = (sunPitchRadius: number, planetPitchRadius: number) =>
+    positiveRadius(sunPitchRadius) + 2 * positiveRadius(planetPitchRadius);
+
+export const planetaryCarrierOutputRatio = (sunPitchRadius: number, planetPitchRadius: number) => {
+    const sun = positiveRadius(sunPitchRadius);
+    const ring = planetaryRingPitchRadius(sunPitchRadius, planetPitchRadius);
+    return safeRadiusRatio(sun, sun + ring, 0.125);
+};
+
+export const planetaryPlanetSpinRatio = (sunPitchRadius: number, planetPitchRadius: number) => {
+    const sun = positiveRadius(sunPitchRadius);
+    const planet = positiveRadius(planetPitchRadius);
+    const carrierRatio = planetaryCarrierOutputRatio(sun, planet);
+    return carrierRatio - (sun / planet) * (1 - carrierRatio);
+};
 
 export const animationDeltaRadians = (
     dtMs: number,
@@ -228,22 +241,22 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
 
     // --- PLANETARY GEAR / EPITROCHOID OUTPUT ---
     else if (config.type === 'planetary_gear') {
-        const carrier = Math.max(1, config.groundLength || 90);
         const planet = Math.max(1, config.rockerLength || 36);
+        const carrier = Math.max(1, config.groundLength || positiveRadius(config.crankLength) + planet);
         const arm = config.couplerPointDist || 65;
-        const ratio = planetaryPlanetSpinRatio(config.crankLength, planet);
+        const carrierAngle = angle1 * planetaryCarrierOutputRatio(config.crankLength, planet);
+        const spin = angle1 * planetaryPlanetSpinRatio(config.crankLength, planet) + (config.phase ?? 0);
         const center: Point = {
-            x: p1.x + carrier * Math.cos(angle1),
-            y: p1.y + carrier * Math.sin(angle1)
+            x: p1.x + carrier * Math.cos(carrierAngle),
+            y: p1.y + carrier * Math.sin(carrierAngle)
         };
-        const spin = angle1 * ratio + (config.phase ?? 0);
         const j2: Point = {
             x: center.x + planet * Math.cos(spin),
             y: center.y + planet * Math.sin(spin)
         };
         const effector: Point = {
-            x: center.x + arm * Math.cos(spin + toRad(config.couplerPointAngle)),
-            y: center.y + arm * Math.sin(spin + toRad(config.couplerPointAngle))
+            x: p1.x + arm * Math.cos(carrierAngle + toRad(config.couplerPointAngle)),
+            y: p1.y + arm * Math.sin(carrierAngle + toRad(config.couplerPointAngle))
         };
         return { p1, p2: center, j1, j2, aux: center, effector, isValid: true };
     }

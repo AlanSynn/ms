@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { BodyPartLayer, CanvasViewport, MechanismConfig, MechanismType, Point, ProjectState, StandardSkeleton } from '../types';
 import { boardGridLines, defaultPhysicalKit, SCENE_PX_PER_MM, sceneBoundsForSheet } from '../utils/coordinates';
-import { calculateLinkage, camProfileScale, gearPairOutputRatio, gearTrainCenters, gearTrainOutputRatio, gearTrainPitchRadii, planetaryPlanetSpinRatio } from '../utils/kinematics';
-import { FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationRenderPlanForMechanism, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints } from '../utils/fabrication';
+import { calculateLinkage, camProfileScale, gearPairOutputRatio, gearTrainCenters, gearTrainOutputRatio, gearTrainPitchRadii, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from '../utils/kinematics';
+import { FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRenderPlanForMechanism, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, type FabricationLinkageRoleLengths } from '../utils/fabrication';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, pointInsideOutline } from '../utils/partGeometry';
 import { clampCanvasZoom, WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, loadRapierPhysicsKernel, physicsKernelErrorMessage } from '../utils/physicsKernel';
@@ -176,7 +176,7 @@ const puppetMechanismInventory = (mechanism: MechanismConfig): MechanismInventor
   cam: { parts: 4, holes: 6, slots: 1, gears: 0, racks: 0, cams: 1, followers: 1, endStops: 0 },
   'rack-pinion': { parts: 5, holes: 6, slots: 1, gears: 1, racks: 1, cams: 0, followers: 1, endStops: 2 },
   gear: { parts: Math.max(6, gearTrainPitchRadii(mechanism).length + 4), holes: Math.max(18, gearTrainPitchRadii(mechanism).length * 8 + 2), slots: 0, gears: gearTrainPitchRadii(mechanism).length, racks: 0, cams: 0, followers: 0, endStops: 0 },
-  planetary_gear: { parts: 5, holes: 14, slots: 0, gears: 3, racks: 0, cams: 0, followers: 0, endStops: 0 }
+  planetary_gear: { parts: 9, holes: 25, slots: 0, gears: 5, racks: 0, cams: 0, followers: 0, endStops: 0 }
 }[mechanism.type]);
 
 const addInventory = (sum: MechanismInventory, item: MechanismInventory): MechanismInventory => ({
@@ -254,17 +254,23 @@ const updateUnitBar = (mesh: THREE.Object3D, a?: Point, b?: Point, z = 0) => {
   mesh.scale.set(Math.max(0.01, len), 1, 1);
 };
 
-const createHoledLink = (length: number, width: number, material: THREE.Material, edgeMaterial: THREE.Material, holeCount = 2) => {
+const createHoledLink = (length: number, width: number, material: THREE.Material, edgeMaterial: THREE.Material, holeCount = 2, pitchMm = 20) => {
   const group = new THREE.Group();
   const safeLength = Math.max(0.08, length);
-  const count = Math.max(2, holeCount);
-  group.userData.baseLength = safeLength;
-  const key = `holed-link:${geometryKeyNumber(safeLength)}:${geometryKeyNumber(width)}:${count}:${geometryKeyNumber(FABRICATION_HOLE_RADIUS_3D)}`;
+  const sceneLength = safeLength * VIEW_SCALE;
+  const spec = fabricationLinkageSpecForSceneLength(sceneLength, pitchMm, holeCount);
+  const templateLength = Math.max(0.08, (spec.lengthMm * SCENE_PX_PER_MM) / VIEW_SCALE);
+  const outlineLength = templateLength + width;
+  const firstHoleX = spec.holeCentersMm[0]?.x ?? 0;
+  const holeXs = spec.holeCentersMm.map(point => ((point.x - firstHoleX) - spec.lengthMm / 2) * SCENE_PX_PER_MM / VIEW_SCALE);
+  group.userData.baseLength = templateLength;
+  group.userData.fabricationLocked = true;
+  group.userData.fabricationSpecKey = spec.key;
+  group.userData.fabricationHoleSpacingMm = spec.pitchMm;
+  const key = `holed-link:${spec.key}:${geometryKeyNumber(pitchMm)}:${geometryKeyNumber(outlineLength)}:${geometryKeyNumber(width)}:${geometryKeyNumber(FABRICATION_HOLE_RADIUS_3D)}`;
   const geometry = cachedGeometry(key, () => {
-    const shape = roundedRect(safeLength, width, width / 2);
-    for (let i = 0; i < count; i += 1) {
-      shape.holes.push(holePath(-safeLength / 2 + (safeLength * i) / (count - 1), 0, Math.min(FABRICATION_HOLE_RADIUS_3D, width * 0.34)));
-    }
+    const shape = roundedRect(outlineLength, width, width / 2);
+    holeXs.forEach(x => shape.holes.push(holePath(x, 0, Math.min(FABRICATION_HOLE_RADIUS_3D, width * 0.34))));
     return new THREE.ExtrudeGeometry(shape, { depth: 0.11, bevelEnabled: false, steps: 1, curveSegments: 6 });
   });
   const mesh = new THREE.Mesh(geometry, material);
@@ -377,7 +383,7 @@ const updateLink = (group: THREE.Object3D, a?: Point, b?: Point, z = 0) => {
   group.visible = len >= 0.03;
   group.position.set((av.x + bv.x) / 2, (av.y + bv.y) / 2, z);
   group.rotation.z = Math.atan2(bv.y - av.y, bv.x - av.x);
-  group.scale.x = len / Math.max(0.01, Number(group.userData.baseLength ?? len));
+  group.scale.x = group.userData.fabricationLocked === true ? 1 : len / Math.max(0.01, Number(group.userData.baseLength ?? len));
 };
 
 const updateObject = (object: THREE.Object3D | undefined, center?: Point, z = 0, rotation = 0) => {
@@ -425,7 +431,10 @@ const mechanismGearRotations = (mechanism: MechanismConfig, angle: number) => {
     const radii = gearTrainPitchRadii(mechanism);
     return radii.map((radius, index) => input * ((index % 2 === 1 ? -1 : 1) * radii[0] / radius) + (index === radii.length - 1 ? phase : 0));
   }
-  if (mechanism.type === 'planetary_gear') return [input, input * planetaryPlanetSpinRatio(mechanism.crankLength, mechanism.rockerLength) + phase];
+  if (mechanism.type === 'planetary_gear') return [
+    input,
+    ...Array.from({ length: 3 }, (_, index) => input * planetaryPlanetSpinRatio(mechanism.crankLength, mechanism.rockerLength) + phase + (index * Math.PI * 2) / 3)
+  ];
   return [input];
 };
 
@@ -560,6 +569,19 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
   const renderedMechanisms = useMemo(() => selectedMechanism ? [selectedMechanism] : [], [selectedMechanism]);
   const selectedTelemetry = useMemo(() => selectedMechanism ? mechanismTelemetry(selectedMechanism, angle) : null, [selectedMechanism, angle]);
   const selectedRenderPlan = useMemo(() => selectedMechanism ? fabricationRenderPlanForMechanism(selectedMechanism) : null, [selectedMechanism]);
+  const selectedLinkageHoleCounts = useMemo(() => selectedMechanism ? fabricationLinkageHoleCountsForMechanism(selectedMechanism, kit.gridPitchMm) : null, [kit.gridPitchMm, selectedMechanism]);
+  const selectedLinkageSpecs = useMemo(() => {
+    if (!selectedMechanism) return null;
+    const lengths = fabricationLinkageSceneLengthsForMechanism(selectedMechanism);
+    return Object.fromEntries(Object.entries(lengths).map(([role, length]) => {
+      const typedRole = role as keyof FabricationLinkageRoleLengths;
+      return [role, fabricationLinkageSpecForSceneLength(length, kit.gridPitchMm, FABRICATION_LINKAGE_ROLE_MIN_HOLES[typedRole])];
+    })) as Record<keyof FabricationLinkageRoleLengths, ReturnType<typeof fabricationLinkageSpecForSceneLength>>;
+  }, [kit.gridPitchMm, selectedMechanism]);
+  const selectedStackZGap = useMemo(() => {
+    if (!selectedRenderPlan || selectedRenderPlan.layers.length < 2) return 0;
+    return selectedRenderPlan.layers[1].z - selectedRenderPlan.layers[0].z;
+  }, [selectedRenderPlan]);
   const stackValidationErrors = useMemo(
     () => mechanismsToRender.reduce((sum, mechanism) => sum + fabricationRenderPlanForMechanism(mechanism).validationErrors.length, 0),
     [mechanismsToRender]
@@ -800,21 +822,16 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
     mechanismRefs.current.clear();
     renderedMechanisms.forEach(mechanism => {
       const group = new THREE.Group();
-      const linkLengths = {
-        base: Math.max(0.08, mechanism.groundLength / VIEW_SCALE),
-        driver: Math.max(0.08, mechanism.crankLength / VIEW_SCALE),
-        coupler: Math.max(0.08, mechanism.couplerLength / VIEW_SCALE),
-        output: Math.max(0.08, mechanism.rockerLength / VIEW_SCALE),
-        effector: Math.max(0.08, Math.max(20, mechanism.couplerPointDist) / VIEW_SCALE),
-        follower: Math.max(0.08, Math.max(20, mechanism.rodLength ?? mechanism.couplerPointDist) / VIEW_SCALE)
-      };
+      const sceneLinkLengths = fabricationLinkageSceneLengthsForMechanism(mechanism);
+      const linkLengths = Object.fromEntries(Object.entries(sceneLinkLengths).map(([role, length]) => [role, Math.max(0.08, length / VIEW_SCALE)])) as Record<LinkKey, number>;
+      const pitchMm = project?.settings.physicalKit.gridPitchMm ?? 20;
       const links: Record<LinkKey, THREE.Group> = {
-        base: createHoledLink(linkLengths.base, FABRICATION_LINKAGE_WIDTH_3D, materials.mechBase, materials.edge, 3),
-        driver: createHoledLink(linkLengths.driver, FABRICATION_LINKAGE_WIDTH_3D, materials.mechDrive, materials.edge, 3),
-        coupler: createHoledLink(linkLengths.coupler, FABRICATION_LINKAGE_WIDTH_3D, materials.mechCoupler, materials.edge, 4),
-        output: createHoledLink(linkLengths.output, FABRICATION_LINKAGE_WIDTH_3D, materials.mechOutput, materials.edge, 3),
-        effector: createHoledLink(linkLengths.effector, FABRICATION_LINKAGE_WIDTH_3D, materials.mechOutput, materials.edge, 2),
-        follower: createHoledLink(linkLengths.follower, FABRICATION_LINKAGE_WIDTH_3D, materials.mechOutput, materials.edge, 2)
+        base: createHoledLink(linkLengths.base, FABRICATION_LINKAGE_WIDTH_3D, materials.mechBase, materials.edge, 3, pitchMm),
+        driver: createHoledLink(linkLengths.driver, FABRICATION_LINKAGE_WIDTH_3D, materials.mechDrive, materials.edge, 3, pitchMm),
+        coupler: createHoledLink(linkLengths.coupler, FABRICATION_LINKAGE_WIDTH_3D, materials.mechCoupler, materials.edge, 4, pitchMm),
+        output: createHoledLink(linkLengths.output, FABRICATION_LINKAGE_WIDTH_3D, materials.mechOutput, materials.edge, 3, pitchMm),
+        effector: createHoledLink(linkLengths.effector, FABRICATION_LINKAGE_WIDTH_3D, materials.mechOutput, materials.edge, 2, pitchMm),
+        follower: createHoledLink(linkLengths.follower, FABRICATION_LINKAGE_WIDTH_3D, materials.mechOutput, materials.edge, 2, pitchMm)
       };
       Object.values(links).forEach(link => group.add(link));
       const gears: THREE.Mesh[] = [];
@@ -823,7 +840,9 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
           ? [mechanism.crankLength]
           : mechanism.type === 'gear'
             ? gearTrainPitchRadii(mechanism)
-            : [mechanism.crankLength, mechanism.rockerLength];
+            : mechanism.type === 'planetary_gear'
+              ? [mechanism.crankLength, mechanism.rockerLength, mechanism.rockerLength, mechanism.rockerLength]
+              : [mechanism.crankLength, mechanism.rockerLength];
         gearRadii.forEach((radius, index) => {
           const mesh = new THREE.Mesh(
             cachedGeometry(`gear:${geometryKeyNumber(Math.max(0.38, radius / VIEW_SCALE))}:${geometryKeyNumber(radius / SCENE_PX_PER_MM)}:0.16`, () => new THREE.ExtrudeGeometry(gearShape(Math.max(0.38, radius / VIEW_SCALE), radius / SCENE_PX_PER_MM), { depth: 0.16, bevelEnabled: false, steps: 1, curveSegments: 6 })),
@@ -864,7 +883,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       }
       if (mechanism.type === 'planetary_gear') {
         {
-          const ringRadius = Math.max(0.82, (mechanism.groundLength + mechanism.rockerLength) / VIEW_SCALE);
+          const ringRadius = Math.max(0.82, planetaryRingPitchRadius(mechanism) / VIEW_SCALE);
           addExtra('ringGear', createExtrudedMesh(
             ringGearShape(ringRadius),
             materials.mechBase,
@@ -979,23 +998,30 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
         updateLink(visual.links.output, state.j2, state.effector, zOutput);
         updateLink(visual.links.effector, undefined, undefined);
       } else if (mechanism.type === 'planetary_gear') {
-        updateLink(visual.links.base, state.p1, state.p2, zBackClip);
-        updateLink(visual.links.driver, state.p1, state.j1, zDriver);
-        updateLink(visual.links.coupler, state.p2, state.j2, zCoupler);
-        updateLink(visual.links.output, state.p2, state.effector, zOutput);
-        updateLink(visual.links.effector, undefined, undefined);
+        const carrierAngle = angle * (mechanism.speed1 ?? 1) * planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength);
+        const planetCenters = planetaryPlanetCenters(state.p1, mechanism, carrierAngle);
+        updateLink(visual.links.base, undefined, undefined);
+        updateLink(visual.links.driver, state.p1, planetCenters[0], zDriver);
+        updateLink(visual.links.coupler, state.p1, planetCenters[1], zCoupler);
+        updateLink(visual.links.output, state.p1, planetCenters[2], zOutput);
+        updateLink(visual.links.effector, state.p2, state.effector, zOutputMoving);
         updateObject(visual.extras.ringGear, state.p1, zDriverGear, 0);
       } else {
         standardLinks();
       }
       visual.gears.forEach((gear, index) => {
         const gearCenters = mechanism.type === 'gear' ? gearTrainCenters(mechanism) : [];
-        const point = mechanism.type === 'gear' ? (gearCenters[index] ?? state.p2) : index === 0 ? state.p1 : state.p2;
+        const planetaryCenters = mechanism.type === 'planetary_gear'
+          ? [state.p1, ...planetaryPlanetCenters(state.p1, mechanism, angle * (mechanism.speed1 ?? 1) * planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength))]
+          : [];
+        const point = mechanism.type === 'gear' ? (gearCenters[index] ?? state.p2) : mechanism.type === 'planetary_gear' ? (planetaryCenters[index] ?? state.p2) : index === 0 ? state.p1 : state.p2;
         const gearZ = index === 0
           ? zDriverGear
-          : mechanism.type === 'gear' && index < visual.gears.length - 1
-            ? zLayer([`Idler gear ${index}`], zOutputMoving)
-            : zLayer(['Output gear', 'Right timing gear', 'Planet gear', 'Sun gear'], zOutputMoving);
+          : mechanism.type === 'planetary_gear'
+            ? zLayer(['Planet gears x3'], zOutputMoving)
+            : mechanism.type === 'gear' && index < visual.gears.length - 1
+              ? zLayer([`Idler gear ${index}`], zOutputMoving)
+              : zLayer(['Output gear', 'Right timing gear', 'Planet gear', 'Sun gear'], zOutputMoving);
         const p = to3(point, gearZ);
         gear.position.set(p.x, p.y, p.z);
         gear.rotation.z = mechanismGearRotations(mechanism, angle)[index] ?? 0;
@@ -1210,6 +1236,11 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       data-three-stack-roles={selectedRenderPlan?.roleSummary ?? ''}
       data-three-stack-colors={selectedRenderPlan?.colorSummary ?? ''}
       data-three-stack-z={selectedRenderPlan?.zSummary ?? ''}
+      data-three-spacer-z-gap={selectedStackZGap.toFixed(2)}
+      data-three-linkage-hole-counts={selectedLinkageHoleCounts ? Object.entries(selectedLinkageHoleCounts).map(([role, count]) => `${role}:${count}`).join(',') : ''}
+      data-three-linkage-template-cells={selectedLinkageSpecs ? Object.entries(selectedLinkageSpecs).map(([role, spec]) => `${role}:${spec.cells}`).join(',') : ''}
+      data-three-linkage-hole-spacing-mm={selectedLinkageSpecs ? Object.entries(selectedLinkageSpecs).map(([role, spec]) => `${role}:${spec.pitchMm.toFixed(2)}`).join(',') : ''}
+      data-three-carrier-linkage-hole-count={selectedLinkageHoleCounts?.driver ?? 0}
       data-three-stack-layer-count={selectedRenderPlan?.layers.length ?? 0}
       data-three-rendered-layer-labels={selectedRenderPlan?.layers.map(item => item.label).join(' → ') ?? ''}
       data-three-rendered-layer-roles={selectedRenderPlan?.layers.map(item => item.renderKind).join('>') ?? ''}
@@ -1221,9 +1252,15 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       data-three-spacer-mm={`${FABRICATION_SPACER_SPEC.outerDiameterMm}x${FABRICATION_SPACER_SPEC.innerDiameterMm}`}
       data-three-primary-rotation-deg={fixed3(selectedTelemetry?.primaryRotationDeg)}
       data-three-secondary-rotation-deg={fixed3(selectedTelemetry?.secondaryRotationDeg)}
-      data-three-gear-radii={selectedMechanism ? (selectedMechanism.type === 'gear' ? gearTrainPitchRadii(selectedMechanism).map(radius => radius.toFixed(2)).join(',') : `${selectedMechanism.crankLength.toFixed(2)},${selectedMechanism.rockerLength.toFixed(2)}`) : ''}
-      data-three-gear-output-ratio={selectedMechanism ? (selectedMechanism.type === 'gear' ? gearTrainOutputRatio(selectedMechanism) : gearPairOutputRatio(selectedMechanism.crankLength, selectedMechanism.rockerLength)).toFixed(3) : ''}
+      data-three-gear-radii={selectedMechanism ? (selectedMechanism.type === 'gear' ? gearTrainPitchRadii(selectedMechanism).map(radius => radius.toFixed(2)).join(',') : selectedMechanism.type === 'planetary_gear' ? planetaryGearRadii(selectedMechanism).map(radius => radius.toFixed(2)).join(',') : `${selectedMechanism.crankLength.toFixed(2)},${selectedMechanism.rockerLength.toFixed(2)}`) : ''}
+      data-three-gear-output-ratio={selectedMechanism ? (selectedMechanism.type === 'gear' ? gearTrainOutputRatio(selectedMechanism) : selectedMechanism.type === 'planetary_gear' ? planetaryCarrierOutputRatio(selectedMechanism.crankLength, selectedMechanism.rockerLength) : gearPairOutputRatio(selectedMechanism.crankLength, selectedMechanism.rockerLength)).toFixed(3) : ''}
       data-three-secondary-speed={selectedMechanism ? (selectedMechanism.speed2 ?? selectedMechanism.gearRatio ?? 1).toFixed(3) : ''}
+      data-three-planetary-syntax={selectedMechanism?.type === 'planetary_gear' ? planetaryGearConventionForMechanism(selectedMechanism).syntax : ''}
+      data-three-planetary-fixed={selectedMechanism?.type === 'planetary_gear' ? planetaryGearConventionForMechanism(selectedMechanism).fixedMember : ''}
+      data-three-planetary-input={selectedMechanism?.type === 'planetary_gear' ? planetaryGearConventionForMechanism(selectedMechanism).inputMember : ''}
+      data-three-planetary-output={selectedMechanism?.type === 'planetary_gear' ? planetaryGearConventionForMechanism(selectedMechanism).outputMember : ''}
+      data-three-planetary-ring-radius={selectedMechanism?.type === 'planetary_gear' ? planetaryGearConventionForMechanism(selectedMechanism).ringPitchRadius.toFixed(2) : ''}
+      data-three-planetary-carrier-radius={selectedMechanism?.type === 'planetary_gear' ? planetaryGearConventionForMechanism(selectedMechanism).carrierPitchRadius.toFixed(2) : ''}
       data-three-rack-x={fixed3(selectedTelemetry?.rackX)}
       data-three-rack-y={fixed3(selectedTelemetry?.rackY)}
       data-three-rack-guide-x={fixed3(selectedTelemetry?.rackGuideX)}

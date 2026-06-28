@@ -5,10 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { boardGridLines, boardToScene, bodyPartPivotScene, physicalKitPreset, placeBodyPartPivotAt, SCENE_PX_PER_MM, sceneToBoard, sceneToBoardRaw, sceneToSheetMm, sceneToSvg, sheetMmToScene } from '../utils/coordinates';
 import { createDefaultMechanism, createSampleProject, handoffGate, loadProjectSnapshot, serializeProject, applyProjectAction, projectSelfCheck, mechanismRequiredParts, mechanismWithGeneratedPath } from '../utils/project';
-import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, sampleFeasibleRange, validateFabricationStack, validateForFabrication } from '../utils/fabrication';
+import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, sampleFeasibleRange, validateFabricationStack, validateForFabrication } from '../utils/fabrication';
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
-import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, generateCurvePoints, planetaryPlanetSpinRatio } from '../utils/kinematics';
+import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, generateCurvePoints, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius } from '../utils/kinematics';
 import { animatedPartsForProject, describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionPreviewForPath, motionPreviewForProject, motionPreviewForTarget, preferredMotionJointId } from '../utils/motion';
 import { buildToonSceneProjection } from '../utils/sceneProjection';
 import { buildFoundryPhysicsOverlay, buildKinematicPhysicsSession, mechanismPhysicsRule } from '../utils/physicsSession';
@@ -355,6 +355,19 @@ assert.equal(g24Profile.attachmentHoleCenters.length, 4, 'G24 profile carries gr
 assert(fabricationGearPathD(30, 30).startsWith('M 28.44 0 L 31.43 2.06 L 31.23 4.11'), 'shared SVG gear path matches fabrication gear outline convention');
 assert(fabricationRingGearPathD(70).includes('M 90 0 A 90 90'), 'shared SVG ring gear path carries fabrication outer ring geometry');
 assert(fabricationRingGearPathD(70).includes('68.54'), 'shared SVG ring gear path carries internal tooth geometry');
+const defaultPlanetary = createDefaultMechanism('planetary_gear');
+const planetaryLinkLengths = fabricationLinkageSceneLengthsForMechanism(defaultPlanetary);
+assert.equal(planetaryLinkLengths.driver, defaultPlanetary.groundLength, 'planetary carrier linkage blank uses carrier radius, not short sun or planet radius');
+assert.equal(
+  fabricationLinkageHoleCountsForMechanism(defaultPlanetary).driver,
+  fabricationLinkageSpecForSceneLength(defaultPlanetary.groundLength).holeCentersMm.length,
+  'planetary carrier blank drills the nearest generator linkage for its actual carrier radius'
+);
+const couplerSpecForNonExactSpan = fabricationLinkageSpecForSceneLength(3 * 20 * SCENE_PX_PER_MM, 20, 4);
+assert.equal(couplerSpecForNonExactSpan.cells, 4, 'min-hole linkage selection snaps non-exact spans to a generator-supported physical blank');
+couplerSpecForNonExactSpan.holeCentersMm.slice(1).forEach((point, index) => {
+  assert.equal(point.x - couplerSpecForNonExactSpan.holeCentersMm[index].x, 20, 'linkage hole spacing stays on the fabrication generator pitch');
+});
 const canvasText = readFileSync(join(process.cwd(), 'components', 'Canvas.tsx'), 'utf8');
 const threePreviewText = readFileSync(join(process.cwd(), 'components', 'ThreePuppetPreview.tsx'), 'utf8');
 const exporterText = readFileSync(join(process.cwd(), 'utils', 'exporter.ts'), 'utf8');
@@ -949,7 +962,7 @@ const requiredPartNames = (type: Parameters<typeof createDefaultMechanism>[0]) =
   assert(Math.abs(compoundOutputAngle - gearTrainOutputRatio(compoundGear) * Math.PI / 2) < 1e-6, 'compound gear train output follows idler parity and endpoint pitch-radius ratio');
   assert.equal(gearTrainOutputRatio(compoundGear), 100 / 60, 'three-gear train has same output direction because the idler flips twice');
   assert(fabricationStackForMechanism(compoundGear).some(layer => layer.label === 'Idler gear 1'), 'compound gear fabrication stack inserts idler gear layers between drive and output');
-  assert.equal(mechanismRequiredParts(compoundGear).find(part => part.name === 'gear pair')?.quantity, 3, 'compound gear train parts scale with gear count');
+  assert.equal(mechanismRequiredParts(compoundGear).find(part => part.name === 'gear train gears')?.quantity, 3, 'compound gear train parts scale with gear count');
   const driverOffsetState = calculateLinkage({ ...mechanism, driverPhaseOffset: Math.PI / 4 }, 0);
   assert(Math.abs(Math.atan2(driverOffsetState.j1.y - driverOffsetState.p1.y, driverOffsetState.j1.x - driverOffsetState.p1.x) - Math.PI / 4) < 1e-6, 'driver phase offset rotates the input driver before downstream constraints solve');
   Array.from({ length: 8 }, () => generateSmartConfig(undefined, 'gear')).forEach(config => {
@@ -958,7 +971,7 @@ const requiredPartNames = (type: Parameters<typeof createDefaultMechanism>[0]) =
   const mutatedGear = mutateConfig({ ...mechanism, groundLength: 999 }, 1, true);
   assert(Math.abs(mutatedGear.groundLength - gearTrainPitchCenterDistance(mutatedGear)) < 1e-6, 'optimizer keeps mutated gear train pitch circles tangent');
   assert.equal(mutatedGear.gearRatio, gearTrainOutputRatio(mutatedGear), 'optimizer keeps gear ratio derived from ordered pitch radii');
-  assert(requiredPartNames('gear').includes('gear pair'), 'gear train recipe includes a gear pair');
+  assert(requiredPartNames('gear').includes('gear train gears'), 'gear train recipe includes gear train gears');
   assert(requiredPartNames('gear').includes('gear train linkage rod'), 'gear train recipe includes paired linkage rods');
 }
 
@@ -969,13 +982,15 @@ const requiredPartNames = (type: Parameters<typeof createDefaultMechanism>[0]) =
     assert(state.isValid && state.aux, 'planetary gear default has valid carrier samples');
     assertDistance(state.p1, state.p2, mechanism.groundLength, 'planetary carrier radius is preserved');
     assertDistance(state.p2, state.j2, mechanism.rockerLength, 'planet gear radius is preserved');
-    assertDistance(state.p2, state.effector, mechanism.couplerPointDist, 'planetary output arm length is preserved');
+    assertDistance(state.p1, state.effector, mechanism.couplerPointDist, 'planetary carrier output radius is preserved');
   });
-  assert.equal(planetaryPlanetSpinRatio(mechanism.crankLength, mechanism.rockerLength), -(mechanism.crankLength + mechanism.rockerLength) / mechanism.rockerLength, 'planetary spin follows sun+planet pitch radii');
+  assert.equal(mechanism.gearRatio, planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength), 'planetary gear ratio is ring-fixed sun-input carrier-output');
+  assert.equal(planetaryRingPitchRadius(mechanism.crankLength, mechanism.rockerLength), mechanism.crankLength + 2 * mechanism.rockerLength, 'planetary ring pitch radius follows sun plus two planets');
+  assert.equal(planetaryPlanetSpinRatio(mechanism.crankLength, mechanism.rockerLength), planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength) - (mechanism.crankLength / mechanism.rockerLength) * (1 - planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength)), 'planet spin is derived from ring-fixed carrier motion');
   Array.from({ length: 8 }, () => generateSmartConfig(undefined, 'planetary_gear')).forEach(config => {
     assert(Math.abs(config.groundLength - (config.crankLength + config.rockerLength)) < 1e-6, 'optimizer keeps generated planetary pitch circles tangent');
   });
-  assert(requiredPartNames('planetary_gear').some(name => name === 'gear pair'), 'planetary recipe includes gear parts');
+  assert(requiredPartNames('planetary_gear').some(name => name === 'planetary set (ring, sun, 3 planets)'), 'planetary recipe includes ring, sun, and three planets');
 }
 
 const gearDefault = createDefaultMechanism('gear', 'contract-gear-mesh');
