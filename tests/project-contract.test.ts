@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { boardGridLines, boardToScene, bodyPartPivotScene, physicalKitPreset, placeBodyPartPivotAt, SCENE_PX_PER_MM, sceneToBoard, sceneToBoardRaw, sceneToSheetMm, sceneToSvg, sheetMmToScene } from '../utils/coordinates';
-import { createDefaultMechanism, createSampleProject, handoffGate, loadProjectSnapshot, serializeProject, applyProjectAction, projectSelfCheck, mechanismRequiredParts, mechanismWithGeneratedPath } from '../utils/project';
+import { createDefaultMechanism, createSampleProject, handoffGate, loadProjectSnapshot, serializeProject, applyProjectAction, projectSelfCheck, mechanismRequiredParts, mechanismWithGeneratedPath, replaceCharacterProject } from '../utils/project';
 import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, sampleFeasibleRange, validateFabricationStack, validateForFabrication } from '../utils/fabrication';
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
@@ -249,9 +249,71 @@ assert(subsystemGovernanceContract.includes('production preview build'), 'subsys
 assert(Object.keys(sample.skeleton?.joints ?? {}).length >= 17, 'sample placeholder exposes the full editable joint set');
 assert(sample.partOrder.every(id => ['#cbd5e1', '#e2e8f0', '#b6c2d2', '#94a3b8'].includes(sample.parts[id].fillColor)), 'sample character uses muted placeholder part colors');
 assert.equal(sample.mechanisms[0].targetAnchorJointId, 'right_hand', 'sample waving arm drives the hand, not the shoulder root');
-assert.deepEqual(motionAnchorJointIds(sample, 'right_arm'), ['right_shoulder', 'right_elbow', 'right_hand'], 'IK anchor choices stay within the target limb chain');
-assert.deepEqual(motionChainRootJointIds(sample, 'right_arm', 'right_hand'), ['right_shoulder', 'right_elbow', 'right_hand'], 'IK chain root choices expose every ancestor from part root to handle');
-assert.equal(preferredMotionJointId(sample, 'right_arm', 'left_hand'), 'right_shoulder', 'invalid IK anchor falls back to the target part root');
+assert.deepEqual(motionAnchorJointIds(sample, 'right_arm_lower'), ['right_elbow', 'right_hand'], 'IK handle choices stay inside the selected lower-limb part');
+assert.deepEqual(motionChainRootJointIds(sample, 'right_arm_lower', 'right_hand'), ['right_shoulder', 'right_elbow', 'right_hand'], 'IK chain root choices expose every ancestor from part root to handle');
+assert.equal(preferredMotionJointId(sample, 'right_arm_lower', 'left_hand'), 'right_elbow', 'invalid IK anchor falls back to the target part root');
+
+const replacementBase = createSampleProject();
+const coarsePrevious: ProjectState = {
+  ...replacementBase,
+  parts: {
+    ...replacementBase.parts,
+    right_arm: {
+      ...replacementBase.parts.right_arm_lower,
+      id: 'right_arm',
+      name: 'Right arm legacy',
+      anchorJointId: 'right_shoulder',
+      bounds: { x: -21, y: -75, width: 42, height: 150 },
+      transform: { x: 98, y: 24, rotation: 18, scale: 1 }
+    }
+  },
+  partOrder: [...replacementBase.partOrder.filter(id => !id.startsWith('right_arm_')), 'right_arm'],
+  paths: {
+    'legacy-wave': {
+      ...replacementBase.paths['path-right-arm'],
+      id: 'legacy-wave',
+      partId: 'right_arm',
+      targetAnchorJointId: undefined,
+      chainRootJointId: undefined
+    }
+  },
+  mechanisms: [{
+    ...replacementBase.mechanisms[0],
+    id: 'legacy-mech',
+    targetPartId: 'right_arm',
+    targetPathId: 'legacy-wave',
+    targetAnchorJointId: 'right_hand',
+    activeVisualPartIds: ['right_arm']
+  }]
+};
+const retargetedReplacement = replaceCharacterProject(replacementBase, coarsePrevious, 'character');
+assert.equal(retargetedReplacement.paths['legacy-wave'].partId, 'right_arm_lower', 'character replacement retargets legacy whole-arm paths to the reachable lower-arm part');
+assert.equal(retargetedReplacement.paths['legacy-wave'].targetAnchorJointId, 'right_hand', 'character replacement backfills path handles from the mechanism target anchor');
+assert.equal(retargetedReplacement.paths['legacy-wave'].chainRootJointId, 'right_shoulder', 'character replacement preserves legacy part root as expanded IK chain root when new skeleton supports it');
+assert.equal(retargetedReplacement.mechanisms[0].targetPartId, 'right_arm_lower', 'character replacement retargets existing mechanisms by target joint, not exact old part id');
+assert.equal(retargetedReplacement.mechanisms[0].targetPathId, 'legacy-wave', 'character replacement keeps compatible mechanism-path binding');
+assert.equal(retargetedReplacement.mechanisms[0].targetAnchorJointId, 'right_hand', 'character replacement preserves driven handle joint');
+assert(Math.abs((retargetedReplacement.mechanisms[0].groundLength ?? 0) - coarsePrevious.mechanisms[0].groundLength) < 1e-9, 'same-size replacement keeps mechanism dimensions stable');
+assert(retargetedReplacement.characterPackage?.replacementContext?.rebindingSummary.includes('1/1 mechanisms rebound'), 'character replacement records a concrete rebinding summary');
+const enlargedReplacement: ProjectState = {
+  ...replacementBase,
+  skeleton: replacementBase.skeleton ? {
+    ...replacementBase.skeleton,
+    joints: Object.fromEntries(Object.entries(replacementBase.skeleton.joints).map(([id, joint]) => [id, {
+      ...joint,
+      position: { x: joint.position.x * 1.5, y: joint.position.y * 1.5 }
+    }]))
+  } : null,
+  parts: Object.fromEntries(Object.entries(replacementBase.parts).map(([id, part]) => [id, {
+    ...part,
+    transform: { ...part.transform, x: part.transform.x * 1.5, y: part.transform.y * 1.5 },
+    bounds: { ...part.bounds, width: part.bounds.width * 1.5, height: part.bounds.height * 1.5 }
+  }]))
+};
+const scaledReplacement = replaceCharacterProject(enlargedReplacement, coarsePrevious, 'path');
+assert(Math.abs((scaledReplacement.mechanisms[0].groundLength ?? 0) - (coarsePrevious.mechanisms[0].groundLength ?? 0) * 1.5) < 1e-9, 'larger replacement scales mechanism link dimensions');
+assert(Math.abs((scaledReplacement.mechanisms[0].anchorX ?? 0) - ((coarsePrevious.mechanisms[0].anchorX ?? 0) * 1.5)) < 1e-9, 'larger replacement repositions mechanism anchors with character scale');
+assert(Math.abs(scaledReplacement.paths['legacy-wave'].points[0].x - (coarsePrevious.paths['legacy-wave'].points[0].x * 1.5)) < 1e-9, 'larger replacement scales retained path points around matching joints');
 assert.deepEqual(SANITIZE_MECHANISM_TYPES, [...ALL_MECHANISM_TYPES], 'import sanitizer accepts every low-level mechanism template including crank');
 assert.deepEqual(OPTIMIZER_MECHANISM_TYPES, [...AUTHORABLE_MECHANISM_TYPES], 'optimizer searches authorable mechanism templates only');
 assert(!AUTHORABLE_MECHANISM_TYPES.includes('crank'), 'bare crank stays a low-level driver, not a novice authoring template');
@@ -335,10 +397,10 @@ const allMechanismSnapshotProject: ProjectState = {
   ...sample,
   mechanisms: ALL_MECHANISM_TYPES.map(type => ({
     ...createDefaultMechanism(type, `${type}-snapshot`),
-    targetPartId: 'right_arm',
+    targetPartId: 'right_arm_lower',
     targetPathId: 'path-right-arm',
     targetAnchorJointId: 'right_hand',
-    activeVisualPartIds: ['right_arm']
+    activeVisualPartIds: ['right_arm_lower']
   }))
 };
 const allMechanismSnapshots = buildMechanismSnapshots(allMechanismSnapshotProject);
@@ -643,34 +705,34 @@ assert(controlsText.includes('mechanismTemplateLabel'), 'legacy Controls uses sh
 assert(!controlsText.includes('Drawing Machine'), 'legacy Controls no longer hardcodes stale mechanism labels');
 assert(!controlsText.includes("m.type === '5bar' ? '5-Bar'"), 'legacy Controls active mechanism chips use shared labels');
 assert(!controlsText.includes("m.type === 'crank' ? 'Gear'"), 'legacy Controls no longer aliases crank as gear');
-assert.equal(describeMotionChain(sample, 'right_arm', 'right_shoulder').kind, 'root-only', 'root anchor is labeled as a root-only chain');
-assert.equal(describeMotionChain(sample, 'right_arm', 'right_elbow').kind, 'two-joint-direct', 'elbow handle is labeled as a 2-joint direct chain');
-assert.equal(describeMotionChain(sample, 'right_arm', 'right_hand').kind, 'three-joint-ik', 'hand handle is labeled as a 3-joint IK chain');
-assert.equal(describeMotionChain(sample, 'right_arm', 'right_hand', { rootJointId: 'right_elbow' }).kind, 'two-joint-direct', 'path-specific chain roots shorten the solver chain');
-assert.equal(describeMotionChain(sample, 'right_arm', 'right_elbow', { rootJointId: 'right_elbow' }).kind, 'root-only', 'path-specific root equal to handle is explicitly root-only');
-const directPinnedPreview = motionPreviewForTarget(sample, 'right_arm', 'right_elbow', { x: 210, y: 40 }, { parts: {}, skeleton: sample.skeleton }, { pinTarget: true });
-const directPinnedElbow = directPinnedPreview.skeleton?.joints.right_elbow.position;
-assert(directPinnedElbow && Math.hypot(directPinnedElbow.x - 210, directPinnedElbow.y - 40) < 1e-9, '2-joint direct mechanism drive pins the handle exactly');
-const directPreview = motionPreviewForTarget(sample, 'right_arm', 'right_elbow', { x: 210, y: 40 }, { parts: {}, skeleton: sample.skeleton }, { pinTarget: false });
-const directPreviewElbow = directPreview.skeleton?.joints.right_elbow.position;
-assert(directPreviewElbow && Math.hypot(directPreviewElbow.x - 210, directPreviewElbow.y - 40) > 1, '2-joint direct path preview preserves non-pinned limb length');
+assert.equal(describeMotionChain(sample, 'right_arm_lower', 'right_elbow').kind, 'root-only', 'root anchor is labeled as a root-only chain');
+assert.equal(describeMotionChain(sample, 'right_arm_lower', 'right_hand').kind, 'two-joint-direct', 'hand handle is labeled as a 2-joint direct chain by default');
+assert.equal(describeMotionChain(sample, 'right_arm_lower', 'right_hand', { rootJointId: 'right_shoulder' }).kind, 'three-joint-ik', 'expanded shoulder root enables 3-joint IK');
+assert.equal(describeMotionChain(sample, 'right_arm_lower', 'right_hand', { rootJointId: 'right_elbow' }).kind, 'two-joint-direct', 'path-specific chain roots shorten the solver chain');
+assert.equal(describeMotionChain(sample, 'right_arm_lower', 'right_elbow', { rootJointId: 'right_elbow' }).kind, 'root-only', 'path-specific root equal to handle is explicitly root-only');
+const directPinnedPreview = motionPreviewForTarget(sample, 'right_arm_lower', 'right_hand', { x: 210, y: 40 }, { parts: {}, skeleton: sample.skeleton }, { pinTarget: true });
+const directPinnedHand = directPinnedPreview.skeleton?.joints.right_hand.position;
+assert(directPinnedHand && Math.hypot(directPinnedHand.x - 210, directPinnedHand.y - 40) < 1e-9, '2-joint direct mechanism drive pins the handle exactly');
+const directPreview = motionPreviewForTarget(sample, 'right_arm_lower', 'right_hand', { x: 210, y: 40 }, { parts: {}, skeleton: sample.skeleton }, { pinTarget: false });
+const directPreviewHand = directPreview.skeleton?.joints.right_hand.position;
+assert(directPreviewHand && Math.hypot(directPreviewHand.x - 210, directPreviewHand.y - 40) > 1, '2-joint direct path preview preserves non-pinned limb length');
 const rightBendProject = applyProjectAction(sample, { type: 'update_joint', jointId: 'right_elbow', updates: { bendDirection: 1 } });
 const leftBendProject = applyProjectAction(sample, { type: 'update_joint', jointId: 'right_elbow', updates: { bendDirection: -1 } });
-const rightBendPreview = motionPreviewForTarget(rightBendProject, 'right_arm', 'right_hand', { x: 180, y: 90 }, { parts: {}, skeleton: rightBendProject.skeleton }, { pinTarget: true });
-const leftBendPreview = motionPreviewForTarget(leftBendProject, 'right_arm', 'right_hand', { x: 180, y: 90 }, { parts: {}, skeleton: leftBendProject.skeleton }, { pinTarget: true });
+const rightBendPreview = motionPreviewForTarget(rightBendProject, 'right_arm_lower', 'right_hand', { x: 180, y: 90 }, { parts: {}, skeleton: rightBendProject.skeleton }, { rootJointId: 'right_shoulder', pinTarget: true });
+const leftBendPreview = motionPreviewForTarget(leftBendProject, 'right_arm_lower', 'right_hand', { x: 180, y: 90 }, { parts: {}, skeleton: leftBendProject.skeleton }, { rootJointId: 'right_shoulder', pinTarget: true });
 const rightBendElbow = rightBendPreview.skeleton?.joints.right_elbow.position;
 const leftBendElbow = leftBendPreview.skeleton?.joints.right_elbow.position;
 assert(rightBendElbow && leftBendElbow && Math.hypot(rightBendElbow.x - leftBendElbow.x, rightBendElbow.y - leftBendElbow.y) > 1, '3-joint IK fold direction changes elbow/knee side');
 const multiJointProject = applyProjectAction(sample, { type: 'add_joint', joint: { id: 'right_finger_tip', name: 'right finger tip', position: { x: 174, y: 30 }, parentId: 'right_hand', locked: false, bendDirection: 1 } });
-assert.equal(describeMotionChain(multiJointProject, 'right_arm', 'right_finger_tip').kind, 'multi-joint', '4+ joint limbs are labeled as multi-joint IK');
-const multiPreview = motionPreviewForTarget(multiJointProject, 'right_arm', 'right_finger_tip', { x: 205, y: 84 }, { parts: {}, skeleton: multiJointProject.skeleton }, { pinTarget: true });
+assert.equal(describeMotionChain(multiJointProject, 'right_arm_lower', 'right_finger_tip', { rootJointId: 'right_shoulder' }).kind, 'multi-joint', '4+ joint limbs are labeled as multi-joint IK');
+const multiPreview = motionPreviewForTarget(multiJointProject, 'right_arm_lower', 'right_finger_tip', { x: 205, y: 84 }, { parts: {}, skeleton: multiJointProject.skeleton }, { rootJointId: 'right_shoulder', pinTarget: true });
 assert(Number.isFinite(multiPreview.skeleton?.joints.right_finger_tip.position.x) && Number.isFinite(multiPreview.skeleton?.joints.right_finger_tip.position.y), 'multi-joint IK preview stays finite');
 const boundMechanism = (type: Parameters<typeof createDefaultMechanism>[0], id: string) => ({
   ...createDefaultMechanism(type, id),
-  targetPartId: 'right_arm',
+  targetPartId: 'right_arm_lower',
   targetPathId: 'path-right-arm',
-  targetAnchorJointId: 'right_shoulder',
-  activeVisualPartIds: ['right_arm']
+  targetAnchorJointId: 'right_hand',
+  activeVisualPartIds: ['right_arm_lower']
 });
 const roundTrip = loadProjectSnapshot(JSON.parse(serializeProject(sample)));
 assert.equal(roundTrip.partOrder.length, sample.partOrder.length, 'project JSON round-trip keeps parts');
@@ -845,7 +907,7 @@ const sceneAnchorOnlyMechanism = {
   anchorY: undefined,
   sceneAnchor: { x: 77, y: -33 },
   transform: { x: 77, y: -33, rotation: 0, scale: 1 },
-  targetPartId: 'right_arm',
+  targetPartId: 'right_arm_lower',
   targetPathId: 'path-right-arm',
   targetAnchorJointId: 'right_hand'
 };
@@ -882,10 +944,10 @@ ALL_MECHANISM_TYPES.forEach(type => {
     ...sample,
     mechanisms: [mechanismWithGeneratedPath({
       ...mechanism,
-      targetPartId: 'right_arm',
+      targetPartId: 'right_arm_lower',
       targetPathId: 'path-right-arm',
       targetAnchorJointId: 'right_hand',
-      activeVisualPartIds: ['right_arm']
+      activeVisualPartIds: ['right_arm_lower']
     })]
   };
   const templateProjection = buildToonSceneProjection(templateProject);
@@ -1233,12 +1295,12 @@ delete (importedMissingAnchor.mechanisms[0] as unknown as Record<string, unknown
 const reloadedMissingAnchor = loadProjectSnapshot(JSON.parse(serializeProject(importedMissingAnchor)));
 assert(validateForFabrication(reloadedMissingAnchor).errors.some(e => e.includes('missing board coordinate')), 'imported snapshot with missing anchors remains invalid for fabrication');
 
-const removed = applyProjectAction(sample, { type: 'remove_joint', jointId: 'right_shoulder' });
-assert.notEqual(removed.parts.right_arm.anchorJointId, 'right_shoulder', 'joint delete repairs part anchors');
+const removed = applyProjectAction(sample, { type: 'remove_joint', jointId: 'right_elbow' });
+assert.notEqual(removed.parts.right_arm_lower.anchorJointId, 'right_elbow', 'joint delete repairs part anchors');
 const cycleAttempt = applyProjectAction(sample, { type: 'update_joint', jointId: 'root', updates: { parentId: 'right_hand' } });
 assert.equal(cycleAttempt.skeleton?.joints.root.parentId ?? null, sample.skeleton?.joints.root.parentId ?? null, 'joint reparent blocks skeleton cycles');
-const movedJoint = applyProjectAction(sample, { type: 'update_joint', jointId: 'right_shoulder', updates: { position: { x: 222, y: 111 } } });
-const movedPivot = bodyPartPivotScene(movedJoint.parts.right_arm, movedJoint.skeleton);
+const movedJoint = applyProjectAction(sample, { type: 'update_joint', jointId: 'right_elbow', updates: { position: { x: 222, y: 111 } } });
+const movedPivot = bodyPartPivotScene(movedJoint.parts.right_arm_lower, movedJoint.skeleton);
 assert(Math.hypot(movedPivot.x - 222, movedPivot.y - 111) < 1e-9, 'moving a skeleton joint updates anchored body-part pivot state');
 
 const malicious = loadProjectSnapshot({
@@ -1360,7 +1422,7 @@ const foundryUpsert = applyProjectAction(sample, {
       visual: { color: '#000', scale: 1, constraintsVisible: true },
       animation: { duration: 1000, steps: foundryPath.length, loop: true },
       metadata: { sourceTab: 'mechanism-foundry', selectedPreset: 'balanced', recommendation: 'test fixture' },
-      targetAnchorJointId: 'right_shoulder',
+      targetAnchorJointId: 'right_hand',
       warnings: [],
       source: 'mechanism-foundry'
     }
@@ -1370,15 +1432,15 @@ assert.equal(foundryUpsert.mechanisms.find(m => m.id === 'foundry-upsert')?.gene
 assert.equal(foundryUpsert.mechanisms.find(m => m.id === 'foundry-upsert')?.foundryExport?.metadata.selectedPreset, 'balanced', 'foundry export preserves preset metadata');
 const anchorOverride = applyProjectAction(sample, { type: 'upsert_mechanism', mechanism: { ...sample.mechanisms[0], targetAnchorJointId: 'right_elbow' } });
 assert.equal(anchorOverride.mechanisms[0].targetAnchorJointId, 'right_elbow', 'mechanism target anchor override survives reducer reconciliation');
-const lockedPartProject = { ...sample, parts: { ...sample.parts, right_arm: { ...sample.parts.right_arm, locked: true } } };
+const lockedPartProject = { ...sample, parts: { ...sample.parts, right_arm_lower: { ...sample.parts.right_arm_lower, locked: true } } };
 assert.equal(
-  applyProjectAction(lockedPartProject, { type: 'update_part', partId: 'right_arm', updates: { transform: { ...sample.parts.right_arm.transform, x: 999 } } }).parts.right_arm.transform.x,
-  sample.parts.right_arm.transform.x,
+  applyProjectAction(lockedPartProject, { type: 'update_part', partId: 'right_arm_lower', updates: { transform: { ...sample.parts.right_arm_lower.transform, x: 999 } } }).parts.right_arm_lower.transform.x,
+  sample.parts.right_arm_lower.transform.x,
   'locked parts reject reducer-level edits'
 );
 assert.equal(
-  applyProjectAction(lockedPartProject, { type: 'delete_part', partId: 'right_arm' }).parts.right_arm.id,
-  'right_arm',
+  applyProjectAction(lockedPartProject, { type: 'delete_part', partId: 'right_arm_lower' }).parts.right_arm_lower.id,
+  'right_arm_lower',
   'locked parts reject deletion'
 );
 const lockedPathAttempt = applyProjectAction(lockedPartProject, { type: 'upsert_path', path: { ...sample.paths['path-right-arm'], points: [{ x: 1, y: 2 }, { x: 3, y: 4 }] } });
@@ -1395,20 +1457,21 @@ const wrongTarget = {
   ...sample,
   paths: {
     ...sample.paths,
-    'path-left': { ...sample.paths['path-right-arm'], id: 'path-left', partId: 'left_arm' }
+    'path-left': { ...sample.paths['path-right-arm'], id: 'path-left', partId: 'left_arm_lower' }
   },
-  mechanisms: [{ ...sample.mechanisms[0], targetPartId: 'right_arm', targetPathId: 'path-left' }]
+  mechanisms: [{ ...sample.mechanisms[0], targetPartId: 'right_arm_lower', targetPathId: 'path-left' }]
 };
-assert(validateForFabrication(wrongTarget).errors.some(e => e.includes('belongs to left_arm')), 'fabrication rejects mismatched target part/path');
+assert(validateForFabrication(wrongTarget).errors.some(e => e.includes('belongs to left_arm_lower')), 'fabrication rejects mismatched target part/path');
 assert.equal(handoffGate({ ...sample, parts: {}, partOrder: [], skeleton: null, paths: {}, mechanisms: [] }, 'path').ok, false, 'stage handoff blocks path work before character data');
 assert.equal(handoffGate({ ...sample, mechanisms: [] }, 'design').ok, true, 'stage handoff allows Design to add the first mechanism after character load');
 assert.equal(handoffGate(sample, 'blueprint').ok, true, 'stage handoff permits blueprint when mechanisms are valid');
 assert.equal(handoffGate(sample, 'assembly').ok, true, 'stage handoff permits assembly guide when mechanisms are valid');
-assert.deepEqual(bodyPartPivotScene({ ...sample.parts.right_arm, anchorJointId: 'right_elbow' }, sample.skeleton), sample.skeleton?.joints.right_elbow.position, 'pivot can follow reassigned skeleton anchor');
-const placed = placeBodyPartPivotAt({ ...sample.parts.right_arm, anchorJointId: 'right_elbow' }, { x: 12, y: 34 }, sample.skeleton);
+const reassignedElbowPivot = bodyPartPivotScene({ ...sample.parts.right_arm_lower, anchorJointId: 'right_elbow' }, sample.skeleton);
+assert(Math.hypot(reassignedElbowPivot.x - (sample.skeleton?.joints.right_elbow.position.x ?? 0), reassignedElbowPivot.y - (sample.skeleton?.joints.right_elbow.position.y ?? 0)) < 1e-9, 'pivot can follow reassigned skeleton anchor');
+const placed = placeBodyPartPivotAt({ ...sample.parts.right_arm_lower, anchorJointId: 'right_elbow' }, { x: 12, y: 34 }, sample.skeleton);
 assert(Math.abs(bodyPartPivotScene(placed, sample.skeleton).x - 12) < 1e-9 && Math.abs(bodyPartPivotScene(placed, sample.skeleton).y - 34) < 1e-9, 'anchor-aware placement moves visual transform');
 const handPart: BodyPartLayer = {
-  ...sample.parts.right_arm,
+  ...sample.parts.right_arm_lower,
   id: 'right_hand_part',
   name: 'Right hand part',
   anchorJointId: 'right_hand',
@@ -1425,7 +1488,7 @@ const ikProject: ProjectState = {
   mechanisms: [{ ...sample.mechanisms[0], targetAnchorJointId: 'right_hand' }]
 };
 const pathPreview = motionPreviewForPath(ikProject, ikProject.paths['path-right-arm'], 0);
-assert(pathPreview.parts.right_arm, 'path editor preview moves selected limb at current frame');
+assert(pathPreview.parts.right_arm_lower, 'path editor preview moves selected limb at current frame');
 assert.deepEqual(pathPreview.skeleton?.joints.right_shoulder.position, ikProject.skeleton?.joints.right_shoulder.position, 'IK preview keeps the shoulder root attached');
 assert(Math.hypot((pathPreview.skeleton?.joints.right_hand.position.x ?? 0) - ikProject.paths['path-right-arm'].points[0].x, (pathPreview.skeleton?.joints.right_hand.position.y ?? 0) - ikProject.paths['path-right-arm'].points[0].y) < 1e-9, 'path editor IK target reaches the path point');
 const elbowRootPath = { ...ikProject.paths['path-right-arm'], chainRootJointId: 'right_elbow', targetAnchorJointId: 'right_hand' };
@@ -1440,22 +1503,22 @@ const drivenMechanism = {
   anchorX: ikProject.paths['path-right-arm'].points[0].x + 30,
   anchorY: ikProject.paths['path-right-arm'].points[0].y - 20,
   crankLength: 10,
-  targetPartId: 'right_arm',
+  targetPartId: 'right_arm_lower',
   targetPathId: 'path-right-arm',
   targetAnchorJointId: 'right_hand',
-  activeVisualPartIds: ['right_arm']
+  activeVisualPartIds: ['right_arm_lower']
 };
 const drivenProject: ProjectState = { ...ikProject, mechanisms: [drivenMechanism] };
 const animated = animatedPartsForProject(drivenProject, drivenProject.mechanisms, 0);
 const mechanismPreview = motionPreviewForProject(drivenProject, drivenProject.mechanisms, 0);
 const mechanismState = calculateLinkage(drivenMechanism, 0);
-assert(animated.right_arm, 'animated preview moves target part at current frame');
+assert(animated.right_arm_lower, 'animated preview moves target part at current frame');
 assert(animated.right_hand_part, 'animated preview propagates target-anchor motion to descendant parts');
-const movedShoulder = bodyPartPivotScene(animated.right_arm, mechanismPreview.skeleton);
+const movedShoulder = bodyPartPivotScene(animated.right_arm_lower, mechanismPreview.skeleton);
 assert(Math.hypot(movedShoulder.x - (drivenProject.skeleton?.joints.right_shoulder.position.x ?? 0), movedShoulder.y - (drivenProject.skeleton?.joints.right_shoulder.position.y ?? 0)) < 1e-9, 'mechanism IK keeps limb root attached instead of translating the whole arm');
 assert(Math.hypot((mechanismPreview.skeleton?.joints.right_hand.position.x ?? 0) - mechanismState.effector.x, (mechanismPreview.skeleton?.joints.right_hand.position.y ?? 0) - mechanismState.effector.y) < 1e-9, 'mechanism design IK target follows the actual linkage effector');
 assert(Math.hypot((mechanismPreview.skeleton?.joints.right_hand.position.x ?? 0) - drivenProject.paths['path-right-arm'].points[0].x, (mechanismPreview.skeleton?.joints.right_hand.position.y ?? 0) - drivenProject.paths['path-right-arm'].points[0].y) > 20, 'mechanism design does not fake success by directly following the target path');
-assert.notEqual(animated.right_arm.transform.rotation, drivenProject.parts.right_arm.transform.rotation, 'IK preview rotates the limb instead of only offsetting it');
+assert.notEqual(animated.right_arm_lower.transform.rotation, drivenProject.parts.right_arm_lower.transform.rotation, 'IK preview rotates the limb instead of only offsetting it');
 assert(Math.hypot(bodyPartPivotScene(animated.right_hand_part, mechanismPreview.skeleton).x - (mechanismPreview.skeleton?.joints.right_hand.position.x ?? 0), bodyPartPivotScene(animated.right_hand_part, mechanismPreview.skeleton).y - (mechanismPreview.skeleton?.joints.right_hand.position.y ?? 0)) < 1e-9, 'descendant part anchor follows animated skeleton');
 const sampleMechanism = sample.mechanisms[0];
 assert(sampleMechanism, 'sample has a mechanism for driven-target checks');
@@ -1469,8 +1532,8 @@ for (const phase of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
 }
 const conflictProject: ProjectState = { ...drivenProject, mechanisms: [drivenMechanism, { ...drivenMechanism, id: 'second-driver', anchorX: drivenMechanism.anchorX + 8 }] };
 const conflicts = mechanismBindingWarnings(conflictProject);
-assert(conflicts['drive-effector']?.some(w => w.includes('also drives right_arm:right_shoulder:right_hand')), 'first duplicate driver receives explicit conflict warning');
-assert(conflicts['second-driver']?.some(w => w.includes('also drives right_arm:right_shoulder:right_hand')), 'second duplicate driver receives explicit conflict warning');
+assert(conflicts['drive-effector']?.some(w => w.includes('also drives right_arm_lower:right_shoulder:right_hand')), 'first duplicate driver receives explicit conflict warning');
+assert(conflicts['second-driver']?.some(w => w.includes('also drives right_arm_lower:right_shoulder:right_hand')), 'second duplicate driver receives explicit conflict warning');
 assert(validateForFabrication(conflictProject).errors.some(e => e.includes('only one mechanism can own a target anchor')), 'blueprint export blocks ambiguous duplicate target drivers');
 const exportedForSettings = applyProjectAction(sample, { type: 'set_export', fabricationPackage: createFabricationPackage(sample) });
 const uiSettingsProject = applyProjectAction(exportedForSettings, { type: 'update_settings', settings: { toolbarVisible: !exportedForSettings.settings.toolbarVisible, debugVisuals: true, detailedProcessingSteps: true } });

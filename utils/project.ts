@@ -1,5 +1,6 @@
 import {
     AppSettings,
+    AppStage,
     BodyPartLayer,
     CharacterPackageArtifact,
     FoundryExportPackage,
@@ -304,13 +305,17 @@ export const createSampleProject = (): ProjectState => {
     const partsArray = [
         part('torso', 'Torso', 'torso', { x: 0, y: 20, rotation: 0, scale: 1 }, { width: 112, height: 170 }, '#cbd5e1', 0),
         part('head', 'Head', 'neck', { x: 0, y: 154, rotation: 0, scale: 1 }, { width: 82, height: 82 }, '#e2e8f0', 5),
-        part('left_arm', 'Left arm', 'left_shoulder', { x: -98, y: 24, rotation: -18, scale: 1 }, { width: 42, height: 150 }, '#b6c2d2', 3),
-        part('right_arm', 'Right arm', 'right_shoulder', { x: 98, y: 24, rotation: 18, scale: 1 }, { width: 42, height: 150 }, '#b6c2d2', 3),
-        part('left_leg', 'Left leg', 'left_hip', { x: -42, y: -160, rotation: -8, scale: 1 }, { width: 46, height: 170 }, '#94a3b8', 1),
-        part('right_leg', 'Right leg', 'right_hip', { x: 42, y: -160, rotation: 8, scale: 1 }, { width: 46, height: 170 }, '#94a3b8', 1)
+        part('left_arm_upper', 'Left upper arm', 'left_shoulder', { x: -78, y: 58, rotation: -20, scale: 1 }, { width: 38, height: 90 }, '#b6c2d2', 3),
+        part('left_arm_lower', 'Left lower arm', 'left_elbow', { x: -118, y: -8, rotation: -18, scale: 1 }, { width: 36, height: 90 }, '#b6c2d2', 3),
+        part('right_arm_upper', 'Right upper arm', 'right_shoulder', { x: 78, y: 58, rotation: 20, scale: 1 }, { width: 38, height: 90 }, '#b6c2d2', 3),
+        part('right_arm_lower', 'Right lower arm', 'right_elbow', { x: 118, y: -8, rotation: 18, scale: 1 }, { width: 36, height: 90 }, '#b6c2d2', 3),
+        part('left_leg_upper', 'Left upper leg', 'left_hip', { x: -43, y: -114, rotation: -8, scale: 1 }, { width: 42, height: 92 }, '#94a3b8', 1),
+        part('left_leg_lower', 'Left lower leg', 'left_knee', { x: -62, y: -190, rotation: -8, scale: 1 }, { width: 42, height: 94 }, '#94a3b8', 1),
+        part('right_leg_upper', 'Right upper leg', 'right_hip', { x: 43, y: -114, rotation: 8, scale: 1 }, { width: 42, height: 92 }, '#94a3b8', 1),
+        part('right_leg_lower', 'Right lower leg', 'right_knee', { x: 62, y: -190, rotation: 8, scale: 1 }, { width: 42, height: 94 }, '#94a3b8', 1)
     ].map(p => ({ ...p, localPivotOffset: localPivotOffsetForScene(p, skeleton.joints[p.anchorJointId]?.position ?? p.transform), localPivotJointId: p.anchorJointId }));
     const mechanisms = [createDefaultMechanism('4bar', 'mech-1')];
-    mechanisms[0].targetPartId = 'right_arm';
+    mechanisms[0].targetPartId = 'right_arm_lower';
     mechanisms[0].targetPathId = 'path-right-arm';
     mechanisms[0].targetAnchorJointId = 'right_hand';
     Object.assign(mechanisms[0], {
@@ -351,7 +356,9 @@ export const createSampleProject = (): ProjectState => {
         paths: {
             'path-right-arm': {
                 id: 'path-right-arm',
-                partId: 'right_arm',
+                partId: 'right_arm_lower',
+                targetAnchorJointId: 'right_hand',
+                chainRootJointId: 'right_shoulder',
                 points: pathPoints,
                 duration: 1800,
                 closed: false,
@@ -362,7 +369,7 @@ export const createSampleProject = (): ProjectState => {
             }
         },
         mechanisms,
-        selectedPartId: 'right_arm',
+        selectedPartId: 'right_arm_lower',
         selectedPathId: 'path-right-arm',
         selectedMechanismId: 'mech-1',
         characterPackage: {
@@ -375,6 +382,158 @@ export const createSampleProject = (): ProjectState => {
             replacementContext: { mode: 'plain-load', rebindingSummary: 'Built-in sample with a ready path and mechanism.' }
         },
         processing: { stage: 'ready', message: 'Sample loaded', progress: 100 }
+    };
+};
+
+const jointScenePoint = (project: ProjectState, jointId?: string): Point | undefined =>
+    jointId ? project.skeleton?.joints[jointId]?.position : undefined;
+
+const skeletonBox = (project: ProjectState) => {
+    const points = Object.values(project.skeleton?.joints ?? {}).map(joint => joint.position);
+    if (!points.length) return undefined;
+    const xs = points.map(p => p.x);
+    const ys = points.map(p => p.y);
+    return {
+        minX: Math.min(...xs),
+        maxX: Math.max(...xs),
+        minY: Math.min(...ys),
+        maxY: Math.max(...ys),
+        center: { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 }
+    };
+};
+
+const characterScaleBetween = (previous: ProjectState, next: ProjectState) => {
+    const before = skeletonBox(previous);
+    const after = skeletonBox(next);
+    if (!before || !after) return 1;
+    const beforeSize = Math.max(1, before.maxX - before.minX, before.maxY - before.minY);
+    const afterSize = Math.max(1, after.maxX - after.minX, after.maxY - after.minY);
+    return clampNumber(afterSize / beforeSize, 1, 0.2, 5);
+};
+
+const jointChainIds = (skeleton: StandardSkeleton | null | undefined, rootJointId?: string, targetJointId?: string) => {
+    if (!skeleton || !rootJointId || !targetJointId) return [];
+    if (rootJointId === targetJointId && skeleton.joints[rootJointId]) return [rootJointId];
+    const chain = [targetJointId];
+    let current = skeleton.joints[targetJointId]?.parentId ?? null;
+    while (current) {
+        chain.push(current);
+        if (current === rootJointId) return chain.reverse();
+        current = skeleton.joints[current]?.parentId ?? null;
+    }
+    return [];
+};
+
+const limbKeywordScore = (oldId: string | undefined, newId: string) => {
+    if (!oldId) return 0;
+    const tokens = ['left', 'right', 'arm', 'leg', 'head', 'torso', 'hand', 'foot'];
+    return tokens.reduce((score, token) => score + (oldId.includes(token) && newId.includes(token) ? 1 : 0), 0);
+};
+
+const replacementPartId = (project: ProjectState, oldPartId?: string, targetJointId?: string) => {
+    if (oldPartId && project.parts[oldPartId]) return oldPartId;
+    const candidates = Object.values(project.parts)
+        .map(part => ({
+            part,
+            chainLength: targetJointId ? jointChainIds(project.skeleton, part.anchorJointId, targetJointId).length : 0,
+            score: limbKeywordScore(oldPartId, part.id)
+        }))
+        .filter(item => (targetJointId ? item.chainLength > 0 : item.score > 0))
+        .sort((a, b) => (targetJointId ? a.chainLength - b.chainLength : b.score - a.score) || b.score - a.score || a.part.zIndex - b.part.zIndex);
+    return candidates[0]?.part.id;
+};
+
+const mappedPoint = (point: Point, from: Point, to: Point, scale: number): Point => ({
+    x: to.x + (point.x - from.x) * scale,
+    y: to.y + (point.y - from.y) * scale
+});
+
+const mechanismScaleKeys: Array<keyof MechanismConfig> = [
+    'crankLength',
+    'groundLength',
+    'couplerLength',
+    'rockerLength',
+    'sliderOffset',
+    'couplerPointDist',
+    'rodLength',
+    'outputGearRadius'
+];
+
+export const replaceCharacterProject = (next: ProjectState, previous: ProjectState, previousStage: AppStage = 'character'): ProjectState => {
+    const scale = characterScaleBetween(previous, next);
+    const previousBox = skeletonBox(previous);
+    const nextBox = skeletonBox(next);
+    const fallbackFrom = previousBox?.center ?? { x: 0, y: 0 };
+    const fallbackTo = nextBox?.center ?? { x: 0, y: 0 };
+    const remappedPaths: Record<string, ProjectMotionPath> = Object.fromEntries(Object.entries(previous.paths).flatMap(([id, path]): Array<[string, ProjectMotionPath]> => {
+        const referencingMechanismTarget = previous.mechanisms.find(mechanism => mechanism.targetPathId === id && mechanism.targetAnchorJointId && next.skeleton?.joints[mechanism.targetAnchorJointId])?.targetAnchorJointId;
+        const previousPartRoot = previous.parts[path.partId]?.anchorJointId;
+        const targetJointId = path.targetAnchorJointId && next.skeleton?.joints[path.targetAnchorJointId]
+            ? path.targetAnchorJointId
+            : (referencingMechanismTarget ?? (previousPartRoot && next.skeleton?.joints[previousPartRoot] ? previousPartRoot : undefined));
+        const partId = replacementPartId(next, path.partId, targetJointId);
+        if (!partId) return [];
+        const from = jointScenePoint(previous, targetJointId) ?? jointScenePoint(previous, previous.parts[path.partId]?.anchorJointId) ?? fallbackFrom;
+        const to = jointScenePoint(next, targetJointId) ?? jointScenePoint(next, next.parts[partId]?.anchorJointId) ?? fallbackTo;
+        const candidateChainRootJointId = path.chainRootJointId ?? previousPartRoot;
+        const chainRootJointId = candidateChainRootJointId && jointChainIds(next.skeleton, candidateChainRootJointId, targetJointId).length ? candidateChainRootJointId : undefined;
+        return [[id, {
+            ...path,
+            partId,
+            targetAnchorJointId: targetJointId,
+            chainRootJointId,
+            points: path.points.map(point => mappedPoint(point, from, to, scale)),
+            timedPoints: path.timedPoints?.map(point => ({ ...mappedPoint(point, from, to, scale), time: point.time })),
+            warnings: []
+        }]];
+    }));
+    const firstPathByPart = (partId?: string) => partId ? Object.values(remappedPaths).find(path => path.partId === partId) : undefined;
+    const remappedMechanisms = previous.mechanisms.map(mechanism => {
+        const priorPath = mechanism.targetPathId ? remappedPaths[mechanism.targetPathId] : undefined;
+        const targetAnchorJointId = mechanism.targetAnchorJointId && next.skeleton?.joints[mechanism.targetAnchorJointId]
+            ? mechanism.targetAnchorJointId
+            : priorPath?.targetAnchorJointId;
+        const targetPartId = replacementPartId(next, mechanism.targetPartId, targetAnchorJointId);
+        const targetPathId = priorPath?.id ?? firstPathByPart(targetPartId)?.id;
+        const anchor = mappedPoint(
+            { x: mechanism.anchorX ?? mechanism.sceneAnchor?.x ?? mechanism.transform?.x ?? fallbackFrom.x, y: mechanism.anchorY ?? mechanism.sceneAnchor?.y ?? mechanism.transform?.y ?? fallbackFrom.y },
+            fallbackFrom,
+            fallbackTo,
+            scale
+        );
+        const scaled = mechanismScaleKeys.reduce((acc, key) => {
+            const value = mechanism[key];
+            return typeof value === 'number' ? { ...acc, [key]: value * scale } : acc;
+        }, {} as Partial<MechanismConfig>);
+        return mechanismWithGeneratedPath({
+            ...mechanism,
+            ...scaled,
+            gearTrainRadii: mechanism.gearTrainRadii?.map(radius => radius * scale),
+            targetPartId,
+            targetPathId,
+            targetAnchorJointId,
+            activeVisualPartIds: targetPartId ? [targetPartId] : [],
+            anchorX: anchor.x,
+            anchorY: anchor.y,
+            transform: mechanism.transform ? { ...mechanism.transform, x: anchor.x, y: anchor.y } : { x: anchor.x, y: anchor.y, rotation: mechanism.groundAngle ?? 0, scale: 1 },
+            sceneAnchor: anchor
+        });
+    });
+    return {
+        ...next,
+        paths: remappedPaths,
+        mechanisms: remappedMechanisms,
+        selectedPartId: remappedMechanisms[0]?.targetPartId ?? Object.keys(next.parts)[0],
+        selectedPathId: Object.keys(remappedPaths)[0],
+        selectedMechanismId: remappedMechanisms[0]?.id,
+        characterPackage: next.characterPackage ? {
+            ...next.characterPackage,
+            replacementContext: {
+                mode: 'replace-character',
+                previousStage,
+                rebindingSummary: `${remappedMechanisms.filter(m => m.targetPartId).length}/${remappedMechanisms.length} mechanisms rebound; ${Object.keys(remappedPaths).length}/${Object.keys(previous.paths).length} paths scaled to new joints.`
+            }
+        } : next.characterPackage
     };
 };
 
@@ -877,7 +1036,7 @@ export const projectSelfCheck = () => {
     if (new Set([duplicateA.id, duplicateB.id]).size !== 2) throw new Error('selfcheck: mechanism ids collide');
     const migrated = loadProjectSnapshot({ skeleton: { joints: { root: { id: 'root', name: 'root', position: { x: 0, y: 0 } } } } });
     if (migrated.skeleton?.joints.root.bendDirection !== 1) throw new Error('selfcheck: skeleton migration missing bendDirection default');
-    const removed = applyProjectAction(sample, { type: 'remove_joint', jointId: 'right_shoulder' });
-    if (removed.parts.right_arm?.anchorJointId === 'right_shoulder') throw new Error('selfcheck: part anchor not repaired after joint delete');
+    const removed = applyProjectAction(sample, { type: 'remove_joint', jointId: 'right_elbow' });
+    if (removed.parts.right_arm_lower?.anchorJointId === 'right_elbow') throw new Error('selfcheck: part anchor not repaired after joint delete');
     return true;
 };

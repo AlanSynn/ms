@@ -33,6 +33,7 @@ import {
     mechanismRequiredParts,
     mechanismWithGeneratedPath,
     projectSelfCheck,
+    replaceCharacterProject,
     serializeProject,
     uid,
     validatePath
@@ -417,32 +418,8 @@ const App: React.FC = () => {
         });
     };
 
-    const mergeReplacementProject = (next: ProjectState, previous: ProjectState): ProjectState => {
-        const paths = Object.fromEntries(Object.entries(previous.paths).filter(([, path]) => Boolean(next.parts[path.partId])));
-        const mechanisms = previous.mechanisms.map(m => {
-            const targetPartId = m.targetPartId && next.parts[m.targetPartId] ? m.targetPartId : undefined;
-            const targetPathId = m.targetPathId && paths[m.targetPathId] ? m.targetPathId : undefined;
-            return mechanismWithGeneratedPath({ ...m, targetPartId, targetPathId, activeVisualPartIds: targetPartId ? [targetPartId] : [] });
-        });
-        return {
-            ...next,
-            paths,
-            mechanisms,
-            selectedMechanismId: mechanisms[0]?.id,
-            selectedPathId: Object.keys(paths)[0],
-            characterPackage: next.characterPackage ? {
-                ...next.characterPackage,
-                replacementContext: {
-                    mode: 'replace-character',
-                    previousStage: stage,
-                    rebindingSummary: `${mechanisms.length} mechanisms preserved; ${Object.keys(paths).length} matching paths rebound.`
-                }
-            } : next.characterPackage
-        };
-    };
-
     const queueCharacterReview = (next: ProjectState, summary: string) => {
-        const reviewed = replaceCharacter ? mergeReplacementProject(next, project) : next;
+        const reviewed = replaceCharacter ? replaceCharacterProject(next, project, stage) : next;
         setPendingCharacter({ project: reviewed, summary, returnStage: replaceCharacter ? (reviewed.mechanisms.length ? 'design' : 'path') : 'path' });
         dispatch({ type: 'set_processing', processing: { stage: 'ready', message: 'Check character', progress: 100 } });
         setShowWelcome(false);
@@ -2323,6 +2300,19 @@ const availableMotionAnchorForRecommendation = (project: ProjectState, partId: s
     return [...anchors].reverse().find(anchor => !occupied.has(anchor)) ?? preferredMotionJointId(project, partId, undefined, { preferDistalWhenRoot: true });
 };
 
+const recommendationTargetAnchor = (project: ProjectState, selectedPart: BodyPartLayer, selectedPath: ProjectMotionPath) => {
+    const anchors = motionAnchorJointIds(project, selectedPart.id);
+    const pathAnchor = selectedPath.targetAnchorJointId && anchors.includes(selectedPath.targetAnchorJointId)
+        ? selectedPath.targetAnchorJointId
+        : undefined;
+    const occupied = new Set(project.mechanisms
+        .filter(m => m.visible && m.enabled !== false && m.targetPartId === selectedPart.id)
+        .map(m => preferredMotionJointId(project, selectedPart.id, m.targetAnchorJointId ?? (m.targetPathId ? project.paths[m.targetPathId]?.targetAnchorJointId : undefined)))
+        .filter(Boolean));
+    if (pathAnchor && !occupied.has(pathAnchor)) return pathAnchor;
+    return availableMotionAnchorForRecommendation(project, selectedPart.id) ?? pathAnchor ?? preferredMotionJointId(project, selectedPart.id, undefined, { preferDistalWhenRoot: true });
+};
+
 const createRecommendedMechanism = (project: ProjectState, selectedPart: BodyPartLayer, selectedPath: ProjectMotionPath, type: MechanismType, reason: string, score: number): MechanismConfig => {
     const metrics = pathMetrics(selectedPath);
     const landingBoard = sceneToBoard(selectedPath.points[0], project.settings.physicalKit);
@@ -2375,7 +2365,7 @@ const createRecommendedMechanism = (project: ProjectState, selectedPart: BodyPar
         phase: 0,
         targetPartId: selectedPart.id,
         targetPathId: selectedPath.id,
-        targetAnchorJointId: selectedPath.targetAnchorJointId ?? availableMotionAnchorForRecommendation(project, selectedPart.id),
+        targetAnchorJointId: recommendationTargetAnchor(project, selectedPart, selectedPath),
         activeVisualPartIds: [selectedPart.id],
         source: 'optimized',
         presetId: `recommendation-${type}`,
@@ -2854,9 +2844,20 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
     const selectedTargetAnchor = selectedMechanism?.targetPartId
         ? preferredMotionJointId(project, selectedMechanism.targetPartId, selectedMechanism.targetAnchorJointId)
         : undefined;
+    const selectedTargetPath = selectedMechanism?.targetPathId ? project.paths[selectedMechanism.targetPathId] : undefined;
     const selectedTargetChain = selectedMechanism?.targetPartId
-        ? describeMotionChain(project, selectedMechanism.targetPartId, selectedTargetAnchor)
+        ? describeMotionChain(project, selectedMechanism.targetPartId, selectedTargetAnchor, { rootJointId: selectedTargetPath?.chainRootJointId })
         : undefined;
+    const updateTargetPart = (partId: string) => {
+        if (!selectedMechanism) return;
+        const targetPartId = partId || undefined;
+        const targetPath = targetPartId ? Object.values(project.paths).find(path => path.partId === targetPartId) : undefined;
+        updateMechanism(selectedMechanism.id, {
+            targetPartId,
+            targetPathId: targetPath?.id,
+            targetAnchorJointId: targetPath?.targetAnchorJointId ?? (targetPartId ? preferredMotionJointId(project, targetPartId, selectedMechanism.targetAnchorJointId, { preferDistalWhenRoot: true }) : undefined)
+        });
+    };
     return <EditorStageFrame
         stage="design"
         className="design-stage-frame"
@@ -2895,7 +2896,7 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
                 <Toggle label="Visible" checked={selectedMechanism.visible} onChange={visible => updateMechanism(selectedMechanism.id, { visible })}/>
                 <Toggle label="Enabled" checked={selectedMechanism.enabled !== false} onChange={enabled => updateMechanism(selectedMechanism.id, { enabled })}/>
                 <div className="section-title">Target</div>
-                <select aria-label="Mechanism target part" className="field" value={selectedMechanism.targetPartId ?? ''} onChange={e => updateMechanism(selectedMechanism.id, { targetPartId: e.target.value || undefined })}><option value="">No target part</option>{project.partOrder.map(id => <option key={id} value={id}>{project.parts[id].name}</option>)}</select>
+                <select aria-label="Mechanism target part" className="field" value={selectedMechanism.targetPartId ?? ''} onChange={e => updateTargetPart(e.target.value)}><option value="">No target part</option>{project.partOrder.map(id => <option key={id} value={id}>{project.parts[id].name}</option>)}</select>
                 <select aria-label="Mechanism target path" className="field" value={selectedMechanism.targetPathId ?? ''} onChange={e => updateMechanism(selectedMechanism.id, { targetPathId: e.target.value || undefined })}><option value="">No target path</option>{Object.values(project.paths).filter(p => !selectedMechanism.targetPartId || p.partId === selectedMechanism.targetPartId).map(p => <option key={p.id} value={p.id}>{p.id} · {p.points.length} pts</option>)}</select>
                 {selectedMechanism.targetPartId && project.skeleton && <select aria-label="Mechanism target anchor" className="field" value={selectedTargetAnchor ?? ''} onChange={e => updateMechanism(selectedMechanism.id, { targetAnchorJointId: e.target.value || undefined })}>
                     <option value="">Part anchor default</option>

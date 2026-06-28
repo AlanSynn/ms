@@ -95,8 +95,7 @@ export const motionChainRootJointIds = (project: ProjectState, partId: string | 
     const skeleton = project.skeleton;
     if (!part || !skeleton) return [];
     const target = preferredMotionJointId(project, partId, targetJointId, { preferDistalWhenRoot: !targetJointId }) ?? part.anchorJointId;
-    const chain = motionJointChain(skeleton, part.anchorJointId, target);
-    return chain.length ? chain : [part.anchorJointId];
+    return motionRootOptionsFor(skeleton, part.anchorJointId, target);
 };
 
 export const preferredMotionJointId = (
@@ -158,12 +157,24 @@ export const motionJointChain = (skeleton: StandardSkeleton, rootJointId: string
 const jointDisplayName = (skeleton: StandardSkeleton | null | undefined, id?: string) =>
     id ? (skeleton?.joints[id]?.name || id).replaceAll('_', ' ') : 'none';
 
-const resolveMotionRootJointId = (skeleton: StandardSkeleton, partRootJointId: string, targetJointId: string, requestedRootJointId?: string) =>
-    requestedRootJointId
-    && motionJointChain(skeleton, partRootJointId, requestedRootJointId).length
-    && motionJointChain(skeleton, requestedRootJointId, targetJointId).length
-        ? requestedRootJointId
-        : partRootJointId;
+const coreBodyRootIds = new Set(['root', 'hip', 'torso', 'neck']);
+const uniqueIds = (ids: string[]) => [...new Set(ids)];
+
+function motionRootOptionsFor(skeleton: StandardSkeleton, partRootJointId: string, targetJointId: string) {
+    if (!skeleton.joints[partRootJointId] || !skeleton.joints[targetJointId]) return [];
+    const directChain = motionJointChain(skeleton, partRootJointId, targetJointId);
+    const parentJointId = skeleton.joints[partRootJointId]?.parentId ?? undefined;
+    const parentChain = parentJointId && !coreBodyRootIds.has(parentJointId)
+        ? motionJointChain(skeleton, parentJointId, targetJointId)
+        : [];
+    const chain = parentChain.length ? parentChain : directChain;
+    return uniqueIds(chain.length ? chain : [partRootJointId]);
+}
+
+const resolveMotionRootJointId = (skeleton: StandardSkeleton, partRootJointId: string, targetJointId: string, requestedRootJointId?: string) => {
+    const options = motionRootOptionsFor(skeleton, partRootJointId, targetJointId);
+    return requestedRootJointId && options.includes(requestedRootJointId) ? requestedRootJointId : partRootJointId;
+};
 
 export const describeMotionChain = (project: ProjectState, partId: string | undefined, targetJointId?: string, options: { rootJointId?: string } = {}): MotionChainDescriptor => {
     const part = partId ? project.parts[partId] : undefined;

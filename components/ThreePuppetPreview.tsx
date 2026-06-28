@@ -1155,6 +1155,17 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       onPointerUp={finishViewerDrag}
       onPointerCancel={finishViewerDrag}
     />
+    {project?.settings.debugVisuals && (
+      <div
+        data-testid="canvas-debug-visuals"
+        className="three-puppet-debug-overlay"
+        aria-label="Canvas debug visuals"
+      >
+        <strong>Debug</strong>
+        <span>{parts.length} parts · {joints.length} joints</span>
+        <span>snap {project.settings.physicsSnapMode}</span>
+      </div>
+    )}
     <div
       className="canvas-zoom-toolbar three-puppet-view-toolbar"
       data-testid={`${testId}-view-toolbar`}
