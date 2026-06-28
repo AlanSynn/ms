@@ -1,0 +1,372 @@
+{
+  "version": "1.0.0",
+  "categories": {
+    "linkages": {
+      "name": "Linkage Mechanisms",
+      "description": "Mechanisms using interconnected rigid links",
+      "icon": "🔗",
+      "mechanisms": {
+        "four_bar": {
+          "name": "Four-Bar Linkage",
+          "description": "Classic four-bar mechanism for converting rotary to oscillating motion",
+          "type": "four_bar_linkage",
+          "class": "FourBarLinkage",
+          "tags": [
+            "basic",
+            "rotary",
+            "oscillating"
+          ],
+          "complexity": "beginner",
+          "parameters": {
+            "link1_length": {
+              "name": "Link 1 Length",
+              "type": "float",
+              "default": 50.0,
+              "min": 20.0,
+              "max": 100.0,
+              "unit": "mm",
+              "description": "Length of the first link (crank)"
+            },
+            "link2_length": {
+              "name": "Link 2 Length",
+              "type": "float",
+              "default": 80.0,
+              "min": 30.0,
+              "max": 150.0,
+              "unit": "mm",
+              "description": "Length of the connecting rod"
+            },
+            "link3_length": {
+              "name": "Link 3 Length",
+              "type": "float",
+              "default": 60.0,
+              "min": 25.0,
+              "max": 120.0,
+              "unit": "mm",
+              "description": "Length of the rocker arm"
+            },
+            "base_length": {
+              "name": "Base Length",
+              "type": "float",
+              "default": 100.0,
+              "min": 50.0,
+              "max": 200.0,
+              "unit": "mm",
+              "description": "Distance between the fixed pivots"
+            },
+            "speed": {
+              "name": "Animation Speed",
+              "type": "float",
+              "default": 1.0,
+              "min": 0.1,
+              "max": 5.0,
+              "unit": "x",
+              "description": "Speed multiplier for animation"
+            }
+          },
+          "preview_size": [
+            300,
+            200
+          ],
+          "animation_duration": 2000
+        },
+        "six_bar": {
+          "name": "Six-Bar Linkage",
+          "description": "More complex linkage with additional degrees of freedom",
+          "type": "six_bar_linkage",
+          "class": "SixBarLinkage",
+          "tags": [
+            "intermediate",
+            "complex",
+            "multi-dof"
+          ],
+          "complexity": "intermediate",
+          "parameters": {
+            "link1_length": {
+              "name": "Crank Length",
+              "type": "float",
+              "default": 40.0,
+              "min": 20.0,
+              "max": 80.0,
+              "unit": "mm"
+            },
+            "link2_length": {
+              "name": "Coupler 1 Length",
+              "type": "float",
+              "default": 90.0,
+              "min": 40.0,
+              "max": 140.0,
+              "unit": "mm"
+            },
+            "link3_length": {
+              "name": "Coupler 2 Length",
+              "type": "float",
+              "default": 70.0,
+              "min": 30.0,
+              "max": 110.0,
+              "unit": "mm"
+            },
+            "speed": {
+              "name": "Animation Speed",
+              "type": "float",
+              "default": 0.8,
+              "min": 0.1,
+              "max": 3.0,
+              "unit": "x"
+            }
+          },
+          "preview_size": [
+            350,
+            250
+          ],
+          "animation_duration": 3000
+        }
+      }
+    },
+    "cams": {
+      "name": "Cam Mechanisms",
+      "description": "Mechanisms using rotating cams to create specific motion profiles",
+      "icon": "⚙️",
+      "mechanisms": {
+        "simple_cam": {
+          "name": "Cam-Follower",
+          "description": "Basic cam mechanism with follower for precise motion control",
+          "type": "cam_follower",
+          "class": "CamFollower",
+          "tags": [
+            "basic",
+            "precise",
+            "timing"
+          ],
+          "complexity": "beginner",
+          "parameters": {
+            "cam_radius": {
+              "name": "Base Cam Radius",
+              "type": "float",
+              "default": 30.0,
+              "min": 15.0,
+              "max": 60.0,
+              "unit": "mm"
+            },
+            "lobe_height": {
+              "name": "Lobe Height",
+              "type": "float",
+              "default": 20.0,
+              "min": 5.0,
+              "max": 40.0,
+              "unit": "mm"
+            },
+            "num_lobes": {
+              "name": "Number of Lobes",
+              "type": "int",
+              "default": 1,
+              "min": 1,
+              "max": 4,
+              "unit": ""
+            },
+            "speed": {
+              "name": "Rotation Speed",
+              "type": "float",
+              "default": 1.2,
+              "min": 0.2,
+              "max": 4.0,
+              "unit": "x"
+            }
+          },
+          "preview_size": [
+            250,
+            200
+          ],
+          "animation_duration": 2500
+        }
+      }
+    },
+    "gears": {
+      "name": "Gear Systems",
+      "description": "Mechanisms using gears for power transmission and speed control",
+      "icon": "⚙️",
+      "mechanisms": {
+        "simple_gear_train": {
+          "name": "Gear Train",
+          "description": "Two meshing gears for speed and torque conversion",
+          "type": "gear_train",
+          "class": "SimpleGearTrain",
+          "tags": [
+            "basic",
+            "transmission",
+            "speed"
+          ],
+          "complexity": "beginner",
+          "parameters": {
+            "gear1_teeth": {
+              "name": "Driver Gear Teeth",
+              "type": "int",
+              "default": 12,
+              "min": 8,
+              "max": 30,
+              "unit": "teeth"
+            },
+            "gear2_teeth": {
+              "name": "Driven Gear Teeth",
+              "type": "int",
+              "default": 24,
+              "min": 10,
+              "max": 50,
+              "unit": "teeth"
+            },
+            "module": {
+              "name": "Module",
+              "type": "float",
+              "default": 2.0,
+              "min": 1.0,
+              "max": 4.0,
+              "unit": "mm"
+            },
+            "speed": {
+              "name": "Input Speed",
+              "type": "float",
+              "default": 1.0,
+              "min": 0.1,
+              "max": 3.0,
+              "unit": "x"
+            }
+          },
+          "preview_size": [
+            280,
+            200
+          ],
+          "animation_duration": 2000
+        },
+        "planetary_gear": {
+          "name": "Planetary Gear System",
+          "description": "Complex gear system with sun, planet, and ring gears",
+          "type": "planetary_gear",
+          "class": "PlanetaryGear",
+          "tags": [
+            "advanced",
+            "compact",
+            "high-ratio"
+          ],
+          "complexity": "advanced",
+          "parameters": {
+            "sun_teeth": {
+              "name": "Sun Gear Teeth",
+              "type": "int",
+              "default": 12,
+              "min": 8,
+              "max": 20,
+              "unit": "teeth"
+            },
+            "planet_teeth": {
+              "name": "Planet Gear Teeth",
+              "type": "int",
+              "default": 18,
+              "min": 12,
+              "max": 25,
+              "unit": "teeth"
+            },
+            "num_planets": {
+              "name": "Number of Planets",
+              "type": "int",
+              "default": 3,
+              "min": 2,
+              "max": 5,
+              "unit": ""
+            },
+            "speed": {
+              "name": "Input Speed",
+              "type": "float",
+              "default": 0.6,
+              "min": 0.1,
+              "max": 2.0,
+              "unit": "x"
+            }
+          },
+          "preview_size": [
+            300,
+            250
+          ],
+          "animation_duration": 4000
+        }
+      }
+    },
+    "specialized": {
+      "name": "Specialized Mechanisms",
+      "description": "Unique and specialized mechanical systems",
+      "icon": "🔧",
+      "mechanisms": {
+        "geneva_drive": {
+          "name": "Geneva Drive",
+          "description": "Intermittent motion mechanism for precise indexing",
+          "type": "geneva_drive",
+          "class": "GenevaDrive",
+          "tags": [
+            "intermittent",
+            "indexing",
+            "precise"
+          ],
+          "complexity": "intermediate",
+          "parameters": {
+            "num_slots": {
+              "name": "Number of Slots",
+              "type": "int",
+              "default": 4,
+              "min": 3,
+              "max": 8,
+              "unit": ""
+            },
+            "drive_radius": {
+              "name": "Drive Wheel Radius",
+              "type": "float",
+              "default": 25.0,
+              "min": 15.0,
+              "max": 40.0,
+              "unit": "mm"
+            },
+            "geneva_radius": {
+              "name": "Geneva Wheel Radius",
+              "type": "float",
+              "default": 50.0,
+              "min": 30.0,
+              "max": 80.0,
+              "unit": "mm"
+            },
+            "speed": {
+              "name": "Drive Speed",
+              "type": "float",
+              "default": 0.8,
+              "min": 0.2,
+              "max": 2.5,
+              "unit": "x"
+            }
+          },
+          "preview_size": [
+            280,
+            220
+          ],
+          "animation_duration": 3000
+        }
+      }
+    }
+  },
+  "search_tags": [
+    "basic",
+    "intermediate",
+    "advanced",
+    "beginner",
+    "rotary",
+    "oscillating",
+    "linear",
+    "intermittent",
+    "transmission",
+    "speed",
+    "torque",
+    "precise",
+    "timing",
+    "indexing",
+    "multi-dof",
+    "complex",
+    "compact",
+    "high-ratio"
+  ]
+}

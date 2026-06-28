@@ -1,0 +1,44 @@
+{
+  "title": "Slider-Crank Mechanism",
+  "goal": "Converts crank rotation into linear reciprocating stroke for piston-style motion and pumping cycles.",
+  "gallery_summary": "Convert rotary input into linear reciprocating motion for engine-like mechanisms.",
+  "motions": ["Circular", "Linear", "Reciprocating"],
+  "parts": [
+    "Crank: Rotating link attached to drive shaft",
+    "Connecting Rod: Links crank to slider",
+    "Slider: Translating element moving linearly",
+    "Guide: Constrains slider to linear path",
+    "Frame: Fixed base supporting all components"
+  ],
+  "advantages": [
+    "Efficient rotary-to-linear conversion",
+    "Proven reliability in engines and pumps",
+    "Scalable to various sizes and forces",
+    "Balanced forces at proper design",
+    "Simple maintenance and replacement"
+  ],
+  "disadvantages": [
+    "Non-uniform velocity during stroke",
+    "Acceleration peaks at stroke endpoints",
+    "Side loading on slider guide",
+    "Requires lubrication at all joints",
+    "Potential for mechanical vibration"
+  ],
+  "materials": [
+    "Steel or aluminum alloy for crank and rod",
+    "Hardened slider with low-friction coating",
+    "Linear bearings or guide rails",
+    "High-quality pivot bearings",
+    "Seals to prevent contamination"
+  ],
+  "cautions": [
+    "Ensure slider guide is properly aligned",
+    "Check for adequate clearances during full stroke",
+    "Monitor wear on slider and guide surfaces",
+    "Balance rotating components to reduce vibration",
+    "Verify connecting rod strength for peak loads"
+  ],
+  "parameter_options": {},
+  "diagram_path": null,
+  "tags": ["slider", "crank", "reciprocating", "engine"]
+}

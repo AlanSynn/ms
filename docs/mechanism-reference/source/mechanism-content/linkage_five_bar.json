@@ -1,0 +1,31 @@
+{
+  "title": "Five-Bar Linkage",
+  "goal": "Study the planar five-bar linkage with two input cranks driving a floating coupler to create complex point paths.",
+  "parts": [
+    "Ground pivots",
+    "Dual input cranks",
+    "Floating coupler links",
+    "Output joint"
+  ],
+  "advantages": [
+    "Provides a wider variety of coupler curves than a four-bar linkage"
+  ],
+  "disadvantages": [
+    "Requires synchronised inputs to avoid binding and unintended motion"
+  ],
+  "materials": [
+    "Steel or aluminium link plates",
+    "Hardened pivot pins",
+    "Low-friction bushings"
+  ],
+  "cautions": [
+    "Watch joint limits—five-bar linkages can quickly enter singular positions"
+  ],
+  "parameter_options": {},
+  "diagram_path": null,
+  "tags": [
+    "linkage",
+    "five-bar",
+    "coupler-curve"
+  ]
+}

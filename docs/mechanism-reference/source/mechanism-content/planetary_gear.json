@@ -1,0 +1,39 @@
+{
+  "title": "Planetary Gear",
+  "goal": "Shows compact orbital gear motion where a sun gear drives one or more planet gears on a carrier.",
+  "gallery_summary": "Compact sun-and-planet gear motion with a carrier/output handle.",
+  "motions": ["Circular", "Orbital", "Reduced rotation"],
+  "parts": [
+    "Sun Gear: Central gear pinned to the board",
+    "Planet Gear: Orbiting gear mounted on the carrier",
+    "Carrier Link: Holds planet axle and output handle hole",
+    "Ring Guide: Visual reference for the planet orbit",
+    "Spacer Stack: Separates board, carrier, and gears"
+  ],
+  "advantages": [
+    "Produces compact geared motion in a small board area",
+    "Demonstrates ratio, carrier, and orbital ideas clearly",
+    "Can be prototyped with the same small gear and linkage parts",
+    "Supports multiple planets for balanced visual motion"
+  ],
+  "disadvantages": [
+    "More sensitive to axle alignment than a two-gear train",
+    "Full ring-gear fabrication is more advanced than the starter board demo",
+    "Extra planets add assembly complexity and friction"
+  ],
+  "materials": [
+    "G12 or G14 sun gear",
+    "G12 to G18 planet gear",
+    "Two-cell carrier/linkage bar",
+    "S8 spacer stack",
+    "Paper fasteners for sun, carrier, and planet axle"
+  ],
+  "cautions": [
+    "Prototype one planet first before adding more planets",
+    "Keep the sun fastener straight and the carrier loose",
+    "Confirm the planet clears adjacent board holes and brackets"
+  ],
+  "parameter_options": {},
+  "diagram_path": null,
+  "tags": ["gear", "planetary", "carrier", "fabrication", "board"]
+}

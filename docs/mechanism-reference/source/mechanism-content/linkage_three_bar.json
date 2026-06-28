@@ -1,0 +1,30 @@
+{
+  "title": "Three-Bar Linkage",
+  "goal": "Visualise the minimal crank-rocker linkage: a ground pivot, one crank, and a rocker arm converting rotation to oscillation.",
+  "parts": [
+    "Ground pivot",
+    "Input crank",
+    "Rocker link"
+  ],
+  "advantages": [
+    "Simplest closed-loop mechanism to explain crank-rocker behaviour"
+  ],
+  "disadvantages": [
+    "Limited control over end-effector trajectories compared with higher-bar linkages"
+  ],
+  "materials": [
+    "Steel flats",
+    "Aluminium plates",
+    "Pinned joints"
+  ],
+  "cautions": [
+    "Keep crank length under the Grashof condition to maintain full rotation"
+  ],
+  "parameter_options": {},
+  "diagram_path": null,
+  "tags": [
+    "linkage",
+    "crank-rocker",
+    "beginner"
+  ]
+}

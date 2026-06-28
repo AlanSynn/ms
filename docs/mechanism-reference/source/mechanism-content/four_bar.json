@@ -1,0 +1,35 @@
+{
+  "title": "Four-Bar Linkage",
+  "goal": "Transforms crank rotation into controlled oscillatory output and coupler trajectories for motion design.",
+  "gallery_summary": "Create swinging, back-and-forth, or circular motion through four connected bars.",
+  "motions": ["Circular", "Oscillatory"],
+  "parts": [
+    "4 bar-shaped links forming one closed chain",
+    "Ground Link: Fixed base connecting two pivot points",
+    "Input Link (Crank): Rotating driver link that provides input motion",
+    "Coupler: Floating link connecting input and output",
+    "Output Link (Rocker): Driven link that produces output motion"
+  ],
+  "advantages": [
+    "Produces versatile motion outputs",
+    "Simple construction with high reliability",
+    "Low friction and good energy efficiency"
+  ],
+  "disadvantages": [
+    "Limited to planar (2D) motion",
+    "Can reach singular or dead-point positions"
+  ],
+  "materials": [
+    "Rigid link bars with low-backlash joints",
+    "Precision bearings or bushings at pivots",
+    "Fasteners and pins sized for cyclic loading"
+  ],
+  "cautions": [
+    "Use only the displayed valid input-angle range when full rotation is not available.",
+    "Verify clearances to avoid link collisions",
+    "Evaluate transmission quality near extreme positions"
+  ],
+  "parameter_options": {},
+  "diagram_path": null,
+  "tags": ["linkage", "basic", "planar", "four-bar"]
+}

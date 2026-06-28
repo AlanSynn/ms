@@ -1,0 +1,32 @@
+{
+  "title": "Six-Bar Linkage",
+  "goal": "Explore a Stephenson-style six-bar linkage that combines two four-bar loops for rich end-effector motion.",
+  "parts": [
+    "Ground frame",
+    "Input crank",
+    "Coupler links",
+    "Secondary rocker",
+    "Output joint"
+  ],
+  "advantages": [
+    "Offers intricate motion paths while keeping a compact footprint"
+  ],
+  "disadvantages": [
+    "Higher sensitivity to tolerances and alignment than lower-order linkages"
+  ],
+  "materials": [
+    "Laser-cut aluminium links",
+    "Ball or sleeve bearings",
+    "Precision fasteners"
+  ],
+  "cautions": [
+    "Analyse Grashof condition for each four-bar sub-loop to maintain continuous motion"
+  ],
+  "parameter_options": {},
+  "diagram_path": null,
+  "tags": [
+    "linkage",
+    "six-bar",
+    "advanced"
+  ]
+}

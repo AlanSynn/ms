@@ -1,0 +1,39 @@
+{
+  "title": "Gear + Linkage",
+  "goal": "Combines meshing gears with an off-center crank hole so a rotating gear can push and pull a linkage arm.",
+  "gallery_summary": "Drive a linkage from a gear-mounted crank pin for timed push-pull motion.",
+  "motions": ["Circular", "Oscillating", "Push-pull"],
+  "parts": [
+    "Drive Gear: Handle-side gear receiving input",
+    "Driven Gear: Gear carrying the off-center crank hole",
+    "Linkage Arm: Bar connected to the crank hole",
+    "Spacer Stack: Keeps gear, linkage, and board from rubbing",
+    "Paper Fasteners: Loose pivots at axles and linkage joints"
+  ],
+  "advantages": [
+    "Uses gear ratio and linkage reach in one compact mechanism",
+    "Works naturally with fabricated gear holes and bracket pivots",
+    "Easy to prototype on the 15 by 15 pegboard",
+    "Makes timing changes visible through gear tooth counts"
+  ],
+  "disadvantages": [
+    "Requires careful spacer ordering to avoid rubbing",
+    "Large crank throw can collide with neighboring parts",
+    "Loose fasteners may introduce wobble in long linkages"
+  ],
+  "materials": [
+    "Small fabricated gears with center and crank holes",
+    "Two-cell or four-cell linkage bar",
+    "S8 spacer stack",
+    "Paper fasteners for axles and joints",
+    "Straight or L bracket for the output pivot"
+  ],
+  "cautions": [
+    "Keep the linkage pin loose enough to rotate",
+    "Check that the bar clears gear teeth over a full turn",
+    "Use only supported gear sizes so board spacing remains compatible"
+  ],
+  "parameter_options": {},
+  "diagram_path": null,
+  "tags": ["gear", "linkage", "crank", "fabrication", "board"]
+}
