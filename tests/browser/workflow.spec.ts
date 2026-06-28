@@ -1673,6 +1673,27 @@ test('Right inspector scroll does not move the center canvas', async ({ page }) 
   expect(Math.abs(after!.y - before!.y), 'center canvas stays pinned while right inspector scrolls').toBeLessThan(1);
 });
 
+test('Narrow character right inspector remains independently scrollable', async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto('/');
+  await openCharacterScreen(page);
+
+  const inspector = page.getByTestId('stage-right-inspector');
+  await inspector.scrollIntoViewIfNeeded();
+  await expect(inspector).toBeVisible();
+  await expect(page.getByTestId('part-art-controls')).toBeVisible();
+  const metrics = await inspector.evaluate(element => ({
+    overflowY: getComputedStyle(element).overflowY,
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight
+  }));
+  expect(metrics.overflowY).toBe('auto');
+  expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
+
+  await inspector.evaluate(element => element.scrollBy(0, 700));
+  await expect.poll(() => inspector.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+});
+
 test('Workflow tabs keep left workflow, center canvas, and right inspector roles', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto('/');

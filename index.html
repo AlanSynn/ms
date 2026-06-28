@@ -344,7 +344,8 @@
         .stage-body { margin-left: 0; padding-top: 1rem !important; }
         .app-shell .stage-body { height: auto; margin-top: 0; overflow: auto; }
         .editor-stage-frame { height: auto; grid-template-columns: 1fr; grid-template-areas: "left" "canvas" "right"; }
-        .stage-left-pane, .stage-canvas-pane, .stage-right-inspector { min-height: auto; overflow: visible; }
+        .stage-left-pane, .stage-canvas-pane { min-height: auto; overflow: visible; }
+        .stage-right-inspector { min-height: 0; max-height: min(72vh, 42rem); overflow: auto; overscroll-behavior: contain; }
         .stage-nav-compact { display: grid; }
         .workflow-status-strip, .status-bar { margin-left: 0; }
         .player-dock { width: 100%; }
