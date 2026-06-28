@@ -106,7 +106,7 @@
       .canvas-workspace { position: relative; background: transparent; border: 0; border-radius: 0; box-shadow: none; overflow: hidden; }
       .canvas-workspace > .canvas-surface { border-radius: 0; border-color: transparent; background: transparent; box-shadow: none; }
       .stage-workflow-block, .stage-nav-compact { display: grid; gap: .75rem; }
-      .stage-player-row { flex: 0 0 auto; display: flex; justify-content: center; pointer-events: none; }
+      .stage-player-row { position: absolute; left: calc(var(--ms-left-pane-width) + var(--ms-stage-gap)); right: calc(var(--ms-right-pane-width) + var(--ms-stage-gap)); bottom: .85rem; z-index: 45; display: flex; justify-content: center; pointer-events: none; }
       .stage-nav-compact { display: none; border-top: 1px solid var(--ms-line); border-bottom: 1px solid var(--ms-line); padding: .9rem 0; }
       .stage-option-list { display: grid; gap: .4rem; margin-top: 1rem; }
       .foundry-canvas-shell { display: grid; place-items: stretch; }
@@ -351,13 +351,15 @@
       .workspace-steps:not(.workflow-rail) button:hover, .workspace-steps:not(.workflow-rail) button.active { color: var(--ms-accent); background: var(--ms-accent-soft); }
       .workspace-side-link { width: 100%; display: flex; align-items: center; gap: .65rem; border-radius: 1rem; background: transparent; color: var(--ms-muted); padding: .78rem .9rem; text-align: left; transition: background .18s ease, color .18s ease, box-shadow .18s ease; }
       .workspace-side-link:hover, .workspace-side-link.active { color: var(--ms-secondary); background: rgba(16,185,129,.12); box-shadow: inset 0 0 0 1px rgba(16,185,129,.18); }
-      .player-dock { position: relative; z-index: 5; width: min(100%, 24rem); border: 1px solid var(--ms-line); border-radius: 2rem; background: rgba(255,255,255,.86); box-shadow: var(--ms-shadow); backdrop-filter: blur(16px); padding: 1rem; pointer-events: none; }
+      .player-dock { position: relative; z-index: 5; width: min(100%, 24rem); border: 1px solid var(--ms-line); border-radius: 2rem; background: rgba(255,255,255,.86); box-shadow: var(--ms-shadow); backdrop-filter: blur(16px); padding: 1rem; pointer-events: auto; transform: translate(var(--player-x, 0), var(--player-y, 0)); touch-action: none; }
+      .player-drag-handle { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: .75rem; background: transparent; color: var(--ms-muted); padding: 0; cursor: grab; text-align: left; }
+      .player-dock.is-moving .player-drag-handle { cursor: grabbing; }
       .player-actions { display: flex; align-items: center; justify-content: space-between; gap: .55rem; margin: .75rem 0; pointer-events: auto; }
       .player-actions button, .player-actions span { min-height: 2.65rem; border-radius: 1rem; padding: .65rem .8rem; background: #fff; border: 1px solid var(--ms-line); color: var(--ms-text-soft); font-size: .82rem; font-weight: 900; }
       .player-actions button:first-child { flex: 1; background: var(--ms-accent-soft); border-color: var(--ms-accent-line); color: var(--ms-accent); }
       .player-actions button:hover { transform: translateY(-1px); color: var(--ms-accent); border-color: var(--ms-accent-line); }
       .player-dock input { pointer-events: auto; }
-      .player-dock.is-drawing { opacity: .28; transform: translateY(1.25rem); pointer-events: none; }
+      .player-dock.is-drawing { opacity: .28; transform: translate(var(--player-x, 0), calc(var(--player-y, 0) + 1.25rem)); pointer-events: none; }
       .player-dock.is-drawing .player-actions, .player-dock.is-drawing input { pointer-events: none; }
       @media (min-width: 901px) and (max-width: 1180px) {
       }
@@ -373,7 +375,8 @@
         .stage-right-inspector { min-height: 0; max-height: min(72vh, 42rem); overflow: auto; overscroll-behavior: contain; }
         .stage-nav-compact { display: grid; }
         .workflow-status-strip, .status-bar { margin-left: 0; }
-        .player-dock { width: 100%; }
+        .stage-player-row { left: .75rem; right: .75rem; bottom: .75rem; }
+        .player-dock { width: min(100%, 24rem); }
         .template-gallery { grid-template-columns: 1fr; }
         .getting-started-dialog .template-gallery { grid-template-columns: 1fr; }
         .template-tile.primary { min-height: 0; }

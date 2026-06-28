@@ -966,8 +966,45 @@ const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, speed, 
 }) => {
     const progress = ((angle / (Math.PI * 2)) % 1 + 1) % 1;
     const percent = Math.round(progress * 100);
-    return <aside className={`player-dock ${drawMode ? 'is-drawing' : ''}`} data-testid="workspace-player-dock" aria-label="Shared animation controls">
-        <div className="section-title">Animation</div>
+    const [offset, setOffset] = useState({ x: 0, y: 0 });
+    const [dragging, setDragging] = useState(false);
+    const dragStart = useRef<{ x: number; y: number; offset: { x: number; y: number } } | null>(null);
+    useEffect(() => {
+        if (!dragging) return;
+        const onMove = (event: PointerEvent) => {
+            const start = dragStart.current;
+            if (!start) return;
+            setOffset({
+                x: Math.max(-260, Math.min(260, start.offset.x + event.clientX - start.x)),
+                y: Math.max(-220, Math.min(120, start.offset.y + event.clientY - start.y))
+            });
+        };
+        const onUp = () => {
+            dragStart.current = null;
+            setDragging(false);
+        };
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp, { once: true });
+        return () => {
+            window.removeEventListener('pointermove', onMove);
+            window.removeEventListener('pointerup', onUp);
+        };
+    }, [dragging]);
+    const startDrag = (event: React.PointerEvent) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        dragStart.current = { x: event.clientX, y: event.clientY, offset };
+        setDragging(true);
+    };
+    return <aside
+        className={`player-dock ${drawMode ? 'is-drawing' : ''} ${dragging ? 'is-moving' : ''}`}
+        data-testid="workspace-player-dock"
+        aria-label="Shared animation controls"
+        style={{ '--player-x': `${offset.x}px`, '--player-y': `${offset.y}px` } as React.CSSProperties}
+    >
+        <button type="button" className="player-drag-handle" data-testid="workspace-player-drag-handle" aria-label="Move animation controls" onPointerDown={startDrag}>
+            <span className="section-title">Animation</span><span aria-hidden="true">⋮⋮</span>
+        </button>
         <div className="player-actions">
             <button type="button" aria-label="Shared transport toggle" onClick={() => setIsPlaying(!isPlaying)}>{isPlaying ? 'Ⅱ' : '▶'}</button>
             <button type="button" aria-label="Shared scrub restart" onClick={() => setAngle(0)}>↺</button>

@@ -1670,7 +1670,7 @@ test('Mobile welcome modal is simple, traps focus, and can be hidden next time',
   await expect(page.getByTestId('character-setup-panel')).toBeVisible();
 });
 
-test('Shared player dock stays inside the editor content at lower and medium desktop widths', async ({ page }) => {
+test('Shared player dock overlays the canvas, does not take layout space, and can be dragged', async ({ page }) => {
   for (const width of [901, 950, 1024]) {
     await page.setViewportSize({ width, height: 768 });
     await page.goto('/');
@@ -1681,14 +1681,25 @@ test('Shared player dock stays inside the editor content at lower and medium des
     const leftBox = await page.getByTestId('stage-left-pane').boundingBox();
     const rightBox = await page.getByTestId('stage-right-inspector').boundingBox();
     const dockBox = await page.getByTestId('workspace-player-dock').boundingBox();
+    const workbenchBox = await page.getByTestId('shared-workbench').boundingBox();
+    const frameBox = await page.locator('.editor-stage-frame').boundingBox();
     expect(leftBox, `left pane layout box at ${width}px`).toBeTruthy();
     expect(rightBox, `right inspector layout box at ${width}px`).toBeTruthy();
     expect(dockBox, `player dock layout box at ${width}px`).toBeTruthy();
+    expect(workbenchBox, `workbench layout box at ${width}px`).toBeTruthy();
+    expect(frameBox, `stage frame layout box at ${width}px`).toBeTruthy();
+    await expect(page.getByTestId('stage-player-row')).toHaveCSS('position', 'absolute');
+    expect(frameBox!.height, `player dock does not reserve a lower flex row at ${width}px`).toBeGreaterThan(workbenchBox!.height - 40);
     const overlaps = (a: NonNullable<typeof dockBox>, b: NonNullable<typeof dockBox>) =>
       a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
     expect(overlaps(dockBox!, leftBox!), `player dock does not geometrically overlap the workflow pane at ${width}px`).toBe(false);
     expect(overlaps(dockBox!, rightBox!), `player dock does not geometrically overlap the right inspector at ${width}px`).toBe(false);
   }
+
+  const before = await page.getByTestId('workspace-player-dock').boundingBox();
+  await page.getByTestId('workspace-player-drag-handle').dragTo(page.getByTestId('stage-canvas-pane'), { targetPosition: { x: 40, y: 40 } });
+  const after = await page.getByTestId('workspace-player-dock').boundingBox();
+  expect(Math.abs((after!.x - before!.x)) + Math.abs((after!.y - before!.y)), 'player dock moves by dragging the title handle').toBeGreaterThan(20);
 });
 
 test('Right inspector scroll does not move the center canvas', async ({ page }) => {
