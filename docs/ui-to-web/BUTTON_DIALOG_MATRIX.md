@@ -8,17 +8,17 @@
 | --- | --- | --- |
 | File menu | New | clear/create project with dirty-state guard |
 | File menu | Load Project... | file picker/import project |
-| File menu | Recover Autosave... | open autosave recovery flow |
-| File menu | Save Project | save current project |
-| File menu | Save Project As... | save project to new file |
+| File menu | Recover Browser Autosave... | open autosave recovery flow |
+| File menu | Download Snapshot | download the current local project snapshot |
+| File menu | Download Snapshot As... | download a timestamped local project snapshot |
 | File menu | Export Blueprint Package | export cut sheets + assembly guide |
-| File menu | Export Project Copy | export current project copy |
+| File menu | Download Portable Copy | download a portable local project copy |
 | View menu | Zoom In/Out/Fit/Reset View | operate on persistent canvas viewport |
 | View menu | Save/Restore/Reset Workspace Layout | persist panel/tab/workspace preferences |
 | Edit menu | Back (Undo), Forward (Redo) | project command history |
 | Options menu | Preferences... | open Options drawer/dialog |
 | Help menu | Keyboard Shortcuts, About... | generated shortcut reference and About modal |
-| Toolbar | New/Load/Save/Export Blueprint/Export Copy | optional quick actions, hidden default |
+| Toolbar | New/Load/Download Snapshot/Export Blueprint/Portable Copy | optional quick actions, hidden default |
 
 ### Retired browser-only placeholders
 

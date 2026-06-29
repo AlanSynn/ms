@@ -19,6 +19,7 @@ import { createMechanismFitContext, fitMechanismSimulation, fitMechanismSimulati
 import { WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
 import { APP_COMMANDS, APP_MENU_GROUPS, commandById, commandIdForKeyboardEvent, validateAppCommandRegistry } from '../utils/appCommands';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_KERNEL_IMPORT, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, physicsKernelCapability, runRapierFrictionProbe } from '../utils/physicsKernel';
+import { formatGridLabel, formatGridPitch, formatGridReadout } from '../utils/units';
 import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, FOUNDRY_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, mechanismTemplateLabel } from '../utils/mechanismTemplates';
 import { MECHANISM_TYPES as SANITIZE_MECHANISM_TYPES, sanitizeMechanismRuntime } from '../utils/sanitize';
 import { generateSmartConfig, mutateConfig, OPTIMIZER_MECHANISM_TYPES } from '../utils/optimizer';
@@ -241,6 +242,8 @@ assert(agentsContract.includes('Viser-style transform tree'), 'AGENTS.md records
 assert(agentsContract.includes('preserve coverage while optimizing wall time'), 'AGENTS.md requires test speedups to preserve test quality');
 assert(agentsContract.includes('bounded Playwright parallel workers'), 'AGENTS.md requires bounded browser test parallelism');
 assert(agentsContract.includes('bun run test') && agentsContract.includes('bun run build') && !agentsContract.includes('npm test'), 'AGENTS.md verification gates use Bun commands');
+assert(agentsContract.includes('local-first browser/Tauri'), 'AGENTS.md excludes server scope and locks the app as local-first');
+assert(agentsContract.includes('Do not add backend/API server'), 'AGENTS.md explicitly excludes backend/API/auth/cloud work unless reopened');
 assert(designContract.includes('Shared editor workbench'), 'DESIGN.md documents the shared editor workbench');
 assert(designContract.includes('Project governance: `AGENTS.md`'), 'DESIGN.md points contributors at the project agent contract');
 assert(designContract.includes('#8b5cf6'), 'DESIGN.md uses the MotionSmith light primary color');
@@ -1287,6 +1290,9 @@ assert.equal(sample.settings.detailedProcessingSteps, false, 'settings default h
 assert.equal(sample.settings.autosaveIntervalSeconds, 60, 'settings default includes autosave interval seconds');
 assert.equal(sample.settings.fabricationReadyMode, true, 'settings default keeps fabrication validation strict');
 assert.equal(sample.settings.gridUnit, 'cm', 'settings default labels grid in centimeters');
+assert.equal(formatGridPitch(20, 'cm'), '2cm', 'grid pitch formatter keeps compact cm labels');
+assert.equal(formatGridLabel({ gridPitchMm: 25 }, 'inch'), 'Letter sheet · 0.98 in grid', 'grid label formatter applies inch units across canvases');
+assert.equal(formatGridReadout({ gridPitchMm: 20 }, 'px'), '40 scene px between board holes', 'grid readout formatter applies scene-pixel units');
 assert.equal(sample.settings.physicalKit.exportMode, 'both', 'physical kit default exposes both custom parts and prefab board kit workflows');
 assert.equal(sample.settings.physicalKit.cutSheetFileType, 'pdf', 'physical kit default is PDF-first for cut sheets');
 assert.equal(animationDeltaRadians(1600, 3200, 1, 'linear'), Math.PI, 'linear animation duration drives playback phase');

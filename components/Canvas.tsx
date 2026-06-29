@@ -6,6 +6,7 @@ import { boardGridLines, boardToScene, bodyPartPivotScene, defaultPhysicalKit, p
 import { motionPreviewForProject, pointOnProjectPath } from '../utils/motion';
 import { mechanismWithGeneratedPath } from '../utils/project';
 import { clampCanvasZoom } from '../utils/viewport';
+import { formatGridLabel } from '../utils/units';
 import { ThreePuppetPreview } from './ThreePuppetPreview';
 import { fabricationGearPathD } from '../utils/fabrication';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlinePathD, pointInsideOutline } from '../utils/partGeometry';
@@ -847,7 +848,7 @@ const SceneUnderlay = ({ project, animatedParts = {}, previewSkeleton }: { proje
         <rect x={sheet.x} y={sheet.y} width={sheet.width} height={sheet.height} rx="18" fill="#ffffff" stroke="#d6dbe8" strokeWidth="1.5" />
         <g opacity="0.28">{lines}</g>
         <g transform="scale(1,-1)">
-            <text x={sheet.x + 16} y={-(sheet.y + sheet.height - 28)} className="fill-slate-400 text-[12px] font-bold" data-testid="scene-grid-label">Letter sheet · {kit.gridPitchMm / 10}cm grid</text>
+            <text x={sheet.x + 16} y={-(sheet.y + sheet.height - 28)} className="fill-slate-400 text-[12px] font-bold" data-testid="scene-grid-label">{formatGridLabel(kit, project?.settings.gridUnit ?? 'cm')}</text>
         </g>
         {project?.settings.debugVisuals && <g data-testid="canvas-debug-visuals" pointerEvents="none" transform="scale(1,-1)">
             <rect x={sheet.x + sheet.width - 182} y={-(sheet.y + sheet.height - 94)} width="166" height="76" rx="12" fill="#0f172a" opacity="0.78"/>

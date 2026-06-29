@@ -239,7 +239,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
 
   const projectDownloadPromise = page.waitForEvent('download');
   await page.getByTestId('top-command-bar').getByText('File', { exact: true }).click();
-  await page.getByTestId('command-save-project').click();
+  await page.getByTestId('command-download-snapshot').click();
   const projectDownload = await projectDownloadPromise;
   expect(projectDownload.suggestedFilename()).toMatch(/\.motionsmith\.json$/);
   const projectDownloadPath = await projectDownload.path();
@@ -943,10 +943,10 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
 
   await page.getByRole('button', { name: /Path Editor/i }).click();
   await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
-  await expect(page.getByTestId('scene-grid-label')).toContainText('Letter sheet · 2.5cm grid');
+  await expect(page.getByTestId('scene-grid-label')).toContainText('Letter sheet · 0.98 in grid');
   await page.getByRole('button', { name: 'Drawing free path', exact: true }).click();
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
-  await expect(page.getByTestId('design-canvas').getByTestId('scene-grid-label')).toContainText('Letter sheet · 2.5cm grid');
+  await expect(page.getByTestId('design-canvas').getByTestId('scene-grid-label')).toContainText('Letter sheet · 0.98 in grid');
   await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').fill('0');
   await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').press('Enter');
   await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').fill('100');
@@ -997,8 +997,8 @@ test('Legacy storage namespace migrates to MotionSmith keys without losing autos
   });
 
   await page.getByTestId('top-command-bar').getByText('File', { exact: true }).click();
-  await page.getByRole('button', { name: 'Recover Autosave…' }).click();
-  await expect(page.getByTestId('status-bar')).toContainText('Recovered autosave snapshot');
+  await page.getByRole('button', { name: 'Recover Browser Autosave…' }).click();
+  await expect(page.getByTestId('status-bar')).toContainText('Recovered browser autosave snapshot');
   await expect.poll(async () => page.evaluate(() => Boolean(localStorage.getItem('motionsmith.autosave'))), { timeout: 5000 }).toBe(true);
 
   await page.getByTestId('top-command-bar').getByText('View', { exact: true }).click();
@@ -1095,7 +1095,7 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   const partLocked = page.locator('label').filter({ hasText: 'Locked' }).first().locator('input[type="checkbox"]');
   await partLocked.check();
   await expect(page.getByRole('button', { name: 'Drawing free path', exact: true })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Track from video', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Trace media path', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Clear path', exact: true })).toBeDisabled();
   await expect(page.getByLabel('X number').first()).toBeDisabled();
   await page.getByTestId('path-canvas').click({ position: { x: 260, y: 220 } });
@@ -1165,7 +1165,7 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await expect(page.getByTestId('foundry-velocity-overlay'), 'Velocity vector is projected from the same Three.js camera as the mechanism pins').toHaveAttribute('data-projection', 'three-camera');
   await expect(page.getByTestId('foundry-forces-overlay'), 'Force vectors are projected from the same Three.js camera as the mechanism pins').toHaveAttribute('data-projection', 'three-camera');
   await expect(page.getByTestId('foundry-playhead'), 'The live playhead is drawn at the projected effector joint, not raw path coordinates').toHaveAttribute('data-projection', 'three-camera');
-  await expect(page.getByTestId('foundry-physics-readout')).toContainText('Physics');
+  await expect(page.getByTestId('foundry-physics-readout')).toContainText('Kinematic estimate');
   await expect(page.getByTestId('foundry-physics-readout')).toContainText('μ');
   await expect(page.getByTestId('foundry-physics-readout')).toContainText('constraint err');
   await expect(threeScene).toHaveAttribute('data-friction-coefficient', /0\.\d+/);
@@ -1202,7 +1202,7 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await expect(page.getByTestId('foundry-mechanism-library')).toHaveCount(0);
   await page.getByRole('button', { name: 'Show Sensemaking' }).click();
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Four-bar linkage');
-  await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Physics: pin reactions');
+  await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Estimate: pin reactions');
   await expect(page.getByTestId('foundry-feasibility')).toContainText('360° valid sampled motion');
   await page.getByRole('button', { name: 'Back to Gallery' }).click();
   await expect(page.getByTestId('foundry-target-summary')).toContainText('Range: 360° valid');
@@ -1922,8 +1922,8 @@ test('Command menu and shared canvas zoom persist across workflow stages', async
   await expect(page.getByTestId('status-bar')).toContainText('New project cancelled');
 
   await page.getByTestId('top-command-bar').getByText('File', { exact: true }).click();
-  await page.getByRole('button', { name: 'Recover Autosave…' }).click();
-  await expect(page.getByTestId('status-bar')).toContainText(/No autosave snapshot found|Recovered autosave snapshot/);
+  await page.getByRole('button', { name: 'Recover Browser Autosave…' }).click();
+  await expect(page.getByTestId('status-bar')).toContainText(/No autosave snapshot found|Recovered browser autosave snapshot/);
 
   await page.getByRole('button', { name: /Options/i }).click();
   await expect(page.getByRole('heading', { name: 'Options' })).toBeVisible();
@@ -2256,7 +2256,7 @@ test('Simplified shared canvas stays non-destructive and exports blueprint', asy
     await page.getByTestId('top-command-bar').getByText('File', { exact: true }).click();
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByTestId('command-save-project').click()
+      page.getByTestId('command-download-snapshot').click()
     ]);
     const path = await download.path();
     expect(path, 'project save path').toBeTruthy();

@@ -6,7 +6,7 @@ MotionSmith uses `utils/appCommands.ts` as the single source of truth for app-wi
 
 | Group | Commands | Shortcut policy |
 | --- | --- | --- |
-| File | New Project, Load Project, Recover Autosave, Save Project, Save Project As, Export Project Copy, Export Blueprint Package | Only stable project/document actions get global shortcuts. |
+| File | New Project, Load Project, Recover Browser Autosave, Download Snapshot, Download Snapshot As, Download Portable Copy, Export Blueprint Package | Only stable project/document actions get global shortcuts. |
 | Edit | Back (Undo), Forward (Redo) | Project-state history only; processing/status/export metadata is not recorded as undoable work. |
 | View | Zoom In, Zoom Out, Zoom to Fit, Reset View, Save/Restore/Reset Workspace Layout | Canvas zoom shortcuts are global; layout actions stay menu-only. |
 | Go | Character, Path Editor, Mechanism Foundry, Mechanism Design, Blueprint, Assembly | `Alt+1` through `Alt+6` navigate the novice workflow. |
@@ -19,9 +19,9 @@ MotionSmith uses `utils/appCommands.ts` as the single source of truth for app-wi
 | --- | --- |
 | `Cmd/Ctrl+N` | New Project |
 | `Cmd/Ctrl+O` | Load Project |
-| `Cmd/Ctrl+S` | Save Project |
-| `Cmd/Ctrl+Shift+S` | Save Project As |
-| `Cmd/Ctrl+Alt+S` | Export Project Copy |
+| `Cmd/Ctrl+S` | Download Snapshot |
+| `Cmd/Ctrl+Shift+S` | Download Snapshot As |
+| `Cmd/Ctrl+Alt+S` | Download Portable Copy |
 | `Cmd/Ctrl+E` | Export Blueprint Package |
 | `Cmd/Ctrl+Z` | Back (Undo) |
 | `Cmd/Ctrl+Shift+Z`, `Cmd/Ctrl+Y` | Forward (Redo) |

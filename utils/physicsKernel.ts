@@ -44,7 +44,7 @@ export interface PhysicsKernelCapability {
   updatePolicy: typeof PHYSICS_UPDATE_POLICY;
   scenePolicy: typeof HIGH_THROUGHPUT_SCENE_POLICY;
   mechanismAuthority: 'MotionSmith kinematics + fabrication constraints';
-  contactAuthority: 'Rapier collider contact/friction solver';
+  contactAuthority: 'Rapier probe validates contact/friction availability';
   throughputTargets: typeof PHYSICS_KERNEL_TARGETS;
 }
 
@@ -55,7 +55,7 @@ export const physicsKernelCapability = (): PhysicsKernelCapability => ({
   updatePolicy: PHYSICS_UPDATE_POLICY,
   scenePolicy: HIGH_THROUGHPUT_SCENE_POLICY,
   mechanismAuthority: 'MotionSmith kinematics + fabrication constraints',
-  contactAuthority: 'Rapier collider contact/friction solver',
+  contactAuthority: 'Rapier probe validates contact/friction availability',
   throughputTargets: PHYSICS_KERNEL_TARGETS
 });
 

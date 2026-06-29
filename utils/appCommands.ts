@@ -15,10 +15,10 @@ export type AppCommandSpec = {
 const APP_COMMAND_DEFINITIONS = [
   { id: 'project.new', menu: 'file', label: 'New Project', description: 'Start a fresh MotionSmith project.', shortcuts: ['Mod+N'] },
   { id: 'project.open', menu: 'file', label: 'Load Project…', description: 'Open a .motionsmith.json project file.', shortcuts: ['Mod+O'], testId: 'command-load-project' },
-  { id: 'project.recoverAutosave', menu: 'file', label: 'Recover Autosave…', description: 'Load the last browser autosave snapshot.' },
-  { id: 'project.save', menu: 'file', label: 'Save Project', description: 'Download the current project snapshot.', shortcuts: ['Mod+S'], testId: 'command-save-project' },
-  { id: 'project.saveAs', menu: 'file', label: 'Save Project As…', description: 'Download a timestamped project copy.', shortcuts: ['Mod+Shift+S'] },
-  { id: 'project.exportCopy', menu: 'file', label: 'Export Project Copy', description: 'Download a portable project copy.', shortcuts: ['Mod+Alt+S'] },
+  { id: 'project.recoverAutosave', menu: 'file', label: 'Recover Browser Autosave…', description: 'Load the last browser-local autosave snapshot.' },
+  { id: 'project.save', menu: 'file', label: 'Download Snapshot', description: 'Download the current local project snapshot.', shortcuts: ['Mod+S'], testId: 'command-download-snapshot' },
+  { id: 'project.saveAs', menu: 'file', label: 'Download Snapshot As…', description: 'Download a timestamped local project copy.', shortcuts: ['Mod+Shift+S'] },
+  { id: 'project.exportCopy', menu: 'file', label: 'Download Portable Copy', description: 'Download a portable local project copy.', shortcuts: ['Mod+Alt+S'] },
   { id: 'project.exportBlueprint', menu: 'file', label: 'Export Blueprint Package', description: 'Open the blueprint export workflow.', shortcuts: ['Mod+E'] },
 
   { id: 'edit.undo', menu: 'edit', label: 'Back (Undo)', description: 'Undo the last project edit.', shortcuts: ['Mod+Z'] },

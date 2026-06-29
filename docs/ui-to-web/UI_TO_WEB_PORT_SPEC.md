@@ -56,7 +56,7 @@ Source: `src/automataii/presentation/qt/actions/action_manager.py`
 
 | Menu | Actions |
 | --- | --- |
-| File | New, Load Project..., Recover Autosave..., Save Project, Save Project As..., Export Blueprint Package, Export Project Copy |
+| File | New, Load Project..., Recover Browser Autosave..., Download Snapshot, Download Snapshot As..., Export Blueprint Package, Download Portable Copy |
 | View | Zoom In, Zoom Out, Zoom to Fit, Reset View, Save Workspace Layout, Restore Workspace Layout, Reset Workspace Layout |
 | Edit | Back (Undo), Forward (Redo) |
 | Options | Preferences... |
@@ -64,7 +64,7 @@ Source: `src/automataii/presentation/qt/actions/action_manager.py`
 
 ### Toolbar
 
-Toolbar actions: New, Load Project, Save Project, Export Blueprint Package, Export Project Copy. Hidden by default; Options can show/hide it.
+Toolbar actions: New, Load Project, Download Snapshot, Export Blueprint Package, Download Portable Copy. Hidden by default; Options can show/hide it.
 
 ### Web mapping
 

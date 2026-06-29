@@ -597,8 +597,8 @@ Follow this order to avoid recreating the current cross-screen drift problems.
    - implement 2 cm grid and Letter sheet constants;
    - test scene/sheet/board/export conversions.
 3. **Character Selection**
-   - keep image processing as backend service or port it behind the same output
-     contract;
+   - port image processing to browser-local ONNX behind the same output
+     contract; do not add backend inference unless server scope is reopened;
    - render processing states and recoverable errors.
 4. **Path Editor**
    - build canvas, selection, layers, skeleton editing, path editing;
@@ -793,7 +793,7 @@ forward with warnings, but it must not move forward with missing required state.
 | Path Editor -> Mechanism Design | parts in scene frame, current skeleton, optional paths, selected target context | short path, no path yet, unlocked/ambiguous joints | no parts loaded, corrupt coordinate transform. |
 | Foundry -> Mechanism Design | mechanism type, params, pivot/output point, generated instance id or new id | partial rotation, fabrication incompatibility, path approximation | unsupported mechanism type, non-finite parameter, missing pivot. |
 | Mechanism Design -> Blueprint Export | all enabled mechanism instances, scene transforms, physical profile, grid pitch | off-sheet but movable item, partial motion, non-fabricable draft mechanism | missing per-instance id, no board coordinate for required axle, invalid physical dimensions. |
-| Any screen -> Save Project | project metadata, parts, skeleton/path/mechanism state serializable to JSON | runtime-only cache dropped | unserializable required field, missing project path on save-overwrite. |
+| Any screen -> Download Snapshot | project metadata, parts, skeleton/path/mechanism state serializable to JSON | runtime-only cache dropped | unserializable required field, failed browser download. |
 
 ## 18. QA checklist for the rebuild team
 

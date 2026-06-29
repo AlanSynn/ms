@@ -50,13 +50,14 @@ import { loadCharacterPackage } from './utils/packageLoader';
 import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionChainRootJointIds, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
 import { fabricablePartOutlinePoints, isUsableContourPoints, partLandmarkLocalPoints, partOutlineBounds, partOutlinePathD, pointInsideOutline } from './utils/partGeometry';
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT, normalizeCanvasViewport, WEBGL_PIXEL_RATIO_CAP } from './utils/viewport';
+import { formatGridLabel, formatGridReadout } from './utils/units';
 import { VIEWER3D_CAMERA_PRESETS, VIEWER3D_CONTRACT_VERSION, createViewer3DContract, viewer3DLayerDataValue, type Viewer3DCameraPreset } from './utils/viewer3d';
 import { assemblyLaneForExportMode, buildAssemblyPlaybackSteps, pendingRecipeForMechanism, type AssemblyLane } from './utils/assemblyPlayback';
 import { commandIdForKeyboardEvent, type AppCommandId } from './utils/appCommands';
 import { AUTHORABLE_MECHANISM_TYPES, FOUNDRY_MECHANISM_TYPES, FOUNDRY_PRESETS, MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY, mechanismTemplateLabel } from './utils/mechanismTemplates';
 import { normalizeMechanismToReference, referenceRequiredPartsHoleCount } from './utils/mechanismReference';
 import { createMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext, fitPathToBox, fitPointsToBox, pointsToSvgPath } from './utils/mechanismPreview';
-import { AlertCircle, Boxes, BrainCircuit, CheckCircle2, Download, FileJson, Loader2, Play, Plus, Route, Save, Sparkles, Trash2, Upload } from 'lucide-react';
+import { AlertCircle, Boxes, BrainCircuit, CheckCircle2, Download, FileJson, Loader2, Play, Plus, Route, Sparkles, Trash2, Upload } from 'lucide-react';
 import girlStarterUrl from './resources/examples/raw/girl.png?url';
 import boyStarterUrl from './resources/examples/raw/boy.PNG?url';
 
@@ -124,7 +125,7 @@ const OPTIONS_SECTION_MANIFEST = [
     { id: 'debugging', label: 'Debugging', description: 'Turn on labels when something feels off.' },
     { id: 'workflow', label: 'Workflow', description: 'Autosave is local to this browser.' },
     { id: 'fabrication', label: 'Fabrication / Blueprint export', description: 'Match the preview grid to the physical sheet and board holes.' },
-    { id: 'units', label: 'Units', description: 'Only labels change; fabrication still stores millimeters.' }
+    { id: 'units', label: 'Units', description: 'Viewport labels change; fabrication geometry still stores millimeters.' }
 ] as const;
 
 type OptionsSectionMeta = typeof OPTIONS_SECTION_MANIFEST[number];
@@ -555,7 +556,7 @@ const App: React.FC = () => {
             try {
                 localStorage.setItem(STORAGE_KEYS.autosave, serializeProject(latestProjectRef.current ?? project));
             } catch {
-                // ponytail: autosave is best-effort; manual Save stays available.
+                // ponytail: browser autosave is best-effort; manual snapshot download stays available.
             }
         };
         writeAutosave();
@@ -577,9 +578,9 @@ const App: React.FC = () => {
         downloadText(`${stem}${suffix}.motionsmith.json`, serializeProject(project));
         setCommandStatus(status);
     };
-    const saveProject = () => downloadProjectSnapshot('', 'Saved project snapshot');
-    const saveProjectAs = () => downloadProjectSnapshot(`-${Date.now()}`, 'Saved timestamped project snapshot');
-    const exportProjectCopy = () => downloadProjectSnapshot('-copy', 'Exported portable project copy');
+    const saveProject = () => downloadProjectSnapshot('', 'Downloaded local project snapshot');
+    const saveProjectAs = () => downloadProjectSnapshot(`-${Date.now()}`, 'Downloaded timestamped project snapshot');
+    const exportProjectCopy = () => downloadProjectSnapshot('-copy', 'Downloaded portable project copy');
     const newProject = () => {
         if (projectHasUserWork(project) && !window.confirm('Start a new project? Unsaved paths, mechanisms, and blueprint work will be discarded.')) {
             setCommandStatus('New project cancelled');
@@ -602,7 +603,7 @@ const App: React.FC = () => {
             }
             setProject(loadProjectSnapshot(JSON.parse(stored.value)), { resetHistory: true });
             if (stored.fromLegacy) migrateStorageValue(STORAGE_KEYS.autosave, stored.value);
-            setCommandStatus('Recovered autosave snapshot');
+            setCommandStatus('Recovered browser autosave snapshot');
             setStage('path');
         } catch (error) {
             setCommandStatus(`Autosave recovery failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -778,7 +779,7 @@ const App: React.FC = () => {
                             <TopCommandBar commandHandlers={commandHandlers} />
                             {project.settings.toolbarVisible && <div className="flex gap-2" data-testid="quick-toolbar">
                                 <label className="btn-secondary cursor-pointer"><Upload size={16}/> Import<input hidden type="file" accept="application/json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/></label>
-                                <button className="btn-secondary" onClick={saveProject}><Save size={16}/> Save</button>
+                                <button className="btn-secondary" onClick={saveProject}><Download size={16}/> Snapshot</button>
                                 <button className="btn-primary" onClick={() => goStage('blueprint')}><Download size={16}/> Export</button>
                             </div>}
                         </div>
@@ -1197,7 +1198,7 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
                 <details className="advanced-panel mt-4">
                     <summary>More</summary>
                     <div className="mt-3 flex flex-wrap gap-2">
-                        <button className="btn-secondary" disabled={pathLocked} onClick={openTracking}><Route size={16}/> Track from video</button>
+                        <button className="btn-secondary" disabled={pathLocked} onClick={openTracking}><Route size={16}/> Trace media path</button>
                         <button className="btn-secondary" aria-label={isPlaying ? 'Play / Stop' : 'Play'} onClick={() => setIsPlaying(!isPlaying)}><Play size={16}/>{isPlaying ? 'Stop' : 'Play'}</button>
                         <button className="btn-secondary" onClick={() => setAngle(0)}>Reset</button>
                         {selectedPath && <button className="btn-secondary" disabled={pathLocked} onClick={() => updatePath({ visible: !selectedPath.visible })}>{selectedPath.visible ? 'Hide path' : 'Show path'}</button>}
@@ -1340,7 +1341,7 @@ const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, 
         <defs><filter id="soft"><feDropShadow dx="0" dy="10" stdDeviation="10" floodOpacity="0.13"/></filter></defs>
         <rect x={sheetSvg.x} y={sheetSvg.y} width={sheetSvg.width} height={sheetSvg.height} rx="18" fill="white" stroke="#d6dbe8" strokeWidth="1.5"/>
         {gridLines}
-        <text x={sheetSvg.x + 16} y={sheetSvg.y + 28} className="fill-slate-400 text-[12px] font-bold" data-testid="scene-grid-label">Letter sheet · {kit.gridPitchMm / 10}cm grid</text>
+        <text x={sheetSvg.x + 16} y={sheetSvg.y + 28} className="fill-slate-400 text-[12px] font-bold" data-testid="scene-grid-label">{formatGridLabel(kit, project.settings.gridUnit)}</text>
         {project.settings.debugVisuals && <g data-testid="canvas-debug-visuals" pointerEvents="none">
             <rect x={sheetSvg.x + sheetSvg.width - 178} y={sheetSvg.y + 14} width="160" height="72" rx="12" fill="#0f172a" opacity="0.78"/>
             <text x={sheetSvg.x + sheetSvg.width - 164} y={sheetSvg.y + 38} fill="white" fontSize="12" fontWeight="800">Debug visuals</text>
@@ -2187,7 +2188,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                     <div className="font-bold text-slate-800">Selected: {library.label}</div>
                     <div>Use: {library.sense}.</div>
                     <div>Rule: {library.constraint}.</div>
-                    <div>Physics: {physicsRule}.</div>
+                    <div>Estimate: {physicsRule}.</div>
                     <div>Stack: {fabricationStackSummary(foundry)}.</div>
                     <div>Feasibility: {feasibilityText}</div>
                 </div>}
@@ -2275,7 +2276,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 <div className="section-title">Selected mechanism</div>
                 <h3>{library.label}</h3>
                 <div className="physics-readout mt-3" data-testid="foundry-physics-readout">
-                    <strong>Physics</strong>
+                    <strong>Kinematic estimate</strong>
                     <span>{physicsRule}</span>
                     <span>v {velocityMagnitude.toFixed(1)} · F {forceMagnitude.toFixed(1)} · μ {project.settings.simulationFriction.toFixed(2)}</span>
                     <span>constraint err {constraintError.toFixed(2)} · mass {project.settings.simulationMassKg.toFixed(1)}kg</span>
@@ -2576,11 +2577,7 @@ const Options = ({ project, dispatch, goStage }: { project: ProjectState; dispat
     const updateSettings = (settings: Partial<ProjectState['settings']>) => dispatch({ type: 'update_settings', settings });
     const updateKit = (physicalKit: Partial<ProjectState['settings']['physicalKit']>) => updateSettings({ physicalKit: { ...kit, ...physicalKit } });
     const durationSeconds = Number((project.settings.animationDurationMs / 1000).toFixed(1));
-    const unitSummary = project.settings.gridUnit === 'inch'
-        ? `${(kit.gridPitchMm / 25.4).toFixed(2)} in between board holes`
-        : project.settings.gridUnit === 'px'
-            ? `${(kit.gridPitchMm * 2).toFixed(0)} scene px between board holes`
-            : `${(kit.gridPitchMm / 10).toFixed(1)} cm between board holes`;
+    const unitSummary = formatGridReadout(kit, project.settings.gridUnit);
     return <EditorStageFrame
         stage="options"
         className="options-stage-frame"
@@ -2600,7 +2597,7 @@ const Options = ({ project, dispatch, goStage }: { project: ProjectState; dispat
                 </defs>
                 <rect x="34" y="24" width="572" height="372" rx="24" fill="white" stroke="#d6dbe8"/>
                 <rect x="34" y="24" width="572" height="372" rx="24" fill="url(#options-grid)" opacity=".9"/>
-                <text x="58" y="64" fill="#94a3b8" fontSize="18" fontWeight="800">Letter sheet · {project.settings.physicalKit.gridPitchMm / 10}cm grid</text>
+                <text x="58" y="64" fill="#94a3b8" fontSize="18" fontWeight="800">{formatGridLabel(project.settings.physicalKit, project.settings.gridUnit)}</text>
                 <g transform="translate(300 210)">
                     <rect x="-70" y="-90" width="140" height="180" rx="32" fill="#cbd5e1" opacity=".55"/>
                     <circle cx="0" cy="-115" r="38" fill="#d8dee8"/>
@@ -2677,7 +2674,7 @@ const Options = ({ project, dispatch, goStage }: { project: ProjectState; dispat
                     <option value="pdf">PDF default</option>
                     <option value="svg">SVG</option>
                 </SelectField>
-                <Toggle label="Fabrication-ready mode" checked={project.settings.fabricationReadyMode} onChange={fabricationReadyMode => updateSettings({ fabricationReadyMode })}/>
+                <Toggle label="Strict fabrication validation" checked={project.settings.fabricationReadyMode} onChange={fabricationReadyMode => updateSettings({ fabricationReadyMode })}/>
                 <SelectField label="Board profile" value={kit.profileKey} onChange={profileKey => updateSettings({ physicalKit: physicalKitPreset(profileKey, kit) })}>
                     <option value="letter-15x15-2cm">Letter paper · 15×15 board holes · 2cm pitch</option>
                     <option value="letter-12x12-2cm">Letter paper · 12×12 draft board · 2cm pitch</option>
@@ -3336,7 +3333,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-physics-kernel={PHYSICS_KERNEL_ENGINE}
             data-physics-update-policy={PHYSICS_UPDATE_POLICY}
             data-high-throughput-scene-policy={HIGH_THROUGHPUT_SCENE_POLICY}
-            data-physics-contact-mode="rapier-friction-contact-kernel"
+            data-physics-contact-mode="kinematic-estimate-rapier-contact-probe"
             data-physics-kernel-runtime={physicsKernelRuntime}
             data-physics-kernel-version={physicsKernelVersion}
             data-physics-kernel-error={physicsKernelError}

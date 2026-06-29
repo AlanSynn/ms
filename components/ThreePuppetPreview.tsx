@@ -1238,7 +1238,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       data-physics-kernel={PHYSICS_KERNEL_ENGINE}
       data-physics-update-policy={PHYSICS_UPDATE_POLICY}
       data-high-throughput-scene-policy={HIGH_THROUGHPUT_SCENE_POLICY}
-      data-physics-contact-mode="rapier-friction-contact-kernel"
+      data-physics-contact-mode="kinematic-estimate-rapier-contact-probe"
       data-physics-kernel-runtime={physicsKernelRuntime}
       data-physics-kernel-version={physicsKernelVersion}
       data-physics-kernel-error={physicsKernelError}

@@ -10,6 +10,10 @@ This file is the project-level rulebook for future agents. If older docs or UI c
 
 MotionSmith is a tinkerable workbench, not a reading-heavy tutorial. Users should learn the workflow by touching the character, joints, paths, mechanisms, and playback controls directly.
 
+- Product scope is local-first browser/Tauri. Do not add backend/API server, cloud DB, auth/RBAC, billing, team accounts, realtime collaboration, hosted asset storage, server inference, or server export jobs unless the user explicitly reopens server scope.
+- When a full-stack feature gap needs a server, document it as excluded local-first scope instead of building a fake client-only substitute.
+- Local persistence must be named honestly: browser autosave, local snapshot download, portable project copy. Do not label downloads as cloud save/sync.
+- AI/inference stays browser-local ONNX. If model caching or local inference fails, use starter/package workflows and show status; do not mock remote AI.
 - Prefer direct manipulation over explanatory prose: draw on the canvas, drag joints, scrub playback, rotate the view, tune sliders, and see the result immediately.
 - Remove or collapse text that does not unlock an action, safety warning, blocker, or fabrication decision.
 - Keep the center workbench visually quiet: no instruction essays, no scrollable copy panels, no sidecar explainers, no fake preview cards inside the canvas.
