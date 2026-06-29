@@ -369,7 +369,7 @@ export const REFERENCE_MECHANISM_RECIPES: Record<MechanismType, ReferenceMechani
     gear: {
         appType: 'gear',
         canonicalKey: 'gear_train',
-        title: 'Two-gear crank',
+        title: 'Gear train',
         physicsRule: 'gear mesh force + opposite angular velocity',
         foundryVisible: true,
         exportReady: true,

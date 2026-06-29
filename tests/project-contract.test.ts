@@ -381,6 +381,7 @@ assert(!isBoardFixedCoordRole('gear_handle_reference'), 'mechanism-reference gea
 assert.equal(referenceRecipeForType('4bar').assemblySteps.find(step => step.label === 'Close output link')?.boardCoordinate, 'I9', '4bar output link closes on board pivot I9, not floating G10');
 assert.equal(referenceRecipeForType('4bar').assemblySteps.find(step => step.label === 'Add coupler')?.stack[0]?.role, 'link-joint-hole', '4bar G6 coupler joint is a floating link joint');
 assert.equal(referenceRecipeForType('4bar').assemblySteps.find(step => step.label === 'Join output to coupler')?.stack[0]?.role, 'link-joint-hole', '4bar G10 output/coupler joint remains floating');
+assert.equal(referenceRecipeForType('gear').title, 'Gear train', 'gear recipe title matches the visible gear-only Foundry label');
 assert.equal(referenceRecipeForType('gear_linkage').assemblySteps.find(step => step.label === 'Add linkage output')?.stack[0]?.role, 'gear-handle-hole', 'gear-linkage output arm starts at an off-centre gear handle hole');
 assert.equal(referenceRecipeForType('gear_linkage').assemblySteps.find(step => step.label === 'Add output connector')?.stack[0]?.role, 'link-end-hole', 'gear-linkage output connector is a moving link-end reference');
 assert.equal(referenceRecipeForType('planetary_gear').assemblySteps.find(step => step.label === 'Add G3 moving planet gear')?.stack[0]?.role, 'carrier-hole', 'planetary planet axle sits on the moving carrier, not the board');

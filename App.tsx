@@ -117,6 +117,33 @@ const projectFoundryOverlayPoint = (point: Point | undefined, camera: FoundryCam
     };
 };
 
+
+const foundryLayerGeometryContract = (type: MechanismType, label: string, renderKind: string) => {
+    if (type === '4bar' && renderKind === 'linkage') {
+        if (/input|crank/i.test(label)) return `${label}:A-B`;
+        if (/coupler/i.test(label)) return `${label}:B-C`;
+        if (/output|rocker/i.test(label)) return `${label}:C-D`;
+    }
+    if (type === 'gear' && renderKind === 'gear') return `${label}:fixed-board-gear`;
+    if (type === 'gear_linkage') {
+        if (renderKind === 'gear') return `${label}:fixed-board-gear`;
+        if (/L4|linkage/i.test(label)) return `${label}:P-R`;
+        if (/2-hole|bracket/i.test(label)) return `${label}:R-connector`;
+    }
+    if (type === 'planetary_gear') {
+        if (/ring/i.test(label)) return `${label}:fixed-ring`;
+        if (/sun/i.test(label)) return `${label}:sun-input`;
+        if (/planet/i.test(label)) return `${label}:planet-on-carrier`;
+        if (/carrier/i.test(label)) return `${label}:sun-planet-carrier`;
+    }
+    if (type === 'cam') {
+        if (renderKind === 'cam') return `${label}:rotating-cam`;
+        if (renderKind === 'follower') return `${label}:guided-follower`;
+        if (renderKind === 'guide') return `${label}:fixed-guide`;
+    }
+    return `${label}:${renderKind}`;
+};
+
 const STARTER_IMAGE_TEMPLATES: StarterImageTemplate[] = [
     { id: 'girl', label: 'Girl starter', fileName: 'girl.png', description: 'Flat vector pose from resources/examples/raw/girl.png.', url: girlStarterUrl },
     { id: 'boy', label: 'Boy starter', fileName: 'boy.PNG', description: 'Textured pose from resources/examples/raw/boy.PNG.', url: boyStarterUrl }
@@ -2059,7 +2086,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
         applyAnchor(point);
         setIsPickingAnchor(false);
     };
-    const setCameraPreset = (preset: Exclude<FoundryViewPreset, 'custom'>) => setFoundryCamera(prev => ({ ...FOUNDRY_VIEW_PRESETS[preset], preset, pan: prev.pan ?? { x: 0, y: 0 } }));
+    const setCameraPreset = (preset: Exclude<FoundryViewPreset, 'custom'>) => setFoundryCamera({ ...FOUNDRY_VIEW_PRESETS[preset], preset, pan: { x: 0, y: 0 } });
     const handleFoundryPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
         if (isPickingAnchor || (event.button !== 0 && event.button !== 1 && event.button !== 2)) return;
         const mode = event.altKey ? 'zoom' : event.shiftKey || event.button === 1 || event.button === 2 ? 'pan' : 'orbit';
@@ -2114,6 +2141,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     };
     const handleFoundryWheel = (event: React.WheelEvent<HTMLDivElement>) => {
         if (isPickingAnchor) return;
+        event.preventDefault();
         event.stopPropagation();
         setFoundryCamera(prev => ({
             ...prev,
@@ -3349,6 +3377,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             else if (mechanism.type === '6bar' && /dyad/i.test(label)) addBar(s.j2, s.aux, z, mat, 2);
             else if (mechanism.type === '6bar' && /follower/i.test(label)) addBar(s.p2, s.aux, z, mat, 2);
             else if (mechanism.type === 'planetary_gear' && /carrier/i.test(label)) planetaryPlanetCenters(s.p1, mechanism, degToRad(angle) * planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength)).forEach(center => addBar(s.p1, center, z, mat, 3));
+            else if (mechanism.type === '4bar' && /output|rocker/i.test(label)) addBar(s.p2, s.j2, z, mat, 3);
             else if (/input|crank|left/i.test(label)) addBar(s.p1, s.j1, z, mat, 3);
             else if (/right/i.test(label)) addBar(s.p2, s.j2, z, mat, 3);
             else if (/coupler|center|carrier/i.test(label)) addBar(s.j1, s.j2, z, mat, 4);
@@ -3524,6 +3553,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-three-rendered-layer-roles={renderPlan.layers.map(item => item.renderKind).join('>')}
             data-three-rendered-layer-colors={renderPlan.layers.map(item => item.color).join(',')}
             data-three-rendered-layer-z={renderPlan.layers.map(item => item.z.toFixed(2)).join(',')}
+            data-three-geometry-contract={renderPlan.layers.map(item => foundryLayerGeometryContract(mechanism.type, item.label, item.renderKind)).join(' → ')}
             data-three-stack-validation-errors={renderPlan.validationErrors.length}
             className="foundry-three-scene-state"
         />

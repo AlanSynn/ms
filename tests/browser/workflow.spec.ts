@@ -1246,6 +1246,9 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
     expect(await threeScene.getAttribute('data-three-rendered-layer-roles'), `${type} rendered roles match fabrication stack roles`).toBe(await threeScene.getAttribute('data-three-stack-roles'));
     expect(await threeScene.getAttribute('data-three-rendered-layer-colors'), `${type} rendered colors match fabrication stack colors`).toBe(await threeScene.getAttribute('data-three-stack-colors'));
     expect(await threeScene.getAttribute('data-three-rendered-layer-z'), `${type} rendered z order matches fabrication stack z order`).toBe(await threeScene.getAttribute('data-three-stack-z'));
+    if (type === '4bar') {
+      await expect(threeScene, '4bar foundry geometry keeps A-B/B-C/C-D topology from mechanism-reference instead of drawing a floating output rod').toHaveAttribute('data-three-geometry-contract', /Input L2 linkage:A-B.*Coupler L4 linkage:B-C.*Output L2 linkage:C-D/);
+    }
     expect(Number(await threeScene.getAttribute('data-three-spacer-z-gap')), `${type} foundry preview has positive z separation for spacers`).toBeGreaterThan(0);
     await expect(page.getByTestId('foundry-forces-overlay'), `${type} keeps live force vectors visible`).toHaveAttribute('data-physics-rule', /force|torque|velocity|acceleration|reaction/);
     await expect(page.getByTestId('foundry-velocity-overlay'), `${type} keeps live velocity vectors visible`).toHaveAttribute('data-speed', /[0-9]+\.[0-9]+/);
@@ -1270,6 +1273,7 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await page.getByRole('button', { name: 'Back to Gallery' }).click();
   expect(Number(await threeScene.getAttribute('data-three-gear-count')), 'Gear preview uses toothed 3D fabrication geometry').toBeGreaterThanOrEqual(2);
   await expect(threeScene, 'Gear train renders as meshed gears only, without fake linkage rods').toHaveAttribute('data-three-gear-train-linkage-mode', 'gear-only-train');
+  await expect(threeScene, 'Gear train geometry contract exposes board-fixed gears only').toHaveAttribute('data-three-geometry-contract', /Drive G3 \/ 3-space gear:fixed-board-gear.*Output G3 \/ 3-space gear:fixed-board-gear/);
   await expect(threeScene, 'Gear train fabrication stack exposes both reference G3 gears').toHaveAttribute('data-three-stack-order', /Drive G3 \/ 3-space gear.*Output G3 \/ 3-space gear/);
   expect(Number(await threeScene.getAttribute('data-three-gear-pitch-center')), 'Gear pitch centers are snapped to the sum of fabrication gear radii').toBeCloseTo(Number(await threeScene.getAttribute('data-three-gear-pitch-sum')), 2);
   await expect(threeScene, 'Default gear train uses the reference G3/G3 pitch radii').toHaveAttribute('data-three-gear-radii', '60.00,60.00');
@@ -1571,6 +1575,8 @@ test('Mechanism Foundry supports CAD-style 3D camera presets and drag orbit', as
   for (const preset of ['front', 'side', 'top', 'iso', 'front'] as const) {
     await page.getByTestId(`foundry-camera-preset-${preset}`).click();
     await expect(rig).toHaveAttribute('data-camera-preset', preset);
+    await expect(rig, 'camera presets recenter the workplane after pan so the screen matches the reference view').toHaveAttribute('data-camera-pan-x', '0.000');
+    await expect(rig, 'camera presets recenter the workplane after pan so the screen matches the reference view').toHaveAttribute('data-camera-pan-y', '0.000');
     if (preset === 'side') {
       const contract = JSON.parse(await rig.getAttribute('data-viewer-contract-state') ?? '{}');
       expect(contract).toMatchObject({ tab: 'foundry', cameraPreset: 'side', mode: '3d' });
