@@ -84,6 +84,7 @@ const GEAR_PRESETS: readonly GearPreset[] = [
 ] as const;
 
 export const FABRICATION_LINKAGE_LENGTH_CELLS = [2, 4, 6, 8] as const;
+const BOARD_COLUMNS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 const roundHalfEven = (value: number, decimals = 3) => {
     const factor = 10 ** decimals;
@@ -217,3 +218,56 @@ export const fabricationRingGearSpecForPitchRadius = (pitchRadiusMm = 70, pitchM
 };
 
 export const FABRICATION_RING_GEAR_SPEC = fabricationRingGearSpecForPitchRadius();
+
+export const fabricationPartDisplayLabel = (label: string) => {
+    const replacements: Array<[RegExp, string]> = [
+        [/Drive G3 \/ 3-space gear/g, 'Drive gear with 24 teeth'],
+        [/Output G3 \/ 3-space gear/g, 'Output gear with 24 teeth'],
+        [/Idler G3 \/ 3-space gear (\d+)/g, 'Idler gear $1 with 24 teeth'],
+        [/G1 \/ 1-space gear/g, 'Gear with 8 teeth'],
+        [/G3 \/ 3-space gear/g, 'Gear with 24 teeth'],
+        [/G5 \/ 5-space gear/g, 'Gear with 40 teeth'],
+        [/G7 \/ 7-space gear/g, 'Gear with 56 teeth'],
+        [/R56 internal ring gear/g, 'Internal ring gear with 56 teeth'],
+        [/\bG1 sun gear\b/g, '8-tooth sun gear'],
+        [/\bG1 gear\b/g, '8-tooth gear'],
+        [/\bG3 gear\b/g, '24-tooth gear'],
+        [/\bG5 gear\b/g, '40-tooth gear'],
+        [/\bG7 gear\b/g, '56-tooth gear'],
+        [/Input L2 linkage/g, 'Input 2-cell linkage (3 holes)'],
+        [/Coupler L4 linkage/g, 'Coupler 4-cell linkage (5 holes)'],
+        [/Output L2 linkage/g, 'Output 2-cell linkage (3 holes)'],
+        [/\bL2 linkage\b/g, '2-cell linkage (3 holes)'],
+        [/\bL4 linkage\b/g, '4-cell linkage (5 holes)'],
+        [/\bL6 linkage\b/g, '6-cell linkage (7 holes)'],
+        [/\bone S10 spacer\b/g, 'one 10mm spacer washer'],
+        [/\bS10 spacers\b/g, '10mm spacer washers'],
+        [/\bS10 spacer\b/g, 'Spacer 10mm OD / 4mm hole'],
+        [/\bG1\b/g, '8-tooth gear'],
+        [/\bG3\b/g, '24-tooth gear'],
+        [/\bG5\b/g, '40-tooth gear'],
+        [/\bG7\b/g, '56-tooth gear'],
+        [/\bR56\b/g, '56-tooth ring gear'],
+        [/\bL2\b/g, '2-cell link'],
+        [/\bL4\b/g, '4-cell link'],
+        [/\bL6\b/g, '6-cell link'],
+        [/\bS10\b/g, '10mm spacer']
+    ];
+    return replacements.reduce((text, [pattern, replacement]) => text.replace(pattern, replacement), label);
+};
+
+export const fabricationBoardCoordinateCallout = (
+    label: string,
+    board?: Partial<{ col: number; row: number; valid: boolean }>
+) => {
+    if (board?.valid === false) return `${label} · off board`;
+    const parsed = /^([A-Z])([1-9]|[1-3][0-9]|40)$/i.exec(label.trim());
+    const col = Number.isFinite(board?.col) ? board!.col! : parsed ? parsed[1].toUpperCase().charCodeAt(0) - 65 : undefined;
+    const row = Number.isFinite(board?.row) ? board!.row! : parsed ? Number(parsed[2]) - 1 : undefined;
+    if (!Number.isFinite(col) || !Number.isFinite(row)) return label;
+    return `${label} · row ${row! + 1}, column ${col! + 1}`;
+};
+
+export const fabricationBoardColumnLabel = (col: number) => `C${col + 1}`;
+export const fabricationBoardRowLabel = (row: number) => `R${row + 1}`;
+export const fabricationBoardAlphaNumericLabel = (col: number, row: number) => `${BOARD_COLUMNS[col] ?? '?'}${row + 1}`;

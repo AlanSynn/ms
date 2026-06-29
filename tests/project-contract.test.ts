@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { boardGridLines, boardToScene, bodyPartPivotScene, physicalKitPreset, placeBodyPartPivotAt, SCENE_PX_PER_MM, sceneToBoard, sceneToBoardRaw, sceneToSheetMm, sceneToSvg, sheetMmToScene } from '../utils/coordinates';
 import { CLASSROOM_LESSONS, classroomLessonById, createDefaultMechanism, createEmptyProject, createLessonProject, createSampleProject, handoffGate, loadProjectSnapshot, serializeProject, applyProjectAction, projectSelfCheck, mechanismRequiredParts, mechanismWithGeneratedPath, replaceCharacterProject, resetProjectToLessonBaseline } from '../utils/project';
-import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, prefabAssemblySteps, sampleFeasibleRange, validateFabricationStack, validateForFabrication } from '../utils/fabrication';
+import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, fabricationBoardCoordinateCallout, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, prefabAssemblySteps, sampleFeasibleRange, validateFabricationStack, validateForFabrication } from '../utils/fabrication';
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
 import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, generateCurvePoints, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius, sampledCamProfileScale } from '../utils/kinematics';
@@ -945,6 +945,15 @@ assert(pkg.recipes[0].requiredParts.some(part => part.name === FABRICATION_SPACE
 assert(pkg.recipes[0].assemblySteps.some(step => step.label === 'Set ground pivots' || step.instruction.includes('Pin ground pivots')), 'prefab board workflow uses mechanism-reference assembly steps');
 assert(pkg.recipes[0].assemblySteps.some(step => step.stack?.some(item => item.label === FABRICATION_SPACER_SPEC.label)), 'prefab board workflow calls out S10 spacer layers in the reference stack');
 assert(pkg.metadataJson.includes('assemblySteps'), 'fabrication metadata includes structured kit assembly steps');
+assert.equal(fabricationPartDisplayLabel('G3 / 3-space gear'), 'Gear with 24 teeth', 'builder-facing gear labels name teeth count instead of G-codes');
+assert.equal(fabricationPartDisplayLabel('L4 linkage'), '4-cell linkage (5 holes)', 'builder-facing linkage labels name cell and hole count instead of L-codes');
+assert.equal(fabricationPartDisplayLabel('S10 spacer'), 'Spacer 10mm OD / 4mm hole', 'builder-facing spacer labels name physical dimensions instead of S-codes');
+assert.equal(fabricationBoardCoordinateCallout('H8'), 'H8 · row 8, column 8', 'board coordinates include row and column callouts for assembly');
+assert(pkg.svg.includes('>C1<') && pkg.svg.includes('>R1<'), 'blueprint SVG labels pegboard columns and rows');
+assert(pkg.svg.includes('row') && pkg.svg.includes('column'), 'blueprint SVG recipe anchors include row/column callouts');
+assert(pkg.assemblyGuideHtml.includes('2-cell linkage (3 holes)'), 'assembly guide uses readable linkage names');
+assert(pkg.assemblyGuideHtml.includes('Spacer 10mm OD / 4mm hole'), 'assembly guide uses readable spacer names');
+assert(pkg.assemblyGuideHtml.includes('row') && pkg.assemblyGuideHtml.includes('column'), 'assembly guide includes row/column callouts');
 
 AUTHORABLE_MECHANISM_TYPES.forEach(type => {
   const stack = fabricationStackForMechanism({ type });

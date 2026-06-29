@@ -1,6 +1,6 @@
 import type { FabricationRecipe, MechanismConfig, PhysicalKitSettings, ProjectState } from '../types';
 import { boardToScene, sceneToBoardRaw, SCENE_PX_PER_MM } from './coordinates';
-import { fabricationStackSummary, prefabAssemblySteps, sampleFeasibleRange } from './fabrication';
+import { fabricationBoardCoordinateCallout, fabricationPartDisplayLabel, readableFabricationStackSummary, prefabAssemblySteps, sampleFeasibleRange } from './fabrication';
 import { preferredMotionJointId } from './motion';
 import { mechanismRequiredParts } from './project';
 
@@ -41,7 +41,7 @@ export const pendingRecipeForMechanism = (project: ProjectState, mechanism: Mech
         sceneAnchor: { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 },
         offsetFromBoardMm: { x: ((mechanism.anchorX ?? 0) - boardScene.x) / SCENE_PX_PER_MM, y: ((mechanism.anchorY ?? 0) - boardScene.y) / SCENE_PX_PER_MM },
         requiredParts: mechanismRequiredParts(mechanism),
-        steps: [`Stack: ${fabricationStackSummary(mechanism)}`, 'Cut sheet + assembly.'],
+        steps: [`Stack: ${readableFabricationStackSummary(mechanism)}`, 'Cut sheet + assembly.'],
         assemblySteps: prefabAssemblySteps(mechanism, board.label),
         warnings: [...(mechanism.warnings ?? []), ...(range.warning ? [range.warning] : [])]
     };
@@ -66,20 +66,20 @@ export const buildAssemblyPlaybackSteps = (recipe: FabricationRecipe, lane: Asse
             coordRoles: [],
             zMm: 0,
             instruction: lane === 'custom' ? 'Use SVG, PDF, or STL from Blueprint, then assemble the same stack.' : 'Collect the mechanism parts before touching the board.',
-            check: lane === 'custom' ? 'Printed/cut parts match the recipe.' : 'All parts and S10 spacers are ready.',
+            check: lane === 'custom' ? 'Printed/cut parts match the recipe.' : 'All parts and 10mm spacer washers are ready.',
             stack: []
         },
         ...recipe.assemblySteps.map((step, index) => ({
             index: index + 2,
-            label: step.label,
+            label: fabricationPartDisplayLabel(step.label),
             phase: 'assemble-module' as const,
             motion: 'stack-layer' as const,
             action: step.action ?? 'stack',
             coords: step.coords?.length ? step.coords : [step.boardCoordinate],
             coordRoles: step.coordRoles?.length ? step.coordRoles : [step.role],
             zMm: step.zMm,
-            instruction: step.instruction,
-            check: step.check,
+            instruction: fabricationPartDisplayLabel(step.instruction),
+            check: step.check ? fabricationPartDisplayLabel(step.check) : step.check,
             stack: step.stack ?? []
         }))
     ];
@@ -93,7 +93,7 @@ export const buildAssemblyPlaybackSteps = (recipe: FabricationRecipe, lane: Asse
         coordRoles: boardCoords.length ? boardCoords.map(() => lane === 'kit' ? 'board' : 'custom-base') : [lane === 'kit' ? 'board' : 'custom-base'],
         zMm: 0,
         instruction: lane === 'kit'
-            ? `Snap the completed mechanism module onto the 15×15 board at ${recipe.boardCoordinate}.`
+            ? `Snap the completed mechanism module onto the 15×15 board at ${fabricationBoardCoordinateCallout(recipe.boardCoordinate, recipe.board)}.`
             : 'Place the completed module on the custom base or keep it standalone.',
         check: lane === 'kit' ? 'The module sits on the called-out board holes.' : 'The custom base and module holes line up.',
         stack: []

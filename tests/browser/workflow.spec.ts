@@ -425,7 +425,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('assembly-board')).toBeVisible();
   await expect(page.getByTestId('assembly-guide-preview')).toContainText(/Target Right lower arm · path path-right-arm · anchor right_(hand|elbow)/);
   await expect(page.getByTestId('assembly-guide-preview')).toContainText('No warnings');
-  await expect(page.getByTestId('assembly-stack-summary')).toContainText(/^Stack: Back Clip.*S10 spacer.*Front Clip/);
+  await expect(page.getByTestId('assembly-stack-summary')).toContainText(/^Stack: Back Clip.*Spacer 10mm OD \/ 4mm hole.*Front Clip/);
+  await expect(page.getByTestId('stage-right-inspector')).toContainText(/row \d+, column \d+/);
   await expect(page.getByTestId('assembly-stack-summary')).not.toContainText(/Base board/);
   await expect(page.getByTestId('prefab-assembly-steps')).toContainText('mount-to-board');
   await expect(page.getByTestId('prefab-assembly-steps')).toContainText(/board/);

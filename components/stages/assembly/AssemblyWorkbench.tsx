@@ -1,5 +1,6 @@
 import type { FabricationRecipe, PhysicalKitSettings } from '../../../types';
 import type { AssemblyLane, AssemblyPlaybackStep } from '../../../utils/assemblyPlayback';
+import { fabricationBoardColumnLabel, fabricationBoardCoordinateCallout, fabricationBoardRowLabel, fabricationPartDisplayLabel } from '../../../utils/fabrication';
 import { isBoardFixedCoordRole, readableCoordRole } from '../../../utils/mechanismReference';
 
 const assemblyCoordToSvg = (coord: string) => {
@@ -72,7 +73,7 @@ export const AssemblyWorkbench = ({ recipe, lane, step, kit, progress = 0 }: { r
                     const y = 190 + Math.floor(index / 2) * 38;
                     return <g key={`${part.name}-${index}`} className="assembly-tray-part">
                         <rect x={x} y={y} width="126" height="24" rx="12" fill={index % 2 ? '#ede9fe' : '#e0f2fe'} stroke="#cbd5e1"/>
-                        <text x={x + 12} y={y + 16} className="assembly-svg-tiny">{part.name} × {part.quantity}</text>
+                        <text x={x + 12} y={y + 16} className="assembly-svg-tiny">{fabricationPartDisplayLabel(part.name)} × {part.quantity}</text>
                     </g>;
                 })}
             </g>}
@@ -88,23 +89,29 @@ export const AssemblyWorkbench = ({ recipe, lane, step, kit, progress = 0 }: { r
                         <rect x={20 + index * 7} y={y} width={190} height="28" rx="14" fill={index === currentLayer ? 'url(#assembly-layer-fill)' : '#eef2f7'} stroke={index === currentLayer ? '#7c3aed' : '#94a3b8'} strokeWidth="2"/>
                         <circle cx={48 + index * 7} cy={y + 14} r="6" fill="#fff" stroke="#64748b" strokeWidth="2"/>
                         <circle cx={178 + index * 7} cy={y + 14} r="6" fill="#fff" stroke="#64748b" strokeWidth="2"/>
-                        <text x={230} y={y + 18} className="assembly-svg-tiny">{layer.part ?? layer.label}</text>
+                        <text x={230} y={y + 18} className="assembly-svg-tiny">{fabricationPartDisplayLabel(layer.label)}</text>
                     </g>;
                 })}
                 {!stack.length && <g className="assembly-active-layer">
                     <rect x="36" y="94" width="178" height="44" rx="22" fill="url(#assembly-layer-fill)" stroke="#7c3aed" strokeWidth="2"/>
-                    <text x="72" y="121" className="assembly-svg-tiny">{recipe.type} module</text>
+                    <text x="72" y="121" className="assembly-svg-tiny">{recipe.type.replace(/[-_]/g, ' ')} module</text>
                 </g>}
             </g>
             <g data-testid="assembly-board" opacity={boardVisible ? 1 : 0.16}>
                 <rect x="472" y="120" width="292" height="292" rx="22" fill="#ffffff" stroke="#cbd5e1" strokeWidth="2"/>
+                {Array.from({ length: kit.boardCells }).map((_, col) =>
+                    <text key={`col-${col}`} x={494 + col * 18} y="116" className="assembly-svg-tiny" textAnchor="middle">{fabricationBoardColumnLabel(col)}</text>
+                )}
+                {Array.from({ length: kit.boardCells }).map((_, row) =>
+                    <text key={`row-${row}`} x="462" y={146 + row * 18} className="assembly-svg-tiny" textAnchor="end">{fabricationBoardRowLabel(row)}</text>
+                )}
                 {Array.from({ length: kit.boardCells }).map((_, row) => Array.from({ length: kit.boardCells }).map((__, col) =>
                     <circle key={`${row}-${col}`} cx={494 + col * 18} cy={142 + row * 18} r="3.2" fill="#e2e8f0" stroke="#94a3b8"/>
                 ))}
                 <text x="492" y="102" className="assembly-svg-label">{kit.boardCells}×{kit.boardCells} board · {kit.gridPitchMm}mm</text>
                 {boardCoordEntries.map(({ point, coord }, index) => <g key={`${point.x}-${point.y}-${index}`} className="assembly-active-hole">
                     <circle cx={point.x} cy={point.y} r="13" fill="rgba(139,92,246,.12)" stroke="#8b5cf6" strokeWidth="3"/>
-                    <text x={point.x + 12} y={point.y - 10} className="assembly-svg-tiny">{coord}</text>
+                    <text x={point.x + 12} y={point.y - 10} className="assembly-svg-tiny">{fabricationBoardCoordinateCallout(coord)}</text>
                 </g>)}
             </g>
             {floatingCoordEntries.length > 0 && <g data-testid="assembly-floating-references" className="assembly-floating-references">
@@ -112,7 +119,7 @@ export const AssemblyWorkbench = ({ recipe, lane, step, kit, progress = 0 }: { r
                 <text x="494" y="450" className="assembly-svg-tiny">Moving refs</text>
                 {floatingCoordEntries.slice(0, 4).map((entry, index) => (
                     <text key={`${entry.coord}-${entry.role}`} x={494 + index * 62} y="470" className="assembly-svg-tiny">
-                        {entry.coord} · {readableCoordRole(entry.role)}
+                        {fabricationBoardCoordinateCallout(entry.coord)} · {readableCoordRole(entry.role)}
                     </text>
                 ))}
             </g>}

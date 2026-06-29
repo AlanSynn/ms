@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { FileJson } from 'lucide-react';
 import type { AppStage, ProjectAction, ProjectState } from '../../../types';
 import { pendingRecipeForMechanism } from '../../../utils/assemblyPlayback';
-import { createFabricationPackage, fabricationStackSummary, validateForFabrication } from '../../../utils/fabrication';
+import { createFabricationPackage, fabricationBoardCoordinateCallout, fabricationPartDisplayLabel, readableFabricationStackSummary, validateForFabrication } from '../../../utils/fabrication';
+import { referenceRecipeForType } from '../../../utils/mechanismReference';
 import { downloadText } from '../../../utils/project';
 import { EditorStageFrame, StageLeftSummary, canvasPane, inspectorPane, workflowPane } from '../stageLayout';
 
@@ -21,6 +22,7 @@ export const BlueprintExport = ({ project, dispatch, goStage }: {
     const recipes = pkg?.recipes ?? activeMechanisms.map(mechanism => pendingRecipeForMechanism(project, mechanism));
     const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
     const selectedRecipe = recipes.find(recipe => recipe.mechanismId === selectedRecipeId) ?? recipes[0];
+    const recipeTitle = (recipe: typeof recipes[number]) => referenceRecipeForType(recipe.type).title;
     const downloadJson = () => pkg && downloadText(`${pkg.id}.json`, JSON.stringify(pkg, null, 2));
     const downloadSvg = () => pkg && downloadText(`${pkg.id}.svg`, pkg.svg, 'image/svg+xml');
     const downloadCutSheetPdf = () => pkg && downloadText(`${pkg.id}-cut-sheet.pdf`, pkg.cutSheetPdf, 'application/pdf');
@@ -84,8 +86,8 @@ export const BlueprintExport = ({ project, dispatch, goStage }: {
                     <h4 className="section-title">Recipes</h4>
                     <div className="mt-3 grid gap-2">
                         {recipes.map(recipe => <button key={recipe.mechanismId} type="button" className={`assembly-recipe-card text-left ${selectedRecipe?.mechanismId === recipe.mechanismId ? 'ring-2 ring-inset' : ''}`} onClick={() => setSelectedRecipeId(recipe.mechanismId)}>
-                            <div className="font-bold text-slate-800">{recipe.mechanismId} · {recipe.type}</div>
-                            <div className="text-sm text-slate-600">Anchor {recipe.boardCoordinate}</div>
+                            <div className="font-bold text-slate-800">{recipe.mechanismId} · {recipeTitle(recipe)}</div>
+                            <div className="text-sm text-slate-600">Anchor {fabricationBoardCoordinateCallout(recipe.boardCoordinate, recipe.board)}</div>
                         </button>)}
                     </div>
                 </div>
@@ -101,10 +103,10 @@ export const BlueprintExport = ({ project, dispatch, goStage }: {
                 <h3>Cut sheet</h3>
             </div>
             {selectedRecipe ? <article className="assembly-recipe-card" data-testid={`blueprint-recipe-${selectedRecipe.mechanismId}`}>
-                <div className="font-bold text-slate-800">{selectedRecipe.mechanismId} · {selectedRecipe.type}</div>
-                <div className="mt-1 text-sm text-slate-600">Board anchor {selectedRecipe.boardCoordinate}</div>
-                <div className="mt-3 flex flex-wrap gap-2">{selectedRecipe.requiredParts.map(part => <span className="blueprint-pill" key={`${selectedRecipe.mechanismId}-${part.name}`}>{part.name} × {part.quantity}</span>)}</div>
-                <div className="mt-3 rounded-2xl bg-slate-100 p-3 text-sm font-bold text-slate-700" data-testid="blueprint-stack-summary">{fabricationStackSummary(selectedRecipe)}</div>
+                <div className="font-bold text-slate-800">{selectedRecipe.mechanismId} · {recipeTitle(selectedRecipe)}</div>
+                <div className="mt-1 text-sm text-slate-600">Board anchor {fabricationBoardCoordinateCallout(selectedRecipe.boardCoordinate, selectedRecipe.board)}</div>
+                <div className="mt-3 flex flex-wrap gap-2">{selectedRecipe.requiredParts.map(part => <span className="blueprint-pill" key={`${selectedRecipe.mechanismId}-${part.name}`}>{fabricationPartDisplayLabel(part.name)} × {part.quantity}</span>)}</div>
+                <div className="mt-3 rounded-2xl bg-slate-100 p-3 text-sm font-bold text-slate-700" data-testid="blueprint-stack-summary">{readableFabricationStackSummary(selectedRecipe)}</div>
                 {selectedRecipe.warnings.length ? <div className="warning mt-3">Warnings: {selectedRecipe.warnings.join('; ')}</div> : <div className="ok mt-3">No warnings</div>}
             </article> : <div className="warning">Generate first.</div>}
             {pkg && <div className="rounded-2xl bg-white p-3 text-sm text-slate-600 shadow-sm">Grid {project.settings.physicalKit.gridPitchMm}mm · holes {project.settings.physicalKit.holeDiameterMm}mm · {recipes.length} recipe{recipes.length === 1 ? '' : 's'}</div>}

@@ -15,8 +15,12 @@ import {
     FABRICATION_RING_GEAR_SPEC,
     FABRICATION_SOURCE_SSOT,
     FABRICATION_SPACER_SPEC,
+    fabricationBoardColumnLabel,
+    fabricationBoardCoordinateCallout,
+    fabricationBoardRowLabel,
     fabricationGearSpecForPitchRadius as sharedFabricationGearSpecForPitchRadius,
     fabricationLinkageSpecForCells as sharedFabricationLinkageSpecForCells,
+    fabricationPartDisplayLabel,
     fabricationRingGearSpecForPitchRadius,
     type FabricationGearSpec,
     type FabricationLinkageSpec,
@@ -31,7 +35,11 @@ export {
     FABRICATION_LINKAGE_WIDTH_MM,
     FABRICATION_RING_GEAR_SPEC,
     FABRICATION_SOURCE_SSOT,
-    FABRICATION_SPACER_SPEC
+    FABRICATION_SPACER_SPEC,
+    fabricationBoardColumnLabel,
+    fabricationBoardCoordinateCallout,
+    fabricationBoardRowLabel,
+    fabricationPartDisplayLabel
 };
 export type { FabricationGearSpec, FabricationLinkageSpec, FabricationRingGearSpec, FabricationSpacerSpec };
 
@@ -355,6 +363,17 @@ export const fabricationStackForMechanism = (mechanism: Pick<MechanismConfig, 't
 };
 
 export const fabricationStackSummary = (mechanism: Pick<MechanismConfig, 'type'> & Partial<Pick<MechanismConfig, 'gearTrainRadii'>>) => fabricationStackForMechanism(mechanism).map(item => item.label).join(' → ');
+export const readableFabricationStackSummary = (mechanism: Pick<MechanismConfig, 'type'> & Partial<Pick<MechanismConfig, 'gearTrainRadii'>>) =>
+    fabricationStackForMechanism(mechanism).map(item => fabricationPartDisplayLabel(item.label)).join(' → ');
+
+const recipeBoardCallout = (recipe: Pick<FabricationRecipe, 'boardCoordinate' | 'board'>) =>
+    fabricationBoardCoordinateCallout(recipe.boardCoordinate, recipe.board);
+
+const mechanismTypeLabel = (type: MechanismConfig['type']) =>
+    referenceRecipeForType(type).title || type.replace(/[-_]/g, ' ');
+
+const readableStepCoordinateCallout = (step: FabricationRecipe['assemblySteps'][number]) =>
+    referenceStepCoordinateCallout(step).replace(/\b([A-O](?:[1-9]|1[0-5]))\b/g, coord => fabricationBoardCoordinateCallout(coord));
 
 const isMovingStackLayer = (item: FabricationStackLayer) => !['clip', 'spacer', 'base'].includes(item.role);
 
@@ -437,7 +456,7 @@ export const prefabAssemblySteps = (mechanism: MechanismConfig, boardCoordinate:
         }));
     }
     const plan = fabricationRenderPlanForMechanism(mechanism);
-    const moduleLabel = `${mechanism.type} prebuilt module`;
+    const moduleLabel = `${mechanismTypeLabel(mechanism.type)} prebuilt module`;
     return [
         {
             index: 1,
@@ -448,11 +467,11 @@ export const prefabAssemblySteps = (mechanism: MechanismConfig, boardCoordinate:
             coords: [boardCoordinate],
             coordRoles: ['board'],
             action: 'snap-module',
-            instruction: `Snap the pre-fabricated ${mechanism.type} module onto board hole ${boardCoordinate}; use this as the beginner default before cutting custom parts.`
+            instruction: `Snap the pre-fabricated ${mechanismTypeLabel(mechanism.type)} module onto board hole ${boardCoordinate}; use this as the beginner default before cutting custom parts.`
         },
         ...plan.layers.map((layer, index) => ({
             index: index + 2,
-            label: layer.label,
+            label: fabricationPartDisplayLabel(layer.label),
             role: layer.role,
             boardCoordinate,
             zMm: Number((layer.z * 10).toFixed(1)),
@@ -460,10 +479,10 @@ export const prefabAssemblySteps = (mechanism: MechanismConfig, boardCoordinate:
             coordRoles: ['stack'],
             action: 'stack-layer',
             instruction: layer.role === 'clip'
-                ? `Lock ${layer.label} at ${boardCoordinate} to keep the stack captured without binding.`
+                ? `Lock ${fabricationPartDisplayLabel(layer.label)} at ${boardCoordinate} to keep the stack captured without binding.`
                 : layer.role === 'spacer'
-                    ? `Insert ${layer.label} at ${boardCoordinate} to separate moving plates along Z.`
-                    : `Place ${layer.label} at ${boardCoordinate} on top of the previous layer.`
+                    ? `Insert ${fabricationPartDisplayLabel(layer.label)} at ${boardCoordinate} to separate moving plates along Z.`
+                    : `Place ${fabricationPartDisplayLabel(layer.label)} at ${boardCoordinate} on top of the previous layer.`
         }))
     ];
 };
@@ -599,16 +618,16 @@ const createRecipe = (project: ProjectState, mechanism: MechanismConfig): Fabric
         offsetFromBoardMm: { x: (mechanism.anchorX! - boardScene.x) / SCENE_PX_PER_MM, y: (mechanism.anchorY! - boardScene.y) / SCENE_PX_PER_MM },
         requiredParts: mechanism.fabricationMetadata?.requiredParts ?? mechanismRequiredParts(mechanism),
         steps: [
-            `Place ${mechanism.id} main axle at ${board.label}.`,
-            `Beginner kit mode: use the pre-fabricated ${mechanism.type} module on the ${project.settings.physicalKit.boardCells}×${project.settings.physicalKit.boardCells} hole board when available.`,
-            `Exploded moving stack order: ${fabricationStackSummary(mechanism)} above the base board.`,
+            `Place ${mechanism.id} main axle at ${fabricationBoardCoordinateCallout(board.label, board)}.`,
+            `Beginner kit mode: use the pre-fabricated ${mechanismTypeLabel(mechanism.type)} module on the ${project.settings.physicalKit.boardCells}×${project.settings.physicalKit.boardCells} hole board when available.`,
+            `Exploded moving stack order: ${readableFabricationStackSummary(mechanism)} above the base board.`,
             mechanism.type === 'cam'
                 ? `Install the cam disk and follower guide aligned to ${mechanism.groundAngle ?? 90}°; follower lift is ${(mechanism.rockerLength || mechanism.crankLength).toFixed(0)} scene units.`
                 : mechanism.type === 'rack-pinion'
                     ? `Mesh the pinion gear with the toothed rack; keep the rack guide offset ${mechanism.sliderOffset.toFixed(0)} scene units from the axle and add end stops.`
                     : mechanism.type === 'gear' || mechanism.type === 'gear_linkage' || mechanism.type === 'planetary_gear'
                         ? `Mesh gears at their pitch centers; physical pitch ratio ${mechanism.type === 'planetary_gear' ? planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength).toFixed(2) : gearTrainOutputRatio(mechanism).toFixed(2)} controls output direction.`
-                        : `Install ${mechanism.type} links with crank ${mechanism.crankLength.toFixed(0)} and coupler ${mechanism.couplerLength.toFixed(0)} scene units.`,
+                        : `Install ${mechanismTypeLabel(mechanism.type)} links with crank ${mechanism.crankLength.toFixed(0)} and coupler ${mechanism.couplerLength.toFixed(0)} scene units.`,
             targetPart ? `Connect output to ${targetPart.name} at anchor ${targetAnchorJointId ?? targetPart.anchorJointId} and follow path ${targetPath?.id ?? 'unassigned'}.` : 'Connect output to selected character part or leave as standalone preview.',
             warnings.length ? `Resolve warning before cutting: ${warnings.join('; ')}` : 'Run preview once, then cut and assemble.'
         ],
@@ -631,8 +650,10 @@ const makeSvg = (project: ProjectState, recipes: FabricationRecipe[]) => {
         for (let r = 0; r < kit.boardCells; r++) {
             const recipe = recipes.find(x => x.board.valid !== false && x.board.col === c && x.board.row === r);
             const { x, y } = sceneToSvg(boardToScene(c, r, kit));
+            if (r === 0) svg += `<text x="${x}" y="${y - 16}" font-size="8" font-family="Inter,Arial" font-weight="800" text-anchor="middle" fill="#64748b">${esc(fabricationBoardColumnLabel(c))}</text>`;
+            if (c === 0) svg += `<text x="${x - 16}" y="${y + 3}" font-size="8" font-family="Inter,Arial" font-weight="800" text-anchor="end" fill="#64748b">${esc(fabricationBoardRowLabel(r))}</text>`;
             svg += `<circle cx="${x}" cy="${y}" r="${recipe ? 5 : 2}" fill="${recipe ? '#ef4444' : '#cbd5e1'}"/>`;
-            if (recipe) svg += `<text x="${x + 8}" y="${y - 8}" font-size="12" font-family="Inter,Arial" fill="#0f172a">${esc(recipe.mechanismId)} ${esc(recipe.boardCoordinate)}</text>`;
+            if (recipe) svg += `<text x="${x + 8}" y="${y - 8}" font-size="12" font-family="Inter,Arial" fill="#0f172a">${esc(recipe.mechanismId)} ${esc(recipeBoardCallout(recipe))}</text>`;
         }
     }
     project.partOrder.forEach(partId => {
@@ -825,7 +846,7 @@ const makeExplodedStackSvg = (recipe: FabricationRecipe | undefined, esc: (value
         return `<g>
 <line x1="${x + 72}" y1="${y + 18}" x2="${labelX - 22}" y2="${labelY - 4}" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="6 8"/>
 ${shapeFor(item, x, y)}
-	<text x="${labelX}" y="${labelY}" class="guide-label">Z+${index + 1} ${esc(item.label)}</text>
+	<text x="${labelX}" y="${labelY}" class="guide-label">Z+${index + 1} ${esc(fabricationPartDisplayLabel(item.label))}</text>
 	<text x="${labelX}" y="${labelY + 18}" class="guide-muted">${esc(item.role)}</text>
 	</g>`;
     }).join('');
@@ -851,7 +872,7 @@ ${shapeFor(item, x, y)}
 	<g filter="url(#guide-shadow)">${items}</g>
 <line x1="92" y1="458" x2="438" y2="130" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 10"/>
 <text x="70" y="486" class="guide-muted">Assembly stack separates moving layers with spacers so clips do not bind.</text>
-${recipe ? `<text x="40" y="505" class="guide-muted">First recipe: ${esc(recipe.mechanismId)} · ${esc(recipe.type)} · anchor ${esc(recipe.boardCoordinate)}</text>` : ''}
+${recipe ? `<text x="40" y="505" class="guide-muted">First recipe: ${esc(recipe.mechanismId)} · ${esc(mechanismTypeLabel(recipe.type))} · anchor ${esc(recipeBoardCallout(recipe))}</text>` : ''}
 </svg>`;
 };
 
@@ -860,13 +881,13 @@ const makeAssemblyGuideHtml = (project: ProjectState, recipes: FabricationRecipe
     const firstRecipe = recipes[0];
     const explodedSvg = makeExplodedStackSvg(firstRecipe, esc);
     const recipeSections = recipes.map(recipe => `<section>
-<h2>${esc(recipe.mechanismId)} · ${esc(recipe.type)}</h2>
-<p><strong>Board anchor:</strong> ${esc(recipe.boardCoordinate)} (${recipe.sceneAnchor.x.toFixed(1)}, ${recipe.sceneAnchor.y.toFixed(1)} scene units)</p>
+<h2>${esc(recipe.mechanismId)} · ${esc(mechanismTypeLabel(recipe.type))}</h2>
+<p><strong>Board anchor:</strong> ${esc(recipeBoardCallout(recipe))} (${recipe.sceneAnchor.x.toFixed(1)}, ${recipe.sceneAnchor.y.toFixed(1)} scene units)</p>
 <p><strong>Target:</strong> ${esc(recipe.targetPartName ?? recipe.targetPartId ?? 'unbound')} · path ${esc(recipe.targetPathId ?? 'none')} · anchor ${esc(recipe.targetAnchorJointId ?? 'part default')} · ${recipe.targetPathPointCount ?? 0} path points</p>
 ${recipe.warnings.length ? `<p><strong>Warnings:</strong> ${recipe.warnings.map(esc).join('; ')}</p>` : '<p><strong>Warnings:</strong> none</p>'}
-<h3>Required parts</h3><ul>${recipe.requiredParts.map(part => `<li>${esc(part.name)} × ${part.quantity}</li>`).join('')}</ul>
-<h3>15×15 board kit assembly</h3><ol class="stepper" data-testid="prefab-assembly-steps">${recipe.assemblySteps.map(step => `<li class="assembly-step" style="--i:${step.index}"><strong>${step.index}. ${esc(step.label)}</strong><span>${esc(step.instruction)}</span><em>${esc(step.role)} · ${esc(referenceStepCoordinateCallout(step))} · Z ${step.zMm.toFixed(1)}mm</em></li>`).join('')}</ol>
-<h3>Steps</h3><ol>${recipe.steps.map(step => `<li>${esc(step)}</li>`).join('')}</ol>
+<h3>Required parts</h3><ul>${recipe.requiredParts.map(part => `<li>${esc(fabricationPartDisplayLabel(part.name))} × ${part.quantity}</li>`).join('')}</ul>
+<h3>15×15 board kit assembly</h3><ol class="stepper" data-testid="prefab-assembly-steps">${recipe.assemblySteps.map(step => `<li class="assembly-step" style="--i:${step.index}"><strong>${step.index}. ${esc(fabricationPartDisplayLabel(step.label))}</strong><span>${esc(fabricationPartDisplayLabel(step.instruction))}</span><em>${esc(step.role)} · ${esc(readableStepCoordinateCallout(step))} · Z ${step.zMm.toFixed(1)}mm</em></li>`).join('')}</ol>
+<h3>Steps</h3><ol>${recipe.steps.map(step => `<li>${esc(fabricationPartDisplayLabel(step))}</li>`).join('')}</ol>
 </section>`).join('');
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(project.metadata.name)} assembly</title><style>
 body{margin:0;background:#f8f9ff;color:#172033;font-family:Inter,Arial,sans-serif;}
@@ -903,6 +924,7 @@ const makePdfDocument = (content: string) => {
 };
 
 const pdfText = (value: unknown) => String(value)
+    .replace(/·/g, '/')
     .replace(/[^\x20-\x7E]/g, '?')
     .replace(/[()\\]/g, '\\$&')
     .slice(0, 120);
@@ -941,9 +963,11 @@ const makeCutSheetPdf = (project: ProjectState, recipes: FabricationRecipe[]) =>
         for (let r = 0; r < kit.boardCells; r++) {
             const recipe = recipes.find(x => x.board.valid !== false && x.board.col === c && x.board.row === r);
             const p = toPdf(boardToScene(c, r, kit));
+            if (r === 0) commands.push(`0.40 0.46 0.57 rg BT /F1 6 Tf ${num(p.x - 4)} ${num(p.y + 13)} Td (${pdfText(fabricationBoardColumnLabel(c))}) Tj ET`);
+            if (c === 0) commands.push(`0.40 0.46 0.57 rg BT /F1 6 Tf ${num(p.x - 20)} ${num(p.y - 2)} Td (${pdfText(fabricationBoardRowLabel(r))}) Tj ET`);
             commands.push(recipe ? '0.94 0.27 0.27 rg' : '0.62 0.68 0.78 rg');
             commands.push(`${circlePath(p.x, p.y, recipe ? 3.8 : 1.7)} f`);
-            if (recipe) commands.push(`0.10 0.16 0.28 rg BT /F1 7 Tf ${num(p.x + 6)} ${num(p.y + 5)} Td (${pdfText(`${recipe.mechanismId} ${recipe.boardCoordinate}`)}) Tj ET`);
+            if (recipe) commands.push(`0.10 0.16 0.28 rg BT /F1 7 Tf ${num(p.x + 6)} ${num(p.y + 5)} Td (${pdfText(`${recipe.mechanismId} ${recipeBoardCallout(recipe)}`)}) Tj ET`);
         }
     }
     project.mechanisms.filter(m => m.visible && m.enabled !== false).forEach(m => {
@@ -954,7 +978,7 @@ const makeCutSheetPdf = (project: ProjectState, recipes: FabricationRecipe[]) =>
         }
     });
     recipes.slice(0, 12).forEach((recipe, index) => {
-        commands.push(`0.10 0.16 0.28 rg BT /F1 8 Tf ${page.margin} ${118 - index * 10} Td (${pdfText(`${recipe.mechanismId}: ${recipe.type} anchor ${recipe.boardCoordinate}`)}) Tj ET`);
+        commands.push(`0.10 0.16 0.28 rg BT /F1 8 Tf ${page.margin} ${118 - index * 10} Td (${pdfText(`${recipe.mechanismId}: ${mechanismTypeLabel(recipe.type)} anchor ${recipeBoardCallout(recipe)}`)}) Tj ET`);
     });
     return makePdfDocument(commands.join('\n'));
 };
@@ -969,16 +993,16 @@ const makeAssemblyGuidePdf = (project: ProjectState, recipes: FabricationRecipe[
     `${project.metadata.name} Printable assembly guide`,
     [
         'Exploded view / Base board below / Clip -> Linkage or Gear -> Spacer -> Linkage -> Clip',
-        `Stack: ${recipes[0] ? fabricationStackSummary(recipes[0]) : 'pending recipe'}`,
+        `Stack: ${recipes[0] ? readableFabricationStackSummary(recipes[0]) : 'pending recipe'}`,
         'Path projection / Z=0 Base / spacer-separated moving layers',
         `Profile ${project.settings.physicalKit.profileKey} / ${project.settings.physicalKit.gridPitchMm}mm grid`,
         ...warnings.map(warning => `Warning: ${warning}`),
         ...recipes.flatMap(recipe => [
-            `${recipe.mechanismId} / ${recipe.type} / anchor ${recipe.boardCoordinate}`,
+            `${recipe.mechanismId} / ${mechanismTypeLabel(recipe.type)} / anchor ${recipeBoardCallout(recipe)}`,
             `Target: ${recipe.targetPartName ?? recipe.targetPartId ?? 'unbound'} / path ${recipe.targetPathId ?? 'none'} / anchor ${recipe.targetAnchorJointId ?? 'part default'}`,
-            `Required parts: ${recipe.requiredParts.map(part => `${part.name} x ${part.quantity}`).join(', ')}`,
-            ...recipe.assemblySteps.map(step => `Kit step ${step.index}: ${step.label} / ${referenceStepCoordinateCallout(step)} / Z ${step.zMm.toFixed(1)}mm`),
-            ...recipe.steps
+            `Required parts: ${recipe.requiredParts.map(part => `${fabricationPartDisplayLabel(part.name)} x ${part.quantity}`).join(', ')}`,
+            ...recipe.assemblySteps.map(step => `Kit step ${step.index}: ${fabricationPartDisplayLabel(step.label)} / ${readableStepCoordinateCallout(step)} / Z ${step.zMm.toFixed(1)}mm`),
+            ...recipe.steps.map(fabricationPartDisplayLabel)
         ])
     ]
 );

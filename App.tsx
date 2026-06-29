@@ -49,7 +49,7 @@ import {
 import { checkWebOnnxCache, processImageWithWebOnnx, warmWebOnnxCache, type WebOnnxCacheStatus } from './utils/webOnnx';
 import { buildFoundryPhysicsOverlay } from './utils/physicsSession';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, loadRapierPhysicsKernel, physicsKernelErrorMessage } from './utils/physicsKernel';
-import { createFabricationPackage, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationLinkageSpecForSceneLength, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
+import { createFabricationPackage, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_SPACER_SPEC, fabricationBoardCoordinateCallout, fabricationGearProfileForPitchRadius, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, readableFabricationStackSummary, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
 import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
 import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionChainRootJointIds, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
@@ -2755,8 +2755,8 @@ const AssemblyGuide = ({ project, dispatch, goStage }: {
                 </div>
                 <div className="mt-5 grid gap-2">
                     {recipes.map(recipe => <button key={recipe.mechanismId} type="button" className={`assembly-recipe-card text-left ${selectedRecipe?.mechanismId === recipe.mechanismId ? 'ring-2 ring-inset' : ''}`} onClick={() => setSelectedRecipeId(recipe.mechanismId)}>
-                        <div className="font-bold text-slate-800">{recipe.mechanismId} · {recipe.type}</div>
-                        <div className="text-sm text-slate-600">Board {recipe.boardCoordinate}</div>
+                        <div className="font-bold text-slate-800">{recipe.mechanismId} · {referenceRecipeForType(recipe.type).title}</div>
+                        <div className="text-sm text-slate-600">Board {fabricationBoardCoordinateCallout(recipe.boardCoordinate, recipe.board)}</div>
                     </button>)}
                 </div>
                 {playbackSteps.length > 0 && <div className="mt-4 rounded-2xl bg-white p-3 shadow-sm" data-testid="assembly-step-list">
@@ -2789,20 +2789,20 @@ const AssemblyGuide = ({ project, dispatch, goStage }: {
             {selectedRecipe ? <article className="assembly-recipe-card" data-testid={`assembly-recipe-${selectedRecipe.mechanismId}`}>
                 <div className="flex items-start justify-between gap-3">
                     <div>
-                        <div className="font-bold text-slate-800">{selectedRecipe.mechanismId} · {selectedRecipe.type}</div>
-                        <div className="text-sm text-slate-600">Board {selectedRecipe.boardCoordinate}</div>
+                        <div className="font-bold text-slate-800">{selectedRecipe.mechanismId} · {referenceRecipeForType(selectedRecipe.type).title}</div>
+                        <div className="text-sm text-slate-600">Board {fabricationBoardCoordinateCallout(selectedRecipe.boardCoordinate, selectedRecipe.board)}</div>
                         <div className="text-xs text-slate-500">Target {selectedRecipe.targetPartName ?? selectedRecipe.targetPartId ?? 'unbound'} · path {selectedRecipe.targetPathId ?? 'none'} · anchor {selectedRecipe.targetAnchorJointId ?? 'part default'}</div>
                     </div>
                     <button className="chip" onClick={() => goStage('design')}>Edit</button>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">{selectedRecipe.requiredParts.map(part => <span className="blueprint-pill" key={`${selectedRecipe.mechanismId}-${part.name}`}>{part.name} × {part.quantity}</span>)}</div>
-                <div className="mt-3 rounded-2xl bg-slate-100 p-3 text-sm font-bold text-slate-700" data-testid="assembly-stack-summary">Stack: {fabricationStackSummary(selectedRecipe)}</div>
+                <div className="mt-3 flex flex-wrap gap-2">{selectedRecipe.requiredParts.map(part => <span className="blueprint-pill" key={`${selectedRecipe.mechanismId}-${part.name}`}>{fabricationPartDisplayLabel(part.name)} × {part.quantity}</span>)}</div>
+                <div className="mt-3 rounded-2xl bg-slate-100 p-3 text-sm font-bold text-slate-700" data-testid="assembly-stack-summary">Stack: {readableFabricationStackSummary(selectedRecipe)}</div>
                 {selectedRecipe.warnings.length ? <div className="warning mt-3">Warnings: {selectedRecipe.warnings.join('; ')}</div> : <div className="ok mt-3">No warnings</div>}
                 {currentStep && <div className="mt-3 rounded-2xl bg-white p-3 shadow-sm" data-testid="prefab-assembly-steps">
                     <div className="section-title">Current step</div>
                     <div className="mt-2 flex flex-wrap gap-2">
                         <span className="blueprint-pill">{currentStep.phase}</span>
-                        {currentStep.coords.map((coord, index) => <span className="blueprint-pill" key={`${coord}-${index}`}>{coord} · {currentStep.coordRoles[index] ?? 'ref'}</span>)}
+                        {currentStep.coords.map((coord, index) => <span className="blueprint-pill" key={`${coord}-${index}`}>{fabricationBoardCoordinateCallout(coord)} · {currentStep.coordRoles[index] ?? 'ref'}</span>)}
                         <span className="blueprint-pill">Z {currentStep.zMm.toFixed(1)}mm</span>
                     </div>
                     <p className="mt-3 text-sm text-slate-600">{currentStep.instruction}</p>
