@@ -2982,6 +2982,159 @@ const pendingRecipeForMechanism = (project: ProjectState, mechanism: MechanismCo
     };
 };
 
+type AssemblyLane = 'kit' | 'custom';
+type AssemblyPlaybackStep = {
+    index: number;
+    label: string;
+    phase: 'prepare-parts' | 'assemble-module' | 'mount-to-board' | 'connect-character' | 'test-motion' | 'export';
+    action: string;
+    coords: string[];
+    coordRoles: string[];
+    zMm: number;
+    instruction: string;
+    check?: string;
+    stack: NonNullable<FabricationRecipe['assemblySteps'][number]['stack']>;
+};
+
+const assemblyLaneForExportMode = (mode: PhysicalKitSettings['exportMode']): AssemblyLane => mode === 'custom-parts' ? 'custom' : 'kit';
+
+const uniqueAssemblyCoords = (recipe: FabricationRecipe, role = 'board') => [...new Set(recipe.assemblySteps.flatMap(step =>
+    ((step.coords?.length ? step.coords : [step.boardCoordinate])).filter((_, index) => (step.coordRoles?.[index] ?? step.role) === role)
+))];
+
+const buildAssemblyPlaybackSteps = (recipe: FabricationRecipe, lane: AssemblyLane): AssemblyPlaybackStep[] => {
+    const boardCoords = uniqueAssemblyCoords(recipe);
+    const steps: AssemblyPlaybackStep[] = [
+        {
+            index: 1,
+            label: lane === 'custom' ? 'Export parts' : 'Gather kit parts',
+            phase: lane === 'custom' ? 'export' : 'prepare-parts',
+            action: lane === 'custom' ? 'export' : 'show-parts',
+            coords: [],
+            coordRoles: [],
+            zMm: 0,
+            instruction: lane === 'custom' ? 'Use SVG, PDF, or STL from Blueprint, then assemble the same stack.' : 'Collect the mechanism parts before touching the board.',
+            check: lane === 'custom' ? 'Printed/cut parts match the recipe.' : 'All parts and S10 spacers are ready.',
+            stack: []
+        },
+        ...recipe.assemblySteps.map((step, index) => ({
+            index: index + 2,
+            label: step.label,
+            phase: 'assemble-module' as const,
+            action: step.action ?? 'stack',
+            coords: step.coords?.length ? step.coords : [step.boardCoordinate],
+            coordRoles: step.coordRoles?.length ? step.coordRoles : [step.role],
+            zMm: step.zMm,
+            instruction: step.instruction,
+            check: step.check,
+            stack: step.stack ?? []
+        }))
+    ];
+    steps.push({
+        index: steps.length + 1,
+        label: lane === 'kit' ? 'Mount module to board' : 'Mount custom module',
+        phase: 'mount-to-board',
+        action: 'mount',
+        coords: boardCoords.length ? boardCoords : [recipe.boardCoordinate],
+        coordRoles: boardCoords.length ? boardCoords.map(() => lane === 'kit' ? 'board' : 'custom-base') : [lane === 'kit' ? 'board' : 'custom-base'],
+        zMm: 0,
+        instruction: lane === 'kit'
+            ? `Snap the completed mechanism module onto the 15×15 board at ${recipe.boardCoordinate}.`
+            : 'Place the completed module on the custom base or keep it standalone.',
+        check: lane === 'kit' ? 'The module sits on the called-out board holes.' : 'The custom base and module holes line up.',
+        stack: []
+    }, {
+        index: steps.length + 2,
+        label: 'Connect character',
+        phase: 'connect-character',
+        action: 'connect',
+        coords: [recipe.boardCoordinate],
+        coordRoles: ['output'],
+        zMm: 0,
+        instruction: `Connect output to ${recipe.targetPartName ?? recipe.targetPartId ?? 'the target part'}.`,
+        check: recipe.targetPathId ? `Output follows ${recipe.targetPathId}.` : 'Output moves freely.',
+        stack: []
+    }, {
+        index: steps.length + 3,
+        label: 'Test motion',
+        phase: 'test-motion',
+        action: 'test',
+        coords: [recipe.boardCoordinate],
+        coordRoles: ['motion'],
+        zMm: 0,
+        instruction: 'Scrub the mechanism once before cutting extra copies.',
+        check: recipe.warnings[0] ?? 'Motion runs without binding.',
+        stack: []
+    });
+    return steps;
+};
+
+const assemblyCoordToSvg = (coord: string) => {
+    const match = /^([A-O])([1-9]|1[0-5])$/i.exec(coord.trim());
+    if (!match) return null;
+    return { x: 494 + (match[1].toUpperCase().charCodeAt(0) - 65) * 18, y: 142 + (Number(match[2]) - 1) * 18 };
+};
+
+const AssemblyWorkbench = ({ recipe, lane, step, kit }: { recipe: FabricationRecipe; lane: AssemblyLane; step: AssemblyPlaybackStep; kit: PhysicalKitSettings }) => {
+    const boardVisible = lane === 'kit' && ['mount-to-board', 'connect-character', 'test-motion'].includes(step.phase);
+    const stack = step.stack.length ? step.stack : recipe.assemblySteps.flatMap(item => item.stack ?? []).slice(0, 5);
+    const activeCoords = step.coords.map(assemblyCoordToSvg).filter(Boolean) as Array<{ x: number; y: number }>;
+    const currentLayer = Math.max(0, Math.min(stack.length - 1, step.phase === 'assemble-module' ? step.index - 2 : stack.length - 1));
+    return <section className="assembly-stepper-workbench" data-testid="assembly-stepper-workbench" aria-label="Interactive assembly workbench">
+        <div className="assembly-workbench-head">
+            <div>
+                <div className="section-title">Assembly</div>
+                <h3>{step.label}</h3>
+            </div>
+            <span className="blueprint-pill">{lane === 'kit' ? `${kit.boardCells}×${kit.boardCells} board` : 'custom parts'}</span>
+        </div>
+        <svg className="assembly-workbench-svg" viewBox="0 0 900 560" role="img" aria-label={`${recipe.type} assembly step ${step.index}`}>
+            <defs>
+                <linearGradient id="assembly-layer-fill" x1="0" x2="1"><stop offset="0" stopColor="#dbeafe"/><stop offset="1" stopColor="#a78bfa"/></linearGradient>
+                <marker id="assembly-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#8b5cf6"/></marker>
+            </defs>
+            <rect x="28" y="78" width="388" height="370" rx="28" fill="#fff" stroke="#dbe3f1"/>
+            <text x="56" y="118" className="assembly-svg-label">Mechanism first</text>
+            <g data-testid="assembly-module" transform="translate(108 162)">
+                <rect x="0" y="156" width="250" height="40" rx="20" fill="#e2e8f0" stroke="#94a3b8"/>
+                {stack.slice(0, 6).map((layer, index) => {
+                    const y = 136 - index * 22;
+                    const active = index <= currentLayer || step.phase !== 'assemble-module';
+                    return <g key={`${layer.label}-${index}`} className={active && index === currentLayer ? 'assembly-active-layer' : ''} opacity={active ? 1 : 0.22}>
+                        <rect x={20 + index * 7} y={y} width={190} height="28" rx="14" fill={index === currentLayer ? 'url(#assembly-layer-fill)' : '#eef2f7'} stroke={index === currentLayer ? '#7c3aed' : '#94a3b8'} strokeWidth="2"/>
+                        <circle cx={48 + index * 7} cy={y + 14} r="6" fill="#fff" stroke="#64748b" strokeWidth="2"/>
+                        <circle cx={178 + index * 7} cy={y + 14} r="6" fill="#fff" stroke="#64748b" strokeWidth="2"/>
+                        <text x={230} y={y + 18} className="assembly-svg-tiny">{layer.part ?? layer.label}</text>
+                    </g>;
+                })}
+                {!stack.length && <g className="assembly-active-layer">
+                    <rect x="36" y="94" width="178" height="44" rx="22" fill="url(#assembly-layer-fill)" stroke="#7c3aed" strokeWidth="2"/>
+                    <text x="72" y="121" className="assembly-svg-tiny">{recipe.type} module</text>
+                </g>}
+            </g>
+            <g data-testid="assembly-board" opacity={boardVisible ? 1 : 0.16}>
+                <rect x="472" y="120" width="292" height="292" rx="22" fill="#ffffff" stroke="#cbd5e1" strokeWidth="2"/>
+                {Array.from({ length: kit.boardCells }).map((_, row) => Array.from({ length: kit.boardCells }).map((__, col) =>
+                    <circle key={`${row}-${col}`} cx={494 + col * 18} cy={142 + row * 18} r="3.2" fill="#e2e8f0" stroke="#94a3b8"/>
+                ))}
+                <text x="492" y="102" className="assembly-svg-label">{kit.boardCells}×{kit.boardCells} board · {kit.gridPitchMm}mm</text>
+                {activeCoords.map((point, index) => <g key={`${point.x}-${point.y}-${index}`} className="assembly-active-hole">
+                    <circle cx={point.x} cy={point.y} r="13" fill="rgba(139,92,246,.12)" stroke="#8b5cf6" strokeWidth="3"/>
+                    <text x={point.x + 12} y={point.y - 10} className="assembly-svg-tiny">{step.coords[index]}</text>
+                </g>)}
+            </g>
+            {step.phase === 'mount-to-board' && <g className="assembly-mount-motion">
+                <path d="M370 272 C430 210 462 206 520 190" fill="none" stroke="#8b5cf6" strokeWidth="6" strokeLinecap="round" markerEnd="url(#assembly-arrow)"/>
+                <rect x="512" y="176" width="126" height="54" rx="22" fill="rgba(139,92,246,.16)" stroke="#8b5cf6" strokeDasharray="8 7" strokeWidth="3"/>
+            </g>}
+            {step.phase === 'test-motion' && <g className="assembly-test-motion">
+                <path d="M560 238 C610 176 680 188 706 252 C728 306 676 356 616 326" fill="none" stroke="#22c55e" strokeWidth="5" strokeDasharray="10 8"/>
+                <circle cx="704" cy="252" r="8" fill="#22c55e"/>
+            </g>}
+        </svg>
+    </section>;
+};
+
 const BlueprintExport = ({ project, dispatch, goStage }: {
     project: ProjectState;
     dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void;
@@ -3101,15 +3254,32 @@ const AssemblyGuide = ({ project, dispatch, goStage }: {
     const recipes = pkg?.recipes ?? activeMechanisms.map(mechanism => pendingRecipeForMechanism(project, mechanism));
     const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
     const selectedRecipe = recipes.find(recipe => recipe.mechanismId === selectedRecipeId) ?? recipes[0];
+    const [lane, setLane] = useState<AssemblyLane>(() => assemblyLaneForExportMode(project.settings.physicalKit.exportMode));
+    const [stepIndex, setStepIndex] = useState(0);
+    const [playing, setPlaying] = useState(false);
+    const playbackSteps = selectedRecipe ? buildAssemblyPlaybackSteps(selectedRecipe, lane) : [];
+    const currentStep = playbackSteps[Math.min(stepIndex, Math.max(0, playbackSteps.length - 1))];
+    useEffect(() => {
+        setStepIndex(0);
+        setPlaying(false);
+    }, [selectedRecipe?.mechanismId, lane]);
+    useEffect(() => {
+        if (!playing || playbackSteps.length < 2) return;
+        const timer = window.setInterval(() => setStepIndex(index => index >= playbackSteps.length - 1 ? 0 : index + 1), 1100);
+        return () => window.clearInterval(timer);
+    }, [playing, playbackSteps.length]);
     const downloadAssemblyPdf = () => pkg && downloadText(`${pkg.id}-assembly.pdf`, pkg.assemblyGuidePdf, 'application/pdf');
     const printGuide = () => {
-        const guideFrame = document.querySelector<HTMLIFrameElement>('[data-testid="assembly-guide-preview-frame"]');
-        if (guideFrame?.contentWindow) {
-            guideFrame.contentWindow.focus();
-            guideFrame.contentWindow.print();
+        if (!pkg) return;
+        const popup = window.open('', '_blank');
+        if (popup) {
+            popup.document.write(pkg.assemblyGuideHtml);
+            popup.document.close();
+            popup.focus();
+            popup.print();
             return;
         }
-        if (pkg) downloadText(`${pkg.id}-assembly.html`, pkg.assemblyGuideHtml, 'text/html');
+        downloadText(`${pkg.id}-assembly.html`, pkg.assemblyGuideHtml, 'text/html');
     };
     return <EditorStageFrame
         stage="assembly"
@@ -3123,35 +3293,42 @@ const AssemblyGuide = ({ project, dispatch, goStage }: {
                     <button className="btn-primary" aria-label={pkg ? 'Print guide' : 'Generate package'} disabled={!!validation.errors.length} onClick={pkg ? printGuide : create}>{pkg ? 'Print guide' : 'Generate'}</button>
                     {pkg && <button className="btn-secondary" onClick={downloadAssemblyPdf}>PDF</button>}
                 </div>
+                <div className="mt-4 flex flex-wrap gap-2" data-testid="assembly-lane-switch">
+                    <button className={lane === 'kit' ? 'chip active' : 'chip'} disabled={project.settings.physicalKit.exportMode === 'custom-parts'} onClick={() => setLane('kit')}>Kit board</button>
+                    <button className={lane === 'custom' ? 'chip active' : 'chip'} disabled={project.settings.physicalKit.exportMode === 'prefab-board'} onClick={() => setLane('custom')}>Custom parts</button>
+                </div>
                 <div className="mt-5 grid gap-2">
                     {recipes.map(recipe => <button key={recipe.mechanismId} type="button" className={`assembly-recipe-card text-left ${selectedRecipe?.mechanismId === recipe.mechanismId ? 'ring-2 ring-inset' : ''}`} onClick={() => setSelectedRecipeId(recipe.mechanismId)}>
                         <div className="font-bold text-slate-800">{recipe.mechanismId} · {recipe.type}</div>
                         <div className="text-sm text-slate-600">Board {recipe.boardCoordinate}</div>
                     </button>)}
                 </div>
+                {playbackSteps.length > 0 && <div className="mt-4 rounded-2xl bg-white p-3 shadow-sm" data-testid="assembly-step-list">
+                    <div className="section-title">Steps</div>
+                    <div className="mt-2 grid gap-1">
+                        {playbackSteps.map((step, index) => <button key={`${step.phase}-${step.index}`} className={`assembly-step-button ${index === stepIndex ? 'active' : ''}`} onClick={() => setStepIndex(index)}>
+                            <span>{step.index}</span>{step.label}
+                        </button>)}
+                    </div>
+                </div>}
             </StageLeftSummary>
         </div>),
             canvas: canvasPane(<div className="assembly-canvas-document canvas-workspace" data-testid="assembly-canvas-preview">
-            {pkg ? <section className="assembly-guide-web-preview" data-testid="assembly-guide-web-preview" aria-label="Printable assembly guide">
-                <div className="assembly-guide-preview-head">
-                    <div>
-                        <div className="section-title">Printable assembly guide</div>
-                        <h3>Exploded view</h3>
-                    </div>
-                    <button className="btn-secondary" onClick={printGuide}>Print guide</button>
-                </div>
-                <div className="assembly-guide-meta">
-                    <span>{recipes.length} recipe{recipes.length === 1 ? '' : 's'}</span>
-                    <span>{project.settings.physicalKit.gridPitchMm}mm grid</span>
-                    <span>{selectedRecipe?.type ?? 'mechanism'}</span>
-                </div>
-                <iframe title="Assembly preview" data-testid="assembly-guide-preview-frame" className="assembly-guide-preview-frame" srcDoc={pkg.assemblyGuideHtml} />
-            </section> : <div className="blueprint-empty-state">Generate first.</div>}
+            {pkg && selectedRecipe && currentStep ? <>
+                <AssemblyWorkbench recipe={selectedRecipe} lane={lane} step={currentStep} kit={project.settings.physicalKit}/>
+                <aside className="assembly-player-overlay" data-testid="assembly-player-overlay">
+                    <button aria-label={playing ? 'Pause assembly' : 'Play assembly'} onClick={() => setPlaying(!playing)}>{playing ? 'Ⅱ' : '▶'}</button>
+                    <button aria-label="Previous assembly step" onClick={() => setStepIndex(index => Math.max(0, index - 1))}>←</button>
+                    <button aria-label="Next assembly step" data-testid="assembly-next-step" onClick={() => setStepIndex(index => Math.min(playbackSteps.length - 1, index + 1))}>→</button>
+                    <input aria-label="Assembly scrubber" type="range" min={0} max={Math.max(0, playbackSteps.length - 1)} value={stepIndex} onChange={event => setStepIndex(Number(event.currentTarget.value))}/>
+                    <span>{currentStep.index}/{playbackSteps.length}</span>
+                </aside>
+            </> : <div className="blueprint-empty-state">Generate first.</div>}
         </div>),
             inspector: inspectorPane(<section className="stage-pane-stack" data-testid="assembly-guide-preview">
             <div>
-                <div className="section-title">Step</div>
-                <h3>Assembly</h3>
+                <div className="section-title">Assembly step</div>
+                <h3>{currentStep?.label ?? 'Assembly'}</h3>
             </div>
             {selectedRecipe ? <article className="assembly-recipe-card" data-testid={`assembly-recipe-${selectedRecipe.mechanismId}`}>
                 <div className="flex items-start justify-between gap-3">
@@ -3165,14 +3342,17 @@ const AssemblyGuide = ({ project, dispatch, goStage }: {
                 <div className="mt-3 flex flex-wrap gap-2">{selectedRecipe.requiredParts.map(part => <span className="blueprint-pill" key={`${selectedRecipe.mechanismId}-${part.name}`}>{part.name} × {part.quantity}</span>)}</div>
                 <div className="mt-3 rounded-2xl bg-slate-100 p-3 text-sm font-bold text-slate-700" data-testid="assembly-stack-summary">Stack: {fabricationStackSummary(selectedRecipe)}</div>
                 {selectedRecipe.warnings.length ? <div className="warning mt-3">Warnings: {selectedRecipe.warnings.join('; ')}</div> : <div className="ok mt-3">No warnings</div>}
-                <div className="mt-3 rounded-2xl bg-white p-3 shadow-sm" data-testid="prefab-assembly-steps">
-                    <div className="section-title">Steps</div>
-                    <ol className="mt-2 space-y-2 text-sm text-slate-600">{selectedRecipe.assemblySteps.map(step => <li key={`${selectedRecipe.mechanismId}-${step.index}`} className="rounded-xl bg-slate-50 p-2">
-                        <strong className="text-slate-800">{step.index}. {step.label}</strong>
-                        <div>{step.instruction}</div>
-                        <div className="text-xs font-bold uppercase tracking-wide text-slate-500">{step.role} · {step.boardCoordinate} · Z {step.zMm.toFixed(1)}mm</div>
-                    </li>)}</ol>
+                {currentStep && <div className="mt-3 rounded-2xl bg-white p-3 shadow-sm" data-testid="prefab-assembly-steps">
+                    <div className="section-title">Current step</div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                        <span className="blueprint-pill">{currentStep.phase}</span>
+                        {currentStep.coords.map((coord, index) => <span className="blueprint-pill" key={`${coord}-${index}`}>{coord} · {currentStep.coordRoles[index] ?? 'ref'}</span>)}
+                        <span className="blueprint-pill">Z {currentStep.zMm.toFixed(1)}mm</span>
+                    </div>
+                    <p className="mt-3 text-sm text-slate-600">{currentStep.instruction}</p>
+                    {currentStep.check && <div className="ok mt-3">Check: {currentStep.check}</div>}
                 </div>
+                }
             </article> : <div className="warning">Generate first.</div>}
         </section>)
         }}

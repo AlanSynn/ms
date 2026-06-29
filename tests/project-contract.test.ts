@@ -661,7 +661,9 @@ assert(!blueprintCanvasBlock.includes('assembly-guide-web-preview') && !blueprin
 const assemblyStart = appText.indexOf('const AssemblyGuide =');
 assert(assemblyStart >= 0, 'AssemblyGuide component owns the assembly document workflow');
 const assemblyBlock = appText.slice(assemblyStart, appText.indexOf('const Options =', assemblyStart));
-assert(assemblyBlock.includes('data-testid="assembly-canvas-preview"') && assemblyBlock.includes('data-testid="assembly-guide-web-preview"'), 'Assembly tab renders the printable guide in the center canvas');
+assert(assemblyBlock.includes('data-testid="assembly-canvas-preview"') && assemblyBlock.includes('<AssemblyWorkbench'), 'Assembly tab renders the interactive stepper in the center canvas');
+assert(appText.includes('data-testid="assembly-stepper-workbench"'), 'Assembly workbench exposes a testable interactive stepper surface');
+assert(!assemblyBlock.includes('data-testid="assembly-guide-preview-frame"'), 'Assembly center no longer defaults to an iframe document preview');
 assert(assemblyBlock.includes('data-testid="assembly-guide-preview"'), 'Assembly tab keeps selected recipe detail in the right inspector');
 const oversizedCutPart: BodyPartLayer = {
   id: 'right_arm_lower',
