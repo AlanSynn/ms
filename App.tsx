@@ -261,7 +261,8 @@ const App: React.FC = () => {
     const [showTracking, setShowTracking] = useState(false);
     const [showRecommendations, setShowRecommendations] = useState(false);
     const [showShortcuts, setShowShortcuts] = useState(false);
-    const modalOpen = showWelcome || showGettingStarted || showShortcuts;
+    const [showAbout, setShowAbout] = useState(false);
+    const modalOpen = showWelcome || showGettingStarted || showShortcuts || showAbout;
     const [foundry, setFoundry] = useState<FoundryState>(() => createDefaultMechanism('4bar', 'foundry-preview'));
     const [pendingCharacter, setPendingCharacter] = useState<{ project: ProjectState; summary: string; returnStage: AppStage } | null>(null);
     const [replaceCharacter, setReplaceCharacter] = useState(false);
@@ -521,20 +522,6 @@ const App: React.FC = () => {
         setCommandStatus('Saved skeleton config');
     };
 
-    const chooseSaveFolder = async () => {
-        const picker = (window as Window & { showDirectoryPicker?: () => Promise<{ name?: string }> }).showDirectoryPicker;
-        if (!picker) {
-            setCommandStatus('Browser downloads use the default download folder');
-            return;
-        }
-        try {
-            const handle = await picker();
-            setCommandStatus(`Output folder: ${handle.name ?? 'selected'}`);
-        } catch {
-            setCommandStatus('Choose save folder cancelled');
-        }
-    };
-
     const optimizeSelectedMechanism = async () => {
         if (!selectedMechanism || !selectedPath || selectedPath.points.length < 3) return;
         setOptimizerBusy(true);
@@ -699,7 +686,7 @@ const App: React.FC = () => {
         });
         setCommandStatus('Redo applied');
     };
-    const aboutMotionSmith = () => setCommandStatus('MotionSmith web port · local ONNX, shared command registry, blueprint export.');
+    const aboutMotionSmith = () => setShowAbout(true);
     const commandHandlers = {
         'project.new': newProject,
         'project.open': () => projectInputRef.current?.click(),
@@ -804,7 +791,7 @@ const App: React.FC = () => {
                     <input ref={projectInputRef} data-testid="project-file-input" hidden type="file" accept="application/json,.motionsmith.json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/>
 
                     <div className="stage-body editor-workbench relative min-h-0 flex-1 overflow-hidden p-7" data-testid="shared-workbench">
-                        {editorStage === 'character' && <CharacterSelection project={project} dispatch={dispatch} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onOpenGettingStarted={() => setShowGettingStarted(true)} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project, { resetHistory: true }); setPendingCharacter(null); setShowWelcome(false); setShowGettingStarted(false); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onProcess={runWebOnnx} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} goStage={goStage} viewport={canvasViewport} setViewport={setCanvasViewport} />}
+                        {editorStage === 'character' && <CharacterSelection project={project} dispatch={dispatch} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onOpenGettingStarted={() => setShowGettingStarted(true)} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project, { resetHistory: true }); setPendingCharacter(null); setShowWelcome(false); setShowGettingStarted(false); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onProcess={runWebOnnx} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} goStage={goStage} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {editorStage === 'path' && <PathEditor project={project} sortedParts={sortedParts} selectedPart={selectedPart} selectedPath={selectedPath} drawMode={drawMode} setDrawMode={setDrawMode} dispatch={dispatch} setPathPoints={setPathPoints} openTracking={() => setShowTracking(true)} isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} onNext={() => goStage('foundry')} goStage={goStage} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {editorStage === 'foundry' && <MechanismFoundry project={project} foundry={foundry} setFoundry={setFoundry} selectedPart={selectedPart} selectedPath={selectedPath} goStage={goStage} onExport={(pkg) => {
                             const existingTarget = project.mechanisms.find(m =>
@@ -862,6 +849,7 @@ const App: React.FC = () => {
             {showWelcome && <WelcomeDialog onClose={closeWelcome} />}
             {!showWelcome && showGettingStarted && <GettingStartedDialog starterTemplates={STARTER_IMAGE_TEMPLATES} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onStarterImage={template => { setShowGettingStarted(false); loadStarterImage(template); }} onSample={() => { setPendingCharacter(null); setProject(createSampleProject(), { resetHistory: true }); setShowWelcome(false); setShowGettingStarted(false); setStage('character'); }} onPackage={files => { setShowGettingStarted(false); importCharacterPackage(files); }} onProcess={file => { setShowGettingStarted(false); runWebOnnx(file); }} onImport={file => { setShowGettingStarted(false); importProject(file); }} onClose={closeGettingStarted} />}
             {showShortcuts && <ShortcutHelpDialog onClose={() => setShowShortcuts(false)} />}
+            {showAbout && <AboutDialog onClose={() => setShowAbout(false)} />}
             <MechanismRecommendationSheet isOpen={showRecommendations} project={project} selectedPart={selectedPart} selectedPath={selectedPath} onClose={() => setShowRecommendations(false)} onApply={mechanism => { dispatch({ type: 'upsert_mechanism', mechanism }); setShowRecommendations(false); setStage('design'); }} />
             <TrackingModal isOpen={showTracking} onClose={() => setShowTracking(false)} onTransfer={path => { setPathPoints(path, 'tracked'); setShowTracking(false); setStage('path'); }} />
         </main>
@@ -933,6 +921,26 @@ const ShortcutHelpDialog = ({ onClose }: { onClose: () => void }) => <div classN
                     </div>;
                 })}
             </section>)}
+        </div>
+    </section>
+</div>;
+
+const AboutDialog = ({ onClose }: { onClose: () => void }) => <div className="modal-backdrop" onMouseDown={event => {
+    if (event.target === event.currentTarget) onClose();
+}}>
+    <section role="dialog" aria-modal="true" aria-labelledby="about-title" className="modal-sheet shortcut-help-dialog" data-testid="about-dialog">
+        <div className="flex items-start justify-between gap-4">
+            <div>
+                <div className="accent-label">About</div>
+                <h3 id="about-title">MotionSmith</h3>
+                <p className="mt-2 text-sm font-bold text-slate-500">Local ONNX character import, shared canvas, mechanism simulation, and blueprint export.</p>
+            </div>
+            <button className="btn-secondary" onClick={onClose}>Close</button>
+        </div>
+        <div className="shortcut-help-grid">
+            <div className="shortcut-help-row"><span>Version</span><kbd>0.1.0</kbd></div>
+            <div className="shortcut-help-row"><span>Runtime</span><kbd>browser</kbd></div>
+            <div className="shortcut-help-row"><span>Project</span><kbd>MotionSmith</kbd></div>
         </div>
     </section>
 </div>;
@@ -1195,7 +1203,7 @@ const GettingStartedDialog = ({ starterTemplates, replaceCharacter, setReplaceCh
     </div>;
 };
 
-const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharacter, setReplaceCharacter, onOpenGettingStarted, onAccept, onDiscard, onProcess, onPackage, onImport, onEditCharacter, onSaveSkeleton, onChooseSaveFolder, goStage, viewport, setViewport }: {
+const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharacter, setReplaceCharacter, onOpenGettingStarted, onAccept, onDiscard, onProcess, onPackage, onImport, onEditCharacter, onSaveSkeleton, goStage, viewport, setViewport }: {
     project: ProjectState;
     dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void;
     pendingCharacter: { project: ProjectState; summary: string; returnStage: AppStage } | null;
@@ -1209,7 +1217,6 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
     onImport: (file: File) => void;
     onEditCharacter: () => void;
     onSaveSkeleton: () => void;
-    onChooseSaveFolder: () => void;
     goStage: (stage: AppStage) => void;
     viewport: CanvasViewport;
     setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
@@ -1295,7 +1302,6 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
                     <div className="mt-3 flex flex-wrap gap-2">
                         <button className="btn-secondary" aria-label="Edit Parts / Skeleton / Boxes" disabled={partPanelDisabled} onClick={onEditCharacter}>Edit rig</button>
                         <button className="btn-secondary" disabled={partPanelDisabled} onClick={onSaveSkeleton}>Save Skeleton</button>
-                        <button className="btn-secondary" onClick={onChooseSaveFolder}>Choose Save Folder…</button>
                     </div>
                 </details>
                 <section className="character-part-list mt-4" data-testid="character-part-list" aria-label="Character body part list">

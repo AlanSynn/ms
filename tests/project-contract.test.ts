@@ -152,6 +152,8 @@ assert.deepEqual(
   [...commandIds].sort(),
   'every visible shell command has exactly one App.tsx handler'
 );
+assert(appCommandSource.includes('setShowAbout(true)'), 'About command opens a real modal instead of only writing status text');
+assert(!appCommandSource.includes('showDirectoryPicker'), 'browser UI omits fake output-folder selection until downloads can write there');
 const visibleUiSource = [
   'App.tsx',
   'components/Canvas.tsx',
@@ -164,6 +166,7 @@ assert(!existsSync(join(process.cwd(), 'components', 'Controls.tsx')), 'runtime-
 assert(!existsSync(join(process.cwd(), 'utils', 'zStack.ts')), 'runtime-unused zStack helper is deleted instead of preserved as dead utility');
 assert(!/Easy IK Setup/i.test(visibleUiSource), 'visible UI does not reintroduce sugar text like Easy IK Setup');
 assert(!visibleUiSource.includes('Capture Camera'), 'browser hardware camera capture entry point is removed from visible UI');
+assert(!visibleUiSource.includes('Choose Save Folder'), 'browser output-folder picker is removed from visible UI because downloads use the browser default location');
 assert(!visibleUiSource.includes('CameraCaptureDialog'), 'browser hardware camera dialog component is removed');
 assert(!visibleUiSource.includes('getUserMedia'), 'browser hardware camera capture API is not used by the app UI');
 [

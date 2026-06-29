@@ -13,13 +13,20 @@
 | File menu | Save Project As... | save project to new file |
 | File menu | Export Blueprint Package | export cut sheets + assembly guide |
 | File menu | Export Project Copy | export current project copy |
-| File menu | Exit | close app/confirm unsaved |
 | View menu | Zoom In/Out/Fit/Reset View | operate on persistent canvas viewport |
 | View menu | Save/Restore/Reset Workspace Layout | persist panel/tab/workspace preferences |
 | Edit menu | Back (Undo), Forward (Redo) | project command history |
 | Options menu | Preferences... | open Options drawer/dialog |
-| Help menu | Check for Updates..., About... | app update/about modals |
+| Help menu | Keyboard Shortcuts, About... | generated shortcut reference and About modal |
 | Toolbar | New/Load/Save/Export Blueprint/Export Copy | optional quick actions, hidden default |
+
+### Retired browser-only placeholders
+
+| Removed control | Reason |
+| --- | --- |
+| File → Exit | Browsers cannot reliably close the app window; no fake “not available” command. |
+| Help → Check for Updates... | No updater contract in the browser build; keep absent until native/Tauri updater exists. |
+| Character → Choose Save Folder… | Browser downloads still go to the browser’s configured download location; selecting a directory would not make existing exports write there. |
 
 ## Character Selection tab
 
@@ -38,7 +45,6 @@
 | Recognition Editing | Save Skeleton | persist edited skeleton |
 | View Controls | + / − / ⌖ / 1:1 | zoom in/out/fit/reset |
 | Character Setup | Replace Character | current processed image becomes project character |
-| Download / Output Location | Choose Save Folder… | set generation output location |
 | Floating zoom | zoom combo / Fit | set canvas zoom preset or fit |
 
 ## Path Editor tab

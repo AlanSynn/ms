@@ -40,6 +40,8 @@ Canvas-local controls such as part sliders, path handles, camera orbit/zoom, fou
 
 The old browser-only menu contained dead placeholders for `Exit` and `Check for Updates`. They are intentionally not rendered until a real Tauri/native updater or browser-close contract exists. No visible command should call a generic “not available yet” handler.
 
+The old character import panel also exposed `Choose Save Folder…`, but browser exports still write through normal download links. It stays absent until a native file-system writer can make that location real.
+
 ## Enforcement
 
 - `validateAppCommandRegistry()` rejects duplicate IDs, duplicate shortcuts, menu/command mismatches, and orphan commands.

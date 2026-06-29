@@ -56,11 +56,11 @@ Source: `src/automataii/presentation/qt/actions/action_manager.py`
 
 | Menu | Actions |
 | --- | --- |
-| File | New, Load Project..., Recover Autosave..., Save Project, Save Project As..., Export Blueprint Package, Export Project Copy, Exit |
+| File | New, Load Project..., Recover Autosave..., Save Project, Save Project As..., Export Blueprint Package, Export Project Copy |
 | View | Zoom In, Zoom Out, Zoom to Fit, Reset View, Save Workspace Layout, Restore Workspace Layout, Reset Workspace Layout |
 | Edit | Back (Undo), Forward (Redo) |
 | Options | Preferences... |
-| Help | Check for Updates..., About... |
+| Help | Keyboard Shortcuts, About... |
 
 ### Toolbar
 
@@ -101,7 +101,8 @@ Source: `src/automataii/presentation/qt/tabs/image_processing_tab.py`
 | Recognition Editing | `Edit Parts / Skeleton / Boxes`, `Edit Skeleton Joints`, `Save Skeleton` | opens manual segmentation/skeleton editing surfaces |
 | View Controls | `+`, `−`, `⌖`, `1:1` | zoom in/out/fit/reset |
 | Character Setup | `Replace Character` | assigns processed image as current character |
-| Download / Output Location | output path label, `Choose Save Folder…` | generated character output destination |
+
+`Choose Save Folder…` is intentionally retired from the browser UI: current exports use normal browser downloads, so a directory picker would be misleading until a native/Tauri writer owns the output path.
 
 ### Right canvas
 

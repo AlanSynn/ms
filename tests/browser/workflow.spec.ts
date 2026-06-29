@@ -1936,6 +1936,12 @@ test('Command menu and shared canvas zoom persist across workflow stages', async
   await page.getByTestId('shortcut-help-dialog').getByRole('button', { name: 'Close' }).click();
   await expect(page.getByTestId('shortcut-help-dialog')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+  await page.getByTestId('top-command-bar').getByText('Help', { exact: true }).click();
+  await page.getByRole('button', { name: 'About MotionSmith…' }).click();
+  await expect(page.getByTestId('about-dialog')).toBeVisible();
+  await expect(page.getByTestId('about-dialog')).toContainText('Local ONNX');
+  await page.getByTestId('about-dialog').getByRole('button', { name: 'Close' }).click();
+  await expect(page.getByTestId('about-dialog')).toHaveCount(0);
 
   const zoomBeforeShiftPlus = await page.getByTestId('canvas-zoom-readout').textContent();
   await page.keyboard.press('Control+Shift+=');
