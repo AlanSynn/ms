@@ -118,6 +118,25 @@ const projectFoundryOverlayPoint = (point: Point | undefined, camera: FoundryCam
     };
 };
 
+const unprojectFoundryOverlayPoint = (point: Point, camera: FoundryCamera, size: FoundryOverlaySize = FOUNDRY_OVERLAY_SIZE, z = 0): Point | undefined => {
+    const width = Math.max(1, size.width);
+    const height = Math.max(1, size.height);
+    const cam = new THREE.PerspectiveCamera(38, width / height, 0.1, 100);
+    cam.position.copy(foundryCameraPosition(camera));
+    cam.lookAt(foundryCameraTarget(camera));
+    cam.updateMatrixWorld();
+    cam.updateProjectionMatrix();
+    const ndc = new THREE.Vector2((point.x / width) * 2 - 1, 1 - (point.y / height) * 2);
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(ndc, cam);
+    const dz = ray.ray.direction.z;
+    if (!Number.isFinite(dz) || Math.abs(dz) < 1e-5) return undefined;
+    const t = (z - ray.ray.origin.z) / dz;
+    if (!Number.isFinite(t)) return undefined;
+    const hit = ray.ray.origin.clone().add(ray.ray.direction.clone().multiplyScalar(t));
+    return { x: hit.x * 18 + 180, y: 120 - hit.y * 18 };
+};
+
 
 const foundryLayerGeometryContract = (type: MechanismType, label: string, renderKind: string) => {
     if (type === '4bar' && renderKind === 'linkage') {
@@ -2035,7 +2054,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const [showForces, setShowForces] = useState(true);
     const [showVelocity, setShowVelocity] = useState(true);
     const [showTrail, setShowTrail] = useState(false);
-    const [showPathPreview, setShowPathPreview] = useState(true);
+    const [showPathPreview, setShowPathPreview] = useState(false);
     const [showFoundryGrid, setShowFoundryGrid] = useState(true);
     const [showSensemaking, setShowSensemaking] = useState(false);
     const [foundryCamera, setFoundryCamera] = useState<FoundryCamera>({ ...FOUNDRY_VIEW_PRESETS.iso, preset: 'iso', pan: { x: 0, y: 0 } });
@@ -2045,6 +2064,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const [isZoomingFoundry, setIsZoomingFoundry] = useState(false);
     const [isPanningFoundry, setIsPanningFoundry] = useState(false);
     const foundryOrbitStartRef = useRef<{ pointerId: number; x: number; y: number; yaw: number; pitch: number; zoom: number; pan: Point; mode: 'orbit' | 'zoom' | 'pan' } | null>(null);
+    const foundryParamDragRef = useRef<{ pointerId: number; handle: 'B' | 'C' | 'D' } | null>(null);
     const targetReady = Boolean(selectedPart && selectedPath && selectedPath.enabled && selectedPath.points.length >= 3);
     const rawLanding = manualAnchor ?? selectedPath?.points[0] ?? (selectedPart ? bodyPartPivotScene(selectedPart, project.skeleton) : { x: foundry.anchorX ?? 0, y: foundry.anchorY ?? 0 });
     const landingBoard = sceneToBoard(rawLanding, project.settings.physicalKit);
@@ -2066,7 +2086,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
         () => buildFoundryPhysicsOverlay(landedFoundry, selectedSimulation, foundryPhase, project.settings, previewPoints),
         [landedFoundry, selectedSimulation, foundryPhase, project.settings, previewPoints]
     );
-    const { playhead, velocityRaw, forceRaw, velocityTip, forceTip, frictionTip, driveTip, velocityMagnitude, frictionMagnitude, forceMagnitude, constraintError, rule: physicsRule } = physicsOverlay;
+    const { playhead, playheadSource, velocityRaw, forceRaw, velocityTip, forceTip, frictionTip, driveTip, velocityMagnitude, frictionMagnitude, forceMagnitude, constraintError, rule: physicsRule } = physicsOverlay;
     const foundryOverlayZ = (fabricationRenderPlanForMechanism(landedFoundry).layers.at(-1)?.z ?? 0.22) + 0.34;
     const projectOverlay = (point: Point | undefined) => projectFoundryOverlayPoint(point, foundryCamera, foundryProjectionSize, foundryOverlayZ);
     const projectedPlayhead = projectOverlay(playhead);
@@ -2076,6 +2096,14 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const projectedDriveOrigin = projectOverlay(selectedSimulation.state.j1);
     const projectedDriveTip = projectOverlay(driveTip);
     const projectedAnchorMarker = projectFoundryOverlayPoint(anchorMarker, foundryCamera, foundryProjectionSize, 0);
+    const foundryParamHandles = landedFoundry.type === '4bar'
+        ? ([
+            { id: 'A', label: 'A fixed', point: selectedSimulation.state.p1, draggable: false },
+            { id: 'B', label: 'B crank', point: selectedSimulation.state.j1, draggable: true },
+            { id: 'C', label: 'C output', point: selectedSimulation.state.j2, draggable: true },
+            { id: 'D', label: 'D ground', point: selectedSimulation.state.p2, draggable: true }
+        ] as const).map(handle => ({ ...handle, screen: projectOverlay(handle.point) })).filter(handle => handle.screen)
+        : [];
     const hardBlocked = !targetReady || range.percentValid === 0 || !Number.isFinite(landing.x) || !Number.isFinite(landing.y);
     const foundryCameraLabel = foundryCamera.preset === 'custom' ? 'Custom view' : FOUNDRY_VIEW_PRESETS[foundryCamera.preset].label;
     const foundryPhaseDegrees = Math.round(((((foundryPhase / (Math.PI * 2)) % 1) + 1) % 1) * 360);
@@ -2179,6 +2207,65 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
         }
         setFoundry(normalizeGearMeshMechanism({ ...foundry, [key]: value }));
     };
+    const clampFoundryParam = (key: keyof MechanismConfig, value: number) => {
+        const param = PARAMS.find(item => item.key === key);
+        if (!param) return value;
+        return Math.max(param.min, Math.min(param.max, value));
+    };
+    const updateFoundryParams = (updates: Partial<MechanismConfig>) => {
+        setFoundry(normalizeGearMeshMechanism({ ...foundry, ...updates }));
+    };
+    const foundryPointFromOverlayEvent = (event: React.PointerEvent<SVGCircleElement>) => {
+        const svg = event.currentTarget.ownerSVGElement;
+        if (!svg) return undefined;
+        const rect = svg.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return undefined;
+        return unprojectFoundryOverlayPoint({
+            x: ((event.clientX - rect.left) / rect.width) * foundryProjectionSize.width,
+            y: ((event.clientY - rect.top) / rect.height) * foundryProjectionSize.height
+        }, foundryCamera, foundryProjectionSize, foundryOverlayZ);
+    };
+    const applyFoundryParamHandleDrag = (handle: 'B' | 'C' | 'D', point: Point) => {
+        const s = selectedSimulation.state;
+        const scale = Math.max(0.001, selectedSimulation.scale);
+        const sceneDistance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y) / scale;
+        if (handle === 'B') {
+            updateFoundryParam('crankLength', clampFoundryParam('crankLength', sceneDistance(s.p1, point)));
+            return;
+        }
+        if (handle === 'D') {
+            updateFoundryParams({
+                groundLength: clampFoundryParam('groundLength', sceneDistance(s.p1, point)),
+                groundAngle: Math.atan2(point.y - s.p1.y, point.x - s.p1.x) * 180 / Math.PI
+            });
+            return;
+        }
+        updateFoundryParams({
+            couplerLength: clampFoundryParam('couplerLength', sceneDistance(s.j1, point)),
+            rockerLength: clampFoundryParam('rockerLength', sceneDistance(s.p2, point))
+        });
+    };
+    const handleFoundryParamPointerDown = (handle: 'B' | 'C' | 'D') => (event: React.PointerEvent<SVGCircleElement>) => {
+        event.preventDefault();
+        event.stopPropagation();
+        foundryParamDragRef.current = { pointerId: event.pointerId, handle };
+        setFoundryPlaying(false);
+        event.currentTarget.setPointerCapture(event.pointerId);
+    };
+    const handleFoundryParamPointerMove = (event: React.PointerEvent<SVGCircleElement>) => {
+        const drag = foundryParamDragRef.current;
+        if (!drag || drag.pointerId !== event.pointerId) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const point = foundryPointFromOverlayEvent(event);
+        if (point) applyFoundryParamHandleDrag(drag.handle, point);
+    };
+    const handleFoundryParamPointerUp = (event: React.PointerEvent<SVGCircleElement>) => {
+        if (foundryParamDragRef.current?.pointerId === event.pointerId) {
+            foundryParamDragRef.current = null;
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+    };
     const keepCurrentAnchor = (mechanism: MechanismConfig): MechanismConfig => ({
         ...mechanism,
         anchorX: landing.x,
@@ -2205,6 +2292,9 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const makePackage = (): FoundryExportPackage => {
         const mechanismId = uid('mech');
         const state = calculateLinkage(landedFoundry, 0);
+        const physicalOutputPoint = landedFoundry.type === '4bar' || landedFoundry.type === '5bar' || landedFoundry.type === '6bar'
+            ? state.j2
+            : (state.effector ?? state.j2);
         const preset = foundry.presetId ?? 'balanced';
         return {
             id: `foundry-${Date.now().toString(36)}`,
@@ -2213,7 +2303,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             mechanismType: landedFoundry.type,
             parameters: { ...landedFoundry, id: mechanismId },
             pivot: landing,
-            outputPoint: state.isValid ? state.effector : undefined,
+            outputPoint: state.isValid ? physicalOutputPoint : undefined,
             generatedPath: preview,
             simulationSummary: feasibilityText,
             visual: { color: landedFoundry.color, scale: landedFoundry.transform?.scale ?? 1, constraintsVisible: true },
@@ -2326,8 +2416,8 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 onWheel={handleFoundryWheel}
                 onProjectionSizeChange={updateFoundryProjectionSize}
             >
-                <svg data-testid="foundry-preview-overlay" viewBox={`0 0 ${foundryProjectionSize.width} ${foundryProjectionSize.height}`} className="foundry-preview-overlay" aria-hidden="true" data-projection-aspect={(foundryProjectionSize.width / Math.max(1, foundryProjectionSize.height)).toFixed(3)}>
-                    {showForces && projectedPlayhead && projectedForceTip && projectedDriveOrigin && projectedDriveTip && <g data-testid="foundry-forces-overlay" className="physics-vector physics-force" data-projection="three-camera" data-origin-source="effector-joint" data-physics-rule={physicsRule} data-fx={forceRaw.x.toFixed(3)} data-fy={forceRaw.y.toFixed(3)} data-force-magnitude={forceMagnitude.toFixed(3)} data-friction-magnitude={frictionMagnitude.toFixed(3)} data-constraint-error={constraintError.toFixed(3)} stroke="#ef4444" strokeWidth="3" strokeLinecap="round">
+                <svg data-testid="foundry-preview-overlay" viewBox={`0 0 ${foundryProjectionSize.width} ${foundryProjectionSize.height}`} className="foundry-preview-overlay" aria-label="Foundry physical joint overlay" data-projection-aspect={(foundryProjectionSize.width / Math.max(1, foundryProjectionSize.height)).toFixed(3)}>
+                    {showForces && projectedPlayhead && projectedForceTip && projectedDriveOrigin && projectedDriveTip && <g data-testid="foundry-forces-overlay" className="physics-vector physics-force" data-projection="three-camera" data-origin-source={playheadSource} data-physics-rule={physicsRule} data-fx={forceRaw.x.toFixed(3)} data-fy={forceRaw.y.toFixed(3)} data-force-magnitude={forceMagnitude.toFixed(3)} data-friction-magnitude={frictionMagnitude.toFixed(3)} data-constraint-error={constraintError.toFixed(3)} stroke="#ef4444" strokeWidth="3" strokeLinecap="round">
                         <defs><marker id="foundry-arrow-force-overlay" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 7 3.5 L 0 7 z" fill="#ef4444" /></marker></defs>
                         <defs><marker id="foundry-arrow-friction-overlay" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 7 3.5 L 0 7 z" fill="#f59e0b" /></marker></defs>
                         <line data-testid="foundry-force-vector" x1={projectedPlayhead.x} y1={projectedPlayhead.y} x2={projectedForceTip.x} y2={projectedForceTip.y} markerEnd="url(#foundry-arrow-force-overlay)" />
@@ -2337,12 +2427,32 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                         <text x={projectedDriveTip.x + 5} y={projectedDriveTip.y + 9}>drive τ</text>
                         {projectedFrictionTip && <text x={projectedFrictionTip.x + 5} y={projectedFrictionTip.y + 9} fill="#92400e">μ</text>}
                     </g>}
-                    {showVelocity && projectedPlayhead && projectedVelocityTip && <g data-testid="foundry-velocity-overlay" className="physics-vector physics-velocity" data-projection="three-camera" data-origin-source="effector-joint" data-vx={velocityRaw.x.toFixed(3)} data-vy={velocityRaw.y.toFixed(3)} data-speed={velocityMagnitude.toFixed(3)} stroke="#10b981" strokeWidth="4" strokeLinecap="round">
+                    {showVelocity && projectedPlayhead && projectedVelocityTip && <g data-testid="foundry-velocity-overlay" className="physics-vector physics-velocity" data-projection="three-camera" data-origin-source={playheadSource} data-vx={velocityRaw.x.toFixed(3)} data-vy={velocityRaw.y.toFixed(3)} data-speed={velocityMagnitude.toFixed(3)} stroke="#10b981" strokeWidth="4" strokeLinecap="round">
                         <defs><marker id="foundry-arrow-velocity-overlay" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth"><path d="M 0 0 L 7 3.5 L 0 7 z" fill="#10b981" /></marker></defs>
                         <line data-testid="foundry-velocity-vector" x1={projectedPlayhead.x} y1={projectedPlayhead.y} x2={projectedVelocityTip.x} y2={projectedVelocityTip.y} markerEnd="url(#foundry-arrow-velocity-overlay)" />
                         <text x={projectedVelocityTip.x + 5} y={projectedVelocityTip.y - 3}>v</text>
                     </g>}
-                    {projectedPlayhead && <circle data-testid="foundry-playhead" data-projection="three-camera" cx={projectedPlayhead.x} cy={projectedPlayhead.y} r="7" fill="#f472b6" stroke="white" strokeWidth="3" />}
+                    {projectedPlayhead && <circle data-testid="foundry-playhead" data-projection="three-camera" data-origin-source={playheadSource} cx={projectedPlayhead.x} cy={projectedPlayhead.y} r="7" fill="#f472b6" stroke="white" strokeWidth="3" />}
+                    {foundryParamHandles.length > 0 && <g data-testid="foundry-param-handles" data-handle-contract="4bar-A-B-C-D" data-projection="three-camera">
+                        {foundryParamHandles.map(handle => <g key={handle.id} transform={`translate(${handle.screen!.x} ${handle.screen!.y})`} data-testid={`foundry-param-handle-group-${handle.id}`}>
+                            <circle
+                                data-testid={`foundry-param-handle-${handle.id}`}
+                                className={`foundry-param-handle ${handle.draggable ? 'is-draggable' : 'is-locked'}`}
+                                data-param-handle={handle.id}
+                                data-param-role={handle.label}
+                                data-draggable={String(handle.draggable)}
+                                r={handle.draggable ? 8 : 6}
+                                fill={handle.draggable ? '#ffffff' : '#e2e8f0'}
+                                stroke={handle.draggable ? '#4f46e5' : '#64748b'}
+                                strokeWidth="3"
+                                onPointerDown={handle.draggable ? handleFoundryParamPointerDown(handle.id as 'B' | 'C' | 'D') : undefined}
+                                onPointerMove={handle.draggable ? handleFoundryParamPointerMove : undefined}
+                                onPointerUp={handle.draggable ? handleFoundryParamPointerUp : undefined}
+                                onPointerCancel={handle.draggable ? handleFoundryParamPointerUp : undefined}
+                            />
+                            <text className="foundry-param-label" x="10" y="-8">{handle.id}</text>
+                        </g>)}
+                    </g>}
                     {(isPickingAnchor || manualAnchor) && projectedAnchorMarker && <g data-testid="foundry-anchor-marker" data-projection="three-camera" transform={`translate(${projectedAnchorMarker.x} ${projectedAnchorMarker.y})`}>
                         <circle r="8" fill="#ffffff" stroke="#8b5cf6" strokeWidth="3" />
                         <path d="M -13 0 H 13 M 0 -13 V 13" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" />
@@ -2937,6 +3047,23 @@ const foundryRenderedInventory = (type: MechanismType) => {
     return referenceHoleCount ? { ...fallback, holes: referenceHoleCount } : fallback;
 };
 
+const foundryAssemblyPinPoints = (type: MechanismType, state: ReturnType<typeof calculateLinkage>): Point[] => {
+    const compact = (points: Array<Point | undefined>) => points.filter(Boolean) as Point[];
+    if (type === '4bar') return compact([state.p1, state.j1, state.j2, state.p2]);
+    if (type === '5bar' || type === '6bar') return compact([state.p1, state.j1, state.j2, state.aux, state.p2]);
+    if (type === 'cam' || type === 'piston' || type === 'rack-pinion' || type === 'yoke' || type === 'quick-return') return compact([state.p1, state.j1, state.j2]);
+    if (type === 'planetary_gear') return compact([state.p1, state.p2, state.j2]);
+    return compact([state.p1, state.p2, state.j1, state.j2, state.aux, state.effector]);
+};
+
+const foundryAssemblyPinContract = (type: MechanismType) => {
+    if (type === '4bar') return 'reference-A-B-C-D-only';
+    if (type === '5bar' || type === '6bar') return 'reference-ground-chain-only';
+    if (type === 'cam' || type === 'piston' || type === 'rack-pinion' || type === 'yoke' || type === 'quick-return') return 'guided-output-only';
+    if (type === 'planetary_gear') return 'gear-centers-and-output-only';
+    return 'template-specific-output';
+};
+
 const disposeThreeObject = (object: THREE.Object3D) => object.traverse(child => {
     const mesh = child as THREE.Mesh;
     if (mesh.geometry && !mesh.geometry.userData.foundryCached) mesh.geometry.dispose();
@@ -2983,7 +3110,9 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         trail: showTrail
     }), [camera.preset, showForces, showGrid, showPathPreview, showTrail, showVelocity]);
     const spacerLayerCount = renderPlan.layers.filter(item => item.role === 'spacer').length;
-    const spacerRenderCount = spacerLayerCount * [simulation.state.p1, simulation.state.p2, simulation.state.j1, simulation.state.j2, simulation.state.aux, simulation.state.effector].filter(Boolean).length;
+    const assemblyPinPoints = foundryAssemblyPinPoints(mechanism.type, simulation.state);
+    const assemblyPinContract = foundryAssemblyPinContract(mechanism.type);
+    const spacerRenderCount = spacerLayerCount * assemblyPinPoints.length;
     const stackZGap = renderPlan.layers.length > 1 ? renderPlan.layers[1].z - renderPlan.layers[0].z : 0;
     useEffect(() => {
         let active = true;
@@ -3381,7 +3510,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         const angle = pinionRotation;
         const usesMeshedPitchCenters = ['gear', 'gear_linkage', 'planetary_gear', 'rack-pinion', 'cam'].includes(mechanism.type);
         if (!usesMeshedPitchCenters) addBar(s.p1, s.p2, 0, material.base, 3);
-        const layerPoints = [s.p1, s.p2, s.j1, s.j2, s.aux, s.effector].filter(Boolean) as Point[];
+        const layerPoints = foundryAssemblyPinPoints(mechanism.type, s);
         const renderLinkageLayer = (label: string, z: number, mat: THREE.Material) => {
             if (mechanism.type === 'gear') return;
             if (mechanism.type === 'gear_linkage' && /L4|linkage/i.test(label)) addBar(s.j2, s.effector, z, mat, 4);
@@ -3432,7 +3561,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         });
         const zBackClip = renderPlan.layers.find(item => item.role === 'clip')?.z ?? 0.22;
         const zPin = (renderPlan.layers.at(-1)?.z ?? 0.22) + 0.34;
-        [s.p1, s.p2, s.j1, s.j2, s.aux, s.effector].filter(Boolean).forEach(point => {
+        layerPoints.forEach(point => {
             const p = to3(point as Point, zPin);
             const pin = new THREE.Mesh(cachedGeometry(`pin:${holeR.toFixed(3)}:${Math.max(0.55, zPin - zBackClip + 0.12).toFixed(3)}`, () => new THREE.CylinderGeometry(holeR * 0.8, holeR * 0.8, Math.max(0.55, zPin - zBackClip + 0.12), 20)), material.dark);
             pin.rotation.x = Math.PI / 2;
@@ -3532,6 +3661,8 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-three-spacer-mm={`${FABRICATION_SPACER_SPEC.outerDiameterMm}x${FABRICATION_SPACER_SPEC.innerDiameterMm}`}
             data-three-spacer-layers={spacerLayerCount}
             data-three-spacer-render-count={spacerRenderCount}
+            data-three-physical-pin-count={assemblyPinPoints.length}
+            data-three-physical-pin-contract={assemblyPinContract}
             data-path-preview={showPathPreview ? 'shown' : 'hidden'}
             data-trail={showTrail ? 'shown' : 'hidden'}
             data-forces={showForces ? 'shown' : 'hidden'}

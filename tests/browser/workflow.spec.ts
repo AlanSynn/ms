@@ -1202,7 +1202,13 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await expect(page.getByTestId('foundry-friction-vector')).toBeVisible();
   await expect(page.getByTestId('foundry-velocity-overlay'), 'Velocity vector is projected from the same Three.js camera as the mechanism pins').toHaveAttribute('data-projection', 'three-camera');
   await expect(page.getByTestId('foundry-forces-overlay'), 'Force vectors are projected from the same Three.js camera as the mechanism pins').toHaveAttribute('data-projection', 'three-camera');
-  await expect(page.getByTestId('foundry-playhead'), 'The live playhead is drawn at the projected effector joint, not raw path coordinates').toHaveAttribute('data-projection', 'three-camera');
+  await expect(page.getByTestId('foundry-velocity-overlay'), 'Four-bar velocity originates from C, the real coupler/output joint, not a floating coupler trace point').toHaveAttribute('data-origin-source', 'coupler-output-joint');
+  await expect(page.getByTestId('foundry-forces-overlay'), 'Four-bar force originates from C, the real coupler/output joint, not a floating coupler trace point').toHaveAttribute('data-origin-source', 'coupler-output-joint');
+  await expect(page.getByTestId('foundry-playhead'), 'The live playhead is drawn at the projected physical output joint, not raw path coordinates').toHaveAttribute('data-projection', 'three-camera');
+  await expect(page.getByTestId('foundry-playhead')).toHaveAttribute('data-origin-source', 'coupler-output-joint');
+  await expect(threeScene, 'Four-bar hardware pins are only A/B/C/D reference joints; the generated trace point must not get floating clips/spacers').toHaveAttribute('data-three-physical-pin-contract', 'reference-A-B-C-D-only');
+  await expect(threeScene).toHaveAttribute('data-three-physical-pin-count', '4');
+  await expect(threeScene, 'Generated trace/path is hidden until explicitly requested so it does not read as a floating mechanism part').toHaveAttribute('data-path-preview', 'hidden');
   await expect(page.getByTestId('foundry-physics-readout')).toContainText('Kinematic estimate');
   await expect(page.getByTestId('foundry-physics-readout')).toContainText('μ');
   await expect(page.getByTestId('foundry-physics-readout')).toContainText('constraint err');
@@ -1247,6 +1253,17 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await expect(page.getByTestId('foundry-anchor-marker'), 'Default sandbox keeps non-mechanism markers hidden').toHaveCount(0);
   await expect(page.getByLabel('Foundry mechanism type')).toBeHidden();
   await page.getByText('Mechanism options').click();
+  await expect(page.getByTestId('foundry-param-handles'), '4bar exposes direct A/B/C/D joint handles in the WebGL overlay').toHaveAttribute('data-handle-contract', '4bar-A-B-C-D');
+  await expect(page.getByTestId('foundry-param-handle-A')).toHaveAttribute('data-draggable', 'false');
+  await expect(page.getByTestId('foundry-param-handle-D')).toHaveAttribute('data-draggable', 'true');
+  const groundBeforeHandleDrag = Number(await page.getByLabel('ground number', { exact: true }).inputValue());
+  const groundHandleBox = await page.getByTestId('foundry-param-handle-D').boundingBox();
+  expect(groundHandleBox, 'ground handle is visible for direct parametric editing').toBeTruthy();
+  await page.mouse.move(groundHandleBox!.x + groundHandleBox!.width / 2, groundHandleBox!.y + groundHandleBox!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(groundHandleBox!.x + groundHandleBox!.width / 2 + 72, groundHandleBox!.y + groundHandleBox!.height / 2 + 18);
+  await page.mouse.up();
+  await expect.poll(async () => Number(await page.getByLabel('ground number', { exact: true }).inputValue()), { message: 'dragging the D handle updates the physical ground length parameter' }).not.toBe(groundBeforeHandleDrag);
 
   const foundryPhysicalMarkers: Record<string, Array<[string, number]>> = {
     '4bar': [['data-three-part-count', 5], ['data-three-hole-count', 11]],
@@ -1270,6 +1287,8 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
     expect(await threeScene.getAttribute('data-three-rendered-layer-z'), `${type} rendered z order matches fabrication stack z order`).toBe(await threeScene.getAttribute('data-three-stack-z'));
     if (type === '4bar') {
       await expect(threeScene, '4bar foundry geometry keeps A-B/B-C/C-D topology from mechanism-reference instead of drawing a floating output rod').toHaveAttribute('data-three-geometry-contract', /Input L2 linkage:A-B.*Coupler L4 linkage:B-C.*Output L2 linkage:C-D/);
+      await expect(threeScene, '4bar keeps only physical A/B/C/D pin hardware in the 3D scene').toHaveAttribute('data-three-physical-pin-contract', 'reference-A-B-C-D-only');
+      await expect(threeScene).toHaveAttribute('data-three-physical-pin-count', '4');
     }
     expect(Number(await threeScene.getAttribute('data-three-spacer-z-gap')), `${type} foundry preview has positive z separation for spacers`).toBeGreaterThan(0);
     await expect(page.getByTestId('foundry-forces-overlay'), `${type} keeps live force vectors visible`).toHaveAttribute('data-physics-rule', /force|torque|velocity|acceleration|reaction/);
@@ -1468,6 +1487,8 @@ test('Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking'
 
   await expect(page.getByTestId('foundry-toolbar')).toBeVisible();
   const threeScene = page.getByTestId('foundry-camera-rig');
+  await expect(threeScene).toHaveAttribute('data-path-preview', 'hidden');
+  await page.getByRole('button', { name: 'Path Preview' }).click();
   await expect(threeScene).toHaveAttribute('data-path-preview', 'shown');
   await page.getByRole('button', { name: 'Path Preview' }).click();
   await expect(threeScene).toHaveAttribute('data-path-preview', 'hidden');
@@ -1510,7 +1531,7 @@ test('Mechanism Foundry supports CAD-style 3D camera presets and drag orbit', as
   await expect(rig).toHaveAttribute('data-camera-preset', 'iso');
   await expect(rig).toHaveAttribute('data-viewer-contract', 'shared-viewer3d:v1');
   await expect(rig).toHaveAttribute('data-layer-grid', 'shown');
-  await expect(rig).toHaveAttribute('data-layer-paths', 'shown');
+  await expect(rig).toHaveAttribute('data-layer-paths', 'hidden');
   await expect(rig).toHaveAttribute('data-camera-zoom', '0.820');
   await expect(rig).toHaveAttribute('data-anchor-pick-mode', 'three-raycaster-plane');
   await expect(page.getByTestId('foundry-camera-readout')).toContainText('3D Isometric');
@@ -1608,8 +1629,9 @@ test('Mechanism Foundry supports CAD-style 3D camera presets and drag orbit', as
   await page.getByTestId('foundry-toggle-grid').click();
   await expect(rig).toHaveAttribute('data-layer-grid', 'hidden');
   await page.getByTestId('foundry-toggle-paths').click();
-  await expect(rig).toHaveAttribute('data-layer-paths', 'hidden');
+  await expect(rig).toHaveAttribute('data-layer-paths', 'shown');
   await page.getByTestId('foundry-toggle-paths').click();
+  await expect(rig).toHaveAttribute('data-layer-paths', 'hidden');
   await page.getByTestId('foundry-toggle-grid').click();
   await expect(rig).toHaveAttribute('data-layer-grid', 'shown');
   await expect(rig).not.toHaveAttribute('data-camera-yaw', isoYaw ?? '');

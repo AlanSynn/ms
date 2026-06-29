@@ -107,6 +107,7 @@ export interface FoundryPhysicsSimulation {
 export interface FoundryPhysicsOverlay {
   playIndex: number;
   playhead?: Point;
+  playheadSource: 'coupler-output-joint' | 'guided-output-joint' | 'moving-output-joint' | 'effector-point' | 'path-sample';
   velocityRaw: Point;
   accelerationRaw: Point;
   forceRaw: Point;
@@ -142,6 +143,24 @@ const ensureVisibleVectorTip = (origin: Point, tip: Point): Point => ({
 const normalizedPhase = (phaseRad: number) => ((((phaseRad / (Math.PI * 2)) % 1) + 1) % 1);
 
 const fittedDistance = (a?: Point, b?: Point) => a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+
+const foundryPhysicalPlayhead = (
+  mechanism: MechanismConfig,
+  simulation: FoundryPhysicsSimulation,
+  fallback?: Point
+): { point?: Point; source: FoundryPhysicsOverlay['playheadSource'] } => {
+  const s = simulation.state;
+  if (mechanism.type === '4bar' || mechanism.type === '5bar' || mechanism.type === '6bar') {
+    return { point: s.j2 ?? fallback, source: 'coupler-output-joint' };
+  }
+  if (mechanism.type === 'cam' || mechanism.type === 'piston' || mechanism.type === 'rack-pinion' || mechanism.type === 'yoke' || mechanism.type === 'quick-return') {
+    return { point: s.j2 ?? s.effector ?? fallback, source: 'guided-output-joint' };
+  }
+  if (mechanism.type === 'gear' || mechanism.type === 'gear_linkage' || mechanism.type === 'planetary_gear') {
+    return { point: s.j2 ?? s.effector ?? fallback, source: 'moving-output-joint' };
+  }
+  return s.effector ? { point: s.effector, source: 'effector-point' } : { point: fallback, source: 'path-sample' };
+};
 
 const foundryConstraintError = (mechanism: MechanismConfig, simulation: FoundryPhysicsSimulation): number => {
   const s = simulation.state;
@@ -183,10 +202,12 @@ export const buildFoundryPhysicsOverlay = (
 ): FoundryPhysicsOverlay => {
   const previewPoints = simulation.pathPoints.length ? simulation.pathPoints : fallbackPathPoints;
   const playIndex = previewPoints.length ? Math.floor(normalizedPhase(phaseRad) * previewPoints.length) : 0;
-  const playhead = simulation.state.effector ?? previewPoints[playIndex];
-  const pointAt = (index: number) => previewPoints.length ? previewPoints[((index % previewPoints.length) + previewPoints.length) % previewPoints.length] : playhead;
-  const previousPoint = pointAt(playIndex - 1) ?? playhead ?? { x: 0, y: 0 };
-  const nextPoint = pointAt(playIndex + 1) ?? playhead ?? { x: 0, y: 0 };
+  const fallbackPlayhead = previewPoints[playIndex];
+  const { point: playhead, source: playheadSource } = foundryPhysicalPlayhead(mechanism, simulation, fallbackPlayhead);
+  const motionSample = simulation.state.effector ?? fallbackPlayhead ?? playhead;
+  const pointAt = (index: number) => previewPoints.length ? previewPoints[((index % previewPoints.length) + previewPoints.length) % previewPoints.length] : motionSample;
+  const previousPoint = pointAt(playIndex - 1) ?? motionSample ?? playhead ?? { x: 0, y: 0 };
+  const nextPoint = pointAt(playIndex + 1) ?? motionSample ?? playhead ?? { x: 0, y: 0 };
   const stepMs = 16.667;
   const centerSum = previewPoints.length
     ? previewPoints.reduce((sum, point) => ({ x: sum.x + point.x, y: sum.y + point.y }), { x: 0, y: 0 })
@@ -195,7 +216,7 @@ export const buildFoundryPhysicsOverlay = (
   const frictionCoefficient = finite(settings.simulationFriction, 0.18);
   const massKg = finite(settings.simulationMassKg, 1);
   const velocityRaw = velocityBetween(previousPoint, nextPoint, stepMs);
-  const accelerationRaw = forceFromAcceleration(previousPoint, playhead ?? { x: 0, y: 0 }, nextPoint, stepMs, massKg);
+  const accelerationRaw = forceFromAcceleration(previousPoint, motionSample ?? playhead ?? { x: 0, y: 0 }, nextPoint, stepMs, massKg);
   const frictionRaw = frictionForce(velocityRaw, massKg, frictionCoefficient);
   const forceRaw = add(accelerationRaw, frictionRaw);
   const driveRaw = {
@@ -217,6 +238,7 @@ export const buildFoundryPhysicsOverlay = (
   return {
     playIndex,
     playhead,
+    playheadSource,
     velocityRaw: cleanPoint(velocityRaw),
     accelerationRaw: cleanPoint(accelerationRaw),
     forceRaw: cleanPoint(forceRaw),
