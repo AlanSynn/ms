@@ -1308,6 +1308,9 @@ test('Character edit drawer mutates body layers and skeleton joints into design 
   await page.goto('/');
   await openWavingArmTemplate(page);
   await page.getByText('Rig setup').click();
+  const rigDrawer = page.getByTestId('rig-structure-drawer');
+  await expect(rigDrawer.getByRole('button', { name: /^Add layer$/ })).toHaveCount(1);
+  await expect(rigDrawer.getByRole('button', { name: /Add body part/i })).toHaveCount(0);
 
   const selectedPart = page.getByLabel('Selected body part');
   await selectedPart.selectOption('right_arm_lower');

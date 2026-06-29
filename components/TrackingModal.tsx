@@ -216,12 +216,12 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
             return;
         }
 
-        // Simulate file input change event
-        const fakeEvent = {
+        // Reuse the same file-selection path for drop and picker input.
+        const syntheticEvent = {
             target: { files: [file] }
         } as unknown as React.ChangeEvent<HTMLInputElement>;
 
-        await handleFileSelect(fakeEvent);
+        await handleFileSelect(syntheticEvent);
     };
 
     // Drag and drop handlers

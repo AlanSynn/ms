@@ -1275,7 +1275,7 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
                 <div className="compact-workflow-row" data-testid="character-workflow-summary">
                     <span>{editableParts.length} parts</span>
                     <span>{Object.keys(project.skeleton?.joints ?? {}).length} joints</span>
-                    <span>{reviewedProject.partOrder.some(id => Boolean(reviewedProject.parts[id]?.textureUrl)) ? 'art on plates' : 'placeholder plates'}</span>
+                    <span>{reviewedProject.partOrder.some(id => Boolean(reviewedProject.parts[id]?.textureUrl)) ? 'art on plates' : 'gray plates'}</span>
                 </div>
                 <div className="mt-4 grid gap-2">
                     <button className="btn-primary" aria-label="Open Getting Started" onClick={onOpenGettingStarted}><Sparkles size={16}/> Starters</button>
@@ -1565,7 +1565,6 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
                             <h4 className="section-title">Rig</h4>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                            <button className="btn-secondary" onClick={addLayer}><Plus size={16}/> Add body part</button>
                             <button className="btn-secondary" onClick={addLayer}><Plus size={16}/> Add layer</button>
                             {selectedPart && <button className="btn-secondary" disabled={selectedPart.locked} onClick={() => dispatch({ type: 'delete_part', partId: selectedPart.id })}><Trash2 size={16}/> Remove layer</button>}
                             <button className="btn-secondary" disabled={!selectedPart || pathLocked} onClick={addJointAtIkHandle}><Plus size={16}/> New IK handle</button>

@@ -170,6 +170,8 @@ assert(!visibleUiSource.includes('Choose Save Folder'), 'browser output-folder p
 assert(!visibleUiSource.includes('CameraCaptureDialog'), 'browser hardware camera dialog component is removed');
 assert(!visibleUiSource.includes('getUserMedia'), 'browser hardware camera capture API is not used by the app UI');
 [
+  'Add body part',
+  'placeholder plates',
   'Mechanism Gallery',
   'Selected part detail',
   'Skeleton anchors',
