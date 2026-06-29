@@ -1,7 +1,7 @@
 # Classroom Field Support Plan
 
-Status: planned from classroom field notes  
-Last refreshed: 2026-06-29  
+Status: active implementation pass
+Last refreshed: 2026-06-29
 Scope: web-first classroom entry, guided templates, sensemaking, reset recovery, blueprint, and assembly guide.
 
 ## Field-study signal
@@ -36,6 +36,18 @@ Key notes translated into product constraints:
 | Blueprint | Printable cut sheet and export package. | Classroom language and teacher checklist need clearer web-first route; paper should be backup. |
 | Assembly | Dedicated Assembly tab and animated stepper exist. | Needs full end-to-end figure + mechanism build: body parts, spacers, board mounting, output binding, final test. |
 | Classroom workflow | Local snapshot/project import/export exists. | Need teacher pack story: share package → students edit locally → export snapshot/blueprint/assembly. |
+
+## Implementation checkpoint — 2026-06-29
+
+Current pass uses existing ProjectState/command/test seams only; no new dependency or server layer.
+
+- `CLASSROOM_LESSONS` is the lesson catalog. First real lesson: `Waving arm / 팔 흔들기`.
+- Lesson entry creates real humanoid, right-hand path, selected four-bar, generated motion samples, and reset metadata.
+- Blank humanoid starter remains clean with no hidden mechanism.
+- `Reset Lesson` restores the active lesson baseline while preserving browser app settings.
+- Foundry `Reset` now clears manual anchor/picking/playback/overlay state and rebuilds a finite preview from the selected mechanism type.
+- Left pane checklist is derived from current `ProjectState`; it never owns separate tutorial state.
+- About/deployment docs state static web, no account, no upload, local ONNX, browser autosave, and local downloads.
 
 ## Product requirements
 

@@ -7,6 +7,7 @@ import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT } from '../utils/viewport';
 import { STAGE_PANE_NAV_ITEMS, StagePaneNavIcon } from './stages/stageLayout';
 
 export type StarterImageTemplate = { id: string; label: string; fileName: string; description: string; url: string };
+export type ClassroomLessonTile = { id: string; label: string; description: string; actionLabel: string };
 
 export const SHARED_PLAYBACK_STAGES: AppStage[] = ['path', 'design'];
 
@@ -135,13 +136,14 @@ export const AboutDialog = ({ onClose }: { onClose: () => void }) => <div classN
             <div>
                 <div className="accent-label">About</div>
                 <h3 id="about-title">MotionSmith</h3>
-                <p className="mt-2 text-sm font-bold text-slate-500">Local ONNX character import, shared canvas, mechanism simulation, and blueprint export.</p>
+                <p className="mt-2 text-sm font-bold text-slate-500">Static web workbench: no account, no upload, Local ONNX, local downloads.</p>
             </div>
             <button className="btn-secondary" onClick={onClose}>Close</button>
         </div>
         <div className="shortcut-help-grid">
-            <div className="shortcut-help-row"><span>Version</span><kbd>0.1.0</kbd></div>
-            <div className="shortcut-help-row"><span>Runtime</span><kbd>browser</kbd></div>
+            <div className="shortcut-help-row"><span>Version</span><kbd>0.0.2</kbd></div>
+            <div className="shortcut-help-row"><span>Release</span><kbd>/ms/ static web</kbd></div>
+            <div className="shortcut-help-row"><span>Data</span><kbd>browser autosave · files</kbd></div>
             <div className="shortcut-help-row"><span>Project</span><kbd>MotionSmith</kbd></div>
         </div>
     </section>
@@ -281,10 +283,12 @@ export const WelcomeDialog = ({ onClose }: { onClose: (hideNextTime?: boolean) =
     </div>;
 };
 
-export const GettingStartedDialog = ({ starterTemplates, replaceCharacter, setReplaceCharacter, onStarterImage, onSample, onPackage, onProcess, onImport, onClose }: {
+export const GettingStartedDialog = ({ lessonTemplates, starterTemplates, replaceCharacter, setReplaceCharacter, onLesson, onStarterImage, onSample, onPackage, onProcess, onImport, onClose }: {
+    lessonTemplates: readonly ClassroomLessonTile[];
     starterTemplates: StarterImageTemplate[];
     replaceCharacter: boolean;
     setReplaceCharacter: (v: boolean) => void;
+    onLesson: (lessonId: string) => void;
     onStarterImage: (template: StarterImageTemplate) => void;
     onSample: () => void;
     onPackage: (files: FileList | File[]) => void;
@@ -333,6 +337,14 @@ export const GettingStartedDialog = ({ starterTemplates, replaceCharacter, setRe
                 <button type="button" className="btn-secondary" onClick={onClose}>Skip to editor</button>
             </div>
             <div className="template-gallery" data-testid="getting-started-gallery">
+                {lessonTemplates.map(template => (
+                    <button key={template.id} type="button" className="template-tile primary" data-testid={`lesson-template-${template.id}`} onClick={() => onLesson(template.id)}>
+                        <span className="template-kicker">Lesson</span>
+                        <strong>{template.label}</strong>
+                        <span>{template.description}</span>
+                        <b><Sparkles size={16}/> {template.actionLabel}</b>
+                    </button>
+                ))}
                 <button type="button" className="template-tile primary" onClick={onSample}>
                     <span className="template-kicker">Start clean</span>
                     <strong>Humanoid starter</strong>

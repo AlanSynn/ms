@@ -27,8 +27,11 @@ import { animationDeltaRadians, calculateLinkage, defaultCamProfileSamples, gene
 import { evaluateFitness, generateSmartConfig, mutateConfig } from './utils/optimizer';
 import {
     applyProjectAction,
+    CLASSROOM_LESSONS,
+    classroomLessonById,
     createDefaultMechanism,
     createEmptyProject,
+    createLessonProject,
     createProjectFromProcessed,
     createSampleProject,
     downloadText,
@@ -38,6 +41,7 @@ import {
     mechanismWithGeneratedPath,
     projectSelfCheck,
     replaceCharacterProject,
+    resetProjectToLessonBaseline,
     serializeProject,
     uid,
     validatePath
@@ -657,6 +661,42 @@ const App: React.FC = () => {
         setShowGettingStarted(false);
         setStage('character');
     };
+    const foundryPreviewFromProject = (lessonProject: ProjectState) => {
+        const mechanism = lessonProject.mechanisms[0];
+        return mechanism ? { ...mechanism, id: 'foundry-preview' } : createDefaultMechanism('4bar', 'foundry-preview');
+    };
+    const openLessonTemplate = (lessonId: string) => {
+        const lesson = classroomLessonById(lessonId);
+        if (!lesson) {
+            setCommandStatus('Lesson not available');
+            return;
+        }
+        const lessonProject = createLessonProject(lesson.id);
+        setPendingCharacter(null);
+        setProject(lessonProject, { resetHistory: true });
+        setFoundry(foundryPreviewFromProject(lessonProject));
+        setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
+        setShowWelcome(false);
+        setShowGettingStarted(false);
+        setStage(lesson.startStage);
+        setCommandStatus(`Opened ${lesson.label}`);
+    };
+    const resetLesson = () => {
+        const lesson = classroomLessonById(project.metadata.classroomLessonId);
+        const resetProject = resetProjectToLessonBaseline(project);
+        if (!lesson || !resetProject) {
+            setCommandStatus('No lesson baseline to reset');
+            return;
+        }
+        setPendingCharacter(null);
+        setProject(resetProject, { resetHistory: true });
+        setFoundry(foundryPreviewFromProject(resetProject));
+        setAngle(0);
+        setIsPlaying(false);
+        setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
+        setStage(lesson.startStage);
+        setCommandStatus(`Reset ${lesson.label}`);
+    };
     const recoverAutosave = () => {
         try {
             const stored = readStorageWithLegacy(STORAGE_KEYS.autosave, LEGACY_STORAGE_KEYS.autosave);
@@ -754,6 +794,7 @@ const App: React.FC = () => {
         'project.saveAs': saveProjectAs,
         'project.exportCopy': exportProjectCopy,
         'project.exportBlueprint': () => goStage('blueprint'),
+        'project.resetLesson': resetLesson,
         'edit.undo': undoProject,
         'edit.redo': redoProject,
         'view.zoomIn': () => zoomCanvas(1.2),
@@ -904,7 +945,7 @@ const App: React.FC = () => {
                 </section>
             </div>
             {showWelcome && <WelcomeDialog onClose={closeWelcome} />}
-            {!showWelcome && showGettingStarted && <GettingStartedDialog starterTemplates={STARTER_IMAGE_TEMPLATES} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onStarterImage={template => { setShowGettingStarted(false); loadStarterImage(template); }} onSample={() => { setPendingCharacter(null); setProject(createSampleProject(), { resetHistory: true }); setShowWelcome(false); setShowGettingStarted(false); setStage('character'); }} onPackage={files => { setShowGettingStarted(false); importCharacterPackage(files); }} onProcess={file => { setShowGettingStarted(false); runWebOnnx(file); }} onImport={file => { setShowGettingStarted(false); importProject(file); }} onClose={closeGettingStarted} />}
+            {!showWelcome && showGettingStarted && <GettingStartedDialog lessonTemplates={CLASSROOM_LESSONS} starterTemplates={STARTER_IMAGE_TEMPLATES} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onLesson={openLessonTemplate} onStarterImage={template => { setShowGettingStarted(false); loadStarterImage(template); }} onSample={() => { setPendingCharacter(null); setProject(createSampleProject(), { resetHistory: true }); setShowWelcome(false); setShowGettingStarted(false); setStage('character'); }} onPackage={files => { setShowGettingStarted(false); importCharacterPackage(files); }} onProcess={file => { setShowGettingStarted(false); runWebOnnx(file); }} onImport={file => { setShowGettingStarted(false); importProject(file); }} onClose={closeGettingStarted} />}
             {showShortcuts && <ShortcutHelpDialog onClose={() => setShowShortcuts(false)} />}
             {showAbout && <AboutDialog onClose={() => setShowAbout(false)} />}
             <MechanismRecommendationSheet isOpen={showRecommendations} project={project} selectedPart={selectedPart} selectedPath={selectedPath} onClose={() => setShowRecommendations(false)} onApply={mechanism => { dispatch({ type: 'upsert_mechanism', mechanism }); setShowRecommendations(false); setStage('design'); }} />
@@ -2272,6 +2313,18 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
         transform: { ...(mechanism.transform ?? { x: landing.x, y: landing.y, rotation: mechanism.groundAngle ?? 0, scale: 1 }), x: landing.x, y: landing.y }
     });
     const setAnchoredFoundry = (mechanism: MechanismConfig) => setFoundry(normalizeGearMeshMechanism(keepCurrentAnchor(mechanism)));
+    const resetFoundryPreview = () => {
+        setFoundryPlaying(false);
+        setFoundryPhase(0);
+        setManualAnchor(null);
+        setIsPickingAnchor(false);
+        setShowForces(true);
+        setShowVelocity(true);
+        setShowTrail(false);
+        setShowPathPreview(false);
+        setFoundryCamera({ ...FOUNDRY_VIEW_PRESETS.iso, preset: 'iso', pan: { x: 0, y: 0 } });
+        setAnchoredFoundry({ ...createDefaultMechanism(foundry.type, 'foundry-preview'), color: foundry.color, presetId: 'balanced', recommendation: FOUNDRY_PRESETS.balanced.recommendation });
+    };
     useEffect(() => {
         if (!foundryPlaying) return;
         let frame = 0;
@@ -2378,7 +2431,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             </div>
             <div className="foundry-playback-hud foundry-toolbar" data-testid="foundry-toolbar" aria-label="Foundry playback controls">
                 <button className={`btn-secondary ${foundryPlaying ? 'active' : ''}`} onClick={() => setFoundryPlaying(!foundryPlaying)}>{foundryPlaying ? 'Pause' : 'Play'}</button>
-                <button className="btn-secondary" onClick={() => { setFoundryPhase(0); setFoundryPlaying(false); }}>Reset</button>
+                <button className="btn-secondary" onClick={resetFoundryPreview}>Reset</button>
                 <input aria-label="Foundry phase" type="range" min="0" max="360" value={foundryPhaseDegrees} onChange={event => { setFoundryPlaying(false); setFoundryPhase(Number(event.target.value) * Math.PI / 180); }} />
                 <span>{foundryPhaseDegrees}°</span>
             </div>

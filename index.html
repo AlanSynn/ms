@@ -123,6 +123,9 @@
       .canvas-workspace { position: relative; background: transparent; border: 0; border-radius: 0; box-shadow: none; overflow: hidden; }
       .canvas-workspace > .canvas-surface { border-radius: 0; border-color: transparent; background: transparent; box-shadow: none; }
       .stage-workflow-block, .stage-nav-compact { display: grid; gap: .75rem; }
+      .classroom-checklist { display: flex; flex-wrap: wrap; gap: .35rem; padding: .55rem; border: 1px solid var(--ms-line); border-radius: 1rem; background: rgba(255,255,255,.72); }
+      .classroom-checklist span { display: inline-flex; align-items: center; min-height: 1.55rem; border: 1px solid var(--ms-line); border-radius: 999px; color: var(--ms-muted); background: #fff; padding: .28rem .52rem; font-size: .68rem; font-weight: 720; }
+      .classroom-checklist span.done { border-color: rgba(16,185,129,.32); color: #047857; background: rgba(16,185,129,.10); }
       .stage-player-row { position: absolute; left: calc(var(--ms-left-pane-width) + var(--ms-stage-gap)); right: calc(var(--ms-right-pane-width) + var(--ms-stage-gap)); bottom: .85rem; z-index: 45; display: flex; justify-content: center; pointer-events: none; }
       .stage-nav-compact { display: none; border-top: 1px solid var(--ms-line); border-bottom: 1px solid var(--ms-line); padding: .9rem 0; }
       .stage-option-list { display: grid; gap: .4rem; margin-top: 1rem; }

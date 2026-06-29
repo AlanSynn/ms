@@ -11,9 +11,12 @@ This file is the project-level rulebook for future agents. If older docs or UI c
 MotionSmith is a tinkerable workbench, not a reading-heavy tutorial. Users should learn the workflow by touching the character, joints, paths, mechanisms, and playback controls directly.
 
 - Product scope is local-first browser/Tauri. Do not add backend/API server, cloud DB, auth/RBAC, billing, team accounts, realtime collaboration, hosted asset storage, server inference, or server export jobs unless the user explicitly reopens server scope.
+- Classroom web release is the static GitHub Pages app at `https://alansynn.com/ms/` with `VITE_BASE_PATH=/ms/`; do not add accounts, uploads, rosters, dashboards, analytics, or cloud sync language for classroom support.
 - When a full-stack feature gap needs a server, document it as excluded local-first scope instead of building a fake client-only substitute.
 - Local persistence must be named honestly: browser autosave, local snapshot download, portable project copy. Do not label downloads as cloud save/sync.
 - AI/inference stays browser-local ONNX. If model caching or local inference fails, use starter/package workflows and show status; do not mock remote AI.
+- Guided classroom lesson templates must create real serializable `ProjectState` data. Blank starters stay mechanism-free; lessons may include paths/mechanisms only when they are editable and exportable.
+- `Reset Lesson` must restore a known-good lesson baseline while preserving app settings; Foundry reset must restore finite mechanism preview state, not just stop playback.
 - Prefer direct manipulation over explanatory prose: draw on the canvas, drag joints, scrub playback, rotate the view, tune sliders, and see the result immediately.
 - Remove or collapse text that does not unlock an action, safety warning, blocker, or fabrication decision.
 - Keep the center workbench visually quiet: no instruction essays, no scrollable copy panels, no sidecar explainers, no fake preview cards inside the canvas.
@@ -32,6 +35,7 @@ The editor follows a Canva/CAD-like shell with one shared scene state.
 - Do not let right-pane scrolling move the center canvas.
 - Do not reset viewport, selection, path, mechanism, or animation state when switching tabs.
 - All tabs and exports operate on canonical `ProjectState`; no tab may keep a separate mock scene.
+- Blueprint owns build files and printable/export artifacts. Assembly owns animated step-by-step build/teacher-pack guidance. Do not merge these roles into one reading-heavy panel.
 
 ## 3. Interaction contract
 

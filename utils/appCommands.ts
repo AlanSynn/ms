@@ -20,6 +20,7 @@ const APP_COMMAND_DEFINITIONS = [
   { id: 'project.saveAs', menu: 'file', label: 'Download Snapshot As…', description: 'Download a timestamped local project copy.', shortcuts: ['Mod+Shift+S'] },
   { id: 'project.exportCopy', menu: 'file', label: 'Download Portable Copy', description: 'Download a portable local project copy.', shortcuts: ['Mod+Alt+S'] },
   { id: 'project.exportBlueprint', menu: 'file', label: 'Export Blueprint Package', description: 'Open the blueprint export workflow.', shortcuts: ['Mod+E'] },
+  { id: 'project.resetLesson', menu: 'file', label: 'Reset Lesson', description: 'Restore the current classroom lesson baseline.', testId: 'command-reset-lesson' },
 
   { id: 'edit.undo', menu: 'edit', label: 'Back (Undo)', description: 'Undo the last project edit.', shortcuts: ['Mod+Z'] },
   { id: 'edit.redo', menu: 'edit', label: 'Forward (Redo)', description: 'Redo the last undone project edit.', shortcuts: ['Mod+Shift+Z', 'Mod+Y'] },
@@ -56,7 +57,7 @@ export type AppMenuGroup = {
 };
 
 export const APP_MENU_GROUPS = [
-  { id: 'file', label: 'File', commandIds: ['project.new', 'project.open', 'project.recoverAutosave', 'project.save', 'project.saveAs', 'project.exportCopy', 'project.exportBlueprint'] },
+  { id: 'file', label: 'File', commandIds: ['project.new', 'project.open', 'project.recoverAutosave', 'project.save', 'project.saveAs', 'project.exportCopy', 'project.exportBlueprint', 'project.resetLesson'] },
   { id: 'edit', label: 'Edit', commandIds: ['edit.undo', 'edit.redo'] },
   { id: 'view', label: 'View', commandIds: ['view.zoomIn', 'view.zoomOut', 'view.fit', 'view.reset', 'workspace.saveLayout', 'workspace.restoreLayout', 'workspace.resetLayout'] },
   { id: 'go', label: 'Go', commandIds: ['stage.character', 'stage.path', 'stage.foundry', 'stage.design', 'stage.blueprint', 'stage.assembly'] },

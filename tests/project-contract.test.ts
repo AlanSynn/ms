@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { boardGridLines, boardToScene, bodyPartPivotScene, physicalKitPreset, placeBodyPartPivotAt, SCENE_PX_PER_MM, sceneToBoard, sceneToBoardRaw, sceneToSheetMm, sceneToSvg, sheetMmToScene } from '../utils/coordinates';
-import { createDefaultMechanism, createEmptyProject, createSampleProject, handoffGate, loadProjectSnapshot, serializeProject, applyProjectAction, projectSelfCheck, mechanismRequiredParts, mechanismWithGeneratedPath, replaceCharacterProject } from '../utils/project';
+import { CLASSROOM_LESSONS, classroomLessonById, createDefaultMechanism, createEmptyProject, createLessonProject, createSampleProject, handoffGate, loadProjectSnapshot, serializeProject, applyProjectAction, projectSelfCheck, mechanismRequiredParts, mechanismWithGeneratedPath, replaceCharacterProject, resetProjectToLessonBaseline } from '../utils/project';
 import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, prefabAssemblySteps, sampleFeasibleRange, validateFabricationStack, validateForFabrication } from '../utils/fabrication';
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
@@ -36,6 +36,7 @@ assert(!readFileSync(onnxPath).subarray(0, 64).toString('utf8').startsWith('vers
 const emptyProject = createEmptyProject();
 const starterSample = createSampleProject();
 const sample = createSampleProject({ includeMechanism: true });
+const classroomLesson = createLessonProject('waving-arm');
 const expectedCanvasDragHandles: Record<MechanismType, MechanismDragHandle[]> = {
   crank: ['P1', 'J1'],
   '4bar': ['P1', 'J1', 'P2', 'J2', 'Effector'],
@@ -106,6 +107,7 @@ const expectedAppCommandIds = [
   'project.saveAs',
   'project.exportCopy',
   'project.exportBlueprint',
+  'project.resetLesson',
   'edit.undo',
   'edit.redo',
   'view.zoomIn',
@@ -132,7 +134,7 @@ assert.deepEqual(APP_MENU_GROUPS.map(group => ({
   label: group.label,
   commandIds: [...group.commandIds]
 })), [
-  { id: 'file', label: 'File', commandIds: ['project.new', 'project.open', 'project.recoverAutosave', 'project.save', 'project.saveAs', 'project.exportCopy', 'project.exportBlueprint'] },
+  { id: 'file', label: 'File', commandIds: ['project.new', 'project.open', 'project.recoverAutosave', 'project.save', 'project.saveAs', 'project.exportCopy', 'project.exportBlueprint', 'project.resetLesson'] },
   { id: 'edit', label: 'Edit', commandIds: ['edit.undo', 'edit.redo'] },
   { id: 'view', label: 'View', commandIds: ['view.zoomIn', 'view.zoomOut', 'view.fit', 'view.reset', 'workspace.saveLayout', 'workspace.restoreLayout', 'workspace.resetLayout'] },
   { id: 'go', label: 'Go', commandIds: ['stage.character', 'stage.path', 'stage.foundry', 'stage.design', 'stage.blueprint', 'stage.assembly'] },
@@ -208,7 +210,9 @@ assert(readFileSync(join(process.cwd(), 'index.html'), 'utf8').includes("font-fa
   'Open a small canvas overlay',
   'Tune the image/decal area'
 ].forEach(phrase => assert(!visibleUiSource.includes(phrase), `visible UI omits over-explaining legacy copy: ${phrase}`));
-assert(readFileSync(join(process.cwd(), 'docs', 'app-command-shortcuts.md'), 'utf8').includes('utils/appCommands.ts'), 'command registry documentation points to the executable registry');
+const appCommandDocs = readFileSync(join(process.cwd(), 'docs', 'app-command-shortcuts.md'), 'utf8');
+assert(appCommandDocs.includes('utils/appCommands.ts'), 'command registry documentation points to the executable registry');
+assert(appCommandDocs.includes('Reset Lesson') && appCommandDocs.includes('preserving app settings'), 'command docs include the menu-only classroom Reset Lesson contract');
 const packageJson = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8'));
 const physicsKernel = physicsKernelCapability();
 const rapierProbe = await runRapierFrictionProbe({ frictionCoefficient: 0.74, steps: 150 });
@@ -258,6 +262,8 @@ assert(dockerfileText.includes('FROM oven/bun:1.3.14-alpine') && dockerfileText.
 assert.equal(tauriConfig.build.beforeDevCommand, 'bun run dev', 'Tauri dev hook uses Bun');
 assert.equal(tauriConfig.build.beforeBuildCommand, 'bun run build:tauri-frontend', 'Tauri build hook uses Bun');
 assert(deploymentDocs.includes('bun install --frozen-lockfile') && !deploymentDocs.includes('npm '), 'deployment docs use Bun commands');
+assert(deploymentDocs.includes('Classroom release checklist') && deploymentDocs.includes('v<package.json version>') && deploymentDocs.includes('VITE_BASE_PATH=/ms/'), 'deployment docs include the classroom /ms release checklist');
+assert(deploymentDocs.includes('no `/api/` requests') && deploymentDocs.includes('Teacher pack workflow') && deploymentDocs.includes('no account, no upload'), 'deployment docs lock classroom release to static local-first teacher-pack flow');
 assert(macosDocs.includes('bun run build:exe') && !macosDocs.includes('npm '), 'macOS distribution docs use Bun commands');
 assert(agentsContract.includes('three` + Rapier WASM'), 'AGENTS.md records the selected high-performance 3D physics stack');
 assert(agentsContract.includes('Viser-style transform tree'), 'AGENTS.md records the Viser-inspired batching rule for large scenes');
@@ -269,6 +275,9 @@ assert(agentsContract.includes('Deploy only from version tags') && agentsContrac
 assert(agentsContract.includes('package.json') && agentsContract.includes('src-tauri/Cargo.toml') && agentsContract.includes('src-tauri/tauri.conf.json'), 'AGENTS.md requires browser and Tauri version alignment before release');
 assert(agentsContract.includes('local-first browser/Tauri'), 'AGENTS.md excludes server scope and locks the app as local-first');
 assert(agentsContract.includes('Do not add backend/API server'), 'AGENTS.md explicitly excludes backend/API/auth/cloud work unless reopened');
+assert(agentsContract.includes('Guided classroom lesson templates must create real serializable `ProjectState` data') && agentsContract.includes('Blank starters stay mechanism-free'), 'AGENTS.md locks lesson templates to real state and keeps blank starters clean');
+assert(agentsContract.includes('`Reset Lesson` must restore a known-good lesson baseline') && agentsContract.includes('preserving app settings'), 'AGENTS.md locks stable lesson reset semantics');
+assert(agentsContract.includes('Blueprint owns build files') && agentsContract.includes('Assembly owns animated step-by-step build'), 'AGENTS.md preserves Blueprint versus Assembly role split');
 assert(designContract.includes('Shared editor workbench'), 'DESIGN.md documents the shared editor workbench');
 assert(designContract.includes('Project governance: `AGENTS.md`'), 'DESIGN.md points contributors at the project agent contract');
 assert(designContract.includes('#8b5cf6'), 'DESIGN.md uses the MotionSmith light primary color');
@@ -303,6 +312,26 @@ assert(classroomFieldPlan.includes('Sensemaking must be visible at the moment of
 assert(classroomFieldPlan.includes('Stable reset and recovery') && classroomFieldPlan.includes('No rotation possible'), 'classroom plan requires stable reset for mechanism failure recovery');
 assert(classroomFieldPlan.includes('Blueprint as build-file screen') && classroomFieldPlan.includes('Assembly as animated build screen'), 'classroom plan preserves Blueprint/Assembly ownership split');
 assert(classroomFieldPlan.includes('No backend, auth, roster, analytics, cloud DB, teacher dashboard') && classroomFieldPlan.includes('Teacher pack workflow'), 'classroom plan excludes server scope while defining local teacher pack workflow');
+assert(CLASSROOM_LESSONS.some(lesson => lesson.id === 'waving-arm' && lesson.label === 'Waving arm / 팔 흔들기' && lesson.actionLabel === 'Open lesson'), 'guided classroom lesson catalog exposes the waving-arm lesson as a real entry point');
+assert.equal(classroomLessonById('waving-arm')?.startStage, 'character', 'classroom lesson opens in Character so students inspect/edit the rig before drawing');
+assert.equal(classroomLesson.metadata.classroomLessonId, 'waving-arm', 'lesson ProjectState carries resettable classroom lesson metadata');
+assert.equal(classroomLesson.metadata.classroomLessonLabel, 'Waving arm / 팔 흔들기', 'lesson ProjectState keeps the bilingual classroom label');
+assert.equal(classroomLesson.mechanisms.length, 1, 'waving-arm lesson includes one real fitted mechanism instead of a mock recommendation card');
+assert.equal(classroomLesson.selectedPathId, 'path-right-arm', 'waving-arm lesson selects the editable hand path');
+assert.equal(classroomLesson.selectedMechanismId, 'mech-1', 'waving-arm lesson selects the fitted four-bar mechanism');
+assert.equal(classroomLesson.mechanisms[0].targetAnchorJointId, 'right_hand', 'waving-arm lesson drives the hand end-effector');
+assert((classroomLesson.mechanisms[0].generatedPath?.length ?? 0) >= 3, 'waving-arm lesson mechanism has generated motion samples for simulation and fit checks');
+assert.throws(() => createLessonProject('missing' as never), /Unknown classroom lesson/, 'invalid classroom lesson IDs fail loudly instead of silently creating blank projects');
+const resetLessonState = resetProjectToLessonBaseline({
+  ...classroomLesson,
+  selectedPartId: 'head',
+  mechanisms: [],
+  settings: { ...classroomLesson.settings, animationSpeed: 1.7 }
+});
+assert(resetLessonState, 'classroom lesson can reset to a durable baseline');
+assert.equal(resetLessonState?.settings.animationSpeed, 1.7, 'lesson reset preserves app settings while restoring lesson content');
+assert.equal(resetLessonState?.mechanisms.length, 1, 'lesson reset restores the fitted mechanism');
+assert.equal(resetLessonState?.selectedPartId, 'right_arm_lower', 'lesson reset restores the lesson selection baseline');
 assert.equal(emptyProject.partOrder.length, 0, 'empty project starts with no preloaded character parts');
 assert.equal(emptyProject.mechanisms.length, 0, 'empty project starts with no hidden mechanism');
 assert.equal(emptyProject.selectedMechanismId, undefined, 'empty project starts with no selected mechanism');

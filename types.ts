@@ -328,6 +328,8 @@ export interface ProjectState {
         id: string;
         name: string;
         sourceImageName?: string;
+        classroomLessonId?: string;
+        classroomLessonLabel?: string;
         createdAt: string;
         updatedAt: string;
         normalizationScale: number;

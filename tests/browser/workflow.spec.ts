@@ -81,7 +81,7 @@ const openWavingArmTemplate = async (page: Page) => {
     await page.getByRole('button', { name: /Open Getting Started/i }).click();
   }
   await expect(page.getByTestId('getting-started-dialog')).toBeVisible();
-  await page.getByRole('button', { name: /Open humanoid starter/i }).click();
+  await page.getByTestId('lesson-template-waving-arm').click();
   await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
   const desktopPathEditor = page.getByRole('button', { name: /Path Editor/i }).first();
   if (await desktopPathEditor.isVisible().catch(() => false)) {
@@ -148,6 +148,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   const gettingStarted = page.getByTestId('getting-started-dialog');
   await expect(gettingStarted).toBeVisible();
   await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Humanoid starter');
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Waving arm / 팔 흔들기');
+  await expect(gettingStarted.getByTestId('lesson-template-waving-arm')).toBeVisible();
   await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Girl starter');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Boy starter');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Load character');
@@ -548,7 +550,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   expect(svgText).toContain('<metadata>');
   expect(svgText).toContain('custom-parts');
   expect(svgText).toContain('fabricablePartOutlinePoints');
-  expect(svgText).toContain('Humanoid starter character');
+  expect(svgText).toContain('Waving arm / 팔 흔들기');
   expect(svgText).toContain('data-part-id="right_arm_lower"');
 
   await page.getByTestId('workspace-steps').getByRole('button', { name: 'Options' }).click();
@@ -1517,6 +1519,14 @@ test('Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking'
   await page.getByRole('button', { name: 'Reset' }).click();
   await expect(page.getByTestId('foundry-toolbar-state')).toContainText('paused');
   await expect(page.getByTestId('foundry-toolbar-state')).not.toBeVisible();
+  await expect(threeScene).toHaveAttribute('data-path-preview', 'hidden');
+  await expect(threeScene).toHaveAttribute('data-trail', 'hidden');
+  await expect(threeScene).toHaveAttribute('data-layer-forces', 'shown');
+  await expect(threeScene).toHaveAttribute('data-layer-velocity', 'shown');
+  await expect(threeScene).toHaveAttribute('data-camera-preset', 'iso');
+  await expect(page.getByTestId('foundry-camera-readout')).toContainText('3D Isometric');
+  await expect(page.getByTestId('foundry-forces-overlay')).toBeVisible();
+  await expect(page.getByTestId('foundry-velocity-overlay')).toBeVisible();
 });
 
 test('Mechanism Foundry supports CAD-style 3D camera presets and drag orbit', async ({ page }) => {
@@ -2063,6 +2073,8 @@ test('Command menu and shared canvas zoom persist across workflow stages', async
   await page.getByRole('button', { name: 'About MotionSmith…' }).click();
   await expect(page.getByTestId('about-dialog')).toBeVisible();
   await expect(page.getByTestId('about-dialog')).toContainText('Local ONNX');
+  await expect(page.getByTestId('about-dialog')).toContainText('no account, no upload');
+  await expect(page.getByTestId('about-dialog')).toContainText('/ms/ static web');
   await page.getByTestId('about-dialog').getByRole('button', { name: 'Close' }).click();
   await expect(page.getByTestId('about-dialog')).toHaveCount(0);
 
@@ -2073,6 +2085,39 @@ test('Command menu and shared canvas zoom persist across workflow stages', async
   await expect(page.getByTestId('status-bar')).toContainText(/Canvas zoom/);
   await page.keyboard.press('Alt+5');
   await expect(page.getByRole('heading', { name: 'Blueprint' })).toBeVisible();
+});
+
+test('guided classroom lesson opens real baseline and can reset safely', async ({ page }) => {
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  await page.goto('/');
+  await dismissWelcomeSplash(page);
+  await expect(page.getByTestId('getting-started-dialog')).toBeVisible();
+  await page.getByTestId('lesson-template-waving-arm').click();
+  await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
+  await expectProjectCounts(page, 14, 1, 1);
+  const checklist = page.getByTestId('classroom-checklist');
+  await expect(checklist).toContainText('Character');
+  await expect(checklist).toContainText('Path');
+  await expect(checklist).toContainText('Mechanism');
+  for (const item of ['Character', 'Path', 'Mechanism', 'Test']) {
+    await expect(checklist.getByRole('checkbox', { name: item })).toHaveAttribute('aria-checked', 'true');
+  }
+  for (const item of ['Blueprint', 'Assembly']) {
+    await expect(checklist.getByRole('checkbox', { name: item })).toHaveAttribute('aria-checked', 'false');
+  }
+
+  await page.getByTestId('top-command-bar').getByText('File', { exact: true }).click();
+  await page.getByTestId('command-reset-lesson').click();
+  await expect(page.getByTestId('status-bar')).toContainText('Reset Waving arm');
+  await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
+  await expectProjectCounts(page, 14, 1, 1);
+  expectCleanPage(pageErrors, consoleErrors);
 });
 
 test('Detached visible mechanisms block browser blueprint generation', async ({ page }) => {

@@ -27,6 +27,18 @@ git push origin v$VERSION
 
 The workflow fetches the Git LFS ONNX model, rejects pointer files before and after build, verifies `v$VERSION == package.json.version`, builds with `VITE_BASE_PATH=/ms/`, and publishes `dist/` with GitHub Pages Actions.
 
+## Classroom release checklist
+
+Before a teacher-facing web release:
+
+- Tag must be `v<package.json version>`; the workflow must reject mismatched tags.
+- Build must use `VITE_BASE_PATH=/ms/` for `https://alansynn.com/ms/`.
+- `public/onnx/pose_model.onnx` and `dist/onnx/pose_model.onnx` must be real ONNX bytes, not Git LFS pointers.
+- Runtime HTML must not load CDN scripts, import maps, or external `https://` assets.
+- Browser QA must show no `/api/` requests, server login, upload, cloud sync, roster, analytics, dashboard, or hosted storage calls.
+- About/help copy must state: no account, no upload, local ONNX, browser autosave, local downloads.
+- Teacher pack workflow stays file-based: teacher shares a project/package, students edit locally, then download snapshot, blueprint files, and assembly guide.
+
 ## CDN policy
 
 `index.html` must not contain CDN scripts, import maps, or external `https://` runtime URLs. Dependencies are bundled through Vite from `package.json`.

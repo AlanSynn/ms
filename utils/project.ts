@@ -434,6 +434,56 @@ export const createSampleProject = (options: { includeMechanism?: boolean } = {}
     };
 };
 
+export const CLASSROOM_LESSONS = [
+    {
+        id: 'waving-arm',
+        label: 'Waving arm / 팔 흔들기',
+        shortLabel: 'Waving arm',
+        description: 'Right hand path + fitted four-bar mechanism.',
+        actionLabel: 'Open lesson',
+        startStage: 'character' as AppStage,
+        mechanismType: '4bar' as MechanismConfig['type']
+    }
+] as const;
+
+export type ClassroomLessonId = typeof CLASSROOM_LESSONS[number]['id'];
+export type ClassroomLessonTemplate = typeof CLASSROOM_LESSONS[number];
+
+export const classroomLessonById = (id?: string): ClassroomLessonTemplate | undefined =>
+    CLASSROOM_LESSONS.find(lesson => lesson.id === id);
+
+export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState => {
+    const lesson = classroomLessonById(lessonId);
+    if (!lesson) throw new Error(`Unknown classroom lesson: ${lessonId}`);
+    const project = createSampleProject({ includeMechanism: true });
+    const mechanisms = project.mechanisms.map(mechanism => mechanismWithGeneratedPath(mechanism));
+    return {
+        ...project,
+        metadata: {
+            ...project.metadata,
+            name: lesson.label,
+            classroomLessonId: lesson.id,
+            classroomLessonLabel: lesson.label
+        },
+        mechanisms,
+        characterPackage: project.characterPackage ? {
+            ...project.characterPackage,
+            replacementContext: {
+                mode: 'plain-load',
+                rebindingSummary: `${lesson.label}: ${lesson.description}`
+            }
+        } : project.characterPackage,
+        processing: { stage: 'ready', message: `${lesson.shortLabel} ready`, progress: 100 }
+    };
+};
+
+export const resetProjectToLessonBaseline = (project: ProjectState): ProjectState | undefined => {
+    const lesson = classroomLessonById(project.metadata.classroomLessonId);
+    if (!lesson) return undefined;
+    const baseline = createLessonProject(lesson.id);
+    return { ...baseline, settings: project.settings };
+};
+
 const jointScenePoint = (project: ProjectState, jointId?: string): Point | undefined =>
     jointId ? project.skeleton?.joints[jointId]?.position : undefined;
 
