@@ -10,7 +10,7 @@ bun run build
 bun run test
 ```
 
-`vite build` copies static ONNX assets from `public/onnx/` into `dist/onnx/`. The contract test asserts `dist/onnx/pose_model.onnx` exists after a production build.
+`vite build` copies static ONNX assets from `public/onnx/` into `dist/onnx/`. The contract test asserts `dist/onnx/pose_model.onnx` exists and is real model data, not a Git LFS pointer.
 
 
 ## GitHub Pages release deploy
@@ -25,7 +25,7 @@ git push origin main
 git push origin v$VERSION
 ```
 
-The workflow verifies `v$VERSION == package.json.version`, builds with `VITE_BASE_PATH=/ms/`, and publishes `dist/` with GitHub Pages Actions.
+The workflow fetches the Git LFS ONNX model, rejects pointer files before and after build, verifies `v$VERSION == package.json.version`, builds with `VITE_BASE_PATH=/ms/`, and publishes `dist/` with GitHub Pages Actions.
 
 ## CDN policy
 

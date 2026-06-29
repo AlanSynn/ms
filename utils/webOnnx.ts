@@ -471,6 +471,9 @@ export interface WebOnnxCacheStatus {
 
 const MODEL_CACHE_NAME = 'motionsmith-web-onnx-v1';
 const MODEL_LABEL = 'AI pose model';
+const MIN_MODEL_BYTES = 1_000_000;
+const MODEL_BYTES_HEADER = 'x-motionsmith-model-bytes';
+const GIT_LFS_POINTER_PREFIX = 'version https://git-lfs';
 const supportsCacheApi = () => typeof window !== 'undefined' && 'caches' in window;
 
 const cacheStatus = (stage: WebOnnxCacheStage, progress: number, extra: Partial<WebOnnxCacheStatus> = {}): WebOnnxCacheStatus => ({
@@ -486,10 +489,35 @@ const cachedModelResponse = async () => {
     return cache.match(modelUrl());
 };
 
-const readCachedModel = async () => (await cachedModelResponse())?.arrayBuffer();
+const deleteCachedModel = async () => {
+    if (!supportsCacheApi()) return;
+    const cache = await caches.open(MODEL_CACHE_NAME);
+    await cache.delete(modelUrl());
+};
+
+const bufferLooksLikeGitLfsPointer = (buffer: ArrayBuffer) => new TextDecoder().decode(new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 64))).startsWith(GIT_LFS_POINTER_PREFIX);
+const isUsableModelBuffer = (buffer: ArrayBuffer) => buffer.byteLength > MIN_MODEL_BYTES && !bufferLooksLikeGitLfsPointer(buffer);
+
+const assertUsableModelBuffer = (buffer: ArrayBuffer, source: string) => {
+    if (isUsableModelBuffer(buffer)) return;
+    if (bufferLooksLikeGitLfsPointer(buffer)) throw new Error(`${source} is a Git LFS pointer, not ONNX model bytes. Redeploy with Git LFS assets fetched.`);
+    throw new Error(`${source} is only ${buffer.byteLength} bytes; expected real ONNX model bytes.`);
+};
+
+const readCachedModel = async () => {
+    const response = await cachedModelResponse();
+    if (!response) return undefined;
+    const buffer = await response.arrayBuffer();
+    if (!isUsableModelBuffer(buffer)) {
+        await deleteCachedModel();
+        return undefined;
+    }
+    if (!response.headers.has(MODEL_BYTES_HEADER)) await cacheModelBuffer(buffer);
+    return buffer;
+};
 
 const fetchModelWithProgress = async (onStatus: (status: WebOnnxCacheStatus) => void = () => {}) => {
-    const response = await fetch(modelUrl(), { cache: 'force-cache' });
+    const response = await fetch(modelUrl(), { cache: 'reload' });
     if (!response.ok) throw new Error(`Could not download ${MODEL_LABEL}: ${response.status}`);
     const total = Number(response.headers.get('content-length')) || undefined;
     if (!response.body) {
@@ -518,14 +546,20 @@ const fetchModelWithProgress = async (onStatus: (status: WebOnnxCacheStatus) => 
 };
 
 const cacheModelBuffer = async (buffer: ArrayBuffer) => {
+    assertUsableModelBuffer(buffer, MODEL_LABEL);
     if (!supportsCacheApi()) return;
     const cache = await caches.open(MODEL_CACHE_NAME);
-    await cache.put(modelUrl(), new Response(buffer.slice(0), { headers: { 'content-type': 'application/octet-stream' } }));
+    await cache.put(modelUrl(), new Response(buffer.slice(0), { headers: { 'content-type': 'application/octet-stream', [MODEL_BYTES_HEADER]: String(buffer.byteLength) } }));
 };
 
 export const checkWebOnnxCache = async (): Promise<WebOnnxCacheStatus> => {
     try {
-        return await cachedModelResponse() ? cacheStatus('cached', 100) : cacheStatus('missing', 0);
+        const cached = await cachedModelResponse();
+        if (!cached) return cacheStatus('missing', 0);
+        const cachedBytes = Number(cached.headers.get(MODEL_BYTES_HEADER));
+        if (cachedBytes > MIN_MODEL_BYTES) return cacheStatus('cached', 100, { bytesLoaded: cachedBytes, bytesTotal: cachedBytes });
+        const buffer = await readCachedModel();
+        return buffer ? cacheStatus('cached', 100, { bytesLoaded: buffer.byteLength, bytesTotal: buffer.byteLength }) : cacheStatus('missing', 0);
     } catch (error) {
         return cacheStatus('error', 0, { error: error instanceof Error ? error.message : String(error) });
     }
@@ -534,8 +568,9 @@ export const checkWebOnnxCache = async (): Promise<WebOnnxCacheStatus> => {
 export const warmWebOnnxCache = async (onStatus: (status: WebOnnxCacheStatus) => void = () => {}): Promise<WebOnnxCacheStatus> => {
     try {
         onStatus(cacheStatus('checking', 0));
-        if (await cachedModelResponse()) {
-            const ready = cacheStatus('cached', 100);
+        const cached = await readCachedModel();
+        if (cached) {
+            const ready = cacheStatus('cached', 100, { bytesLoaded: cached.byteLength, bytesTotal: cached.byteLength });
             onStatus(ready);
             return ready;
         }

@@ -211,6 +211,8 @@ const rapierProbe = await runRapierFrictionProbe({ frictionCoefficient: 0.74, st
 const physicsKernelSource = readFileSync(join(process.cwd(), 'utils', 'physicsKernel.ts'), 'utf8');
 const dockerfileText = readFileSync(join(process.cwd(), 'Dockerfile'), 'utf8');
 const deployWorkflowText = readFileSync(join(process.cwd(), '.github', 'workflows', 'deploy.yml'), 'utf8');
+const cargoTomlText = readFileSync(join(process.cwd(), 'src-tauri', 'Cargo.toml'), 'utf8');
+const cargoLockText = readFileSync(join(process.cwd(), 'src-tauri', 'Cargo.lock'), 'utf8');
 const tauriConfig = JSON.parse(readFileSync(join(process.cwd(), 'src-tauri', 'tauri.conf.json'), 'utf8'));
 const deploymentDocs = readFileSync(join(process.cwd(), 'docs', 'deployment.md'), 'utf8');
 const macosDocs = readFileSync(join(process.cwd(), 'docs', 'macos-distribution.md'), 'utf8');
@@ -220,7 +222,10 @@ assert(playwrightConfigText.includes('PLAYWRIGHT_WORKERS'), 'browser worker coun
 assert(playwrightConfigText.includes('MAX_BROWSER_WORKERS'), 'browser worker defaults are bounded to avoid local over-parallelization');
 assert(playwrightConfigText.includes('Number.isInteger'), 'browser worker override validates positive integer input');
 assert(playwrightConfigText.includes('PLAYWRIGHT_SERVER') && playwrightConfigText.includes('preview'), 'browser tests can run against production preview without Vite HMR noise');
-assert.equal(packageJson.version, '0.0.1', 'release version starts at 0.0.1 for the first GitHub Pages deployment');
+assert.equal(packageJson.version, '0.0.2', 'release version is bumped for the LFS-backed GitHub Pages redeploy');
+assert.equal(tauriConfig.version, packageJson.version, 'Tauri config version stays aligned with package.json');
+assert(cargoTomlText.includes(`version = "${packageJson.version}"`), 'Cargo.toml version stays aligned with package.json');
+assert(cargoLockText.includes('name = "motionsmith"') && cargoLockText.includes(`version = "${packageJson.version}"`), 'Cargo.lock MotionSmith package version stays aligned with package.json');
 assert.equal(packageJson.packageManager, 'bun@1.3.14', 'Bun is the canonical package manager');
 assert.equal(packageJson.dependencies[PHYSICS_KERNEL_IMPORT], '^0.19.3', 'Rapier 3D compatibility WASM kernel is installed behind the physics subsystem boundary');
 assert(!packageJson.dependencies['@react-three/fiber'] && !packageJson.dependencies['@react-three/rapier'] && !packageJson.dependencies['babylonjs'], 'renderer stack avoids extra scene frameworks while the imperative Three boundary is sufficient');
@@ -240,6 +245,8 @@ assert(rapierProbe.contactSettled, `Rapier friction probe settles on contact wit
 assert(!existsSync(join(process.cwd(), 'package-lock.json')), 'npm lockfile is absent after Bun migration');
 assert(packageJson.scripts['test:browser'].includes('bun run build') && packageJson.scripts['test:browser'].includes('PLAYWRIGHT_SERVER=preview'), 'browser test script validates the production build through preview mode');
 assert(deployWorkflowText.includes('oven-sh/setup-bun@v2') && deployWorkflowText.includes('bun install --frozen-lockfile') && deployWorkflowText.includes('bun run build'), 'GitHub Pages workflow uses Bun install and build');
+assert(deployWorkflowText.includes('lfs: true') && deployWorkflowText.includes('git lfs pull --include="public/onnx/pose_model.onnx"'), 'GitHub Pages workflow fetches real ONNX bytes from Git LFS before build');
+assert(deployWorkflowText.includes('Check ONNX LFS asset') && deployWorkflowText.includes('Check built ONNX asset') && deployWorkflowText.includes('version https://git-lfs'), 'GitHub Pages workflow rejects Git LFS pointer files before upload');
 assert(deployWorkflowText.includes('tags:') && deployWorkflowText.includes('v*.*.*') && !deployWorkflowText.includes('branches:'), 'GitHub Pages workflow deploys only from version tags');
 assert(deployWorkflowText.includes('test "v${VERSION}" = "${GITHUB_REF_NAME}"'), 'GitHub Pages workflow requires the tag to match package.json version');
 assert(deployWorkflowText.includes('VITE_BASE_PATH: /ms/'), 'GitHub Pages workflow builds assets under /ms/');
@@ -696,6 +703,8 @@ assert(!threePreviewText.includes('teeth * 2'), '3D preview no longer carries a 
 assert(threePreviewText.includes('fabricablePartOutlinePoints'), '3D puppet preview uses shared model/user contour outlines instead of raw image crop rectangles');
 assert(webOnnxText.includes('contourFromCropMask') && webOnnxText.includes("contourSource: crop.contourPoints.length >= 3 ? 'onnx-mask'"), 'browser ONNX preserves mask-derived part contours for fabrication plates');
 assert(webOnnxText.includes('MODEL_CACHE_NAME') && webOnnxText.includes('caches.open') && webOnnxText.includes('warmWebOnnxCache'), 'browser ONNX model can be separately downloaded and cached');
+assert(webOnnxText.includes('GIT_LFS_POINTER_PREFIX') && webOnnxText.includes('deleteCachedModel') && webOnnxText.includes("cache: 'reload'"), 'browser ONNX rejects stale Git LFS pointer caches and refetches model bytes');
+assert(webOnnxText.includes('MODEL_BYTES_HEADER') && webOnnxText.includes('x-motionsmith-model-bytes'), 'browser ONNX marks valid cached model bytes to avoid treating pointer files as ready');
 assert(webOnnxText.includes('InferenceSession.create(new Uint8Array(modelBuffer)'), 'browser ONNX creates sessions from cached model bytes');
 assert(webOnnxText.includes("import('onnxruntime-web')") && !webOnnxText.includes("import * as ort from 'onnxruntime-web'"), 'ONNX Runtime JS is lazy-loaded outside the initial editor shell bundle');
 assert(appUiText.includes('data-testid="onnx-cache-status"') && appText.includes('checkWebOnnxCache'), 'status bar exposes ONNX cache/download status');
@@ -1730,7 +1739,11 @@ const indexHtml = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
 assert(!/https?:\/\//.test(indexHtml), 'index.html has no external CDN URLs');
 assert(!/importmap|tailwindcss/i.test(indexHtml), 'index.html does not rely on importmap or Tailwind CDN');
 assert(existsSync(join(process.cwd(), 'public/onnx/pose_model.onnx')), 'ONNX model asset is present for web runtime');
-if (existsSync(join(process.cwd(), 'dist'))) assert(existsSync(join(process.cwd(), 'dist/onnx/pose_model.onnx')), 'production build copies ONNX model to dist');
+if (existsSync(join(process.cwd(), 'dist'))) {
+  const distOnnxPath = join(process.cwd(), 'dist/onnx/pose_model.onnx');
+  assert(existsSync(distOnnxPath), 'production build copies ONNX model to dist');
+  assert(statSync(distOnnxPath).size > 1_000_000 && !readFileSync(distOnnxPath).subarray(0, 64).toString('utf8').startsWith('version https://git-lfs'), 'production ONNX build output is real model bytes, not a Git LFS pointer');
+}
 const staleExport = loadProjectSnapshot({ ...sample, lastExport: { id: 'stale-export' } });
 assert.equal(staleExport.lastExport, undefined, 'imported project snapshots clear stale fabrication exports');
 assert(existsSync(join(process.cwd(), 'src-tauri/icons/icon.png')) && existsSync(join(process.cwd(), 'src-tauri/icons/icon.ico')), 'Tauri package icon files exist');
