@@ -232,6 +232,133 @@ Examples:
    - Check first screen has one dominant action.
    - Check novice path drawing can be understood without reading docs.
 
+## Tutorial layer PRD
+
+Tutorials must make the existing workbench easier to touch. They must not
+become another screen, another canvas, or another source of project truth.
+
+### Agent review synthesis
+
+- `explore`: current tutorial surfaces are `WelcomeDialog`,
+  `GettingStartedDialog`, `ShortcutHelpDialog`, `AboutDialog`, and status
+  guidance. There is no tutorial `AppStage`, and that should stay true.
+- `designer`: the useful novice layer is splash → starter choice → small
+  checklist → sparse coach marks.
+- `test-engineer`: tests should prove tutorial actions use real controls and
+  do not mutate `ProjectState` when only viewing help.
+
+### 1. Splash
+
+**Job:** brand pause only.
+
+- Keep only MotionSmith mark, `Start`, and `Do not show again`.
+- If the splash auto-dismisses, it may open Getting Started; it must never skip
+  straight into a fake tutorial or fake project.
+- Hide choice is local browser preference only.
+- No video, tips, template gallery, stats, sample output, or lesson copy.
+
+### 2. Getting Started dialog
+
+**Job:** choose a real starting state.
+
+Use the existing compact modal. Do not make it full-screen.
+
+Primary tiles:
+
+1. `Humanoid starter` — creates editable humanoid `ProjectState`.
+2. `Girl starter` — runs the same local package/ONNX path as production.
+3. `Boy starter` — runs the same local package/ONNX path as production.
+4. `Load character` — package or project import.
+5. `Create from image` — browser-local ONNX only.
+6. `Import project` — portable project copy.
+
+Rules:
+
+- One-line tile copy only.
+- Closing always lands on Character.
+- Starter tiles create real parts, joints, anchors, and editable contours.
+- Starter tiles do not preload fake mechanisms. Mechanisms enter through
+  Foundry or an explicit demo template.
+- `Preserve compatible mechanisms` remains secondary.
+
+### 3. First-run checklist
+
+**Job:** show progress without teaching by paragraphs.
+
+Placement: left pane above stage controls. Never center canvas.
+
+Checklist:
+
+1. `Character ready`
+2. `Draw 3+ path points`
+3. `Use mechanism`
+4. `Fit / attach`
+5. `Generate blueprint`
+6. `Open assembly`
+
+Behavior:
+
+- Each item links to its workflow tab.
+- Completion derives from current `ProjectState`.
+- Store only dismissed/collapsed state in local storage.
+- View-only tutorial state must not change `ProjectState`, `metadata.updatedAt`,
+  export data, mechanism data, or fabrication output.
+- Expert users can ignore it; it never blocks tools.
+
+### 4. Coach marks and hints
+
+Use three hint channels, in this order:
+
+1. **Left pane next action** — primary instruction, e.g. `Draw free path`.
+2. **Status strip** — blocker and next action, e.g. `Need 3+ path points`.
+3. **Canvas micro-hint** — one short label only while manipulating, e.g.
+   `Hold and drag`.
+
+Allowed coach mark:
+
+- one at a time;
+- anchored to a real control, handle, status item, or inspector field;
+- auto-dismisses when the user performs the action;
+- always has `Skip tips`.
+
+Forbidden:
+
+- tutorial tab;
+- full-screen tutorial mode;
+- dark spotlight over the work canvas;
+- center-canvas lesson cards;
+- scrollable lesson panels;
+- separate tutorial scene or sample state;
+- fake progress, fake AI recommendation, canned mechanism preview, or canned
+  export;
+- No new tour dependency. Plain React state and CSS are enough.
+
+### Per-tab tutorial beats
+
+| Tab | Question | Beat | Placement |
+| --- | --- | --- | --- |
+| Character | What am I editing? | Pick/load character, select a body part, confirm joints/anchors. | Left checklist + part list; right part inspector. |
+| Path | How do I make it move? | Select part, press `Draw`, hold-drag path, reach 3+ points. | Left controls; tiny canvas hint only in draw mode. |
+| Foundry | Which mechanism works? | Show target, recommend one mechanism, preview physical stack, click `Use`. | Left cards; center simulation only; right physics/detail readout. |
+| Design | Is it attached? | Play/trace, verify target, use `Fit path` if warned. | Left mechanism list; right target/parameters. |
+| Blueprint | Can I build it? | Show Ready/Needs fix, route warnings, generate package. | Left validation/downloads; center cut sheet; right recipe detail. |
+| Assembly | How do I put it together? | Pick recipe, step through stack order, print/download guide. | Left recipe/steps; center assembly workbench; right step detail. |
+| Options | How do I tune defaults? | Units, export defaults, view toggles only. | Settings groups and exact values. |
+
+### Tutorial acceptance criteria
+
+- A novice can complete starter → select part → draw path → use mechanism →
+  blueprint → assembly without reading docs.
+- Center pane remains only canvas, viewport, handles, simulation, cut sheet, or
+  assembly workbench.
+- Checklist is dismissible, non-blocking, and derived from real project state.
+- Tutorial actions trigger existing commands/stages; no private duplicate action
+  path.
+- Opening, advancing, closing, or skipping view-only help does not reset stage,
+  viewport, selection, path, mechanism, playback, or serialized project data.
+- Browser tests assert tutorial roots are overlay/modal/status guidance and that
+  `stage-canvas-pane` remains the work surface.
+
 ## Acceptance tests
 
 Browser tests must cover:

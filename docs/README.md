@@ -20,6 +20,7 @@ Use this file before adding new docs. If a doc does not fit below, update an exi
 - [`prd/toon-25d-main-3d-unlock-plan.md`](prd/toon-25d-main-3d-unlock-plan.md)
 - [`prd/toon-25d-implementation-plan.md`](prd/toon-25d-implementation-plan.md)
 - [`prd/toon-25d-test-spec.md`](prd/toon-25d-test-spec.md)
+- [`prd/novice-canva-style-ui-plan.md`](prd/novice-canva-style-ui-plan.md) — active novice flow and tutorial/help plan.
 - [`subsystem-governance-and-mechanism-contracts.md`](subsystem-governance-and-mechanism-contracts.md)
 - [`analysis/codebase-cleanup-architecture-plan.md`](analysis/codebase-cleanup-architecture-plan.md)
 
@@ -29,7 +30,6 @@ Keep these for provenance; do not treat them as current UI contract unless `DESI
 
 - [`ui-to-web/`](ui-to-web/) — Qt-to-web inventory, screenshots, porting evidence.
 - [`ui-pane-tab-redesign-plan.md`](ui-pane-tab-redesign-plan.md) — prior pane redesign notes.
-- [`prd/novice-canva-style-ui-plan.md`](prd/novice-canva-style-ui-plan.md) — superseded by `DESIGN.md` + active 2.5D plans.
 - [`prd/canva-video-editor-workspace-plan.md`](prd/canva-video-editor-workspace-plan.md) — superseded by current pane/workbench contract.
 - [`prd/realistic-25d-3d-physics-platform-plan.md`](prd/realistic-25d-3d-physics-platform-plan.md) — superseded by toon 2.5D main + 3D unlock plan.
 - [`assembly-lic-stepper-plan.md`](assembly-lic-stepper-plan.md) — planning provenance; assembly behavior now belongs in `mechanism-reference/05-assembly-process-guides.md` plus implementation tests.
