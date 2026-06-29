@@ -1,17 +1,17 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BodyPartLayer, CanvasViewport, GlobalConfig, MechanismConfig, Point, ProjectState } from '../types';
-import { calculateLinkage, generateCurvePoints } from '../utils/kinematics';
+import { calculateLinkage, generateCurvePoints, gearTrainCenters, gearTrainPitchRadii, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, sampledCamProfileScale } from '../utils/kinematics';
 import { boardGridLines, boardToScene, bodyPartPivotScene, defaultPhysicalKit, pathFromPoints, SCENE_PX_PER_MM, SCENE_VIEW, sceneBoundsForSheet, sceneToBoard, sceneToSvg } from '../utils/coordinates';
 import { motionPreviewForProject, pointOnProjectPath } from '../utils/motion';
 import { mechanismWithGeneratedPath } from '../utils/project';
 import { clampCanvasZoom } from '../utils/viewport';
 import { formatGridLabel } from '../utils/units';
 import { ThreePuppetPreview } from './ThreePuppetPreview';
-import { fabricationGearPathD } from '../utils/fabrication';
+import { fabricationGearPathD, fabricationRingGearPathD, planetaryPlanetCenters, planetaryRingPitchRadius } from '../utils/fabrication';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlinePathD, pointInsideOutline } from '../utils/partGeometry';
 import { mechanismFeature, type MechanismDragHandle } from '../utils/mechanismFeatureRegistry';
-import { normalizeMechanismToReference } from '../utils/mechanismReference';
+import { normalizeMechanismToReference, referenceRecipeForType } from '../utils/mechanismReference';
 
 interface CanvasProps {
     project?: ProjectState;
@@ -37,6 +37,35 @@ const INITIAL_OFFSET_X = SCENE_ORIGIN.x;
 const INITIAL_OFFSET_Y = SCENE_ORIGIN.y;
 
 const GearPath = ({ radius }: { radius: number }) => <path d={fabricationGearPathD(radius, radius / SCENE_PX_PER_MM)} fillRule="evenodd" />;
+const RingGearPath = ({ radius }: { radius: number }) => <path d={fabricationRingGearPathD(radius)} fillRule="evenodd" />;
+const CamProfilePath = ({ radius, samples }: { radius: number; samples?: number[] }) => {
+    const points = Array.from({ length: 48 }, (_, index) => {
+        const a = (index / 48) * Math.PI * 2;
+        const r = Math.max(1, radius) * sampledCamProfileScale(a, samples);
+        return `${Math.cos(a) * r} ${Math.sin(a) * r}`;
+    });
+    return <path d={`M ${points.join(' L ')} Z`} />;
+};
+
+const referenceTopologySummary = (type: MechanismConfig['type']) => {
+    if (type === '4bar') return 'A-B input; B-C coupler; C-D output; D-A board-ground';
+    if (type === 'gear') return 'fixed gear centers only; no rods; external mesh sequence';
+    if (type === 'gear_linkage') return 'fixed gear centers; driven gear handle P; P-R L4 linkage; R bracket';
+    if (type === 'cam') return 'rotating cam profile; guided follower block; no linkage rods';
+    if (type === 'planetary_gear') return 'fixed ring; sun input; planet on carrier; carrier output';
+    if (type === '5bar') return 'A-B-C-D-E closed chain; A-E board-ground; simulation-only';
+    if (type === '6bar') return 'A-B-C-D four-bar plus C-E-D dyad; simulation-only';
+    if (type === 'piston') return 'crank-slider guide; slider-crank fabrication recipe';
+    return `${type} simulation topology`;
+};
+
+const referenceCoordRoleSummary = (type: MechanismConfig['type']) => referenceRecipeForType(type)
+    .assemblySteps
+    .flatMap(step => step.coords.map((coord, index) => `${coord}:${step.coordRoles[index] ?? 'moving_reference'}`))
+    .join('|');
+
+const hasNoCrankDriverInCanvas = (type: MechanismConfig['type']) =>
+    type === 'gear' || type === 'gear_linkage' || type === 'cam' || type === 'planetary_gear';
 
 export const Canvas: React.FC<CanvasProps> = ({
     project, config, setConfig, selectedId, setSelectedId, isPlaying, showTrace, isDrawMode, userPath, setUserPath, angle, setAngle, viewport, setViewport
@@ -488,6 +517,11 @@ export const Canvas: React.FC<CanvasProps> = ({
                         const opacity = isSelected ? 1 : 0.6;
                         const color = m.color;
                         const yokeSlotHalfHeight = m.type === 'yoke' ? Math.abs(m.sliderOffset) + m.crankLength + 30 : 0;
+                        const recipe = referenceRecipeForType(m.type);
+                        const coordRoleSummary = referenceCoordRoleSummary(m.type);
+                        const gearCenters = (m.type === 'gear' || m.type === 'gear_linkage') ? gearTrainCenters(m) : [];
+                        const gearRadii = (m.type === 'gear' || m.type === 'gear_linkage') ? gearTrainPitchRadii(m) : [];
+                        const showCrankDriver = !hasNoCrankDriverInCanvas(m.type);
 
                         let rockerAngleDeg = 0;
                         if (m.type === '4bar' || m.type === 'quick-return') {
@@ -495,12 +529,29 @@ export const Canvas: React.FC<CanvasProps> = ({
                         }
 
                         return (
-                            <g key={m.id} opacity={opacity}>
-                                {/* Anchor P1 Visualization */}
+                            <g
+                                key={m.id}
+                                opacity={opacity}
+                                data-testid={`design-mechanism-${m.id}`}
+                                data-mechanism-type={m.type}
+                                data-reference-canonical-key={recipe.canonicalKey}
+                                data-reference-topology={referenceTopologySummary(m.type)}
+                                data-reference-stack-labels={recipe.stackLabels.join(' → ')}
+                                data-reference-coord-roles={coordRoleSummary}
+                                data-reference-export-ready={recipe.exportReady ? 'true' : 'false'}
+                                data-reference-support={recipe.support}
+                            >
+                                {/* Anchor P1 Visualization: only the actual driver family gets a crank bar. */}
                                 <g transform={`translate(${p1.x}, ${p1.y})`}>
                                     <g transform={`rotate(${crankDeg * (m.speed1 ?? 1)})`}>
                                         <g fill="#5a6cff" stroke="#3742c6" strokeWidth="2">
-                                            <GearPath radius={m.crankLength} />
+                                            {m.type === 'cam'
+                                                ? <CamProfilePath radius={m.crankLength} samples={m.camProfileSamples} />
+                                                : m.type === 'planetary_gear'
+                                                    ? <GearPath radius={m.crankLength} />
+                                                    : showCrankDriver
+                                                        ? <line x1="0" y1="0" x2={m.crankLength} y2="0" stroke="#3742c6" strokeWidth="8" strokeLinecap="round" />
+                                                        : null}
                                         </g>
                                         <circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />
                                     </g>
@@ -514,6 +565,16 @@ export const Canvas: React.FC<CanvasProps> = ({
                                     )}
                                 </g>
 
+                                {(m.type === 'gear' || m.type === 'gear_linkage') && gearCenters.map((center, index) => {
+                                    const ratio = index === 0 ? 1 : (index % 2 === 1 ? -1 : 1) * (gearRadii[0] ?? 1) / (gearRadii[index] ?? 1);
+                                    return <g key={`${m.id}-gear-${index}`} transform={`translate(${center.x}, ${center.y}) rotate(${crankDeg * ratio})`}>
+                                        <g fill={index === 0 ? '#5a6cff' : '#94a3b8'} stroke={index === 0 ? '#3742c6' : '#475569'} strokeWidth="2">
+                                            <GearPath radius={gearRadii[index] ?? m.crankLength} />
+                                        </g>
+                                        <circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />
+                                    </g>;
+                                })}
+
                                 {(m.type === '4bar' || m.type === 'quick-return') && m.showOutputGear && isValid && (
                                     <g transform={`translate(${p2.x}, ${p2.y}) rotate(${rockerAngleDeg})`}>
                                         <g fill="#5a6cff" stroke="#3742c6" strokeWidth="2">
@@ -523,8 +584,10 @@ export const Canvas: React.FC<CanvasProps> = ({
                                     </g>
                                 )}
 
-                                <line x1={p1.x} y1={p1.y} x2={j1.x} y2={j1.y} stroke="#3742c6" strokeWidth="4" strokeLinecap="round" />
-                                <circle cx={j1.x} cy={j1.y} r={4} fill={color} />
+                                {showCrankDriver && <>
+                                    <line x1={p1.x} y1={p1.y} x2={j1.x} y2={j1.y} stroke="#3742c6" strokeWidth="4" strokeLinecap="round" />
+                                    <circle cx={j1.x} cy={j1.y} r={4} fill={color} />
+                                </>}
 
                                 {isValid ? (
                                     <>
@@ -532,7 +595,6 @@ export const Canvas: React.FC<CanvasProps> = ({
                                             <>
                                                 <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="#cbd5e1" strokeWidth="12" strokeLinecap="round" />
                                                 <line x1={p2.x} y1={p2.y} x2={j2.x} y2={j2.y} stroke="#475569" strokeWidth="8" strokeLinecap="round" />
-                                                <path d={`M ${j1.x} ${j1.y} L ${j2.x} ${j2.y} L ${effector.x} ${effector.y} Z`} fill={`${color}20`} stroke={color} strokeWidth="1" />
                                                 <line x1={j1.x} y1={j1.y} x2={j2.x} y2={j2.y} stroke={color} strokeWidth="8" strokeLinecap="round" />
                                                 <circle cx={p2.x} cy={p2.y} r={8} fill="#94a3b8" stroke="white" strokeWidth="2" className="cursor-grab" />
                                                 <circle cx={j2.x} cy={j2.y} r={6} fill="white" stroke="#334155" strokeWidth="2" className="cursor-grab" />
@@ -541,12 +603,6 @@ export const Canvas: React.FC<CanvasProps> = ({
 
                                         {m.type === '5bar' && aux && (
                                             <>
-                                                <g transform={`translate(${p2.x}, ${p2.y}) rotate(${(crankDeg * (m.speed2 ?? (m.gearRatio || 1))) + ((m.phase ?? 0) * 180 / Math.PI)})`}>
-                                                    <g fill="#5a6cff" stroke="#3742c6" strokeWidth="2">
-                                                        <GearPath radius={m.rockerLength} />
-                                                    </g>
-                                                    <circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />
-                                                </g>
                                                 <line x1={p2.x} y1={p2.y} x2={aux.x} y2={aux.y} stroke="#3742c6" strokeWidth="4" strokeLinecap="round" />
                                                 <circle cx={aux.x} cy={aux.y} r={4} fill={color} className="cursor-grab" />
 
@@ -554,8 +610,9 @@ export const Canvas: React.FC<CanvasProps> = ({
                                                     <circle cx={aux.x} cy={aux.y} r={8} fill="transparent" stroke="white" strokeWidth="2" strokeDasharray="2,2" className="cursor-grab" />
                                                 )}
 
-                                                <line x1={j1.x} y1={j1.y} x2={effector.x} y2={effector.y} stroke="#475569" strokeWidth="6" strokeLinecap="round" />
+                                                <line x1={j1.x} y1={j1.y} x2={j2.x} y2={j2.y} stroke="#475569" strokeWidth="6" strokeLinecap="round" />
                                                 <line x1={aux.x} y1={aux.y} x2={j2.x} y2={j2.y} stroke="#475569" strokeWidth="6" strokeLinecap="round" />
+                                                <line x1={j2.x} y1={j2.y} x2={effector.x} y2={effector.y} stroke={color} strokeWidth="4" strokeLinecap="round" opacity="0.75" />
 
                                                 <circle cx={p2.x} cy={p2.y} r={8} fill="transparent" stroke="#94a3b8" strokeWidth="2" className="cursor-grab" />
                                                 <circle cx={j2.x} cy={j2.y} r={5} fill="white" stroke="#334155" strokeWidth="2" className="cursor-grab" />
@@ -577,10 +634,12 @@ export const Canvas: React.FC<CanvasProps> = ({
 
                                         {m.type === 'gear' && (
                                             <>
-                                                <line x1={j1.x} y1={j1.y} x2={effector.x} y2={effector.y} stroke={color} strokeWidth="6" strokeLinecap="round" />
-                                                <line x1={j2.x} y1={j2.y} x2={effector.x} y2={effector.y} stroke="#475569" strokeWidth="4" strokeLinecap="round" />
+                                                {gearCenters.slice(1).map((center, index) => {
+                                                    const previous = gearCenters[index];
+                                                    return previous ? <line key={`${m.id}-gear-mesh-${index}`} x1={previous.x} y1={previous.y} x2={center.x} y2={center.y} stroke="#94a3b8" strokeWidth="2" strokeDasharray="7 7" opacity="0.55" /> : null;
+                                                })}
                                                 <circle cx={p2.x} cy={p2.y} r={8} fill="#94a3b8" stroke="white" strokeWidth="2" className="cursor-grab" />
-                                                <circle cx={j2.x} cy={j2.y} r={5} fill="white" stroke="#334155" strokeWidth="2" className={canDragJ2(m) ? 'cursor-grab' : ''} opacity={canDragJ2(m) ? 1 : 0.65} />
+                                                <circle cx={j2.x} cy={j2.y} r={5} fill="white" stroke="#334155" strokeWidth="2" opacity="0.65" />
                                             </>
                                         )}
 
@@ -598,14 +657,51 @@ export const Canvas: React.FC<CanvasProps> = ({
                                             </>
                                         )}
 
-                                        {(m.type === 'cam' || m.type === 'planetary_gear') && (
+                                        {m.type === 'cam' && (
                                             <>
-                                                {aux && <circle cx={aux.x} cy={aux.y} r={m.rockerLength || 20} fill="none" stroke="#5a6cff" strokeWidth="2" strokeDasharray="6 6" />}
-                                                <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="#cbd5e1" strokeWidth="7" strokeLinecap="round" />
-                                                <line x1={p2.x} y1={p2.y} x2={j2.x} y2={j2.y} stroke={color} strokeWidth="6" strokeLinecap="round" />
-                                                <line x1={j2.x} y1={j2.y} x2={effector.x} y2={effector.y} stroke="#475569" strokeWidth="4" strokeLinecap="round" />
-                                                <circle cx={p2.x} cy={p2.y} r={8} fill="#94a3b8" stroke="white" strokeWidth="2" opacity={0.65} />
-                                                <circle cx={j2.x} cy={j2.y} r={5} fill="white" stroke="#334155" strokeWidth="2" className={canDragJ2(m) ? 'cursor-grab' : ''} opacity={canDragJ2(m) ? 1 : 0.65} />
+                                                {(() => {
+                                                    const a = ((m.groundAngle ?? 90) * Math.PI) / 180;
+                                                    const axis = { x: Math.cos(a), y: Math.sin(a) };
+                                                    const normal = { x: -Math.sin(a), y: Math.cos(a) };
+                                                    const railA = { x: j2.x - axis.x * 90, y: j2.y - axis.y * 90 };
+                                                    const railB = { x: j2.x + axis.x * 90, y: j2.y + axis.y * 90 };
+                                                    return <>
+                                                        <line x1={railA.x + normal.x * 12} y1={railA.y + normal.y * 12} x2={railB.x + normal.x * 12} y2={railB.y + normal.y * 12} stroke="#cbd5e1" strokeWidth="3" strokeLinecap="round" />
+                                                        <line x1={railA.x - normal.x * 12} y1={railA.y - normal.y * 12} x2={railB.x - normal.x * 12} y2={railB.y - normal.y * 12} stroke="#cbd5e1" strokeWidth="3" strokeLinecap="round" />
+                                                        <line x1={p1.x} y1={p1.y} x2={j1.x} y2={j1.y} stroke={color} strokeWidth="2" strokeDasharray="6 6" opacity="0.7" />
+                                                        <g transform={`translate(${j2.x}, ${j2.y}) rotate(${m.groundAngle ?? 90})`}>
+                                                            <rect x="-24" y="-12" width="48" height="24" rx="8" fill="#e2e8f0" stroke="#475569" strokeWidth="2" />
+                                                            <circle cx="0" cy="0" r="5" fill="white" stroke="#334155" strokeWidth="2" />
+                                                        </g>
+                                                    </>;
+                                                })()}
+                                            </>
+                                        )}
+
+                                        {m.type === 'planetary_gear' && (
+                                            <>
+                                                {(() => {
+                                                    const ringRadius = planetaryRingPitchRadius(m);
+                                                    const carrierAngle = angle * planetaryCarrierOutputRatio(m.crankLength, m.rockerLength);
+                                                    const planetCenters = planetaryPlanetCenters(p1, m, carrierAngle);
+                                                    const planetCount = Math.max(1, planetCenters.length);
+                                                    return <>
+                                                        <g transform={`translate(${p1.x}, ${p1.y})`}>
+                                                            <g fill="#c4b5fd" stroke="#6d5dfc" strokeWidth="2" opacity="0.75">
+                                                                <RingGearPath radius={ringRadius} />
+                                                            </g>
+                                                        </g>
+                                                        {planetCenters.map((center, index) => (
+                                                            <g key={`${m.id}-planet-${index}`} transform={`translate(${center.x}, ${center.y}) rotate(${crankDeg * planetaryPlanetSpinRatio(m.crankLength, m.rockerLength) + index * (360 / planetCount)})`}>
+                                                                <line x1={p1.x - center.x} y1={p1.y - center.y} x2="0" y2="0" stroke="#475569" strokeWidth="5" strokeLinecap="round" />
+                                                                <g fill="#94a3b8" stroke="#475569" strokeWidth="2">
+                                                                    <GearPath radius={m.rockerLength} />
+                                                                </g>
+                                                                <circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />
+                                                            </g>
+                                                        ))}
+                                                    </>;
+                                                })()}
                                             </>
                                         )}
 

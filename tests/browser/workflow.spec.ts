@@ -16,10 +16,16 @@ const downloadMetadataJson = async (page: Page) => {
   return JSON.parse(await readFile(metadataPath!, 'utf8'));
 };
 
+const dismissWelcomeSplash = async (page: Page) => {
+  const dialog = page.getByTestId('welcome-dialog');
+  if (!(await dialog.count())) return;
+  await dialog.getByRole('button', { name: 'Start', exact: true }).click({ timeout: 2500 }).catch(async () => {
+    await expect(dialog, 'welcome splash either accepted or auto-dismissed').toHaveCount(0, { timeout: 5000 });
+  });
+};
+
 const openCharacterScreen = async (page: Page) => {
-  if (await page.getByTestId('welcome-dialog').count()) {
-    await page.getByRole('button', { name: 'Start', exact: true }).click();
-  }
+  await dismissWelcomeSplash(page);
   if (await page.getByTestId('getting-started-dialog').count()) {
     await page.getByRole('button', { name: 'Skip to editor' }).click();
   }
@@ -68,9 +74,7 @@ test('Character part cut outline editor bakes and edits contour points', async (
 
 
 const openWavingArmTemplate = async (page: Page) => {
-  if (await page.getByTestId('welcome-dialog').count()) {
-    await page.getByRole('button', { name: 'Start', exact: true }).click();
-  }
+  await dismissWelcomeSplash(page);
   if (!(await page.getByTestId('getting-started-dialog').count())) {
     await openCharacterScreen(page);
     await page.getByRole('button', { name: /Open Getting Started/i }).click();
@@ -339,6 +343,11 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   expect(Number(await designPuppet.getAttribute('data-three-mechanism-link-count')), '3D mechanism overlay contains physical link bars').toBeGreaterThanOrEqual(5);
   await expect.poll(async () => Number(await designPuppet.getAttribute('data-three-scene-object-count')), { message: 'design 3D scene includes character, joints, and mechanism geometry' }).toBeGreaterThan(60);
   await expect.poll(async () => Number(await designPuppet.getAttribute('data-three-render-triangles')), { message: 'design WebGL renderer drew real triangles' }).toBeGreaterThan(0);
+  const designMechanism = page.getByTestId('design-canvas').locator('[data-mechanism-type="4bar"]').first();
+  await expect(designMechanism).toHaveAttribute('data-reference-canonical-key', 'four_bar');
+  await expect(designMechanism).toHaveAttribute('data-reference-topology', /A-B input.*B-C coupler.*C-D output.*D-A board-ground/);
+  await expect(designMechanism).toHaveAttribute('data-reference-stack-labels', /Input L2 linkage.*Coupler L4 linkage.*Output L2 linkage/);
+  await expect(designMechanism).toHaveAttribute('data-reference-coord-roles', /I5:board.*G6:link_end_reference.*G10:link_joint_reference.*I9:board/);
   const persistedPathCount = await page.getByTestId('design-canvas').locator('path').evaluateAll(paths =>
     paths.filter(path => (path.getAttribute('d') ?? '').includes('M 70.00 60.00') && (path.getAttribute('d') ?? '').includes('L 130.00 84.00')).length
   );
@@ -399,6 +408,13 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('stage-right-inspector').getByTestId('assembly-guide-web-preview')).toHaveCount(0);
   await expect(page.getByTestId('assembly-stepper-workbench')).toContainText('Mechanism first');
   await expect(page.getByTestId('assembly-step-list')).toContainText('Mount module to board');
+  const assemblyWorkbench = page.getByTestId('assembly-stepper-workbench');
+  await page.getByTestId('assembly-step-list').getByRole('button', { name: /Add coupler/i }).click();
+  await expect(assemblyWorkbench).toHaveAttribute('data-step-phase', 'assemble-module');
+  await expect(assemblyWorkbench).toHaveAttribute('data-active-board-coords', '');
+  await expect(assemblyWorkbench).toHaveAttribute('data-floating-reference-coords', /G6.*G10/);
+  await expect(page.getByTestId('assembly-floating-references')).toContainText('G6');
+  await expect(page.getByTestId('assembly-board').locator('.assembly-active-hole')).toHaveCount(0);
   await page.getByTestId('assembly-step-list').getByRole('button', { name: /Mount module to board/i }).click();
   await expect(page.getByTestId('assembly-guide-preview')).toContainText('Mount module to board');
   await expect(page.getByTestId('assembly-player-overlay')).toBeVisible();
@@ -410,8 +426,9 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('prefab-assembly-steps')).toContainText('mount-to-board');
   await expect(page.getByTestId('prefab-assembly-steps')).toContainText(/board/);
   await expect(page.getByTestId('prefab-assembly-steps')).toContainText(/Z \d+\.\dmm/);
-  const assemblyWorkbench = page.getByTestId('assembly-stepper-workbench');
   await expect(assemblyWorkbench).toHaveAttribute('data-step-phase', 'mount-to-board');
+  await expect(assemblyWorkbench).toHaveAttribute('data-active-board-coords', /I5.*I9/);
+  await expect(assemblyWorkbench).toHaveAttribute('data-floating-reference-coords', '');
   await expect(page.getByTestId('assembly-mount-motion')).toBeVisible();
   await page.getByTestId('assembly-player-overlay').getByRole('button', { name: 'Play assembly' }).click();
   await expect.poll(async () => Number(await assemblyWorkbench.getAttribute('data-step-progress')), { message: 'assembly player animates the active step' }).toBeGreaterThan(0);

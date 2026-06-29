@@ -1,5 +1,6 @@
 import type { FabricationRecipe, PhysicalKitSettings } from '../../../types';
 import type { AssemblyLane, AssemblyPlaybackStep } from '../../../utils/assemblyPlayback';
+import { isBoardFixedCoordRole, readableCoordRole } from '../../../utils/mechanismReference';
 
 const assemblyCoordToSvg = (coord: string) => {
     const match = /^([A-O])([1-9]|1[0-5])$/i.exec(coord.trim());
@@ -16,7 +17,14 @@ export const AssemblyWorkbench = ({ recipe, lane, step, kit, progress = 0 }: { r
     const eased = smooth(progress);
     const boardVisible = lane === 'kit' && ['mount-to-board', 'connect-character', 'test-motion'].includes(step.phase);
     const stack = step.stack.length ? step.stack : recipe.assemblySteps.flatMap(item => item.stack ?? []).slice(0, 5);
-    const activeCoords = step.coords.map(assemblyCoordToSvg).filter(Boolean) as Array<{ x: number; y: number }>;
+    const coordEntries = step.coords.map((coord, index) => ({
+        coord,
+        role: step.coordRoles[index] ?? 'moving_reference',
+        point: assemblyCoordToSvg(coord)
+    })).filter((entry): entry is { coord: string; role: string; point: { x: number; y: number } } => Boolean(entry.point));
+    const boardCoordEntries = coordEntries.filter(entry => isBoardFixedCoordRole(entry.role));
+    const floatingCoordEntries = coordEntries.filter(entry => !isBoardFixedCoordRole(entry.role));
+    const activeCoords = boardCoordEntries.map(entry => entry.point);
     const currentLayer = Math.max(0, Math.min(stack.length - 1, step.phase === 'assemble-module' ? step.index - 2 : stack.length - 1));
     const primaryBoardPoint = activeCoords[0] ?? assemblyCoordToSvg(recipe.boardCoordinate) ?? { x: 620, y: 260 };
     const home = { x: 108, y: 162 };
@@ -37,6 +45,9 @@ export const AssemblyWorkbench = ({ recipe, lane, step, kit, progress = 0 }: { r
         data-step-phase={step.phase}
         data-step-motion={step.motion}
         data-step-progress={Math.round(progress * 100)}
+        data-active-coords={coordEntries.map(entry => `${entry.coord}:${entry.role}`).join(',')}
+        data-active-board-coords={boardCoordEntries.map(entry => entry.coord).join(',')}
+        data-floating-reference-coords={floatingCoordEntries.map(entry => entry.coord).join(',')}
         aria-label="Interactive assembly workbench"
     >
         <div className="assembly-workbench-head">
@@ -91,11 +102,20 @@ export const AssemblyWorkbench = ({ recipe, lane, step, kit, progress = 0 }: { r
                     <circle key={`${row}-${col}`} cx={494 + col * 18} cy={142 + row * 18} r="3.2" fill="#e2e8f0" stroke="#94a3b8"/>
                 ))}
                 <text x="492" y="102" className="assembly-svg-label">{kit.boardCells}×{kit.boardCells} board · {kit.gridPitchMm}mm</text>
-                {activeCoords.map((point, index) => <g key={`${point.x}-${point.y}-${index}`} className="assembly-active-hole">
+                {boardCoordEntries.map(({ point, coord }, index) => <g key={`${point.x}-${point.y}-${index}`} className="assembly-active-hole">
                     <circle cx={point.x} cy={point.y} r="13" fill="rgba(139,92,246,.12)" stroke="#8b5cf6" strokeWidth="3"/>
-                    <text x={point.x + 12} y={point.y - 10} className="assembly-svg-tiny">{step.coords[index]}</text>
+                    <text x={point.x + 12} y={point.y - 10} className="assembly-svg-tiny">{coord}</text>
                 </g>)}
             </g>
+            {floatingCoordEntries.length > 0 && <g data-testid="assembly-floating-references" className="assembly-floating-references">
+                <rect x="474" y="428" width="288" height="52" rx="16" fill="rgba(139,92,246,.08)" stroke="#c4b5fd" strokeDasharray="8 6"/>
+                <text x="494" y="450" className="assembly-svg-tiny">Moving refs</text>
+                {floatingCoordEntries.slice(0, 4).map((entry, index) => (
+                    <text key={`${entry.coord}-${entry.role}`} x={494 + index * 62} y="470" className="assembly-svg-tiny">
+                        {entry.coord} · {readableCoordRole(entry.role)}
+                    </text>
+                ))}
+            </g>}
             {step.phase === 'mount-to-board' && <g className="assembly-mount-motion" data-testid="assembly-mount-motion">
                 <path d="M370 272 C430 210 462 206 520 190" fill="none" stroke="#8b5cf6" strokeWidth="6" strokeLinecap="round" markerEnd="url(#assembly-arrow)"/>
                 <rect x={primaryBoardPoint.x - 18} y={primaryBoardPoint.y - 18} width="138" height="60" rx="22" fill="rgba(139,92,246,.16)" stroke="#8b5cf6" strokeDasharray="8 7" strokeWidth="3"/>
