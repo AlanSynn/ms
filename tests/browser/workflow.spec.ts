@@ -1360,7 +1360,14 @@ test('Recommendation sheet applies a distinct mechanism and blueprint recipe', a
   const metadata = await downloadMetadataJson(page);
   expect(metadata.recipes).toHaveLength(initialMechanisms + 1);
   expect(new Set(metadata.recipes.map((recipe: { mechanismId: string }) => recipe.mechanismId)).size).toBe(initialMechanisms + 1);
-  expect(metadata.sceneSnapshot.mechanisms.some((mechanism: { presetId?: string; source?: string }) => mechanism.source === 'optimized' && mechanism.presetId?.startsWith('recommendation-'))).toBe(true);
+  const appliedRecommendation = metadata.sceneSnapshot.mechanisms.find((mechanism: { id: string; presetId?: string; source?: string; targetPathId?: string; targetPartId?: string }) => mechanism.source === 'optimized' && mechanism.presetId?.startsWith('recommendation-'));
+  expect(appliedRecommendation).toBeTruthy();
+  expect(appliedRecommendation?.targetPartId).toBe('right_arm_lower');
+  expect(appliedRecommendation?.targetPathId).toBe('path-right-arm');
+  const appliedRecipe = metadata.recipes.find((recipe: { mechanismId: string; offsetFromBoardMm?: { x: number; y: number } }) => recipe.mechanismId === appliedRecommendation?.id);
+  expect(appliedRecipe).toBeTruthy();
+  expect(Math.abs(appliedRecipe?.offsetFromBoardMm?.x ?? Number.NaN)).toBeLessThan(0.01);
+  expect(Math.abs(appliedRecipe?.offsetFromBoardMm?.y ?? Number.NaN)).toBeLessThan(0.01);
 
   await page.goto('/');
   await openWavingArmTemplate(page);
@@ -2008,6 +2015,8 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   await expect(page.getByTestId('design-mechanism-library')).toContainText('Slider piston');
   await expect(page.getByLabel('slider offset number')).toBeVisible();
   await expect(page.getByLabel('rod length number')).toBeVisible();
+  await expect(page.getByLabel('Mechanism target part')).toHaveValue('right_arm_lower');
+  await expect(page.getByLabel('Mechanism target path')).toHaveValue('path-right-arm');
 
   await page.getByLabel('Mechanism target part').selectOption('head');
   await expect(page.getByLabel('Mechanism target path')).toHaveValue('');
@@ -2041,6 +2050,32 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   await page.getByRole('button', { name: /Generate package/i }).click();
   expect((await downloadMetadataJson(page)).recipes).toHaveLength(1);
 
+  expectCleanPage(pageErrors, consoleErrors);
+});
+
+
+test('Mechanism anchor drag snaps to the fabrication grid', async ({ page }) => {
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByRole('button', { name: /Mechanism Design/i }).click();
+  await page.getByTestId('design-three-puppet-view-2d').click();
+  const anchor = page.locator('[data-testid^="mechanism-anchor-"]').first();
+  await expect(anchor).toBeVisible();
+  await anchor.dragTo(page.getByTestId('design-canvas'), { targetPosition: { x: 420, y: 320 } });
+
+  await clickStage(page, 'Blueprint');
+  await page.getByRole('button', { name: /Generate package/i }).click();
+  const metadata = await downloadMetadataJson(page);
+  const recipe = metadata.recipes[0] as { offsetFromBoardMm?: { x: number; y: number } };
+  expect(Math.abs(recipe.offsetFromBoardMm?.x ?? Number.NaN)).toBeLessThan(0.01);
+  expect(Math.abs(recipe.offsetFromBoardMm?.y ?? Number.NaN)).toBeLessThan(0.01);
   expectCleanPage(pageErrors, consoleErrors);
 });
 

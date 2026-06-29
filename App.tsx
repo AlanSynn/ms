@@ -390,10 +390,11 @@ const App: React.FC = () => {
                 : undefined;
         }
         const next = { ...mechanism, ...nextUpdates };
-        const normalized = next.type === 'gear' || next.type === 'gear_linkage' || next.type === 'planetary_gear'
-            ? normalizeMechanismToReference(next)
-            : next;
-        dispatch({ type: 'upsert_mechanism', mechanism: mechanismWithGeneratedPath({ ...normalized, activeVisualPartIds: normalized.targetPartId ? [normalized.targetPartId] : [] }) });
+        const normalized = normalizeGearMeshMechanism(next);
+        const fitted = nextUpdates.targetPathId && (updates.targetPathId !== undefined || updates.targetPartId !== undefined)
+            ? fitMechanismToTargetPath(project, normalized, nextUpdates.targetPathId)
+            : mechanismWithGeneratedPath({ ...normalized, activeVisualPartIds: normalized.targetPartId ? [normalized.targetPartId] : [] });
+        dispatch({ type: 'upsert_mechanism', mechanism: fitted });
     };
 
     const setPathPoints = (points: Point[], source: ProjectMotionPath['source'] = 'drawn') => {
@@ -2240,6 +2241,31 @@ const snapMechanismAnchor = (mechanism: MechanismConfig, project: ProjectState) 
     return mechanismWithGeneratedPath({ ...mechanism, anchorX: anchor.x, anchorY: anchor.y, sceneAnchor: anchor, transform: { ...(mechanism.transform ?? { x: anchor.x, y: anchor.y, rotation: mechanism.groundAngle ?? 0, scale: 1 }), x: anchor.x, y: anchor.y } });
 };
 
+const generatedPathCenter = (mechanism: MechanismConfig): Point | undefined => {
+    const points = mechanism.generatedPath?.length ? mechanism.generatedPath : generateCurvePoints(mechanism, 72).points;
+    if (!points.length) return undefined;
+    const xs = points.map(p => p.x);
+    const ys = points.map(p => p.y);
+    return { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 };
+};
+
+const fitMechanismGeneratedPathToPath = (mechanism: MechanismConfig, path: ProjectMotionPath) => {
+    const center = generatedPathCenter(mechanism);
+    if (!center || path.points.length < 3) return mechanism;
+    const metrics = pathMetrics(path);
+    const dx = metrics.cx - center.x;
+    const dy = metrics.cy - center.y;
+    if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return mechanism;
+    const anchor = { x: (mechanism.anchorX ?? 0) + dx, y: (mechanism.anchorY ?? 0) + dy };
+    return mechanismWithGeneratedPath({
+        ...mechanism,
+        anchorX: anchor.x,
+        anchorY: anchor.y,
+        sceneAnchor: anchor,
+        transform: { ...(mechanism.transform ?? { x: anchor.x, y: anchor.y, rotation: mechanism.groundAngle ?? 0, scale: 1 }), x: anchor.x, y: anchor.y }
+    });
+};
+
 const fitRecommendedMechanismToSheet = (project: ProjectState, mechanism: MechanismConfig) => {
     const sheet = sceneBoundsForSheet(project.settings.physicalKit);
     const margin = Math.max(10, project.settings.physicalKit.gridPitchMm * 0.35 * SCENE_PX_PER_MM);
@@ -2355,7 +2381,30 @@ const createRecommendedMechanism = (project: ProjectState, selectedPart: BodyPar
         recommendation: reason,
         warnings: score < 55 ? ['Low-confidence recommendation; review in Foundry before fabrication.'] : []
     };
-    return fitRecommendedMechanismToSheet(project, mechanismWithGeneratedPath(normalizeMechanismToReference(tuned)));
+    const normalized = mechanismWithGeneratedPath(normalizeMechanismToReference(tuned));
+    return fitRecommendedMechanismToSheet(project, fitMechanismGeneratedPathToPath(normalized, selectedPath));
+};
+
+const fitMechanismToTargetPath = (project: ProjectState, mechanism: MechanismConfig, targetPathId?: string): MechanismConfig => {
+    const path = targetPathId ? project.paths[targetPathId] : undefined;
+    const part = path ? project.parts[path.partId] : undefined;
+    if (!path || !part || path.points.length < 3) return snapMechanismAnchor(normalizeGearMeshMechanism(mechanism), project);
+    const fitted = createRecommendedMechanism(project, part, path, mechanism.type, mechanism.recommendation ?? 'Fit to current path.', 80);
+    return mechanismWithGeneratedPath({
+        ...fitted,
+        id: mechanism.id,
+        color: mechanism.color ?? fitted.color,
+        visible: mechanism.visible,
+        enabled: mechanism.enabled,
+        source: mechanism.source ?? fitted.source,
+        presetId: mechanism.presetId ?? fitted.presetId,
+        recommendation: mechanism.recommendation ?? fitted.recommendation,
+        warnings: mechanism.warnings ?? fitted.warnings,
+        targetPartId: path.partId,
+        targetPathId: path.id,
+        targetAnchorJointId: mechanism.targetAnchorJointId ?? path.targetAnchorJointId ?? fitted.targetAnchorJointId,
+        activeVisualPartIds: [path.partId]
+    });
 };
 
 const buildMechanismRecommendations = (project: ProjectState, selectedPart?: BodyPartLayer, selectedPath?: ProjectMotionPath): MechanismRecommendation[] => {
@@ -2839,6 +2888,14 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
             targetAnchorJointId: targetPath?.targetAnchorJointId ?? (targetPartId ? preferredMotionJointId(project, targetPartId, selectedMechanism.targetAnchorJointId, { preferDistalWhenRoot: true }) : undefined)
         });
     };
+    const addLibraryMechanism = (type: MechanismType) => {
+        const base = createDefaultMechanism(type, uid('mech'));
+        const path = project.selectedPathId ? project.paths[project.selectedPathId] : undefined;
+        const mechanism = path && path.points.length >= 3
+            ? fitMechanismToTargetPath(project, { ...base, targetPathId: path.id, targetPartId: path.partId }, path.id)
+            : mechanismWithGeneratedPath(base);
+        dispatch({ type: 'upsert_mechanism', mechanism });
+    };
     return <EditorStageFrame
         stage="design"
         className="design-stage-frame"
@@ -2853,7 +2910,7 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
                 <h4 className="section-title mt-4">Mechanisms</h4>
                 <select aria-label="Mechanism instance" className="field" value={selectedMechanism?.id ?? ''} onChange={e => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: e.target.value })}>{project.mechanisms.map(m => <option key={m.id} value={m.id}>{m.id} · {m.type}</option>)}</select>
                 <div className="mt-3 flex flex-wrap gap-2">
-                    {AUTHORABLE_MECHANISM_TYPES.map(type => <button key={type} className="chip" title={mechanismTemplateLabel(type)} onClick={() => dispatch({ type: 'upsert_mechanism', mechanism: mechanismWithGeneratedPath(createDefaultMechanism(type, uid('mech'))) })}>{type}</button>)}
+                    {AUTHORABLE_MECHANISM_TYPES.map(type => <button key={type} className="chip" title={mechanismTemplateLabel(type)} onClick={() => addLibraryMechanism(type)}>{type}</button>)}
                 </div>
                 {selectedLibrary && <div className="rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-600" data-testid="design-mechanism-library">
                     <div className="font-bold text-slate-800">Mechanism library</div>

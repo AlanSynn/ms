@@ -1012,6 +1012,7 @@ export const createFabricationPackage = (project: ProjectState): FabricationPack
             boardCoordinate: r.boardCoordinate,
             board: r.board,
             sceneAnchor: r.sceneAnchor,
+            offsetFromBoardMm: r.offsetFromBoardMm,
             requiredParts: r.requiredParts,
             warnings: r.warnings,
             steps: r.steps,

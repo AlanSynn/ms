@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BodyPartLayer, CanvasViewport, GlobalConfig, MechanismConfig, Point, ProjectState } from '../types';
 import { calculateLinkage, generateCurvePoints } from '../utils/kinematics';
-import { boardGridLines, bodyPartPivotScene, defaultPhysicalKit, pathFromPoints, SCENE_PX_PER_MM, SCENE_VIEW, sceneBoundsForSheet, sceneToSvg } from '../utils/coordinates';
+import { boardGridLines, boardToScene, bodyPartPivotScene, defaultPhysicalKit, pathFromPoints, SCENE_PX_PER_MM, SCENE_VIEW, sceneBoundsForSheet, sceneToBoard, sceneToSvg } from '../utils/coordinates';
 import { motionPreviewForProject, pointOnProjectPath } from '../utils/motion';
 import { mechanismWithGeneratedPath } from '../utils/project';
 import { clampCanvasZoom } from '../utils/viewport';
@@ -153,12 +153,26 @@ export const Canvas: React.FC<CanvasProps> = ({
         };
     };
 
+    const snapAnchorUpdates = (m: MechanismConfig, updates: Partial<MechanismConfig>) => {
+        if (updates.anchorX === undefined || updates.anchorY === undefined) return updates;
+        const kit = project?.settings.physicalKit ?? defaultPhysicalKit();
+        const board = sceneToBoard({ x: updates.anchorX, y: updates.anchorY }, kit);
+        const anchor = boardToScene(board.col, board.row, kit);
+        return {
+            ...updates,
+            anchorX: anchor.x,
+            anchorY: anchor.y,
+            sceneAnchor: anchor,
+            transform: { ...(m.transform ?? { x: anchor.x, y: anchor.y, rotation: m.groundAngle ?? 0, scale: 1 }), ...(updates.transform ?? {}), x: anchor.x, y: anchor.y }
+        };
+    };
+
     const updateMechanism = (id: string, updates: Partial<MechanismConfig>) => {
         setConfig(prev => ({
             ...prev,
             mechanisms: prev.mechanisms.map(m => {
                 if (m.id !== id) return m;
-                const next = { ...m, ...updates };
+                const next = { ...m, ...snapAnchorUpdates(m, updates) };
                 const normalized = next.type === 'gear' || next.type === 'gear_linkage' || next.type === 'planetary_gear'
                     ? normalizeMechanismToReference(next)
                     : next;
@@ -666,6 +680,9 @@ export const Canvas: React.FC<CanvasProps> = ({
 
                                 {isSelected && isValid && (
                                     <circle cx={j1.x} cy={j1.y} r={8} fill="transparent" stroke="white" strokeWidth="2" strokeDasharray="2,2" />
+                                )}
+                                {isSelected && canDragHandle(m, 'P1') && (
+                                    <circle data-testid={`mechanism-anchor-${m.id}`} cx={p1.x} cy={p1.y} r={14 / zoom} fill="transparent" stroke="white" strokeWidth={2 / zoom} strokeDasharray={`${3 / zoom},${3 / zoom}`} className="cursor-move" pointerEvents="all" />
                                 )}
                             </g>
                         );
