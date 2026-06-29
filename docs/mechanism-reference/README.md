@@ -36,6 +36,8 @@ This folder is the portable mechanism-unit rulebook for rebuilding Automataii's 
 | `six_bar` / `linkage_six_bar` | catalog/content/domain reference only | no | no | no | Catalog entry exists; no current physical recipe. |
 | `geneva_drive` | catalog-only legacy idea | no | no | no | Present in `mechanism_catalog.json`, not in physical kit/export contract. |
 
+PRD-level implementation contracts live in `docs/prd/mechanisms/`. Those files are the task-level spec for keeping Foundry, Design, Blueprint, Assembly, and tests aligned with this reference.
+
 ## Non-negotiable portability rules
 
 - Use millimetres as canonical physical units.
@@ -45,3 +47,4 @@ This folder is the portable mechanism-unit rulebook for rebuilding Automataii's 
 - Moving pivots must use loose paper fasteners with spacers above/below moving layers.
 - Moving joints (`link_joint_reference`, `link_end_reference`, `gear_handle_reference`, `carrier_reference`, `slider_reference`) are assembly reference positions only; they must not be pinned to board holes.
 - A board coordinate in an assembly step is not automatically a fixed board pivot. Its `coord_role` decides whether it is fixed (`board`) or only a reference for a moving joint.
+- View pan/zoom is a shared viewer input rule: wheel zooms; drag pans in 2D or with middle/right/Shift in 3D; left drag orbits only in 3D.

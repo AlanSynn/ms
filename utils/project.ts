@@ -17,7 +17,7 @@ import {
 import { defaultPhysicalKit, localPivotOffsetForScene, SCENE_PX_PER_MM, sceneBoundsForSheet } from './coordinates';
 import { FABRICATION_GEAR_SPECS, FABRICATION_RING_GEAR_SPEC } from './fabricationContract';
 import { REFERENCE_DEFAULTS, normalizeMechanismToReference, referenceRequiredPartsForMechanism } from './mechanismReference';
-import { gearTrainOutputRatio, gearTrainPitchCenterDistance, generateCurvePoints, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from './kinematics';
+import { defaultCamProfileSamples, gearTrainOutputRatio, gearTrainPitchCenterDistance, generateCurvePoints, normalizeCamProfileSamples, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from './kinematics';
 import { clampNumber, finiteNumber, sanitizeHexColor, sanitizeMechanismType, sanitizePoint } from './sanitize';
 import { isUsableContourPoints } from './partGeometry';
 
@@ -279,6 +279,7 @@ export const createDefaultMechanism = (type: MechanismConfig['type'] = '4bar', i
     speed2: type === '5bar' ? -2 : type === 'gear' || type === 'gear_linkage' ? gearTrainOutputRatio([DEFAULT_DRIVE_GEAR_RADIUS, DEFAULT_OUTPUT_GEAR_RADIUS]) : type === 'planetary_gear' ? planetaryPlanetSpinRatio(DEFAULT_PLANETARY_SUN_RADIUS, DEFAULT_PLANETARY_PLANET_RADIUS) : 1,
     gearRatio: type === 'gear' || type === 'gear_linkage' ? gearTrainOutputRatio([DEFAULT_DRIVE_GEAR_RADIUS, DEFAULT_OUTPUT_GEAR_RADIUS]) : type === 'planetary_gear' ? planetaryCarrierOutputRatio(DEFAULT_PLANETARY_SUN_RADIUS, DEFAULT_PLANETARY_PLANET_RADIUS) : undefined,
     gearTrainRadii: type === 'gear' || type === 'gear_linkage' ? [DEFAULT_DRIVE_GEAR_RADIUS, DEFAULT_OUTPUT_GEAR_RADIUS] : undefined,
+    camProfileSamples: type === 'cam' ? defaultCamProfileSamples() : undefined,
     driverGroupId: 'driver-1',
     driverPhaseOffset: 0,
     rodLength: type === '6bar' ? 95 : type === 'piston' ? REFERENCE_DEFAULTS.sliderCrank.rod : 110,
@@ -990,6 +991,9 @@ const normalizeMechanismSnapshot = (value: unknown): MechanismConfig => {
     const gearRatio = type === 'gear' || type === 'gear_linkage'
         ? gearTrainOutputRatio({ crankLength, rockerLength, gearTrainRadii })
         : raw.gearRatio === undefined ? base.gearRatio : finiteNumber(raw.gearRatio, base.gearRatio ?? 1);
+    const camProfileSamples = Array.isArray(raw.camProfileSamples)
+        ? normalizeCamProfileSamples(raw.camProfileSamples.map(value => finiteNumber(value, Number.NaN)).filter(Number.isFinite)).slice(0, 64)
+        : base.camProfileSamples;
     const normalized: MechanismConfig = {
         ...base,
         id: typeof raw.id === 'string' && raw.id.trim() ? raw.id.slice(0, 80) : base.id,
@@ -1017,6 +1021,7 @@ const normalizeMechanismSnapshot = (value: unknown): MechanismConfig => {
         speed2: type === 'gear' || type === 'gear_linkage' ? gearRatio : finiteNumber(raw.speed2, base.speed2 ?? 1),
         gearRatio,
         gearTrainRadii,
+        camProfileSamples,
         driverGroupId: typeof raw.driverGroupId === 'string' && raw.driverGroupId.trim() ? raw.driverGroupId.slice(0, 80) : base.driverGroupId,
         driverPhaseOffset: finiteNumber(raw.driverPhaseOffset, base.driverPhaseOffset ?? 0),
         rodLength: raw.rodLength === undefined ? base.rodLength : finiteNumber(raw.rodLength, base.rodLength ?? 0),

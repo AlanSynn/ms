@@ -23,7 +23,7 @@ import {
     ProjectAction
 } from './types';
 import { gearPathD, generateDXF, generateSVG } from './utils/exporter';
-import { animationDeltaRadians, calculateLinkage, camProfileScale, generateCurvePoints, gearPairOutputRatio, gearTrainCenters, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from './utils/kinematics';
+import { animationDeltaRadians, calculateLinkage, defaultCamProfileSamples, generateCurvePoints, gearPairOutputRatio, gearTrainCenters, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, normalizeCamProfileSamples, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, sampledCamProfileScale } from './utils/kinematics';
 import { evaluateFitness, generateSmartConfig, mutateConfig } from './utils/optimizer';
 import {
     applyProjectAction,
@@ -63,7 +63,7 @@ import boyStarterUrl from './resources/examples/raw/boy.PNG?url';
 
 type FoundryState = MechanismConfig;
 type FoundryViewPreset = Viewer3DCameraPreset | 'side' | 'custom';
-type FoundryCamera = { yaw: number; pitch: number; zoom: number; preset: FoundryViewPreset };
+type FoundryCamera = { yaw: number; pitch: number; zoom: number; preset: FoundryViewPreset; pan: Point };
 type FoundryCameraPreset = { label: string; yaw: number; pitch: number; zoom: number };
 const foundryPreset = (preset: Viewer3DCameraPreset): FoundryCameraPreset => ({
     label: VIEWER3D_CAMERA_PRESETS[preset].foundryLabel,
@@ -84,17 +84,21 @@ const foundryCameraDistance = (camera: FoundryCamera) => 17 / clampFoundryZoom(c
 type FoundryOverlaySize = { width: number; height: number };
 const FOUNDRY_OVERLAY_SIZE: FoundryOverlaySize = { width: 360, height: 240 };
 const FOUNDRY_ANIMATION_COMMIT_MS = 1000 / 30;
+const FOUNDRY_CAMERA_TARGET_Z = 0.25;
+const foundryCameraTarget = (camera: FoundryCamera) =>
+    new THREE.Vector3(camera.pan?.x ?? 0, camera.pan?.y ?? 0, FOUNDRY_CAMERA_TARGET_Z);
 
 const foundryCameraPosition = (camera: FoundryCamera) => {
     const { yaw, pitch } = camera;
     const distance = foundryCameraDistance(camera);
     const yawRad = yaw * Math.PI / 180;
     const pitchRad = pitch * Math.PI / 180;
-    return new THREE.Vector3(
+    const target = foundryCameraTarget(camera);
+    return target.clone().add(new THREE.Vector3(
         Math.sin(yawRad) * Math.cos(pitchRad) * distance,
         Math.sin(pitchRad) * distance,
         Math.cos(yawRad) * Math.cos(pitchRad) * distance
-    );
+    ));
 };
 
 const projectFoundryOverlayPoint = (point: Point | undefined, camera: FoundryCamera, size: FoundryOverlaySize = FOUNDRY_OVERLAY_SIZE, z = 0): Point | undefined => {
@@ -103,7 +107,7 @@ const projectFoundryOverlayPoint = (point: Point | undefined, camera: FoundryCam
     const height = Math.max(1, size.height);
     const cam = new THREE.PerspectiveCamera(38, width / height, 0.1, 100);
     cam.position.copy(foundryCameraPosition(camera));
-    cam.lookAt(0, 0, 0.25);
+    cam.lookAt(foundryCameraTarget(camera));
     cam.updateMatrixWorld();
     cam.updateProjectionMatrix();
     const projected = new THREE.Vector3((point.x - 180) / 18, (120 - point.y) / 18, z).project(cam);
@@ -1337,6 +1341,7 @@ const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, 
     const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
         const rect = svgRef.current?.getBoundingClientRect();
         if (!rect) return;
+        e.stopPropagation();
         const nextZoom = clampCanvasZoom(viewport.zoom * (1 - e.deltaY * 0.001));
         const fx = (e.clientX - rect.left) / rect.width;
         const fy = (e.clientY - rect.top) / rect.height;
@@ -1993,12 +1998,13 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const [showPathPreview, setShowPathPreview] = useState(true);
     const [showFoundryGrid, setShowFoundryGrid] = useState(true);
     const [showSensemaking, setShowSensemaking] = useState(false);
-    const [foundryCamera, setFoundryCamera] = useState<FoundryCamera>({ ...FOUNDRY_VIEW_PRESETS.iso, preset: 'iso' });
+    const [foundryCamera, setFoundryCamera] = useState<FoundryCamera>({ ...FOUNDRY_VIEW_PRESETS.iso, preset: 'iso', pan: { x: 0, y: 0 } });
     const [foundryRigOpacity, setFoundryRigOpacity] = useState(85);
     const [foundryProjectionSize, setFoundryProjectionSize] = useState<FoundryOverlaySize>(FOUNDRY_OVERLAY_SIZE);
     const [isOrbitingFoundry, setIsOrbitingFoundry] = useState(false);
     const [isZoomingFoundry, setIsZoomingFoundry] = useState(false);
-    const foundryOrbitStartRef = useRef<{ pointerId: number; x: number; y: number; yaw: number; pitch: number; zoom: number; mode: 'orbit' | 'zoom' } | null>(null);
+    const [isPanningFoundry, setIsPanningFoundry] = useState(false);
+    const foundryOrbitStartRef = useRef<{ pointerId: number; x: number; y: number; yaw: number; pitch: number; zoom: number; pan: Point; mode: 'orbit' | 'zoom' | 'pan' } | null>(null);
     const targetReady = Boolean(selectedPart && selectedPath && selectedPath.enabled && selectedPath.points.length >= 3);
     const rawLanding = manualAnchor ?? selectedPath?.points[0] ?? (selectedPart ? bodyPartPivotScene(selectedPart, project.skeleton) : { x: foundry.anchorX ?? 0, y: foundry.anchorY ?? 0 });
     const landingBoard = sceneToBoard(rawLanding, project.settings.physicalKit);
@@ -2031,7 +2037,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const projectedDriveTip = projectOverlay(driveTip);
     const projectedAnchorMarker = projectFoundryOverlayPoint(anchorMarker, foundryCamera, foundryProjectionSize, 0);
     const hardBlocked = !targetReady || range.percentValid === 0 || !Number.isFinite(landing.x) || !Number.isFinite(landing.y);
-    const foundryCameraLabel = foundryCamera.preset === 'custom' ? 'Drag orbit' : FOUNDRY_VIEW_PRESETS[foundryCamera.preset].label;
+    const foundryCameraLabel = foundryCamera.preset === 'custom' ? 'Custom view' : FOUNDRY_VIEW_PRESETS[foundryCamera.preset].label;
     const foundryPhaseDegrees = Math.round(((((foundryPhase / (Math.PI * 2)) % 1) + 1) % 1) * 360);
     const applyAnchor = (point: Point) => {
         const board = sceneToBoard(point, project.settings.physicalKit);
@@ -2053,13 +2059,14 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
         applyAnchor(point);
         setIsPickingAnchor(false);
     };
-    const setCameraPreset = (preset: Exclude<FoundryViewPreset, 'custom'>) => setFoundryCamera({ ...FOUNDRY_VIEW_PRESETS[preset], preset });
+    const setCameraPreset = (preset: Exclude<FoundryViewPreset, 'custom'>) => setFoundryCamera(prev => ({ ...FOUNDRY_VIEW_PRESETS[preset], preset, pan: prev.pan ?? { x: 0, y: 0 } }));
     const handleFoundryPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
         if (isPickingAnchor || (event.button !== 0 && event.button !== 1 && event.button !== 2)) return;
-        const mode = event.shiftKey || event.altKey || event.button !== 0 ? 'zoom' : 'orbit';
-        foundryOrbitStartRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, yaw: foundryCamera.yaw, pitch: foundryCamera.pitch, zoom: foundryCamera.zoom, mode };
+        const mode = event.altKey ? 'zoom' : event.shiftKey || event.button === 1 || event.button === 2 ? 'pan' : 'orbit';
+        foundryOrbitStartRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, yaw: foundryCamera.yaw, pitch: foundryCamera.pitch, zoom: foundryCamera.zoom, pan: foundryCamera.pan ?? { x: 0, y: 0 }, mode };
         setIsOrbitingFoundry(mode === 'orbit');
         setIsZoomingFoundry(mode === 'zoom');
+        setIsPanningFoundry(mode === 'pan');
         event.preventDefault();
         event.currentTarget.setPointerCapture(event.pointerId);
     };
@@ -2072,7 +2079,19 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 yaw: start.yaw,
                 pitch: start.pitch,
                 zoom: clampFoundryZoom(start.zoom + (start.y - event.clientY) * 0.006),
-                preset: 'custom'
+                preset: 'custom',
+                pan: start.pan
+            });
+            return;
+        }
+        if (start.mode === 'pan') {
+            const scale = 0.018 / Math.max(0.45, start.zoom);
+            setFoundryCamera({
+                yaw: start.yaw,
+                pitch: start.pitch,
+                zoom: start.zoom,
+                preset: 'custom',
+                pan: { x: start.pan.x - (event.clientX - start.x) * scale, y: start.pan.y + (event.clientY - start.y) * scale }
             });
             return;
         }
@@ -2080,7 +2099,8 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             yaw: start.yaw + (event.clientX - start.x) * 0.45,
             pitch: clampFoundryPitch(start.pitch - (event.clientY - start.y) * 0.45),
             zoom: start.zoom,
-            preset: 'custom'
+            preset: 'custom',
+            pan: start.pan
         });
     };
     const finishFoundryOrbit = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -2088,11 +2108,13 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             foundryOrbitStartRef.current = null;
             setIsOrbitingFoundry(false);
             setIsZoomingFoundry(false);
+            setIsPanningFoundry(false);
             if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
         }
     };
     const handleFoundryWheel = (event: React.WheelEvent<HTMLDivElement>) => {
         if (isPickingAnchor) return;
+        event.stopPropagation();
         setFoundryCamera(prev => ({
             ...prev,
             zoom: clampFoundryZoom(prev.zoom * (event.deltaY < 0 ? 1.1 : 0.9)),
@@ -2254,6 +2276,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 isPickingAnchor={isPickingAnchor}
                 isOrbiting={isOrbitingFoundry}
                 isZooming={isZoomingFoundry}
+                isPanning={isPanningFoundry}
                 onAnchorPick={handleAnchorPick}
                 onPointerDown={handleFoundryPointerDown}
                 onPointerMove={handleFoundryPointerMove}
@@ -2315,6 +2338,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                         setAnchoredFoundry({ ...base, color: foundry.color, ...updates, presetId, recommendation: preset.recommendation });
                     }}>{Object.entries(FOUNDRY_PRESETS).map(([id, preset]) => <option key={id} value={id}>{preset.label}</option>)}</select>
                     {PARAMS.filter(p => showParam(foundry.type, p.key)).map(p => <React.Fragment key={String(p.key)}><MiniNumber label={p.label} value={Number(foundry[p.key] ?? 0)} min={p.min} max={p.max} step={p.step} onChange={value => updateFoundryParam(p.key, value)}/></React.Fragment>) }
+                    {foundry.type === 'cam' && <CamProfileEditor samples={foundry.camProfileSamples} onChange={camProfileSamples => setFoundry({ ...foundry, camProfileSamples })} />}
                 </div>
             </details>
             <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
@@ -2733,6 +2757,82 @@ const SelectField = ({ label, value, onChange, children }: { label: string; valu
 const MiniNumber = ({ label, value, min, max, step = 1, disabled = false, onChange }: { label: string; value: number; min: number; max: number; step?: number; disabled?: boolean; onChange: (v: number) => void }) => <label className={`block ${disabled ? 'opacity-50' : ''}`}><div className="mb-1 flex justify-between text-xs font-black uppercase tracking-wider text-slate-500"><span>{label}</span><span>{Number(value).toFixed(step < 1 ? 2 : 0)}</span></div><input aria-label={`${label} slider`} className="w-full" type="range" min={min} max={max} step={step} disabled={disabled} value={Number.isFinite(value) ? value : 0} onChange={e => onChange(Number(e.target.value))}/><input aria-label={`${label} number`} className="field mt-1" type="number" min={min} max={max} step={step} disabled={disabled} value={Number.isFinite(value) ? value : 0} onChange={e => onChange(Number(e.target.value))}/></label>;
 const Toggle = ({ label, checked, disabled = false, onChange }: { label: string; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void }) => <label className={`flex items-center justify-between rounded-2xl bg-slate-100 px-3 py-2 text-sm font-bold ${disabled ? 'opacity-50' : ''}`}><span>{label}</span><input type="checkbox" disabled={disabled} checked={checked} onChange={e => onChange(e.target.checked)} /></label>;
 
+const CAM_PROFILE_MIN = 0.35;
+const CAM_PROFILE_MAX = 1.65;
+const clampCamProfileSample = (value: number) => Math.max(CAM_PROFILE_MIN, Math.min(CAM_PROFILE_MAX, value));
+const CamProfileEditor = ({ samples, onChange }: { samples?: number[]; onChange: (samples: number[]) => void }) => {
+    const svgRef = useRef<SVGSVGElement | null>(null);
+    const activeIndexRef = useRef<number | null>(null);
+    const profile = useMemo(() => normalizeCamProfileSamples(samples), [samples]);
+    const width = 240;
+    const height = 88;
+    const pad = 12;
+    const sampleToY = (value: number) => pad + (1 - ((value - CAM_PROFILE_MIN) / (CAM_PROFILE_MAX - CAM_PROFILE_MIN))) * (height - pad * 2);
+    const pointX = (index: number) => pad + (index / Math.max(1, profile.length - 1)) * (width - pad * 2);
+    const eventIndex = (event: React.PointerEvent<SVGElement>) => {
+        const rect = svgRef.current?.getBoundingClientRect();
+        if (!rect) return activeIndexRef.current ?? 0;
+        const t = Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width)));
+        return Math.max(0, Math.min(profile.length - 1, Math.round(t * (profile.length - 1))));
+    };
+    const eventValue = (event: React.PointerEvent<SVGElement>) => {
+        const rect = svgRef.current?.getBoundingClientRect();
+        if (!rect) return profile[activeIndexRef.current ?? 0] ?? 1;
+        const t = Math.max(0, Math.min(1, (event.clientY - rect.top) / Math.max(1, rect.height)));
+        return clampCamProfileSample(CAM_PROFILE_MAX - t * (CAM_PROFILE_MAX - CAM_PROFILE_MIN));
+    };
+    const updatePoint = (index: number, value: number) => onChange(profile.map((sample, sampleIndex) => sampleIndex === index ? clampCamProfileSample(value) : sample));
+    const profilePath = profile.map((value, index) => `${index === 0 ? 'M' : 'L'} ${pointX(index).toFixed(1)} ${sampleToY(value).toFixed(1)}`).join(' ');
+    return <div className="rounded-2xl border border-slate-200 bg-white/80 p-3" data-testid="cam-profile-editor">
+        <div className="mb-2 flex items-center justify-between">
+            <div className="section-title">Cam profile</div>
+            <button type="button" className="btn-secondary compact" data-testid="cam-profile-reset" onClick={() => onChange(defaultCamProfileSamples(profile.length))}>Reset</button>
+        </div>
+        <svg
+            ref={svgRef}
+            data-testid="cam-profile-canvas"
+            className="w-full touch-none rounded-xl bg-slate-50"
+            viewBox={`0 0 ${width} ${height}`}
+            role="img"
+            aria-label="Editable cam lift profile"
+            onPointerDown={event => {
+                event.preventDefault();
+                const index = eventIndex(event);
+                activeIndexRef.current = index;
+                event.currentTarget.setPointerCapture(event.pointerId);
+                updatePoint(index, eventValue(event));
+            }}
+            onPointerMove={event => {
+                const index = activeIndexRef.current;
+                if (index === null) return;
+                event.preventDefault();
+                updatePoint(index, eventValue(event));
+            }}
+            onPointerUp={() => { activeIndexRef.current = null; }}
+            onPointerLeave={() => { activeIndexRef.current = null; }}
+        >
+            <path d={`M ${pad} ${height - pad} H ${width - pad}`} stroke="#cbd5e1" strokeWidth="2" />
+            <path d={profilePath} fill="none" stroke="#8b5cf6" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+            {profile.map((value, index) => <circle
+                key={index}
+                data-testid={`cam-profile-point-${index}`}
+                cx={pointX(index)}
+                cy={sampleToY(value)}
+                r={5}
+                fill="#ffffff"
+                stroke="#4f46e5"
+                strokeWidth="2"
+                onPointerDown={event => {
+                    event.preventDefault();
+                    activeIndexRef.current = index;
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    updatePoint(index, eventValue(event));
+                }}
+            />)}
+        </svg>
+    </div>;
+};
+
 const showParam = (type: MechanismType, key: keyof MechanismConfig) => {
     if (key === 'speed2') return type === '5bar';
     if (key === 'phase') return ['5bar', 'gear', 'gear_linkage', 'planetary_gear'].includes(type);
@@ -2766,6 +2866,7 @@ type ThreeFoundryPreviewProps = {
     isPickingAnchor: boolean;
     isOrbiting: boolean;
     isZooming: boolean;
+    isPanning: boolean;
     onAnchorPick: (point: Point) => void;
     onPointerDown: React.PointerEventHandler<HTMLDivElement>;
     onPointerMove: React.PointerEventHandler<HTMLDivElement>;
@@ -2782,7 +2883,7 @@ const foundryRenderedInventory = (type: MechanismType) => {
         piston: { parts: 6, holes: 15, slots: 1, gears: 0, racks: 0, cams: 0, followers: 0, endStops: 0 },
         yoke: { parts: 7, holes: 15, slots: 2, gears: 0, racks: 0, cams: 0, followers: 0, endStops: 0 },
         'quick-return': { parts: 6, holes: 15, slots: 1, gears: 0, racks: 0, cams: 0, followers: 0, endStops: 0 },
-        '5bar': { parts: 7, holes: 25, slots: 0, gears: 2, racks: 0, cams: 0, followers: 0, endStops: 0 },
+        '5bar': { parts: 7, holes: 25, slots: 0, gears: 0, racks: 0, cams: 0, followers: 0, endStops: 0 },
         '6bar': { parts: 7, holes: 25, slots: 0, gears: 0, racks: 0, cams: 0, followers: 0, endStops: 0 },
         cam: { parts: 8, holes: 16, slots: 1, gears: 0, racks: 0, cams: 1, followers: 1, endStops: 0 },
         'rack-pinion': { parts: 10, holes: 20, slots: 1, gears: 1, racks: 1, cams: 0, followers: 0, endStops: 2 },
@@ -2805,7 +2906,7 @@ const disposeThreeObject = (object: THREE.Object3D) => object.traverse(child => 
     else if (material && !material.userData.foundryCached) material.dispose();
 });
 
-const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, color, pathPoints, showGrid, showPathPreview, showTrail, showForces, showVelocity, physicsRule, velocityMagnitude, forceMagnitude, frictionCoefficient, frictionMagnitude, constraintError, cameraLabel, isPickingAnchor, isOrbiting, isZooming, onAnchorPick, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onWheel, onProjectionSizeChange, children }: ThreeFoundryPreviewProps) => {
+const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, color, pathPoints, showGrid, showPathPreview, showTrail, showForces, showVelocity, physicsRule, velocityMagnitude, forceMagnitude, frictionCoefficient, frictionMagnitude, constraintError, cameraLabel, isPickingAnchor, isOrbiting, isZooming, isPanning, onAnchorPick, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onWheel, onProjectionSizeChange, children }: ThreeFoundryPreviewProps) => {
     const hostRef = useRef<HTMLDivElement | null>(null);
     const stateRef = useRef<HTMLDivElement | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
@@ -2867,7 +2968,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         const cam = cameraRef.current;
         if (!scene || !renderer || !cam) return;
         cam.position.copy(foundryCameraPosition(view));
-        cam.lookAt(0, 0, 0.25);
+        cam.lookAt(foundryCameraTarget(view));
         renderer.render(scene, cam);
     };
     const handleAnchorClick: React.MouseEventHandler<HTMLDivElement> = event => {
@@ -3153,14 +3254,14 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             const shape = new THREE.Shape();
             for (let i = 0; i < 56; i++) {
                 const a = (i / 56) * Math.PI * 2;
-                const rr = r * camProfileScale(a);
+                const rr = r * sampledCamProfileScale(a, mechanism.camProfileSamples);
                 const x = Math.cos(a) * rr, y = Math.sin(a) * rr;
                 if (i === 0) shape.moveTo(x, y);
                 else shape.lineTo(x, y);
             }
             shape.closePath();
             shape.holes.push(circularHole(0, 0, holeR * 1.35));
-            const geometryKey = `cam:${mechanism.crankLength.toFixed(2)}:${simulation.scale.toFixed(3)}:${thickness.toFixed(3)}`;
+            const geometryKey = `cam:${mechanism.crankLength.toFixed(2)}:${(mechanism.camProfileSamples ?? []).join(',')}:${simulation.scale.toFixed(3)}:${thickness.toFixed(3)}`;
             const mesh = new THREE.Mesh(cachedGeometry(geometryKey, () => new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.025 })), mat);
             const c = to3(center, z);
             mesh.position.set(c.x, c.y, z - thickness / 2);
@@ -3241,9 +3342,8 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         if (!usesMeshedPitchCenters) addBar(s.p1, s.p2, 0, material.base, 3);
         const layerPoints = [s.p1, s.p2, s.j1, s.j2, s.aux, s.effector].filter(Boolean) as Point[];
         const renderLinkageLayer = (label: string, z: number, mat: THREE.Material) => {
-            if (mechanism.type === 'gear' && /drive/i.test(label)) addBar(s.j1, s.effector, z, mat, 4);
-            else if (mechanism.type === 'gear' && /output/i.test(label)) addBar(s.j2, s.effector, z, mat, 3);
-            else if (mechanism.type === 'gear_linkage' && /L4|linkage/i.test(label)) addBar(s.j2, s.effector, z, mat, 4);
+            if (mechanism.type === 'gear') return;
+            if (mechanism.type === 'gear_linkage' && /L4|linkage/i.test(label)) addBar(s.j2, s.effector, z, mat, 4);
             else if (mechanism.type === 'gear_linkage' && /2-hole|bracket/i.test(label)) addSlotPlate(s.effector, barW * 3.2, Math.atan2(s.effector.y - s.j2.y, s.effector.x - s.j2.x), z, mat);
             else if (mechanism.type === '6bar' && /output rocker/i.test(label)) addBar(s.p2, s.j2, z, mat, 3);
             else if (mechanism.type === '6bar' && /dyad/i.test(label)) addBar(s.j2, s.aux, z, mat, 2);
@@ -3312,7 +3412,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         onPointerCancel={onPointerCancel}
         onWheel={onWheel}
         onContextMenu={event => event.preventDefault()}
-        className={`foundry-preview h-[520px] w-full ${isPickingAnchor ? 'is-picking-anchor' : ''} ${isOrbiting ? 'is-orbiting' : ''} ${isZooming ? 'is-zooming' : ''}`}
+        className={`foundry-preview h-[520px] w-full ${isPickingAnchor ? 'is-picking-anchor' : ''} ${isOrbiting ? 'is-orbiting' : ''} ${isZooming ? 'is-zooming' : ''} ${isPanning ? 'is-panning' : ''}`}
         aria-label="Mechanism Foundry true WebGL 3D sandbox preview"
         data-viewer-contract={VIEWER3D_CONTRACT_VERSION}
         data-viewer-contract-state={JSON.stringify(viewerContract)}
@@ -3343,6 +3443,8 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-camera-yaw={camera.yaw.toFixed(1)}
             data-camera-pitch={camera.pitch.toFixed(1)}
             data-camera-zoom={camera.zoom.toFixed(3)}
+            data-camera-pan-x={(camera.pan?.x ?? 0).toFixed(3)}
+            data-camera-pan-y={(camera.pan?.y ?? 0).toFixed(3)}
             data-camera-distance={foundryCameraDistance(camera).toFixed(3)}
             data-rig-opacity={rigOpacity.toFixed(2)}
             data-three-renderer="webgl"
@@ -3365,6 +3467,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-three-follower-count={inv.followers}
             data-three-end-stop-count={inv.endStops}
             data-three-gear-radii={gearRadii.map(radius => radius.toFixed(2)).join(',')}
+            data-cam-profile={mechanism.type === 'cam' ? normalizeCamProfileSamples(mechanism.camProfileSamples).map(value => value.toFixed(2)).join(',') : ''}
             data-three-gear-pitch-center={(mechanism.type === 'planetary_gear' ? planetaryGearConventionForMechanism(mechanism).carrierPitchRadius : mechanism.groundLength).toFixed(2)}
             data-three-gear-pitch-sum={(isGearTrain ? gearTrainPitchCenterDistance(mechanism) : mechanism.type === 'planetary_gear' ? planetaryGearConventionForMechanism(mechanism).ringPitchRadius : mechanism.crankLength + mechanism.rockerLength).toFixed(2)}
             data-three-gear-output-ratio={(isGearTrain ? gearTrainOutputRatio(mechanism) : mechanism.type === 'planetary_gear' ? planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength) : gearPairOutputRatio(mechanism.crankLength, mechanism.rockerLength)).toFixed(3)}
@@ -3375,7 +3478,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-three-planetary-output={planetaryConvention?.outputMember ?? ''}
             data-three-planetary-ring-radius={planetaryConvention?.ringPitchRadius.toFixed(2) ?? ''}
             data-three-planetary-carrier-radius={planetaryConvention?.carrierPitchRadius.toFixed(2) ?? ''}
-            data-three-gear-train-linkage-mode={mechanism.type === 'gear' ? 'drive-and-output-rods' : mechanism.type === 'gear_linkage' ? 'output-gear-handle-l4-bracket' : 'template-specific'}
+            data-three-gear-train-linkage-mode={mechanism.type === 'gear' ? 'gear-only-train' : mechanism.type === 'gear_linkage' ? 'output-gear-handle-l4-bracket' : 'template-specific'}
             data-three-gear-linkage-mode={mechanism.type === 'gear_linkage' ? 'off-center-output-gear-crank' : 'none'}
             data-three-linkage-pin-radius={mechanism.type === 'gear_linkage' ? mechanism.couplerPointDist.toFixed(2) : ''}
             data-three-spacer-key={FABRICATION_SPACER_SPEC.key}
@@ -3542,7 +3645,7 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
         const base = radius(length, compact ? 10 : 20, compact ? 34 : 66);
         const points = Array.from({ length: 42 }, (_, index) => {
             const angle = (index / 42) * Math.PI * 2;
-            const lift = camProfileScale(angle);
+            const lift = sampledCamProfileScale(angle, mechanism.camProfileSamples);
             return `${Math.cos(angle) * base * lift} ${Math.sin(angle) * base * lift}`;
         });
         return <g key="cam-body" data-testid={fabricationTest('cam')} className="mechanism-part mechanism-cam" transform={`translate(${center.x} ${center.y}) rotate(${inputAngleDeg})`}>
@@ -3557,7 +3660,7 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
         <rect data-testid={fabricationTest('part')} className="mechanism-face" x={-barWidth * 1.35} y={-barWidth / 2} width={barWidth * 2.7} height={barWidth} rx={barWidth / 3} />
         <circle data-testid={fabricationTest('hole')} className="mechanism-hole" cx="0" cy="0" r={holeR} />
     </g>;
-    const gearPreview = (mechanism.type === 'gear' || mechanism.type === 'gear_linkage' || mechanism.type === 'planetary_gear' || mechanism.type === '5bar' || mechanism.type === 'rack-pinion') && <g data-testid={mechanism.type === '5bar' ? undefined : test('gear')}>
+    const gearPreview = (mechanism.type === 'gear' || mechanism.type === 'gear_linkage' || mechanism.type === 'planetary_gear' || mechanism.type === 'rack-pinion') && <g data-testid={test('gear')}>
         {mechanism.type === 'rack-pinion' && <>
             {gear(s.p1, mechanism.crankLength, 'mechanism-driver', 'rack-pinion-gear', compact ? 8 : 16, compact ? 34 : 62, inputAngleDeg)}
         </>}
@@ -3573,10 +3676,6 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
             {planetaryPlanetCenters(s.p1, mechanism, degToRad(inputAngleDeg) * planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength)).map((center, index) =>
                 gear(center, mechanism.rockerLength, 'mechanism-link secondary', `planet-${index + 1}`, compact ? 7 : 12, compact ? 22 : 42, outputAngleDeg + index * 120)
             )}
-        </>}
-        {mechanism.type === '5bar' && <>
-            {gear(s.p1, mechanism.crankLength, 'mechanism-driver', 'fivebar-gear-a', compact ? 7 : 12, compact ? 22 : 42, inputAngleDeg)}
-            {gear(s.p2, mechanism.rockerLength, 'mechanism-driver', 'fivebar-gear-b', compact ? 7 : 12, compact ? 22 : 42, outputAngleDeg)}
         </>}
     </g>;
     const links = (() => {
@@ -3633,10 +3732,7 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
             slotPlate({ x: (s.p2.x + s.j2.x) / 2, y: (s.p2.y + s.j2.y) / 2 }, vectorAxis(s.p2, s.j2), Math.hypot(s.j2.x - s.p2.x, s.j2.y - s.p2.y), 'slotted-rocker', 'mechanism-link', 'link'),
             link(s.j2, s.effector, 'output', 'mechanism-output', 'output')
         ];
-        if (mechanism.type === 'gear') return [
-            link(s.j1, s.effector, 'gear-drive-rod', 'mechanism-link', 'link'),
-            link(s.j2, s.effector, 'gear-output-rod', 'mechanism-output', 'output')
-        ];
+        if (mechanism.type === 'gear') return [];
         if (mechanism.type === 'gear_linkage') return [
             link(s.p1, s.j1, 'gear-drive-radius', 'mechanism-driver', 'driver'),
             link(s.j2, s.effector, 'l4-output-linkage', 'mechanism-output', 'output'),

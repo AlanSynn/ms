@@ -1269,7 +1269,7 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('ratio sign');
   await page.getByRole('button', { name: 'Back to Gallery' }).click();
   expect(Number(await threeScene.getAttribute('data-three-gear-count')), 'Gear preview uses toothed 3D fabrication geometry').toBeGreaterThanOrEqual(2);
-  await expect(threeScene, 'Gear train uses separate drive/output rods instead of a fake center bar').toHaveAttribute('data-three-gear-train-linkage-mode', 'drive-and-output-rods');
+  await expect(threeScene, 'Gear train renders as meshed gears only, without fake linkage rods').toHaveAttribute('data-three-gear-train-linkage-mode', 'gear-only-train');
   await expect(threeScene, 'Gear train fabrication stack exposes both reference G3 gears').toHaveAttribute('data-three-stack-order', /Drive G3 \/ 3-space gear.*Output G3 \/ 3-space gear/);
   expect(Number(await threeScene.getAttribute('data-three-gear-pitch-center')), 'Gear pitch centers are snapped to the sum of fabrication gear radii').toBeCloseTo(Number(await threeScene.getAttribute('data-three-gear-pitch-sum')), 2);
   await expect(threeScene, 'Default gear train uses the reference G3/G3 pitch radii').toHaveAttribute('data-three-gear-radii', '60.00,60.00');
@@ -1552,13 +1552,21 @@ test('Mechanism Foundry supports CAD-style 3D camera presets and drag orbit', as
   await expect.poll(async () => Number(await rig.getAttribute('data-camera-zoom')), { message: 'wheel zoom changes the actual Three camera distance' }).toBeGreaterThan(zoomBeforeWheel);
   await expect(page.getByTestId('foundry-camera-readout')).toContainText('%');
   const zoomAfterWheel = Number(await rig.getAttribute('data-camera-zoom'));
+  const panBeforeShiftDrag = {
+    x: Number(await rig.getAttribute('data-camera-pan-x')),
+    y: Number(await rig.getAttribute('data-camera-pan-y'))
+  };
   await page.keyboard.down('Shift');
   await page.mouse.move(previewBox!.x + previewBox!.width * 0.55, previewBox!.y + previewBox!.height * 0.55);
   await page.mouse.down();
   await page.mouse.move(previewBox!.x + previewBox!.width * 0.55, previewBox!.y + previewBox!.height * 0.34);
   await page.mouse.up();
   await page.keyboard.up('Shift');
-  await expect.poll(async () => Number(await rig.getAttribute('data-camera-zoom')), { message: 'shift-drag performs CAD-style dolly zoom' }).toBeGreaterThan(zoomAfterWheel);
+  await expect.poll(async () => Math.hypot(
+    Number(await rig.getAttribute('data-camera-pan-x')) - panBeforeShiftDrag.x,
+    Number(await rig.getAttribute('data-camera-pan-y')) - panBeforeShiftDrag.y
+  ), { message: 'shift-drag pans the CAD workplane' }).toBeGreaterThan(0.01);
+  expect(Number(await rig.getAttribute('data-camera-zoom')), 'shift-pan keeps dolly zoom stable').toBeCloseTo(zoomAfterWheel, 2);
 
   for (const preset of ['front', 'side', 'top', 'iso', 'front'] as const) {
     await page.getByTestId(`foundry-camera-preset-${preset}`).click();
@@ -1586,7 +1594,7 @@ test('Mechanism Foundry supports CAD-style 3D camera presets and drag orbit', as
   await page.mouse.up();
 
   await expect(rig).toHaveAttribute('data-camera-preset', 'custom');
-  await expect(page.getByTestId('foundry-camera-readout')).toContainText('3D Drag orbit');
+  await expect(page.getByTestId('foundry-camera-readout')).toContainText('3D Custom view');
   expect(await rig.getAttribute('data-camera-yaw')).not.toBe(yawBeforeDrag);
 
   await page.getByTestId('foundry-pick-anchor').click();
@@ -1597,6 +1605,30 @@ test('Mechanism Foundry supports CAD-style 3D camera presets and drag orbit', as
   const orbitPickedCenter = await overlayCenter();
   expect(Math.abs(Number(orbitPickedCoords![1]) - orbitPickedCenter.x), 'orbit-picked marker remains visually centered after custom Three camera projection').toBeLessThan(6);
   expect(Math.abs(Number(orbitPickedCoords![2]) - orbitPickedCenter.y), 'orbit-picked marker remains visually centered after custom Three camera projection').toBeLessThan(6);
+});
+
+test('Cam foundry profile points edit the shared cam simulation profile', async ({ page }) => {
+  await page.setViewportSize({ width: 901, height: 720 });
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByRole('button', { name: /Mechanism Foundry/i }).click();
+  await page.getByText('Mechanism options').click();
+  await page.getByLabel('Foundry mechanism type').selectOption('cam');
+
+  const rig = page.getByTestId('foundry-camera-rig');
+  await expect(rig).toHaveAttribute('data-mechanism-type', 'cam');
+  const editor = page.getByTestId('cam-profile-editor');
+  await editor.scrollIntoViewIfNeeded();
+  await expect(editor).toBeVisible();
+  const before = await rig.getAttribute('data-cam-profile');
+  const point = page.getByTestId('cam-profile-point-1');
+  const box = await point.boundingBox();
+  expect(box, 'cam profile point is draggable').toBeTruthy();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y - 24);
+  await page.mouse.up();
+  await expect.poll(async () => rig.getAttribute('data-cam-profile'), { message: 'dragged cam profile is reflected in Three/fabrication shared data' }).not.toBe(before);
 });
 
 

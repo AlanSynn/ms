@@ -6,11 +6,34 @@ const toRad = (deg: number) => (deg * Math.PI) / 180;
 
 export const camProfileScale = (angleRad: number) => 0.72 + 0.2 * (1 - Math.cos(angleRad)) + 0.08 * Math.sin(angleRad * 2);
 
-export const camFollowerRise = (liftLength: number, angleRad: number) => {
+export const DEFAULT_CAM_PROFILE_SAMPLE_COUNT = 16;
+export const defaultCamProfileSamples = (count = DEFAULT_CAM_PROFILE_SAMPLE_COUNT) =>
+    Array.from({ length: Math.max(4, Math.round(count)) }, (_, index) => camProfileScale((index / Math.max(4, Math.round(count))) * Math.PI * 2));
+
+export const normalizeCamProfileSamples = (samples?: number[]) => {
+    const clean = Array.isArray(samples)
+        ? samples.map(value => Number.isFinite(value) ? Math.max(0.35, Math.min(1.65, Math.abs(value))) : Number.NaN).filter(Number.isFinite).slice(0, 64)
+        : [];
+    return clean.length >= 4 ? clean : defaultCamProfileSamples();
+};
+
+export const sampledCamProfileScale = (angleRad: number, samples?: number[]) => {
+    if (!samples || samples.length < 4) return camProfileScale(angleRad);
+    const profile = normalizeCamProfileSamples(samples);
+    const turns = (((angleRad / (Math.PI * 2)) % 1) + 1) % 1;
+    const scaled = turns * profile.length;
+    const i0 = Math.floor(scaled) % profile.length;
+    const i1 = (i0 + 1) % profile.length;
+    const t = scaled - Math.floor(scaled);
+    return profile[i0] + (profile[i1] - profile[i0]) * t;
+};
+
+export const camFollowerRise = (liftLength: number, angleRad: number, samples?: number[]) => {
     const lift = Math.max(1, liftLength);
-    const baseScale = camProfileScale(0);
-    const fullRiseScale = camProfileScale(Math.PI) - baseScale;
-    return Math.max(0, camProfileScale(angleRad) - baseScale) * (lift / Math.max(fullRiseScale, 0.001));
+    const baseScale = sampledCamProfileScale(0, samples);
+    const highScale = Math.max(...normalizeCamProfileSamples(samples));
+    const fullRiseScale = highScale - baseScale;
+    return Math.max(0, sampledCamProfileScale(angleRad, samples) - baseScale) * (lift / Math.max(fullRiseScale, 0.001));
 };
 
 const safeRadiusRatio = (numerator: number, denominator: number, fallback: number) => {
@@ -175,9 +198,9 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
         const trackAngle = toRad(config.groundAngle ?? 90);
         const lift = Math.max(1, config.rockerLength || config.crankLength);
         const radius = Math.max(1, config.crankLength);
-        const rise = camFollowerRise(lift, angle1);
+        const rise = camFollowerRise(lift, angle1, config.camProfileSamples);
         const base = radius + (config.sliderOffset || 0);
-        const profileRadius = radius * camProfileScale(angle1);
+        const profileRadius = radius * sampledCamProfileScale(angle1, config.camProfileSamples);
         const p2: Point = {
             x: p1.x + Math.cos(trackAngle) * (base + rise),
             y: p1.y + Math.sin(trackAngle) * (base + rise)
@@ -342,34 +365,31 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
         return { p1, p2, j1, j2, aux, effector: aux, isValid: true };
     }
 
-    // --- GEARED 5-BAR LINKAGE ---
+    // --- 5-BAR LINKAGE ---
     else if (config.type === '5bar') {
-        // P2: Secondary Gear Center
+        // A=p1 and E=p2 are fixed ground pivots. A-B-C-D-E closes with A-E as
+        // the ground link. D is stored in `aux`; C is stored in `j2`.
         const gAngle = toRad(config.groundAngle ?? 0);
         const p2: Point = { 
             x: p1.x + config.groundLength * Math.cos(gAngle), 
             y: p1.y + config.groundLength * Math.sin(gAngle) 
         };
 
-        // Aux: Tip of Secondary Crank (Right Gear)
-        // Rotates at speed2 + phase offset
+        // D: tip of the right crank, driven by the second input.
         const s2 = config.speed2 ?? (config.gearRatio ?? 1);
         const ph = config.phase ?? 0;
         const angle2 = (crankAngleRad * s2) + ph + driverPhaseOffset;
-        
-        // RockerLength is reused as the radius of the second gear/crank
+
         const aux: Point = {
             x: p2.x + config.rockerLength * Math.cos(angle2),
             y: p2.y + config.rockerLength * Math.sin(angle2)
         };
 
-        // J2 is the intersection point on the main arm.
-        // It is distance 'couplerLength' from J1
-        // It is distance 'rodLength' from Aux
+        // C: intersection of B-C and D-C.
         const r1 = config.couplerLength;
         const r2 = config.rodLength || 100;
 
-        const intersect = getCircleIntersection(j1, r1, aux, r2);
+        const intersect = getCircleIntersection(j1, r1, aux, r2, config.assemblyMode !== 'crossed');
 
         if (!intersect) {
              return { p1, p2, j1, j2: p1, aux, effector: p1, isValid: false };

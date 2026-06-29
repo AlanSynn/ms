@@ -188,6 +188,7 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     const handleWheel = (e: React.WheelEvent) => {
         if (!svgRef.current) return;
+        e.stopPropagation();
 
         const zoomSensitivity = 0.001;
         // Calculate new zoom

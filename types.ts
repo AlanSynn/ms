@@ -56,6 +56,11 @@ export interface MechanismConfig {
      * Two entries are the legacy drive/output pair; extra entries are idlers.
      */
     gearTrainRadii?: number[];
+    /**
+     * Cyclic angle-indexed cam radius/lift samples. Kinematics, 3D preview, and
+     * fabrication preview all read this same list so edited cams do not drift.
+     */
+    camProfileSamples?: number[];
     driverGroupId?: string;
     driverPhaseOffset?: number;
     rodLength?: number;

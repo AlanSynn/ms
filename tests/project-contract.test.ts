@@ -8,7 +8,7 @@ import { createDefaultMechanism, createSampleProject, handoffGate, loadProjectSn
 import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, prefabAssemblySteps, sampleFeasibleRange, validateFabricationStack, validateForFabrication } from '../utils/fabrication';
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
-import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, generateCurvePoints, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius } from '../utils/kinematics';
+import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, generateCurvePoints, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius, sampledCamProfileScale } from '../utils/kinematics';
 import { animatedPartsForProject, describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainRootJointIds, motionPreviewForPath, motionPreviewForProject, motionPreviewForTarget, preferredMotionJointId } from '../utils/motion';
 import { buildToonSceneProjection } from '../utils/sceneProjection';
 import { buildFoundryPhysicsOverlay, buildKinematicPhysicsSession, mechanismPhysicsRule } from '../utils/physicsSession';
@@ -1139,6 +1139,28 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
   const mechanism = createDefaultMechanism('5bar', 'contract-5bar-simulation-only');
   assert.deepEqual(requiredParts('5bar'), [], '5bar has no required parts until synchronized dual-driver fabrication is specified');
   assert(fabricationRenderPlanForMechanism(mechanism).validationErrors.some(error => error.includes('Five-bar is content/simulation-only')), '5bar produces a fabrication validation error instead of pretending to be ready');
+  const topology = {
+    ...mechanism,
+    anchorX: 0,
+    anchorY: 0,
+    groundAngle: 0,
+    groundLength: 120,
+    crankLength: 40,
+    rockerLength: 40,
+    couplerLength: 70,
+    rodLength: 70,
+    speed1: 1,
+    speed2: 0,
+    phase: Math.PI,
+    assemblyMode: 'open' as const
+  };
+  const pose = calculateLinkage(topology, 0);
+  assert(pose.isValid && pose.aux, '5bar A-B-C-D-E topology closes with A-E as ground');
+  assertDistance(pose.p1, pose.j1, topology.crankLength, '5bar A-B input crank length is preserved');
+  assertDistance(pose.j1, pose.j2, topology.couplerLength, '5bar B-C left floating rod length is preserved');
+  assertDistance(pose.j2, pose.aux, topology.rodLength, '5bar C-D right floating rod length is preserved');
+  assertDistance(pose.aux, pose.p2, topology.rockerLength, '5bar D-E right crank length is preserved');
+  assertDistance(pose.p1, pose.p2, topology.groundLength, '5bar A-E ground linkage length is preserved');
 }
 
 {
@@ -1156,8 +1178,18 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
   assert.deepEqual(low.j2, low.effector, 'cam follower output is the follower block');
   assert.deepEqual(high.j2, high.effector, 'cam follower lifted output remains the follower block');
   const liftLength = Math.max(1, mechanism.rockerLength || mechanism.crankLength);
-  assert(Math.abs(camFollowerRise(liftLength, Math.PI) - liftLength) < 1e-6, 'cam follower full lift comes from the shared cam profile');
+  const maxDefaultCamSampleIndex = mechanism.camProfileSamples?.reduce((best, value, index, list) => value > list[best] ? index : best, 0) ?? 0;
+  const maxDefaultCamAngle = ((maxDefaultCamSampleIndex / Math.max(1, mechanism.camProfileSamples?.length ?? 1)) * Math.PI * 2);
+  assert(Math.abs(camFollowerRise(liftLength, maxDefaultCamAngle, mechanism.camProfileSamples) - liftLength) < 1e-6, 'cam follower full lift comes from the shared cam profile');
   assert(camProfileScale(Math.PI) > camProfileScale(0), 'rendered cam profile has the same high-lift lobe used by kinematics');
+  const customProfile = [0.7, 1.45, 0.7, 0.55, 0.7, 0.95, 0.7, 0.65];
+  const custom = { ...mechanism, camProfileSamples: customProfile };
+  assert.equal(sampledCamProfileScale(Math.PI / 4, customProfile), 1.45, 'editable cam profile samples are angle-indexed and round-trip into shared geometry');
+  assert(localTrack(custom, calculateLinkage(custom, Math.PI / 4).j2).x > localTrack(mechanism, calculateLinkage(mechanism, Math.PI / 4).j2).x, 'edited cam lobe changes the follower lift used by simulation');
+  const defaultCamExportPath = generateSVG({ speed: 1, rotation: 0, mechanisms: [mechanism] }, 0).match(/data-export-kind="cam-profile" d="([^"]+)"/)?.[1];
+  const customCamExportPath = generateSVG({ speed: 1, rotation: 0, mechanisms: [custom] }, 0).match(/data-export-kind="cam-profile" d="([^"]+)"/)?.[1];
+  assert(defaultCamExportPath && customCamExportPath && defaultCamExportPath !== customCamExportPath, 'cam SVG export uses edited cam profile samples');
+  assert(generateDXF({ speed: 1, rotation: 0, mechanisms: [custom] }, 0).includes('CONTRACT-CAM-PHYSICAL_CAM'), 'cam DXF export includes an explicit sampled cam profile layer');
   assert(localTrack(mechanism, high.j2).x > localTrack(mechanism, low.j2).x, 'cam follower lift increases along the guide');
   assert.deepEqual(requiredPartQuantities('cam'), { 'Eccentric cam': 1, 'Round follower': 1, '2-hole bracket': 1, [FABRICATION_SPACER_SPEC.label]: 8 }, 'cam recipe uses eccentric cam, round follower, bracket, and S10 from mechanism-reference');
 }
@@ -1203,6 +1235,11 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
   const mutatedGear = mutateConfig({ ...mechanism, groundLength: 999 }, 1, true);
   assert(Math.abs(mutatedGear.groundLength - gearTrainPitchCenterDistance(mutatedGear)) < 1e-6, 'optimizer keeps mutated gear train pitch circles tangent');
   assert.equal(mutatedGear.gearRatio, gearTrainOutputRatio(mutatedGear), 'optimizer keeps gear ratio derived from ordered pitch radii');
+  const gearOnlySvg = generateSVG({ speed: 1, rotation: 0, mechanisms: [mechanism] }, 0);
+  const gearOnlyDxf = generateDXF({ speed: 1, rotation: 0, mechanisms: [mechanism] }, 0);
+  assert(!gearOnlySvg.includes('<line'), 'gear train SVG export is gears-only without fake linkage rods');
+  assert(!gearOnlyDxf.includes('\nLINE\n'), 'gear train DXF export is gears-only without fake linkage rods');
+  assert((gearOnlySvg.match(/<path d="/g) ?? []).length >= 2, 'gear train SVG export still carries meshed gear outlines');
   assert.deepEqual(requiredPartQuantities('gear'), { 'G3 / 3-space gear': 2, [FABRICATION_SPACER_SPEC.label]: 8 }, 'gear train recipe uses two G3 gears and S10 spacers from mechanism-reference');
 }
 

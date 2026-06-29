@@ -1,6 +1,6 @@
 
 import { GlobalConfig, MechanismConfig, Point } from '../types';
-import { calculateLinkage, gearTrainCenters, gearTrainOutputRatio, gearTrainPitchRadii, generateCurvePoints } from './kinematics';
+import { calculateLinkage, gearTrainCenters, gearTrainOutputRatio, gearTrainPitchRadii, generateCurvePoints, sampledCamProfileScale } from './kinematics';
 import { SCENE_PX_PER_MM, SCENE_VIEW, sceneToSvg } from './coordinates';
 import { finiteNumber, sanitizeHexColor, sanitizeMechanismRuntime, svgNumber } from './sanitize';
 import { fabricationGearPathD } from './fabrication';
@@ -32,6 +32,12 @@ const dxfPolyline = (points: Point[], layer: string = "TRACE", color: number = 3
 export const gearPathD = (radius: number) => fabricationGearPathD(radius, radius / SCENE_PX_PER_MM);
 
 const rawPath = (points: Point[]) => points.length ? `M ${points.map(p => `${svgNumber(p.x)} ${svgNumber(p.y)}`).join(' L ')}` : '';
+const camProfilePoints = (center: Point, radius: number, samples?: number[], steps = 64) => Array.from({ length: steps }, (_, index) => {
+    const angle = (index / steps) * Math.PI * 2;
+    const r = Math.max(1, radius) * sampledCamProfileScale(angle, samples);
+    return { x: center.x + Math.cos(angle) * r, y: center.y + Math.sin(angle) * r };
+});
+const camProfilePathD = (center: Point, radius: number, samples?: number[]) => `${rawPath(camProfilePoints(center, radius, samples))} Z`;
 const activeMechanisms = (config: GlobalConfig) => config.mechanisms.map(sanitizeMechanismRuntime).filter(m => m.visible && m.enabled !== false);
 
 // --- EXPORT FUNCTIONS ---
@@ -44,7 +50,7 @@ export const generateDXF = (config: GlobalConfig, angle: number): string => {
         if (m.type !== 'crank') {
             const { points } = generateCurvePoints(m, 100);
             if (points.length > 1) {
-                content += dxfPolyline(points, "TRACE_" + m.id.toUpperCase(), 3); 
+                content += dxfPolyline(points, "TRACE_" + m.id.toUpperCase(), 3);
             }
         }
     });
@@ -53,13 +59,17 @@ export const generateDXF = (config: GlobalConfig, angle: number): string => {
     activeMechanisms(config).forEach(m => {
         const state = calculateLinkage(m, angle);
         const { p1, p2, j1, j2, aux, effector, isValid } = state;
-        
+
         if (!isValid) return;
 
         const MECH_LAYER = "MECH_" + m.id.toUpperCase();
 
-        // Crank Arm (Common)
-        content += dxfLine(p1.x, p1.y, j1.x, j1.y, MECH_LAYER, 1); 
+        // Input arm / physical drive shape. Plain gear trains are gears only.
+        if (m.type !== 'gear' && m.type !== 'cam') content += dxfLine(p1.x, p1.y, j1.x, j1.y, MECH_LAYER, 1);
+        if (m.type === 'cam') {
+            const points = camProfilePoints(p1, finiteNumber(m.crankLength, 1), m.camProfileSamples);
+            content += dxfPolyline([...points, points[0]], `${MECH_LAYER}_CAM`, 5);
+        }
         content += dxfCircle(p1.x, p1.y, 5, "JOINTS", 7);
 
         if (m.type === '4bar') {
@@ -70,7 +80,7 @@ export const generateDXF = (config: GlobalConfig, angle: number): string => {
             content += dxfLine(j1.x, j1.y, effector.x, effector.y, MECH_LAYER, 1);
             content += dxfLine(j2.x, j2.y, effector.x, effector.y, MECH_LAYER, 1);
             content += dxfCircle(p2.x, p2.y, 5, "JOINTS", 7);
-        } 
+        }
         else if (m.type === '5bar' && aux) {
             content += dxfLine(p1.x, p1.y, p2.x, p2.y, "GROUND", 8);
             // Secondary Crank
@@ -108,9 +118,6 @@ export const generateDXF = (config: GlobalConfig, angle: number): string => {
             if (m.type === 'gear_linkage') {
                 content += dxfLine(p1.x, p1.y, j1.x, j1.y, MECH_LAYER, 1);
                 content += dxfLine(p2.x, p2.y, j2.x, j2.y, MECH_LAYER, 1);
-                content += dxfLine(j2.x, j2.y, effector.x, effector.y, MECH_LAYER, 1);
-            } else {
-                content += dxfLine(j1.x, j1.y, effector.x, effector.y, MECH_LAYER, 1);
                 content += dxfLine(j2.x, j2.y, effector.x, effector.y, MECH_LAYER, 1);
             }
         }
@@ -158,13 +165,17 @@ export const generateSVG = (config: GlobalConfig, angle: number): string => {
         const crankDeg = (angle * 180) / Math.PI;
         const color = sanitizeHexColor(m.color, '#3b82f6');
 
-        // Anchors & Gears
-        svg += `<g transform="translate(${svgNumber(p1.x)}, ${svgNumber(p1.y)}) rotate(${svgNumber(crankDeg * (m.speed1 ?? 1))})">`;
-        svg += `<path d="${gearPathD(finiteNumber(m.crankLength, 1))}" fill="#f59e0b" stroke="#b45309" stroke-width="2" />`;
-        svg += `<circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />`;
-        svg += `</g>`;
+        // Anchors & gears. Plain gear trains export gears only; cams export the edited cam outline.
+        if (m.type === 'gear' || m.type === 'gear_linkage' || m.type === 'rack-pinion') {
+            svg += `<g transform="translate(${svgNumber(p1.x)}, ${svgNumber(p1.y)}) rotate(${svgNumber(crankDeg * (m.speed1 ?? 1))})">`;
+            svg += `<path d="${gearPathD(finiteNumber(m.crankLength, 1))}" fill="#f59e0b" stroke="#b45309" stroke-width="2" />`;
+            svg += `<circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />`;
+            svg += `</g>`;
+        } else if (m.type === 'cam') {
+            svg += `<path data-export-kind="cam-profile" d="${camProfilePathD(p1, finiteNumber(m.crankLength, 1), m.camProfileSamples)}" fill="#f59e0b" stroke="#b45309" stroke-width="2" />`;
+        }
 
-        // Output Gear for 5-bar / meshed gear train
+        // Meshed gear train
         if (m.type === 'gear' || m.type === 'gear_linkage') {
              const centers = gearTrainCenters(m);
              const radii = gearTrainPitchRadii(m);
@@ -180,16 +191,9 @@ export const generateSVG = (config: GlobalConfig, angle: number): string => {
                  svg += `</g>`;
              });
         }
-        else if (m.type === '5bar' && aux) {
-             const rot = (crankDeg * (m.speed2 ?? (m.gearRatio || 1))) + ((m.phase ?? 0) * 180 / Math.PI);
-             svg += `<g transform="translate(${svgNumber(p2.x)}, ${svgNumber(p2.y)}) rotate(${svgNumber(rot)})">`;
-             svg += `<path d="${gearPathD(finiteNumber(m.rockerLength, 1))}" fill="#f59e0b" stroke="#b45309" stroke-width="2" />`;
-             svg += `<circle cx="0" cy="0" r="4" fill="#475569" stroke="white" />`;
-             svg += `</g>`;
-        }
 
         // Arms
-        svg += `<line x1="${svgNumber(p1.x)}" y1="${svgNumber(p1.y)}" x2="${svgNumber(j1.x)}" y2="${svgNumber(j1.y)}" stroke="#78350f" stroke-width="4" stroke-linecap="round" />`;
+        if (m.type !== 'gear' && m.type !== 'cam') svg += `<line x1="${svgNumber(p1.x)}" y1="${svgNumber(p1.y)}" x2="${svgNumber(j1.x)}" y2="${svgNumber(j1.y)}" stroke="#78350f" stroke-width="4" stroke-linecap="round" />`;
 
         if (m.type === '4bar') {
             svg += `<line x1="${svgNumber(p1.x)}" y1="${svgNumber(p1.y)}" x2="${svgNumber(p2.x)}" y2="${svgNumber(p2.y)}" stroke="#cbd5e1" stroke-width="12" stroke-linecap="round" />`;
@@ -197,7 +201,7 @@ export const generateSVG = (config: GlobalConfig, angle: number): string => {
             svg += `<path d="M ${svgNumber(j1.x)} ${svgNumber(j1.y)} L ${svgNumber(j2.x)} ${svgNumber(j2.y)} L ${svgNumber(effector.x)} ${svgNumber(effector.y)} Z" fill="${color}" fill-opacity="0.2" stroke="${color}" stroke-width="1" />`;
             svg += `<line x1="${svgNumber(j1.x)}" y1="${svgNumber(j1.y)}" x2="${svgNumber(j2.x)}" y2="${svgNumber(j2.y)}" stroke="${color}" stroke-width="8" stroke-linecap="round" />`;
             svg += `<circle cx="${svgNumber(p2.x)}" cy="${svgNumber(p2.y)}" r="8" fill="#94a3b8" stroke="white" stroke-width="2" />`;
-        } 
+        }
         else if (m.type === '5bar' && aux) {
              svg += `<line x1="${svgNumber(p2.x)}" y1="${svgNumber(p2.y)}" x2="${svgNumber(aux.x)}" y2="${svgNumber(aux.y)}" stroke="#78350f" stroke-width="4" stroke-linecap="round" />`;
              svg += `<line x1="${svgNumber(j1.x)}" y1="${svgNumber(j1.y)}" x2="${svgNumber(effector.x)}" y2="${svgNumber(effector.y)}" stroke="#475569" stroke-width="6" stroke-linecap="round" />`;
@@ -219,9 +223,6 @@ export const generateSVG = (config: GlobalConfig, angle: number): string => {
             if (m.type === 'gear_linkage') {
                 svg += `<line x1="${svgNumber(p2.x)}" y1="${svgNumber(p2.y)}" x2="${svgNumber(j2.x)}" y2="${svgNumber(j2.y)}" stroke="#475569" stroke-width="4" stroke-linecap="round" />`;
                 svg += `<line x1="${svgNumber(j2.x)}" y1="${svgNumber(j2.y)}" x2="${svgNumber(effector.x)}" y2="${svgNumber(effector.y)}" stroke="${color}" stroke-width="6" stroke-linecap="round" />`;
-            } else {
-                svg += `<line x1="${svgNumber(j1.x)}" y1="${svgNumber(j1.y)}" x2="${svgNumber(effector.x)}" y2="${svgNumber(effector.y)}" stroke="${color}" stroke-width="6" stroke-linecap="round" />`;
-                svg += `<line x1="${svgNumber(j2.x)}" y1="${svgNumber(j2.y)}" x2="${svgNumber(effector.x)}" y2="${svgNumber(effector.y)}" stroke="#475569" stroke-width="4" stroke-linecap="round" />`;
             }
         }
         else if (m.type === 'quick-return' || m.type === 'cam' || m.type === 'planetary_gear') {

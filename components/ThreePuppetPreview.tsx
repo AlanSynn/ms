@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { BodyPartLayer, CanvasViewport, MechanismConfig, MechanismType, Point, ProjectState, StandardSkeleton } from '../types';
 import { boardGridLines, defaultPhysicalKit, SCENE_PX_PER_MM, sceneBoundsForSheet } from '../utils/coordinates';
-import { calculateLinkage, camProfileScale, gearPairOutputRatio, gearTrainCenters, gearTrainOutputRatio, gearTrainPitchRadii, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from '../utils/kinematics';
+import { calculateLinkage, sampledCamProfileScale, gearPairOutputRatio, gearTrainCenters, gearTrainOutputRatio, gearTrainPitchRadii, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from '../utils/kinematics';
 import { FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRenderPlanForMechanism, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, type FabricationLinkageRoleLengths } from '../utils/fabrication';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, pointInsideOutline } from '../utils/partGeometry';
 import { clampCanvasZoom, WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
@@ -174,7 +174,7 @@ const puppetMechanismInventory = (mechanism: MechanismConfig): MechanismInventor
     piston: { parts: 5, holes: 10, slots: 1, gears: 0, racks: 0, cams: 0, followers: 1, endStops: 0 },
     yoke: { parts: 5, holes: 9, slots: 2, gears: 0, racks: 0, cams: 0, followers: 1, endStops: 0 },
     'quick-return': { parts: 5, holes: 11, slots: 1, gears: 0, racks: 0, cams: 0, followers: 0, endStops: 0 },
-    '5bar': { parts: 6, holes: 18, slots: 0, gears: 2, racks: 0, cams: 0, followers: 0, endStops: 0 },
+    '5bar': { parts: 6, holes: 18, slots: 0, gears: 0, racks: 0, cams: 0, followers: 0, endStops: 0 },
     '6bar': { parts: 7, holes: 22, slots: 0, gears: 0, racks: 0, cams: 0, followers: 0, endStops: 0 },
     cam: { parts: 4, holes: 6, slots: 1, gears: 0, racks: 0, cams: 1, followers: 1, endStops: 0 },
     'rack-pinion': { parts: 5, holes: 6, slots: 1, gears: 1, racks: 1, cams: 0, followers: 1, endStops: 2 },
@@ -347,11 +347,11 @@ const createEndStop = (material: THREE.Material, edgeMaterial: THREE.Material) =
   return mesh;
 };
 
-const createCamProfile = (radius: number, material: THREE.Material, edgeMaterial: THREE.Material) => {
+const createCamProfile = (radius: number, samples: number[] | undefined, material: THREE.Material, edgeMaterial: THREE.Material) => {
   const shape = new THREE.Shape();
   for (let i = 0; i < 64; i += 1) {
     const a = (i / 64) * Math.PI * 2;
-    const r = Math.max(0.3, radius) * camProfileScale(a);
+    const r = Math.max(0.3, radius) * sampledCamProfileScale(a, samples);
     const x = Math.cos(a) * r;
     const y = Math.sin(a) * r;
     if (i === 0) shape.moveTo(x, y);
@@ -360,7 +360,7 @@ const createCamProfile = (radius: number, material: THREE.Material, edgeMaterial
   shape.closePath();
   shape.holes.push(holePath(0, 0, Math.max(0.08, radius * 0.15)));
   const group = new THREE.Group();
-  group.add(createExtrudedMesh(shape, material, edgeMaterial, 0.2, `cam:${geometryKeyNumber(radius)}`));
+  group.add(createExtrudedMesh(shape, material, edgeMaterial, 0.2, `cam:${geometryKeyNumber(radius)}:${(samples ?? []).join(',')}`));
   return group;
 };
 
@@ -843,7 +843,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       };
       Object.values(links).forEach(link => group.add(link));
       const gears: THREE.Mesh[] = [];
-      if (['gear', 'gear_linkage', 'planetary_gear', '5bar', 'rack-pinion'].includes(mechanism.type)) {
+      if (['gear', 'gear_linkage', 'planetary_gear', 'rack-pinion'].includes(mechanism.type)) {
         const gearRadii = mechanism.type === 'rack-pinion'
           ? [mechanism.crankLength]
           : mechanism.type === 'gear' || mechanism.type === 'gear_linkage'
@@ -879,7 +879,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
         addExtra('slottedLever', createSlotPlate(Math.max(2.2, mechanism.rockerLength / VIEW_SCALE), 0.32, materials.mechOutput, materials.edge));
       }
       if (mechanism.type === 'cam') {
-        addExtra('camProfile', createCamProfile(Math.max(0.46, mechanism.crankLength / VIEW_SCALE), materials.mechDrive, materials.edge));
+        addExtra('camProfile', createCamProfile(Math.max(0.46, mechanism.crankLength / VIEW_SCALE), mechanism.camProfileSamples, materials.mechDrive, materials.edge));
         addExtra('followerGuide', createSlotPlate(Math.max(2.0, (mechanism.rockerLength || 90) / VIEW_SCALE), 0.28, materials.mechBase, materials.edge));
         addExtra('followerBlock', createFollowerBlock(materials.mechOutput, materials.edge));
       }
@@ -1001,9 +1001,9 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
         updateObject(visual.extras.endStopB, shifted(rackGuide.center, rackGuide.trackAngle, mechanism.rockerLength / 2), zOutputMoving + 0.08, rackGuide.trackAngle);
       } else if (mechanism.type === 'gear') {
         updateLink(visual.links.base, undefined, undefined);
-        updateLink(visual.links.driver, state.j1, state.effector, zCoupler);
+        updateLink(visual.links.driver, undefined, undefined);
         updateLink(visual.links.coupler, undefined, undefined);
-        updateLink(visual.links.output, state.j2, state.effector, zOutput);
+        updateLink(visual.links.output, undefined, undefined);
         updateLink(visual.links.effector, undefined, undefined);
       } else if (mechanism.type === 'gear_linkage') {
         updateLink(visual.links.base, undefined, undefined);
@@ -1093,8 +1093,8 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
   };
 
   const handleViewerPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
-    const mode = cameraPreset === 'front' ? 'pan' : 'orbit';
+    if (event.button !== 0 && event.button !== 1 && event.button !== 2) return;
+    const mode = cameraPreset === 'front' || event.shiftKey || event.button === 1 || event.button === 2 ? 'pan' : 'orbit';
     if (mode === 'pan' && !setViewport) return;
     viewerDragRef.current = {
       pointerId: event.pointerId,
@@ -1169,6 +1169,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       onPointerMove={handleViewerPointerMove}
       onPointerUp={finishViewerDrag}
       onPointerCancel={finishViewerDrag}
+      onContextMenu={event => event.preventDefault()}
     />
     {project?.settings.debugVisuals && (
       <div
