@@ -174,6 +174,10 @@ assert(!visibleUiSource.includes('Capture Camera'), 'browser hardware camera cap
 assert(!visibleUiSource.includes('Choose Save Folder'), 'browser output-folder picker is removed from visible UI because downloads use the browser default location');
 assert(!visibleUiSource.includes('CameraCaptureDialog'), 'browser hardware camera dialog component is removed');
 assert(!visibleUiSource.includes('getUserMedia'), 'browser hardware camera capture API is not used by the app UI');
+assert(existsSync(join(process.cwd(), 'public', 'fonts', 'manrope-800-latin.woff2')), 'Manrope splash font is self-hosted instead of loaded from a runtime CDN');
+assert(!readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8').includes('src-tauri/icons/icon.png'), 'welcome splash does not reuse the blue Tauri grid icon');
+assert(readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8').includes('MotionSmithLogoMark'), 'welcome splash uses the MotionSmith mascot/gear mark');
+assert(readFileSync(join(process.cwd(), 'index.html'), 'utf8').includes("font-family: 'Manrope'") && readFileSync(join(process.cwd(), 'index.html'), 'utf8').includes('fonts/manrope-800-latin.woff2'), 'welcome splash uses a local Manrope wordmark font');
 [
   'Add body part',
   'placeholder plates',
@@ -711,8 +715,9 @@ assert(threePreviewText.includes('transparent: false, opacity: 1'), '3D puppet b
 assert(threePreviewText.includes('disposeOwnedMaterials(scene)'), '3D puppet preview disposes owned decal textures on unmount');
 assert(designContract.includes('Getting Started is a compact modal dialog'), 'DESIGN.md separates Getting Started from full-screen onboarding');
 assert(designContract.includes('The Character tab is functional'), 'DESIGN.md defines Character as a functional editor tab');
-assert(appUiText.includes('splash-dialog') && appUiText.includes('MotionSmith'), 'first-run welcome is a logo-only splash dialog');
-assert(appShellText.includes("../src-tauri/icons/icon.png?url") && appShellText.includes('motionSmithIconUrl'), 'first-run welcome uses the packaged MotionSmith app icon');
+assert(appUiText.includes('splash-dialog') && appShellText.includes('MOTIONSMITH'), 'first-run welcome is a compact MotionSmith wordmark splash dialog');
+assert(appShellText.includes('MotionSmithLogoMark') && !appShellText.includes('motionSmithIconUrl') && !appShellText.includes('../src-tauri/icons/icon.png?url'), 'first-run welcome uses the inline MotionSmith mascot mark instead of the blue grid app icon');
+assert(indexText.includes("font-family: 'Manrope'") && indexText.includes('fonts/manrope-800-latin.woff2'), 'first-run welcome uses self-hosted Manrope wordmark styling');
 assert(appShellText.includes('window.setTimeout') && appShellText.includes('3000') && appShellText.includes('window.clearTimeout'), 'first-run welcome auto-dismisses after three seconds');
 assert(indexText.includes('--ms-font-sans') && indexText.includes('font-family: var(--ms-font-sans)') && indexText.includes('.brand-title'), 'global typography uses the shared modern MotionSmith font stack');
 assert(appText.includes('readStorageWithLegacy') && appText.includes('migrateStorageValue'), 'MotionSmith storage rename keeps legacy autosave/workspace migration hooks');

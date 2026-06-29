@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MotionSmith - Mechanical Character Designer</title>
     <style>
+      @font-face {
+        font-family: 'Manrope';
+        font-style: normal;
+        font-weight: 800;
+        font-display: swap;
+        src: url('fonts/manrope-800-latin.woff2') format('woff2');
+        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+      }
       :root {
         --ms-bg: #ffffff;
         --ms-bg-soft: #f8f9ff;
@@ -170,9 +178,10 @@
       .cut-outline-actions { display: flex; flex-wrap: wrap; gap: .45rem; }
       .welcome-backdrop { background: rgba(248,250,252,.46); backdrop-filter: blur(14px) saturate(1.05); }
       .welcome-dialog { width: min(100%, 74rem); max-height: min(91vh, 52rem); padding: 1rem; border-color: rgba(139,92,246,.24); background: rgba(255,255,255,.96); }
-      .splash-dialog { width: min(92vw, 22rem); max-height: none; display: grid; justify-items: center; gap: .85rem; padding: 1.35rem; text-align: center; overflow: hidden; }
-      .splash-dialog img { width: 3.75rem; height: 3.75rem; border-radius: .9rem; background: #2563eb; box-shadow: 0 18px 40px rgba(37,99,235,.22); image-rendering: pixelated; }
-      .splash-dialog h2 { margin: 0; color: var(--ms-text); font-family: var(--ms-font-display); font-size: clamp(2rem, 8vw, 3.25rem); line-height: .9; letter-spacing: -.065em; font-weight: 720; }
+      .splash-dialog { width: min(92vw, 24rem); max-height: none; display: grid; justify-items: center; gap: 1rem; padding: 1.6rem; text-align: center; overflow: hidden; }
+      .splash-brand { display: inline-flex; align-items: center; justify-content: center; gap: .75rem; }
+      .motionsmith-logo-mark { width: 2.55rem; height: 2.55rem; flex: none; filter: drop-shadow(0 8px 16px rgba(47,86,214,.14)); }
+      .splash-dialog h2 { margin: 0; color: var(--ms-text); font-family: Manrope, var(--ms-font-display); font-size: clamp(1.35rem, 7vw, 2rem); line-height: 1; letter-spacing: .18em; font-weight: 800; }
       .getting-started-dialog { width: min(94vw, 58rem); max-height: min(88vh, 44rem); display: grid; gap: 1rem; padding: 1rem; overflow: auto; }
       .getting-started-head { display: flex; justify-content: space-between; align-items: start; gap: 1rem; border-bottom: 1px solid var(--ms-line); padding-bottom: .85rem; }
       .getting-started-head h2 { max-width: 34rem; margin: .2rem 0 0; color: var(--ms-text); font-size: clamp(1.4rem, 3vw, 2.4rem); line-height: .95; letter-spacing: -.055em; font-weight: 720; }
