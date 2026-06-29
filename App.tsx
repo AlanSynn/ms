@@ -769,8 +769,8 @@ const App: React.FC = () => {
                     <header className="app-header flex items-center justify-between border-b border-slate-300/70 bg-white/50 px-7 py-4 backdrop-blur-xl">
                         <div className="flex min-w-0 items-center gap-6">
                             <div>
-                                <div className="accent-label text-[11px] font-black uppercase tracking-[0.28em]">MotionSmith</div>
-                                <h1 className="text-2xl font-black tracking-[-0.05em]">MotionSmith</h1>
+                                <div className="brand-kicker">MotionSmith</div>
+                                <h1 className="brand-title">MotionSmith</h1>
                                 <h2 className="current-stage-title">{stageMeta?.label}</h2>
                             </div>
                         </div>

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { BrainCircuit, FileJson, Sparkles, Upload } from 'lucide-react';
+import motionSmithIconUrl from '../src-tauri/icons/icon.png?url';
 import type { AppStage, CanvasViewport } from '../types';
 import type { WebOnnxCacheStatus } from '../utils/webOnnx';
 import { APP_MENU_GROUPS, commandById, commandShortcutListText, commandShortcutText, type AppCommandId } from '../utils/appCommands';
@@ -8,8 +9,6 @@ import { STAGE_PANE_NAV_ITEMS, StagePaneNavIcon } from './stages/stageLayout';
 
 export type StarterImageTemplate = { id: string; label: string; fileName: string; description: string; url: string };
 
-const MOTIONSMITH_SITE_URL = 'https://alansynn.com/motionsmith/';
-const MOTIONSMITH_ICON_URL = `${MOTIONSMITH_SITE_URL}static/images/favicon.ico`;
 export const SHARED_PLAYBACK_STAGES: AppStage[] = ['path', 'design'];
 
 export const STAGES: Array<{ id: AppStage; label: string }> = [
@@ -221,9 +220,13 @@ export const WorkflowStatusStrip = ({ stageLabel, blocker, nextAction }: { stage
 export const WelcomeDialog = ({ onClose }: { onClose: (hideNextTime?: boolean) => void }) => {
     const [hideNextTime, setHideNextTime] = useState(false);
     const dialogRef = useRef<HTMLElement>(null);
+    const onCloseRef = useRef(onClose);
+    const hideNextTimeRef = useRef(false);
+    useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
     useEffect(() => {
-        const dialog = dialogRef.current;
-        dialog?.focus();
+        dialogRef.current?.focus();
+        const autoCloseTimer = window.setTimeout(() => onCloseRef.current(hideNextTimeRef.current), 3000);
+        return () => window.clearTimeout(autoCloseTimer);
     }, []);
     const trapDialogFocus = (event: React.KeyboardEvent) => {
         if (event.key === 'Escape') {
@@ -253,10 +256,10 @@ export const WelcomeDialog = ({ onClose }: { onClose: (hideNextTime?: boolean) =
 
     return <div className="modal-backdrop welcome-backdrop" role="presentation">
         <section ref={dialogRef} className="modal-sheet welcome-dialog splash-dialog animate-rise" role="dialog" aria-modal="true" aria-labelledby="welcome-dialog-title" data-testid="welcome-dialog" tabIndex={-1} onKeyDown={trapDialogFocus}>
-            <img src={MOTIONSMITH_ICON_URL} alt="" />
+            <img src={motionSmithIconUrl} alt="" />
             <h2 id="welcome-dialog-title">MotionSmith</h2>
             <button type="button" className="btn-primary" onClick={() => onClose(hideNextTime)}>Start</button>
-            <label className="replace-toggle"><input type="checkbox" checked={hideNextTime} onChange={event => setHideNextTime(event.target.checked)} /> Do not show this again</label>
+            <label className="replace-toggle"><input type="checkbox" checked={hideNextTime} onChange={event => { hideNextTimeRef.current = event.target.checked; setHideNextTime(event.target.checked); }} /> Do not show this again</label>
         </section>
     </div>;
 };

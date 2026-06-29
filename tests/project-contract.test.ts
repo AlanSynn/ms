@@ -677,6 +677,9 @@ assert(threePreviewText.includes('disposeOwnedMaterials(scene)'), '3D puppet pre
 assert(designContract.includes('Getting Started is a compact modal dialog'), 'DESIGN.md separates Getting Started from full-screen onboarding');
 assert(designContract.includes('The Character tab is functional'), 'DESIGN.md defines Character as a functional editor tab');
 assert(appUiText.includes('splash-dialog') && appUiText.includes('MotionSmith'), 'first-run welcome is a logo-only splash dialog');
+assert(appShellText.includes("../src-tauri/icons/icon.png?url") && appShellText.includes('motionSmithIconUrl'), 'first-run welcome uses the packaged MotionSmith app icon');
+assert(appShellText.includes('window.setTimeout') && appShellText.includes('3000') && appShellText.includes('window.clearTimeout'), 'first-run welcome auto-dismisses after three seconds');
+assert(indexText.includes('--ms-font-sans') && indexText.includes('font-family: var(--ms-font-sans)') && indexText.includes('.brand-title'), 'global typography uses the shared modern MotionSmith font stack');
 assert(appText.includes('readStorageWithLegacy') && appText.includes('migrateStorageValue'), 'MotionSmith storage rename keeps legacy autosave/workspace migration hooks');
 assert(!appUiText.includes('MOTIONSMITH_VIDEO_URL'), 'welcome splash does not embed the old preview video');
 assert(appUiText.includes('getting-started-dialog') && appUiText.includes('getting-started-gallery'), 'Getting Started is an explicit compact starter dialog');

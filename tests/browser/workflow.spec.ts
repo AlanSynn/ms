@@ -119,9 +119,6 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await page.goto('/');
   await expect(page.getByTestId('shared-workbench')).toBeVisible();
   await expect(page.locator('#boot-loader')).toHaveCount(0);
-  await expect(page.getByTestId('onnx-cache-status')).toBeVisible();
-  await expect(page.getByTestId('onnx-cache-status')).toContainText(/AI ready|Get AI|AI \d+%|Try again/);
-  await expect(page.getByTestId('status-bar')).not.toContainText(/parts:|paths:|mechs:|zoom/);
   const welcomeDialog = page.getByTestId('welcome-dialog');
   await expect(welcomeDialog).toBeVisible();
   await expect(welcomeDialog.getByRole('heading', { name: 'MotionSmith' })).toBeVisible();
@@ -139,6 +136,9 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   }
   await page.getByRole('button', { name: 'Start', exact: true }).click();
   await expect(page.getByTestId('welcome-dialog')).toHaveCount(0);
+  await expect(page.getByTestId('onnx-cache-status')).toBeVisible();
+  await expect(page.getByTestId('onnx-cache-status')).toContainText(/AI ready|Get AI|AI \d+%|Try again/);
+  await expect(page.getByTestId('status-bar')).not.toContainText(/parts:|paths:|mechs:|zoom/);
 
   const gettingStarted = page.getByTestId('getting-started-dialog');
   await expect(gettingStarted).toBeVisible();
@@ -1611,6 +1611,16 @@ test('Mobile path editor keeps Draw free path action above the canvas', async ({
   expect(drawBox, 'draw button layout box').toBeTruthy();
   expect(canvasBox, 'path canvas layout box').toBeTruthy();
   expect(drawBox!.y, 'mobile draw action appears before canvas').toBeLessThan(canvasBox!.y);
+});
+
+
+test('Welcome splash uses the packaged icon and auto-dismisses', async ({ page }) => {
+  await page.goto('/');
+  const splash = page.getByTestId('welcome-dialog');
+  await expect(splash).toBeVisible();
+  await expect.poll(() => splash.locator('img').evaluate(image => ({ src: (image as HTMLImageElement).currentSrc, width: (image as HTMLImageElement).naturalWidth, height: (image as HTMLImageElement).naturalHeight }))).toMatchObject({ src: expect.stringMatching(/^data:image\/png/), width: 256, height: 256 });
+  await expect(splash).toHaveCount(0);
+  await expect(page.getByTestId('getting-started-dialog')).toBeVisible();
 });
 
 test('Mobile welcome modal is simple, traps focus, and can be hidden next time', async ({ page }) => {
