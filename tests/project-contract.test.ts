@@ -158,6 +158,7 @@ const visibleUiSource = [
   'App.tsx',
   'components/Canvas.tsx',
   'components/TrackingModal.tsx',
+  'components/AppShell.tsx',
   'components/stages/stageLayout.tsx',
   'components/stages/blueprint/BlueprintExport.tsx',
   'components/stages/assembly/AssemblyWorkbench.tsx'
@@ -605,6 +606,9 @@ const viewportText = readFileSync(join(process.cwd(), 'utils', 'viewport.ts'), '
 const viewer3dText = readFileSync(join(process.cwd(), 'utils', 'viewer3d.ts'), 'utf8');
 const webOnnxText = readFileSync(join(process.cwd(), 'utils', 'webOnnx.ts'), 'utf8');
 const appText = readFileSync(join(process.cwd(), 'App.tsx'), 'utf8');
+const appShellText = readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8');
+const appUiText = `${appText}
+${appShellText}`;
 const typesText = readFileSync(join(process.cwd(), 'types.ts'), 'utf8');
 const indexText = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
 assert(canvasText.includes('fabricationGearPathD'), '2D canvas gear rendering uses shared fabrication gear geometry');
@@ -637,7 +641,7 @@ assert(viewportText.includes('WEBGL_PIXEL_RATIO_CAP') && appText.includes('WEBGL
 assert(threePreviewText.includes("const PUPPET_CAMERA_PRESETS: Viewer3DCameraPreset[] = ['front', 'iso']"), 'puppet viewer toolbar exposes only the fixed 2D and orbitable 3D modes');
 assert(threePreviewText.includes('onWheel={handleViewerWheel}') && threePreviewText.includes('data-camera-yaw'), 'puppet 3D canvas exposes direct wheel zoom and orbit state for browser verification');
 assert(indexText.includes('bottom: calc(var(--ms-bottom-bars-height) + 10px)') && !indexText.includes('--ms-status-bar-height'), 'character import status dock floats 10px above the bottom status area instead of covering the canvas');
-assert(indexText.includes('.stage-player-row { position: absolute;') && appText.includes('data-testid="workspace-player-drag-handle"'), 'shared animation dock is an overlay with a draggable handle instead of a layout row');
+assert(indexText.includes('.stage-player-row { position: absolute;') && appUiText.includes('data-testid="workspace-player-drag-handle"'), 'shared animation dock is an overlay with a draggable handle instead of a layout row');
 assert(appText.includes('data-three-pixel-ratio-cap') && threePreviewText.includes('data-three-pixel-ratio-cap'), '3D previews expose the pixel-ratio cap for browser performance checks');
 assert.equal(WEBGL_PIXEL_RATIO_CAP, 1.5, 'WebGL pixel-ratio cap avoids high-DPI overdraw while preserving sharp CAD-style previews');
 assert(!appText.includes('starShape'), 'Foundry sandbox no longer carries saw-tooth star gears');
@@ -655,7 +659,7 @@ assert(webOnnxText.includes('contourFromCropMask') && webOnnxText.includes("cont
 assert(webOnnxText.includes('MODEL_CACHE_NAME') && webOnnxText.includes('caches.open') && webOnnxText.includes('warmWebOnnxCache'), 'browser ONNX model can be separately downloaded and cached');
 assert(webOnnxText.includes('InferenceSession.create(new Uint8Array(modelBuffer)'), 'browser ONNX creates sessions from cached model bytes');
 assert(webOnnxText.includes("import('onnxruntime-web')") && !webOnnxText.includes("import * as ort from 'onnxruntime-web'"), 'ONNX Runtime JS is lazy-loaded outside the initial editor shell bundle');
-assert(appText.includes('data-testid="onnx-cache-status"') && appText.includes('checkWebOnnxCache'), 'status bar exposes ONNX cache/download status');
+assert(appUiText.includes('data-testid="onnx-cache-status"') && appText.includes('checkWebOnnxCache'), 'status bar exposes ONNX cache/download status');
 assert(indexText.includes('id="boot-loader"') && indexText.includes('Loading…'), 'static boot loader covers slow startup');
 assert(viewer3dText.includes('VIEWER3D_CAMERA_PRESETS') && threePreviewText.includes('three-puppet-view-toolbar') && appText.includes('foundryPreset'), '3D puppet and foundry previews share one viewer camera preset contract');
 assert(viewer3dText.includes('type Viewer3DContract') && viewer3dText.includes('createViewer3DContract'), '3D viewers expose one shared OOP-style contract object for tab adapters');
@@ -672,11 +676,11 @@ assert(threePreviewText.includes('transparent: false, opacity: 1'), '3D puppet b
 assert(threePreviewText.includes('disposeOwnedMaterials(scene)'), '3D puppet preview disposes owned decal textures on unmount');
 assert(designContract.includes('Getting Started is a compact modal dialog'), 'DESIGN.md separates Getting Started from full-screen onboarding');
 assert(designContract.includes('The Character tab is functional'), 'DESIGN.md defines Character as a functional editor tab');
-assert(appText.includes('splash-dialog') && appText.includes('MotionSmith'), 'first-run welcome is a logo-only splash dialog');
+assert(appUiText.includes('splash-dialog') && appUiText.includes('MotionSmith'), 'first-run welcome is a logo-only splash dialog');
 assert(appText.includes('readStorageWithLegacy') && appText.includes('migrateStorageValue'), 'MotionSmith storage rename keeps legacy autosave/workspace migration hooks');
-assert(!appText.includes('MOTIONSMITH_VIDEO_URL'), 'welcome splash does not embed the old preview video');
-assert(appText.includes('getting-started-dialog') && appText.includes('getting-started-gallery'), 'Getting Started is an explicit compact starter dialog');
-assert(appText.includes('Pick a starter, then tune it in Character.'), 'Getting Started copy routes users into the Character tab');
+assert(!appUiText.includes('MOTIONSMITH_VIDEO_URL'), 'welcome splash does not embed the old preview video');
+assert(appUiText.includes('getting-started-dialog') && appUiText.includes('getting-started-gallery'), 'Getting Started is an explicit compact starter dialog');
+assert(appUiText.includes('Pick a starter, then tune it in Character.'), 'Getting Started copy routes users into the Character tab');
 assert(appText.includes('setShowGettingStarted(!hideNextTime)'), 'Start opens Getting Started unless the splash is hidden for next time');
 assert(appText.includes('onOpenGettingStarted'), 'Character tab can reopen Getting Started without owning its starter gallery');
 assert(!appText.includes('Start with character art'), 'Character tab no longer carries the old hero/onboarding copy');
@@ -700,7 +704,7 @@ assert(appText.includes('stage-body editor-workbench relative min-h-0 flex-1 ove
 assert(appText.includes('const [showSensemaking, setShowSensemaking] = useState(false)'), 'Foundry starts in compact tinkerable mode with sensemaking collapsed');
 assert(appText.includes('compact-fabrication-stack') && appText.includes('data-testid="foundry-fabrication-stack"'), 'Foundry keeps fabrication stack visible as a compact action datum');
 assert(typesText.includes("'assembly'"), 'AppStage includes a dedicated Assembly tab');
-assert(appText.includes("{ id: 'assembly', label: 'Assembly' }"), 'workflow rail exposes Assembly as a separate stage');
+assert(appUiText.includes("{ id: 'assembly', label: 'Assembly' }"), 'workflow rail exposes Assembly as a separate stage');
 const blueprintCanvasStart = blueprintExportText.indexOf('canvas: canvasPane(<div className="blueprint-document-preview canvas-workspace" data-testid="blueprint-canvas-preview">');
 const blueprintInspectorStart = blueprintExportText.indexOf('inspector: inspectorPane(<section className="stage-pane-stack" data-testid="blueprint-detail-preview">', blueprintCanvasStart);
 assert(blueprintCanvasStart >= 0 && blueprintInspectorStart > blueprintCanvasStart, 'Blueprint layout exposes printable 2D canvas and cut-sheet inspector slots');
