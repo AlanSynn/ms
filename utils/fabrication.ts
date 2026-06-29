@@ -2,7 +2,7 @@ import { BodyPartLayer, FabricationIssue, FabricationPackage, FabricationRecipe,
 import { calculateLinkage, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, generateCurvePoints, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius as kinematicPlanetaryRingPitchRadius } from './kinematics';
 import { boardToScene, pathFromPoints, SCENE_PX_PER_MM, sceneToBoardRaw, sceneToSvg, sceneBoundsForSheet } from './coordinates';
 import { mechanismRequiredParts } from './project';
-import { REFERENCE_DEFAULTS, isReferenceExportReady, referenceRecipeForType, referenceSupportWarning } from './mechanismReference';
+import { REFERENCE_DEFAULTS, isReferenceExportReady, referenceRecipeForType, referenceStepCoordinateCallout, referenceSupportWarning } from './mechanismReference';
 import { mechanismBindingWarnings, preferredMotionJointId } from './motion';
 import { svgNumber } from './sanitize';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlineBounds, pointInsideOutline } from './partGeometry';
@@ -432,7 +432,7 @@ export const prefabAssemblySteps = (mechanism: MechanismConfig, boardCoordinate:
     if (recipe.exportReady && recipe.assemblySteps.length) {
         return recipe.assemblySteps.map(step => ({
             ...step,
-            boardCoordinate: step.coords[0] ?? boardCoordinate,
+            boardCoordinate: step.boardCoordinate || boardCoordinate,
             zMm: step.zMm ?? 0
         }));
     }
@@ -851,7 +851,7 @@ ${shapeFor(item, x, y)}
 	<g filter="url(#guide-shadow)">${items}</g>
 <line x1="92" y1="458" x2="438" y2="130" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 10"/>
 <text x="70" y="486" class="guide-muted">Assembly stack separates moving layers with spacers so clips do not bind.</text>
-${recipe ? `<text x="40" y="505" class="guide-muted">First recipe: ${esc(recipe.mechanismId)} · ${esc(recipe.type)} · hole ${esc(recipe.boardCoordinate)}</text>` : ''}
+${recipe ? `<text x="40" y="505" class="guide-muted">First recipe: ${esc(recipe.mechanismId)} · ${esc(recipe.type)} · anchor ${esc(recipe.boardCoordinate)}</text>` : ''}
 </svg>`;
 };
 
@@ -861,11 +861,11 @@ const makeAssemblyGuideHtml = (project: ProjectState, recipes: FabricationRecipe
     const explodedSvg = makeExplodedStackSvg(firstRecipe, esc);
     const recipeSections = recipes.map(recipe => `<section>
 <h2>${esc(recipe.mechanismId)} · ${esc(recipe.type)}</h2>
-<p><strong>Board coordinate:</strong> ${esc(recipe.boardCoordinate)} (${recipe.sceneAnchor.x.toFixed(1)}, ${recipe.sceneAnchor.y.toFixed(1)} scene units)</p>
+<p><strong>Board anchor:</strong> ${esc(recipe.boardCoordinate)} (${recipe.sceneAnchor.x.toFixed(1)}, ${recipe.sceneAnchor.y.toFixed(1)} scene units)</p>
 <p><strong>Target:</strong> ${esc(recipe.targetPartName ?? recipe.targetPartId ?? 'unbound')} · path ${esc(recipe.targetPathId ?? 'none')} · anchor ${esc(recipe.targetAnchorJointId ?? 'part default')} · ${recipe.targetPathPointCount ?? 0} path points</p>
 ${recipe.warnings.length ? `<p><strong>Warnings:</strong> ${recipe.warnings.map(esc).join('; ')}</p>` : '<p><strong>Warnings:</strong> none</p>'}
 <h3>Required parts</h3><ul>${recipe.requiredParts.map(part => `<li>${esc(part.name)} × ${part.quantity}</li>`).join('')}</ul>
-<h3>15×15 board kit assembly</h3><ol class="stepper" data-testid="prefab-assembly-steps">${recipe.assemblySteps.map(step => `<li class="assembly-step" style="--i:${step.index}"><strong>${step.index}. ${esc(step.label)}</strong><span>${esc(step.instruction)}</span><em>${esc(step.role)} · ${esc(step.boardCoordinate)} · Z ${step.zMm.toFixed(1)}mm</em></li>`).join('')}</ol>
+<h3>15×15 board kit assembly</h3><ol class="stepper" data-testid="prefab-assembly-steps">${recipe.assemblySteps.map(step => `<li class="assembly-step" style="--i:${step.index}"><strong>${step.index}. ${esc(step.label)}</strong><span>${esc(step.instruction)}</span><em>${esc(step.role)} · ${esc(referenceStepCoordinateCallout(step))} · Z ${step.zMm.toFixed(1)}mm</em></li>`).join('')}</ol>
 <h3>Steps</h3><ol>${recipe.steps.map(step => `<li>${esc(step)}</li>`).join('')}</ol>
 </section>`).join('');
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(project.metadata.name)} assembly</title><style>
@@ -954,7 +954,7 @@ const makeCutSheetPdf = (project: ProjectState, recipes: FabricationRecipe[]) =>
         }
     });
     recipes.slice(0, 12).forEach((recipe, index) => {
-        commands.push(`0.10 0.16 0.28 rg BT /F1 8 Tf ${page.margin} ${118 - index * 10} Td (${pdfText(`${recipe.mechanismId}: ${recipe.type} at ${recipe.boardCoordinate}`)}) Tj ET`);
+        commands.push(`0.10 0.16 0.28 rg BT /F1 8 Tf ${page.margin} ${118 - index * 10} Td (${pdfText(`${recipe.mechanismId}: ${recipe.type} anchor ${recipe.boardCoordinate}`)}) Tj ET`);
     });
     return makePdfDocument(commands.join('\n'));
 };
@@ -974,10 +974,10 @@ const makeAssemblyGuidePdf = (project: ProjectState, recipes: FabricationRecipe[
         `Profile ${project.settings.physicalKit.profileKey} / ${project.settings.physicalKit.gridPitchMm}mm grid`,
         ...warnings.map(warning => `Warning: ${warning}`),
         ...recipes.flatMap(recipe => [
-            `${recipe.mechanismId} / ${recipe.type} / ${recipe.boardCoordinate}`,
+            `${recipe.mechanismId} / ${recipe.type} / anchor ${recipe.boardCoordinate}`,
             `Target: ${recipe.targetPartName ?? recipe.targetPartId ?? 'unbound'} / path ${recipe.targetPathId ?? 'none'} / anchor ${recipe.targetAnchorJointId ?? 'part default'}`,
             `Required parts: ${recipe.requiredParts.map(part => `${part.name} x ${part.quantity}`).join(', ')}`,
-            ...recipe.assemblySteps.map(step => `Kit step ${step.index}: ${step.label} / ${step.boardCoordinate} / Z ${step.zMm.toFixed(1)}mm`),
+            ...recipe.assemblySteps.map(step => `Kit step ${step.index}: ${step.label} / ${referenceStepCoordinateCallout(step)} / Z ${step.zMm.toFixed(1)}mm`),
             ...recipe.steps
         ])
     ]

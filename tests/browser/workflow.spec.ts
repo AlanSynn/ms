@@ -457,7 +457,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   expect(guidePath, 'guide download path').toBeTruthy();
   const guideText = await readFile(guidePath!, 'utf8');
   expect(guideText).toContain('assembly guide');
-  expect(guideText).toContain('Board coordinate:');
+  expect(guideText).toContain('Board anchor:');
   expect(guideText).toContain('Target:');
   expect(guideText).toContain('Right lower arm');
   expect(guideText).toContain('path-right-arm');

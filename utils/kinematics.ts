@@ -1,5 +1,6 @@
 
 import { Point, MechanismConfig, JointState, AppSettings } from '../types';
+import { normalizeGearLinkageToReference } from './mechanismReference';
 
 const toRad = (deg: number) => (deg * Math.PI) / 180;
 
@@ -241,8 +242,12 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
 
     // --- GEAR-DRIVEN OUTPUT LINKAGE ---
     else if (config.type === 'gear_linkage') {
-        const radii = gearTrainPitchRadii(config);
-        const centers = gearTrainCenters(config);
+        // Gear-linkage is a fixed mechanism-reference recipe: two meshed G3 gears only.
+        // Do not inherit arbitrary gear-train idlers from a raw config; the output linkage
+        // attaches to the driven G3 handle hole, not to a compound train endpoint.
+        const referencePair = normalizeGearLinkageToReference(config);
+        const radii = gearTrainPitchRadii(referencePair);
+        const centers = gearTrainCenters(referencePair);
         const inputRadius = radii[0];
         const outputRadius = radii.at(-1) ?? config.rockerLength;
         const p2 = centers.at(-1) ?? p1;
@@ -252,12 +257,12 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
         };
         const ratio = gearTrainOutputRatio(radii);
         const outAngle = angle1 * ratio + (config.phase ?? 0);
-        const handleRadius = Math.max(1, Math.abs(config.couplerPointDist || outputRadius * (2 / 3)));
+        const handleRadius = Math.max(1, Math.abs(referencePair.couplerPointDist));
         const j2: Point = {
             x: p2.x + handleRadius * Math.cos(outAngle),
             y: p2.y + handleRadius * Math.sin(outAngle)
         };
-        const linkLength = Math.max(1, Math.abs(config.couplerLength || handleRadius * 4));
+        const linkLength = Math.max(1, Math.abs(referencePair.couplerLength));
         const effectorAngle = outAngle + toRad(config.couplerPointAngle);
         const effector: Point = {
             x: j2.x + linkLength * Math.cos(effectorAngle),

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { boardGridLines, boardToScene, bodyPartPivotScene, physicalKitPreset, placeBodyPartPivotAt, SCENE_PX_PER_MM, sceneToBoard, sceneToBoardRaw, sceneToSheetMm, sceneToSvg, sheetMmToScene } from '../utils/coordinates';
 import { createDefaultMechanism, createSampleProject, handoffGate, loadProjectSnapshot, serializeProject, applyProjectAction, projectSelfCheck, mechanismRequiredParts, mechanismWithGeneratedPath, replaceCharacterProject } from '../utils/project';
-import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, sampleFeasibleRange, validateFabricationStack, validateForFabrication } from '../utils/fabrication';
+import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, prefabAssemblySteps, sampleFeasibleRange, validateFabricationStack, validateForFabrication } from '../utils/fabrication';
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
 import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, generateCurvePoints, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius } from '../utils/kinematics';
@@ -22,7 +22,7 @@ import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_KERNEL_IMP
 import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, FOUNDRY_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, mechanismTemplateLabel } from '../utils/mechanismTemplates';
 import { MECHANISM_TYPES as SANITIZE_MECHANISM_TYPES, sanitizeMechanismRuntime } from '../utils/sanitize';
 import { generateSmartConfig, mutateConfig, OPTIMIZER_MECHANISM_TYPES } from '../utils/optimizer';
-import { REFERENCE_DEFAULTS, REFERENCE_EXPORT_READY_TYPES, REFERENCE_FOUNDRY_TYPES, REFERENCE_MECHANISM_RECIPES, referenceRecipeForType } from '../utils/mechanismReference';
+import { isBoardFixedCoordRole, REFERENCE_DEFAULTS, REFERENCE_EXPORT_READY_TYPES, REFERENCE_FOUNDRY_TYPES, REFERENCE_MECHANISM_RECIPES, referenceRecipeForType } from '../utils/mechanismReference';
 import type { BodyPartLayer, MechanismType, ProjectState } from '../types';
 
 projectSelfCheck();
@@ -348,6 +348,38 @@ unsupportedLegacyMechanismTypes.forEach(type => {
   assert.equal(recipe.foundryVisible, false, `${type} is hidden from Foundry until a physical recipe exists`);
   assert.deepEqual(recipe.requiredParts, [], `${type} has no required fabrication parts without a reference recipe`);
 });
+REFERENCE_EXPORT_READY_TYPES.forEach(type => {
+  const recipe = referenceRecipeForType(type);
+  recipe.assemblySteps.forEach(step => {
+    assert.equal(step.coordRoles.length, step.coords.length, `${type} step ${step.index} keeps coord_roles aligned with coords`);
+    const firstBoardIndex = step.coordRoles.findIndex(isBoardFixedCoordRole);
+    const expectedBoardCoordinate = step.coords[firstBoardIndex >= 0 ? firstBoardIndex : 0] ?? '';
+    assert.equal(step.boardCoordinate, expectedBoardCoordinate, `${type} step ${step.index} boardCoordinate follows the first board role, not a moving reference`);
+    assert(step.stack.some(layer => layer.role === 'paper-fastener'), `${type} step ${step.index} stack includes a paper fastener`);
+    const orders = step.stack.map(layer => layer.order);
+    assert.deepEqual(orders, [...new Set(orders)].sort((a, b) => a - b), `${type} step ${step.index} stack orders are strictly increasing`);
+    step.stack
+      .filter(layer => layer.role === 'spacer' || layer.role === 'top-spacer')
+      .forEach(layer => assert.equal(layer.part, 'spacers:s10', `${type} step ${step.index} spacer layer uses S10`));
+  });
+  assert.deepEqual(
+    prefabAssemblySteps(createDefaultMechanism(type, `prefab-${type}-contract`), 'H8').map(step => step.boardCoordinate),
+    recipe.assemblySteps.map(step => step.boardCoordinate),
+    `${type} prefab assembly keeps mechanism-reference board/moving coordinate semantics`
+  );
+});
+assert(isBoardFixedCoordRole('board'), 'mechanism-reference board role is board-fixed');
+assert(isBoardFixedCoordRole('board_axle'), 'mechanism-reference compatibility board_axle role is board-fixed');
+assert(!isBoardFixedCoordRole('link_joint_reference'), 'mechanism-reference floating link joints are not board-fixed');
+assert(!isBoardFixedCoordRole('gear_handle_reference'), 'mechanism-reference gear handle references are not board-fixed');
+assert.equal(referenceRecipeForType('4bar').assemblySteps.find(step => step.label === 'Close output link')?.boardCoordinate, 'I9', '4bar output link closes on board pivot I9, not floating G10');
+assert.equal(referenceRecipeForType('4bar').assemblySteps.find(step => step.label === 'Add coupler')?.stack[0]?.role, 'link-joint-hole', '4bar G6 coupler joint is a floating link joint');
+assert.equal(referenceRecipeForType('4bar').assemblySteps.find(step => step.label === 'Join output to coupler')?.stack[0]?.role, 'link-joint-hole', '4bar G10 output/coupler joint remains floating');
+assert.equal(referenceRecipeForType('gear_linkage').assemblySteps.find(step => step.label === 'Add linkage output')?.stack[0]?.role, 'gear-handle-hole', 'gear-linkage output arm starts at an off-centre gear handle hole');
+assert.equal(referenceRecipeForType('gear_linkage').assemblySteps.find(step => step.label === 'Add output connector')?.stack[0]?.role, 'link-end-hole', 'gear-linkage output connector is a moving link-end reference');
+assert.equal(referenceRecipeForType('planetary_gear').assemblySteps.find(step => step.label === 'Add G3 moving planet gear')?.stack[0]?.role, 'carrier-hole', 'planetary planet axle sits on the moving carrier, not the board');
+assert.equal(referenceRecipeForType('piston').assemblySteps.find(step => step.label === 'Add connecting rod')?.stack[0]?.role, 'link-joint-hole', 'slider-crank G6 rod joint is a floating link joint');
+assert.equal(referenceRecipeForType('piston').assemblySteps.find(step => step.label === 'Add slider block')?.stack[0]?.role, 'link-end-hole', 'slider-crank block is a moving slider/link reference');
 ALL_MECHANISM_TYPES.forEach(type => {
   assert(MECHANISM_TEMPLATE_LIBRARY[type].label && MECHANISM_TEMPLATE_LIBRARY[type].sense, `${type} has shared template metadata`);
 });
@@ -1168,6 +1200,31 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
   assert.equal(mechanism.couplerPointDist, REFERENCE_DEFAULTS.gearLinkage.handleRadius, 'gear-linkage output handle uses the reference one-cell offset');
   assert.equal(mechanism.couplerLength, REFERENCE_DEFAULTS.gearLinkage.outputLinkage, 'gear-linkage output rod uses the reference L4 linkage');
   assert.deepEqual(requiredPartQuantities('gear_linkage'), { 'G3 / 3-space gear': 2, 'L4 linkage': 1, '2-hole bracket': 1, [FABRICATION_SPACER_SPEC.label]: 8 }, 'gear-linkage recipe uses two G3 gears, L4, output bracket, and S10 spacers');
+  assert.equal(mechanismRequiredParts({ ...mechanism, gearTrainRadii: [60, 40, 60] }).find(part => part.name === 'G3 / 3-space gear')?.quantity, 2, 'gear-linkage stays the exact two-G3 + L4 reference recipe instead of inheriting compound gear-train idlers');
+  const compoundGearLinkage = {
+    ...mechanism,
+    crankLength: 100,
+    rockerLength: 60,
+    couplerPointDist: 55,
+    couplerLength: 140,
+    gearTrainRadii: [100, 40, 60],
+    groundLength: 999
+  };
+  const compoundGearLinkageState = calculateLinkage(compoundGearLinkage, Math.PI / 2);
+  assertDistance(compoundGearLinkageState.p1, compoundGearLinkageState.p2, REFERENCE_DEFAULTS.gearLinkage.centerDistance, 'gear-linkage ignores stale crank/rocker/idler dimensions and keeps the two-G3 center distance');
+  assertDistance(compoundGearLinkageState.p2, compoundGearLinkageState.j2, REFERENCE_DEFAULTS.gearLinkage.handleRadius, 'gear-linkage ignores stale handle radius and uses the reference off-center gear hole');
+  assertDistance(compoundGearLinkageState.j2, compoundGearLinkageState.effector, REFERENCE_DEFAULTS.gearLinkage.outputLinkage, 'gear-linkage ignores stale output linkage length and uses the reference L4 linkage');
+  assert.equal(compoundGearLinkageState.aux, undefined, 'gear-linkage does not expose idler gear centers');
+  Array.from({ length: 8 }, () => generateSmartConfig(undefined, 'gear_linkage')).forEach(config => {
+    assert.deepEqual(config.gearTrainRadii, [REFERENCE_DEFAULTS.gearLinkage.driveRadius, REFERENCE_DEFAULTS.gearLinkage.outputRadius], 'optimizer generates gear-linkage as the exact two-G3 reference recipe');
+    assert.equal(config.groundLength, REFERENCE_DEFAULTS.gearLinkage.centerDistance, 'optimizer generates gear-linkage at the reference G3/G3 center distance');
+    assert.equal(config.couplerPointDist, REFERENCE_DEFAULTS.gearLinkage.handleRadius, 'optimizer generates gear-linkage with the reference output gear handle radius');
+    assert.equal(config.couplerLength, REFERENCE_DEFAULTS.gearLinkage.outputLinkage, 'optimizer generates gear-linkage with the reference L4 output linkage');
+  });
+  const mutatedGearLinkage = mutateConfig(compoundGearLinkage, 1, true);
+  assert.deepEqual(mutatedGearLinkage.gearTrainRadii, [REFERENCE_DEFAULTS.gearLinkage.driveRadius, REFERENCE_DEFAULTS.gearLinkage.outputRadius], 'optimizer mutates gear-linkage back to the exact two-G3 reference recipe');
+  assert.equal(mutatedGearLinkage.groundLength, REFERENCE_DEFAULTS.gearLinkage.centerDistance, 'optimizer mutation preserves the gear-linkage reference center distance');
+  assert.equal(mutatedGearLinkage.couplerLength, REFERENCE_DEFAULTS.gearLinkage.outputLinkage, 'optimizer mutation preserves the L4 output linkage');
   assert.deepEqual(
     fabricationStackForMechanism(mechanism).filter(layer => ['gear', 'linkage', 'guide'].includes(layer.role)).map(layer => layer.label),
     ['Drive G3 / 3-space gear', 'Output G3 / 3-space gear', 'L4 linkage', '2-hole bracket'],
@@ -1293,7 +1350,11 @@ assert(validateForFabrication(simulationOnlyOffGridProject).warnings.some(e => e
 const recipeWithPath = createFabricationPackage(sample).recipes[0];
 assert.equal(recipeWithPath.targetPathId, 'path-right-arm', 'fabrication recipe preserves target path metadata');
 assert(recipeWithPath.sceneAnchor && 'x' in recipeWithPath.sceneAnchor, 'fabrication recipe includes explicit scene anchor');
-assert(createFabricationPackage(sample).assemblyGuideHtml.includes('assembly guide'), 'fabrication package includes printable assembly guide');
+const sampleAssemblyGuideHtml = createFabricationPackage(sample).assemblyGuideHtml;
+assert(sampleAssemblyGuideHtml.includes('assembly guide'), 'fabrication package includes printable assembly guide');
+assert(sampleAssemblyGuideHtml.includes('Board anchor:'), 'assembly guide labels the mechanism board anchor explicitly');
+assert(!sampleAssemblyGuideHtml.includes('Board coordinate:'), 'assembly guide does not label moving-reference callouts as board coordinates');
+assert(sampleAssemblyGuideHtml.includes('link joint reference') || sampleAssemblyGuideHtml.includes('gear handle reference') || sampleAssemblyGuideHtml.includes('carrier reference'), 'assembly guide surfaces moving-reference coord roles instead of board-only labels');
 const warningPackage = createFabricationPackage({
   ...sample,
   mechanisms: [{ ...sample.mechanisms[0], warnings: ['project warning should appear in guide'] }]

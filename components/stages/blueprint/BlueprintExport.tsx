@@ -85,7 +85,7 @@ export const BlueprintExport = ({ project, dispatch, goStage }: {
                     <div className="mt-3 grid gap-2">
                         {recipes.map(recipe => <button key={recipe.mechanismId} type="button" className={`assembly-recipe-card text-left ${selectedRecipe?.mechanismId === recipe.mechanismId ? 'ring-2 ring-inset' : ''}`} onClick={() => setSelectedRecipeId(recipe.mechanismId)}>
                             <div className="font-bold text-slate-800">{recipe.mechanismId} · {recipe.type}</div>
-                            <div className="text-sm text-slate-600">Hole {recipe.boardCoordinate}</div>
+                            <div className="text-sm text-slate-600">Anchor {recipe.boardCoordinate}</div>
                         </button>)}
                     </div>
                 </div>
@@ -102,7 +102,7 @@ export const BlueprintExport = ({ project, dispatch, goStage }: {
             </div>
             {selectedRecipe ? <article className="assembly-recipe-card" data-testid={`blueprint-recipe-${selectedRecipe.mechanismId}`}>
                 <div className="font-bold text-slate-800">{selectedRecipe.mechanismId} · {selectedRecipe.type}</div>
-                <div className="mt-1 text-sm text-slate-600">Board {selectedRecipe.boardCoordinate}</div>
+                <div className="mt-1 text-sm text-slate-600">Board anchor {selectedRecipe.boardCoordinate}</div>
                 <div className="mt-3 flex flex-wrap gap-2">{selectedRecipe.requiredParts.map(part => <span className="blueprint-pill" key={`${selectedRecipe.mechanismId}-${part.name}`}>{part.name} × {part.quantity}</span>)}</div>
                 <div className="mt-3 rounded-2xl bg-slate-100 p-3 text-sm font-bold text-slate-700" data-testid="blueprint-stack-summary">{fabricationStackSummary(selectedRecipe)}</div>
                 {selectedRecipe.warnings.length ? <div className="warning mt-3">Warnings: {selectedRecipe.warnings.join('; ')}</div> : <div className="ok mt-3">No warnings</div>}

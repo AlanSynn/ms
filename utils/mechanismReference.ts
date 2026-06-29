@@ -131,11 +131,37 @@ export const referencePartHoleCount = (partRequirement: Pick<ReferencePartRequir
 export const referenceRequiredPartsHoleCount = (parts: Array<Pick<ReferencePartRequirement, 'part' | 'key' | 'label' | 'name' | 'quantity'>>) =>
     parts.reduce((sum, partRequirement) => sum + referencePartHoleCount(partRequirement) * Math.max(0, partRequirement.quantity), 0);
 
+export const isBoardFixedCoordRole = (role: string) => role === 'board' || role === 'board_axle';
+
+const COORD_ROLE_LABELS: Record<string, string> = {
+    board: 'Board',
+    board_axle: 'Board axle',
+    link_end_reference: 'link end reference',
+    link_joint_reference: 'link joint reference',
+    gear_handle_reference: 'gear handle reference',
+    carrier_reference: 'carrier reference',
+    slider_reference: 'slider reference',
+    moving_reference: 'moving reference'
+};
+
+export const readableCoordRole = (role: string) =>
+    COORD_ROLE_LABELS[role] ?? role.replace(/_/g, ' ');
+
+export const referenceStepCoordinateCallout = (step: Pick<ReferenceAssemblyStep, 'boardCoordinate'> & Partial<Pick<ReferenceAssemblyStep, 'coords' | 'coordRoles'>>) => {
+    const coords = step.coords ?? [];
+    const roles = step.coordRoles ?? [];
+    const fixedIndex = roles.findIndex(isBoardFixedCoordRole);
+    if (fixedIndex >= 0) return `Board ${coords[fixedIndex] ?? step.boardCoordinate}`;
+    const coord = coords[0] ?? step.boardCoordinate;
+    const role = roles[0] ?? 'moving_reference';
+    return `${readableCoordRole(role)} ${coord}`;
+};
+
 export const referenceRequiredPartsForMechanism = (mechanism: Pick<MechanismConfig, 'type'> & Partial<Pick<MechanismConfig, 'gearTrainRadii'>>) => {
     const recipe = referenceRecipeForType(mechanism.type);
     if (!recipe.exportReady) return [];
     const parts = recipe.requiredParts.map(partRequirement => ({ ...partRequirement }));
-    if (mechanism.type === 'gear' || mechanism.type === 'gear_linkage') {
+    if (mechanism.type === 'gear') {
         const referenceGearCount = Array.isArray(mechanism.gearTrainRadii) ? Math.max(2, mechanism.gearTrainRadii.length) : 2;
         const gearPart = parts.find(partRequirement => partRequirement.part === 'gears:g24');
         if (gearPart) {
@@ -195,6 +221,11 @@ const fixedPartStack = (coord: string, label: string, partId: string, repeat?: s
     ...(repeat ? [{ label: repeat, role: 'repeat-fastener-sites' }] : [])
 ]);
 
+const stepBoardCoordinate = (coords: string[], coordRoles: string[]) => {
+    const boardIndex = coordRoles.findIndex(isBoardFixedCoordRole);
+    return coords[boardIndex >= 0 ? boardIndex : 0] ?? '';
+};
+
 const step = (
     index: number,
     title: string,
@@ -210,7 +241,7 @@ const step = (
     title,
     action,
     role: action,
-    boardCoordinate: coords[0] ?? '',
+    boardCoordinate: stepBoardCoordinate(coords, coordRoles),
     zMm: 0,
     coords,
     coordRoles,
@@ -399,6 +430,22 @@ export const referenceSupportWarning = (type: MechanismType) => {
     return recipe.exportReady ? null : `${type}: ${recipe.reason ?? 'not fabrication-ready under mechanism-reference.'}`;
 };
 
+export const normalizeGearLinkageToReference = <T extends Partial<MechanismConfig>>(mechanism: T): T => {
+    const drive = REFERENCE_DEFAULTS.gearLinkage.driveRadius;
+    const output = REFERENCE_DEFAULTS.gearLinkage.outputRadius;
+    return {
+        ...mechanism,
+        crankLength: drive,
+        rockerLength: output,
+        groundLength: REFERENCE_DEFAULTS.gearLinkage.centerDistance,
+        couplerPointDist: REFERENCE_DEFAULTS.gearLinkage.handleRadius,
+        couplerLength: REFERENCE_DEFAULTS.gearLinkage.outputLinkage,
+        gearTrainRadii: [drive, output],
+        gearRatio: -drive / output,
+        speed2: -drive / output
+    };
+};
+
 export const normalizeMechanismToReference = <T extends Partial<MechanismConfig> & Pick<MechanismConfig, 'type'>>(mechanism: T): T => {
     if (mechanism.type === '4bar') {
         return {
@@ -425,19 +472,7 @@ export const normalizeMechanismToReference = <T extends Partial<MechanismConfig>
         };
     }
     if (mechanism.type === 'gear_linkage') {
-        const drive = REFERENCE_DEFAULTS.gearLinkage.driveRadius;
-        const output = REFERENCE_DEFAULTS.gearLinkage.outputRadius;
-        return {
-            ...mechanism,
-            crankLength: drive,
-            rockerLength: output,
-            groundLength: REFERENCE_DEFAULTS.gearLinkage.centerDistance,
-            couplerPointDist: REFERENCE_DEFAULTS.gearLinkage.handleRadius,
-            couplerLength: REFERENCE_DEFAULTS.gearLinkage.outputLinkage,
-            gearTrainRadii: [drive, output],
-            gearRatio: -drive / output,
-            speed2: -drive / output
-        };
+        return normalizeGearLinkageToReference(mechanism);
     }
     if (mechanism.type === 'planetary_gear') {
         return {
