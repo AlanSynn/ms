@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Canvas } from './components/Canvas';
+import { AssemblyWorkbench } from './components/stages/assembly/AssemblyWorkbench';
+import { BlueprintExport } from './components/stages/blueprint/BlueprintExport';
+import { EditorStageFrame, StageLeftSummary, STAGE_PANE_NAV_ITEMS, StagePaneNavIcon, canvasPane, inspectorPane, workflowPane } from './components/stages/stageLayout';
 import { ThreePuppetPreview } from './components/ThreePuppetPreview';
 import { TrackingModal } from './components/TrackingModal';
 import {
@@ -8,7 +11,6 @@ import {
     BodyPartLayer,
     CanvasViewport,
     CharacterPackageArtifact,
-    FabricationRecipe,
     FoundryExportPackage,
     GlobalConfig,
     MechanismConfig,
@@ -41,18 +43,19 @@ import {
 import { checkWebOnnxCache, processImageWithWebOnnx, warmWebOnnxCache, type WebOnnxCacheStatus } from './utils/webOnnx';
 import { buildFoundryPhysicsOverlay } from './utils/physicsSession';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, loadRapierPhysicsKernel, physicsKernelErrorMessage } from './utils/physicsKernel';
-import { createFabricationPackage, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationLinkageSpecForSceneLength, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, prefabAssemblySteps, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
-import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToBoardRaw, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
+import { createFabricationPackage, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationLinkageSpecForSceneLength, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
+import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
 import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionChainRootJointIds, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
 import { fabricablePartOutlinePoints, isUsableContourPoints, partLandmarkLocalPoints, partOutlineBounds, partOutlinePathD, pointInsideOutline } from './utils/partGeometry';
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT, normalizeCanvasViewport, WEBGL_PIXEL_RATIO_CAP } from './utils/viewport';
 import { VIEWER3D_CAMERA_PRESETS, VIEWER3D_CONTRACT_VERSION, createViewer3DContract, viewer3DLayerDataValue, type Viewer3DCameraPreset } from './utils/viewer3d';
+import { assemblyLaneForExportMode, buildAssemblyPlaybackSteps, pendingRecipeForMechanism, type AssemblyLane } from './utils/assemblyPlayback';
 import { APP_MENU_GROUPS, commandById, commandIdForKeyboardEvent, commandShortcutListText, commandShortcutText, type AppCommandId } from './utils/appCommands';
 import { AUTHORABLE_MECHANISM_TYPES, FOUNDRY_MECHANISM_TYPES, FOUNDRY_PRESETS, MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY, mechanismTemplateLabel } from './utils/mechanismTemplates';
 import { normalizeMechanismToReference, referenceRequiredPartsHoleCount } from './utils/mechanismReference';
 import { createMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext, fitPathToBox, fitPointsToBox, pointsToSvgPath } from './utils/mechanismPreview';
-import { AlertCircle, Boxes, BrainCircuit, Camera, CheckCircle2, Download, FileJson, Loader2, PenLine, Play, Plus, Route, Save, Settings, Sparkles, Trash2, Upload, UserRound, Wrench } from 'lucide-react';
+import { AlertCircle, Boxes, BrainCircuit, Camera, CheckCircle2, Download, FileJson, Loader2, Play, Plus, Route, Save, Sparkles, Trash2, Upload } from 'lucide-react';
 import girlStarterUrl from './resources/examples/raw/girl.png?url';
 import boyStarterUrl from './resources/examples/raw/boy.PNG?url';
 
@@ -137,18 +140,6 @@ const stageNavLabel = (stage: AppStage) => ({
     assembly: 'Assembly'
 } as Partial<Record<AppStage, string>>)[stage];
 
-type StageIconName = 'character' | 'path' | 'foundry' | 'design' | 'blueprint' | 'assembly' | 'options';
-
-const STAGE_PANE_NAV_ITEMS: Array<{ ariaLabel: string; label: string; target: AppStage; activeStages: AppStage[]; icon: StageIconName }> = [
-    { ariaLabel: 'Character', label: 'Character', target: 'character', activeStages: ['character'], icon: 'character' },
-    { ariaLabel: 'Rail motion path', label: 'Path', target: 'path', activeStages: ['path'], icon: 'path' },
-    { ariaLabel: 'Mechanism Foundry', label: 'Foundry', target: 'foundry', activeStages: ['foundry'], icon: 'foundry' },
-    { ariaLabel: 'Rail mechanism parameters', label: 'Design', target: 'design', activeStages: ['design'], icon: 'design' },
-    { ariaLabel: 'Rail export package', label: 'Blueprint', target: 'blueprint', activeStages: ['blueprint'], icon: 'blueprint' },
-    { ariaLabel: 'Rail assembly guide', label: 'Assembly', target: 'assembly', activeStages: ['assembly'], icon: 'assembly' },
-    { ariaLabel: 'Options', label: 'Options', target: 'options', activeStages: ['options'], icon: 'options' }
-];
-
 const OPTIONS_SECTION_MANIFEST = [
     { id: 'appearance', label: 'Appearance', description: 'Keep the interface light and show only the panels you need.' },
     { id: 'simulation', label: 'Simulation', description: 'Timing plus the physical mass/friction used by force previews.' },
@@ -161,16 +152,6 @@ const OPTIONS_SECTION_MANIFEST = [
 
 type OptionsSectionMeta = typeof OPTIONS_SECTION_MANIFEST[number];
 const optionSection = (id: OptionsSectionMeta['id']) => OPTIONS_SECTION_MANIFEST.find(section => section.id === id)!;
-const StagePaneNavIcon = ({ icon }: { icon: typeof STAGE_PANE_NAV_ITEMS[number]['icon'] }) => {
-    if (icon === 'character') return <UserRound size={16}/>;
-    if (icon === 'path') return <PenLine size={16}/>;
-    if (icon === 'foundry') return <Boxes size={16}/>;
-    if (icon === 'design') return <Wrench size={16}/>;
-    if (icon === 'blueprint') return <Download size={16}/>;
-    if (icon === 'assembly') return <FileJson size={16}/>;
-    return <Settings size={16}/>;
-};
-
 const PARAMS: Array<{ key: keyof MechanismConfig; label: string; min: number; max: number; step?: number }> = [
     { key: 'anchorX', label: 'anchor X', min: -260, max: 260, step: 40 },
     { key: 'anchorY', label: 'anchor Y', min: -260, max: 260, step: 40 },
@@ -1016,58 +997,6 @@ const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, speed, 
             onChange={event => setAngle((Number(event.currentTarget.value) / 100) * Math.PI * 2)}
         />
     </aside>;
-};
-
-const EDITOR_PANE_CONTRACT = {
-    left: { testId: 'stage-left-pane', ariaLabel: 'Workflow and primary actions' },
-    center: { testId: 'stage-canvas-pane', ariaLabel: 'Shared canvas' },
-    right: { testId: 'stage-right-inspector', ariaLabel: 'Selected item inspector' }
-} as const;
-
-type PaneSlot<Kind extends 'workflow' | 'canvas' | 'inspector'> = Readonly<{
-    kind: Kind;
-    content: React.ReactNode;
-}>;
-type StageLayoutSpec = Readonly<{
-    workflow: PaneSlot<'workflow'>;
-    canvas: PaneSlot<'canvas'>;
-    inspector: PaneSlot<'inspector'>;
-}>;
-const workflowPane = (content: React.ReactNode): PaneSlot<'workflow'> => ({ kind: 'workflow', content });
-const canvasPane = (content: React.ReactNode): PaneSlot<'canvas'> => ({ kind: 'canvas', content });
-const inspectorPane = (content: React.ReactNode): PaneSlot<'inspector'> => ({ kind: 'inspector', content });
-
-const EditorStageFrame = ({ stage, layout, className = '' }: { stage: AppStage; layout: StageLayoutSpec; className?: string }) => (
-    <div className={`editor-stage-frame ${className}`.trim()} data-stage={stage}>
-        <aside className="stage-left-pane workspace p-5" data-pane-kind={layout.workflow.kind} data-testid={EDITOR_PANE_CONTRACT.left.testId} aria-label={EDITOR_PANE_CONTRACT.left.ariaLabel}>
-            <div className="stage-left-pane-content" data-testid="editor-sidebar">{layout.workflow.content}</div>
-        </aside>
-        <section className="stage-canvas-pane" data-pane-kind={layout.canvas.kind} data-testid={EDITOR_PANE_CONTRACT.center.testId} aria-label={EDITOR_PANE_CONTRACT.center.ariaLabel}>{layout.canvas.content}</section>
-        <aside className="stage-right-inspector workspace p-5" data-pane-kind={layout.inspector.kind} data-testid={EDITOR_PANE_CONTRACT.right.testId} aria-label={EDITOR_PANE_CONTRACT.right.ariaLabel}>{layout.inspector.content}</aside>
-    </div>
-);
-
-const StageLeftSummary = ({ project, title, stage, goStage, children }: {
-    project: ProjectState;
-    title: string;
-    stage: AppStage;
-    goStage?: (stage: AppStage) => void;
-    children: React.ReactNode;
-}) => {
-    const linkClass = (targets: AppStage[]) => `workspace-side-link ${targets.includes(stage) ? 'active' : ''}`;
-    return <>
-        <div hidden className="stage-project-card" data-testid="stage-project-card" aria-label={`${project.metadata.name}: ${project.partOrder.length} parts, ${Object.keys(project.paths).length} paths, ${project.mechanisms.length} mechanisms, ${project.settings.physicalKit.gridPitchMm} millimeter grid`}>
-            <span data-testid="project-compact-stats">{project.partOrder.length} parts · {Object.keys(project.paths).length} paths · {project.mechanisms.length} mechanisms · {project.settings.physicalKit.gridPitchMm}mm</span>
-        </div>
-        {goStage && <nav className="stage-nav-compact">
-            <div className="section-title">Flow</div>
-            {STAGE_PANE_NAV_ITEMS.map(item => <button key={item.ariaLabel} aria-label={item.ariaLabel} aria-current={item.activeStages.includes(stage) ? 'step' : undefined} className={linkClass(item.activeStages)} onClick={() => goStage(item.target)}><StagePaneNavIcon icon={item.icon}/> {item.label}</button>)}
-        </nav>}
-        <div className="stage-workflow-block">
-            <div className="section-title">{title}</div>
-            {children}
-        </div>
-    </>;
 };
 
 const WorkflowStatusStrip = ({ stage, project, selectedPart, selectedPath }: { stage: AppStage; project: ProjectState; selectedPart?: BodyPartLayer; selectedPath?: ProjectMotionPath }) => {
@@ -2952,292 +2881,6 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
                 <div className="flex flex-wrap gap-2"><button className="btn-secondary" onClick={exportSvg}>SVG</button><button className="btn-secondary" onClick={exportDxf}>DXF</button><button className="btn-primary" aria-label="Export Blueprint" onClick={onBlueprint}>Blueprint</button></div>
             </>}
         </div>)
-        }}
-    />;
-};
-
-const pendingRecipeForMechanism = (project: ProjectState, mechanism: MechanismConfig): FabricationRecipe => {
-    const board = sceneToBoardRaw({ x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 }, project.settings.physicalKit);
-    const boardScene = board.valid ? boardToScene(board.col, board.row, project.settings.physicalKit) : { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 };
-    const targetPart = mechanism.targetPartId ? project.parts[mechanism.targetPartId] : undefined;
-    const targetPath = mechanism.targetPathId ? project.paths[mechanism.targetPathId] : undefined;
-    const targetAnchorJointId = preferredMotionJointId(project, mechanism.targetPartId, mechanism.targetAnchorJointId);
-    const range = sampleFeasibleRange(mechanism);
-    return {
-        mechanismId: mechanism.id,
-        type: mechanism.type,
-        targetPartId: mechanism.targetPartId,
-        targetPathId: mechanism.targetPathId,
-        targetAnchorJointId,
-        targetPartName: targetPart?.name,
-        targetPathPointCount: targetPath?.points.length,
-        boardCoordinate: board.label,
-        board,
-        sceneAnchor: { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 },
-        offsetFromBoardMm: { x: ((mechanism.anchorX ?? 0) - boardScene.x) / SCENE_PX_PER_MM, y: ((mechanism.anchorY ?? 0) - boardScene.y) / SCENE_PX_PER_MM },
-        requiredParts: mechanismRequiredParts(mechanism),
-        steps: [`Stack: ${fabricationStackSummary(mechanism)}`, 'Cut sheet + assembly.'],
-        assemblySteps: prefabAssemblySteps(mechanism, board.label),
-        warnings: [...(mechanism.warnings ?? []), ...(range.warning ? [range.warning] : [])]
-    };
-};
-
-type AssemblyLane = 'kit' | 'custom';
-type AssemblyPlaybackStep = {
-    index: number;
-    label: string;
-    phase: 'prepare-parts' | 'assemble-module' | 'mount-to-board' | 'connect-character' | 'test-motion' | 'export';
-    action: string;
-    coords: string[];
-    coordRoles: string[];
-    zMm: number;
-    instruction: string;
-    check?: string;
-    stack: NonNullable<FabricationRecipe['assemblySteps'][number]['stack']>;
-};
-
-const assemblyLaneForExportMode = (mode: PhysicalKitSettings['exportMode']): AssemblyLane => mode === 'custom-parts' ? 'custom' : 'kit';
-
-const uniqueAssemblyCoords = (recipe: FabricationRecipe, role = 'board') => [...new Set(recipe.assemblySteps.flatMap(step =>
-    ((step.coords?.length ? step.coords : [step.boardCoordinate])).filter((_, index) => (step.coordRoles?.[index] ?? step.role) === role)
-))];
-
-const buildAssemblyPlaybackSteps = (recipe: FabricationRecipe, lane: AssemblyLane): AssemblyPlaybackStep[] => {
-    const boardCoords = uniqueAssemblyCoords(recipe);
-    const steps: AssemblyPlaybackStep[] = [
-        {
-            index: 1,
-            label: lane === 'custom' ? 'Export parts' : 'Gather kit parts',
-            phase: lane === 'custom' ? 'export' : 'prepare-parts',
-            action: lane === 'custom' ? 'export' : 'show-parts',
-            coords: [],
-            coordRoles: [],
-            zMm: 0,
-            instruction: lane === 'custom' ? 'Use SVG, PDF, or STL from Blueprint, then assemble the same stack.' : 'Collect the mechanism parts before touching the board.',
-            check: lane === 'custom' ? 'Printed/cut parts match the recipe.' : 'All parts and S10 spacers are ready.',
-            stack: []
-        },
-        ...recipe.assemblySteps.map((step, index) => ({
-            index: index + 2,
-            label: step.label,
-            phase: 'assemble-module' as const,
-            action: step.action ?? 'stack',
-            coords: step.coords?.length ? step.coords : [step.boardCoordinate],
-            coordRoles: step.coordRoles?.length ? step.coordRoles : [step.role],
-            zMm: step.zMm,
-            instruction: step.instruction,
-            check: step.check,
-            stack: step.stack ?? []
-        }))
-    ];
-    steps.push({
-        index: steps.length + 1,
-        label: lane === 'kit' ? 'Mount module to board' : 'Mount custom module',
-        phase: 'mount-to-board',
-        action: 'mount',
-        coords: boardCoords.length ? boardCoords : [recipe.boardCoordinate],
-        coordRoles: boardCoords.length ? boardCoords.map(() => lane === 'kit' ? 'board' : 'custom-base') : [lane === 'kit' ? 'board' : 'custom-base'],
-        zMm: 0,
-        instruction: lane === 'kit'
-            ? `Snap the completed mechanism module onto the 15×15 board at ${recipe.boardCoordinate}.`
-            : 'Place the completed module on the custom base or keep it standalone.',
-        check: lane === 'kit' ? 'The module sits on the called-out board holes.' : 'The custom base and module holes line up.',
-        stack: []
-    }, {
-        index: steps.length + 2,
-        label: 'Connect character',
-        phase: 'connect-character',
-        action: 'connect',
-        coords: [recipe.boardCoordinate],
-        coordRoles: ['output'],
-        zMm: 0,
-        instruction: `Connect output to ${recipe.targetPartName ?? recipe.targetPartId ?? 'the target part'}.`,
-        check: recipe.targetPathId ? `Output follows ${recipe.targetPathId}.` : 'Output moves freely.',
-        stack: []
-    }, {
-        index: steps.length + 3,
-        label: 'Test motion',
-        phase: 'test-motion',
-        action: 'test',
-        coords: [recipe.boardCoordinate],
-        coordRoles: ['motion'],
-        zMm: 0,
-        instruction: 'Scrub the mechanism once before cutting extra copies.',
-        check: recipe.warnings[0] ?? 'Motion runs without binding.',
-        stack: []
-    });
-    return steps;
-};
-
-const assemblyCoordToSvg = (coord: string) => {
-    const match = /^([A-O])([1-9]|1[0-5])$/i.exec(coord.trim());
-    if (!match) return null;
-    return { x: 494 + (match[1].toUpperCase().charCodeAt(0) - 65) * 18, y: 142 + (Number(match[2]) - 1) * 18 };
-};
-
-const AssemblyWorkbench = ({ recipe, lane, step, kit }: { recipe: FabricationRecipe; lane: AssemblyLane; step: AssemblyPlaybackStep; kit: PhysicalKitSettings }) => {
-    const boardVisible = lane === 'kit' && ['mount-to-board', 'connect-character', 'test-motion'].includes(step.phase);
-    const stack = step.stack.length ? step.stack : recipe.assemblySteps.flatMap(item => item.stack ?? []).slice(0, 5);
-    const activeCoords = step.coords.map(assemblyCoordToSvg).filter(Boolean) as Array<{ x: number; y: number }>;
-    const currentLayer = Math.max(0, Math.min(stack.length - 1, step.phase === 'assemble-module' ? step.index - 2 : stack.length - 1));
-    return <section className="assembly-stepper-workbench" data-testid="assembly-stepper-workbench" aria-label="Interactive assembly workbench">
-        <div className="assembly-workbench-head">
-            <div>
-                <div className="section-title">Assembly</div>
-                <h3>{step.label}</h3>
-            </div>
-            <span className="blueprint-pill">{lane === 'kit' ? `${kit.boardCells}×${kit.boardCells} board` : 'custom parts'}</span>
-        </div>
-        <svg className="assembly-workbench-svg" viewBox="0 0 900 560" role="img" aria-label={`${recipe.type} assembly step ${step.index}`}>
-            <defs>
-                <linearGradient id="assembly-layer-fill" x1="0" x2="1"><stop offset="0" stopColor="#dbeafe"/><stop offset="1" stopColor="#a78bfa"/></linearGradient>
-                <marker id="assembly-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#8b5cf6"/></marker>
-            </defs>
-            <rect x="28" y="78" width="388" height="370" rx="28" fill="#fff" stroke="#dbe3f1"/>
-            <text x="56" y="118" className="assembly-svg-label">Mechanism first</text>
-            <g data-testid="assembly-module" transform="translate(108 162)">
-                <rect x="0" y="156" width="250" height="40" rx="20" fill="#e2e8f0" stroke="#94a3b8"/>
-                {stack.slice(0, 6).map((layer, index) => {
-                    const y = 136 - index * 22;
-                    const active = index <= currentLayer || step.phase !== 'assemble-module';
-                    return <g key={`${layer.label}-${index}`} className={active && index === currentLayer ? 'assembly-active-layer' : ''} opacity={active ? 1 : 0.22}>
-                        <rect x={20 + index * 7} y={y} width={190} height="28" rx="14" fill={index === currentLayer ? 'url(#assembly-layer-fill)' : '#eef2f7'} stroke={index === currentLayer ? '#7c3aed' : '#94a3b8'} strokeWidth="2"/>
-                        <circle cx={48 + index * 7} cy={y + 14} r="6" fill="#fff" stroke="#64748b" strokeWidth="2"/>
-                        <circle cx={178 + index * 7} cy={y + 14} r="6" fill="#fff" stroke="#64748b" strokeWidth="2"/>
-                        <text x={230} y={y + 18} className="assembly-svg-tiny">{layer.part ?? layer.label}</text>
-                    </g>;
-                })}
-                {!stack.length && <g className="assembly-active-layer">
-                    <rect x="36" y="94" width="178" height="44" rx="22" fill="url(#assembly-layer-fill)" stroke="#7c3aed" strokeWidth="2"/>
-                    <text x="72" y="121" className="assembly-svg-tiny">{recipe.type} module</text>
-                </g>}
-            </g>
-            <g data-testid="assembly-board" opacity={boardVisible ? 1 : 0.16}>
-                <rect x="472" y="120" width="292" height="292" rx="22" fill="#ffffff" stroke="#cbd5e1" strokeWidth="2"/>
-                {Array.from({ length: kit.boardCells }).map((_, row) => Array.from({ length: kit.boardCells }).map((__, col) =>
-                    <circle key={`${row}-${col}`} cx={494 + col * 18} cy={142 + row * 18} r="3.2" fill="#e2e8f0" stroke="#94a3b8"/>
-                ))}
-                <text x="492" y="102" className="assembly-svg-label">{kit.boardCells}×{kit.boardCells} board · {kit.gridPitchMm}mm</text>
-                {activeCoords.map((point, index) => <g key={`${point.x}-${point.y}-${index}`} className="assembly-active-hole">
-                    <circle cx={point.x} cy={point.y} r="13" fill="rgba(139,92,246,.12)" stroke="#8b5cf6" strokeWidth="3"/>
-                    <text x={point.x + 12} y={point.y - 10} className="assembly-svg-tiny">{step.coords[index]}</text>
-                </g>)}
-            </g>
-            {step.phase === 'mount-to-board' && <g className="assembly-mount-motion">
-                <path d="M370 272 C430 210 462 206 520 190" fill="none" stroke="#8b5cf6" strokeWidth="6" strokeLinecap="round" markerEnd="url(#assembly-arrow)"/>
-                <rect x="512" y="176" width="126" height="54" rx="22" fill="rgba(139,92,246,.16)" stroke="#8b5cf6" strokeDasharray="8 7" strokeWidth="3"/>
-            </g>}
-            {step.phase === 'test-motion' && <g className="assembly-test-motion">
-                <path d="M560 238 C610 176 680 188 706 252 C728 306 676 356 616 326" fill="none" stroke="#22c55e" strokeWidth="5" strokeDasharray="10 8"/>
-                <circle cx="704" cy="252" r="8" fill="#22c55e"/>
-            </g>}
-        </svg>
-    </section>;
-};
-
-const BlueprintExport = ({ project, dispatch, goStage }: {
-    project: ProjectState;
-    dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void;
-    goStage: (stage: AppStage) => void;
-}) => {
-    const validation = validateForFabrication(project);
-    const create = () => dispatch({ type: 'set_export', fabricationPackage: createFabricationPackage(project) });
-    const pkg = project.lastExport;
-    const exportMode = project.settings.physicalKit.exportMode;
-    const defaultFormat = project.settings.physicalKit.defaultExportFormat;
-    const cutSheetFileType = project.settings.physicalKit.cutSheetFileType;
-    const activeMechanisms = project.mechanisms.filter(m => m.visible && m.enabled !== false);
-    const recipes = pkg?.recipes ?? activeMechanisms.map(mechanism => pendingRecipeForMechanism(project, mechanism));
-    const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
-    const selectedRecipe = recipes.find(recipe => recipe.mechanismId === selectedRecipeId) ?? recipes[0];
-    const downloadJson = () => pkg && downloadText(`${pkg.id}.json`, JSON.stringify(pkg, null, 2));
-    const downloadSvg = () => pkg && downloadText(`${pkg.id}.svg`, pkg.svg, 'image/svg+xml');
-    const downloadCutSheetPdf = () => pkg && downloadText(`${pkg.id}-cut-sheet.pdf`, pkg.cutSheetPdf, 'application/pdf');
-    const downloadCustomSvg = () => pkg && downloadText(`${pkg.id}-custom-parts.svg`, pkg.customPartsSvg, 'image/svg+xml');
-    const downloadCustomPdf = () => pkg && downloadText(`${pkg.id}-custom-parts.pdf`, pkg.customPartsPdf, 'application/pdf');
-    const downloadCustomStl = () => pkg && downloadText(`${pkg.id}-custom-parts.stl`, pkg.customPartsStl, 'model/stl');
-    const downloadAssemblyPdf = () => pkg && downloadText(`${pkg.id}-assembly.pdf`, pkg.assemblyGuidePdf, 'application/pdf');
-    return <EditorStageFrame
-        stage="blueprint"
-        className="blueprint-stage-frame"
-        layout={{
-            workflow: workflowPane(<div className="stage-pane-stack" data-testid="blueprint-control-panel">
-            <StageLeftSummary project={project} title="Blueprint" stage="blueprint" goStage={goStage}>
-                <h3>Cut sheet</h3>
-                <div className="mt-4 space-y-2">{validation.issues.map((issue, index) => <div className={issue.severity === 'error' ? 'error' : 'warning'} key={`${issue.message}-${index}`}>
-                    <div>{issue.message}</div>
-                    <button className="mt-2 underline" onClick={() => goStage(issue.recoveryStage)}>{issue.recoveryAction}</button>
-                </div>)}{!validation.errors.length && !validation.warnings.length && <div className="ok">Fabrication state ready.</div>}</div>
-                <button className="btn-primary mt-5" aria-label="Generate package" disabled={!!validation.errors.length} onClick={create}><FileJson size={16}/> Generate</button>
-                {pkg && <div className="mt-5 space-y-3">
-                    <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
-                        <div className="font-bold text-slate-800">Default · {defaultFormat} · {exportMode}</div>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                            {defaultFormat !== 'svg' && <button className="btn-primary" aria-label="Download JSON default" onClick={downloadJson}>JSON</button>}
-                            {defaultFormat !== 'json' && <button className="btn-primary" aria-label="Download SVG default" onClick={downloadSvg}>SVG</button>}
-                            <button className="btn-secondary" onClick={() => goStage('assembly')}>Assembly</button>
-                        </div>
-                    </div>
-                    {exportMode !== 'prefab-board' && <div className="rounded-2xl bg-white p-3 text-sm text-slate-600 shadow-sm" data-testid="custom-parts-export-lane">
-                        <div className="font-bold text-slate-800">Custom parts</div>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                            <button className="btn-secondary" onClick={downloadCustomSvg}>SVG</button>
-                            <button className="btn-secondary" onClick={downloadCustomPdf}>PDF</button>
-                            <button className="btn-secondary" data-testid="download-custom-stl" onClick={downloadCustomStl}>STL</button>
-                        </div>
-                    </div>}
-                    {exportMode !== 'custom-parts' && <div className="rounded-2xl bg-white p-3 text-sm text-slate-600 shadow-sm" data-testid="prefab-board-export-lane">
-                        <div className="font-bold text-slate-800">Prefab kit</div>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                            <button className="btn-secondary" aria-label="Assembly guide" onClick={() => goStage('assembly')}>Guide</button>
-                            <button className="btn-secondary" onClick={downloadAssemblyPdf}>PDF</button>
-                        </div>
-                    </div>}
-                    <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
-                        <div className="font-bold text-slate-800">Cut sheet · {cutSheetFileType.toUpperCase()}</div>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                            {cutSheetFileType === 'pdf'
-                                ? <button className="btn-primary" aria-label="Download PDF cut sheet default" onClick={downloadCutSheetPdf}>PDF</button>
-                                : <button className="btn-primary" aria-label="Download SVG cut sheet default" onClick={downloadSvg}>SVG</button>}
-                        </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                        <button className="btn-secondary" onClick={downloadJson}>JSON</button>
-                        <button className="btn-secondary" onClick={downloadSvg}>SVG</button>
-                        <button className="btn-secondary" onClick={() => downloadText(`${pkg.id}-assembly.html`, pkg.assemblyGuideHtml, 'text/html')}>HTML</button>
-                        <button className="btn-secondary" onClick={() => downloadText(`${pkg.id}-metadata.json`, pkg.metadataJson)}>Metadata</button>
-                        <button className="btn-secondary" onClick={downloadAssemblyPdf}>PDF</button>
-                    </div>
-                </div>}
-                <div className="mt-5">
-                    <h4 className="section-title">Recipes</h4>
-                    <div className="mt-3 grid gap-2">
-                        {recipes.map(recipe => <button key={recipe.mechanismId} type="button" className={`assembly-recipe-card text-left ${selectedRecipe?.mechanismId === recipe.mechanismId ? 'ring-2 ring-inset' : ''}`} onClick={() => setSelectedRecipeId(recipe.mechanismId)}>
-                            <div className="font-bold text-slate-800">{recipe.mechanismId} · {recipe.type}</div>
-                            <div className="text-sm text-slate-600">Hole {recipe.boardCoordinate}</div>
-                        </button>)}
-                    </div>
-                </div>
-            </StageLeftSummary>
-        </div>),
-            canvas: canvasPane(<div className="blueprint-document-preview canvas-workspace" data-testid="blueprint-canvas-preview">
-            <div className="blueprint-document-title">Letter sheet · 2D cut blueprint</div>
-            {pkg ? <img data-testid="blueprint-svg-preview" alt="Printable cut sheet blueprint" src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(pkg.svg)}`} /> : <div className="blueprint-empty-state">Generate first.</div>}
-        </div>),
-            inspector: inspectorPane(<section className="stage-pane-stack" data-testid="blueprint-detail-preview">
-            <div>
-                <div className="section-title">Detail</div>
-                <h3>Cut sheet</h3>
-            </div>
-            {selectedRecipe ? <article className="assembly-recipe-card" data-testid={`blueprint-recipe-${selectedRecipe.mechanismId}`}>
-                <div className="font-bold text-slate-800">{selectedRecipe.mechanismId} · {selectedRecipe.type}</div>
-                <div className="mt-1 text-sm text-slate-600">Board {selectedRecipe.boardCoordinate}</div>
-                <div className="mt-3 flex flex-wrap gap-2">{selectedRecipe.requiredParts.map(part => <span className="blueprint-pill" key={`${selectedRecipe.mechanismId}-${part.name}`}>{part.name} × {part.quantity}</span>)}</div>
-                <div className="mt-3 rounded-2xl bg-slate-100 p-3 text-sm font-bold text-slate-700" data-testid="blueprint-stack-summary">{fabricationStackSummary(selectedRecipe)}</div>
-                {selectedRecipe.warnings.length ? <div className="warning mt-3">Warnings: {selectedRecipe.warnings.join('; ')}</div> : <div className="ok mt-3">No warnings</div>}
-            </article> : <div className="warning">Generate first.</div>}
-            {pkg && <div className="rounded-2xl bg-white p-3 text-sm text-slate-600 shadow-sm">Grid {project.settings.physicalKit.gridPitchMm}mm · holes {project.settings.physicalKit.holeDiameterMm}mm · {recipes.length} recipe{recipes.length === 1 ? '' : 's'}</div>}
-        </section>)
         }}
     />;
 };

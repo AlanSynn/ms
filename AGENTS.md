@@ -1,7 +1,7 @@
 # MotionSmith Project Agents Contract
 
 Status: active
-Last refreshed: 2026-06-27
+Last refreshed: 2026-06-29
 Scope: every implementation, design, test, and documentation change in this repository.
 
 This file is the project-level rulebook for future agents. If older docs or UI copy drift from this contract, update the product to match this file and `DESIGN.md`; do not add another explanatory layer.
@@ -87,6 +87,21 @@ The app must always trend toward real buildable artifacts, not illustration-only
 - Mechanism Foundry, Mechanism Design, Blueprint, Assembly Guide, 2D canvas, and 3D viewport must consume the same fabrication and physics contracts for a mechanism.
 - Stage components may compose controls, but mechanism defaults, required parts, drag handles, z-stacks, and fabrication validation belong behind shared registry/facade helpers.
 - If a new library is adopted, document the measured performance/maintainability reason and keep the dependency behind a replaceable subsystem boundary.
+
+
+## 8.1 Code shape, SOLID, and domain seams
+
+Keep files compact by responsibility, not by ceremony. Split code when one file starts owning multiple reasons to change.
+
+- `App.tsx` should be the composition shell: app state, command wiring, stage selection, and top-level layout only. Do not add new mechanism math, fabrication rules, renderer geometry, or long stage internals there.
+- Domain modules compute. UI modules compose. Renderer modules draw. Export modules serialize. A file that does two of these gets split at the existing seam.
+- Use SOLID as a guardrail, not boilerplate: single responsibility first; open extension through existing registries/contracts; dependency inversion only at real boundaries such as renderer, physics, import, or export.
+- Do not create interfaces, factories, providers, or adapters with one implementation. Plain typed functions are preferred until a second real consumer exists.
+- New mechanism behavior enters the shared domain path first: `utils/mechanismReference.ts`, `utils/mechanismFeatureRegistry.ts`, `utils/kinematics.ts`, fabrication manifest/recipes, then UI. No stage component may invent a private mechanism rule.
+- File-size target: keep new files under roughly 400 lines and refactor files over roughly 800 lines when already touching them. Do not churn stable large files just to satisfy a number; move behavior with tests.
+- Refactor by extraction only unless the task is a redesign: move code, preserve names/behavior, run tests, then simplify. Never mix huge file moves with feature changes.
+- Delete dead legacy surfaces before wrapping them. If a file is not imported by runtime, either remove it with contract-test updates or document why it remains as historical coverage.
+- Commit per seam: docs map, generated cleanup, pure helper extraction, stage extraction, renderer extraction, legacy deletion.
 
 ## 9. Verification gates
 

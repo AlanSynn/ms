@@ -154,9 +154,13 @@ assert.deepEqual(
 const visibleUiSource = [
   'App.tsx',
   'components/Canvas.tsx',
-  'components/Controls.tsx',
-  'components/TrackingModal.tsx'
+  'components/TrackingModal.tsx',
+  'components/stages/stageLayout.tsx',
+  'components/stages/blueprint/BlueprintExport.tsx',
+  'components/stages/assembly/AssemblyWorkbench.tsx'
 ].map(file => readFileSync(join(process.cwd(), file), 'utf8')).join('\n');
+assert(!existsSync(join(process.cwd(), 'components', 'Controls.tsx')), 'runtime-unused legacy Controls component is deleted instead of preserved as dead UI');
+assert(!existsSync(join(process.cwd(), 'utils', 'zStack.ts')), 'runtime-unused zStack helper is deleted instead of preserved as dead utility');
 assert(!/Easy IK Setup/i.test(visibleUiSource), 'visible UI does not reintroduce sugar text like Easy IK Setup');
 [
   'Mechanism Gallery',
@@ -449,7 +453,6 @@ assert.deepEqual(gearMetadataSnapshot?.mechanism.gearTrainRadii, [50, 20, 35, 30
 assert.equal(gearMetadataSnapshot?.mechanism.driverGroupId, 'main-drive', 'snapshot preserves driver grouping metadata');
 assert.equal(gearMetadataSnapshot?.mechanism.driverPhaseOffset, 0.45, 'snapshot preserves driver phase metadata');
 assert.equal(buildMechanismSnapshot(sample, 'missing-mechanism'), null, 'missing mechanism snapshot returns null instead of fabricating data');
-const controlsText = readFileSync(join(process.cwd(), 'components', 'Controls.tsx'), 'utf8');
 type FabricationManifest = {
   generated_by: string;
   source_ssot: string;
@@ -546,6 +549,9 @@ couplerSpecForNonExactSpan.holeCentersMm.slice(1).forEach((point, index) => {
   assert.equal(point.x - couplerSpecForNonExactSpan.holeCentersMm[index].x, 20, 'linkage hole spacing stays on the fabrication generator pitch');
 });
 const canvasText = readFileSync(join(process.cwd(), 'components', 'Canvas.tsx'), 'utf8');
+const assemblyWorkbenchText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'AssemblyWorkbench.tsx'), 'utf8');
+const blueprintExportText = readFileSync(join(process.cwd(), 'components', 'stages', 'blueprint', 'BlueprintExport.tsx'), 'utf8');
+const assemblyPlaybackText = readFileSync(join(process.cwd(), 'utils', 'assemblyPlayback.ts'), 'utf8');
 const threePreviewText = readFileSync(join(process.cwd(), 'components', 'ThreePuppetPreview.tsx'), 'utf8');
 const exporterText = readFileSync(join(process.cwd(), 'utils', 'exporter.ts'), 'utf8');
 const physicsSessionText = readFileSync(join(process.cwd(), 'utils', 'physicsSession.ts'), 'utf8');
@@ -650,11 +656,11 @@ assert(appText.includes('const [showSensemaking, setShowSensemaking] = useState(
 assert(appText.includes('compact-fabrication-stack') && appText.includes('data-testid="foundry-fabrication-stack"'), 'Foundry keeps fabrication stack visible as a compact action datum');
 assert(typesText.includes("'assembly'"), 'AppStage includes a dedicated Assembly tab');
 assert(appText.includes("{ id: 'assembly', label: 'Assembly' }"), 'workflow rail exposes Assembly as a separate stage');
-const blueprintCanvasStart = appText.indexOf('canvas: canvasPane(<div className="blueprint-document-preview canvas-workspace" data-testid="blueprint-canvas-preview">');
-const blueprintInspectorStart = appText.indexOf('inspector: inspectorPane(<section className="stage-pane-stack" data-testid="blueprint-detail-preview">', blueprintCanvasStart);
+const blueprintCanvasStart = blueprintExportText.indexOf('canvas: canvasPane(<div className="blueprint-document-preview canvas-workspace" data-testid="blueprint-canvas-preview">');
+const blueprintInspectorStart = blueprintExportText.indexOf('inspector: inspectorPane(<section className="stage-pane-stack" data-testid="blueprint-detail-preview">', blueprintCanvasStart);
 assert(blueprintCanvasStart >= 0 && blueprintInspectorStart > blueprintCanvasStart, 'Blueprint layout exposes printable 2D canvas and cut-sheet inspector slots');
-const blueprintCanvasBlock = appText.slice(blueprintCanvasStart, blueprintInspectorStart);
-const blueprintInspectorBlock = appText.slice(blueprintInspectorStart, appText.indexOf('        }}', blueprintInspectorStart));
+const blueprintCanvasBlock = blueprintExportText.slice(blueprintCanvasStart, blueprintInspectorStart);
+const blueprintInspectorBlock = blueprintExportText.slice(blueprintInspectorStart, blueprintExportText.indexOf('        }}', blueprintInspectorStart));
 assert(blueprintCanvasBlock.includes('blueprint-svg-preview'), 'Blueprint center canvas previews the printable SVG cut sheet');
 assert(!blueprintCanvasBlock.includes('<Canvas project={project}'), 'Blueprint center canvas is a static output sheet, not the animated 3D/2.5D workbench');
 assert(!blueprintCanvasBlock.includes('assembly-guide-web-preview') && !blueprintInspectorBlock.includes('assembly-guide-web-preview'), 'Blueprint no longer embeds the assembly guide document');
@@ -662,7 +668,8 @@ const assemblyStart = appText.indexOf('const AssemblyGuide =');
 assert(assemblyStart >= 0, 'AssemblyGuide component owns the assembly document workflow');
 const assemblyBlock = appText.slice(assemblyStart, appText.indexOf('const Options =', assemblyStart));
 assert(assemblyBlock.includes('data-testid="assembly-canvas-preview"') && assemblyBlock.includes('<AssemblyWorkbench'), 'Assembly tab renders the interactive stepper in the center canvas');
-assert(appText.includes('data-testid="assembly-stepper-workbench"'), 'Assembly workbench exposes a testable interactive stepper surface');
+assert(assemblyWorkbenchText.includes('data-testid="assembly-stepper-workbench"'), 'Assembly workbench exposes a testable interactive stepper surface');
+assert(assemblyPlaybackText.includes('export const pendingRecipeForMechanism') && assemblyPlaybackText.includes('buildAssemblyPlaybackSteps'), 'Assembly recipe/playback derivation lives outside App.tsx');
 assert(!assemblyBlock.includes('data-testid="assembly-guide-preview-frame"'), 'Assembly center no longer defaults to an iframe document preview');
 assert(assemblyBlock.includes('data-testid="assembly-guide-preview"'), 'Assembly tab keeps selected recipe detail in the right inspector');
 const oversizedCutPart: BodyPartLayer = {
@@ -719,10 +726,6 @@ assert(productionArmLandmarks.every(point => pointInsideOutline(point, productio
 const torsoCutPart: BodyPartLayer = { ...oversizedCutPart, id: 'torso', name: 'Torso', anchorJointId: 'torso' };
 const torsoOutlineBounds = partOutlineBounds(fabricablePartOutlinePoints(torsoCutPart, [{ x: -70, y: 90 }, { x: 70, y: 90 }, { x: -42, y: -74 }, { x: 42, y: -74 }, { x: 0, y: 16 }]));
 assert(torsoOutlineBounds.width < 230 && torsoOutlineBounds.height < 250, 'torso fabrication outline is compact around skeleton landmarks rather than a background image slab');
-assert(controlsText.includes('mechanismTemplateLabel'), 'legacy Controls uses shared mechanism registry labels');
-assert(!controlsText.includes('Drawing Machine'), 'legacy Controls no longer hardcodes stale mechanism labels');
-assert(!controlsText.includes("m.type === '5bar' ? '5-Bar'"), 'legacy Controls active mechanism chips use shared labels');
-assert(!controlsText.includes("m.type === 'crank' ? 'Gear'"), 'legacy Controls no longer aliases crank as gear');
 assert.equal(describeMotionChain(sample, 'right_arm_lower', 'right_elbow').kind, 'root-only', 'root anchor is labeled as a root-only chain');
 assert.equal(describeMotionChain(sample, 'right_arm_lower', 'right_hand').kind, 'two-joint-direct', 'hand handle is labeled as a 2-joint direct chain by default');
 assert.equal(describeMotionChain(sample, 'right_arm_lower', 'right_hand', { rootJointId: 'right_shoulder' }).kind, 'three-joint-ik', 'expanded shoulder root enables 3-joint IK');
