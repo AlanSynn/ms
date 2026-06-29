@@ -120,3 +120,11 @@ Before claiming completion, run the smallest checks that prove the changed contr
 - Do not add artificial test time limits, timeout wrappers, or shortened runner timeouts. Let tests finish unless an external tool has truly hung, then fix the hang or record the blocker.
 - Fabrication/export changes: test generated stacks, z-order/exploded data, printable/export artifacts, and round-trip project state.
 - Commits must use the repository Lore commit protocol.
+
+## 10. Release and deployment contract
+
+- GitHub Pages is the only hosted web release path for now: publish the static app at `https://alansynn.com/ms/` with `VITE_BASE_PATH=/ms/`.
+- Deploy only from version tags matching `v<package.json version>`; do not restore branch-push or manual workflow deploys.
+- Keep release versions aligned across `package.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json` before tagging.
+- The `github-pages` environment must allow `v*.*.*` tags only. Do not re-enable `main` branch deployment unless the release policy is explicitly changed.
+- Do not add a Pages `CNAME` file for this project page; the repo lives under the already-routed `/ms/` path.
