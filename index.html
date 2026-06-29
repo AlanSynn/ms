@@ -96,15 +96,17 @@
       .workflow-rail button.active { box-shadow: inset 0 0 0 1px var(--ms-accent-line); }
       .workflow-rail-mark { display: grid; place-items: center; width: 1.9rem; height: 1.9rem; border-radius: .8rem; background: #fff; border: 1px solid var(--ms-line); color: var(--ms-text-soft); font-size: .78rem; font-weight: 720; }
       .workflow-rail button.active .workflow-rail-mark { background: var(--ms-accent); color: white; border-color: transparent; }
-      .brand-kicker { color: var(--ms-accent); font-family: var(--ms-font-display); font-size: .68rem; font-weight: 680; letter-spacing: .18em; text-transform: uppercase; }
-      .brand-title { margin: 0; color: var(--ms-text); font-family: var(--ms-font-display); font-size: 1.45rem; line-height: 1.75rem; font-weight: 720; letter-spacing: -.045em; }
+      .brand-kicker { display: grid; place-items: center; width: 1.82rem; height: 1.82rem; border-radius: .68rem; background: var(--ms-accent); color: #fff; font-family: var(--ms-font-display); font-size: .68rem; font-weight: 800; letter-spacing: -.04em; line-height: 1; box-shadow: 0 10px 24px rgba(139,92,246,.18); white-space: nowrap; }
+      .brand-title { margin: 0; color: var(--ms-text); font-family: var(--ms-font-display); font-size: 1.08rem; line-height: 1; font-weight: 800; letter-spacing: -.035em; white-space: nowrap; }
       h1, h2, h3, h4, .modal-sheet h3, .template-tile strong { font-family: var(--ms-font-display); }
       kbd, .blueprint-label, .label-mono { font-family: var(--ms-font-mono); }
       .workflow-rail-short { max-width: 100%; color: inherit; font-size: .66rem; font-weight: 720; line-height: .84rem; text-align: center; white-space: normal; overflow-wrap: anywhere; }
       .workflow-rail-full { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-      .app-header { position: fixed; left: var(--ms-rail-width); right: 0; top: 0; height: var(--ms-header-height); z-index: 50; background: rgba(255,255,255,.90); box-shadow: 0 4px 20px rgba(139,92,246,.05); }
-      .app-header > div:first-child { gap: .9rem; }
-      .app-header > div:last-child { flex-direction: row; align-items: center; gap: .75rem; }
+      .app-header { position: fixed; left: var(--ms-rail-width); right: 0; top: 0; height: var(--ms-header-height); z-index: 50; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0 1.1rem; background: rgba(255,255,255,.90); box-shadow: 0 4px 20px rgba(139,92,246,.05); }
+      .app-header-brand { display: flex; min-width: 0; align-items: center; gap: .58rem; }
+      .app-header-actions { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: .6rem; }
+      .quick-toolbar { display: flex; align-items: center; gap: .35rem; }
+      .quick-toolbar .btn-secondary, .quick-toolbar .btn-primary { min-height: 2rem; border-radius: 999px; padding: .42rem .65rem; font-size: .76rem; }
       .stage-body { margin-left: 0; padding-top: calc(var(--ms-header-height) + var(--ms-stage-top-gap)) !important; min-height: calc(100vh - var(--ms-bottom-bars-height)); }
       .editor-workbench { background-color: var(--ms-bg-soft); background-size: 40px 40px; background-image: linear-gradient(to right, rgba(139,92,246,.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(139,92,246,.06) 1px, transparent 1px); }
       .app-shell .stage-body { display: flex; flex-direction: column; gap: .65rem; flex: none; height: var(--ms-stage-body-height); margin-left: var(--ms-rail-width); margin-top: var(--ms-header-height); min-height: 0; overflow: hidden; padding: var(--ms-stage-top-gap) var(--ms-stage-gap) .7rem !important; }
@@ -381,7 +383,7 @@
       .progress-track { background: var(--ms-accent-soft); }
       .progress-bar { background: var(--ms-accent); }
       .workspace-steps:not(.workflow-rail) { display: flex; align-items: center; gap: .35rem; min-width: 0; overflow-x: auto; scrollbar-width: none; }
-      .current-stage-title { margin: .1rem 0 0; color: var(--ms-muted); font-size: .8rem; line-height: 1rem; font-weight: 680; letter-spacing: -.01em; }
+      .current-stage-title { display: inline-flex; align-items: center; min-height: 1.55rem; margin: 0; border: 1px solid var(--ms-line); border-radius: 999px; background: var(--ms-bg-soft); color: var(--ms-muted); padding: .22rem .55rem; font-size: .72rem; line-height: 1; font-weight: 720; letter-spacing: -.01em; white-space: nowrap; }
       .workspace-steps:not(.workflow-rail)::-webkit-scrollbar { display: none; }
       .workspace-steps:not(.workflow-rail) button { white-space: nowrap; border-radius: 1rem; background: transparent; color: var(--ms-muted); padding: .58rem .72rem; font-size: .88rem; font-weight: 680; transition: background .18s ease, color .18s ease, transform .18s ease; }
       .workspace-steps:not(.workflow-rail) button:hover, .workspace-steps:not(.workflow-rail) button.active { color: var(--ms-accent); background: var(--ms-accent-soft); }
@@ -398,11 +400,18 @@
       .player-dock.is-drawing { opacity: .28; transform: translate(var(--player-x, 0), calc(var(--player-y, 0) + 1.25rem)); pointer-events: none; }
       .player-dock.is-drawing .player-actions, .player-dock.is-drawing input { pointer-events: none; }
       @media (min-width: 901px) and (max-width: 1180px) {
+        .brand-kicker { display: none; }
+        .app-header { gap: .7rem; padding: 0 .85rem; }
+        .app-header-actions { gap: .45rem; }
+        .quick-toolbar .btn-secondary, .quick-toolbar .btn-primary { padding-inline: .55rem; }
       }
       @media (max-width: 900px) {
         .app-shell { display: block; }
         .app-rail, .workflow-rail { display: none; }
-        .app-header { position: sticky; left: 0; right: 0; min-height: auto; padding: 1rem; }
+        .app-header { position: sticky; left: 0; right: 0; height: auto; min-height: 3.55rem; padding: .7rem .9rem; flex-wrap: wrap; }
+        .app-header-brand { width: 100%; }
+        .app-header-actions { width: 100%; justify-content: flex-start; }
+        .brand-kicker { display: none; }
         .workspace-steps { display: none; }
         .stage-body { margin-left: 0; padding-top: 1rem !important; }
         .app-shell .stage-body { height: auto; margin-top: 0; overflow: auto; }

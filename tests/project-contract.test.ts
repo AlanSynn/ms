@@ -729,6 +729,9 @@ assert(appShellText.includes('MotionSmithLogoMark') && !appShellText.includes('m
 assert(indexText.includes("font-family: 'Manrope'") && indexText.includes('fonts/manrope-800-latin.woff2'), 'first-run welcome uses self-hosted Manrope wordmark styling');
 assert(appShellText.includes('window.setTimeout') && appShellText.includes('3000') && appShellText.includes('window.clearTimeout'), 'first-run welcome auto-dismisses after three seconds');
 assert(indexText.includes('--ms-font-sans') && indexText.includes('font-family: var(--ms-font-sans)') && indexText.includes('.brand-title'), 'global typography uses the shared modern MotionSmith font stack');
+assert(appText.includes('app-header-brand') && appText.includes('app-header-actions') && appText.includes('quick-toolbar'), 'top app bar separates brand, menus, and quick actions into compact zones');
+assert(indexText.includes('.app-header-brand') && indexText.includes('.app-header-actions') && indexText.includes('border-radius: 999px'), 'top app bar keeps the brand and current stage in one slick editor row');
+assert(!appText.includes('flex flex-col items-end gap-2'), 'top app bar does not stack menu and quick actions vertically');
 assert(appText.includes('readStorageWithLegacy') && appText.includes('migrateStorageValue'), 'MotionSmith storage rename keeps legacy autosave/workspace migration hooks');
 assert(!appUiText.includes('MOTIONSMITH_VIDEO_URL'), 'welcome splash does not embed the old preview video');
 assert(appUiText.includes('getting-started-dialog') && appUiText.includes('getting-started-gallery'), 'Getting Started is an explicit compact starter dialog');
