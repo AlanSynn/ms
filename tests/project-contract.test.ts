@@ -181,8 +181,11 @@ assert(!visibleUiSource.includes('Choose Save Folder'), 'browser output-folder p
 assert(!visibleUiSource.includes('CameraCaptureDialog'), 'browser hardware camera dialog component is removed');
 assert(!visibleUiSource.includes('getUserMedia'), 'browser hardware camera capture API is not used by the app UI');
 assert(existsSync(join(process.cwd(), 'public', 'fonts', 'manrope-800-latin.woff2')), 'Manrope splash font is self-hosted instead of loaded from a runtime CDN');
-assert(!readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8').includes('src-tauri/icons/icon.png'), 'welcome splash does not reuse the blue Tauri grid icon');
-assert(readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8').includes('MotionSmithLogoMark'), 'welcome splash uses the MotionSmith mascot/gear mark');
+assert(existsSync(join(process.cwd(), 'resources', 'icons', 'AppIcon.png')) && existsSync(join(process.cwd(), 'resources', 'icons', 'AppIcon.icns')), 'canonical MotionSmith icon assets live under resources/icons');
+assert(readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8').includes("../resources/icons/AppIcon.png?url"), 'welcome splash and rail use the canonical resources icon');
+assert(readFileSync(join(process.cwd(), 'App.tsx'), 'utf8').includes("./resources/icons/AppIcon.png?url"), 'top app bar uses the canonical resources icon');
+assert(!readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8').includes('src-tauri/icons/icon.png'), 'welcome splash does not reuse the old Tauri grid icon path');
+assert(!readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8').includes('<svg className="motionsmith-logo-mark"'), 'welcome splash does not keep an inline dummy logo SVG');
 assert(readFileSync(join(process.cwd(), 'index.html'), 'utf8').includes("font-family: 'Manrope'") && readFileSync(join(process.cwd(), 'index.html'), 'utf8').includes('fonts/manrope-800-latin.woff2'), 'welcome splash uses a local Manrope wordmark font');
 [
   'Add body part',
@@ -232,6 +235,7 @@ assert(playwrightConfigText.includes('Number.isInteger'), 'browser worker overri
 assert(playwrightConfigText.includes('PLAYWRIGHT_SERVER') && playwrightConfigText.includes('preview'), 'browser tests can run against production preview without Vite HMR noise');
 assert.equal(packageJson.version, '0.0.2', 'release version is bumped for the LFS-backed GitHub Pages redeploy');
 assert.equal(tauriConfig.version, packageJson.version, 'Tauri config version stays aligned with package.json');
+assert.deepEqual(tauriConfig.bundle.icon, ['icons/icon.png', 'icons/icon.ico', 'icons/icon.icns'], 'Tauri bundle references the tracked MotionSmith png, ico, and icns icons');
 assert(cargoTomlText.includes(`version = "${packageJson.version}"`), 'Cargo.toml version stays aligned with package.json');
 assert(cargoLockText.includes('name = "motionsmith"') && cargoLockText.includes(`version = "${packageJson.version}"`), 'Cargo.lock MotionSmith package version stays aligned with package.json');
 assert.equal(packageJson.packageManager, 'bun@1.3.14', 'Bun is the canonical package manager');
@@ -771,7 +775,8 @@ assert(threePreviewText.includes('disposeOwnedMaterials(scene)'), '3D puppet pre
 assert(designContract.includes('Getting Started is a compact modal dialog'), 'DESIGN.md separates Getting Started from full-screen onboarding');
 assert(designContract.includes('The Character tab is functional'), 'DESIGN.md defines Character as a functional editor tab');
 assert(appUiText.includes('splash-dialog') && appShellText.includes('MOTIONSMITH'), 'first-run welcome is a compact MotionSmith wordmark splash dialog');
-assert(appShellText.includes('MotionSmithLogoMark') && !appShellText.includes('motionSmithIconUrl') && !appShellText.includes('../src-tauri/icons/icon.png?url'), 'first-run welcome uses the inline MotionSmith mascot mark instead of the blue grid app icon');
+assert(appShellText.includes('MotionSmithLogoMark') && appShellText.includes('../resources/icons/AppIcon.png?url') && !appShellText.includes('../src-tauri/icons/icon.png?url'), 'first-run welcome uses the canonical MotionSmith app icon instead of the old blue grid path');
+assert(appText.includes('./resources/icons/AppIcon.png?url') && indexText.includes('.app-header-icon'), 'top bar renders the canonical MotionSmith app icon with dedicated sizing');
 assert(indexText.includes("font-family: 'Manrope'") && indexText.includes('fonts/manrope-800-latin.woff2'), 'first-run welcome uses self-hosted Manrope wordmark styling');
 assert(appShellText.includes('window.setTimeout') && appShellText.includes('3000') && appShellText.includes('window.clearTimeout'), 'first-run welcome auto-dismisses after three seconds');
 assert(indexText.includes('--ms-font-sans') && indexText.includes('font-family: var(--ms-font-sans)') && indexText.includes('.brand-title'), 'global typography uses the shared modern MotionSmith font stack');
@@ -1814,7 +1819,8 @@ if (existsSync(join(process.cwd(), 'dist'))) {
 }
 const staleExport = loadProjectSnapshot({ ...sample, lastExport: { id: 'stale-export' } });
 assert.equal(staleExport.lastExport, undefined, 'imported project snapshots clear stale fabrication exports');
-assert(existsSync(join(process.cwd(), 'src-tauri/icons/icon.png')) && existsSync(join(process.cwd(), 'src-tauri/icons/icon.ico')), 'Tauri package icon files exist');
+assert(existsSync(join(process.cwd(), 'src-tauri/icons/icon.png')) && existsSync(join(process.cwd(), 'src-tauri/icons/icon.ico')) && existsSync(join(process.cwd(), 'src-tauri/icons/icon.icns')), 'Tauri package icon files exist for png, ico, and macOS icns targets');
+assert(statSync(join(process.cwd(), 'src-tauri/icons/icon.png')).size > 20_000 && statSync(join(process.cwd(), 'src-tauri/icons/icon.ico')).size > 20_000 && statSync(join(process.cwd(), 'src-tauri/icons/icon.icns')).size > 100_000, 'Tauri package icons use real MotionSmith artwork bytes, not tiny dummy grid placeholders');
 assert.throws(
   () => createProjectFromPackageData({ parts: { p: { roi: [0, 0, 10, 10] } } }, parseCharConfig('width: 1\nheight: 1\nskeleton: []')),
   /missing skeleton\/joints|no valid joints/,

@@ -17,6 +17,6 @@ Before distributing, verify:
 
 - `bun run test` passes.
 - `dist/onnx/pose_model.onnx` is present.
-- `src-tauri/icons/icon.png` and `src-tauri/icons/icon.ico` are tracked source assets.
+- `resources/icons/AppIcon.png` / `.icns` are the canonical app icon assets, and `src-tauri/icons/icon.png`, `.ico`, and `.icns` are regenerated package copies.
 - The app opens without network access.
 - Blueprint export downloads JSON, SVG, HTML, metadata JSON, and PDF artifacts.

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { BrainCircuit, FileJson, Sparkles, Upload } from 'lucide-react';
+import motionSmithIconUrl from '../resources/icons/AppIcon.png?url';
 import type { AppStage, CanvasViewport } from '../types';
 import type { WebOnnxCacheStatus } from '../utils/webOnnx';
 import { APP_MENU_GROUPS, commandById, commandShortcutListText, commandShortcutText, type AppCommandId } from '../utils/appCommands';
@@ -31,21 +32,7 @@ const stageNavLabel = (stage: AppStage) => ({
 
 const formatBytes = (bytes?: number) => bytes ? `${Math.round(bytes / 1024 / 1024)}MB` : '';
 
-const MotionSmithLogoMark = () => <svg className="motionsmith-logo-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
-    <g fill="none" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M43 44h9v8H18v-8h9" fill="#f472b6" stroke="#2f56d6" strokeWidth="3"/>
-        <path d="M45 28l9 7 4-5" stroke="#2f56d6" strokeWidth="4"/>
-        <path d="M19 28l-9 7-4-5" stroke="#2f56d6" strokeWidth="4"/>
-        <path d="M24 43l-4 10M40 43l4 10" stroke="#2f56d6" strokeWidth="4"/>
-        <circle cx="32" cy="15" r="9" fill="#ffd45a" stroke="#2f56d6" strokeWidth="3"/>
-        <circle cx="29" cy="14" r="1.5" fill="#2f56d6"/>
-        <circle cx="36" cy="14" r="1.5" fill="#2f56d6"/>
-        <path d="M28 19c3 3 7 3 10 0" stroke="#2f56d6" strokeWidth="2.5"/>
-        <path d="M24 29c0-5 4-9 8-9s8 4 8 9v12H24z" fill="#f472b6" stroke="#2f56d6" strokeWidth="3"/>
-        <path d="M49 42l2-3 4 1 1 4 4 2-2 5-4-1-3 3-4-2v-4l-3-3z" fill="#60a5fa" stroke="#2f56d6" strokeWidth="2.6"/>
-        <circle cx="52" cy="46" r="3" fill="#facc15" stroke="#2f56d6" strokeWidth="2"/>
-    </g>
-</svg>;
+const MotionSmithLogoMark = ({ className = '' }: { className?: string }) => <img className={`motionsmith-logo-mark ${className}`.trim()} src={motionSmithIconUrl} alt="" aria-hidden="true" decoding="async" draggable={false}/>;
 
 export const OnnxCacheStatusPill = ({ status, onDownload }: { status: WebOnnxCacheStatus; onDownload: () => void }) => {
     const busy = status.stage === 'checking' || status.stage === 'downloading';
@@ -61,7 +48,7 @@ export const OnnxCacheStatusPill = ({ status, onDownload }: { status: WebOnnxCac
 
 export const WorkflowRail = ({ stage, goStage }: { stage: AppStage; goStage: (stage: AppStage) => void }) => (
     <nav className="workflow-rail workspace-steps" data-testid="workspace-steps" aria-label="Workflow">
-        <div className="workflow-rail-brand" aria-hidden="true"><Sparkles size={18}/></div>
+        <div className="workflow-rail-brand" aria-hidden="true"><MotionSmithLogoMark className="workflow-rail-app-icon" /></div>
         {STAGES.map(item => {
             const navItem = STAGE_PANE_NAV_ITEMS.find(nav => nav.target === item.id);
             return <button key={item.id} type="button" aria-label={item.label} aria-current={stage === item.id ? 'step' : undefined} onClick={() => goStage(item.id)} className={stage === item.id ? 'active' : ''}>

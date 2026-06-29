@@ -1737,7 +1737,9 @@ test('Welcome splash uses the MotionSmith logo mark and auto-dismisses', async (
   await page.goto('/');
   const splash = page.getByTestId('welcome-dialog');
   await expect(splash).toBeVisible();
-  await expect(splash.locator('.motionsmith-logo-mark')).toBeVisible();
+  const logo = splash.locator('img.motionsmith-logo-mark');
+  await expect(logo).toBeVisible();
+  await expect(logo).toHaveAttribute('src', /AppIcon/);
   await expect(splash).toContainText('MOTIONSMITH');
   await expect(splash).toHaveCount(0);
   await expect(page.getByTestId('getting-started-dialog')).toBeVisible();

@@ -63,6 +63,7 @@ import { AUTHORABLE_MECHANISM_TYPES, FOUNDRY_MECHANISM_TYPES, FOUNDRY_PRESETS, M
 import { normalizeMechanismToReference, referenceRecipeForType, referenceRequiredPartsHoleCount } from './utils/mechanismReference';
 import { createMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext, fitPathToBox, fitPointsToBox, pointsToSvgPath } from './utils/mechanismPreview';
 import { AlertCircle, Boxes, BrainCircuit, CheckCircle2, Download, FileJson, Loader2, Play, Plus, Route, Sparkles, Trash2, Upload } from 'lucide-react';
+import motionSmithIconUrl from './resources/icons/AppIcon.png?url';
 import girlStarterUrl from './resources/examples/raw/girl.png?url';
 import boyStarterUrl from './resources/examples/raw/boy.PNG?url';
 
@@ -873,7 +874,7 @@ const App: React.FC = () => {
                 <section className="relative flex min-w-0 flex-col">
                     <header className="app-header border-b border-slate-300/70 bg-white/50 backdrop-blur-xl">
                         <div className="app-header-brand">
-                            <span className="brand-kicker" aria-hidden="true">MS</span>
+                            <img className="brand-kicker app-header-icon" src={motionSmithIconUrl} alt="" aria-hidden="true" decoding="async" draggable={false}/>
                             <h1 className="brand-title">MotionSmith</h1>
                             <h2 className="current-stage-title">{stageMeta?.label}</h2>
                         </div>
