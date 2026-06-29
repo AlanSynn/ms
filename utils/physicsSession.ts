@@ -3,6 +3,7 @@ import { calculateLinkage, gearTrainPitchCenterDistance } from './kinematics';
 import { mechanismTemplateLabel } from './mechanismTemplates';
 import type { ProjectionSourceType, ToonSceneProjection } from './sceneProjection';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY } from './physicsKernel';
+import { referencePhysicsRuleForType } from './mechanismReference';
 
 export type PhysicsBodyKind = 'fixed' | 'kinematic' | 'joint' | 'driver';
 export type PhysicsConstraintKind = 'pin' | 'rod' | 'guide' | 'target';
@@ -120,21 +121,7 @@ export interface FoundryPhysicsOverlay {
   rule: string;
 }
 
-const MECHANISM_PHYSICS_RULES: Record<MechanismType, string> = {
-  '4bar': 'pin reactions + coupler acceleration',
-  piston: 'slider thrust + guide normal force',
-  yoke: 'pin-in-slot thrust + guide reaction',
-  'quick-return': 'slotted-arm torque + uneven return velocity',
-  '5bar': 'dual crank torque + coupler acceleration',
-  '6bar': 'four-bar base + dyad follower reactions',
-  cam: 'cam normal force + follower lift velocity',
-  'rack-pinion': 'gear mesh tangent force + rack velocity',
-  gear: 'gear mesh force + opposite angular velocity',
-  planetary_gear: 'sun/planet mesh force + carrier velocity',
-  crank: 'driver torque + tangential velocity'
-};
-
-export const mechanismPhysicsRule = (type: MechanismType) => MECHANISM_PHYSICS_RULES[type];
+export const mechanismPhysicsRule = (type: MechanismType) => referencePhysicsRuleForType(type);
 
 const unitVector = (x: number, y: number, fallback: Point = { x: 1, y: 0 }): Point => {
   const length = Math.hypot(x, y);
@@ -161,6 +148,12 @@ const foundryConstraintError = (mechanism: MechanismConfig, simulation: FoundryP
   const scaledLength = (length: number | undefined) => Math.max(0, finite(length ?? 0)) * simulation.scale;
   const errors = mechanism.type === 'gear'
     ? [Math.abs(fittedDistance(s.p1, s.p2) - scaledLength(gearTrainPitchCenterDistance(mechanism)))]
+    : mechanism.type === 'gear_linkage'
+      ? [
+        Math.abs(fittedDistance(s.p1, s.p2) - scaledLength(gearTrainPitchCenterDistance(mechanism))),
+        Math.abs(fittedDistance(s.p2, s.j2) - scaledLength(mechanism.couplerPointDist)),
+        Math.abs(fittedDistance(s.j2, s.effector) - scaledLength(mechanism.couplerLength))
+      ]
     : mechanism.type === 'planetary_gear'
       ? [Math.abs(fittedDistance(s.p1, s.p2) - scaledLength(mechanism.groundLength)), Math.abs(fittedDistance(s.p2, s.j2) - scaledLength(mechanism.rockerLength)), Math.abs(fittedDistance(s.p1, s.effector) - scaledLength(mechanism.couplerPointDist))]
       : mechanism.type === 'rack-pinion'
@@ -370,6 +363,11 @@ export const buildKinematicPhysicsSession = (
         addCrankConstraint();
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/output-radius`, 'rod', current.p2, current.j2, finite(mechanism.rockerLength), 'output pitch radius', mechanism.id);
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/gear-mesh`, 'guide', current.p1, current.p2, finite(gearTrainPitchCenterDistance(mechanism)), 'gear pitch mesh tangent', mechanism.id);
+      } else if (mechanism.type === 'gear_linkage') {
+        addCrankConstraint();
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/output-radius`, 'rod', current.p2, current.j2, finite(mechanism.couplerPointDist), 'off-center output gear handle radius', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/gear-mesh`, 'guide', current.p1, current.p2, finite(gearTrainPitchCenterDistance(mechanism)), 'gear pitch mesh tangent', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/linkage-arm`, 'rod', current.j2, current.effector, finite(mechanism.couplerLength), 'L4 linkage output arm', mechanism.id);
       } else if (mechanism.type === 'planetary_gear') {
         addCrankConstraint();
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/carrier`, 'guide', current.p1, current.p2, finite(mechanism.groundLength), 'planet carrier radius', mechanism.id);

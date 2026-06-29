@@ -19,9 +19,10 @@ import { createMechanismFitContext, fitMechanismSimulation, fitMechanismSimulati
 import { WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
 import { APP_COMMANDS, APP_MENU_GROUPS, commandById, commandIdForKeyboardEvent, validateAppCommandRegistry } from '../utils/appCommands';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_KERNEL_IMPORT, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, physicsKernelCapability, runRapierFrictionProbe } from '../utils/physicsKernel';
-import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, mechanismTemplateLabel } from '../utils/mechanismTemplates';
+import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, FOUNDRY_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, mechanismTemplateLabel } from '../utils/mechanismTemplates';
 import { MECHANISM_TYPES as SANITIZE_MECHANISM_TYPES, sanitizeMechanismRuntime } from '../utils/sanitize';
 import { generateSmartConfig, mutateConfig, OPTIMIZER_MECHANISM_TYPES } from '../utils/optimizer';
+import { REFERENCE_DEFAULTS, REFERENCE_EXPORT_READY_TYPES, REFERENCE_FOUNDRY_TYPES, REFERENCE_MECHANISM_RECIPES, referenceRecipeForType } from '../utils/mechanismReference';
 import type { BodyPartLayer, MechanismType, ProjectState } from '../types';
 
 projectSelfCheck();
@@ -42,8 +43,9 @@ const expectedCanvasDragHandles: Record<MechanismType, MechanismDragHandle[]> = 
   '6bar': ['P1', 'J1', 'P2', 'J2', 'Aux', 'Effector'],
   cam: ['P1', 'J1', 'P2'],
   'rack-pinion': ['P1', 'J1', 'Effector'],
-  gear: ['P1', 'J1', 'P2', 'J2', 'Effector'],
-  planetary_gear: ['P1', 'J1', 'J2', 'Effector']
+  gear: ['P1'],
+  gear_linkage: ['P1'],
+  planetary_gear: ['P1']
 };
 assert(existsSync(join(process.cwd(), 'resources/examples/raw/girl.png')), 'girl starter source image is present');
 assert(existsSync(join(process.cwd(), 'resources/examples/raw/boy.PNG')), 'boy starter source image is present');
@@ -315,8 +317,22 @@ assert(Math.abs((scaledReplacement.mechanisms[0].groundLength ?? 0) - (coarsePre
 assert(Math.abs((scaledReplacement.mechanisms[0].anchorX ?? 0) - ((coarsePrevious.mechanisms[0].anchorX ?? 0) * 1.5)) < 1e-9, 'larger replacement repositions mechanism anchors with character scale');
 assert(Math.abs(scaledReplacement.paths['legacy-wave'].points[0].x - (coarsePrevious.paths['legacy-wave'].points[0].x * 1.5)) < 1e-9, 'larger replacement scales retained path points around matching joints');
 assert.deepEqual(SANITIZE_MECHANISM_TYPES, [...ALL_MECHANISM_TYPES], 'import sanitizer accepts every low-level mechanism template including crank');
-assert.deepEqual(OPTIMIZER_MECHANISM_TYPES, [...AUTHORABLE_MECHANISM_TYPES], 'optimizer searches authorable mechanism templates only');
+const expectedReferenceAuthorableTypes: MechanismType[] = ['4bar', 'piston', 'cam', 'gear', 'gear_linkage', 'planetary_gear'];
+const expectedReferenceFoundryTypes: MechanismType[] = ['4bar', 'cam', 'gear', 'gear_linkage', 'planetary_gear'];
+const unsupportedLegacyMechanismTypes: MechanismType[] = ['yoke', 'quick-return', 'rack-pinion', '5bar', '6bar'];
+assert.deepEqual(AUTHORABLE_MECHANISM_TYPES, expectedReferenceAuthorableTypes, 'authorable mechanism types are exactly export-ready mechanism-reference recipes');
+assert.deepEqual(REFERENCE_EXPORT_READY_TYPES, expectedReferenceAuthorableTypes, 'mechanism-reference export-ready types match the authoring contract');
+assert.deepEqual(OPTIMIZER_MECHANISM_TYPES, expectedReferenceAuthorableTypes, 'optimizer searches export-ready mechanism-reference templates only');
+assert.deepEqual(FOUNDRY_MECHANISM_TYPES, expectedReferenceFoundryTypes, 'Foundry exposes only visible mechanism-reference recipes');
+assert.deepEqual(REFERENCE_FOUNDRY_TYPES, expectedReferenceFoundryTypes, 'mechanism-reference Foundry-visible types match the gallery contract');
 assert(!AUTHORABLE_MECHANISM_TYPES.includes('crank'), 'bare crank stays a low-level driver, not a novice authoring template');
+assert.equal(REFERENCE_MECHANISM_RECIPES.piston.canonicalKey, 'slider_crank', 'piston maps to the mechanism-reference slider_crank recipe');
+unsupportedLegacyMechanismTypes.forEach(type => {
+  const recipe = referenceRecipeForType(type);
+  assert.equal(recipe.exportReady, false, `${type} is not export-ready in mechanism-reference`);
+  assert.equal(recipe.foundryVisible, false, `${type} is hidden from Foundry until a physical recipe exists`);
+  assert.deepEqual(recipe.requiredParts, [], `${type} has no required fabrication parts without a reference recipe`);
+});
 ALL_MECHANISM_TYPES.forEach(type => {
   assert(MECHANISM_TEMPLATE_LIBRARY[type].label && MECHANISM_TEMPLATE_LIBRARY[type].sense, `${type} has shared template metadata`);
 });
@@ -764,11 +780,11 @@ assert(pkg.metadataJson.includes('validationIssues'), 'fabrication metadata incl
 assert(pkg.recipes.every(r => r.requiredParts.length > 0), 'fabrication recipes include explicit required parts');
 assert.deepEqual(pkg.recipes[0].requiredParts, mechanismRequiredParts(twoFourBars.mechanisms[0]), 'recipe required parts mirror mechanism metadata defaults');
 assert(pkg.recipes[0].requiredParts.some(part => part.name === FABRICATION_SPACER_SPEC.label), 'required parts name the S10 spacer explicitly');
-assert(pkg.recipes[0].assemblySteps.some(step => step.instruction.includes('pre-fabricated')), 'prefab board workflow starts from a beginner prebuilt module');
-assert(pkg.recipes[0].assemblySteps.some(step => step.label === FABRICATION_SPACER_SPEC.label && step.instruction.includes('Insert')), 'prefab board workflow calls out S10 spacer insertion');
+assert(pkg.recipes[0].assemblySteps.some(step => step.label === 'Set ground pivots' || step.instruction.includes('Pin ground pivots')), 'prefab board workflow uses mechanism-reference assembly steps');
+assert(pkg.recipes[0].assemblySteps.some(step => step.stack?.some(item => item.label === FABRICATION_SPACER_SPEC.label)), 'prefab board workflow calls out S10 spacer layers in the reference stack');
 assert(pkg.metadataJson.includes('assemblySteps'), 'fabrication metadata includes structured kit assembly steps');
 
-ALL_MECHANISM_TYPES.forEach(type => {
+AUTHORABLE_MECHANISM_TYPES.forEach(type => {
   const stack = fabricationStackForMechanism({ type });
   assert.equal(validateFabricationStack(stack).join('; '), '', `${type} fabrication stack obeys clip/layer/spacer/layer/clip invariant`);
   assert.equal(stack[0].role, 'clip', `${type} moving stack starts with a clip`);
@@ -962,6 +978,7 @@ ALL_MECHANISM_TYPES.forEach(type => {
     cam: 'cam follower contact',
     'rack-pinion': 'rack linear guide',
     gear: 'gear pitch mesh tangent',
+    gear_linkage: 'L4 linkage output arm',
     planetary_gear: 'planet gear mesh',
     piston: 'slider guide',
     yoke: 'pin-in-slot guide',
@@ -991,8 +1008,12 @@ const localTrack = (mechanism: ReturnType<typeof createDefaultMechanism>, point:
     y: dx * Math.sin(-angle) + dy * Math.cos(-angle)
   };
 };
+const requiredParts = (type: Parameters<typeof createDefaultMechanism>[0]) =>
+  mechanismRequiredParts(createDefaultMechanism(type, `parts-${type}`));
 const requiredPartNames = (type: Parameters<typeof createDefaultMechanism>[0]) =>
-  mechanismRequiredParts(createDefaultMechanism(type, `parts-${type}`)).map(part => part.name);
+  requiredParts(type).map(part => part.name);
+const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[0]) =>
+  Object.fromEntries(requiredParts(type).map(part => [part.name, part.quantity]));
 
 {
   const mechanism = createDefaultMechanism('4bar', 'contract-4bar-physical');
@@ -1002,15 +1023,15 @@ const requiredPartNames = (type: Parameters<typeof createDefaultMechanism>[0]) =
   assertDistance(state.j1, state.j2, mechanism.couplerLength, '4bar coupler length is preserved');
   assertDistance(state.p2, state.j2, mechanism.rockerLength, '4bar rocker length is preserved');
   assertDistance(state.p1, state.p2, mechanism.groundLength, '4bar A-D ground link is fixed while A-B, B-C, C-D move');
-  assert(state.j2.y > state.p1.y, '4bar default uses the front/open assembly branch instead of the crossed underside branch');
+  assert(state.j2.y >= state.p1.y, '4bar default uses the front/open assembly branch instead of the crossed underside branch');
   const negativeOutputAngleState = calculateLinkage({ ...mechanism, couplerPointAngle: -40 }, 0);
   assert(negativeOutputAngleState.isValid, '4bar remains valid when the coupler output angle is negative');
-  assert(negativeOutputAngleState.j2.y > negativeOutputAngleState.p1.y, '4bar assembly branch is independent of output-point angle');
-  assert(requiredPartNames('4bar').includes('4bar linkage plate'), '4bar recipe includes its linkage plate');
+  assert(negativeOutputAngleState.j2.y >= negativeOutputAngleState.p1.y, '4bar assembly branch is independent of output-point angle');
+  assert.deepEqual(requiredPartQuantities('4bar'), { 'L2 linkage': 2, 'L4 linkage': 1, [FABRICATION_SPACER_SPEC.label]: 8 }, '4bar recipe uses L2/L4/S10 required parts from mechanism-reference');
   assert.deepEqual(
     fabricationStackForMechanism(mechanism).filter(layer => layer.role === 'linkage').map(layer => layer.label),
-    ['Input linkage', 'Coupler linkage', 'Output linkage'],
-    '4bar fabrication stack exposes exactly the three moving bars around the A-D ground link'
+    ['Input L2 linkage', 'Coupler L4 linkage', 'Output L2 linkage'],
+    '4bar fabrication stack exposes exactly L2/L4/L2 moving bars around the A-D ground link'
   );
 }
 
@@ -1023,61 +1044,34 @@ const requiredPartNames = (type: Parameters<typeof createDefaultMechanism>[0]) =
     assertDistance(state.j1, state.j2, mechanism.couplerLength, 'piston connecting rod length is preserved');
     assert(Math.abs(localTrack(mechanism, state.j2).y - mechanism.sliderOffset) < 1e-6, 'piston slider stays on its guide offset');
   });
-  assert(requiredPartNames('piston').includes('slider guide'), 'piston recipe includes a slider guide');
+  assert.equal(referenceRecipeForType('piston').canonicalKey, 'slider_crank', 'piston recipe is normalized to slider_crank in mechanism-reference');
+  assert(requiredPartNames('piston').includes('3-hole bracket'), 'piston slider_crank recipe includes a fixed guide bracket');
+  assert(requiredPartNames('piston').includes('2-hole bracket'), 'piston slider_crank recipe includes a moving slider block');
 }
 
 {
-  const mechanism = createDefaultMechanism('yoke', 'contract-yoke-physical');
-  [0, Math.PI / 2, Math.PI].forEach(angle => {
-    const state = calculateLinkage(mechanism, angle);
-    assert(state.isValid, 'scotch yoke default has valid pin-in-slot samples');
-    assert(Math.abs(localTrack(mechanism, state.j2).x - localTrack(mechanism, state.j1).x) < 1e-6, 'scotch yoke slider follows crank pin x along the slot');
-    assert(Math.abs(localTrack(mechanism, state.j2).y - mechanism.sliderOffset) < 1e-6, 'scotch yoke slider stays on its guide offset');
-  });
-  assert(requiredPartNames('yoke').includes('slider guide'), 'scotch yoke recipe includes a slider guide');
+  const mechanism = createDefaultMechanism('yoke', 'contract-yoke-unsupported');
+  assert.deepEqual(requiredParts('yoke'), [], 'scotch yoke has no required parts until a mechanism-reference recipe exists');
+  assert(fabricationRenderPlanForMechanism(mechanism).validationErrors.some(error => error.includes('Scotch yoke has no mechanism-reference recipe')), 'scotch yoke produces a fabrication validation error instead of pretending to be ready');
 }
 
 {
-  const mechanism = createDefaultMechanism('quick-return', 'contract-quick-return-physical');
-  [0, Math.PI / 2, Math.PI].forEach(angle => {
-    const state = calculateLinkage(mechanism, angle);
-    assert(state.isValid, 'quick-return default has valid sampled poses');
-    assertDistance(state.p1, state.j1, mechanism.crankLength, 'quick-return driver crank length is preserved');
-    assertDistance(state.p2, state.j2, mechanism.rockerLength, 'quick-return slotted rocker length is preserved');
-  });
-  assert(requiredPartNames('quick-return').includes('quick-return linkage plate'), 'quick-return recipe includes its linkage plate');
+  const mechanism = createDefaultMechanism('quick-return', 'contract-quick-return-unsupported');
+  assert.deepEqual(requiredParts('quick-return'), [], 'quick-return has no required parts until a mechanism-reference recipe exists');
+  assert(fabricationRenderPlanForMechanism(mechanism).validationErrors.some(error => error.includes('Quick-return has no mechanism-reference recipe')), 'quick-return produces a fabrication validation error instead of pretending to be ready');
 }
 
 {
-  const mechanism = createDefaultMechanism('5bar', 'contract-5bar-physical');
-  [0, Math.PI / 2].forEach(angle => {
-    const state = calculateLinkage(mechanism, angle);
-    assert(state.isValid && state.aux, '5bar default has valid two-crank sampled poses');
-    assertDistance(state.p1, state.j1, mechanism.crankLength, '5bar first crank length is preserved');
-    assertDistance(state.p2, state.aux!, mechanism.rockerLength, '5bar second crank length is preserved');
-    assertDistance(state.j1, state.j2, mechanism.couplerLength, '5bar first rod length is preserved');
-    assertDistance(state.aux!, state.j2, mechanism.rodLength!, '5bar second rod length is preserved');
-  });
-  assert(requiredPartNames('5bar').includes('matched gear'), '5bar recipe includes matched gears');
+  const mechanism = createDefaultMechanism('5bar', 'contract-5bar-simulation-only');
+  assert.deepEqual(requiredParts('5bar'), [], '5bar has no required parts until synchronized dual-driver fabrication is specified');
+  assert(fabricationRenderPlanForMechanism(mechanism).validationErrors.some(error => error.includes('Five-bar is content/simulation-only')), '5bar produces a fabrication validation error instead of pretending to be ready');
 }
 
 {
-  const mechanism = createDefaultMechanism('6bar', 'contract-6bar-physical');
-  [0, Math.PI / 2].forEach(angle => {
-    const state = calculateLinkage(mechanism, angle);
-    assert(state.isValid && state.aux, '6bar default has valid four-bar plus dyad sampled poses');
-    assertDistance(state.p1, state.j1, mechanism.crankLength, '6bar input crank A-B length is preserved');
-    assertDistance(state.j1, state.j2, mechanism.couplerLength, '6bar coupler B-C length is preserved');
-    assertDistance(state.p2, state.j2, mechanism.rockerLength, '6bar rocker C-D length is preserved');
-    assertDistance(state.j2, state.aux!, mechanism.rodLength!, '6bar dyad C-E length is preserved');
-    assertDistance(state.p2, state.aux!, mechanism.couplerPointDist, '6bar follower D-E length is preserved');
-    assert.deepEqual(state.effector, state.aux, '6bar effector is the dyad/follower joint E');
-  });
-  assert(requiredPartNames('6bar').includes('dyad linkage plate'), '6bar recipe includes a dyad linkage plate');
-  assert(requiredPartNames('6bar').includes('follower linkage plate'), '6bar recipe includes a follower linkage plate');
-  const stackLabels = fabricationStackForMechanism(mechanism).map(layer => layer.label);
-  assert(stackLabels.includes('Dyad link'), '6bar fabrication stack includes the dyad link');
-  assert(stackLabels.includes('Follower link'), '6bar fabrication stack includes the follower link');
+  const mechanism = createDefaultMechanism('6bar', 'contract-6bar-simulation-only');
+  assert.deepEqual(requiredParts('6bar'), [], '6bar has no required parts until a real board/part/stack recipe is specified');
+  assert(fabricationRenderPlanForMechanism(mechanism).validationErrors.some(error => error.includes('Six-bar is content/simulation-only')), '6bar produces a fabrication validation error instead of pretending to be ready');
+  assert.deepEqual(fabricationStackForMechanism(mechanism), [], '6bar has no fabrication stack without a mechanism-reference recipe');
 }
 
 {
@@ -1091,23 +1085,13 @@ const requiredPartNames = (type: Parameters<typeof createDefaultMechanism>[0]) =
   assert(Math.abs(camFollowerRise(liftLength, Math.PI) - liftLength) < 1e-6, 'cam follower full lift comes from the shared cam profile');
   assert(camProfileScale(Math.PI) > camProfileScale(0), 'rendered cam profile has the same high-lift lobe used by kinematics');
   assert(localTrack(mechanism, high.j2).x > localTrack(mechanism, low.j2).x, 'cam follower lift increases along the guide');
-  assert(requiredPartNames('cam').includes('cam disk'), 'cam recipe includes a cam disk');
-  assert(requiredPartNames('cam').includes('follower guide'), 'cam recipe includes a follower guide');
+  assert.deepEqual(requiredPartQuantities('cam'), { 'Eccentric cam': 1, 'Round follower': 1, '2-hole bracket': 1, [FABRICATION_SPACER_SPEC.label]: 8 }, 'cam recipe uses eccentric cam, round follower, bracket, and S10 from mechanism-reference');
 }
 
 {
-  const mechanism = createDefaultMechanism('rack-pinion', 'contract-rack-pinion-physical');
-  const low = calculateLinkage(mechanism, 0);
-  const high = calculateLinkage(mechanism, Math.PI);
-  assert(low.isValid && high.isValid, 'rack-pinion default has valid pinion/rack samples');
-  assertDistance(low.p1, low.j1, mechanism.crankLength, 'rack-pinion pinion pitch radius is preserved');
-  assert(Math.abs(Math.atan2(high.j1.y - high.p1.y, high.j1.x - high.p1.x) - Math.PI) < 1e-6, 'rack-pinion pinion index visibly rotates with input angle');
-  assert(Math.abs(localTrack(mechanism, low.j2).y - mechanism.sliderOffset) < 1e-6, 'rack-pinion rack stays on its guide offset');
-  assert(Math.abs((localTrack(mechanism, high.j2).x - localTrack(mechanism, low.j2).x) - mechanism.crankLength * Math.PI) < 1e-6, 'rack-pinion rack travel equals pinion arc length');
-  const shortRack = { ...mechanism, rockerLength: mechanism.crankLength * 3 };
-  assert(sampleFeasibleRange(shortRack).percentValid < 1, 'rack-pinion becomes partial when rack/guide is too short for the stroke');
-  assert(requiredPartNames('rack-pinion').includes('pinion gear'), 'rack-pinion recipe includes a pinion gear');
-  assert(requiredPartNames('rack-pinion').includes('toothed rack'), 'rack-pinion recipe includes a toothed rack');
+  const mechanism = createDefaultMechanism('rack-pinion', 'contract-rack-pinion-unsupported');
+  assert.deepEqual(requiredParts('rack-pinion'), [], 'rack-pinion has no required parts until a kit part contract exists');
+  assert(fabricationRenderPlanForMechanism(mechanism).validationErrors.some(error => error.includes('Rack-pinion has no mechanism-reference recipe')), 'rack-pinion produces a fabrication validation error instead of pretending to be ready');
 }
 
 {
@@ -1119,8 +1103,9 @@ const requiredPartNames = (type: Parameters<typeof createDefaultMechanism>[0]) =
     assertDistance(state.p2, state.j2, mechanism.rockerLength, 'gear output pitch radius is preserved');
     assertDistance(state.p1, state.p2, mechanism.crankLength + mechanism.rockerLength, 'gear pitch circles remain tangent');
   });
-  assert.equal(mechanism.crankLength, 50 * SCENE_PX_PER_MM, 'gear train default uses the fabrication G5 drive gear pitch radius');
-  assert.equal(mechanism.rockerLength, 30 * SCENE_PX_PER_MM, 'gear train default uses the fabrication G3 output gear pitch radius');
+  assert.equal(mechanism.crankLength, REFERENCE_DEFAULTS.gearTrain.driveRadius, 'gear train default uses the fabrication G3 drive gear pitch radius');
+  assert.equal(mechanism.rockerLength, REFERENCE_DEFAULTS.gearTrain.outputRadius, 'gear train default uses the fabrication G3 output gear pitch radius');
+  assert.equal(mechanism.groundLength, REFERENCE_DEFAULTS.gearTrain.centerDistance, 'gear train default uses the G3/G3 60 mm center distance');
   assert.equal(mechanism.gearRatio, gearPairOutputRatio(mechanism.crankLength, mechanism.rockerLength), 'gear train default ratio is derived from meshed pitch radii');
   assert.deepEqual(gearTrainPitchRadii(mechanism), [mechanism.crankLength, mechanism.rockerLength], 'gear train default stores the legacy two-gear pair as the ordered pitch-radius train');
   assert.equal(gearTrainOutputRatio(mechanism), gearPairOutputRatio(mechanism.crankLength, mechanism.rockerLength), 'two-gear train helper preserves legacy reverse rotation');
@@ -1134,8 +1119,8 @@ const requiredPartNames = (type: Parameters<typeof createDefaultMechanism>[0]) =
   assertDistance(compoundQuarter.p1, compoundQuarter.p2, 100 + 40 + 40 + 60, 'compound gear train pitch centers accumulate adjacent meshed radii');
   assert(Math.abs(compoundOutputAngle - gearTrainOutputRatio(compoundGear) * Math.PI / 2) < 1e-6, 'compound gear train output follows idler parity and endpoint pitch-radius ratio');
   assert.equal(gearTrainOutputRatio(compoundGear), 100 / 60, 'three-gear train has same output direction because the idler flips twice');
-  assert(fabricationStackForMechanism(compoundGear).some(layer => layer.label === 'Idler gear 1'), 'compound gear fabrication stack inserts idler gear layers between drive and output');
-  assert.equal(mechanismRequiredParts(compoundGear).find(part => part.name === 'gear train gears')?.quantity, 3, 'compound gear train parts scale with gear count');
+  assert(fabricationStackForMechanism(compoundGear).some(layer => layer.label === 'Idler G3 / 3-space gear 1'), 'compound gear fabrication stack inserts reference G3 idler layers between drive and output');
+  assert.equal(mechanismRequiredParts(compoundGear).find(part => part.name === 'G3 / 3-space gear')?.quantity, 3, 'compound gear train parts scale with reference G3 gear count');
   const driverOffsetState = calculateLinkage({ ...mechanism, driverPhaseOffset: Math.PI / 4 }, 0);
   assert(Math.abs(Math.atan2(driverOffsetState.j1.y - driverOffsetState.p1.y, driverOffsetState.j1.x - driverOffsetState.p1.x) - Math.PI / 4) < 1e-6, 'driver phase offset rotates the input driver before downstream constraints solve');
   Array.from({ length: 8 }, () => generateSmartConfig(undefined, 'gear')).forEach(config => {
@@ -1144,8 +1129,30 @@ const requiredPartNames = (type: Parameters<typeof createDefaultMechanism>[0]) =
   const mutatedGear = mutateConfig({ ...mechanism, groundLength: 999 }, 1, true);
   assert(Math.abs(mutatedGear.groundLength - gearTrainPitchCenterDistance(mutatedGear)) < 1e-6, 'optimizer keeps mutated gear train pitch circles tangent');
   assert.equal(mutatedGear.gearRatio, gearTrainOutputRatio(mutatedGear), 'optimizer keeps gear ratio derived from ordered pitch radii');
-  assert(requiredPartNames('gear').includes('gear train gears'), 'gear train recipe includes gear train gears');
-  assert(requiredPartNames('gear').includes('gear train linkage rod'), 'gear train recipe includes paired linkage rods');
+  assert.deepEqual(requiredPartQuantities('gear'), { 'G3 / 3-space gear': 2, [FABRICATION_SPACER_SPEC.label]: 8 }, 'gear train recipe uses two G3 gears and S10 spacers from mechanism-reference');
+}
+
+{
+  const mechanism = createDefaultMechanism('gear_linkage', 'contract-gear-linkage-physical');
+  [0, Math.PI / 2, Math.PI].forEach(angle => {
+    const state = calculateLinkage(mechanism, angle);
+    assert(state.isValid, 'gear-linkage default has valid sampled poses');
+    assertDistance(state.p1, state.j1, mechanism.crankLength, 'gear-linkage input G3 handle radius is preserved');
+    assertDistance(state.p1, state.p2, mechanism.groundLength, 'gear-linkage G3 centers stay at meshed pitch distance');
+    assertDistance(state.p2, state.j2, mechanism.couplerPointDist, 'gear-linkage output gear off-center handle radius is preserved');
+    assertDistance(state.j2, state.effector, mechanism.couplerLength, 'gear-linkage L4 output linkage length is preserved');
+  });
+  assert.equal(mechanism.crankLength, REFERENCE_DEFAULTS.gearLinkage.driveRadius, 'gear-linkage drive radius uses the reference G3 pitch radius');
+  assert.equal(mechanism.rockerLength, REFERENCE_DEFAULTS.gearLinkage.outputRadius, 'gear-linkage output gear radius uses the reference G3 pitch radius');
+  assert.equal(mechanism.groundLength, REFERENCE_DEFAULTS.gearLinkage.centerDistance, 'gear-linkage centers use the G3/G3 60 mm pitch distance');
+  assert.equal(mechanism.couplerPointDist, REFERENCE_DEFAULTS.gearLinkage.handleRadius, 'gear-linkage output handle uses the reference one-cell offset');
+  assert.equal(mechanism.couplerLength, REFERENCE_DEFAULTS.gearLinkage.outputLinkage, 'gear-linkage output rod uses the reference L4 linkage');
+  assert.deepEqual(requiredPartQuantities('gear_linkage'), { 'G3 / 3-space gear': 2, 'L4 linkage': 1, '2-hole bracket': 1, [FABRICATION_SPACER_SPEC.label]: 8 }, 'gear-linkage recipe uses two G3 gears, L4, output bracket, and S10 spacers');
+  assert.deepEqual(
+    fabricationStackForMechanism(mechanism).filter(layer => ['gear', 'linkage', 'guide'].includes(layer.role)).map(layer => layer.label),
+    ['Drive G3 / 3-space gear', 'Output G3 / 3-space gear', 'L4 linkage', '2-hole bracket'],
+    'gear-linkage fabrication stack exposes G3→G3→L4→bracket in mechanism-reference order'
+  );
 }
 
 {
@@ -1163,7 +1170,7 @@ const requiredPartNames = (type: Parameters<typeof createDefaultMechanism>[0]) =
   Array.from({ length: 8 }, () => generateSmartConfig(undefined, 'planetary_gear')).forEach(config => {
     assert(Math.abs(config.groundLength - (config.crankLength + config.rockerLength)) < 1e-6, 'optimizer keeps generated planetary pitch circles tangent');
   });
-  assert(requiredPartNames('planetary_gear').some(name => name === 'planetary set (ring, sun, 3 planets)'), 'planetary recipe includes ring, sun, and three planets');
+  assert.deepEqual(requiredPartQuantities('planetary_gear'), { 'R56 internal ring gear': 1, 'G1 / 1-space gear': 1, 'G3 / 3-space gear': 1, 'L2 linkage': 1, [FABRICATION_SPACER_SPEC.label]: 8 }, 'planetary recipe uses R56 ring, G1 sun, G3 planet, L2 carrier, and S10 from mechanism-reference');
 }
 
 const gearDefault = createDefaultMechanism('gear', 'contract-gear-mesh');

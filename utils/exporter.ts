@@ -101,12 +101,18 @@ export const generateDXF = (config: GlobalConfig, angle: number): string => {
         else if (m.type === 'yoke') {
             content += dxfLine(j2.x - 40, j2.y, j2.x + 40, j2.y, MECH_LAYER, 1); // Plate
         }
-        else if (m.type === 'gear') {
+        else if (m.type === 'gear' || m.type === 'gear_linkage') {
             gearTrainCenters(m).forEach((center, index) => {
                 content += dxfCircle(center.x, center.y, gearTrainPitchRadii(m)[index] ?? m.rockerLength, `${MECH_LAYER}_GEARS`, 5);
             });
-            content += dxfLine(j1.x, j1.y, effector.x, effector.y, MECH_LAYER, 1);
-            content += dxfLine(j2.x, j2.y, effector.x, effector.y, MECH_LAYER, 1);
+            if (m.type === 'gear_linkage') {
+                content += dxfLine(p1.x, p1.y, j1.x, j1.y, MECH_LAYER, 1);
+                content += dxfLine(p2.x, p2.y, j2.x, j2.y, MECH_LAYER, 1);
+                content += dxfLine(j2.x, j2.y, effector.x, effector.y, MECH_LAYER, 1);
+            } else {
+                content += dxfLine(j1.x, j1.y, effector.x, effector.y, MECH_LAYER, 1);
+                content += dxfLine(j2.x, j2.y, effector.x, effector.y, MECH_LAYER, 1);
+            }
         }
         else if (m.type === 'quick-return' || m.type === 'cam' || m.type === 'planetary_gear') {
             content += dxfLine(p1.x, p1.y, p2.x, p2.y, "GROUND", 8);
@@ -159,7 +165,7 @@ export const generateSVG = (config: GlobalConfig, angle: number): string => {
         svg += `</g>`;
 
         // Output Gear for 5-bar / meshed gear train
-        if (m.type === 'gear') {
+        if (m.type === 'gear' || m.type === 'gear_linkage') {
              const centers = gearTrainCenters(m);
              const radii = gearTrainPitchRadii(m);
              centers.slice(1).forEach((center, index) => {
@@ -209,9 +215,14 @@ export const generateSVG = (config: GlobalConfig, angle: number): string => {
              svg += `<line x1="${svgNumber(j1.x)}" y1="${svgNumber(j1.y)}" x2="${svgNumber(j2.x)}" y2="${svgNumber(j2.y)}" stroke="${color}" stroke-width="8" stroke-linecap="round" />`;
              svg += `<rect x="${svgNumber(j2.x - 20)}" y="${svgNumber(j2.y - 10)}" width="40" height="20" fill="#334155" rx="2" transform="rotate(${svgNumber(m.groundAngle || 0)} ${svgNumber(j2.x)} ${svgNumber(j2.y)})" />`;
         }
-        else if (m.type === 'gear') {
-            svg += `<line x1="${svgNumber(j1.x)}" y1="${svgNumber(j1.y)}" x2="${svgNumber(effector.x)}" y2="${svgNumber(effector.y)}" stroke="${color}" stroke-width="6" stroke-linecap="round" />`;
-            svg += `<line x1="${svgNumber(j2.x)}" y1="${svgNumber(j2.y)}" x2="${svgNumber(effector.x)}" y2="${svgNumber(effector.y)}" stroke="#475569" stroke-width="4" stroke-linecap="round" />`;
+        else if (m.type === 'gear' || m.type === 'gear_linkage') {
+            if (m.type === 'gear_linkage') {
+                svg += `<line x1="${svgNumber(p2.x)}" y1="${svgNumber(p2.y)}" x2="${svgNumber(j2.x)}" y2="${svgNumber(j2.y)}" stroke="#475569" stroke-width="4" stroke-linecap="round" />`;
+                svg += `<line x1="${svgNumber(j2.x)}" y1="${svgNumber(j2.y)}" x2="${svgNumber(effector.x)}" y2="${svgNumber(effector.y)}" stroke="${color}" stroke-width="6" stroke-linecap="round" />`;
+            } else {
+                svg += `<line x1="${svgNumber(j1.x)}" y1="${svgNumber(j1.y)}" x2="${svgNumber(effector.x)}" y2="${svgNumber(effector.y)}" stroke="${color}" stroke-width="6" stroke-linecap="round" />`;
+                svg += `<line x1="${svgNumber(j2.x)}" y1="${svgNumber(j2.y)}" x2="${svgNumber(effector.x)}" y2="${svgNumber(effector.y)}" stroke="#475569" stroke-width="4" stroke-linecap="round" />`;
+            }
         }
         else if (m.type === 'quick-return' || m.type === 'cam' || m.type === 'planetary_gear') {
             svg += `<line x1="${svgNumber(p1.x)}" y1="${svgNumber(p1.y)}" x2="${svgNumber(p2.x)}" y2="${svgNumber(p2.y)}" stroke="#cbd5e1" stroke-width="8" stroke-linecap="round" />`;

@@ -10,6 +10,7 @@ import { ThreePuppetPreview } from './ThreePuppetPreview';
 import { fabricationGearPathD } from '../utils/fabrication';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlinePathD, pointInsideOutline } from '../utils/partGeometry';
 import { mechanismFeature, type MechanismDragHandle } from '../utils/mechanismFeatureRegistry';
+import { normalizeMechanismToReference } from '../utils/mechanismReference';
 
 interface CanvasProps {
     project?: ProjectState;
@@ -155,7 +156,14 @@ export const Canvas: React.FC<CanvasProps> = ({
     const updateMechanism = (id: string, updates: Partial<MechanismConfig>) => {
         setConfig(prev => ({
             ...prev,
-            mechanisms: prev.mechanisms.map(m => m.id === id ? mechanismWithGeneratedPath({ ...m, ...updates }) : m)
+            mechanisms: prev.mechanisms.map(m => {
+                if (m.id !== id) return m;
+                const next = { ...m, ...updates };
+                const normalized = next.type === 'gear' || next.type === 'gear_linkage' || next.type === 'planetary_gear'
+                    ? normalizeMechanismToReference(next)
+                    : next;
+                return mechanismWithGeneratedPath(normalized);
+            })
         }));
     };
 
@@ -308,7 +316,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 const dy = p.y - state.p1.y;
                 const newAngle = toDeg(Math.atan2(dy, dx));
 
-                if (m.type === '4bar' || m.type === '5bar' || m.type === '6bar' || m.type === 'gear') {
+                if (m.type === '4bar' || m.type === '5bar' || m.type === '6bar' || m.type === 'gear' || m.type === 'gear_linkage') {
                     const newGround = Math.hypot(dx, dy);
                     updateMechanism(m.id, { groundLength: newGround, groundAngle: newAngle });
                 } else {
@@ -351,7 +359,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                     const newRocker = dist(state.p2, p);
                     const newDyad = state.aux ? dist(state.aux, p) : (m.rodLength ?? 95);
                     updateMechanism(m.id, { couplerLength: newCoupler, rockerLength: newRocker, rodLength: newDyad });
-                } else if (m.type === 'quick-return' || m.type === 'gear' || m.type === 'planetary_gear') {
+                } else if (m.type === 'quick-return' || m.type === 'gear' || m.type === 'gear_linkage' || m.type === 'planetary_gear') {
                     updateMechanism(m.id, { rockerLength: dist(state.p2, p) });
                 }
             }
@@ -362,7 +370,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                         updateMechanism(m.id, { couplerPointDist: newExtension });
                     } else if (m.type === '6bar') {
                         updateMechanism(m.id, { rodLength: dist(state.j2, p), couplerPointDist: dist(state.p2, p) });
-                    } else if (m.type === 'gear' || m.type === 'planetary_gear') {
+                    } else if (m.type === 'gear' || m.type === 'gear_linkage' || m.type === 'planetary_gear') {
                         const baseAngle = Math.atan2(state.j2.y - state.p2.y, state.j2.x - state.p2.x);
                         const mouseAngle = Math.atan2(p.y - state.j2.y, p.x - state.j2.x);
                         updateMechanism(m.id, { couplerPointDist: dist(state.j2, p), couplerPointAngle: toDeg(mouseAngle - baseAngle) });
@@ -557,6 +565,20 @@ export const Canvas: React.FC<CanvasProps> = ({
                                                 <line x1={j2.x} y1={j2.y} x2={effector.x} y2={effector.y} stroke="#475569" strokeWidth="4" strokeLinecap="round" />
                                                 <circle cx={p2.x} cy={p2.y} r={8} fill="#94a3b8" stroke="white" strokeWidth="2" className="cursor-grab" />
                                                 <circle cx={j2.x} cy={j2.y} r={5} fill="white" stroke="#334155" strokeWidth="2" className={canDragJ2(m) ? 'cursor-grab' : ''} opacity={canDragJ2(m) ? 1 : 0.65} />
+                                            </>
+                                        )}
+
+                                        {m.type === 'gear_linkage' && (
+                                            <>
+                                                <line x1={p2.x} y1={p2.y} x2={j2.x} y2={j2.y} stroke="#94a3b8" strokeWidth="5" strokeLinecap="round" />
+                                                <line x1={j2.x} y1={j2.y} x2={effector.x} y2={effector.y} stroke={color} strokeWidth="8" strokeLinecap="round" />
+                                                <g transform={`translate(${effector.x}, ${effector.y}) rotate(${Math.atan2(effector.y - j2.y, effector.x - j2.x) * 180 / Math.PI})`}>
+                                                    <rect x="-12" y="-7" width="24" height="14" rx="5" fill="#e2e8f0" stroke="#475569" strokeWidth="2" />
+                                                    <circle cx="-6" cy="0" r="3" fill="white" stroke="#475569" strokeWidth="1.5" />
+                                                    <circle cx="6" cy="0" r="3" fill="white" stroke="#475569" strokeWidth="1.5" />
+                                                </g>
+                                                <circle cx={p2.x} cy={p2.y} r={8} fill="#94a3b8" stroke="white" strokeWidth="2" opacity={0.65} />
+                                                <circle cx={j2.x} cy={j2.y} r={5} fill="white" stroke="#334155" strokeWidth="2" opacity={0.65} />
                                             </>
                                         )}
 

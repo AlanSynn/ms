@@ -1,4 +1,5 @@
 import type { MechanismConfig, MechanismType } from '../types';
+import { REFERENCE_AUTHORABLE_TYPES, REFERENCE_FOUNDRY_TYPES, referenceRecipeForType } from './mechanismReference';
 
 export interface MechanismTemplateMetadata {
     label: string;
@@ -19,11 +20,12 @@ export const ALL_MECHANISM_TYPES: readonly MechanismType[] = [
     'cam',
     'rack-pinion',
     'gear',
+    'gear_linkage',
     'planetary_gear'
 ] as const;
 
-export const AUTHORABLE_MECHANISM_TYPES: readonly MechanismType[] = ALL_MECHANISM_TYPES
-    .filter(type => type !== 'crank');
+export const AUTHORABLE_MECHANISM_TYPES: readonly MechanismType[] = REFERENCE_AUTHORABLE_TYPES;
+export const FOUNDRY_MECHANISM_TYPES: readonly MechanismType[] = REFERENCE_FOUNDRY_TYPES;
 
 export const MECHANISM_TEMPLATE_LIBRARY: Record<MechanismType, MechanismTemplateMetadata> = {
     crank: {
@@ -44,36 +46,36 @@ export const MECHANISM_TEMPLATE_LIBRARY: Record<MechanismType, MechanismTemplate
         label: 'Slider piston',
         sense: 'rotation pushes a rod along one linear slide',
         goodFor: 'push-pull limbs, doors, and props',
-        constraint: 'rod length and slider offset must keep the guide printable',
+        constraint: 'maps to the reference slider_crank recipe; guide is fixed, slider is moving',
         authorable: true
     },
     yoke: {
-        label: 'Scotch yoke',
+        label: 'Scotch yoke (simulation)',
         sense: 'pin-in-slot motion converts rotation to straight reciprocation',
         goodFor: 'compact back-and-forth travel',
-        constraint: 'slot stroke must stay inside the board profile',
-        authorable: true
+        constraint: 'simulation only until a mechanism-reference recipe exists',
+        authorable: false
     },
     'quick-return': {
-        label: 'Quick-return linkage',
+        label: 'Quick-return (simulation)',
         sense: 'uneven timing makes one stroke faster than the return stroke',
         goodFor: 'snappy mechanical accents',
-        constraint: 'review partial range before export',
-        authorable: true
+        constraint: 'simulation only until a mechanism-reference recipe exists',
+        authorable: false
     },
     '5bar': {
-        label: 'Five-bar linkage',
+        label: 'Five-bar (simulation)',
         sense: 'two cranks combine phases for wider two-arm tracing',
         goodFor: 'complex foot or hand trajectories',
-        constraint: 'phase and second speed decide path shape and collision risk',
-        authorable: true
+        constraint: 'content/simulation only; no fabrication-ready recipe yet',
+        authorable: false
     },
     '6bar': {
-        label: 'Six-bar linkage',
+        label: 'Six-bar (simulation)',
         sense: 'a four-bar base drives a second dyad so a follower point traces richer compound arcs',
         goodFor: 'hands, feet, and character parts that need more nuanced paths than a simple four-bar',
-        constraint: 'base A-D, input A-B, coupler B-C, rocker C-D, dyad C-E, and follower D-E must all stay pinned',
-        authorable: true
+        constraint: 'content/simulation only; no fabrication-ready recipe yet',
+        authorable: false
     },
     cam: {
         label: 'Cam follower',
@@ -83,17 +85,24 @@ export const MECHANISM_TEMPLATE_LIBRARY: Record<MechanismType, MechanismTemplate
         authorable: true
     },
     'rack-pinion': {
-        label: 'Rack and pinion',
+        label: 'Rack and pinion (unsupported)',
         sense: 'a rotating pinion walks a toothed rack along a straight guide',
         goodFor: 'PaperMech-style up-down or open-close linear travel',
-        constraint: 'rack stroke is open-ended, so the guide length and end stops must be visible',
-        authorable: true
+        constraint: 'unsupported until a rack/pinion kit contract is added to mechanism-reference',
+        authorable: false
     },
     gear: {
         label: 'Gear train',
         sense: 'paired gears transfer rotation through a fixed ratio',
         goodFor: 'reversing or scaling rotation',
         constraint: 'ratio sign and gear size decide output direction',
+        authorable: true
+    },
+    gear_linkage: {
+        label: 'Gear linkage',
+        sense: 'paired G3 gears drive an off-center L4 crank linkage from the output gear',
+        goodFor: 'gear-driven waving arms and rotary-to-orbiting linkage handles',
+        constraint: 'output linkage attaches to the gear handle hole only, never to the board',
         authorable: true
     },
     planetary_gear: {
@@ -126,5 +135,7 @@ export const FOUNDRY_PRESETS: Record<string, Partial<MechanismConfig> & { label:
 export const mechanismTemplateLabel = (type: MechanismType): string =>
     MECHANISM_TEMPLATE_LIBRARY[type]?.label ?? type;
 
-export const mechanismTemplateOptionLabel = (type: MechanismType): string =>
-    `${mechanismTemplateLabel(type)} · ${type}`;
+export const mechanismTemplateOptionLabel = (type: MechanismType): string => {
+    const recipe = referenceRecipeForType(type);
+    return recipe.exportReady ? `${mechanismTemplateLabel(type)} · ${recipe.canonicalKey}` : `${mechanismTemplateLabel(type)} · ${recipe.support}`;
+};

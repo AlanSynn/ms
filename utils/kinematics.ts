@@ -239,6 +239,33 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
         return { p1, p2, j1: drivePoint, j2, aux: centers.length > 2 ? centers[1] : undefined, effector, isValid: true };
     }
 
+    // --- GEAR-DRIVEN OUTPUT LINKAGE ---
+    else if (config.type === 'gear_linkage') {
+        const radii = gearTrainPitchRadii(config);
+        const centers = gearTrainCenters(config);
+        const inputRadius = radii[0];
+        const outputRadius = radii.at(-1) ?? config.rockerLength;
+        const p2 = centers.at(-1) ?? p1;
+        const drivePoint: Point = {
+            x: p1.x + inputRadius * Math.cos(angle1),
+            y: p1.y + inputRadius * Math.sin(angle1)
+        };
+        const ratio = gearTrainOutputRatio(radii);
+        const outAngle = angle1 * ratio + (config.phase ?? 0);
+        const handleRadius = Math.max(1, Math.abs(config.couplerPointDist || outputRadius * (2 / 3)));
+        const j2: Point = {
+            x: p2.x + handleRadius * Math.cos(outAngle),
+            y: p2.y + handleRadius * Math.sin(outAngle)
+        };
+        const linkLength = Math.max(1, Math.abs(config.couplerLength || handleRadius * 4));
+        const effectorAngle = outAngle + toRad(config.couplerPointAngle);
+        const effector: Point = {
+            x: j2.x + linkLength * Math.cos(effectorAngle),
+            y: j2.y + linkLength * Math.sin(effectorAngle)
+        };
+        return { p1, p2, j1: drivePoint, j2, aux: centers.length > 2 ? centers[1] : undefined, effector, isValid: true };
+    }
+
     // --- PLANETARY GEAR / EPITROCHOID OUTPUT ---
     else if (config.type === 'planetary_gear') {
         const planet = Math.max(1, config.rockerLength || 36);

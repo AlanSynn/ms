@@ -2,6 +2,7 @@ import { BodyPartLayer, FabricationIssue, FabricationPackage, FabricationRecipe,
 import { calculateLinkage, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, generateCurvePoints, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius as kinematicPlanetaryRingPitchRadius } from './kinematics';
 import { boardToScene, pathFromPoints, SCENE_PX_PER_MM, sceneToBoardRaw, sceneToSvg, sceneBoundsForSheet } from './coordinates';
 import { mechanismRequiredParts } from './project';
+import { REFERENCE_DEFAULTS, isReferenceExportReady, referenceRecipeForType, referenceSupportWarning } from './mechanismReference';
 import { mechanismBindingWarnings, preferredMotionJointId } from './motion';
 import { svgNumber } from './sanitize';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlineBounds, pointInsideOutline } from './partGeometry';
@@ -50,7 +51,7 @@ export const fabricationGearSpecForPitchRadius = sharedFabricationGearSpecForPit
 export const fabricationLinkageSpecForCells = sharedFabricationLinkageSpecForCells;
 
 export const PLANETARY_GEAR_SYNTAX = 'ring-fixed-sun-input-carrier-output' as const;
-export const PLANETARY_GEAR_PLANET_COUNT = 3;
+export const PLANETARY_GEAR_PLANET_COUNT = 1;
 
 const positiveSceneRadius = (value: number, fallback = 1) => Math.max(1, Math.abs(Number.isFinite(value) ? value : fallback));
 
@@ -157,6 +158,11 @@ export const fabricationLinkageSceneLengthsForMechanism = (mechanism: Pick<Mecha
     }
     if (mechanism.type === 'gear') {
         return { ...standard, driver: output, coupler: output, output, effector: output };
+    }
+    if (mechanism.type === 'gear_linkage') {
+        const handle = minimumSceneLinkageLength(Math.max(20, mechanism.couplerPointDist));
+        const link = minimumSceneLinkageLength(Math.max(20, mechanism.couplerLength));
+        return { ...standard, driver: handle, coupler: link, output: link, effector: link };
     }
     if (mechanism.type === 'rack-pinion') {
         return { ...standard, output, effector: output };
@@ -297,6 +303,7 @@ export type FabricationRenderPlan = {
     layers: FabricationRenderLayer[];
     stackSummary: string;
     roleSummary: string;
+    occurrenceSummary: string;
     colorSummary: string;
     zSummary: string;
     validationErrors: string[];
@@ -321,38 +328,30 @@ export const fabricationBaseLayer = (): FabricationStackLayer => layer('Base boa
 export const fabricationStackForMechanism = (mechanism: Pick<MechanismConfig, 'type'> & Partial<Pick<MechanismConfig, 'gearTrainRadii'>>): FabricationStackLayer[] => {
     const linked = (...middle: FabricationStackLayer[]) => [layer('Back Clip', 'clip'), ...middle, layer('Front Clip', 'clip')];
     const spacer = () => layer(FABRICATION_SPACER_SPEC.label, 'spacer');
-    switch (mechanism.type) {
-        case 'gear': {
-            const radii = gearTrainPitchRadii({
-                crankLength: 50 * SCENE_PX_PER_MM,
-                rockerLength: 30 * SCENE_PX_PER_MM,
-                gearTrainRadii: mechanism.gearTrainRadii
-            });
-            if (radii.length <= 2) {
-                return linked(layer('Drive gear', 'gear'), spacer(), layer('Drive linkage', 'linkage'), spacer(), layer('Output gear', 'gear'), spacer(), layer('Output linkage', 'linkage'));
-            }
-            const gearLayers: FabricationStackLayer[] = [layer('Drive gear', 'gear'), spacer(), layer('Drive linkage', 'linkage')];
-            radii.slice(1, -1).forEach((_, index) => gearLayers.push(spacer(), layer(`Idler gear ${index + 1}`, 'gear')));
-            gearLayers.push(spacer(), layer('Output gear', 'gear'), spacer(), layer('Output linkage', 'linkage'));
-            return linked(...gearLayers);
-        }
-        case 'planetary_gear':
-            return linked(layer('Ring gear', 'gear'), spacer(), layer('Carrier linkage', 'linkage'), spacer(), layer('Planet gears x3', 'gear'), spacer(), layer('Sun gear', 'gear'));
-        case 'rack-pinion':
-            return linked(layer('Pinion gear', 'gear'), spacer(), layer('Rack guide', 'guide'), spacer(), layer('Toothed rack', 'rack'), spacer(), layer('Output linkage', 'linkage'));
-        case 'cam':
-            return linked(layer('Cam disk', 'cam'), spacer(), layer('Follower guide', 'guide'), spacer(), layer('Follower linkage', 'follower'));
-        case 'piston':
-        case 'yoke':
-        case 'quick-return':
-            return linked(layer('Crank linkage', 'linkage'), spacer(), layer('Slider guide', 'guide'), spacer(), layer('Output linkage', 'linkage'));
-        case '5bar':
-            return linked(layer('Left timing gear', 'gear'), spacer(), layer('Left crank linkage', 'linkage'), spacer(), layer('Right timing gear', 'gear'), spacer(), layer('Right crank linkage', 'linkage'), spacer(), layer('Center coupler', 'linkage'));
-        case '6bar':
-            return linked(layer('Input linkage', 'linkage'), spacer(), layer('Coupler linkage', 'linkage'), spacer(), layer('Output rocker', 'linkage'), spacer(), layer('Dyad link', 'linkage'), spacer(), layer('Follower link', 'linkage'));
-        default:
-            return linked(layer('Input linkage', 'linkage'), spacer(), layer('Coupler linkage', 'linkage'), spacer(), layer('Output linkage', 'linkage'));
+    const recipe = referenceRecipeForType(mechanism.type);
+    if (!recipe.exportReady) return [];
+    if (mechanism.type === 'gear') {
+        const radii = gearTrainPitchRadii({
+            crankLength: REFERENCE_DEFAULTS.gearTrain.driveRadius,
+            rockerLength: REFERENCE_DEFAULTS.gearTrain.outputRadius,
+            gearTrainRadii: mechanism.gearTrainRadii
+        });
+        const gearLayers: FabricationStackLayer[] = [layer('Drive G3 / 3-space gear', 'gear')];
+        radii.slice(1, -1).forEach((_, index) => gearLayers.push(spacer(), layer(`Idler G3 / 3-space gear ${index + 1}`, 'gear')));
+        gearLayers.push(spacer(), layer('Output G3 / 3-space gear', 'gear'));
+        return linked(...gearLayers);
     }
+    const roleForLabel = (labelText: string): FabricationStackLayer['role'] => {
+        if (/gear|ring|sun|planet/i.test(labelText)) return 'gear';
+        if (/cam/i.test(labelText)) return 'cam';
+        if (/follower|slider block/i.test(labelText)) return 'follower';
+        if (/guide|bracket/i.test(labelText)) return 'guide';
+        return 'linkage';
+    };
+    return linked(...recipe.stackLabels.flatMap((labelText, index) => [
+        ...(index > 0 ? [spacer()] : []),
+        layer(labelText, roleForLabel(labelText))
+    ]));
 };
 
 export const fabricationStackSummary = (mechanism: Pick<MechanismConfig, 'type'> & Partial<Pick<MechanismConfig, 'gearTrainRadii'>>) => fabricationStackForMechanism(mechanism).map(item => item.label).join(' → ');
@@ -362,6 +361,8 @@ const isMovingStackLayer = (item: FabricationStackLayer) => !['clip', 'spacer', 
 export const validateFabricationStack = (mechanism: (Pick<MechanismConfig, 'type'> & Partial<Pick<MechanismConfig, 'gearTrainRadii'>>) | FabricationStackLayer[]) => {
     const stack = Array.isArray(mechanism) ? mechanism : fabricationStackForMechanism(mechanism);
     const errors: string[] = [];
+    if (!Array.isArray(mechanism) && !isReferenceExportReady(mechanism.type)) errors.push(referenceSupportWarning(mechanism.type) ?? `${mechanism.type}: not fabrication-ready`);
+    if (!stack.length) return errors;
     if (stack.some(item => item.role === 'base')) errors.push('moving stack must not include Base board');
     if (stack[0]?.role !== 'clip') errors.push('moving stack must start with a back clip');
     if (stack.at(-1)?.role !== 'clip') errors.push('moving stack must end with a front clip');
@@ -376,6 +377,14 @@ export const validateFabricationStack = (mechanism: (Pick<MechanismConfig, 'type
         const next = index < middle.length - 1 ? middle[index + 1] : stack.at(-1);
         if (isMovingStackLayer(item) && next && isMovingStackLayer(next)) errors.push(`${item.label} and ${next.label} need a ${FABRICATION_SPACER_SPEC.label} between them`);
     });
+    stack.filter(item => item.role === 'spacer').forEach(item => {
+        if (item.label !== FABRICATION_SPACER_SPEC.label) errors.push(`spacer layers must use ${FABRICATION_SPACER_SPEC.label}`);
+    });
+    if (!Array.isArray(mechanism) && isReferenceExportReady(mechanism.type)) {
+        const expectedLabels = fabricationStackForMechanism(mechanism).map(item => item.label).join(' → ');
+        const actualLabels = stack.map(item => item.label).join(' → ');
+        if (actualLabels !== expectedLabels) errors.push(`${mechanism.type} stack must match mechanism-reference order: ${expectedLabels}`);
+    }
     return errors;
 };
 
@@ -383,7 +392,7 @@ const renderKindForRole = (role: FabricationStackLayer['role']): FabricationRend
 
 export const fabricationRenderPlanForMechanism = (mechanism: Pick<MechanismConfig, 'type'> & Partial<Pick<MechanismConfig, 'gearTrainRadii'>>): FabricationRenderPlan => {
     const stack = fabricationStackForMechanism(mechanism);
-    const validationErrors = validateFabricationStack(stack);
+    const validationErrors = validateFabricationStack(mechanism);
     const occurrenceByRole = new Map<FabricationStackLayer['role'], number>();
     const makeRenderLayer = (item: FabricationStackLayer, stackIndex: number): FabricationRenderLayer => {
         const occurrence = occurrenceByRole.get(item.role) ?? 0;
@@ -411,6 +420,7 @@ export const fabricationRenderPlanForMechanism = (mechanism: Pick<MechanismConfi
         layers,
         stackSummary: layers.map(item => item.label).join(' → '),
         roleSummary: layers.map(item => item.role).join('>'),
+        occurrenceSummary: layers.map(item => `${item.role}#${item.occurrence}:${item.label}`).join('>'),
         colorSummary: layers.map(item => item.color).join(','),
         zSummary: layers.map(item => item.z.toFixed(2)).join(','),
         validationErrors
@@ -418,6 +428,14 @@ export const fabricationRenderPlanForMechanism = (mechanism: Pick<MechanismConfi
 };
 
 export const prefabAssemblySteps = (mechanism: MechanismConfig, boardCoordinate: string): FabricationRecipe['assemblySteps'] => {
+    const recipe = referenceRecipeForType(mechanism.type);
+    if (recipe.exportReady && recipe.assemblySteps.length) {
+        return recipe.assemblySteps.map(step => ({
+            ...step,
+            boardCoordinate: step.coords[0] ?? boardCoordinate,
+            zMm: step.zMm ?? 0
+        }));
+    }
     const plan = fabricationRenderPlanForMechanism(mechanism);
     const moduleLabel = `${mechanism.type} prebuilt module`;
     return [
@@ -427,6 +445,9 @@ export const prefabAssemblySteps = (mechanism: MechanismConfig, boardCoordinate:
             role: 'prefab-module',
             boardCoordinate,
             zMm: 0,
+            coords: [boardCoordinate],
+            coordRoles: ['board'],
+            action: 'snap-module',
             instruction: `Snap the pre-fabricated ${mechanism.type} module onto board hole ${boardCoordinate}; use this as the beginner default before cutting custom parts.`
         },
         ...plan.layers.map((layer, index) => ({
@@ -435,6 +456,9 @@ export const prefabAssemblySteps = (mechanism: MechanismConfig, boardCoordinate:
             role: layer.role,
             boardCoordinate,
             zMm: Number((layer.z * 10).toFixed(1)),
+            coords: [boardCoordinate],
+            coordRoles: ['stack'],
+            action: 'stack-layer',
             instruction: layer.role === 'clip'
                 ? `Lock ${layer.label} at ${boardCoordinate} to keep the stack captured without binding.`
                 : layer.role === 'spacer'
@@ -502,6 +526,8 @@ export const validateForFabrication = (project: ProjectState) => {
         if (corners.some(p => !insideSheet(p))) add('warning', `${part.id}: visible part extends outside sheet bounds.`, { partId, recoveryStage: 'path', recoveryAction: 'Move part inside sheet' });
     });
     activeMechanisms.forEach(m => {
+        const recipe = referenceRecipeForType(m.type);
+        if (!recipe.exportReady) add('error', `${m.id}: ${recipe.reason ?? 'mechanism is not fabrication-ready under mechanism-reference.'}`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Choose a fabrication-ready reference mechanism' });
         (bindingWarnings[m.id] ?? []).forEach(message => add('error', `${m.id}: ${message}`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Rebind mechanism target' }));
         if (!m.id) add('error', 'Mechanism missing per-instance id.', { recoveryStage: 'design', recoveryAction: 'Select or recreate mechanism' });
         if (!m.targetPartId || !m.targetPathId) add('error', `${m.id}: choose a target part and path before blueprint export.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Choose target part and path' });
@@ -513,11 +539,11 @@ export const validateForFabrication = (project: ProjectState) => {
         }
         const physicalNumbers = [m.crankLength, m.couplerLength, m.groundLength, m.rockerLength, m.sliderOffset, m.couplerPointDist, m.couplerPointAngle];
         if (m.type === '5bar' || m.type === '6bar' || m.type === 'piston') physicalNumbers.push(m.rodLength ?? Number.NaN);
-        if (m.type === 'gear' || m.type === 'planetary_gear') physicalNumbers.push(m.gearRatio ?? Number.NaN, m.speed2 ?? Number.NaN);
+        if (m.type === 'gear' || m.type === 'gear_linkage' || m.type === 'planetary_gear') physicalNumbers.push(m.gearRatio ?? Number.NaN, m.speed2 ?? Number.NaN);
         if (!physicalNumbers.every(Number.isFinite)) add('error', `${m.id}: non-finite physical dimension.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Fix mechanism dimensions' });
-        if ((m.type === 'gear' || m.type === 'planetary_gear') && (m.gearRatio ?? 0) === 0) add('error', `${m.id}: gear ratio cannot be zero.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Choose a non-zero gear ratio' });
-        if (m.type === 'gear' || m.type === 'planetary_gear') {
-            const expectedCenterDistance = m.type === 'gear' ? gearTrainPitchCenterDistance(m) : m.crankLength + m.rockerLength;
+        if ((m.type === 'gear' || m.type === 'gear_linkage' || m.type === 'planetary_gear') && (m.gearRatio ?? 0) === 0) add('error', `${m.id}: gear ratio cannot be zero.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Choose a non-zero gear ratio' });
+        if (m.type === 'gear' || m.type === 'gear_linkage' || m.type === 'planetary_gear') {
+            const expectedCenterDistance = m.type === 'gear' || m.type === 'gear_linkage' ? gearTrainPitchCenterDistance(m) : m.crankLength + m.rockerLength;
             if (Math.abs(m.groundLength - expectedCenterDistance) > Math.max(1, expectedCenterDistance * 0.03)) {
                 add(fabricationSeverity, `${m.id}: gear pitch centers must equal the ordered pitch train adjacent-radius sum.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Snap gear center distance to pitch radii' });
             }
@@ -580,7 +606,7 @@ const createRecipe = (project: ProjectState, mechanism: MechanismConfig): Fabric
                 ? `Install the cam disk and follower guide aligned to ${mechanism.groundAngle ?? 90}°; follower lift is ${(mechanism.rockerLength || mechanism.crankLength).toFixed(0)} scene units.`
                 : mechanism.type === 'rack-pinion'
                     ? `Mesh the pinion gear with the toothed rack; keep the rack guide offset ${mechanism.sliderOffset.toFixed(0)} scene units from the axle and add end stops.`
-                    : mechanism.type === 'gear' || mechanism.type === 'planetary_gear'
+                    : mechanism.type === 'gear' || mechanism.type === 'gear_linkage' || mechanism.type === 'planetary_gear'
                         ? `Mesh gears at their pitch centers; physical pitch ratio ${mechanism.type === 'planetary_gear' ? planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength).toFixed(2) : gearTrainOutputRatio(mechanism).toFixed(2)} controls output direction.`
                         : `Install ${mechanism.type} links with crank ${mechanism.crankLength.toFixed(0)} and coupler ${mechanism.couplerLength.toFixed(0)} scene units.`,
             targetPart ? `Connect output to ${targetPart.name} at anchor ${targetAnchorJointId ?? targetPart.anchorJointId} and follow path ${targetPath?.id ?? 'unassigned'}.` : 'Connect output to selected character part or leave as standalone preview.',

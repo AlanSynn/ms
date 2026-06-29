@@ -379,8 +379,9 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('assembly-guide-preview')).toContainText('No warnings');
   await expect(page.getByTestId('assembly-stack-summary')).toContainText(/^Stack: Back Clip.*S10 spacer.*Front Clip/);
   await expect(page.getByTestId('assembly-stack-summary')).not.toContainText(/Base board/);
-  await expect(page.getByTestId('prefab-assembly-steps')).toContainText('pre-fabricated');
-  await expect(page.getByTestId('prefab-assembly-steps')).toContainText('S10 spacer');
+  await expect(page.getByTestId('prefab-assembly-steps')).toContainText('Set ground pivots');
+  await expect(page.getByTestId('prefab-assembly-steps')).toContainText('L2');
+  await expect(page.getByTestId('prefab-assembly-steps')).toContainText('L4');
   await expect(page.getByTestId('prefab-assembly-steps')).toContainText(/Z \d+\.\dmm/);
   await clickStage(page, 'Blueprint');
   await expect(page.getByRole('button', { name: 'JSON', exact: true })).toBeVisible();
@@ -415,7 +416,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
     /^right_(hand|elbow)$/.test(recipe.targetAnchorJointId ?? '') &&
     recipe.targetPartName === 'Right lower arm' &&
     recipe.steps?.some(step => /Stack:|Connect output/.test(step)) &&
-    recipe.assemblySteps?.some((step: { instruction?: string }) => step.instruction?.includes('pre-fabricated')) &&
+    recipe.assemblySteps?.some((step: { instruction?: string }) => /Set ground pivots|L2|L4/.test(step.instruction ?? '')) &&
     Array.isArray(recipe.warnings)
   )).toBe(true);
 
@@ -1090,7 +1091,7 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await openWavingArmTemplate(page);
   await page.getByRole('button', { name: /Mechanism Foundry/i }).click();
   await expect(page.getByRole('heading', { name: 'Mechanism Foundry' })).toBeVisible();
-  await expect(page.locator('[data-testid^="foundry-mini-simulation-"]')).toHaveCount(10);
+  await expect(page.locator('[data-testid^="foundry-mini-simulation-"]')).toHaveCount(5);
   await expect(page.getByTestId('foundry-three-canvas')).toBeVisible();
   const threeScene = page.getByTestId('foundry-camera-rig');
   await expect(threeScene).toHaveAttribute('data-three-renderer', 'webgl');
@@ -1119,7 +1120,7 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   expect(hasWebgl, 'Foundry uses an actual WebGL canvas, not a flat SVG-only preview').toBe(true);
   await expect(page.getByTestId('workspace-player-dock')).toHaveCount(0);
   expect(Number(await threeScene.getAttribute('data-three-part-count')), 'Sandbox uses 3D fabrication-style holed bars').toBeGreaterThanOrEqual(4);
-  expect(Number(await threeScene.getAttribute('data-three-hole-count')), 'Sandbox models drilled holes in the 3D scene').toBeGreaterThanOrEqual(12);
+  expect(Number(await threeScene.getAttribute('data-three-hole-count')), 'Sandbox models drilled holes in the 3D scene').toBeGreaterThanOrEqual(10);
   await expect(page.getByTestId('foundry-depth-overlay'), 'Foundry hides the confusing floating board plane').toHaveCount(0);
   await expect(page.getByTestId('foundry-cad-plane')).toHaveCount(0);
   await expect(page.getByTestId('foundry-angle-strip'), 'Foundry no longer adds extra multi-view mini canvases over the work area').toHaveCount(0);
@@ -1179,19 +1180,14 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await page.getByText('Mechanism options').click();
 
   const foundryPhysicalMarkers: Record<string, Array<[string, number]>> = {
-    '4bar': [['data-three-part-count', 4], ['data-three-hole-count', 8]],
-    piston: [['data-three-slot-count', 1], ['data-three-hole-count', 4]],
-    yoke: [['data-three-slot-count', 2], ['data-three-hole-count', 4]],
-    'quick-return': [['data-three-slot-count', 1], ['data-three-hole-count', 4]],
-    '5bar': [['data-three-gear-count', 2], ['data-three-part-count', 4]],
-    '6bar': [['data-three-part-count', 7], ['data-three-hole-count', 22]],
-    cam: [['data-three-cam-count', 1], ['data-three-follower-count', 1]],
-    'rack-pinion': [['data-three-gear-count', 1], ['data-three-rack-count', 1], ['data-three-slot-count', 1], ['data-three-end-stop-count', 2]],
-    gear: [['data-three-gear-count', 2], ['data-three-hole-count', 8]],
-    planetary_gear: [['data-three-gear-count', 5], ['data-three-hole-count', 25]]
+    '4bar': [['data-three-part-count', 5], ['data-three-hole-count', 11]],
+    cam: [['data-three-cam-count', 1], ['data-three-follower-count', 1], ['data-three-hole-count', 8]],
+    gear: [['data-three-gear-count', 2], ['data-three-hole-count', 10]],
+    gear_linkage: [['data-three-gear-count', 2], ['data-three-hole-count', 17]],
+    planetary_gear: [['data-three-gear-count', 3], ['data-three-hole-count', 13]]
   };
 
-  for (const type of ['piston', 'yoke', 'quick-return', '5bar', '6bar', 'cam', 'rack-pinion', 'gear', 'planetary_gear', '4bar']) {
+  for (const type of ['4bar', 'cam', 'gear', 'gear_linkage', 'planetary_gear']) {
     await page.getByLabel('Foundry mechanism type').selectOption(type);
     await expect(threeScene, `${type} has its own physical 3D preview template`).toHaveAttribute('data-mechanism-type', type);
     await expect(threeScene, `${type} uses the fabrication stack as the 3D render source`).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
@@ -1214,20 +1210,12 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
       await expect(threeScene).toHaveAttribute('data-three-planetary-fixed', 'ring');
       await expect(threeScene).toHaveAttribute('data-three-planetary-input', 'sun');
       await expect(threeScene).toHaveAttribute('data-three-planetary-output', 'carrier');
+      await expect(threeScene).toHaveAttribute('data-three-planet-count', '1');
       const radii = (await threeScene.getAttribute('data-three-gear-radii') ?? '').split(',').map(Number);
-      expect(radii, 'Planetary foundry exposes sun, 3 planets, and ring radii from the fabrication convention').toHaveLength(5);
-      expect(radii[4], 'Planetary ring pitch radius equals sun + 2*planet pitch radii').toBeCloseTo(radii[0] + 2 * radii[1], 2);
+      expect(radii, 'Planetary foundry exposes sun, one G3 planet, and ring radii from the fabrication convention').toHaveLength(3);
+      expect(radii[2], 'Planetary ring pitch radius equals sun + 2*planet pitch radii').toBeCloseTo(radii[0] + 2 * radii[1], 2);
     }
   }
-  await page.getByLabel('Foundry mechanism type').selectOption('rack-pinion');
-  await page.getByRole('button', { name: 'Show Sensemaking' }).click();
-  await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Rack and pinion');
-  await page.getByRole('button', { name: 'Back to Gallery' }).click();
-  expect(Number(await threeScene.getAttribute('data-three-rack-count')), 'Rack-pinion preview shows the toothed rack fabrication part').toBeGreaterThanOrEqual(1);
-  const startRotation = await threeScene.getAttribute('data-pinion-rotation-deg');
-  await page.getByRole('button', { name: 'Play' }).click();
-  await expect.poll(async () => threeScene.getAttribute('data-pinion-rotation-deg'), { message: 'Rack-pinion pinion rotates while rack travels' }).not.toBe(startRotation);
-  await page.getByRole('button', { name: 'Pause' }).click();
   await page.getByLabel('Foundry mechanism type').selectOption('gear');
   await page.getByRole('button', { name: 'Show Sensemaking' }).click();
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Gear train');
@@ -1235,21 +1223,25 @@ test('Mechanism Foundry sensemaking shows library, partial range, and exported m
   await page.getByRole('button', { name: 'Back to Gallery' }).click();
   expect(Number(await threeScene.getAttribute('data-three-gear-count')), 'Gear preview uses toothed 3D fabrication geometry').toBeGreaterThanOrEqual(2);
   await expect(threeScene, 'Gear train uses separate drive/output rods instead of a fake center bar').toHaveAttribute('data-three-gear-train-linkage-mode', 'drive-and-output-rods');
-  await expect(threeScene, 'Gear train fabrication stack exposes both linkage rods').toHaveAttribute('data-three-stack-order', /Drive linkage.*Output linkage/);
+  await expect(threeScene, 'Gear train fabrication stack exposes both reference G3 gears').toHaveAttribute('data-three-stack-order', /Drive G3 \/ 3-space gear.*Output G3 \/ 3-space gear/);
   expect(Number(await threeScene.getAttribute('data-three-gear-pitch-center')), 'Gear pitch centers are snapped to the sum of fabrication gear radii').toBeCloseTo(Number(await threeScene.getAttribute('data-three-gear-pitch-sum')), 2);
-  await expect(threeScene, 'Default gear train is a visible G5-to-G3 ratio, not two identical gears').toHaveAttribute('data-three-gear-radii', '100.00,60.00');
+  await expect(threeScene, 'Default gear train uses the reference G3/G3 pitch radii').toHaveAttribute('data-three-gear-radii', '60.00,60.00');
+  await page.getByLabel('Foundry mechanism type').selectOption('gear_linkage');
+  await expect(threeScene, 'Gear-linkage uses an off-center G3 output crank').toHaveAttribute('data-three-gear-linkage-mode', 'off-center-output-gear-crank');
+  await expect(threeScene, 'Gear-linkage uses the output gear handle, L4 rod, and bracket').toHaveAttribute('data-three-gear-train-linkage-mode', 'output-gear-handle-l4-bracket');
+  await expect(threeScene, 'Gear-linkage stack exposes G3/G3/L4/bracket in reference order').toHaveAttribute('data-three-stack-order', /Drive G3 \/ 3-space gear.*Output G3 \/ 3-space gear.*L4 linkage.*2-hole bracket/);
+  await expect(threeScene).toHaveAttribute('data-three-gear-radii', '60.00,60.00');
+  await expect(threeScene).toHaveAttribute('data-three-linkage-pin-radius', '40.00');
   await page.getByLabel('Foundry mechanism type').selectOption('cam');
   expect(Number(await threeScene.getAttribute('data-three-cam-count')), 'Cam follower uses a cam profile, not a generic gear').toBeGreaterThanOrEqual(1);
   expect(Number(await threeScene.getAttribute('data-three-follower-count')), 'Cam follower shows its follower block').toBeGreaterThanOrEqual(1);
-  await page.getByLabel('Foundry mechanism type').selectOption('yoke');
-  expect(Number(await threeScene.getAttribute('data-three-slot-count')), 'Scotch yoke shows guide and pin-in-slot yoke slots').toBeGreaterThanOrEqual(2);
   await page.getByLabel('Foundry mechanism type').selectOption('4bar');
   await page.getByLabel('Foundry preset').selectOption('compact');
   await expect(page.getByTestId('foundry-target-summary')).toContainText('smaller footprint');
   await expect(page.getByLabel('ground number')).toHaveValue('120');
   await page.getByLabel('Foundry preset').selectOption('balanced');
   await expect(page.getByTestId('foundry-target-summary')).toContainText('general purpose linkage');
-  await expect(page.getByLabel('ground number')).toHaveValue('180');
+  await expect(page.getByLabel('ground number')).toHaveValue('160');
   await page.getByLabel('Foundry preset').selectOption('compact');
 
   for (const label of ['ground', 'crank', 'coupler', 'rocker / gear']) {
@@ -2091,19 +2083,15 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
   await expect(page.getByTestId('design-three-puppet-canvas')).toBeVisible();
 
   const centerPhysicalMarkers: Record<string, Array<[string, number]>> = {
-    '4bar': [['data-three-mechanism-link-count', 5], ['data-three-mechanism-hole-count', 15]],
+    '4bar': [['data-three-mechanism-link-count', 5], ['data-three-mechanism-hole-count', 11]],
     piston: [['data-three-slot-count', 1], ['data-three-follower-count', 1]],
-    yoke: [['data-three-slot-count', 2], ['data-three-follower-count', 1]],
-    'quick-return': [['data-three-slot-count', 1], ['data-three-mechanism-hole-count', 11]],
-    '5bar': [['data-three-gear-count', 2], ['data-three-mechanism-link-count', 6]],
-    '6bar': [['data-three-mechanism-link-count', 7], ['data-three-mechanism-hole-count', 22]],
-    cam: [['data-three-cam-count', 1], ['data-three-follower-count', 1]],
-    'rack-pinion': [['data-three-gear-count', 1], ['data-three-rack-count', 1], ['data-three-slot-count', 1], ['data-three-end-stop-count', 2]],
-    gear: [['data-three-gear-count', 2], ['data-three-mechanism-hole-count', 14]],
-    planetary_gear: [['data-three-gear-count', 5], ['data-three-mechanism-hole-count', 25]]
+    cam: [['data-three-cam-count', 1], ['data-three-follower-count', 1], ['data-three-mechanism-hole-count', 8]],
+    gear: [['data-three-gear-count', 2], ['data-three-mechanism-hole-count', 10]],
+    gear_linkage: [['data-three-gear-count', 2], ['data-three-mechanism-hole-count', 17]],
+    planetary_gear: [['data-three-gear-count', 3], ['data-three-mechanism-hole-count', 13]]
   };
 
-  for (const type of ['4bar', 'piston', 'yoke', 'quick-return', '5bar', '6bar', 'cam', 'rack-pinion', 'gear', 'planetary_gear']) {
+  for (const type of ['4bar', 'piston', 'cam', 'gear', 'gear_linkage', 'planetary_gear']) {
     const before = Object.fromEntries(await Promise.all(centerPhysicalMarkers[type].map(async ([attr]) => [attr, Number(await designPuppet.getAttribute(attr)) || 0])));
     await page.getByRole('button', { name: type, exact: true }).click();
     await expect(designPuppet, `${type} design renderer uses the shared fabrication stack`).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
@@ -2125,8 +2113,8 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
     }
   }
 
-  expect(Number(await designPuppet.getAttribute('data-three-physical-template-count')), 'Center workspace tracks physical templates, not dummy overlays').toBeGreaterThanOrEqual(10);
-  await expect(designPuppet, 'Preview advertises the full mechanism renderer union, including the internal crank primitive').toHaveAttribute('data-three-supported-mechanism-types', /crank/);
+  expect(Number(await designPuppet.getAttribute('data-three-physical-template-count')), 'Center workspace tracks physical templates, not dummy overlays').toBeGreaterThanOrEqual(7);
+  await expect(designPuppet, 'Preview advertises exactly the reference authorable mechanism types').toHaveAttribute('data-three-supported-mechanism-types', '4bar,piston,cam,gear,gear_linkage,planetary_gear');
   await expect.poll(async () => Number(await designPuppet.getAttribute('data-three-render-triangles')), { message: 'center WebGL renderer draws real 3D fabrication triangles' }).toBeGreaterThan(0);
 
   const numAttr = async (attr: string) => Number(await designPuppet.getAttribute(attr));
@@ -2207,37 +2195,15 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
   const gearSecondaryDelta = deltaDeg(gearTelemetry.secondary, gearSecondaryStart);
   expect(circularDeltaError(gearSecondaryDelta, gearPrimaryDelta * gearTelemetry.gearRatio), 'gear train rotates by the live physical pitch-radius ratio').toBeLessThan(1.25);
 
-  await page.getByRole('button', { name: '5bar', exact: true }).click();
-  await expect(designPuppet).toHaveAttribute('data-three-selected-mechanism-type', '5bar');
-  const { startTelemetry: fiveStartTelemetry, motionSample: fiveTelemetry } = await scrubToMotionSample(10, 20, 'five-bar scrubber updates secondary crank phase');
-  const fiveStart = fiveStartTelemetry.primary;
-  const fiveSecondaryStart = fiveStartTelemetry.secondary;
-  const fivePrimaryDelta = deltaDeg(fiveTelemetry.primary, fiveStart);
-  const fiveSecondaryDelta = deltaDeg(fiveTelemetry.secondary, fiveSecondaryStart);
-  expect(circularDeltaError(fiveSecondaryDelta, fiveTelemetry.secondarySpeed * fivePrimaryDelta), 'five-bar second crank follows speed2 rather than generic opposite rotation').toBeLessThan(0.75);
+  await page.getByRole('button', { name: 'gear_linkage', exact: true }).click();
+  await expect(designPuppet).toHaveAttribute('data-three-selected-mechanism-type', 'gear_linkage');
+  await expect(designPuppet).toHaveAttribute('data-three-gear-linkage-mode', 'off-center-output-gear-crank');
+  await expect(designPuppet).toHaveAttribute('data-three-linkage-pin-radius', '40.00');
+  const { startTelemetry: gearLinkageStartTelemetry, motionSample: gearLinkageTelemetry } = await scrubToMotionSample(10, 20, 'gear-linkage scrubber updates output gear crank linkage');
+  const gearLinkagePrimaryDelta = deltaDeg(gearLinkageTelemetry.primary, gearLinkageStartTelemetry.primary);
+  const gearLinkageSecondaryDelta = deltaDeg(gearLinkageTelemetry.secondary, gearLinkageStartTelemetry.secondary);
+  expect(circularDeltaError(gearLinkageSecondaryDelta, gearLinkagePrimaryDelta * gearLinkageTelemetry.gearRatio), 'gear-linkage output gear rotates by the live physical pitch-radius ratio').toBeLessThan(1.25);
 
-  await page.getByRole('button', { name: 'rack-pinion', exact: true }).click();
-  await expect(designPuppet).toHaveAttribute('data-three-selected-mechanism-type', 'rack-pinion');
-  await ensureDesignPaused();
-  await setWorkspaceScrubber(25);
-  const rackStart = {
-    x: await numAttr('data-three-rack-x'),
-    y: await numAttr('data-three-rack-y'),
-    guideX: await numAttr('data-three-rack-guide-x'),
-    guideY: await numAttr('data-three-rack-guide-y'),
-    stopAX: await numAttr('data-three-end-stop-a-x'),
-    stopAY: await numAttr('data-three-end-stop-a-y'),
-    stopBX: await numAttr('data-three-end-stop-b-x'),
-    stopBY: await numAttr('data-three-end-stop-b-y')
-  };
-  await setWorkspaceScrubber(40);
-  await expect.poll(async () => {
-    const telemetry = await readTelemetry();
-    return Math.hypot(telemetry.rackX - rackStart.x, telemetry.rackY - rackStart.y);
-  }, { message: 'rack travels through a fixed guide' }).toBeGreaterThan(4);
-  expect(Math.hypot(await numAttr('data-three-rack-guide-x') - rackStart.guideX, await numAttr('data-three-rack-guide-y') - rackStart.guideY), 'rack guide stays fixed while the rack slides').toBeLessThan(0.01);
-  expect(Math.hypot(await numAttr('data-three-end-stop-a-x') - rackStart.stopAX, await numAttr('data-three-end-stop-a-y') - rackStart.stopAY), 'rack end stop A stays fixed').toBeLessThan(0.01);
-  expect(Math.hypot(await numAttr('data-three-end-stop-b-x') - rackStart.stopBX, await numAttr('data-three-end-stop-b-y') - rackStart.stopBY), 'rack end stop B stays fixed').toBeLessThan(0.01);
   expectCleanPage(pageErrors, consoleErrors);
 });
 

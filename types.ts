@@ -1,4 +1,4 @@
-export type MechanismType = 'crank' | '4bar' | 'piston' | 'yoke' | 'quick-return' | '5bar' | '6bar' | 'cam' | 'rack-pinion' | 'gear' | 'planetary_gear';
+export type MechanismType = 'crank' | '4bar' | 'piston' | 'yoke' | 'quick-return' | '5bar' | '6bar' | 'cam' | 'rack-pinion' | 'gear' | 'gear_linkage' | 'planetary_gear';
 export type AppStage = 'character' | 'path' | 'foundry' | 'design' | 'blueprint' | 'assembly' | 'options';
 
 export interface Point {
@@ -70,7 +70,7 @@ export interface MechanismConfig {
         gridPitchMm?: number;
         sceneAnchor?: Point;
         targetPathId?: string;
-        requiredParts?: Array<{ name: string; quantity: number }>;
+        requiredParts?: FabricationPartRequirement[];
         warnings?: string[];
     };
     foundryExport?: FoundryExportPackage;
@@ -224,6 +224,23 @@ export interface ProcessingStatus {
     error?: string;
 }
 
+export interface FabricationPartRequirement {
+    name: string;
+    quantity: number;
+    label?: string;
+    count?: number;
+    part?: string;
+    category?: string;
+    key?: string;
+}
+
+export interface AssemblyStepStackItem {
+    order: number;
+    label: string;
+    role: string;
+    part?: string;
+}
+
 export interface FabricationRecipe {
     mechanismId: string;
     type: MechanismType;
@@ -236,7 +253,7 @@ export interface FabricationRecipe {
     board: { col: number; row: number; xMm: number; yMm: number; valid?: boolean };
     sceneAnchor: Point;
     offsetFromBoardMm: Point;
-    requiredParts: Array<{ name: string; quantity: number }>;
+    requiredParts: FabricationPartRequirement[];
     steps: string[];
     assemblySteps: Array<{
         index: number;
@@ -245,6 +262,12 @@ export interface FabricationRecipe {
         boardCoordinate: string;
         zMm: number;
         instruction: string;
+        title?: string;
+        action?: string;
+        coords?: string[];
+        coordRoles?: string[];
+        check?: string;
+        stack?: AssemblyStepStackItem[];
     }>;
     warnings: string[];
 }

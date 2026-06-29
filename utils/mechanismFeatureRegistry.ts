@@ -63,6 +63,7 @@ const roleForType = (type: MechanismType): MechanismFeatureRole => {
         case 'rack-pinion':
             return 'linear-guide';
         case 'gear':
+        case 'gear_linkage':
         case 'planetary_gear':
             return 'gear-train';
         case 'cam':
@@ -94,8 +95,9 @@ const editableParametersForType = (type: MechanismType): Array<keyof MechanismCo
         case 'rack-pinion':
             return ['crankLength', 'sliderOffset', 'rodLength', 'rockerLength', 'phase'];
         case 'gear':
+        case 'gear_linkage':
         case 'planetary_gear':
-            return ['crankLength', 'groundLength', 'rockerLength', 'gearTrainRadii', 'driverGroupId', 'driverPhaseOffset', 'phase'];
+            return ['driverGroupId', 'driverPhaseOffset', 'phase'];
         case 'cam':
             return ['crankLength', 'rockerLength', 'sliderOffset', 'phase'];
         case '5bar':
@@ -114,15 +116,17 @@ const draggableHandlesForType = (type: MechanismType): MechanismDragHandle[] => 
         case 'piston':
         case 'yoke':
         case 'quick-return':
-        case 'gear':
             return [...base, 'P2', 'J2', 'Effector'];
+        case 'gear':
+        case 'gear_linkage':
+            return ['P1'];
         case '5bar':
         case '6bar':
             return [...base, 'P2', 'J2', 'Aux', 'Effector'];
         case 'cam':
             return [...base, 'P2'];
         case 'planetary_gear':
-            return [...base, 'J2', 'Effector'];
+            return ['P1'];
         case 'rack-pinion':
             return [...base, 'Effector'];
         default:

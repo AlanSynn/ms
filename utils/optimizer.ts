@@ -527,13 +527,14 @@ export const generateSmartConfig = (targetPath?: Point[], forcedType?: Mechanism
         config.rockerLength = Math.max(s(0.9), config.crankLength * (2 * Math.PI + 2.2));
         config.sliderOffset = Math.max(config.crankLength + 8, s(0.25));
         config.couplerPointAngle = 0;
-    } else if (type === 'gear') {
+    } else if (type === 'gear' || type === 'gear_linkage') {
         config.rockerLength = s(0.25);
         config.gearTrainRadii = [config.crankLength, config.rockerLength];
         config.groundLength = gearTrainPitchCenterDistance(config);
         config.gearRatio = gearTrainOutputRatio(config);
         config.speed2 = config.gearRatio;
-        config.couplerLength = 0;
+        if (type === 'gear') config.couplerLength = 0;
+        else config.couplerLength = s(0.65);
     } else if (type === 'planetary_gear') {
         config.rockerLength = s(0.18);
         config.groundLength = config.crankLength + config.rockerLength;
@@ -732,21 +733,22 @@ export const mutateConfig = (config: MechanismConfig, temperature: number = 1.0,
     if (newConfig.type === '6bar') {
         enforceSixBarConstraints(newConfig);
     }
-    if (newConfig.type === 'gear' || newConfig.type === 'planetary_gear') {
-        newConfig.couplerLength = 0;
-        if (newConfig.type === 'gear') {
+    if (newConfig.type === 'gear' || newConfig.type === 'gear_linkage' || newConfig.type === 'planetary_gear') {
+        if (newConfig.type !== 'gear_linkage') newConfig.couplerLength = 0;
+        if (newConfig.type === 'gear' || newConfig.type === 'gear_linkage') {
             const idlers = Array.isArray(newConfig.gearTrainRadii) && newConfig.gearTrainRadii.length > 2
                 ? newConfig.gearTrainRadii.slice(1, -1)
                 : [];
             newConfig.gearTrainRadii = [newConfig.crankLength, ...idlers, newConfig.rockerLength];
             newConfig.groundLength = gearTrainPitchCenterDistance(newConfig);
             newConfig.gearRatio = gearTrainOutputRatio(newConfig);
+            if (newConfig.type === 'gear_linkage') newConfig.couplerLength = Math.max(5, Math.abs(newConfig.couplerLength));
         } else {
             newConfig.groundLength = newConfig.crankLength + newConfig.rockerLength;
             newConfig.gearRatio = planetaryCarrierOutputRatio(newConfig.crankLength, newConfig.rockerLength);
             newConfig.speed2 = planetaryPlanetSpinRatio(newConfig.crankLength, newConfig.rockerLength);
         }
-        if (newConfig.type === 'gear') newConfig.speed2 = newConfig.gearRatio ?? newConfig.speed2;
+        if (newConfig.type === 'gear' || newConfig.type === 'gear_linkage') newConfig.speed2 = newConfig.gearRatio ?? newConfig.speed2;
     }
     if (newConfig.type === 'rack-pinion') {
         newConfig.groundLength = 0;
