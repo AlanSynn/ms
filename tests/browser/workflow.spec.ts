@@ -24,10 +24,11 @@ const dismissWelcomeSplash = async (page: Page) => {
   });
 };
 
-const openCharacterScreen = async (page: Page) => {
+const openCharacterScreen = async (page: Page, options: { loadStarter?: boolean } = { loadStarter: true }) => {
   await dismissWelcomeSplash(page);
   if (await page.getByTestId('getting-started-dialog').count()) {
-    await page.getByRole('button', { name: 'Skip to editor' }).click();
+    if (options.loadStarter !== false) await page.getByRole('button', { name: /Open humanoid starter/i }).click();
+    else await page.getByRole('button', { name: 'Skip to editor' }).click();
   }
   if (!(await page.getByTestId('character-screen').count())) {
     await page.getByRole('button', { name: /^Character$/i }).click();
@@ -159,10 +160,11 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('getting-started-gallery')).toHaveCount(0);
   await expect(page.getByText('Start with character art')).toHaveCount(0);
   await expect(page.getByTestId('character-status-dock')).toHaveCount(0);
-  await expect(page.getByTestId('character-part-list')).toContainText('Right lower arm');
-  await expect(page.getByTestId('character-setup-panel')).toContainText('Part');
-  await expect(page.getByTestId('part-art-controls')).toContainText('Artwork surface');
-  await expect(page.getByLabel('Art width number')).toBeVisible();
+  await expectProjectCounts(page, 0, 0, 0);
+  await expect(page.getByTestId('character-part-list')).not.toContainText('Right lower arm');
+  await expect(page.getByTestId('character-setup-panel')).toContainText('No part selected');
+  await expect(page.getByTestId('part-art-controls')).toHaveCount(0);
+  await expect(page.getByLabel('Art width number')).toHaveCount(0);
   await expect(page.getByText('parts_info.json package artifact')).toBeHidden();
   await expect(page.getByTestId('onboarding-import-input')).toBeAttached();
 
@@ -700,12 +702,11 @@ test('Create from image upload creates a reviewed character package in browser',
   await expect(page.getByRole('button', { name: 'Use it' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Use it' }).click();
-  await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
-  await expect(page.getByTestId('novice-path-panel')).toContainText('Draw path');
-  await expect(page.getByRole('heading', { name: 'Draw path' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Path Editor' })).toHaveCount(0);
   await expectProjectCounts(page, 10, 0, 0);
-  await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
-  const generatedPuppet = page.getByTestId('path-three-puppet-state');
+  await expect(page.getByTestId('character-three-puppet-canvas')).toBeVisible();
+  const generatedPuppet = page.getByTestId('character-three-puppet-state');
   await expect(generatedPuppet).toHaveAttribute('data-part-outline-mode', 'model-or-user-contour-with-fabrication-fallback');
   await expect(generatedPuppet).toHaveAttribute('data-puppet-mode', 'thick-flat-assembly');
   await expect(generatedPuppet).toHaveAttribute('data-three-part-surface', 'solid-cut-plates');
@@ -768,9 +769,10 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
   await page.getByTestId('blank-package-input').setInputFiles(packageFiles);
   await expect(page.getByTestId('character-status-dock').getByText('Ready', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Use it' }).click();
-  await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Path Editor' })).toHaveCount(0);
   await expectProjectCounts(page, 1, 0, 0);
-  await expect(page.getByText('Draw or track a path.')).toBeVisible();
+  await expect(page.getByTestId('character-part-list')).toContainText('Fixture body');
 
   await page.getByRole('button', { name: /^Character$/i }).click();
   await page.getByTestId('blank-package-input').setInputFiles('tests/fixtures/package/char_cfg.yaml');
@@ -807,6 +809,9 @@ test('Replacement package preserves compatible mechanisms and rebound paths', as
   await expect(page.getByText('replacement preserves compatible mechanisms')).toBeVisible();
   await page.getByRole('button', { name: 'Use it' }).click();
 
+  await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toHaveCount(0);
+  await clickStage(page, 'Mechanism Design');
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
   await expectProjectCounts(page, 1, 1, 1);
   await expect(page.getByRole('heading', { name: 'Mechanisms' })).toBeVisible();

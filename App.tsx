@@ -28,6 +28,7 @@ import { evaluateFitness, generateSmartConfig, mutateConfig } from './utils/opti
 import {
     applyProjectAction,
     createDefaultMechanism,
+    createEmptyProject,
     createProjectFromProcessed,
     createSampleProject,
     downloadText,
@@ -278,7 +279,7 @@ const isTypingShortcutTarget = (target: EventTarget | null) => target instanceof
 const App: React.FC = () => {
     const [projectHistory, setProjectHistory] = useState<ProjectHistoryState>(() => {
         projectSelfCheck();
-        return { present: createSampleProject(), past: [], future: [] };
+        return { present: createEmptyProject(), past: [], future: [] };
     });
     const project = projectHistory.present;
     const setProject = (update: React.SetStateAction<ProjectState>, options: { history?: boolean; resetHistory?: boolean } = {}) => {
@@ -445,7 +446,7 @@ const App: React.FC = () => {
 
     const queueCharacterReview = (next: ProjectState, summary: string) => {
         const reviewed = replaceCharacter ? replaceCharacterProject(next, project, stage) : next;
-        setPendingCharacter({ project: reviewed, summary, returnStage: replaceCharacter ? (reviewed.mechanisms.length ? 'design' : 'path') : 'path' });
+        setPendingCharacter({ project: reviewed, summary, returnStage: 'character' });
         dispatch({ type: 'set_processing', processing: { stage: 'ready', message: 'Check character', progress: 100 } });
         setShowWelcome(false);
         setStage('character');
@@ -630,9 +631,9 @@ const App: React.FC = () => {
             return;
         }
         setPendingCharacter(null);
-        setProject(createSampleProject(), { resetHistory: true });
+        setProject(createEmptyProject(), { resetHistory: true });
         setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
-        setCommandStatus('Started a fresh template project');
+        setCommandStatus('Started a fresh empty project');
         setShowWelcome(!shouldHideWelcome());
         setShowGettingStarted(false);
         setStage('character');

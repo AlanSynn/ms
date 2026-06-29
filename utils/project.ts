@@ -336,9 +336,9 @@ export const createEmptyProject = (): ProjectState => ({
     partOrder: [],
     skeleton: null,
     paths: {},
-    mechanisms: [createDefaultMechanism('4bar', 'mech-1')],
+    mechanisms: [],
     settings: defaultSettings(),
-    selectedMechanismId: 'mech-1',
+    selectedMechanismId: undefined,
     processing: idleProcessing()
 });
 
