@@ -1063,6 +1063,7 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
     const [dragPoint, setDragPoint] = useState<number | null>(null);
     const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
     const [isFreeDrawing, setIsFreeDrawing] = useState(false);
+    const [pathViewMode, setPathViewMode] = useState<'2d' | '3d'>('3d');
     const pathLocked = Boolean(selectedPart?.locked);
     const pointCount = selectedPath?.points.length ?? 0;
     const jointOptions = selectedPart ? motionAnchorJointIds(project, selectedPart.id) : [];
@@ -1139,6 +1140,18 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
         setSelectedPoint(null);
     };
     const clearPath = () => selectedPath && !pathLocked && dispatch({ type: 'delete_path', pathId: selectedPath.id });
+    const switchPathView = (mode: '2d' | '3d') => {
+        setPathViewMode(mode);
+        if (mode === '3d' && drawMode) {
+            stopDrawing();
+            setDrawMode(false);
+        }
+    };
+    const togglePathDrawing = () => {
+        setPathViewMode('2d');
+        if (drawMode) stopDrawing();
+        setDrawMode(!drawMode);
+    };
     const addLayer = () => {
         const base = selectedPart;
         const id = uid('part');
@@ -1179,7 +1192,7 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
                     {sortedParts.map(p => <option value={p.id} key={p.id}>{p.name}</option>)}
                 </select>
                 <div className="mt-3 flex flex-col gap-2">
-                    <button className={drawMode ? 'btn-primary active' : 'btn-secondary'} aria-label={drawMode ? 'Drawing free path' : 'Draw free path'} disabled={pathLocked} onClick={() => setDrawMode(!drawMode)}><Route size={16}/>{drawMode ? 'Drawing' : 'Draw'}</button>
+                    <button className={drawMode ? 'btn-primary active' : 'btn-secondary'} aria-label={drawMode ? 'Drawing free path' : 'Draw free path'} disabled={pathLocked} onClick={togglePathDrawing}><Route size={16}/>{drawMode ? 'Drawing' : 'Draw'}</button>
                     <button className="btn-secondary" disabled={!selectedPath || pathLocked} onClick={clearPath}><Trash2 size={16}/> Clear path</button>
                     <button className="btn-secondary" disabled={pointCount < 3 || pathLocked} onClick={onNext}>Foundry</button>
                 </div>
@@ -1227,7 +1240,11 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
         </div>),
             canvas: canvasPane(<div className="path-canvas-shell canvas-workspace overflow-hidden p-0">
             <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
-            {drawMode ? <SceneSketch svgRef={svgRef} project={project} selectedPath={selectedPath} dragPoint={dragPoint} selectedPoint={selectedPoint} setDragPoint={setDragPoint} setSelectedPoint={setSelectedPoint} onPointMove={movePoint} onPointUp={stopDrawing} onCanvasDown={onCanvasDown} onJointPick={pickIkJoint} dispatch={dispatch} drawMode={drawMode} pathLocked={pathLocked} isPlaying={isPlaying} angle={angle} viewport={viewport} setViewport={setViewport}/> : <ThreePuppetPreview project={project} animatedParts={pathPreview?.parts ?? {}} skeleton={pathPreview?.skeleton ?? project.skeleton} angle={angle} viewport={viewport} setViewport={setViewport} inputMode="always" testId="path-three-puppet" />}
+            <div className="path-view-switch" data-testid="path-view-switch" aria-label="Path view mode" onMouseDown={event => event.stopPropagation()} onPointerDown={event => event.stopPropagation()}>
+                <button type="button" data-testid="path-view-2d" className={pathViewMode === '2d' ? 'active' : ''} aria-pressed={pathViewMode === '2d'} onClick={() => switchPathView('2d')}>2D</button>
+                <button type="button" data-testid="path-view-3d" className={pathViewMode === '3d' ? 'active' : ''} aria-pressed={pathViewMode === '3d'} onClick={() => switchPathView('3d')}>3D</button>
+            </div>
+            {pathViewMode === '2d' ? <SceneSketch svgRef={svgRef} project={project} selectedPath={selectedPath} dragPoint={dragPoint} selectedPoint={selectedPoint} setDragPoint={setDragPoint} setSelectedPoint={setSelectedPoint} onPointMove={movePoint} onPointUp={stopDrawing} onCanvasDown={onCanvasDown} onJointPick={pickIkJoint} dispatch={dispatch} drawMode={drawMode} pathLocked={pathLocked} isPlaying={isPlaying} angle={angle} viewport={viewport} setViewport={setViewport}/> : <ThreePuppetPreview project={project} animatedParts={pathPreview?.parts ?? {}} skeleton={pathPreview?.skeleton ?? project.skeleton} angle={angle} viewport={viewport} setViewport={setViewport} inputMode="always" testId="path-three-puppet" cameraPresets={['iso']} />}
         </div>),
             inspector: inspectorPane(<div className="path-inspector stage-pane-stack">
             <div>
@@ -1371,7 +1388,7 @@ const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, 
         {selectedPath?.visible && selectedPath.points.map((pt, i) => {
             const p = sceneToSvg(pt);
             const active = dragPoint === i || selectedPoint === i;
-            return <circle data-canvas-interactive="true" key={`${selectedPath.id}-${i}`} cx={p.x} cy={p.y} r={active ? 8 : 6} fill={active ? '#5a6cff' : '#fff'} stroke="#5a6cff" strokeWidth="3" pointerEvents={drawMode ? 'none' : undefined} className={pathLocked ? 'cursor-not-allowed' : 'cursor-grab'} onClick={e => e.stopPropagation()} onMouseDown={e => { e.stopPropagation(); if (!pathLocked) { setSelectedPoint(i); setDragPoint(i); } }} />;
+            return <circle data-canvas-interactive="true" key={`${selectedPath.id}-${i}`} cx={p.x} cy={p.y} r={active ? 8 : 6} fill={active ? '#5a6cff' : '#fff'} stroke="#5a6cff" strokeWidth="3" className={pathLocked ? 'cursor-not-allowed' : 'cursor-grab'} onClick={e => e.stopPropagation()} onMouseDown={e => { e.stopPropagation(); if (!pathLocked) { setSelectedPoint(i); setDragPoint(i); } }} />;
         })}
         {pathPreview?.target && (() => {
             const target = pathPreview.target;

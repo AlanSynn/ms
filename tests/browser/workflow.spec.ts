@@ -185,19 +185,25 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(pathPuppet).toHaveAttribute('data-three-renderer', 'webgl');
   await expect(pathPuppet).toHaveAttribute('data-camera-preset', 'iso');
   await expect(page.getByTestId('path-three-puppet-view-top')).toHaveCount(0);
-  await page.getByTestId('path-three-puppet-view-2d').click();
-  await expect(pathPuppet).toHaveAttribute('data-camera-preset', 'front');
-  await expect(pathPuppet).toHaveAttribute('data-view-mode', '2d');
+  await expect(page.getByTestId('path-three-puppet-view-2d')).toHaveCount(0);
+  await page.getByTestId('path-view-2d').click();
+  await expect(page.getByTestId('path-view-2d')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('path-canvas')).toBeVisible();
+  await expect(page.getByTestId('path-three-puppet-state')).toHaveCount(0);
+  await expect(page.getByTestId('path-shape-controls')).toBeVisible();
+  await expect(page.getByLabel('Smoothness number')).toBeVisible();
   const zoomReadout = page.getByTestId('canvas-zoom-readout');
   const readZoomPercent = async () => Number((await zoomReadout.textContent())?.replace('%', '') ?? '0');
   const zoomBefore = await readZoomPercent();
-  const pathCanvasForZoom = page.getByTestId('path-three-puppet-canvas');
+  const pathCanvasForZoom = page.getByTestId('path-canvas');
   const pathBox = await pathCanvasForZoom.boundingBox();
-  if (!pathBox) throw new Error('path 3D canvas box missing');
+  if (!pathBox) throw new Error('path 2D canvas box missing');
   await page.mouse.move(pathBox.x + pathBox.width * 0.55, pathBox.y + pathBox.height * 0.45);
   await page.mouse.wheel(0, -360);
   await expect.poll(readZoomPercent).toBeGreaterThan(zoomBefore);
-  await page.getByTestId('path-three-puppet-view-3d').click();
+  await page.getByTestId('path-view-3d').click();
+  await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
+  await expect(page.getByTestId('path-canvas')).toHaveCount(0);
   await expect(pathPuppet).toHaveAttribute('data-camera-preset', 'iso');
   await expect(pathPuppet).toHaveAttribute('data-view-mode', '3d');
   const yawBefore = Number(await pathPuppet.getAttribute('data-camera-yaw'));
@@ -253,8 +259,12 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await page.getByTestId('project-file-input').setInputFiles(projectDownloadPath!);
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
 
+  await page.getByTestId('path-view-3d').click();
+  await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
   await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
+  await expect(page.getByTestId('path-view-2d')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('path-three-puppet-state')).toHaveCount(0);
+  await expect(page.locator('[data-testid="path-canvas"], [data-testid="path-three-puppet-canvas"]')).toHaveCount(1);
   const pathCanvas = page.getByTestId('path-canvas');
   await expect(pathCanvas).toBeVisible();
   await pathCanvas.click({ position: { x: 260, y: 220 } });
@@ -1028,8 +1038,12 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await expect(page.getByTestId('free-draw-status')).toContainText('0 points · none');
   await expect(page.getByText('Draw or track a path.')).toBeVisible();
 
+  await page.getByTestId('path-view-3d').click();
+  await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
   await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
+  await expect(page.getByTestId('path-view-2d')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('path-three-puppet-state')).toHaveCount(0);
+  await expect(page.locator('[data-testid="path-canvas"], [data-testid="path-three-puppet-canvas"]')).toHaveCount(1);
   const pathCanvas = page.getByTestId('path-canvas');
   const canvasBox = await pathCanvas.boundingBox();
   expect(canvasBox, 'path canvas box for free-draw gesture').toBeTruthy();
@@ -1070,12 +1084,14 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
 
   const firstArmPoint = pathCanvas.locator('circle[stroke="#5a6cff"]').first();
   const firstArmPointBox = await firstArmPoint.boundingBox();
-  expect(firstArmPointBox, 'first arm point can start a free-draw stroke').toBeTruthy();
+  expect(firstArmPointBox, 'first arm point can be edited directly in 2D view').toBeTruthy();
+  const firstArmPointCx = await firstArmPoint.getAttribute('cx');
   await page.mouse.move(firstArmPointBox!.x + firstArmPointBox!.width / 2, firstArmPointBox!.y + firstArmPointBox!.height / 2);
   await page.mouse.down();
   await page.mouse.move(firstArmPointBox!.x + firstArmPointBox!.width / 2 + 34, firstArmPointBox!.y + firstArmPointBox!.height / 2 + 18);
   await page.mouse.up();
-  await expect(page.getByTestId('free-draw-status')).toContainText(/7 points .*path-right-arm/);
+  await expect(firstArmPoint).not.toHaveAttribute('cx', firstArmPointCx ?? '');
+  await expect(page.getByTestId('free-draw-status')).toContainText(/5 points .*path-right-arm/);
 
   await page.getByTestId('novice-path-panel').getByText('More', { exact: true }).click();
   const stopButtonBeforePreview = page.getByTestId('novice-path-panel').getByRole('button', { name: /Stop/i });
@@ -1099,7 +1115,7 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await expect(page.getByRole('button', { name: 'Clear path', exact: true })).toBeDisabled();
   await expect(page.getByLabel('X number').first()).toBeDisabled();
   await page.getByTestId('path-canvas').click({ position: { x: 260, y: 220 } });
-  await expect(page.getByTestId('free-draw-status')).toContainText(/7 points .*path-right-arm.*locked part/);
+  await expect(page.getByTestId('free-draw-status')).toContainText(/5 points .*path-right-arm.*locked part/);
 
   await partLocked.uncheck();
   await page.locator('label').filter({ hasText: 'Selected part anchor' }).locator('select').selectOption('right_elbow');
@@ -1605,6 +1621,7 @@ test('Mobile path editor keeps Draw free path action above the canvas', async ({
   const drawButton = page.getByRole('button', { name: 'Draw free path', exact: true });
   const canvas = page.getByTestId('path-three-puppet-canvas');
   await expect(drawButton).toBeVisible();
+  await expect(page.getByTestId('path-view-switch')).toBeVisible();
   await expect(canvas).toBeVisible();
   const drawBox = await drawButton.boundingBox();
   const canvasBox = await canvas.boundingBox();
@@ -1780,7 +1797,7 @@ test('Workflow tabs keep left workflow, center canvas, and right inspector roles
     expect(centerBox!.width, 'center workspace dominates the inspector').toBeGreaterThan(rightBox!.width);
   };
 
-  await assertPaneContract('Draw path', '3D', 'Selected inspector');
+  await assertPaneContract('Draw path', '3D', 'Selected inspector', '.canvas-zoom-toolbar, .path-view-switch');
   await expect(page.getByTestId('stage-left-pane')).toContainText('Rig setup');
   await expect(page.getByTestId('stage-right-inspector')).not.toContainText(/Add body part|Add layer|Remove layer|Add joint|New IK handle|Parts \+ skeleton/);
 
@@ -2271,6 +2288,12 @@ test('Simplified shared canvas stays non-destructive and exports blueprint', asy
   await expect(page.getByTestId('toon-renderer-shell')).toHaveCount(0);
   await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
   await expect(page.getByTestId('path-canvas')).toHaveCount(0);
+  await page.getByTestId('path-view-2d').click();
+  await expect(page.getByTestId('path-canvas')).toBeVisible();
+  await expect(page.getByTestId('path-three-puppet-canvas')).toHaveCount(0);
+  await page.getByTestId('path-view-3d').click();
+  await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
+  await expect(page.getByTestId('path-canvas')).toHaveCount(0);
   await expect(page.getByTestId('canvas-zoom-readout')).toHaveText('100%');
 
   const before = await saveSnapshot();
@@ -2320,13 +2343,12 @@ test('Simplified shared canvas stays non-destructive and exports blueprint', asy
   expectCleanPage(pageErrors, consoleErrors);
 });
 
-test('Shared canvas supports wheel zoom and direct drag pan', async ({ page }) => {
+test('Shared path view supports 2D zoom and 3D direct orbit', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await openWavingArmTemplate(page);
 
-  await page.getByTestId('path-three-puppet-view-2d').click();
-  await expect(page.getByTestId('path-three-puppet-state')).toHaveAttribute('data-view-mode', '2d');
+  await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
   const canvas = page.getByTestId('path-three-puppet-canvas');
   const box = await canvas.boundingBox();
   expect(box, 'path 3D canvas can receive direct viewport gestures').toBeTruthy();
@@ -2339,21 +2361,39 @@ test('Shared canvas supports wheel zoom and direct drag pan', async ({ page }) =
   await expect(page.getByTestId('canvas-zoom-readout')).not.toHaveText(zoomBefore ?? '100%');
   await expect(state).not.toHaveAttribute('data-camera-zoom', cameraZoomBefore ?? '1.000');
 
-  const offsetBefore = await state.getAttribute('data-camera-offset-x');
+  const yawBefore = Number(await state.getAttribute('data-camera-yaw'));
   await page.mouse.move(box!.x + box!.width * 0.18, box!.y + box!.height * 0.2);
   await page.mouse.down();
   await page.mouse.move(box!.x + box!.width * 0.31, box!.y + box!.height * 0.28, { steps: 6 });
   await page.mouse.up();
-  await expect(state).not.toHaveAttribute('data-camera-offset-x', offsetBefore ?? '0.00');
+  await expect.poll(async () => Math.abs(Number(await state.getAttribute('data-camera-yaw')) - yawBefore)).toBeGreaterThan(1);
+
+  await page.getByTestId('path-view-2d').click();
+  await expect(page.getByTestId('path-view-2d')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('path-canvas')).toBeVisible();
+  await expect(page.getByTestId('path-three-puppet-state')).toHaveCount(0);
+  const svgCanvas = page.getByTestId('path-canvas');
+  const svgBox = await svgCanvas.boundingBox();
+  expect(svgBox, 'path 2D SceneSketch can receive direct viewport gestures').toBeTruthy();
+  const viewBoxBefore = await svgCanvas.getAttribute('viewBox');
+  await page.mouse.move(svgBox!.x + svgBox!.width * 0.52, svgBox!.y + svgBox!.height * 0.45);
+  await page.mouse.wheel(0, -360);
+  await expect(svgCanvas).not.toHaveAttribute('viewBox', viewBoxBefore ?? '');
 });
 
-test('Draw mode accepts free path strokes on the simplified canvas', async ({ page }) => {
+test('Draw mode forces 2D Path view and accepts free path strokes on SceneSketch', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await openWavingArmTemplate(page);
+  await page.getByTestId('path-view-3d').click();
+  await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Draw free path', exact: true })).toHaveClass(/btn-secondary/);
   await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Drawing free path', exact: true })).toHaveClass(/btn-primary active/);
+  await expect(page.getByTestId('path-view-2d')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('path-canvas')).toBeVisible();
+  await expect(page.getByTestId('path-three-puppet-canvas')).toHaveCount(0);
+  await expect(page.locator('[data-testid="path-canvas"], [data-testid="path-three-puppet-canvas"]')).toHaveCount(1);
 
   await expect(page.getByTestId('view-lens-hud')).toHaveCount(0);
   await expect(page.getByTestId('toon-renderer-shell')).toHaveCount(0);

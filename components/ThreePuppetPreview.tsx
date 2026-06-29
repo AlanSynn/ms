@@ -504,7 +504,7 @@ const mechanismGeometrySignature = (mechanisms: MechanismConfig[]) => mechanisms
   mechanism.showOutputGear
 ].join(':')).join('|');
 
-export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mechanisms, angle = 0, viewport, setViewport, inputMode = 'always', testId = 'three-puppet' }: {
+export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mechanisms, angle = 0, viewport, setViewport, inputMode = 'always', testId = 'three-puppet', cameraPresets = PUPPET_CAMERA_PRESETS }: {
   project?: ProjectState;
   animatedParts?: Record<string, BodyPartLayer>;
   skeleton?: StandardSkeleton | null;
@@ -514,6 +514,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
   setViewport?: React.Dispatch<React.SetStateAction<CanvasViewport>>;
   inputMode?: 'always' | '3d-only' | 'none';
   testId?: string;
+  cameraPresets?: Viewer3DCameraPreset[];
 }) => {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef<HTMLDivElement | null>(null);
@@ -1188,7 +1189,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       onMouseDown={event => event.stopPropagation()}
       onPointerDown={event => event.stopPropagation()}
     >
-      {PUPPET_CAMERA_PRESETS.map(preset => (
+      {cameraPresets.map(preset => (
         <button
           key={preset}
           type="button"

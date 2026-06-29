@@ -643,6 +643,16 @@ assert(appText.includes('useMemo(() => sampleFeasibleRange(landedFoundry), [land
 assert(viewportText.includes('WEBGL_PIXEL_RATIO_CAP') && appText.includes('WEBGL_PIXEL_RATIO_CAP') && threePreviewText.includes('WEBGL_PIXEL_RATIO_CAP'), 'WebGL renderer pixel ratio cap is shared across Foundry and puppet previews');
 assert(threePreviewText.includes("const PUPPET_CAMERA_PRESETS: Viewer3DCameraPreset[] = ['front', 'iso']"), 'puppet viewer toolbar exposes only the fixed 2D and orbitable 3D modes');
 assert(threePreviewText.includes('onWheel={handleViewerWheel}') && threePreviewText.includes('data-camera-yaw'), 'puppet 3D canvas exposes direct wheel zoom and orbit state for browser verification');
+const pathStageStart = appText.indexOf('stage="path"');
+const pathCanvasStart = appText.indexOf('canvas: canvasPane', pathStageStart);
+const pathInspectorStart = appText.indexOf('inspector: inspectorPane', pathCanvasStart);
+const pathCanvasBlock = appText.slice(pathCanvasStart, pathInspectorStart);
+assert(pathCanvasBlock.includes('path-view-2d') && pathCanvasBlock.includes('path-view-3d'), 'Path Editor exposes a persistent 2D/3D Path view switch');
+assert(pathCanvasBlock.includes("pathViewMode === '2d' ? <SceneSketch"), 'Path Editor 2D view uses editable SceneSketch for viewing, drawing, and point editing');
+assert(pathCanvasBlock.includes('<ThreePuppetPreview') && pathCanvasBlock.includes('testId="path-three-puppet"'), 'Path Editor 3D view uses ThreePuppetPreview');
+assert(pathCanvasBlock.includes("cameraPresets={['iso']}"), 'Path Editor 3D preview hides the preview-only 2D camera preset so editable 2D has one owner');
+assert(!pathCanvasBlock.includes('drawMode ? <SceneSketch'), 'Draw mode does not mount a special duplicate drawing canvas; it only forces the 2D Path view');
+assert(appText.includes("setPathViewMode('2d')"), 'Starting free-path drawing forces Path view back to 2D');
 assert(indexText.includes('bottom: calc(var(--ms-bottom-bars-height) + 10px)') && !indexText.includes('--ms-status-bar-height'), 'character import status dock floats 10px above the bottom status area instead of covering the canvas');
 assert(indexText.includes('.stage-player-row { position: absolute;') && appUiText.includes('data-testid="workspace-player-drag-handle"'), 'shared animation dock is an overlay with a draggable handle instead of a layout row');
 assert(appText.includes('data-three-pixel-ratio-cap') && threePreviewText.includes('data-three-pixel-ratio-cap'), '3D previews expose the pixel-ratio cap for browser performance checks');
