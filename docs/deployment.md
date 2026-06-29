@@ -1,6 +1,6 @@
 # Deployment
 
-The web build is fully local/offline after install. Production web deployment is rooted at `/` so the editor can load from the domain root; Tauri builds keep relative `./` assets.
+The web build is fully local/offline after install. The default web build is rooted at `/`; the GitHub Pages release build sets `VITE_BASE_PATH=/ms/` so MotionSmith loads from `https://alansynn.com/ms/`. Tauri builds keep relative `./` assets.
 
 ## Build
 
@@ -11,6 +11,21 @@ bun run test
 ```
 
 `vite build` copies static ONNX assets from `public/onnx/` into `dist/onnx/`. The contract test asserts `dist/onnx/pose_model.onnx` exists after a production build.
+
+
+## GitHub Pages release deploy
+
+Deployment is intentionally version-gated. Pushing to `main` does not deploy; only a tag that matches `package.json` deploys.
+
+```bash
+# after committing the release
+VERSION=$(bun -p "require('./package.json').version")
+git tag v$VERSION
+git push origin main
+git push origin v$VERSION
+```
+
+The workflow verifies `v$VERSION == package.json.version`, builds with `VITE_BASE_PATH=/ms/`, and publishes `dist/` with GitHub Pages Actions.
 
 ## CDN policy
 
