@@ -681,6 +681,10 @@ const assemblyBlock = appText.slice(assemblyStart, appText.indexOf('const Option
 assert(assemblyBlock.includes('data-testid="assembly-canvas-preview"') && assemblyBlock.includes('<AssemblyWorkbench'), 'Assembly tab renders the interactive stepper in the center canvas');
 assert(assemblyWorkbenchText.includes('data-testid="assembly-stepper-workbench"'), 'Assembly workbench exposes a testable interactive stepper surface');
 assert(assemblyPlaybackText.includes('export const pendingRecipeForMechanism') && assemblyPlaybackText.includes('buildAssemblyPlaybackSteps'), 'Assembly recipe/playback derivation lives outside App.tsx');
+assert(assemblyPlaybackText.includes("motion: 'stack-layer'") && assemblyPlaybackText.includes("motion: 'move-to-board'") && assemblyPlaybackText.includes("motion: 'connect-character'") && assemblyPlaybackText.includes("motion: 'test-motion'"), 'Assembly playback declares a visual motion mode for every build phase');
+assert(appText.includes('stepProgressRef') && appText.includes('window.requestAnimationFrame(tick)'), 'Assembly playback advances with rAF progress instead of only jumping static steps');
+assert(assemblyWorkbenchText.includes('progress = 0') && assemblyWorkbenchText.includes('data-step-progress') && assemblyWorkbenchText.includes('moduleTranslate'), 'Assembly workbench receives live progress and moves the mechanism module per step');
+assert(assemblyWorkbenchText.includes('data-testid="assembly-parts-tray"') && assemblyWorkbenchText.includes('data-testid="assembly-mount-motion"') && assemblyWorkbenchText.includes('data-testid="assembly-character-connect"') && assemblyWorkbenchText.includes('data-testid="assembly-motion-dot"'), 'Assembly workbench visualizes parts, mounting, character connection, and test motion as step-specific simulation states');
 assert(!assemblyBlock.includes('data-testid="assembly-guide-preview-frame"'), 'Assembly center no longer defaults to an iframe document preview');
 assert(assemblyBlock.includes('data-testid="assembly-guide-preview"'), 'Assembly tab keeps selected recipe detail in the right inspector');
 const oversizedCutPart: BodyPartLayer = {

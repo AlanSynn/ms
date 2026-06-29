@@ -400,6 +400,17 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('prefab-assembly-steps')).toContainText('mount-to-board');
   await expect(page.getByTestId('prefab-assembly-steps')).toContainText(/board/);
   await expect(page.getByTestId('prefab-assembly-steps')).toContainText(/Z \d+\.\dmm/);
+  const assemblyWorkbench = page.getByTestId('assembly-stepper-workbench');
+  await expect(assemblyWorkbench).toHaveAttribute('data-step-phase', 'mount-to-board');
+  await expect(page.getByTestId('assembly-mount-motion')).toBeVisible();
+  await page.getByTestId('assembly-player-overlay').getByRole('button', { name: 'Play assembly' }).click();
+  await expect.poll(async () => Number(await assemblyWorkbench.getAttribute('data-step-progress')), { message: 'assembly player animates the active step' }).toBeGreaterThan(0);
+  const pauseAssembly = page.getByTestId('assembly-player-overlay').getByRole('button', { name: 'Pause assembly' });
+  if (await pauseAssembly.count()) await pauseAssembly.click();
+  await page.getByTestId('assembly-step-list').getByRole('button', { name: /Connect character/i }).click();
+  await expect(page.getByTestId('assembly-character-connect')).toBeVisible();
+  await page.getByTestId('assembly-step-list').getByRole('button', { name: /Test motion/i }).click();
+  await expect(page.getByTestId('assembly-motion-dot')).toBeVisible();
   await clickStage(page, 'Blueprint');
   await expect(page.getByRole('button', { name: 'JSON', exact: true })).toBeVisible();
   await expect(page.getByTestId('custom-parts-export-lane').getByRole('button', { name: 'SVG', exact: true })).toBeVisible();

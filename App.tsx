@@ -2795,17 +2795,43 @@ const AssemblyGuide = ({ project, dispatch, goStage }: {
     const selectedRecipe = recipes.find(recipe => recipe.mechanismId === selectedRecipeId) ?? recipes[0];
     const [lane, setLane] = useState<AssemblyLane>(() => assemblyLaneForExportMode(project.settings.physicalKit.exportMode));
     const [stepIndex, setStepIndex] = useState(0);
+    const [stepProgress, setStepProgress] = useState(0);
+    const stepProgressRef = useRef(0);
     const [playing, setPlaying] = useState(false);
     const playbackSteps = selectedRecipe ? buildAssemblyPlaybackSteps(selectedRecipe, lane) : [];
     const currentStep = playbackSteps[Math.min(stepIndex, Math.max(0, playbackSteps.length - 1))];
+    const goAssemblyStep = (next: number | ((index: number) => number)) => {
+        stepProgressRef.current = 0;
+        setStepProgress(0);
+        setStepIndex(index => typeof next === 'function' ? next(index) : next);
+    };
     useEffect(() => {
+        stepProgressRef.current = 0;
         setStepIndex(0);
+        setStepProgress(0);
         setPlaying(false);
     }, [selectedRecipe?.mechanismId, lane]);
     useEffect(() => {
         if (!playing || playbackSteps.length < 2) return;
-        const timer = window.setInterval(() => setStepIndex(index => index >= playbackSteps.length - 1 ? 0 : index + 1), 1100);
-        return () => window.clearInterval(timer);
+        let frame = 0;
+        let last = performance.now();
+        const stepMs = 1400;
+        const tick = (time: number) => {
+            const delta = Math.min(120, time - last);
+            last = time;
+            const next = stepProgressRef.current + delta / stepMs;
+            if (next >= 1) {
+                stepProgressRef.current = 0;
+                setStepProgress(0);
+                setStepIndex(index => index >= playbackSteps.length - 1 ? 0 : index + 1);
+            } else {
+                stepProgressRef.current = next;
+                setStepProgress(next);
+            }
+            frame = window.requestAnimationFrame(tick);
+        };
+        frame = window.requestAnimationFrame(tick);
+        return () => window.cancelAnimationFrame(frame);
     }, [playing, playbackSteps.length]);
     const downloadAssemblyPdf = () => pkg && downloadText(`${pkg.id}-assembly.pdf`, pkg.assemblyGuidePdf, 'application/pdf');
     const printGuide = () => {
@@ -2845,7 +2871,7 @@ const AssemblyGuide = ({ project, dispatch, goStage }: {
                 {playbackSteps.length > 0 && <div className="mt-4 rounded-2xl bg-white p-3 shadow-sm" data-testid="assembly-step-list">
                     <div className="section-title">Steps</div>
                     <div className="mt-2 grid gap-1">
-                        {playbackSteps.map((step, index) => <button key={`${step.phase}-${step.index}`} className={`assembly-step-button ${index === stepIndex ? 'active' : ''}`} onClick={() => setStepIndex(index)}>
+                        {playbackSteps.map((step, index) => <button key={`${step.phase}-${step.index}`} className={`assembly-step-button ${index === stepIndex ? 'active' : ''}`} onClick={() => goAssemblyStep(index)}>
                             <span>{step.index}</span>{step.label}
                         </button>)}
                     </div>
@@ -2854,12 +2880,12 @@ const AssemblyGuide = ({ project, dispatch, goStage }: {
         </div>),
             canvas: canvasPane(<div className="assembly-canvas-document canvas-workspace" data-testid="assembly-canvas-preview">
             {pkg && selectedRecipe && currentStep ? <>
-                <AssemblyWorkbench recipe={selectedRecipe} lane={lane} step={currentStep} kit={project.settings.physicalKit}/>
+                <AssemblyWorkbench recipe={selectedRecipe} lane={lane} step={currentStep} kit={project.settings.physicalKit} progress={stepProgress}/>
                 <aside className="assembly-player-overlay" data-testid="assembly-player-overlay">
                     <button aria-label={playing ? 'Pause assembly' : 'Play assembly'} onClick={() => setPlaying(!playing)}>{playing ? 'Ⅱ' : '▶'}</button>
-                    <button aria-label="Previous assembly step" onClick={() => setStepIndex(index => Math.max(0, index - 1))}>←</button>
-                    <button aria-label="Next assembly step" data-testid="assembly-next-step" onClick={() => setStepIndex(index => Math.min(playbackSteps.length - 1, index + 1))}>→</button>
-                    <input aria-label="Assembly scrubber" type="range" min={0} max={Math.max(0, playbackSteps.length - 1)} value={stepIndex} onChange={event => setStepIndex(Number(event.currentTarget.value))}/>
+                    <button aria-label="Previous assembly step" onClick={() => goAssemblyStep(index => Math.max(0, index - 1))}>←</button>
+                    <button aria-label="Next assembly step" data-testid="assembly-next-step" onClick={() => goAssemblyStep(index => Math.min(playbackSteps.length - 1, index + 1))}>→</button>
+                    <input aria-label="Assembly scrubber" type="range" min={0} max={Math.max(0, playbackSteps.length - 1)} value={stepIndex} onChange={event => goAssemblyStep(Number(event.currentTarget.value))}/>
                     <span>{currentStep.index}/{playbackSteps.length}</span>
                 </aside>
             </> : <div className="blueprint-empty-state">Generate first.</div>}

@@ -239,9 +239,8 @@
       .assembly-workbench-svg { flex: 1 1 auto; min-height: 0; width: 100%; margin-top: .6rem; border: 1px solid var(--ms-line); border-radius: 1.1rem; background-image: linear-gradient(to right, rgba(99,102,241,.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(99,102,241,.06) 1px, transparent 1px); background-size: 28px 28px; }
       .assembly-svg-label { fill: var(--ms-muted); font-size: 19px; font-weight: 950; letter-spacing: .08em; text-transform: uppercase; }
       .assembly-svg-tiny { fill: var(--ms-text-soft); font-size: 12px; font-weight: 900; }
-      .assembly-active-layer { animation: assembly-pop 1.1s ease-in-out infinite alternate; transform-origin: center; }
+      .assembly-active-layer { filter: drop-shadow(0 8px 14px rgba(124,58,237,.18)); }
       .assembly-active-hole { animation: assembly-pulse 1s ease-in-out infinite alternate; }
-      .assembly-mount-motion { animation: assembly-slide 1.6s ease-in-out infinite alternate; }
       .assembly-test-motion { animation: assembly-dash 1.4s linear infinite; }
       .assembly-player-overlay { position: absolute; left: 50%; bottom: 1.25rem; z-index: 18; display: flex; align-items: center; gap: .45rem; min-width: min(34rem, calc(100% - 2rem)); transform: translateX(-50%); border: 1px solid var(--ms-line); border-radius: 999px; background: rgba(255,255,255,.92); box-shadow: 0 18px 46px rgba(8,10,18,.10); padding: .5rem .65rem; backdrop-filter: blur(14px); }
       .assembly-player-overlay button { border: 1px solid var(--ms-line); border-radius: 999px; background: #fff; color: var(--ms-text); min-width: 2.3rem; min-height: 2.3rem; font-weight: 950; }
@@ -252,9 +251,7 @@
       .assembly-step-button span { display: inline-grid; place-items: center; width: 1.35rem; height: 1.35rem; border-radius: 999px; background: #fff; color: var(--ms-accent); font-size: .68rem; }
       .assembly-step-button.active { border-color: var(--ms-accent-line); background: var(--ms-accent-soft); color: var(--ms-accent); }
       .chip.active { background: var(--ms-accent); color: #fff; box-shadow: 0 12px 28px rgba(139,92,246,.18); }
-      @keyframes assembly-pop { from { opacity: .78; transform: translateY(0); } to { opacity: 1; transform: translateY(-3px); } }
       @keyframes assembly-pulse { from { opacity: .55; } to { opacity: 1; } }
-      @keyframes assembly-slide { from { transform: translateX(-8px); opacity: .65; } to { transform: translateX(8px); opacity: 1; } }
       @keyframes assembly-dash { to { stroke-dashoffset: -36; } }
       .app-rail, .app-header { color: var(--ms-text); }
       .accent-label { color: var(--ms-accent); }
