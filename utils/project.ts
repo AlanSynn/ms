@@ -168,6 +168,62 @@ const defaultSkeleton = () => buildSkeleton([
     joint('right_foot', 72, -218, 'right_knee')
 ]);
 
+type StarterPartShape = 'torso' | 'head' | 'limb' | 'hand' | 'foot';
+
+const capsuleContour = (width: number, height: number): Point[] => {
+    const r = Math.min(width, height) / 2;
+    const halfW = width / 2;
+    const halfH = height / 2;
+    const steps = 6;
+    const points: Point[] = [];
+    for (let i = 0; i <= steps; i += 1) {
+        const t = Math.PI - (Math.PI * i) / steps;
+        points.push({ x: Math.cos(t) * r, y: -halfH + r + Math.sin(t) * r });
+    }
+    for (let i = 0; i <= steps; i += 1) {
+        const t = -Math.PI * i / steps;
+        points.push({ x: Math.cos(t) * r, y: halfH - r + Math.sin(t) * r });
+    }
+    return points;
+};
+
+const starterContour = (shape: StarterPartShape, width: number, height: number): Point[] => {
+    const hw = width / 2;
+    const hh = height / 2;
+    if (shape === 'head') {
+        return [
+            { x: -hw * 0.62, y: -hh * 0.78 }, { x: 0, y: -hh * 0.94 }, { x: hw * 0.62, y: -hh * 0.78 },
+            { x: hw * 0.82, y: 0 }, { x: hw * 0.55, y: hh * 0.78 }, { x: 0, y: hh * 0.92 },
+            { x: -hw * 0.55, y: hh * 0.78 }, { x: -hw * 0.82, y: 0 }
+        ];
+    }
+    if (shape === 'torso') {
+        return [
+            { x: -hw * 0.58, y: -hh * 0.96 }, { x: hw * 0.58, y: -hh * 0.96 }, { x: hw * 0.82, y: -hh * 0.55 },
+            { x: hw * 0.9, y: hh * 0.62 }, { x: hw * 0.55, y: hh * 0.96 }, { x: -hw * 0.55, y: hh * 0.96 },
+            { x: -hw * 0.9, y: hh * 0.62 }, { x: -hw * 0.82, y: -hh * 0.55 }
+        ];
+    }
+    if (shape === 'hand') {
+        return [
+            { x: -hw * 0.6, y: -hh * 0.72 }, { x: hw * 0.55, y: -hh * 0.82 }, { x: hw * 0.88, y: -hh * 0.15 },
+            { x: hw * 0.52, y: hh * 0.82 }, { x: -hw * 0.5, y: hh * 0.72 }, { x: -hw * 0.88, y: hh * 0.08 }
+        ];
+    }
+    if (shape === 'foot') {
+        return [
+            { x: -hw * 0.92, y: -hh * 0.5 }, { x: hw * 0.35, y: -hh * 0.8 }, { x: hw * 0.94, y: -hh * 0.2 },
+            { x: hw * 0.72, y: hh * 0.62 }, { x: -hw * 0.58, y: hh * 0.82 }, { x: -hw * 0.96, y: hh * 0.25 }
+        ];
+    }
+    return capsuleContour(width, height);
+};
+
+const textureFromContour = (width: number, height: number, points: Point[], fillColor: string) => {
+    const d = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${(point.x + width / 2).toFixed(2)} ${(point.y + height / 2).toFixed(2)}`).join(' ') + ' Z';
+    return `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}"><path d="${d}" fill="${fillColor}"/></svg>`)}`;
+};
+
 const part = (
     id: string,
     name: string,
@@ -175,23 +231,29 @@ const part = (
     transform: Transform,
     bounds: { width: number; height: number },
     fillColor: string,
-    zIndex: number
-): BodyPartLayer => ({
-    id,
-    name,
-    anchorJointId,
-    transform,
-    bounds: { x: -bounds.width / 2, y: -bounds.height / 2, ...bounds },
-    zIndex,
-    opacity: 0.9,
-    visible: true,
-    locked: false,
-    selectable: true,
-    fillColor,
-    textureUrl: `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${bounds.width} ${bounds.height}"><rect width="100%" height="100%" rx="18" fill="${fillColor}"/></svg>`)}`,
-    originalSvgPath: `sample-assets/${id}.svg`,
-    enhancedSvgPath: `sample-assets/${id}-enhanced.svg`
-});
+    zIndex: number,
+    shape: StarterPartShape = 'limb'
+): BodyPartLayer => {
+    const contourPoints = starterContour(shape, bounds.width, bounds.height);
+    return {
+        id,
+        name,
+        anchorJointId,
+        transform,
+        bounds: { x: -bounds.width / 2, y: -bounds.height / 2, ...bounds },
+        zIndex,
+        opacity: 0.9,
+        visible: true,
+        locked: false,
+        selectable: true,
+        fillColor,
+        contourPoints,
+        contourSource: 'imported',
+        textureUrl: textureFromContour(bounds.width, bounds.height, contourPoints, fillColor),
+        originalSvgPath: `sample-assets/${id}.svg`,
+        enhancedSvgPath: `sample-assets/${id}-enhanced.svg`
+    };
+};
 
 export const createDefaultMechanism = (type: MechanismConfig['type'] = '4bar', id = uid('mech')): MechanismConfig => ({
     id,
@@ -279,41 +341,48 @@ export const createEmptyProject = (): ProjectState => ({
     processing: idleProcessing()
 });
 
-export const createSampleProject = (): ProjectState => {
+export const createSampleProject = (options: { includeMechanism?: boolean } = {}): ProjectState => {
+    const includeMechanism = options.includeMechanism ?? false;
     const skeleton = defaultSkeleton();
     const partsArray = [
-        part('torso', 'Torso', 'torso', { x: 0, y: 20, rotation: 0, scale: 1 }, { width: 112, height: 170 }, '#cbd5e1', 0),
-        part('head', 'Head', 'neck', { x: 0, y: 154, rotation: 0, scale: 1 }, { width: 82, height: 82 }, '#e2e8f0', 5),
-        part('left_arm_upper', 'Left upper arm', 'left_shoulder', { x: -78, y: 58, rotation: -20, scale: 1 }, { width: 38, height: 90 }, '#b6c2d2', 3),
-        part('left_arm_lower', 'Left lower arm', 'left_elbow', { x: -118, y: -8, rotation: -18, scale: 1 }, { width: 36, height: 90 }, '#b6c2d2', 3),
-        part('right_arm_upper', 'Right upper arm', 'right_shoulder', { x: 78, y: 58, rotation: 20, scale: 1 }, { width: 38, height: 90 }, '#b6c2d2', 3),
-        part('right_arm_lower', 'Right lower arm', 'right_elbow', { x: 118, y: -8, rotation: 18, scale: 1 }, { width: 36, height: 90 }, '#b6c2d2', 3),
-        part('left_leg_upper', 'Left upper leg', 'left_hip', { x: -43, y: -114, rotation: -8, scale: 1 }, { width: 42, height: 92 }, '#94a3b8', 1),
-        part('left_leg_lower', 'Left lower leg', 'left_knee', { x: -62, y: -190, rotation: -8, scale: 1 }, { width: 42, height: 94 }, '#94a3b8', 1),
-        part('right_leg_upper', 'Right upper leg', 'right_hip', { x: 43, y: -114, rotation: 8, scale: 1 }, { width: 42, height: 92 }, '#94a3b8', 1),
-        part('right_leg_lower', 'Right lower leg', 'right_knee', { x: 62, y: -190, rotation: 8, scale: 1 }, { width: 42, height: 94 }, '#94a3b8', 1)
+        part('torso', 'Torso', 'torso', { x: 0, y: 20, rotation: 0, scale: 1 }, { width: 118, height: 176 }, '#cbd5e1', 0, 'torso'),
+        part('head', 'Head', 'neck', { x: 0, y: 154, rotation: 0, scale: 1 }, { width: 82, height: 82 }, '#e2e8f0', 5, 'head'),
+        part('left_arm_upper', 'Left upper arm', 'left_shoulder', { x: -78, y: 58, rotation: -20, scale: 1 }, { width: 38, height: 88 }, '#b6c2d2', 3, 'limb'),
+        part('left_arm_lower', 'Left lower arm', 'left_elbow', { x: -118, y: -8, rotation: -18, scale: 1 }, { width: 36, height: 88 }, '#b6c2d2', 3, 'limb'),
+        part('left_hand_part', 'Left hand', 'left_hand', { x: -136, y: -52, rotation: -18, scale: 1 }, { width: 34, height: 38 }, '#d1d5db', 4, 'hand'),
+        part('right_arm_upper', 'Right upper arm', 'right_shoulder', { x: 78, y: 58, rotation: 20, scale: 1 }, { width: 38, height: 88 }, '#b6c2d2', 3, 'limb'),
+        part('right_arm_lower', 'Right lower arm', 'right_elbow', { x: 118, y: -8, rotation: 18, scale: 1 }, { width: 36, height: 88 }, '#b6c2d2', 3, 'limb'),
+        part('right_hand_part', 'Right hand', 'right_hand', { x: 136, y: -52, rotation: 18, scale: 1 }, { width: 34, height: 38 }, '#d1d5db', 4, 'hand'),
+        part('left_leg_upper', 'Left upper leg', 'left_hip', { x: -43, y: -114, rotation: -8, scale: 1 }, { width: 42, height: 92 }, '#94a3b8', 1, 'limb'),
+        part('left_leg_lower', 'Left lower leg', 'left_knee', { x: -62, y: -190, rotation: -8, scale: 1 }, { width: 42, height: 94 }, '#94a3b8', 1, 'limb'),
+        part('left_foot_part', 'Left foot', 'left_foot', { x: -86, y: -238, rotation: -8, scale: 1 }, { width: 54, height: 34 }, '#94a3b8', 2, 'foot'),
+        part('right_leg_upper', 'Right upper leg', 'right_hip', { x: 43, y: -114, rotation: 8, scale: 1 }, { width: 42, height: 92 }, '#94a3b8', 1, 'limb'),
+        part('right_leg_lower', 'Right lower leg', 'right_knee', { x: 62, y: -190, rotation: 8, scale: 1 }, { width: 42, height: 94 }, '#94a3b8', 1, 'limb'),
+        part('right_foot_part', 'Right foot', 'right_foot', { x: 86, y: -238, rotation: 8, scale: 1 }, { width: 54, height: 34 }, '#94a3b8', 2, 'foot')
     ].map(p => ({ ...p, localPivotOffset: localPivotOffsetForScene(p, skeleton.joints[p.anchorJointId]?.position ?? p.transform), localPivotJointId: p.anchorJointId }));
-    const mechanisms = [createDefaultMechanism('4bar', 'mech-1')];
-    mechanisms[0].targetPartId = 'right_arm_lower';
-    mechanisms[0].targetPathId = 'path-right-arm';
-    mechanisms[0].targetAnchorJointId = 'right_hand';
-    Object.assign(mechanisms[0], {
-        anchorX: 120,
-        anchorY: 200,
-        transform: { x: 120, y: 200, rotation: 331.4, scale: 1 },
-        sceneAnchor: { x: 120, y: 200 },
-        groundAngle: 331.4,
-        groundLength: 180.1,
-        crankLength: 54.7,
-        couplerLength: 108.5,
-        rockerLength: 137,
-        couplerPointDist: 180,
-        couplerPointAngle: -13.2,
-        assemblyMode: 'crossed',
-        source: 'optimized',
-        presetId: 'sample-fitted',
-        recommendation: 'sample path fit'
-    });
+    const mechanisms = includeMechanism ? [createDefaultMechanism('4bar', 'mech-1')] : [];
+    if (mechanisms[0]) {
+        mechanisms[0].targetPartId = 'right_arm_lower';
+        mechanisms[0].targetPathId = 'path-right-arm';
+        mechanisms[0].targetAnchorJointId = 'right_hand';
+        Object.assign(mechanisms[0], {
+            anchorX: 120,
+            anchorY: 200,
+            transform: { x: 120, y: 200, rotation: 331.4, scale: 1 },
+            sceneAnchor: { x: 120, y: 200 },
+            groundAngle: 331.4,
+            groundLength: 180.1,
+            crankLength: 54.7,
+            couplerLength: 108.5,
+            rockerLength: 137,
+            couplerPointDist: 180,
+            couplerPointAngle: -13.2,
+            assemblyMode: 'crossed',
+            source: 'optimized',
+            presetId: 'sample-fitted',
+            recommendation: 'sample path fit'
+        });
+    }
 
     const pathPoints: Point[] = [
         { x: 70, y: 60 }, { x: 130, y: 84 }, { x: 174, y: 34 }, { x: 142, y: -34 }, { x: 82, y: -18 }
@@ -323,7 +392,7 @@ export const createSampleProject = (): ProjectState => {
         ...createEmptyProject(),
         metadata: {
             id: uid('project'),
-            name: 'Sample articulated character',
+            name: 'Humanoid starter character',
             createdAt: nowIso(),
             updatedAt: nowIso(),
             normalizationScale: 1,
@@ -350,15 +419,15 @@ export const createSampleProject = (): ProjectState => {
         mechanisms,
         selectedPartId: 'right_arm_lower',
         selectedPathId: 'path-right-arm',
-        selectedMechanismId: 'mech-1',
+        selectedMechanismId: mechanisms[0]?.id,
         characterPackage: {
             id: 'sample-character-package',
             createdAt: nowIso(),
             sourceImageName: 'sample',
             outputDir: 'sample://built-in',
-            partsInfo: { parts: Object.fromEntries(partsArray.map(p => [p.id, { name: p.name, texture_path: `sample-assets/${p.id}.svg`, original_svg_path: p.originalSvgPath, enhanced_svg_path: p.enhancedSvgPath, anchor_joint_id: p.anchorJointId, transform: p.transform, z_index: p.zIndex, visible: p.visible }])) },
+            partsInfo: { parts: Object.fromEntries(partsArray.map(p => [p.id, { name: p.name, texture_path: `sample-assets/${p.id}.svg`, original_svg_path: p.originalSvgPath, enhanced_svg_path: p.enhancedSvgPath, contour_points: p.contourPoints, contour_source: p.contourSource, anchor_joint_id: p.anchorJointId, transform: p.transform, z_index: p.zIndex, visible: p.visible }])) },
             charCfg: { joints: skeleton.joints, bones: skeleton.bones, root_joint_ids: skeleton.rootJointIds, metadata: skeleton.metadata },
-            replacementContext: { mode: 'plain-load', rebindingSummary: 'Built-in sample with a ready path and mechanism.' }
+            replacementContext: { mode: 'plain-load', rebindingSummary: includeMechanism ? 'Built-in sample with a ready path and mechanism.' : 'Built-in full humanoid starter with no mechanisms.' }
         },
         processing: { stage: 'ready', message: 'Sample loaded', progress: 100 }
     };
@@ -418,7 +487,7 @@ const replacementPartId = (project: ProjectState, oldPartId?: string, targetJoin
             score: limbKeywordScore(oldPartId, part.id)
         }))
         .filter(item => (targetJointId ? item.chainLength > 0 : item.score > 0))
-        .sort((a, b) => (targetJointId ? a.chainLength - b.chainLength : b.score - a.score) || b.score - a.score || a.part.zIndex - b.part.zIndex);
+        .sort((a, b) => (targetJointId && oldPartId ? b.score - a.score : 0) || (targetJointId ? a.chainLength - b.chainLength : b.score - a.score) || b.score - a.score || a.part.zIndex - b.part.zIndex);
     return candidates[0]?.part.id;
 };
 

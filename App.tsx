@@ -55,7 +55,7 @@ import { APP_MENU_GROUPS, commandById, commandIdForKeyboardEvent, commandShortcu
 import { AUTHORABLE_MECHANISM_TYPES, FOUNDRY_MECHANISM_TYPES, FOUNDRY_PRESETS, MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY, mechanismTemplateLabel } from './utils/mechanismTemplates';
 import { normalizeMechanismToReference, referenceRequiredPartsHoleCount } from './utils/mechanismReference';
 import { createMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext, fitPathToBox, fitPointsToBox, pointsToSvgPath } from './utils/mechanismPreview';
-import { AlertCircle, Boxes, BrainCircuit, Camera, CheckCircle2, Download, FileJson, Loader2, Play, Plus, Route, Save, Sparkles, Trash2, Upload } from 'lucide-react';
+import { AlertCircle, Boxes, BrainCircuit, CheckCircle2, Download, FileJson, Loader2, Play, Plus, Route, Save, Sparkles, Trash2, Upload } from 'lucide-react';
 import girlStarterUrl from './resources/examples/raw/girl.png?url';
 import boyStarterUrl from './resources/examples/raw/boy.PNG?url';
 
@@ -259,7 +259,6 @@ const App: React.FC = () => {
     const [showTrace, setShowTrace] = useState(true);
     const [drawMode, setDrawMode] = useState(false);
     const [showTracking, setShowTracking] = useState(false);
-    const [showCamera, setShowCamera] = useState(false);
     const [showRecommendations, setShowRecommendations] = useState(false);
     const [showShortcuts, setShowShortcuts] = useState(false);
     const modalOpen = showWelcome || showGettingStarted || showShortcuts;
@@ -805,7 +804,7 @@ const App: React.FC = () => {
                     <input ref={projectInputRef} data-testid="project-file-input" hidden type="file" accept="application/json,.motionsmith.json,.json" onChange={e => e.target.files?.[0] && importProject(e.target.files[0])}/>
 
                     <div className="stage-body editor-workbench relative min-h-0 flex-1 overflow-hidden p-7" data-testid="shared-workbench">
-                        {editorStage === 'character' && <CharacterSelection project={project} dispatch={dispatch} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onOpenGettingStarted={() => setShowGettingStarted(true)} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project, { resetHistory: true }); setPendingCharacter(null); setShowWelcome(false); setShowGettingStarted(false); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onProcess={runWebOnnx} onCamera={() => setShowCamera(true)} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} viewport={canvasViewport} setViewport={setCanvasViewport} />}
+                        {editorStage === 'character' && <CharacterSelection project={project} dispatch={dispatch} pendingCharacter={pendingCharacter} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onOpenGettingStarted={() => setShowGettingStarted(true)} onAccept={() => { if (!pendingCharacter) return; setProject(pendingCharacter.project, { resetHistory: true }); setPendingCharacter(null); setShowWelcome(false); setShowGettingStarted(false); setStage(pendingCharacter.returnStage); }} onDiscard={() => setPendingCharacter(null)} onProcess={runWebOnnx} onPackage={importCharacterPackage} onImport={importProject} onEditCharacter={editCharacterParts} onSaveSkeleton={saveSkeleton} onChooseSaveFolder={chooseSaveFolder} goStage={goStage} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {editorStage === 'path' && <PathEditor project={project} sortedParts={sortedParts} selectedPart={selectedPart} selectedPath={selectedPath} drawMode={drawMode} setDrawMode={setDrawMode} dispatch={dispatch} setPathPoints={setPathPoints} openTracking={() => setShowTracking(true)} isPlaying={isPlaying} setIsPlaying={setIsPlaying} angle={angle} setAngle={setAngle} onNext={() => goStage('foundry')} goStage={goStage} viewport={canvasViewport} setViewport={setCanvasViewport} />}
                         {editorStage === 'foundry' && <MechanismFoundry project={project} foundry={foundry} setFoundry={setFoundry} selectedPart={selectedPart} selectedPath={selectedPath} goStage={goStage} onExport={(pkg) => {
                             const existingTarget = project.mechanisms.find(m =>
@@ -813,7 +812,7 @@ const App: React.FC = () => {
                                 m.targetPathId === pkg.targetPathId &&
                                 preferredMotionJointId(project, m.targetPartId, m.targetAnchorJointId) === pkg.targetAnchorJointId
                             );
-                            const mech = mechanismWithGeneratedPath({
+                            const rawMechanism = mechanismWithGeneratedPath({
                                 ...foundry,
                                 id: existingTarget?.id ?? pkg.mechanismId,
                                 anchorX: pkg.pivot.x,
@@ -827,6 +826,23 @@ const App: React.FC = () => {
                                 foundryExport: pkg,
                                 generatedPath: pkg.generatedPath,
                                 warnings: pkg.warnings,
+                                activeVisualPartIds: selectedPart ? [selectedPart.id] : []
+                            }, { preserveGeneratedPath: true });
+                            const fittedMechanism = pkg.targetPathId
+                                ? fitMechanismToTargetPath(project, rawMechanism, pkg.targetPathId)
+                                : fitRecommendedMechanismToSheet(project, rawMechanism);
+                            const generatedPath = fittedMechanism.generatedPath ?? rawMechanism.generatedPath ?? pkg.generatedPath;
+                            const mech = mechanismWithGeneratedPath({
+                                ...fittedMechanism,
+                                foundryExport: {
+                                    ...pkg,
+                                    parameters: { ...fittedMechanism },
+                                    pivot: { x: fittedMechanism.anchorX ?? pkg.pivot.x, y: fittedMechanism.anchorY ?? pkg.pivot.y },
+                                    outputPoint: generatedPath[0] ?? pkg.outputPoint,
+                                    generatedPath
+                                },
+                                generatedPath,
+                                warnings: [...new Set([...(fittedMechanism.warnings ?? []), ...(pkg.warnings ?? [])])],
                                 activeVisualPartIds: selectedPart ? [selectedPart.id] : []
                             }, { preserveGeneratedPath: true });
                             dispatch({ type: 'set_foundry_export', foundryExport: pkg });
@@ -844,9 +860,8 @@ const App: React.FC = () => {
                 </section>
             </div>
             {showWelcome && <WelcomeDialog onClose={closeWelcome} />}
-            {!showWelcome && showGettingStarted && <GettingStartedDialog starterTemplates={STARTER_IMAGE_TEMPLATES} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onStarterImage={template => { setShowGettingStarted(false); loadStarterImage(template); }} onSample={() => { setPendingCharacter(null); setProject(createSampleProject(), { resetHistory: true }); setShowWelcome(false); setShowGettingStarted(false); setStage('path'); }} onPackage={files => { setShowGettingStarted(false); importCharacterPackage(files); }} onProcess={file => { setShowGettingStarted(false); runWebOnnx(file); }} onCamera={() => { setShowGettingStarted(false); setShowCamera(true); }} onImport={file => { setShowGettingStarted(false); importProject(file); }} onClose={closeGettingStarted} />}
+            {!showWelcome && showGettingStarted && <GettingStartedDialog starterTemplates={STARTER_IMAGE_TEMPLATES} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onStarterImage={template => { setShowGettingStarted(false); loadStarterImage(template); }} onSample={() => { setPendingCharacter(null); setProject(createSampleProject(), { resetHistory: true }); setShowWelcome(false); setShowGettingStarted(false); setStage('character'); }} onPackage={files => { setShowGettingStarted(false); importCharacterPackage(files); }} onProcess={file => { setShowGettingStarted(false); runWebOnnx(file); }} onImport={file => { setShowGettingStarted(false); importProject(file); }} onClose={closeGettingStarted} />}
             {showShortcuts && <ShortcutHelpDialog onClose={() => setShowShortcuts(false)} />}
-            <CameraCaptureDialog isOpen={showCamera} onClose={() => setShowCamera(false)} onCapture={file => { setShowCamera(false); runWebOnnx(file); }} />
             <MechanismRecommendationSheet isOpen={showRecommendations} project={project} selectedPart={selectedPart} selectedPath={selectedPath} onClose={() => setShowRecommendations(false)} onApply={mechanism => { dispatch({ type: 'upsert_mechanism', mechanism }); setShowRecommendations(false); setStage('design'); }} />
             <TrackingModal isOpen={showTracking} onClose={() => setShowTracking(false)} onTransfer={path => { setPathPoints(path, 'tracked'); setShowTracking(false); setStage('path'); }} />
         </main>
@@ -1078,7 +1093,7 @@ const WelcomeDialog = ({ onClose }: { onClose: (hideNextTime?: boolean) => void 
     </div>;
 };
 
-const GettingStartedDialog = ({ starterTemplates, replaceCharacter, setReplaceCharacter, onStarterImage, onSample, onPackage, onProcess, onCamera, onImport, onClose }: {
+const GettingStartedDialog = ({ starterTemplates, replaceCharacter, setReplaceCharacter, onStarterImage, onSample, onPackage, onProcess, onImport, onClose }: {
     starterTemplates: StarterImageTemplate[];
     replaceCharacter: boolean;
     setReplaceCharacter: (v: boolean) => void;
@@ -1086,7 +1101,6 @@ const GettingStartedDialog = ({ starterTemplates, replaceCharacter, setReplaceCh
     onSample: () => void;
     onPackage: (files: FileList | File[]) => void;
     onProcess: (file: File) => void;
-    onCamera: () => void;
     onImport: (file: File) => void;
     onClose: () => void;
 }) => {
@@ -1132,10 +1146,10 @@ const GettingStartedDialog = ({ starterTemplates, replaceCharacter, setReplaceCh
             </div>
             <div className="template-gallery" data-testid="getting-started-gallery">
                 <button type="button" className="template-tile primary" onClick={onSample}>
-                    <span className="template-kicker">Start fastest</span>
-                    <strong>Waving arm</strong>
-                    <span>Ready path + four-bar.</span>
-                    <b><Sparkles size={16}/> Open Waving arm</b>
+                    <span className="template-kicker">Start clean</span>
+                    <strong>Humanoid starter</strong>
+                    <span>Full body rig. No mechanism.</span>
+                    <b><Sparkles size={16}/> Open humanoid starter</b>
                 </button>
                 {starterTemplates.map(template => (
                     <button key={template.id} type="button" className="template-tile starter cursor-pointer" onClick={() => onStarterImage(template)}>
@@ -1168,12 +1182,6 @@ const GettingStartedDialog = ({ starterTemplates, replaceCharacter, setReplaceCh
                     e.currentTarget.value = '';
                     if (file) onProcess(file);
                 }}/>
-                <button type="button" className="template-tile cursor-pointer" onClick={onCamera}>
-                    <span className="template-kicker">Camera</span>
-                    <strong>Camera</strong>
-                    <span>Capture frame.</span>
-                    <b><Camera size={16}/> Capture</b>
-                </button>
             </div>
             <div className="getting-started-foot">
                 <button type="button" className="btn-secondary cursor-pointer" onClick={() => importInputRef.current?.click()}><Upload size={16}/> Import project</button><input ref={importInputRef} data-testid="getting-started-import-input" hidden type="file" accept="application/json,.json" onChange={e => {
@@ -1187,7 +1195,7 @@ const GettingStartedDialog = ({ starterTemplates, replaceCharacter, setReplaceCh
     </div>;
 };
 
-const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharacter, setReplaceCharacter, onOpenGettingStarted, onAccept, onDiscard, onProcess, onCamera, onPackage, onImport, onEditCharacter, onSaveSkeleton, onChooseSaveFolder, viewport, setViewport }: {
+const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharacter, setReplaceCharacter, onOpenGettingStarted, onAccept, onDiscard, onProcess, onPackage, onImport, onEditCharacter, onSaveSkeleton, onChooseSaveFolder, goStage, viewport, setViewport }: {
     project: ProjectState;
     dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void;
     pendingCharacter: { project: ProjectState; summary: string; returnStage: AppStage } | null;
@@ -1197,12 +1205,12 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
     onAccept: () => void;
     onDiscard: () => void;
     onProcess: (file: File) => void;
-    onCamera: () => void;
     onPackage: (files: FileList | File[]) => void;
     onImport: (file: File) => void;
     onEditCharacter: () => void;
     onSaveSkeleton: () => void;
     onChooseSaveFolder: () => void;
+    goStage: (stage: AppStage) => void;
     viewport: CanvasViewport;
     setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
 }) => {
@@ -1256,7 +1264,7 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
     return <>
         <section className="character-stage animate-rise" data-testid="character-screen">
         <EditorStageFrame stage="character" className="character-editor-frame" layout={{
-            workflow: workflowPane(<StageLeftSummary project={project} title="Character" stage="character">
+            workflow: workflowPane(<StageLeftSummary project={project} title="Character" stage="character" goStage={goStage}>
                 <div className="compact-workflow-row" data-testid="character-workflow-summary">
                     <span>{editableParts.length} parts</span>
                     <span>{Object.keys(project.skeleton?.joints ?? {}).length} joints</span>
@@ -1274,7 +1282,6 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
                         e.currentTarget.value = '';
                         if (file) onProcess(file);
                     }}/>
-                    <button className="btn-secondary" aria-label="Capture Camera" onClick={onCamera}><Camera size={16}/> Camera</button>
                     <button type="button" className="btn-secondary cursor-pointer" onClick={() => importInputRef.current?.click()}><Upload size={16}/> Import project</button><input ref={importInputRef} data-testid="onboarding-import-input" hidden type="file" accept="application/json,.json" onChange={e => {
                         const file = e.currentTarget.files?.[0];
                         e.currentTarget.value = '';
@@ -1344,123 +1351,6 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
             {importStatusPanel}
         </aside>}
     </>;
-};
-
-const CameraCaptureDialog = ({ isOpen, onClose, onCapture }: { isOpen: boolean; onClose: () => void; onCapture: (file: File) => void }) => {
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const streamRef = useRef<MediaStream | null>(null);
-    const [status, setStatus] = useState<'starting' | 'ready' | 'error'>('starting');
-    const [error, setError] = useState('');
-    useEffect(() => {
-        if (!isOpen) return;
-        let active = true;
-        const stopStream = () => {
-            streamRef.current?.getTracks().forEach(track => track.stop());
-            streamRef.current = null;
-            if (videoRef.current) videoRef.current.srcObject = null;
-        };
-        setStatus('starting');
-        setError('');
-        const camera = navigator.mediaDevices;
-        if (!camera?.getUserMedia) {
-            setStatus('error');
-            setError('Camera unavailable in this browser. Upload an image instead.');
-            return stopStream;
-        }
-        const waitForPreview = (video: HTMLVideoElement) => new Promise<void>((resolve, reject) => {
-            let timeout = 0;
-            const cleanup = () => {
-                window.clearTimeout(timeout);
-                video.removeEventListener('loadedmetadata', ready);
-                video.removeEventListener('canplay', ready);
-            };
-            const ready = () => {
-                if (!video.videoWidth || !video.videoHeight) return;
-                cleanup();
-                resolve();
-            };
-            video.addEventListener('loadedmetadata', ready);
-            video.addEventListener('canplay', ready);
-            timeout = window.setTimeout(() => {
-                cleanup();
-                reject(new Error('Camera preview did not start. Try closing and reopening camera capture.'));
-            }, 7000);
-            ready();
-        });
-        camera.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
-            .then(async stream => {
-                if (!active) {
-                    stream.getTracks().forEach(track => track.stop());
-                    return;
-                }
-                streamRef.current = stream;
-                if (videoRef.current) {
-                    videoRef.current.srcObject = stream;
-                    void videoRef.current.play().catch(() => undefined);
-                    await waitForPreview(videoRef.current);
-                } else {
-                    throw new Error('Camera preview element is missing.');
-                }
-                if (active) setStatus('ready');
-            })
-            .catch((cause: unknown) => {
-                if (!active) return;
-                stopStream();
-                const name = cause instanceof DOMException ? cause.name : cause instanceof Error ? cause.name : 'CameraError';
-                const message = cause instanceof Error ? cause.message : String(cause);
-                setStatus('error');
-                setError(name === 'NotAllowedError' ? 'Camera permission denied. Allow camera access or use Create from image.' : `Camera error: ${message}`);
-            });
-        return () => {
-            active = false;
-            stopStream();
-        };
-    }, [isOpen]);
-
-    const captureFrame = () => {
-        const video = videoRef.current;
-        const canvas = canvasRef.current;
-        if (!video || !canvas || status !== 'ready' || !video.videoWidth || !video.videoHeight) {
-            setError('Camera preview is still starting. Wait for the live preview or use Create from image.');
-            return;
-        }
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob(blob => {
-            if (!blob) {
-                setStatus('error');
-                setError('Could not capture a camera frame.');
-                return;
-            }
-            onCapture(new File([blob], `camera-frame-${Date.now()}.png`, { type: 'image/png' }));
-        }, 'image/png');
-    };
-
-    if (!isOpen) return null;
-    return <div className="modal-backdrop" role="presentation">
-        <section className="modal-sheet camera-dialog" role="dialog" aria-modal="true" aria-labelledby="camera-dialog-title" data-testid="camera-dialog">
-            <div className="flex items-center justify-between gap-3">
-                <div>
-                    <div className="section-title">Camera Capture</div>
-                    <h3 id="camera-dialog-title">Camera Capture</h3>
-                </div>
-                <button className="btn-secondary" onClick={onClose}>Cancel</button>
-            </div>
-            <div className="camera-preview mt-4">
-                <video ref={videoRef} muted playsInline data-testid="camera-preview-video" className={status === 'ready' ? '' : 'hidden'} />
-                {status !== 'ready' && <div className="camera-placeholder">{status === 'starting' ? 'Requesting browser camera…' : 'Camera preview unavailable'}</div>}
-            </div>
-            <canvas ref={canvasRef} hidden />
-            {status === 'error' && <div className="error" data-testid="camera-error">{error}</div>}
-            {status === 'ready' && <div className="ok">Camera ready. Capture frame.</div>}
-            <div className="mt-4 flex flex-wrap gap-2">
-                <button className="btn-primary" disabled={status !== 'ready'} onClick={captureFrame}><Camera size={16}/> Capture frame</button>
-                <button className="btn-secondary" onClick={onClose}>Close</button>
-            </div>
-        </section>
-    </div>;
 };
 
 const ProgressBlock = ({ project }: { project: ProjectState }) => {
@@ -1653,7 +1543,7 @@ const PathEditor = ({ project, sortedParts, selectedPart, selectedPath, drawMode
                 <details className="advanced-panel mt-4">
                     <summary>More</summary>
                     <div className="mt-3 flex flex-wrap gap-2">
-                        <button className="btn-secondary" disabled={pathLocked} onClick={openTracking}><Camera size={16}/> Track from video</button>
+                        <button className="btn-secondary" disabled={pathLocked} onClick={openTracking}><Route size={16}/> Track from video</button>
                         <button className="btn-secondary" aria-label={isPlaying ? 'Play / Stop' : 'Play'} onClick={() => setIsPlaying(!isPlaying)}><Play size={16}/>{isPlaying ? 'Stop' : 'Play'}</button>
                         <button className="btn-secondary" onClick={() => setAngle(0)}>Reset</button>
                         {selectedPath && <button className="btn-secondary" disabled={pathLocked} onClick={() => updatePath({ visible: !selectedPath.visible })}>{selectedPath.visible ? 'Hide path' : 'Show path'}</button>}

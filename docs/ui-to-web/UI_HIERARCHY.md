@@ -58,7 +58,6 @@ AutomataDesigner (QMainWindow)
 
 ```text
 DialogHost
-├─ CameraDialog
 ├─ CharacterSelectionDialog
 ├─ MechanismRecommendationDialog
 │  └─ PreviewContainer

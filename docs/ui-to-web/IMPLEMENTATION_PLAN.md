@@ -117,13 +117,11 @@ Deliverables:
 - Character edit drawer: add/remove part layer, add/remove/lock joint, set part anchor from joint, clear selected path/binding if references become invalid.
 - Recommendation sheet: ranked mechanism cards from current selected path; Apply creates/updates real `MechanismConfig` with unique id and payload.
 - Foundry toolbar toggles: play, forces, velocity, trail, path preview, sensemaking, reset, add.
-- Camera action: browser `getUserMedia` path with permission/missing-device error; no fake capture.
 
 Acceptance:
 
 - Browser tests cover add/remove skeleton joint and part layer reflecting in Path/Design lists.
 - Browser tests cover recommendation Apply creating a distinct mechanism and blueprint using it.
-- Camera test can mock permission denied and verify error state.
 
 ### M5 — Blueprint/fabrication UI polish and end-to-end QA
 

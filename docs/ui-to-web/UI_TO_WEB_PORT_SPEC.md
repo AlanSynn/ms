@@ -96,7 +96,7 @@ Source: `src/automataii/presentation/qt/tabs/image_processing_tab.py`
 
 | Group | Controls | Notes |
 | --- | --- | --- |
-| Input Drawing | `Use <Sample> Example` buttons, `Load Image File`, `Capture Camera` | sample buttons generated from example images, limited to 2 in current code |
+| Input Drawing | `Use <Sample> Example` buttons, `Load Image File` | sample buttons generated from example images, limited to 2 in current code; browser hardware capture was removed |
 | Processing Steps | `Process Image (Skeleton)`, `Edit Skeleton`, `Save Skeleton`, `Generate Body Parts`, plus optional `Extend Skeleton 10%`, `Lock/Unlock Joints` | implemented by `ProcessingStepsGroup`; detailed steps can be hidden/shown |
 | Recognition Editing | `Edit Parts / Skeleton / Boxes`, `Edit Skeleton Joints`, `Save Skeleton` | opens manual segmentation/skeleton editing surfaces |
 | View Controls | `+`, `−`, `⌖`, `1:1` | zoom in/out/fit/reset |
@@ -357,19 +357,9 @@ Web mapping:
 - Each recommendation must carry full mechanism payload, including type, params, key points, reverse direction, fabrication readiness, valid angle range.
 - Applying one recommendation creates/updates a mechanism instance; preview click only selects/highlights.
 
-### Camera Dialog
+### Browser hardware capture
 
-Source: `dialogs/camera_dialog.py`
-
-- Title: `Camera Capture`
-- Status label `Initializing camera...`
-- Capture and cancel buttons.
-- Starts camera worker thread, so screenshot capture intentionally skipped to avoid hardware side effects.
-
-Web mapping:
-
-- Browser `getUserMedia` modal.
-- Must clearly handle permission denied/device missing.
+Dropped from the web port. Character import now uses bundled starters, project/package import, or local image upload with Web ONNX.
 
 ### Custom Coupler Point Dialog
 
@@ -442,7 +432,6 @@ AppShell
    ├─ ManualSegmentationDialog
    ├─ RecommendationDialog
    ├─ CharacterPresetDialog
-   ├─ CameraCaptureDialog
    ├─ CustomCouplerDialog
    ├─ AboutDialog
    └─ File/Save/Export dialogs

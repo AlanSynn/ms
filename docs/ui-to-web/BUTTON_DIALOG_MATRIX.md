@@ -27,7 +27,6 @@
 | --- | --- | --- |
 | Input Drawing | Use sample example | loads bundled raw character image |
 | Input Drawing | Load Image File | imports image into `source.image` layer |
-| Input Drawing | Capture Camera | opens camera dialog / browser camera |
 | Processing Steps | Process Image (Skeleton) | AI/image pipeline, skeleton first |
 | Processing Steps | Edit Skeleton | direct skeleton editing |
 | Processing Steps | Save Skeleton | persist skeleton config |
@@ -110,7 +109,6 @@
 | Manual Segmentation Editor | Character Selection → Edit Parts / Skeleton / Boxes | part radios, clear, box from joints, anchor from joint, add/remove joint, add/remove layer, preview, save/load, apply/cancel |
 | Character Selection Dialog | mechanism character assignment | preset list, thumbnail, description, OK/Cancel |
 | Mechanism Recommendation Dialog | Get Mechanism | recommendation cards, Apply this, Close, empty state |
-| Camera Capture Dialog | Capture Camera | camera preview, capture, cancel, camera error state |
 | Custom Coupler Path Dialog | Foundry coupler custom point | fraction slider/spinbox, OK/Cancel |
 | Options Dialog | Preferences | settings groups above |
 | About Dialog | Help → About | product/about text |

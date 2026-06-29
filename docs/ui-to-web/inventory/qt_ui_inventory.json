@@ -9639,12 +9639,6 @@
     },
     {
       "file": "src/automataii/presentation/qt/tabs/image_processing_tab.py",
-      "line": 113,
-      "call": "QPushButton",
-      "text": "Capture Camera"
-    },
-    {
-      "file": "src/automataii/presentation/qt/tabs/image_processing_tab.py",
       "line": 114,
       "call": "QLabel",
       "text": "Example Character"

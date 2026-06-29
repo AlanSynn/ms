@@ -573,7 +573,6 @@ Classes:
 User-visible controls/text:
 - L109: `QGroupBox` → “Input Drawing”
 - L112: `QPushButton` → “Load Image File”
-- L113: `QPushButton` → “Capture Camera”
 - L114: `QLabel` → “Example Character”
 - L132: `QGroupBox` → “Recognition Editing”
 - L136: `QPushButton` → “Edit Parts / Skeleton / Boxes”

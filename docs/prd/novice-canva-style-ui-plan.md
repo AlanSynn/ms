@@ -62,7 +62,7 @@ Template tiles:
 
 | Template | What it teaches | Real data created |
 | --- | --- | --- |
-| Waving arm | path on one limb + four-bar | sample character, right-arm path, one mechanism |
+| Humanoid starter | full humanoid rig + one ready arm path | 14 body parts, upper/lower limbs, hands/feet, no mechanism until the user chooses one |
 | Bobbing head | short cyclic path + cam/piston option | head path, recommended mechanism |
 | Walking legs | two paths + duplicated mechanism instances | leg paths, two mechanisms |
 | Blank character | user-loaded asset flow | package review, no fake mechanisms |
@@ -210,7 +210,7 @@ Examples:
    - Add minimal template metadata: id, title, beginner promise, thumbnail style,
      factory function.
    - Reuse existing sample project factories; do not add a template engine yet.
-   - First templates: Waving arm and Blank character.
+   - First templates: Humanoid starter and Blank character. Starter templates must not preload mechanisms; mechanisms enter through Foundry or explicit demos.
 
 3. **Path Editor polish**
    - Keep canvas-first layout.

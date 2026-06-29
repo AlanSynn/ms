@@ -343,7 +343,24 @@ export const motionPreviewForTarget = (
     const targetJoint = skeleton?.joints[resolvedTargetJointId];
 
     if (!skeleton || !rootJoint || !targetJoint) return existing;
-    if (resolvedTargetJointId === rootJointId) return { ...existing, target: rootJoint.position, targetJointId: resolvedTargetJointId, rootJointId };
+    if (resolvedTargetJointId === rootJointId) {
+        const dx = target.x - rootJoint.position.x;
+        const dy = target.y - rootJoint.position.y;
+        const affectedJoints = descendantJoints(skeleton, rootJointId);
+        const jointUpdates: Record<string, Point> = {};
+        affectedJoints.forEach(id => {
+            const joint = skeleton.joints[id];
+            if (joint) jointUpdates[id] = { x: joint.position.x + dx, y: joint.position.y + dy };
+        });
+        const nextSkeleton = withJointUpdates(skeleton, jointUpdates);
+        const parts = { ...existing.parts };
+        visualPartIdsForJoints(project, targetPart.id, affectedJoints).forEach(partId => {
+            const part = project.parts[partId];
+            const anchor = nextSkeleton?.joints[part.anchorJointId]?.position;
+            parts[partId] = anchor ? placeBodyPartPivotAt(part, anchor, nextSkeleton) : part;
+        });
+        return { parts, skeleton: nextSkeleton, target, targetJointId: resolvedTargetJointId, rootJointId };
+    }
 
     const jointUpdates = solveChainTargets(skeleton, rootJointId, resolvedTargetJointId, target, options.pinTarget === true);
     const solvedTarget = jointUpdates[resolvedTargetJointId] ?? targetJoint.position;
