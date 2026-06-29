@@ -56,6 +56,7 @@ const designContract = readFileSync(join(process.cwd(), 'DESIGN.md'), 'utf8');
 const agentsContract = readFileSync(join(process.cwd(), 'AGENTS.md'), 'utf8');
 const docsMap = readFileSync(join(process.cwd(), 'docs', 'README.md'), 'utf8');
 const noviceUiPlan = readFileSync(join(process.cwd(), 'docs', 'prd', 'novice-canva-style-ui-plan.md'), 'utf8');
+const classroomFieldPlan = readFileSync(join(process.cwd(), 'docs', 'prd', 'classroom-field-support-plan.md'), 'utf8');
 const brandStaticFiles = [
   'App.tsx',
   'index.html',
@@ -72,6 +73,7 @@ const brandStaticFiles = [
   'src-tauri/tauri.conf.json',
   'docs/mechanism-blueprint-manual.md',
   'docs/prd/novice-canva-style-ui-plan.md',
+  'docs/prd/classroom-field-support-plan.md',
   'docs/prd/realistic-25d-3d-physics-platform-plan.md',
   'docs/prd/canva-video-editor-workspace-plan.md',
   'docs/prd/toon-25d-main-3d-unlock-plan.md',
@@ -272,6 +274,7 @@ assert(designContract.includes('Project governance: `AGENTS.md`'), 'DESIGN.md po
 assert(designContract.includes('#8b5cf6'), 'DESIGN.md uses the MotionSmith light primary color');
 assert(!designContract.includes('Cyber-Industrial Minimalism'), 'DESIGN.md no longer points contributors at the old dark CAD direction');
 assert(docsMap.includes('active novice flow and tutorial/help plan'), 'docs map treats the novice tutorial plan as an active implementation plan');
+assert(docsMap.includes('classroom field-study gap plan'), 'docs map treats the classroom field support plan as an active implementation plan');
 assert(agentsContract.includes('tinkerable workbench'), 'AGENTS.md codifies the tinkerable workbench direction');
 assert(agentsContract.includes('direct manipulation'), 'AGENTS.md prioritizes direct manipulation over explanatory text');
 assert(agentsContract.includes('3D physics'), 'AGENTS.md codifies the 3D physics simulation direction');
@@ -293,6 +296,13 @@ assert(noviceUiPlan.includes('## Tutorial layer PRD'), 'novice UI plan includes 
 assert(noviceUiPlan.includes('First-run checklist') && noviceUiPlan.includes('Completion derives from current `ProjectState`'), 'tutorial checklist is derived from real project state');
 assert(noviceUiPlan.includes('Forbidden:') && noviceUiPlan.includes('tutorial tab') && noviceUiPlan.includes('center-canvas lesson cards'), 'tutorial plan forbids fake tutorial stages and center-canvas lessons');
 assert(noviceUiPlan.includes('No new tour dependency') && noviceUiPlan.includes('Plain React state and CSS are enough'), 'tutorial plan avoids extra tour dependencies');
+assert(classroomFieldPlan.includes('# Classroom Field Support Plan'), 'classroom field support PRD exists');
+assert(classroomFieldPlan.includes('Web is mandatory for classrooms') && classroomFieldPlan.includes('https://alansynn.com/ms/'), 'classroom plan locks the web-first classroom release target');
+assert(classroomFieldPlan.includes('Guided entry beats open exploration') && classroomFieldPlan.includes('Waving arm / 팔 흔들기'), 'classroom plan requires guided lesson templates before open exploration');
+assert(classroomFieldPlan.includes('Sensemaking must be visible at the moment of action') && classroomFieldPlan.includes('Show Sensemaking'), 'classroom plan requires discoverable sensemaking without center-canvas teaching panels');
+assert(classroomFieldPlan.includes('Stable reset and recovery') && classroomFieldPlan.includes('No rotation possible'), 'classroom plan requires stable reset for mechanism failure recovery');
+assert(classroomFieldPlan.includes('Blueprint as build-file screen') && classroomFieldPlan.includes('Assembly as animated build screen'), 'classroom plan preserves Blueprint/Assembly ownership split');
+assert(classroomFieldPlan.includes('No backend, auth, roster, analytics, cloud DB, teacher dashboard') && classroomFieldPlan.includes('Teacher pack workflow'), 'classroom plan excludes server scope while defining local teacher pack workflow');
 assert.equal(emptyProject.partOrder.length, 0, 'empty project starts with no preloaded character parts');
 assert.equal(emptyProject.mechanisms.length, 0, 'empty project starts with no hidden mechanism');
 assert.equal(emptyProject.selectedMechanismId, undefined, 'empty project starts with no selected mechanism');

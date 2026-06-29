@@ -21,6 +21,7 @@ Use this file before adding new docs. If a doc does not fit below, update an exi
 - [`prd/toon-25d-implementation-plan.md`](prd/toon-25d-implementation-plan.md)
 - [`prd/toon-25d-test-spec.md`](prd/toon-25d-test-spec.md)
 - [`prd/novice-canva-style-ui-plan.md`](prd/novice-canva-style-ui-plan.md) — active novice flow and tutorial/help plan.
+- [`prd/classroom-field-support-plan.md`](prd/classroom-field-support-plan.md) — classroom field-study gap plan: web-first release, guided lesson templates, sensemaking, stable reset, and animated assembly.
 - [`subsystem-governance-and-mechanism-contracts.md`](subsystem-governance-and-mechanism-contracts.md)
 - [`analysis/codebase-cleanup-architecture-plan.md`](analysis/codebase-cleanup-architecture-plan.md)
 
