@@ -1,6 +1,6 @@
 import { BodyPartLayer, MechanismConfig, Point, ProjectMotionPath, ProjectState, StandardJoint, StandardSkeleton } from '../types';
 import { calculateLinkage } from './kinematics';
-import { localPivotOffsetForScene, placeBodyPartPivotAt } from './coordinates';
+import { placeBodyPartPivotAt } from './coordinates';
 
 export interface MotionPreview {
     parts: Record<string, BodyPartLayer>;
@@ -275,6 +275,78 @@ export const motionChainOptionLabel = (project: ProjectState, partId: string | u
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
+const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
+
+const angleBetween = (a: Point, b: Point) => Math.atan2(b.y - a.y, b.x - a.x);
+
+const firstChildJointId = (skeleton: StandardSkeleton | null | undefined, jointId: string) =>
+    (skeleton?.hierarchy[jointId] ?? []).find(id => Boolean(skeleton?.joints[id]));
+
+const solveLongChainTargets = (skeleton: StandardSkeleton, chain: string[], target: Point): Record<string, Point> => {
+    const points = chain.map(id => skeleton.joints[id]?.position);
+    if (points.some(point => !point)) return {};
+    const positions = points as Point[];
+    const lengths = positions.slice(1).map((point, index) => distance(point, positions[index]));
+    const totalLength = lengths.reduce((sum, length) => sum + length, 0);
+    const root = positions[0];
+    if (totalLength <= 1e-6 || distance(root, target) <= 1e-6) return {};
+
+    const next = positions.map(point => ({ ...point }));
+    if (distance(root, target) >= totalLength) {
+        const direction = angleBetween(root, target);
+        for (let index = 1; index < next.length; index += 1) {
+            next[index] = {
+                x: next[index - 1].x + Math.cos(direction) * lengths[index - 1],
+                y: next[index - 1].y + Math.sin(direction) * lengths[index - 1]
+            };
+        }
+    } else {
+        for (let iteration = 0; iteration < 12; iteration += 1) {
+            next[next.length - 1] = { ...target };
+            for (let index = next.length - 2; index >= 0; index -= 1) {
+                const nextLength = Math.max(1e-6, distance(next[index], next[index + 1]));
+                const ratio = lengths[index] / nextLength;
+                next[index] = {
+                    x: next[index + 1].x + (next[index].x - next[index + 1].x) * ratio,
+                    y: next[index + 1].y + (next[index].y - next[index + 1].y) * ratio
+                };
+            }
+            next[0] = { ...root };
+            for (let index = 1; index < next.length; index += 1) {
+                const nextLength = Math.max(1e-6, distance(next[index], next[index - 1]));
+                const ratio = lengths[index - 1] / nextLength;
+                next[index] = {
+                    x: next[index - 1].x + (next[index].x - next[index - 1].x) * ratio,
+                    y: next[index - 1].y + (next[index].y - next[index - 1].y) * ratio
+                };
+            }
+        }
+    }
+
+    return Object.fromEntries(chain.slice(1).map((id, index) => [id, next[index + 1]]));
+};
+
+const partWithAnimatedSegment = (part: BodyPartLayer, before: StandardSkeleton, after: StandardSkeleton | null): BodyPartLayer => {
+    if (!after) return part;
+    const childId = firstChildJointId(before, part.anchorJointId);
+    const beforeAnchor = before.joints[part.anchorJointId]?.position;
+    const beforeChild = childId ? before.joints[childId]?.position : undefined;
+    const afterAnchor = after.joints[part.anchorJointId]?.position;
+    const afterChild = childId ? after.joints[childId]?.position : undefined;
+    const segmentChanged = beforeAnchor && beforeChild && afterAnchor && afterChild;
+    const rotated = segmentChanged
+        ? {
+            ...part,
+            transform: {
+                ...part.transform,
+                rotation: part.transform.rotation + (angleBetween(afterAnchor, afterChild) - angleBetween(beforeAnchor, beforeChild)) * 180 / Math.PI
+            }
+        }
+        : part;
+    const anchor = after.joints[part.anchorJointId]?.position;
+    return anchor ? placeBodyPartPivotAt(rotated, anchor, after) : rotated;
+};
+
 const solveChainTargets = (skeleton: StandardSkeleton, rootJointId: string, targetJointId: string, target: Point, pinTarget = false): Record<string, Point> => {
     const root = skeleton.joints[rootJointId]?.position;
     const oldTarget = skeleton.joints[targetJointId]?.position;
@@ -290,6 +362,7 @@ const solveChainTargets = (skeleton: StandardSkeleton, rootJointId: string, targ
                 : { x: root.x + Math.cos(direction) * length, y: root.y + Math.sin(direction) * length }
         };
     }
+    if (chain.length > 3) return solveLongChainTargets(skeleton, chain, target);
     if (chain.length >= 3) {
         const midId = chain[chain.length - 2];
         const mid = skeleton.joints[midId]?.position;
@@ -372,27 +445,11 @@ export const motionPreviewForTarget = (
         }
     });
     const nextSkeleton = withJointUpdates(skeleton, jointUpdates);
-    const oldVector = { x: targetJoint.position.x - rootJoint.position.x, y: targetJoint.position.y - rootJoint.position.y };
-    const newVector = { x: solvedTarget.x - rootJoint.position.x, y: solvedTarget.y - rootJoint.position.y };
-    const rotationDelta = Math.atan2(newVector.y, newVector.x) - Math.atan2(oldVector.y, oldVector.x);
-    const rotatedTarget = {
-        ...targetPart,
-        anchorJointId: rootJointId,
-        localPivotOffset: localPivotOffsetForScene(targetPart, rootJoint.position),
-        localPivotJointId: rootJointId,
-        transform: { ...targetPart.transform, rotation: targetPart.transform.rotation + rotationDelta * 180 / Math.PI }
-    };
-    const placedTarget = placeBodyPartPivotAt(rotatedTarget, rootJoint.position, nextSkeleton);
     const affectedJoints = descendantJoints(skeleton, rootJointId);
     const parts = { ...existing.parts };
     visualPartIdsForJoints(project, targetPart.id, affectedJoints).forEach(partId => {
         const part = project.parts[partId];
-        if (partId === targetPart.id) {
-            parts[partId] = placedTarget;
-            return;
-        }
-        const anchor = nextSkeleton?.joints[part.anchorJointId]?.position;
-        parts[partId] = anchor ? placeBodyPartPivotAt(part, anchor, nextSkeleton) : part;
+        parts[partId] = partWithAnimatedSegment(part, skeleton, nextSkeleton);
     });
     return { parts, skeleton: nextSkeleton, target: solvedTarget, targetJointId: resolvedTargetJointId, rootJointId };
 };

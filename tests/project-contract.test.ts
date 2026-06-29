@@ -905,6 +905,7 @@ const multiJointProject = applyProjectAction(sample, { type: 'add_joint', joint:
 assert.equal(describeMotionChain(multiJointProject, 'right_arm_lower', 'right_finger_tip', { rootJointId: 'right_shoulder' }).kind, 'multi-joint', '4+ joint limbs are labeled as multi-joint IK');
 const multiPreview = motionPreviewForTarget(multiJointProject, 'right_arm_lower', 'right_finger_tip', { x: 205, y: 84 }, { parts: {}, skeleton: multiJointProject.skeleton }, { rootJointId: 'right_shoulder', pinTarget: true });
 assert(Number.isFinite(multiPreview.skeleton?.joints.right_finger_tip.position.x) && Number.isFinite(multiPreview.skeleton?.joints.right_finger_tip.position.y), 'multi-joint IK preview stays finite');
+assert(Math.hypot((multiPreview.skeleton?.joints.right_elbow.position.x ?? 0) - (multiJointProject.skeleton?.joints.right_elbow.position.x ?? 0), (multiPreview.skeleton?.joints.right_elbow.position.y ?? 0) - (multiJointProject.skeleton?.joints.right_elbow.position.y ?? 0)) > 1, 'multi-joint IK updates intermediate body-chain joints instead of only moving the distal handle');
 const boundMechanism = (type: Parameters<typeof createDefaultMechanism>[0], id: string) => ({
   ...createDefaultMechanism(type, id),
   targetPartId: 'right_arm_lower',
@@ -1736,8 +1737,13 @@ const ikProject: ProjectState = {
 };
 const pathPreview = motionPreviewForPath(ikProject, ikProject.paths['path-right-arm'], 0);
 assert(pathPreview.parts.right_arm_lower, 'path editor preview moves selected limb at current frame');
+assert(pathPreview.parts.right_arm_upper, 'path editor preview includes the upper arm when the hand path uses a shoulder-root chain');
 assert.deepEqual(pathPreview.skeleton?.joints.right_shoulder.position, ikProject.skeleton?.joints.right_shoulder.position, 'IK preview keeps the shoulder root attached');
 assert(Math.hypot((pathPreview.skeleton?.joints.right_hand.position.x ?? 0) - ikProject.paths['path-right-arm'].points[0].x, (pathPreview.skeleton?.joints.right_hand.position.y ?? 0) - ikProject.paths['path-right-arm'].points[0].y) < 1e-9, 'path editor IK target reaches the path point');
+assert(distance(bodyPartPivotScene(pathPreview.parts.right_arm_upper, pathPreview.skeleton), pathPreview.skeleton!.joints.right_shoulder.position) < 1e-9, 'upper arm visual stays pinned to the shoulder root during hand IK');
+assert(distance(bodyPartPivotScene(pathPreview.parts.right_arm_lower, pathPreview.skeleton), pathPreview.skeleton!.joints.right_elbow.position) < 1e-9, 'lower arm visual stays pinned to the solved elbow during hand IK');
+assert.notEqual(pathPreview.parts.right_arm_upper.transform.rotation, ikProject.parts.right_arm_upper.transform.rotation, 'hand IK rotates the upper-arm body component as part of the same chain');
+assert.notEqual(pathPreview.parts.right_arm_lower.transform.rotation, ikProject.parts.right_arm_lower.transform.rotation, 'hand IK rotates the lower-arm body component as part of the same chain');
 const elbowRootPath = { ...ikProject.paths['path-right-arm'], chainRootJointId: 'right_elbow', targetAnchorJointId: 'right_hand' };
 const elbowRootPreview = motionPreviewForPath(ikProject, elbowRootPath, 0);
 assert.deepEqual(elbowRootPreview.skeleton?.joints.right_elbow.position, ikProject.skeleton?.joints.right_elbow.position, 'path-specific IK root keeps the chosen elbow/knee joint attached');
@@ -1761,11 +1767,15 @@ const animated = animatedPartsForProject(drivenProject, drivenProject.mechanisms
 const mechanismPreview = motionPreviewForProject(drivenProject, drivenProject.mechanisms, 0);
 const mechanismState = calculateLinkage(drivenMechanism, 0);
 assert(animated.right_arm_lower, 'animated preview moves target part at current frame');
+assert(animated.right_arm_upper, 'animated preview moves parent limb parts in the same IK chain');
 assert(animated.right_hand_part, 'animated preview propagates target-anchor motion to descendant parts');
-const movedShoulder = bodyPartPivotScene(animated.right_arm_lower, mechanismPreview.skeleton);
-assert(Math.hypot(movedShoulder.x - (drivenProject.skeleton?.joints.right_shoulder.position.x ?? 0), movedShoulder.y - (drivenProject.skeleton?.joints.right_shoulder.position.y ?? 0)) < 1e-9, 'mechanism IK keeps limb root attached instead of translating the whole arm');
+const movedUpperArmPivot = bodyPartPivotScene(animated.right_arm_upper, mechanismPreview.skeleton);
+assert(distance(movedUpperArmPivot, mechanismPreview.skeleton!.joints.right_shoulder.position) < 1e-9, 'mechanism IK keeps the upper arm attached to the shoulder root');
+const movedLowerArmPivot = bodyPartPivotScene(animated.right_arm_lower, mechanismPreview.skeleton);
+assert(distance(movedLowerArmPivot, mechanismPreview.skeleton!.joints.right_elbow.position) < 1e-9, 'mechanism IK keeps the lower arm attached to the solved elbow instead of snapping it to the shoulder');
 assert(Math.hypot((mechanismPreview.skeleton?.joints.right_hand.position.x ?? 0) - mechanismState.effector.x, (mechanismPreview.skeleton?.joints.right_hand.position.y ?? 0) - mechanismState.effector.y) < 1e-9, 'mechanism design IK target follows the actual linkage effector');
 assert(Math.hypot((mechanismPreview.skeleton?.joints.right_hand.position.x ?? 0) - drivenProject.paths['path-right-arm'].points[0].x, (mechanismPreview.skeleton?.joints.right_hand.position.y ?? 0) - drivenProject.paths['path-right-arm'].points[0].y) > 20, 'mechanism design does not fake success by directly following the target path');
+assert.notEqual(animated.right_arm_upper.transform.rotation, drivenProject.parts.right_arm_upper.transform.rotation, 'IK preview rotates the upper arm instead of leaving the parent component static');
 assert.notEqual(animated.right_arm_lower.transform.rotation, drivenProject.parts.right_arm_lower.transform.rotation, 'IK preview rotates the limb instead of only offsetting it');
 assert(Math.hypot(bodyPartPivotScene(animated.right_hand_part, mechanismPreview.skeleton).x - (mechanismPreview.skeleton?.joints.right_hand.position.x ?? 0), bodyPartPivotScene(animated.right_hand_part, mechanismPreview.skeleton).y - (mechanismPreview.skeleton?.joints.right_hand.position.y ?? 0)) < 1e-9, 'descendant part anchor follows animated skeleton');
 const sampleMechanism = sample.mechanisms[0];

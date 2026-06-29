@@ -1121,11 +1121,20 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await page.getByTestId('novice-path-panel').getByText('More', { exact: true }).click();
   const stopButtonBeforePreview = page.getByTestId('novice-path-panel').getByRole('button', { name: /Stop/i });
   if (await stopButtonBeforePreview.count()) await stopButtonBeforePreview.click();
+  await page.getByLabel('IK handle').selectOption('right_hand');
+  await page.getByTestId('ik-chain-root-options').getByRole('button', { name: 'right shoulder' }).click();
+  await expect(page.getByLabel('IK chain root')).toHaveValue('right_shoulder');
+  await expect(page.getByLabel('IK handle')).toHaveValue('right_hand');
+  await expect(page.getByTestId('ik-chain-summary')).toContainText('3 joints');
+  const upperArmTransformBeforePlay = await page.getByTestId('path-part-right_arm_upper').getAttribute('transform');
   const armTransformBeforePlay = await page.getByTestId('path-part-right_arm_lower').getAttribute('transform');
   await page.getByTestId('novice-path-panel').getByRole('button', { name: /Play/i }).click();
   await expect(page.getByText('IK target')).toBeVisible();
+  await expect(page.getByTestId('path-part-right_arm_upper')).not.toHaveAttribute('transform', upperArmTransformBeforePlay ?? '');
   await expect(page.getByTestId('path-part-right_arm_lower')).not.toHaveAttribute('transform', armTransformBeforePlay ?? '');
   await page.getByTestId('novice-path-panel').getByRole('button', { name: /Stop/i }).click();
+  await page.getByTestId('ik-chain-root-options').getByRole('button', { name: 'right elbow' }).click();
+  await page.getByLabel('IK handle').selectOption('right_elbow');
   await page.getByText('Rig setup').click();
   const artXBefore = await page.getByTestId('path-part-art-right_arm_lower').getAttribute('x');
   await page.getByLabel('Art offset X number').fill('-12');
@@ -1724,11 +1733,12 @@ test('Mobile path editor keeps Draw free path action above the canvas', async ({
 });
 
 
-test('Welcome splash uses the packaged icon and auto-dismisses', async ({ page }) => {
+test('Welcome splash uses the MotionSmith logo mark and auto-dismisses', async ({ page }) => {
   await page.goto('/');
   const splash = page.getByTestId('welcome-dialog');
   await expect(splash).toBeVisible();
-  await expect.poll(() => splash.locator('img').evaluate(image => ({ src: (image as HTMLImageElement).currentSrc, width: (image as HTMLImageElement).naturalWidth, height: (image as HTMLImageElement).naturalHeight }))).toMatchObject({ src: expect.stringMatching(/^data:image\/png/), width: 256, height: 256 });
+  await expect(splash.locator('.motionsmith-logo-mark')).toBeVisible();
+  await expect(splash).toContainText('MOTIONSMITH');
   await expect(splash).toHaveCount(0);
   await expect(page.getByTestId('getting-started-dialog')).toBeVisible();
 });
