@@ -8,7 +8,7 @@ import { CLASSROOM_LESSONS, classroomLessonById, createDefaultMechanism, createE
 import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, fabricationBoardCoordinateCallout, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, prefabAssemblySteps, sampleFeasibleRange, validateFabricationStack, validateForFabrication } from '../utils/fabrication';
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
-import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, generateCurvePoints, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius, sampledCamProfileScale } from '../utils/kinematics';
+import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, generateCurvePoints, generateMechanismPointTraces, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius, sampledCamProfileScale } from '../utils/kinematics';
 import { animatedPartsForProject, describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainRootJointIds, motionPreviewForPath, motionPreviewForProject, motionPreviewForTarget, preferredMotionJointId } from '../utils/motion';
 import { buildToonSceneProjection } from '../utils/sceneProjection';
 import { buildFoundryPhysicsOverlay, buildKinematicPhysicsSession, mechanismPhysicsRule } from '../utils/physicsSession';
@@ -1173,10 +1173,12 @@ assert(physicsSession.summary.maxConstraintError >= 0, 'physics session reports 
 assertFiniteDeep(physicsSession, 'physicsSession');
 
 const foundryOverlayMechanism = createDefaultMechanism('4bar', 'contract-foundry-overlay');
+const foundryOverlayTraces = generateMechanismPointTraces(foundryOverlayMechanism, 96).traces;
+const foundryOverlayPrimaryTrace = foundryOverlayTraces.find(trace => trace.primary) ?? foundryOverlayTraces[0];
 const foundryOverlaySimulation = {
   state: calculateLinkage(foundryOverlayMechanism, Math.PI / 3),
   scale: 1,
-  pathPoints: generateCurvePoints(foundryOverlayMechanism, 96).points
+  pathPoints: foundryOverlayPrimaryTrace?.points ?? generateCurvePoints(foundryOverlayMechanism, 96).points
 };
 const foundryOverlay = buildFoundryPhysicsOverlay(foundryOverlayMechanism, foundryOverlaySimulation, Math.PI / 3, sample.settings);
 assert.equal(foundryOverlay.rule, mechanismPhysicsRule('4bar'), 'Foundry overlay uses the same type-specific PhysicsSession rule text');
@@ -1231,6 +1233,13 @@ ALL_MECHANISM_TYPES.forEach(type => {
     });
   });
   assert(generateCurvePoints(mechanism, 24).points.length > 0, `${type} generates an output motion path`);
+  const pointTraces = generateMechanismPointTraces(mechanism, 24).traces;
+  assert(pointTraces.length > 0, `${type} exposes physical moving-joint traces for Foundry`);
+  assert(pointTraces.some(trace => trace.primary && trace.points.length > 1), `${type} marks one physical trace as the primary output path`);
+  if (type === '4bar') {
+    assert(pointTraces.some(trace => trace.id === 'B' && trace.points.length > 1), '4bar exposes the B crank-joint path');
+    assert(pointTraces.some(trace => trace.id === 'C' && trace.primary && trace.points.length > 1), '4bar exposes C as the primary output-joint path');
+  }
   const templateProject = {
     ...sample,
     mechanisms: [mechanismWithGeneratedPath({

@@ -529,3 +529,81 @@ export const generateCurvePoints = (config: MechanismConfig, resolution: number 
 
     return { points, percentValid: validCount / res };
 };
+
+export interface MechanismPointTrace {
+    id: string;
+    label: string;
+    points: Point[];
+    primary: boolean;
+}
+
+const compactTraceDefinitions = (
+    type: MechanismConfig['type'],
+    state: JointState
+): Array<{ id: string; label: string; point?: Point; primary?: boolean }> => {
+    if (type === '4bar') return [
+        { id: 'B', label: 'B crank joint', point: state.j1 },
+        { id: 'C', label: 'C output joint', point: state.j2, primary: true }
+    ];
+    if (type === '5bar') return [
+        { id: 'B', label: 'B left crank joint', point: state.j1 },
+        { id: 'C', label: 'C coupler joint', point: state.j2, primary: true },
+        { id: 'D', label: 'D right crank joint', point: state.aux }
+    ];
+    if (type === '6bar') return [
+        { id: 'B', label: 'B input crank joint', point: state.j1 },
+        { id: 'C', label: 'C four-bar joint', point: state.j2 },
+        { id: 'E', label: 'E follower joint', point: state.aux, primary: true }
+    ];
+    if (type === 'cam') return [
+        { id: 'B', label: 'B cam contact', point: state.j1 },
+        { id: 'C', label: 'C follower', point: state.j2, primary: true }
+    ];
+    if (type === 'planetary_gear') return [
+        { id: 'B', label: 'B drive point', point: state.j1 },
+        { id: 'C', label: 'C carrier', point: state.p2 },
+        { id: 'D', label: 'D planet pin', point: state.j2, primary: true }
+    ];
+    if (type === 'crank') return [
+        { id: 'B', label: 'B crank pin', point: state.j1, primary: true }
+    ];
+    if (type === 'gear' || type === 'gear_linkage') return [
+        { id: 'B', label: 'B drive point', point: state.j1 },
+        { id: 'C', label: 'C output point', point: state.j2, primary: true }
+    ];
+    return [
+        { id: 'B', label: 'B drive point', point: state.j1 },
+        { id: 'C', label: 'C output point', point: state.j2, primary: true }
+    ];
+};
+
+/**
+ * Physical traces shown in Foundry: moving joints/pins, not an arbitrary
+ * coupler-effector curve. Keep generateCurvePoints as the optimizer/exporter
+ * effector trace; use this helper for point-specific mechanism previews.
+ */
+export const generateMechanismPointTraces = (config: MechanismConfig, resolution: number = 36): { traces: MechanismPointTrace[], percentValid: number } => {
+    const traces = new Map<string, MechanismPointTrace>();
+    let validCount = 0;
+    let loops = 1;
+    if (config.type === '5bar' || config.type === '6bar' || config.type === 'planetary_gear') loops = 8;
+    const res = resolution * loops;
+
+    for (let i = 0; i < res; i++) {
+        const angle = (i / resolution) * 2 * Math.PI;
+        const state = calculateLinkage(config, angle);
+        if (!state.isValid) continue;
+        validCount++;
+        compactTraceDefinitions(config.type, state).forEach(def => {
+            if (!def.point || !Number.isFinite(def.point.x) || !Number.isFinite(def.point.y)) return;
+            const trace = traces.get(def.id) ?? { id: def.id, label: def.label, points: [], primary: Boolean(def.primary) };
+            trace.primary = trace.primary || Boolean(def.primary);
+            trace.points.push(def.point);
+            traces.set(def.id, trace);
+        });
+    }
+
+    const allTraces = [...traces.values()].filter(trace => trace.points.length > 1);
+    if (allTraces.length && !allTraces.some(trace => trace.primary)) allTraces[allTraces.length - 1].primary = true;
+    return { traces: allTraces, percentValid: validCount / res };
+};

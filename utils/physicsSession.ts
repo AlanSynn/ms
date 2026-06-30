@@ -150,7 +150,10 @@ const foundryPhysicalPlayhead = (
   fallback?: Point
 ): { point?: Point; source: FoundryPhysicsOverlay['playheadSource'] } => {
   const s = simulation.state;
-  if (mechanism.type === '4bar' || mechanism.type === '5bar' || mechanism.type === '6bar') {
+  if (mechanism.type === '6bar') {
+    return { point: s.aux ?? s.j2 ?? fallback, source: 'coupler-output-joint' };
+  }
+  if (mechanism.type === '4bar' || mechanism.type === '5bar') {
     return { point: s.j2 ?? fallback, source: 'coupler-output-joint' };
   }
   if (mechanism.type === 'cam' || mechanism.type === 'piston' || mechanism.type === 'rack-pinion' || mechanism.type === 'yoke' || mechanism.type === 'quick-return') {
@@ -204,7 +207,7 @@ export const buildFoundryPhysicsOverlay = (
   const playIndex = previewPoints.length ? Math.floor(normalizedPhase(phaseRad) * previewPoints.length) : 0;
   const fallbackPlayhead = previewPoints[playIndex];
   const { point: playhead, source: playheadSource } = foundryPhysicalPlayhead(mechanism, simulation, fallbackPlayhead);
-  const motionSample = simulation.state.effector ?? fallbackPlayhead ?? playhead;
+  const motionSample = fallbackPlayhead ?? playhead ?? simulation.state.effector;
   const pointAt = (index: number) => previewPoints.length ? previewPoints[((index % previewPoints.length) + previewPoints.length) % previewPoints.length] : motionSample;
   const previousPoint = pointAt(playIndex - 1) ?? motionSample ?? playhead ?? { x: 0, y: 0 };
   const nextPoint = pointAt(playIndex + 1) ?? motionSample ?? playhead ?? { x: 0, y: 0 };

@@ -1204,6 +1204,9 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   const threeScene = page.getByTestId('foundry-camera-rig');
   await expect(threeScene).toHaveAttribute('data-three-renderer', 'webgl');
   await expect(threeScene).toHaveAttribute('data-mechanism-type', '4bar');
+  await expect(threeScene).toHaveAttribute('data-three-path-source', 'moving-joints');
+  await expect(threeScene).toHaveAttribute('data-three-path-trace-ids', 'B,C');
+  await expect(threeScene).toHaveAttribute('data-three-primary-path-id', 'C');
   await expect(threeScene).toHaveAttribute('data-three-hole-mode', 'extruded-cut-through');
   await expect(threeScene).toHaveAttribute('data-three-render-loop', 'camera-only-orbit');
   await expect(threeScene).toHaveAttribute('data-three-inventory-source', 'rendered-template');
@@ -1530,6 +1533,9 @@ test('Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking'
   await expect(threeScene).toHaveAttribute('data-path-preview', 'hidden');
   await page.getByRole('button', { name: 'Path', exact: true }).click();
   await expect(threeScene).toHaveAttribute('data-path-preview', 'shown');
+  await expect(threeScene).toHaveAttribute('data-three-path-source', 'moving-joints');
+  await expect(threeScene).toHaveAttribute('data-three-path-trace-ids', 'B,C');
+  await expect(threeScene).toHaveAttribute('data-three-primary-path-id', 'C');
   await page.getByRole('button', { name: 'Path', exact: true }).click();
   await expect(threeScene).toHaveAttribute('data-path-preview', 'hidden');
   await page.getByRole('button', { name: 'Trail' }).click();

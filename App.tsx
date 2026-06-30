@@ -24,7 +24,7 @@ import {
     ProjectAction
 } from './types';
 import { gearPathD, generateDXF, generateSVG } from './utils/exporter';
-import { animationDeltaRadians, calculateLinkage, defaultCamProfileSamples, generateCurvePoints, gearPairOutputRatio, gearTrainCenters, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, normalizeCamProfileSamples, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, sampledCamProfileScale } from './utils/kinematics';
+import { animationDeltaRadians, calculateLinkage, defaultCamProfileSamples, generateCurvePoints, generateMechanismPointTraces, gearPairOutputRatio, gearTrainCenters, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, normalizeCamProfileSamples, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, sampledCamProfileScale } from './utils/kinematics';
 import { evaluateFitness, generateSmartConfig, mutateConfig } from './utils/optimizer';
 import {
     applyProjectAction,
@@ -2085,7 +2085,12 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const snapDistance = Math.hypot(rawLanding.x - landing.x, rawLanding.y - landing.y);
     const landedFoundry = useMemo(() => ({ ...foundry, anchorX: landing.x, anchorY: landing.y, sceneAnchor: landing }), [foundry, landing.x, landing.y]);
     const anchorMarker = { x: 180 + (landing.x / SCENE_VIEW.width) * 360, y: 120 - (landing.y / SCENE_VIEW.height) * 240 };
-    const preview = useMemo(() => generateCurvePoints(landedFoundry, 96).points, [landedFoundry]);
+    const rawFoundryPointTraces = useMemo(() => generateMechanismPointTraces(landedFoundry, 96).traces, [landedFoundry]);
+    const preview = useMemo(() => (
+        rawFoundryPointTraces.find(trace => trace.primary)?.points
+        ?? rawFoundryPointTraces[0]?.points
+        ?? generateCurvePoints(landedFoundry, 96).points
+    ), [landedFoundry, rawFoundryPointTraces]);
     const range = useMemo(() => sampleFeasibleRange(landedFoundry), [landedFoundry]);
     const library = MECHANISM_LIBRARY[foundry.type];
     const targetIkJointId = selectedPart ? preferredMotionJointId(project, selectedPart.id, selectedPath?.targetAnchorJointId, { preferDistalWhenRoot: !selectedPath?.targetAnchorJointId }) : undefined;
@@ -2093,11 +2098,23 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const feasibilityText = range.warning ?? '360°';
     const foundryFitContext = useMemo(() => createMechanismFitContext(landedFoundry, 360, 240, 96), [landedFoundry]);
     const selectedSimulation = useMemo(() => fitMechanismSimulationWithContext(landedFoundry, foundryPhase, foundryFitContext), [landedFoundry, foundryPhase, foundryFitContext]);
-    const previewPoints = selectedSimulation.pathPoints.length ? selectedSimulation.pathPoints : fitPointsToBox(preview, 360, 240);
-    const previewPath = selectedSimulation.pathD || pointsToSvgPath(previewPoints);
+    const foundryPointTraces = useMemo(() => rawFoundryPointTraces.map(trace => ({
+        ...trace,
+        points: trace.points.map(foundryFitContext.map)
+    })), [foundryFitContext, rawFoundryPointTraces]);
+    const previewPoints = useMemo(() => (
+        foundryPointTraces.find(trace => trace.primary)?.points
+        ?? foundryPointTraces[0]?.points
+        ?? fitPointsToBox(preview, 360, 240)
+    ), [foundryPointTraces, preview]);
+    const selectedPhysicalSimulation = useMemo(() => ({
+        ...selectedSimulation,
+        pathPoints: previewPoints,
+        pathD: pointsToSvgPath(previewPoints)
+    }), [previewPoints, selectedSimulation]);
     const physicsOverlay = useMemo(
-        () => buildFoundryPhysicsOverlay(landedFoundry, selectedSimulation, foundryPhase, project.settings, previewPoints),
-        [landedFoundry, selectedSimulation, foundryPhase, project.settings, previewPoints]
+        () => buildFoundryPhysicsOverlay(landedFoundry, selectedPhysicalSimulation, foundryPhase, project.settings, previewPoints),
+        [landedFoundry, selectedPhysicalSimulation, foundryPhase, project.settings, previewPoints]
     );
     const { playhead, playheadSource, velocityRaw, forceRaw, velocityTip, forceTip, frictionTip, driveTip, velocityMagnitude, frictionMagnitude, forceMagnitude, constraintError, rule: physicsRule } = physicsOverlay;
     const foundryRenderPlan = useMemo(() => fabricationRenderPlanForMechanism(landedFoundry), [landedFoundry]);
@@ -2410,12 +2427,13 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             </div>
             <ThreeFoundryPreview
                 mechanism={landedFoundry}
-                simulation={selectedSimulation}
+                simulation={selectedPhysicalSimulation}
                 kit={project.settings.physicalKit}
                 camera={foundryCamera}
                 rigOpacity={foundryRigOpacity / 100}
                 color={foundry.color}
                 pathPoints={previewPoints}
+                pathTraces={foundryPointTraces}
                 showGrid={showFoundryGrid}
                 showPathPreview={showPathPreview}
                 showTrail={showTrail}
@@ -3031,6 +3049,7 @@ type ThreeFoundryPreviewProps = {
     rigOpacity: number;
     color: string;
     pathPoints: Point[];
+    pathTraces: Array<{ id: string; label: string; points: Point[]; primary: boolean }>;
     showGrid: boolean;
     showPathPreview: boolean;
     showTrail: boolean;
@@ -3104,7 +3123,7 @@ const disposeThreeObject = (object: THREE.Object3D) => object.traverse(child => 
     else if (material && !material.userData.foundryCached) material.dispose();
 });
 
-const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, color, pathPoints, showGrid, showPathPreview, showTrail, showForces, showVelocity, explode, physicsRule, velocityMagnitude, forceMagnitude, frictionCoefficient, frictionMagnitude, constraintError, cameraLabel, isPickingAnchor, isOrbiting, isZooming, isPanning, onAnchorPick, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onWheel, onProjectionSizeChange, children }: ThreeFoundryPreviewProps) => {
+const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, color, pathPoints, pathTraces, showGrid, showPathPreview, showTrail, showForces, showVelocity, explode, physicsRule, velocityMagnitude, forceMagnitude, frictionCoefficient, frictionMagnitude, constraintError, cameraLabel, isPickingAnchor, isOrbiting, isZooming, isPanning, onAnchorPick, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onWheel, onProjectionSizeChange, children }: ThreeFoundryPreviewProps) => {
     const hostRef = useRef<HTMLDivElement | null>(null);
     const stateRef = useRef<HTMLDivElement | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
@@ -3149,6 +3168,11 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
     const pinTopZ = (renderedLayerZ.at(-1) ?? 0.22) + 0.18;
     const pinLengthZ = Math.max(0.55, pinTopZ - pinBottomZ);
     const pinCenterZ = (pinBottomZ + pinTopZ) / 2;
+    const visiblePathTraces = useMemo(() => (
+        pathTraces.length ? pathTraces : [{ id: 'output', label: 'Output path', points: pathPoints, primary: true }]
+    ), [pathPoints, pathTraces]);
+    const primaryPathId = visiblePathTraces.find(trace => trace.primary)?.id ?? visiblePathTraces[0]?.id ?? '';
+    const pathLayerZ = pinTopZ + 0.08;
     useEffect(() => {
         let active = true;
         loadRapierPhysicsKernel()
@@ -3538,8 +3562,8 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             root.add(line);
         };
 
-        if (showTrail) addPath(pathPoints, -0.72, material.trail);
-        if (showPathPreview) addPath(pathPoints, -0.55, material.path);
+        if (showTrail) visiblePathTraces.forEach(trace => addPath(trace.points, pathLayerZ - 0.05, material.trail));
+        if (showPathPreview) visiblePathTraces.forEach(trace => addPath(trace.points, pathLayerZ, material.path));
 
         const s = simulation.state;
         const angle = pinionRotation;
@@ -3610,7 +3634,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             stateRef.current.dataset.threeMaterialCacheSize = String(materialCacheRef.current.size);
         }
         renderCamera(cameraStateRef.current);
-    }, [mechanism, simulation, kit, color, pathPoints, showPathPreview, showTrail, pinionRotation, renderPlan, renderedLayerZ, pinCenterZ, pinLengthZ, rigOpacity]);
+    }, [mechanism, simulation, kit, color, visiblePathTraces, pathLayerZ, showPathPreview, showTrail, pinionRotation, renderPlan, renderedLayerZ, pinCenterZ, pinLengthZ, rigOpacity]);
 
     return <div
         data-testid="foundry-preview"
@@ -3697,6 +3721,11 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-three-spacer-render-count={spacerRenderCount}
             data-three-physical-pin-count={assemblyPinPoints.length}
             data-three-physical-pin-contract={assemblyPinContract}
+            data-three-path-source="moving-joints"
+            data-three-path-trace-count={visiblePathTraces.length}
+            data-three-path-trace-ids={visiblePathTraces.map(trace => trace.id).join(',')}
+            data-three-primary-path-id={primaryPathId}
+            data-three-path-z={pathLayerZ.toFixed(2)}
             data-path-preview={showPathPreview ? 'shown' : 'hidden'}
             data-trail={showTrail ? 'shown' : 'hidden'}
             data-forces={showForces ? 'shown' : 'hidden'}
