@@ -220,14 +220,12 @@ export const WorkflowStatusStrip = ({ stageLabel, blocker, nextAction }: { stage
 );
 
 export const WelcomeDialog = ({ onClose }: { onClose: (hideNextTime?: boolean) => void }) => {
-    const [hideNextTime, setHideNextTime] = useState(false);
     const dialogRef = useRef<HTMLElement>(null);
     const onCloseRef = useRef(onClose);
-    const hideNextTimeRef = useRef(false);
     useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
     useEffect(() => {
         dialogRef.current?.focus();
-        const autoCloseTimer = window.setTimeout(() => onCloseRef.current(hideNextTimeRef.current), 3000);
+        const autoCloseTimer = window.setTimeout(() => onCloseRef.current(false), 5000);
         return () => window.clearTimeout(autoCloseTimer);
     }, []);
     const trapDialogFocus = (event: React.KeyboardEvent) => {
@@ -240,7 +238,11 @@ export const WelcomeDialog = ({ onClose }: { onClose: (hideNextTime?: boolean) =
         const dialog = dialogRef.current;
         if (!dialog) return;
         const focusables = Array.from(dialog.querySelectorAll('button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter((element): element is HTMLElement => element instanceof HTMLElement && element.offsetParent !== null);
-        if (!focusables.length) return;
+        if (!focusables.length) {
+            event.preventDefault();
+            dialog.focus();
+            return;
+        }
         const first = focusables[0];
         const last = focusables.at(-1)!;
         const active = document.activeElement;
@@ -262,8 +264,6 @@ export const WelcomeDialog = ({ onClose }: { onClose: (hideNextTime?: boolean) =
                 <MotionSmithLogoMark />
                 <h2 id="welcome-dialog-title">MOTIONSMITH</h2>
             </div>
-            <button type="button" className="btn-primary" onClick={() => onClose(hideNextTime)}>Start</button>
-            <label className="replace-toggle"><input type="checkbox" checked={hideNextTime} onChange={event => { hideNextTimeRef.current = event.target.checked; setHideNextTime(event.target.checked); }} /> Skip forever</label>
         </section>
     </div>;
 };

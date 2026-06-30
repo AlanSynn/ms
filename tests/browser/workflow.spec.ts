@@ -22,9 +22,8 @@ const downloadMetadataJson = async (page: Page) => {
 const dismissWelcomeSplash = async (page: Page) => {
   const dialog = page.getByTestId('welcome-dialog');
   if (!(await dialog.count())) return;
-  await dialog.getByRole('button', { name: 'Start', exact: true }).click({ timeout: 2500 }).catch(async () => {
-    await expect(dialog, 'welcome splash either accepted or auto-dismissed').toHaveCount(0, { timeout: 5000 });
-  });
+  await dialog.press('Escape');
+  await expect(dialog, 'welcome splash closes without showing onboarding controls').toHaveCount(0, { timeout: 1000 });
 };
 
 const openCharacterScreen = async (page: Page, options: { loadStarter?: boolean } = { loadStarter: true }) => {
@@ -135,20 +134,25 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.locator('#boot-loader')).toHaveCount(0);
   const welcomeDialog = page.getByTestId('welcome-dialog');
   await expect(welcomeDialog).toBeVisible();
-  await expect(welcomeDialog.getByRole('heading', { name: 'MotionSmith' })).toBeVisible();
+  await expect(welcomeDialog).toContainText('MOTIONSMITH');
+  await expect(welcomeDialog.getByRole('button')).toHaveCount(0);
+  await expect(welcomeDialog.getByRole('checkbox')).toHaveCount(0);
   await expect(welcomeDialog.getByLabel('MotionSmith preview video')).toHaveCount(0);
   await expect(welcomeDialog.getByText('Rig a character, draw a path')).toHaveCount(0);
-  await expect(welcomeDialog.getByLabel('Skip forever')).toBeVisible();
+  await expect(welcomeDialog.getByText('Skip forever')).toHaveCount(0);
   const welcomeBox = await welcomeDialog.boundingBox();
+  const logoBox = await welcomeDialog.locator('img.motionsmith-logo-mark').boundingBox();
   const viewport = page.viewportSize();
-  expect(welcomeBox?.height ?? 0, 'logo-only splash fits inside the editor viewport').toBeLessThanOrEqual((viewport?.height ?? 900) * 0.58);
+  expect(welcomeBox?.width ?? 0, 'startup splash reads as a large overlay').toBeGreaterThanOrEqual((viewport?.width ?? 1200) * 0.62);
+  expect(welcomeBox?.height ?? 0, 'logo-only splash fits inside the editor viewport').toBeLessThanOrEqual((viewport?.height ?? 900) * 0.7);
+  expect(logoBox?.width ?? 0, 'splash logo is large enough to read as startup branding').toBeGreaterThan(70);
   expect(await page.evaluate(() => document.scrollingElement!.scrollHeight <= document.scrollingElement!.clientHeight + 8)).toBe(true);
   await expect.poll(() => activeElementIsInDialog(page)).toBe(true);
   for (let i = 0; i < 4; i += 1) {
     await page.keyboard.press('Tab');
     expect(await activeElementIsInDialog(page)).toBe(true);
   }
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await welcomeDialog.press('Escape');
   await expect(page.getByTestId('welcome-dialog')).toHaveCount(0);
   await expect(page.getByTestId('onnx-cache-status')).toBeVisible();
   await expect(page.getByTestId('onnx-cache-status')).toContainText(/AI ready|Get AI|AI \d+%|Try again/);
@@ -1754,16 +1758,18 @@ test('Welcome splash uses the MotionSmith logo mark and auto-dismisses', async (
   await expect(logo).toBeVisible();
   await expect(logo).toHaveAttribute('src', /AppIcon/);
   await expect(splash).toContainText('MOTIONSMITH');
-  await expect(splash).toHaveCount(0);
+  await expect(splash).toHaveCount(0, { timeout: 6500 });
   await expect(page.getByTestId('getting-started-dialog')).toBeVisible();
 });
 
-test('Mobile welcome modal is simple, traps focus, and can be hidden next time', async ({ page }) => {
+test('Mobile welcome modal is logo-only, traps focus, and releases to Getting Started', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   const splash = page.getByTestId('welcome-dialog');
   await expect(splash).toBeVisible();
-  await expect(splash.getByRole('heading', { name: 'MotionSmith' })).toBeVisible();
+  await expect(splash).toContainText('MOTIONSMITH');
+  await expect(splash.getByRole('button')).toHaveCount(0);
+  await expect(splash.getByRole('checkbox')).toHaveCount(0);
   await expect(splash.getByLabel('MotionSmith preview video')).toHaveCount(0);
   await expect.poll(() => activeElementIsInDialog(page)).toBe(true);
   const modalState = await page.evaluate(() => ({
@@ -1782,16 +1788,10 @@ test('Mobile welcome modal is simple, traps focus, and can be hidden next time',
     await page.keyboard.press('Tab');
     expect(await activeElementIsInDialog(page)).toBe(true);
   }
-  await page.getByLabel('Skip forever').check();
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await splash.press('Escape');
   await expect(page.getByTestId('welcome-dialog')).toHaveCount(0);
-  await expect(page.getByTestId('getting-started-dialog')).toHaveCount(0);
-  expect(await page.evaluate(() => document.documentElement.classList.contains('welcome-modal-open'))).toBe(false);
-  await page.reload();
-  await expect(page.getByTestId('welcome-dialog')).toHaveCount(0);
-  await expect(page.getByTestId('getting-started-dialog')).toHaveCount(0);
-  await expect(page.getByTestId('character-screen')).toBeVisible();
-  await expect(page.getByTestId('character-setup-panel')).toBeVisible();
+  await expect(page.getByTestId('getting-started-dialog')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.classList.contains('welcome-modal-open'))).toBe(true);
 });
 
 test('Shared player dock overlays the canvas, does not take layout space, and can be dragged', async ({ page }) => {

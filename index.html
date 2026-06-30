@@ -182,13 +182,15 @@
       .cut-outline-point.dragging { cursor: grabbing; }
       .cut-outline-tools { display: grid; gap: .72rem; border: 1px solid var(--ms-line); border-radius: 1.1rem; background: var(--ms-bg-soft); padding: .75rem; }
       .cut-outline-actions { display: flex; flex-wrap: wrap; gap: .45rem; }
-      .welcome-backdrop { background: rgba(248,250,252,.46); backdrop-filter: blur(14px) saturate(1.05); }
-      .welcome-dialog { width: min(100%, 74rem); max-height: min(91vh, 52rem); padding: 1rem; border-color: rgba(139,92,246,.24); background: rgba(255,255,255,.96); }
-      .splash-dialog { width: min(92vw, 24rem); max-height: none; display: grid; justify-items: center; gap: 1rem; padding: 1.6rem; text-align: center; overflow: hidden; }
-      .splash-brand { display: inline-flex; align-items: center; justify-content: center; gap: .75rem; }
+      .welcome-backdrop { background: rgba(248,250,252,.62); backdrop-filter: blur(10px) saturate(1.08); }
+      .welcome-dialog { width: min(96vw, 64rem); max-height: none; border: 0; background: transparent; box-shadow: none; padding: 2rem; }
+      .splash-dialog { display: grid; justify-items: center; gap: 0; text-align: center; overflow: hidden; }
+      .splash-brand { display: inline-flex; align-items: center; justify-content: center; gap: clamp(1rem, 3vw, 2rem); animation: splash-breathe 1.8s ease-in-out infinite; }
       .motionsmith-logo-mark { width: 2.55rem; height: 2.55rem; flex: none; border-radius: .9rem; object-fit: cover; filter: drop-shadow(0 8px 16px rgba(47,86,214,.14)); }
       .workflow-rail-app-icon { width: 2.35rem; height: 2.35rem; border-radius: .82rem; }
-      .splash-dialog h2 { margin: 0; color: var(--ms-text); font-family: Manrope, var(--ms-font-display); font-size: clamp(1.35rem, 7vw, 2rem); line-height: 1; letter-spacing: .18em; font-weight: 800; }
+      .splash-dialog .motionsmith-logo-mark { width: clamp(4.5rem, 11vw, 8rem); height: clamp(4.5rem, 11vw, 8rem); border-radius: 1.6rem; filter: drop-shadow(0 18px 40px rgba(47,86,214,.22)); }
+      .splash-dialog h2 { margin: 0; color: var(--ms-text); font-family: Manrope, var(--ms-font-display); font-size: clamp(3rem, 10vw, 7rem); line-height: .9; letter-spacing: .24em; font-weight: 800; }
+      @keyframes splash-breathe { 0%, 100% { opacity: .82; transform: scale(.98); } 50% { opacity: 1; transform: scale(1); } }
       .getting-started-dialog { width: min(92vw, 42rem); max-height: min(86vh, 34rem); display: grid; gap: .85rem; padding: 1rem; overflow: auto; }
       .getting-started-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; border-bottom: 1px solid var(--ms-line); padding-bottom: .75rem; }
       .getting-started-head h2 { max-width: 24rem; margin: .2rem 0 0; color: var(--ms-text); font-size: clamp(1.35rem, 2.4vw, 2rem); line-height: .98; letter-spacing: -.045em; font-weight: 720; }
@@ -435,7 +437,9 @@
         .stage-canvas-pane > .path-canvas-shell.canvas-workspace { order: 2; height: 58vh; min-height: 360px; }
         .path-canvas-shell svg { height: 58vh; min-height: 360px; }
         .welcome-backdrop { padding: .75rem; }
-        .welcome-dialog { max-height: 94vh; padding: .85rem; border-radius: 1.4rem; }
+        .welcome-dialog { max-height: 94vh; padding: .85rem; border-radius: 0; }
+        .splash-brand { flex-direction: column; gap: 1rem; }
+        .splash-dialog h2 { font-size: clamp(2.3rem, 14vw, 4.2rem); letter-spacing: .18em; }
         .character-stage { height: auto; min-height: calc(100vh - var(--ms-bottom-bars-height) - 1rem); overflow: visible; }
         .character-status-dock { left: .75rem; right: .75rem; bottom: calc(var(--ms-bottom-bars-height) + 10px); width: auto; }
         .character-status-dock .import-status { max-height: 46vh; }

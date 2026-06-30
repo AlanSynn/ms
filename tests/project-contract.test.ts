@@ -283,6 +283,7 @@ assert(readFileSync(join(process.cwd(), 'index.html'), 'utf8').includes("font-fa
   'Mechanism Foundry true WebGL 3D sandbox preview',
   'Do not show this again',
   'Skip to editor',
+  'Skip forever',
   'Rail motion path',
   'Rail mechanism parameters',
   'Rail export package',
@@ -862,7 +863,8 @@ assert(appUiText.includes('splash-dialog') && appShellText.includes('MOTIONSMITH
 assert(appShellText.includes('MotionSmithLogoMark') && appShellText.includes('../resources/icons/AppIcon.png?url') && !appShellText.includes('../src-tauri/icons/icon.png?url'), 'first-run welcome uses the canonical MotionSmith app icon instead of the old blue grid path');
 assert(appText.includes('./resources/icons/AppIcon.png?url') && indexText.includes('.app-header-icon'), 'top bar renders the canonical MotionSmith app icon with dedicated sizing');
 assert(indexText.includes("font-family: 'Manrope'") && indexText.includes('fonts/manrope-800-latin.woff2'), 'first-run welcome uses self-hosted Manrope wordmark styling');
-assert(appShellText.includes('window.setTimeout') && appShellText.includes('3000') && appShellText.includes('window.clearTimeout'), 'first-run welcome auto-dismisses after three seconds');
+assert(appShellText.includes('window.setTimeout') && appShellText.includes('5000') && appShellText.includes('window.clearTimeout'), 'first-run welcome auto-dismisses after five seconds');
+assert(!appShellText.includes('Skip forever') && !appShellText.includes('>Start<'), 'first-run welcome is logo-only without persistence/start controls');
 assert(indexText.includes('--ms-font-sans') && indexText.includes('font-family: var(--ms-font-sans)') && indexText.includes('.brand-title'), 'global typography uses the shared modern MotionSmith font stack');
 assert(appText.includes('app-header-brand') && appText.includes('app-header-actions') && appText.includes('quick-toolbar'), 'top app bar separates brand, menus, and quick actions into compact zones');
 assert(indexText.includes('.app-header-brand') && indexText.includes('.app-header-actions') && indexText.includes('border-radius: 999px'), 'top app bar keeps the brand and current stage in one slick editor row');
@@ -878,7 +880,7 @@ assert(indexText.includes('.starter-thumb { width: 2.25rem; height: 2.25rem;'), 
 assert(appText.includes('return { present: createEmptyProject(), past: [], future: [] }'), 'App initializes an empty project instead of preloading a character');
 assert(appText.includes('setProject(createEmptyProject(), { resetHistory: true })'), 'New Project resets to an empty project instead of a starter character');
 assert(appText.includes("returnStage: 'character'"), 'Accepted character loads stay in the Character tab instead of jumping to Path');
-assert(appText.includes('setShowGettingStarted(!hideNextTime)'), 'Start opens Getting Started unless the splash is hidden for next time');
+assert(appText.includes('setShowGettingStarted(!hideNextTime)'), 'Splash close opens Getting Started unless a legacy hide flag is present');
 assert(appText.includes('onOpenGettingStarted'), 'Character tab can reopen Getting Started without owning its starter gallery');
 assert(!appText.includes('Start with character art'), 'Character tab no longer carries the old hero/onboarding copy');
 assert(!indexText.includes('.onboarding-page'), 'CSS no longer keeps a full-screen onboarding page mode');
