@@ -8,7 +8,7 @@ import { CLASSROOM_LESSONS, classroomLessonById, createDefaultMechanism, createE
 import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, PLANETARY_GEAR_PLANET_COUNT, fabricationBoardCoordinateCallout, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, planetaryPlanetCenters, prefabAssemblySteps, sampleFeasibleRange, validateFabricationStack, validateForFabrication } from '../utils/fabrication';
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
-import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, generateCurvePoints, generateMechanismPointTraces, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius, sampledCamProfileScale } from '../utils/kinematics';
+import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainMeshPhaseDegAt, gearTrainMeshPhaseRadAt, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, generateCurvePoints, generateMechanismPointTraces, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius, sampledCamProfileScale } from '../utils/kinematics';
 import { animatedPartsForProject, describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainRootJointIds, motionPreviewForPath, motionPreviewForProject, motionPreviewForTarget, preferredMotionJointId } from '../utils/motion';
 import { buildToonSceneProjection } from '../utils/sceneProjection';
 import { buildFoundryPhysicsOverlay, buildKinematicPhysicsSession, mechanismPhysicsRule } from '../utils/physicsSession';
@@ -555,8 +555,9 @@ assert.equal(referenceRecipeForType('4bar').assemblySteps.find(step => step.labe
 assert.equal(referenceRecipeForType('4bar').assemblySteps.find(step => step.label === 'Add coupler')?.stack[0]?.role, 'link-joint-hole', '4bar G6 coupler joint is a floating link joint');
 assert.equal(referenceRecipeForType('4bar').assemblySteps.find(step => step.label === 'Join output to coupler')?.stack[0]?.role, 'link-joint-hole', '4bar G10 output/coupler joint remains floating');
 assert.equal(referenceRecipeForType('gear').title, 'Gear train', 'gear recipe title matches the visible gear-only Foundry label');
-assert.equal(referenceRecipeForType('gear_linkage').assemblySteps.find(step => step.label === 'Add linkage output')?.stack[0]?.role, 'gear-handle-hole', 'gear-linkage output arm starts at an off-centre gear handle hole');
-assert.equal(referenceRecipeForType('gear_linkage').assemblySteps.find(step => step.label === 'Add output connector')?.stack[0]?.role, 'link-end-hole', 'gear-linkage output connector is a moving link-end reference');
+assert.equal(referenceRecipeForType('gear_linkage').assemblySteps.find(step => step.label === 'Add drive crank link')?.stack[0]?.role, 'gear-handle-hole', 'gear-linkage drive arm starts at an off-centre gear handle hole');
+assert.equal(referenceRecipeForType('gear_linkage').assemblySteps.find(step => step.label === 'Add output crank link')?.stack[0]?.role, 'gear-handle-hole', 'gear-linkage output arm starts at an off-centre gear handle hole');
+assert.equal(referenceRecipeForType('gear_linkage').assemblySteps.find(step => step.label === 'Join moving connector')?.stack[0]?.role, 'link-end-hole', 'gear-linkage shared connector is a moving link-end reference');
 assert.equal(referenceRecipeForType('planetary_gear').assemblySteps.find(step => step.label === 'Add G3 moving planet gear')?.stack[0]?.role, 'carrier-hole', 'planetary planet axle sits on the moving carrier, not the board');
 assert.equal(referenceRecipeForType('piston').assemblySteps.find(step => step.label === 'Add connecting rod')?.stack[0]?.role, 'link-joint-hole', 'slider-crank G6 rod joint is a floating link joint');
 assert.equal(referenceRecipeForType('piston').assemblySteps.find(step => step.label === 'Add slider block')?.stack[0]?.role, 'link-end-hole', 'slider-crank block is a moving slider/link reference');
@@ -583,7 +584,7 @@ ALL_MECHANISM_TYPES.forEach(type => {
   assert(feature.physicsHints(mechanism).every(hint => hint.solver === 'kinematic-derived' && hint.preservesProjectState), `${type} feature declares derived physics sidecar behavior`);
 });
 assert(mechanismFeature('gear').interactionPolicy(createDefaultMechanism('gear')).editableParameters.includes('gearTrainRadii'), 'gear Foundry/Design editing exposes ordered fabrication gear sizes');
-assert(mechanismFeature('gear_linkage').interactionPolicy(createDefaultMechanism('gear_linkage')).editableParameters.includes('couplerLength'), 'gear-linkage Foundry/Design editing exposes the output linkage length');
+assert(mechanismFeature('gear_linkage').interactionPolicy(createDefaultMechanism('gear_linkage')).editableParameters.includes('couplerLength'), 'gear-linkage Foundry/Design editing exposes the paired linkage length');
 assert(mechanismFeature('cam').interactionPolicy(createDefaultMechanism('cam')).editableParameters.includes('camProfileSamples'), 'cam Foundry/Design editing exposes the editable lift profile');
 const sampleMechanismId = sample.mechanisms[0].id;
 const snapshotBeforeProject = serializeProject(sample);
@@ -767,6 +768,8 @@ assert.equal(g24Profile.source, FABRICATION_SOURCE_SSOT, 'gear profile declares 
 assert.equal(g24Profile.preset.key, 'g24', 'gear profile preserves fabrication preset key');
 assert.equal(g24Profile.outlinePoints.length, 96, 'G24 profile uses fabrication tooth segmentation, not sparse saw teeth');
 assert.equal(g24Profile.attachmentHoleCenters.length, 4, 'G24 profile carries grid attachment holes into shared renderers');
+assert.equal(gearTrainMeshPhaseDegAt([60, 60], 1), 7.5, 'G3/G3 external mesh offsets the driven gear by half a tooth');
+assert(Math.abs(gearTrainMeshPhaseRadAt([60, 60], 1) - Math.PI / 24) < 1e-9, 'gear mesh phase has a radian form for 3D design rotations');
 assert(fabricationGearPathD(30, 30).startsWith('M 28.44 0 L 31.43 2.06 L 31.23 4.11'), 'shared SVG gear path matches fabrication gear outline convention');
 assert(fabricationRingGearPathD(70).includes('M 90 0 A 90 90'), 'shared SVG ring gear path carries fabrication outer ring geometry');
 assert(fabricationRingGearPathD(70).includes('68.54'), 'shared SVG ring gear path carries internal tooth geometry');
@@ -810,8 +813,10 @@ assert(canvasText.includes('RingGearPath') && canvasText.includes('planetaryPlan
 assert(appText.includes('fixed-gear-axles-only'), 'Foundry 3D gear train preview declares fixed gear axles rather than generic mechanism pins');
 assert(appText.includes('coplanar-fixed-axles') && appText.includes('gear-axles-include-spacer'), 'Foundry 3D gear train preview keeps meshed gear plates coplanar and spans local spacer stacks');
 assert(appText.includes('foundry-parametric-editor') && appText.includes('design-parametric-editor'), 'Foundry and Design both mount the same compact parametric mechanism editor');
-assert(appText.includes('Drive gear size') && appText.includes('Output gear size') && appText.includes('Output link length'), 'parametric editor exposes gear and linkage fabrication selectors instead of hidden generic numbers');
+assert(appText.includes('Drive gear size') && appText.includes('Output gear size') && appText.includes('Paired link length'), 'parametric editor exposes gear and linkage fabrication selectors instead of hidden generic numbers');
 assert(appText.includes('fittedGearTrainCenters') && appText.includes('pin-stacks-use-rendered-gear-centers'), 'Foundry 3D gear plates, axles, and spacer stacks share fitted preview gear centers instead of raw mechanism coordinates');
+assert(appText.includes('gearTrainMeshPhaseDegAt') && appText.includes('alternating-half-tooth-gap-phase'), 'Foundry 3D gear rendering offsets adjacent tooth phases instead of showing tooth-on-tooth overlap at pitch contact');
+assert(physicsSessionText.includes('velocityBetween') && physicsSessionText.includes('forceFromAcceleration'), 'Foundry force/velocity overlays are kinematic estimates, not hidden dynamic rigid-body claims');
 assert(assemblyWorkbenchText.includes('isBoardFixedCoordRole') && assemblyWorkbenchText.includes('data-floating-reference-coords'), 'assembly workbench separates board-fixed holes from moving reference coordinates');
 assert(assemblyWorkbenchText.includes('assembly-floating-references') && assemblyWorkbenchText.includes('readableCoordRole'), 'assembly workbench visualizes moving references without turning them into board holes');
 assert(threePreviewText.includes('fabricationGearProfileForPitchRadius'), '3D foundry gear rendering uses shared fabrication gear geometry');
@@ -1308,7 +1313,7 @@ ALL_MECHANISM_TYPES.forEach(type => {
     assert(pointTraces.some(trace => trace.id === 'C' && trace.primary && trace.points.length > 1), '4bar exposes C as the primary output-joint path');
   }
   if (type === 'gear_linkage') {
-    assert(pointTraces.some(trace => trace.id === 'C' && trace.primary && trace.label.includes('output')), 'gear-linkage primary trace follows the linkage end-effector, not the intermediate gear handle');
+    assert(pointTraces.some(trace => trace.id === 'R' && trace.primary && trace.label.includes('shared')), 'gear-linkage primary trace follows the shared R linkage output, not either gear crank pin');
   }
   if (type === 'planetary_gear') {
     assert(pointTraces.some(trace => trace.id === 'C' && trace.primary && trace.label.includes('carrier')), 'planetary primary trace follows the carrier output, not a planet pitch point');
@@ -1335,7 +1340,7 @@ ALL_MECHANISM_TYPES.forEach(type => {
     cam: 'cam follower contact',
     'rack-pinion': 'rack linear guide',
     gear: 'gear pitch mesh tangent',
-    gear_linkage: 'L4 linkage output arm',
+    gear_linkage: 'drive L4 linkage arm',
     planetary_gear: 'planet gear mesh',
     piston: 'slider guide',
     yoke: 'pin-in-slot guide',
@@ -1501,7 +1506,7 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
   const unequalGear = { ...mechanism, crankLength: 30, rockerLength: 60, groundLength: 90, gearRatio: -99, speed2: -99 };
   const unequalQuarter = calculateLinkage(unequalGear, Math.PI / 2);
   const outputAngle = Math.atan2(unequalQuarter.j2.y - unequalQuarter.p2.y, unequalQuarter.j2.x - unequalQuarter.p2.x);
-  assert(Math.abs(outputAngle - gearPairOutputRatio(30, 60) * Math.PI / 2) < 1e-6, 'gear output rotation follows pitch radii, not stale ratio fields');
+  assert(Math.abs(outputAngle - (gearPairOutputRatio(30, 60) * Math.PI / 2 + gearTrainMeshPhaseRadAt([30, 60], 1))) < 1e-6, 'gear output rotation follows pitch radii plus physical tooth/gap mesh phase, not stale ratio fields');
   const g5 = gearSceneRadiusByKey('g40');
   const g1 = gearSceneRadiusByKey('g8');
   const g3 = gearSceneRadiusByKey('g24');
@@ -1536,22 +1541,23 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
   [0, Math.PI / 2, Math.PI].forEach(angle => {
     const state = calculateLinkage(mechanism, angle);
     assert(state.isValid, 'gear-linkage default has valid sampled poses');
-    assertDistance(state.p1, state.j1, mechanism.crankLength, 'gear-linkage input G3 handle radius is preserved');
+    assertDistance(state.p1, state.j1, mechanism.couplerPointDist, 'gear-linkage drive gear off-center handle radius is preserved');
     assertDistance(state.p1, state.p2, mechanism.groundLength, 'gear-linkage G3 centers stay at meshed pitch distance');
     assertDistance(state.p2, state.j2, mechanism.couplerPointDist, 'gear-linkage output gear off-center handle radius is preserved');
-    assertDistance(state.j2, state.effector, mechanism.couplerLength, 'gear-linkage L4 output linkage length is preserved');
+    assertDistance(state.j1, state.effector, mechanism.couplerLength, 'gear-linkage drive L4 linkage length is preserved');
+    assertDistance(state.j2, state.effector, mechanism.couplerLength, 'gear-linkage output L4 linkage length is preserved');
   });
   assert.equal(mechanism.crankLength, REFERENCE_DEFAULTS.gearLinkage.driveRadius, 'gear-linkage drive radius uses the reference G3 pitch radius');
   assert.equal(mechanism.rockerLength, REFERENCE_DEFAULTS.gearLinkage.outputRadius, 'gear-linkage output gear radius uses the reference G3 pitch radius');
   assert.equal(mechanism.groundLength, REFERENCE_DEFAULTS.gearLinkage.centerDistance, 'gear-linkage centers use the G3/G3 60 mm pitch distance');
-  assert.equal(mechanism.couplerPointDist, REFERENCE_DEFAULTS.gearLinkage.handleRadius, 'gear-linkage output handle uses the reference one-cell offset');
-  assert.equal(mechanism.couplerLength, REFERENCE_DEFAULTS.gearLinkage.outputLinkage, 'gear-linkage output rod uses the reference L4 linkage');
-  assert.deepEqual(requiredPartQuantities('gear_linkage'), { 'G3 / 3-space gear': 2, 'L4 linkage': 1, '2-hole bracket': 1, [FABRICATION_SPACER_SPEC.label]: 8 }, 'gear-linkage recipe uses two G3 gears, L4, output bracket, and S10 spacers');
+  assert.equal(mechanism.couplerPointDist, REFERENCE_DEFAULTS.gearLinkage.handleRadius, 'gear-linkage shared crank-pin radius uses the reference one-cell offset');
+  assert.equal(mechanism.couplerLength, REFERENCE_DEFAULTS.gearLinkage.outputLinkage, 'gear-linkage paired links use the reference L4 linkage');
+  assert.deepEqual(requiredPartQuantities('gear_linkage'), { 'G3 / 3-space gear': 2, 'L4 linkage': 2, '2-hole bracket': 1, [FABRICATION_SPACER_SPEC.label]: 8 }, 'gear-linkage recipe uses two G3 gears, two L4 crank links, output bracket, and S10 spacers');
   const dynamicGearLinkageParts = mechanismRequiredParts({ ...mechanism, gearTrainRadii: [gearSceneRadiusByKey('g40'), gearSceneRadiusByKey('g8'), gearSceneRadiusByKey('g56')], couplerLength: linkageSceneLengthByCells(6) });
   assert.equal(dynamicGearLinkageParts.find(part => part.name === 'G5 / 5-space gear')?.quantity, 1, 'gear-linkage required parts preserve a selected large drive gear');
   assert.equal(dynamicGearLinkageParts.find(part => part.name === 'G1 / 1-space gear')?.quantity, 1, 'gear-linkage required parts preserve selected idler gears');
   assert.equal(dynamicGearLinkageParts.find(part => part.name === 'G7 / 7-space gear')?.quantity, 1, 'gear-linkage required parts preserve a selected attachment-capable output gear');
-  assert.equal(dynamicGearLinkageParts.find(part => part.name === 'L6 linkage')?.quantity, 1, 'gear-linkage required parts preserve the selected output linkage size');
+  assert.equal(dynamicGearLinkageParts.find(part => part.name === 'L6 linkage')?.quantity, 2, 'gear-linkage required parts preserve the selected paired linkage size');
   const compoundGearLinkage = normalizeGearLinkageToReference({
     ...mechanism,
     crankLength: gearSceneRadiusByKey('g40'),
@@ -1563,24 +1569,28 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
   });
   const compoundGearLinkageState = calculateLinkage(compoundGearLinkage, Math.PI / 2);
   assertDistance(compoundGearLinkageState.p1, compoundGearLinkageState.p2, gearTrainPitchCenterDistance(compoundGearLinkage), 'gear-linkage preserves selected fabrication gear sizes and derives the meshed center distance');
+  assertDistance(compoundGearLinkageState.p1, compoundGearLinkageState.j1, compoundGearLinkage.couplerPointDist, 'gear-linkage snaps the drive crank pin to a real drive-gear attachment hole');
   assertDistance(compoundGearLinkageState.p2, compoundGearLinkageState.j2, compoundGearLinkage.couplerPointDist, 'gear-linkage snaps the output crank pin to a real output-gear attachment hole');
-  assertDistance(compoundGearLinkageState.j2, compoundGearLinkageState.effector, linkageSceneLengthByCells(6), 'gear-linkage preserves the selected L6 output linkage length');
+  assertDistance(compoundGearLinkageState.j1, compoundGearLinkageState.effector, linkageSceneLengthByCells(6), 'gear-linkage preserves the selected L6 drive linkage length');
+  assertDistance(compoundGearLinkageState.j2, compoundGearLinkageState.effector, linkageSceneLengthByCells(6), 'gear-linkage preserves the selected L6 paired linkage length');
   assert(compoundGearLinkageState.aux, 'gear-linkage exposes an idler gear center when the user inserts idlers');
+  const rejectedG1Drive = normalizeGearLinkageToReference({ ...mechanism, gearTrainRadii: [gearSceneRadiusByKey('g8'), gearSceneRadiusByKey('g24')], crankLength: gearSceneRadiusByKey('g8') });
+  assert.notEqual(fabricationGearSpecForPitchRadius((rejectedG1Drive.crankLength ?? 0) / SCENE_PX_PER_MM).key, 'g8', 'gear-linkage rejects G1 as a drive gear because it has no attachment holes');
   const rejectedG1Output = normalizeGearLinkageToReference({ ...mechanism, gearTrainRadii: [gearSceneRadiusByKey('g24'), gearSceneRadiusByKey('g8')], rockerLength: gearSceneRadiusByKey('g8') });
   assert.notEqual(fabricationGearSpecForPitchRadius((rejectedG1Output.rockerLength ?? 0) / SCENE_PX_PER_MM).key, 'g8', 'gear-linkage rejects G1 as an output gear because it has no attachment holes');
   Array.from({ length: 8 }, () => generateSmartConfig(undefined, 'gear_linkage')).forEach(config => {
     assert(config.gearTrainRadii?.every(gearSceneRadiusIsFabricationPreset), 'optimizer generates gear-linkage gear sizes from the fabrication gear preset set');
     assert.equal(config.groundLength, gearTrainPitchCenterDistance(config), 'optimizer derives gear-linkage center distance from the ordered gear train');
-    assert(linkageSceneLengthIsFabricationPreset(config.couplerLength), 'optimizer generates gear-linkage output linkage from fabricated linkage sizes');
+    assert(linkageSceneLengthIsFabricationPreset(config.couplerLength), 'optimizer generates gear-linkage paired linkage from fabricated linkage sizes');
   });
   const mutatedGearLinkage = mutateConfig(compoundGearLinkage, 1, true);
   assert(mutatedGearLinkage.gearTrainRadii?.every(gearSceneRadiusIsFabricationPreset), 'optimizer mutates gear-linkage back onto fabrication gear sizes without erasing idlers by contract');
   assert.equal(mutatedGearLinkage.groundLength, gearTrainPitchCenterDistance(mutatedGearLinkage), 'optimizer mutation derives the gear-linkage center distance from the ordered gear train');
-  assert(linkageSceneLengthIsFabricationPreset(mutatedGearLinkage.couplerLength), 'optimizer mutation preserves a fabricated output linkage size');
+  assert(linkageSceneLengthIsFabricationPreset(mutatedGearLinkage.couplerLength), 'optimizer mutation preserves a fabricated paired linkage size');
   assert.deepEqual(
     fabricationStackForMechanism(mechanism).filter(layer => ['gear', 'linkage', 'guide'].includes(layer.role)).map(layer => layer.label),
-    ['Drive G3 / 3-space gear', 'Output G3 / 3-space gear', 'L4 linkage', '2-hole bracket'],
-    'gear-linkage fabrication stack exposes G3→G3→L4→bracket in mechanism-reference order'
+    ['Drive G3 / 3-space gear', 'Output G3 / 3-space gear', 'Drive L4 linkage', 'Output L4 linkage', '2-hole bracket'],
+    'gear-linkage fabrication stack exposes G3→G3→two L4 links→bracket in mechanism-reference order'
   );
 }
 

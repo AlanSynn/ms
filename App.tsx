@@ -24,7 +24,7 @@ import {
     ProjectAction
 } from './types';
 import { gearPathD, generateDXF, generateSVG } from './utils/exporter';
-import { animationDeltaRadians, calculateLinkage, defaultCamProfileSamples, generateCurvePoints, generateMechanismPointTraces, gearPairOutputRatio, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, normalizeCamProfileSamples, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, sampledCamProfileScale } from './utils/kinematics';
+import { animationDeltaRadians, calculateLinkage, defaultCamProfileSamples, generateCurvePoints, generateMechanismPointTraces, gearPairOutputRatio, gearTrainMeshPhaseDegAt, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, gearTrainRotationRatioAt, normalizeCamProfileSamples, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, sampledCamProfileScale } from './utils/kinematics';
 import { evaluateFitness, generateSmartConfig, mutateConfig } from './utils/optimizer';
 import {
     applyProjectAction,
@@ -153,7 +153,9 @@ const foundryLayerGeometryContract = (type: MechanismType, label: string, render
     if (type === 'gear' && renderKind === 'gear') return `${label}:fixed-board-gear`;
     if (type === 'gear_linkage') {
         if (renderKind === 'gear') return `${label}:fixed-board-gear`;
-        if (/L4|linkage/i.test(label)) return `${label}:P-R`;
+        if (/drive.*L|Drive L|drive.*linkage/i.test(label)) return `${label}:B-pin-to-R`;
+        if (/output.*L|Output L|output.*linkage/i.test(label)) return `${label}:C-pin-to-R`;
+        if (/L4|linkage/i.test(label)) return `${label}:gear-pin-to-R`;
         if (/2-hole|bracket/i.test(label)) return `${label}:R-connector`;
     }
     if (type === 'planetary_gear') {
@@ -173,7 +175,7 @@ const foundryLayerGeometryContract = (type: MechanismType, label: string, render
 const mechanismReferenceTopologySummary = (type: MechanismType) => {
     if (type === '4bar') return 'A-B input; B-C coupler; C-D output; D-A board-ground';
     if (type === 'gear') return 'fixed gear centers only; no rods; external mesh sequence';
-    if (type === 'gear_linkage') return 'fixed gear centers; driven gear handle P; P-R L4 linkage; R bracket';
+    if (type === 'gear_linkage') return 'fixed gear centers; drive/output gear handle pins; two L4 links meet at R; R bracket';
     if (type === 'cam') return 'rotating cam profile; guided follower block; no linkage rods';
     if (type === 'planetary_gear') return 'fixed ring; sun input; planet on carrier; carrier output';
     if (type === '5bar') return 'A-B-C-D-E closed chain; A-E board-ground; simulation-only';
@@ -2554,7 +2556,6 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                         setAnchoredFoundry({ ...base, color: foundry.color, ...updates, presetId, recommendation: preset.recommendation });
                     }}>{Object.entries(FOUNDRY_PRESETS).map(([id, preset]) => <option key={id} value={id}>{preset.label}</option>)}</select>
                     {PARAMS.filter(p => showParam(foundry.type, p.key)).map(p => <React.Fragment key={String(p.key)}><MiniNumber label={p.label} value={Number(foundry[p.key] ?? 0)} min={p.min} max={p.max} step={p.step} onChange={value => updateFoundryParam(p.key, value)}/></React.Fragment>) }
-                    {foundry.type === 'cam' && <CamProfileEditor samples={foundry.camProfileSamples} onChange={camProfileSamples => updateFoundryParams({ camProfileSamples })} />}
                 </div>
             </details>
             <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
@@ -3000,7 +3001,7 @@ const MechanismParametricEditor = ({ mechanism, onChange, testId }: { mechanism:
     };
     const renderGearControls = radii.length >= 2 && (mechanism.type === 'gear' || mechanism.type === 'gear_linkage');
     const renderLinkageControls = mechanism.type === '4bar' || mechanism.type === 'gear_linkage';
-    const outputGearOptions = mechanism.type === 'gear_linkage' ? FABRICATION_GEAR_SPECS.filter(spec => spec.attachmentHoleCentersMm.length > 0) : FABRICATION_GEAR_SPECS;
+    const endpointGearOptions = mechanism.type === 'gear_linkage' ? FABRICATION_GEAR_SPECS.filter(spec => spec.attachmentHoleCentersMm.length > 0) : FABRICATION_GEAR_SPECS;
     if (!renderGearControls && !renderLinkageControls && mechanism.type !== 'cam') return null;
     return <div className="inspector-control-card compact-parametric-editor" data-testid={testId ?? 'mechanism-parametric-editor'}>
         {renderGearControls && <div className="space-y-2">
@@ -3008,7 +3009,7 @@ const MechanismParametricEditor = ({ mechanism, onChange, testId }: { mechanism:
             {radii.map((radius, index) => {
                 const isOutput = index === radii.length - 1;
                 const label = index === 0 ? 'Drive gear size' : isOutput ? 'Output gear size' : `Idler gear ${index} size`;
-                const options = isOutput ? outputGearOptions : FABRICATION_GEAR_SPECS;
+                const options = mechanism.type === 'gear_linkage' && (index === 0 || isOutput) ? endpointGearOptions : FABRICATION_GEAR_SPECS;
                 const selected = gearSpecForSceneRadius(radius).key;
                 return <label key={`${label}-${index}`} className="block text-xs font-black uppercase tracking-wider text-slate-500">
                     <span>{label.replace(' size', '')}</span>
@@ -3035,8 +3036,8 @@ const MechanismParametricEditor = ({ mechanism, onChange, testId }: { mechanism:
                 </select>
             </label>)}
             {mechanism.type === 'gear_linkage' && <label className="block text-xs font-black uppercase tracking-wider text-slate-500">
-                <span>Output link</span>
-                <select aria-label="Output link length" className="field mt-1" value={linkageCellsForSceneLength(mechanism.couplerLength)} onChange={event => onChange({ couplerLength: linkageSceneLengthForCells(Number(event.target.value)) })}>
+                <span>Paired links</span>
+                <select aria-label="Paired link length" className="field mt-1" value={linkageCellsForSceneLength(mechanism.couplerLength)} onChange={event => onChange({ couplerLength: linkageSceneLengthForCells(Number(event.target.value)) })}>
                     {FABRICATION_LINKAGE_SPECS.map(spec => <option key={spec.key} value={spec.cells}>{spec.cells}-cell</option>)}
                 </select>
             </label>}
@@ -3206,7 +3207,7 @@ const foundryAssemblyPinContract = (type: MechanismType) => {
     if (type === '5bar' || type === '6bar') return 'reference-ground-chain-only';
     if (type === 'cam' || type === 'piston' || type === 'rack-pinion' || type === 'yoke' || type === 'quick-return') return 'guided-output-only';
     if (type === 'gear') return 'fixed-gear-axles-only';
-    if (type === 'gear_linkage') return 'fixed-gear-axles-plus-output-linkage';
+    if (type === 'gear_linkage') return 'fixed-gear-axles-plus-two-crank-links';
     if (type === 'planetary_gear') return 'sun-and-carrier-planet-axles';
     return 'template-specific-output';
 };
@@ -3224,12 +3225,6 @@ const fittedGearTrainCenters = (radii: number[], start: Point, end: Point): Poin
         const t = distance / totalPitchDistance;
         return { x: start.x + dx * t, y: start.y + dy * t };
     });
-};
-
-const gearTrainRotationRatioAt = (radii: number[], index: number) => {
-    const drive = Math.max(0.001, Math.abs(radii[0] ?? 1));
-    const current = Math.max(0.001, Math.abs(radii[index] ?? radii.at(-1) ?? drive));
-    return (index % 2 === 1 ? -1 : 1) * drive / current;
 };
 
 type FoundryPinStackPoint = {
@@ -3378,7 +3373,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
     const spacerLayerCount = renderPlan.layers.filter(item => item.role === 'spacer').length;
     const assemblyPinPoints = useMemo(() => isGearTrain
         ? (mechanism.type === 'gear_linkage'
-            ? [...gearCenters, simulation.state.j2, simulation.state.effector].filter((point): point is Point => Boolean(point))
+            ? [...gearCenters, simulation.state.j1, simulation.state.j2, simulation.state.effector].filter((point): point is Point => Boolean(point))
             : gearCenters)
         : foundryAssemblyPinPoints(mechanism.type, simulation.state), [gearCenters, isGearTrain, mechanism.type, simulation.state]);
     const assemblyPinContract = foundryAssemblyPinContract(mechanism.type);
@@ -3408,6 +3403,9 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
     const gearAxleCenters = isGearTrain ? pinStackPoints.slice(0, gearCenters.length).map(pin => pin.point) : [];
     const gearCenterSummary = gearCenters.map(point => `${point.x.toFixed(2)}:${point.y.toFixed(2)}`).join(',');
     const gearAxleCenterSummary = gearAxleCenters.map(point => `${point.x.toFixed(2)}:${point.y.toFixed(2)}`).join(',');
+    const gearMeshPhaseSummary = isGearTrain
+        ? gearRadii.map((_, index) => gearTrainMeshPhaseDegAt(gearRadii, index).toFixed(2)).join(',')
+        : '';
     const gearCenterMaxError = isGearTrain && gearCenters.length > 1
         ? Math.max(...gearCenters.slice(1).map((center, index) => {
             const previous = gearCenters[index];
@@ -3694,6 +3692,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             root.add(mesh);
             const holes = new THREE.Group();
             holes.position.set(c.x, c.y, z);
+            holes.rotation.z = mesh.rotation.z;
             addHoleRing(holes, 0, 0, 0);
             profile.attachmentHoleCenters.forEach(point => addHoleRing(holes, point.x, point.y, 0));
             root.add(holes);
@@ -3829,7 +3828,8 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         const clipMat = clipLayer ? materialForLayer(clipLayer.color, 0.66, 0.03) : material.dark;
         const renderLinkageLayer = (label: string, z: number, mat: THREE.Material) => {
             if (mechanism.type === 'gear') return;
-            if (mechanism.type === 'gear_linkage' && /L4|linkage/i.test(label)) addBar(s.j2, s.effector, z, mat, 4);
+            if (mechanism.type === 'gear_linkage' && /drive.*L|Drive L|drive.*linkage/i.test(label)) addBar(s.j1, s.effector, z, mat, 4);
+            else if (mechanism.type === 'gear_linkage' && /output.*L|Output L|output.*linkage|L4|linkage/i.test(label)) addBar(s.j2, s.effector, z, mat, 4);
             else if (mechanism.type === 'gear_linkage' && /2-hole|bracket/i.test(label)) addSlotPlate(s.effector, barW * 3.2, Math.atan2(s.effector.y - s.j2.y, s.effector.x - s.j2.x), z, mat);
             else if (mechanism.type === '6bar' && /output rocker/i.test(label)) addBar(s.p2, s.j2, z, mat, 3);
             else if (mechanism.type === '6bar' && /dyad/i.test(label)) addBar(s.j2, s.aux, z, mat, 2);
@@ -3853,7 +3853,8 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
                 const index = Math.max(0, Math.min(gearTrainIndex, Math.max(0, gearRadii.length - 1)));
                 const fallbackCenter = index === 0 ? s.p1 : s.p2;
                 const fallbackRadius = index === 0 ? mechanism.crankLength : mechanism.rockerLength;
-                addGear(gearCenters[index] ?? fallbackCenter, gearRadii[index] ?? fallbackRadius, z, angle * gearTrainRotationRatioAt(gearRadii, index), mat);
+                const phaseDeg = gearTrainMeshPhaseDegAt(gearRadii, index) + (index === gearRadii.length - 1 ? ((mechanism.phase ?? 0) * 180) / Math.PI : 0);
+                addGear(gearCenters[index] ?? fallbackCenter, gearRadii[index] ?? fallbackRadius, z, angle * gearTrainRotationRatioAt(gearRadii, index) + phaseDeg, mat);
             }
             else addGear(s.p1, mechanism.crankLength, z, angle, mat);
         };
@@ -3978,14 +3979,16 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-three-planetary-output={planetaryConvention?.outputMember ?? ''}
             data-three-planetary-ring-radius={planetaryConvention?.ringPitchRadius.toFixed(2) ?? ''}
             data-three-planetary-carrier-radius={planetaryConvention?.carrierPitchRadius.toFixed(2) ?? ''}
-            data-three-gear-train-linkage-mode={mechanism.type === 'gear' ? 'gear-only-train' : mechanism.type === 'gear_linkage' ? 'output-gear-handle-l4-bracket' : 'template-specific'}
-            data-three-gear-linkage-mode={mechanism.type === 'gear_linkage' ? 'off-center-output-gear-crank' : 'none'}
+            data-three-gear-train-linkage-mode={mechanism.type === 'gear' ? 'gear-only-train' : mechanism.type === 'gear_linkage' ? 'two-gear-two-link-coupler' : 'template-specific'}
+            data-three-gear-linkage-mode={mechanism.type === 'gear_linkage' ? 'two-gear-two-link-coupler' : 'none'}
             data-three-gear-center-source={isGearTrain ? 'fitted-simulation-pitch-centers' : 'not-gear-train'}
             data-three-gear-center-count={gearCenters.length}
             data-three-gear-centers={gearCenterSummary}
             data-three-gear-axle-centers={gearAxleCenterSummary}
             data-three-gear-axle-center-contract={isGearTrain ? 'pin-stacks-use-rendered-gear-centers' : 'not-gear-train'}
             data-three-gear-center-max-error={gearCenterMaxError.toFixed(3)}
+            data-three-gear-mesh-phase-contract={isGearTrain ? 'alternating-half-tooth-gap-phase' : 'not-gear-train'}
+            data-three-gear-mesh-phases={gearMeshPhaseSummary}
             data-three-gear-plane-mode={isGearTrain ? (typeof gearMeshPlaneZ === 'number' ? 'coplanar-fixed-axles' : 'exploded-stack') : 'not-gear-train'}
             data-three-gear-plane-z={typeof gearMeshPlaneZ === 'number' ? gearMeshPlaneZ.toFixed(2) : ''}
             data-three-linkage-pin-radius={mechanism.type === 'gear_linkage' ? mechanism.couplerPointDist.toFixed(2) : ''}
@@ -4279,7 +4282,8 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
         ];
         if (mechanism.type === 'gear') return [];
         if (mechanism.type === 'gear_linkage') return [
-            link(s.j2, s.effector, 'l4-output-linkage', 'mechanism-output', 'output'),
+            link(s.j1, s.effector, 'drive-l4-linkage', 'mechanism-driver', 'driver'),
+            link(s.j2, s.effector, 'output-l4-linkage', 'mechanism-output', 'output'),
             slotPlate(s.effector, vectorAxis(s.j2, s.effector), barWidth * 3.2, 'output-bracket', 'mechanism-output', 'output')
         ];
         if (mechanism.type === 'planetary_gear') {

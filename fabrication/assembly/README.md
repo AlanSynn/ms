@@ -31,7 +31,7 @@ the 15x15 hole board (15 rows x 15 columns = 225 board holes).
 - `gear-train-basic` — Two-gear crank (4 steps)
 - `cam-follower-basic` — Cam and follower lift (4 steps)
 - `four-bar-basic` — Four-bar linkage (5 steps)
-- `gear-linkage-crank` — Gear crank linkage (5 steps)
+- `gear-linkage-crank` — Gear crank linkage (6 steps)
 - `planetary-gear-basic` — Planetary ring gear (6 steps)
 - `slider-crank-basic` — Slider-crank linkage (6 steps)
 

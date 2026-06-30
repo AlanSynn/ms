@@ -23,7 +23,8 @@ const downloadMetadataJson = async (page: Page) => {
 const dismissWelcomeSplash = async (page: Page) => {
   const dialog = page.getByTestId('welcome-dialog');
   if (!(await dialog.count())) return;
-  await dialog.press('Escape');
+  if (!(await dialog.first().isVisible().catch(() => false))) return;
+  await page.keyboard.press('Escape');
   await expect(dialog, 'welcome splash closes without showing onboarding controls').toHaveCount(0, { timeout: 1000 });
 };
 
@@ -1341,6 +1342,8 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(threeScene, 'Gear train axles are generated from the same fitted centers used to draw the gear plates').toHaveAttribute('data-three-gear-center-source', 'fitted-simulation-pitch-centers');
   await expect(threeScene).toHaveAttribute('data-three-gear-center-count', '3');
   await expect(threeScene).toHaveAttribute('data-three-gear-axle-center-contract', 'pin-stacks-use-rendered-gear-centers');
+  await expect(threeScene, 'Adjacent gear plates use alternating tooth/gap phase so pitch-center contact does not render as tooth overlap').toHaveAttribute('data-three-gear-mesh-phase-contract', 'alternating-half-tooth-gap-phase');
+  await expect(threeScene).toHaveAttribute('data-three-gear-mesh-phases', '0.00,22.50,0.00');
   expect(await threeScene.getAttribute('data-three-gear-axle-centers'), 'Every visible gear axle sits on its rendered gear center').toBe(await threeScene.getAttribute('data-three-gear-centers'));
   expect(Number(await threeScene.getAttribute('data-three-gear-center-max-error')), 'Fitted gear centers preserve fabrication pitch spacing after preview scaling').toBeLessThan(0.75);
   await expect(threeScene, 'Dynamic gear stack uses the same G1/G5/G7 fabrication labels as Blueprint/Assembly').toHaveAttribute('data-three-stack-order', /Drive G5 \/ 5-space gear.*Idler G1 \/ 1-space gear 1.*Output G7 \/ 7-space gear/);
@@ -1349,8 +1352,8 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(page.getByTestId('foundry-parametric-editor'), 'Gear linkage exposes the shared parametric editor').toBeVisible();
   await page.getByLabel('Drive gear size').selectOption('g40');
   await page.getByLabel('Output gear size').selectOption('g56');
-  await page.getByLabel('Output link length').selectOption('6');
-  await expect(threeScene, 'Gear linkage param editor keeps output gear and linkage in the fabrication stack').toHaveAttribute('data-three-stack-order', /Drive G5 \/ 5-space gear.*Output G7 \/ 7-space gear.*L6 linkage.*2-hole bracket/);
+  await page.getByLabel('Paired link length').selectOption('6');
+  await expect(threeScene, 'Gear linkage param editor keeps output gear and linkage in the fabrication stack').toHaveAttribute('data-three-stack-order', /Drive G5 \/ 5-space gear.*Output G7 \/ 7-space gear.*Drive L6 linkage.*Output L6 linkage.*2-hole bracket/);
   await expect(threeScene, 'Gear linkage crank pin snaps to a real attachment hole on the selected output gear').toHaveAttribute('data-three-linkage-pin-radius', /\d+\.\d+/);
 
   await page.getByLabel('Foundry mechanism type').selectOption('4bar');
@@ -1360,7 +1363,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
     '4bar': [['data-three-part-count', 5], ['data-three-hole-count', 11]],
     cam: [['data-three-cam-count', 1], ['data-three-follower-count', 1], ['data-three-hole-count', 8]],
     gear: [['data-three-gear-count', 2], ['data-three-hole-count', 10]],
-    gear_linkage: [['data-three-gear-count', 2], ['data-three-hole-count', 17]],
+    gear_linkage: [['data-three-gear-count', 2], ['data-three-hole-count', 22]],
     planetary_gear: [['data-three-gear-count', 3], ['data-three-hole-count', 13]]
   };
 
@@ -1431,6 +1434,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(threeScene, 'Default gear axles use the same fitted centers as the rendered gear plates').toHaveAttribute('data-three-gear-center-source', 'fitted-simulation-pitch-centers');
   await expect(threeScene).toHaveAttribute('data-three-gear-center-count', gearCount ?? '2');
   await expect(threeScene).toHaveAttribute('data-three-gear-axle-center-contract', 'pin-stacks-use-rendered-gear-centers');
+  await expect(threeScene, 'Default G3/G3 mesh offsets one gear by half a tooth instead of drawing tooth-on-tooth overlap').toHaveAttribute('data-three-gear-mesh-phases', '0.00,7.50');
   expect(await threeScene.getAttribute('data-three-gear-axle-centers'), 'Default gear axle centers match rendered gear centers').toBe(await threeScene.getAttribute('data-three-gear-centers'));
   expect(Number(await threeScene.getAttribute('data-three-gear-center-max-error')), 'Default fitted gear centers preserve fabrication pitch spacing').toBeLessThan(0.75);
   await expect(threeScene, 'Each visible gear has one real fixed axle, with no orphan pin tower').toHaveAttribute('data-three-physical-pin-count', gearCount ?? '2');
@@ -1439,14 +1443,14 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   const gearPinSpans = (await threeScene.getAttribute('data-three-pin-stack-spans') ?? '').split(',').map(item => Number(item.split(':')[1]));
   expect(Math.min(...gearPinSpans), 'gear axle pins cross the spacer clearance instead of only the thin gear plate').toBeGreaterThan(FABRICATION_RENDER_LAYER_Z_STEP);
   await page.getByLabel('Foundry mechanism type').selectOption('gear_linkage');
-  await expect(threeScene, 'Gear-linkage uses an off-center G3 output crank').toHaveAttribute('data-three-gear-linkage-mode', 'off-center-output-gear-crank');
-  await expect(threeScene, 'Gear-linkage uses the output gear handle, L4 rod, and bracket').toHaveAttribute('data-three-gear-train-linkage-mode', 'output-gear-handle-l4-bracket');
+  await expect(threeScene, 'Gear-linkage uses paired off-center G3 crank pins').toHaveAttribute('data-three-gear-linkage-mode', 'two-gear-two-link-coupler');
+  await expect(threeScene, 'Gear-linkage uses two gear handles, paired L4 rods, and bracket').toHaveAttribute('data-three-gear-train-linkage-mode', 'two-gear-two-link-coupler');
   await expect(threeScene, 'Gear-linkage keeps the drive/output gear mesh coplanar on board axles').toHaveAttribute('data-three-gear-plane-mode', 'coplanar-fixed-axles');
   await expect(threeScene, 'Gear-linkage gear axles include local spacer z in their fastener spans').toHaveAttribute('data-three-pin-stack-z-sources', 'gear-axles-include-spacer');
-  await expect(threeScene, 'Gear-linkage pins are the two fixed gear axles plus output handle and bracket connector').toHaveAttribute('data-three-physical-pin-contract', 'fixed-gear-axles-plus-output-linkage');
-  await expect(threeScene, 'Gear-linkage has no orphan hardware tower beyond its four real pin sites').toHaveAttribute('data-three-physical-pin-count', '4');
-  await expect(threeScene, 'Gear-linkage geometry maps each layer to its reference role').toHaveAttribute('data-three-geometry-contract', /Drive G3 \/ 3-space gear:fixed-board-gear.*Output G3 \/ 3-space gear:fixed-board-gear.*L4 linkage:P-R.*2-hole bracket:R-connector/);
-  await expect(threeScene, 'Gear-linkage stack exposes G3/G3/L4/bracket in reference order').toHaveAttribute('data-three-stack-order', /Drive G3 \/ 3-space gear.*Output G3 \/ 3-space gear.*L4 linkage.*2-hole bracket/);
+  await expect(threeScene, 'Gear-linkage pins are the two fixed gear axles plus two gear crank pins and one shared R connector').toHaveAttribute('data-three-physical-pin-contract', 'fixed-gear-axles-plus-two-crank-links');
+  await expect(threeScene, 'Gear-linkage has no orphan hardware tower beyond its five real pin sites').toHaveAttribute('data-three-physical-pin-count', '5');
+  await expect(threeScene, 'Gear-linkage geometry maps each layer to its reference role').toHaveAttribute('data-three-geometry-contract', /Drive G3 \/ 3-space gear:fixed-board-gear.*Output G3 \/ 3-space gear:fixed-board-gear.*Drive L4 linkage:B-pin-to-R.*Output L4 linkage:C-pin-to-R.*2-hole bracket:R-connector/);
+  await expect(threeScene, 'Gear-linkage stack exposes G3/G3/L4/bracket in reference order').toHaveAttribute('data-three-stack-order', /Drive G3 \/ 3-space gear.*Output G3 \/ 3-space gear.*Drive L4 linkage.*Output L4 linkage.*2-hole bracket/);
   await expect(threeScene).toHaveAttribute('data-three-gear-radii', '60.00,60.00');
   await expect(threeScene).toHaveAttribute('data-three-linkage-pin-radius', '40.00');
   await page.getByLabel('Foundry mechanism type').selectOption('cam');
@@ -2414,8 +2418,8 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
     '4bar': [['data-three-mechanism-link-count', 5], ['data-three-mechanism-hole-count', 11]],
     piston: [['data-three-slot-count', 1], ['data-three-follower-count', 1]],
     cam: [['data-three-cam-count', 1], ['data-three-follower-count', 1], ['data-three-mechanism-hole-count', 8]],
-    gear: [['data-three-gear-count', 2], ['data-three-mechanism-hole-count', 10]],
-    gear_linkage: [['data-three-gear-count', 2], ['data-three-mechanism-hole-count', 17]],
+    gear: [['data-three-gear-count', 2], ['data-three-mechanism-hole-count', 6]],
+    gear_linkage: [['data-three-gear-count', 2], ['data-three-mechanism-hole-count', 22]],
     planetary_gear: [['data-three-gear-count', 3], ['data-three-mechanism-hole-count', 13]]
   };
 
@@ -2532,7 +2536,7 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
 
   await page.getByRole('button', { name: 'gear_linkage', exact: true }).click();
   await expect(designPuppet).toHaveAttribute('data-three-selected-mechanism-type', 'gear_linkage');
-  await expect(designPuppet).toHaveAttribute('data-three-gear-linkage-mode', 'off-center-output-gear-crank');
+  await expect(designPuppet).toHaveAttribute('data-three-gear-linkage-mode', 'two-gear-two-link-coupler');
   await expect(designPuppet).toHaveAttribute('data-three-linkage-pin-radius', '40.00');
   const { startTelemetry: gearLinkageStartTelemetry, motionSample: gearLinkageTelemetry } = await scrubToMotionSample(10, 20, 'gear-linkage scrubber updates output gear crank linkage');
   const gearLinkagePrimaryDelta = deltaDeg(gearLinkageTelemetry.primary, gearLinkageStartTelemetry.primary);

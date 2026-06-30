@@ -50,7 +50,7 @@ const CamProfilePath = ({ radius, samples }: { radius: number; samples?: number[
 const referenceTopologySummary = (type: MechanismConfig['type']) => {
     if (type === '4bar') return 'A-B input; B-C coupler; C-D output; D-A board-ground';
     if (type === 'gear') return 'fixed gear centers only; no rods; external mesh sequence';
-    if (type === 'gear_linkage') return 'fixed gear centers; driven gear handle P; P-R L4 linkage; R bracket';
+    if (type === 'gear_linkage') return 'two meshed gear crank pins; two L4 links meet at R';
     if (type === 'cam') return 'rotating cam profile; guided follower block; no linkage rods';
     if (type === 'planetary_gear') return 'fixed ring; sun input; planet on carrier; carrier output';
     if (type === '5bar') return 'A-B-C-D-E closed chain; A-E board-ground; simulation-only';
@@ -645,15 +645,17 @@ export const Canvas: React.FC<CanvasProps> = ({
 
                                         {m.type === 'gear_linkage' && (
                                             <>
-                                                <line x1={p2.x} y1={p2.y} x2={j2.x} y2={j2.y} stroke="#94a3b8" strokeWidth="5" strokeLinecap="round" />
-                                                <line x1={j2.x} y1={j2.y} x2={effector.x} y2={effector.y} stroke={color} strokeWidth="8" strokeLinecap="round" />
+                                                <line x1={j1.x} y1={j1.y} x2={effector.x} y2={effector.y} stroke={color} strokeWidth="8" strokeLinecap="round" />
+                                                <line x1={j2.x} y1={j2.y} x2={effector.x} y2={effector.y} stroke="#334155" strokeWidth="8" strokeLinecap="round" />
                                                 <g transform={`translate(${effector.x}, ${effector.y}) rotate(${Math.atan2(effector.y - j2.y, effector.x - j2.x) * 180 / Math.PI})`}>
                                                     <rect x="-12" y="-7" width="24" height="14" rx="5" fill="#e2e8f0" stroke="#475569" strokeWidth="2" />
                                                     <circle cx="-6" cy="0" r="3" fill="white" stroke="#475569" strokeWidth="1.5" />
                                                     <circle cx="6" cy="0" r="3" fill="white" stroke="#475569" strokeWidth="1.5" />
                                                 </g>
+                                                <circle cx={p1.x} cy={p1.y} r={8} fill="#94a3b8" stroke="white" strokeWidth="2" opacity={0.65} />
                                                 <circle cx={p2.x} cy={p2.y} r={8} fill="#94a3b8" stroke="white" strokeWidth="2" opacity={0.65} />
-                                                <circle cx={j2.x} cy={j2.y} r={5} fill="white" stroke="#334155" strokeWidth="2" opacity={0.65} />
+                                                <circle cx={j1.x} cy={j1.y} r={5} fill="white" stroke="#334155" strokeWidth="2" opacity={0.85} />
+                                                <circle cx={j2.x} cy={j2.y} r={5} fill="white" stroke="#334155" strokeWidth="2" opacity={0.85} />
                                             </>
                                         )}
 

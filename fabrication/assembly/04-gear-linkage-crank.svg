@@ -52,13 +52,20 @@
   <rect x="101" y="167" width="28" height="17" class="layout-box" style="fill:none;stroke:none" data-layout-box="5,board,101,167,28,17" data-step="5" data-zone="board"/>
   <rect x="19" y="184" width="103" height="9" class="layout-box" style="fill:none;stroke:none" data-layout-box="5,stack,19,184,103,9" data-step="5" data-zone="stack"/>
   <rect x="19" y="194" width="103" height="8" class="layout-box" style="fill:none;stroke:none" data-layout-box="5,check,19,194,103,8" data-step="5" data-zone="check"/>
+  <rect x="146" y="158" width="122" height="49" class="score step-card"/>
+  <rect x="151" y="173" width="46" height="10" class="layout-box" style="fill:none;stroke:none" data-layout-box="6,parts,151,173,46,10" data-step="6" data-zone="parts"/>
+  <rect x="233" y="167" width="28" height="17" class="layout-box" style="fill:none;stroke:none" data-layout-box="6,board,233,167,28,17" data-step="6" data-zone="board"/>
+  <rect x="151" y="184" width="103" height="9" class="layout-box" style="fill:none;stroke:none" data-layout-box="6,stack,151,184,103,9" data-step="6" data-zone="stack"/>
+  <rect x="151" y="194" width="103" height="8" class="layout-box" style="fill:none;stroke:none" data-layout-box="6,check,151,194,103,8" data-step="6" data-zone="check"/>
   <g id="layer-board-grid">
   <circle cx="106" cy="64" r="1.15" class="drill board-hole active-board-hole" data-step="1" data-board-coord="I6"/>
   <circle cx="238" cy="64" r="1.15" class="drill board-hole active-board-hole" data-step="2" data-board-coord="I6"/>
   <circle cx="106" cy="122" r="1.15" class="drill board-hole active-board-hole" data-step="3" data-board-coord="I9"/>
-  <circle cx="238" cy="122" r="1.15" class="drill board-hole reference-coordinate" data-step="4" data-board-coord="I9"/>
+  <circle cx="238" cy="122" r="1.15" class="drill board-hole reference-coordinate" data-step="4" data-board-coord="I6"/>
   <circle cx="243" cy="122" r="1.15" class="drill board-hole reference-coordinate" data-step="4" data-board-coord="I12"/>
-  <circle cx="106" cy="180" r="1.15" class="drill board-hole reference-coordinate" data-step="5" data-board-coord="I12"/>
+  <circle cx="106" cy="180" r="1.15" class="drill board-hole reference-coordinate" data-step="5" data-board-coord="I9"/>
+  <circle cx="111" cy="180" r="1.15" class="drill board-hole reference-coordinate" data-step="5" data-board-coord="I12"/>
+  <circle cx="238" cy="180" r="1.15" class="drill board-hole reference-coordinate" data-step="6" data-board-coord="I12"/>
   </g>
   <g id="layer-previous-step-ghost">
   </g>
@@ -77,16 +84,22 @@
   <text x="189" y="121" class="tiny" text-anchor="middle">L4</text>
   <rect x="21" y="174" width="22" height="7.5" class="score part-card" style="fill:#94a3b8;fill-opacity:0.22;stroke:#94a3b8;stroke-width:0.5" data-step="5" data-part-key="spacers:s10" data-part-index="1"/>
   <text x="32" y="179" class="tiny" text-anchor="middle">S10</text>
-  <rect x="46" y="174" width="22" height="7.5" class="score part-card" style="fill:#a78bfa;fill-opacity:0.22;stroke:#a78bfa;stroke-width:0.5" data-step="5" data-part-key="brackets:2-hole-straight" data-part-index="2"/>
-  <text x="57" y="179" class="tiny" text-anchor="middle">2 Hole Straig…</text>
+  <rect x="46" y="174" width="22" height="7.5" class="score part-card" style="fill:#60a5fa;fill-opacity:0.22;stroke:#60a5fa;stroke-width:0.5" data-step="5" data-part-key="linkages:linkage-4-cell" data-part-index="2"/>
+  <text x="57" y="179" class="tiny" text-anchor="middle">L4</text>
+  <rect x="153" y="174" width="22" height="7.5" class="score part-card" style="fill:#94a3b8;fill-opacity:0.22;stroke:#94a3b8;stroke-width:0.5" data-step="6" data-part-key="spacers:s10" data-part-index="1"/>
+  <text x="164" y="179" class="tiny" text-anchor="middle">S10</text>
+  <rect x="178" y="174" width="22" height="7.5" class="score part-card" style="fill:#a78bfa;fill-opacity:0.22;stroke:#a78bfa;stroke-width:0.5" data-step="6" data-part-key="brackets:2-hole-straight" data-part-index="2"/>
+  <text x="189" y="179" class="tiny" text-anchor="middle">2 Hole Straig…</text>
   </g>
   <g id="layer-new-part-highlight">
   <circle cx="106" cy="64" r="1.8" class="score new-part-highlight" data-step="1" data-board-coord="I6" data-app-mechanism="gear_linkage"/>
   <circle cx="238" cy="64" r="1.8" class="score new-part-highlight" data-step="2" data-board-coord="I6" data-app-mechanism="gear_linkage"/>
   <circle cx="106" cy="122" r="1.8" class="score new-part-highlight" data-step="3" data-board-coord="I9" data-app-mechanism="gear_linkage"/>
-  <circle cx="238" cy="122" r="1.8" class="score reference-marker" data-step="4" data-reference-coord="I9" data-app-mechanism="gear_linkage"/>
+  <circle cx="238" cy="122" r="1.8" class="score reference-marker" data-step="4" data-reference-coord="I6" data-app-mechanism="gear_linkage"/>
   <circle cx="243" cy="122" r="1.8" class="score reference-marker" data-step="4" data-reference-coord="I12" data-app-mechanism="gear_linkage"/>
-  <circle cx="106" cy="180" r="1.8" class="score reference-marker" data-step="5" data-reference-coord="I12" data-app-mechanism="gear_linkage"/>
+  <circle cx="106" cy="180" r="1.8" class="score reference-marker" data-step="5" data-reference-coord="I9" data-app-mechanism="gear_linkage"/>
+  <circle cx="111" cy="180" r="1.8" class="score reference-marker" data-step="5" data-reference-coord="I12" data-app-mechanism="gear_linkage"/>
+  <circle cx="238" cy="180" r="1.8" class="score reference-marker" data-step="6" data-reference-coord="I12" data-app-mechanism="gear_linkage"/>
   </g>
   <g id="layer-fasteners">
   <rect x="21" y="58" width="34" height="7.5" class="score part-card" style="fill:#f97316;fill-opacity:0.18;stroke:#f97316;stroke-width:0.5" data-step="1" data-part-key="hardware:paper-fastener" data-part-index="1"/>
@@ -104,16 +117,19 @@
   <text x="19" y="108" class="coord-label" text-anchor="start">3</text>
   <text x="30" y="107.6" class="part-card-label" text-anchor="start">Mesh output G3 gear</text>
   <text x="151" y="108" class="coord-label" text-anchor="start">4</text>
-  <text x="162" y="107.6" class="part-card-label" text-anchor="start">Add linkage output</text>
+  <text x="162" y="107.6" class="part-card-label" text-anchor="start">Add drive crank link</text>
   <text x="19" y="166" class="coord-label" text-anchor="start">5</text>
-  <text x="30" y="165.6" class="part-card-label" text-anchor="start">Add output connector</text>
+  <text x="30" y="165.6" class="part-card-label" text-anchor="start">Add output crank link</text>
+  <text x="151" y="166" class="coord-label" text-anchor="start">6</text>
+  <text x="162" y="165.6" class="part-card-label" text-anchor="start">Join moving connector</text>
   </g>
   <g id="layer-labels">
   <text x="72" y="57" class="tiny" text-anchor="start">Board holes: I6</text>
   <text x="204" y="57" class="tiny" text-anchor="start">Board holes: I6</text>
   <text x="72" y="115" class="tiny" text-anchor="start">Board holes: I9</text>
-  <text x="204" y="115" class="tiny" text-anchor="start">Gear/handle ref: I9, I12</text>
-  <text x="72" y="173" class="tiny" text-anchor="start">Link-end ref: I12</text>
+  <text x="204" y="115" class="tiny" text-anchor="start">Gear/handle ref: I6, I12</text>
+  <text x="72" y="173" class="tiny" text-anchor="start">Gear/handle ref: I9, I12</text>
+  <text x="204" y="173" class="tiny" text-anchor="start">Link-end ref: I12</text>
   </g>
   <g id="layer-stack-diagram">
   <rect x="21" y="69" width="9" height="4.6" class="score stack-layer" data-step="1" data-stack-layer="1" data-stack-role="board" data-part-key=""/>
@@ -124,7 +140,9 @@
   <text x="33" y="131" class="tiny" text-anchor="start">Board hole I9</text>
   <rect x="153" y="127" width="9" height="4.6" class="score stack-layer" data-step="4" data-stack-layer="1" data-stack-role="gear-handle-hole" data-part-key=""/>
   <text x="165" y="131" class="tiny" text-anchor="start">Gear handle hole</text>
-  <rect x="21" y="185" width="9" height="4.6" class="score stack-layer" data-step="5" data-stack-layer="1" data-stack-role="link-end-hole" data-part-key=""/>
-  <text x="33" y="189" class="tiny" text-anchor="start">Link end hole</text>
+  <rect x="21" y="185" width="9" height="4.6" class="score stack-layer" data-step="5" data-stack-layer="1" data-stack-role="gear-handle-hole" data-part-key=""/>
+  <text x="33" y="189" class="tiny" text-anchor="start">Gear handle hole</text>
+  <rect x="153" y="185" width="9" height="4.6" class="score stack-layer" data-step="6" data-stack-layer="1" data-stack-role="link-end-hole" data-part-key=""/>
+  <text x="165" y="189" class="tiny" text-anchor="start">Link end hole</text>
   </g>
 </svg>

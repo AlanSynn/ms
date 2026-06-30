@@ -1,5 +1,7 @@
 
 import { Point, MechanismConfig, JointState, AppSettings } from '../types';
+import { SCENE_PX_PER_MM } from './coordinates';
+import { FABRICATION_GEAR_RADIUS_PER_TOOTH_MM } from './fabricationContract';
 import { normalizeGearLinkageToReference } from './mechanismReference';
 
 const toRad = (deg: number) => (deg * Math.PI) / 180;
@@ -72,6 +74,23 @@ export const gearTrainOutputRatio = (configOrRadii: Pick<MechanismConfig, 'crank
     const sign = meshCount % 2 === 1 ? -1 : 1;
     return sign * safeRadiusRatio(radii[0], radii.at(-1) ?? radii[0], 1);
 };
+
+export const gearTrainRotationRatioAt = (radii: number[], index: number) => {
+    const drive = Math.max(0.001, Math.abs(radii[0] ?? 1));
+    const current = Math.max(0.001, Math.abs(radii[index] ?? radii.at(-1) ?? drive));
+    return (index % 2 === 1 ? -1 : 1) * drive / current;
+};
+
+export const gearTrainMeshPhaseDegAt = (radii: number[], index: number) => {
+    if (index % 2 === 0) return 0;
+    const sceneRadius = Math.max(1, Math.abs(radii[index] ?? radii.at(-1) ?? radii[0] ?? 1));
+    const pitchRadiusMm = sceneRadius / SCENE_PX_PER_MM;
+    const teeth = Math.max(1, Math.round(pitchRadiusMm / FABRICATION_GEAR_RADIUS_PER_TOOTH_MM));
+    return 180 / teeth;
+};
+
+export const gearTrainMeshPhaseRadAt = (radii: number[], index: number) =>
+    (gearTrainMeshPhaseDegAt(radii, index) * Math.PI) / 180;
 
 export const gearTrainPitchCenterDistance = (config: Pick<MechanismConfig, 'crankLength' | 'rockerLength' | 'gearTrainRadii'>) => {
     const radii = gearTrainPitchRadii(config);
@@ -251,7 +270,7 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
             y: p1.y + inputRadius * Math.sin(angle1)
         };
         const ratio = gearTrainOutputRatio(radii);
-        const outAngle = angle1 * ratio + (config.phase ?? 0);
+        const outAngle = angle1 * ratio + gearTrainMeshPhaseRadAt(radii, radii.length - 1) + (config.phase ?? 0);
         const j2: Point = {
             x: p2.x + outputRadius * Math.cos(outAngle),
             y: p2.y + outputRadius * Math.sin(outAngle)
@@ -263,35 +282,38 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
         return { p1, p2, j1: drivePoint, j2, aux: centers.length > 2 ? centers[1] : undefined, effector, isValid: true };
     }
 
-    // --- GEAR-DRIVEN OUTPUT LINKAGE ---
+    // --- GEAR-DRIVEN TWO-LINK COUPLER ---
     else if (config.type === 'gear_linkage') {
-        // Gear-linkage is a fixed mechanism-reference recipe: two meshed G3 gears only.
-        // Do not inherit arbitrary gear-train idlers from a raw config; the output linkage
-        // attaches to the driven G3 handle hole, not to a compound train endpoint.
+        // Paper-style gear linkage: two meshed gear crank pins drive two fabricated
+        // rods that meet at one moving coupler/output point. Both crank pins are
+        // real off-center attachment holes; the pitch radius is only for meshing.
         const referencePair = normalizeGearLinkageToReference(config);
         const radii = gearTrainPitchRadii(referencePair);
         const centers = gearTrainCenters(referencePair);
-        const inputRadius = radii[0];
-        const outputRadius = radii.at(-1) ?? config.rockerLength;
         const p2 = centers.at(-1) ?? p1;
-        const drivePoint: Point = {
-            x: p1.x + inputRadius * Math.cos(angle1),
-            y: p1.y + inputRadius * Math.sin(angle1)
-        };
         const ratio = gearTrainOutputRatio(radii);
-        const outAngle = angle1 * ratio + (config.phase ?? 0);
+        const outAngle = angle1 * ratio + gearTrainMeshPhaseRadAt(radii, radii.length - 1) + (config.phase ?? 0);
         const handleRadius = Math.max(1, Math.abs(referencePair.couplerPointDist));
-        const j2: Point = {
+        const drivePin: Point = {
+            x: p1.x + handleRadius * Math.cos(angle1),
+            y: p1.y + handleRadius * Math.sin(angle1)
+        };
+        const outputPin: Point = {
             x: p2.x + handleRadius * Math.cos(outAngle),
             y: p2.y + handleRadius * Math.sin(outAngle)
         };
         const linkLength = Math.max(1, Math.abs(referencePair.couplerLength));
-        const effectorAngle = outAngle + toRad(config.couplerPointAngle);
-        const effector: Point = {
-            x: j2.x + linkLength * Math.cos(effectorAngle),
-            y: j2.y + linkLength * Math.sin(effectorAngle)
+        const effector = getCircleIntersection(drivePin, linkLength, outputPin, linkLength, config.assemblyMode !== 'crossed');
+        const fallbackEffector = { x: (drivePin.x + outputPin.x) / 2, y: (drivePin.y + outputPin.y) / 2 };
+        return {
+            p1,
+            p2,
+            j1: drivePin,
+            j2: outputPin,
+            aux: centers.length > 2 ? centers[1] : undefined,
+            effector: effector ?? fallbackEffector,
+            isValid: Boolean(effector)
         };
-        return { p1, p2, j1: drivePoint, j2, aux: centers.length > 2 ? centers[1] : undefined, effector, isValid: true };
     }
 
     // --- PLANETARY GEAR / EPITROCHOID OUTPUT ---
@@ -568,9 +590,9 @@ const compactTraceDefinitions = (
         { id: 'B', label: 'B crank pin', point: state.j1, primary: true }
     ];
     if (type === 'gear_linkage') return [
-        { id: 'B', label: 'B drive point', point: state.j1 },
-        { id: 'C', label: 'C output point', point: state.effector, primary: true },
-        { id: 'D', label: 'D gear handle', point: state.j2 }
+        { id: 'B', label: 'B drive crank pin', point: state.j1 },
+        { id: 'C', label: 'C output crank pin', point: state.j2 },
+        { id: 'R', label: 'R shared link output', point: state.effector, primary: true }
     ];
     if (type === 'gear') return [
         { id: 'B', label: 'B drive point', point: state.j1 },

@@ -1180,6 +1180,7 @@
         "highlight_ids": [
           "gears:g24",
           "gears:g24",
+          "linkages:linkage-4-cell",
           "linkages:linkage-4-cell"
         ],
         "mechanism_type": "gear_linkage"
@@ -1213,7 +1214,7 @@
         },
         {
           "category": "linkages",
-          "count": 1,
+          "count": 2,
           "key": "linkage-4-cell",
           "label": "L4 linkage",
           "part": "linkages:linkage-4-cell"
@@ -1364,7 +1365,7 @@
         {
           "action": "add-part",
           "app_mapping": {
-            "component_role": "driven-gear",
+            "component_role": "output-gear",
             "highlight_ids": [
               "spacers:s10",
               "gears:g24"
@@ -1448,23 +1449,23 @@
         {
           "action": "add-linkage",
           "app_mapping": {
-            "component_role": "output-link",
+            "component_role": "drive-crank-link",
             "highlight_ids": [
               "spacers:s10",
               "linkages:linkage-4-cell"
             ],
             "mechanism_type": "gear_linkage"
           },
-          "check": "The linkage rides around the gear center instead of locking to the board.",
+          "check": "The drive linkage rides around the gear center instead of locking to the board.",
           "coord_roles": [
             "gear_handle_reference",
             "link_end_reference"
           ],
           "coords": [
-            "I9",
+            "I6",
             "I12"
           ],
-          "instruction": "Fasten L4 through an off-center output G3 handle hole only (not the board), then point the free end toward I12.",
+          "instruction": "Fasten L4 through an off-center drive G3 handle hole only (not the board), then point the free end toward I12.",
           "n": 4,
           "parts": [
             {
@@ -1484,7 +1485,7 @@
           ],
           "stack": [
             {
-              "label": "G3 handle hole near I9",
+              "label": "Drive G3 handle hole near I6",
               "order": 1,
               "role": "gear-handle-hole"
             },
@@ -1517,7 +1518,7 @@
               "role": "fastener-tabs"
             }
           ],
-          "title": "Add linkage output",
+          "title": "Add drive crank link",
           "visual_state": {
             "active_parts": [
               "spacers:s10",
@@ -1526,6 +1527,95 @@
             "ghost_parts": [
               "gears:g24",
               "gears:g24"
+            ],
+            "highlight_coords": [
+              "I6",
+              "I12"
+            ]
+          }
+        },
+        {
+          "action": "add-linkage",
+          "app_mapping": {
+            "component_role": "output-crank-link",
+            "highlight_ids": [
+              "spacers:s10",
+              "linkages:linkage-4-cell"
+            ],
+            "mechanism_type": "gear_linkage"
+          },
+          "check": "Both L4 links meet at one moving output point.",
+          "coord_roles": [
+            "gear_handle_reference",
+            "link_end_reference"
+          ],
+          "coords": [
+            "I9",
+            "I12"
+          ],
+          "instruction": "Fasten a second L4 through an off-center output G3 handle hole only (not the board), then meet the first L4 at I12.",
+          "n": 5,
+          "parts": [
+            {
+              "category": "spacers",
+              "count": 8,
+              "key": "s10",
+              "label": "S10 spacer",
+              "part": "spacers:s10"
+            },
+            {
+              "category": "linkages",
+              "count": 1,
+              "key": "linkage-4-cell",
+              "label": "L4 linkage",
+              "part": "linkages:linkage-4-cell"
+            }
+          ],
+          "stack": [
+            {
+              "label": "Output G3 handle hole near I9",
+              "order": 1,
+              "role": "gear-handle-hole"
+            },
+            {
+              "label": "Paper fastener",
+              "order": 2,
+              "role": "paper-fastener"
+            },
+            {
+              "label": "S10 spacer",
+              "order": 3,
+              "part": "spacers:s10",
+              "role": "spacer"
+            },
+            {
+              "label": "L4 linkage",
+              "order": 4,
+              "part": "linkages:linkage-4-cell",
+              "role": "moving-part"
+            },
+            {
+              "label": "S10 spacer",
+              "order": 5,
+              "part": "spacers:s10",
+              "role": "top-spacer"
+            },
+            {
+              "label": "Open tabs loosely",
+              "order": 6,
+              "role": "fastener-tabs"
+            }
+          ],
+          "title": "Add output crank link",
+          "visual_state": {
+            "active_parts": [
+              "spacers:s10",
+              "linkages:linkage-4-cell"
+            ],
+            "ghost_parts": [
+              "gears:g24",
+              "gears:g24",
+              "linkages:linkage-4-cell"
             ],
             "highlight_coords": [
               "I9",
@@ -1543,15 +1633,15 @@
             ],
             "mechanism_type": "gear_linkage"
           },
-          "check": "The bracket follows the linkage end and is not pinned to the board.",
+          "check": "The bracket follows both link ends and is not pinned to the board.",
           "coord_roles": [
             "link_end_reference"
           ],
           "coords": [
             "I12"
           ],
-          "instruction": "Fasten the 2-hole bracket to the free L4 end near I12 as a moving handle.",
-          "n": 5,
+          "instruction": "Fasten the 2-hole bracket to the two free L4 ends near I12 as a moving handle.",
+          "n": 6,
           "parts": [
             {
               "category": "spacers",
@@ -1570,7 +1660,7 @@
           ],
           "stack": [
             {
-              "label": "Link output hole near I12",
+              "label": "Shared link output hole near I12",
               "order": 1,
               "role": "link-end-hole"
             },
@@ -1603,7 +1693,7 @@
               "role": "fastener-tabs"
             }
           ],
-          "title": "Add output connector",
+          "title": "Join moving connector",
           "visual_state": {
             "active_parts": [
               "spacers:s10",
@@ -1612,6 +1702,7 @@
             "ghost_parts": [
               "gears:g24",
               "gears:g24",
+              "linkages:linkage-4-cell",
               "linkages:linkage-4-cell"
             ],
             "highlight_coords": [

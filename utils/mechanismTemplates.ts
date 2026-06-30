@@ -100,9 +100,9 @@ export const MECHANISM_TEMPLATE_LIBRARY: Record<MechanismType, MechanismTemplate
     },
     gear_linkage: {
         label: 'Gear linkage',
-        sense: 'paired G3 gears drive an off-center L4 crank linkage from the output gear',
+        sense: 'paired G3 gears drive two L4 crank links that meet at one moving point',
         goodFor: 'Gear crank',
-        constraint: 'output linkage attaches to the gear handle hole only, never to the board',
+        constraint: 'both linkages attach to off-center gear handle holes and share one floating output point',
         authorable: true
     },
     planetary_gear: {

@@ -366,7 +366,9 @@ export const fabricationStackForMechanism = (mechanism: Pick<MechanismConfig, 't
         return linked(
             ...gearStackLayers(REFERENCE_DEFAULTS.gearLinkage.driveRadius, REFERENCE_DEFAULTS.gearLinkage.outputRadius),
             spacer(),
-            layer(`L${linkageSpec.cells} linkage`, 'linkage'),
+            layer(`Drive L${linkageSpec.cells} linkage`, 'linkage'),
+            spacer(),
+            layer(`Output L${linkageSpec.cells} linkage`, 'linkage'),
             spacer(),
             layer('2-hole bracket', 'guide')
         );

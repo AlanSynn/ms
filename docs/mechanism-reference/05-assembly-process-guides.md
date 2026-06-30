@@ -341,7 +341,7 @@ Parts:
 
 ```text
 G3 × 2
-L4 × 1
+L4 × 2
 2-hole bracket × 1
 S10 × 8
 paper fasteners
@@ -359,20 +359,24 @@ Build sequence:
 3. **Mesh output G3 at I9**
    - Stack: `B@I9 > F > S10 > G3_output > S10 > tabs-loose`.
    - Check: gears move together.
-4. **Add linkage output**
+4. **Add drive crank link**
+   - Coordinates: `I6(gear_handle_reference)`, `I12(link_end_reference)`.
+   - Stack: `H_gear@I6 > F > S10 > L4_drive > S10 > tabs-loose`.
+   - Check: drive link rides around the drive gear centre instead of locking to the board.
+5. **Add output crank link**
    - Coordinates: `I9(gear_handle_reference)`, `I12(link_end_reference)`.
-   - Stack: `H_gear@I9 > F > S10 > L4 > S10 > tabs-loose`.
-   - Check: linkage rides around gear centre instead of locking to board.
-5. **Add output connector**
+   - Stack: `H_gear@I9 > F > S10 > L4_output > S10 > tabs-loose`.
+   - Check: both L4 links meet at one moving R connector.
+6. **Join moving connector**
    - Coordinate: `I12(link_end_reference)`.
    - Stack: `E_link@I12 > F > S10 > bracket2 > S10 > tabs-loose`.
-   - Check: bracket follows linkage end and is not pinned to board.
+   - Check: bracket follows the two link ends and is not pinned to the board.
 
 Gear-linkage final check:
 
 - Drive/output gear centres are fixed at `I6/I9`.
-- Linkage crank pin is an off-centre output gear hole.
-- `I12` connector moves.
+- B/C crank pins are off-centre gear handle holes.
+- `I12`/R connector moves as the two-link circle intersection.
 
 ## 5.6.5 Planetary gear build flow
 

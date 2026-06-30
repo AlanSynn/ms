@@ -28,7 +28,7 @@ This folder is the portable mechanism-unit rulebook for rebuilding Automataii's 
 | `four_bar` | production physical mechanism | yes | yes | yes | Canonical 4-bar recipe; uses L2-L4-L2 plus board ground link. |
 | `cam_follower` | production physical mechanism | yes | yes | yes | Eccentric cam + round follower recipe; other cam/follower presets are parts. |
 | `gear_train` | production physical mechanism | yes | yes | yes | Two meshing G3 gears in default recipe. |
-| `gear_linkage` | production physical mechanism | yes | yes | yes | Gear pair plus off-center crank/linkage output. |
+| `gear_linkage` | production physical mechanism | yes | yes | yes | Two meshed gear crank pins plus paired links meeting at R. |
 | `planetary_gear` | production physical mechanism | yes | yes | yes | G1 sun, G3 planet, R56 fixed ring, L2 carrier. |
 | `slider_crank` | supported physical/export mechanism | no | yes | yes | Assembly recipe exists; not exposed in Foundry gallery. |
 | `three_bar` / `linkage_three_bar` | content/domain reference only | no | no | no | No current physical recipe. |

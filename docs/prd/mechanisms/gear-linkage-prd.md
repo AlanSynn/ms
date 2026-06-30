@@ -1,7 +1,7 @@
 # MotionSmith gear linkage PRD
 
 ## Scope
-Compound mechanism: verified two-gear train plus off-center output linkage. Separate from plain `gear`.
+Fabrication-ready compound mechanism: two meshed gears each carry one off-center crank pin, and two fabricated linkages meet at one moving output point. This is not the plain `gear` train and not a single output rod. It matches the paper-style driving block where a paired gear crank can sweep a wide family of curves.
 
 References:
 - https://github.com/JarrettR/Stagger for future two-drive linkage sweep patterns.
@@ -9,28 +9,34 @@ References:
 ## Topology contract
 
 ```text
-G_a drive gear fixed on board
-G_b driven gear fixed on board
-P off-center attachment hole on G_b
-R linkage output point
-G_a meshes G_b
-P-R is a fabricated linkage
+A = drive gear fixed board axle
+D = output gear fixed board axle
+B = off-center crank pin on drive gear G_a
+C = off-center crank pin on output gear G_b
+R = shared moving linkage/output point
+G_a meshes G_b, with optional idlers between them
+B-R is one fabricated linkage
+C-R is one fabricated linkage of the same selected length
 ```
 
 ## Physics invariants
 
-- Gear pair center distance equals `r_a + r_b`.
-- Driven gear angular velocity is `-omega_a * r_a / r_b`.
-- P rotates around `G_b` at selected fabricated attachment radius.
-- Linkage attaches to P, not to G_b board axle.
+- Every adjacent gear center distance equals `r_i + r_{i+1}`.
+- Output gear angular velocity is `(-1)^mesh_count * omega_a * r_a / r_d`.
+- B rotates around A at a real fabricated attachment-hole radius.
+- C rotates around D at the same real fabricated attachment-hole radius.
+- R is the valid circle intersection of radius `L` around B and radius `L` around C.
+- If no intersection exists, the mechanism is invalid; previews may use a fallback midpoint only as a blocker state, never as successful simulation.
 
 ## Fabrication contract
 
-- Driven gear must expose a real attachment hole. Reject G1 if no off-center holes.
-- Linkage length snaps to L2/L4/L6/L8 family.
-- Stack: board gear axle -> gear -> S10 -> linkage -> front clip/spacer.
+- Drive and output gears must expose real off-center attachment holes. Reject G1 at endpoints because it has no crank holes.
+- Idler gears may be any fabricated gear size because they do not carry crank pins.
+- Attachment radius snaps to a shared fabricated hole radius available on both endpoint gears.
+- Linkage length snaps to L2/L4/L6/L8 and is instantiated twice.
+- Stack: fixed gear axle stacks stay board-mounted; B/C crank stacks are moving gear-handle holes; R joins the two link ends plus bracket.
 
 ## Tests
 
-- Contract tests assert gear spacing and linkage pin radius.
-- Assembly tests assert stack includes `H_gear`, not extra board pin.
+- Contract tests assert pitch spacing, endpoint gear rejection, B/C crank radius, B-R and C-R linkage lengths, and doubled linkage part count.
+- Browser tests assert `two-gear-two-link-coupler`, five real pin sites, and layer roles `B-pin-to-R`, `C-pin-to-R`, and `R-connector`.

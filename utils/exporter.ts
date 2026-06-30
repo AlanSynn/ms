@@ -116,8 +116,7 @@ export const generateDXF = (config: GlobalConfig, angle: number): string => {
                 content += dxfCircle(center.x, center.y, gearTrainPitchRadii(m)[index] ?? m.rockerLength, `${MECH_LAYER}_GEARS`, 5);
             });
             if (m.type === 'gear_linkage') {
-                content += dxfLine(p1.x, p1.y, j1.x, j1.y, MECH_LAYER, 1);
-                content += dxfLine(p2.x, p2.y, j2.x, j2.y, MECH_LAYER, 1);
+                content += dxfLine(j1.x, j1.y, effector.x, effector.y, MECH_LAYER, 1);
                 content += dxfLine(j2.x, j2.y, effector.x, effector.y, MECH_LAYER, 1);
             }
         }
@@ -221,7 +220,7 @@ export const generateSVG = (config: GlobalConfig, angle: number): string => {
         }
         else if (m.type === 'gear' || m.type === 'gear_linkage') {
             if (m.type === 'gear_linkage') {
-                svg += `<line x1="${svgNumber(p2.x)}" y1="${svgNumber(p2.y)}" x2="${svgNumber(j2.x)}" y2="${svgNumber(j2.y)}" stroke="#475569" stroke-width="4" stroke-linecap="round" />`;
+                svg += `<line x1="${svgNumber(j1.x)}" y1="${svgNumber(j1.y)}" x2="${svgNumber(effector.x)}" y2="${svgNumber(effector.y)}" stroke="#475569" stroke-width="6" stroke-linecap="round" />`;
                 svg += `<line x1="${svgNumber(j2.x)}" y1="${svgNumber(j2.y)}" x2="${svgNumber(effector.x)}" y2="${svgNumber(effector.y)}" stroke="${color}" stroke-width="6" stroke-linecap="round" />`;
             }
         }

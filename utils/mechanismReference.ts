@@ -169,9 +169,10 @@ export const referenceRequiredPartsForMechanism = (mechanism: Pick<MechanismConf
     }
     if (mechanism.type === 'gear_linkage') {
         const normalized = normalizeGearLinkageToReference(mechanism);
+        const couplerLinkage = linkageRequirementForSceneLength(normalized.couplerLength ?? REFERENCE_DEFAULTS.gearLinkage.outputLinkage);
         return aggregatePartRequirements([
             ...gearRequirementsForMechanism(normalized),
-            linkageRequirementForSceneLength(normalized.couplerLength ?? REFERENCE_DEFAULTS.gearLinkage.outputLinkage),
+            { ...couplerLinkage, quantity: couplerLinkage.quantity * 2, count: couplerLinkage.quantity * 2 },
             ...parts.filter(partRequirement => partRequirement.category !== 'gears' && partRequirement.category !== 'linkages')
         ]);
     }
@@ -209,7 +210,12 @@ export const fabricationLinkageSpecForSceneLength = (sceneLength: number) => {
     );
 };
 
-const normalizeGearTrainRadii = (mechanism: Partial<MechanismConfig>, fallbackDrive: number, fallbackOutput: number, options?: { outputNeedsAttachment?: boolean }) => {
+const normalizeGearTrainRadii = (
+    mechanism: Partial<MechanismConfig>,
+    fallbackDrive: number,
+    fallbackOutput: number,
+    options?: { outputNeedsAttachment?: boolean; endpointsNeedAttachment?: boolean }
+) => {
     const raw = Array.isArray(mechanism.gearTrainRadii) && mechanism.gearTrainRadii.length >= 2
         ? mechanism.gearTrainRadii
         : [mechanism.crankLength ?? fallbackDrive, mechanism.rockerLength ?? fallbackOutput];
@@ -217,7 +223,8 @@ const normalizeGearTrainRadii = (mechanism: Partial<MechanismConfig>, fallbackDr
     const source = limited.length >= 2 ? limited : [fallbackDrive, fallbackOutput];
     const snapped = source.map((radius, index) => {
         const isOutput = index === source.length - 1;
-        const candidates = options?.outputNeedsAttachment && isOutput ? attachmentGearSpecs : FABRICATION_GEAR_SPECS;
+        const needsAttachment = (options?.endpointsNeedAttachment && (index === 0 || isOutput)) || (options?.outputNeedsAttachment && isOutput);
+        const candidates = needsAttachment ? attachmentGearSpecs : FABRICATION_GEAR_SPECS;
         return sceneGearRadiusForSpec(fabricationGearSpecForSceneRadius(radius, candidates));
     });
     return snapped.length >= 2 ? snapped : [fallbackDrive, fallbackOutput];
@@ -230,12 +237,22 @@ const outputRatioForRadii = (radii: number[]) => {
     return sign * (radii[0] / Math.max(1, radii.at(-1) ?? radii[0]));
 };
 
-const nearestAttachmentRadiusForScene = (outputGearRadius: number, requested: number) => {
-    const spec = fabricationGearSpecForSceneRadius(outputGearRadius, attachmentGearSpecs);
+const attachmentOffsetsMmForSceneGear = (sceneRadius: number) =>
+    fabricationGearSpecForSceneRadius(sceneRadius, attachmentGearSpecs)
+        .attachmentHoleCentersMm
+        .map(point => Math.hypot(point.x, point.y))
+        .filter(radius => radius > 0);
+
+const nearestSharedAttachmentRadiusForScene = (driveGearRadius: number, outputGearRadius: number, requested: number) => {
     const requestedMm = sceneToMm(requested || REFERENCE_DEFAULTS.gearLinkage.handleRadius);
-    const offsets = spec.attachmentHoleCentersMm.map(point => Math.hypot(point.x, point.y)).filter(radius => radius > 0);
-    const bestMm = offsets.length
-        ? offsets.reduce((best, radius) => Math.abs(radius - requestedMm) < Math.abs(best - requestedMm) ? radius : best)
+    const driveOffsets = attachmentOffsetsMmForSceneGear(driveGearRadius);
+    const outputOffsets = attachmentOffsetsMmForSceneGear(outputGearRadius);
+    const sharedOffsets = driveOffsets.filter(driveOffset =>
+        outputOffsets.some(outputOffset => Math.abs(outputOffset - driveOffset) < 0.01)
+    );
+    const candidates = sharedOffsets.length ? sharedOffsets : outputOffsets.length ? outputOffsets : driveOffsets;
+    const bestMm = candidates.length
+        ? candidates.reduce((best, radius) => Math.abs(radius - requestedMm) < Math.abs(best - requestedMm) ? radius : best)
         : sceneToMm(REFERENCE_DEFAULTS.gearLinkage.handleRadius);
     return mmToScene(bestMm);
 };
@@ -261,7 +278,7 @@ const gearRequirementForSceneRadius = (sceneRadius: number, quantity = 1) => {
 };
 
 const gearRequirementsForMechanism = (mechanism: Partial<MechanismConfig>) =>
-    normalizeGearTrainRadii(mechanism, REFERENCE_DEFAULTS.gearTrain.driveRadius, REFERENCE_DEFAULTS.gearTrain.outputRadius, { outputNeedsAttachment: mechanism.type === 'gear_linkage' })
+    normalizeGearTrainRadii(mechanism, REFERENCE_DEFAULTS.gearTrain.driveRadius, REFERENCE_DEFAULTS.gearTrain.outputRadius, { endpointsNeedAttachment: mechanism.type === 'gear_linkage' })
         .map(radius => gearRequirementForSceneRadius(radius));
 
 const linkageRequirementForSceneLength = (sceneLength: number) => {
@@ -288,7 +305,7 @@ const G1 = () => part('gears:g8', 'gears', 'g8', 'G1 / 1-space gear', 1);
 const R56 = () => part('ring_gears:ring-g8-g24', 'ring_gears', 'ring-g8-g24', 'R56 internal ring gear', 1);
 const S10 = part('spacers:s10', 'spacers', 's10', FABRICATION_SPACER_SPEC.label, 8);
 const L2 = (quantity: number) => part('linkages:linkage-2-cell', 'linkages', 'linkage-2-cell', 'L2 linkage', quantity);
-const L4 = () => part('linkages:linkage-4-cell', 'linkages', 'linkage-4-cell', 'L4 linkage', 1);
+const L4 = (quantity = 1) => part('linkages:linkage-4-cell', 'linkages', 'linkage-4-cell', 'L4 linkage', quantity);
 const L6 = () => part('linkages:linkage-6-cell', 'linkages', 'linkage-6-cell', 'L6 linkage', 1);
 const BR2 = () => part('brackets:2-hole-straight', 'brackets', '2-hole-straight', '2-hole bracket', 1);
 const BR3 = () => part('brackets:3-hole-straight', 'brackets', '3-hole-straight', '3-hole bracket', 1);
@@ -396,8 +413,9 @@ const gearLinkageSteps: ReferenceAssemblyStep[] = [
     step(1, 'Mount drive gear', 'place-fastener', ['I6'], ['board'], 'Place the drive gear fastener at I6.', 'The axle is straight.', bareFastener('I6')),
     step(2, 'Add drive G3 gear', 'add-part', ['I6'], ['board'], 'Add S10 spacer, then place drive G3 at I6.', 'Drive G3 rotates freely.', movingPartStack('Board hole I6', 'G3 / 3-space gear', 'gears:g24')),
     step(3, 'Mesh output G3 gear', 'add-part', ['I9'], ['board'], 'Place output G3 at I9 and mesh it with drive G3.', 'The gears move together.', movingPartStack('Board hole I9', 'G3 / 3-space gear', 'gears:g24')),
-    step(4, 'Add linkage output', 'add-linkage', ['I9', 'I12'], ['gear_handle_reference', 'link_end_reference'], 'Fasten L4 through an off-center output G3 handle hole only (not the board), then point the free end toward I12.', 'The linkage rides around the gear center instead of locking to the board.', movingPartStack('G3 handle hole near I9', 'L4 linkage', 'linkages:linkage-4-cell', 'gear-handle-hole')),
-    step(5, 'Add output connector', 'add-bracket', ['I12'], ['link_end_reference'], 'Fasten the 2-hole bracket to the free L4 end near I12 as a moving handle.', 'The bracket follows the linkage end and is not pinned to the board.', movingPartStack('Link output hole near I12', '2-hole bracket', 'brackets:2-hole-straight', 'link-end-hole'))
+    step(4, 'Add drive crank link', 'add-linkage', ['I6', 'I12'], ['gear_handle_reference', 'link_end_reference'], 'Fasten L4 through an off-center drive G3 handle hole only (not the board), then point the free end toward I12.', 'The drive linkage rides around the gear center instead of locking to the board.', movingPartStack('Drive G3 handle hole near I6', 'L4 linkage', 'linkages:linkage-4-cell', 'gear-handle-hole')),
+    step(5, 'Add output crank link', 'add-linkage', ['I9', 'I12'], ['gear_handle_reference', 'link_end_reference'], 'Fasten a second L4 through an off-center output G3 handle hole only (not the board), then meet the first L4 at I12.', 'Both L4 links meet at one moving output point.', movingPartStack('Output G3 handle hole near I9', 'L4 linkage', 'linkages:linkage-4-cell', 'gear-handle-hole')),
+    step(6, 'Join moving connector', 'add-bracket', ['I12'], ['link_end_reference'], 'Fasten the 2-hole bracket to the two free L4 ends near I12 as a moving handle.', 'The bracket follows both link ends and is not pinned to the board.', movingPartStack('Shared link output hole near I12', '2-hole bracket', 'brackets:2-hole-straight', 'link-end-hole'))
 ];
 
 const planetarySteps: ReferenceAssemblyStep[] = [
@@ -485,14 +503,14 @@ export const REFERENCE_MECHANISM_RECIPES: Record<MechanismType, ReferenceMechani
         appType: 'gear_linkage',
         canonicalKey: 'gear_linkage',
         title: 'Gear crank linkage',
-        physicsRule: 'gear mesh force + off-center linkage velocity',
+        physicsRule: 'gear mesh force + two crank-link circle intersection',
         foundryVisible: true,
         exportReady: true,
         support: 'fabrication-ready',
         recipeId: 'gear-linkage-crank',
         guideSvg: 'fabrication/assembly/04-gear-linkage-crank.svg',
-        requiredParts: [G3(2), L4(), BR2(), S10],
-        stackLabels: ['Drive G3 / 3-space gear', 'Output G3 / 3-space gear', 'L4 linkage', '2-hole bracket'],
+        requiredParts: [G3(2), L4(2), BR2(), S10],
+        stackLabels: ['Drive G3 / 3-space gear', 'Output G3 / 3-space gear', 'Drive L4 linkage', 'Output L4 linkage', '2-hole bracket'],
         assemblySteps: gearLinkageSteps
     },
     planetary_gear: {
@@ -532,7 +550,8 @@ export const referenceSupportWarning = (type: MechanismType) => {
 };
 
 export const normalizeGearLinkageToReference = <T extends Partial<MechanismConfig>>(mechanism: T): T => {
-    const radii = normalizeGearTrainRadii(mechanism, REFERENCE_DEFAULTS.gearLinkage.driveRadius, REFERENCE_DEFAULTS.gearLinkage.outputRadius, { outputNeedsAttachment: true });
+    const radii = normalizeGearTrainRadii(mechanism, REFERENCE_DEFAULTS.gearLinkage.driveRadius, REFERENCE_DEFAULTS.gearLinkage.outputRadius, { endpointsNeedAttachment: true });
+    const drive = radii[0] ?? REFERENCE_DEFAULTS.gearLinkage.driveRadius;
     const output = radii.at(-1) ?? REFERENCE_DEFAULTS.gearLinkage.outputRadius;
     const ratio = outputRatioForRadii(radii);
     const linkageSpec = fabricationLinkageSpecForSceneLength(mechanism.couplerLength ?? REFERENCE_DEFAULTS.gearLinkage.outputLinkage);
@@ -541,7 +560,7 @@ export const normalizeGearLinkageToReference = <T extends Partial<MechanismConfi
         crankLength: radii[0],
         rockerLength: output,
         groundLength: pitchDistanceForRadii(radii),
-        couplerPointDist: nearestAttachmentRadiusForScene(output, mechanism.couplerPointDist ?? REFERENCE_DEFAULTS.gearLinkage.handleRadius),
+        couplerPointDist: nearestSharedAttachmentRadiusForScene(drive, output, mechanism.couplerPointDist ?? REFERENCE_DEFAULTS.gearLinkage.handleRadius),
         couplerLength: sceneLinkageLengthForSpec(linkageSpec),
         gearTrainRadii: radii,
         gearRatio: ratio,

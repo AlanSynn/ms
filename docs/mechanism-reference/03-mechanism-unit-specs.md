@@ -25,7 +25,7 @@ Snapping by family:
 | `four_bar` | `ground_link`, `input_link`, `coupler_link`, `output_link`, `l1..l4`, `L1..L4` → nearest `{40,80,120,160}` mm. |
 | `slider_crank` | `crank_length`, `rod_length` → nearest `{40,80,120,160}` mm. |
 | `gear_train` | `gear1_teeth`, `gear2_teeth` → nearest `{8,24,40,56}`; radii aliases filled. |
-| `gear_linkage` | gear pair as above; driven gear must have attachment holes; `linkage_pin_radius` → fabricated driven-gear attachment radius; `linkage_arm_length` → linkage length. |
+| `gear_linkage` | gear train as above; drive/output endpoint gears must have attachment holes; `linkage_pin_radius` → shared fabricated attachment radius on both endpoint gears; `linkage_arm_length` → paired linkage length. |
 | `planetary_gear` | forced to `sun=g8/8T`, `planet=g24/24T`, `ring=ring-g8-g24`; `planet_count` fixed at `1` until the multi-planet carrier recipe exists; carrier length snapped. |
 | `cam_follower` | snap to nearest physical cam preset; fill `base_radius`, `eccentricity`, `cam_lobes`, `profile_harmonic`, `rise_deg`, `high_dwell_deg`, `return_deg`, `physical_cam_preset`. |
 
@@ -37,7 +37,7 @@ Mechanism Foundry and Mechanism Design edit the same `MechanismConfig` fields. A
 |---|---|---|
 | `4bar` | input link, coupler link, output link, ground angle/position | link lengths snap to L2/L4/L6/L8; ground remains a board reference between A and D. |
 | `gear` | drive gear size, output gear size, zero or more idler gear sizes, ground angle/position | every gear snaps to G1/G3/G5/G7 (`8/24/40/56` teeth); centre distances, gear ratio, and speed ratio derive from the ordered gear list. |
-| `gear_linkage` | drive/output/idler gear sizes, output linkage size, ground angle/position | output gear must be G3/G5/G7 because G1 has no attachment holes; crank pin snaps to a real output-gear attachment hole; linkage snaps to L2/L4/L6/L8. |
+| `gear_linkage` | drive/output/idler gear sizes, paired linkage size, crank-pin radius, ground angle/position | drive and output gears must be G3/G5/G7 because G1 has no attachment holes; both crank pins snap to a shared real endpoint-gear attachment radius; paired linkages snap to L2/L4/L6/L8. |
 | `cam` | cam profile samples, follower travel/radius, phase | visible cam profile edits update `camProfileSamples`; sampled profile drives follower contact and physics overlays. |
 | `planetary_gear` | phase and driver grouping only until alternate ring/carrier recipes exist | physical recipe remains fixed to R56 + G1 + G3 + L2 so the assembly stack stays buildable. |
 
@@ -214,12 +214,13 @@ Rules:
 ### Symbols
 
 ```text
-G_a = drive gear at fixed board axle
-G_b = output/driven gear at fixed board axle
-P = off-centre crank pin on G_b attachment hole
-R = linkage output end / connector reference
-ρ = linkage_pin_radius = |center(G_b)-P|
-L = linkage_arm_length = |P-R|
+A = drive gear fixed board axle = I6
+D = output gear fixed board axle = I9
+B = off-centre crank pin on drive gear G_a
+C = off-centre crank pin on output gear G_b
+R = shared moving linkage/output connector reference
+ρ = linkage_pin_radius = |A-B| = |D-C|
+L = linkage_arm_length = |B-R| = |C-R|
 θ = input gear angle
 ```
 
@@ -227,11 +228,11 @@ L = linkage_arm_length = |P-R|
 
 | Param | Default | Snap |
 |---|---:|---|
-| `gear1_teeth` / drive size | `24` | one of `{8,24,40,56}` teeth |
-| `gear2_teeth` / output size | `24` | one of `{24,40,56}` teeth; `G1` rejected as driven crank gear because it has no attachment holes |
-| `idler_teeth[]` | `[]` | each idler one of `{8,24,40,56}` teeth; idlers change centre spacing and output parity but do not carry the output linkage |
-| `linkage_pin_radius` | `20 mm` | nearest fabricated driven-gear attachment radius |
-| `linkage_arm_length` | `80 mm` | nearest linkage length |
+| `gear1_teeth` / drive size | `24` | one of `{24,40,56}` teeth; `G1` rejected at endpoints because it has no attachment holes |
+| `gear2_teeth` / output size | `24` | one of `{24,40,56}` teeth; same endpoint attachment rule |
+| `idler_teeth[]` | `[]` | each idler one of `{8,24,40,56}` teeth; idlers change centre spacing and output parity but do not carry crank pins |
+| `linkage_pin_radius` | `20 mm` | nearest shared fabricated attachment radius on both endpoint gears |
+| `linkage_arm_length` | `80 mm` | nearest linkage length; instantiated twice |
 | `gear_linkage_enabled` | `1.0` | flag |
 | `input_angle` | `30°` | angle only |
 
@@ -239,9 +240,9 @@ L = linkage_arm_length = |P-R|
 
 | Part | Count | Role |
 |---|---:|---|
-| `gears:g24` (`G3`) | 2 | drive and driven/output gears |
-| `linkages:linkage-4-cell` (`L4`) | 1 | crank linkage arm |
-| `brackets:2-hole-straight` | 1 | moving output connector |
+| `gears:g24` (`G3`) | 2 | drive and output endpoint gears |
+| `linkages:linkage-4-cell` (`L4`) | 2 | paired crank linkage arms `B-R` and `C-R` |
+| `brackets:2-hole-straight` | 1 | moving output connector at `R` |
 | `spacers:s10` | 8 | clearance stacks |
 
 ### Exact recipe
@@ -251,24 +252,26 @@ L = linkage_arm_length = |P-R|
 | 1 | `I6(board)` | `B@I6 > F > tabs-behind-board` |
 | 2 | `I6(board)` | `B@I6 > F > S10 > G3_drive > S10 > tabs-loose` |
 | 3 | `I9(board)` | `B@I9 > F > S10 > G3_output > S10 > tabs-loose` |
-| 4 | `I9(gear_handle_reference)`, `I12(link_end_reference)` | `H_gear@I9 > F > S10 > L4 > S10 > tabs-loose` |
-| 5 | `I12(link_end_reference)` | `E_link@I12 > F > S10 > bracket2 > S10 > tabs-loose` |
+| 4 | `I6(gear_handle_reference)`, `I12(link_end_reference)` | `H_gear@I6 > F > S10 > L4_drive > S10 > tabs-loose` |
+| 5 | `I9(gear_handle_reference)`, `I12(link_end_reference)` | `H_gear@I9 > F > S10 > L4_output > S10 > tabs-loose` |
+| 6 | `I12(link_end_reference)` | `E_link@I12 > F > S10 > bracket2 > S10 > tabs-loose` |
 
 Compatibility:
 
 ```text
 I6 ↔ I9 = 3 board cells = 60.0 mm
 G3 + G3 required centre distance = 60.0 mm
+B-R = C-R = selected fabricated linkage length
 ```
 
 Rules:
 
-1. The linkage attaches to an off-centre hole on the output gear, not to the board axle.
-2. The `I9` coordinate in step 4 is a gear-handle reference; do not create another board fastener there.
-3. The connector at `I12` is moving; do not pin it to the board.
-4. `linkage_pin_radius` must be a radius available on the selected driven gear.
-5. The linkage arm should be a real linkage bar length, usually `L4` in the default recipe.
-6. The drive and output gears remain coplanar on their fixed board axles; the linkage stack starts from the output gear handle above that gear with `S10` clearance.
+1. B and C attach to off-centre gear handle holes, not to board axles.
+2. R is the only moving output connector; do not pin it to the board.
+3. The drive/output gears remain coplanar on their fixed board axles; linkages live on spacer-separated moving stacks.
+4. `linkage_pin_radius` must be a radius available on both selected endpoint gears.
+5. The paired link arms should be real linkage bar lengths, usually `L4` in the default recipe.
+6. Simulation succeeds only when R is the circle intersection of the two equal linkage lengths around B and C.
 
 ## 3.5 Cam follower — `cam_follower`
 

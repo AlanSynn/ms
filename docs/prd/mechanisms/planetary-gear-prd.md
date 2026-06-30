@@ -5,6 +5,8 @@ Verified Foundry/export mechanism: fixed internal ring, sun input, carrier outpu
 
 References:
 - https://github.com/CKraft11/pygeartrain
+- https://github.com/CKraft11/pygeartrain/blob/main/pygeartrain/planetary.py
+- https://github.com/CKraft11/pygeartrain/blob/main/pygeartrain/core/kinematics.py
 
 ## Topology contract
 
@@ -23,7 +25,8 @@ R = S + 2P in tooth/radius convention
 - Planet spin follows pygeartrain equations:
   - `S*s + P*p - (S+P)*c = 0`
   - `R*r - P*p - (R-P)*c = 0`
-- Planet axle is moving with carrier, not board-fixed.
+- MotionSmith default maps to `Planetary("s", "c", "r")`: sun input, carrier output, ring fixed.
+- With ring fixed, carrier/sun ratio is `S / (S + R)` and the planet axle moves with the carrier, not the board.
 
 ## Fabrication contract
 

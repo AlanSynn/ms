@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { BodyPartLayer, CanvasViewport, MechanismConfig, MechanismType, Point, ProjectState, StandardSkeleton } from '../types';
 import { boardGridLines, defaultPhysicalKit, SCENE_PX_PER_MM, sceneBoundsForSheet } from '../utils/coordinates';
-import { calculateLinkage, sampledCamProfileScale, gearPairOutputRatio, gearTrainCenters, gearTrainOutputRatio, gearTrainPitchRadii, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from '../utils/kinematics';
+import { calculateLinkage, sampledCamProfileScale, gearPairOutputRatio, gearTrainCenters, gearTrainMeshPhaseRadAt, gearTrainOutputRatio, gearTrainPitchRadii, gearTrainRotationRatioAt, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from '../utils/kinematics';
 import { FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRenderPlanForMechanism, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, type FabricationLinkageRoleLengths } from '../utils/fabrication';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, pointInsideOutline } from '../utils/partGeometry';
 import { clampCanvasZoom, WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
@@ -436,7 +436,7 @@ const mechanismGearRotations = (mechanism: MechanismConfig, angle: number) => {
   if (mechanism.type === '5bar') return [input, angle * (mechanism.speed2 ?? mechanism.gearRatio ?? 1) + phase];
   if (mechanism.type === 'gear' || mechanism.type === 'gear_linkage') {
     const radii = gearTrainPitchRadii(mechanism);
-    return radii.map((radius, index) => input * ((index % 2 === 1 ? -1 : 1) * radii[0] / radius) + (index === radii.length - 1 ? phase : 0));
+    return radii.map((_, index) => input * gearTrainRotationRatioAt(radii, index) + gearTrainMeshPhaseRadAt(radii, index) + (index === radii.length - 1 ? phase : 0));
   }
   if (mechanism.type === 'planetary_gear') return [
     input,
@@ -1026,9 +1026,9 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
         updateLink(visual.links.effector, undefined, undefined);
       } else if (mechanism.type === 'gear_linkage') {
         updateLink(visual.links.base, undefined, undefined);
-        updateLink(visual.links.driver, state.p1, state.j1, zDriver);
+        updateLink(visual.links.driver, state.isValid ? state.j1 : undefined, state.isValid ? state.effector : undefined, zDriver);
         updateLink(visual.links.coupler, undefined, undefined);
-        updateLink(visual.links.output, state.j2, state.effector, zOutput);
+        updateLink(visual.links.output, state.isValid ? state.j2 : undefined, state.isValid ? state.effector : undefined, zOutput);
         updateLink(visual.links.effector, undefined, undefined);
       } else if (mechanism.type === 'planetary_gear') {
         const carrierAngle = angle * (mechanism.speed1 ?? 1) * planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength);
@@ -1313,7 +1313,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       data-three-gear-output-ratio={selectedMechanism ? ((selectedMechanism.type === 'gear' || selectedMechanism.type === 'gear_linkage') ? gearTrainOutputRatio(selectedMechanism) : selectedMechanism.type === 'planetary_gear' ? planetaryCarrierOutputRatio(selectedMechanism.crankLength, selectedMechanism.rockerLength) : gearPairOutputRatio(selectedMechanism.crankLength, selectedMechanism.rockerLength)).toFixed(3) : ''}
       data-three-secondary-speed={selectedMechanism ? (selectedMechanism.speed2 ?? selectedMechanism.gearRatio ?? 1).toFixed(3) : ''}
       data-three-planet-count={selectedMechanism?.type === 'planetary_gear' ? planetaryGearConventionForMechanism(selectedMechanism).planetCount : 0}
-      data-three-gear-linkage-mode={selectedMechanism?.type === 'gear_linkage' ? 'off-center-output-gear-crank' : 'none'}
+      data-three-gear-linkage-mode={selectedMechanism?.type === 'gear_linkage' ? 'two-gear-two-link-coupler' : 'none'}
       data-three-gear-plane-mode={selectedIsGearTrain ? 'coplanar-fixed-axles' : 'not-gear-train'}
       data-three-gear-plane-z={typeof selectedGearPlaneZ === 'number' ? selectedGearPlaneZ.toFixed(2) : ''}
       data-three-linkage-pin-radius={selectedMechanism?.type === 'gear_linkage' ? selectedMechanism.couplerPointDist.toFixed(2) : ''}
