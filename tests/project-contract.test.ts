@@ -811,7 +811,7 @@ assert(appText.includes('fixed-gear-axles-only'), 'Foundry 3D gear train preview
 assert(appText.includes('coplanar-fixed-axles') && appText.includes('gear-axles-include-spacer'), 'Foundry 3D gear train preview keeps meshed gear plates coplanar and spans local spacer stacks');
 assert(appText.includes('foundry-parametric-editor') && appText.includes('design-parametric-editor'), 'Foundry and Design both mount the same compact parametric mechanism editor');
 assert(appText.includes('Drive gear size') && appText.includes('Output gear size') && appText.includes('Output link length'), 'parametric editor exposes gear and linkage fabrication selectors instead of hidden generic numbers');
-assert(appText.includes('foundryIdlerGearTrainIndex') && appText.includes('match(/\\bgear\\s+(\\d+)\\s*$/i)'), 'Foundry 3D idler gear renderer reads the trailing idler index, not the G3 part number');
+assert(appText.includes('fittedGearTrainCenters') && appText.includes('pin-stacks-use-rendered-gear-centers'), 'Foundry 3D gear plates, axles, and spacer stacks share fitted preview gear centers instead of raw mechanism coordinates');
 assert(assemblyWorkbenchText.includes('isBoardFixedCoordRole') && assemblyWorkbenchText.includes('data-floating-reference-coords'), 'assembly workbench separates board-fixed holes from moving reference coordinates');
 assert(assemblyWorkbenchText.includes('assembly-floating-references') && assemblyWorkbenchText.includes('readableCoordRole'), 'assembly workbench visualizes moving references without turning them into board holes');
 assert(threePreviewText.includes('fabricationGearProfileForPitchRadius'), '3D foundry gear rendering uses shared fabrication gear geometry');

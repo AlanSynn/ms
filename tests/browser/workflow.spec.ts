@@ -1338,6 +1338,11 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await page.getByRole('button', { name: 'Add idler gear' }).click();
   await page.getByLabel('Idler gear 1 size').selectOption('g8');
   await expect(threeScene, 'Gear train param editor writes ordered drive/idler/output radii to the shared preview').toHaveAttribute('data-three-gear-radii', '100.00,20.00,140.00');
+  await expect(threeScene, 'Gear train axles are generated from the same fitted centers used to draw the gear plates').toHaveAttribute('data-three-gear-center-source', 'fitted-simulation-pitch-centers');
+  await expect(threeScene).toHaveAttribute('data-three-gear-center-count', '3');
+  await expect(threeScene).toHaveAttribute('data-three-gear-axle-center-contract', 'pin-stacks-use-rendered-gear-centers');
+  expect(await threeScene.getAttribute('data-three-gear-axle-centers'), 'Every visible gear axle sits on its rendered gear center').toBe(await threeScene.getAttribute('data-three-gear-centers'));
+  expect(Number(await threeScene.getAttribute('data-three-gear-center-max-error')), 'Fitted gear centers preserve fabrication pitch spacing after preview scaling').toBeLessThan(0.75);
   await expect(threeScene, 'Dynamic gear stack uses the same G1/G5/G7 fabrication labels as Blueprint/Assembly').toHaveAttribute('data-three-stack-order', /Drive G5 \/ 5-space gear.*Idler G1 \/ 1-space gear 1.*Output G7 \/ 7-space gear/);
 
   await page.getByLabel('Foundry mechanism type').selectOption('gear_linkage');
@@ -1423,6 +1428,11 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   expect(Number(await threeScene.getAttribute('data-three-gear-pitch-center')), 'Gear pitch centers are snapped to the sum of fabrication gear radii').toBeCloseTo(Number(await threeScene.getAttribute('data-three-gear-pitch-sum')), 2);
   await expect(threeScene, 'Default gear train uses the reference G3/G3 pitch radii').toHaveAttribute('data-three-gear-radii', '60.00,60.00');
   const gearCount = await threeScene.getAttribute('data-three-gear-count');
+  await expect(threeScene, 'Default gear axles use the same fitted centers as the rendered gear plates').toHaveAttribute('data-three-gear-center-source', 'fitted-simulation-pitch-centers');
+  await expect(threeScene).toHaveAttribute('data-three-gear-center-count', gearCount ?? '2');
+  await expect(threeScene).toHaveAttribute('data-three-gear-axle-center-contract', 'pin-stacks-use-rendered-gear-centers');
+  expect(await threeScene.getAttribute('data-three-gear-axle-centers'), 'Default gear axle centers match rendered gear centers').toBe(await threeScene.getAttribute('data-three-gear-centers'));
+  expect(Number(await threeScene.getAttribute('data-three-gear-center-max-error')), 'Default fitted gear centers preserve fabrication pitch spacing').toBeLessThan(0.75);
   await expect(threeScene, 'Each visible gear has one real fixed axle, with no orphan pin tower').toHaveAttribute('data-three-physical-pin-count', gearCount ?? '2');
   await expect(threeScene, 'Each G3 axle receives exactly one visible S10 spacer washer').toHaveAttribute('data-three-spacer-render-count', gearCount ?? '2');
   await expect(threeScene, 'Gear axles span both the gear plate and local S10 washer so gears are not floating off their shafts').toHaveAttribute('data-three-pin-stack-z-sources', 'gear-axles-include-spacer');

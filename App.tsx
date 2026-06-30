@@ -24,7 +24,7 @@ import {
     ProjectAction
 } from './types';
 import { gearPathD, generateDXF, generateSVG } from './utils/exporter';
-import { animationDeltaRadians, calculateLinkage, defaultCamProfileSamples, generateCurvePoints, generateMechanismPointTraces, gearPairOutputRatio, gearTrainCenters, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, normalizeCamProfileSamples, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, sampledCamProfileScale } from './utils/kinematics';
+import { animationDeltaRadians, calculateLinkage, defaultCamProfileSamples, generateCurvePoints, generateMechanismPointTraces, gearPairOutputRatio, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, normalizeCamProfileSamples, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, sampledCamProfileScale } from './utils/kinematics';
 import { evaluateFitness, generateSmartConfig, mutateConfig } from './utils/optimizer';
 import {
     applyProjectAction,
@@ -3211,9 +3211,25 @@ const foundryAssemblyPinContract = (type: MechanismType) => {
     return 'template-specific-output';
 };
 
-const foundryIdlerGearTrainIndex = (label: string) => {
-    const idlerNumber = Number(label.match(/\bgear\s+(\d+)\s*$/i)?.[1] ?? 1);
-    return Math.max(1, Number.isFinite(idlerNumber) ? idlerNumber : 1);
+const fittedGearTrainCenters = (radii: number[], start: Point, end: Point): Point[] => {
+    if (!radii.length) return [];
+    if (radii.length === 1) return [start];
+    const totalPitchDistance = radii.slice(1).reduce((sum, radius, index) => sum + radii[index] + radius, 0);
+    if (!Number.isFinite(totalPitchDistance) || totalPitchDistance <= 0) return radii.map(() => start);
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    let distance = 0;
+    return radii.map((radius, index) => {
+        if (index > 0) distance += radii[index - 1] + radius;
+        const t = distance / totalPitchDistance;
+        return { x: start.x + dx * t, y: start.y + dy * t };
+    });
+};
+
+const gearTrainRotationRatioAt = (radii: number[], index: number) => {
+    const drive = Math.max(0.001, Math.abs(radii[0] ?? 1));
+    const current = Math.max(0.001, Math.abs(radii[index] ?? radii.at(-1) ?? drive));
+    return (index % 2 === 1 ? -1 : 1) * drive / current;
 };
 
 type FoundryPinStackPoint = {
@@ -3329,7 +3345,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
     const [physicsKernelError, setPhysicsKernelError] = useState('none');
     const isGearTrain = mechanism.type === 'gear' || mechanism.type === 'gear_linkage';
     const gearRadii = isGearTrain ? gearTrainPitchRadii(mechanism) : mechanism.type === 'planetary_gear' ? planetaryGearRadii(mechanism) : [mechanism.crankLength, mechanism.rockerLength];
-    const gearCenters = useMemo(() => isGearTrain ? gearTrainCenters(mechanism) : [], [isGearTrain, mechanism]);
+    const gearCenters = isGearTrain ? fittedGearTrainCenters(gearRadii, simulation.state.p1, simulation.state.p2) : [];
     const planetaryConvention = mechanism.type === 'planetary_gear' ? planetaryGearConventionForMechanism(mechanism) : null;
     const baseInv = foundryRenderedInventory(mechanism.type);
     const inv = isGearTrain
@@ -3389,6 +3405,16 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
     const pinSpanSummary = pinStacks.map(pin => `${pin.id}:${pin.lengthZ.toFixed(2)}`).join(',');
     const pinStackLayerSummary = pinStackPoints.map(pin => `${pin.id}:${pin.movingLayerIndexes.join('+') || 'none'}`).join(',');
     const spacerPinIdSummary = spacerLayerIndexes.map(spacerIndex => `${spacerIndex}:${pinStackPoints.filter(pin => foundrySpacerTouchesPin(pin, spacerIndex)).map(pin => pin.id).join('+')}`).join(',');
+    const gearAxleCenters = isGearTrain ? pinStackPoints.slice(0, gearCenters.length).map(pin => pin.point) : [];
+    const gearCenterSummary = gearCenters.map(point => `${point.x.toFixed(2)}:${point.y.toFixed(2)}`).join(',');
+    const gearAxleCenterSummary = gearAxleCenters.map(point => `${point.x.toFixed(2)}:${point.y.toFixed(2)}`).join(',');
+    const gearCenterMaxError = isGearTrain && gearCenters.length > 1
+        ? Math.max(...gearCenters.slice(1).map((center, index) => {
+            const previous = gearCenters[index];
+            const expected = (gearRadii[index] + gearRadii[index + 1]) * simulation.scale;
+            return Math.abs(Math.hypot(center.x - previous.x, center.y - previous.y) - expected);
+        }))
+        : 0;
     const zCollisionCount = pinStacks.filter(pin => pin.topZ <= pin.bottomZ || pin.lengthZ <= 0).length;
     const visiblePathTraces = useMemo(() => (
         pathTraces.length ? pathTraces : [{ id: 'output', label: 'Output path', points: pathPoints, primary: true }]
@@ -3816,21 +3842,22 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             else if (/output|follower/i.test(label)) addBar(s.j2, s.effector, z, mat, 2);
             else addBar(s.j1, s.j2, z, mat, 3);
         };
-        const renderGearLayer = (label: string, z: number, mat: THREE.Material) => {
+        const renderGearLayer = (label: string, z: number, mat: THREE.Material, gearTrainIndex = 0) => {
             if (/ring/i.test(label)) addRingGear(s.p1, planetaryRingPitchRadius(mechanism), z, 0, mat);
             else if (/planet/i.test(label)) {
                 const planetCenters = planetaryPlanetCenters(s.p1, mechanism, degToRad(angle) * planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength));
                 const planetCount = Math.max(1, planetCenters.length);
                 planetCenters.forEach((center, index) => addGear(center, mechanism.rockerLength, z, angle * planetaryPlanetSpinRatio(mechanism.crankLength, mechanism.rockerLength) + index * (360 / planetCount), mat));
             }
-            else if (isGearTrain && /\bidler\b/i.test(label)) {
-                const index = foundryIdlerGearTrainIndex(label);
-                const ratio = (index % 2 === 1 ? -1 : 1) * gearRadii[0] / gearRadii[index];
-                addGear(gearCenters[index] ?? s.p2, gearRadii[index] ?? mechanism.rockerLength, z, angle * ratio, mat);
+            else if (isGearTrain) {
+                const index = Math.max(0, Math.min(gearTrainIndex, Math.max(0, gearRadii.length - 1)));
+                const fallbackCenter = index === 0 ? s.p1 : s.p2;
+                const fallbackRadius = index === 0 ? mechanism.crankLength : mechanism.rockerLength;
+                addGear(gearCenters[index] ?? fallbackCenter, gearRadii[index] ?? fallbackRadius, z, angle * gearTrainRotationRatioAt(gearRadii, index), mat);
             }
-            else if (isGearTrain && /output|right/i.test(label)) addGear(s.p2, gearRadii.at(-1) ?? mechanism.rockerLength, z, angle * gearTrainOutputRatio(gearRadii), mat);
             else addGear(s.p1, mechanism.crankLength, z, angle, mat);
         };
+        let gearTrainLayerIndex = 0;
         renderPlan.layers.forEach((layerItem, index) => {
             const z = renderedLayerZ[index] ?? layerItem.z;
             const mat = materialForLayer(layerItem.color, layerItem.role === 'spacer' ? 0.55 : 0.66, layerItem.role === 'spacer' ? 0.06 : 0.03);
@@ -3839,7 +3866,10 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
                 .filter(pin => foundrySpacerTouchesPin(pin, index))
                 .forEach(pin => addSpacerWasher(pin.point, boardPivotSpacerZ(pin) ?? z, mat));
             else if (layerItem.renderKind === 'linkage') renderLinkageLayer(layerItem.label, z, mat);
-            else if (layerItem.renderKind === 'gear') renderGearLayer(layerItem.label, z, mat);
+            else if (layerItem.renderKind === 'gear') {
+                renderGearLayer(layerItem.label, z, mat, gearTrainLayerIndex);
+                if (isGearTrain) gearTrainLayerIndex += 1;
+            }
             else if (layerItem.renderKind === 'cam') addCam(s.p1, z, degToRad(angle), mat);
             else if (layerItem.renderKind === 'guide') {
                 const slotRotation = mechanism.type === 'cam' ? camGuideRotation : /follower|slider|rack/i.test(layerItem.label) ? Math.PI / 2 : Math.atan2(s.j2.y - s.p2.y, s.j2.x - s.p2.x);
@@ -3950,6 +3980,12 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-three-planetary-carrier-radius={planetaryConvention?.carrierPitchRadius.toFixed(2) ?? ''}
             data-three-gear-train-linkage-mode={mechanism.type === 'gear' ? 'gear-only-train' : mechanism.type === 'gear_linkage' ? 'output-gear-handle-l4-bracket' : 'template-specific'}
             data-three-gear-linkage-mode={mechanism.type === 'gear_linkage' ? 'off-center-output-gear-crank' : 'none'}
+            data-three-gear-center-source={isGearTrain ? 'fitted-simulation-pitch-centers' : 'not-gear-train'}
+            data-three-gear-center-count={gearCenters.length}
+            data-three-gear-centers={gearCenterSummary}
+            data-three-gear-axle-centers={gearAxleCenterSummary}
+            data-three-gear-axle-center-contract={isGearTrain ? 'pin-stacks-use-rendered-gear-centers' : 'not-gear-train'}
+            data-three-gear-center-max-error={gearCenterMaxError.toFixed(3)}
             data-three-gear-plane-mode={isGearTrain ? (typeof gearMeshPlaneZ === 'number' ? 'coplanar-fixed-axles' : 'exploded-stack') : 'not-gear-train'}
             data-three-gear-plane-z={typeof gearMeshPlaneZ === 'number' ? gearMeshPlaneZ.toFixed(2) : ''}
             data-three-linkage-pin-radius={mechanism.type === 'gear_linkage' ? mechanism.couplerPointDist.toFixed(2) : ''}
@@ -4050,7 +4086,7 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
     const outputAngleDeg = Math.atan2(s.j2.y - s.p2.y, s.j2.x - s.p2.x) * 180 / Math.PI;
     const isGearTrainPreview = mechanism.type === 'gear' || mechanism.type === 'gear_linkage';
     const previewGearRadii = isGearTrainPreview ? gearTrainPitchRadii(mechanism) : [];
-    const previewGearCenters = isGearTrainPreview ? gearTrainCenters(mechanism) : [];
+    const previewGearCenters = isGearTrainPreview ? fittedGearTrainCenters(previewGearRadii, s.p1, s.p2) : [];
     const vectorAxis = (a: Point | undefined, b: Point | undefined, fallback = trackAxis) => {
         if (!a || !b) return fallback;
         const dx = b.x - a.x;
