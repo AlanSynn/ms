@@ -1087,7 +1087,22 @@ const normalizeMechanismSnapshot = (value: unknown): MechanismConfig => {
         generatedPath: Array.isArray(raw.generatedPath) ? raw.generatedPath.map(p => sanitizePoint(p)).slice(0, 1000) : undefined,
         warnings
     };
-    return normalizeMechanismToReference(normalized);
+    const hasFittedGeometry = [
+        raw.groundLength,
+        raw.crankLength,
+        raw.couplerLength,
+        raw.rockerLength,
+        raw.sliderOffset,
+        raw.couplerPointDist,
+        raw.couplerPointAngle,
+        raw.rodLength,
+        raw.outputGearRadius,
+        raw.gearRatio
+    ].some(value => optionalNumber(value) !== undefined)
+        || Array.isArray(raw.gearTrainRadii)
+        || Array.isArray(raw.camProfileSamples)
+        || Array.isArray(raw.generatedPath);
+    return hasFittedGeometry ? normalized : normalizeMechanismToReference(normalized);
 };
 
 export const migrateProjectSnapshot = (raw: unknown): ProjectState => {

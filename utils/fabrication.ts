@@ -467,7 +467,7 @@ export const prefabAssemblySteps = (mechanism: MechanismConfig, boardCoordinate:
             coords: [boardCoordinate],
             coordRoles: ['board'],
             action: 'snap-module',
-            instruction: `Snap the pre-fabricated ${mechanismTypeLabel(mechanism.type)} module onto board hole ${boardCoordinate}; use this as the beginner default before cutting custom parts.`
+            instruction: `Mount ${mechanismTypeLabel(mechanism.type)} at ${boardCoordinate}.`
         },
         ...plan.layers.map((layer, index) => ({
             index: index + 2,
@@ -479,10 +479,10 @@ export const prefabAssemblySteps = (mechanism: MechanismConfig, boardCoordinate:
             coordRoles: ['stack'],
             action: 'stack-layer',
             instruction: layer.role === 'clip'
-                ? `Lock ${fabricationPartDisplayLabel(layer.label)} at ${boardCoordinate} to keep the stack captured without binding.`
+                ? `Lock ${fabricationPartDisplayLabel(layer.label)} at ${boardCoordinate}.`
                 : layer.role === 'spacer'
-                    ? `Insert ${fabricationPartDisplayLabel(layer.label)} at ${boardCoordinate} to separate moving plates along Z.`
-                    : `Place ${fabricationPartDisplayLabel(layer.label)} at ${boardCoordinate} on top of the previous layer.`
+                    ? `Insert ${fabricationPartDisplayLabel(layer.label)} at ${boardCoordinate}.`
+                    : `Place ${fabricationPartDisplayLabel(layer.label)} at ${boardCoordinate}.`
         }))
     ];
 };
@@ -513,7 +513,7 @@ export const sampleFeasibleRange = (mechanism: MechanismConfig, samples = 96) =>
         startDeg: intervals[0]?.startDeg ?? 0,
         endDeg: intervals.at(-1)?.endDeg ?? 0,
         intervals,
-        warning: valid === totalSamples + 1 ? null : valid === 0 ? 'No valid sampled motion' : `Partial motion ${Math.round((valid / (totalSamples + 1)) * 100)}% (${intervalText})`
+        warning: valid === totalSamples + 1 ? null : valid === 0 ? 'No motion' : `Motion ${Math.round((valid / (totalSamples + 1)) * 100)}% · ${intervalText}`
     };
 };
 
@@ -546,45 +546,45 @@ export const validateForFabrication = (project: ProjectState) => {
     });
     activeMechanisms.forEach(m => {
         const recipe = referenceRecipeForType(m.type);
-        if (!recipe.exportReady) add('error', `${m.id}: ${recipe.reason ?? 'mechanism is not fabrication-ready under mechanism-reference.'}`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Choose a fabrication-ready reference mechanism' });
+        if (!recipe.exportReady) add('error', `${m.id}: ${recipe.reason ?? 'not fabrication-ready.'}`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Choose ready template' });
         (bindingWarnings[m.id] ?? []).forEach(message => add('error', `${m.id}: ${message}`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Rebind mechanism target' }));
         if (!m.id) add('error', 'Mechanism missing per-instance id.', { recoveryStage: 'design', recoveryAction: 'Select or recreate mechanism' });
-        if (!m.targetPartId || !m.targetPathId) add('error', `${m.id}: choose a target part and path before blueprint export.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Choose target part and path' });
-        if (m.targetPartId && !project.parts[m.targetPartId]) add('error', `${m.id}: target part ${m.targetPartId} is missing.`, { mechanismId: m.id, partId: m.targetPartId, recoveryStage: 'design', recoveryAction: 'Choose an existing target part' });
+        if (!m.targetPartId || !m.targetPathId) add('error', `${m.id}: choose target + path.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Choose target + path' });
+        if (m.targetPartId && !project.parts[m.targetPartId]) add('error', `${m.id}: missing target part ${m.targetPartId}.`, { mechanismId: m.id, partId: m.targetPartId, recoveryStage: 'design', recoveryAction: 'Choose existing part' });
         if (m.targetPathId) {
             const path = project.paths[m.targetPathId];
-            if (!path) add('error', `${m.id}: target path ${m.targetPathId} is missing.`, { mechanismId: m.id, pathId: m.targetPathId, recoveryStage: 'path', recoveryAction: 'Create or select a valid path' });
-            else if (m.targetPartId && path.partId !== m.targetPartId) add('error', `${m.id}: target path ${m.targetPathId} belongs to ${path.partId}, not ${m.targetPartId}.`, { mechanismId: m.id, pathId: m.targetPathId, partId: m.targetPartId, recoveryStage: 'design', recoveryAction: 'Rebind target path' });
+            if (!path) add('error', `${m.id}: missing path ${m.targetPathId}.`, { mechanismId: m.id, pathId: m.targetPathId, recoveryStage: 'path', recoveryAction: 'Choose valid path' });
+            else if (m.targetPartId && path.partId !== m.targetPartId) add('error', `${m.id}: path belongs to ${path.partId}.`, { mechanismId: m.id, pathId: m.targetPathId, partId: m.targetPartId, recoveryStage: 'design', recoveryAction: 'Rebind target path' });
         }
         const physicalNumbers = [m.crankLength, m.couplerLength, m.groundLength, m.rockerLength, m.sliderOffset, m.couplerPointDist, m.couplerPointAngle];
         if (m.type === '5bar' || m.type === '6bar' || m.type === 'piston') physicalNumbers.push(m.rodLength ?? Number.NaN);
         if (m.type === 'gear' || m.type === 'gear_linkage' || m.type === 'planetary_gear') physicalNumbers.push(m.gearRatio ?? Number.NaN, m.speed2 ?? Number.NaN);
-        if (!physicalNumbers.every(Number.isFinite)) add('error', `${m.id}: non-finite physical dimension.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Fix mechanism dimensions' });
-        if ((m.type === 'gear' || m.type === 'gear_linkage' || m.type === 'planetary_gear') && (m.gearRatio ?? 0) === 0) add('error', `${m.id}: gear ratio cannot be zero.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Choose a non-zero gear ratio' });
+        if (!physicalNumbers.every(Number.isFinite)) add('error', `${m.id}: bad dimension.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Fix dimensions' });
+        if ((m.type === 'gear' || m.type === 'gear_linkage' || m.type === 'planetary_gear') && (m.gearRatio ?? 0) === 0) add('error', `${m.id}: gear ratio 0.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Choose non-zero ratio' });
         if (m.type === 'gear' || m.type === 'gear_linkage' || m.type === 'planetary_gear') {
             const expectedCenterDistance = m.type === 'gear' || m.type === 'gear_linkage' ? gearTrainPitchCenterDistance(m) : m.crankLength + m.rockerLength;
             if (Math.abs(m.groundLength - expectedCenterDistance) > Math.max(1, expectedCenterDistance * 0.03)) {
-                add(fabricationSeverity, `${m.id}: gear pitch centers must equal the ordered pitch train adjacent-radius sum.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Snap gear center distance to pitch radii' });
+                add(fabricationSeverity, `${m.id}: snap gear pitch.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Snap gear pitch' });
             }
         }
-        if (m.type === 'rack-pinion' && Math.abs(m.sliderOffset) < Math.max(2, m.crankLength * 0.8)) add('warning', `${m.id}: rack guide is too close to the pinion pitch circle.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Increase rack offset or reduce pinion radius' });
-        if (m.type === 'rack-pinion' && m.rockerLength < m.crankLength * (2 * Math.PI + 2)) add(fabricationSeverity, `${m.id}: rack is too short for a full pinion turn and visible end stops.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Lengthen rack/guide or reduce pinion radius' });
+        if (m.type === 'rack-pinion' && Math.abs(m.sliderOffset) < Math.max(2, m.crankLength * 0.8)) add('warning', `${m.id}: rack guide too close.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Move rack guide' });
+        if (m.type === 'rack-pinion' && m.rockerLength < m.crankLength * (2 * Math.PI + 2)) add(fabricationSeverity, `${m.id}: rack too short.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Lengthen rack' });
         const range = sampleFeasibleRange(m);
-        if (range.warning?.startsWith('No valid')) add('error', `${m.id}: ${range.warning}.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Adjust mechanism parameters' });
+        if (range.warning?.startsWith('No motion')) add('error', `${m.id}: ${range.warning}.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Adjust' });
         else if (range.warning) add('warning', `${m.id}: ${range.warning}`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Review partial motion' });
         if (!Number.isFinite(m.anchorX) || !Number.isFinite(m.anchorY)) {
-            add('error', `${m.id}: missing board coordinate anchor.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Drag mechanism onto board grid' });
+            add('error', `${m.id}: missing board anchor.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Drag to board' });
             return;
         }
         const board = sceneToBoardRaw({ x: m.anchorX!, y: m.anchorY! }, project.settings.physicalKit);
         const boardScene = board.valid ? boardToScene(board.col, board.row, project.settings.physicalKit) : null;
-        if (!board.valid) add(fabricationSeverity, `${m.id}: anchor outside board at ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move anchor onto board' });
-        else if (boardScene && Math.hypot(boardScene.x - m.anchorX!, boardScene.y - m.anchorY!) > snapTolerance) add(fabricationSeverity, `${m.id}: anchor off grid at ${board.label}; snap to a board hole before export.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Snap anchor to board hole' });
+        if (!board.valid) add(fabricationSeverity, `${m.id}: off board at ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move onto board' });
+        else if (boardScene && Math.hypot(boardScene.x - m.anchorX!, boardScene.y - m.anchorY!) > snapTolerance) add(fabricationSeverity, `${m.id}: anchor off grid at ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Snap to hole' });
         else if (board.col <= 0 || board.row <= 0 || board.col >= project.settings.physicalKit.boardCells - 1 || board.row >= project.settings.physicalKit.boardCells - 1) {
-            add('warning', `${m.id}: anchor near board edge at ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move anchor inward if needed' });
+            add('warning', `${m.id}: near board edge ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move inward' });
         }
         const path = generateCurvePoints(m, 72).points;
-        if (path.some(p => !insideSheet(p))) add('error', `${m.id}: generated mechanism path leaves sheet bounds.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Resize or move mechanism' });
+        if (path.some(p => !insideSheet(p))) add('error', `${m.id}: path outside sheet.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Resize or move' });
     });
     return { warnings, errors, issues };
 };
@@ -619,17 +619,17 @@ const createRecipe = (project: ProjectState, mechanism: MechanismConfig): Fabric
         requiredParts: mechanism.fabricationMetadata?.requiredParts ?? mechanismRequiredParts(mechanism),
         steps: [
             `Place ${mechanism.id} main axle at ${fabricationBoardCoordinateCallout(board.label, board)}.`,
-            `Beginner kit mode: use the pre-fabricated ${mechanismTypeLabel(mechanism.type)} module on the ${project.settings.physicalKit.boardCells}×${project.settings.physicalKit.boardCells} hole board when available.`,
-            `Exploded moving stack order: ${readableFabricationStackSummary(mechanism)} above the base board.`,
+            `Kit: ${mechanismTypeLabel(mechanism.type)} module · ${project.settings.physicalKit.boardCells}×${project.settings.physicalKit.boardCells}.`,
+            `Stack: ${readableFabricationStackSummary(mechanism)}.`,
             mechanism.type === 'cam'
-                ? `Install the cam disk and follower guide aligned to ${mechanism.groundAngle ?? 90}°; follower lift is ${(mechanism.rockerLength || mechanism.crankLength).toFixed(0)} scene units.`
+                ? `Cam + follower · ${mechanism.groundAngle ?? 90}° · lift ${(mechanism.rockerLength || mechanism.crankLength).toFixed(0)}.`
                 : mechanism.type === 'rack-pinion'
-                    ? `Mesh the pinion gear with the toothed rack; keep the rack guide offset ${mechanism.sliderOffset.toFixed(0)} scene units from the axle and add end stops.`
+                    ? `Pinion + rack · offset ${mechanism.sliderOffset.toFixed(0)} · stops.`
                     : mechanism.type === 'gear' || mechanism.type === 'gear_linkage' || mechanism.type === 'planetary_gear'
-                        ? `Mesh gears at their pitch centers; physical pitch ratio ${mechanism.type === 'planetary_gear' ? planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength).toFixed(2) : gearTrainOutputRatio(mechanism).toFixed(2)} controls output direction.`
-                        : `Install ${mechanismTypeLabel(mechanism.type)} links with crank ${mechanism.crankLength.toFixed(0)} and coupler ${mechanism.couplerLength.toFixed(0)} scene units.`,
-            targetPart ? `Connect output to ${targetPart.name} at anchor ${targetAnchorJointId ?? targetPart.anchorJointId} and follow path ${targetPath?.id ?? 'unassigned'}.` : 'Connect output to selected character part or leave as standalone preview.',
-            warnings.length ? `Resolve warning before cutting: ${warnings.join('; ')}` : 'Run preview once, then cut and assemble.'
+                        ? `Gears: ratio ${mechanism.type === 'planetary_gear' ? planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength).toFixed(2) : gearTrainOutputRatio(mechanism).toFixed(2)}.`
+                        : `${mechanismTypeLabel(mechanism.type)}: crank ${mechanism.crankLength.toFixed(0)} · coupler ${mechanism.couplerLength.toFixed(0)}.`,
+            targetPart ? `Output: ${targetPart.name} · ${targetPath?.id ?? 'no path'}.` : 'Output: standalone.',
+            warnings.length ? `Fix: ${warnings.join('; ')}` : 'Ready.'
         ],
         assemblySteps,
         warnings
@@ -862,17 +862,17 @@ ${shapeFor(item, x, y)}
 <g transform="translate(38 36)">
 <rect width="330" height="74" rx="20" fill="#ffffff" stroke="#c7d2fe" stroke-width="2"/>
 <text x="22" y="25" class="guide-title">Exploded view</text>
-	<text x="22" y="47" class="guide-muted">Base board below · moving stack: Clip → Linkage/Gear → Spacer → Linkage → Clip</text>
-	<text x="22" y="64" class="guide-muted">Z=0 Base board · ${recipe ? esc(recipe.mechanismId) : 'pending recipe'}</text>
+	<text x="22" y="47" class="guide-muted">Stack: Clip → part → spacer → part → clip</text>
+	<text x="22" y="64" class="guide-muted">Z=0 board · ${recipe ? esc(recipe.mechanismId) : 'pending recipe'}</text>
 	</g>
 	<g transform="translate(86 426)">
 	<rect width="310" height="36" rx="9" fill="${base.color}" stroke="#334155" stroke-width="3"/>
-	<text x="18" y="24" class="guide-muted">Z=0 ${esc(base.label)} · all moving parts float above with spacers</text>
+	<text x="18" y="24" class="guide-muted">Z=0 ${esc(base.label)}</text>
 	</g>
 	<g filter="url(#guide-shadow)">${items}</g>
 <line x1="92" y1="458" x2="438" y2="130" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 10"/>
-<text x="70" y="486" class="guide-muted">Assembly stack separates moving layers with spacers so clips do not bind.</text>
-${recipe ? `<text x="40" y="505" class="guide-muted">First recipe: ${esc(recipe.mechanismId)} · ${esc(mechanismTypeLabel(recipe.type))} · anchor ${esc(recipeBoardCallout(recipe))}</text>` : ''}
+<text x="70" y="486" class="guide-muted">Spacers sit between moving layers.</text>
+${recipe ? `<text x="40" y="505" class="guide-muted">Recipe: ${esc(recipe.mechanismId)} · ${esc(mechanismTypeLabel(recipe.type))} · anchor ${esc(recipeBoardCallout(recipe))}</text>` : ''}
 </svg>`;
 };
 
@@ -882,9 +882,9 @@ const makeAssemblyGuideHtml = (project: ProjectState, recipes: FabricationRecipe
     const explodedSvg = makeExplodedStackSvg(firstRecipe, esc);
     const recipeSections = recipes.map(recipe => `<section>
 <h2>${esc(recipe.mechanismId)} · ${esc(mechanismTypeLabel(recipe.type))}</h2>
-<p><strong>Board anchor:</strong> ${esc(recipeBoardCallout(recipe))} (${recipe.sceneAnchor.x.toFixed(1)}, ${recipe.sceneAnchor.y.toFixed(1)} scene units)</p>
+<p><strong>Board:</strong> ${esc(recipeBoardCallout(recipe))}</p>
 <p><strong>Target:</strong> ${esc(recipe.targetPartName ?? recipe.targetPartId ?? 'unbound')} · path ${esc(recipe.targetPathId ?? 'none')} · anchor ${esc(recipe.targetAnchorJointId ?? 'part default')} · ${recipe.targetPathPointCount ?? 0} path points</p>
-${recipe.warnings.length ? `<p><strong>Warnings:</strong> ${recipe.warnings.map(esc).join('; ')}</p>` : '<p><strong>Warnings:</strong> none</p>'}
+${recipe.warnings.length ? `<p><strong>Fix:</strong> ${recipe.warnings.map(esc).join('; ')}</p>` : '<p><strong>OK</strong></p>'}
 <h3>Required parts</h3><ul>${recipe.requiredParts.map(part => `<li>${esc(fabricationPartDisplayLabel(part.name))} × ${part.quantity}</li>`).join('')}</ul>
 <h3>15×15 board kit assembly</h3><ol class="stepper" data-testid="prefab-assembly-steps">${recipe.assemblySteps.map(step => `<li class="assembly-step" style="--i:${step.index}"><strong>${step.index}. ${esc(fabricationPartDisplayLabel(step.label))}</strong><span>${esc(fabricationPartDisplayLabel(step.instruction))}</span><em>${esc(step.role)} · ${esc(readableStepCoordinateCallout(step))} · Z ${step.zMm.toFixed(1)}mm</em></li>`).join('')}</ol>
 <h3>Steps</h3><ol>${recipe.steps.map(step => `<li>${esc(fabricationPartDisplayLabel(step))}</li>`).join('')}</ol>
@@ -903,7 +903,7 @@ section{break-inside:avoid;margin:18px 0;padding:20px;border:1px solid #dbe3f0;b
 li{margin:.32rem 0;line-height:1.42;}
 .stepper{display:grid;gap:10px;padding-left:0;list-style:none}.assembly-step{display:grid;gap:3px;border:1px solid #dbe3f0;border-radius:16px;padding:10px 12px;background:linear-gradient(135deg,#fff,#f8f9ff);animation:step-rise .8s ease both;animation-delay:calc(var(--i) * 90ms)}.assembly-step span{font-weight:750;color:#334155}.assembly-step em{font-style:normal;color:#64748b;font-weight:800;font-size:12px}@keyframes step-rise{from{opacity:.25;transform:translateY(12px)}to{opacity:1;transform:none}}
 @media print{body{background:#fff}.page{max-width:none;padding:10mm}.print-actions{display:none}.exploded-guide,section{box-shadow:none}section{page-break-inside:avoid}}
-</style></head><body><main class="page"><div class="print-actions"><strong>Printable assembly guide</strong><button onclick="window.print()">Print guide</button></div><h1>${esc(project.metadata.name)} assembly guide</h1><p class="subtitle">Profile ${esc(project.settings.physicalKit.profileKey)} · ${project.settings.physicalKit.gridPitchMm}mm grid · exploded view for foundry and assembly handoff.</p>${explodedSvg}${warnings.map(w => `<p class="warning"><strong>Warning:</strong> ${esc(w)}</p>`).join('')}${recipeSections}</main></body></html>`;
+</style></head><body><main class="page"><div class="print-actions"><strong>Printable assembly guide</strong><button onclick="window.print()">Print guide</button></div><h1>${esc(project.metadata.name)} assembly guide</h1><p class="subtitle">Profile ${esc(project.settings.physicalKit.profileKey)} · ${project.settings.physicalKit.gridPitchMm}mm grid · exploded view.</p>${explodedSvg}${warnings.map(w => `<p class="warning"><strong>Fix:</strong> ${esc(w)}</p>`).join('')}${recipeSections}</main></body></html>`;
 };
 
 const makePdfDocument = (content: string) => {

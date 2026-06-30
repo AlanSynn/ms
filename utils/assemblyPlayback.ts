@@ -65,8 +65,8 @@ export const buildAssemblyPlaybackSteps = (recipe: FabricationRecipe, lane: Asse
             coords: [],
             coordRoles: [],
             zMm: 0,
-            instruction: lane === 'custom' ? 'Use SVG, PDF, or STL from Blueprint, then assemble the same stack.' : 'Collect the mechanism parts before touching the board.',
-            check: lane === 'custom' ? 'Printed/cut parts match the recipe.' : 'All parts and 10mm spacer washers are ready.',
+            instruction: lane === 'custom' ? 'Export files.' : 'Gather parts.',
+            check: lane === 'custom' ? 'Parts match recipe.' : 'Parts ready.',
             stack: []
         },
         ...recipe.assemblySteps.map((step, index) => ({
@@ -93,9 +93,9 @@ export const buildAssemblyPlaybackSteps = (recipe: FabricationRecipe, lane: Asse
         coordRoles: boardCoords.length ? boardCoords.map(() => lane === 'kit' ? 'board' : 'custom-base') : [lane === 'kit' ? 'board' : 'custom-base'],
         zMm: 0,
         instruction: lane === 'kit'
-            ? `Snap the completed mechanism module onto the 15×15 board at ${fabricationBoardCoordinateCallout(recipe.boardCoordinate, recipe.board)}.`
-            : 'Place the completed module on the custom base or keep it standalone.',
-        check: lane === 'kit' ? 'The module sits on the called-out board holes.' : 'The custom base and module holes line up.',
+            ? `Mount at ${fabricationBoardCoordinateCallout(recipe.boardCoordinate, recipe.board)}.`
+            : 'Place module.',
+        check: lane === 'kit' ? 'Module seated.' : 'Holes line up.',
         stack: []
     }, {
         index: steps.length + 2,
@@ -106,8 +106,8 @@ export const buildAssemblyPlaybackSteps = (recipe: FabricationRecipe, lane: Asse
         coords: [recipe.boardCoordinate],
         coordRoles: ['output'],
         zMm: 0,
-        instruction: `Connect output to ${recipe.targetPartName ?? recipe.targetPartId ?? 'the target part'}.`,
-        check: recipe.targetPathId ? `Output follows ${recipe.targetPathId}.` : 'Output moves freely.',
+        instruction: `Connect output.`,
+        check: recipe.targetPathId ? `Path follows.` : 'Output moves.',
         stack: []
     }, {
         index: steps.length + 3,
@@ -118,8 +118,8 @@ export const buildAssemblyPlaybackSteps = (recipe: FabricationRecipe, lane: Asse
         coords: [recipe.boardCoordinate],
         coordRoles: ['motion'],
         zMm: 0,
-        instruction: 'Scrub the mechanism once before cutting extra copies.',
-        check: recipe.warnings[0] ?? 'Motion runs without binding.',
+        instruction: 'Scrub once.',
+        check: recipe.warnings[0] ?? 'Motion OK.',
         stack: []
     });
     return steps;

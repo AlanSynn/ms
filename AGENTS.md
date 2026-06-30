@@ -26,6 +26,18 @@ MotionSmith is a tinkerable workbench, not a reading-heavy tutorial. Users shoul
 - Favor icons, handles, ghost previews, hover affordances, short labels, and status chips over paragraphs.
 - Every workflow must remain compact enough to understand at a glance on one screen.
 
+### Result-first UI copy policy
+
+Visible runtime copy should be labels, status chips, direct actions, or blockers. Users should see what can be done or what will result, not how the system works.
+
+- Keep buttons, chips, pane headers, and setting labels to short nouns or verbs; prefer one to three words.
+- Remove explanatory paragraphs from visible stage panes. Move rare necessary detail into tooltips, docs, or collapsed diagnostics.
+- Warnings must be direct blockers or next actions such as `Fix: ...`, `No path`, or `Unlock part`; do not write theory or tutorial prose.
+- Getting Started shows only starter choices. Character shows parts/joints. Path shows draw/edit controls. Foundry shows template, stack, status, and Use. Design shows target and parameters. Blueprint shows cut sheets/downloads. Assembly shows steps, parts, and board coordinates. Options shows setting names.
+- Keep all runtime UI English-only and novice-readable; avoid jargon unless it names a physical part the user can see or fabricate.
+- This policy also covers generated UI/export strings from utility modules such as `utils/fabrication.ts`, `utils/assemblyPlayback.ts`, `utils/mechanismTemplates.ts`, and `utils/appCommands.ts`.
+
+
 ## 2. Pane ownership and workflow shell
 
 The editor follows a Canva/CAD-like shell with one shared scene state.

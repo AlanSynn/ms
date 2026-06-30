@@ -347,10 +347,10 @@ export const REFERENCE_MECHANISM_RECIPES: Record<MechanismType, ReferenceMechani
         stackLabels: ['L2 linkage', 'L6 linkage', '3-hole bracket', '2-hole bracket'],
         assemblySteps: sliderCrankSteps
     },
-    yoke: unsupportedRecipe('yoke', 'unsupported', 'Scotch yoke has no mechanism-reference recipe or fabrication stack yet.'),
-    'quick-return': unsupportedRecipe('quick-return', 'unsupported', 'Quick-return has no mechanism-reference recipe or fabrication stack yet.'),
-    '5bar': unsupportedRecipe('5bar', 'five_bar', 'Five-bar is content/simulation-only until dual-driver phase, singularity, and stack rules are specified.'),
-    '6bar': unsupportedRecipe('6bar', 'six_bar', 'Six-bar is content/simulation-only until a real board/part/stack recipe is specified.'),
+    yoke: unsupportedRecipe('yoke', 'unsupported', 'Scotch yoke needs recipe.'),
+    'quick-return': unsupportedRecipe('quick-return', 'unsupported', 'Quick-return needs recipe.'),
+    '5bar': unsupportedRecipe('5bar', 'five_bar', 'Five-bar needs recipe.'),
+    '6bar': unsupportedRecipe('6bar', 'six_bar', 'Six-bar needs recipe.'),
     cam: {
         appType: 'cam',
         canonicalKey: 'cam_follower',

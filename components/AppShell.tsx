@@ -42,7 +42,7 @@ export const OnnxCacheStatusPill = ({ status, onDownload }: { status: WebOnnxCac
             : status.stage === 'error'
                 ? 'Try again'
                 : 'Get AI';
-    return <button type="button" className={`status-cache-pill ${status.stage}`} data-testid="onnx-cache-status" disabled={busy || status.stage === 'cached'} onClick={onDownload} title={status.error ?? 'Cache ONNX model for faster image imports'}>{label}</button>;
+    return <button type="button" className={`status-cache-pill ${status.stage}`} data-testid="onnx-cache-status" disabled={busy || status.stage === 'cached'} onClick={onDownload} aria-label={status.error ?? label}>{label}</button>;
 };
 
 export const WorkflowRail = ({ stage, goStage }: { stage: AppStage; goStage: (stage: AppStage) => void }) => (
@@ -69,14 +69,14 @@ export const TopCommandBar = ({ commandHandlers }: { commandHandlers: Record<App
         commandHandlers[id]();
         setOpenMenu(null);
     };
-    return <nav className="command-bar" aria-label="Application command menu" data-testid="top-command-bar">
+    return <nav className="command-bar" aria-label="Commands" data-testid="top-command-bar">
         {APP_MENU_GROUPS.map(group => <details key={group.id} open={openMenu === group.id}>
             <summary onClick={toggleMenu(group.id)}>{group.label}</summary>
             <div className="command-menu">
                 {group.commandIds.map(id => {
                     const command = commandById(id);
                     const shortcut = commandShortcutText(command);
-                    return <button key={id} data-command-id={id} data-testid={command.testId ?? `command-${id.replaceAll('.', '-')}`} onClick={runCommand(id)} title={command.description}>
+                    return <button key={id} data-command-id={id} data-testid={command.testId ?? `command-${id.replaceAll('.', '-')}`} onClick={runCommand(id)}>
                         <span>{command.label}</span>
                         {shortcut && <kbd aria-hidden="true">{shortcut}</kbd>}
                     </button>;
@@ -92,9 +92,8 @@ export const ShortcutHelpDialog = ({ onClose }: { onClose: () => void }) => <div
     <section role="dialog" aria-modal="true" aria-labelledby="shortcut-help-title" className="modal-sheet shortcut-help-dialog" data-testid="shortcut-help-dialog">
         <div className="flex items-start justify-between gap-4">
             <div>
-                <div className="accent-label">Application commands</div>
-                <h3 id="shortcut-help-title">Keyboard Shortcuts</h3>
-                <p className="mt-2 text-sm font-bold text-slate-500">One registry drives the menu bar, shortcuts, and this reference.</p>
+                <div className="accent-label">Commands</div>
+                <h3 id="shortcut-help-title">Shortcuts</h3>
             </div>
             <button className="btn-secondary" onClick={onClose}>Close</button>
         </div>
@@ -122,7 +121,7 @@ export const AboutDialog = ({ onClose }: { onClose: () => void }) => <div classN
             <div>
                 <div className="accent-label">About</div>
                 <h3 id="about-title">MotionSmith</h3>
-                <p className="mt-2 text-sm font-bold text-slate-500">Static web workbench: no account, no upload, Local ONNX, local downloads.</p>
+                <p className="mt-2 text-sm font-bold text-slate-500">Local only.</p>
             </div>
             <button className="btn-secondary" onClick={onClose}>Close</button>
         </div>
@@ -190,10 +189,10 @@ export const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, 
     return <aside
         className={`player-dock ${drawMode ? 'is-drawing' : ''} ${dragging ? 'is-moving' : ''}`}
         data-testid="workspace-player-dock"
-        aria-label="Shared animation controls"
+        aria-label="Playback"
         style={{ '--player-x': `${offset.x}px`, '--player-y': `${offset.y}px` } as React.CSSProperties}
     >
-        <button type="button" className="player-drag-handle" data-testid="workspace-player-drag-handle" aria-label="Move controls" title="Drag controls" onPointerDown={startDrag}>
+        <button type="button" className="player-drag-handle" data-testid="workspace-player-drag-handle" aria-label="Move controls" title="Move" onPointerDown={startDrag}>
             <span aria-hidden="true">⋮⋮</span>
         </button>
         <div className="player-actions">
@@ -264,7 +263,7 @@ export const WelcomeDialog = ({ onClose }: { onClose: (hideNextTime?: boolean) =
                 <h2 id="welcome-dialog-title">MOTIONSMITH</h2>
             </div>
             <button type="button" className="btn-primary" onClick={() => onClose(hideNextTime)}>Start</button>
-            <label className="replace-toggle"><input type="checkbox" checked={hideNextTime} onChange={event => { hideNextTimeRef.current = event.target.checked; setHideNextTime(event.target.checked); }} /> Do not show this again</label>
+            <label className="replace-toggle"><input type="checkbox" checked={hideNextTime} onChange={event => { hideNextTimeRef.current = event.target.checked; setHideNextTime(event.target.checked); }} /> Skip forever</label>
         </section>
     </div>;
 };
@@ -316,7 +315,7 @@ export const GettingStartedDialog = ({ starterTemplates, onSample, onStarterImag
                     <div className="section-title">Getting started</div>
                     <h2 id="getting-started-title">Start a character.</h2>
                 </div>
-                <button type="button" className="btn-secondary" onClick={onClose}>Skip to editor</button>
+                <button type="button" className="btn-secondary" onClick={onClose}>Skip</button>
             </div>
             <div className="template-gallery" data-testid="getting-started-gallery">
                 <button type="button" className="template-tile primary" data-testid="getting-started-card-humanoid" aria-label="Open humanoid starter" onClick={onSample}>

@@ -13,7 +13,7 @@ Key notes translated into product constraints:
 - **Web is mandatory for classrooms.** Software installation creates IT/department approval burden. Hosted static web at `https://alansynn.com/ms/` is the default path. Tauri remains optional.
 - **Guided entry beats open exploration.** Free exploration stays available after a starter exists, but first entry should be theme/template-led.
 - **Motion templates need scaffolding.** Elementary students need working human figures and pre-made motion examples before advanced tuning.
-- **Sensemaking must be visible at the moment of action.** Hidden panels and general instructions fail; students need direct cause/action hints near the workflow.
+- **Details must be visible at the moment of action.** Hidden panels and general instructions fail; students need direct cause/action hints near the workflow.
 - **Failure recovery must be safe.** `Reset` should return the selected lesson/mechanism to a stable known-good state, not leave partial broken parameters.
 - **Blueprint + Assembly must be web-first.** Students should not have to infer build order from paper. The app should show animated assembly, including character part placement, then offer print/download as backup.
 
@@ -97,7 +97,7 @@ Acceptance:
 
 ### R4 — Direct sensemaking
 
-Sensemaking must answer “why this works / why this fails / what now?” at the point of action.
+Details must answer only what works, what blocks, and what to try next at the point of action.
 
 Required channels:
 
@@ -110,7 +110,7 @@ Acceptance:
 
 - Students can find mechanism meaning without opening a hidden essay panel.
 - Warnings name the affected object and action: path, joint, mechanism, spacer, board coordinate.
-- `Show Sensemaking` remains optional for deeper explanation; default UI still stays compact.
+- `Details` remains optional for deeper explanation; default UI still stays compact.
 - Vocabulary must be English-only in the app UI and repository text: `Joint`, `Path`, `Anchor`, `Drive`.
 
 ### R5 — Stable reset and recovery

@@ -6,12 +6,12 @@ MotionSmith uses `utils/appCommands.ts` as the single source of truth for app-wi
 
 | Group | Commands | Shortcut policy |
 | --- | --- | --- |
-| File | New Project, Load Project, Recover Browser Autosave, Download Snapshot, Download Snapshot As, Download Portable Copy, Export Blueprint Package, Reset Lesson | Only stable project/document actions get global shortcuts. |
-| Edit | Back (Undo), Forward (Redo) | Project-state history only; processing/status/export metadata is not recorded as undoable work. |
-| View | Zoom In, Zoom Out, Zoom to Fit, Reset View, Save/Restore/Reset Workspace Layout | Canvas zoom shortcuts are global; layout actions stay menu-only. |
-| Go | Character, Path Editor, Mechanism Foundry, Mechanism Design, Blueprint, Assembly | `Alt+1` through `Alt+6` navigate the novice workflow. |
+| File | New Project, Load Project, Recover Autosave, Download Snapshot, Download Snapshot As, Portable Copy, Export Blueprint, Reset Lesson | Only stable project/document actions get global shortcuts. |
+| Edit | Undo, Redo | Project-state history only; processing/status/export metadata is not recorded as undoable work. |
+| View | Zoom In, Zoom Out, Zoom to Fit, Reset View, Save/Restore/Reset Layout | Canvas zoom shortcuts are global; layout actions stay menu-only. |
+| Go | Character, Path, Foundry, Design, Blueprint, Assembly | `Alt+1` through `Alt+6` navigate the novice workflow. |
 | Options | Preferences | `Cmd/Ctrl+,` opens the Options tab. |
-| Help | Keyboard Shortcuts, About MotionSmith | `?` opens the generated shortcut reference. |
+| Help | Shortcuts, About MotionSmith | `?` opens the generated shortcut reference. |
 
 ## Global shortcuts
 
@@ -21,16 +21,16 @@ MotionSmith uses `utils/appCommands.ts` as the single source of truth for app-wi
 | `Cmd/Ctrl+O` | Load Project |
 | `Cmd/Ctrl+S` | Download Snapshot |
 | `Cmd/Ctrl+Shift+S` | Download Snapshot As |
-| `Cmd/Ctrl+Alt+S` | Download Portable Copy |
-| `Cmd/Ctrl+E` | Export Blueprint Package |
-| `Cmd/Ctrl+Z` | Back (Undo) |
-| `Cmd/Ctrl+Shift+Z`, `Cmd/Ctrl+Y` | Forward (Redo) |
+| `Cmd/Ctrl+Alt+S` | Portable Copy |
+| `Cmd/Ctrl+E` | Export Blueprint |
+| `Cmd/Ctrl+Z` | Undo |
+| `Cmd/Ctrl+Shift+Z`, `Cmd/Ctrl+Y` | Redo |
 | `Cmd/Ctrl+=` or `Cmd/Ctrl++` | Zoom In |
 | `Cmd/Ctrl+-` | Zoom Out |
 | `Cmd/Ctrl+0` | Zoom to Fit |
 | `Alt+1` … `Alt+6` | Workflow tabs from Character through Assembly |
 | `Cmd/Ctrl+,` | Preferences |
-| `?` | Keyboard Shortcuts |
+| `?` | Shortcuts |
 
 Shortcuts are ignored while focus is inside `input`, `textarea`, `select`, or content-editable controls so direct manipulation and numeric editing are not interrupted. App-wide shortcuts are also suspended while a modal dialog is open; modal-local buttons and focus traps own that interaction until the dialog closes.
 

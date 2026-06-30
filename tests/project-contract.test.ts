@@ -188,7 +188,11 @@ const visibleUiSource = [
   'components/AppShell.tsx',
   'components/stages/stageLayout.tsx',
   'components/stages/blueprint/BlueprintExport.tsx',
-  'components/stages/assembly/AssemblyWorkbench.tsx'
+  'components/stages/assembly/AssemblyWorkbench.tsx',
+  'utils/fabrication.ts',
+  'utils/assemblyPlayback.ts',
+  'utils/mechanismTemplates.ts',
+  'utils/appCommands.ts'
 ].map(file => readFileSync(join(process.cwd(), file), 'utf8')).join('\n');
 assert(!existsSync(join(process.cwd(), 'components', 'Controls.tsx')), 'runtime-unused legacy Controls component is deleted instead of preserved as dead UI');
 assert(!existsSync(join(process.cwd(), 'utils', 'zStack.ts')), 'runtime-unused zStack helper is deleted instead of preserved as dead utility');
@@ -228,7 +232,64 @@ assert(readFileSync(join(process.cwd(), 'index.html'), 'utf8').includes("font-fa
   'Use this mechanism',
   'Anchor picked visually',
   'Open a small canvas overlay',
-  'Tune the image/decal area'
+  'Tune the image/decal area',
+  'Ranked from the current free path',
+  'Apply adds a real editable mechanism instance',
+  'Draw at least 3 free-path points',
+  'Draw at least 3 points for a selected body part',
+  'Use or skip the new character first',
+  'Skeleton editing is available after package acceptance',
+  'Select a point on the canvas for point-level edits',
+  'Unlock the selected part before editing',
+  'Part properties are hidden from Options',
+  'Kinematic estimate',
+  'Mechanism library',
+  'Feasibility:',
+  'Path Preview',
+  'One registry drives the menu bar',
+  'Cache ONNX model for faster image imports',
+  'Static web workbench',
+  'scene units from target to nearest board hole',
+  'Scrub the mechanism once before cutting extra copies',
+  'Collect the mechanism parts before touching the board',
+  'Snap the completed mechanism module',
+  'Export SVG + JSON',
+  'Fast · fewer fit samples',
+  'Letter paper · 15×15 board holes',
+  'Drag a point, or click the canvas',
+  'This exact contour drives',
+  'review anchor before cutting',
+  'Beginner kit mode',
+  'Exploded moving stack order',
+  'Run preview once, then cut and assemble',
+  'Resolve warning before cutting',
+  'sampled motion',
+  'valid sampled',
+  'general purpose linkage',
+  'scene units from target',
+  'scene units)',
+  'to keep the stack captured',
+  'moving parts float',
+  'so clips do not bind',
+  'Show Sensemaking',
+  'Back to Gallery',
+  'Start a fresh MotionSmith project',
+  'Open a .motionsmith.json project file',
+  'Application command menu',
+  'Shared animation controls',
+  'Replace current character and preserve compatible mechanisms',
+  'Draw 3+ path points',
+  'Foundry playback controls',
+  'Mechanism Foundry true WebGL 3D sandbox preview',
+  'Do not show this again',
+  'Skip to editor',
+  'Rail motion path',
+  'Rail mechanism parameters',
+  'Rail export package',
+  'Workflow and primary actions',
+  'simulation only until a mechanism-reference recipe exists',
+  'content/simulation only',
+  'unsupported until a rack/pinion kit contract is added'
 ].forEach(phrase => assert(!visibleUiSource.includes(phrase), `visible UI omits over-explaining legacy copy: ${phrase}`));
 const appCommandDocs = readFileSync(join(process.cwd(), 'docs', 'app-command-shortcuts.md'), 'utf8');
 assert(appCommandDocs.includes('utils/appCommands.ts'), 'command registry documentation points to the executable registry');
@@ -307,6 +368,8 @@ assert(docsMap.includes('active novice flow and tutorial/help plan'), 'docs map 
 assert(docsMap.includes('classroom field-study gap plan'), 'docs map treats the classroom field support plan as an active implementation plan');
 assert(agentsContract.includes('tinkerable workbench'), 'AGENTS.md codifies the tinkerable workbench direction');
 assert(agentsContract.includes('direct manipulation'), 'AGENTS.md prioritizes direct manipulation over explanatory text');
+assert(agentsContract.includes('Result-first UI copy policy'), 'AGENTS.md locks result-first visible UI copy policy');
+assert(agentsContract.includes('Visible runtime copy should be labels, status chips, direct actions, or blockers'), 'AGENTS.md blocks reading-heavy runtime copy');
 assert(agentsContract.includes('3D physics'), 'AGENTS.md codifies the 3D physics simulation direction');
 assert(agentsContract.includes('fabrication'), 'AGENTS.md codifies fabrication-oriented mechanisms');
 assert(agentsContract.includes('canonical `ProjectState`'), 'AGENTS.md requires one canonical ProjectState across workflows');
@@ -330,7 +393,7 @@ assert(classroomFieldPlan.includes('# Classroom Field Support Plan'), 'classroom
 assert(classroomFieldPlan.includes('Web is mandatory for classrooms') && classroomFieldPlan.includes('https://alansynn.com/ms/'), 'classroom plan locks the web-first classroom release target');
 assert(classroomFieldPlan.includes('Guided entry beats open exploration') && classroomFieldPlan.includes('Waving arm'), 'classroom plan requires guided lesson templates before open exploration');
 assert(classroomFieldPlan.includes('Vocabulary must be English-only'), 'classroom plan forbids mixed-language UI vocabulary');
-assert(classroomFieldPlan.includes('Sensemaking must be visible at the moment of action') && classroomFieldPlan.includes('Show Sensemaking'), 'classroom plan requires discoverable sensemaking without center-canvas teaching panels');
+assert(classroomFieldPlan.includes('Details must be visible at the moment of action') && classroomFieldPlan.includes('Details'), 'classroom plan requires compact details without center-canvas teaching panels');
 assert(classroomFieldPlan.includes('Stable reset and recovery') && classroomFieldPlan.includes('No rotation possible'), 'classroom plan requires stable reset for mechanism failure recovery');
 assert(classroomFieldPlan.includes('Blueprint as build-file screen') && classroomFieldPlan.includes('Assembly as animated build screen'), 'classroom plan preserves Blueprint/Assembly ownership split');
 assert(classroomFieldPlan.includes('No backend, auth, roster, analytics, cloud DB, teacher dashboard') && classroomFieldPlan.includes('Teacher pack workflow'), 'classroom plan excludes server scope while defining local teacher pack workflow');
@@ -343,6 +406,9 @@ assert.equal(classroomLesson.selectedPathId, 'path-right-arm', 'waving-arm lesso
 assert.equal(classroomLesson.selectedMechanismId, 'mech-1', 'waving-arm lesson selects the fitted four-bar mechanism');
 assert.equal(classroomLesson.mechanisms[0].targetAnchorJointId, 'right_hand', 'waving-arm lesson drives the hand end-effector');
 assert((classroomLesson.mechanisms[0].generatedPath?.length ?? 0) >= 3, 'waving-arm lesson mechanism has generated motion samples for simulation and fit checks');
+const classroomLessonRoundTrip = loadProjectSnapshot(JSON.parse(serializeProject(classroomLesson)));
+assert.equal(classroomLessonRoundTrip.mechanisms[0].groundLength, classroomLesson.mechanisms[0].groundLength, 'lesson load preserves fitted mechanism geometry');
+assert(!validateForFabrication(classroomLessonRoundTrip).errors.some(error => error.includes('path outside sheet')), 'lesson load stays blueprint-ready');
 assert.throws(() => createLessonProject('missing' as never), /Unknown classroom lesson/, 'invalid classroom lesson IDs fail loudly instead of silently creating blank projects');
 const resetLessonState = resetProjectToLessonBaseline({
   ...classroomLesson,
@@ -828,7 +894,7 @@ assert(appText.includes('data-testid={`path-part-art-${part.id}`}') && appText.i
 assert(canvasText.includes('data-testid={`design-part-art-${part.id}`}') && canvasText.includes('part.bounds.x * part.transform.scale'), 'Mechanism Design renders artwork from the same editable part bounds offset');
 assert(appText.includes('partOutlinePathD(part, landmarks') && appText.includes('path-part-surface-mask'), 'Path Editor clips part art to the shared fabrication outline and hole mask');
 assert(canvasText.includes('partOutlinePathD(part, landmarks') && canvasText.includes('design-part-surface-mask'), 'Mechanism Design clips part art to the shared fabrication outline and hole mask');
-assert(appText.includes('Use or skip the new character first.'), 'Character tab disables active-project artwork edits while a package review is pending');
+assert(appText.includes('Choose new character.'), 'Character tab disables active-project artwork edits while a package review is pending');
 assert(appText.includes('disabled={partPanelDisabled} onClick={onEditCharacter}'), 'Pending package review disables active-character edit buttons');
 assert(appText.includes('disabled={partPanelDisabled} onClick={onSaveSkeleton}'), 'Pending package review disables active skeleton save controls');
 assert(appText.includes('stage-body editor-workbench relative min-h-0 flex-1 overflow-hidden'), 'shared workbench prevents right-pane scroll from moving the center canvas');
@@ -1251,19 +1317,19 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
 {
   const mechanism = createDefaultMechanism('yoke', 'contract-yoke-unsupported');
   assert.deepEqual(requiredParts('yoke'), [], 'scotch yoke has no required parts until a mechanism-reference recipe exists');
-  assert(fabricationRenderPlanForMechanism(mechanism).validationErrors.some(error => error.includes('Scotch yoke has no mechanism-reference recipe')), 'scotch yoke produces a fabrication validation error instead of pretending to be ready');
+  assert(fabricationRenderPlanForMechanism(mechanism).validationErrors.some(error => error.includes('Scotch yoke needs recipe')), 'scotch yoke produces a fabrication validation error instead of pretending to be ready');
 }
 
 {
   const mechanism = createDefaultMechanism('quick-return', 'contract-quick-return-unsupported');
   assert.deepEqual(requiredParts('quick-return'), [], 'quick-return has no required parts until a mechanism-reference recipe exists');
-  assert(fabricationRenderPlanForMechanism(mechanism).validationErrors.some(error => error.includes('Quick-return has no mechanism-reference recipe')), 'quick-return produces a fabrication validation error instead of pretending to be ready');
+  assert(fabricationRenderPlanForMechanism(mechanism).validationErrors.some(error => error.includes('Quick-return needs recipe')), 'quick-return produces a fabrication validation error instead of pretending to be ready');
 }
 
 {
   const mechanism = createDefaultMechanism('5bar', 'contract-5bar-simulation-only');
   assert.deepEqual(requiredParts('5bar'), [], '5bar has no required parts until synchronized dual-driver fabrication is specified');
-  assert(fabricationRenderPlanForMechanism(mechanism).validationErrors.some(error => error.includes('Five-bar is content/simulation-only')), '5bar produces a fabrication validation error instead of pretending to be ready');
+  assert(fabricationRenderPlanForMechanism(mechanism).validationErrors.some(error => error.includes('Five-bar needs recipe')), '5bar produces a fabrication validation error instead of pretending to be ready');
   const topology = {
     ...mechanism,
     anchorX: 0,
@@ -1291,7 +1357,7 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
 {
   const mechanism = createDefaultMechanism('6bar', 'contract-6bar-simulation-only');
   assert.deepEqual(requiredParts('6bar'), [], '6bar has no required parts until a real board/part/stack recipe is specified');
-  assert(fabricationRenderPlanForMechanism(mechanism).validationErrors.some(error => error.includes('Six-bar is content/simulation-only')), '6bar produces a fabrication validation error instead of pretending to be ready');
+  assert(fabricationRenderPlanForMechanism(mechanism).validationErrors.some(error => error.includes('Six-bar needs recipe')), '6bar produces a fabrication validation error instead of pretending to be ready');
   assert.deepEqual(fabricationStackForMechanism(mechanism), [], '6bar has no fabrication stack without a mechanism-reference recipe');
 }
 
@@ -1524,12 +1590,12 @@ assert.equal(optionsRoundTrip.settings.physicalKit.exportMode, 'prefab-board', '
 assert.equal(optionsRoundTrip.settings.physicalKit.cutSheetFileType, 'svg', 'cut-sheet file type round-trips');
 assert(sample.characterPackage?.partsInfo && sample.characterPackage.charCfg, 'sample project carries character package review artifacts');
 const detachedMechanismProject = { ...sample, mechanisms: [createDefaultMechanism('4bar', 'detached')] };
-assert(validateForFabrication(detachedMechanismProject).errors.some(e => e.includes('choose a target part and path')), 'fabrication blocks detached visible mechanisms');
+assert(validateForFabrication(detachedMechanismProject).errors.some(e => e.includes('choose target + path')), 'fabrication blocks detached visible mechanisms');
 const noEnabledMechanismProject = { ...sample, mechanisms: sample.mechanisms.map(m => ({ ...m, enabled: false })) };
 assert(validateForFabrication(noEnabledMechanismProject).errors.some(e => e.includes('No enabled mechanism')), 'fabrication blocks zero-recipe blueprint packages');
 assert.throws(() => createFabricationPackage(noEnabledMechanismProject), /No enabled mechanism/, 'fabrication package refuses zero-recipe output');
 const impossibleMechanismProject = { ...sample, mechanisms: [{ ...boundMechanism('4bar', 'impossible'), anchorX: -80, anchorY: -80, groundLength: 10, crankLength: 10, couplerLength: 10, rockerLength: 1000 }] };
-assert(validateForFabrication(impossibleMechanismProject).errors.some(e => e.includes('No valid sampled motion')), 'fabrication blocks mechanisms with no valid sampled motion');
+assert(validateForFabrication(impossibleMechanismProject).errors.some(e => e.includes('No motion')), 'fabrication blocks mechanisms with no motion');
 const offGridProject = { ...sample, mechanisms: [{ ...boundMechanism('4bar', 'off-grid'), anchorX: -70, anchorY: -80 }] };
 assert(validateForFabrication(offGridProject).errors.some(e => e.includes('off grid')), 'fabrication blocks off-grid anchors instead of rounding silently');
 const simulationOnlyOffGridProject = { ...offGridProject, settings: { ...sample.settings, fabricationReadyMode: false } };
@@ -1539,7 +1605,7 @@ assert.equal(recipeWithPath.targetPathId, 'path-right-arm', 'fabrication recipe 
 assert(recipeWithPath.sceneAnchor && 'x' in recipeWithPath.sceneAnchor, 'fabrication recipe includes explicit scene anchor');
 const sampleAssemblyGuideHtml = createFabricationPackage(sample).assemblyGuideHtml;
 assert(sampleAssemblyGuideHtml.includes('assembly guide'), 'fabrication package includes printable assembly guide');
-assert(sampleAssemblyGuideHtml.includes('Board anchor:'), 'assembly guide labels the mechanism board anchor explicitly');
+assert(sampleAssemblyGuideHtml.includes('<strong>Board:</strong>'), 'assembly guide labels the mechanism board explicitly');
 assert(!sampleAssemblyGuideHtml.includes('Board coordinate:'), 'assembly guide does not label moving-reference callouts as board coordinates');
 assert(sampleAssemblyGuideHtml.includes('link joint reference') || sampleAssemblyGuideHtml.includes('gear handle reference') || sampleAssemblyGuideHtml.includes('carrier reference'), 'assembly guide surfaces moving-reference coord roles instead of board-only labels');
 const warningPackage = createFabricationPackage({
@@ -1560,15 +1626,15 @@ const invalid = {
   mechanisms: [{ ...boundMechanism('4bar', 'off'), anchorX: 9999, anchorY: 9999 }]
 };
 assert.equal(sceneToBoardRaw({ x: 9999, y: 9999 }, sample.settings.physicalKit).valid, false, 'raw board detects invalid anchor');
-assert(validateForFabrication(invalid).errors.some(e => e.includes('outside board')), 'fabrication rejects off-board anchor');
+assert(validateForFabrication(invalid).errors.some(e => e.includes('off board')), 'fabrication rejects off-board anchor');
 const missingAnchor = { ...sample, mechanisms: [{ ...boundMechanism('4bar', 'missing-anchor'), anchorX: undefined, anchorY: undefined }] };
-assert(validateForFabrication(missingAnchor).errors.some(e => e.includes('missing board coordinate')), 'fabrication rejects missing board coordinate');
-assert.throws(() => createFabricationPackage(missingAnchor), /missing board coordinate/, 'fabrication package does not silently place missing anchors at origin');
+assert(validateForFabrication(missingAnchor).errors.some(e => e.includes('missing board anchor')), 'fabrication rejects missing board coordinate');
+assert.throws(() => createFabricationPackage(missingAnchor), /missing board anchor/, 'fabrication package does not silently place missing anchors at origin');
 const importedMissingAnchor = loadProjectSnapshot(JSON.parse(serializeProject(sample)));
 delete (importedMissingAnchor.mechanisms[0] as unknown as Record<string, unknown>).anchorX;
 delete (importedMissingAnchor.mechanisms[0] as unknown as Record<string, unknown>).anchorY;
 const reloadedMissingAnchor = loadProjectSnapshot(JSON.parse(serializeProject(importedMissingAnchor)));
-assert(validateForFabrication(reloadedMissingAnchor).errors.some(e => e.includes('missing board coordinate')), 'imported snapshot with missing anchors remains invalid for fabrication');
+assert(validateForFabrication(reloadedMissingAnchor).errors.some(e => e.includes('missing board anchor')), 'imported snapshot with missing anchors remains invalid for fabrication');
 
 const removed = applyProjectAction(sample, { type: 'remove_joint', jointId: 'right_elbow' });
 assert.notEqual(removed.parts.right_arm_lower.anchorJointId, 'right_elbow', 'joint delete repairs part anchors');

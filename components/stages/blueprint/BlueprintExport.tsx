@@ -40,7 +40,7 @@ export const BlueprintExport = ({ project, dispatch, goStage }: {
                 <div className="mt-4 space-y-2">{validation.issues.map((issue, index) => <div className={issue.severity === 'error' ? 'error' : 'warning'} key={`${issue.message}-${index}`}>
                     <div>{issue.message}</div>
                     <button className="mt-2 underline" onClick={() => goStage(issue.recoveryStage)}>{issue.recoveryAction}</button>
-                </div>)}{!validation.errors.length && !validation.warnings.length && <div className="ok">Fabrication state ready.</div>}</div>
+                </div>)}{!validation.errors.length && !validation.warnings.length && <div className="ok">Ready.</div>}</div>
                 <button className="btn-primary mt-5" aria-label="Generate package" disabled={!!validation.errors.length} onClick={create}><FileJson size={16}/> Generate</button>
                 {pkg && <div className="mt-5 space-y-3">
                     <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
@@ -94,8 +94,8 @@ export const BlueprintExport = ({ project, dispatch, goStage }: {
             </StageLeftSummary>
         </div>),
             canvas: canvasPane(<div className="blueprint-document-preview canvas-workspace" data-testid="blueprint-canvas-preview">
-            <div className="blueprint-document-title">Letter sheet · 2D cut blueprint</div>
-            {pkg ? <img data-testid="blueprint-svg-preview" alt="Printable cut sheet blueprint" src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(pkg.svg)}`} /> : <div className="blueprint-empty-state">Generate first.</div>}
+            <div className="blueprint-document-title">Cut sheet</div>
+            {pkg ? <img data-testid="blueprint-svg-preview" alt="Cut sheet" src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(pkg.svg)}`} /> : <div className="blueprint-empty-state">Generate first.</div>}
         </div>),
             inspector: inspectorPane(<section className="stage-pane-stack" data-testid="blueprint-detail-preview">
             <div>
@@ -104,10 +104,10 @@ export const BlueprintExport = ({ project, dispatch, goStage }: {
             </div>
             {selectedRecipe ? <article className="assembly-recipe-card" data-testid={`blueprint-recipe-${selectedRecipe.mechanismId}`}>
                 <div className="font-bold text-slate-800">{selectedRecipe.mechanismId} · {recipeTitle(selectedRecipe)}</div>
-                <div className="mt-1 text-sm text-slate-600">Board anchor {fabricationBoardCoordinateCallout(selectedRecipe.boardCoordinate, selectedRecipe.board)}</div>
+                <div className="mt-1 text-sm text-slate-600">Board {fabricationBoardCoordinateCallout(selectedRecipe.boardCoordinate, selectedRecipe.board)}</div>
                 <div className="mt-3 flex flex-wrap gap-2">{selectedRecipe.requiredParts.map(part => <span className="blueprint-pill" key={`${selectedRecipe.mechanismId}-${part.name}`}>{fabricationPartDisplayLabel(part.name)} × {part.quantity}</span>)}</div>
                 <div className="mt-3 rounded-2xl bg-slate-100 p-3 text-sm font-bold text-slate-700" data-testid="blueprint-stack-summary">{readableFabricationStackSummary(selectedRecipe)}</div>
-                {selectedRecipe.warnings.length ? <div className="warning mt-3">Warnings: {selectedRecipe.warnings.join('; ')}</div> : <div className="ok mt-3">No warnings</div>}
+                {selectedRecipe.warnings.length ? <div className="warning mt-3">Fix: {selectedRecipe.warnings.join('; ')}</div> : <div className="ok mt-3">OK</div>}
             </article> : <div className="warning">Generate first.</div>}
             {pkg && <div className="rounded-2xl bg-white p-3 text-sm text-slate-600 shadow-sm">Grid {project.settings.physicalKit.gridPitchMm}mm · holes {project.settings.physicalKit.holeDiameterMm}mm · {recipes.length} recipe{recipes.length === 1 ? '' : 's'}</div>}
         </section>)

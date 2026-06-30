@@ -685,7 +685,7 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
                 <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
                     <div className="flex items-center gap-3">
                         <Crosshair className="w-5 h-5 text-blue-400" />
-                        <h2 className="text-lg font-semibold text-white">Trace media path</h2>
+                        <h2 className="text-lg font-semibold text-white">Trace</h2>
                     </div>
 
                     <button onClick={onClose} className="p-1 hover:bg-slate-700 rounded">

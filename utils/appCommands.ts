@@ -13,37 +13,37 @@ export type AppCommandSpec = {
 };
 
 const APP_COMMAND_DEFINITIONS = [
-  { id: 'project.new', menu: 'file', label: 'New Project', description: 'Start a fresh MotionSmith project.', shortcuts: ['Mod+N'] },
-  { id: 'project.open', menu: 'file', label: 'Load Project…', description: 'Open a .motionsmith.json project file.', shortcuts: ['Mod+O'], testId: 'command-load-project' },
-  { id: 'project.recoverAutosave', menu: 'file', label: 'Recover Browser Autosave…', description: 'Load the last browser-local autosave snapshot.' },
-  { id: 'project.save', menu: 'file', label: 'Download Snapshot', description: 'Download the current local project snapshot.', shortcuts: ['Mod+S'], testId: 'command-download-snapshot' },
-  { id: 'project.saveAs', menu: 'file', label: 'Download Snapshot As…', description: 'Download a timestamped local project copy.', shortcuts: ['Mod+Shift+S'] },
-  { id: 'project.exportCopy', menu: 'file', label: 'Download Portable Copy', description: 'Download a portable local project copy.', shortcuts: ['Mod+Alt+S'] },
-  { id: 'project.exportBlueprint', menu: 'file', label: 'Export Blueprint Package', description: 'Open the blueprint export workflow.', shortcuts: ['Mod+E'] },
-  { id: 'project.resetLesson', menu: 'file', label: 'Reset Lesson', description: 'Restore the current classroom lesson baseline.', testId: 'command-reset-lesson' },
+  { id: 'project.new', menu: 'file', label: 'New Project', description: 'Start new project.', shortcuts: ['Mod+N'] },
+  { id: 'project.open', menu: 'file', label: 'Load Project…', description: 'Open project file.', shortcuts: ['Mod+O'], testId: 'command-load-project' },
+  { id: 'project.recoverAutosave', menu: 'file', label: 'Recover Autosave…', description: 'Load autosave.' },
+  { id: 'project.save', menu: 'file', label: 'Download Snapshot', description: 'Save snapshot.', shortcuts: ['Mod+S'], testId: 'command-download-snapshot' },
+  { id: 'project.saveAs', menu: 'file', label: 'Download Snapshot As…', description: 'Save named copy.', shortcuts: ['Mod+Shift+S'] },
+  { id: 'project.exportCopy', menu: 'file', label: 'Portable Copy', description: 'Save portable copy.', shortcuts: ['Mod+Alt+S'] },
+  { id: 'project.exportBlueprint', menu: 'file', label: 'Export Blueprint', description: 'Export files.', shortcuts: ['Mod+E'] },
+  { id: 'project.resetLesson', menu: 'file', label: 'Reset Lesson', description: 'Restore lesson.', testId: 'command-reset-lesson' },
 
-  { id: 'edit.undo', menu: 'edit', label: 'Back (Undo)', description: 'Undo the last project edit.', shortcuts: ['Mod+Z'] },
-  { id: 'edit.redo', menu: 'edit', label: 'Forward (Redo)', description: 'Redo the last undone project edit.', shortcuts: ['Mod+Shift+Z', 'Mod+Y'] },
+  { id: 'edit.undo', menu: 'edit', label: 'Undo', description: 'Undo.', shortcuts: ['Mod+Z'] },
+  { id: 'edit.redo', menu: 'edit', label: 'Redo', description: 'Redo.', shortcuts: ['Mod+Shift+Z', 'Mod+Y'] },
 
-  { id: 'view.zoomIn', menu: 'view', label: 'Zoom In', description: 'Zoom the shared canvas in.', shortcuts: ['Mod+='] },
-  { id: 'view.zoomOut', menu: 'view', label: 'Zoom Out', description: 'Zoom the shared canvas out.', shortcuts: ['Mod+-'] },
-  { id: 'view.fit', menu: 'view', label: 'Zoom to Fit', description: 'Fit the canvas to the sheet.', shortcuts: ['Mod+0'] },
-  { id: 'view.reset', menu: 'view', label: 'Reset View', description: 'Reset the shared canvas view.' },
-  { id: 'workspace.saveLayout', menu: 'view', label: 'Save Workspace Layout', description: 'Save the current stage, panels, and viewport.' },
-  { id: 'workspace.restoreLayout', menu: 'view', label: 'Restore Workspace Layout', description: 'Restore the saved workspace layout.' },
-  { id: 'workspace.resetLayout', menu: 'view', label: 'Reset Workspace Layout', description: 'Reset panels and viewport to defaults.' },
+  { id: 'view.zoomIn', menu: 'view', label: 'Zoom In', description: 'Zoom in.', shortcuts: ['Mod+='] },
+  { id: 'view.zoomOut', menu: 'view', label: 'Zoom Out', description: 'Zoom out.', shortcuts: ['Mod+-'] },
+  { id: 'view.fit', menu: 'view', label: 'Fit', description: 'Fit view.', shortcuts: ['Mod+0'] },
+  { id: 'view.reset', menu: 'view', label: 'Reset View', description: 'Reset view.' },
+  { id: 'workspace.saveLayout', menu: 'view', label: 'Save Layout', description: 'Save layout.' },
+  { id: 'workspace.restoreLayout', menu: 'view', label: 'Restore Layout', description: 'Restore layout.' },
+  { id: 'workspace.resetLayout', menu: 'view', label: 'Reset Layout', description: 'Reset layout.' },
 
-  { id: 'stage.character', menu: 'go', label: 'Character', description: 'Go to character editing.', shortcuts: ['Alt+1'], stageTarget: 'character' },
-  { id: 'stage.path', menu: 'go', label: 'Path Editor', description: 'Go to path drawing.', shortcuts: ['Alt+2'], stageTarget: 'path' },
-  { id: 'stage.foundry', menu: 'go', label: 'Mechanism Foundry', description: 'Go to mechanism foundry.', shortcuts: ['Alt+3'], stageTarget: 'foundry' },
-  { id: 'stage.design', menu: 'go', label: 'Mechanism Design', description: 'Go to mechanism design.', shortcuts: ['Alt+4'], stageTarget: 'design' },
-  { id: 'stage.blueprint', menu: 'go', label: 'Blueprint', description: 'Go to blueprint output.', shortcuts: ['Alt+5'], stageTarget: 'blueprint' },
-  { id: 'stage.assembly', menu: 'go', label: 'Assembly', description: 'Go to assembly.', shortcuts: ['Alt+6'], stageTarget: 'assembly' },
+  { id: 'stage.character', menu: 'go', label: 'Character', description: 'Character.', shortcuts: ['Alt+1'], stageTarget: 'character' },
+  { id: 'stage.path', menu: 'go', label: 'Path', description: 'Path.', shortcuts: ['Alt+2'], stageTarget: 'path' },
+  { id: 'stage.foundry', menu: 'go', label: 'Foundry', description: 'Foundry.', shortcuts: ['Alt+3'], stageTarget: 'foundry' },
+  { id: 'stage.design', menu: 'go', label: 'Design', description: 'Design.', shortcuts: ['Alt+4'], stageTarget: 'design' },
+  { id: 'stage.blueprint', menu: 'go', label: 'Blueprint', description: 'Blueprint.', shortcuts: ['Alt+5'], stageTarget: 'blueprint' },
+  { id: 'stage.assembly', menu: 'go', label: 'Assembly', description: 'Assembly.', shortcuts: ['Alt+6'], stageTarget: 'assembly' },
 
-  { id: 'options.preferences', menu: 'options', label: 'Preferences…', description: 'Open MotionSmith preferences.', shortcuts: ['Mod+,'], stageTarget: 'options' },
+  { id: 'options.preferences', menu: 'options', label: 'Preferences…', description: 'Options.', shortcuts: ['Mod+,'], stageTarget: 'options' },
 
-  { id: 'help.shortcuts', menu: 'help', label: 'Keyboard Shortcuts', description: 'Show all MotionSmith commands and shortcuts.', shortcuts: ['?'] },
-  { id: 'help.about', menu: 'help', label: 'About MotionSmith…', description: 'Show app build information.' }
+  { id: 'help.shortcuts', menu: 'help', label: 'Shortcuts', description: 'Shortcuts.', shortcuts: ['?'] },
+  { id: 'help.about', menu: 'help', label: 'About MotionSmith…', description: 'About.' }
 ] as const satisfies readonly AppCommandSpec[];
 
 export type AppCommandId = typeof APP_COMMAND_DEFINITIONS[number]['id'];

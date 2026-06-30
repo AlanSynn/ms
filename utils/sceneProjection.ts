@@ -372,7 +372,7 @@ export const buildToonSceneProjection = (project: ProjectState): ToonSceneProjec
             warnings.push({
                 id: `/warnings/mechanisms/${pathSegment(mechanism.id)}/invalid-sample`,
                 severity: 'warning',
-                message: `${templateLabel} has no valid sampled output at phase 0`,
+                message: `${templateLabel}: no output at phase 0`,
                 sourceNodeId: `${baseId}/output`,
                 sourceType: 'mechanism',
                 sourceId: mechanism.id,

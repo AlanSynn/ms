@@ -6,11 +6,11 @@ export type StageIconName = 'character' | 'path' | 'foundry' | 'design' | 'bluep
 
 export const STAGE_PANE_NAV_ITEMS: Array<{ ariaLabel: string; label: string; target: AppStage; activeStages: AppStage[]; icon: StageIconName }> = [
     { ariaLabel: 'Character', label: 'Character', target: 'character', activeStages: ['character'], icon: 'character' },
-    { ariaLabel: 'Rail motion path', label: 'Path', target: 'path', activeStages: ['path'], icon: 'path' },
-    { ariaLabel: 'Mechanism Foundry', label: 'Foundry', target: 'foundry', activeStages: ['foundry'], icon: 'foundry' },
-    { ariaLabel: 'Rail mechanism parameters', label: 'Design', target: 'design', activeStages: ['design'], icon: 'design' },
-    { ariaLabel: 'Rail export package', label: 'Blueprint', target: 'blueprint', activeStages: ['blueprint'], icon: 'blueprint' },
-    { ariaLabel: 'Rail assembly guide', label: 'Assembly', target: 'assembly', activeStages: ['assembly'], icon: 'assembly' },
+    { ariaLabel: 'Path', label: 'Path', target: 'path', activeStages: ['path'], icon: 'path' },
+    { ariaLabel: 'Foundry', label: 'Foundry', target: 'foundry', activeStages: ['foundry'], icon: 'foundry' },
+    { ariaLabel: 'Design', label: 'Design', target: 'design', activeStages: ['design'], icon: 'design' },
+    { ariaLabel: 'Blueprint', label: 'Blueprint', target: 'blueprint', activeStages: ['blueprint'], icon: 'blueprint' },
+    { ariaLabel: 'Assembly', label: 'Assembly', target: 'assembly', activeStages: ['assembly'], icon: 'assembly' },
     { ariaLabel: 'Options', label: 'Options', target: 'options', activeStages: ['options'], icon: 'options' }
 ];
 
@@ -25,7 +25,7 @@ export const StagePaneNavIcon = ({ icon }: { icon: typeof STAGE_PANE_NAV_ITEMS[n
 };
 
 const EDITOR_PANE_CONTRACT = {
-    left: { testId: 'stage-left-pane', ariaLabel: 'Workflow and primary actions' },
+    left: { testId: 'stage-left-pane', ariaLabel: 'Workflow' },
     center: { testId: 'stage-canvas-pane', ariaLabel: 'Shared canvas' },
     right: { testId: 'stage-right-inspector', ariaLabel: 'Selected item inspector' }
 } as const;
