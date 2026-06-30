@@ -56,16 +56,21 @@ test('Character part cut outline editor bakes and edits contour points', async (
   const cutDialog = page.getByTestId('cut-outline-dialog');
   await expect(cutDialog).toBeVisible();
   await expect(page.getByTestId('part-cut-summary')).toContainText('user cut');
-  const xInput = cutDialog.getByLabel('Cut point X number');
-  const beforeX = Number(await xInput.inputValue());
-  await xInput.fill(String(beforeX + 6));
-  await expect(xInput).toHaveValue(String(beforeX + 6));
+  const dialogBox = await cutDialog.boundingBox();
+  const viewport = page.viewportSize();
+  expect(dialogBox, 'cut editor overlay has a visible box').toBeTruthy();
+  expect(viewport, 'browser viewport is available').toBeTruthy();
+  if (!dialogBox || !viewport) throw new Error('Missing cut editor overlay or viewport metrics');
+  expect(dialogBox.width, 'cut editor opens as a large canvas-first overlay').toBeGreaterThan(700);
+  expect(Math.abs((dialogBox.x + dialogBox.width / 2) - viewport.width / 2), 'cut editor is centered over the workbench').toBeLessThan(12);
+  await expect(cutDialog.getByLabel('Cut point X number')).toHaveCount(0);
   await cutDialog.getByTestId('part-cut-add-point').click();
   await expect(page.getByTestId('part-cut-summary')).toContainText('user cut');
   const canvas = page.getByTestId('cut-outline-canvas');
-  const afterInputEdit = Number(await xInput.inputValue());
+  const editedPoint = cutDialog.getByTestId('cut-outline-point-1');
+  const beforeClickX = Number(await editedPoint.getAttribute('cx'));
   await canvas.click({ position: { x: 260, y: 140 } });
-  await expect.poll(async () => Number(await xInput.inputValue()), { message: 'canvas click moves the selected cut point' }).not.toBe(afterInputEdit);
+  await expect.poll(async () => Number(await editedPoint.getAttribute('cx')), { message: 'canvas click moves the selected cut point' }).not.toBe(beforeClickX);
   await cutDialog.getByRole('button', { name: 'Done' }).click();
   await expect(cutDialog).toHaveCount(0);
 
