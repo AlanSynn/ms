@@ -48,7 +48,7 @@ import {
 import { checkWebOnnxCache, processImageWithWebOnnx, warmWebOnnxCache, type WebOnnxCacheStatus } from './utils/webOnnx';
 import { buildFoundryPhysicsOverlay } from './utils/physicsSession';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, loadRapierPhysicsKernel, physicsKernelErrorMessage } from './utils/physicsKernel';
-import { createFabricationPackage, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_SPACER_SPEC, fabricationBoardCoordinateCallout, fabricationGearProfileForPitchRadius, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, readableFabricationStackSummary, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
+import { createFabricationPackage, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_PART_DEPTH, FABRICATION_SPACER_SPEC, fabricationBoardCoordinateCallout, fabricationGearProfileForPitchRadius, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, readableFabricationStackSummary, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
 import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
 import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionChainRootJointIds, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
@@ -3113,6 +3113,67 @@ const foundryAssemblyPinContract = (type: MechanismType) => {
     return 'template-specific-output';
 };
 
+type FoundryPinStackPoint = {
+    id: string;
+    point: Point;
+    movingLayerIndexes: number[];
+};
+
+type FoundryPinStack = FoundryPinStackPoint & {
+    bottomZ: number;
+    topZ: number;
+    centerZ: number;
+    lengthZ: number;
+};
+
+const isMovingRenderKind = (renderKind: string) => !['clip', 'spacer', 'base'].includes(renderKind);
+
+const foundryPinStackPoints = (
+    type: MechanismType,
+    points: Point[],
+    movingLayerIndexes: number[]
+): FoundryPinStackPoint[] => {
+    const ids = ['A', 'B', 'C', 'D', 'E', 'F'];
+    const cleanIndexes = movingLayerIndexes.filter(index => Number.isFinite(index));
+    if (!points.length || !cleanIndexes.length) return points.map((point, index) => ({ id: ids[index] ?? `P${index + 1}`, point, movingLayerIndexes: [] }));
+
+    if ((type === '4bar' || type === '5bar' || type === '6bar') && points.length === cleanIndexes.length + 1) {
+        return points.map((point, index) => ({
+            id: ids[index] ?? `P${index + 1}`,
+            point,
+            movingLayerIndexes: [cleanIndexes[index - 1], cleanIndexes[index]].filter((item): item is number => typeof item === 'number')
+        }));
+    }
+
+    return points.map((point, index) => ({
+        id: ids[index] ?? `P${index + 1}`,
+        point,
+        movingLayerIndexes: [cleanIndexes[Math.min(index, cleanIndexes.length - 1)]].filter((item): item is number => typeof item === 'number')
+    }));
+};
+
+const foundrySpacerTouchesPin = (movingLayerIndexes: number[], spacerLayerIndex: number) =>
+    movingLayerIndexes.some(index => index < spacerLayerIndex) && movingLayerIndexes.some(index => index > spacerLayerIndex);
+
+const foundryPinStacks = (
+    pinPoints: FoundryPinStackPoint[],
+    renderedLayerZ: number[]
+): FoundryPinStack[] => pinPoints.map(pin => {
+    const movingZ = pin.movingLayerIndexes.map(index => renderedLayerZ[index]).filter((z): z is number => typeof z === 'number');
+    const minZ = movingZ.length ? Math.min(...movingZ) : renderedLayerZ[0] ?? FABRICATION_RENDER_LAYER_Z_STEP;
+    const maxZ = movingZ.length ? Math.max(...movingZ) : minZ;
+    const bottomZ = Number((minZ - FABRICATION_RENDER_PART_DEPTH / 2 - 0.08).toFixed(3));
+    const topZ = Number((maxZ + FABRICATION_RENDER_PART_DEPTH / 2 + 0.18).toFixed(3));
+    const lengthZ = Math.max(0.46, Number((topZ - bottomZ).toFixed(3)));
+    return {
+        ...pin,
+        bottomZ,
+        topZ,
+        centerZ: Number(((bottomZ + topZ) / 2).toFixed(3)),
+        lengthZ
+    };
+});
+
 const disposeThreeObject = (object: THREE.Object3D) => object.traverse(child => {
     const mesh = child as THREE.Mesh;
     if (mesh.geometry && !mesh.geometry.userData.foundryCached) mesh.geometry.dispose();
@@ -3138,7 +3199,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
     const [physicsKernelError, setPhysicsKernelError] = useState('none');
     const isGearTrain = mechanism.type === 'gear' || mechanism.type === 'gear_linkage';
     const gearRadii = isGearTrain ? gearTrainPitchRadii(mechanism) : mechanism.type === 'planetary_gear' ? planetaryGearRadii(mechanism) : [mechanism.crankLength, mechanism.rockerLength];
-    const gearCenters = isGearTrain ? gearTrainCenters(mechanism) : [];
+    const gearCenters = useMemo(() => isGearTrain ? gearTrainCenters(mechanism) : [], [isGearTrain, mechanism]);
     const planetaryConvention = mechanism.type === 'planetary_gear' ? planetaryGearConventionForMechanism(mechanism) : null;
     const baseInv = foundryRenderedInventory(mechanism.type);
     const inv = isGearTrain
@@ -3160,14 +3221,24 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         trail: showTrail
     }), [camera.preset, showForces, showGrid, showPathPreview, showTrail, showVelocity]);
     const spacerLayerCount = renderPlan.layers.filter(item => item.role === 'spacer').length;
-    const assemblyPinPoints = foundryAssemblyPinPoints(mechanism.type, simulation.state);
+    const assemblyPinPoints = useMemo(() => isGearTrain
+        ? (mechanism.type === 'gear_linkage'
+            ? [...gearCenters, simulation.state.j2, simulation.state.effector].filter((point): point is Point => Boolean(point))
+            : gearCenters)
+        : foundryAssemblyPinPoints(mechanism.type, simulation.state), [gearCenters, isGearTrain, mechanism.type, simulation.state]);
     const assemblyPinContract = foundryAssemblyPinContract(mechanism.type);
-    const spacerRenderCount = spacerLayerCount * assemblyPinPoints.length;
+    const movingLayerIndexes = useMemo(() => renderPlan.layers.flatMap((item, index) => isMovingRenderKind(item.renderKind) ? [index] : []), [renderPlan.layers]);
+    const pinStackPoints = useMemo(() => foundryPinStackPoints(mechanism.type, assemblyPinPoints, movingLayerIndexes), [assemblyPinPoints, mechanism.type, movingLayerIndexes]);
+    const pinStacks = useMemo(() => foundryPinStacks(pinStackPoints, renderedLayerZ), [pinStackPoints, renderedLayerZ]);
+    const spacerLayerIndexes = useMemo(() => renderPlan.layers.flatMap((item, index) => item.role === 'spacer' ? [index] : []), [renderPlan.layers]);
+    const spacerRenderCount = spacerLayerIndexes.reduce((count, spacerIndex) => (
+        count + pinStackPoints.filter(pin => foundrySpacerTouchesPin(pin.movingLayerIndexes, spacerIndex)).length
+    ), 0);
     const stackZGap = renderPlan.layers.length > 1 ? renderPlan.layers[1].z - renderPlan.layers[0].z : 0;
-    const pinBottomZ = (renderedLayerZ[0] ?? 0.22) - 0.08;
-    const pinTopZ = (renderedLayerZ.at(-1) ?? 0.22) + 0.18;
-    const pinLengthZ = Math.max(0.55, pinTopZ - pinBottomZ);
-    const pinCenterZ = (pinBottomZ + pinTopZ) / 2;
+    const pinBottomZ = pinStacks.length ? Math.min(...pinStacks.map(pin => pin.bottomZ)) : (renderedLayerZ[0] ?? 0.22) - 0.08;
+    const pinTopZ = pinStacks.length ? Math.max(...pinStacks.map(pin => pin.topZ)) : (renderedLayerZ.at(-1) ?? 0.22) + 0.18;
+    const pinLengthZ = pinStacks.length ? Math.max(...pinStacks.map(pin => pin.lengthZ)) : Math.max(0.55, pinTopZ - pinBottomZ);
+    const pinSpanSummary = pinStacks.map(pin => `${pin.id}:${pin.lengthZ.toFixed(2)}`).join(',');
     const visiblePathTraces = useMemo(() => (
         pathTraces.length ? pathTraces : [{ id: 'output', label: 'Output path', points: pathPoints, primary: true }]
     ), [pathPoints, pathTraces]);
@@ -3569,7 +3640,8 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         const angle = pinionRotation;
         const usesMeshedPitchCenters = ['gear', 'gear_linkage', 'planetary_gear', 'rack-pinion', 'cam'].includes(mechanism.type);
         if (!usesMeshedPitchCenters) addBar(s.p1, s.p2, 0, material.base, 3);
-        const layerPoints = foundryAssemblyPinPoints(mechanism.type, s);
+        const clipLayer = renderPlan.layers.find(layer => layer.renderKind === 'clip');
+        const clipMat = clipLayer ? materialForLayer(clipLayer.color, 0.66, 0.03) : material.dark;
         const renderLinkageLayer = (label: string, z: number, mat: THREE.Material) => {
             if (mechanism.type === 'gear') return;
             if (mechanism.type === 'gear_linkage' && /L4|linkage/i.test(label)) addBar(s.j2, s.effector, z, mat, 4);
@@ -3603,8 +3675,10 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         renderPlan.layers.forEach((layerItem, index) => {
             const z = renderedLayerZ[index] ?? layerItem.z;
             const mat = materialForLayer(layerItem.color, layerItem.role === 'spacer' ? 0.55 : 0.66, layerItem.role === 'spacer' ? 0.06 : 0.03);
-            if (layerItem.renderKind === 'clip') layerPoints.forEach(point => addClipCap(point, z, mat));
-            else if (layerItem.renderKind === 'spacer') layerPoints.forEach(point => addSpacerWasher(point, z, mat));
+            if (layerItem.renderKind === 'clip') return;
+            else if (layerItem.renderKind === 'spacer') pinStacks
+                .filter(pin => foundrySpacerTouchesPin(pin.movingLayerIndexes, index))
+                .forEach(pin => addSpacerWasher(pin.point, z, mat));
             else if (layerItem.renderKind === 'linkage') renderLinkageLayer(layerItem.label, z, mat);
             else if (layerItem.renderKind === 'gear') renderGearLayer(layerItem.label, z, mat);
             else if (layerItem.renderKind === 'cam') addCam(s.p1, z, mat);
@@ -3619,9 +3693,11 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             }
             else if (layerItem.renderKind === 'follower') addFollowerBlock(s.j2, z, mat);
         });
-        layerPoints.forEach(point => {
-            const p = to3(point as Point, pinCenterZ);
-            const pin = new THREE.Mesh(cachedGeometry(`pin:${holeR.toFixed(3)}:${pinLengthZ.toFixed(3)}`, () => new THREE.CylinderGeometry(holeR * 0.8, holeR * 0.8, pinLengthZ, 20)), material.dark);
+        pinStacks.forEach(pinStack => {
+            addClipCap(pinStack.point, pinStack.bottomZ, clipMat);
+            addClipCap(pinStack.point, pinStack.topZ, clipMat);
+            const p = to3(pinStack.point, pinStack.centerZ);
+            const pin = new THREE.Mesh(cachedGeometry(`pin:${holeR.toFixed(3)}:${pinStack.lengthZ.toFixed(3)}`, () => new THREE.CylinderGeometry(holeR * 0.8, holeR * 0.8, pinStack.lengthZ, 20)), material.dark);
             pin.rotation.x = Math.PI / 2;
             pin.position.copy(p);
             root.add(pin);
@@ -3634,7 +3710,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             stateRef.current.dataset.threeMaterialCacheSize = String(materialCacheRef.current.size);
         }
         renderCamera(cameraStateRef.current);
-    }, [mechanism, simulation, kit, color, visiblePathTraces, pathLayerZ, showPathPreview, showTrail, pinionRotation, renderPlan, renderedLayerZ, pinCenterZ, pinLengthZ, rigOpacity]);
+    }, [mechanism, simulation, kit, color, visiblePathTraces, pathLayerZ, showPathPreview, showTrail, pinionRotation, renderPlan, renderedLayerZ, pinStacks, rigOpacity]);
 
     return <div
         data-testid="foundry-preview"
@@ -3719,8 +3795,11 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-three-spacer-mm={`${FABRICATION_SPACER_SPEC.outerDiameterMm}x${FABRICATION_SPACER_SPEC.innerDiameterMm}`}
             data-three-spacer-layers={spacerLayerCount}
             data-three-spacer-render-count={spacerRenderCount}
+            data-three-spacer-render-contract="adjacent-moving-layers-only"
             data-three-physical-pin-count={assemblyPinPoints.length}
             data-three-physical-pin-contract={assemblyPinContract}
+            data-three-pin-stack-policy="per-pin-adjacent-stack"
+            data-three-pin-stack-spans={pinSpanSummary}
             data-three-path-source="moving-joints"
             data-three-path-trace-count={visiblePathTraces.length}
             data-three-path-trace-ids={visiblePathTraces.map(trace => trace.id).join(',')}
