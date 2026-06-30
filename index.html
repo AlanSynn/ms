@@ -144,15 +144,12 @@
       .template-tile.primary { background: linear-gradient(180deg, #ffffff, #f9faff); color: var(--ms-text); border-color: var(--ms-accent-line); box-shadow: 0 22px 70px rgba(139,92,246,.15); }
       .template-tile:hover { transform: translateY(-2px); box-shadow: 0 24px 70px rgba(8,10,18,.10); background: white; border-color: var(--ms-line-strong); }
       .template-tile.primary:hover { background: white; border-color: var(--ms-accent); }
-      .template-kicker { color: var(--ms-accent); font-size: .72rem; font-weight: 720; letter-spacing: .18em; text-transform: uppercase; }
-      .template-tile.primary .template-kicker { color: var(--ms-accent); }
       .template-tile strong { color: inherit; display: block; margin-top: .28rem; font-size: clamp(1rem, 1.4vw, 1.35rem); line-height: 1; letter-spacing: -.025em; font-weight: 720; }
-      .template-tile span:not(.template-kicker) { display: block; margin-top: .28rem; color: #64748b; font-size: .84rem; line-height: 1.25; font-weight: 620; }
-      .template-tile.primary span:not(.template-kicker) { color: var(--ms-muted); }
       .template-tile small { display: block; margin-top: .45rem; color: var(--ms-muted); font-weight: 620; }
       .template-tile b { margin-top: .45rem; display: inline-flex; align-items: center; gap: .35rem; color: white; background: var(--ms-accent); width: fit-content; border-radius: 999px; padding: .45rem .56rem; font-size: .68rem; white-space: nowrap; }
       .template-tile.starter { position: relative; overflow: hidden; }
-      .starter-thumb { width: 2.25rem; height: 2.25rem; object-fit: contain; border-radius: .85rem; background: #f5f6fa; filter: grayscale(1); opacity: .78; }
+      .template-tile .template-icon-slot { width: 2.25rem; height: 2.25rem; display: inline-grid; place-items: center; border-radius: .85rem; background: #f5f6fa; color: var(--ms-accent); }
+      .starter-thumb { width: 2.25rem; height: 2.25rem; object-fit: contain; border-radius: .85rem; filter: grayscale(1); opacity: .78; }
       .replace-toggle { display: inline-flex; align-items: center; gap: .45rem; color: var(--ms-muted); font-size: .82rem; font-weight: 650; }
       .import-status { width: min(100%, 34rem); min-width: 0; border: 1px solid var(--ms-line); border-radius: 1.5rem; background: rgba(255,255,255,.86); padding: 1rem; }
       .path-canvas-shell { position: relative; }

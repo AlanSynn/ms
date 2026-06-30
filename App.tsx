@@ -1015,7 +1015,7 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
                 </div>
                 <div className="mt-4 grid gap-2">
                     <button className="btn-primary" aria-label="Open Getting Started" onClick={onOpenGettingStarted}><Sparkles size={16}/> Starters</button>
-                    <button type="button" className="btn-secondary cursor-pointer" aria-label="Load character package" onClick={() => packageInputRef.current?.click()}><FileJson size={16}/> Load package</button><input ref={packageInputRef} data-testid="blank-package-input" hidden type="file" multiple accept=".json,.yaml,.yml,image/png,image/jpeg,image/webp,image/svg+xml" onChange={e => {
+                    <button type="button" className="btn-secondary cursor-pointer" aria-label="Load character file" onClick={() => packageInputRef.current?.click()}><FileJson size={16}/> Load character file</button><input ref={packageInputRef} data-testid="blank-package-input" hidden type="file" multiple accept=".json,.yaml,.yml,image/png,image/jpeg,image/webp,image/svg+xml" onChange={e => {
                         const files = e.currentTarget.files ? Array.from(e.currentTarget.files) as File[] : [];
                         e.currentTarget.value = '';
                         if (files.length) onPackage(files);
@@ -1025,7 +1025,7 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
                         e.currentTarget.value = '';
                         if (file) onProcess(file);
                     }}/>
-                    <button type="button" className="btn-secondary cursor-pointer" onClick={() => importInputRef.current?.click()}><Upload size={16}/> Import project</button><input ref={importInputRef} data-testid="onboarding-import-input" hidden type="file" accept="application/json,.json" onChange={e => {
+                    <button type="button" className="btn-secondary cursor-pointer" onClick={() => importInputRef.current?.click()}><Upload size={16}/> Open full project</button><input ref={importInputRef} data-testid="onboarding-import-input" hidden type="file" accept="application/json,.json" onChange={e => {
                         const file = e.currentTarget.files?.[0];
                         e.currentTarget.value = '';
                         if (file) onImport(file);

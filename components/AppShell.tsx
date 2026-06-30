@@ -318,18 +318,20 @@ export const GettingStartedDialog = ({ starterTemplates, onSample, onStarterImag
                 <button type="button" className="btn-secondary" onClick={onClose}>Skip</button>
             </div>
             <div className="template-gallery" data-testid="getting-started-gallery">
-                <button type="button" className="template-tile primary" data-testid="getting-started-card-humanoid" aria-label="Open humanoid starter" onClick={onSample}>
-                    <strong>Humanoid</strong>
+                <button type="button" className="template-tile primary" data-testid="getting-started-card-humanoid" aria-label="Open starter rig" onClick={onSample}>
+                    <span className="template-icon-slot"><Sparkles size={18}/></span>
+                    <strong>Starter rig</strong>
                     <b><Sparkles size={16}/> Start</b>
                 </button>
                 {starterTemplates.map(template => (
                     <button key={template.id} type="button" className="template-tile starter cursor-pointer" data-testid={`getting-started-card-${template.id}`} aria-label={`Start ${template.label} starter`} onClick={() => onStarterImage(template)}>
-                        <img className="starter-thumb" src={template.thumbUrl} alt="" />
+                        <span className="template-icon-slot"><img className="starter-thumb" src={template.thumbUrl} alt="" /></span>
                         <strong>{template.label}</strong>
                         <b><Sparkles size={16}/> Start</b>
                     </button>
                 ))}
                 <button type="button" className="template-tile cursor-pointer" data-testid="getting-started-card-image" aria-label="Choose image" onClick={() => onnxInputRef.current?.click()}>
+                    <span className="template-icon-slot"><BrainCircuit size={18}/></span>
                     <strong>Image</strong>
                     <b><BrainCircuit size={16}/> Choose</b>
                 </button>
@@ -338,8 +340,9 @@ export const GettingStartedDialog = ({ starterTemplates, onSample, onStarterImag
                     e.currentTarget.value = '';
                     if (file) onProcess(file);
                 }}/>
-                <button type="button" className="template-tile cursor-pointer" data-testid="getting-started-card-package" aria-label="Load package" onClick={() => packageInputRef.current?.click()}>
-                    <strong>Package</strong>
+                <button type="button" className="template-tile cursor-pointer" data-testid="getting-started-card-package" aria-label="Load character file" onClick={() => packageInputRef.current?.click()}>
+                    <span className="template-icon-slot"><FileJson size={18}/></span>
+                    <strong>Character file</strong>
                     <b><FileJson size={16}/> Load</b>
                 </button>
                 <input ref={packageInputRef} data-testid="getting-started-package-input" hidden type="file" multiple accept=".json,.yaml,.yml,image/png,image/jpeg,image/webp,image/svg+xml" onChange={e => {
@@ -349,7 +352,7 @@ export const GettingStartedDialog = ({ starterTemplates, onSample, onStarterImag
                 }}/>
             </div>
             <div className="getting-started-foot">
-                <button type="button" className="btn-secondary cursor-pointer" onClick={() => importInputRef.current?.click()}><Upload size={16}/> Import project</button><input ref={importInputRef} data-testid="getting-started-import-input" hidden type="file" accept="application/json,.json" onChange={e => {
+                <button type="button" className="btn-secondary cursor-pointer" onClick={() => importInputRef.current?.click()}><Upload size={16}/> Open full project</button><input ref={importInputRef} data-testid="getting-started-import-input" hidden type="file" accept="application/json,.json" onChange={e => {
                     const file = e.currentTarget.files?.[0];
                     e.currentTarget.value = '';
                     if (file) onImport(file);

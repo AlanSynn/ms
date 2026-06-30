@@ -873,6 +873,7 @@ assert(appText.includes('readStorageWithLegacy') && appText.includes('migrateSto
 assert(!appUiText.includes('MOTIONSMITH_VIDEO_URL'), 'welcome splash does not embed the old preview video');
 assert(appUiText.includes('getting-started-dialog') && appUiText.includes('getting-started-gallery'), 'Getting Started is an explicit compact starter dialog');
 assert(appUiText.includes('Start a character.'), 'Getting Started uses a short result-oriented heading');
+assert(appUiText.includes('Starter rig') && appUiText.includes('Character file') && appUiText.includes('Open full project') && !appUiText.includes('>Humanoid<') && !appUiText.includes('>Package<') && !appUiText.includes('Import project'), 'Getting Started separates starter rig, character file, and full project entry points');
 assert(appUiText.includes('getting-started-card-humanoid') && appUiText.includes('getting-started-card-image') && appUiText.includes('getting-started-card-package') && appUiText.includes('getting-started-card-${template.id}') && appText.includes("id: 'girl'") && appText.includes("id: 'boy'"), 'Getting Started exposes compact starter/result choices including Girl and Boy');
 assert(!appUiText.includes('Local browser processing') && !appUiText.includes('Load art + skeleton') && !appUiText.includes('Full body rig') && !appUiText.includes('Browser ONNX rigging'), 'Getting Started avoids process/explanation copy');
 assert(!appUiText.includes('lesson-template-'), 'Getting Started does not show lesson cards in the first screen');

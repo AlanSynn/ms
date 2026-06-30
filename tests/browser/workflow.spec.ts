@@ -29,7 +29,7 @@ const dismissWelcomeSplash = async (page: Page) => {
 const openCharacterScreen = async (page: Page, options: { loadStarter?: boolean } = { loadStarter: true }) => {
   await dismissWelcomeSplash(page);
   if (await page.getByTestId('getting-started-dialog').count()) {
-    if (options.loadStarter !== false) await page.getByRole('button', { name: /Open humanoid starter/i }).click();
+    if (options.loadStarter !== false) await page.getByRole('button', { name: /Open starter rig/i }).click();
     else await page.getByRole('button', { name: 'Skip' }).click();
   }
   if (!(await page.getByTestId('character-screen').count())) {
@@ -161,13 +161,19 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   const gettingStarted = page.getByTestId('getting-started-dialog');
   await expect(gettingStarted).toBeVisible();
   await expect(gettingStarted).toContainText('Start a character.');
-  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Humanoid');
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Starter rig');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Image');
-  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Package');
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Character file');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Girl');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Boy');
+  await expect(gettingStarted).toContainText('Open full project');
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Package');
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Humanoid');
   await expect(gettingStarted.getByTestId('getting-started-gallery').locator('.template-tile')).toHaveCount(5);
+  await expect(gettingStarted.getByTestId('getting-started-gallery').locator('.template-icon-slot')).toHaveCount(5);
   await expect(gettingStarted.getByTestId('getting-started-gallery').locator('.starter-thumb')).toHaveCount(2);
+  const topRowTitleYs = await Promise.all(['humanoid', 'girl', 'boy'].map(id => gettingStarted.getByTestId(`getting-started-card-${id}`).locator('strong').boundingBox().then(box => box?.y ?? 0)));
+  expect(Math.max(...topRowTitleYs) - Math.min(...topRowTitleYs), 'top-row starter titles align despite thumbnails').toBeLessThan(3);
   await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Local browser processing');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('rigging');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Waving arm');
@@ -594,7 +600,7 @@ test('Character tab processing controls route to real browser workflows', async 
   await expect(page.getByTestId('character-preview-pane')).toBeVisible();
 
   const packageChooserPromise = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Load character package', exact: true }).click();
+  await page.getByRole('button', { name: 'Load character file', exact: true }).click();
   const packageChooser = await packageChooserPromise;
   expect(packageChooser.isMultiple()).toBe(true);
   await packageChooser.setFiles([]);
@@ -608,7 +614,7 @@ test('Character tab processing controls route to real browser workflows', async 
   await page.getByRole('button', { name: /Open Getting Started/i }).click();
   await expect(page.getByTestId('getting-started-dialog')).toBeVisible();
   const starterPackageChooserPromise = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: /Load package/i }).click();
+  await page.getByRole('button', { name: /Load character file/i }).click();
   const starterPackageChooser = await starterPackageChooserPromise;
   expect(starterPackageChooser.isMultiple()).toBe(true);
   await starterPackageChooser.setFiles([]);
@@ -754,7 +760,7 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
     'tests/fixtures/package/char_cfg.yaml',
     'tests/fixtures/package/body.png'
   ];
-  const loadPackageButton = page.getByRole('button', { name: 'Load character package', exact: true });
+  const loadPackageButton = page.getByRole('button', { name: 'Load character file', exact: true });
   await loadPackageButton.focus();
   await expect(loadPackageButton).toBeFocused();
   const [packageChooser] = await Promise.all([
