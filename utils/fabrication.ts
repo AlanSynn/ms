@@ -317,6 +317,11 @@ export type FabricationRenderPlan = {
     validationErrors: string[];
 };
 
+export const FABRICATION_RENDER_BASE_Z = 0.22;
+export const FABRICATION_RENDER_LAYER_Z_STEP = 0.56;
+export const FABRICATION_RENDER_PART_DEPTH = 0.40;
+export const FABRICATION_RENDER_MIN_CLEARANCE = Number((FABRICATION_RENDER_LAYER_Z_STEP - FABRICATION_RENDER_PART_DEPTH).toFixed(2));
+
 export const STACK_COLORS: Record<FabricationStackLayer['role'], string> = {
     base: '#e2e8f0',
     clip: '#334155',
@@ -421,7 +426,7 @@ export const fabricationRenderPlanForMechanism = (mechanism: Pick<MechanismConfi
             source: 'fabrication-stack',
             stackIndex,
             occurrence,
-            z: stackIndex === -1 ? 0 : 0.22 + stackIndex * 0.18,
+            z: stackIndex === -1 ? 0 : FABRICATION_RENDER_BASE_Z + stackIndex * FABRICATION_RENDER_LAYER_Z_STEP,
             renderKind: renderKindForRole(item.role)
         };
     };

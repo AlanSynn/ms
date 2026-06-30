@@ -3,6 +3,7 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createLessonProject, serializeProject } from '../../utils/project';
+import { FABRICATION_RENDER_LAYER_Z_STEP } from '../../utils/fabrication';
 
 const expectCleanPage = (pageErrors: string[], consoleErrors: string[]) => {
   expect(pageErrors, 'no uncaught browser exceptions').toEqual([]);
@@ -1212,7 +1213,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(threeScene).toHaveAttribute('data-three-stack-order', /^Back Clip → .*S10 spacer.*Front Clip$/);
   await expect(threeScene).toHaveAttribute('data-three-spacer-key', 's10');
   await expect(threeScene).toHaveAttribute('data-three-spacer-mm', '10x4');
-  expect(Number(await threeScene.getAttribute('data-three-spacer-z-gap')), 'Foundry spaces stacked plates along z by the shared S10 spacer layer').toBeGreaterThan(0);
+  expect(Number(await threeScene.getAttribute('data-three-spacer-z-gap')), 'Foundry spaces stacked plates along z by the shared S10 spacer layer').toBeGreaterThanOrEqual(FABRICATION_RENDER_LAYER_Z_STEP - 0.01);
   expect(Number(await threeScene.getAttribute('data-three-spacer-render-count'))).toBeGreaterThan(0);
   await expect(threeScene).toHaveAttribute('data-three-stack-roles', /^clip>.*spacer.*>clip$/);
   await expect(threeScene).toHaveAttribute('data-three-stack-colors', /#334155.*#f59e0b/);
@@ -1327,7 +1328,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
       await expect(threeScene, '4bar keeps only physical A/B/C/D pin hardware in the 3D scene').toHaveAttribute('data-three-physical-pin-contract', 'reference-A-B-C-D-only');
       await expect(threeScene).toHaveAttribute('data-three-physical-pin-count', '4');
     }
-    expect(Number(await threeScene.getAttribute('data-three-spacer-z-gap')), `${type} foundry preview has positive z separation for spacers`).toBeGreaterThan(0);
+    expect(Number(await threeScene.getAttribute('data-three-spacer-z-gap')), `${type} foundry preview has spacer clearance along z`).toBeGreaterThanOrEqual(FABRICATION_RENDER_LAYER_Z_STEP - 0.01);
     await expect(page.getByTestId('foundry-forces-overlay'), `${type} keeps live force vectors visible`).toHaveAttribute('data-physics-rule', /force|torque|velocity|acceleration|reaction/);
     await expect(page.getByTestId('foundry-velocity-overlay'), `${type} keeps live velocity vectors visible`).toHaveAttribute('data-speed', /[0-9]+\.[0-9]+/);
     for (const [attr, minimumCount] of foundryPhysicalMarkers[type]) {
@@ -2286,7 +2287,7 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
   await expect(designPuppet).toHaveAttribute('data-three-stack-order', /^Back Clip → .*S10 spacer.*Front Clip$/);
   await expect(designPuppet).toHaveAttribute('data-three-spacer-key', 's10');
   await expect(designPuppet).toHaveAttribute('data-three-spacer-mm', '10x4');
-  expect(Number(await designPuppet.getAttribute('data-three-spacer-z-gap')), 'Design center workspace spaces stacked plates along z by the shared S10 spacer layer').toBeGreaterThan(0);
+  expect(Number(await designPuppet.getAttribute('data-three-spacer-z-gap')), 'Design center workspace spaces stacked plates along z by the shared S10 spacer layer').toBeGreaterThanOrEqual(FABRICATION_RENDER_LAYER_Z_STEP - 0.01);
   await expect(designPuppet).toHaveAttribute('data-three-stack-validation-errors', '0');
   expect(await designPuppet.getAttribute('data-three-rendered-layer-labels')).toBe(await designPuppet.getAttribute('data-three-stack-order'));
   expect(await designPuppet.getAttribute('data-three-rendered-layer-roles')).toBe(await designPuppet.getAttribute('data-three-stack-roles'));
@@ -2311,7 +2312,7 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
     await expect(designPuppet, `${type} design stack has no validation errors`).toHaveAttribute('data-three-stack-validation-errors', '0');
     expect(await designPuppet.getAttribute('data-three-rendered-layer-labels'), `${type} design rendered labels match fabrication stack labels`).toBe(await designPuppet.getAttribute('data-three-stack-order'));
     expect(await designPuppet.getAttribute('data-three-rendered-layer-z'), `${type} design rendered z order matches fabrication stack z order`).toBe(await designPuppet.getAttribute('data-three-stack-z'));
-    expect(Number(await designPuppet.getAttribute('data-three-spacer-z-gap')), `${type} design preview has positive z separation for spacers`).toBeGreaterThan(0);
+    expect(Number(await designPuppet.getAttribute('data-three-spacer-z-gap')), `${type} design preview has spacer clearance along z`).toBeGreaterThanOrEqual(FABRICATION_RENDER_LAYER_Z_STEP - 0.01);
     await expect.poll(async () => Number(await designPuppet.getAttribute('data-three-scene-object-count')), { message: `${type} adds visible WebGL mechanism geometry to the center workspace` }).toBeGreaterThan(60);
     for (const [attr, minimumCount] of centerPhysicalMarkers[type]) {
       expect(Number(await designPuppet.getAttribute(attr)), `${type} center preview includes ${attr}`).toBeGreaterThanOrEqual(before[attr] + minimumCount);

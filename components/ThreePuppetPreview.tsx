@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import type { BodyPartLayer, CanvasViewport, MechanismConfig, MechanismType, Point, ProjectState, StandardSkeleton } from '../types';
 import { boardGridLines, defaultPhysicalKit, SCENE_PX_PER_MM, sceneBoundsForSheet } from '../utils/coordinates';
 import { calculateLinkage, sampledCamProfileScale, gearPairOutputRatio, gearTrainCenters, gearTrainOutputRatio, gearTrainPitchRadii, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from '../utils/kinematics';
-import { FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRenderPlanForMechanism, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, type FabricationLinkageRoleLengths } from '../utils/fabrication';
+import { FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRenderPlanForMechanism, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, type FabricationLinkageRoleLengths } from '../utils/fabrication';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, pointInsideOutline } from '../utils/partGeometry';
 import { clampCanvasZoom, WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, loadRapierPhysicsKernel, physicsKernelErrorMessage } from '../utils/physicsKernel';
@@ -920,15 +920,20 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       if (!visual) return;
       const state = calculateLinkage(mechanism, angle);
       const renderPlan = fabricationRenderPlanForMechanism(mechanism);
-      const zLayer = (labels: string[], fallback: number) => renderPlan.layers.find(layer => labels.includes(layer.label))?.z ?? fallback;
+      const zLayer = (labels: string[], fallback: number, occurrence = 0) => renderPlan.layers.filter(layer => labels.includes(layer.label))[occurrence]?.z ?? fallback;
+      const zRole = (role: string, occurrence: number, fallback: number) => renderPlan.layers.find(layer => layer.role === role && layer.occurrence === occurrence)?.z ?? fallback;
+      const zLastRole = (role: string, fallback: number) => renderPlan.layers.filter(layer => layer.role === role).at(-1)?.z ?? fallback;
       const zBackClip = zLayer(['Back Clip'], 0.22);
-      const zDriver = zLayer(['Input L2 linkage', 'L2 linkage', 'Drive linkage', 'Input linkage', 'Crank linkage', 'Left crank linkage'], 0.76);
-      const zDriverGear = zLayer(['Drive G3 / 3-space gear', 'G1 / 1-space gear', 'Eccentric cam', 'R56 internal ring gear', 'Drive gear', 'Left timing gear', 'Pinion gear', 'Cam disk', 'Ring gear'], 0.4);
-      const zCoupler = zLayer(['Coupler L4 linkage', 'L4 linkage', 'L6 linkage', 'Round follower', '2-hole bracket', '3-hole bracket', 'Coupler linkage', 'Center coupler', 'Carrier linkage', 'Slider guide', 'Rack guide', 'Follower guide'], 0.76);
-      const zOutput = zLayer(['Output L2 linkage', 'L4 linkage', '2-hole bracket', 'Output linkage', 'Right crank linkage', 'Follower linkage'], 1.12);
-      const zDyad = zLayer(['Dyad link'], zOutput + 0.18);
-      const zFollower = zLayer(['Follower link'], zOutput + 0.36);
-      const zOutputMoving = zLayer(['Toothed rack', 'G3 / 3-space gear', 'Output G3 / 3-space gear', 'Planet gear', 'Sun gear', 'Output gear', 'Right timing gear'], zOutput);
+      const zDriver = zRole('linkage', 0, zLayer(['Input L2 linkage', 'L2 linkage', 'Drive linkage', 'Input linkage', 'Crank linkage', 'Left crank linkage'], 0.76));
+      const zFirstGear = zRole('gear', 0, zLayer(['Drive G3 / 3-space gear', 'G1 / 1-space gear', 'Eccentric cam', 'R56 internal ring gear', 'Drive gear', 'Left timing gear', 'Pinion gear', 'Cam disk', 'Ring gear'], 0.4));
+      const zSecondGear = zRole('gear', 1, zFirstGear + FABRICATION_RENDER_LAYER_Z_STEP);
+      const zDriverGear = mechanism.type === 'planetary_gear' ? zSecondGear : zFirstGear;
+      const zRingGear = mechanism.type === 'planetary_gear' ? zFirstGear : zDriverGear;
+      const zCoupler = zRole('linkage', 1, zLayer(['Coupler L4 linkage', 'L4 linkage', 'L6 linkage', 'Round follower', '2-hole bracket', '3-hole bracket', 'Coupler linkage', 'Center coupler', 'Carrier linkage', 'Slider guide', 'Rack guide', 'Follower guide'], zDriver + FABRICATION_RENDER_LAYER_Z_STEP));
+      const zOutput = zRole('linkage', 2, zLayer(['Output L2 linkage', 'L4 linkage', '2-hole bracket', 'Output linkage', 'Right crank linkage', 'Follower linkage'], zCoupler + FABRICATION_RENDER_LAYER_Z_STEP));
+      const zDyad = zRole('linkage', 3, zLayer(['Dyad link'], zOutput + FABRICATION_RENDER_LAYER_Z_STEP));
+      const zFollower = zRole('linkage', 4, zLayer(['Follower link'], zDyad + FABRICATION_RENDER_LAYER_Z_STEP));
+      const zOutputMoving = zLastRole('gear', zLayer(['Toothed rack', 'G3 / 3-space gear', 'Output G3 / 3-space gear', 'Planet gear', 'Sun gear', 'Output gear', 'Right timing gear'], zOutput));
       const zPin = (renderPlan.layers.at(-1)?.z ?? zOutputMoving) + 0.34;
       Object.values(visual.extras).forEach(extra => hideObject(extra));
       updateLink(visual.links.follower, undefined, undefined);
@@ -1019,7 +1024,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
         updateLink(visual.links.coupler, undefined, undefined);
         updateLink(visual.links.output, undefined, undefined);
         updateLink(visual.links.effector, state.p2, state.effector, zOutputMoving);
-        updateObject(visual.extras.ringGear, state.p1, zDriverGear, 0);
+        updateObject(visual.extras.ringGear, state.p1, zRingGear, 0);
       } else {
         standardLinks();
       }
@@ -1033,7 +1038,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
         const gearZ = index === 0
           ? zDriverGear
           : mechanism.type === 'planetary_gear'
-            ? zLayer(['G3 / 3-space gear', 'Planet gear'], zOutputMoving)
+            ? zOutputMoving
             : isGearTrain && index < visual.gears.length - 1
               ? zLayer([`Idler G3 / 3-space gear ${index}`, `Idler gear ${index}`], zOutputMoving)
               : zLayer(['Output G3 / 3-space gear', 'G3 / 3-space gear', 'Output gear', 'Right timing gear', 'Planet gear', 'Sun gear'], zOutputMoving);
