@@ -156,13 +156,16 @@ test('character → path → foundry → design → blueprint runs end-to-end in
 
   const gettingStarted = page.getByTestId('getting-started-dialog');
   await expect(gettingStarted).toBeVisible();
-  await expect(gettingStarted).toContainText('Choose how to begin.');
-  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Humanoid starter');
-  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Create from image');
-  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Load character');
-  await expect(gettingStarted.getByTestId('getting-started-gallery').locator('.template-tile')).toHaveCount(3);
-  await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Girl starter');
-  await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Boy starter');
+  await expect(gettingStarted).toContainText('Start a character.');
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Humanoid');
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Image');
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Package');
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Girl');
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Boy');
+  await expect(gettingStarted.getByTestId('getting-started-gallery').locator('.template-tile')).toHaveCount(5);
+  await expect(gettingStarted.getByTestId('getting-started-gallery').locator('.starter-thumb')).toHaveCount(2);
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Local browser processing');
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('rigging');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Waving arm');
   await page.getByRole('button', { name: 'Skip to editor' }).click();
 

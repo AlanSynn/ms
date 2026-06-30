@@ -29,8 +29,8 @@ Key notes translated into product constraints:
 | Area | Supported now | Gap to close |
 | --- | --- | --- |
 | Web deployment | GitHub Pages workflow, `/ms/` base path, tag-gated release, local ONNX asset checks. | No classroom-safe release checklist in product docs/About: no account, no upload, no server, local-first. |
-| Guided entry | Splash + compact three-choice Getting Started dialog. | Classroom lessons must be a secondary lesson/library path, not extra cards in the first-run modal. |
-| Templates | Humanoid starter, image/package import, and serializable lesson baselines. | Classroom templates need teacher-ready motion objectives with starter path and compatible mechanism option. |
+| Guided entry | Splash + compact result-first Getting Started dialog. | Classroom lessons must be a secondary lesson/library path, not extra cards in the first-run modal. |
+| Templates | Humanoid, Girl/Boy tiny-thumbnail starters, image/package import, and serializable lesson baselines. | Classroom templates need teacher-ready motion objectives with starter path and compatible mechanism option. |
 | Sensemaking | Foundry has collapsed sensemaking and status/warnings. | Too hidden. Need one visible next-action chip and one mechanism meaning cue at each step. |
 | Stable reset | View reset, playback reset, some stage reset buttons. | No explicit per-template/per-mechanism stable reset contract. `No rotation possible` must recover to known-good range. |
 | Blueprint | Printable cut sheet and export package. | Classroom language and teacher checklist need clearer web-first route; paper should be backup. |
@@ -67,7 +67,7 @@ Non-goal:
 
 ### R2 — Guided theme/template entry
 
-Classroom lessons should answer “what classroom project are we making?” through a secondary lesson/library entry. Getting Started itself remains the compact three-choice first-run modal.
+Classroom lessons should answer “what classroom project are we making?” through a secondary lesson/library entry. Getting Started itself remains the compact result-first starter modal.
 
 Minimum classroom templates:
 

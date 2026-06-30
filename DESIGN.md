@@ -37,7 +37,7 @@ Avoid: dark CAD chrome, tiny low-contrast controls, dense ungrouped lists, fake 
 
 The first-run splash is logo-only: MotionSmith mark, Start, and Do not show again. It must not teach, show galleries, embed videos, or replace the editor shell.
 
-Getting Started is a compact modal dialog, not a full-screen stage. It shows only three first-run choices: Humanoid starter, Create from image, and Load character. Import project is secondary. Lesson galleries, sample image galleries, and preserve-compatible-mechanisms controls stay out of the first-run modal. Closing it always lands on the Character tab with the editor shell still visible underneath.
+Getting Started is a compact modal dialog, not a full-screen stage. It shows result-first starter choices: Humanoid, Girl, Boy, Image, and Package. Girl/Boy use tiny thumbnails, Import project is secondary, and process/explanation copy stays out. Closing it always lands on the Character tab with the editor shell still visible underneath.
 
 ### Character tab
 

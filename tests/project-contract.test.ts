@@ -804,9 +804,11 @@ assert(!appText.includes('flex flex-col items-end gap-2'), 'top app bar does not
 assert(appText.includes('readStorageWithLegacy') && appText.includes('migrateStorageValue'), 'MotionSmith storage rename keeps legacy autosave/workspace migration hooks');
 assert(!appUiText.includes('MOTIONSMITH_VIDEO_URL'), 'welcome splash does not embed the old preview video');
 assert(appUiText.includes('getting-started-dialog') && appUiText.includes('getting-started-gallery'), 'Getting Started is an explicit compact starter dialog');
-assert(appUiText.includes('Choose how to begin.'), 'Getting Started uses a short action-oriented heading');
-assert(appUiText.includes('getting-started-card-humanoid') && appUiText.includes('getting-started-card-image') && appUiText.includes('getting-started-card-package'), 'Getting Started exposes only the three primary first-run choices');
-assert(!appUiText.includes('Girl starter') && !appUiText.includes('Boy starter') && !appUiText.includes('lesson-template-'), 'Getting Started does not show sample galleries or lesson cards in the first screen');
+assert(appUiText.includes('Start a character.'), 'Getting Started uses a short result-oriented heading');
+assert(appUiText.includes('getting-started-card-humanoid') && appUiText.includes('getting-started-card-image') && appUiText.includes('getting-started-card-package') && appUiText.includes('getting-started-card-${template.id}') && appText.includes("id: 'girl'") && appText.includes("id: 'boy'"), 'Getting Started exposes compact starter/result choices including Girl and Boy');
+assert(!appUiText.includes('Local browser processing') && !appUiText.includes('Load art + skeleton') && !appUiText.includes('Full body rig') && !appUiText.includes('Browser ONNX rigging'), 'Getting Started avoids process/explanation copy');
+assert(!appUiText.includes('lesson-template-'), 'Getting Started does not show lesson cards in the first screen');
+assert(indexText.includes('.starter-thumb { width: 2.25rem; height: 2.25rem;'), 'Girl/Boy starter thumbnails stay compact');
 assert(appText.includes('return { present: createEmptyProject(), past: [], future: [] }'), 'App initializes an empty project instead of preloading a character');
 assert(appText.includes('setProject(createEmptyProject(), { resetHistory: true })'), 'New Project resets to an empty project instead of a starter character');
 assert(appText.includes("returnStage: 'character'"), 'Accepted character loads stay in the Character tab instead of jumping to Path');

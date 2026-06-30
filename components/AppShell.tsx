@@ -7,6 +7,8 @@ import { APP_MENU_GROUPS, commandById, commandShortcutListText, commandShortcutT
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT } from '../utils/viewport';
 import { STAGE_PANE_NAV_ITEMS, StagePaneNavIcon } from './stages/stageLayout';
 
+export type StarterImageTemplate = { id: string; label: string; fileName: string; url: string; thumbUrl: string };
+
 export const SHARED_PLAYBACK_STAGES: AppStage[] = ['path', 'design'];
 
 export const STAGES: Array<{ id: AppStage; label: string }> = [
@@ -267,8 +269,10 @@ export const WelcomeDialog = ({ onClose }: { onClose: (hideNextTime?: boolean) =
     </div>;
 };
 
-export const GettingStartedDialog = ({ onSample, onPackage, onProcess, onImport, onClose }: {
+export const GettingStartedDialog = ({ starterTemplates, onSample, onStarterImage, onPackage, onProcess, onImport, onClose }: {
+    starterTemplates: StarterImageTemplate[];
     onSample: () => void;
+    onStarterImage: (template: StarterImageTemplate) => void;
     onPackage: (files: FileList | File[]) => void;
     onProcess: (file: File) => void;
     onImport: (file: File) => void;
@@ -310,33 +314,34 @@ export const GettingStartedDialog = ({ onSample, onPackage, onProcess, onImport,
             <div className="getting-started-head">
                 <div>
                     <div className="section-title">Getting started</div>
-                    <h2 id="getting-started-title">Choose how to begin.</h2>
+                    <h2 id="getting-started-title">Start a character.</h2>
                 </div>
                 <button type="button" className="btn-secondary" onClick={onClose}>Skip to editor</button>
             </div>
             <div className="template-gallery" data-testid="getting-started-gallery">
-                <button type="button" className="template-tile primary" data-testid="getting-started-card-humanoid" onClick={onSample}>
-                    <span className="template-kicker">Starter</span>
-                    <strong>Humanoid starter</strong>
-                    <span>Full body rig. No mechanism.</span>
-                    <b><Sparkles size={16}/> Open humanoid starter</b>
+                <button type="button" className="template-tile primary" data-testid="getting-started-card-humanoid" aria-label="Open humanoid starter" onClick={onSample}>
+                    <strong>Humanoid</strong>
+                    <b><Sparkles size={16}/> Start</b>
                 </button>
-                <button type="button" className="template-tile cursor-pointer" data-testid="getting-started-card-image" onClick={() => onnxInputRef.current?.click()}>
-                    <span className="template-kicker">Image</span>
-                    <strong>Create from image</strong>
-                    <span>Local browser processing.</span>
-                    <b><BrainCircuit size={16}/> Choose image</b>
+                {starterTemplates.map(template => (
+                    <button key={template.id} type="button" className="template-tile starter cursor-pointer" data-testid={`getting-started-card-${template.id}`} aria-label={`Start ${template.label} starter`} onClick={() => onStarterImage(template)}>
+                        <img className="starter-thumb" src={template.thumbUrl} alt="" />
+                        <strong>{template.label}</strong>
+                        <b><Sparkles size={16}/> Start</b>
+                    </button>
+                ))}
+                <button type="button" className="template-tile cursor-pointer" data-testid="getting-started-card-image" aria-label="Choose image" onClick={() => onnxInputRef.current?.click()}>
+                    <strong>Image</strong>
+                    <b><BrainCircuit size={16}/> Choose</b>
                 </button>
                 <input ref={onnxInputRef} data-testid="getting-started-onnx-input" hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={e => {
                     const file = e.currentTarget.files?.[0];
                     e.currentTarget.value = '';
                     if (file) onProcess(file);
                 }}/>
-                <button type="button" className="template-tile cursor-pointer" data-testid="getting-started-card-package" onClick={() => packageInputRef.current?.click()}>
-                    <span className="template-kicker">Package</span>
-                    <strong>Load character</strong>
-                    <span>Load art + skeleton.</span>
-                    <b><FileJson size={16}/> Load package</b>
+                <button type="button" className="template-tile cursor-pointer" data-testid="getting-started-card-package" aria-label="Load package" onClick={() => packageInputRef.current?.click()}>
+                    <strong>Package</strong>
+                    <b><FileJson size={16}/> Load</b>
                 </button>
                 <input ref={packageInputRef} data-testid="getting-started-package-input" hidden type="file" multiple accept=".json,.yaml,.yml,image/png,image/jpeg,image/webp,image/svg+xml" onChange={e => {
                     const files = e.currentTarget.files ? Array.from(e.currentTarget.files) as File[] : [];
