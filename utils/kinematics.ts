@@ -561,13 +561,18 @@ const compactTraceDefinitions = (
     ];
     if (type === 'planetary_gear') return [
         { id: 'B', label: 'B drive point', point: state.j1 },
-        { id: 'C', label: 'C carrier', point: state.p2 },
-        { id: 'D', label: 'D planet pin', point: state.j2, primary: true }
+        { id: 'C', label: 'C carrier', point: state.p2, primary: true },
+        { id: 'D', label: 'D planet pitch trace', point: state.j2 }
     ];
     if (type === 'crank') return [
         { id: 'B', label: 'B crank pin', point: state.j1, primary: true }
     ];
-    if (type === 'gear' || type === 'gear_linkage') return [
+    if (type === 'gear_linkage') return [
+        { id: 'B', label: 'B drive point', point: state.j1 },
+        { id: 'C', label: 'C output point', point: state.effector, primary: true },
+        { id: 'D', label: 'D gear handle', point: state.j2 }
+    ];
+    if (type === 'gear') return [
         { id: 'B', label: 'B drive point', point: state.j1 },
         { id: 'C', label: 'C output point', point: state.j2, primary: true }
     ];

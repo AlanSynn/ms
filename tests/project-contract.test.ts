@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { extname, join, relative } from 'node:path';
 import { boardGridLines, boardToScene, bodyPartPivotScene, physicalKitPreset, placeBodyPartPivotAt, SCENE_PX_PER_MM, sceneToBoard, sceneToBoardRaw, sceneToSheetMm, sceneToSvg, sheetMmToScene } from '../utils/coordinates';
 import { CLASSROOM_LESSONS, classroomLessonById, createDefaultMechanism, createEmptyProject, createLessonProject, createSampleProject, handoffGate, loadProjectSnapshot, serializeProject, applyProjectAction, projectSelfCheck, mechanismRequiredParts, mechanismWithGeneratedPath, replaceCharacterProject, resetProjectToLessonBaseline } from '../utils/project';
-import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, fabricationBoardCoordinateCallout, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, prefabAssemblySteps, sampleFeasibleRange, validateFabricationStack, validateForFabrication } from '../utils/fabrication';
+import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, PLANETARY_GEAR_PLANET_COUNT, fabricationBoardCoordinateCallout, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, planetaryPlanetCenters, prefabAssemblySteps, sampleFeasibleRange, validateFabricationStack, validateForFabrication } from '../utils/fabrication';
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
 import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, generateCurvePoints, generateMechanismPointTraces, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius, sampledCamProfileScale } from '../utils/kinematics';
@@ -560,7 +560,9 @@ ALL_MECHANISM_TYPES.forEach(type => {
   assert.deepEqual(feature.fabricationStack(mechanism), fabricationStackForMechanism(mechanism), `${type} feature stack uses canonical fabrication helper`);
   assert.equal(feature.fabricationPlan(mechanism).roleSummary, fabricationRenderPlanForMechanism(mechanism).roleSummary, `${type} feature render plan uses canonical fabrication helper`);
   assert.equal(feature.sampleKinematics(mechanism, 0).isValid, calculateLinkage(mechanism, 0).isValid, `${type} feature kinematics use canonical solver`);
-  assert.equal(feature.sampleFeasibleRange(mechanism, 12).percentValid, sampleFeasibleRange(mechanism, 12).percentValid, `${type} feature feasible range uses canonical sampler`);
+  const feasibleRange = feature.sampleFeasibleRange(mechanism, 12);
+  assert.equal(feasibleRange.percentValid, sampleFeasibleRange(mechanism, 12).percentValid, `${type} feature feasible range uses canonical sampler`);
+  assert(feasibleRange.startDeg >= 0 && feasibleRange.endDeg <= 360 && feasibleRange.intervals.every(interval => interval.startDeg >= 0 && interval.endDeg <= 360), `${type} feasible range reports one normalized 0–360° cycle`);
   assert(feature.interactionPolicy(mechanism).writesProjectState, `${type} feature declares ProjectState-backed edits`);
   assert.deepEqual(feature.interactionPolicy(mechanism).draggableHandles, expectedCanvasDragHandles[type], `${type} feature preserves legacy Canvas drag handles`);
   assert(feature.projectionHints(mechanism).every(hint => hint.source === 'mechanism-feature-registry' && hint.zStackUsesFabricationPlan), `${type} feature declares fabrication-backed projection`);
@@ -1082,6 +1084,18 @@ AUTHORABLE_MECHANISM_TYPES.forEach(type => {
   assert.equal(new Set(movingZValues).size, movingZValues.length, `${type} moving mechanism layers occupy distinct z planes`);
 });
 
+{
+  const validStack = fabricationStackForMechanism(createDefaultMechanism('4bar', 'invalid-stack-source'));
+  const expectStackError = (stack: typeof validStack, message: string, label: string) => {
+    assert(validateFabricationStack(stack).some(error => error.includes(message)), label);
+  };
+  expectStackError(validStack.slice(1), 'start with a back clip', 'fabrication stack validation rejects missing first clip');
+  expectStackError(validStack.slice(0, -1), 'end with a front clip', 'fabrication stack validation rejects missing final clip');
+  expectStackError(validStack.filter(layer => layer.role !== 'spacer'), 'S10 spacer', 'fabrication stack validation rejects adjacent moving layers without S10 spacers');
+  expectStackError(validStack.map(layer => layer.role === 'spacer' ? { ...layer, label: 'Wrong spacer' } : layer), 'S10 spacer', 'fabrication stack validation rejects non-S10 spacer labels');
+  expectStackError([{ ...validStack[1], label: 'Base board', role: 'base' }, ...validStack], 'moving stack must not include Base board', 'fabrication stack validation keeps the base board out of moving stacks');
+}
+
 const assertFiniteDeep = (value: unknown, label: string): void => {
   if (typeof value === 'number') {
     assert(Number.isFinite(value), `${label} is finite`);
@@ -1188,6 +1202,28 @@ assert(Math.abs(foundryOverlay.forceMagnitude - Math.hypot(foundryOverlay.forceR
 assert(foundryOverlay.playhead && foundryOverlay.forceTip && ((foundryOverlay.forceTip.x - foundryOverlay.playhead.x) * foundryOverlay.forceRaw.x + (foundryOverlay.forceTip.y - foundryOverlay.playhead.y) * foundryOverlay.forceRaw.y) > 0, 'Foundry force arrow points along the live total force vector');
 assert(foundryOverlay.constraintError < 1e-6, 'Foundry overlay constraint error matches the sampled 4-bar pose');
 assertFiniteDeep(foundryOverlay, 'foundryPhysicsOverlay');
+{
+  const gearLinkageMechanism = createDefaultMechanism('gear_linkage', 'foundry-gear-linkage-playhead');
+  const gearLinkageState = calculateLinkage(gearLinkageMechanism, Math.PI / 3);
+  const gearLinkageTrace = generateMechanismPointTraces(gearLinkageMechanism, 48).traces.find(trace => trace.primary);
+  const overlay = buildFoundryPhysicsOverlay(gearLinkageMechanism, { state: gearLinkageState, scale: 1, pathPoints: gearLinkageTrace?.points ?? [] }, Math.PI / 3, sample.settings);
+  assert.equal(overlay.playheadSource, 'mechanism-effector', 'Foundry gear-linkage vectors anchor to the L4 end-effector, not the intermediate gear handle');
+  assert.deepEqual(overlay.playhead, gearLinkageState.effector, 'Foundry gear-linkage playhead equals the sampled end-effector');
+}
+{
+  const planetaryMechanism = createDefaultMechanism('planetary_gear', 'foundry-planetary-playhead');
+  const planetaryState = calculateLinkage(planetaryMechanism, Math.PI / 3);
+  const planetaryTrace = generateMechanismPointTraces(planetaryMechanism, 48).traces.find(trace => trace.primary);
+  const overlay = buildFoundryPhysicsOverlay(planetaryMechanism, { state: planetaryState, scale: 1, pathPoints: planetaryTrace?.points ?? [] }, Math.PI / 3, sample.settings);
+  assert.equal(overlay.playheadSource, 'carrier-output', 'Foundry planetary vectors anchor to the carrier output, not a planet pitch point');
+  assert.deepEqual(overlay.playhead, planetaryState.p2, 'Foundry planetary playhead equals the sampled carrier center');
+}
+{
+  const camMechanism = createDefaultMechanism('cam', 'foundry-cam-contact');
+  const camState = calculateLinkage(camMechanism, Math.PI / 3);
+  const overlay = buildFoundryPhysicsOverlay(camMechanism, { state: camState, scale: 1, pathPoints: generateCurvePoints(camMechanism, 48).points }, Math.PI / 3, sample.settings);
+  assert(overlay.constraintError < 1e-6, 'Foundry cam contact/guide overlay uses the sampled cam kinematics instead of an arbitrary rocker-length error');
+}
 const warningProjection = buildToonSceneProjection({ ...sample, mechanisms: [{ ...sample.mechanisms[0], warnings: ['projection warning'] }] });
 assert(warningProjection.warnings.some(warning => warning.message === 'projection warning' && warning.sourceType === 'mechanism' && warning.recoveryStage === 'design'), 'projection warning maps to source and recovery stage');
 assert(warningProjection.labels.some(label => label.text === 'projection warning' && label.severity === 'warning'), 'projection creates warning label chips');
@@ -1239,6 +1275,12 @@ ALL_MECHANISM_TYPES.forEach(type => {
   if (type === '4bar') {
     assert(pointTraces.some(trace => trace.id === 'B' && trace.points.length > 1), '4bar exposes the B crank-joint path');
     assert(pointTraces.some(trace => trace.id === 'C' && trace.primary && trace.points.length > 1), '4bar exposes C as the primary output-joint path');
+  }
+  if (type === 'gear_linkage') {
+    assert(pointTraces.some(trace => trace.id === 'C' && trace.primary && trace.label.includes('output')), 'gear-linkage primary trace follows the linkage end-effector, not the intermediate gear handle');
+  }
+  if (type === 'planetary_gear') {
+    assert(pointTraces.some(trace => trace.id === 'C' && trace.primary && trace.label.includes('carrier')), 'planetary primary trace follows the carrier output, not a planet pitch point');
   }
   const templateProject = {
     ...sample,
@@ -1503,6 +1545,8 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
 
 {
   const mechanism = createDefaultMechanism('planetary_gear', 'contract-planetary-physical');
+  assert.equal(PLANETARY_GEAR_PLANET_COUNT, 1, 'planetary gear recipe is intentionally fixed to one fabricated planet until multi-planet carriers exist');
+  assert.equal(planetaryPlanetCenters({ x: 0, y: 0 }, mechanism, 0).length, 1, 'planetary planet center helper matches the single-planet fabrication recipe');
   [0, Math.PI / 2, Math.PI].forEach(angle => {
     const state = calculateLinkage(mechanism, angle);
     assert(state.isValid && state.aux, 'planetary gear default has valid carrier samples');

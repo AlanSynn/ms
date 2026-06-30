@@ -26,7 +26,7 @@ Snapping by family:
 | `slider_crank` | `crank_length`, `rod_length` → nearest `{40,80,120,160}` mm. |
 | `gear_train` | `gear1_teeth`, `gear2_teeth` → nearest `{8,24,40,56}`; radii aliases filled. |
 | `gear_linkage` | gear pair as above; driven gear must have attachment holes; `linkage_pin_radius` → fabricated driven-gear attachment radius; `linkage_arm_length` → linkage length. |
-| `planetary_gear` | forced to `sun=g8/8T`, `planet=g24/24T`, `ring=ring-g8-g24`; `planet_count` clamped `1..4`; carrier length snapped. |
+| `planetary_gear` | forced to `sun=g8/8T`, `planet=g24/24T`, `ring=ring-g8-g24`; `planet_count` fixed at `1` until the multi-planet carrier recipe exists; carrier length snapped. |
 | `cam_follower` | snap to nearest physical cam preset; fill `base_radius`, `eccentricity`, `cam_lobes`, `profile_harmonic`, `rise_deg`, `high_dwell_deg`, `return_deg`, `physical_cam_preset`. |
 
 ## 3.2 Four-bar linkage — `four_bar`
@@ -345,7 +345,7 @@ r_ring_pitch = r_s + 2r_p = 70 mm
 |---|---:|---|
 | `sun_teeth` | `8` | forced to first gear preset `g8` |
 | `planet_teeth` | `24` | forced to second gear preset `g24` |
-| `planet_count` | `1` | integer clamped `1..4` |
+| `planet_count` | `1` | fixed single-planet authoring recipe until multi-planet carrier fabrication is implemented |
 | `carrier_arm_length` | `40 mm` | nearest linkage length, default `L2` |
 | `physical_ring_gear` | `ring-g8-g24` | forced |
 | `input_angle` | `30°` | angle only |

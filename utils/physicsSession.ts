@@ -107,7 +107,7 @@ export interface FoundryPhysicsSimulation {
 export interface FoundryPhysicsOverlay {
   playIndex: number;
   playhead?: Point;
-  playheadSource: 'coupler-output-joint' | 'guided-output-joint' | 'moving-output-joint' | 'effector-point' | 'path-sample';
+  playheadSource: 'coupler-output-joint' | 'guided-output-joint' | 'moving-output-joint' | 'mechanism-effector' | 'carrier-output' | 'effector-point' | 'path-sample';
   velocityRaw: Point;
   accelerationRaw: Point;
   forceRaw: Point;
@@ -159,7 +159,13 @@ const foundryPhysicalPlayhead = (
   if (mechanism.type === 'cam' || mechanism.type === 'piston' || mechanism.type === 'rack-pinion' || mechanism.type === 'yoke' || mechanism.type === 'quick-return') {
     return { point: s.j2 ?? s.effector ?? fallback, source: 'guided-output-joint' };
   }
-  if (mechanism.type === 'gear' || mechanism.type === 'gear_linkage' || mechanism.type === 'planetary_gear') {
+  if (mechanism.type === 'gear_linkage') {
+    return { point: s.effector ?? s.j2 ?? fallback, source: 'mechanism-effector' };
+  }
+  if (mechanism.type === 'planetary_gear') {
+    return { point: s.p2 ?? s.aux ?? s.effector ?? fallback, source: 'carrier-output' };
+  }
+  if (mechanism.type === 'gear') {
     return { point: s.j2 ?? s.effector ?? fallback, source: 'moving-output-joint' };
   }
   return s.effector ? { point: s.effector, source: 'effector-point' } : { point: fallback, source: 'path-sample' };
@@ -181,7 +187,7 @@ const foundryConstraintError = (mechanism: MechanismConfig, simulation: FoundryP
       : mechanism.type === 'rack-pinion'
         ? [Math.abs(fittedDistance(s.p1, s.j1) - scaledLength(mechanism.crankLength)), fittedDistance(s.j2, s.p2)]
         : mechanism.type === 'cam'
-          ? [fittedDistance(s.j2, s.p2), Math.abs(fittedDistance(s.j1, s.j2) - scaledLength(mechanism.rockerLength))]
+          ? [fittedDistance(s.j2, s.p2)]
           : mechanism.type === 'piston'
             ? [fittedDistance(s.j2, s.effector)]
             : mechanism.type === 'yoke'

@@ -321,9 +321,10 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(foundryRig).toHaveAttribute('data-three-spacer-key', 's10');
   await expect(foundryRig).toHaveAttribute('data-three-spacer-mm', '10x4');
   expect(Number(await foundryRig.getAttribute('data-three-spacer-render-count'))).toBeGreaterThan(0);
-  await expect(foundryRig).toHaveAttribute('data-three-spacer-render-contract', 'adjacent-moving-layers-only');
+  await expect(foundryRig).toHaveAttribute('data-three-spacer-render-contract', 'recipe-pin-spacer-sites');
   await expect(foundryRig).toHaveAttribute('data-three-pin-stack-policy', 'per-pin-adjacent-stack');
   await expect(foundryRig).toHaveAttribute('data-three-pin-stack-spans', /A:[0-9.]+/);
+  await expect(foundryRig).toHaveAttribute('data-three-z-collision-count', '0');
   await expect(foundryRig).toHaveAttribute('data-three-stack-colors', /#334155.*#f59e0b/);
   await expect(foundryRig).toHaveAttribute('data-three-stack-validation-errors', '0');
   expect(await foundryRig.getAttribute('data-three-rendered-layer-labels')).toBe(await foundryRig.getAttribute('data-three-stack-order'));
@@ -1220,9 +1221,11 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(threeScene).toHaveAttribute('data-three-spacer-key', 's10');
   await expect(threeScene).toHaveAttribute('data-three-spacer-mm', '10x4');
   expect(Number(await threeScene.getAttribute('data-three-spacer-z-gap')), 'Foundry spaces stacked plates along z by the shared S10 spacer layer').toBeGreaterThanOrEqual(FABRICATION_RENDER_LAYER_Z_STEP - 0.01);
-  await expect(threeScene).toHaveAttribute('data-three-spacer-render-contract', 'adjacent-moving-layers-only');
+  await expect(threeScene).toHaveAttribute('data-three-spacer-render-contract', 'recipe-pin-spacer-sites');
   await expect(threeScene).toHaveAttribute('data-three-pin-stack-policy', 'per-pin-adjacent-stack');
-  await expect(threeScene).toHaveAttribute('data-three-spacer-render-count', '2');
+  await expect(threeScene).toHaveAttribute('data-three-spacer-render-count', '4');
+  await expect(threeScene).toHaveAttribute('data-three-spacer-pin-ids', /A.*B.*C.*D/);
+  await expect(threeScene).toHaveAttribute('data-three-z-collision-count', '0');
   const spanSummary = await threeScene.getAttribute('data-three-pin-stack-spans') ?? '';
   const pinSpans = Object.fromEntries(spanSummary.split(',').map(item => {
     const [id, value] = item.split(':');
@@ -1342,9 +1345,12 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
       await expect(threeScene, '4bar foundry geometry keeps A-B/B-C/C-D topology from mechanism-reference instead of drawing a floating output rod').toHaveAttribute('data-three-geometry-contract', /Input L2 linkage:A-B.*Coupler L4 linkage:B-C.*Output L2 linkage:C-D/);
       await expect(threeScene, '4bar keeps only physical A/B/C/D pin hardware in the 3D scene').toHaveAttribute('data-three-physical-pin-contract', 'reference-A-B-C-D-only');
       await expect(threeScene).toHaveAttribute('data-three-physical-pin-count', '4');
-      await expect(threeScene, '4bar renders only the B/C shared-link spacers, not duplicate A/D spacer towers').toHaveAttribute('data-three-spacer-render-count', '2');
+      await expect(threeScene, '4bar renders recipe spacer sites at A/B/C/D without z-layer collisions').toHaveAttribute('data-three-spacer-render-count', '4');
       await expect(threeScene, '4bar pins use per-pivot stack spans so A/D do not protrude through empty z-layers').toHaveAttribute('data-three-pin-stack-policy', 'per-pin-adjacent-stack');
+      await expect(threeScene, '4bar ground A-D is a board reference span, not a fabricated moving linkage').toHaveAttribute('data-three-ground-span-mode', 'board-reference');
     }
+    await expect(threeScene, `${type} preview keeps stack z-collisions at zero`).toHaveAttribute('data-three-z-collision-count', '0');
+    if (type === 'cam') await expect(threeScene, 'Cam follower guide stays board-fixed while the follower moves').toHaveAttribute('data-three-cam-guide-mode', 'fixed-board-guide');
     expect(Number(await threeScene.getAttribute('data-three-spacer-z-gap')), `${type} foundry preview has spacer clearance along z`).toBeGreaterThanOrEqual(FABRICATION_RENDER_LAYER_Z_STEP - 0.01);
     await expect(page.getByTestId('foundry-forces-overlay'), `${type} keeps live force vectors visible`).toHaveAttribute('data-physics-rule', /force|torque|velocity|acceleration|reaction/);
     await expect(page.getByTestId('foundry-velocity-overlay'), `${type} keeps live velocity vectors visible`).toHaveAttribute('data-speed', /[0-9]+\.[0-9]+/);

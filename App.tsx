@@ -3101,7 +3101,7 @@ const foundryAssemblyPinPoints = (type: MechanismType, state: ReturnType<typeof 
     if (type === '4bar') return compact([state.p1, state.j1, state.j2, state.p2]);
     if (type === '5bar' || type === '6bar') return compact([state.p1, state.j1, state.j2, state.aux, state.p2]);
     if (type === 'cam' || type === 'piston' || type === 'rack-pinion' || type === 'yoke' || type === 'quick-return') return compact([state.p1, state.j1, state.j2]);
-    if (type === 'planetary_gear') return compact([state.p1, state.p2, state.j2]);
+    if (type === 'planetary_gear') return compact([state.p1, state.p2]);
     return compact([state.p1, state.p2, state.j1, state.j2, state.aux, state.effector]);
 };
 
@@ -3109,7 +3109,7 @@ const foundryAssemblyPinContract = (type: MechanismType) => {
     if (type === '4bar') return 'reference-A-B-C-D-only';
     if (type === '5bar' || type === '6bar') return 'reference-ground-chain-only';
     if (type === 'cam' || type === 'piston' || type === 'rack-pinion' || type === 'yoke' || type === 'quick-return') return 'guided-output-only';
-    if (type === 'planetary_gear') return 'gear-centers-and-output-only';
+    if (type === 'planetary_gear') return 'sun-and-carrier-planet-axles';
     return 'template-specific-output';
 };
 
@@ -3117,6 +3117,7 @@ type FoundryPinStackPoint = {
     id: string;
     point: Point;
     movingLayerIndexes: number[];
+    spacerLayerIndexes: number[];
 };
 
 type FoundryPinStack = FoundryPinStackPoint & {
@@ -3131,29 +3132,51 @@ const isMovingRenderKind = (renderKind: string) => !['clip', 'spacer', 'base'].i
 const foundryPinStackPoints = (
     type: MechanismType,
     points: Point[],
-    movingLayerIndexes: number[]
+    movingLayerIndexes: number[],
+    spacerLayerIndexes: number[]
 ): FoundryPinStackPoint[] => {
     const ids = ['A', 'B', 'C', 'D', 'E', 'F'];
     const cleanIndexes = movingLayerIndexes.filter(index => Number.isFinite(index));
-    if (!points.length || !cleanIndexes.length) return points.map((point, index) => ({ id: ids[index] ?? `P${index + 1}`, point, movingLayerIndexes: [] }));
+    const cleanSpacerIndexes = spacerLayerIndexes.filter(index => Number.isFinite(index));
+    const spacerIndexesForPin = (pinMovingLayerIndexes: number[]) => {
+        const between = cleanSpacerIndexes.filter(spacerIndex =>
+            pinMovingLayerIndexes.some(index => index < spacerIndex) && pinMovingLayerIndexes.some(index => index > spacerIndex)
+        );
+        if (between.length) return [...new Set(between)];
+        if (pinMovingLayerIndexes.length !== 1) return [];
+        const movingIndex = pinMovingLayerIndexes[0];
+        const before = [...cleanSpacerIndexes].reverse().find(spacerIndex => spacerIndex < movingIndex);
+        const after = cleanSpacerIndexes.find(spacerIndex => spacerIndex > movingIndex);
+        const nearest = movingIndex === cleanIndexes[0] ? [after] : movingIndex === cleanIndexes.at(-1) ? [before] : [before, after];
+        return [...new Set(nearest.filter((item): item is number => typeof item === 'number'))];
+    };
+    if (!points.length || !cleanIndexes.length) return points.map((point, index) => ({ id: ids[index] ?? `P${index + 1}`, point, movingLayerIndexes: [], spacerLayerIndexes: [] }));
 
     if ((type === '4bar' || type === '5bar' || type === '6bar') && points.length === cleanIndexes.length + 1) {
-        return points.map((point, index) => ({
-            id: ids[index] ?? `P${index + 1}`,
-            point,
-            movingLayerIndexes: [cleanIndexes[index - 1], cleanIndexes[index]].filter((item): item is number => typeof item === 'number')
-        }));
+        return points.map((point, index) => {
+            const pinMovingLayerIndexes = [cleanIndexes[index - 1], cleanIndexes[index]].filter((item): item is number => typeof item === 'number');
+            return {
+                id: ids[index] ?? `P${index + 1}`,
+                point,
+                movingLayerIndexes: pinMovingLayerIndexes,
+                spacerLayerIndexes: spacerIndexesForPin(pinMovingLayerIndexes)
+            };
+        });
     }
 
-    return points.map((point, index) => ({
-        id: ids[index] ?? `P${index + 1}`,
-        point,
-        movingLayerIndexes: [cleanIndexes[Math.min(index, cleanIndexes.length - 1)]].filter((item): item is number => typeof item === 'number')
-    }));
+    return points.map((point, index) => {
+        const pinMovingLayerIndexes = [cleanIndexes[Math.min(index, cleanIndexes.length - 1)]].filter((item): item is number => typeof item === 'number');
+        return {
+            id: ids[index] ?? `P${index + 1}`,
+            point,
+            movingLayerIndexes: pinMovingLayerIndexes,
+            spacerLayerIndexes: spacerIndexesForPin(pinMovingLayerIndexes)
+        };
+    });
 };
 
-const foundrySpacerTouchesPin = (movingLayerIndexes: number[], spacerLayerIndex: number) =>
-    movingLayerIndexes.some(index => index < spacerLayerIndex) && movingLayerIndexes.some(index => index > spacerLayerIndex);
+const foundrySpacerTouchesPin = (pin: FoundryPinStackPoint, spacerLayerIndex: number) =>
+    pin.spacerLayerIndexes.includes(spacerLayerIndex);
 
 const foundryPinStacks = (
     pinPoints: FoundryPinStackPoint[],
@@ -3228,17 +3251,20 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         : foundryAssemblyPinPoints(mechanism.type, simulation.state), [gearCenters, isGearTrain, mechanism.type, simulation.state]);
     const assemblyPinContract = foundryAssemblyPinContract(mechanism.type);
     const movingLayerIndexes = useMemo(() => renderPlan.layers.flatMap((item, index) => isMovingRenderKind(item.renderKind) ? [index] : []), [renderPlan.layers]);
-    const pinStackPoints = useMemo(() => foundryPinStackPoints(mechanism.type, assemblyPinPoints, movingLayerIndexes), [assemblyPinPoints, mechanism.type, movingLayerIndexes]);
-    const pinStacks = useMemo(() => foundryPinStacks(pinStackPoints, renderedLayerZ), [pinStackPoints, renderedLayerZ]);
     const spacerLayerIndexes = useMemo(() => renderPlan.layers.flatMap((item, index) => item.role === 'spacer' ? [index] : []), [renderPlan.layers]);
+    const pinStackPoints = useMemo(() => foundryPinStackPoints(mechanism.type, assemblyPinPoints, movingLayerIndexes, spacerLayerIndexes), [assemblyPinPoints, mechanism.type, movingLayerIndexes, spacerLayerIndexes]);
+    const pinStacks = useMemo(() => foundryPinStacks(pinStackPoints, renderedLayerZ), [pinStackPoints, renderedLayerZ]);
     const spacerRenderCount = spacerLayerIndexes.reduce((count, spacerIndex) => (
-        count + pinStackPoints.filter(pin => foundrySpacerTouchesPin(pin.movingLayerIndexes, spacerIndex)).length
+        count + pinStackPoints.filter(pin => foundrySpacerTouchesPin(pin, spacerIndex)).length
     ), 0);
     const stackZGap = renderPlan.layers.length > 1 ? renderPlan.layers[1].z - renderPlan.layers[0].z : 0;
     const pinBottomZ = pinStacks.length ? Math.min(...pinStacks.map(pin => pin.bottomZ)) : (renderedLayerZ[0] ?? 0.22) - 0.08;
     const pinTopZ = pinStacks.length ? Math.max(...pinStacks.map(pin => pin.topZ)) : (renderedLayerZ.at(-1) ?? 0.22) + 0.18;
     const pinLengthZ = pinStacks.length ? Math.max(...pinStacks.map(pin => pin.lengthZ)) : Math.max(0.55, pinTopZ - pinBottomZ);
     const pinSpanSummary = pinStacks.map(pin => `${pin.id}:${pin.lengthZ.toFixed(2)}`).join(',');
+    const pinStackLayerSummary = pinStackPoints.map(pin => `${pin.id}:${pin.movingLayerIndexes.join('+') || 'none'}`).join(',');
+    const spacerPinIdSummary = spacerLayerIndexes.map(spacerIndex => `${spacerIndex}:${pinStackPoints.filter(pin => foundrySpacerTouchesPin(pin, spacerIndex)).map(pin => pin.id).join('+')}`).join(',');
+    const zCollisionCount = pinStacks.filter(pin => pin.topZ <= pin.bottomZ || pin.lengthZ <= 0).length;
     const visiblePathTraces = useMemo(() => (
         pathTraces.length ? pathTraces : [{ id: 'output', label: 'Output path', points: pathPoints, primary: true }]
     ), [pathPoints, pathTraces]);
@@ -3549,7 +3575,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             profile.mountHoleCenters.forEach(point => addHoleRing(holes, point.x, point.y, 0));
             root.add(holes);
         };
-        const addCam = (center: Point, z: number, mat: THREE.Material) => {
+        const addCam = (center: Point, z: number, rotation: number, mat: THREE.Material) => {
             const r = Math.max(0.5, mechanism.crankLength * simulation.scale / 22);
             const shape = new THREE.Shape();
             for (let i = 0; i < 56; i++) {
@@ -3565,6 +3591,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             const mesh = new THREE.Mesh(cachedGeometry(geometryKey, () => new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: true, bevelSize: 0.025 })), mat);
             const c = to3(center, z);
             mesh.position.set(c.x, c.y, z - thickness / 2);
+            mesh.rotation.z = rotation;
             mesh.castShadow = true;
             addEdges(mesh, geometryKey);
             root.add(mesh);
@@ -3638,8 +3665,15 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
 
         const s = simulation.state;
         const angle = pinionRotation;
+        const camGuideRotation = degToRad(mechanism.groundAngle ?? 90);
+        const camGuideCenter = mechanism.type === 'cam'
+            ? {
+                x: s.p1.x + Math.cos(camGuideRotation) * (mechanism.crankLength + mechanism.sliderOffset + mechanism.rockerLength * 0.5) * simulation.scale,
+                y: s.p1.y + Math.sin(camGuideRotation) * (mechanism.crankLength + mechanism.sliderOffset + mechanism.rockerLength * 0.5) * simulation.scale
+            }
+            : s.j2;
         const usesMeshedPitchCenters = ['gear', 'gear_linkage', 'planetary_gear', 'rack-pinion', 'cam'].includes(mechanism.type);
-        if (!usesMeshedPitchCenters) addBar(s.p1, s.p2, 0, material.base, 3);
+        if (!usesMeshedPitchCenters && mechanism.type !== '4bar') addBar(s.p1, s.p2, 0, material.base, 3);
         const clipLayer = renderPlan.layers.find(layer => layer.renderKind === 'clip');
         const clipMat = clipLayer ? materialForLayer(clipLayer.color, 0.66, 0.03) : material.dark;
         const renderLinkageLayer = (label: string, z: number, mat: THREE.Material) => {
@@ -3677,14 +3711,15 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             const mat = materialForLayer(layerItem.color, layerItem.role === 'spacer' ? 0.55 : 0.66, layerItem.role === 'spacer' ? 0.06 : 0.03);
             if (layerItem.renderKind === 'clip') return;
             else if (layerItem.renderKind === 'spacer') pinStacks
-                .filter(pin => foundrySpacerTouchesPin(pin.movingLayerIndexes, index))
+                .filter(pin => foundrySpacerTouchesPin(pin, index))
                 .forEach(pin => addSpacerWasher(pin.point, z, mat));
             else if (layerItem.renderKind === 'linkage') renderLinkageLayer(layerItem.label, z, mat);
             else if (layerItem.renderKind === 'gear') renderGearLayer(layerItem.label, z, mat);
-            else if (layerItem.renderKind === 'cam') addCam(s.p1, z, mat);
+            else if (layerItem.renderKind === 'cam') addCam(s.p1, z, degToRad(angle), mat);
             else if (layerItem.renderKind === 'guide') {
-                const slotRotation = /follower|slider|rack/i.test(layerItem.label) ? Math.PI / 2 : Math.atan2(s.j2.y - s.p2.y, s.j2.x - s.p2.x);
-                addSlotPlate(/quick/i.test(layerItem.label) ? { x: (s.p2.x + s.j2.x) / 2, y: (s.p2.y + s.j2.y) / 2 } : s.j2, /rack/i.test(layerItem.label) ? 4.8 : 3.2, slotRotation, z, mat);
+                const slotRotation = mechanism.type === 'cam' ? camGuideRotation : /follower|slider|rack/i.test(layerItem.label) ? Math.PI / 2 : Math.atan2(s.j2.y - s.p2.y, s.j2.x - s.p2.x);
+                const slotCenter = mechanism.type === 'cam' ? camGuideCenter : /quick/i.test(layerItem.label) ? { x: (s.p2.x + s.j2.x) / 2, y: (s.p2.y + s.j2.y) / 2 } : s.j2;
+                addSlotPlate(slotCenter, /rack/i.test(layerItem.label) ? 4.8 : 3.2, slotRotation, z, mat);
             }
             else if (layerItem.renderKind === 'rack') {
                 addRack(s.j2, z, mat);
@@ -3795,11 +3830,18 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-three-spacer-mm={`${FABRICATION_SPACER_SPEC.outerDiameterMm}x${FABRICATION_SPACER_SPEC.innerDiameterMm}`}
             data-three-spacer-layers={spacerLayerCount}
             data-three-spacer-render-count={spacerRenderCount}
-            data-three-spacer-render-contract="adjacent-moving-layers-only"
+            data-three-spacer-render-contract="recipe-pin-spacer-sites"
+            data-three-spacer-pin-ids={spacerPinIdSummary}
             data-three-physical-pin-count={assemblyPinPoints.length}
             data-three-physical-pin-contract={assemblyPinContract}
             data-three-pin-stack-policy="per-pin-adjacent-stack"
+            data-three-pin-stack-layer-indexes={pinStackLayerSummary}
             data-three-pin-stack-spans={pinSpanSummary}
+            data-three-z-collision-count={zCollisionCount}
+            data-three-ground-span-mode={mechanism.type === '4bar' ? 'board-reference' : 'rendered-reference'}
+            data-three-cam-guide-mode={mechanism.type === 'cam' ? 'fixed-board-guide' : 'not-cam'}
+            data-three-cam-rotation-deg={mechanism.type === 'cam' ? pinionRotation.toFixed(2) : ''}
+            data-three-ring-mount-mode={mechanism.type === 'planetary_gear' ? 'fixed-ring-holes' : 'not-planetary'}
             data-three-path-source="moving-joints"
             data-three-path-trace-count={visiblePathTraces.length}
             data-three-path-trace-ids={visiblePathTraces.map(trace => trace.id).join(',')}

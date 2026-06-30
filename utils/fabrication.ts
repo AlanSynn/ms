@@ -496,9 +496,10 @@ export const sampleFeasibleRange = (mechanism: MechanismConfig, samples = 96) =>
     let valid = 0;
     const validSamples: boolean[] = [];
     const loops = mechanism.type === '5bar' || mechanism.type === '6bar' || mechanism.type === 'planetary_gear' ? 8 : 1;
-    const totalSamples = samples * loops;
+    const baseSamples = Math.max(1, Math.round(samples));
+    const totalSamples = baseSamples * loops;
     for (let i = 0; i <= totalSamples; i++) {
-        const angle = (i / samples) * Math.PI * 2;
+        const angle = (i / totalSamples) * Math.PI * 2;
         validSamples[i] = calculateLinkage(mechanism, angle).isValid;
         if (validSamples[i]) valid++;
     }
@@ -508,7 +509,7 @@ export const sampleFeasibleRange = (mechanism: MechanismConfig, samples = 96) =>
         if (ok && start === null) start = i;
         if ((!ok || i === totalSamples) && start !== null) {
             const end = ok && i === totalSamples ? i : i - 1;
-            intervals.push({ startDeg: Math.round(start * 360 / samples), endDeg: Math.round(end * 360 / samples) });
+            intervals.push({ startDeg: Math.round(start * 360 / totalSamples), endDeg: Math.round(end * 360 / totalSamples) });
             start = null;
         }
     });
