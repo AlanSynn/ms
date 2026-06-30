@@ -3109,8 +3109,15 @@ const foundryAssemblyPinContract = (type: MechanismType) => {
     if (type === '4bar') return 'reference-A-B-C-D-only';
     if (type === '5bar' || type === '6bar') return 'reference-ground-chain-only';
     if (type === 'cam' || type === 'piston' || type === 'rack-pinion' || type === 'yoke' || type === 'quick-return') return 'guided-output-only';
+    if (type === 'gear') return 'fixed-gear-axles-only';
+    if (type === 'gear_linkage') return 'fixed-gear-axles-plus-output-linkage';
     if (type === 'planetary_gear') return 'sun-and-carrier-planet-axles';
     return 'template-specific-output';
+};
+
+const foundryIdlerGearTrainIndex = (label: string) => {
+    const idlerNumber = Number(label.match(/\bgear\s+(\d+)\s*$/i)?.[1] ?? 1);
+    return Math.max(1, Number.isFinite(idlerNumber) ? idlerNumber : 1);
 };
 
 type FoundryPinStackPoint = {
@@ -3698,8 +3705,8 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
                 const planetCount = Math.max(1, planetCenters.length);
                 planetCenters.forEach((center, index) => addGear(center, mechanism.rockerLength, z, angle * planetaryPlanetSpinRatio(mechanism.crankLength, mechanism.rockerLength) + index * (360 / planetCount), mat));
             }
-            else if (isGearTrain && /idler gear/i.test(label)) {
-                const index = Math.max(1, Number(label.match(/(\d+)/)?.[1] ?? 1));
+            else if (isGearTrain && /\bidler\b/i.test(label)) {
+                const index = foundryIdlerGearTrainIndex(label);
                 const ratio = (index % 2 === 1 ? -1 : 1) * gearRadii[0] / gearRadii[index];
                 addGear(gearCenters[index] ?? s.p2, gearRadii[index] ?? mechanism.rockerLength, z, angle * ratio, mat);
             }

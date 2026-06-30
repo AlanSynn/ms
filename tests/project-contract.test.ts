@@ -783,6 +783,8 @@ assert(canvasText.includes('const showCrankDriver = !hasNoCrankDriverInCanvas(m.
 assert(canvasText.includes("if (type === 'gear') return 'fixed gear centers only; no rods; external mesh sequence'"), '2D design canvas labels gear trains as gears-only mechanisms');
 assert(canvasText.includes("if (type === 'cam') return 'rotating cam profile; guided follower block; no linkage rods'"), '2D design canvas labels cam followers as cam-plus-follower mechanisms');
 assert(canvasText.includes('RingGearPath') && canvasText.includes('planetaryPlanetSpinRatio'), '2D design canvas renders planetary gears as ring/sun/planet/carrier geometry');
+assert(appText.includes('fixed-gear-axles-only'), 'Foundry 3D gear train preview declares fixed gear axles rather than generic mechanism pins');
+assert(appText.includes('foundryIdlerGearTrainIndex') && appText.includes('match(/\\bgear\\s+(\\d+)\\s*$/i)'), 'Foundry 3D idler gear renderer reads the trailing idler index, not the G3 part number');
 assert(assemblyWorkbenchText.includes('isBoardFixedCoordRole') && assemblyWorkbenchText.includes('data-floating-reference-coords'), 'assembly workbench separates board-fixed holes from moving reference coordinates');
 assert(assemblyWorkbenchText.includes('assembly-floating-references') && assemblyWorkbenchText.includes('readableCoordRole'), 'assembly workbench visualizes moving references without turning them into board holes');
 assert(threePreviewText.includes('fabricationGearProfileForPitchRadius'), '3D foundry gear rendering uses shared fabrication gear geometry');
