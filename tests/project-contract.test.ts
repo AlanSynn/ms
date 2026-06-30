@@ -698,6 +698,9 @@ assert(
   readFileSync('docs/mechanism-reference/03-mechanism-unit-specs.md', 'utf-8').includes('fastener-end > S10 board-side spacer > linkage > fastener-head'),
   '4bar mechanism reference documents A/D as board-side spacer plus visible fastener head, not a second top spacer'
 );
+const mechanismReferenceText = readFileSync('docs/mechanism-reference/03-mechanism-unit-specs.md', 'utf-8');
+assert(mechanismReferenceText.includes('external gear train are coplanar on fixed board axles'), 'gear train mechanism reference requires meshed gears to share one pitch plane');
+assert(mechanismReferenceText.includes('must pass through the gear centre and the adjacent `S10` spacer'), 'gear train mechanism reference requires visible axles to pass through gears and local spacers');
 assert(fabricationRuntimeText.includes("from './fabricationContract'"), 'fabrication runtime consumes centralized fabricationContract instead of hardcoded primitive tables');
 assert(!fabricationRuntimeText.includes("rootRadiusMm: 28.438"), 'runtime gear constants are no longer duplicated outside the centralized contract');
 assert.equal(fabricationManifest.generated_by, 'fabrication/generate_fabrication_templates.py', 'fabrication manifest generated_by matches the checked-in generator');
@@ -788,6 +791,7 @@ assert(canvasText.includes("if (type === 'gear') return 'fixed gear centers only
 assert(canvasText.includes("if (type === 'cam') return 'rotating cam profile; guided follower block; no linkage rods'"), '2D design canvas labels cam followers as cam-plus-follower mechanisms');
 assert(canvasText.includes('RingGearPath') && canvasText.includes('planetaryPlanetSpinRatio'), '2D design canvas renders planetary gears as ring/sun/planet/carrier geometry');
 assert(appText.includes('fixed-gear-axles-only'), 'Foundry 3D gear train preview declares fixed gear axles rather than generic mechanism pins');
+assert(appText.includes('coplanar-fixed-axles') && appText.includes('gear-axles-include-spacer'), 'Foundry 3D gear train preview keeps meshed gear plates coplanar and spans local spacer stacks');
 assert(appText.includes('foundryIdlerGearTrainIndex') && appText.includes('match(/\\bgear\\s+(\\d+)\\s*$/i)'), 'Foundry 3D idler gear renderer reads the trailing idler index, not the G3 part number');
 assert(assemblyWorkbenchText.includes('isBoardFixedCoordRole') && assemblyWorkbenchText.includes('data-floating-reference-coords'), 'assembly workbench separates board-fixed holes from moving reference coordinates');
 assert(assemblyWorkbenchText.includes('assembly-floating-references') && assemblyWorkbenchText.includes('readableCoordRole'), 'assembly workbench visualizes moving references without turning them into board holes');
@@ -797,6 +801,7 @@ assert(threePreviewText.includes('sharedGeometryCache') && threePreviewText.incl
 assert(threePreviewText.includes('const renderedMechanisms = useMemo(() => selectedMechanism ? [selectedMechanism] : []'), 'Design 3D preview renders the selected mechanism geometry while inventory telemetry covers the full project');
 assert(!threePreviewText.includes('scene.traverse(child =>'), '3D puppet preview does not traverse the whole scene every animation frame for telemetry');
 assert(threePreviewText.includes('fabricationRenderPlanForMechanism'), 'Mechanism Design 3D preview uses the same fabrication stack plan as Foundry');
+assert(threePreviewText.includes('coplanar-fixed-axles') && threePreviewText.includes('selectedGearPlaneZ'), 'Mechanism Design 3D preview keeps external gear train plates coplanar like Foundry');
 assert(threePreviewText.includes('data-three-stack-source'), 'Mechanism Design exposes fabrication stack provenance for browser verification');
 assert(exporterText.includes('fabricationGearPathD'), 'SVG export gear rendering uses shared fabrication gear geometry');
 assert(appText.includes('fabricationGearProfileForPitchRadius'), 'Foundry gear helper uses shared fabrication gear holes/profile');

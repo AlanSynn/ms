@@ -1348,7 +1348,18 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
     expect(await threeScene.getAttribute('data-three-rendered-layer-labels'), `${type} rendered labels match fabrication stack labels`).toBe(await threeScene.getAttribute('data-three-stack-order'));
     expect(await threeScene.getAttribute('data-three-rendered-layer-roles'), `${type} rendered roles match fabrication stack roles`).toBe(await threeScene.getAttribute('data-three-stack-roles'));
     expect(await threeScene.getAttribute('data-three-rendered-layer-colors'), `${type} rendered colors match fabrication stack colors`).toBe(await threeScene.getAttribute('data-three-stack-colors'));
-    expect(await threeScene.getAttribute('data-three-rendered-layer-z'), `${type} rendered z order matches fabrication stack z order`).toBe(await threeScene.getAttribute('data-three-stack-z'));
+    const renderedLayerZ = await threeScene.getAttribute('data-three-rendered-layer-z') ?? '';
+    const stackLayerZ = await threeScene.getAttribute('data-three-stack-z') ?? '';
+    if (type === 'gear' || type === 'gear_linkage') {
+      await expect(threeScene, `${type} keeps meshed gears coplanar instead of separating them by the linear stack list`).toHaveAttribute('data-three-gear-plane-mode', 'coplanar-fixed-axles');
+      expect(renderedLayerZ, `${type} gear render z intentionally differs from the printable stack z because each axle has a local spacer stack`).not.toBe(stackLayerZ);
+      const roles = (await threeScene.getAttribute('data-three-rendered-layer-roles') ?? '').split('>');
+      const zValues = renderedLayerZ.split(',').map(Number);
+      const gearZValues = roles.flatMap((role, index) => role === 'gear' ? [zValues[index]] : []);
+      expect(new Set(gearZValues.map(z => z.toFixed(2))).size, `${type} all external meshing gears share one pitch plane`).toBe(1);
+    } else {
+      expect(renderedLayerZ, `${type} rendered z order matches fabrication stack z order`).toBe(stackLayerZ);
+    }
     if (type === '4bar') {
       await expect(threeScene, '4bar foundry geometry keeps A-B/B-C/C-D topology from mechanism-reference instead of drawing a floating output rod').toHaveAttribute('data-three-geometry-contract', /Input L2 linkage:A-B.*Coupler L4 linkage:B-C.*Output L2 linkage:C-D/);
       await expect(threeScene, '4bar keeps only physical A/B/C/D pin hardware in the 3D scene').toHaveAttribute('data-three-physical-pin-contract', 'reference-A-B-C-D-only');
@@ -1392,9 +1403,14 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   const gearCount = await threeScene.getAttribute('data-three-gear-count');
   await expect(threeScene, 'Each visible gear has one real fixed axle, with no orphan pin tower').toHaveAttribute('data-three-physical-pin-count', gearCount ?? '2');
   await expect(threeScene, 'Each G3 axle receives exactly one visible S10 spacer washer').toHaveAttribute('data-three-spacer-render-count', gearCount ?? '2');
+  await expect(threeScene, 'Gear axles span both the gear plate and local S10 washer so gears are not floating off their shafts').toHaveAttribute('data-three-pin-stack-z-sources', 'gear-axles-include-spacer');
+  const gearPinSpans = (await threeScene.getAttribute('data-three-pin-stack-spans') ?? '').split(',').map(item => Number(item.split(':')[1]));
+  expect(Math.min(...gearPinSpans), 'gear axle pins cross the spacer clearance instead of only the thin gear plate').toBeGreaterThan(FABRICATION_RENDER_LAYER_Z_STEP);
   await page.getByLabel('Foundry mechanism type').selectOption('gear_linkage');
   await expect(threeScene, 'Gear-linkage uses an off-center G3 output crank').toHaveAttribute('data-three-gear-linkage-mode', 'off-center-output-gear-crank');
   await expect(threeScene, 'Gear-linkage uses the output gear handle, L4 rod, and bracket').toHaveAttribute('data-three-gear-train-linkage-mode', 'output-gear-handle-l4-bracket');
+  await expect(threeScene, 'Gear-linkage keeps the drive/output gear mesh coplanar on board axles').toHaveAttribute('data-three-gear-plane-mode', 'coplanar-fixed-axles');
+  await expect(threeScene, 'Gear-linkage gear axles include local spacer z in their fastener spans').toHaveAttribute('data-three-pin-stack-z-sources', 'gear-axles-include-spacer');
   await expect(threeScene, 'Gear-linkage pins are the two fixed gear axles plus output handle and bracket connector').toHaveAttribute('data-three-physical-pin-contract', 'fixed-gear-axles-plus-output-linkage');
   await expect(threeScene, 'Gear-linkage has no orphan hardware tower beyond its four real pin sites').toHaveAttribute('data-three-physical-pin-count', '4');
   await expect(threeScene, 'Gear-linkage geometry maps each layer to its reference role').toHaveAttribute('data-three-geometry-contract', /Drive G3 \/ 3-space gear:fixed-board-gear.*Output G3 \/ 3-space gear:fixed-board-gear.*L4 linkage:P-R.*2-hole bracket:R-connector/);
@@ -2377,7 +2393,14 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
     await expect(designPuppet, `${type} design stack stays assembled until explicitly exploded`).toHaveAttribute('data-three-exploded', 'false');
     await expect(designPuppet, `${type} design stack has no validation errors`).toHaveAttribute('data-three-stack-validation-errors', '0');
     expect(await designPuppet.getAttribute('data-three-rendered-layer-labels'), `${type} design rendered labels match fabrication stack labels`).toBe(await designPuppet.getAttribute('data-three-stack-order'));
-    expect(await designPuppet.getAttribute('data-three-rendered-layer-z'), `${type} design rendered z order matches fabrication stack z order`).toBe(await designPuppet.getAttribute('data-three-stack-z'));
+    const designRenderedZ = await designPuppet.getAttribute('data-three-rendered-layer-z') ?? '';
+    const designStackZ = await designPuppet.getAttribute('data-three-stack-z') ?? '';
+    if (type === 'gear' || type === 'gear_linkage') {
+      await expect(designPuppet, `${type} design preview keeps meshing gear plates coplanar`).toHaveAttribute('data-three-gear-plane-mode', 'coplanar-fixed-axles');
+      expect(designRenderedZ, `${type} design render uses a coplanar gear pitch plane instead of the linear stack z for gear plates`).not.toBe(designStackZ);
+    } else {
+      expect(designRenderedZ, `${type} design rendered z order matches fabrication stack z order`).toBe(designStackZ);
+    }
     expect(Number(await designPuppet.getAttribute('data-three-spacer-z-gap')), `${type} design preview has spacer clearance along z`).toBeGreaterThanOrEqual(FABRICATION_RENDER_LAYER_Z_STEP - 0.01);
     await expect.poll(async () => Number(await designPuppet.getAttribute('data-three-scene-object-count')), { message: `${type} adds visible WebGL mechanism geometry to the center workspace` }).toBeGreaterThan(60);
     for (const [attr, minimumCount] of centerPhysicalMarkers[type]) {

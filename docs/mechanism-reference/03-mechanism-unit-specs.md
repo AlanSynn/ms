@@ -177,9 +177,11 @@ tolerance = 3.6 mm
 Rules:
 
 1. Meshing gear centres are fixed board axles in this recipe.
-2. Gears should touch lightly; physical tolerance is loose educational tolerance, not precision gearbox backlash.
-3. If an app chooses other gear pairs, verify board distance equals `r_a+r_b+g` within tolerance.
-4. If using a handle, attach to a real gear attachment hole; `G1` has no attachment holes.
+2. Drive, idler, and driven gears in an external gear train are coplanar on fixed board axles. `S10` spacers are local washers on each axle; they must not push meshing gear plates onto different z planes.
+3. Each visible axle/fastener stack must pass through the gear centre and the adjacent `S10` spacer(s); no gear may float beside or away from its centre shaft.
+4. Gears should touch lightly; physical tolerance is loose educational tolerance, not precision gearbox backlash.
+5. If an app chooses other gear pairs, verify board distance equals `r_a+r_b+g` within tolerance.
+6. If using a handle, attach to a real gear attachment hole; `G1` has no attachment holes.
 
 ## 3.4 Gear linkage crank — `gear_linkage`
 
@@ -250,6 +252,7 @@ Rules:
 3. The connector at `I12` is moving; do not pin it to the board.
 4. `linkage_pin_radius` must be a radius available on the selected driven gear.
 5. The linkage arm should be a real linkage bar length, usually `L4` in the default recipe.
+6. The drive and output gears remain coplanar on their fixed board axles; the linkage stack starts from the output gear handle above that gear with `S10` clearance.
 
 ## 3.5 Cam follower — `cam_follower`
 
