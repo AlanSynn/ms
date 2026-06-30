@@ -934,7 +934,10 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       const zDyad = zRole('linkage', 3, zLayer(['Dyad link'], zOutput + FABRICATION_RENDER_LAYER_Z_STEP));
       const zFollower = zRole('linkage', 4, zLayer(['Follower link'], zDyad + FABRICATION_RENDER_LAYER_Z_STEP));
       const zOutputMoving = zLastRole('gear', zLayer(['Toothed rack', 'G3 / 3-space gear', 'Output G3 / 3-space gear', 'Planet gear', 'Sun gear', 'Output gear', 'Right timing gear'], zOutput));
-      const zPin = (renderPlan.layers.at(-1)?.z ?? zOutputMoving) + 0.34;
+      const zPinBottom = zBackClip - 0.08;
+      const zPinTop = (renderPlan.layers.at(-1)?.z ?? zOutputMoving) + 0.18;
+      const zPinLength = Math.max(0.36, zPinTop - zPinBottom);
+      const zPinCenter = (zPinBottom + zPinTop) / 2;
       Object.values(visual.extras).forEach(extra => hideObject(extra));
       updateLink(visual.links.follower, undefined, undefined);
       const groundAngle = ((mechanism.groundAngle ?? 0) * Math.PI) / 180;
@@ -1053,9 +1056,10 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
           pin.visible = false;
           return;
         }
-        const p = to3(point, zPin);
+        const p = to3(point, zPinCenter);
         pin.visible = true;
         pin.position.copy(p);
+        pin.scale.set(1, zPinLength / 0.36, 1);
       });
     });
     render();

@@ -321,6 +321,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(foundryRig).toHaveAttribute('data-three-spacer-key', 's10');
   await expect(foundryRig).toHaveAttribute('data-three-spacer-mm', '10x4');
   expect(Number(await foundryRig.getAttribute('data-three-spacer-render-count'))).toBeGreaterThan(0);
+  expect(Number(await foundryRig.getAttribute('data-three-pin-length'))).toBeGreaterThan(Number(await foundryRig.getAttribute('data-three-pin-z-max')) - Number(await foundryRig.getAttribute('data-three-pin-z-min')) - 0.01);
   await expect(foundryRig).toHaveAttribute('data-three-stack-colors', /#334155.*#f59e0b/);
   await expect(foundryRig).toHaveAttribute('data-three-stack-validation-errors', '0');
   expect(await foundryRig.getAttribute('data-three-rendered-layer-labels')).toBe(await foundryRig.getAttribute('data-three-stack-order'));
@@ -1215,6 +1216,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(threeScene).toHaveAttribute('data-three-spacer-mm', '10x4');
   expect(Number(await threeScene.getAttribute('data-three-spacer-z-gap')), 'Foundry spaces stacked plates along z by the shared S10 spacer layer').toBeGreaterThanOrEqual(FABRICATION_RENDER_LAYER_Z_STEP - 0.01);
   expect(Number(await threeScene.getAttribute('data-three-spacer-render-count'))).toBeGreaterThan(0);
+  expect(Number(await threeScene.getAttribute('data-three-pin-length')), 'Foundry pins span the full z stack instead of floating at the front face').toBeGreaterThan(Number(await threeScene.getAttribute('data-three-pin-z-max')) - Number(await threeScene.getAttribute('data-three-pin-z-min')) - 0.01);
   await expect(threeScene).toHaveAttribute('data-three-stack-roles', /^clip>.*spacer.*>clip$/);
   await expect(threeScene).toHaveAttribute('data-three-stack-colors', /#334155.*#f59e0b/);
   await expect(threeScene).toHaveAttribute('data-three-stack-validation-errors', '0');
@@ -1584,6 +1586,30 @@ test('Foundry supports CAD-style 3D camera presets and drag orbit', async ({ pag
   await expect(page.getByTestId('foundry-sim-badge')).toBeVisible();
   await expect(page.getByTestId('foundry-opacity-panel')).toBeVisible();
   await expect(page.getByTestId('stage-right-inspector').getByTestId('foundry-opacity-panel')).toBeVisible();
+  await expect(page.getByTestId('foundry-explode-panel')).toBeVisible();
+  const explodeSlider = page.getByLabel('Exploded view');
+  await expect(explodeSlider).toHaveValue('0');
+  const assembledLayerZ = (await rig.getAttribute('data-three-stack-z'))!.split(',').map(Number);
+  await explodeSlider.evaluate(input => {
+    const slider = input as HTMLInputElement;
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    valueSetter?.call(slider, '60');
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    slider.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(rig).toHaveAttribute('data-three-exploded', 'true');
+  await expect(rig).toHaveAttribute('data-three-explode-percent', '60');
+  const explodedLayerZ = (await rig.getAttribute('data-three-rendered-layer-z'))!.split(',').map(Number);
+  expect(explodedLayerZ[0], 'exploded view keeps back clip on the fabrication base plane').toBeCloseTo(assembledLayerZ[0], 2);
+  expect(explodedLayerZ.at(-1)!, 'exploded slider fans front layers forward along z').toBeGreaterThan(assembledLayerZ.at(-1)!);
+  await explodeSlider.evaluate(input => {
+    const slider = input as HTMLInputElement;
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    valueSetter?.call(slider, '0');
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    slider.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(rig).toHaveAttribute('data-three-exploded', 'false');
   await expect(page.getByTestId('foundry-toolbar')).toBeVisible();
   const centerPaneBox = await page.getByTestId('stage-canvas-pane').boundingBox();
   expect(centerPaneBox, 'center pane box for overlay containment').toBeTruthy();

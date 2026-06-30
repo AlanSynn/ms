@@ -48,7 +48,7 @@ import {
 import { checkWebOnnxCache, processImageWithWebOnnx, warmWebOnnxCache, type WebOnnxCacheStatus } from './utils/webOnnx';
 import { buildFoundryPhysicsOverlay } from './utils/physicsSession';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, loadRapierPhysicsKernel, physicsKernelErrorMessage } from './utils/physicsKernel';
-import { createFabricationPackage, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_SPACER_SPEC, fabricationBoardCoordinateCallout, fabricationGearProfileForPitchRadius, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, readableFabricationStackSummary, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
+import { createFabricationPackage, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_SPACER_SPEC, fabricationBoardCoordinateCallout, fabricationGearProfileForPitchRadius, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, readableFabricationStackSummary, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
 import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
 import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionChainRootJointIds, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
@@ -2069,6 +2069,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const [showPathPreview, setShowPathPreview] = useState(false);
     const [showFoundryGrid, setShowFoundryGrid] = useState(true);
     const [showSensemaking, setShowSensemaking] = useState(false);
+    const [foundryExplode, setFoundryExplode] = useState(0);
     const [foundryCamera, setFoundryCamera] = useState<FoundryCamera>({ ...FOUNDRY_VIEW_PRESETS.iso, preset: 'iso', pan: { x: 0, y: 0 } });
     const [foundryRigOpacity, setFoundryRigOpacity] = useState(85);
     const [foundryProjectionSize, setFoundryProjectionSize] = useState<FoundryOverlaySize>(FOUNDRY_OVERLAY_SIZE);
@@ -2099,7 +2100,9 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
         [landedFoundry, selectedSimulation, foundryPhase, project.settings, previewPoints]
     );
     const { playhead, playheadSource, velocityRaw, forceRaw, velocityTip, forceTip, frictionTip, driveTip, velocityMagnitude, frictionMagnitude, forceMagnitude, constraintError, rule: physicsRule } = physicsOverlay;
-    const foundryOverlayZ = (fabricationRenderPlanForMechanism(landedFoundry).layers.at(-1)?.z ?? 0.22) + 0.34;
+    const foundryRenderPlan = useMemo(() => fabricationRenderPlanForMechanism(landedFoundry), [landedFoundry]);
+    const foundryTopLayer = foundryRenderPlan.layers.at(-1);
+    const foundryOverlayZ = ((foundryTopLayer?.z ?? 0.22) + (foundryTopLayer ? foundryExplode / 100 * foundryTopLayer.stackIndex * FABRICATION_RENDER_LAYER_Z_STEP * 1.5 : 0)) + 0.18;
     const projectOverlay = (point: Point | undefined) => projectFoundryOverlayPoint(point, foundryCamera, foundryProjectionSize, foundryOverlayZ);
     const projectedPlayhead = projectOverlay(playhead);
     const projectedVelocityTip = projectOverlay(velocityTip);
@@ -2295,6 +2298,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
         setShowVelocity(true);
         setShowTrail(false);
         setShowPathPreview(false);
+        setFoundryExplode(0);
         setFoundryCamera({ ...FOUNDRY_VIEW_PRESETS.iso, preset: 'iso', pan: { x: 0, y: 0 } });
         setAnchoredFoundry({ ...createDefaultMechanism(foundry.type, 'foundry-preview'), color: foundry.color, presetId: 'balanced', recommendation: FOUNDRY_PRESETS.balanced.recommendation });
     };
@@ -2417,6 +2421,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 showTrail={showTrail}
                 showForces={showForces}
                 showVelocity={showVelocity}
+                explode={foundryExplode / 100}
                 physicsRule={physicsRule}
                 velocityMagnitude={velocityMagnitude}
                 forceMagnitude={forceMagnitude}
@@ -2496,6 +2501,10 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             <div className="foundry-opacity-panel inspector-control-card" data-testid="foundry-opacity-panel">
                 <div><span>Rig Opacity</span><strong>{foundryRigOpacity}%</strong></div>
                 <input aria-label="Rig opacity" type="range" min="35" max="100" value={foundryRigOpacity} onChange={event => setFoundryRigOpacity(Number(event.target.value))} />
+            </div>
+            <div className="foundry-opacity-panel inspector-control-card" data-testid="foundry-explode-panel">
+                <div><span>Exploded view</span><strong>{foundryExplode}%</strong></div>
+                <input aria-label="Exploded view" type="range" min="0" max="100" value={foundryExplode} onChange={event => setFoundryExplode(Number(event.target.value))} />
             </div>
             <details className="advanced-panel">
                 <summary>Mechanism options</summary>
@@ -3027,6 +3036,7 @@ type ThreeFoundryPreviewProps = {
     showTrail: boolean;
     showForces: boolean;
     showVelocity: boolean;
+    explode: number;
     physicsRule: string;
     velocityMagnitude: number;
     forceMagnitude: number;
@@ -3094,7 +3104,7 @@ const disposeThreeObject = (object: THREE.Object3D) => object.traverse(child => 
     else if (material && !material.userData.foundryCached) material.dispose();
 });
 
-const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, color, pathPoints, showGrid, showPathPreview, showTrail, showForces, showVelocity, physicsRule, velocityMagnitude, forceMagnitude, frictionCoefficient, frictionMagnitude, constraintError, cameraLabel, isPickingAnchor, isOrbiting, isZooming, isPanning, onAnchorPick, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onWheel, onProjectionSizeChange, children }: ThreeFoundryPreviewProps) => {
+const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, color, pathPoints, showGrid, showPathPreview, showTrail, showForces, showVelocity, explode, physicsRule, velocityMagnitude, forceMagnitude, frictionCoefficient, frictionMagnitude, constraintError, cameraLabel, isPickingAnchor, isOrbiting, isZooming, isPanning, onAnchorPick, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onWheel, onProjectionSizeChange, children }: ThreeFoundryPreviewProps) => {
     const hostRef = useRef<HTMLDivElement | null>(null);
     const stateRef = useRef<HTMLDivElement | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
@@ -3119,6 +3129,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             : baseInv;
     const pinionRotation = Math.atan2(simulation.state.j1.y - simulation.state.p1.y, simulation.state.j1.x - simulation.state.p1.x) * 180 / Math.PI;
     const renderPlan = useMemo(() => fabricationRenderPlanForMechanism(mechanism), [mechanism]);
+    const renderedLayerZ = useMemo(() => renderPlan.layers.map(item => item.z + explode * item.stackIndex * FABRICATION_RENDER_LAYER_Z_STEP * 1.5), [explode, renderPlan]);
     const viewerContract = useMemo(() => createViewer3DContract('foundry', camera.preset, {
         grid: showGrid,
         character: 'absent',
@@ -3134,6 +3145,10 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
     const assemblyPinContract = foundryAssemblyPinContract(mechanism.type);
     const spacerRenderCount = spacerLayerCount * assemblyPinPoints.length;
     const stackZGap = renderPlan.layers.length > 1 ? renderPlan.layers[1].z - renderPlan.layers[0].z : 0;
+    const pinBottomZ = (renderedLayerZ[0] ?? 0.22) - 0.08;
+    const pinTopZ = (renderedLayerZ.at(-1) ?? 0.22) + 0.18;
+    const pinLengthZ = Math.max(0.55, pinTopZ - pinBottomZ);
+    const pinCenterZ = (pinBottomZ + pinTopZ) / 2;
     useEffect(() => {
         let active = true;
         loadRapierPhysicsKernel()
@@ -3561,29 +3576,28 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             else if (isGearTrain && /output|right/i.test(label)) addGear(s.p2, gearRadii.at(-1) ?? mechanism.rockerLength, z, angle * gearTrainOutputRatio(gearRadii), mat);
             else addGear(s.p1, mechanism.crankLength, z, angle, mat);
         };
-        renderPlan.layers.forEach(layerItem => {
+        renderPlan.layers.forEach((layerItem, index) => {
+            const z = renderedLayerZ[index] ?? layerItem.z;
             const mat = materialForLayer(layerItem.color, layerItem.role === 'spacer' ? 0.55 : 0.66, layerItem.role === 'spacer' ? 0.06 : 0.03);
-            if (layerItem.renderKind === 'clip') layerPoints.forEach(point => addClipCap(point, layerItem.z, mat));
-            else if (layerItem.renderKind === 'spacer') layerPoints.forEach(point => addSpacerWasher(point, layerItem.z, mat));
-            else if (layerItem.renderKind === 'linkage') renderLinkageLayer(layerItem.label, layerItem.z, mat);
-            else if (layerItem.renderKind === 'gear') renderGearLayer(layerItem.label, layerItem.z, mat);
-            else if (layerItem.renderKind === 'cam') addCam(s.p1, layerItem.z, mat);
+            if (layerItem.renderKind === 'clip') layerPoints.forEach(point => addClipCap(point, z, mat));
+            else if (layerItem.renderKind === 'spacer') layerPoints.forEach(point => addSpacerWasher(point, z, mat));
+            else if (layerItem.renderKind === 'linkage') renderLinkageLayer(layerItem.label, z, mat);
+            else if (layerItem.renderKind === 'gear') renderGearLayer(layerItem.label, z, mat);
+            else if (layerItem.renderKind === 'cam') addCam(s.p1, z, mat);
             else if (layerItem.renderKind === 'guide') {
                 const slotRotation = /follower|slider|rack/i.test(layerItem.label) ? Math.PI / 2 : Math.atan2(s.j2.y - s.p2.y, s.j2.x - s.p2.x);
-                addSlotPlate(/quick/i.test(layerItem.label) ? { x: (s.p2.x + s.j2.x) / 2, y: (s.p2.y + s.j2.y) / 2 } : s.j2, /rack/i.test(layerItem.label) ? 4.8 : 3.2, slotRotation, layerItem.z, mat);
+                addSlotPlate(/quick/i.test(layerItem.label) ? { x: (s.p2.x + s.j2.x) / 2, y: (s.p2.y + s.j2.y) / 2 } : s.j2, /rack/i.test(layerItem.label) ? 4.8 : 3.2, slotRotation, z, mat);
             }
             else if (layerItem.renderKind === 'rack') {
-                addRack(s.j2, layerItem.z, mat);
-                addEndStop(s.j2, -2.55, layerItem.z + 0.04);
-                addEndStop(s.j2, 2.55, layerItem.z + 0.04);
+                addRack(s.j2, z, mat);
+                addEndStop(s.j2, -2.55, z + 0.04);
+                addEndStop(s.j2, 2.55, z + 0.04);
             }
-            else if (layerItem.renderKind === 'follower') addFollowerBlock(s.j2, layerItem.z, mat);
+            else if (layerItem.renderKind === 'follower') addFollowerBlock(s.j2, z, mat);
         });
-        const zBackClip = renderPlan.layers.find(item => item.role === 'clip')?.z ?? 0.22;
-        const zPin = (renderPlan.layers.at(-1)?.z ?? 0.22) + 0.34;
         layerPoints.forEach(point => {
-            const p = to3(point as Point, zPin);
-            const pin = new THREE.Mesh(cachedGeometry(`pin:${holeR.toFixed(3)}:${Math.max(0.55, zPin - zBackClip + 0.12).toFixed(3)}`, () => new THREE.CylinderGeometry(holeR * 0.8, holeR * 0.8, Math.max(0.55, zPin - zBackClip + 0.12), 20)), material.dark);
+            const p = to3(point as Point, pinCenterZ);
+            const pin = new THREE.Mesh(cachedGeometry(`pin:${holeR.toFixed(3)}:${pinLengthZ.toFixed(3)}`, () => new THREE.CylinderGeometry(holeR * 0.8, holeR * 0.8, pinLengthZ, 20)), material.dark);
             pin.rotation.x = Math.PI / 2;
             pin.position.copy(p);
             root.add(pin);
@@ -3596,7 +3610,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             stateRef.current.dataset.threeMaterialCacheSize = String(materialCacheRef.current.size);
         }
         renderCamera(cameraStateRef.current);
-    }, [mechanism, simulation, kit, color, pathPoints, showPathPreview, showTrail, pinionRotation, renderPlan, rigOpacity]);
+    }, [mechanism, simulation, kit, color, pathPoints, showPathPreview, showTrail, pinionRotation, renderPlan, renderedLayerZ, pinCenterZ, pinLengthZ, rigOpacity]);
 
     return <div
         data-testid="foundry-preview"
@@ -3708,7 +3722,11 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-three-inventory-source="rendered-template"
             data-three-stack-source="fabricationStackForMechanism"
             data-three-stack-mode="assembled-spacer-separated"
-            data-three-exploded="false"
+            data-three-exploded={explode > 0 ? 'true' : 'false'}
+            data-three-explode-percent={Math.round(explode * 100)}
+            data-three-pin-z-min={pinBottomZ.toFixed(2)}
+            data-three-pin-z-max={pinTopZ.toFixed(2)}
+            data-three-pin-length={pinLengthZ.toFixed(2)}
             data-three-spacer-z-gap={stackZGap.toFixed(2)}
             data-three-base-layer={renderPlan.base.label}
             data-three-stack-order={renderPlan.stackSummary}
@@ -3720,7 +3738,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-three-rendered-layer-labels={renderPlan.layers.map(item => item.label).join(' → ')}
             data-three-rendered-layer-roles={renderPlan.layers.map(item => item.renderKind).join('>')}
             data-three-rendered-layer-colors={renderPlan.layers.map(item => item.color).join(',')}
-            data-three-rendered-layer-z={renderPlan.layers.map(item => item.z.toFixed(2)).join(',')}
+            data-three-rendered-layer-z={renderedLayerZ.map(z => z.toFixed(2)).join(',')}
             data-three-geometry-contract={renderPlan.layers.map(item => foundryLayerGeometryContract(mechanism.type, item.label, item.renderKind)).join(' → ')}
             data-three-stack-validation-errors={renderPlan.validationErrors.length}
             className="foundry-three-scene-state"
