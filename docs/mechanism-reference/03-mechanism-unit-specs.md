@@ -29,6 +29,20 @@ Snapping by family:
 | `planetary_gear` | forced to `sun=g8/8T`, `planet=g24/24T`, `ring=ring-g8-g24`; `planet_count` fixed at `1` until the multi-planet carrier recipe exists; carrier length snapped. |
 | `cam_follower` | snap to nearest physical cam preset; fill `base_radius`, `eccentricity`, `cam_lobes`, `profile_harmonic`, `rise_deg`, `high_dwell_deg`, `return_deg`, `physical_cam_preset`. |
 
+### Foundry ↔ Design parametric editing contract
+
+Mechanism Foundry and Mechanism Design edit the same `MechanismConfig` fields. A control may be visual, draggable, or a compact selector, but it must write the canonical field and then run the same fabrication snap used by previews, blueprints, and assembly.
+
+| Mechanism | Editable in Foundry and Design | Snap / derived fields |
+|---|---|---|
+| `4bar` | input link, coupler link, output link, ground angle/position | link lengths snap to L2/L4/L6/L8; ground remains a board reference between A and D. |
+| `gear` | drive gear size, output gear size, zero or more idler gear sizes, ground angle/position | every gear snaps to G1/G3/G5/G7 (`8/24/40/56` teeth); centre distances, gear ratio, and speed ratio derive from the ordered gear list. |
+| `gear_linkage` | drive/output/idler gear sizes, output linkage size, ground angle/position | output gear must be G3/G5/G7 because G1 has no attachment holes; crank pin snaps to a real output-gear attachment hole; linkage snaps to L2/L4/L6/L8. |
+| `cam` | cam profile samples, follower travel/radius, phase | visible cam profile edits update `camProfileSamples`; sampled profile drives follower contact and physics overlays. |
+| `planetary_gear` | phase and driver grouping only until alternate ring/carrier recipes exist | physical recipe remains fixed to R56 + G1 + G3 + L2 so the assembly stack stays buildable. |
+
+Parametric edits are portable only if the changed parts still appear in `referenceRequiredPartsForMechanism`, `fabricationStackForMechanism`, the 3D render plan, Blueprint, and Assembly. Do not add a UI-only field that bypasses those helpers.
+
 ## 3.2 Four-bar linkage — `four_bar`
 
 ### Identity
@@ -144,8 +158,9 @@ gear_ratio = T_b / T_a
 
 | Param | Default | Snap |
 |---|---:|---|
-| `gear1_teeth` | `24` | nearest `{8,24,40,56}` |
-| `gear2_teeth` | `24` | nearest `{8,24,40,56}` |
+| `gear1_teeth` / drive size | `24` | one of `{8,24,40,56}` teeth |
+| `gear2_teeth` / output size | `24` | one of `{8,24,40,56}` teeth |
+| `idler_teeth[]` | `[]` | each idler one of `{8,24,40,56}` teeth; may be inserted between drive and output |
 | `input_torque` | `200 Nm` | display/simulation only |
 | `input_angle` | `30°` | angle only |
 
@@ -212,8 +227,9 @@ L = linkage_arm_length = |P-R|
 
 | Param | Default | Snap |
 |---|---:|---|
-| `gear1_teeth` | `24` | nearest gear preset |
-| `gear2_teeth` | `24` | nearest gear preset with attachment holes; `G1` rejected as driven crank gear |
+| `gear1_teeth` / drive size | `24` | one of `{8,24,40,56}` teeth |
+| `gear2_teeth` / output size | `24` | one of `{24,40,56}` teeth; `G1` rejected as driven crank gear because it has no attachment holes |
+| `idler_teeth[]` | `[]` | each idler one of `{8,24,40,56}` teeth; idlers change centre spacing and output parity but do not carry the output linkage |
 | `linkage_pin_radius` | `20 mm` | nearest fabricated driven-gear attachment radius |
 | `linkage_arm_length` | `80 mm` | nearest linkage length |
 | `gear_linkage_enabled` | `1.0` | flag |

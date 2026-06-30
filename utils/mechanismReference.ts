@@ -1,6 +1,6 @@
 import type { MechanismConfig, MechanismType } from '../types';
 import { SCENE_PX_PER_MM } from './coordinates';
-import { FABRICATION_SPACER_SPEC } from './fabricationContract';
+import { FABRICATION_GEAR_SPECS, FABRICATION_LINKAGE_SPECS, FABRICATION_SPACER_SPEC, type FabricationGearSpec, type FabricationLinkageSpec } from './fabricationContract';
 
 export type ReferenceSupport = 'fabrication-ready' | 'simulation-only' | 'unsupported';
 
@@ -157,17 +157,23 @@ export const referenceStepCoordinateCallout = (step: Pick<ReferenceAssemblyStep,
     return `${readableCoordRole(role)} ${coord}`;
 };
 
-export const referenceRequiredPartsForMechanism = (mechanism: Pick<MechanismConfig, 'type'> & Partial<Pick<MechanismConfig, 'gearTrainRadii'>>) => {
+export const referenceRequiredPartsForMechanism = (mechanism: Pick<MechanismConfig, 'type'> & Partial<Pick<MechanismConfig, 'crankLength' | 'rockerLength' | 'couplerLength' | 'gearTrainRadii'>>) => {
     const recipe = referenceRecipeForType(mechanism.type);
     if (!recipe.exportReady) return [];
     const parts = recipe.requiredParts.map(partRequirement => ({ ...partRequirement }));
     if (mechanism.type === 'gear') {
-        const referenceGearCount = Array.isArray(mechanism.gearTrainRadii) ? Math.max(2, mechanism.gearTrainRadii.length) : 2;
-        const gearPart = parts.find(partRequirement => partRequirement.part === 'gears:g24');
-        if (gearPart) {
-            gearPart.quantity = referenceGearCount;
-            gearPart.count = referenceGearCount;
-        }
+        return aggregatePartRequirements([
+            ...gearRequirementsForMechanism(normalizeGearTrainToFabrication(mechanism)),
+            ...parts.filter(partRequirement => partRequirement.category !== 'gears')
+        ]);
+    }
+    if (mechanism.type === 'gear_linkage') {
+        const normalized = normalizeGearLinkageToReference(mechanism);
+        return aggregatePartRequirements([
+            ...gearRequirementsForMechanism(normalized),
+            linkageRequirementForSceneLength(normalized.couplerLength ?? REFERENCE_DEFAULTS.gearLinkage.outputLinkage),
+            ...parts.filter(partRequirement => partRequirement.category !== 'gears' && partRequirement.category !== 'linkages')
+        ]);
     }
     return parts;
 };
@@ -181,6 +187,101 @@ const part = (partId: string, category: string, key: string, label: string, quan
     category,
     key
 });
+
+const sceneToMm = (scene: number) => Math.abs(scene) / SCENE_PX_PER_MM;
+const sceneGearRadiusForSpec = (spec: FabricationGearSpec) => mmToScene(spec.pitchRadiusMm);
+const sceneLinkageLengthForSpec = (spec: FabricationLinkageSpec) => mmToScene(spec.lengthMm);
+
+const attachmentGearSpecs = FABRICATION_GEAR_SPECS.filter(spec => spec.attachmentHoleCentersMm.length > 0);
+
+export const fabricationGearSpecForSceneRadius = (sceneRadius: number, candidates: readonly FabricationGearSpec[] = FABRICATION_GEAR_SPECS) => {
+    const radiusMm = sceneToMm(sceneRadius);
+    const pool = candidates.length ? candidates : FABRICATION_GEAR_SPECS;
+    return pool.reduce((best, spec) =>
+        Math.abs(spec.pitchRadiusMm - radiusMm) < Math.abs(best.pitchRadiusMm - radiusMm) ? spec : best
+    );
+};
+
+export const fabricationLinkageSpecForSceneLength = (sceneLength: number) => {
+    const lengthMm = sceneToMm(sceneLength);
+    return FABRICATION_LINKAGE_SPECS.reduce((best, spec) =>
+        Math.abs(spec.lengthMm - lengthMm) < Math.abs(best.lengthMm - lengthMm) ? spec : best
+    );
+};
+
+const normalizeGearTrainRadii = (mechanism: Partial<MechanismConfig>, fallbackDrive: number, fallbackOutput: number, options?: { outputNeedsAttachment?: boolean }) => {
+    const raw = Array.isArray(mechanism.gearTrainRadii) && mechanism.gearTrainRadii.length >= 2
+        ? mechanism.gearTrainRadii
+        : [mechanism.crankLength ?? fallbackDrive, mechanism.rockerLength ?? fallbackOutput];
+    const limited = raw.filter(value => Number.isFinite(value)).slice(0, 8);
+    const source = limited.length >= 2 ? limited : [fallbackDrive, fallbackOutput];
+    const snapped = source.map((radius, index) => {
+        const isOutput = index === source.length - 1;
+        const candidates = options?.outputNeedsAttachment && isOutput ? attachmentGearSpecs : FABRICATION_GEAR_SPECS;
+        return sceneGearRadiusForSpec(fabricationGearSpecForSceneRadius(radius, candidates));
+    });
+    return snapped.length >= 2 ? snapped : [fallbackDrive, fallbackOutput];
+};
+
+const pitchDistanceForRadii = (radii: number[]) => radii.slice(1).reduce((sum, radius, index) => sum + radii[index] + radius, 0);
+const outputRatioForRadii = (radii: number[]) => {
+    const meshCount = Math.max(1, radii.length - 1);
+    const sign = meshCount % 2 === 1 ? -1 : 1;
+    return sign * (radii[0] / Math.max(1, radii.at(-1) ?? radii[0]));
+};
+
+const nearestAttachmentRadiusForScene = (outputGearRadius: number, requested: number) => {
+    const spec = fabricationGearSpecForSceneRadius(outputGearRadius, attachmentGearSpecs);
+    const requestedMm = sceneToMm(requested || REFERENCE_DEFAULTS.gearLinkage.handleRadius);
+    const offsets = spec.attachmentHoleCentersMm.map(point => Math.hypot(point.x, point.y)).filter(radius => radius > 0);
+    const bestMm = offsets.length
+        ? offsets.reduce((best, radius) => Math.abs(radius - requestedMm) < Math.abs(best - requestedMm) ? radius : best)
+        : sceneToMm(REFERENCE_DEFAULTS.gearLinkage.handleRadius);
+    return mmToScene(bestMm);
+};
+
+export const normalizeGearTrainToFabrication = <T extends Partial<MechanismConfig>>(mechanism: T): T => {
+    const radii = normalizeGearTrainRadii(mechanism, REFERENCE_DEFAULTS.gearTrain.driveRadius, REFERENCE_DEFAULTS.gearTrain.outputRadius);
+    const ratio = outputRatioForRadii(radii);
+    return {
+        ...mechanism,
+        crankLength: radii[0],
+        rockerLength: radii.at(-1) ?? radii[0],
+        groundLength: pitchDistanceForRadii(radii),
+        gearTrainRadii: radii,
+        gearRatio: ratio,
+        speed2: ratio,
+        couplerPointDist: mechanism.couplerPointDist ?? 0
+    };
+};
+
+const gearRequirementForSceneRadius = (sceneRadius: number, quantity = 1) => {
+    const spec = fabricationGearSpecForSceneRadius(sceneRadius);
+    return part(`gears:${spec.key}`, 'gears', spec.key, spec.label, quantity);
+};
+
+const gearRequirementsForMechanism = (mechanism: Partial<MechanismConfig>) =>
+    normalizeGearTrainRadii(mechanism, REFERENCE_DEFAULTS.gearTrain.driveRadius, REFERENCE_DEFAULTS.gearTrain.outputRadius, { outputNeedsAttachment: mechanism.type === 'gear_linkage' })
+        .map(radius => gearRequirementForSceneRadius(radius));
+
+const linkageRequirementForSceneLength = (sceneLength: number) => {
+    const spec = fabricationLinkageSpecForSceneLength(sceneLength);
+    return part(`linkages:${spec.key}`, 'linkages', spec.key, `L${spec.cells} linkage`, 1);
+};
+
+const aggregatePartRequirements = (parts: ReferencePartRequirement[]) => {
+    const map = new Map<string, ReferencePartRequirement>();
+    parts.forEach(item => {
+        const current = map.get(item.part);
+        if (current) {
+            current.quantity += item.quantity;
+            current.count = current.quantity;
+        } else {
+            map.set(item.part, { ...item });
+        }
+    });
+    return [...map.values()];
+};
 
 const G3 = (quantity: number) => part('gears:g24', 'gears', 'g24', 'G3 / 3-space gear', quantity);
 const G1 = () => part('gears:g8', 'gears', 'g8', 'G1 / 1-space gear', 1);
@@ -431,18 +532,20 @@ export const referenceSupportWarning = (type: MechanismType) => {
 };
 
 export const normalizeGearLinkageToReference = <T extends Partial<MechanismConfig>>(mechanism: T): T => {
-    const drive = REFERENCE_DEFAULTS.gearLinkage.driveRadius;
-    const output = REFERENCE_DEFAULTS.gearLinkage.outputRadius;
+    const radii = normalizeGearTrainRadii(mechanism, REFERENCE_DEFAULTS.gearLinkage.driveRadius, REFERENCE_DEFAULTS.gearLinkage.outputRadius, { outputNeedsAttachment: true });
+    const output = radii.at(-1) ?? REFERENCE_DEFAULTS.gearLinkage.outputRadius;
+    const ratio = outputRatioForRadii(radii);
+    const linkageSpec = fabricationLinkageSpecForSceneLength(mechanism.couplerLength ?? REFERENCE_DEFAULTS.gearLinkage.outputLinkage);
     return {
         ...mechanism,
-        crankLength: drive,
+        crankLength: radii[0],
         rockerLength: output,
-        groundLength: REFERENCE_DEFAULTS.gearLinkage.centerDistance,
-        couplerPointDist: REFERENCE_DEFAULTS.gearLinkage.handleRadius,
-        couplerLength: REFERENCE_DEFAULTS.gearLinkage.outputLinkage,
-        gearTrainRadii: [drive, output],
-        gearRatio: -drive / output,
-        speed2: -drive / output
+        groundLength: pitchDistanceForRadii(radii),
+        couplerPointDist: nearestAttachmentRadiusForScene(output, mechanism.couplerPointDist ?? REFERENCE_DEFAULTS.gearLinkage.handleRadius),
+        couplerLength: sceneLinkageLengthForSpec(linkageSpec),
+        gearTrainRadii: radii,
+        gearRatio: ratio,
+        speed2: ratio
     };
 };
 
@@ -458,18 +561,7 @@ export const normalizeMechanismToReference = <T extends Partial<MechanismConfig>
         };
     }
     if (mechanism.type === 'gear') {
-        const drive = REFERENCE_DEFAULTS.gearTrain.driveRadius;
-        const output = REFERENCE_DEFAULTS.gearTrain.outputRadius;
-        return {
-            ...mechanism,
-            crankLength: drive,
-            rockerLength: output,
-            groundLength: drive + output,
-            gearTrainRadii: [drive, output],
-            gearRatio: -drive / output,
-            speed2: -drive / output,
-            couplerPointDist: mechanism.couplerPointDist ?? 0
-        };
+        return normalizeGearTrainToFabrication(mechanism);
     }
     if (mechanism.type === 'gear_linkage') {
         return normalizeGearLinkageToReference(mechanism);

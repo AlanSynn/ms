@@ -48,7 +48,7 @@ import {
 import { checkWebOnnxCache, processImageWithWebOnnx, warmWebOnnxCache, type WebOnnxCacheStatus } from './utils/webOnnx';
 import { buildFoundryPhysicsOverlay } from './utils/physicsSession';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, loadRapierPhysicsKernel, physicsKernelErrorMessage } from './utils/physicsKernel';
-import { createFabricationPackage, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_PART_DEPTH, FABRICATION_SPACER_SPEC, fabricationBoardCoordinateCallout, fabricationGearProfileForPitchRadius, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, readableFabricationStackSummary, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
+import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_PART_DEPTH, FABRICATION_SPACER_SPEC, fabricationBoardCoordinateCallout, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, readableFabricationStackSummary, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
 import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
 import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionChainRootJointIds, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
@@ -2541,6 +2541,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                 <div><span>Exploded view</span><strong>{foundryExplode}%</strong></div>
                 <input aria-label="Exploded view" type="range" min="0" max="100" value={foundryExplode} onChange={event => setFoundryExplode(Number(event.target.value))} />
             </div>
+            <MechanismParametricEditor mechanism={foundry} onChange={updateFoundryParams} testId="foundry-parametric-editor" />
             <details className="advanced-panel">
                 <summary>Mechanism options</summary>
                 <div className="mt-3 space-y-3">
@@ -2553,7 +2554,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                         setAnchoredFoundry({ ...base, color: foundry.color, ...updates, presetId, recommendation: preset.recommendation });
                     }}>{Object.entries(FOUNDRY_PRESETS).map(([id, preset]) => <option key={id} value={id}>{preset.label}</option>)}</select>
                     {PARAMS.filter(p => showParam(foundry.type, p.key)).map(p => <React.Fragment key={String(p.key)}><MiniNumber label={p.label} value={Number(foundry[p.key] ?? 0)} min={p.min} max={p.max} step={p.step} onChange={value => updateFoundryParam(p.key, value)}/></React.Fragment>) }
-                    {foundry.type === 'cam' && <CamProfileEditor samples={foundry.camProfileSamples} onChange={camProfileSamples => setFoundry({ ...foundry, camProfileSamples })} />}
+                    {foundry.type === 'cam' && <CamProfileEditor samples={foundry.camProfileSamples} onChange={camProfileSamples => updateFoundryParams({ camProfileSamples })} />}
                 </div>
             </details>
             <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
@@ -2672,6 +2673,7 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
                 {selectedTargetChain && <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3 text-sm text-slate-600" data-testid="mechanism-ik-chain-summary" title={selectedTargetChain.helper}>
                     <div className="font-bold text-slate-800">{selectedTargetChain.label}</div>
                 </div>}
+                <MechanismParametricEditor mechanism={selectedMechanism} onChange={updates => updateMechanism(selectedMechanism.id, updates)} testId="design-parametric-editor" />
                 <div className="section-title">Parameters</div>
                 {PARAMS.filter(p => showParam(selectedMechanism.type, p.key)).map(p => <React.Fragment key={String(p.key)}><MiniNumber label={p.label} value={Number(selectedMechanism[p.key] ?? 0)} min={p.min} max={p.max} step={p.step} onChange={value => updateMechanism(selectedMechanism.id, { [p.key]: value } as Partial<MechanismConfig>)}/></React.Fragment>) }
                 {selectedBindingWarnings.map((w, i) => <div className="warning" key={`binding-${w}-${i}`}>{w}</div>)}
@@ -2972,6 +2974,77 @@ const SelectField = ({ label, value, onChange, children }: { label: string; valu
 const MiniNumber = ({ label, value, min, max, step = 1, disabled = false, onChange }: { label: string; value: number; min: number; max: number; step?: number; disabled?: boolean; onChange: (v: number) => void }) => <label className={`block ${disabled ? 'opacity-50' : ''}`}><div className="mb-1 flex justify-between text-xs font-black uppercase tracking-wider text-slate-500"><span>{label}</span><span>{Number(value).toFixed(step < 1 ? 2 : 0)}</span></div><input aria-label={`${label} slider`} className="w-full" type="range" min={min} max={max} step={step} disabled={disabled} value={Number.isFinite(value) ? value : 0} onChange={e => onChange(Number(e.target.value))}/><input aria-label={`${label} number`} className="field mt-1" type="number" min={min} max={max} step={step} disabled={disabled} value={Number.isFinite(value) ? value : 0} onChange={e => onChange(Number(e.target.value))}/></label>;
 const Toggle = ({ label, checked, disabled = false, onChange }: { label: string; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void }) => <label className={`flex items-center justify-between rounded-2xl bg-slate-100 px-3 py-2 text-sm font-bold ${disabled ? 'opacity-50' : ''}`}><span>{label}</span><input type="checkbox" disabled={disabled} checked={checked} onChange={e => onChange(e.target.checked)} /></label>;
 
+const gearSpecForSceneRadius = (radius: number) => fabricationGearSpecForPitchRadius(Math.abs(radius) / SCENE_PX_PER_MM);
+const gearSceneRadiusForKey = (key: string) => (FABRICATION_GEAR_SPECS.find(spec => spec.key === key) ?? FABRICATION_GEAR_SPECS[1]).pitchRadiusMm * SCENE_PX_PER_MM;
+const linkageSceneLengthForCells = (cells: number) => (FABRICATION_LINKAGE_SPECS.find(spec => spec.cells === cells) ?? FABRICATION_LINKAGE_SPECS[1]).lengthMm * SCENE_PX_PER_MM;
+const linkageCellsForSceneLength = (length: number) => fabricationLinkageSpecForSceneLength(length).cells;
+const gearOptionLabel = (teeth: number) => `${teeth} teeth`;
+
+const MechanismParametricEditor = ({ mechanism, onChange, testId }: { mechanism: MechanismConfig; onChange: (updates: Partial<MechanismConfig>) => void; testId?: string }) => {
+    const radii = (mechanism.type === 'gear' || mechanism.type === 'gear_linkage') ? gearTrainPitchRadii(mechanism) : [];
+    const updateGearRadius = (index: number, key: string) => {
+        const next = radii.length >= 2 ? [...radii] : [mechanism.crankLength, mechanism.rockerLength];
+        next[index] = gearSceneRadiusForKey(key);
+        onChange({ crankLength: next[0], rockerLength: next.at(-1) ?? next[0], gearTrainRadii: next });
+    };
+    const addIdlerGear = () => {
+        const next = radii.length >= 2 ? [...radii] : [mechanism.crankLength, mechanism.rockerLength];
+        next.splice(Math.max(1, next.length - 1), 0, gearSceneRadiusForKey('g24'));
+        onChange({ crankLength: next[0], rockerLength: next.at(-1) ?? next[0], gearTrainRadii: next });
+    };
+    const removeIdlerGear = () => {
+        if (radii.length <= 2) return;
+        const next = [...radii];
+        next.splice(next.length - 2, 1);
+        onChange({ crankLength: next[0], rockerLength: next.at(-1) ?? next[0], gearTrainRadii: next });
+    };
+    const renderGearControls = radii.length >= 2 && (mechanism.type === 'gear' || mechanism.type === 'gear_linkage');
+    const renderLinkageControls = mechanism.type === '4bar' || mechanism.type === 'gear_linkage';
+    const outputGearOptions = mechanism.type === 'gear_linkage' ? FABRICATION_GEAR_SPECS.filter(spec => spec.attachmentHoleCentersMm.length > 0) : FABRICATION_GEAR_SPECS;
+    if (!renderGearControls && !renderLinkageControls && mechanism.type !== 'cam') return null;
+    return <div className="inspector-control-card compact-parametric-editor" data-testid={testId ?? 'mechanism-parametric-editor'}>
+        {renderGearControls && <div className="space-y-2">
+            <div className="section-title">Gear sizes</div>
+            {radii.map((radius, index) => {
+                const isOutput = index === radii.length - 1;
+                const label = index === 0 ? 'Drive gear size' : isOutput ? 'Output gear size' : `Idler gear ${index} size`;
+                const options = isOutput ? outputGearOptions : FABRICATION_GEAR_SPECS;
+                const selected = gearSpecForSceneRadius(radius).key;
+                return <label key={`${label}-${index}`} className="block text-xs font-black uppercase tracking-wider text-slate-500">
+                    <span>{label.replace(' size', '')}</span>
+                    <select aria-label={label} className="field mt-1" value={options.some(spec => spec.key === selected) ? selected : options[0].key} onChange={event => updateGearRadius(index, event.target.value)}>
+                        {options.map(spec => <option key={spec.key} value={spec.key}>{gearOptionLabel(spec.teeth)}</option>)}
+                    </select>
+                </label>;
+            })}
+            <div className="flex flex-wrap gap-2">
+                <button type="button" className="btn-secondary" aria-label="Add idler gear" onClick={addIdlerGear}>+ idler</button>
+                <button type="button" className="btn-secondary" aria-label="Remove idler gear" disabled={radii.length <= 2} onClick={removeIdlerGear}>− idler</button>
+            </div>
+        </div>}
+        {renderLinkageControls && <div className="mt-3 space-y-2">
+            <div className="section-title">Link sizes</div>
+            {mechanism.type === '4bar' && ([
+                ['Input link length', 'crankLength'],
+                ['Coupler link length', 'couplerLength'],
+                ['Output link length', 'rockerLength']
+            ] as const).map(([label, key]) => <label key={key} className="block text-xs font-black uppercase tracking-wider text-slate-500">
+                <span>{label.replace(' length', '')}</span>
+                <select aria-label={label} className="field mt-1" value={linkageCellsForSceneLength(Number(mechanism[key] ?? 0))} onChange={event => onChange({ [key]: linkageSceneLengthForCells(Number(event.target.value)) } as Partial<MechanismConfig>)}>
+                    {FABRICATION_LINKAGE_SPECS.map(spec => <option key={spec.key} value={spec.cells}>{spec.cells}-cell</option>)}
+                </select>
+            </label>)}
+            {mechanism.type === 'gear_linkage' && <label className="block text-xs font-black uppercase tracking-wider text-slate-500">
+                <span>Output link</span>
+                <select aria-label="Output link length" className="field mt-1" value={linkageCellsForSceneLength(mechanism.couplerLength)} onChange={event => onChange({ couplerLength: linkageSceneLengthForCells(Number(event.target.value)) })}>
+                    {FABRICATION_LINKAGE_SPECS.map(spec => <option key={spec.key} value={spec.cells}>{spec.cells}-cell</option>)}
+                </select>
+            </label>}
+        </div>}
+        {mechanism.type === 'cam' && <div className="mt-3"><CamProfileEditor samples={mechanism.camProfileSamples} onChange={camProfileSamples => onChange({ camProfileSamples })}/></div>}
+    </div>;
+};
+
 const CAM_PROFILE_MIN = 0.35;
 const CAM_PROFILE_MAX = 1.65;
 const clampCamProfileSample = (value: number) => Math.max(CAM_PROFILE_MIN, Math.min(CAM_PROFILE_MAX, value));
@@ -3049,6 +3122,12 @@ const CamProfileEditor = ({ samples, onChange }: { samples?: number[]; onChange:
 };
 
 const showParam = (type: MechanismType, key: keyof MechanismConfig) => {
+    const compactParametricKeys: Partial<Record<MechanismType, Array<keyof MechanismConfig>>> = {
+        '4bar': ['crankLength', 'couplerLength', 'rockerLength'],
+        gear: ['crankLength', 'rockerLength', 'gearRatio', 'gearTrainRadii', 'groundLength', 'couplerPointDist', 'couplerPointAngle', 'speed2'],
+        gear_linkage: ['crankLength', 'rockerLength', 'couplerLength', 'gearRatio', 'gearTrainRadii', 'groundLength', 'couplerPointDist', 'couplerPointAngle', 'speed2']
+    };
+    if (compactParametricKeys[type]?.includes(key)) return false;
     if (key === 'speed2') return type === '5bar';
     if (key === 'phase') return ['5bar', 'gear', 'gear_linkage', 'planetary_gear'].includes(type);
     if (key === 'gearRatio') return false;

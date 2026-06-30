@@ -144,7 +144,7 @@ export const wouldCreateCycle = (joints: Record<string, StandardJoint>, jointId:
     return false;
 };
 
-export const mechanismRequiredParts = (mechanism: Pick<MechanismConfig, 'type'> & Partial<Pick<MechanismConfig, 'gearTrainRadii'>>) => {
+export const mechanismRequiredParts = (mechanism: Pick<MechanismConfig, 'type'> & Partial<Pick<MechanismConfig, 'crankLength' | 'rockerLength' | 'couplerLength' | 'gearTrainRadii'>>) => {
     return referenceRequiredPartsForMechanism(mechanism);
 };
 

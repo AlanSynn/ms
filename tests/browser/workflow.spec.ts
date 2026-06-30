@@ -385,6 +385,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(designMechanism).toHaveAttribute('data-reference-topology', /A-B input.*B-C coupler.*C-D output.*D-A board-ground/);
   await expect(designMechanism).toHaveAttribute('data-reference-stack-labels', /Input L2 linkage.*Coupler L4 linkage.*Output L2 linkage/);
   await expect(designMechanism).toHaveAttribute('data-reference-coord-roles', /I5:board.*G6:link_end_reference.*G10:link_joint_reference.*I9:board/);
+  await expect(page.getByTestId('design-parametric-editor'), 'Design reuses the same fabrication-backed parametric editor after Foundry export').toBeVisible();
+  await expect(page.getByLabel('Input link length'), 'Foundry-selected 4bar remains visibly editable in Design').toBeVisible();
   const persistedPathCount = await page.getByTestId('design-canvas').locator('path').evaluateAll(paths =>
     paths.filter(path => (path.getAttribute('d') ?? '').includes('M 70.00 60.00') && (path.getAttribute('d') ?? '').includes('L 130.00 84.00')).length
   );
@@ -1329,6 +1331,26 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await page.mouse.up();
   await expect.poll(async () => Number(await page.getByLabel('ground number', { exact: true }).inputValue()), { message: 'dragging the D handle updates the physical ground length parameter' }).not.toBe(groundBeforeHandleDrag);
 
+  await page.getByLabel('Foundry mechanism type').selectOption('gear');
+  await expect(page.getByTestId('foundry-parametric-editor'), 'Foundry exposes fabrication-backed gear selectors').toBeVisible();
+  await page.getByLabel('Drive gear size').selectOption('g40');
+  await page.getByLabel('Output gear size').selectOption('g56');
+  await page.getByRole('button', { name: 'Add idler gear' }).click();
+  await page.getByLabel('Idler gear 1 size').selectOption('g8');
+  await expect(threeScene, 'Gear train param editor writes ordered drive/idler/output radii to the shared preview').toHaveAttribute('data-three-gear-radii', '100.00,20.00,140.00');
+  await expect(threeScene, 'Dynamic gear stack uses the same G1/G5/G7 fabrication labels as Blueprint/Assembly').toHaveAttribute('data-three-stack-order', /Drive G5 \/ 5-space gear.*Idler G1 \/ 1-space gear 1.*Output G7 \/ 7-space gear/);
+
+  await page.getByLabel('Foundry mechanism type').selectOption('gear_linkage');
+  await expect(page.getByTestId('foundry-parametric-editor'), 'Gear linkage exposes the shared parametric editor').toBeVisible();
+  await page.getByLabel('Drive gear size').selectOption('g40');
+  await page.getByLabel('Output gear size').selectOption('g56');
+  await page.getByLabel('Output link length').selectOption('6');
+  await expect(threeScene, 'Gear linkage param editor keeps output gear and linkage in the fabrication stack').toHaveAttribute('data-three-stack-order', /Drive G5 \/ 5-space gear.*Output G7 \/ 7-space gear.*L6 linkage.*2-hole bracket/);
+  await expect(threeScene, 'Gear linkage crank pin snaps to a real attachment hole on the selected output gear').toHaveAttribute('data-three-linkage-pin-radius', /\d+\.\d+/);
+
+  await page.getByLabel('Foundry mechanism type').selectOption('4bar');
+  await expect(page.getByLabel('Input link length'), '4bar exposes visible linkage blank selectors instead of hidden generic numbers').toBeVisible();
+
   const foundryPhysicalMarkers: Record<string, Array<[string, number]>> = {
     '4bar': [['data-three-part-count', 5], ['data-three-hole-count', 11]],
     cam: [['data-three-cam-count', 1], ['data-three-follower-count', 1], ['data-three-hole-count', 8]],
@@ -1429,9 +1451,10 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(page.getByLabel('ground number')).toHaveValue('160');
   await page.getByLabel('Foundry preset').selectOption('compact');
 
-  for (const label of ['ground', 'crank', 'coupler', 'rocker / gear']) {
-    await page.getByLabel(`${label} number`, { exact: true }).fill('30');
-  }
+  await page.getByLabel('ground number', { exact: true }).fill('120');
+  await page.getByLabel('Input link length').selectOption('2');
+  await page.getByLabel('Coupler link length').selectOption('4');
+  await page.getByLabel('Output link length').selectOption('2');
   await expect(page.getByTestId('foundry-feasibility')).toContainText(/Motion \d+%/);
   await page.getByRole('button', { name: /Use mechanism/i }).click();
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();

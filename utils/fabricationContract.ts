@@ -221,9 +221,18 @@ export const FABRICATION_RING_GEAR_SPEC = fabricationRingGearSpecForPitchRadius(
 
 export const fabricationPartDisplayLabel = (label: string) => {
     const replacements: Array<[RegExp, string]> = [
+        [/Drive G1 \/ 1-space gear/g, 'Drive gear with 8 teeth'],
         [/Drive G3 \/ 3-space gear/g, 'Drive gear with 24 teeth'],
+        [/Drive G5 \/ 5-space gear/g, 'Drive gear with 40 teeth'],
+        [/Drive G7 \/ 7-space gear/g, 'Drive gear with 56 teeth'],
+        [/Output G1 \/ 1-space gear/g, 'Output gear with 8 teeth'],
         [/Output G3 \/ 3-space gear/g, 'Output gear with 24 teeth'],
+        [/Output G5 \/ 5-space gear/g, 'Output gear with 40 teeth'],
+        [/Output G7 \/ 7-space gear/g, 'Output gear with 56 teeth'],
+        [/Idler G1 \/ 1-space gear (\d+)/g, 'Idler gear $1 with 8 teeth'],
         [/Idler G3 \/ 3-space gear (\d+)/g, 'Idler gear $1 with 24 teeth'],
+        [/Idler G5 \/ 5-space gear (\d+)/g, 'Idler gear $1 with 40 teeth'],
+        [/Idler G7 \/ 7-space gear (\d+)/g, 'Idler gear $1 with 56 teeth'],
         [/G1 \/ 1-space gear/g, 'Gear with 8 teeth'],
         [/G3 \/ 3-space gear/g, 'Gear with 24 teeth'],
         [/G5 \/ 5-space gear/g, 'Gear with 40 teeth'],

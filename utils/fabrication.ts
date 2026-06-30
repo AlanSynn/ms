@@ -338,21 +338,38 @@ const layer = (label: string, role: FabricationStackLayer['role']): FabricationS
 
 export const fabricationBaseLayer = (): FabricationStackLayer => layer('Base board', 'base');
 
-export const fabricationStackForMechanism = (mechanism: Pick<MechanismConfig, 'type'> & Partial<Pick<MechanismConfig, 'gearTrainRadii'>>): FabricationStackLayer[] => {
+export const fabricationStackForMechanism = (mechanism: Pick<MechanismConfig, 'type'> & Partial<Pick<MechanismConfig, 'crankLength' | 'rockerLength' | 'couplerLength' | 'gearTrainRadii'>>): FabricationStackLayer[] => {
     const linked = (...middle: FabricationStackLayer[]) => [layer('Back Clip', 'clip'), ...middle, layer('Front Clip', 'clip')];
     const spacer = () => layer(FABRICATION_SPACER_SPEC.label, 'spacer');
     const recipe = referenceRecipeForType(mechanism.type);
     if (!recipe.exportReady) return [];
-    if (mechanism.type === 'gear') {
+    const gearLabelForRadius = (role: 'Drive' | 'Output' | 'Idler', radius: number, index?: number) => {
+        const spec = sharedFabricationGearSpecForPitchRadius(Math.abs(radius) / SCENE_PX_PER_MM);
+        return `${role} ${spec.label}${role === 'Idler' && index ? ` ${index}` : ''}`;
+    };
+    const gearStackLayers = (fallbackDrive: number, fallbackOutput: number) => {
         const radii = gearTrainPitchRadii({
-            crankLength: REFERENCE_DEFAULTS.gearTrain.driveRadius,
-            rockerLength: REFERENCE_DEFAULTS.gearTrain.outputRadius,
+            crankLength: mechanism.crankLength ?? fallbackDrive,
+            rockerLength: mechanism.rockerLength ?? fallbackOutput,
             gearTrainRadii: mechanism.gearTrainRadii
         });
-        const gearLayers: FabricationStackLayer[] = [layer('Drive G3 / 3-space gear', 'gear')];
-        radii.slice(1, -1).forEach((_, index) => gearLayers.push(spacer(), layer(`Idler G3 / 3-space gear ${index + 1}`, 'gear')));
-        gearLayers.push(spacer(), layer('Output G3 / 3-space gear', 'gear'));
-        return linked(...gearLayers);
+        const gearLayers: FabricationStackLayer[] = [layer(gearLabelForRadius('Drive', radii[0]), 'gear')];
+        radii.slice(1, -1).forEach((radius, index) => gearLayers.push(spacer(), layer(gearLabelForRadius('Idler', radius, index + 1), 'gear')));
+        gearLayers.push(spacer(), layer(gearLabelForRadius('Output', radii.at(-1) ?? radii[0]), 'gear'));
+        return gearLayers;
+    };
+    if (mechanism.type === 'gear') {
+        return linked(...gearStackLayers(REFERENCE_DEFAULTS.gearTrain.driveRadius, REFERENCE_DEFAULTS.gearTrain.outputRadius));
+    }
+    if (mechanism.type === 'gear_linkage') {
+        const linkageSpec = fabricationLinkageSpecForSceneLength(mechanism.couplerLength ?? REFERENCE_DEFAULTS.gearLinkage.outputLinkage);
+        return linked(
+            ...gearStackLayers(REFERENCE_DEFAULTS.gearLinkage.driveRadius, REFERENCE_DEFAULTS.gearLinkage.outputRadius),
+            spacer(),
+            layer(`L${linkageSpec.cells} linkage`, 'linkage'),
+            spacer(),
+            layer('2-hole bracket', 'guide')
+        );
     }
     const roleForLabel = (labelText: string): FabricationStackLayer['role'] => {
         if (/gear|ring|sun|planet/i.test(labelText)) return 'gear';
