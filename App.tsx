@@ -2119,7 +2119,19 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const { playhead, playheadSource, velocityRaw, forceRaw, velocityTip, forceTip, frictionTip, driveTip, velocityMagnitude, frictionMagnitude, forceMagnitude, constraintError, rule: physicsRule } = physicsOverlay;
     const foundryRenderPlan = useMemo(() => fabricationRenderPlanForMechanism(landedFoundry), [landedFoundry]);
     const foundryTopLayer = foundryRenderPlan.layers.at(-1);
+    const foundryRenderedLayerZ = useMemo(() =>
+        foundryRenderPlan.layers.map(item => item.z + foundryExplode / 100 * item.stackIndex * FABRICATION_RENDER_LAYER_Z_STEP * 1.5),
+        [foundryExplode, foundryRenderPlan.layers]
+    );
+    const foundryMovingLayerIndexes = useMemo(() => foundryRenderPlan.layers.flatMap((item, index) => isMovingRenderKind(item.renderKind) ? [index] : []), [foundryRenderPlan.layers]);
+    const foundrySpacerLayerIndexes = useMemo(() => foundryRenderPlan.layers.flatMap((item, index) => item.role === 'spacer' ? [index] : []), [foundryRenderPlan.layers]);
+    const foundryOverlayPinStacks = useMemo(() => foundryPinStacks(
+        foundryPinStackPoints(landedFoundry.type, foundryAssemblyPinPoints(landedFoundry.type, selectedSimulation.state), foundryMovingLayerIndexes, foundrySpacerLayerIndexes),
+        foundryRenderedLayerZ
+    ), [foundryMovingLayerIndexes, foundryRenderedLayerZ, foundrySpacerLayerIndexes, landedFoundry.type, selectedSimulation.state]);
+    const foundryOverlayPinStackById = useMemo(() => new Map(foundryOverlayPinStacks.map(pin => [pin.id, pin])), [foundryOverlayPinStacks]);
     const foundryOverlayZ = ((foundryTopLayer?.z ?? 0.22) + (foundryTopLayer ? foundryExplode / 100 * foundryTopLayer.stackIndex * FABRICATION_RENDER_LAYER_Z_STEP * 1.5 : 0)) + 0.18;
+    const foundryOverlayZForHandle = (handleId?: string) => foundryOverlayPinStackById.get(handleId ?? '')?.topZ ?? foundryOverlayZ;
     const projectOverlay = (point: Point | undefined) => projectFoundryOverlayPoint(point, foundryCamera, foundryProjectionSize, foundryOverlayZ);
     const projectedPlayhead = projectOverlay(playhead);
     const projectedVelocityTip = projectOverlay(velocityTip);
@@ -2134,8 +2146,12 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
             { id: 'B', label: 'B crank', point: selectedSimulation.state.j1, draggable: true },
             { id: 'C', label: 'C output', point: selectedSimulation.state.j2, draggable: true },
             { id: 'D', label: 'D ground', point: selectedSimulation.state.p2, draggable: true }
-        ] as const).map(handle => ({ ...handle, screen: projectOverlay(handle.point) })).filter(handle => handle.screen)
+        ] as const).map(handle => {
+            const z = foundryOverlayZForHandle(handle.id);
+            return { ...handle, z, screen: projectFoundryOverlayPoint(handle.point, foundryCamera, foundryProjectionSize, z) };
+        }).filter(handle => handle.screen)
         : [];
+    const foundryParamHandleZSummary = foundryParamHandles.map(handle => `${handle.id}:${handle.z.toFixed(2)}`).join(',');
     const hardBlocked = !targetReady || range.percentValid === 0 || !Number.isFinite(landing.x) || !Number.isFinite(landing.y);
     const foundryCameraLabel = foundryCamera.preset === 'custom' ? 'Custom view' : FOUNDRY_VIEW_PRESETS[foundryCamera.preset].label;
     const foundryPhaseDegrees = Math.round(((((foundryPhase / (Math.PI * 2)) % 1) + 1) % 1) * 360);
@@ -2247,7 +2263,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
     const updateFoundryParams = (updates: Partial<MechanismConfig>) => {
         setFoundry(normalizeGearMeshMechanism({ ...foundry, ...updates }));
     };
-    const foundryPointFromOverlayEvent = (event: React.PointerEvent<SVGCircleElement>) => {
+    const foundryPointFromOverlayEvent = (event: React.PointerEvent<SVGCircleElement>, handleId?: string) => {
         const svg = event.currentTarget.ownerSVGElement;
         if (!svg) return undefined;
         const rect = svg.getBoundingClientRect();
@@ -2255,7 +2271,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
         return unprojectFoundryOverlayPoint({
             x: ((event.clientX - rect.left) / rect.width) * foundryProjectionSize.width,
             y: ((event.clientY - rect.top) / rect.height) * foundryProjectionSize.height
-        }, foundryCamera, foundryProjectionSize, foundryOverlayZ);
+        }, foundryCamera, foundryProjectionSize, foundryOverlayZForHandle(handleId));
     };
     const applyFoundryParamHandleDrag = (handle: 'B' | 'C' | 'D', point: Point) => {
         const s = selectedSimulation.state;
@@ -2289,7 +2305,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
         if (!drag || drag.pointerId !== event.pointerId) return;
         event.preventDefault();
         event.stopPropagation();
-        const point = foundryPointFromOverlayEvent(event);
+        const point = foundryPointFromOverlayEvent(event, drag.handle);
         if (point) applyFoundryParamHandleDrag(drag.handle, point);
     };
     const handleFoundryParamPointerUp = (event: React.PointerEvent<SVGCircleElement>) => {
@@ -2476,7 +2492,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                         <text x={projectedVelocityTip.x + 5} y={projectedVelocityTip.y - 3}>v</text>
                     </g>}
                     {projectedPlayhead && <circle data-testid="foundry-playhead" data-projection="three-camera" data-origin-source={playheadSource} cx={projectedPlayhead.x} cy={projectedPlayhead.y} r="7" fill="#f472b6" stroke="white" strokeWidth="3" />}
-                    {foundryParamHandles.length > 0 && <g data-testid="foundry-param-handles" data-handle-contract="4bar-A-B-C-D" data-projection="three-camera">
+                    {foundryParamHandles.length > 0 && <g data-testid="foundry-param-handles" data-handle-contract="4bar-A-B-C-D" data-projection="three-camera" data-handle-z-contract="per-pin-stack-top" data-handle-z-map={foundryParamHandleZSummary}>
                         {foundryParamHandles.map(handle => <g key={handle.id} transform={`translate(${handle.screen!.x} ${handle.screen!.y})`} data-testid={`foundry-param-handle-group-${handle.id}`}>
                             <circle
                                 data-testid={`foundry-param-handle-${handle.id}`}
@@ -2484,6 +2500,7 @@ const MechanismFoundry = ({ project, foundry, setFoundry, selectedPart, selected
                                 data-param-handle={handle.id}
                                 data-param-role={handle.label}
                                 data-draggable={String(handle.draggable)}
+                                data-projection-z={handle.z.toFixed(2)}
                                 r={handle.draggable ? 8 : 6}
                                 fill={handle.draggable ? '#ffffff' : '#e2e8f0'}
                                 stroke={handle.draggable ? '#4f46e5' : '#64748b'}
@@ -3264,6 +3281,15 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
     const spacerRenderCount = spacerLayerIndexes.reduce((count, spacerIndex) => (
         count + pinStackPoints.filter(pin => foundrySpacerTouchesPin(pin, spacerIndex)).length
     ), 0);
+    const boardPivotPinStacks = mechanism.type === '4bar' ? pinStacks.filter(pin => pin.id === 'A' || pin.id === 'D') : [];
+    const boardPivotSpacerZ = (pin: FoundryPinStackPoint) => {
+        if (mechanism.type !== '4bar' || (pin.id !== 'A' && pin.id !== 'D') || pin.movingLayerIndexes.length !== 1) return undefined;
+        const movingZ = renderedLayerZ[pin.movingLayerIndexes[0]];
+        return typeof movingZ === 'number' ? Number((movingZ - FABRICATION_RENDER_PART_DEPTH).toFixed(3)) : undefined;
+    };
+    const boardPivotSpacerSummary = boardPivotPinStacks
+        .map(pin => `${pin.id}:${boardPivotSpacerZ(pin)?.toFixed(2) ?? 'n/a'}`)
+        .join(',');
     const stackZGap = renderPlan.layers.length > 1 ? renderPlan.layers[1].z - renderPlan.layers[0].z : 0;
     const pinBottomZ = pinStacks.length ? Math.min(...pinStacks.map(pin => pin.bottomZ)) : (renderedLayerZ[0] ?? 0.22) - 0.08;
     const pinTopZ = pinStacks.length ? Math.max(...pinStacks.map(pin => pin.topZ)) : (renderedLayerZ.at(-1) ?? 0.22) + 0.18;
@@ -3486,10 +3512,10 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             addEdges(washer, geometryKey);
             root.add(washer);
         };
-        const addClipCap = (point: Point | undefined, z: number, mat: THREE.Material) => {
+        const addClipCap = (point: Point | undefined, z: number, mat: THREE.Material, radiusScale = 1.35) => {
             if (!point) return;
             const p = to3(point, z);
-            const clip = new THREE.Mesh(cachedGeometry(`clip:${holeR.toFixed(3)}`, () => new THREE.CylinderGeometry(holeR * 1.35, holeR * 1.35, 0.08, 24)), mat);
+            const clip = new THREE.Mesh(cachedGeometry(`clip:${holeR.toFixed(3)}:${radiusScale.toFixed(2)}`, () => new THREE.CylinderGeometry(holeR * radiusScale, holeR * radiusScale, 0.08, 24)), mat);
             clip.rotation.x = Math.PI / 2;
             clip.position.copy(p);
             clip.position.z = z;
@@ -3719,7 +3745,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             if (layerItem.renderKind === 'clip') return;
             else if (layerItem.renderKind === 'spacer') pinStacks
                 .filter(pin => foundrySpacerTouchesPin(pin, index))
-                .forEach(pin => addSpacerWasher(pin.point, z, mat));
+                .forEach(pin => addSpacerWasher(pin.point, boardPivotSpacerZ(pin) ?? z, mat));
             else if (layerItem.renderKind === 'linkage') renderLinkageLayer(layerItem.label, z, mat);
             else if (layerItem.renderKind === 'gear') renderGearLayer(layerItem.label, z, mat);
             else if (layerItem.renderKind === 'cam') addCam(s.p1, z, degToRad(angle), mat);
@@ -3736,8 +3762,9 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             else if (layerItem.renderKind === 'follower') addFollowerBlock(s.j2, z, mat);
         });
         pinStacks.forEach(pinStack => {
-            addClipCap(pinStack.point, pinStack.bottomZ, clipMat);
-            addClipCap(pinStack.point, pinStack.topZ, clipMat);
+            const boardPivotFastener = mechanism.type === '4bar' && (pinStack.id === 'A' || pinStack.id === 'D');
+            addClipCap(pinStack.point, pinStack.bottomZ, clipMat, boardPivotFastener ? 1.5 : 1.35);
+            addClipCap(pinStack.point, pinStack.topZ + (boardPivotFastener ? 0.035 : 0), clipMat, boardPivotFastener ? 1.75 : 1.35);
             const p = to3(pinStack.point, pinStack.centerZ);
             const pin = new THREE.Mesh(cachedGeometry(`pin:${holeR.toFixed(3)}:${pinStack.lengthZ.toFixed(3)}`, () => new THREE.CylinderGeometry(holeR * 0.8, holeR * 0.8, pinStack.lengthZ, 20)), material.dark);
             pin.rotation.x = Math.PI / 2;
@@ -3839,6 +3866,10 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-three-spacer-render-count={spacerRenderCount}
             data-three-spacer-render-contract="recipe-pin-spacer-sites"
             data-three-spacer-pin-ids={spacerPinIdSummary}
+            data-three-board-pivot-spacer-mode={mechanism.type === '4bar' ? 'single-board-side-spacer' : 'not-board-pivot'}
+            data-three-board-pivot-spacer-ids={boardPivotPinStacks.map(pin => pin.id).join(',')}
+            data-three-board-pivot-spacer-z={boardPivotSpacerSummary}
+            data-three-board-pivot-fastener-contract={mechanism.type === '4bar' ? 'fastener-end>S10-board-side>linkage>fastener-head' : 'template-specific'}
             data-three-physical-pin-count={assemblyPinPoints.length}
             data-three-physical-pin-contract={assemblyPinContract}
             data-three-pin-stack-policy="per-pin-adjacent-stack"

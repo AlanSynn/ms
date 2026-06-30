@@ -694,6 +694,10 @@ assert(fabricationContractText.includes(FABRICATION_SOURCE_SSOT), 'runtime fabri
 assert(fabricationContractText.includes('FABRICATION_GEAR_RADIUS_PER_TOOTH_MM = 1.25'), 'runtime fabrication contract keeps the generator gear radius/tooth rule centralized');
 assert(fabricationContractText.includes('FABRICATION_LINKAGE_WIDTH_MM = 14'), 'runtime fabrication contract keeps the generator linkage width centralized');
 assert(fabricationContractText.includes("key: 's10'"), 'runtime fabrication contract keeps the S10 spacer centralized');
+assert(
+  readFileSync('docs/mechanism-reference/03-mechanism-unit-specs.md', 'utf-8').includes('fastener-end > S10 board-side spacer > linkage > fastener-head'),
+  '4bar mechanism reference documents A/D as board-side spacer plus visible fastener head, not a second top spacer'
+);
 assert(fabricationRuntimeText.includes("from './fabricationContract'"), 'fabrication runtime consumes centralized fabricationContract instead of hardcoded primitive tables');
 assert(!fabricationRuntimeText.includes("rootRadiusMm: 28.438"), 'runtime gear constants are no longer duplicated outside the centralized contract');
 assert.equal(fabricationManifest.generated_by, 'fabrication/generate_fabrication_templates.py', 'fabrication manifest generated_by matches the checked-in generator');

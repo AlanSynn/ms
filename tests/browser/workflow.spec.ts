@@ -1225,6 +1225,9 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(threeScene).toHaveAttribute('data-three-pin-stack-policy', 'per-pin-adjacent-stack');
   await expect(threeScene).toHaveAttribute('data-three-spacer-render-count', '4');
   await expect(threeScene).toHaveAttribute('data-three-spacer-pin-ids', /A.*B.*C.*D/);
+  await expect(threeScene).toHaveAttribute('data-three-board-pivot-spacer-mode', 'single-board-side-spacer');
+  await expect(threeScene).toHaveAttribute('data-three-board-pivot-spacer-ids', 'A,D');
+  await expect(threeScene).toHaveAttribute('data-three-board-pivot-fastener-contract', 'fastener-end>S10-board-side>linkage>fastener-head');
   await expect(threeScene).toHaveAttribute('data-three-z-collision-count', '0');
   const spanSummary = await threeScene.getAttribute('data-three-pin-stack-spans') ?? '';
   const pinSpans = Object.fromEntries(spanSummary.split(',').map(item => {
@@ -1310,6 +1313,11 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(page.getByLabel('Foundry mechanism type')).toBeHidden();
   await page.getByText('Mechanism options').click();
   await expect(page.getByTestId('foundry-param-handles'), '4bar exposes direct A/B/C/D joint handles in the WebGL overlay').toHaveAttribute('data-handle-contract', '4bar-A-B-C-D');
+  await expect(page.getByTestId('foundry-param-handles'), '4bar overlay handles project at each physical pin stack instead of a single floating top z plane').toHaveAttribute('data-handle-z-contract', 'per-pin-stack-top');
+  const handleZMap = await page.getByTestId('foundry-param-handles').getAttribute('data-handle-z-map') ?? '';
+  const handleZ = Object.fromEntries(handleZMap.split(',').map(item => { const [id, value] = item.split(':'); return [id, Number(value)]; }));
+  expect(handleZ.A, 'A handle is projected on its short board-pivot stack, not the global top layer').toBeLessThan(handleZ.B);
+  expect(handleZ.D, 'D handle is projected from its own board-pivot stack and may share the top z when output is the top layer').toBeLessThanOrEqual(handleZ.C);
   await expect(page.getByTestId('foundry-param-handle-A')).toHaveAttribute('data-draggable', 'false');
   await expect(page.getByTestId('foundry-param-handle-D')).toHaveAttribute('data-draggable', 'true');
   const groundBeforeHandleDrag = Number(await page.getByLabel('ground number', { exact: true }).inputValue());
@@ -1346,6 +1354,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
       await expect(threeScene, '4bar keeps only physical A/B/C/D pin hardware in the 3D scene').toHaveAttribute('data-three-physical-pin-contract', 'reference-A-B-C-D-only');
       await expect(threeScene).toHaveAttribute('data-three-physical-pin-count', '4');
       await expect(threeScene, '4bar renders recipe spacer sites at A/B/C/D without z-layer collisions').toHaveAttribute('data-three-spacer-render-count', '4');
+      await expect(threeScene, '4bar ground pivots keep one board-side spacer and a visible fastener head instead of an outboard/top spacer').toHaveAttribute('data-three-board-pivot-fastener-contract', 'fastener-end>S10-board-side>linkage>fastener-head');
       await expect(threeScene, '4bar pins use per-pivot stack spans so A/D do not protrude through empty z-layers').toHaveAttribute('data-three-pin-stack-policy', 'per-pin-adjacent-stack');
       await expect(threeScene, '4bar ground A-D is a board reference span, not a fabricated moving linkage').toHaveAttribute('data-three-ground-span-mode', 'board-reference');
     }

@@ -108,7 +108,7 @@ Board coordinate interpretation:
 
 1. `G6` and `G10` are moving joint references; never draw/emit them as board pins.
 2. Board only supplies the ground link `A-D` and the two fixed pivots `A`, `D`.
-3. `S10` goes below and above every moving link on the fastener stack.
+3. `S10` separates moving layers. Board-fixed single-link pivots `A` and `D` render as `fastener-end > S10 board-side spacer > linkage > fastener-head`; do not add a second outboard/top spacer there. Floating shared joints `B` and `C` keep the spacer between the two moving link layers.
 4. The displayed valid input-angle range may be less than 360°. If the loop solver has no valid closure for an input angle, do not fake a complete revolution; display only the valid angle interval(s).
 5. If a future editor lets users drag joints, the on-screen joint point and the stored parameter must update together: `|AB|`, `|BC|`, `|CD|`, `|AD|` must snap to the same physical length set when physical mode is enabled.
 6. Do not require Grashof full rotation for a physical four-bar. Grashof decides full rotation, not whether the linkage can exist. Non-Grashof four-bars should still be allowed if they have a valid partial motion range.
