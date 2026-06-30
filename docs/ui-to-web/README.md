@@ -1,34 +1,34 @@
 # Automataii UI → Web Porting Bundle
 
-이 디렉터리는 현재 PyQt6 UI를 웹/캔버스 기반 앱으로 재구축하기 위한 UI 문서화 번들입니다.
+This directory is the UI documentation bundle for rebuilding the current PyQt6 UI as a web/canvas app.
 
-## 포함된 산출물
+## Included artifacts
 
-| 파일/폴더 | 내용 |
+| File/folder | Contents |
 | --- | --- |
-| `UI_TO_WEB_PORT_SPEC.md` | 메인 윈도우, 탭, 메뉴, 버튼, 다이얼로그, 상태 흐름, 웹 컴포넌트 대응표 |
-| `CANVAS_LAYER_STRATEGY.md` | 탭을 바꿔도 단일 캔버스를 유지하고 레이어 visibility만 바꾸는 웹 설계안 |
-| `SCREENSHOT_INDEX.md` | 캡처된 UI 스크린샷 목록과 출처/용도 |
-| `inventory/qt_ui_inventory.md` | `src/automataii/presentation/qt/**/*.py` 자동 스캔 결과: UI 클래스와 텍스트/컨트롤 호출 |
-| `inventory/qt_ui_inventory.json` | 위 인벤토리의 기계 판독용 JSON |
-| `inventory/source-files.md` | UI 관련 Python 파일 인덱스 |
-| `screenshots/*.png` | 오프스크린 Qt 런타임 캡처 이미지 |
-| `tools/capture_ui_screenshots.py` | 스크린샷 재생성 스크립트 |
+| `UI_TO_WEB_PORT_SPEC.md` | Main window, tabs, menus, buttons, dialogs, status flow, and web component mapping |
+| `CANVAS_LAYER_STRATEGY.md` | Web design for keeping one canvas while changing only layer visibility across tabs |
+| `SCREENSHOT_INDEX.md` | Captured UI screenshot list with source and purpose |
+| `inventory/qt_ui_inventory.md` | Auto-scan results for `src/automataii/presentation/qt/**/*.py`: UI classes and text/control calls |
+| `inventory/qt_ui_inventory.json` | Machine-readable JSON for the same inventory |
+| `inventory/source-files.md` | Index of UI-related Python files |
+| `screenshots/*.png` | Offscreen Qt runtime captures |
+| `tools/capture_ui_screenshots.py` | Screenshot regeneration script |
 
-## 재생성
+## Regeneration
 
 ```bash
 QT_QPA_PLATFORM=offscreen uv run python ui-to-web/tools/capture_ui_screenshots.py
-python3 ui-to-web/tools/extract_qt_ui_inventory.py  # 현재 세션에서 사용한 자동 인벤토리 생성 스크립트
+python3 ui-to-web/tools/extract_qt_ui_inventory.py  # auto-inventory script used for this documentation bundle
 ```
 
-> 참고: `inventory/qt_ui_inventory.json`은 226개 Qt presentation Python 파일을 스캔해 UI-ish class 193개, UI call 730개를 기록했습니다. 일부 비위젯 QObject/서비스 클래스도 PyQt import 때문에 포함될 수 있으므로, 웹 포팅 때는 `UI_TO_WEB_PORT_SPEC.md`의 수동 정리표를 우선 기준으로 삼으세요.
+> Note: `inventory/qt_ui_inventory.json` scanned 226 Qt presentation Python files and recorded 193 UI-ish classes plus 730 UI calls. Some non-widget QObject/service classes may appear because they import PyQt, so prefer the curated tables in `UI_TO_WEB_PORT_SPEC.md` when porting.
 
-## 웹 리빌드 핵심 방향
+## Web rebuild direction
 
-현재 Qt 앱은 탭마다 별도 `QGraphicsView/QGraphicsScene` 성격이 강합니다. 웹에서는 사용자가 요청한 대로 **하나의 persistent canvas scene**를 중심에 두고, 탭은 좌측/상단 도구 패널과 레이어 visibility preset만 바꾸는 구조가 더 안전합니다.
+The Qt app is strongly split into separate `QGraphicsView/QGraphicsScene` surfaces per tab. On the web, a **single persistent canvas scene** is safer: tabs change side/top tools and layer visibility presets only.
 
-핵심 레이어:
+Core layers:
 
 1. sheet/grid/background
 2. source image / character parts
@@ -39,4 +39,4 @@ python3 ui-to-web/tools/extract_qt_ui_inventory.py  # 현재 세션에서 사용
 7. foundry preview/blueprint/fabrication overlays
 8. debug/status overlays
 
-자세한 설계는 `CANVAS_LAYER_STRATEGY.md`를 보세요.
+See `CANVAS_LAYER_STRATEGY.md` for the detailed design.

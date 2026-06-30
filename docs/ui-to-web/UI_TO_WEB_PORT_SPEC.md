@@ -1,16 +1,16 @@
 # Automataii UI → Web Port Specification
 
-이 문서는 `src/automataii/presentation/qt/`의 PyQt6 UI를 재귀적으로 훑어서 웹 리빌드에 필요한 화면/탭/버튼/다이얼로그/그리드/캔버스 구성을 정리한 것입니다.
+This document recursively reviews the PyQt6 UI under `src/automataii/presentation/qt/` and summarizes the screens, tabs, buttons, dialogs, grids, and canvas structure needed for the web rebuild.
 
 ## 0. Inspection evidence
 
-- 자동 스캔 범위: `src/automataii/presentation/qt/**/*.py`
-- 스캔 파일 수: 226
-- UI-ish class 수: 193
-- UI constructor/property call 수: 730
-- 자동 인벤토리: [`inventory/qt_ui_inventory.md`](inventory/qt_ui_inventory.md), [`inventory/qt_ui_inventory.json`](inventory/qt_ui_inventory.json)
-- UI 소스 파일 인덱스: [`inventory/source-files.md`](inventory/source-files.md)
-- 런타임 스크린샷: [`SCREENSHOT_INDEX.md`](SCREENSHOT_INDEX.md)
+- Auto-scan scope: `src/automataii/presentation/qt/**/*.py`
+- Scanned files: 226
+- UI-ish classes: 193
+- UI constructor/property calls: 730
+- Auto inventory: [`inventory/qt_ui_inventory.md`](inventory/qt_ui_inventory.md), [`inventory/qt_ui_inventory.json`](inventory/qt_ui_inventory.json)
+- UI source file index: [`inventory/source-files.md`](inventory/source-files.md)
+- Runtime screenshots: [`SCREENSHOT_INDEX.md`](SCREENSHOT_INDEX.md)
 
 ## 1. Product-level shell
 

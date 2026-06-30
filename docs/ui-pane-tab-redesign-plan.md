@@ -17,7 +17,7 @@ Observed from code/docs:
 
 User correction to honor:
 
-> 왼쪽 pane 이 너무 놀고 있음. 오른쪽 pane 은 각 항목들의 상세 세밀 조정 정도만 해야하는데, 가운데 화면은 완전히 작업화면만 해야함.
+> The left pane is underused, the right pane should only tune selected details, and the center must be only the work surface.
 
 So the new layout must make pane ownership explicit.
 

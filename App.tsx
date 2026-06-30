@@ -6,7 +6,7 @@ import { BlueprintExport } from './components/stages/blueprint/BlueprintExport';
 import { EditorStageFrame, StageLeftSummary, canvasPane, inspectorPane, workflowPane } from './components/stages/stageLayout';
 import { ThreePuppetPreview } from './components/ThreePuppetPreview';
 import { TrackingModal } from './components/TrackingModal';
-import { AboutDialog, CanvasZoomToolbar, GettingStartedDialog, OnnxCacheStatusPill, SHARED_PLAYBACK_STAGES, STAGES, ShortcutHelpDialog, TopCommandBar, WelcomeDialog, WorkflowRail, WorkflowStatusStrip, WorkspacePlayerDock, type StarterImageTemplate } from './components/AppShell';
+import { AboutDialog, CanvasZoomToolbar, GettingStartedDialog, OnnxCacheStatusPill, SHARED_PLAYBACK_STAGES, STAGES, ShortcutHelpDialog, TopCommandBar, WelcomeDialog, WorkflowRail, WorkflowStatusStrip, WorkspacePlayerDock } from './components/AppShell';
 import {
     AppStage,
     BodyPartLayer,
@@ -27,11 +27,9 @@ import { animationDeltaRadians, calculateLinkage, defaultCamProfileSamples, gene
 import { evaluateFitness, generateSmartConfig, mutateConfig } from './utils/optimizer';
 import {
     applyProjectAction,
-    CLASSROOM_LESSONS,
     classroomLessonById,
     createDefaultMechanism,
     createEmptyProject,
-    createLessonProject,
     createProjectFromProcessed,
     createSampleProject,
     downloadText,
@@ -64,8 +62,6 @@ import { normalizeMechanismToReference, referenceRecipeForType, referenceRequire
 import { createMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext, fitPathToBox, fitPointsToBox, pointsToSvgPath } from './utils/mechanismPreview';
 import { AlertCircle, Boxes, BrainCircuit, CheckCircle2, Download, FileJson, Loader2, Play, Plus, Route, Sparkles, Trash2, Upload } from 'lucide-react';
 import motionSmithIconUrl from './resources/icons/AppIcon.png?url';
-import girlStarterUrl from './resources/examples/raw/girl.png?url';
-import boyStarterUrl from './resources/examples/raw/boy.PNG?url';
 
 type FoundryState = MechanismConfig;
 type FoundryViewPreset = Viewer3DCameraPreset | 'side' | 'custom';
@@ -180,11 +176,6 @@ const mechanismReferenceTopologySummary = (type: MechanismType) => {
     if (type === 'piston') return 'crank-slider guide; slider-crank fabrication recipe';
     return `${type} simulation topology`;
 };
-
-const STARTER_IMAGE_TEMPLATES: StarterImageTemplate[] = [
-    { id: 'girl', label: 'Girl starter', fileName: 'girl.png', description: 'Flat vector pose from resources/examples/raw/girl.png.', url: girlStarterUrl },
-    { id: 'boy', label: 'Boy starter', fileName: 'boy.PNG', description: 'Textured pose from resources/examples/raw/boy.PNG.', url: boyStarterUrl }
-];
 
 const OPTIONS_SECTION_MANIFEST = [
     { id: 'appearance', label: 'Appearance', description: 'Keep the interface light and show only the panels you need.' },
@@ -513,21 +504,6 @@ const App: React.FC = () => {
         }
     };
 
-    const loadStarterImage = async (template: StarterImageTemplate) => {
-        setCommandStatus(`Opening ${template.label}`);
-        dispatch({ type: 'set_processing', processing: { stage: 'loading-model', message: `Opening ${template.label}`, progress: 8 } });
-        try {
-            const response = await fetch(template.url);
-            if (!response.ok) throw new Error(`Could not load ${template.fileName}`);
-            const blob = await response.blob();
-            await runWebOnnx(new File([blob], template.fileName, { type: blob.type || 'image/png' }));
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            dispatch({ type: 'set_processing', processing: { stage: 'error', message: 'Starter image failed', progress: 0, error: message } });
-            setCommandStatus(`Starter failed: ${message}`);
-        }
-    };
-
     const importCharacterPackage = async (files: FileList | File[]) => {
         dispatch({ type: 'set_processing', processing: { stage: 'loading-model', message: 'Loading character…', progress: 20 } });
         try {
@@ -665,22 +641,6 @@ const App: React.FC = () => {
     const foundryPreviewFromProject = (lessonProject: ProjectState) => {
         const mechanism = lessonProject.mechanisms[0];
         return mechanism ? { ...mechanism, id: 'foundry-preview' } : createDefaultMechanism('4bar', 'foundry-preview');
-    };
-    const openLessonTemplate = (lessonId: string) => {
-        const lesson = classroomLessonById(lessonId);
-        if (!lesson) {
-            setCommandStatus('Lesson not available');
-            return;
-        }
-        const lessonProject = createLessonProject(lesson.id);
-        setPendingCharacter(null);
-        setProject(lessonProject, { resetHistory: true });
-        setFoundry(foundryPreviewFromProject(lessonProject));
-        setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
-        setShowWelcome(false);
-        setShowGettingStarted(false);
-        setStage(lesson.startStage);
-        setCommandStatus(`Opened ${lesson.label}`);
     };
     const resetLesson = () => {
         const lesson = classroomLessonById(project.metadata.classroomLessonId);
@@ -946,7 +906,7 @@ const App: React.FC = () => {
                 </section>
             </div>
             {showWelcome && <WelcomeDialog onClose={closeWelcome} />}
-            {!showWelcome && showGettingStarted && <GettingStartedDialog lessonTemplates={CLASSROOM_LESSONS} starterTemplates={STARTER_IMAGE_TEMPLATES} replaceCharacter={replaceCharacter} setReplaceCharacter={setReplaceCharacter} onLesson={openLessonTemplate} onStarterImage={template => { setShowGettingStarted(false); loadStarterImage(template); }} onSample={() => { setPendingCharacter(null); setProject(createSampleProject(), { resetHistory: true }); setShowWelcome(false); setShowGettingStarted(false); setStage('character'); }} onPackage={files => { setShowGettingStarted(false); importCharacterPackage(files); }} onProcess={file => { setShowGettingStarted(false); runWebOnnx(file); }} onImport={file => { setShowGettingStarted(false); importProject(file); }} onClose={closeGettingStarted} />}
+            {!showWelcome && showGettingStarted && <GettingStartedDialog onSample={() => { setPendingCharacter(null); setProject(createSampleProject(), { resetHistory: true }); setShowWelcome(false); setShowGettingStarted(false); setStage('character'); }} onPackage={files => { setShowGettingStarted(false); importCharacterPackage(files); }} onProcess={file => { setShowGettingStarted(false); runWebOnnx(file); }} onImport={file => { setShowGettingStarted(false); importProject(file); }} onClose={closeGettingStarted} />}
             {showShortcuts && <ShortcutHelpDialog onClose={() => setShowShortcuts(false)} />}
             {showAbout && <AboutDialog onClose={() => setShowAbout(false)} />}
             <MechanismRecommendationSheet isOpen={showRecommendations} project={project} selectedPart={selectedPart} selectedPath={selectedPath} onClose={() => setShowRecommendations(false)} onApply={mechanism => { dispatch({ type: 'upsert_mechanism', mechanism }); setShowRecommendations(false); setStage('design'); }} />

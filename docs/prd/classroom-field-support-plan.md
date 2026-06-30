@@ -21,7 +21,7 @@ Key notes translated into product constraints:
 
 - `analyst`: current system partially supports web, onboarding, blueprint, and assembly, but lacks classroom approval checklist, lesson templates, stable lesson reset, and teacher-friendly local package flow.
 - `explore`: existing anchors are `WelcomeDialog`, `GettingStartedDialog`, `ShortcutHelpDialog`, `AboutDialog`, Foundry/Design reset controls, `BlueprintExport`, `AssemblyWorkbench`, `utils/appCommands.ts`, `docs/deployment.md`, and tag-gated GitHub Pages workflow.
-- `designer`: keep splash tiny; put guided choices in Getting Started; left pane acts as tutorial conductor; center canvas remains pure workbench; right pane stays inspector; assembly uses low-text exploded animation.
+- `designer`: keep splash tiny; keep Getting Started to three setup choices; put classroom lessons in a secondary lesson/library path; left pane acts as tutorial conductor; center canvas remains pure workbench; right pane stays inspector; assembly uses low-text exploded animation.
 - `test-engineer`: add contract/browser coverage for `/ms/` static deploy, guided real starter flow, sensemaking discoverability, stable Foundry reset, animated Assembly, and no server/cloud calls.
 
 ## Current support and gaps
@@ -29,8 +29,8 @@ Key notes translated into product constraints:
 | Area | Supported now | Gap to close |
 | --- | --- | --- |
 | Web deployment | GitHub Pages workflow, `/ms/` base path, tag-gated release, local ONNX asset checks. | No classroom-safe release checklist in product docs/About: no account, no upload, no server, local-first. |
-| Guided entry | Splash + compact Getting Started dialog. | Entry is starter picker, not lesson/theme path. Need theme templates such as waving arm, walking legs, crank puppet. |
-| Templates | Humanoid/girl/boy/image/package starters. | Templates do not yet encode teacher-ready end-to-end motion objective with starter path and compatible mechanism option. |
+| Guided entry | Splash + compact three-choice Getting Started dialog. | Classroom lessons must be a secondary lesson/library path, not extra cards in the first-run modal. |
+| Templates | Humanoid starter, image/package import, and serializable lesson baselines. | Classroom templates need teacher-ready motion objectives with starter path and compatible mechanism option. |
 | Sensemaking | Foundry has collapsed sensemaking and status/warnings. | Too hidden. Need one visible next-action chip and one mechanism meaning cue at each step. |
 | Stable reset | View reset, playback reset, some stage reset buttons. | No explicit per-template/per-mechanism stable reset contract. `No rotation possible` must recover to known-good range. |
 | Blueprint | Printable cut sheet and export package. | Classroom language and teacher checklist need clearer web-first route; paper should be backup. |
@@ -41,7 +41,7 @@ Key notes translated into product constraints:
 
 Current pass uses existing ProjectState/command/test seams only; no new dependency or server layer.
 
-- `CLASSROOM_LESSONS` is the lesson catalog. First real lesson: `Waving arm / 팔 흔들기`.
+- `CLASSROOM_LESSONS` is the lesson catalog. First real lesson: `Waving arm`.
 - Lesson entry creates real humanoid, right-hand path, selected four-bar, generated motion samples, and reset metadata.
 - Blank humanoid starter remains clean with no hidden mechanism.
 - `Reset Lesson` restores the active lesson baseline while preserving browser app settings.
@@ -67,15 +67,15 @@ Non-goal:
 
 ### R2 — Guided theme/template entry
 
-Getting Started should ask “what classroom project are we making?” before exposing blank tools.
+Classroom lessons should answer “what classroom project are we making?” through a secondary lesson/library entry. Getting Started itself remains the compact three-choice first-run modal.
 
 Minimum classroom templates:
 
-1. `Waving arm / 팔 흔들기` — humanoid, wrist path, four-bar or crank-rocker recommendation.
-2. `Walking legs / 걷는 다리` — humanoid lower-limb paths, paired mechanism recommendation.
-3. `Bobbing head / 고개 끄덕이기` — head path, cam follower recommendation.
-4. `Spinning sign / 회전 표지판` — gear train recommendation.
-5. `Blank character / 빈 캐릭터` — user package/image import, no fake mechanism.
+1. `Waving arm` — humanoid, wrist path, four-bar or crank-rocker recommendation.
+2. `Walking legs` — humanoid lower-limb paths, paired mechanism recommendation.
+3. `Bobbing head` — head path, cam follower recommendation.
+4. `Spinning sign` — gear train recommendation.
+5. `Blank character` — user package/image import, no fake mechanism.
 
 Acceptance:
 
@@ -111,7 +111,7 @@ Acceptance:
 - Students can find mechanism meaning without opening a hidden essay panel.
 - Warnings name the affected object and action: path, joint, mechanism, spacer, board coordinate.
 - `Show Sensemaking` remains optional for deeper explanation; default UI still stays compact.
-- Vocabulary can be bilingual where helpful: `Joint / 관절`, `Path / 경로`, `Anchor / 고정점`, `Drive / 구동`.
+- Vocabulary must be English-only in the app UI and repository text: `Joint`, `Path`, `Anchor`, `Drive`.
 
 ### R5 — Stable reset and recovery
 
@@ -186,7 +186,7 @@ Done when:
 ### Phase 2 — Guided lesson templates
 
 - Extend existing starter metadata before adding a template engine.
-- Implement the first true lesson template: `Waving arm / 팔 흔들기`.
+- Implement the first true lesson template: `Waving arm`.
 - Reuse existing sample character factory and mechanism registry.
 - Store template reset baseline as serializable project snapshot.
 
@@ -242,8 +242,8 @@ Done when:
 
 - Add one Playwright flow using production preview:
   - start empty;
-  - open Getting Started;
-  - choose lesson template;
+  - open the lesson/library entry;
+  - choose or import the lesson template;
   - draw/edit path;
   - use mechanism;
   - reset mechanism;

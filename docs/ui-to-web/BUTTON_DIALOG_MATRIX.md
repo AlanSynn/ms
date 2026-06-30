@@ -1,6 +1,6 @@
 # Button / Dialog / Control Matrix
 
-이 표는 웹 포팅 때 누락되기 쉬운 사용자 조작 지점을 한곳에 모은 것입니다. 더 원시적인 자동 스캔 결과는 `inventory/qt_ui_inventory.*`를 참조하세요.
+This table collects user controls that are easy to miss during the web port. For raw auto-scan evidence, see `inventory/qt_ui_inventory.*`.
 
 ## App shell
 

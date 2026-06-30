@@ -7,9 +7,6 @@ import { APP_MENU_GROUPS, commandById, commandShortcutListText, commandShortcutT
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT } from '../utils/viewport';
 import { STAGE_PANE_NAV_ITEMS, StagePaneNavIcon } from './stages/stageLayout';
 
-export type StarterImageTemplate = { id: string; label: string; fileName: string; description: string; url: string };
-export type ClassroomLessonTile = { id: string; label: string; description: string; actionLabel: string };
-
 export const SHARED_PLAYBACK_STAGES: AppStage[] = ['path', 'design'];
 
 export const STAGES: Array<{ id: AppStage; label: string }> = [
@@ -270,13 +267,7 @@ export const WelcomeDialog = ({ onClose }: { onClose: (hideNextTime?: boolean) =
     </div>;
 };
 
-export const GettingStartedDialog = ({ lessonTemplates, starterTemplates, replaceCharacter, setReplaceCharacter, onLesson, onStarterImage, onSample, onPackage, onProcess, onImport, onClose }: {
-    lessonTemplates: readonly ClassroomLessonTile[];
-    starterTemplates: StarterImageTemplate[];
-    replaceCharacter: boolean;
-    setReplaceCharacter: (v: boolean) => void;
-    onLesson: (lessonId: string) => void;
-    onStarterImage: (template: StarterImageTemplate) => void;
+export const GettingStartedDialog = ({ onSample, onPackage, onProcess, onImport, onClose }: {
     onSample: () => void;
     onPackage: (files: FileList | File[]) => void;
     onProcess: (file: File) => void;
@@ -319,35 +310,29 @@ export const GettingStartedDialog = ({ lessonTemplates, starterTemplates, replac
             <div className="getting-started-head">
                 <div>
                     <div className="section-title">Getting started</div>
-                    <h2 id="getting-started-title">Pick a starter, then tune it in Character.</h2>
+                    <h2 id="getting-started-title">Choose how to begin.</h2>
                 </div>
                 <button type="button" className="btn-secondary" onClick={onClose}>Skip to editor</button>
             </div>
             <div className="template-gallery" data-testid="getting-started-gallery">
-                {lessonTemplates.map(template => (
-                    <button key={template.id} type="button" className="template-tile primary" data-testid={`lesson-template-${template.id}`} onClick={() => onLesson(template.id)}>
-                        <span className="template-kicker">Lesson</span>
-                        <strong>{template.label}</strong>
-                        <span>{template.description}</span>
-                        <b><Sparkles size={16}/> {template.actionLabel}</b>
-                    </button>
-                ))}
-                <button type="button" className="template-tile primary" onClick={onSample}>
-                    <span className="template-kicker">Start clean</span>
+                <button type="button" className="template-tile primary" data-testid="getting-started-card-humanoid" onClick={onSample}>
+                    <span className="template-kicker">Starter</span>
                     <strong>Humanoid starter</strong>
                     <span>Full body rig. No mechanism.</span>
                     <b><Sparkles size={16}/> Open humanoid starter</b>
                 </button>
-                {starterTemplates.map(template => (
-                    <button key={template.id} type="button" className="template-tile starter cursor-pointer" onClick={() => onStarterImage(template)}>
-                        <img className="starter-thumb" src={template.url} alt="" />
-                        <span className="template-kicker">Image</span>
-                        <strong>{template.label}</strong>
-                        <span>Browser ONNX rigging.</span>
-                        <b><BrainCircuit size={16}/> Create from {template.id}</b>
-                    </button>
-                ))}
-                <button type="button" className="template-tile cursor-pointer" onClick={() => packageInputRef.current?.click()}>
+                <button type="button" className="template-tile cursor-pointer" data-testid="getting-started-card-image" onClick={() => onnxInputRef.current?.click()}>
+                    <span className="template-kicker">Image</span>
+                    <strong>Create from image</strong>
+                    <span>Local browser processing.</span>
+                    <b><BrainCircuit size={16}/> Choose image</b>
+                </button>
+                <input ref={onnxInputRef} data-testid="getting-started-onnx-input" hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={e => {
+                    const file = e.currentTarget.files?.[0];
+                    e.currentTarget.value = '';
+                    if (file) onProcess(file);
+                }}/>
+                <button type="button" className="template-tile cursor-pointer" data-testid="getting-started-card-package" onClick={() => packageInputRef.current?.click()}>
                     <span className="template-kicker">Package</span>
                     <strong>Load character</strong>
                     <span>Load art + skeleton.</span>
@@ -358,17 +343,6 @@ export const GettingStartedDialog = ({ lessonTemplates, starterTemplates, replac
                     e.currentTarget.value = '';
                     if (files.length) onPackage(files);
                 }}/>
-                <button type="button" className="template-tile cursor-pointer" onClick={() => onnxInputRef.current?.click()}>
-                    <span className="template-kicker">Private</span>
-                    <strong>Create from image</strong>
-                    <span>Local on-device processing.</span>
-                    <b><BrainCircuit size={16}/> Choose image</b>
-                </button>
-                <input ref={onnxInputRef} data-testid="getting-started-onnx-input" hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={e => {
-                    const file = e.currentTarget.files?.[0];
-                    e.currentTarget.value = '';
-                    if (file) onProcess(file);
-                }}/>
             </div>
             <div className="getting-started-foot">
                 <button type="button" className="btn-secondary cursor-pointer" onClick={() => importInputRef.current?.click()}><Upload size={16}/> Import project</button><input ref={importInputRef} data-testid="getting-started-import-input" hidden type="file" accept="application/json,.json" onChange={e => {
@@ -376,7 +350,6 @@ export const GettingStartedDialog = ({ lessonTemplates, starterTemplates, replac
                     e.currentTarget.value = '';
                     if (file) onImport(file);
                 }}/>
-                <label className="replace-toggle"><input aria-label="Replace current character and preserve compatible mechanisms" type="checkbox" checked={replaceCharacter} onChange={e => setReplaceCharacter(e.target.checked)} /> Preserve compatible mechanisms</label>
             </div>
         </section>
     </div>;

@@ -1,5 +1,8 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createLessonProject, serializeProject } from '../../utils/project';
 
 const expectCleanPage = (pageErrors: string[], consoleErrors: string[]) => {
   expect(pageErrors, 'no uncaught browser exceptions').toEqual([]);
@@ -74,22 +77,28 @@ test('Character part cut outline editor bakes and edits contour points', async (
 });
 
 
-const openWavingArmTemplate = async (page: Page) => {
+const writeWavingArmLessonProject = async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'motionsmith-lesson-'));
+  const path = join(dir, 'waving-arm.motionsmith.json');
+  await writeFile(path, serializeProject(createLessonProject('waving-arm')), 'utf8');
+  return path;
+};
+
+const importWavingArmLessonProject = async (page: Page, targetStage: 'character' | 'path' = 'path') => {
   await dismissWelcomeSplash(page);
-  if (!(await page.getByTestId('getting-started-dialog').count())) {
-    await openCharacterScreen(page);
-    await page.getByRole('button', { name: /Open Getting Started/i }).click();
-  }
-  await expect(page.getByTestId('getting-started-dialog')).toBeVisible();
-  await page.getByTestId('lesson-template-waving-arm').click();
-  await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
-  const desktopPathEditor = page.getByRole('button', { name: /Path Editor/i }).first();
-  if (await desktopPathEditor.isVisible().catch(() => false)) {
-    await desktopPathEditor.click();
-  } else {
-    await page.getByRole('button', { name: /Rail motion path/i }).click();
-  }
+  const projectPath = await writeWavingArmLessonProject();
+  const gettingStarted = page.getByTestId('getting-started-dialog');
+  if (await gettingStarted.count()) await page.getByTestId('getting-started-import-input').setInputFiles(projectPath);
+  else await page.getByTestId('project-file-input').setInputFiles(projectPath);
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
+  if (targetStage === 'character') {
+    await page.getByRole('button', { name: /^Character$/i }).click();
+    await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
+  }
+};
+
+const openWavingArmTemplate = async (page: Page) => {
+  await importWavingArmLessonProject(page, 'path');
 };
 
 const applyFourBarFromFoundry = async (page: Page) => {
@@ -147,13 +156,14 @@ test('character → path → foundry → design → blueprint runs end-to-end in
 
   const gettingStarted = page.getByTestId('getting-started-dialog');
   await expect(gettingStarted).toBeVisible();
+  await expect(gettingStarted).toContainText('Choose how to begin.');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Humanoid starter');
-  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Waving arm / 팔 흔들기');
-  await expect(gettingStarted.getByTestId('lesson-template-waving-arm')).toBeVisible();
-  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Girl starter');
-  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Boy starter');
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Create from image');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Load character');
-  await expect.poll(() => gettingStarted.locator('.starter-thumb').evaluateAll(images => images.every(img => (img as HTMLImageElement).naturalWidth > 0))).toBe(true);
+  await expect(gettingStarted.getByTestId('getting-started-gallery').locator('.template-tile')).toHaveCount(3);
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Girl starter');
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Boy starter');
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Waving arm');
   await page.getByRole('button', { name: 'Skip to editor' }).click();
 
   await expect(page.getByTestId('character-screen')).toBeVisible();
@@ -551,7 +561,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   expect(svgText).toContain('<metadata>');
   expect(svgText).toContain('custom-parts');
   expect(svgText).toContain('fabricablePartOutlinePoints');
-  expect(svgText).toContain('Waving arm / 팔 흔들기');
+  expect(svgText).toContain('Waving arm');
   expect(svgText).toContain('data-part-id="right_arm_lower"');
 
   await page.getByTestId('workspace-steps').getByRole('button', { name: 'Options' }).click();
@@ -2109,10 +2119,7 @@ test('guided classroom lesson opens real baseline and can reset safely', async (
   });
 
   await page.goto('/');
-  await dismissWelcomeSplash(page);
-  await expect(page.getByTestId('getting-started-dialog')).toBeVisible();
-  await page.getByTestId('lesson-template-waving-arm').click();
-  await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
+  await importWavingArmLessonProject(page, 'character');
   await expectProjectCounts(page, 14, 1, 1);
   const checklist = page.getByTestId('classroom-checklist');
   await expect(checklist).toContainText('Character');

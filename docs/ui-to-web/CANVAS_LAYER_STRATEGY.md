@@ -1,28 +1,28 @@
 # Single Canvas + Layer Visibility Strategy for Web Rebuild
 
-## 결론
+## Conclusion
 
-웹 리빌드에서는 Qt처럼 탭마다 별도 scene/view를 새로 만들지 말고, **하나의 persistent scene graph + 하나의 캔버스 viewport**를 유지한다. 탭 전환은 canvas를 리셋하지 않고 다음 두 가지만 바꾼다.
+For the web rebuild, do not create a separate scene/view per tab like Qt. Keep **one persistent scene graph + one canvas viewport**. Tab changes must not reset the canvas; they only change:
 
-1. 왼쪽/오른쪽 tool panel 구성
-2. scene layer group의 visibility, editability, hit-test policy
+1. Left/right tool panel composition
+2. Scene layer visibility, editability, and hit-test policy
 
-이 방식이 현재 앱에서 반복적으로 문제를 만든 “탭 간 위치/스케일/캐릭터/스켈레톤/메커니즘 불일치”를 줄인다.
+This reduces repeated position, scale, character, skeleton, and mechanism mismatches across tabs.
 
-## 현재 Qt 구조에서 확인된 사실
+## Observed Qt structure
 
-| 영역 | 현재 구현 | 근거 파일 |
+| Area | Current implementation | Evidence file |
 | --- | --- | --- |
 | Main window | `QMainWindow` + `QTabWidget`; Character Selection, Path Editor, Mechanism Design, Mechanism Foundry | `src/automataii/presentation/qt/main_window.py` |
-| Character canvas | `ImageProcessingView(QGraphicsView)`; image/skeleton/debug/grid를 직접 그림 | `src/automataii/presentation/qt/image_view.py` |
+| Character canvas | `ImageProcessingView(QGraphicsView)`; directly draws image, skeleton, debug, and grid | `src/automataii/presentation/qt/image_view.py` |
 | Editor canvas | `EditorView(QGraphicsView)`; character parts, skeleton item, path drawing, vertex edit, grid | `src/automataii/presentation/qt/views/editor_view.py` |
-| Mechanism Design canvas | `EditorView` 계열 view를 사용해 parts/path/mechanism/handles 표시 | `src/automataii/presentation/qt/tabs/mechanism_design/tab.py`, `mechanism_design_ui.py` |
-| Foundry canvas | 별도 `QGraphicsScene/QGraphicsView` + grid/fabrication board render | `src/automataii/presentation/qt/tabs/mechanism_foundry/foundry_view.py` |
-| View/camera sharing | `TabOrchestrator`가 shared camera state를 저장/복원 | `src/automataii/presentation/qt/windows/components/tab_orchestrator.py` |
+| Mechanism Design canvas | Uses an `EditorView`-family view for parts, paths, mechanisms, and handles | `src/automataii/presentation/qt/tabs/mechanism_design/tab.py`, `mechanism_design_ui.py` |
+| Foundry canvas | Separate `QGraphicsScene/QGraphicsView` plus grid/fabrication board rendering | `src/automataii/presentation/qt/tabs/mechanism_foundry/foundry_view.py` |
+| View/camera sharing | `TabOrchestrator` stores and restores shared camera state | `src/automataii/presentation/qt/windows/components/tab_orchestrator.py` |
 | Grid settings | Options → physical context → image/editor/foundry grid propagation | `main_window.py`, `options_tab.py`, `physical_context_store.py` |
 | Z order | constants + direct `setZValue` calls | `src/automataii/config/z_indices.py`, visualizer files |
 
-## 권장 웹 scene model
+## Recommended web scene model
 
 ```ts
 type SceneState = {
@@ -48,7 +48,7 @@ type LayerState = {
 
 ## Layer groups
 
-| z band | Layer group | 포함 요소 | 기본 visible 탭 | hit-test/editing |
+| z band | Layer group | Included elements | Visible by default in tabs | hit-test/editing |
 | ---: | --- | --- | --- | --- |
 | -200 | `sheet.printBounds` | Letter/A4 sheet outline, fabrication board bounds | all canvas tabs | none |
 | -150 | `grid.minorMajor` | 2cm/physical pitch grid, major grid lines | all canvas tabs | none |
@@ -97,15 +97,15 @@ type LayerState = {
 
 ## Why this matters for current known bugs
 
-현재 대화에서 나온 버그들은 대부분 “같은 모델을 여러 view/scene이 각자 해석”할 때 생기는 유형이다.
+Most bugs seen in this project come from multiple views/scenes interpreting the same model differently.
 
-- 캐릭터 resize가 Character/Editor/Mechanism/Blueprint에서 다르게 보임
-- skeleton point와 body part가 tab마다 다른 transform으로 보임
-- mechanism 추가 후 상완/하완 분리처럼 보이는 animation mismatch
-- parametric editing에서 점/handle이 남거나 실제 드래그 좌표와 표시 좌표가 다름
-- blueprint/assembly guide에서 board 위치와 character 위치가 generic/default로 보임
+- Character resize appears differently in Character, Editor, Mechanism, and Blueprint.
+- Skeleton points and body parts use different transforms across tabs.
+- Adding a mechanism can make upper/lower limbs appear detached during animation.
+- Parametric editing can leave stale points/handles or mismatch drag coordinates and displayed coordinates.
+- Blueprint/assembly guide can show generic/default board and character placement.
 
-웹 리빌드에서는 scene item의 canonical 좌표계를 하나만 둔다.
+The web rebuild keeps one canonical coordinate system for scene items.
 
 ```ts
 // all stored in physical scene units, preferably millimeters
@@ -117,7 +117,7 @@ SceneItem.transform = {
 };
 ```
 
-Viewport transform은 렌더링 전용이며 저장 데이터에 섞지 않는다.
+Viewport transforms are rendering-only and must not be mixed into stored data.
 
 ## Coordinate contract
 

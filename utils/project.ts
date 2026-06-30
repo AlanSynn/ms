@@ -437,7 +437,7 @@ export const createSampleProject = (options: { includeMechanism?: boolean } = {}
 export const CLASSROOM_LESSONS = [
     {
         id: 'waving-arm',
-        label: 'Waving arm / 팔 흔들기',
+        label: 'Waving arm',
         shortLabel: 'Waving arm',
         description: 'Right hand path + fitted four-bar mechanism.',
         actionLabel: 'Open lesson',

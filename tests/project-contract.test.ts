@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { extname, join, relative } from 'node:path';
 import { boardGridLines, boardToScene, bodyPartPivotScene, physicalKitPreset, placeBodyPartPivotAt, SCENE_PX_PER_MM, sceneToBoard, sceneToBoardRaw, sceneToSheetMm, sceneToSvg, sheetMmToScene } from '../utils/coordinates';
 import { CLASSROOM_LESSONS, classroomLessonById, createDefaultMechanism, createEmptyProject, createLessonProject, createSampleProject, handoffGate, loadProjectSnapshot, serializeProject, applyProjectAction, projectSelfCheck, mechanismRequiredParts, mechanismWithGeneratedPath, replaceCharacterProject, resetProjectToLessonBaseline } from '../utils/project';
 import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, fabricationBoardCoordinateCallout, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, prefabAssemblySteps, sampleFeasibleRange, validateFabricationStack, validateForFabrication } from '../utils/fabrication';
@@ -27,6 +27,23 @@ import { isBoardFixedCoordRole, REFERENCE_DEFAULTS, REFERENCE_EXPORT_READY_TYPES
 import type { BodyPartLayer, MechanismType, ProjectState } from '../types';
 
 projectSelfCheck();
+
+const textExtensions = new Set(['.bat', '.css', '.html', '.js', '.json', '.md', '.mjs', '.py', '.rs', '.sh', '.toml', '.ts', '.tsx', '.txt', '.yaml', '.yml']);
+const ignoredEnglishScanDirs = new Set(['.git', '.omx', 'dist', 'exe build', 'node_modules', 'playwright-report', 'src-tauri/target', 'test-results']);
+const filesWithHangul: string[] = [];
+const scanEnglishOnlyText = (dir: string) => {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    const rel = relative(process.cwd(), path);
+    if (entry.isDirectory()) {
+      if (!ignoredEnglishScanDirs.has(rel) && !ignoredEnglishScanDirs.has(entry.name)) scanEnglishOnlyText(path);
+    } else if (textExtensions.has(extname(entry.name)) && /[\uac00-\ud7af]/.test(readFileSync(path, 'utf8'))) {
+      filesWithHangul.push(rel);
+    }
+  }
+};
+scanEnglishOnlyText(process.cwd());
+assert.deepEqual(filesWithHangul, [], 'repository text and UI copy stay English-only with no Hangul/Korean strings');
 
 const onnxPath = join(process.cwd(), 'public', 'onnx', 'pose_model.onnx');
 assert(existsSync(onnxPath), 'web ONNX asset is present');
@@ -311,15 +328,16 @@ assert(noviceUiPlan.includes('Forbidden:') && noviceUiPlan.includes('tutorial ta
 assert(noviceUiPlan.includes('No new tour dependency') && noviceUiPlan.includes('Plain React state and CSS are enough'), 'tutorial plan avoids extra tour dependencies');
 assert(classroomFieldPlan.includes('# Classroom Field Support Plan'), 'classroom field support PRD exists');
 assert(classroomFieldPlan.includes('Web is mandatory for classrooms') && classroomFieldPlan.includes('https://alansynn.com/ms/'), 'classroom plan locks the web-first classroom release target');
-assert(classroomFieldPlan.includes('Guided entry beats open exploration') && classroomFieldPlan.includes('Waving arm / 팔 흔들기'), 'classroom plan requires guided lesson templates before open exploration');
+assert(classroomFieldPlan.includes('Guided entry beats open exploration') && classroomFieldPlan.includes('Waving arm'), 'classroom plan requires guided lesson templates before open exploration');
+assert(classroomFieldPlan.includes('Vocabulary must be English-only'), 'classroom plan forbids mixed-language UI vocabulary');
 assert(classroomFieldPlan.includes('Sensemaking must be visible at the moment of action') && classroomFieldPlan.includes('Show Sensemaking'), 'classroom plan requires discoverable sensemaking without center-canvas teaching panels');
 assert(classroomFieldPlan.includes('Stable reset and recovery') && classroomFieldPlan.includes('No rotation possible'), 'classroom plan requires stable reset for mechanism failure recovery');
 assert(classroomFieldPlan.includes('Blueprint as build-file screen') && classroomFieldPlan.includes('Assembly as animated build screen'), 'classroom plan preserves Blueprint/Assembly ownership split');
 assert(classroomFieldPlan.includes('No backend, auth, roster, analytics, cloud DB, teacher dashboard') && classroomFieldPlan.includes('Teacher pack workflow'), 'classroom plan excludes server scope while defining local teacher pack workflow');
-assert(CLASSROOM_LESSONS.some(lesson => lesson.id === 'waving-arm' && lesson.label === 'Waving arm / 팔 흔들기' && lesson.actionLabel === 'Open lesson'), 'guided classroom lesson catalog exposes the waving-arm lesson as a real entry point');
+assert(CLASSROOM_LESSONS.some(lesson => lesson.id === 'waving-arm' && lesson.label === 'Waving arm' && lesson.actionLabel === 'Open lesson'), 'guided classroom lesson catalog exposes the waving-arm lesson as an English-only entry point');
 assert.equal(classroomLessonById('waving-arm')?.startStage, 'character', 'classroom lesson opens in Character so students inspect/edit the rig before drawing');
 assert.equal(classroomLesson.metadata.classroomLessonId, 'waving-arm', 'lesson ProjectState carries resettable classroom lesson metadata');
-assert.equal(classroomLesson.metadata.classroomLessonLabel, 'Waving arm / 팔 흔들기', 'lesson ProjectState keeps the bilingual classroom label');
+assert.equal(classroomLesson.metadata.classroomLessonLabel, 'Waving arm', 'lesson ProjectState keeps the English-only classroom label');
 assert.equal(classroomLesson.mechanisms.length, 1, 'waving-arm lesson includes one real fitted mechanism instead of a mock recommendation card');
 assert.equal(classroomLesson.selectedPathId, 'path-right-arm', 'waving-arm lesson selects the editable hand path');
 assert.equal(classroomLesson.selectedMechanismId, 'mech-1', 'waving-arm lesson selects the fitted four-bar mechanism');
@@ -786,7 +804,9 @@ assert(!appText.includes('flex flex-col items-end gap-2'), 'top app bar does not
 assert(appText.includes('readStorageWithLegacy') && appText.includes('migrateStorageValue'), 'MotionSmith storage rename keeps legacy autosave/workspace migration hooks');
 assert(!appUiText.includes('MOTIONSMITH_VIDEO_URL'), 'welcome splash does not embed the old preview video');
 assert(appUiText.includes('getting-started-dialog') && appUiText.includes('getting-started-gallery'), 'Getting Started is an explicit compact starter dialog');
-assert(appUiText.includes('Pick a starter, then tune it in Character.'), 'Getting Started copy routes users into the Character tab');
+assert(appUiText.includes('Choose how to begin.'), 'Getting Started uses a short action-oriented heading');
+assert(appUiText.includes('getting-started-card-humanoid') && appUiText.includes('getting-started-card-image') && appUiText.includes('getting-started-card-package'), 'Getting Started exposes only the three primary first-run choices');
+assert(!appUiText.includes('Girl starter') && !appUiText.includes('Boy starter') && !appUiText.includes('lesson-template-'), 'Getting Started does not show sample galleries or lesson cards in the first screen');
 assert(appText.includes('return { present: createEmptyProject(), past: [], future: [] }'), 'App initializes an empty project instead of preloading a character');
 assert(appText.includes('setProject(createEmptyProject(), { resetHistory: true })'), 'New Project resets to an empty project instead of a starter character');
 assert(appText.includes("returnStage: 'character'"), 'Accepted character loads stay in the Character tab instead of jumping to Path');

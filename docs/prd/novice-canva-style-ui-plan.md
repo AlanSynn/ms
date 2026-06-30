@@ -266,11 +266,12 @@ Use the existing compact modal. Do not make it full-screen.
 Primary tiles:
 
 1. `Humanoid starter` — creates editable humanoid `ProjectState`.
-2. `Girl starter` — runs the same local package/ONNX path as production.
-3. `Boy starter` — runs the same local package/ONNX path as production.
-4. `Load character` — package or project import.
-5. `Create from image` — browser-local ONNX only.
-6. `Import project` — portable project copy.
+2. `Create from image` — browser-local ONNX only.
+3. `Load character` — package import.
+
+Secondary action:
+
+- `Import project` — portable project copy.
 
 Rules:
 
@@ -279,7 +280,8 @@ Rules:
 - Starter tiles create real parts, joints, anchors, and editable contours.
 - Starter tiles do not preload fake mechanisms. Mechanisms enter through
   Foundry or an explicit demo template.
-- `Preserve compatible mechanisms` remains secondary.
+- Lesson galleries, sample image galleries, and preserve-compatible-mechanism
+  toggles stay out of this first-run modal.
 
 ### 3. First-run checklist
 
