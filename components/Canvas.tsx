@@ -949,7 +949,7 @@ const SceneUnderlay = ({ project, animatedParts = {}, previewSkeleton }: { proje
         </g>
         {project?.settings.debugVisuals && <g data-testid="canvas-debug-visuals" pointerEvents="none" transform="scale(1,-1)">
             <rect x={sheet.x + sheet.width - 182} y={-(sheet.y + sheet.height - 94)} width="166" height="76" rx="12" fill="#0f172a" opacity="0.78"/>
-            <text x={sheet.x + sheet.width - 166} y={-(sheet.y + sheet.height - 68)} fill="white" fontSize="12" fontWeight="800">Debug visuals</text>
+            <text x={sheet.x + sheet.width - 166} y={-(sheet.y + sheet.height - 68)} fill="white" fontSize="12" fontWeight="800">Dev layer</text>
             <text x={sheet.x + sheet.width - 166} y={-(sheet.y + sheet.height - 48)} fill="#cbd5e1" fontSize="11">{project.partOrder.length} parts · {Object.keys(skeleton?.joints ?? {}).length} joints</text>
             <text x={sheet.x + sheet.width - 166} y={-(sheet.y + sheet.height - 30)} fill="#cbd5e1" fontSize="11">snap {project.settings.physicsSnapMode} · fab {project.settings.fabricationReadyMode ? 'on' : 'off'}</text>
         </g>}

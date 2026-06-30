@@ -717,14 +717,15 @@ test('Create from image upload creates a reviewed character package in browser',
   ]);
   await onnxChooser.setFiles('tests/fixtures/stick-character.png');
 
-  await expect(page.getByTestId('character-status-dock')).toBeVisible({ timeout: 180_000 });
-  await expect(page.getByTestId('character-status-dock').getByText('Ready', { exact: true })).toBeVisible({ timeout: 180_000 });
-  const dockBox = await page.getByTestId('character-status-dock').boundingBox();
-  const canvasBox = await page.getByTestId('stage-canvas-pane').boundingBox();
-  const statusStripBox = await page.getByTestId('workflow-status-strip').boundingBox();
-  expect(dockBox?.x ?? 0, 'character import status floats outside the center canvas').toBeGreaterThanOrEqual((canvasBox?.x ?? 0) + (canvasBox?.width ?? 0) - 8);
-  expect(Math.abs(((statusStripBox?.y ?? 0) - ((dockBox?.y ?? 0) + (dockBox?.height ?? 0))) - 10), 'character import status floats 10px above the bottom status area').toBeLessThanOrEqual(2);
-  await expect(page.getByTestId('character-status-dock').getByText(/parts · .*joints/i)).toBeVisible();
+  const review = page.getByTestId('character-import-review');
+  await expect(review).toBeVisible({ timeout: 180_000 });
+  await expect(review.getByText('Ready', { exact: true })).toBeVisible({ timeout: 180_000 });
+  await expect(review.getByText(/parts · .*joints/i)).toBeVisible();
+  const reviewBox = await review.boundingBox();
+  const viewport = page.viewportSize();
+  const reviewCenterX = (reviewBox?.x ?? 0) + (reviewBox?.width ?? 0) / 2;
+  expect(Math.abs(reviewCenterX - (viewport?.width ?? 0) / 2), 'character import approval is centered on screen').toBeLessThan(8);
+  await expect(page.getByTestId('character-three-puppet-state')).toHaveAttribute('data-part-count', /[1-9]\d*/);
   await expect(page.getByRole('button', { name: 'Use it' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Use it' }).click();
@@ -768,12 +769,13 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
     page.keyboard.press('Enter')
   ]);
   await packageChooser.setFiles(packageFiles);
-  await expect(page.getByTestId('character-status-dock')).toBeVisible();
-  await expect(page.getByTestId('character-status-dock').getByText('Ready', { exact: true })).toBeVisible();
-  await expect(page.getByTestId('character-status-dock')).toContainText('Use?');
-  await expect(page.getByTestId('character-status-dock')).toContainText('1 parts · 2 joints');
+  const review = page.getByTestId('character-import-review');
+  await expect(review).toBeVisible();
+  await expect(review.getByText('Ready', { exact: true })).toBeVisible();
+  await expect(review).toContainText('1 parts · 2 joints');
+  await expect(page.getByTestId('character-three-puppet-state')).toHaveAttribute('data-part-count', '1');
   await expect(page.getByText('outlines')).toBeHidden();
-  await expect(page.getByText('Checks')).toBeVisible();
+  await expect(page.getByText('Checks')).toHaveCount(0);
   await expect(page.getByTestId('character-setup-panel').getByText('Choose new character.')).toBeVisible();
   await page.getByTestId('character-processing-panel').locator('summary').click();
   await expect(page.getByTestId('character-processing-panel').getByText('Choose new character.')).toBeVisible();
@@ -781,11 +783,8 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
   await expect(page.getByRole('button', { name: 'Edit rig' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Save Skeleton' })).toBeDisabled();
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toHaveCount(0);
-  await page.getByText('Checks').click();
-  await expect(page.getByText('outlines')).toBeVisible();
-  await expect(page.getByText('clean load')).toBeVisible();
   await page.getByRole('button', { name: 'Skip' }).click();
-  await expect(page.getByTestId('character-status-dock').getByText('Ready', { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId('character-import-review')).toHaveCount(0);
   await page.getByRole('button', { name: 'Edit rig', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
   await expect(page.getByTestId('stage-right-inspector').getByText('Anchors')).toBeVisible();
@@ -793,7 +792,7 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
   await page.getByRole('button', { name: /^Character$/i }).click();
 
   await page.getByTestId('blank-package-input').setInputFiles(packageFiles);
-  await expect(page.getByTestId('character-status-dock').getByText('Ready', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('character-import-review').getByText('Ready', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Use it' }).click();
   await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toHaveCount(0);
@@ -828,11 +827,9 @@ test('Replacement package preserves compatible mechanisms and rebound paths', as
     'tests/fixtures/package-compatible/char_cfg.yaml',
     'tests/fixtures/package-compatible/body.png'
   ]);
-  await expect(page.getByTestId('character-status-dock').getByText('Ready', { exact: true })).toBeVisible();
-  await expect(page.getByText('Preserve matches.')).toBeVisible();
-  await expect(page.getByText('kept mechanisms')).toBeHidden();
-  await page.getByText('Checks').click();
-  await expect(page.getByText('kept mechanisms')).toBeVisible();
+  await expect(page.getByTestId('character-import-review').getByText('Ready', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('character-import-review')).toContainText(/parts · .*joints/i);
+  await expect(page.getByText('kept mechanisms')).toHaveCount(0);
   await page.getByRole('button', { name: 'Use it' }).click();
 
   await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
@@ -940,7 +937,7 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await expect(page.getByTestId('rig-structure-drawer')).toBeVisible();
   await page.getByRole('button', { name: /Options/i }).click();
 
-  await page.getByLabel('Debug visuals').check();
+  await page.getByLabel('Dev mode').check();
   await page.getByRole('button', { name: /Path Editor/i }).click();
   await expect(page.getByTestId('canvas-debug-visuals')).toBeVisible();
   await page.getByRole('button', { name: /Options/i }).click();

@@ -214,6 +214,13 @@
       .character-status-dock .progress-track { margin-top: .55rem; }
       .character-status-dock .import-status > .mt-5 { margin-top: .55rem; padding: .65rem; border-radius: 1rem; }
       .character-status-dock .import-status .mt-4.flex { margin-top: .65rem; }
+      .character-import-review { position: fixed; inset: 0; z-index: 75; display: grid; place-items: center; padding: 1rem; pointer-events: none; background: rgba(248,250,252,.18); backdrop-filter: blur(2px); }
+      .character-import-review-card { pointer-events: auto; width: min(28rem, calc(100vw - 2rem)); border: 1px solid var(--ms-line); border-radius: 1.65rem; background: rgba(255,255,255,.96); box-shadow: 0 32px 100px rgba(8,10,18,.20); padding: 1rem; color: var(--ms-text); }
+      .character-import-review-status { display: inline-flex; align-items: center; gap: .45rem; color: #10b981; font-size: .85rem; font-weight: 800; }
+      .character-import-review-title { margin-top: .45rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: clamp(1.45rem, 4vw, 2.25rem); line-height: 1; letter-spacing: -.045em; font-weight: 800; }
+      .character-import-review-meta { margin-top: .45rem; color: var(--ms-muted); font-size: .92rem; font-weight: 650; }
+      .character-import-review-actions { display: flex; gap: .65rem; margin-top: 1rem; }
+      .character-import-review-actions .btn-primary { min-width: 9rem; justify-content: center; font-size: 1rem; }
       .camera-placeholder { color: #e2e8f0; font-weight: 650; }
       .recommendation-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1rem; }
       .recommendation-option { display: flex; flex-direction: column; }

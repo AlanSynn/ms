@@ -961,7 +961,8 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
     const artifact = reviewedProject.characterPackage;
     const isPlainReview = artifact?.replacementContext?.mode !== 'replace-character';
     const isReplacementReview = artifact?.replacementContext?.mode === 'replace-character';
-    const statusOpen = Boolean(pendingCharacter || project.settings.detailedProcessingSteps || ['downloading-model', 'loading-model', 'running-onnx', 'extracting-parts', 'normalizing', 'error'].includes(project.processing.stage));
+    const showImportProgress = Boolean(project.settings.detailedProcessingSteps || ['downloading-model', 'loading-model', 'running-onnx', 'extracting-parts', 'normalizing', 'error'].includes(project.processing.stage));
+    const showImportChecks = project.settings.debugVisuals;
     const checks = [
         { label: 'parts', ok: Boolean(artifact?.partsInfo) },
         { label: 'skeleton', ok: Boolean(artifact?.charCfg && reviewedProject.skeleton) },
@@ -982,17 +983,10 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
         ? `${pendingCharacter.project.partOrder.length} parts · ${Object.keys(pendingCharacter.project.skeleton?.joints ?? {}).length} joints`
         : '';
     const importStatusPanel = (
-        <details className="advanced-panel import-status" open={statusOpen}>
+        <details className="advanced-panel import-status" open>
             <summary>Import</summary>
             <div className="mt-3"><ProgressBlock project={project} /></div>
-            {pendingCharacter && <div className="mt-5 rounded-3xl border border-amber-200 bg-amber-50 p-4">
-                <div className="text-xs font-black uppercase tracking-[0.2em] text-amber-700">Use?</div>
-                <div className="mt-1 font-bold">{pendingCharacter.project.metadata.name}</div>
-                <div className="text-sm text-slate-600">{pendingStats || compactPackageSummary(pendingCharacter.summary)}</div>
-                <div className="mt-2 text-xs text-slate-500" title={pendingCharacter.project.characterPackage?.replacementContext?.rebindingSummary}>{pendingCharacter.project.characterPackage?.replacementContext?.mode === 'replace-character' ? 'Preserve matches.' : 'Clean start.'}</div>
-                <div className="mt-4 flex gap-2"><button className="btn-primary" onClick={onAccept}>Use it</button><button className="btn-secondary" onClick={onDiscard}>Skip</button></div>
-            </div>}
-            <details className="advanced-panel mt-6">
+            {showImportChecks && <details className="advanced-panel mt-6">
                 <summary>Checks</summary>
                 <div className="mt-3 grid gap-3 text-sm text-slate-600">
                     {checks.map(item => <div key={item.label} className="flex items-center gap-2">
@@ -1000,7 +994,7 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
                         <span className={item.ok ? '' : 'font-bold text-amber-700'}>{item.label}</span>
                     </div>)}
                 </div>
-            </details>
+            </details>}
         </details>
     );
 
@@ -1072,7 +1066,7 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
             </StageLeftSummary>),
             canvas: canvasPane(<div className="character-preview-pane canvas-workspace" data-testid="character-preview-pane">
                 <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
-                <ThreePuppetPreview project={project} skeleton={project.skeleton} angle={0} viewport={viewport} setViewport={setViewport} inputMode="always" testId="character-three-puppet" />
+                <ThreePuppetPreview project={reviewedProject} skeleton={reviewedProject.skeleton} angle={0} viewport={viewport} setViewport={setViewport} inputMode="always" testId="character-three-puppet" />
             </div>),
             inspector: inspectorPane(<div className="stage-pane-stack character-inspector">
                 <section className="character-setup-panel" data-testid="character-setup-panel" aria-label="Character part settings">
@@ -1089,9 +1083,20 @@ const CharacterSelection = ({ project, dispatch, pendingCharacter, replaceCharac
             </div>)
         }}/>
         </section>
-        {statusOpen && <aside className="character-status-dock" data-testid="character-status-dock" role="dialog" aria-label="Import" aria-live="polite">
+        {showImportProgress && <aside className="character-status-dock" data-testid="character-status-dock" role="dialog" aria-label="Import" aria-live="polite">
             {importStatusPanel}
         </aside>}
+        {pendingCharacter && <section className="character-import-review" data-testid="character-import-review" role="dialog" aria-modal="true" aria-label="Use imported character">
+            <div className="character-import-review-card">
+                <div className="character-import-review-status"><CheckCircle2 size={24}/><span>Ready</span></div>
+                <div className="character-import-review-title">{pendingCharacter.project.metadata.name}</div>
+                <div className="character-import-review-meta">{pendingStats || compactPackageSummary(pendingCharacter.summary)}</div>
+                <div className="character-import-review-actions">
+                    <button className="btn-primary" onClick={onAccept}>Use it</button>
+                    <button className="btn-secondary" onClick={onDiscard}>Skip</button>
+                </div>
+            </div>
+        </section>}
     </>;
 };
 
@@ -1449,7 +1454,7 @@ const SceneSketch = ({ project, svgRef, selectedPath, dragPoint, selectedPoint, 
         <text x={sheetSvg.x + 16} y={sheetSvg.y + 28} className="fill-slate-400 text-[12px] font-bold" data-testid="scene-grid-label">{formatGridLabel(kit, project.settings.gridUnit)}</text>
         {project.settings.debugVisuals && <g data-testid="canvas-debug-visuals" pointerEvents="none">
             <rect x={sheetSvg.x + sheetSvg.width - 178} y={sheetSvg.y + 14} width="160" height="72" rx="12" fill="#0f172a" opacity="0.78"/>
-            <text x={sheetSvg.x + sheetSvg.width - 164} y={sheetSvg.y + 38} fill="white" fontSize="12" fontWeight="800">Debug visuals</text>
+            <text x={sheetSvg.x + sheetSvg.width - 164} y={sheetSvg.y + 38} fill="white" fontSize="12" fontWeight="800">Dev layer</text>
             <text x={sheetSvg.x + sheetSvg.width - 164} y={sheetSvg.y + 57} fill="#cbd5e1" fontSize="11">{project.partOrder.length} parts · {Object.keys(project.skeleton?.joints ?? {}).length} joints</text>
             <text x={sheetSvg.x + sheetSvg.width - 164} y={sheetSvg.y + 75} fill="#cbd5e1" fontSize="11">snap {project.settings.physicsSnapMode} · fab {project.settings.fabricationReadyMode ? 'on' : 'off'}</text>
         </g>}
@@ -2875,7 +2880,7 @@ const Options = ({ project, dispatch, goStage }: { project: ProjectState; dispat
                 </SelectField>
             </SettingsSection>
             <SettingsSection section={optionSection('debugging')}>
-                <Toggle label="Debug visuals" checked={project.settings.debugVisuals} onChange={debugVisuals => updateSettings({ debugVisuals })}/>
+                <Toggle label="Dev mode" checked={project.settings.debugVisuals} onChange={debugVisuals => updateSettings({ debugVisuals })}/>
                 <Toggle label="Import details" checked={project.settings.detailedProcessingSteps} onChange={detailedProcessingSteps => updateSettings({ detailedProcessingSteps })}/>
             </SettingsSection>
             <SettingsSection section={optionSection('workflow')}>

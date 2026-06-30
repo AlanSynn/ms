@@ -881,6 +881,8 @@ assert(indexText.includes('.starter-thumb { width: 2.25rem; height: 2.25rem;'), 
 assert(appText.includes('return { present: createEmptyProject(), past: [], future: [] }'), 'App initializes an empty project instead of preloading a character');
 assert(appText.includes('setProject(createEmptyProject(), { resetHistory: true })'), 'New Project resets to an empty project instead of a starter character');
 assert(appText.includes("returnStage: 'character'"), 'Accepted character loads stay in the Character tab instead of jumping to Path');
+assert(appText.includes('character-import-review') && appText.includes('project={reviewedProject}') && appText.includes('showImportChecks = project.settings.debugVisuals'), 'Character imports preview the pending character and put approval in a centered overlay while checks stay dev-only');
+assert(appUiText.includes('Dev mode') && !appUiText.includes('Debug visuals'), 'Options expose debug overlays as Dev mode instead of novice-facing debug copy');
 assert(appText.includes('setShowGettingStarted(!hideNextTime)'), 'Splash close opens Getting Started unless a legacy hide flag is present');
 assert(appText.includes('onOpenGettingStarted'), 'Character tab can reopen Getting Started without owning its starter gallery');
 assert(!appText.includes('Start with character art'), 'Character tab no longer carries the old hero/onboarding copy');
