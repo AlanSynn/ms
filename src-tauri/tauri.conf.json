@@ -1,6 +1,6 @@
 {
     "productName": "MotionSmith",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "identifier": "com.motionsmith.app",
     "build": {
         "beforeDevCommand": "bun run dev",

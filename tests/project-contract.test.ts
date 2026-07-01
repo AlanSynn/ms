@@ -326,7 +326,7 @@ assert(playwrightConfigText.includes('PLAYWRIGHT_WORKERS'), 'browser worker coun
 assert(playwrightConfigText.includes('MAX_BROWSER_WORKERS'), 'browser worker defaults are bounded to avoid local over-parallelization');
 assert(playwrightConfigText.includes('Number.isInteger'), 'browser worker override validates positive integer input');
 assert(playwrightConfigText.includes('PLAYWRIGHT_SERVER') && playwrightConfigText.includes('preview'), 'browser tests can run against production preview without Vite HMR noise');
-assert.equal(packageJson.version, '0.0.2', 'release version is bumped for the LFS-backed GitHub Pages redeploy');
+assert.equal(packageJson.version, '0.0.3', 'release version is bumped for the LFS-backed GitHub Pages redeploy');
 assert.equal(tauriConfig.version, packageJson.version, 'Tauri config version stays aligned with package.json');
 assert.deepEqual(tauriConfig.bundle.icon, ['icons/icon.png', 'icons/icon.ico', 'icons/icon.icns'], 'Tauri bundle references the tracked MotionSmith png, ico, and icns icons');
 assert(cargoTomlText.includes(`version = "${packageJson.version}"`), 'Cargo.toml version stays aligned with package.json');
