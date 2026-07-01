@@ -3287,6 +3287,9 @@ const foundryPinStackPoints = (
     const ids = ['A', 'B', 'C', 'D', 'E', 'F'];
     const cleanIndexes = movingLayerIndexes.filter(index => Number.isFinite(index));
     const cleanSpacerIndexes = spacerLayerIndexes.filter(index => Number.isFinite(index));
+    const spacerIndexesFrom = (start: number, count = 1) => Array.from({ length: count }, (_, offset) =>
+        cleanSpacerIndexes[Math.max(0, Math.min(cleanSpacerIndexes.length - 1, start + offset))]
+    ).filter((item): item is number => typeof item === 'number');
     const spacerIndexesForPin = (pinMovingLayerIndexes: number[]) => {
         const between = cleanSpacerIndexes.filter(spacerIndex =>
             pinMovingLayerIndexes.some(index => index < spacerIndex) && pinMovingLayerIndexes.some(index => index > spacerIndex)
@@ -3301,24 +3304,63 @@ const foundryPinStackPoints = (
     };
     if (!points.length || !cleanIndexes.length) return points.map((point, index) => ({ id: ids[index] ?? `P${index + 1}`, point, movingLayerIndexes: [], spacerLayerIndexes: [] }));
 
-    if (type === 'gear' || type === 'gear_linkage') {
-        const fixedGearPinCount = type === 'gear' ? points.length : Math.min(2, points.length);
+    if (type === 'gear') {
         return points.map((point, index) => {
             const pinMovingLayerIndexes = [cleanIndexes[Math.min(index, cleanIndexes.length - 1)]].filter((item): item is number => typeof item === 'number');
-            if (index < fixedGearPinCount) {
-                const spacerIndex = cleanSpacerIndexes[Math.min(index, Math.max(0, cleanSpacerIndexes.length - 1))] ?? cleanSpacerIndexes[0];
-                return {
-                    id: ids[index] ?? `P${index + 1}`,
-                    point,
-                    movingLayerIndexes: pinMovingLayerIndexes,
-                    spacerLayerIndexes: typeof spacerIndex === 'number' ? [spacerIndex] : []
-                };
-            }
             return {
                 id: ids[index] ?? `P${index + 1}`,
                 point,
                 movingLayerIndexes: pinMovingLayerIndexes,
-                spacerLayerIndexes: spacerIndexesForPin(pinMovingLayerIndexes)
+                spacerLayerIndexes: spacerIndexesFrom(index)
+            };
+        });
+    }
+
+    if (type === 'gear_linkage') {
+        const gearCount = Math.max(2, Math.min(points.length, cleanIndexes.length - 3));
+        const gearIndexes = cleanIndexes.slice(0, gearCount);
+        const linkageIndexes = cleanIndexes.slice(gearCount);
+        const pinId = (index: number) => {
+            if (index < gearCount) {
+                if (index === 0) return 'A';
+                if (index === gearCount - 1) return 'D';
+                return `I${index}`;
+            }
+            if (index === gearCount) return 'B';
+            if (index === gearCount + 1) return 'C';
+            return 'R';
+        };
+        return points.map((point, index) => {
+            if (index < gearCount) {
+                return {
+                    id: pinId(index),
+                    point,
+                    movingLayerIndexes: [gearIndexes[index]].filter((item): item is number => typeof item === 'number'),
+                    spacerLayerIndexes: spacerIndexesFrom(index)
+                };
+            }
+            if (index === gearCount) {
+                return {
+                    id: pinId(index),
+                    point,
+                    movingLayerIndexes: [gearIndexes[0], linkageIndexes[0]].filter((item): item is number => typeof item === 'number'),
+                    spacerLayerIndexes: spacerIndexesFrom(Math.max(0, gearCount - 1))
+                };
+            }
+            if (index === gearCount + 1) {
+                return {
+                    id: pinId(index),
+                    point,
+                    movingLayerIndexes: [gearIndexes.at(-1), linkageIndexes[1] ?? linkageIndexes[0]].filter((item): item is number => typeof item === 'number'),
+                    spacerLayerIndexes: spacerIndexesFrom(Math.max(0, gearCount - 1), 2)
+                };
+            }
+            const moving = [linkageIndexes[0], linkageIndexes[1], linkageIndexes[2]].filter((item): item is number => typeof item === 'number');
+            return {
+                id: pinId(index),
+                point,
+                movingLayerIndexes: moving,
+                spacerLayerIndexes: spacerIndexesFrom(gearCount, Math.max(1, moving.length - 1))
             };
         });
     }
@@ -3376,29 +3418,55 @@ const foundryPinStacks = (
     };
 });
 
-const foundryLocalSpacerZForPin = (
+const foundryLocalSpacerZsForPin = (
     type: MechanismType,
     pin: FoundryPinStackPoint,
     renderedLayerZ: number[],
     layers: FoundryRenderLayerLike[]
 ) => {
-    const movingZ = pin.movingLayerIndexes.map(index => renderedLayerZ[index]).filter((z): z is number => typeof z === 'number');
+    const movingZ = pin.movingLayerIndexes
+        .map(index => renderedLayerZ[index])
+        .filter((z): z is number => typeof z === 'number')
+        .sort((a, b) => a - b);
+    const uniqueMovingZ = movingZ.filter((z, index) => index === 0 || Math.abs(z - movingZ[index - 1]) > 0.001);
+    const betweenMovingLayers = () => uniqueMovingZ.slice(1).map((z, index) =>
+        Number(((uniqueMovingZ[index] + z) / 2).toFixed(3))
+    );
     if (type === '4bar') {
-        if ((pin.id === 'A' || pin.id === 'D') && movingZ.length === 1) {
-            return Number((movingZ[0] - FABRICATION_RENDER_PART_DEPTH).toFixed(3));
+        if ((pin.id === 'A' || pin.id === 'D') && uniqueMovingZ.length === 1) {
+            return [Number((uniqueMovingZ[0] - FABRICATION_RENDER_PART_DEPTH).toFixed(3))];
         }
-        if ((pin.id === 'B' || pin.id === 'C') && movingZ.length >= 2) {
-            const minZ = Math.min(...movingZ);
-            const maxZ = Math.max(...movingZ);
-            return Number(((minZ + maxZ) / 2).toFixed(3));
-        }
+        if ((pin.id === 'B' || pin.id === 'C') && uniqueMovingZ.length >= 2) return betweenMovingLayers().slice(0, 1);
+    }
+    if (type === 'gear_linkage' && uniqueMovingZ.length >= 2) {
+        const minZ = uniqueMovingZ[0];
+        const maxZ = uniqueMovingZ.at(-1) ?? minZ;
+        const spacerCount = Math.max(pin.spacerLayerIndexes.length, uniqueMovingZ.length - 1);
+        return Array.from({ length: spacerCount }, (_, index) =>
+            Number((minZ + ((maxZ - minZ) * (index + 1)) / (spacerCount + 1)).toFixed(3))
+        );
     }
     if ((type === 'gear' || type === 'gear_linkage') && pin.movingLayerIndexes.some(index => layers[index]?.renderKind === 'gear')) {
         const gearLayerIndex = pin.movingLayerIndexes.find(index => layers[index]?.renderKind === 'gear');
         const gearZ = typeof gearLayerIndex === 'number' ? renderedLayerZ[gearLayerIndex] : undefined;
-        return typeof gearZ === 'number' ? Number((gearZ - FABRICATION_RENDER_PART_DEPTH).toFixed(3)) : undefined;
+        return typeof gearZ === 'number' ? [Number((gearZ - FABRICATION_RENDER_PART_DEPTH).toFixed(3))] : [];
     }
-    return undefined;
+    return [];
+};
+
+const foundryLocalSpacerZForPin = (
+    type: MechanismType,
+    pin: FoundryPinStackPoint,
+    renderedLayerZ: number[],
+    layers: FoundryRenderLayerLike[],
+    spacerLayerIndex?: number
+) => {
+    const spacerZs = foundryLocalSpacerZsForPin(type, pin, renderedLayerZ, layers);
+    if (typeof spacerLayerIndex === 'number') {
+        const spacerOrdinal = pin.spacerLayerIndexes.indexOf(spacerLayerIndex);
+        return spacerZs[Math.max(0, spacerOrdinal)] ?? spacerZs[0];
+    }
+    return spacerZs[0];
 };
 
 const disposeThreeObject = (object: THREE.Object3D) => object.traverse(child => {
@@ -3465,17 +3533,18 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
     const movingLayerIndexes = useMemo(() => renderPlan.layers.flatMap((item, index) => isMovingRenderKind(item.renderKind) ? [index] : []), [renderPlan.layers]);
     const spacerLayerIndexes = useMemo(() => renderPlan.layers.flatMap((item, index) => item.role === 'spacer' ? [index] : []), [renderPlan.layers]);
     const pinStackPoints = useMemo(() => foundryPinStackPoints(mechanism.type, assemblyPinPoints, movingLayerIndexes, spacerLayerIndexes), [assemblyPinPoints, mechanism.type, movingLayerIndexes, spacerLayerIndexes]);
-    const localSpacerZForPin = useMemo(() => (pin: FoundryPinStackPoint) =>
-        foundryLocalSpacerZForPin(mechanism.type, pin, renderedLayerZ, renderPlan.layers),
+    const localSpacerZsForPin = useMemo(() => (pin: FoundryPinStackPoint) =>
+        foundryLocalSpacerZsForPin(mechanism.type, pin, renderedLayerZ, renderPlan.layers),
+        [mechanism.type, renderPlan.layers, renderedLayerZ]
+    );
+    const localSpacerZForPin = useMemo(() => (pin: FoundryPinStackPoint, spacerLayerIndex?: number) =>
+        foundryLocalSpacerZForPin(mechanism.type, pin, renderedLayerZ, renderPlan.layers, spacerLayerIndex),
         [mechanism.type, renderPlan.layers, renderedLayerZ]
     );
     const pinStacks = useMemo(() => foundryPinStacks(pinStackPoints, renderedLayerZ, {
         includeSpacerZ: isGearTrain,
-        spacerZForPin: pin => {
-            const z = localSpacerZForPin(pin);
-            return typeof z === 'number' ? [z] : undefined;
-        }
-    }), [isGearTrain, localSpacerZForPin, pinStackPoints, renderedLayerZ]);
+        spacerZForPin: localSpacerZsForPin
+    }), [isGearTrain, localSpacerZsForPin, pinStackPoints, renderedLayerZ]);
     const spacerRenderCount = spacerLayerIndexes.reduce((count, spacerIndex) => (
         count + pinStackPoints.filter(pin => foundrySpacerTouchesPin(pin, spacerIndex)).length
     ), 0);
@@ -3495,6 +3564,28 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             const fastenerZ = pinStacks.find(stack => stack.id === pin.id)?.topZ;
             const ordered = typeof spacerZ === 'number' && typeof gearZ === 'number' && typeof fastenerZ === 'number' && spacerZ < gearZ && gearZ < fastenerZ;
             return `${pin.id}:${ordered ? 'S10<gear<fastener' : 'invalid'}`;
+        }).join(',')
+        : '';
+    const gearLinkagePinZOrderSummary = mechanism.type === 'gear_linkage'
+        ? pinStackPoints.slice(gearCenters.length).map(pin => {
+            const movingEntries = pin.movingLayerIndexes.map(index => ({
+                z: renderedLayerZ[index],
+                label: renderPlan.layers[index]?.renderKind === 'gear'
+                    ? 'gear'
+                    : renderPlan.layers[index]?.renderKind === 'guide'
+                        ? 'bracket'
+                        : renderPlan.layers[index]?.renderKind ?? 'part'
+            })).filter((entry): entry is { z: number; label: string } => typeof entry.z === 'number');
+            const spacerEntries = localSpacerZsForPin(pin).map(z => ({ z, label: 'S10' }));
+            const ordered = [...movingEntries, ...spacerEntries].sort((a, b) => a.z - b.z).map(entry => entry.label).join('<');
+            const validCrank = pin.id === 'B'
+                ? /gear<.*S10<.*linkage/.test(ordered)
+                : pin.id === 'C'
+                    ? /gear<.*S10<.*S10<.*linkage/.test(ordered)
+                : pin.id === 'R'
+                    ? /linkage<.*S10<.*linkage/.test(ordered) && /bracket/.test(ordered)
+                    : true;
+            return `${pin.id}:${validCrank ? ordered : 'invalid'}`;
         }).join(',')
         : '';
     const stackZGap = renderPlan.layers.length > 1 ? renderPlan.layers[1].z - renderPlan.layers[0].z : 0;
@@ -3969,7 +4060,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             if (layerItem.renderKind === 'clip') return;
             else if (layerItem.renderKind === 'spacer') pinStacks
                 .filter(pin => foundrySpacerTouchesPin(pin, index))
-                .forEach(pin => addSpacerWasher(pin.point, localSpacerZForPin(pin) ?? z, mat));
+                .forEach(pin => addSpacerWasher(pin.point, localSpacerZForPin(pin, index) ?? z, mat));
             else if (layerItem.renderKind === 'linkage') renderLinkageLayer(layerItem.label, z, mat);
             else if (layerItem.renderKind === 'gear') {
                 renderGearLayer(layerItem.label, z, mat, gearTrainLayerIndex);
@@ -3977,9 +4068,13 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             }
             else if (layerItem.renderKind === 'cam') addCam(s.p1, z, degToRad(angle), mat);
             else if (layerItem.renderKind === 'guide') {
-                const slotRotation = mechanism.type === 'cam' ? camGuideRotation : /follower|slider|rack/i.test(layerItem.label) ? Math.PI / 2 : Math.atan2(s.j2.y - s.p2.y, s.j2.x - s.p2.x);
-                const slotCenter = mechanism.type === 'cam' ? camGuideCenter : /quick/i.test(layerItem.label) ? { x: (s.p2.x + s.j2.x) / 2, y: (s.p2.y + s.j2.y) / 2 } : s.j2;
-                addSlotPlate(slotCenter, /rack/i.test(layerItem.label) ? 4.8 : 3.2, slotRotation, z, mat);
+                if (mechanism.type === 'gear_linkage' && /2-hole|bracket/i.test(layerItem.label)) {
+                    addSlotPlate(s.effector, barW * 3.2, Math.atan2(s.effector.y - s.j2.y, s.effector.x - s.j2.x), z, mat);
+                } else {
+                    const slotRotation = mechanism.type === 'cam' ? camGuideRotation : /follower|slider|rack/i.test(layerItem.label) ? Math.PI / 2 : Math.atan2(s.j2.y - s.p2.y, s.j2.x - s.p2.x);
+                    const slotCenter = mechanism.type === 'cam' ? camGuideCenter : /quick/i.test(layerItem.label) ? { x: (s.p2.x + s.j2.x) / 2, y: (s.p2.y + s.j2.y) / 2 } : s.j2;
+                    addSlotPlate(slotCenter, /rack/i.test(layerItem.label) ? 4.8 : 3.2, slotRotation, z, mat);
+                }
             }
             else if (layerItem.renderKind === 'rack') {
                 addRack(s.j2, z, mat);
@@ -4098,6 +4193,10 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-three-gear-axle-stack-contract={isGearTrain ? 'board-side>S10-spacer>gear>fastener-head' : 'not-gear-train'}
             data-three-gear-board-side-spacer-z={gearBoardSpacerSummary}
             data-three-gear-axle-z-order={gearAxleZOrderSummary}
+            data-three-gear-linkage-spacing-contract={mechanism.type === 'gear_linkage' ? 'endpoint-gears-separated-by-pitch-chain-distance' : 'not-gear-linkage'}
+            data-three-gear-linkage-crank-stack-contract={mechanism.type === 'gear_linkage' ? 'B-gear-hole>S10>drive-link;C-gear-hole>S10>S10>output-link;R-drive-link>S10>output-link>S10>bracket' : 'not-gear-linkage'}
+            data-three-gear-linkage-bracket-anchor={mechanism.type === 'gear_linkage' ? 'R-connector' : 'not-gear-linkage'}
+            data-three-gear-linkage-pin-z-order={gearLinkagePinZOrderSummary}
             data-three-linkage-pin-radius={mechanism.type === 'gear_linkage' ? mechanism.couplerPointDist.toFixed(2) : ''}
             data-three-spacer-key={FABRICATION_SPACER_SPEC.key}
             data-three-spacer-label={FABRICATION_SPACER_SPEC.label}

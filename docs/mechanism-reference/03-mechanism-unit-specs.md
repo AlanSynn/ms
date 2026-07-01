@@ -252,9 +252,9 @@ L = linkage_arm_length = |B-R| = |C-R|
 | 1 | `I6(board)` | `B@I6 > F > tabs-behind-board` |
 | 2 | `I6(board)` | `B@I6 > S10 > G3_drive > fastener-head` |
 | 3 | `I9(board)` | `B@I9 > S10 > G3_output > fastener-head` |
-| 4 | `I6(gear_handle_reference)`, `I12(link_end_reference)` | `H_gear@I6 > F > S10 > L4_drive > S10 > tabs-loose` |
-| 5 | `I9(gear_handle_reference)`, `I12(link_end_reference)` | `H_gear@I9 > F > S10 > L4_output > S10 > tabs-loose` |
-| 6 | `I12(link_end_reference)` | `E_link@I12 > F > S10 > bracket2 > S10 > tabs-loose` |
+| 4 | `I6(gear_handle_reference)`, `I12(link_end_reference)` | `H_gear@I6 > gear-hole > S10 > L4_drive > S10 > tabs-loose` |
+| 5 | `I9(gear_handle_reference)`, `I12(link_end_reference)` | `H_gear@I9 > gear-hole > S10 > S10 > L4_output > S10 > tabs-loose` |
+| 6 | `I12(link_end_reference)` | `E_link@I12 > L4_drive > S10 > L4_output > S10 > bracket2 > F > tabs-loose` |
 
 Compatibility:
 
@@ -267,11 +267,14 @@ B-R = C-R = selected fabricated linkage length
 Rules:
 
 1. B and C attach to off-centre gear handle holes, not to board axles.
-2. R is the only moving output connector; do not pin it to the board.
-3. The drive/output gears remain coplanar on their fixed board axles; linkages live on spacer-separated moving stacks.
-4. `linkage_pin_radius` must be a radius available on both selected endpoint gears.
-5. The paired link arms should be real linkage bar lengths, usually `L4` in the default recipe.
-6. Simulation succeeds only when R is the circle intersection of the two equal linkage lengths around B and C.
+2. Gear A and gear D are separated by the pitch-chain distance; optional idlers may increase that distance but do not carry crank links.
+3. The drive/output/idler gears remain coplanar on their fixed board axles; each centre stack is `board > S10 > gear > fastener-head`.
+4. The B crank stack passes through the real drive gear plate hole, then `S10`, then the lower drive linkage plane.
+5. The C crank stack passes through the real output gear plate hole, then two `S10` spacers, then the upper output linkage plane.
+6. R is the only moving output connector; it stacks the two linkage ends with S10 clearance and the output bracket, and it is not pinned to the board.
+7. `linkage_pin_radius` must be a radius available on both selected endpoint gears.
+8. The paired link arms should be real linkage bar lengths, usually `L4` in the default recipe.
+9. Simulation succeeds only when R is the circle intersection of the two equal linkage lengths around B and C.
 
 ## 3.5 Cam follower — `cam_follower`
 

@@ -555,9 +555,15 @@ assert.equal(referenceRecipeForType('4bar').assemblySteps.find(step => step.labe
 assert.equal(referenceRecipeForType('4bar').assemblySteps.find(step => step.label === 'Add coupler')?.stack[0]?.role, 'link-joint-hole', '4bar G6 coupler joint is a floating link joint');
 assert.equal(referenceRecipeForType('4bar').assemblySteps.find(step => step.label === 'Join output to coupler')?.stack[0]?.role, 'link-joint-hole', '4bar G10 output/coupler joint remains floating');
 assert.equal(referenceRecipeForType('gear').title, 'Gear train', 'gear recipe title matches the visible gear-only Foundry label');
-assert.equal(referenceRecipeForType('gear_linkage').assemblySteps.find(step => step.label === 'Add drive crank link')?.stack[0]?.role, 'gear-handle-hole', 'gear-linkage drive arm starts at an off-centre gear handle hole');
-assert.equal(referenceRecipeForType('gear_linkage').assemblySteps.find(step => step.label === 'Add output crank link')?.stack[0]?.role, 'gear-handle-hole', 'gear-linkage output arm starts at an off-centre gear handle hole');
-assert.equal(referenceRecipeForType('gear_linkage').assemblySteps.find(step => step.label === 'Join moving connector')?.stack[0]?.role, 'link-end-hole', 'gear-linkage shared connector is a moving link-end reference');
+const gearLinkageDriveCrankStack = referenceRecipeForType('gear_linkage').assemblySteps.find(step => step.label === 'Add drive crank link')?.stack ?? [];
+const gearLinkageOutputCrankStack = referenceRecipeForType('gear_linkage').assemblySteps.find(step => step.label === 'Add output crank link')?.stack ?? [];
+const gearLinkageConnectorStack = referenceRecipeForType('gear_linkage').assemblySteps.find(step => step.label === 'Join moving connector')?.stack ?? [];
+assert.equal(gearLinkageDriveCrankStack[0]?.role, 'gear-handle-hole', 'gear-linkage drive arm starts at an off-centre gear handle hole');
+assert.equal(gearLinkageOutputCrankStack[0]?.role, 'gear-handle-hole', 'gear-linkage output arm starts at an off-centre gear handle hole');
+assert.deepEqual(gearLinkageDriveCrankStack.slice(0, 4).map(item => item.role), ['gear-handle-hole', 'spacer', 'moving-part', 'top-spacer'], 'gear-linkage drive crank stack keeps the endpoint gear below an S10-separated linkage');
+assert.deepEqual(gearLinkageOutputCrankStack.slice(0, 5).map(item => item.role), ['gear-handle-hole', 'spacer', 'spacer', 'moving-part', 'top-spacer'], 'gear-linkage output crank stack uses two S10 spacers to reach the upper output-link plane');
+assert.equal(gearLinkageConnectorStack[0]?.role, 'link-end-hole', 'gear-linkage shared connector is a moving link-end reference');
+assert.deepEqual(gearLinkageConnectorStack.slice(1, 6).map(item => item.role), ['moving-part', 'spacer', 'moving-part', 'top-spacer', 'moving-part'], 'gear-linkage R connector stacks both linkage ends with spacer clearance before the bracket');
 assert.equal(referenceRecipeForType('planetary_gear').assemblySteps.find(step => step.label === 'Add G3 moving planet gear')?.stack[0]?.role, 'carrier-hole', 'planetary planet axle sits on the moving carrier, not the board');
 assert.equal(referenceRecipeForType('piston').assemblySteps.find(step => step.label === 'Add connecting rod')?.stack[0]?.role, 'link-joint-hole', 'slider-crank G6 rod joint is a floating link joint');
 assert.equal(referenceRecipeForType('piston').assemblySteps.find(step => step.label === 'Add slider block')?.stack[0]?.role, 'link-end-hole', 'slider-crank block is a moving slider/link reference');

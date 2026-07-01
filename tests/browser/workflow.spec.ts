@@ -1471,6 +1471,14 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(threeScene, 'Gear-linkage stack exposes G3/G3/L4/bracket in reference order').toHaveAttribute('data-three-stack-order', /Drive G3 \/ 3-space gear.*Output G3 \/ 3-space gear.*Drive L4 linkage.*Output L4 linkage.*2-hole bracket/);
   await expect(threeScene).toHaveAttribute('data-three-gear-radii', '60.00,60.00');
   await expect(threeScene).toHaveAttribute('data-three-linkage-pin-radius', '40.00');
+  await expect(threeScene, 'Gear-linkage endpoint gear centers are spaced by the pitch-chain distance, not collapsed onto one shaft').toHaveAttribute('data-three-gear-linkage-spacing-contract', 'endpoint-gears-separated-by-pitch-chain-distance');
+  await expect(threeScene, 'Gear-linkage crank pins pass through real off-center gear holes before spacer-separated links').toHaveAttribute('data-three-gear-linkage-crank-stack-contract', 'B-gear-hole>S10>drive-link;C-gear-hole>S10>S10>output-link;R-drive-link>S10>output-link>S10>bracket');
+  await expect(threeScene, 'Gear-linkage output bracket renders at the shared R connector, not at a gear axle').toHaveAttribute('data-three-gear-linkage-bracket-anchor', 'R-connector');
+  const gearLinkagePinOrder = await threeScene.getAttribute('data-three-gear-linkage-pin-z-order');
+  expect(gearLinkagePinOrder, 'drive crank pin stacks gear, S10 spacer, then linkage').toContain('B:gear<S10<linkage');
+  expect(gearLinkagePinOrder, 'output crank pin stacks gear, two S10 spacers, then upper output linkage').toContain('C:gear<S10<S10<linkage');
+  expect(gearLinkagePinOrder, 'shared R connector stacks the two links with spacer clearance and the bracket').toContain('R:linkage<S10<linkage<S10<bracket');
+  expect(gearLinkagePinOrder, 'gear-linkage moving pin z-order has no invalid floating stack').not.toContain('invalid');
   await page.getByLabel('Foundry mechanism type').selectOption('cam');
   expect(Number(await threeScene.getAttribute('data-three-cam-count')), 'Cam follower uses a cam profile, not a generic gear').toBeGreaterThanOrEqual(1);
   expect(Number(await threeScene.getAttribute('data-three-follower-count')), 'Cam follower shows its follower block').toBeGreaterThanOrEqual(1);

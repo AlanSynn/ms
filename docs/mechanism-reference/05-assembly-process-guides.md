@@ -180,7 +180,7 @@ Failure signs:
 Used by gear-linkage.
 
 ```text
-H_gear@coord > F > S10 > L4 > S10 > tabs-loose
+H_gear@coord > gear plate hole > S10 > L4 > S10 > tabs-loose
 ```
 
 Hands-on steps:
@@ -361,15 +361,15 @@ Build sequence:
    - Check: gears move together.
 4. **Add drive crank link**
    - Coordinates: `I6(gear_handle_reference)`, `I12(link_end_reference)`.
-   - Stack: `H_gear@I6 > F > S10 > L4_drive > S10 > tabs-loose`.
+   - Stack: `H_gear@I6 > gear-hole > S10 > L4_drive > S10 > tabs-loose`.
    - Check: drive link rides around the drive gear centre instead of locking to the board.
 5. **Add output crank link**
    - Coordinates: `I9(gear_handle_reference)`, `I12(link_end_reference)`.
-   - Stack: `H_gear@I9 > F > S10 > L4_output > S10 > tabs-loose`.
+   - Stack: `H_gear@I9 > gear-hole > S10 > S10 > L4_output > S10 > tabs-loose`.
    - Check: both L4 links meet at one moving R connector.
 6. **Join moving connector**
    - Coordinate: `I12(link_end_reference)`.
-   - Stack: `E_link@I12 > F > S10 > bracket2 > S10 > tabs-loose`.
+   - Stack: `E_link@I12 > L4_drive > S10 > L4_output > S10 > bracket2 > F > tabs-loose`.
    - Check: bracket follows the two link ends and is not pinned to the board.
 
 Gear-linkage final check:

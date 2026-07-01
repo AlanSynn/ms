@@ -329,14 +329,44 @@ const movingPartStack = (coordLabel: string, label: string, partId: string, star
         { label: 'Paper fastener head', role: 'paper-fastener' },
         { label: 'Open tabs behind board', role: 'fastener-tabs' }
     ])
-    : stack([
-        { label: coordLabel, role: startRole },
-        { label: 'Paper fastener', role: 'paper-fastener' },
-        { label: FABRICATION_SPACER_SPEC.label, role: 'spacer', part: 'spacers:s10' },
-        { label, role: 'moving-part', part: partId },
-        { label: FABRICATION_SPACER_SPEC.label, role: 'top-spacer', part: 'spacers:s10' },
-        { label: 'Open tabs loosely', role: 'fastener-tabs' }
-    ]);
+    : startRole === 'gear-handle-hole'
+        ? stack([
+            { label: coordLabel, role: startRole },
+            { label: FABRICATION_SPACER_SPEC.label, role: 'spacer', part: 'spacers:s10' },
+            { label, role: 'moving-part', part: partId },
+            { label: FABRICATION_SPACER_SPEC.label, role: 'top-spacer', part: 'spacers:s10' },
+            { label: 'Paper fastener through gear handle hole', role: 'paper-fastener' },
+            { label: 'Open tabs loosely', role: 'fastener-tabs' }
+        ])
+        : stack([
+            { label: coordLabel, role: startRole },
+            { label: 'Paper fastener', role: 'paper-fastener' },
+            { label: FABRICATION_SPACER_SPEC.label, role: 'spacer', part: 'spacers:s10' },
+            { label, role: 'moving-part', part: partId },
+            { label: FABRICATION_SPACER_SPEC.label, role: 'top-spacer', part: 'spacers:s10' },
+            { label: 'Open tabs loosely', role: 'fastener-tabs' }
+        ]);
+
+const gearLinkageConnectorStack = () => stack([
+    { label: 'Shared L4 drive/output end holes', role: 'link-end-hole' },
+    { label: 'Drive L4 linkage end', role: 'moving-part', part: 'linkages:linkage-4-cell' },
+    { label: FABRICATION_SPACER_SPEC.label, role: 'spacer', part: 'spacers:s10' },
+    { label: 'Output L4 linkage end', role: 'moving-part', part: 'linkages:linkage-4-cell' },
+    { label: FABRICATION_SPACER_SPEC.label, role: 'top-spacer', part: 'spacers:s10' },
+    { label: '2-hole bracket', role: 'moving-part', part: 'brackets:2-hole-straight' },
+    { label: 'Paper fastener through shared connector', role: 'paper-fastener' },
+    { label: 'Open tabs loosely', role: 'fastener-tabs' }
+]);
+
+const gearLinkageCrankStack = (coordLabel: string, label: string, partId: string, clearanceSpacerCount: 1 | 2) => stack([
+    { label: coordLabel, role: 'gear-handle-hole' },
+    { label: FABRICATION_SPACER_SPEC.label, role: 'spacer', part: 'spacers:s10' },
+    ...(clearanceSpacerCount === 2 ? [{ label: `${FABRICATION_SPACER_SPEC.label} riser`, role: 'spacer' as const, part: 'spacers:s10' }] : []),
+    { label, role: 'moving-part', part: partId },
+    { label: FABRICATION_SPACER_SPEC.label, role: 'top-spacer', part: 'spacers:s10' },
+    { label: 'Paper fastener through gear handle hole', role: 'paper-fastener' },
+    { label: 'Open tabs loosely', role: 'fastener-tabs' }
+]);
 
 const fixedPartStack = (coord: string, label: string, partId: string, repeat?: string) => stack([
     { label: `Board hole ${coord}`, role: 'board' },
@@ -421,9 +451,9 @@ const gearLinkageSteps: ReferenceAssemblyStep[] = [
     step(1, 'Mount drive gear', 'place-fastener', ['I6'], ['board'], 'Place the drive gear fastener at I6.', 'The axle is straight.', bareFastener('I6')),
     step(2, 'Add drive G3 gear', 'add-part', ['I6'], ['board'], 'Add S10 spacer, then place drive G3 at I6.', 'Drive G3 rotates freely.', movingPartStack('Board hole I6', 'G3 / 3-space gear', 'gears:g24')),
     step(3, 'Mesh output G3 gear', 'add-part', ['I9'], ['board'], 'Place output G3 at I9 and mesh it with drive G3.', 'The gears move together.', movingPartStack('Board hole I9', 'G3 / 3-space gear', 'gears:g24')),
-    step(4, 'Add drive crank link', 'add-linkage', ['I6', 'I12'], ['gear_handle_reference', 'link_end_reference'], 'Fasten L4 through an off-center drive G3 handle hole only (not the board), then point the free end toward I12.', 'The drive linkage rides around the gear center instead of locking to the board.', movingPartStack('Drive G3 handle hole near I6', 'L4 linkage', 'linkages:linkage-4-cell', 'gear-handle-hole')),
-    step(5, 'Add output crank link', 'add-linkage', ['I9', 'I12'], ['gear_handle_reference', 'link_end_reference'], 'Fasten a second L4 through an off-center output G3 handle hole only (not the board), then meet the first L4 at I12.', 'Both L4 links meet at one moving output point.', movingPartStack('Output G3 handle hole near I9', 'L4 linkage', 'linkages:linkage-4-cell', 'gear-handle-hole')),
-    step(6, 'Join moving connector', 'add-bracket', ['I12'], ['link_end_reference'], 'Fasten the 2-hole bracket to the two free L4 ends near I12 as a moving handle.', 'The bracket follows both link ends and is not pinned to the board.', movingPartStack('Shared link output hole near I12', '2-hole bracket', 'brackets:2-hole-straight', 'link-end-hole'))
+    step(4, 'Add drive crank link', 'add-linkage', ['I6', 'I12'], ['gear_handle_reference', 'link_end_reference'], 'Fasten L4 through an off-center drive G3 handle hole only (not the board), then point the free end toward I12.', 'The drive linkage rides around the gear center instead of locking to the board.', gearLinkageCrankStack('Drive G3 handle hole near I6', 'L4 linkage', 'linkages:linkage-4-cell', 1)),
+    step(5, 'Add output crank link', 'add-linkage', ['I9', 'I12'], ['gear_handle_reference', 'link_end_reference'], 'Fasten a second L4 through an off-center output G3 handle hole only (not the board), then meet the first L4 at I12.', 'Both L4 links meet at one moving output point.', gearLinkageCrankStack('Output G3 handle hole near I9', 'L4 linkage', 'linkages:linkage-4-cell', 2)),
+    step(6, 'Join moving connector', 'add-bracket', ['I12'], ['link_end_reference'], 'Fasten the 2-hole bracket through the two free L4 ends near I12 as a moving handle.', 'The bracket follows both link ends with spacer clearance and is not pinned to the board.', gearLinkageConnectorStack())
 ];
 
 const planetarySteps: ReferenceAssemblyStep[] = [

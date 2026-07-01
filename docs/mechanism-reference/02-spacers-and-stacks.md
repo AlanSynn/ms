@@ -165,7 +165,7 @@ Use cases:
 Use when a linkage is fastened through a gear attachment hole. This is a moving joint on the rotating gear, not a fixed board axle.
 
 ```text
-H_gear@coord > F > S10 > moving-part > S10 > tabs-loose
+H_gear@coord > gear plate hole > S10 > moving-link > S10 > tabs-loose
 ```
 
 Use cases:
@@ -174,7 +174,9 @@ Use cases:
 
 Rules:
 
-- `H_gear` must correspond to a real attachment hole of the gear.
+- `H_gear` must correspond to a real attachment hole of the gear, not the centre axle and not a board hole.
+- The endpoint gear stays on the lower gear plane; the linkage sits above it with S10 clearance.
+- If the output linkage is on the upper linkage plane, use two S10 spacers between the gear plate and that output link so the link stays coplanar with its shared R connector.
 - `G1` has no attachment holes, so it cannot drive a gear-linkage crank pin.
 - For `G3`, valid radius is `20.0 mm` at offsets `(0,±20)` or `(±20,0)`.
 
