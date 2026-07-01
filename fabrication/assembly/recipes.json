@@ -1172,13 +1172,6 @@
           "part": "linkages:linkage-4-cell"
         },
         {
-          "category": "brackets",
-          "count": 1,
-          "key": "2-hole-straight",
-          "label": "2-hole bracket",
-          "part": "brackets:2-hole-straight"
-        },
-        {
           "category": "spacers",
           "count": 8,
           "key": "s10",
@@ -1564,23 +1557,22 @@
           }
         },
         {
-          "action": "add-bracket",
+          "action": "join-linkages",
           "app_mapping": {
-            "component_role": "output-connector",
+            "component_role": "shared-link-output",
             "highlight_ids": [
-              "spacers:s10",
-              "brackets:2-hole-straight"
+              "spacers:s10"
             ],
             "mechanism_type": "gear_linkage"
           },
-          "check": "The bracket follows both link ends and is not pinned to the board.",
+          "check": "The shared connector follows both link ends and is not pinned to the board.",
           "coord_roles": [
             "link_end_reference"
           ],
           "coords": [
             "I12"
           ],
-          "instruction": "Fasten the 2-hole bracket to the two free L4 ends near I12 as a moving handle.",
+          "instruction": "Fasten the two free L4 ends near I12 with one S10 spacer between them.",
           "n": 6,
           "parts": [
             {
@@ -1589,25 +1581,19 @@
               "key": "s10",
               "label": "S10 spacer",
               "part": "spacers:s10"
-            },
-            {
-              "category": "brackets",
-              "count": 1,
-              "key": "2-hole-straight",
-              "label": "2-hole bracket",
-              "part": "brackets:2-hole-straight"
             }
           ],
           "stack": [
             {
-              "label": "Shared link output hole near I12",
+              "label": "Shared L4 drive/output end holes",
               "order": 1,
               "role": "link-end-hole"
             },
             {
-              "label": "Paper fastener",
+              "label": "Drive L4 linkage end",
               "order": 2,
-              "role": "paper-fastener"
+              "part": "linkages:linkage-4-cell",
+              "role": "moving-part"
             },
             {
               "label": "S10 spacer",
@@ -1616,16 +1602,15 @@
               "role": "spacer"
             },
             {
-              "label": "2-hole bracket",
+              "label": "Output L4 linkage end",
               "order": 4,
-              "part": "brackets:2-hole-straight",
+              "part": "linkages:linkage-4-cell",
               "role": "moving-part"
             },
             {
-              "label": "S10 spacer",
+              "label": "Paper fastener through shared connector",
               "order": 5,
-              "part": "spacers:s10",
-              "role": "top-spacer"
+              "role": "paper-fastener"
             },
             {
               "label": "Open tabs loosely",
@@ -1636,8 +1621,7 @@
           "title": "Join moving connector",
           "visual_state": {
             "active_parts": [
-              "spacers:s10",
-              "brackets:2-hole-straight"
+              "spacers:s10"
             ],
             "ghost_parts": [
               "gears:g24",

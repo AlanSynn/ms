@@ -1372,7 +1372,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await page.getByLabel('Drive gear size').selectOption('g40');
   await page.getByLabel('Output gear size').selectOption('g56');
   await page.getByLabel('Paired link length').selectOption('6');
-  await expect(threeScene, 'Gear linkage param editor keeps output gear and linkage in the fabrication stack').toHaveAttribute('data-three-stack-order', /Drive G5 \/ 5-space gear.*Output G7 \/ 7-space gear.*Drive L6 linkage.*Output L6 linkage.*2-hole bracket/);
+  await expect(threeScene, 'Gear linkage param editor keeps output gear and linkage in the fabrication stack').toHaveAttribute('data-three-stack-order', /Drive G5 \/ 5-space gear.*Output G7 \/ 7-space gear.*Drive L6 linkage.*Output L6 linkage/);
   await expect(threeScene, 'Gear linkage crank pin snaps to a real attachment hole on the selected output gear').toHaveAttribute('data-three-linkage-pin-radius', /\d+\.\d+/);
 
   await page.getByLabel('Foundry mechanism type').selectOption('4bar');
@@ -1382,7 +1382,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
     '4bar': [['data-three-part-count', 5], ['data-three-hole-count', 11]],
     cam: [['data-three-cam-count', 1], ['data-three-follower-count', 1], ['data-three-hole-count', 8]],
     gear: [['data-three-gear-count', 2], ['data-three-hole-count', 10]],
-    gear_linkage: [['data-three-gear-count', 2], ['data-three-hole-count', 22]],
+    gear_linkage: [['data-three-gear-count', 2], ['data-three-hole-count', 20]],
     planetary_gear: [['data-three-gear-count', 3], ['data-three-hole-count', 13]]
   };
 
@@ -1487,22 +1487,22 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   expect(Math.min(...gearPinSpans), 'gear axle pins cross the spacer clearance instead of only the thin gear plate').toBeGreaterThan(FABRICATION_RENDER_LAYER_Z_STEP);
   await page.getByLabel('Foundry mechanism type').selectOption('gear_linkage');
   await expect(threeScene, 'Gear-linkage uses paired off-center G3 crank pins').toHaveAttribute('data-three-gear-linkage-mode', 'two-gear-two-link-coupler');
-  await expect(threeScene, 'Gear-linkage uses two gear handles, paired L4 rods, and bracket').toHaveAttribute('data-three-gear-train-linkage-mode', 'two-gear-two-link-coupler');
+  await expect(threeScene, 'Gear-linkage uses two gear handles and paired L4 rods').toHaveAttribute('data-three-gear-train-linkage-mode', 'two-gear-two-link-coupler');
   await expect(threeScene, 'Gear-linkage keeps the drive/output gear mesh coplanar on board axles').toHaveAttribute('data-three-gear-plane-mode', 'coplanar-fixed-axles');
   await expect(threeScene, 'Gear-linkage gear axles include local board-side spacer z in their fastener spans').toHaveAttribute('data-three-pin-stack-z-sources', 'gear-axles-include-board-side-spacer');
   await expect(threeScene, 'Gear-linkage pins are the two fixed gear axles plus two gear crank pins and one shared R connector').toHaveAttribute('data-three-physical-pin-contract', 'fixed-gear-axles-plus-two-crank-links');
   await expect(threeScene, 'Gear-linkage has no orphan hardware tower beyond its five real pin sites').toHaveAttribute('data-three-physical-pin-count', '5');
-  await expect(threeScene, 'Gear-linkage geometry maps each layer to its reference role').toHaveAttribute('data-three-geometry-contract', /Drive G3 \/ 3-space gear:fixed-board-gear.*Output G3 \/ 3-space gear:fixed-board-gear.*Drive L4 linkage:B-pin-to-R.*Output L4 linkage:C-pin-to-R.*2-hole bracket:R-connector/);
-  await expect(threeScene, 'Gear-linkage stack exposes G3/G3/L4/bracket in reference order').toHaveAttribute('data-three-stack-order', /Drive G3 \/ 3-space gear.*Output G3 \/ 3-space gear.*Drive L4 linkage.*Output L4 linkage.*2-hole bracket/);
+  await expect(threeScene, 'Gear-linkage geometry maps each layer to its reference role').toHaveAttribute('data-three-geometry-contract', /Drive G3 \/ 3-space gear:fixed-board-gear.*Output G3 \/ 3-space gear:fixed-board-gear.*Drive L4 linkage:B-pin-to-R.*Output L4 linkage:C-pin-to-R/);
+  await expect(threeScene, 'Gear-linkage stack exposes G3/G3/L4/L4 in reference order').toHaveAttribute('data-three-stack-order', /Drive G3 \/ 3-space gear.*Output G3 \/ 3-space gear.*Drive L4 linkage.*Output L4 linkage/);
   await expect(threeScene).toHaveAttribute('data-three-gear-radii', '60.00,60.00');
   await expect(threeScene).toHaveAttribute('data-three-linkage-pin-radius', '40.00');
   await expect(threeScene, 'Gear-linkage endpoint gear centers are spaced by the pitch-chain distance, not collapsed onto one shaft').toHaveAttribute('data-three-gear-linkage-spacing-contract', 'endpoint-gears-separated-by-pitch-chain-distance');
-  await expect(threeScene, 'Gear-linkage crank pins pass through real off-center gear holes before spacer-separated links').toHaveAttribute('data-three-gear-linkage-crank-stack-contract', 'B-gear-hole>S10>drive-link;C-gear-hole>S10>S10>output-link;R-drive-link>S10>output-link>S10>bracket');
-  await expect(threeScene, 'Gear-linkage output bracket renders at the shared R connector, not at a gear axle').toHaveAttribute('data-three-gear-linkage-bracket-anchor', 'R-connector');
+  await expect(threeScene, 'Gear-linkage crank pins pass through real off-center gear holes before spacer-separated links').toHaveAttribute('data-three-gear-linkage-crank-stack-contract', 'B-gear-hole>S10>drive-link;C-gear-hole>S10>S10>output-link;R-drive-link>S10>output-link');
+  await expect(threeScene, 'Gear-linkage has no extra output bracket beyond the shared R fastener').toHaveAttribute('data-three-gear-linkage-bracket-anchor', 'no-output-bracket');
   const gearLinkagePinOrder = await threeScene.getAttribute('data-three-gear-linkage-pin-z-order');
   expect(gearLinkagePinOrder, 'drive crank pin stacks gear, S10 spacer, then linkage').toContain('B:gear<S10<linkage');
   expect(gearLinkagePinOrder, 'output crank pin stacks gear, two S10 spacers, then upper output linkage').toContain('C:gear<S10<S10<linkage');
-  expect(gearLinkagePinOrder, 'shared R connector stacks the two links with spacer clearance and the bracket').toContain('R:linkage<S10<linkage<S10<bracket');
+  expect(gearLinkagePinOrder, 'shared R connector stacks the two links with spacer clearance and no bracket').toContain('R:linkage<S10<linkage');
   expect(gearLinkagePinOrder, 'gear-linkage moving pin z-order has no invalid floating stack').not.toContain('invalid');
   await page.getByLabel('Foundry mechanism type').selectOption('cam');
   expect(Number(await threeScene.getAttribute('data-three-cam-count')), 'Cam follower uses a cam profile, not a generic gear').toBeGreaterThanOrEqual(1);

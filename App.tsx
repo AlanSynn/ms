@@ -219,7 +219,7 @@ const foundryRenderedLayerZForMechanism = (
 const mechanismReferenceTopologySummary = (type: MechanismType) => {
     if (type === '4bar') return 'A-B input; B-C coupler; C-D output; D-A board-ground';
     if (type === 'gear') return 'fixed gear centers only; no rods; external mesh sequence';
-    if (type === 'gear_linkage') return 'fixed gear centers; drive/output gear handle pins; two L4 links meet at R; R bracket';
+    if (type === 'gear_linkage') return 'fixed gear centers; drive/output gear handle pins; two L4 links meet at shared R fastener';
     if (type === 'cam') return 'rotating cam profile; guided follower block; no linkage rods';
     if (type === 'planetary_gear') return 'fixed ring; sun input; planet on carrier; carrier output';
     if (type === '5bar') return 'A-B-C-D-E closed chain; A-E board-ground; simulation-only';
@@ -3642,7 +3642,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
                 : pin.id === 'C'
                     ? /gear<.*S10<.*S10<.*linkage/.test(ordered)
                 : pin.id === 'R'
-                    ? /linkage<.*S10<.*linkage/.test(ordered) && /bracket/.test(ordered)
+                    ? /linkage<.*S10<.*linkage/.test(ordered)
                     : true;
             return `${pin.id}:${validCrank ? ordered : 'invalid'}`;
         }).join(',')
@@ -4084,7 +4084,6 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             if (mechanism.type === 'gear') return;
             if (mechanism.type === 'gear_linkage' && /drive.*L|Drive L|drive.*linkage/i.test(label)) addBar(s.j1, s.effector, z, mat, 4);
             else if (mechanism.type === 'gear_linkage' && /output.*L|Output L|output.*linkage|L4|linkage/i.test(label)) addBar(s.j2, s.effector, z, mat, 4);
-            else if (mechanism.type === 'gear_linkage' && /2-hole|bracket/i.test(label)) addSlotPlate(s.effector, barW * 3.2, Math.atan2(s.effector.y - s.j2.y, s.effector.x - s.j2.x), z, mat);
             else if (mechanism.type === '6bar' && /output rocker/i.test(label)) addBar(s.p2, s.j2, z, mat, 3);
             else if (mechanism.type === '6bar' && /dyad/i.test(label)) addBar(s.j2, s.aux, z, mat, 2);
             else if (mechanism.type === '6bar' && /follower/i.test(label)) addBar(s.p2, s.aux, z, mat, 2);
@@ -4127,13 +4126,9 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             }
             else if (layerItem.renderKind === 'cam') addCam(s.p1, z, degToRad(angle), mat);
             else if (layerItem.renderKind === 'guide') {
-                if (mechanism.type === 'gear_linkage' && /2-hole|bracket/i.test(layerItem.label)) {
-                    addSlotPlate(s.effector, barW * 3.2, Math.atan2(s.effector.y - s.j2.y, s.effector.x - s.j2.x), z, mat);
-                } else {
-                    const slotRotation = mechanism.type === 'cam' ? camGuideRotation : /follower|slider|rack/i.test(layerItem.label) ? Math.PI / 2 : Math.atan2(s.j2.y - s.p2.y, s.j2.x - s.p2.x);
-                    const slotCenter = mechanism.type === 'cam' ? camGuideCenter : /quick/i.test(layerItem.label) ? { x: (s.p2.x + s.j2.x) / 2, y: (s.p2.y + s.j2.y) / 2 } : s.j2;
-                    addSlotPlate(slotCenter, /rack/i.test(layerItem.label) ? 4.8 : 3.2, slotRotation, z, mat);
-                }
+                const slotRotation = mechanism.type === 'cam' ? camGuideRotation : /follower|slider|rack/i.test(layerItem.label) ? Math.PI / 2 : Math.atan2(s.j2.y - s.p2.y, s.j2.x - s.p2.x);
+                const slotCenter = mechanism.type === 'cam' ? camGuideCenter : /quick/i.test(layerItem.label) ? { x: (s.p2.x + s.j2.x) / 2, y: (s.p2.y + s.j2.y) / 2 } : s.j2;
+                addSlotPlate(slotCenter, /rack/i.test(layerItem.label) ? 4.8 : 3.2, slotRotation, z, mat);
             }
             else if (layerItem.renderKind === 'rack') {
                 addRack(s.j2, z, mat);
@@ -4253,8 +4248,8 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-three-gear-board-side-spacer-z={gearBoardSpacerSummary}
             data-three-gear-axle-z-order={gearAxleZOrderSummary}
             data-three-gear-linkage-spacing-contract={mechanism.type === 'gear_linkage' ? 'endpoint-gears-separated-by-pitch-chain-distance' : 'not-gear-linkage'}
-            data-three-gear-linkage-crank-stack-contract={mechanism.type === 'gear_linkage' ? 'B-gear-hole>S10>drive-link;C-gear-hole>S10>S10>output-link;R-drive-link>S10>output-link>S10>bracket' : 'not-gear-linkage'}
-            data-three-gear-linkage-bracket-anchor={mechanism.type === 'gear_linkage' ? 'R-connector' : 'not-gear-linkage'}
+            data-three-gear-linkage-crank-stack-contract={mechanism.type === 'gear_linkage' ? 'B-gear-hole>S10>drive-link;C-gear-hole>S10>S10>output-link;R-drive-link>S10>output-link' : 'not-gear-linkage'}
+            data-three-gear-linkage-bracket-anchor={mechanism.type === 'gear_linkage' ? 'no-output-bracket' : 'not-gear-linkage'}
             data-three-gear-linkage-pin-z-order={gearLinkagePinZOrderSummary}
             data-three-linkage-pin-radius={mechanism.type === 'gear_linkage' ? mechanism.couplerPointDist.toFixed(2) : ''}
             data-three-spacer-key={FABRICATION_SPACER_SPEC.key}

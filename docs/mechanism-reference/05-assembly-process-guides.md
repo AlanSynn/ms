@@ -342,7 +342,6 @@ Parts:
 ```text
 G3 × 2
 L4 × 2
-2-hole bracket × 1
 S10 × 8
 paper fasteners
 ```
@@ -369,8 +368,8 @@ Build sequence:
    - Check: both L4 links meet at one moving R connector.
 6. **Join moving connector**
    - Coordinate: `I12(link_end_reference)`.
-   - Stack: `E_link@I12 > L4_drive > S10 > L4_output > S10 > bracket2 > F > tabs-loose`.
-   - Check: bracket follows the two link ends and is not pinned to the board.
+   - Stack: `E_link@I12 > L4_drive > S10 > L4_output > F > tabs-loose`.
+   - Check: shared fastener follows the two link ends and is not pinned to the board.
 
 Gear-linkage final check:
 

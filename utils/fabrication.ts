@@ -368,9 +368,7 @@ export const fabricationStackForMechanism = (mechanism: Pick<MechanismConfig, 't
             spacer(),
             layer(`Drive L${linkageSpec.cells} linkage`, 'linkage'),
             spacer(),
-            layer(`Output L${linkageSpec.cells} linkage`, 'linkage'),
-            spacer(),
-            layer('2-hole bracket', 'guide')
+            layer(`Output L${linkageSpec.cells} linkage`, 'linkage')
         );
     }
     const roleForLabel = (labelText: string): FabricationStackLayer['role'] => {

@@ -34,9 +34,9 @@ C-R is one fabricated linkage of the same selected length
 - Idler gears may be any fabricated gear size because they do not carry crank pins.
 - Attachment radius snaps to a shared fabricated hole radius available on both endpoint gears.
 - Linkage length snaps to L2/L4/L6/L8 and is instantiated twice.
-- Stack: fixed gear axle stacks stay board-mounted; B/C crank stacks are moving gear-handle holes; R joins the two link ends plus bracket.
+- Stack: fixed gear axle stacks stay board-mounted; B/C crank stacks are moving gear-handle holes; R joins only the two link ends with one S10 spacer and a shared fastener.
 
 ## Tests
 
 - Contract tests assert pitch spacing, endpoint gear rejection, B/C crank radius, B-R and C-R linkage lengths, and doubled linkage part count.
-- Browser tests assert `two-gear-two-link-coupler`, five real pin sites, and layer roles `B-pin-to-R`, `C-pin-to-R`, and `R-connector`.
+- Browser tests assert `two-gear-two-link-coupler`, five real pin sites, and layer roles `B-pin-to-R` and `C-pin-to-R` with no output bracket.

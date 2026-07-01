@@ -563,7 +563,7 @@ assert.equal(gearLinkageOutputCrankStack[0]?.role, 'gear-handle-hole', 'gear-lin
 assert.deepEqual(gearLinkageDriveCrankStack.slice(0, 4).map(item => item.role), ['gear-handle-hole', 'spacer', 'moving-part', 'top-spacer'], 'gear-linkage drive crank stack keeps the endpoint gear below an S10-separated linkage');
 assert.deepEqual(gearLinkageOutputCrankStack.slice(0, 5).map(item => item.role), ['gear-handle-hole', 'spacer', 'spacer', 'moving-part', 'top-spacer'], 'gear-linkage output crank stack uses two S10 spacers to reach the upper output-link plane');
 assert.equal(gearLinkageConnectorStack[0]?.role, 'link-end-hole', 'gear-linkage shared connector is a moving link-end reference');
-assert.deepEqual(gearLinkageConnectorStack.slice(1, 6).map(item => item.role), ['moving-part', 'spacer', 'moving-part', 'top-spacer', 'moving-part'], 'gear-linkage R connector stacks both linkage ends with spacer clearance before the bracket');
+assert.deepEqual(gearLinkageConnectorStack.slice(1, 5).map(item => item.role), ['moving-part', 'spacer', 'moving-part', 'paper-fastener'], 'gear-linkage R connector stacks only the two linkage ends with S10 clearance before the fastener');
 assert.equal(referenceRecipeForType('planetary_gear').assemblySteps.find(step => step.label === 'Add G3 moving planet gear')?.stack[0]?.role, 'carrier-hole', 'planetary planet axle sits on the moving carrier, not the board');
 assert(referenceRecipeForType('planetary_gear').stackLabels.includes('L2 carrier linkage'), 'planetary stack labels the L2 part as the carrier so renderers do not draw a generic floating linkage');
 assert.equal(referenceRecipeForType('piston').assemblySteps.find(step => step.label === 'Add connecting rod')?.stack[0]?.role, 'link-joint-hole', 'slider-crank G6 rod joint is a floating link joint');
@@ -1565,7 +1565,7 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
   assert.equal(mechanism.groundLength, REFERENCE_DEFAULTS.gearLinkage.centerDistance, 'gear-linkage centers use the G3/G3 60 mm pitch distance');
   assert.equal(mechanism.couplerPointDist, REFERENCE_DEFAULTS.gearLinkage.handleRadius, 'gear-linkage shared crank-pin radius uses the reference one-cell offset');
   assert.equal(mechanism.couplerLength, REFERENCE_DEFAULTS.gearLinkage.outputLinkage, 'gear-linkage paired links use the reference L4 linkage');
-  assert.deepEqual(requiredPartQuantities('gear_linkage'), { 'G3 / 3-space gear': 2, 'L4 linkage': 2, '2-hole bracket': 1, [FABRICATION_SPACER_SPEC.label]: 8 }, 'gear-linkage recipe uses two G3 gears, two L4 crank links, output bracket, and S10 spacers');
+  assert.deepEqual(requiredPartQuantities('gear_linkage'), { 'G3 / 3-space gear': 2, 'L4 linkage': 2, [FABRICATION_SPACER_SPEC.label]: 8 }, 'gear-linkage recipe uses two G3 gears, two L4 crank links, and S10 spacers without an output bracket');
   const dynamicGearLinkageParts = mechanismRequiredParts({ ...mechanism, gearTrainRadii: [gearSceneRadiusByKey('g40'), gearSceneRadiusByKey('g8'), gearSceneRadiusByKey('g56')], couplerLength: linkageSceneLengthByCells(6) });
   assert.equal(dynamicGearLinkageParts.find(part => part.name === 'G5 / 5-space gear')?.quantity, 1, 'gear-linkage required parts preserve a selected large drive gear');
   assert.equal(dynamicGearLinkageParts.find(part => part.name === 'G1 / 1-space gear')?.quantity, 1, 'gear-linkage required parts preserve selected idler gears');
@@ -1581,6 +1581,7 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
     groundLength: 999
   });
   const compoundGearLinkageState = calculateLinkage(compoundGearLinkage, Math.PI / 2);
+  assert.equal(compoundGearLinkage.gearRatio, gearTrainOutputRatio(compoundGearLinkage), 'gear-linkage derives output speed from the ordered gear train instead of locking gears to one speed');
   assertDistance(compoundGearLinkageState.p1, compoundGearLinkageState.p2, gearTrainPitchCenterDistance(compoundGearLinkage), 'gear-linkage preserves selected fabrication gear sizes and derives the meshed center distance');
   assertDistance(compoundGearLinkageState.p1, compoundGearLinkageState.j1, compoundGearLinkage.couplerPointDist, 'gear-linkage snaps the drive crank pin to a real drive-gear attachment hole');
   assertDistance(compoundGearLinkageState.p2, compoundGearLinkageState.j2, compoundGearLinkage.couplerPointDist, 'gear-linkage snaps the output crank pin to a real output-gear attachment hole');
@@ -1602,8 +1603,8 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
   assert(linkageSceneLengthIsFabricationPreset(mutatedGearLinkage.couplerLength), 'optimizer mutation preserves a fabricated paired linkage size');
   assert.deepEqual(
     fabricationStackForMechanism(mechanism).filter(layer => ['gear', 'linkage', 'guide'].includes(layer.role)).map(layer => layer.label),
-    ['Drive G3 / 3-space gear', 'Output G3 / 3-space gear', 'Drive L4 linkage', 'Output L4 linkage', '2-hole bracket'],
-    'gear-linkage fabrication stack exposes G3→G3→two L4 links→bracket in mechanism-reference order'
+    ['Drive G3 / 3-space gear', 'Output G3 / 3-space gear', 'Drive L4 linkage', 'Output L4 linkage'],
+    'gear-linkage fabrication stack exposes G3→G3→two L4 links in mechanism-reference order without a bracket'
   );
 }
 

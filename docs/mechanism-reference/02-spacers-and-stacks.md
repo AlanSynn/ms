@@ -149,7 +149,7 @@ Use cases:
 
 ### E. Moving link-end connector
 
-Use when a bracket/output connector attaches to a link end, not to the board.
+Use when an output connector attaches to a link end, not to the board.
 
 ```text
 E_link@coord > F > S10 > moving-part > S10 > tabs-loose
@@ -157,7 +157,7 @@ E_link@coord > F > S10 > moving-part > S10 > tabs-loose
 
 Use cases:
 
-- gear-linkage output bracket at `I12`,
+- gear-linkage shared R fastener at `I12`,
 - slider block bracket at `G12`.
 
 ### F. Off-centre gear handle / crank pin

@@ -88,8 +88,6 @@
   <text x="57" y="179" class="tiny" text-anchor="middle">L4</text>
   <rect x="153" y="174" width="22" height="7.5" class="score part-card" style="fill:#94a3b8;fill-opacity:0.22;stroke:#94a3b8;stroke-width:0.5" data-step="6" data-part-key="spacers:s10" data-part-index="1"/>
   <text x="164" y="179" class="tiny" text-anchor="middle">S10</text>
-  <rect x="178" y="174" width="22" height="7.5" class="score part-card" style="fill:#a78bfa;fill-opacity:0.22;stroke:#a78bfa;stroke-width:0.5" data-step="6" data-part-key="brackets:2-hole-straight" data-part-index="2"/>
-  <text x="189" y="179" class="tiny" text-anchor="middle">2 Hole Straig…</text>
   </g>
   <g id="layer-new-part-highlight">
   <circle cx="106" cy="64" r="1.8" class="score new-part-highlight" data-step="1" data-board-coord="I6" data-app-mechanism="gear_linkage"/>

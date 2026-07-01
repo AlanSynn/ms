@@ -352,8 +352,6 @@ const gearLinkageConnectorStack = () => stack([
     { label: 'Drive L4 linkage end', role: 'moving-part', part: 'linkages:linkage-4-cell' },
     { label: FABRICATION_SPACER_SPEC.label, role: 'spacer', part: 'spacers:s10' },
     { label: 'Output L4 linkage end', role: 'moving-part', part: 'linkages:linkage-4-cell' },
-    { label: FABRICATION_SPACER_SPEC.label, role: 'top-spacer', part: 'spacers:s10' },
-    { label: '2-hole bracket', role: 'moving-part', part: 'brackets:2-hole-straight' },
     { label: 'Paper fastener through shared connector', role: 'paper-fastener' },
     { label: 'Open tabs loosely', role: 'fastener-tabs' }
 ]);
@@ -453,7 +451,7 @@ const gearLinkageSteps: ReferenceAssemblyStep[] = [
     step(3, 'Mesh output G3 gear', 'add-part', ['I9'], ['board'], 'Place output G3 at I9 and mesh it with drive G3.', 'The gears move together.', movingPartStack('Board hole I9', 'G3 / 3-space gear', 'gears:g24')),
     step(4, 'Add drive crank link', 'add-linkage', ['I6', 'I12'], ['gear_handle_reference', 'link_end_reference'], 'Fasten L4 through an off-center drive G3 handle hole only (not the board), then point the free end toward I12.', 'The drive linkage rides around the gear center instead of locking to the board.', gearLinkageCrankStack('Drive G3 handle hole near I6', 'L4 linkage', 'linkages:linkage-4-cell', 1)),
     step(5, 'Add output crank link', 'add-linkage', ['I9', 'I12'], ['gear_handle_reference', 'link_end_reference'], 'Fasten a second L4 through an off-center output G3 handle hole only (not the board), then meet the first L4 at I12.', 'Both L4 links meet at one moving output point.', gearLinkageCrankStack('Output G3 handle hole near I9', 'L4 linkage', 'linkages:linkage-4-cell', 2)),
-    step(6, 'Join moving connector', 'add-bracket', ['I12'], ['link_end_reference'], 'Fasten the 2-hole bracket through the two free L4 ends near I12 as a moving handle.', 'The bracket follows both link ends with spacer clearance and is not pinned to the board.', gearLinkageConnectorStack())
+    step(6, 'Join moving connector', 'join-linkages', ['I12'], ['link_end_reference'], 'Fasten the two free L4 ends near I12 with one S10 spacer between them.', 'The shared connector follows both link ends and is not pinned to the board.', gearLinkageConnectorStack())
 ];
 
 const planetarySteps: ReferenceAssemblyStep[] = [
@@ -547,8 +545,8 @@ export const REFERENCE_MECHANISM_RECIPES: Record<MechanismType, ReferenceMechani
         support: 'fabrication-ready',
         recipeId: 'gear-linkage-crank',
         guideSvg: 'fabrication/assembly/04-gear-linkage-crank.svg',
-        requiredParts: [G3(2), L4(2), BR2(), S10],
-        stackLabels: ['Drive G3 / 3-space gear', 'Output G3 / 3-space gear', 'Drive L4 linkage', 'Output L4 linkage', '2-hole bracket'],
+        requiredParts: [G3(2), L4(2), S10],
+        stackLabels: ['Drive G3 / 3-space gear', 'Output G3 / 3-space gear', 'Drive L4 linkage', 'Output L4 linkage'],
         assemblySteps: gearLinkageSteps
     },
     planetary_gear: {

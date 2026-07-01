@@ -242,7 +242,6 @@ L = linkage_arm_length = |B-R| = |C-R|
 |---|---:|---|
 | `gears:g24` (`G3`) | 2 | drive and output endpoint gears |
 | `linkages:linkage-4-cell` (`L4`) | 2 | paired crank linkage arms `B-R` and `C-R` |
-| `brackets:2-hole-straight` | 1 | moving output connector at `R` |
 | `spacers:s10` | 8 | clearance stacks |
 
 ### Exact recipe
@@ -254,7 +253,7 @@ L = linkage_arm_length = |B-R| = |C-R|
 | 3 | `I9(board)` | `B@I9 > S10 > G3_output > fastener-head` |
 | 4 | `I6(gear_handle_reference)`, `I12(link_end_reference)` | `H_gear@I6 > gear-hole > S10 > L4_drive > S10 > tabs-loose` |
 | 5 | `I9(gear_handle_reference)`, `I12(link_end_reference)` | `H_gear@I9 > gear-hole > S10 > S10 > L4_output > S10 > tabs-loose` |
-| 6 | `I12(link_end_reference)` | `E_link@I12 > L4_drive > S10 > L4_output > S10 > bracket2 > F > tabs-loose` |
+| 6 | `I12(link_end_reference)` | `E_link@I12 > L4_drive > S10 > L4_output > F > tabs-loose` |
 
 Compatibility:
 
@@ -271,7 +270,7 @@ Rules:
 3. The drive/output/idler gears remain coplanar on their fixed board axles; each centre stack is `board > S10 > gear > fastener-head`.
 4. The B crank stack passes through the real drive gear plate hole, then `S10`, then the lower drive linkage plane.
 5. The C crank stack passes through the real output gear plate hole, then two `S10` spacers, then the upper output linkage plane.
-6. R is the only moving output connector; it stacks the two linkage ends with S10 clearance and the output bracket, and it is not pinned to the board.
+6. R is the only moving output connector; it stacks the two linkage ends with one S10 clearance spacer and a shared fastener, and it is not pinned to the board.
 7. `linkage_pin_radius` must be a radius available on both selected endpoint gears.
 8. The paired link arms should be real linkage bar lengths, usually `L4` in the default recipe.
 9. Simulation succeeds only when R is the circle intersection of the two equal linkage lengths around B and C.
