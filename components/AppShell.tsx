@@ -30,6 +30,7 @@ const stageNavLabel = (stage: AppStage) => ({
 } as Partial<Record<AppStage, string>>)[stage];
 
 const formatBytes = (bytes?: number) => bytes ? `${Math.round(bytes / 1024 / 1024)}MB` : '';
+const APP_VERSION = __APP_VERSION__;
 
 const MotionSmithLogoMark = ({ className = '' }: { className?: string }) => <img className={`motionsmith-logo-mark ${className}`.trim()} src={motionSmithIconUrl} alt="" aria-hidden="true" decoding="async" draggable={false}/>;
 
@@ -56,6 +57,7 @@ export const WorkflowRail = ({ stage, goStage }: { stage: AppStage; goStage: (st
                 <span className="workflow-rail-full">{item.label}</span>
             </button>;
         })}
+        <span className="workflow-rail-version" aria-label={`MotionSmith version ${APP_VERSION}`}>v{APP_VERSION}</span>
     </nav>
 );
 
@@ -126,7 +128,7 @@ export const AboutDialog = ({ onClose }: { onClose: () => void }) => <div classN
             <button className="btn-secondary" onClick={onClose}>Close</button>
         </div>
         <div className="shortcut-help-grid">
-            <div className="shortcut-help-row"><span>Version</span><kbd>0.0.2</kbd></div>
+            <div className="shortcut-help-row"><span>Version</span><kbd>v{APP_VERSION}</kbd></div>
             <div className="shortcut-help-row"><span>Release</span><kbd>/ms/ static web</kbd></div>
             <div className="shortcut-help-row"><span>Data</span><kbd>browser autosave · files</kbd></div>
             <div className="shortcut-help-row"><span>Project</span><kbd>MotionSmith</kbd></div>
@@ -264,6 +266,7 @@ export const WelcomeDialog = ({ onClose }: { onClose: (hideNextTime?: boolean) =
                 <MotionSmithLogoMark />
                 <h2 id="welcome-dialog-title">MOTIONSMITH</h2>
             </div>
+            <span className="splash-version" aria-label={`Version ${APP_VERSION}`}>v{APP_VERSION}</span>
         </section>
     </div>;
 };

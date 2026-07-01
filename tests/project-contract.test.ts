@@ -328,6 +328,7 @@ assert(playwrightConfigText.includes('Number.isInteger'), 'browser worker overri
 assert(playwrightConfigText.includes('PLAYWRIGHT_SERVER') && playwrightConfigText.includes('preview'), 'browser tests can run against production preview without Vite HMR noise');
 assert.equal(packageJson.version, '0.0.3', 'release version is bumped for the LFS-backed GitHub Pages redeploy');
 assert.equal(tauriConfig.version, packageJson.version, 'Tauri config version stays aligned with package.json');
+assert(viteConfigText.includes('__APP_VERSION__') && viteConfigText.includes('packageVersion'), 'Vite exposes package.json version to the browser UI');
 assert.deepEqual(tauriConfig.bundle.icon, ['icons/icon.png', 'icons/icon.ico', 'icons/icon.icns'], 'Tauri bundle references the tracked MotionSmith png, ico, and icns icons');
 assert(cargoTomlText.includes(`version = "${packageJson.version}"`), 'Cargo.toml version stays aligned with package.json');
 assert(cargoLockText.includes('name = "motionsmith"') && cargoLockText.includes(`version = "${packageJson.version}"`), 'Cargo.lock MotionSmith package version stays aligned with package.json');
@@ -984,6 +985,8 @@ assert(designContract.includes('The Character tab is functional'), 'DESIGN.md de
 assert(appUiText.includes('splash-dialog') && appShellText.includes('MOTIONSMITH'), 'first-run welcome is a compact MotionSmith wordmark splash dialog');
 assert(indexText.includes('max-width: min(100%, calc(100vw - 1.5rem))') && indexText.includes('.splash-dialog { display: grid; justify-items: center; gap: 0; text-align: center; overflow: visible; }'), 'first-run welcome wordmark and icon are viewport-constrained instead of clipped');
 assert(appShellText.includes('MotionSmithLogoMark') && appShellText.includes('../resources/icons/AppIcon.png?url') && !appShellText.includes('../src-tauri/icons/icon.png?url'), 'first-run welcome uses the canonical MotionSmith app icon instead of the old blue grid path');
+assert(appShellText.includes('const APP_VERSION = __APP_VERSION__') && appShellText.includes('splash-version') && appShellText.includes('workflow-rail-version'), 'first-run welcome and editor rail show the package version subtly');
+assert(indexText.includes('.splash-version') && indexText.includes('.workflow-rail-version'), 'version labels use low-emphasis styling');
 assert(appText.includes('./resources/icons/AppIcon.png?url') && indexText.includes('.app-header-icon'), 'top bar renders the canonical MotionSmith app icon with dedicated sizing');
 assert(indexText.includes("font-family: 'Manrope'") && indexText.includes('fonts/manrope-800-latin.woff2'), 'first-run welcome uses self-hosted Manrope wordmark styling');
 assert(appShellText.includes('window.setTimeout') && appShellText.includes('5000') && appShellText.includes('window.clearTimeout'), 'first-run welcome auto-dismisses after five seconds');
