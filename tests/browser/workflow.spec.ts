@@ -121,6 +121,18 @@ const readScenePoint = async (locator: Locator) => locator.evaluate((el: SVGElem
 
 const activeElementIsInDialog = (page: Page) => page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]')));
 
+const expectInsideViewport = async (page: Page, locator: Locator, label: string) => {
+  const box = await locator.boundingBox();
+  const viewport = page.viewportSize();
+  expect(box, `${label} has a layout box`).toBeTruthy();
+  expect(viewport, `${label} has viewport metrics`).toBeTruthy();
+  if (!box || !viewport) throw new Error(`Missing metrics for ${label}`);
+  expect(box.x, `${label} left edge stays inside viewport`).toBeGreaterThanOrEqual(-1);
+  expect(box.y, `${label} top edge stays inside viewport`).toBeGreaterThanOrEqual(-1);
+  expect(box.x + box.width, `${label} right edge stays inside viewport`).toBeLessThanOrEqual(viewport.width + 1);
+  expect(box.y + box.height, `${label} bottom edge stays inside viewport`).toBeLessThanOrEqual(viewport.height + 1);
+};
+
 const stageRailButton = (page: Page, name: string | RegExp) => page.getByTestId('workspace-steps').getByRole('button', { name, exact: typeof name === 'string' });
 const clickStage = async (page: Page, name: string | RegExp) => stageRailButton(page, name).click();
 const expectProjectCounts = async (page: Page, parts: number, paths: number, mechanisms: number) => {
@@ -150,6 +162,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   const welcomeBox = await welcomeDialog.boundingBox();
   const logoBox = await welcomeDialog.locator('img.motionsmith-logo-mark').boundingBox();
   const viewport = page.viewportSize();
+  await expectInsideViewport(page, welcomeDialog.locator('.splash-brand'), 'startup splash brand');
+  await expectInsideViewport(page, welcomeDialog.locator('#welcome-dialog-title'), 'startup splash wordmark');
   expect(welcomeBox?.width ?? 0, 'startup splash reads as a large overlay').toBeGreaterThanOrEqual((viewport?.width ?? 1200) * 0.62);
   expect(welcomeBox?.height ?? 0, 'logo-only splash fits inside the editor viewport').toBeLessThanOrEqual((viewport?.height ?? 900) * 0.7);
   expect(logoBox?.width ?? 0, 'splash logo is large enough to read as startup branding').toBeGreaterThan(70);
@@ -1930,6 +1944,8 @@ test('Mobile welcome modal is logo-only, traps focus, and releases to Getting St
   const splash = page.getByTestId('welcome-dialog');
   await expect(splash).toBeVisible();
   await expect(splash).toContainText('MOTIONSMITH');
+  await expectInsideViewport(page, splash.locator('.splash-brand'), 'mobile splash brand');
+  await expectInsideViewport(page, splash.locator('#welcome-dialog-title'), 'mobile splash wordmark');
   await expect(splash.getByRole('button')).toHaveCount(0);
   await expect(splash.getByRole('checkbox')).toHaveCount(0);
   await expect(splash.getByLabel('MotionSmith preview video')).toHaveCount(0);

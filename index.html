@@ -185,13 +185,13 @@
         .cut-outline-actions { justify-content: flex-start; }
       }
       .welcome-backdrop { background: rgba(248,250,252,.62); backdrop-filter: blur(10px) saturate(1.08); }
-      .welcome-dialog { width: min(96vw, 64rem); max-height: none; border: 0; background: transparent; box-shadow: none; padding: 2rem; }
-      .splash-dialog { display: grid; justify-items: center; gap: 0; text-align: center; overflow: hidden; }
-      .splash-brand { display: inline-flex; align-items: center; justify-content: center; gap: clamp(1rem, 3vw, 2rem); animation: splash-breathe 1.8s ease-in-out infinite; }
+      .welcome-dialog { width: min(96vw, 64rem); max-height: 94vh; border: 0; background: transparent; box-shadow: none; padding: clamp(.75rem, 3vw, 2rem); }
+      .splash-dialog { display: grid; justify-items: center; gap: 0; text-align: center; overflow: visible; }
+      .splash-brand { display: inline-flex; align-items: center; justify-content: center; gap: clamp(.75rem, 2.4vw, 1.75rem); max-width: min(100%, calc(100vw - 1.5rem)); min-width: 0; animation: splash-breathe 1.8s ease-in-out infinite; }
       .motionsmith-logo-mark { width: 2.55rem; height: 2.55rem; flex: none; border-radius: .9rem; object-fit: cover; filter: drop-shadow(0 8px 16px rgba(47,86,214,.14)); }
       .workflow-rail-app-icon { width: 2.35rem; height: 2.35rem; border-radius: .82rem; }
-      .splash-dialog .motionsmith-logo-mark { width: clamp(4.5rem, 11vw, 8rem); height: clamp(4.5rem, 11vw, 8rem); border-radius: 1.6rem; filter: drop-shadow(0 18px 40px rgba(47,86,214,.22)); }
-      .splash-dialog h2 { margin: 0; color: var(--ms-text); font-family: Manrope, var(--ms-font-display); font-size: clamp(3rem, 10vw, 7rem); line-height: .9; letter-spacing: .24em; font-weight: 800; }
+      .splash-dialog .motionsmith-logo-mark { width: clamp(3.5rem, 8vw, 6.5rem); height: clamp(3.5rem, 8vw, 6.5rem); border-radius: 1.45rem; filter: drop-shadow(0 18px 40px rgba(47,86,214,.22)); }
+      .splash-dialog h2 { margin: 0; max-width: 100%; color: var(--ms-text); font-family: Manrope, var(--ms-font-display); font-size: clamp(2.4rem, 7vw, 5.25rem); line-height: .95; letter-spacing: clamp(.06em, .5vw, .16em); font-weight: 800; white-space: nowrap; }
       @keyframes splash-breathe { 0%, 100% { opacity: .82; transform: scale(.98); } 50% { opacity: 1; transform: scale(1); } }
       .getting-started-dialog { width: min(92vw, 42rem); max-height: min(86vh, 34rem); display: grid; gap: .85rem; padding: 1rem; overflow: auto; }
       .getting-started-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; border-bottom: 1px solid var(--ms-line); padding-bottom: .75rem; }
@@ -447,8 +447,9 @@
         .path-canvas-shell svg { height: 58vh; min-height: 360px; }
         .welcome-backdrop { padding: .75rem; }
         .welcome-dialog { max-height: 94vh; padding: .85rem; border-radius: 0; }
-        .splash-brand { flex-direction: column; gap: 1rem; }
-        .splash-dialog h2 { font-size: clamp(2.3rem, 14vw, 4.2rem); letter-spacing: .18em; }
+        .splash-brand { flex-direction: column; gap: .8rem; width: 100%; max-width: calc(100vw - 1.5rem); }
+        .splash-dialog .motionsmith-logo-mark { width: clamp(3.75rem, 18vw, 5.25rem); height: clamp(3.75rem, 18vw, 5.25rem); border-radius: 1.25rem; }
+        .splash-dialog h2 { font-size: clamp(1.65rem, 9vw, 3rem); letter-spacing: .12em; }
         .character-stage { height: auto; min-height: calc(100vh - var(--ms-bottom-bars-height) - 1rem); overflow: visible; }
         .character-status-dock { left: .75rem; right: .75rem; bottom: calc(var(--ms-bottom-bars-height) + 10px); width: auto; }
         .character-status-dock .import-status { max-height: 46vh; }

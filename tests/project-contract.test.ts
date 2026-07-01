@@ -908,6 +908,7 @@ assert(threePreviewText.includes('disposeOwnedMaterials(scene)'), '3D puppet pre
 assert(designContract.includes('Getting Started is a compact modal dialog'), 'DESIGN.md separates Getting Started from full-screen onboarding');
 assert(designContract.includes('The Character tab is functional'), 'DESIGN.md defines Character as a functional editor tab');
 assert(appUiText.includes('splash-dialog') && appShellText.includes('MOTIONSMITH'), 'first-run welcome is a compact MotionSmith wordmark splash dialog');
+assert(indexText.includes('max-width: min(100%, calc(100vw - 1.5rem))') && indexText.includes('.splash-dialog { display: grid; justify-items: center; gap: 0; text-align: center; overflow: visible; }'), 'first-run welcome wordmark and icon are viewport-constrained instead of clipped');
 assert(appShellText.includes('MotionSmithLogoMark') && appShellText.includes('../resources/icons/AppIcon.png?url') && !appShellText.includes('../src-tauri/icons/icon.png?url'), 'first-run welcome uses the canonical MotionSmith app icon instead of the old blue grid path');
 assert(appText.includes('./resources/icons/AppIcon.png?url') && indexText.includes('.app-header-icon'), 'top bar renders the canonical MotionSmith app icon with dedicated sizing');
 assert(indexText.includes("font-family: 'Manrope'") && indexText.includes('fonts/manrope-800-latin.woff2'), 'first-run welcome uses self-hosted Manrope wordmark styling');
