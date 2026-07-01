@@ -887,7 +887,7 @@ ${shapeFor(item, x, y)}
 <g transform="translate(38 36)">
 <rect width="330" height="74" rx="20" fill="#ffffff" stroke="#c7d2fe" stroke-width="2"/>
 <text x="22" y="25" class="guide-title">Exploded view</text>
-	<text x="22" y="47" class="guide-muted">Stack: Clip → part → spacer → part → clip</text>
+	<text x="22" y="47" class="guide-muted">Stack: listed low-Z board side to high-Z fastener side</text>
 	<text x="22" y="64" class="guide-muted">Z=0 board · ${recipe ? esc(recipe.mechanismId) : 'pending recipe'}</text>
 	</g>
 	<g transform="translate(86 426)">
@@ -896,7 +896,7 @@ ${shapeFor(item, x, y)}
 	</g>
 	<g filter="url(#guide-shadow)">${items}</g>
 <line x1="92" y1="458" x2="438" y2="130" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 10"/>
-<text x="70" y="486" class="guide-muted">Spacers sit between moving layers.</text>
+<text x="70" y="486" class="guide-muted">Board-side S10 spacers lift moving parts before the fastener head.</text>
 ${recipe ? `<text x="40" y="505" class="guide-muted">Recipe: ${esc(recipe.mechanismId)} · ${esc(mechanismTypeLabel(recipe.type))} · anchor ${esc(recipeBoardCallout(recipe))}</text>` : ''}
 </svg>`;
 };

@@ -75,7 +75,7 @@ Use cases:
 Use for a rotating part whose axle is board-fixed but whose part must spin/swing.
 
 ```text
-B@coord > F > S10 > moving-part > S10 > tabs-loose
+B@coord > S10 > moving-part > fastener-head
 ```
 
 Layer order:
@@ -83,11 +83,10 @@ Layer order:
 | Order | Role | Part constraint |
 |---:|---|---|
 | 1 | `board` | none |
-| 2 | `paper-fastener` | hardware |
-| 3 | `spacer` | `spacers:s10` |
-| 4 | `moving-part` | gear/link/cam/follower/bracket |
-| 5 | `top-spacer` | `spacers:s10` |
-| 6 | `fastener-tabs` | loose |
+| 2 | `spacer` | `spacers:s10` |
+| 3 | `moving-part` | gear/link/cam/follower/bracket |
+| 4 | `paper-fastener` | visible fastener head |
+| 5 | `fastener-tabs` | loose |
 
 Use cases:
 
@@ -212,10 +211,10 @@ Physical stack contract:
 
 | Joint | Role | Stack | Board-pinned? |
 |---|---|---|---:|
-| `A = I5` | input ground pivot | `B@I5 > F > S10 > L2_input > S10 > tabs-loose` | yes |
+| `A = I5` | input ground pivot | `B@I5 > S10 > L2_input > fastener-head` | yes |
 | `B = G6` | input/coupler joint | `J_link@G6 > F > S10 > L4_coupler > S10 > tabs-loose` | no |
 | `C = G10` | coupler/output joint | `J_link@G10 > F > S10 > L4_coupler or L2_output > S10 > tabs-loose` | no |
-| `D = I9` | output ground pivot | `B@I9 > F > S10 > L2_output > S10 > tabs-loose` | yes |
+| `D = I9` | output ground pivot | `B@I9 > S10 > L2_output > fastener-head` | yes |
 
 Do not create a board hole fastener at `G6` or `G10`. Those are moving joint references. Pinning them to the board locks or visually misrepresents the mechanism.
 
@@ -229,7 +228,7 @@ Portable validator should enforce at least:
 4. If a coordinate role is not `board`, stack first layer must not be `board`.
 5. If first layer is `link-joint-hole`, `link-end-hole`, `gear-handle-hole`, or `carrier-hole`, the coordinate is a reference only.
 6. Fixed multi-hole parts must include all fixed board coordinates and repeat the fixed stack.
-7. Moving parts must end with `top-spacer` before `fastener-tabs` unless a future profile explicitly defines a different clearance stack.
+7. Board-fixed moving parts use lower-z board-side order: `board > S10 spacer > moving part > fastener head`; floating joints may still use a top spacer when separating two moving layers.
 8. Gears in mesh must satisfy `abs(board_distance_mm - (r1+r2+g)) <= tolerance_mm`.
 9. Ring gear must be fixed; sun gear and planet gear must be moving.
 10. Slider guide must be fixed; slider block must be moving.

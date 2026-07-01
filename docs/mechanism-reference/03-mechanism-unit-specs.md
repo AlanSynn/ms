@@ -113,9 +113,9 @@ Board coordinate interpretation:
 | Step | Action | Coords / roles | Stack |
 |---:|---|---|---|
 | 1 | Set ground pivots | `I5(board)`, `I9(board)` | `B@I5 > F > tabs-behind-board`, repeated at `I9` |
-| 2 | Add input link | `I5(board)`, `G6(link_end_reference)` | `B@I5 > F > S10 > L2_input > S10 > tabs-loose` |
+| 2 | Add input link | `I5(board)`, `G6(link_end_reference)` | `B@I5 > S10 > L2_input > fastener-head` |
 | 3 | Add coupler | `G6(link_joint_reference)`, `G10(link_end_reference)` | `J_link@G6 > F > S10 > L4_coupler > S10 > tabs-loose` |
-| 4 | Close output link | `G10(link_joint_reference)`, `I9(board)` | `B@I9 > F > S10 > L2_output > S10 > tabs-loose` |
+| 4 | Close output link | `G10(link_joint_reference)`, `I9(board)` | `B@I9 > S10 > L2_output > fastener-head` |
 | 5 | Join output to coupler | `G10(link_joint_reference)` | `J_link@G10 > F > S10 > L4_coupler > S10 > tabs-loose` |
 
 ### Four-bar rules to preserve in another app
@@ -176,8 +176,8 @@ gear_ratio = T_b / T_a
 | Step | Coords / roles | Stack |
 |---:|---|---|
 | 1 | `H6(board)` | `B@H6 > F > tabs-behind-board` |
-| 2 | `H6(board)` | `B@H6 > F > S10 > G3_drive > S10 > tabs-loose` |
-| 3 | `H9(board)` | `B@H9 > F > S10 > G3_driven > S10 > tabs-loose` |
+| 2 | `H6(board)` | `B@H6 > S10 > G3_drive > fastener-head` |
+| 3 | `H9(board)` | `B@H9 > S10 > G3_driven > fastener-head` |
 | 4 | `H6(board)`, `H9(board)` | same moving gear stack for motion check |
 
 Compatibility record:
@@ -192,8 +192,8 @@ tolerance = 3.6 mm
 Rules:
 
 1. Meshing gear centres are fixed board axles in this recipe.
-2. Drive, idler, and driven gears in an external gear train are coplanar on fixed board axles. `S10` spacers are local washers on each axle; they must not push meshing gear plates onto different z planes.
-3. Each visible axle/fastener stack must pass through the gear centre and the adjacent `S10` spacer(s); no gear may float beside or away from its centre shaft.
+2. Drive, idler, and driven gears in an external gear train are coplanar on fixed board axles. Lower z is the board side: each gear axle renders `board > S10 board-side spacer > gear > fastener-head`. `S10` spacers are local washers on each axle; they must not push meshing gear plates onto different z planes.
+3. Each visible axle/fastener stack must pass through the gear centre and the adjacent board-side `S10` spacer; no gear may float beside or away from its centre shaft.
 4. Gears should touch lightly; physical tolerance is loose educational tolerance, not precision gearbox backlash.
 5. If an app chooses other gear pairs, verify board distance equals `r_a+r_b+g` within tolerance.
 6. If using a handle, attach to a real gear attachment hole; `G1` has no attachment holes.
@@ -250,8 +250,8 @@ L = linkage_arm_length = |B-R| = |C-R|
 | Step | Coords / roles | Stack |
 |---:|---|---|
 | 1 | `I6(board)` | `B@I6 > F > tabs-behind-board` |
-| 2 | `I6(board)` | `B@I6 > F > S10 > G3_drive > S10 > tabs-loose` |
-| 3 | `I9(board)` | `B@I9 > F > S10 > G3_output > S10 > tabs-loose` |
+| 2 | `I6(board)` | `B@I6 > S10 > G3_drive > fastener-head` |
+| 3 | `I9(board)` | `B@I9 > S10 > G3_output > fastener-head` |
 | 4 | `I6(gear_handle_reference)`, `I12(link_end_reference)` | `H_gear@I6 > F > S10 > L4_drive > S10 > tabs-loose` |
 | 5 | `I9(gear_handle_reference)`, `I12(link_end_reference)` | `H_gear@I9 > F > S10 > L4_output > S10 > tabs-loose` |
 | 6 | `I12(link_end_reference)` | `E_link@I12 > F > S10 > bracket2 > S10 > tabs-loose` |
@@ -459,7 +459,7 @@ x = slider displacement along guide
 | Step | Coords / roles | Stack |
 |---:|---|---|
 | 1 | `I5(board)` | `B@I5 > F > tabs-behind-board` |
-| 2 | `I5(board)`, `G6(link_end_reference)` | `B@I5 > F > S10 > L2_crank > S10 > tabs-loose` |
+| 2 | `I5(board)`, `G6(link_end_reference)` | `B@I5 > S10 > L2_crank > fastener-head` |
 | 3 | `G6(link_joint_reference)`, `G12(slider_reference)` | `J_link@G6 > F > S10 > L6_rod > S10 > tabs-loose` |
 | 4 | `G11(board)`, `G12(board)`, `G13(board)` | `B@G11 > F > S10 > bracket3_fixed_guide > tabs-behind-board`, repeated |
 | 5 | `G12(slider_reference)` | `E_link@G12 > F > S10 > bracket2_slider > S10 > tabs-loose` |

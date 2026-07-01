@@ -175,32 +175,26 @@
               "role": "board"
             },
             {
-              "label": "Paper fastener",
-              "order": 2,
-              "role": "paper-fastener"
-            },
-            {
               "label": "S10 spacer",
-              "order": 3,
+              "order": 2,
               "part": "spacers:s10",
               "role": "spacer"
             },
             {
               "label": "G3 / 3-space gear",
-              "order": 4,
+              "order": 3,
               "part": "gears:g24",
               "role": "moving-part"
             },
             {
-              "label": "S10 spacer",
-              "order": 5,
-              "part": "spacers:s10",
-              "role": "top-spacer"
+              "label": "Paper fastener head",
+              "role": "paper-fastener",
+              "order": 4
             },
             {
-              "label": "Open tabs loosely",
-              "order": 6,
-              "role": "fastener-tabs"
+              "label": "Open tabs behind board",
+              "role": "fastener-tabs",
+              "order": 5
             }
           ],
           "title": "Add drive G3 gear",
@@ -259,32 +253,26 @@
               "role": "board"
             },
             {
-              "label": "Paper fastener",
-              "order": 2,
-              "role": "paper-fastener"
-            },
-            {
               "label": "S10 spacer",
-              "order": 3,
+              "order": 2,
               "part": "spacers:s10",
               "role": "spacer"
             },
             {
               "label": "G3 / 3-space gear",
-              "order": 4,
+              "order": 3,
               "part": "gears:g24",
               "role": "moving-part"
             },
             {
-              "label": "S10 spacer",
-              "order": 5,
-              "part": "spacers:s10",
-              "role": "top-spacer"
+              "label": "Paper fastener head",
+              "role": "paper-fastener",
+              "order": 4
             },
             {
-              "label": "Open tabs loosely",
-              "order": 6,
-              "role": "fastener-tabs"
+              "label": "Open tabs behind board",
+              "role": "fastener-tabs",
+              "order": 5
             }
           ],
           "title": "Add output G3 gear",
@@ -345,32 +333,26 @@
               "role": "board"
             },
             {
-              "label": "Paper fastener",
-              "order": 2,
-              "role": "paper-fastener"
-            },
-            {
               "label": "S10 spacer",
-              "order": 3,
+              "order": 2,
               "part": "spacers:s10",
               "role": "spacer"
             },
             {
               "label": "G3 / 3-space gear",
-              "order": 4,
+              "order": 3,
               "part": "gears:g24",
               "role": "moving-part"
             },
             {
-              "label": "S10 spacer",
-              "order": 5,
-              "part": "spacers:s10",
-              "role": "top-spacer"
+              "label": "Paper fastener head",
+              "role": "paper-fastener",
+              "order": 4
             },
             {
-              "label": "Open tabs loosely",
-              "order": 6,
-              "role": "fastener-tabs"
+              "label": "Open tabs behind board",
+              "role": "fastener-tabs",
+              "order": 5
             }
           ],
           "title": "Turn the handle hole",
@@ -521,32 +503,26 @@
               "role": "board"
             },
             {
-              "label": "Paper fastener",
-              "order": 2,
-              "role": "paper-fastener"
-            },
-            {
               "label": "S10 spacer",
-              "order": 3,
+              "order": 2,
               "part": "spacers:s10",
               "role": "spacer"
             },
             {
               "label": "Eccentric cam",
-              "order": 4,
+              "order": 3,
               "part": "cams:eccentric",
               "role": "moving-part"
             },
             {
-              "label": "S10 spacer",
-              "order": 5,
-              "part": "spacers:s10",
-              "role": "top-spacer"
+              "label": "Paper fastener head",
+              "role": "paper-fastener",
+              "order": 4
             },
             {
-              "label": "Open tabs loosely",
-              "order": 6,
-              "role": "fastener-tabs"
+              "label": "Open tabs behind board",
+              "role": "fastener-tabs",
+              "order": 5
             }
           ],
           "title": "Add eccentric cam",
@@ -605,32 +581,26 @@
               "role": "board"
             },
             {
-              "label": "Paper fastener",
-              "order": 2,
-              "role": "paper-fastener"
-            },
-            {
               "label": "S10 spacer",
-              "order": 3,
+              "order": 2,
               "part": "spacers:s10",
               "role": "spacer"
             },
             {
               "label": "Round follower",
-              "order": 4,
+              "order": 3,
               "part": "followers:f3-round",
               "role": "moving-part"
             },
             {
-              "label": "S10 spacer",
-              "order": 5,
-              "part": "spacers:s10",
-              "role": "top-spacer"
+              "label": "Paper fastener head",
+              "role": "paper-fastener",
+              "order": 4
             },
             {
-              "label": "Open tabs loosely",
-              "order": 6,
-              "role": "fastener-tabs"
+              "label": "Open tabs behind board",
+              "role": "fastener-tabs",
+              "order": 5
             }
           ],
           "title": "Add follower guide",
@@ -691,32 +661,26 @@
               "role": "board"
             },
             {
-              "label": "Paper fastener",
-              "order": 2,
-              "role": "paper-fastener"
-            },
-            {
               "label": "S10 spacer",
-              "order": 3,
+              "order": 2,
               "part": "spacers:s10",
               "role": "spacer"
             },
             {
               "label": "Round follower",
-              "order": 4,
+              "order": 3,
               "part": "followers:f3-round",
               "role": "moving-part"
             },
             {
-              "label": "S10 spacer",
-              "order": 5,
-              "part": "spacers:s10",
-              "role": "top-spacer"
+              "label": "Paper fastener head",
+              "role": "paper-fastener",
+              "order": 4
             },
             {
-              "label": "Open tabs loosely",
-              "order": 6,
-              "role": "fastener-tabs"
+              "label": "Open tabs behind board",
+              "role": "fastener-tabs",
+              "order": 5
             }
           ],
           "title": "Check lift",
@@ -870,32 +834,26 @@
               "role": "board"
             },
             {
-              "label": "Paper fastener",
-              "order": 2,
-              "role": "paper-fastener"
-            },
-            {
               "label": "S10 spacer",
-              "order": 3,
+              "order": 2,
               "part": "spacers:s10",
               "role": "spacer"
             },
             {
               "label": "L2 linkage",
-              "order": 4,
+              "order": 3,
               "part": "linkages:linkage-2-cell",
               "role": "moving-part"
             },
             {
-              "label": "S10 spacer",
-              "order": 5,
-              "part": "spacers:s10",
-              "role": "top-spacer"
+              "label": "Paper fastener head",
+              "role": "paper-fastener",
+              "order": 4
             },
             {
-              "label": "Open tabs loosely",
-              "order": 6,
-              "role": "fastener-tabs"
+              "label": "Open tabs behind board",
+              "role": "fastener-tabs",
+              "order": 5
             }
           ],
           "title": "Add input link",
@@ -1042,32 +1000,26 @@
               "role": "board"
             },
             {
-              "label": "Paper fastener",
-              "order": 2,
-              "role": "paper-fastener"
-            },
-            {
               "label": "S10 spacer",
-              "order": 3,
+              "order": 2,
               "part": "spacers:s10",
               "role": "spacer"
             },
             {
               "label": "L2 linkage",
-              "order": 4,
+              "order": 3,
               "part": "linkages:linkage-2-cell",
               "role": "moving-part"
             },
             {
-              "label": "S10 spacer",
-              "order": 5,
-              "part": "spacers:s10",
-              "role": "top-spacer"
+              "label": "Paper fastener head",
+              "role": "paper-fastener",
+              "order": 4
             },
             {
-              "label": "Open tabs loosely",
-              "order": 6,
-              "role": "fastener-tabs"
+              "label": "Open tabs behind board",
+              "role": "fastener-tabs",
+              "order": 5
             }
           ],
           "title": "Close output link",
@@ -1320,32 +1272,26 @@
               "role": "board"
             },
             {
-              "label": "Paper fastener",
-              "order": 2,
-              "role": "paper-fastener"
-            },
-            {
               "label": "S10 spacer",
-              "order": 3,
+              "order": 2,
               "part": "spacers:s10",
               "role": "spacer"
             },
             {
               "label": "G3 / 3-space gear",
-              "order": 4,
+              "order": 3,
               "part": "gears:g24",
               "role": "moving-part"
             },
             {
-              "label": "S10 spacer",
-              "order": 5,
-              "part": "spacers:s10",
-              "role": "top-spacer"
+              "label": "Paper fastener head",
+              "role": "paper-fastener",
+              "order": 4
             },
             {
-              "label": "Open tabs loosely",
-              "order": 6,
-              "role": "fastener-tabs"
+              "label": "Open tabs behind board",
+              "role": "fastener-tabs",
+              "order": 5
             }
           ],
           "title": "Add drive G3 gear",
@@ -1404,32 +1350,26 @@
               "role": "board"
             },
             {
-              "label": "Paper fastener",
-              "order": 2,
-              "role": "paper-fastener"
-            },
-            {
               "label": "S10 spacer",
-              "order": 3,
+              "order": 2,
               "part": "spacers:s10",
               "role": "spacer"
             },
             {
               "label": "G3 / 3-space gear",
-              "order": 4,
+              "order": 3,
               "part": "gears:g24",
               "role": "moving-part"
             },
             {
-              "label": "S10 spacer",
-              "order": 5,
-              "part": "spacers:s10",
-              "role": "top-spacer"
+              "label": "Paper fastener head",
+              "role": "paper-fastener",
+              "order": 4
             },
             {
-              "label": "Open tabs loosely",
-              "order": 6,
-              "role": "fastener-tabs"
+              "label": "Open tabs behind board",
+              "role": "fastener-tabs",
+              "order": 5
             }
           ],
           "title": "Mesh output G3 gear",
@@ -1956,32 +1896,26 @@
               "role": "board"
             },
             {
-              "label": "Paper fastener",
-              "order": 2,
-              "role": "paper-fastener"
-            },
-            {
               "label": "S10 spacer",
-              "order": 3,
+              "order": 2,
               "part": "spacers:s10",
               "role": "spacer"
             },
             {
               "label": "G1 / 1-space gear",
-              "order": 4,
+              "order": 3,
               "part": "gears:g8",
               "role": "moving-part"
             },
             {
-              "label": "S10 spacer",
-              "order": 5,
-              "part": "spacers:s10",
-              "role": "top-spacer"
+              "label": "Paper fastener head",
+              "role": "paper-fastener",
+              "order": 4
             },
             {
-              "label": "Open tabs loosely",
-              "order": 6,
-              "role": "fastener-tabs"
+              "label": "Open tabs behind board",
+              "role": "fastener-tabs",
+              "order": 5
             }
           ],
           "title": "Add G1 sun gear",
@@ -2042,32 +1976,26 @@
               "role": "board"
             },
             {
-              "label": "Paper fastener",
-              "order": 2,
-              "role": "paper-fastener"
-            },
-            {
               "label": "S10 spacer",
-              "order": 3,
+              "order": 2,
               "part": "spacers:s10",
               "role": "spacer"
             },
             {
               "label": "L2 linkage",
-              "order": 4,
+              "order": 3,
               "part": "linkages:linkage-2-cell",
               "role": "moving-part"
             },
             {
-              "label": "S10 spacer",
-              "order": 5,
-              "part": "spacers:s10",
-              "role": "top-spacer"
+              "label": "Paper fastener head",
+              "role": "paper-fastener",
+              "order": 4
             },
             {
-              "label": "Open tabs loosely",
-              "order": 6,
-              "role": "fastener-tabs"
+              "label": "Open tabs behind board",
+              "role": "fastener-tabs",
+              "order": 5
             }
           ],
           "title": "Add carrier link",
@@ -2414,32 +2342,26 @@
               "role": "board"
             },
             {
-              "label": "Paper fastener",
-              "order": 2,
-              "role": "paper-fastener"
-            },
-            {
               "label": "S10 spacer",
-              "order": 3,
+              "order": 2,
               "part": "spacers:s10",
               "role": "spacer"
             },
             {
               "label": "L2 linkage",
-              "order": 4,
+              "order": 3,
               "part": "linkages:linkage-2-cell",
               "role": "moving-part"
             },
             {
-              "label": "S10 spacer",
-              "order": 5,
-              "part": "spacers:s10",
-              "role": "top-spacer"
+              "label": "Paper fastener head",
+              "role": "paper-fastener",
+              "order": 4
             },
             {
-              "label": "Open tabs loosely",
-              "order": 6,
-              "role": "fastener-tabs"
+              "label": "Open tabs behind board",
+              "role": "fastener-tabs",
+              "order": 5
             }
           ],
           "title": "Add crank link",

@@ -241,7 +241,7 @@ Build sequence:
    - Check: both ground pivots are fixed.
 2. **Add input link**
    - Coordinates: `I5(board)`, `G6(link_end_reference)`.
-   - Stack: `B@I5 > F > S10 > L2_input > S10 > tabs-loose`.
+   - Stack: `B@I5 > S10 > L2_input > fastener-head`.
    - Check: input L2 swings freely.
 3. **Add coupler**
    - Coordinates: `G6(link_joint_reference)`, `G10(link_end_reference)`.
@@ -249,7 +249,7 @@ Build sequence:
    - Check: coupler moves without scraping.
 4. **Close output link**
    - Coordinates: `G10(link_joint_reference)`, `I9(board)`.
-   - Stack: `B@I9 > F > S10 > L2_output > S10 > tabs-loose`.
+   - Stack: `B@I9 > S10 > L2_output > fastener-head`.
    - Check: all pivots move when input link turns.
 5. **Join output to coupler**
    - Coordinate: `G10(link_joint_reference)`.
@@ -281,10 +281,10 @@ Build sequence:
    - Stack: `B@H6 > F > tabs-behind-board`.
    - Check: fastener turns freely.
 2. **Add drive G3**
-   - Stack: `B@H6 > F > S10 > G3_drive > S10 > tabs-loose`.
+   - Stack: `B@H6 > S10 > G3_drive > fastener-head`.
    - Check: drive gear spins without rubbing.
 3. **Add output G3 at H9**
-   - Stack: `B@H9 > F > S10 > G3_output > S10 > tabs-loose`.
+   - Stack: `B@H9 > S10 > G3_output > fastener-head`.
    - Check: both gears turn when drive gear turns.
 4. **Turn handle hole**
    - Use a real drive gear attachment hole.
@@ -354,10 +354,10 @@ Build sequence:
    - Stack: `B@I6 > F > tabs-behind-board`.
    - Check: axle is straight.
 2. **Add drive G3**
-   - Stack: `B@I6 > F > S10 > G3_drive > S10 > tabs-loose`.
+   - Stack: `B@I6 > S10 > G3_drive > fastener-head`.
    - Check: drive gear rotates freely.
 3. **Mesh output G3 at I9**
-   - Stack: `B@I9 > F > S10 > G3_output > S10 > tabs-loose`.
+   - Stack: `B@I9 > S10 > G3_output > fastener-head`.
    - Check: gears move together.
 4. **Add drive crank link**
    - Coordinates: `I6(gear_handle_reference)`, `I12(link_end_reference)`.
@@ -448,7 +448,7 @@ Build sequence:
    - Check: crank axle is fixed.
 2. **Add crank link**
    - Coordinates: `I5(board)`, `G6(link_end_reference)`.
-   - Stack: `B@I5 > F > S10 > L2_crank > S10 > tabs-loose`.
+   - Stack: `B@I5 > S10 > L2_crank > fastener-head`.
    - Check: crank rotates without scraping.
 3. **Add connecting rod**
    - Coordinates: `G6(link_joint_reference)`, `G12(slider_reference)`.
@@ -509,7 +509,7 @@ B@coord > F > S10 > character-part > tabs-behind-board
 | Planetary carrier locks | Planet axle pinned to board | Use `H_carrier` stack; remove board pin at `H10`. |
 | Slider block stuck | Guide/slider both fixed at `G12` | Fixed guide can use `G12(board)`, but slider block uses `G12(slider_reference)`. |
 | Part rubs board | Missing lower spacer | Add `S10` between board and moving part. |
-| Part rubs fastener tabs/top layer | Missing top spacer or tabs too tight | Add top `S10`; loosen tabs. |
+| Floating joint rubs another moving layer | Missing between-layer spacer or tabs too tight | Add the required `S10` between moving layers; loosen tabs. |
 | Gear mesh binds | Axle distance wrong or fasteners too tight | Verify centre distance and loosen fasteners. |
 | Printed holes too tight | Printer/cutter kerf/material issue | Cut test coupon and adjust hole scaling/kerf. |
 

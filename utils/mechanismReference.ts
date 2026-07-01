@@ -321,14 +321,22 @@ const bareFastener = (coord: string) => stack([
     { label: 'Open tabs behind board', role: 'fastener-tabs' }
 ]);
 
-const movingPartStack = (coordLabel: string, label: string, partId: string, startRole = 'board') => stack([
-    { label: coordLabel, role: startRole },
-    { label: 'Paper fastener', role: 'paper-fastener' },
-    { label: FABRICATION_SPACER_SPEC.label, role: 'spacer', part: 'spacers:s10' },
-    { label, role: 'moving-part', part: partId },
-    { label: FABRICATION_SPACER_SPEC.label, role: 'top-spacer', part: 'spacers:s10' },
-    { label: 'Open tabs loosely', role: 'fastener-tabs' }
-]);
+const movingPartStack = (coordLabel: string, label: string, partId: string, startRole = 'board') => startRole === 'board'
+    ? stack([
+        { label: coordLabel, role: startRole },
+        { label: FABRICATION_SPACER_SPEC.label, role: 'spacer', part: 'spacers:s10' },
+        { label, role: 'moving-part', part: partId },
+        { label: 'Paper fastener head', role: 'paper-fastener' },
+        { label: 'Open tabs behind board', role: 'fastener-tabs' }
+    ])
+    : stack([
+        { label: coordLabel, role: startRole },
+        { label: 'Paper fastener', role: 'paper-fastener' },
+        { label: FABRICATION_SPACER_SPEC.label, role: 'spacer', part: 'spacers:s10' },
+        { label, role: 'moving-part', part: partId },
+        { label: FABRICATION_SPACER_SPEC.label, role: 'top-spacer', part: 'spacers:s10' },
+        { label: 'Open tabs loosely', role: 'fastener-tabs' }
+    ]);
 
 const fixedPartStack = (coord: string, label: string, partId: string, repeat?: string) => stack([
     { label: `Board hole ${coord}`, role: 'board' },

@@ -234,7 +234,7 @@ Rules:
 
 - [ ] Orders are strictly increasing.
 - [ ] Spacer layers use `spacers:s10`.
-- [ ] Moving parts include lower spacer and top spacer.
+- [ ] Board-fixed moving parts use lower-z `S10` spacer → moving part → fastener head; floating joints use the spacer profile required by their adjacent moving layers.
 - [ ] Fixed parts do not include top spacer unless intentionally specified by a new profile.
 - [ ] Loose tabs are used for moving joints.
 - [ ] Behind-board tabs are used for fixed stacks.

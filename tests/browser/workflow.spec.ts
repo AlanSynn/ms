@@ -331,7 +331,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   expect(await foundryRig.getAttribute('data-three-rendered-layer-labels')).toBe(await foundryRig.getAttribute('data-three-stack-order'));
   expect(await foundryRig.getAttribute('data-three-rendered-layer-roles')).toBe(await foundryRig.getAttribute('data-three-stack-roles'));
   expect(await foundryRig.getAttribute('data-three-rendered-layer-colors')).toBe(await foundryRig.getAttribute('data-three-stack-colors'));
-  expect(await foundryRig.getAttribute('data-three-rendered-layer-z')).toBe(await foundryRig.getAttribute('data-three-stack-z'));
+  expect(await foundryRig.getAttribute('data-three-rendered-layer-z'), 'Default foundry 4bar keeps A/D ground links coplanar instead of rendering the printable stack literally').not.toBe(await foundryRig.getAttribute('data-three-stack-z'));
+  await expect(foundryRig).toHaveAttribute('data-three-fourbar-ground-link-plane', 'A-D-ground-links-coplanar');
   expect(await foundryRig.getAttribute('data-three-stack-order')).not.toContain('Base board');
   await expect(page.getByTestId('foundry-exploded-guide')).toHaveCount(0);
   await expect(page.getByTestId('foundry-z-layer-labels')).toHaveCount(0);
@@ -1245,7 +1246,8 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   expect(await threeScene.getAttribute('data-three-rendered-layer-labels')).toBe(await threeScene.getAttribute('data-three-stack-order'));
   expect(await threeScene.getAttribute('data-three-rendered-layer-roles')).toBe(await threeScene.getAttribute('data-three-stack-roles'));
   expect(await threeScene.getAttribute('data-three-rendered-layer-colors')).toBe(await threeScene.getAttribute('data-three-stack-colors'));
-  expect(await threeScene.getAttribute('data-three-rendered-layer-z')).toBe(await threeScene.getAttribute('data-three-stack-z'));
+  expect(await threeScene.getAttribute('data-three-rendered-layer-z'), '4bar renders A/D ground links coplanar instead of blindly using the printable linear stack z').not.toBe(await threeScene.getAttribute('data-three-stack-z'));
+  await expect(threeScene).toHaveAttribute('data-three-fourbar-ground-link-plane', 'A-D-ground-links-coplanar');
   await expect(threeScene).toHaveAttribute('data-anchor-pick-mode', 'three-raycaster-plane');
   const hasWebgl = await page.getByTestId('foundry-three-canvas').evaluate((canvas: HTMLCanvasElement) => Boolean(canvas.getContext('webgl2') || canvas.getContext('webgl')));
   expect(hasWebgl, 'Foundry uses an actual WebGL canvas, not a flat SVG-only preview').toBe(true);
@@ -1316,7 +1318,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(page.getByLabel('Foundry mechanism type')).toBeHidden();
   await page.getByText('Mechanism options').click();
   await expect(page.getByTestId('foundry-param-handles'), '4bar exposes direct A/B/C/D joint handles in the WebGL overlay').toHaveAttribute('data-handle-contract', '4bar-A-B-C-D');
-  await expect(page.getByTestId('foundry-param-handles'), '4bar overlay handles project at each physical pin stack instead of a single floating top z plane').toHaveAttribute('data-handle-z-contract', 'per-pin-stack-top');
+  await expect(page.getByTestId('foundry-param-handles'), '4bar overlay handles keep board pivots on the low board-side stack and floating joints on top').toHaveAttribute('data-handle-z-contract', 'board-pivots-bottom-floating-top');
   const handleZMap = await page.getByTestId('foundry-param-handles').getAttribute('data-handle-z-map') ?? '';
   const handleZ = Object.fromEntries(handleZMap.split(',').map(item => { const [id, value] = item.split(':'); return [id, Number(value)]; }));
   expect(handleZ.A, 'A handle is projected on its short board-pivot stack, not the global top layer').toBeLessThan(handleZ.B);
@@ -1387,6 +1389,8 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
       const zValues = renderedLayerZ.split(',').map(Number);
       const gearZValues = roles.flatMap((role, index) => role === 'gear' ? [zValues[index]] : []);
       expect(new Set(gearZValues.map(z => z.toFixed(2))).size, `${type} all external meshing gears share one pitch plane`).toBe(1);
+    } else if (type === '4bar') {
+      expect(renderedLayerZ, '4bar draws A/D ground links on one board-side plane while keeping the coupler above them').not.toBe(stackLayerZ);
     } else {
       expect(renderedLayerZ, `${type} rendered z order matches fabrication stack z order`).toBe(stackLayerZ);
     }
@@ -1396,6 +1400,12 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
       await expect(threeScene).toHaveAttribute('data-three-physical-pin-count', '4');
       await expect(threeScene, '4bar renders recipe spacer sites at A/B/C/D without z-layer collisions').toHaveAttribute('data-three-spacer-render-count', '4');
       await expect(threeScene, '4bar ground pivots keep one board-side spacer and a visible fastener head instead of an outboard/top spacer').toHaveAttribute('data-three-board-pivot-fastener-contract', 'fastener-end>S10-board-side>linkage>fastener-head');
+      await expect(threeScene, '4bar ground pivots A and D share one low board-side linkage plane').toHaveAttribute('data-three-fourbar-ground-link-plane', 'A-D-ground-links-coplanar');
+      const boardSpacerZ = Object.fromEntries((await threeScene.getAttribute('data-three-board-pivot-spacer-z') ?? '').split(',').map(item => {
+        const [id, value] = item.split(':');
+        return [id, Number(value)];
+      }));
+      expect(boardSpacerZ.A, 'A board spacer is below the low ground-link plane').toBeCloseTo(boardSpacerZ.D, 2);
       await expect(threeScene, '4bar pins use per-pivot stack spans so A/D do not protrude through empty z-layers').toHaveAttribute('data-three-pin-stack-policy', 'per-pin-adjacent-stack');
       await expect(threeScene, '4bar ground A-D is a board reference span, not a fabricated moving linkage').toHaveAttribute('data-three-ground-span-mode', 'board-reference');
     }
@@ -1439,14 +1449,22 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   expect(Number(await threeScene.getAttribute('data-three-gear-center-max-error')), 'Default fitted gear centers preserve fabrication pitch spacing').toBeLessThan(0.75);
   await expect(threeScene, 'Each visible gear has one real fixed axle, with no orphan pin tower').toHaveAttribute('data-three-physical-pin-count', gearCount ?? '2');
   await expect(threeScene, 'Each G3 axle receives exactly one visible S10 spacer washer').toHaveAttribute('data-three-spacer-render-count', gearCount ?? '2');
-  await expect(threeScene, 'Gear axles span both the gear plate and local S10 washer so gears are not floating off their shafts').toHaveAttribute('data-three-pin-stack-z-sources', 'gear-axles-include-spacer');
+  await expect(threeScene, 'Gear axles use board-side spacer then coplanar gear then fastener head').toHaveAttribute('data-three-gear-axle-stack-contract', 'board-side>S10-spacer>gear>fastener-head');
+  await expect(threeScene, 'Gear axles span both the gear plate and local S10 washer so gears are not floating off their shafts').toHaveAttribute('data-three-pin-stack-z-sources', 'gear-axles-include-board-side-spacer');
+  await expect(threeScene, 'Every fixed gear axle orders lower-z S10 spacer before gear before fastener head').toHaveAttribute('data-three-gear-axle-z-order', /S10<gear<fastener/);
+  const gearAxleOrders = (await threeScene.getAttribute('data-three-gear-axle-z-order') ?? '').split(',').filter(Boolean);
+  expect(gearAxleOrders.length, 'gear z-order contract covers every visible gear axle').toBe(Number(gearCount ?? '2'));
+  expect(gearAxleOrders.every(item => item.endsWith(':S10<gear<fastener')), 'no fixed gear axle is reversed or invalid').toBe(true);
+  const gearPlaneZ = Number(await threeScene.getAttribute('data-three-gear-plane-z'));
+  const gearSpacerZ = (await threeScene.getAttribute('data-three-gear-board-side-spacer-z') ?? '').split(',').map(item => Number(item.split(':')[1]));
+  expect(Math.max(...gearSpacerZ), 'gear spacers sit on the lower-z board side of the gear plate').toBeLessThan(gearPlaneZ);
   const gearPinSpans = (await threeScene.getAttribute('data-three-pin-stack-spans') ?? '').split(',').map(item => Number(item.split(':')[1]));
   expect(Math.min(...gearPinSpans), 'gear axle pins cross the spacer clearance instead of only the thin gear plate').toBeGreaterThan(FABRICATION_RENDER_LAYER_Z_STEP);
   await page.getByLabel('Foundry mechanism type').selectOption('gear_linkage');
   await expect(threeScene, 'Gear-linkage uses paired off-center G3 crank pins').toHaveAttribute('data-three-gear-linkage-mode', 'two-gear-two-link-coupler');
   await expect(threeScene, 'Gear-linkage uses two gear handles, paired L4 rods, and bracket').toHaveAttribute('data-three-gear-train-linkage-mode', 'two-gear-two-link-coupler');
   await expect(threeScene, 'Gear-linkage keeps the drive/output gear mesh coplanar on board axles').toHaveAttribute('data-three-gear-plane-mode', 'coplanar-fixed-axles');
-  await expect(threeScene, 'Gear-linkage gear axles include local spacer z in their fastener spans').toHaveAttribute('data-three-pin-stack-z-sources', 'gear-axles-include-spacer');
+  await expect(threeScene, 'Gear-linkage gear axles include local board-side spacer z in their fastener spans').toHaveAttribute('data-three-pin-stack-z-sources', 'gear-axles-include-board-side-spacer');
   await expect(threeScene, 'Gear-linkage pins are the two fixed gear axles plus two gear crank pins and one shared R connector').toHaveAttribute('data-three-physical-pin-contract', 'fixed-gear-axles-plus-two-crank-links');
   await expect(threeScene, 'Gear-linkage has no orphan hardware tower beyond its five real pin sites').toHaveAttribute('data-three-physical-pin-count', '5');
   await expect(threeScene, 'Gear-linkage geometry maps each layer to its reference role').toHaveAttribute('data-three-geometry-contract', /Drive G3 \/ 3-space gear:fixed-board-gear.*Output G3 \/ 3-space gear:fixed-board-gear.*Drive L4 linkage:B-pin-to-R.*Output L4 linkage:C-pin-to-R.*2-hole bracket:R-connector/);
