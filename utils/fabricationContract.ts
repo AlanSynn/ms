@@ -246,6 +246,7 @@ export const fabricationPartDisplayLabel = (label: string) => {
         [/Input L2 linkage/g, 'Input 2-cell linkage (3 holes)'],
         [/Coupler L4 linkage/g, 'Coupler 4-cell linkage (5 holes)'],
         [/Output L2 linkage/g, 'Output 2-cell linkage (3 holes)'],
+        [/L2 carrier linkage/g, 'Carrier 2-cell linkage (3 holes)'],
         [/\bL2 linkage\b/g, '2-cell linkage (3 holes)'],
         [/\bL4 linkage\b/g, '4-cell linkage (5 holes)'],
         [/\bL6 linkage\b/g, '6-cell linkage (7 holes)'],

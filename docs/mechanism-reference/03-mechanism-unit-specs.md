@@ -26,7 +26,7 @@ Snapping by family:
 | `slider_crank` | `crank_length`, `rod_length` → nearest `{40,80,120,160}` mm. |
 | `gear_train` | `gear1_teeth`, `gear2_teeth` → nearest `{8,24,40,56}`; radii aliases filled. |
 | `gear_linkage` | gear train as above; drive/output endpoint gears must have attachment holes; `linkage_pin_radius` → shared fabricated attachment radius on both endpoint gears; `linkage_arm_length` → paired linkage length. |
-| `planetary_gear` | forced to `sun=g8/8T`, `planet=g24/24T`, `ring=ring-g8-g24`; `planet_count` fixed at `1` until the multi-planet carrier recipe exists; carrier length snapped. |
+| `planetary_gear` | forced to `sun=g8/8T`, `planet=g24/24T`, `ring=ring-g8-g24`; `planet_count` fixed at `1` until the multi-planet carrier recipe exists; carrier length snapped; ring/sun/planet gear teeth stay coplanar. |
 | `cam_follower` | snap to nearest physical cam preset; fill `base_radius`, `eccentricity`, `cam_lobes`, `profile_harmonic`, `rise_deg`, `high_dwell_deg`, `return_deg`, `physical_cam_preset`. |
 
 ### Foundry ↔ Design parametric editing contract
@@ -383,6 +383,17 @@ r_ring_pitch = r_s + 2r_p = 70 mm
 | `gears:g8` (`G1`) | 1 | rotating sun gear |
 | `gears:g24` (`G3`) | 1 | moving planet gear |
 | `linkages:linkage-2-cell` (`L2`) | 1 | carrier arm |
+
+### Planetary render / spacer plane contract
+
+The default authoring type is the common sun–ring–planet gearset: fixed ring, sun input, carrier output. The [Benchtop Hybrid planetary gearset reference](http://www.benchtophybrid.com/PG_Types.html) shows the same basic family and notes that one displayed planet is enough for clarity while extra planets are optional for balance/torque. MotionSmith therefore keeps the current single-planet fabrication recipe until a multi-planet carrier part exists.
+
+For every assembled preview and simulation:
+
+- `R56`, `G1`, and `G3` render on one shared gear mesh plane so the internal ring, sun, and planet teeth can mesh physically.
+- `L2 carrier linkage` renders on the next spacer plane and connects the sun center to the moving planet axle.
+- The center pin stack is `G1 sun gear → S10 → L2 carrier linkage`; the planet pin stack is `L2 carrier linkage → S10 → G3 planet gear`.
+- The ring mount holes are fixed board fasteners. They are not carrier pins and must not be counted as the moving sun/planet axle stack.
 | `spacers:s10` | 8 | clearance stacks |
 
 ### Exact recipe

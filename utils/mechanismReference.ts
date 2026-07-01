@@ -460,7 +460,7 @@ const planetarySteps: ReferenceAssemblyStep[] = [
     step(1, 'Pin the sun axle', 'place-fastener', ['H8'], ['board'], 'Place the sun gear fastener at H8.', 'The center axle is straight and fixed.', bareFastener('H8')),
     step(2, 'Mount R56 internal ring gear', 'add-ring', ['D8', 'H4', 'H12', 'L8'], ['board', 'board', 'board', 'board'], 'Center R56 internal ring gear around H8 and fasten its outer mount holes at D8, H4, H12, and L8.', 'The ring gear is fixed to the board and does not rotate.', fixedPartStack('D8', 'R56 internal ring gear', 'ring_gears:ring-g8-g24', 'Repeat this stack at D8, H4, H12, L8')),
     step(3, 'Add G1 sun gear', 'add-part', ['H8'], ['board'], 'Add S10 spacer, then place G1 on H8.', 'G1 spins cleanly before the carrier is added.', movingPartStack('Board hole H8', 'G1 / 1-space gear', 'gears:g8')),
-    step(4, 'Add carrier link', 'add-linkage', ['H8', 'H10'], ['board', 'carrier_reference'], 'Place L2 from H8 toward H10 as the carrier.', 'The carrier swings loosely around the sun axle.', movingPartStack('Board hole H8', 'L2 linkage', 'linkages:linkage-2-cell')),
+    step(4, 'Add carrier link', 'add-linkage', ['H8', 'H10'], ['board', 'carrier_reference'], 'Place L2 from H8 toward H10 as the carrier.', 'The carrier swings loosely around the sun axle.', movingPartStack('Board hole H8', 'L2 carrier linkage', 'linkages:linkage-2-cell')),
     step(5, 'Add G3 moving planet gear', 'add-part', ['H10'], ['carrier_reference'], 'Align the free carrier hole near H10, then fasten G3 through the carrier hole only (not the board) so it meshes with both G1 and R56 internal ring gear.', 'The planet axle travels with the carrier and rolls between sun and ring.', movingPartStack('Carrier hole near H10', 'G3 / 3-space gear', 'gears:g24', 'carrier-hole')),
     step(6, 'Rotate the carrier', 'test-motion', ['H8', 'H10'], ['board', 'carrier_reference'], 'Hold the ring fixed and use the carrier end/handle hole to orbit the planet around H8.', 'If the orbit binds, loosen the planet fastener and spacer stack.', movingPartStack('Carrier hole near H10', 'G3 / 3-space gear', 'gears:g24', 'carrier-hole'))
 ];
@@ -562,7 +562,7 @@ export const REFERENCE_MECHANISM_RECIPES: Record<MechanismType, ReferenceMechani
         recipeId: 'planetary-gear-basic',
         guideSvg: 'fabrication/assembly/05-planetary-gear-basic.svg',
         requiredParts: [R56(), G1(), G3(1), L2(1), S10],
-        stackLabels: ['R56 internal ring gear', 'G1 / 1-space gear', 'L2 linkage', 'G3 / 3-space gear'],
+        stackLabels: ['R56 internal ring gear', 'G1 / 1-space gear', 'L2 carrier linkage', 'G3 / 3-space gear'],
         assemblySteps: planetarySteps
     }
 };

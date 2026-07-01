@@ -1389,6 +1389,14 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
       const zValues = renderedLayerZ.split(',').map(Number);
       const gearZValues = roles.flatMap((role, index) => role === 'gear' ? [zValues[index]] : []);
       expect(new Set(gearZValues.map(z => z.toFixed(2))).size, `${type} all external meshing gears share one pitch plane`).toBe(1);
+    } else if (type === 'planetary_gear') {
+      await expect(threeScene, 'Planetary keeps the ring, sun, and planet teeth on one mesh plane').toHaveAttribute('data-three-gear-plane-mode', 'planetary-coplanar-ring-sun-planet');
+      await expect(threeScene, 'Planetary carrier pins include real local S10 spacers').toHaveAttribute('data-three-pin-stack-z-sources', 'planetary-carrier-pins-include-local-spacers');
+      expect(renderedLayerZ, 'Planetary render z differs from the printable stack because the ring/sun/planet mesh coplanarly while the carrier rides one spacer plane above').not.toBe(stackLayerZ);
+      const roles = (await threeScene.getAttribute('data-three-rendered-layer-roles') ?? '').split('>');
+      const zValues = renderedLayerZ.split(',').map(Number);
+      const gearZValues = roles.flatMap((role, index) => role === 'gear' ? [zValues[index]] : []);
+      expect(new Set(gearZValues.map(z => z.toFixed(2))).size, 'Planetary ring, sun, and planet share one pitch plane').toBe(1);
     } else if (type === '4bar') {
       expect(renderedLayerZ, '4bar draws A/D ground links on one board-side plane while keeping the coupler above them').not.toBe(stackLayerZ);
     } else {
@@ -2461,6 +2469,9 @@ test('Mechanism Design center workspace renders physical 3D templates for every 
     if (type === 'gear' || type === 'gear_linkage') {
       await expect(designPuppet, `${type} design preview keeps meshing gear plates coplanar`).toHaveAttribute('data-three-gear-plane-mode', 'coplanar-fixed-axles');
       expect(designRenderedZ, `${type} design render uses a coplanar gear pitch plane instead of the linear stack z for gear plates`).not.toBe(designStackZ);
+    } else if (type === 'planetary_gear') {
+      await expect(designPuppet, 'Planetary design preview keeps the fixed ring, sun, and planet gear teeth coplanar').toHaveAttribute('data-three-gear-plane-mode', 'planetary-coplanar-ring-sun-planet');
+      expect(designRenderedZ, 'Planetary design preview uses a shared gear pitch plane plus an adjacent carrier plane').not.toBe(designStackZ);
     } else {
       expect(designRenderedZ, `${type} design rendered z order matches fabrication stack z order`).toBe(designStackZ);
     }

@@ -565,6 +565,7 @@ assert.deepEqual(gearLinkageOutputCrankStack.slice(0, 5).map(item => item.role),
 assert.equal(gearLinkageConnectorStack[0]?.role, 'link-end-hole', 'gear-linkage shared connector is a moving link-end reference');
 assert.deepEqual(gearLinkageConnectorStack.slice(1, 6).map(item => item.role), ['moving-part', 'spacer', 'moving-part', 'top-spacer', 'moving-part'], 'gear-linkage R connector stacks both linkage ends with spacer clearance before the bracket');
 assert.equal(referenceRecipeForType('planetary_gear').assemblySteps.find(step => step.label === 'Add G3 moving planet gear')?.stack[0]?.role, 'carrier-hole', 'planetary planet axle sits on the moving carrier, not the board');
+assert(referenceRecipeForType('planetary_gear').stackLabels.includes('L2 carrier linkage'), 'planetary stack labels the L2 part as the carrier so renderers do not draw a generic floating linkage');
 assert.equal(referenceRecipeForType('piston').assemblySteps.find(step => step.label === 'Add connecting rod')?.stack[0]?.role, 'link-joint-hole', 'slider-crank G6 rod joint is a floating link joint');
 assert.equal(referenceRecipeForType('piston').assemblySteps.find(step => step.label === 'Add slider block')?.stack[0]?.role, 'link-end-hole', 'slider-crank block is a moving slider/link reference');
 ALL_MECHANISM_TYPES.forEach(type => {
@@ -818,6 +819,7 @@ assert(canvasText.includes("if (type === 'cam') return 'rotating cam profile; gu
 assert(canvasText.includes('RingGearPath') && canvasText.includes('planetaryPlanetSpinRatio'), '2D design canvas renders planetary gears as ring/sun/planet/carrier geometry');
 assert(appText.includes('fixed-gear-axles-only'), 'Foundry 3D gear train preview declares fixed gear axles rather than generic mechanism pins');
 assert(appText.includes('coplanar-fixed-axles') && appText.includes('gear-axles-include-board-side-spacer'), 'Foundry 3D gear train preview keeps meshed gear plates coplanar and spans board-side local spacer stacks');
+assert(appText.includes('planetary-coplanar-ring-sun-planet') && appText.includes('planetary-carrier-pins-include-local-spacers'), 'Foundry 3D planetary preview keeps ring/sun/planet coplanar while carrier pins use local S10 spacers');
 assert(appText.includes('board-side>S10-spacer>gear>fastener-head'), 'Foundry 3D gear train preview documents lower-z board-side gear axle ordering');
 assert(appText.includes('S10<gear<fastener'), 'Foundry 3D gear train preview exposes the runtime lower-z S10, gear, fastener z-order contract');
 assert(appText.includes('foundry-parametric-editor') && appText.includes('design-parametric-editor'), 'Foundry and Design both mount the same compact parametric mechanism editor');
@@ -834,6 +836,7 @@ assert(threePreviewText.includes('const renderedMechanisms = useMemo(() => selec
 assert(!threePreviewText.includes('scene.traverse(child =>'), '3D puppet preview does not traverse the whole scene every animation frame for telemetry');
 assert(threePreviewText.includes('fabricationRenderPlanForMechanism'), 'Mechanism Design 3D preview uses the same fabrication stack plan as Foundry');
 assert(threePreviewText.includes('coplanar-fixed-axles') && threePreviewText.includes('selectedGearPlaneZ'), 'Mechanism Design 3D preview keeps external gear train plates coplanar like Foundry');
+assert(threePreviewText.includes('planetary-coplanar-ring-sun-planet') && threePreviewText.includes('renderedLayerZForMechanism'), 'Mechanism Design 3D preview keeps planetary ring/sun/planet gears coplanar like Foundry');
 assert(threePreviewText.includes('data-three-stack-source'), 'Mechanism Design exposes fabrication stack provenance for browser verification');
 assert(exporterText.includes('fabricationGearPathD'), 'SVG export gear rendering uses shared fabrication gear geometry');
 assert(appText.includes('fabricationGearProfileForPitchRadius'), 'Foundry gear helper uses shared fabrication gear holes/profile');
@@ -1620,6 +1623,11 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
     assert(Math.abs(config.groundLength - (config.crankLength + config.rockerLength)) < 1e-6, 'optimizer keeps generated planetary pitch circles tangent');
   });
   assert.deepEqual(requiredPartQuantities('planetary_gear'), { 'R56 internal ring gear': 1, 'G1 / 1-space gear': 1, 'G3 / 3-space gear': 1, 'L2 linkage': 1, [FABRICATION_SPACER_SPEC.label]: 8 }, 'planetary recipe uses R56 ring, G1 sun, G3 planet, L2 carrier, and S10 from mechanism-reference');
+  assert.deepEqual(
+    referenceRecipeForType('planetary_gear').stackLabels,
+    ['R56 internal ring gear', 'G1 / 1-space gear', 'L2 carrier linkage', 'G3 / 3-space gear'],
+    'planetary reference stack distinguishes the fixed ring, rotating sun, separate carrier, and moving planet'
+  );
 }
 
 const gearDefault = createDefaultMechanism('gear', 'contract-gear-mesh');

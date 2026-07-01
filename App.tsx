@@ -183,6 +183,16 @@ const foundryGroundLinkLayerIndexes = (type: MechanismType, layers: FoundryRende
     return { input, output, coupler };
 };
 
+const foundryPlanetaryLayerIndexes = (type: MechanismType, layers: FoundryRenderLayerLike[]) => {
+    if (type !== 'planetary_gear') return undefined;
+    const ring = layers.findIndex(item => item.renderKind === 'gear' && /ring/i.test(item.label));
+    const sun = layers.findIndex(item => item.renderKind === 'gear' && /sun|G1/i.test(item.label));
+    const carrier = layers.findIndex(item => item.renderKind === 'linkage' && /carrier|L2|linkage/i.test(item.label));
+    const planet = layers.findIndex(item => item.renderKind === 'gear' && /planet|G3/i.test(item.label));
+    if (ring < 0 || sun < 0 || carrier < 0 || planet < 0) return undefined;
+    return { ring, sun, carrier, planet };
+};
+
 const foundryRenderedLayerZForMechanism = (
     type: MechanismType,
     layers: FoundryRenderLayerLike[],
@@ -196,6 +206,13 @@ const foundryRenderedLayerZForMechanism = (
     ));
     const fourBarLayers = foundryGroundLinkLayerIndexes(type, layers);
     if (fourBarLayers) z[fourBarLayers.output] = z[fourBarLayers.input];
+    const planetaryLayers = foundryPlanetaryLayerIndexes(type, layers);
+    if (planetaryLayers && typeof gearMeshPlaneZ === 'number') {
+        z[planetaryLayers.ring] = gearMeshPlaneZ;
+        z[planetaryLayers.sun] = gearMeshPlaneZ;
+        z[planetaryLayers.planet] = gearMeshPlaneZ;
+        z[planetaryLayers.carrier] = Number((gearMeshPlaneZ + FABRICATION_RENDER_LAYER_Z_STEP).toFixed(3));
+    }
     return z;
 };
 
@@ -3365,6 +3382,28 @@ const foundryPinStackPoints = (
         });
     }
 
+    if (type === 'planetary_gear') {
+        const sunIndex = cleanIndexes[1] ?? cleanIndexes[0];
+        const carrierIndex = cleanIndexes[2] ?? sunIndex;
+        const planetIndex = cleanIndexes[3] ?? carrierIndex;
+        return points.map((point, index) => {
+            if (index === 0) {
+                return {
+                    id: 'A',
+                    point,
+                    movingLayerIndexes: [sunIndex, carrierIndex].filter((item): item is number => typeof item === 'number'),
+                    spacerLayerIndexes: spacerIndexesFrom(1)
+                };
+            }
+            return {
+                id: ids[index] ?? `P${index + 1}`,
+                point,
+                movingLayerIndexes: [carrierIndex, planetIndex].filter((item): item is number => typeof item === 'number'),
+                spacerLayerIndexes: spacerIndexesFrom(2)
+            };
+        });
+    }
+
     if ((type === '4bar' || type === '5bar' || type === '6bar') && points.length === cleanIndexes.length + 1) {
         return points.map((point, index) => {
             const pinMovingLayerIndexes = [cleanIndexes[index - 1], cleanIndexes[index]].filter((item): item is number => typeof item === 'number');
@@ -3446,6 +3485,7 @@ const foundryLocalSpacerZsForPin = (
             Number((minZ + ((maxZ - minZ) * (index + 1)) / (spacerCount + 1)).toFixed(3))
         );
     }
+    if (type === 'planetary_gear' && uniqueMovingZ.length >= 2) return betweenMovingLayers().slice(0, 1);
     if ((type === 'gear' || type === 'gear_linkage') && pin.movingLayerIndexes.some(index => layers[index]?.renderKind === 'gear')) {
         const gearLayerIndex = pin.movingLayerIndexes.find(index => layers[index]?.renderKind === 'gear');
         const gearZ = typeof gearLayerIndex === 'number' ? renderedLayerZ[gearLayerIndex] : undefined;
@@ -3493,6 +3533,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
     const [physicsKernelVersion, setPhysicsKernelVersion] = useState('pending');
     const [physicsKernelError, setPhysicsKernelError] = useState('none');
     const isGearTrain = mechanism.type === 'gear' || mechanism.type === 'gear_linkage';
+    const isPlanetaryGear = mechanism.type === 'planetary_gear';
     const gearRadii = isGearTrain ? gearTrainPitchRadii(mechanism) : mechanism.type === 'planetary_gear' ? planetaryGearRadii(mechanism) : [mechanism.crankLength, mechanism.rockerLength];
     const gearCenters = isGearTrain ? fittedGearTrainCenters(gearRadii, simulation.state.p1, simulation.state.p2) : [];
     const planetaryConvention = mechanism.type === 'planetary_gear' ? planetaryGearConventionForMechanism(mechanism) : null;
@@ -3506,13 +3547,23 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
     const renderPlan = useMemo(() => fabricationRenderPlanForMechanism(mechanism), [mechanism]);
     const stackLayerZ = useMemo(() => renderPlan.layers.map(item => item.z + explode * item.stackIndex * FABRICATION_RENDER_LAYER_Z_STEP * 1.5), [explode, renderPlan]);
     const gearLayerIndexes = useMemo(() => renderPlan.layers.flatMap((item, index) => item.renderKind === 'gear' ? [index] : []), [renderPlan.layers]);
-    const gearMeshPlaneZ = isGearTrain && explode <= 0 && gearLayerIndexes.length
+    const gearMeshPlaneZ = (isGearTrain || isPlanetaryGear) && explode <= 0 && gearLayerIndexes.length
         ? stackLayerZ[gearLayerIndexes[0]]
         : undefined;
     const renderedLayerZ = useMemo(() =>
         foundryRenderedLayerZForMechanism(mechanism.type, renderPlan.layers, stackLayerZ, gearMeshPlaneZ),
         [gearMeshPlaneZ, mechanism.type, renderPlan.layers, stackLayerZ]
     );
+    const activeGearPlaneZ = typeof gearMeshPlaneZ === 'number'
+        ? gearMeshPlaneZ
+        : isPlanetaryGear && gearLayerIndexes.length
+            ? renderedLayerZ[gearLayerIndexes[0]]
+            : undefined;
+    const gearPlaneMode = isGearTrain
+        ? (typeof gearMeshPlaneZ === 'number' ? 'coplanar-fixed-axles' : 'exploded-stack')
+        : isPlanetaryGear
+            ? (typeof gearMeshPlaneZ === 'number' ? 'planetary-coplanar-ring-sun-planet' : 'exploded-stack')
+            : 'not-gear-train';
     const viewerContract = useMemo(() => createViewer3DContract('foundry', camera.preset, {
         grid: showGrid,
         character: 'absent',
@@ -3541,10 +3592,11 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         foundryLocalSpacerZForPin(mechanism.type, pin, renderedLayerZ, renderPlan.layers, spacerLayerIndex),
         [mechanism.type, renderPlan.layers, renderedLayerZ]
     );
+    const usesLocalSpacerPins = isGearTrain || isPlanetaryGear;
     const pinStacks = useMemo(() => foundryPinStacks(pinStackPoints, renderedLayerZ, {
-        includeSpacerZ: isGearTrain,
+        includeSpacerZ: usesLocalSpacerPins,
         spacerZForPin: localSpacerZsForPin
-    }), [isGearTrain, localSpacerZsForPin, pinStackPoints, renderedLayerZ]);
+    }), [localSpacerZsForPin, pinStackPoints, renderedLayerZ, usesLocalSpacerPins]);
     const spacerRenderCount = spacerLayerIndexes.reduce((count, spacerIndex) => (
         count + pinStackPoints.filter(pin => foundrySpacerTouchesPin(pin, spacerIndex)).length
     ), 0);
@@ -4188,9 +4240,9 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-three-gear-center-max-error={gearCenterMaxError.toFixed(3)}
             data-three-gear-mesh-phase-contract={isGearTrain ? 'alternating-half-tooth-gap-phase' : 'not-gear-train'}
             data-three-gear-mesh-phases={gearMeshPhaseSummary}
-            data-three-gear-plane-mode={isGearTrain ? (typeof gearMeshPlaneZ === 'number' ? 'coplanar-fixed-axles' : 'exploded-stack') : 'not-gear-train'}
-            data-three-gear-plane-z={typeof gearMeshPlaneZ === 'number' ? gearMeshPlaneZ.toFixed(2) : ''}
-            data-three-gear-axle-stack-contract={isGearTrain ? 'board-side>S10-spacer>gear>fastener-head' : 'not-gear-train'}
+            data-three-gear-plane-mode={gearPlaneMode}
+            data-three-gear-plane-z={typeof activeGearPlaneZ === 'number' ? activeGearPlaneZ.toFixed(2) : ''}
+            data-three-gear-axle-stack-contract={isGearTrain ? 'board-side>S10-spacer>gear>fastener-head' : isPlanetaryGear ? 'sun/carrier and planet/carrier pins use local S10 spacers' : 'not-gear-train'}
             data-three-gear-board-side-spacer-z={gearBoardSpacerSummary}
             data-three-gear-axle-z-order={gearAxleZOrderSummary}
             data-three-gear-linkage-spacing-contract={mechanism.type === 'gear_linkage' ? 'endpoint-gears-separated-by-pitch-chain-distance' : 'not-gear-linkage'}
@@ -4213,7 +4265,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-three-physical-pin-count={assemblyPinPoints.length}
             data-three-physical-pin-contract={assemblyPinContract}
             data-three-pin-stack-policy="per-pin-adjacent-stack"
-            data-three-pin-stack-z-sources={isGearTrain ? 'gear-axles-include-board-side-spacer' : 'moving-layers-only'}
+            data-three-pin-stack-z-sources={isGearTrain ? 'gear-axles-include-board-side-spacer' : isPlanetaryGear ? 'planetary-carrier-pins-include-local-spacers' : 'moving-layers-only'}
             data-three-pin-stack-layer-indexes={pinStackLayerSummary}
             data-three-pin-stack-spans={pinSpanSummary}
             data-three-z-collision-count={zCollisionCount}
