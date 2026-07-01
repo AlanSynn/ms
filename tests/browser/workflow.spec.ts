@@ -57,6 +57,9 @@ test('Character part cut outline editor bakes and edits contour points', async (
   await page.getByTestId('part-cut-bake').click();
   const cutDialog = page.getByTestId('cut-outline-dialog');
   await expect(cutDialog).toBeVisible();
+  const cutArt = cutDialog.getByTestId('cut-outline-art');
+  await expect(cutArt).toBeVisible();
+  await expect(cutArt).toHaveAttribute('href', /data:image/);
   await expect(page.getByTestId('part-cut-summary')).toContainText('user cut');
   const dialogBox = await cutDialog.boundingBox();
   const viewport = page.viewportSize();

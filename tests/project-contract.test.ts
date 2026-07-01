@@ -943,6 +943,7 @@ assert(appText.includes('viewport={viewport} setViewport={setViewport} inputMode
 assert(appText.includes("setStage('character')"), 'Character edit controls stay in the functional Character tab');
 assert(appText.includes('Art width') && appText.includes('Art offset X'), 'Character part inspector exposes artwork extent and offset controls');
 assert(appText.includes('data-testid="part-cut-controls"') && appText.includes('data-testid="cut-outline-dialog"') && appText.includes('Edit cut') && !appText.includes('Cut point X'), 'Character part inspector opens a canvas-first cut overlay instead of coordinate controls');
+assert(appText.includes('data-testid="cut-outline-art"') && appText.includes('part.textureUrl') && indexText.includes('.cut-outline-art { opacity: .72; pointer-events: none; }'), 'Character cut editor shows the selected part artwork under the editable contour');
 assert(appText.includes("contourSource: 'user'") && appText.includes('Auto cut') && appText.includes('Add point'), 'Character cut editor writes user contours and can bake/add contour points');
 assert(appText.includes('data-testid={`path-part-art-${part.id}`}') && appText.includes('part.bounds.x * part.transform.scale'), 'Path Editor renders artwork from the editable part bounds offset');
 assert(canvasText.includes('data-testid={`design-part-art-${part.id}`}') && canvasText.includes('part.bounds.x * part.transform.scale'), 'Mechanism Design renders artwork from the same editable part bounds offset');

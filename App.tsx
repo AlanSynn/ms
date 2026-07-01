@@ -1598,8 +1598,14 @@ const CutOutlineEditorDialog = ({ part, points, autoPoints, selectedIndex, setSe
     const svgRef = useRef<SVGSVGElement | null>(null);
     const dragIndexRef = useRef<number | null>(null);
     const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+    const artX = part.bounds.x;
+    const artY = part.bounds.y;
     const viewport = useMemo(() => {
-        const merged = [...autoPoints, ...points].filter(point => Number.isFinite(point.x) && Number.isFinite(point.y));
+        const artBounds = [
+            { x: part.bounds.x, y: part.bounds.y },
+            { x: part.bounds.x + part.bounds.width, y: part.bounds.y + part.bounds.height }
+        ];
+        const merged = [...artBounds, ...autoPoints, ...points].filter(point => Number.isFinite(point.x) && Number.isFinite(point.y));
         if (!merged.length) return { minX: -80, minY: -80, width: 160, height: 160 };
         const bounds = partOutlineBounds(merged);
         const pad = Math.max(24, Math.min(64, Math.max(bounds.width, bounds.height) * 0.12));
@@ -1665,6 +1671,7 @@ const CutOutlineEditorDialog = ({ part, points, autoPoints, selectedIndex, setSe
                         <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#d8dfec" strokeWidth="0.7" opacity="0.9"/>
                     </pattern>
                 </defs>
+                {part.textureUrl ? <image data-testid="cut-outline-art" className="cut-outline-art" href={part.textureUrl} x={artX} y={artY} width={part.bounds.width} height={part.bounds.height} preserveAspectRatio="xMidYMid meet"/> : <rect data-testid="cut-outline-art" className="cut-outline-art" x={artX} y={artY} width={part.bounds.width} height={part.bounds.height} fill={part.fillColor}/>}
                 <rect x={viewport.minX} y={viewport.minY} width={viewport.width} height={viewport.height} fill={`url(#cut-grid-${part.id})`}/>
                 {autoPoints.length >= 3 && <path className="cut-outline-auto" d={contourPathD(autoPoints)}/>}
                 {points.length >= 3 && <path className="cut-outline-user" d={contourPathD(points)}/>}
