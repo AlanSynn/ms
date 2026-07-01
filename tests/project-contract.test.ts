@@ -957,6 +957,9 @@ assert(webOnnxText.includes('contourFromCropMask') && webOnnxText.includes("cont
 assert(webOnnxText.includes('MODEL_CACHE_NAME') && webOnnxText.includes('caches.open') && webOnnxText.includes('warmWebOnnxCache'), 'browser ONNX model can be separately downloaded and cached');
 assert(webOnnxText.includes('GIT_LFS_POINTER_PREFIX') && webOnnxText.includes('deleteCachedModel') && webOnnxText.includes("cache: 'reload'"), 'browser ONNX rejects stale Git LFS pointer caches and refetches model bytes');
 assert(webOnnxText.includes('MODEL_BYTES_HEADER') && webOnnxText.includes('x-motionsmith-model-bytes'), 'browser ONNX marks valid cached model bytes to avoid treating pointer files as ready');
+assert(webOnnxText.includes('assertCompleteModelDownload') && webOnnxText.includes('download disconnected after'), 'browser ONNX rejects interrupted model downloads before they can be cached');
+assert(webOnnxText.includes('markedBytes && markedBytes !== buffer.byteLength'), 'browser ONNX evicts cache entries whose recorded bytes do not match the cached body');
+assert(webOnnxText.includes("runtimeStage === 'loading-model'") && webOnnxText.includes('Cached model bytes were cleared') && webOnnxText.includes('URL.revokeObjectURL(imageUrl)'), 'browser ONNX clears bad session-load caches and releases per-image blob URLs for repeated imports');
 assert(webOnnxText.includes('InferenceSession.create(new Uint8Array(modelBuffer)'), 'browser ONNX creates sessions from cached model bytes');
 assert(webOnnxText.includes("import('onnxruntime-web')") && !webOnnxText.includes("import * as ort from 'onnxruntime-web'"), 'ONNX Runtime JS is lazy-loaded outside the initial editor shell bundle');
 assert(appUiText.includes('data-testid="onnx-cache-status"') && appText.includes('checkWebOnnxCache'), 'status bar exposes ONNX cache/download status');

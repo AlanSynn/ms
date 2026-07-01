@@ -504,10 +504,20 @@ const assertUsableModelBuffer = (buffer: ArrayBuffer, source: string) => {
     throw new Error(`${source} is only ${buffer.byteLength} bytes; expected real ONNX model bytes.`);
 };
 
+const assertCompleteModelDownload = (buffer: ArrayBuffer, total?: number) => {
+    if (!total || buffer.byteLength === total) return;
+    throw new Error(`${MODEL_LABEL} download disconnected after ${buffer.byteLength}/${total} bytes. Try again.`);
+};
+
 const readCachedModel = async () => {
     const response = await cachedModelResponse();
     if (!response) return undefined;
+    const markedBytes = Number(response.headers.get(MODEL_BYTES_HEADER)) || undefined;
     const buffer = await response.arrayBuffer();
+    if (markedBytes && markedBytes !== buffer.byteLength) {
+        await deleteCachedModel();
+        return undefined;
+    }
     if (!isUsableModelBuffer(buffer)) {
         await deleteCachedModel();
         return undefined;
@@ -522,6 +532,7 @@ const fetchModelWithProgress = async (onStatus: (status: WebOnnxCacheStatus) => 
     const total = Number(response.headers.get('content-length')) || undefined;
     if (!response.body) {
         const buffer = await response.arrayBuffer();
+        assertCompleteModelDownload(buffer, total);
         onStatus(cacheStatus('downloading', 100, { bytesLoaded: buffer.byteLength, bytesTotal: total }));
         return buffer;
     }
@@ -542,6 +553,7 @@ const fetchModelWithProgress = async (onStatus: (status: WebOnnxCacheStatus) => 
         bytes.set(chunk, offset);
         offset += chunk.byteLength;
     }
+    assertCompleteModelDownload(bytes.buffer, total);
     return bytes.buffer;
 };
 
@@ -616,8 +628,10 @@ export const processImageWithWebOnnx = async (
     onProgress: (stage: string, progress: number) => void = () => {}
 ): Promise<WebOnnxResult> => {
     let runtimeStage = 'decode-image';
-    const { img, url } = await readImage(file);
+    let imageUrl: string | undefined;
     try {
+        const { img, url } = await readImage(file);
+        imageUrl = url;
         runtimeStage = 'segment-character';
         const mask = makeCharacterMask(img);
         runtimeStage = 'downloading-model';
@@ -646,8 +660,17 @@ export const processImageWithWebOnnx = async (
         onProgress('normalizing', 90);
         return { skeleton, parts, textureUrl: imageToDataUrl(img), maskUrl: mask.url, keypoints };
     } catch (error) {
-        throw new Error(`Web ONNX image processing failed during ${runtimeStage} at ${modelUrl()}: ${error instanceof Error ? error.message : String(error)}`);
+        const message = error instanceof Error ? error.message : String(error);
+        if (runtimeStage === 'loading-model') {
+            try {
+                await deleteCachedModel();
+            } catch {
+                // Preserve the ONNX Runtime failure as the actionable error.
+            }
+        }
+        const retryHint = runtimeStage === 'loading-model' ? ' Cached model bytes were cleared; try the image again to redownload them.' : '';
+        throw new Error(`Web ONNX image processing failed during ${runtimeStage} at ${modelUrl()}: ${message}${retryHint}`);
     } finally {
-        URL.revokeObjectURL(url);
+        if (imageUrl) URL.revokeObjectURL(imageUrl);
     }
 };
