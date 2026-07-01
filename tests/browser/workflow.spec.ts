@@ -1443,6 +1443,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
       expect(Number(await threeScene.getAttribute(attr)), `${type} preview includes ${attr}`).toBeGreaterThanOrEqual(minimumCount);
     }
     if (type === 'planetary_gear') {
+      await expect(threeScene, 'Planetary geometry maps R56/G1/L2/G3 recipe labels to ring/sun/carrier/planet roles').toHaveAttribute('data-three-geometry-contract', /R56 internal ring gear:fixed-ring.*G1 \/ 1-space gear:sun-input.*L2 carrier linkage:sun-planet-carrier.*G3 \/ 3-space gear:planet-on-carrier/);
       await expect(threeScene, 'Planetary foundry syntax uses a fixed ring, sun input, carrier output set').toHaveAttribute('data-three-planetary-syntax', 'ring-fixed-sun-input-carrier-output');
       await expect(threeScene).toHaveAttribute('data-three-planetary-fixed', 'ring');
       await expect(threeScene).toHaveAttribute('data-three-planetary-input', 'sun');
@@ -1451,6 +1452,14 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
       const radii = (await threeScene.getAttribute('data-three-gear-radii') ?? '').split(',').map(Number);
       expect(radii, 'Planetary foundry exposes sun, one G3 planet, and ring radii from the fabrication convention').toHaveLength(3);
       expect(radii[2], 'Planetary ring pitch radius equals sun + 2*planet pitch radii').toBeCloseTo(radii[0] + 2 * radii[1], 2);
+      const phaseControl = page.getByLabel('Foundry phase');
+      const phaseBefore = Number(await phaseControl.inputValue());
+      const playButton = page.getByTestId('foundry-toolbar').getByRole('button', { name: 'Play', exact: true });
+      if (await playButton.count()) await playButton.click();
+      await expect(page.getByTestId('foundry-toolbar-state'), 'Planetary preview stays in the running animation loop').toContainText('playing');
+      await expect.poll(async () => Number(await phaseControl.inputValue()), { message: 'Planetary carrier animation keeps advancing instead of stopping mid-turn' }).not.toBe(phaseBefore);
+      const pauseButton = page.getByTestId('foundry-toolbar').getByRole('button', { name: 'Pause', exact: true });
+      if (await pauseButton.count()) await pauseButton.click();
     }
   }
   await page.getByLabel('Foundry mechanism type').selectOption('gear');

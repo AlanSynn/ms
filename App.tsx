@@ -160,8 +160,8 @@ const foundryLayerGeometryContract = (type: MechanismType, label: string, render
     }
     if (type === 'planetary_gear') {
         if (/ring/i.test(label)) return `${label}:fixed-ring`;
-        if (/sun/i.test(label)) return `${label}:sun-input`;
-        if (/planet/i.test(label)) return `${label}:planet-on-carrier`;
+        if (/sun|G1|1-space/i.test(label)) return `${label}:sun-input`;
+        if (/planet|G3|3-space/i.test(label)) return `${label}:planet-on-carrier`;
         if (/carrier/i.test(label)) return `${label}:sun-planet-carrier`;
     }
     if (type === 'cam') {
@@ -186,9 +186,9 @@ const foundryGroundLinkLayerIndexes = (type: MechanismType, layers: FoundryRende
 const foundryPlanetaryLayerIndexes = (type: MechanismType, layers: FoundryRenderLayerLike[]) => {
     if (type !== 'planetary_gear') return undefined;
     const ring = layers.findIndex(item => item.renderKind === 'gear' && /ring/i.test(item.label));
-    const sun = layers.findIndex(item => item.renderKind === 'gear' && /sun|G1/i.test(item.label));
+    const sun = layers.findIndex(item => item.renderKind === 'gear' && /sun|G1|1-space/i.test(item.label));
     const carrier = layers.findIndex(item => item.renderKind === 'linkage' && /carrier|L2|linkage/i.test(item.label));
-    const planet = layers.findIndex(item => item.renderKind === 'gear' && /planet|G3/i.test(item.label));
+    const planet = layers.findIndex(item => item.renderKind === 'gear' && /planet|G3|3-space/i.test(item.label));
     if (ring < 0 || sun < 0 || carrier < 0 || planet < 0) return undefined;
     return { ring, sun, carrier, planet };
 };
@@ -4096,11 +4096,14 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             else addBar(s.j1, s.j2, z, mat, 3);
         };
         const renderGearLayer = (label: string, z: number, mat: THREE.Material, gearTrainIndex = 0) => {
-            if (/ring/i.test(label)) addRingGear(s.p1, planetaryRingPitchRadius(mechanism), z, 0, mat);
-            else if (/planet/i.test(label)) {
-                const planetCenters = planetaryPlanetCenters(s.p1, mechanism, degToRad(angle) * planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength));
-                const planetCount = Math.max(1, planetCenters.length);
-                planetCenters.forEach((center, index) => addGear(center, mechanism.rockerLength, z, angle * planetaryPlanetSpinRatio(mechanism.crankLength, mechanism.rockerLength) + index * (360 / planetCount), mat));
+            if (mechanism.type === 'planetary_gear') {
+                if (/ring/i.test(label)) addRingGear(s.p1, planetaryRingPitchRadius(mechanism), z, 0, mat);
+                else if (/planet|G3|3-space/i.test(label)) {
+                    const planetCenters = planetaryPlanetCenters(s.p1, mechanism, degToRad(angle) * planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength));
+                    const planetCount = Math.max(1, planetCenters.length);
+                    planetCenters.forEach((center, index) => addGear(center, mechanism.rockerLength, z, angle * planetaryPlanetSpinRatio(mechanism.crankLength, mechanism.rockerLength) + ((mechanism.phase ?? 0) * 180) / Math.PI + index * (360 / planetCount), mat));
+                }
+                else addGear(s.p1, mechanism.crankLength, z, angle, mat);
             }
             else if (isGearTrain) {
                 const index = Math.max(0, Math.min(gearTrainIndex, Math.max(0, gearRadii.length - 1)));

@@ -820,6 +820,7 @@ assert(canvasText.includes('RingGearPath') && canvasText.includes('planetaryPlan
 assert(appText.includes('fixed-gear-axles-only'), 'Foundry 3D gear train preview declares fixed gear axles rather than generic mechanism pins');
 assert(appText.includes('coplanar-fixed-axles') && appText.includes('gear-axles-include-board-side-spacer'), 'Foundry 3D gear train preview keeps meshed gear plates coplanar and spans board-side local spacer stacks');
 assert(appText.includes('planetary-coplanar-ring-sun-planet') && appText.includes('planetary-carrier-pins-include-local-spacers'), 'Foundry 3D planetary preview keeps ring/sun/planet coplanar while carrier pins use local S10 spacers');
+assert(appText.includes('/planet|G3|3-space/i'), 'Foundry 3D planetary renderer recognizes the mechanism-reference G3 label as the moving planet gear');
 assert(appText.includes('board-side>S10-spacer>gear>fastener-head'), 'Foundry 3D gear train preview documents lower-z board-side gear axle ordering');
 assert(appText.includes('S10<gear<fastener'), 'Foundry 3D gear train preview exposes the runtime lower-z S10, gear, fastener z-order contract');
 assert(appText.includes('foundry-parametric-editor') && appText.includes('design-parametric-editor'), 'Foundry and Design both mount the same compact parametric mechanism editor');
