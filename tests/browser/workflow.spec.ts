@@ -1436,7 +1436,14 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
       await expect(threeScene, '4bar ground A-D is a board reference span, not a fabricated moving linkage').toHaveAttribute('data-three-ground-span-mode', 'board-reference');
     }
     await expect(threeScene, `${type} preview keeps stack z-collisions at zero`).toHaveAttribute('data-three-z-collision-count', '0');
-    if (type === 'cam') await expect(threeScene, 'Cam follower guide stays board-fixed while the follower moves').toHaveAttribute('data-three-cam-guide-mode', 'fixed-board-guide');
+    if (type === 'cam') {
+      await expect(threeScene, 'Cam follower guide stays board-fixed while the follower moves').toHaveAttribute('data-three-cam-guide-mode', 'fixed-board-guide');
+      await expect(threeScene, 'Cam follower contact is sampled from the same rotating cam profile shown in 3D').toHaveAttribute('data-three-cam-contact-mode', 'sampled-profile-on-guide-axis');
+      await expect(threeScene, 'Cam preview uses only the real cam axle and follower-center fastener points').toHaveAttribute('data-three-cam-pin-contract', 'cam-axle-and-follower-center-only');
+      await expect(threeScene).toHaveAttribute('data-three-physical-pin-contract', 'cam-axle-and-follower-center-only');
+      await expect(threeScene).toHaveAttribute('data-three-physical-pin-count', '2');
+      expect(Number(await threeScene.getAttribute('data-three-cam-contact-error')), 'Cam surface, follower roller, and guide axis stay physically mated').toBeLessThan(0.75);
+    }
     expect(Number(await threeScene.getAttribute('data-three-spacer-z-gap')), `${type} foundry preview has spacer clearance along z`).toBeGreaterThanOrEqual(FABRICATION_RENDER_LAYER_Z_STEP - 0.01);
     await expect(page.getByTestId('foundry-forces-overlay'), `${type} keeps live force vectors visible`).toHaveAttribute('data-physics-rule', /force|torque|velocity|acceleration|reaction/);
     await expect(page.getByTestId('foundry-velocity-overlay'), `${type} keeps live velocity vectors visible`).toHaveAttribute('data-speed', /[0-9]+\.[0-9]+/);

@@ -97,6 +97,7 @@ export const REFERENCE_DEFAULTS = {
     },
     cam: {
         radius: mmToScene(15),
+        followerRadius: mmToScene(10),
         followerTravel: mmToScene(160)
     },
     sliderCrank: {
@@ -647,6 +648,7 @@ export const normalizeMechanismToReference = <T extends Partial<MechanismConfig>
             groundAngle: 90,
             groundLength: 0,
             crankLength: REFERENCE_DEFAULTS.cam.radius,
+            sliderOffset: REFERENCE_DEFAULTS.cam.followerRadius,
             rockerLength: REFERENCE_DEFAULTS.cam.followerTravel,
             couplerLength: 0
         };

@@ -3256,7 +3256,8 @@ const foundryAssemblyPinPoints = (type: MechanismType, state: ReturnType<typeof 
     const compact = (points: Array<Point | undefined>) => points.filter(Boolean) as Point[];
     if (type === '4bar') return compact([state.p1, state.j1, state.j2, state.p2]);
     if (type === '5bar' || type === '6bar') return compact([state.p1, state.j1, state.j2, state.aux, state.p2]);
-    if (type === 'cam' || type === 'piston' || type === 'rack-pinion' || type === 'yoke' || type === 'quick-return') return compact([state.p1, state.j1, state.j2]);
+    if (type === 'cam') return compact([state.p1, state.j2]);
+    if (type === 'piston' || type === 'rack-pinion' || type === 'yoke' || type === 'quick-return') return compact([state.p1, state.j1, state.j2]);
     if (type === 'planetary_gear') return compact([state.p1, state.p2]);
     return compact([state.p1, state.p2, state.j1, state.j2, state.aux, state.effector]);
 };
@@ -3264,7 +3265,8 @@ const foundryAssemblyPinPoints = (type: MechanismType, state: ReturnType<typeof 
 const foundryAssemblyPinContract = (type: MechanismType) => {
     if (type === '4bar') return 'reference-A-B-C-D-only';
     if (type === '5bar' || type === '6bar') return 'reference-ground-chain-only';
-    if (type === 'cam' || type === 'piston' || type === 'rack-pinion' || type === 'yoke' || type === 'quick-return') return 'guided-output-only';
+    if (type === 'cam') return 'cam-axle-and-follower-center-only';
+    if (type === 'piston' || type === 'rack-pinion' || type === 'yoke' || type === 'quick-return') return 'guided-output-only';
     if (type === 'gear') return 'fixed-gear-axles-only';
     if (type === 'gear_linkage') return 'fixed-gear-axles-plus-two-crank-links';
     if (type === 'planetary_gear') return 'sun-and-carrier-planet-axles';
@@ -3550,7 +3552,8 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
         : mechanism.type === 'planetary_gear'
             ? { ...baseInv, gears: gearRadii.length, parts: Math.max(baseInv.parts, gearRadii.length + 4) }
             : baseInv;
-    const pinionRotation = Math.atan2(simulation.state.j1.y - simulation.state.p1.y, simulation.state.j1.x - simulation.state.p1.x) * 180 / Math.PI;
+    const driveReferencePoint = mechanism.type === 'cam' && simulation.state.aux ? simulation.state.aux : simulation.state.j1;
+    const pinionRotation = Math.atan2(driveReferencePoint.y - simulation.state.p1.y, driveReferencePoint.x - simulation.state.p1.x) * 180 / Math.PI;
     const renderPlan = useMemo(() => fabricationRenderPlanForMechanism(mechanism), [mechanism]);
     const stackLayerZ = useMemo(() => renderPlan.layers.map(item => item.z + explode * item.stackIndex * FABRICATION_RENDER_LAYER_Z_STEP * 1.5), [explode, renderPlan]);
     const gearLayerIndexes = useMemo(() => renderPlan.layers.flatMap((item, index) => item.renderKind === 'gear' ? [index] : []), [renderPlan.layers]);
@@ -3688,6 +3691,20 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
     ), [pathPoints, pathTraces]);
     const primaryPathId = visiblePathTraces.find(trace => trace.primary)?.id ?? visiblePathTraces[0]?.id ?? '';
     const pathLayerZ = pinTopZ + 0.08;
+    const camContactErrorForData = mechanism.type === 'cam'
+        ? (() => {
+            const s = simulation.state;
+            const guideDx = s.j2.x - s.p1.x;
+            const guideDy = s.j2.y - s.p1.y;
+            const guideLength = Math.hypot(guideDx, guideDy);
+            const guide = guideLength > 0.001
+                ? { x: guideDx / guideLength, y: guideDy / guideLength }
+                : { x: Math.cos(degToRad(mechanism.groundAngle ?? 90)), y: -Math.sin(degToRad(mechanism.groundAngle ?? 90)) };
+            const contactGap = Math.abs(Math.hypot(s.j2.x - s.j1.x, s.j2.y - s.j1.y) - Math.max(0, mechanism.sliderOffset) * simulation.scale);
+            const axisError = Math.abs((s.j1.x - s.p1.x) * guide.y - (s.j1.y - s.p1.y) * guide.x);
+            return Math.max(contactGap, axisError);
+        })()
+        : 0;
     useEffect(() => {
         let active = true;
         loadRapierPhysicsKernel()
@@ -4032,10 +4049,11 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             group.add(mesh);
             root.add(group);
         };
-        const addFollowerBlock = (center: Point, z: number, mat: THREE.Material) => {
+        const addFollowerBlock = (center: Point, z: number, mat: THREE.Material, rotation = 0) => {
             const c = to3(center, z);
             const group = new THREE.Group();
             group.position.copy(c);
+            group.rotation.z = rotation;
             const blockKey = `follower-block:${barW.toFixed(3)}:${thickness.toFixed(3)}`;
             const block = new THREE.Mesh(cachedGeometry(blockKey, () => new THREE.BoxGeometry(barW * 1.45, barW * 1.8, thickness)), mat);
             addEdges(block, blockKey);
@@ -4084,11 +4102,21 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
 
         const s = simulation.state;
         const angle = pinionRotation;
-        const camGuideRotation = degToRad(mechanism.groundAngle ?? 90);
+        const camGuideFallback = { x: Math.cos(degToRad(mechanism.groundAngle ?? 90)), y: -Math.sin(degToRad(mechanism.groundAngle ?? 90)) };
+        const camGuideVector = mechanism.type === 'cam'
+            ? (() => {
+                const dx = s.j2.x - s.p1.x;
+                const dy = s.j2.y - s.p1.y;
+                const len = Math.hypot(dx, dy);
+                return len > 0.001 ? { x: dx / len, y: dy / len } : camGuideFallback;
+            })()
+            : camGuideFallback;
+        const camGuideRotation = Math.atan2(camGuideVector.y, camGuideVector.x);
+        const camFollowerRotation = camGuideRotation - Math.PI / 2;
         const camGuideCenter = mechanism.type === 'cam'
             ? {
-                x: s.p1.x + Math.cos(camGuideRotation) * (mechanism.crankLength + mechanism.sliderOffset + mechanism.rockerLength * 0.5) * simulation.scale,
-                y: s.p1.y + Math.sin(camGuideRotation) * (mechanism.crankLength + mechanism.sliderOffset + mechanism.rockerLength * 0.5) * simulation.scale
+                x: s.p1.x + camGuideVector.x * (mechanism.crankLength + mechanism.sliderOffset + mechanism.rockerLength * 0.5) * simulation.scale,
+                y: s.p1.y + camGuideVector.y * (mechanism.crankLength + mechanism.sliderOffset + mechanism.rockerLength * 0.5) * simulation.scale
             }
             : s.j2;
         const usesMeshedPitchCenters = ['gear', 'gear_linkage', 'planetary_gear', 'rack-pinion', 'cam'].includes(mechanism.type);
@@ -4155,7 +4183,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
                 addEndStop(s.j2, -2.55, z + 0.04);
                 addEndStop(s.j2, 2.55, z + 0.04);
             }
-            else if (layerItem.renderKind === 'follower') addFollowerBlock(s.j2, z, mat);
+            else if (layerItem.renderKind === 'follower') addFollowerBlock(s.j2, z, mat, mechanism.type === 'cam' ? camFollowerRotation : 0);
         });
         pinStacks.forEach(pinStack => {
             const boardPivotFastener = mechanism.type === '4bar' && (pinStack.id === 'A' || pinStack.id === 'D');
@@ -4296,6 +4324,10 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-three-z-collision-count={zCollisionCount}
             data-three-ground-span-mode={mechanism.type === '4bar' ? 'board-reference' : 'rendered-reference'}
             data-three-cam-guide-mode={mechanism.type === 'cam' ? 'fixed-board-guide' : 'not-cam'}
+            data-three-cam-contact-mode={mechanism.type === 'cam' ? 'sampled-profile-on-guide-axis' : 'not-cam'}
+            data-three-cam-contact-error={mechanism.type === 'cam' ? camContactErrorForData.toFixed(3) : ''}
+            data-three-cam-follower-offset={mechanism.type === 'cam' ? (Math.max(0, mechanism.sliderOffset) * simulation.scale).toFixed(3) : ''}
+            data-three-cam-pin-contract={mechanism.type === 'cam' ? 'cam-axle-and-follower-center-only' : 'not-cam'}
             data-three-cam-rotation-deg={mechanism.type === 'cam' ? pinionRotation.toFixed(2) : ''}
             data-three-ring-mount-mode={mechanism.type === 'planetary_gear' ? 'fixed-ring-holes' : 'not-planetary'}
             data-three-path-source="moving-joints"
@@ -4369,7 +4401,8 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
     const axisForAngle = (deg: number) => ({ x: Math.cos(degToRad(deg)), y: -Math.sin(degToRad(deg)) });
     const trackAxis = axisForAngle(mechanism.groundAngle ?? 0);
     const normalAxis = { x: -trackAxis.y, y: trackAxis.x };
-    const inputAngleDeg = Math.atan2(s.j1.y - s.p1.y, s.j1.x - s.p1.x) * 180 / Math.PI;
+    const inputReferencePoint = mechanism.type === 'cam' && s.aux ? s.aux : s.j1;
+    const inputAngleDeg = Math.atan2(inputReferencePoint.y - s.p1.y, inputReferencePoint.x - s.p1.x) * 180 / Math.PI;
     const outputAngleDeg = Math.atan2(s.j2.y - s.p2.y, s.j2.x - s.p2.x) * 180 / Math.PI;
     const isGearTrainPreview = mechanism.type === 'gear' || mechanism.type === 'gear_linkage';
     const previewGearRadii = isGearTrainPreview ? gearTrainPitchRadii(mechanism) : [];
@@ -4426,7 +4459,7 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
             {[-len / 2, len / 2].map((x, index) => <circle key={index} data-testid={fabricationTest('hole')} className="mechanism-hole" cx={x} cy="0" r={holeR} />)}
         </g>;
     };
-    const pins = [s.p1, s.p2, s.j1, s.j2, s.aux].filter((point): point is Point => Boolean(point));
+    const pins = (mechanism.type === 'cam' ? [s.p1, s.j2] : [s.p1, s.p2, s.j1, s.j2, s.aux]).filter((point): point is Point => Boolean(point));
     const gear = (center: Point, length: number, className: string, key: string, min = compact ? 8 : 16, max = compact ? 34 : 62, rotation = 0) => {
         const pitchRadius = radius(length, min, max);
         const gearProfile = fabricationGearProfileForPitchRadius(pitchRadius, pitchRadius / SCENE_PX_PER_MM);

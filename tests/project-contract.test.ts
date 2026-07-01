@@ -1542,8 +1542,8 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
 
 {
   const mechanism = createDefaultMechanism('cam', 'contract-cam-physical');
-  const low = calculateLinkage(mechanism, 0);
-  const high = calculateLinkage(mechanism, Math.PI);
+  const low = calculateLinkage(mechanism, Math.PI / 2);
+  const high = calculateLinkage(mechanism, (3 * Math.PI) / 2);
   assert(low.isValid && high.isValid, 'cam follower default has valid lift samples');
   assert.deepEqual(low.j2, low.effector, 'cam follower output is the follower block');
   assert.deepEqual(high.j2, high.effector, 'cam follower lifted output remains the follower block');
@@ -1561,6 +1561,12 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
   assert(defaultCamExportPath && customCamExportPath && defaultCamExportPath !== customCamExportPath, 'cam SVG export uses edited cam profile samples');
   assert(generateDXF({ speed: 1, rotation: 0, mechanisms: [custom] }, 0).includes('CONTRACT-CAM-PHYSICAL_CAM'), 'cam DXF export includes an explicit sampled cam profile layer');
   assert(localTrack(mechanism, high.j2).x > localTrack(mechanism, low.j2).x, 'cam follower lift increases along the guide');
+  assert(Math.abs(localTrack(mechanism, low.j1).y) < 1e-6, 'cam contact point sits on the follower guide axis');
+  assert(Math.abs(localTrack(mechanism, low.j2).y) < 1e-6, 'round follower center stays on the guide axis');
+  assertDistance(low.j1, low.j2, mechanism.sliderOffset, 'round follower center remains one follower radius from the sampled cam surface');
+  const contactProfileAngle = ((mechanism.groundAngle ?? 90) * Math.PI) / 180 - (Math.PI / 2);
+  assertDistance(low.p1, low.j1, mechanism.crankLength * sampledCamProfileScale(contactProfileAngle, mechanism.camProfileSamples), 'cam contact radius samples the rendered profile at the guide direction');
+  assert(low.aux && distance(low.p1, low.aux) > 0, 'cam kinematics preserves a separate drive-angle reference instead of reusing the follower contact as rotation');
   assert.deepEqual(requiredPartQuantities('cam'), { 'Eccentric cam': 1, 'Round follower': 1, '2-hole bracket': 1, [FABRICATION_SPACER_SPEC.label]: 8 }, 'cam recipe uses eccentric cam, round follower, bracket, and S10 from mechanism-reference');
 }
 

@@ -174,6 +174,16 @@ const foundryPhysicalPlayhead = (
 const foundryConstraintError = (mechanism: MechanismConfig, simulation: FoundryPhysicsSimulation): number => {
   const s = simulation.state;
   const scaledLength = (length: number | undefined) => Math.max(0, finite(length ?? 0)) * simulation.scale;
+  const guideAxisError = (origin: Point | undefined, contact: Point | undefined, follower: Point | undefined) => {
+    if (!origin || !contact || !follower) return 0;
+    const guideDx = follower.x - origin.x;
+    const guideDy = follower.y - origin.y;
+    const guideLength = Math.hypot(guideDx, guideDy);
+    if (guideLength < 1e-9) return 0;
+    const ux = guideDx / guideLength;
+    const uy = guideDy / guideLength;
+    return Math.abs((contact.x - origin.x) * uy - (contact.y - origin.y) * ux);
+  };
   const errors = mechanism.type === 'gear'
     ? [Math.abs(fittedDistance(s.p1, s.p2) - scaledLength(gearTrainResolvedCenterDistance(mechanism)))]
     : mechanism.type === 'gear_linkage'
@@ -189,7 +199,10 @@ const foundryConstraintError = (mechanism: MechanismConfig, simulation: FoundryP
       : mechanism.type === 'rack-pinion'
         ? [Math.abs(fittedDistance(s.p1, s.j1) - scaledLength(mechanism.crankLength)), fittedDistance(s.j2, s.p2)]
         : mechanism.type === 'cam'
-          ? [fittedDistance(s.j2, s.p2)]
+          ? [
+            Math.abs(fittedDistance(s.j1, s.j2) - scaledLength(mechanism.sliderOffset)),
+            guideAxisError(s.p1, s.j1, s.j2)
+          ]
           : mechanism.type === 'piston'
             ? [fittedDistance(s.j2, s.effector)]
             : mechanism.type === 'yoke'

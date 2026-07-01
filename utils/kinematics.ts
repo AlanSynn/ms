@@ -228,20 +228,24 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
     // --- CAM FOLLOWER ---
     else if (config.type === 'cam') {
         const trackAngle = toRad(config.groundAngle ?? 90);
-        const lift = Math.max(1, config.rockerLength || config.crankLength);
         const radius = Math.max(1, config.crankLength);
-        const rise = camFollowerRise(lift, angle1, config.camProfileSamples);
-        const base = radius + (config.sliderOffset || 0);
-        const profileRadius = radius * sampledCamProfileScale(angle1, config.camProfileSamples);
-        const p2: Point = {
-            x: p1.x + Math.cos(trackAngle) * (base + rise),
-            y: p1.y + Math.sin(trackAngle) * (base + rise)
+        const followerRadius = Math.max(0, config.sliderOffset || 0);
+        const axis = { x: Math.cos(trackAngle), y: Math.sin(trackAngle) };
+        const contactProfileAngle = trackAngle - angle1;
+        const contactRadius = radius * sampledCamProfileScale(contactProfileAngle, config.camProfileSamples);
+        const contactPoint: Point = {
+            x: p1.x + axis.x * contactRadius,
+            y: p1.y + axis.y * contactRadius
         };
-        const camPoint: Point = {
-            x: p1.x + profileRadius * Math.cos(angle1),
-            y: p1.y + profileRadius * Math.sin(angle1)
+        const followerCenter: Point = {
+            x: p1.x + axis.x * (contactRadius + followerRadius),
+            y: p1.y + axis.y * (contactRadius + followerRadius)
         };
-        return { p1, p2, j1: camPoint, j2: p2, effector: p2, isValid: true };
+        const driveReference: Point = {
+            x: p1.x + radius * Math.cos(angle1),
+            y: p1.y + radius * Math.sin(angle1)
+        };
+        return { p1, p2: followerCenter, j1: contactPoint, j2: followerCenter, aux: driveReference, effector: followerCenter, isValid: true };
     }
 
     // --- RACK AND PINION ---
