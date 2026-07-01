@@ -1,6 +1,6 @@
 
 import { MechanismConfig, Point, MechanismType } from '../types';
-import { gearTrainOutputRatio, gearTrainPitchCenterDistance, generateCurvePoints, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from './kinematics';
+import { gearTrainOutputRatio, gearTrainResolvedCenterDistance, generateCurvePoints, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from './kinematics';
 import { AUTHORABLE_MECHANISM_TYPES } from './mechanismTemplates';
 import { normalizeGearLinkageToReference } from './mechanismReference';
 
@@ -531,7 +531,7 @@ export const generateSmartConfig = (targetPath?: Point[], forcedType?: Mechanism
     } else if (type === 'gear') {
         config.rockerLength = s(0.25);
         config.gearTrainRadii = [config.crankLength, config.rockerLength];
-        config.groundLength = gearTrainPitchCenterDistance(config);
+        config.groundLength = gearTrainResolvedCenterDistance(config);
         config.gearRatio = gearTrainOutputRatio(config);
         config.speed2 = config.gearRatio;
         config.couplerLength = 0;
@@ -744,7 +744,7 @@ export const mutateConfig = (config: MechanismConfig, temperature: number = 1.0,
                 ? newConfig.gearTrainRadii.slice(1, -1)
                 : [];
             newConfig.gearTrainRadii = [newConfig.crankLength, ...idlers, newConfig.rockerLength];
-            newConfig.groundLength = gearTrainPitchCenterDistance(newConfig);
+            newConfig.groundLength = gearTrainResolvedCenterDistance(newConfig);
             newConfig.gearRatio = gearTrainOutputRatio(newConfig);
             newConfig.speed2 = newConfig.gearRatio ?? newConfig.speed2;
         } else {

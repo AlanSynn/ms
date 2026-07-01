@@ -1,7 +1,7 @@
 # MotionSmith gear train PRD
 
 ## Scope
-Verified Foundry/export mechanism: only meshed gears in a line. No linkage rods in plain gear-train mode.
+Verified Foundry/export mechanism: separated endpoint gears by default; optional inserted idlers create the meshed gear line. No linkage rods in plain gear-train mode.
 
 References:
 - https://github.com/CKraft11/pygeartrain

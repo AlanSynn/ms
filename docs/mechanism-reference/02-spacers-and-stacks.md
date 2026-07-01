@@ -157,7 +157,7 @@ E_link@coord > F > S10 > moving-part > S10 > tabs-loose
 
 Use cases:
 
-- gear-linkage shared R fastener at `I12`,
+- gear-linkage shared R fastener at moving `I9`,
 - slider block bracket at `G12`.
 
 ### F. Off-centre gear handle / crank pin
@@ -170,7 +170,7 @@ H_gear@coord > gear plate hole > S10 > moving-link > S10 > tabs-loose
 
 Use cases:
 
-- gear-linkage L4 attached to output G3 handle hole near `I9`.
+- gear-linkage L4 attached to output G3 handle hole near `I12`.
 
 Rules:
 

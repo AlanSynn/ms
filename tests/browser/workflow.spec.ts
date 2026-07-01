@@ -1358,6 +1358,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await page.getByRole('button', { name: 'Add idler gear' }).click();
   await page.getByLabel('Idler gear 1 size').selectOption('g8');
   await expect(threeScene, 'Gear train param editor writes ordered drive/idler/output radii to the shared preview').toHaveAttribute('data-three-gear-radii', '100.00,20.00,140.00');
+  await expect(threeScene, 'Inserted idlers close the endpoint span into an adjacent pitch chain').toHaveAttribute('data-three-gear-train-endpoint-mode', 'idler-connected-pitch-chain');
   await expect(threeScene, 'Gear train axles are generated from the same fitted centers used to draw the gear plates').toHaveAttribute('data-three-gear-center-source', 'fitted-simulation-pitch-centers');
   await expect(threeScene).toHaveAttribute('data-three-gear-center-count', '3');
   await expect(threeScene).toHaveAttribute('data-three-gear-axle-center-contract', 'pin-stacks-use-rendered-gear-centers');
@@ -1400,12 +1401,12 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
     const renderedLayerZ = await threeScene.getAttribute('data-three-rendered-layer-z') ?? '';
     const stackLayerZ = await threeScene.getAttribute('data-three-stack-z') ?? '';
     if (type === 'gear' || type === 'gear_linkage') {
-      await expect(threeScene, `${type} keeps meshed gears coplanar instead of separating them by the linear stack list`).toHaveAttribute('data-three-gear-plane-mode', 'coplanar-fixed-axles');
+      await expect(threeScene, `${type} keeps gear plates coplanar instead of separating them by the linear stack list`).toHaveAttribute('data-three-gear-plane-mode', 'coplanar-fixed-axles');
       expect(renderedLayerZ, `${type} gear render z intentionally differs from the printable stack z because each axle has a local spacer stack`).not.toBe(stackLayerZ);
       const roles = (await threeScene.getAttribute('data-three-rendered-layer-roles') ?? '').split('>');
       const zValues = renderedLayerZ.split(',').map(Number);
       const gearZValues = roles.flatMap((role, index) => role === 'gear' ? [zValues[index]] : []);
-      expect(new Set(gearZValues.map(z => z.toFixed(2))).size, `${type} all external meshing gears share one pitch plane`).toBe(1);
+      expect(new Set(gearZValues.map(z => z.toFixed(2))).size, `${type} all external gear plates share one pitch plane`).toBe(1);
     } else if (type === 'planetary_gear') {
       await expect(threeScene, 'Planetary keeps the ring, sun, and planet teeth on one mesh plane').toHaveAttribute('data-three-gear-plane-mode', 'planetary-coplanar-ring-sun-planet');
       await expect(threeScene, 'Planetary carrier pins include real local S10 spacers').toHaveAttribute('data-three-pin-stack-z-sources', 'planetary-carrier-pins-include-local-spacers');
@@ -1448,6 +1449,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
       await expect(threeScene).toHaveAttribute('data-three-planetary-fixed', 'ring');
       await expect(threeScene).toHaveAttribute('data-three-planetary-input', 'sun');
       await expect(threeScene).toHaveAttribute('data-three-planetary-output', 'carrier');
+      await expect(threeScene, 'Planetary carrier and planet render from the sampled simulation state so the gear stays on the carrier axle at every zoom scale').toHaveAttribute('data-three-planetary-center-source', 'simulation-state-carrier-center');
       await expect(threeScene).toHaveAttribute('data-three-planet-count', '1');
       const radii = (await threeScene.getAttribute('data-three-gear-radii') ?? '').split(',').map(Number);
       expect(radii, 'Planetary foundry exposes sun, one G3 planet, and ring radii from the fabrication convention').toHaveLength(3);
@@ -1465,22 +1467,25 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await page.getByLabel('Foundry mechanism type').selectOption('gear');
   await page.getByRole('button', { name: 'Show details' }).click();
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Gear train');
-  await expect(page.getByTestId('foundry-mechanism-library')).toContainText('gear mesh');
+  await expect(page.getByTestId('foundry-mechanism-library')).toContainText('endpoint');
   await page.getByRole('button', { name: 'Hide details' }).click();
   expect(Number(await threeScene.getAttribute('data-three-gear-count')), 'Gear preview uses toothed 3D fabrication geometry').toBeGreaterThanOrEqual(2);
-  await expect(threeScene, 'Gear train renders as meshed gears only, without fake linkage rods').toHaveAttribute('data-three-gear-train-linkage-mode', 'gear-only-train');
+  await expect(threeScene, 'Gear train renders endpoint gears only, without fake linkage rods').toHaveAttribute('data-three-gear-train-linkage-mode', 'gear-only-train');
   await expect(threeScene, 'Gear train hardware is limited to fixed board gear axles').toHaveAttribute('data-three-physical-pin-contract', 'fixed-gear-axles-only');
   await expect(threeScene, 'Gear train geometry contract exposes board-fixed gears only').toHaveAttribute('data-three-geometry-contract', /Drive G3 \/ 3-space gear:fixed-board-gear.*Output G3 \/ 3-space gear:fixed-board-gear/);
   await expect(threeScene, 'Gear train fabrication stack exposes both reference G3 gears').toHaveAttribute('data-three-stack-order', /Drive G3 \/ 3-space gear.*Output G3 \/ 3-space gear/);
-  expect(Number(await threeScene.getAttribute('data-three-gear-pitch-center')), 'Gear pitch centers are snapped to the sum of fabrication gear radii').toBeCloseTo(Number(await threeScene.getAttribute('data-three-gear-pitch-sum')), 2);
+  expect(Number(await threeScene.getAttribute('data-three-gear-pitch-center')), 'Default gear train leaves A/B separated until an idler is inserted').toBeGreaterThan(Number(await threeScene.getAttribute('data-three-gear-pitch-sum')));
   await expect(threeScene, 'Default gear train uses the reference G3/G3 pitch radii').toHaveAttribute('data-three-gear-radii', '60.00,60.00');
   const gearCount = await threeScene.getAttribute('data-three-gear-count');
-  await expect(threeScene, 'Default gear axles use the same fitted centers as the rendered gear plates').toHaveAttribute('data-three-gear-center-source', 'fitted-simulation-pitch-centers');
+  await expect(threeScene, 'Default gear train advertises separated endpoint axles awaiting idlers').toHaveAttribute('data-three-gear-train-endpoint-mode', 'separated-endpoints-await-idlers');
+  await expect(threeScene, 'Default gear axles use separated endpoint centers until idlers are inserted').toHaveAttribute('data-three-gear-center-source', 'separated-endpoints-await-idlers');
+  await expect(threeScene, 'Default endpoint gears are not coupled until an idler chain exists').toHaveAttribute('data-three-gear-coupling-mode', 'uncoupled-endpoints');
+  await expect(threeScene, 'Default endpoint gear output ratio is zero until idlers close the chain').toHaveAttribute('data-three-gear-output-ratio', '0.000');
   await expect(threeScene).toHaveAttribute('data-three-gear-center-count', gearCount ?? '2');
   await expect(threeScene).toHaveAttribute('data-three-gear-axle-center-contract', 'pin-stacks-use-rendered-gear-centers');
-  await expect(threeScene, 'Default G3/G3 mesh offsets one gear by half a tooth instead of drawing tooth-on-tooth overlap').toHaveAttribute('data-three-gear-mesh-phases', '0.00,7.50');
+  await expect(threeScene, 'Default separated endpoint gears do not claim an active mesh phase').toHaveAttribute('data-three-gear-mesh-phases', '0.00,0.00');
   expect(await threeScene.getAttribute('data-three-gear-axle-centers'), 'Default gear axle centers match rendered gear centers').toBe(await threeScene.getAttribute('data-three-gear-centers'));
-  expect(Number(await threeScene.getAttribute('data-three-gear-center-max-error')), 'Default fitted gear centers preserve fabrication pitch spacing').toBeLessThan(0.75);
+  expect(Number(await threeScene.getAttribute('data-three-gear-center-max-error')), 'Default separated endpoint gears do not report meshing error until idlers are inserted').toBe(0);
   await expect(threeScene, 'Each visible gear has one real fixed axle, with no orphan pin tower').toHaveAttribute('data-three-physical-pin-count', gearCount ?? '2');
   await expect(threeScene, 'Each G3 axle receives exactly one visible S10 spacer washer').toHaveAttribute('data-three-spacer-render-count', gearCount ?? '2');
   await expect(threeScene, 'Gear axles use board-side spacer then coplanar gear then fastener head').toHaveAttribute('data-three-gear-axle-stack-contract', 'board-side>S10-spacer>gear>fastener-head');
@@ -1497,7 +1502,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await page.getByLabel('Foundry mechanism type').selectOption('gear_linkage');
   await expect(threeScene, 'Gear-linkage uses paired off-center G3 crank pins').toHaveAttribute('data-three-gear-linkage-mode', 'two-gear-two-link-coupler');
   await expect(threeScene, 'Gear-linkage uses two gear handles and paired L4 rods').toHaveAttribute('data-three-gear-train-linkage-mode', 'two-gear-two-link-coupler');
-  await expect(threeScene, 'Gear-linkage keeps the drive/output gear mesh coplanar on board axles').toHaveAttribute('data-three-gear-plane-mode', 'coplanar-fixed-axles');
+  await expect(threeScene, 'Gear-linkage keeps the drive/output gear plates coplanar on board axles').toHaveAttribute('data-three-gear-plane-mode', 'coplanar-fixed-axles');
   await expect(threeScene, 'Gear-linkage gear axles include local board-side spacer z in their fastener spans').toHaveAttribute('data-three-pin-stack-z-sources', 'gear-axles-include-board-side-spacer');
   await expect(threeScene, 'Gear-linkage pins are the two fixed gear axles plus two gear crank pins and one shared R connector').toHaveAttribute('data-three-physical-pin-contract', 'fixed-gear-axles-plus-two-crank-links');
   await expect(threeScene, 'Gear-linkage has no orphan hardware tower beyond its five real pin sites').toHaveAttribute('data-three-physical-pin-count', '5');
@@ -1505,7 +1510,8 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(threeScene, 'Gear-linkage stack exposes G3/G3/L4/L4 in reference order').toHaveAttribute('data-three-stack-order', /Drive G3 \/ 3-space gear.*Output G3 \/ 3-space gear.*Drive L4 linkage.*Output L4 linkage/);
   await expect(threeScene).toHaveAttribute('data-three-gear-radii', '60.00,60.00');
   await expect(threeScene).toHaveAttribute('data-three-linkage-pin-radius', '40.00');
-  await expect(threeScene, 'Gear-linkage endpoint gear centers are spaced by the pitch-chain distance, not collapsed onto one shaft').toHaveAttribute('data-three-gear-linkage-spacing-contract', 'endpoint-gears-separated-by-pitch-chain-distance');
+  await expect(threeScene, 'Gear-linkage endpoint gear centers stay separated until idlers close the pitch chain').toHaveAttribute('data-three-gear-linkage-spacing-contract', 'separated-endpoints-await-idlers');
+  await expect(threeScene, 'Gear-linkage endpoint gears are not coupled until idlers are inserted').toHaveAttribute('data-three-gear-coupling-mode', 'uncoupled-endpoints');
   await expect(threeScene, 'Gear-linkage crank pins pass through real off-center gear holes before spacer-separated links').toHaveAttribute('data-three-gear-linkage-crank-stack-contract', 'B-gear-hole>S10>drive-link;C-gear-hole>S10>S10>output-link;R-drive-link>S10>output-link');
   await expect(threeScene, 'Gear-linkage has no extra output bracket beyond the shared R fastener').toHaveAttribute('data-three-gear-linkage-bracket-anchor', 'no-output-bracket');
   const gearLinkagePinOrder = await threeScene.getAttribute('data-three-gear-linkage-pin-z-order');

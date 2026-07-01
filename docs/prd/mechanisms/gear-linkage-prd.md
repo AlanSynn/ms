@@ -1,7 +1,7 @@
 # MotionSmith gear linkage PRD
 
 ## Scope
-Fabrication-ready compound mechanism: two meshed gears each carry one off-center crank pin, and two fabricated linkages meet at one moving output point. This is not the plain `gear` train and not a single output rod. It matches the paper-style driving block where a paired gear crank can sweep a wide family of curves.
+Fabrication-ready compound mechanism: two separated endpoint gears each carry one off-center crank pin, optional inserted idlers provide gear coupling, and two fabricated linkages meet at one moving output point. This is not the plain `gear` train and not a single output rod. It matches the paper-style driving block where a paired gear crank can sweep a wide family of curves.
 
 References:
 - https://github.com/JarrettR/Stagger for future two-drive linkage sweep patterns.

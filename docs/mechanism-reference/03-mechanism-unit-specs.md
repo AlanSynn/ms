@@ -177,25 +177,25 @@ gear_ratio = T_b / T_a
 |---:|---|---|
 | 1 | `H6(board)` | `B@H6 > F > tabs-behind-board` |
 | 2 | `H6(board)` | `B@H6 > S10 > G3_drive > fastener-head` |
-| 3 | `H9(board)` | `B@H9 > S10 > G3_driven > fastener-head` |
-| 4 | `H6(board)`, `H9(board)` | same moving gear stack for motion check |
+| 3 | `H12(board)` | `B@H12 > S10 > G3_driven > fastener-head` |
+| 4 | `H6(board)`, `H12(board)` | endpoint span check; add idlers before mesh-coupled motion |
 
 Compatibility record:
 
 ```text
-H6 ↔ H9 = 3 board cells = 60.0 mm
-G3 + G3 required centre distance = 30.0 + 30.0 = 60.0 mm
-error = 0.0 mm
-tolerance = 3.6 mm
+H6 ↔ H12 = 6 board cells = 120.0 mm
+G3 + optional G3 idler + G3 pitch chain = 30.0 + 60.0 + 30.0 = 120.0 mm
+error = 0.0 mm when the idler is inserted
+tolerance = 3.6 mm for each adjacent meshing pair
 ```
 
 Rules:
 
-1. Meshing gear centres are fixed board axles in this recipe.
-2. Drive, idler, and driven gears in an external gear train are coplanar on fixed board axles. Lower z is the board side: each gear axle renders `board > S10 board-side spacer > gear > fastener-head`. `S10` spacers are local washers on each axle; they must not push meshing gear plates onto different z planes.
+1. Endpoint gear centres are fixed board axles. With only drive/output gears, A and B are intentionally separated placeholders; an inserted idler chain fills the span and creates the meshing contacts.
+2. Drive, idler, and driven gears in an external gear train are coplanar on fixed board axles when the pitch chain is complete. Lower z is the board side: each gear axle renders `board > S10 board-side spacer > gear > fastener-head`. `S10` spacers are local washers on each axle; they must not push meshing gear plates onto different z planes.
 3. Each visible axle/fastener stack must pass through the gear centre and the adjacent board-side `S10` spacer; no gear may float beside or away from its centre shaft.
-4. Gears should touch lightly; physical tolerance is loose educational tolerance, not precision gearbox backlash.
-5. If an app chooses other gear pairs, verify board distance equals `r_a+r_b+g` within tolerance.
+4. Adjacent gears in an inserted chain should touch lightly; physical tolerance is loose educational tolerance, not precision gearbox backlash.
+5. If an app chooses other gear pairs or idlers, verify each adjacent board distance equals `r_i+r_{i+1}+g` within tolerance.
 6. If using a handle, attach to a real gear attachment hole; `G1` has no attachment holes.
 
 ## 3.4 Gear linkage crank — `gear_linkage`
@@ -215,7 +215,7 @@ Rules:
 
 ```text
 A = drive gear fixed board axle = I6
-D = output gear fixed board axle = I9
+D = output gear fixed board axle = I12
 B = off-centre crank pin on drive gear G_a
 C = off-centre crank pin on output gear G_b
 R = shared moving linkage/output connector reference
@@ -250,23 +250,23 @@ L = linkage_arm_length = |B-R| = |C-R|
 |---:|---|---|
 | 1 | `I6(board)` | `B@I6 > F > tabs-behind-board` |
 | 2 | `I6(board)` | `B@I6 > S10 > G3_drive > fastener-head` |
-| 3 | `I9(board)` | `B@I9 > S10 > G3_output > fastener-head` |
-| 4 | `I6(gear_handle_reference)`, `I12(link_end_reference)` | `H_gear@I6 > gear-hole > S10 > L4_drive > S10 > tabs-loose` |
-| 5 | `I9(gear_handle_reference)`, `I12(link_end_reference)` | `H_gear@I9 > gear-hole > S10 > S10 > L4_output > S10 > tabs-loose` |
-| 6 | `I12(link_end_reference)` | `E_link@I12 > L4_drive > S10 > L4_output > F > tabs-loose` |
+| 3 | `I12(board)` | `B@I12 > S10 > G3_output > fastener-head` |
+| 4 | `I6(gear_handle_reference)`, `I9(link_end_reference)` | `H_gear@I6 > gear-hole > S10 > L4_drive > S10 > tabs-loose` |
+| 5 | `I12(gear_handle_reference)`, `I9(link_end_reference)` | `H_gear@I12 > gear-hole > S10 > S10 > L4_output > S10 > tabs-loose` |
+| 6 | `I9(link_end_reference)` | `E_link@I9 > L4_drive > S10 > L4_output > F > tabs-loose` |
 
 Compatibility:
 
 ```text
-I6 ↔ I9 = 3 board cells = 60.0 mm
-G3 + G3 required centre distance = 60.0 mm
+I6 ↔ I12 = 6 board cells = 120.0 mm
+G3 + optional G3 idler + G3 pitch chain = 120.0 mm
 B-R = C-R = selected fabricated linkage length
 ```
 
 Rules:
 
 1. B and C attach to off-centre gear handle holes, not to board axles.
-2. Gear A and gear D are separated by the pitch-chain distance; optional idlers may increase that distance but do not carry crank links.
+2. Gear A and gear D are separated endpoint board axles; inserted idlers fill the pitch-chain distance and do not carry crank links.
 3. The drive/output/idler gears remain coplanar on their fixed board axles; each centre stack is `board > S10 > gear > fastener-head`.
 4. The B crank stack passes through the real drive gear plate hole, then `S10`, then the lower drive linkage plane.
 5. The C crank stack passes through the real output gear plate hole, then two `S10` spacers, then the upper output linkage plane.

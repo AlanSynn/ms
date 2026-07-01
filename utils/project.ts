@@ -17,7 +17,7 @@ import {
 import { defaultPhysicalKit, localPivotOffsetForScene, SCENE_PX_PER_MM, sceneBoundsForSheet } from './coordinates';
 import { FABRICATION_GEAR_SPECS, FABRICATION_RING_GEAR_SPEC } from './fabricationContract';
 import { REFERENCE_DEFAULTS, normalizeMechanismToReference, referenceRequiredPartsForMechanism } from './mechanismReference';
-import { defaultCamProfileSamples, gearTrainOutputRatio, gearTrainPitchCenterDistance, generateCurvePoints, normalizeCamProfileSamples, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from './kinematics';
+import { defaultCamProfileSamples, gearTrainOutputRatio, generateCurvePoints, normalizeCamProfileSamples, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from './kinematics';
 import { clampNumber, finiteNumber, sanitizeHexColor, sanitizeMechanismType, sanitizePoint } from './sanitize';
 import { isUsableContourPoints } from './partGeometry';
 
@@ -267,7 +267,7 @@ export const createDefaultMechanism = (type: MechanismConfig['type'] = '4bar', i
     sceneAnchor: { x: -120, y: -40 },
     activeVisualPartIds: [],
     groundAngle: type === 'cam' || type === 'rack-pinion' ? 90 : 0,
-    groundLength: type === 'gear' || type === 'gear_linkage' ? gearTrainPitchCenterDistance({ crankLength: DEFAULT_DRIVE_GEAR_RADIUS, rockerLength: DEFAULT_OUTPUT_GEAR_RADIUS }) : type === 'planetary_gear' ? DEFAULT_PLANETARY_CARRIER_RADIUS : type === 'piston' || type === 'yoke' || type === 'cam' || type === 'rack-pinion' ? 0 : REFERENCE_DEFAULTS.fourBar.ground,
+    groundLength: type === 'gear' ? REFERENCE_DEFAULTS.gearTrain.centerDistance : type === 'gear_linkage' ? REFERENCE_DEFAULTS.gearLinkage.centerDistance : type === 'planetary_gear' ? DEFAULT_PLANETARY_CARRIER_RADIUS : type === 'piston' || type === 'yoke' || type === 'cam' || type === 'rack-pinion' ? 0 : REFERENCE_DEFAULTS.fourBar.ground,
     crankLength: type === '6bar' ? 55 : type === '5bar' ? 60 : type === 'gear' || type === 'gear_linkage' ? DEFAULT_DRIVE_GEAR_RADIUS : type === 'planetary_gear' ? DEFAULT_PLANETARY_SUN_RADIUS : type === 'piston' ? REFERENCE_DEFAULTS.sliderCrank.crank : type === 'cam' ? REFERENCE_DEFAULTS.cam.radius : type === 'rack-pinion' ? 42 : REFERENCE_DEFAULTS.fourBar.input,
     couplerLength: type === '6bar' ? 145 : type === 'piston' ? REFERENCE_DEFAULTS.sliderCrank.rod : type === 'gear_linkage' ? REFERENCE_DEFAULTS.gearLinkage.outputLinkage : type === 'yoke' || type === 'cam' || type === 'gear' || type === 'planetary_gear' || type === 'rack-pinion' ? 0 : REFERENCE_DEFAULTS.fourBar.coupler,
     rockerLength: type === '6bar' ? 110 : type === '5bar' ? 48 : type === 'quick-return' ? 130 : type === 'gear' || type === 'gear_linkage' ? DEFAULT_OUTPUT_GEAR_RADIUS : type === 'planetary_gear' ? DEFAULT_PLANETARY_PLANET_RADIUS : type === 'cam' ? REFERENCE_DEFAULTS.cam.followerTravel : type === 'rack-pinion' ? 380 : type === 'piston' ? 0 : REFERENCE_DEFAULTS.fourBar.output,

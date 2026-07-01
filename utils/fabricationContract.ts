@@ -278,6 +278,6 @@ export const fabricationBoardCoordinateCallout = (
     return `${label} · row ${row! + 1}, column ${col! + 1}`;
 };
 
-export const fabricationBoardColumnLabel = (col: number) => `C${col + 1}`;
-export const fabricationBoardRowLabel = (row: number) => `R${row + 1}`;
-export const fabricationBoardAlphaNumericLabel = (col: number, row: number) => `${BOARD_COLUMNS[col] ?? '?'}${row + 1}`;
+export const fabricationBoardColumnLabel = (col: number) => BOARD_COLUMNS[col] ?? '?';
+export const fabricationBoardRowLabel = (row: number) => `${row + 1}`;
+export const fabricationBoardAlphaNumericLabel = (col: number, row: number) => `${fabricationBoardColumnLabel(col)}${fabricationBoardRowLabel(row)}`;

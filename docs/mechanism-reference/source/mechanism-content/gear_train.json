@@ -32,7 +32,7 @@
     "Rigid housing for alignment"
   ],
   "cautions": [
-    "Ensure proper gear meshing and backlash",
+    "Insert idlers when endpoint gears need coupled motion",
     "Verify tooth contact pattern during assembly",
     "Use correct lubricant type and quantity",
     "Monitor for unusual noise or vibration",

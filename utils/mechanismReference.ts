@@ -79,12 +79,12 @@ export const REFERENCE_DEFAULTS = {
     gearTrain: {
         driveRadius: mmToScene(30),
         outputRadius: mmToScene(30),
-        centerDistance: mmToScene(60)
+        centerDistance: mmToScene(120)
     },
     gearLinkage: {
         driveRadius: mmToScene(30),
         outputRadius: mmToScene(30),
-        centerDistance: mmToScene(60),
+        centerDistance: mmToScene(120),
         handleRadius: mmToScene(20),
         outputLinkage: mmToScene(80)
     },
@@ -231,6 +231,17 @@ const normalizeGearTrainRadii = (
 };
 
 const pitchDistanceForRadii = (radii: number[]) => radii.slice(1).reduce((sum, radius, index) => sum + radii[index] + radius, 0);
+
+const endpointSpanForRadii = (radii: number[], requested: number | undefined, fallback: number) => {
+    const pitchDistance = pitchDistanceForRadii(radii);
+    if (radii.length > 2) return pitchDistance;
+    const requestedSpan = Number.isFinite(requested) ? Math.abs(requested ?? 0) : fallback;
+    // Two endpoint gears are intentionally separated; a pitch-contact request is
+    // treated as a legacy no-idler snapshot and normalized to the reference span.
+    if (requestedSpan <= pitchDistance + 1e-6) return Math.max(fallback, pitchDistance);
+    return Math.max(requestedSpan, pitchDistance);
+};
+
 const outputRatioForRadii = (radii: number[]) => {
     const meshCount = Math.max(1, radii.length - 1);
     const sign = meshCount % 2 === 1 ? -1 : 1;
@@ -264,7 +275,7 @@ export const normalizeGearTrainToFabrication = <T extends Partial<MechanismConfi
         ...mechanism,
         crankLength: radii[0],
         rockerLength: radii.at(-1) ?? radii[0],
-        groundLength: pitchDistanceForRadii(radii),
+        groundLength: endpointSpanForRadii(radii, mechanism.groundLength, REFERENCE_DEFAULTS.gearTrain.centerDistance),
         gearTrainRadii: radii,
         gearRatio: ratio,
         speed2: ratio,
@@ -421,8 +432,8 @@ const unsupportedRecipe = (type: MechanismType, canonicalKey: ReferenceCanonical
 const gearTrainSteps: ReferenceAssemblyStep[] = [
     step(1, 'Start at H6', 'place-fastener', ['H6'], ['board'], 'Place a paper fastener at H6.', 'The fastener turns freely.', bareFastener('H6')),
     step(2, 'Add drive G3 gear', 'add-part', ['H6'], ['board'], 'Add one S10 spacer, then place drive G3 on H6.', 'Drive G3 spins without rubbing.', movingPartStack('Board hole H6', 'G3 / 3-space gear', 'gears:g24')),
-    step(3, 'Add output G3 gear', 'add-part', ['H9'], ['board'], 'Place output G3 at H9 so it touches drive G3 lightly.', 'Both gears turn when drive G3 turns.', movingPartStack('Board hole H9', 'G3 / 3-space gear', 'gears:g24')),
-    step(4, 'Turn the handle hole', 'test-motion', ['H6', 'H9'], ['board', 'board'], 'Use a handle hole on drive G3 and rotate slowly.', 'If the mesh binds, loosen both fasteners.', movingPartStack('Board hole H6', 'G3 / 3-space gear', 'gears:g24'))
+    step(3, 'Add output G3 gear', 'add-part', ['H12'], ['board'], 'Place output G3 at H12 as the separated endpoint gear.', 'Insert idlers before expecting the endpoints to mesh.', movingPartStack('Board hole H12', 'G3 / 3-space gear', 'gears:g24')),
+    step(4, 'Check endpoint span', 'test-motion', ['H6', 'H12'], ['board', 'board'], 'Turn the drive gear and confirm both endpoint axles stay fixed and clear.', 'Add idler gears between H6 and H12 when you want coupled rotation.', movingPartStack('Board hole H6', 'G3 / 3-space gear', 'gears:g24'))
 ];
 
 const camSteps: ReferenceAssemblyStep[] = [
@@ -448,10 +459,10 @@ const fourBarSteps: ReferenceAssemblyStep[] = [
 const gearLinkageSteps: ReferenceAssemblyStep[] = [
     step(1, 'Mount drive gear', 'place-fastener', ['I6'], ['board'], 'Place the drive gear fastener at I6.', 'The axle is straight.', bareFastener('I6')),
     step(2, 'Add drive G3 gear', 'add-part', ['I6'], ['board'], 'Add S10 spacer, then place drive G3 at I6.', 'Drive G3 rotates freely.', movingPartStack('Board hole I6', 'G3 / 3-space gear', 'gears:g24')),
-    step(3, 'Mesh output G3 gear', 'add-part', ['I9'], ['board'], 'Place output G3 at I9 and mesh it with drive G3.', 'The gears move together.', movingPartStack('Board hole I9', 'G3 / 3-space gear', 'gears:g24')),
-    step(4, 'Add drive crank link', 'add-linkage', ['I6', 'I12'], ['gear_handle_reference', 'link_end_reference'], 'Fasten L4 through an off-center drive G3 handle hole only (not the board), then point the free end toward I12.', 'The drive linkage rides around the gear center instead of locking to the board.', gearLinkageCrankStack('Drive G3 handle hole near I6', 'L4 linkage', 'linkages:linkage-4-cell', 1)),
-    step(5, 'Add output crank link', 'add-linkage', ['I9', 'I12'], ['gear_handle_reference', 'link_end_reference'], 'Fasten a second L4 through an off-center output G3 handle hole only (not the board), then meet the first L4 at I12.', 'Both L4 links meet at one moving output point.', gearLinkageCrankStack('Output G3 handle hole near I9', 'L4 linkage', 'linkages:linkage-4-cell', 2)),
-    step(6, 'Join moving connector', 'join-linkages', ['I12'], ['link_end_reference'], 'Fasten the two free L4 ends near I12 with one S10 spacer between them.', 'The shared connector follows both link ends and is not pinned to the board.', gearLinkageConnectorStack())
+    step(3, 'Add output G3 gear', 'add-part', ['I12'], ['board'], 'Place output G3 at I12 as the separated endpoint gear.', 'Inserted idlers provide coupling; endpoint gears do not overlap.', movingPartStack('Board hole I12', 'G3 / 3-space gear', 'gears:g24')),
+    step(4, 'Add drive crank link', 'add-linkage', ['I6', 'I9'], ['gear_handle_reference', 'link_end_reference'], 'Fasten L4 through an off-center drive G3 handle hole only (not the board), then point the free end toward the moving R point.', 'The drive linkage rides around the gear center instead of locking to the board.', gearLinkageCrankStack('Drive G3 handle hole near I6', 'L4 linkage', 'linkages:linkage-4-cell', 1)),
+    step(5, 'Add output crank link', 'add-linkage', ['I12', 'I9'], ['gear_handle_reference', 'link_end_reference'], 'Fasten a second L4 through an off-center output G3 handle hole only (not the board), then meet the first L4 at the moving R point.', 'Both L4 links meet at one moving output point.', gearLinkageCrankStack('Output G3 handle hole near I12', 'L4 linkage', 'linkages:linkage-4-cell', 2)),
+    step(6, 'Join moving connector', 'join-linkages', ['I9'], ['link_end_reference'], 'Fasten the two free L4 ends near moving R with one S10 spacer between them.', 'The shared connector follows both link ends and is not pinned to the board.', gearLinkageConnectorStack())
 ];
 
 const planetarySteps: ReferenceAssemblyStep[] = [
@@ -525,7 +536,7 @@ export const REFERENCE_MECHANISM_RECIPES: Record<MechanismType, ReferenceMechani
         appType: 'gear',
         canonicalKey: 'gear_train',
         title: 'Gear train',
-        physicsRule: 'gear mesh force + opposite angular velocity',
+        physicsRule: 'endpoint gear axles + optional idler mesh force',
         foundryVisible: true,
         exportReady: true,
         support: 'fabrication-ready',
@@ -539,7 +550,7 @@ export const REFERENCE_MECHANISM_RECIPES: Record<MechanismType, ReferenceMechani
         appType: 'gear_linkage',
         canonicalKey: 'gear_linkage',
         title: 'Gear crank linkage',
-        physicsRule: 'gear mesh force + two crank-link circle intersection',
+        physicsRule: 'endpoint gear axle forces + optional idler crank-link reaction',
         foundryVisible: true,
         exportReady: true,
         support: 'fabrication-ready',
@@ -595,7 +606,7 @@ export const normalizeGearLinkageToReference = <T extends Partial<MechanismConfi
         ...mechanism,
         crankLength: radii[0],
         rockerLength: output,
-        groundLength: pitchDistanceForRadii(radii),
+        groundLength: endpointSpanForRadii(radii, mechanism.groundLength, REFERENCE_DEFAULTS.gearLinkage.centerDistance),
         couplerPointDist: nearestSharedAttachmentRadiusForScene(drive, output, mechanism.couplerPointDist ?? REFERENCE_DEFAULTS.gearLinkage.handleRadius),
         couplerLength: sceneLinkageLengthForSpec(linkageSpec),
         gearTrainRadii: radii,

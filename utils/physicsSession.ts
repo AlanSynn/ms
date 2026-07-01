@@ -1,5 +1,5 @@
 import type { MechanismConfig, MechanismType, Point, ProjectState } from '../types';
-import { calculateLinkage, gearTrainPitchCenterDistance } from './kinematics';
+import { calculateLinkage, gearTrainResolvedCenterDistance } from './kinematics';
 import { mechanismTemplateLabel } from './mechanismTemplates';
 import type { ProjectionSourceType, ToonSceneProjection } from './sceneProjection';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY } from './physicsKernel';
@@ -175,10 +175,10 @@ const foundryConstraintError = (mechanism: MechanismConfig, simulation: FoundryP
   const s = simulation.state;
   const scaledLength = (length: number | undefined) => Math.max(0, finite(length ?? 0)) * simulation.scale;
   const errors = mechanism.type === 'gear'
-    ? [Math.abs(fittedDistance(s.p1, s.p2) - scaledLength(gearTrainPitchCenterDistance(mechanism)))]
+    ? [Math.abs(fittedDistance(s.p1, s.p2) - scaledLength(gearTrainResolvedCenterDistance(mechanism)))]
     : mechanism.type === 'gear_linkage'
       ? [
-        Math.abs(fittedDistance(s.p1, s.p2) - scaledLength(gearTrainPitchCenterDistance(mechanism))),
+        Math.abs(fittedDistance(s.p1, s.p2) - scaledLength(gearTrainResolvedCenterDistance(mechanism))),
         Math.abs(fittedDistance(s.p1, s.j1) - scaledLength(mechanism.couplerPointDist)),
         Math.abs(fittedDistance(s.p2, s.j2) - scaledLength(mechanism.couplerPointDist)),
         Math.abs(fittedDistance(s.j1, s.effector) - scaledLength(mechanism.couplerLength)),
@@ -395,11 +395,11 @@ export const buildKinematicPhysicsSession = (
       } else if (mechanism.type === 'gear') {
         addCrankConstraint();
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/output-radius`, 'rod', current.p2, current.j2, finite(mechanism.rockerLength), 'output pitch radius', mechanism.id);
-        addConstraint(constraints, `/physics/constraints/${mechanism.id}/gear-mesh`, 'guide', current.p1, current.p2, finite(gearTrainPitchCenterDistance(mechanism)), 'gear pitch mesh tangent', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/gear-span`, 'guide', current.p1, current.p2, finite(gearTrainResolvedCenterDistance(mechanism)), 'gear endpoint span', mechanism.id);
       } else if (mechanism.type === 'gear_linkage') {
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/drive-handle-radius`, 'rod', current.p1, current.j1, finite(mechanism.couplerPointDist), 'off-center drive gear handle radius', mechanism.id);
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/output-handle-radius`, 'rod', current.p2, current.j2, finite(mechanism.couplerPointDist), 'off-center output gear handle radius', mechanism.id);
-        addConstraint(constraints, `/physics/constraints/${mechanism.id}/gear-mesh`, 'guide', current.p1, current.p2, finite(gearTrainPitchCenterDistance(mechanism)), 'gear pitch mesh tangent', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/gear-span`, 'guide', current.p1, current.p2, finite(gearTrainResolvedCenterDistance(mechanism)), 'gear endpoint span', mechanism.id);
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/drive-linkage-arm`, 'rod', current.j1, current.effector, finite(mechanism.couplerLength), 'drive L4 linkage arm', mechanism.id);
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/output-linkage-arm`, 'rod', current.j2, current.effector, finite(mechanism.couplerLength), 'output L4 linkage arm', mechanism.id);
       } else if (mechanism.type === 'planetary_gear') {

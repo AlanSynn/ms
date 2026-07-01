@@ -1,5 +1,5 @@
 import { BodyPartLayer, FabricationIssue, FabricationPackage, FabricationRecipe, MechanismConfig, Point, ProjectState } from '../types';
-import { calculateLinkage, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, generateCurvePoints, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius as kinematicPlanetaryRingPitchRadius } from './kinematics';
+import { calculateLinkage, gearTrainOutputRatio, gearTrainResolvedCenterDistance, gearTrainPitchRadii, generateCurvePoints, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius as kinematicPlanetaryRingPitchRadius } from './kinematics';
 import { boardToScene, pathFromPoints, SCENE_PX_PER_MM, sceneToBoardRaw, sceneToSvg, sceneBoundsForSheet } from './coordinates';
 import { mechanismRequiredParts } from './project';
 import { REFERENCE_DEFAULTS, isReferenceExportReady, referenceRecipeForType, referenceStepCoordinateCallout, referenceSupportWarning } from './mechanismReference';
@@ -585,7 +585,7 @@ export const validateForFabrication = (project: ProjectState) => {
         if (!physicalNumbers.every(Number.isFinite)) add('error', `${m.id}: bad dimension.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Fix dimensions' });
         if ((m.type === 'gear' || m.type === 'gear_linkage' || m.type === 'planetary_gear') && (m.gearRatio ?? 0) === 0) add('error', `${m.id}: gear ratio 0.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Choose non-zero ratio' });
         if (m.type === 'gear' || m.type === 'gear_linkage' || m.type === 'planetary_gear') {
-            const expectedCenterDistance = m.type === 'gear' || m.type === 'gear_linkage' ? gearTrainPitchCenterDistance(m) : m.crankLength + m.rockerLength;
+            const expectedCenterDistance = m.type === 'gear' || m.type === 'gear_linkage' ? gearTrainResolvedCenterDistance(m) : m.crankLength + m.rockerLength;
             if (Math.abs(m.groundLength - expectedCenterDistance) > Math.max(1, expectedCenterDistance * 0.03)) {
                 add(fabricationSeverity, `${m.id}: snap gear pitch.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Snap gear pitch' });
             }

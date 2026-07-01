@@ -283,18 +283,18 @@ Build sequence:
 2. **Add drive G3**
    - Stack: `B@H6 > S10 > G3_drive > fastener-head`.
    - Check: drive gear spins without rubbing.
-3. **Add output G3 at H9**
-   - Stack: `B@H9 > S10 > G3_output > fastener-head`.
-   - Check: both gears turn when drive gear turns.
-4. **Turn handle hole**
+3. **Add output G3 at H12**
+   - Stack: `B@H12 > S10 > G3_output > fastener-head`.
+   - Check: endpoint gear is clear; it should not overlap the drive gear.
+4. **Check endpoint span**
    - Use a real drive gear attachment hole.
-   - Check: if mesh binds, loosen both fasteners.
+   - Check: add idler gears between H6 and H12 before expecting coupled rotation.
 
 Gear train final check:
 
-- Distance `H6-H9` is 3 cells / 60 mm.
-- Both centres are board-fixed.
-- Teeth touch lightly, not forcefully.
+- Distance `H6-H12` is 6 cells / 120 mm.
+- Both endpoint centres are board-fixed.
+- Inserted adjacent gears touch lightly, not forcefully.
 
 ## 5.6.3 Cam-follower build flow
 
@@ -355,27 +355,27 @@ Build sequence:
 2. **Add drive G3**
    - Stack: `B@I6 > S10 > G3_drive > fastener-head`.
    - Check: drive gear rotates freely.
-3. **Mesh output G3 at I9**
-   - Stack: `B@I9 > S10 > G3_output > fastener-head`.
-   - Check: gears move together.
+3. **Add output G3 at I12**
+   - Stack: `B@I12 > S10 > G3_output > fastener-head`.
+   - Check: endpoint gear is clear; inserted idlers provide the mesh.
 4. **Add drive crank link**
-   - Coordinates: `I6(gear_handle_reference)`, `I12(link_end_reference)`.
+   - Coordinates: `I6(gear_handle_reference)`, `I9(link_end_reference)`.
    - Stack: `H_gear@I6 > gear-hole > S10 > L4_drive > S10 > tabs-loose`.
    - Check: drive link rides around the drive gear centre instead of locking to the board.
 5. **Add output crank link**
-   - Coordinates: `I9(gear_handle_reference)`, `I12(link_end_reference)`.
-   - Stack: `H_gear@I9 > gear-hole > S10 > S10 > L4_output > S10 > tabs-loose`.
+   - Coordinates: `I12(gear_handle_reference)`, `I9(link_end_reference)`.
+   - Stack: `H_gear@I12 > gear-hole > S10 > S10 > L4_output > S10 > tabs-loose`.
    - Check: both L4 links meet at one moving R connector.
 6. **Join moving connector**
-   - Coordinate: `I12(link_end_reference)`.
-   - Stack: `E_link@I12 > L4_drive > S10 > L4_output > F > tabs-loose`.
+   - Coordinate: `I9(link_end_reference)`.
+   - Stack: `E_link@I9 > L4_drive > S10 > L4_output > F > tabs-loose`.
    - Check: shared fastener follows the two link ends and is not pinned to the board.
 
 Gear-linkage final check:
 
-- Drive/output gear centres are fixed at `I6/I9`.
+- Drive/output gear centres are fixed at `I6/I12`.
 - B/C crank pins are off-centre gear handle holes.
-- `I12`/R connector moves as the two-link circle intersection.
+- `I9`/R connector is a moving two-link circle intersection, not a board axle.
 
 ## 5.6.5 Planetary gear build flow
 

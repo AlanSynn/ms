@@ -97,13 +97,26 @@ export const gearTrainPitchCenterDistance = (config: Pick<MechanismConfig, 'cran
     return radii.slice(1).reduce((sum, radius, index) => sum + radii[index] + radius, 0);
 };
 
-export const gearTrainCenters = (config: Pick<MechanismConfig, 'anchorX' | 'anchorY' | 'groundAngle' | 'crankLength' | 'rockerLength' | 'gearTrainRadii'>): Point[] => {
+export const gearTrainResolvedCenterDistance = (config: Pick<MechanismConfig, 'groundLength' | 'crankLength' | 'rockerLength' | 'gearTrainRadii'>) => {
+    const pitchChainDistance = gearTrainPitchCenterDistance(config);
+    const radii = gearTrainPitchRadii(config);
+    if (radii.length > 2) return pitchChainDistance;
+    const requested = Number.isFinite(config.groundLength) ? Math.abs(config.groundLength ?? 0) : pitchChainDistance;
+    // Two endpoint gears are kit endpoints, not a completed mesh. If an old/custom
+    // config asks for pitch contact, migrate it to a one-idler-sized span so the
+    // viewport and assembly contract do not show impossible overlap.
+    if (requested <= pitchChainDistance + 1e-6) return pitchChainDistance * 2;
+    return Math.max(requested, pitchChainDistance);
+};
+
+export const gearTrainCenters = (config: Pick<MechanismConfig, 'anchorX' | 'anchorY' | 'groundAngle' | 'groundLength' | 'crankLength' | 'rockerLength' | 'gearTrainRadii'>): Point[] => {
     const radii = gearTrainPitchRadii(config);
     const angle = toRad(config.groundAngle ?? 0);
     const origin = { x: config.anchorX ?? 0, y: config.anchorY ?? 0 };
+    const resolvedSpan = gearTrainResolvedCenterDistance(config);
     let distance = 0;
     return radii.map((radius, index) => {
-        if (index > 0) distance += radii[index - 1] + radius;
+        if (index > 0) distance = radii.length === 2 ? resolvedSpan : distance + radii[index - 1] + radius;
         return {
             x: origin.x + distance * Math.cos(angle),
             y: origin.y + distance * Math.sin(angle)
@@ -269,8 +282,9 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
             x: p1.x + inputRadius * Math.cos(angle1),
             y: p1.y + inputRadius * Math.sin(angle1)
         };
-        const ratio = gearTrainOutputRatio(radii);
-        const outAngle = angle1 * ratio + gearTrainMeshPhaseRadAt(radii, radii.length - 1) + (config.phase ?? 0);
+        const hasInsertedIdlers = radii.length > 2;
+        const ratio = hasInsertedIdlers ? gearTrainOutputRatio(radii) : 0;
+        const outAngle = (hasInsertedIdlers ? angle1 * ratio + gearTrainMeshPhaseRadAt(radii, radii.length - 1) : 0) + (config.phase ?? 0);
         const j2: Point = {
             x: p2.x + outputRadius * Math.cos(outAngle),
             y: p2.y + outputRadius * Math.sin(outAngle)
@@ -284,15 +298,16 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
 
     // --- GEAR-DRIVEN TWO-LINK COUPLER ---
     else if (config.type === 'gear_linkage') {
-        // Paper-style gear linkage: two meshed gear crank pins drive two fabricated
-        // rods that meet at one moving coupler/output point. Both crank pins are
-        // real off-center attachment holes; the pitch radius is only for meshing.
+        // Paper-style gear linkage: separated endpoint gear crank pins drive two
+        // fabricated rods; inserted idlers are the only gear-coupling path. Both
+        // crank pins are real off-center attachment holes.
         const referencePair = normalizeGearLinkageToReference(config);
         const radii = gearTrainPitchRadii(referencePair);
         const centers = gearTrainCenters(referencePair);
         const p2 = centers.at(-1) ?? p1;
-        const ratio = gearTrainOutputRatio(radii);
-        const outAngle = angle1 * ratio + gearTrainMeshPhaseRadAt(radii, radii.length - 1) + (config.phase ?? 0);
+        const hasInsertedIdlers = radii.length > 2;
+        const ratio = hasInsertedIdlers ? gearTrainOutputRatio(radii) : 0;
+        const outAngle = (hasInsertedIdlers ? angle1 * ratio + gearTrainMeshPhaseRadAt(radii, radii.length - 1) : 0) + (config.phase ?? 0);
         const handleRadius = Math.max(1, Math.abs(referencePair.couplerPointDist));
         const drivePin: Point = {
             x: p1.x + handleRadius * Math.cos(angle1),

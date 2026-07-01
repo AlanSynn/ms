@@ -24,7 +24,7 @@ import {
     ProjectAction
 } from './types';
 import { gearPathD, generateDXF, generateSVG } from './utils/exporter';
-import { animationDeltaRadians, calculateLinkage, defaultCamProfileSamples, generateCurvePoints, generateMechanismPointTraces, gearPairOutputRatio, gearTrainMeshPhaseDegAt, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, gearTrainRotationRatioAt, normalizeCamProfileSamples, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, sampledCamProfileScale } from './utils/kinematics';
+import { animationDeltaRadians, calculateLinkage, defaultCamProfileSamples, generateCurvePoints, generateMechanismPointTraces, gearPairOutputRatio, gearTrainMeshPhaseDegAt, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, gearTrainResolvedCenterDistance, gearTrainRotationRatioAt, normalizeCamProfileSamples, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, sampledCamProfileScale } from './utils/kinematics';
 import { evaluateFitness, generateSmartConfig, mutateConfig } from './utils/optimizer';
 import {
     applyProjectAction,
@@ -48,7 +48,7 @@ import {
 import { checkWebOnnxCache, processImageWithWebOnnx, warmWebOnnxCache, type WebOnnxCacheStatus } from './utils/webOnnx';
 import { buildFoundryPhysicsOverlay } from './utils/physicsSession';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, loadRapierPhysicsKernel, physicsKernelErrorMessage } from './utils/physicsKernel';
-import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_PART_DEPTH, FABRICATION_SPACER_SPEC, fabricationBoardCoordinateCallout, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, readableFabricationStackSummary, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
+import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_PART_DEPTH, FABRICATION_SPACER_SPEC, fabricationBoardCoordinateCallout, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, fabricationRenderPlanForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryRingPitchRadius, readableFabricationStackSummary, sampleFeasibleRange, validateForFabrication } from './utils/fabrication';
 import { boardGridLines, boardToScene, bodyPartPivotScene, localPivotOffsetForScene, pathFromPoints, physicalKitPreset, sceneBoundsForSheet, sceneToBoard, sceneToSvg, svgPointerToScene, SCENE_PX_PER_MM, SCENE_VIEW } from './utils/coordinates';
 import { loadCharacterPackage } from './utils/packageLoader';
 import { describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainOptionLabel, motionChainRootJointIds, motionPreviewForPath, preferredMotionJointId } from './utils/motion';
@@ -3657,10 +3657,25 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
     const gearAxleCenters = isGearTrain ? pinStackPoints.slice(0, gearCenters.length).map(pin => pin.point) : [];
     const gearCenterSummary = gearCenters.map(point => `${point.x.toFixed(2)}:${point.y.toFixed(2)}`).join(',');
     const gearAxleCenterSummary = gearAxleCenters.map(point => `${point.x.toFixed(2)}:${point.y.toFixed(2)}`).join(',');
+    const gearEndpointMode = isGearTrain
+        ? gearRadii.length > 2
+            ? 'idler-connected-pitch-chain'
+            : 'separated-endpoints-await-idlers'
+        : 'not-gear-train';
+    const gearCouplingMode = isGearTrain
+        ? gearEndpointMode === 'idler-connected-pitch-chain'
+            ? 'idler-coupled'
+            : 'uncoupled-endpoints'
+        : 'not-gear-train';
     const gearMeshPhaseSummary = isGearTrain
-        ? gearRadii.map((_, index) => gearTrainMeshPhaseDegAt(gearRadii, index).toFixed(2)).join(',')
+        ? gearRadii.map((_, index) => gearEndpointMode === 'idler-connected-pitch-chain' ? gearTrainMeshPhaseDegAt(gearRadii, index).toFixed(2) : '0.00').join(',')
         : '';
-    const gearCenterMaxError = isGearTrain && gearCenters.length > 1
+    const gearCenterSource = isGearTrain
+        ? gearEndpointMode === 'idler-connected-pitch-chain'
+            ? 'fitted-simulation-pitch-centers'
+            : 'separated-endpoints-await-idlers'
+        : 'not-gear-train';
+    const gearCenterMaxError = isGearTrain && gearEndpointMode === 'idler-connected-pitch-chain' && gearCenters.length > 1
         ? Math.max(...gearCenters.slice(1).map((center, index) => {
             const previous = gearCenters[index];
             const expected = (gearRadii[index] + gearRadii[index + 1]) * simulation.scale;
@@ -4087,7 +4102,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             else if (mechanism.type === '6bar' && /output rocker/i.test(label)) addBar(s.p2, s.j2, z, mat, 3);
             else if (mechanism.type === '6bar' && /dyad/i.test(label)) addBar(s.j2, s.aux, z, mat, 2);
             else if (mechanism.type === '6bar' && /follower/i.test(label)) addBar(s.p2, s.aux, z, mat, 2);
-            else if (mechanism.type === 'planetary_gear' && /carrier/i.test(label)) planetaryPlanetCenters(s.p1, mechanism, degToRad(angle) * planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength)).forEach(center => addBar(s.p1, center, z, mat, 3));
+            else if (mechanism.type === 'planetary_gear' && /carrier/i.test(label)) addBar(s.p1, s.p2, z, mat, 3);
             else if (mechanism.type === '4bar' && /output|rocker/i.test(label)) addBar(s.p2, s.j2, z, mat, 3);
             else if (/input|crank|left/i.test(label)) addBar(s.p1, s.j1, z, mat, 3);
             else if (/right/i.test(label)) addBar(s.p2, s.j2, z, mat, 3);
@@ -4099,7 +4114,7 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             if (mechanism.type === 'planetary_gear') {
                 if (/ring/i.test(label)) addRingGear(s.p1, planetaryRingPitchRadius(mechanism), z, 0, mat);
                 else if (/planet|G3|3-space/i.test(label)) {
-                    const planetCenters = planetaryPlanetCenters(s.p1, mechanism, degToRad(angle) * planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength));
+                    const planetCenters = [s.p2];
                     const planetCount = Math.max(1, planetCenters.length);
                     planetCenters.forEach((center, index) => addGear(center, mechanism.rockerLength, z, angle * planetaryPlanetSpinRatio(mechanism.crankLength, mechanism.rockerLength) + ((mechanism.phase ?? 0) * 180) / Math.PI + index * (360 / planetCount), mat));
                 }
@@ -4109,8 +4124,10 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
                 const index = Math.max(0, Math.min(gearTrainIndex, Math.max(0, gearRadii.length - 1)));
                 const fallbackCenter = index === 0 ? s.p1 : s.p2;
                 const fallbackRadius = index === 0 ? mechanism.crankLength : mechanism.rockerLength;
-                const phaseDeg = gearTrainMeshPhaseDegAt(gearRadii, index) + (index === gearRadii.length - 1 ? ((mechanism.phase ?? 0) * 180) / Math.PI : 0);
-                addGear(gearCenters[index] ?? fallbackCenter, gearRadii[index] ?? fallbackRadius, z, angle * gearTrainRotationRatioAt(gearRadii, index) + phaseDeg, mat);
+                const isCoupledGear = gearEndpointMode === 'idler-connected-pitch-chain' || index === 0;
+                const phaseDeg = (gearEndpointMode === 'idler-connected-pitch-chain' ? gearTrainMeshPhaseDegAt(gearRadii, index) : 0) + (index === gearRadii.length - 1 ? ((mechanism.phase ?? 0) * 180) / Math.PI : 0);
+                const ratio = isCoupledGear ? gearTrainRotationRatioAt(gearRadii, index) : 0;
+                addGear(gearCenters[index] ?? fallbackCenter, gearRadii[index] ?? fallbackRadius, z, angle * ratio + phaseDeg, mat);
             }
             else addGear(s.p1, mechanism.crankLength, z, angle, mat);
         };
@@ -4225,9 +4242,9 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-three-end-stop-count={inv.endStops}
             data-three-gear-radii={gearRadii.map(radius => radius.toFixed(2)).join(',')}
             data-cam-profile={mechanism.type === 'cam' ? normalizeCamProfileSamples(mechanism.camProfileSamples).map(value => value.toFixed(2)).join(',') : ''}
-            data-three-gear-pitch-center={(mechanism.type === 'planetary_gear' ? planetaryGearConventionForMechanism(mechanism).carrierPitchRadius : mechanism.groundLength).toFixed(2)}
+            data-three-gear-pitch-center={(isGearTrain ? gearTrainResolvedCenterDistance(mechanism) : mechanism.type === 'planetary_gear' ? planetaryGearConventionForMechanism(mechanism).carrierPitchRadius : mechanism.groundLength).toFixed(2)}
             data-three-gear-pitch-sum={(isGearTrain ? gearTrainPitchCenterDistance(mechanism) : mechanism.type === 'planetary_gear' ? planetaryGearConventionForMechanism(mechanism).ringPitchRadius : mechanism.crankLength + mechanism.rockerLength).toFixed(2)}
-            data-three-gear-output-ratio={(isGearTrain ? gearTrainOutputRatio(mechanism) : mechanism.type === 'planetary_gear' ? planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength) : gearPairOutputRatio(mechanism.crankLength, mechanism.rockerLength)).toFixed(3)}
+            data-three-gear-output-ratio={(isGearTrain ? (gearCouplingMode === 'idler-coupled' ? gearTrainOutputRatio(mechanism) : 0) : mechanism.type === 'planetary_gear' ? planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength) : gearPairOutputRatio(mechanism.crankLength, mechanism.rockerLength)).toFixed(3)}
             data-three-planet-count={planetaryConvention?.planetCount ?? 0}
             data-three-planetary-syntax={planetaryConvention?.syntax ?? ''}
             data-three-planetary-fixed={planetaryConvention?.fixedMember ?? ''}
@@ -4235,22 +4252,25 @@ const ThreeFoundryPreview = ({ mechanism, simulation, kit, camera, rigOpacity, c
             data-three-planetary-output={planetaryConvention?.outputMember ?? ''}
             data-three-planetary-ring-radius={planetaryConvention?.ringPitchRadius.toFixed(2) ?? ''}
             data-three-planetary-carrier-radius={planetaryConvention?.carrierPitchRadius.toFixed(2) ?? ''}
+            data-three-planetary-center-source={isPlanetaryGear ? 'simulation-state-carrier-center' : 'not-planetary'}
             data-three-gear-train-linkage-mode={mechanism.type === 'gear' ? 'gear-only-train' : mechanism.type === 'gear_linkage' ? 'two-gear-two-link-coupler' : 'template-specific'}
             data-three-gear-linkage-mode={mechanism.type === 'gear_linkage' ? 'two-gear-two-link-coupler' : 'none'}
-            data-three-gear-center-source={isGearTrain ? 'fitted-simulation-pitch-centers' : 'not-gear-train'}
+            data-three-gear-center-source={gearCenterSource}
+            data-three-gear-coupling-mode={gearCouplingMode}
             data-three-gear-center-count={gearCenters.length}
             data-three-gear-centers={gearCenterSummary}
             data-three-gear-axle-centers={gearAxleCenterSummary}
             data-three-gear-axle-center-contract={isGearTrain ? 'pin-stacks-use-rendered-gear-centers' : 'not-gear-train'}
             data-three-gear-center-max-error={gearCenterMaxError.toFixed(3)}
-            data-three-gear-mesh-phase-contract={isGearTrain ? 'alternating-half-tooth-gap-phase' : 'not-gear-train'}
+            data-three-gear-train-endpoint-mode={gearEndpointMode}
+            data-three-gear-mesh-phase-contract={isGearTrain ? (gearEndpointMode === 'idler-connected-pitch-chain' ? 'alternating-half-tooth-gap-phase' : 'uncoupled-endpoints-no-phase') : 'not-gear-train'}
             data-three-gear-mesh-phases={gearMeshPhaseSummary}
             data-three-gear-plane-mode={gearPlaneMode}
             data-three-gear-plane-z={typeof activeGearPlaneZ === 'number' ? activeGearPlaneZ.toFixed(2) : ''}
             data-three-gear-axle-stack-contract={isGearTrain ? 'board-side>S10-spacer>gear>fastener-head' : isPlanetaryGear ? 'sun/carrier and planet/carrier pins use local S10 spacers' : 'not-gear-train'}
             data-three-gear-board-side-spacer-z={gearBoardSpacerSummary}
             data-three-gear-axle-z-order={gearAxleZOrderSummary}
-            data-three-gear-linkage-spacing-contract={mechanism.type === 'gear_linkage' ? 'endpoint-gears-separated-by-pitch-chain-distance' : 'not-gear-linkage'}
+            data-three-gear-linkage-spacing-contract={mechanism.type === 'gear_linkage' ? gearEndpointMode : 'not-gear-linkage'}
             data-three-gear-linkage-crank-stack-contract={mechanism.type === 'gear_linkage' ? 'B-gear-hole>S10>drive-link;C-gear-hole>S10>S10>output-link;R-drive-link>S10>output-link' : 'not-gear-linkage'}
             data-three-gear-linkage-bracket-anchor={mechanism.type === 'gear_linkage' ? 'no-output-bracket' : 'not-gear-linkage'}
             data-three-gear-linkage-pin-z-order={gearLinkagePinZOrderSummary}
@@ -4468,7 +4488,8 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
         </>}
         {isGearTrainPreview && <>
             {previewGearRadii.map((radiusValue, index) => {
-                const ratio = index === 0 ? 1 : (index % 2 === 1 ? -1 : 1) * previewGearRadii[0] / radiusValue;
+                const isCoupledGear = previewGearRadii.length > 2 || index === 0;
+                const ratio = isCoupledGear ? (index === 0 ? 1 : (index % 2 === 1 ? -1 : 1) * previewGearRadii[0] / radiusValue) : 0;
                 return gear(previewGearCenters[index] ?? (index === 0 ? s.p1 : s.p2), radiusValue, index === 0 ? 'mechanism-driver' : index === previewGearRadii.length - 1 ? 'mechanism-link secondary' : 'mechanism-link', `gear-${index}`, compact ? 8 : 16, compact ? 34 : 62, inputAngleDeg * ratio + (index === previewGearRadii.length - 1 ? (mechanism.phase ?? 0) * 180 / Math.PI : 0));
             })}
         </>}
@@ -4476,7 +4497,7 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
             {ringGear(s.p1, planetaryRingPitchRadius(mechanism), 'mechanism-frame carrier', 'ring')}
             {gear(s.p1, mechanism.crankLength, 'mechanism-driver', 'sun', compact ? 7 : 12, compact ? 22 : 42, inputAngleDeg)}
             {(() => {
-                const planetCenters = planetaryPlanetCenters(s.p1, mechanism, degToRad(inputAngleDeg) * planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength));
+                const planetCenters = [s.p2];
                 const planetCount = Math.max(1, planetCenters.length);
                 return planetCenters.map((center, index) =>
                     gear(center, mechanism.rockerLength, 'mechanism-link secondary', `planet-${index + 1}`, compact ? 7 : 12, compact ? 22 : 42, outputAngleDeg + index * (360 / planetCount))
@@ -4551,7 +4572,7 @@ const MechanismLinkagePreview = ({ mechanism, simulation, kit, testId, compact =
             slotPlate(s.effector, vectorAxis(s.j2, s.effector), barWidth * 3.2, 'output-bracket', 'mechanism-output', 'output')
         ];
         if (mechanism.type === 'planetary_gear') {
-            const planetCenters = planetaryPlanetCenters(s.p1, mechanism, degToRad(inputAngleDeg) * planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength));
+            const planetCenters = [s.p2];
             return [
                 ...planetCenters.map((center, index) => link(s.p1, center, `carrier-${index + 1}`, 'mechanism-driver', index === 0 ? 'driver' : undefined)),
                 link(s.p2, s.effector, 'carrier-output', 'mechanism-output', 'output')

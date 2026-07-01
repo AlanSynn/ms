@@ -22,8 +22,9 @@ Sources:
 
 The canonical helpers are in `utils/kinematics.ts`:
 - `gearTrainPitchRadii(config)` sanitizes the train.
-- `gearTrainPitchCenterDistance(config)` sums adjacent pitch-radius distances.
-- `gearTrainCenters(config)` places all gear centers on the ground axis.
+- `gearTrainPitchCenterDistance(config)` sums adjacent pitch-radius distances for the meshing chain.
+- `gearTrainResolvedCenterDistance(config)` preserves a separated A/B endpoint span until idlers are inserted; once idlers exist, it snaps to the full pitch-chain distance.
+- `gearTrainCenters(config)` places all gear centers on the ground axis using the resolved endpoint span.
 - `gearTrainOutputRatio(config)` computes external spur train parity and endpoint ratio.
 
 ## Mechanism constraints

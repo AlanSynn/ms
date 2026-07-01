@@ -188,7 +188,7 @@
       "mechanisms": {
         "simple_gear_train": {
           "name": "Gear Train",
-          "description": "Two meshing gears for speed and torque conversion",
+          "description": "Separated endpoint gears with optional inserted idlers for speed and torque conversion",
           "type": "gear_train",
           "class": "SimpleGearTrain",
           "tags": [

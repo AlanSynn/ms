@@ -56,15 +56,15 @@
       },
       "compatibility": [
         {
-          "board_distance_cells": 3.0,
-          "board_distance_mm": 60.0,
+          "board_distance_cells": 6.0,
+          "board_distance_mm": 120.0,
           "compatible": true,
           "error_mm": 0.0,
           "first_coord": "H6",
           "first_coord_role": "board_axle",
           "first_part": "gears:g24",
-          "required_center_distance_mm": 60.0,
-          "second_coord": "H9",
+          "required_center_distance_mm": 120.0,
+          "second_coord": "H12",
           "second_coord_role": "board_axle",
           "second_part": "gears:g24",
           "tolerance_mm": 3.6
@@ -221,14 +221,14 @@
             ],
             "mechanism_type": "gear_train"
           },
-          "check": "Both gears turn when drive G3 turns.",
+          "check": "Insert idlers before expecting the endpoints to mesh.",
           "coord_roles": [
             "board"
           ],
           "coords": [
-            "H9"
+            "H12"
           ],
-          "instruction": "Place output G3 at H9 so it touches drive G3 lightly.",
+          "instruction": "Place output G3 at H12 as the separated endpoint gear.",
           "n": 3,
           "parts": [
             {
@@ -248,7 +248,7 @@
           ],
           "stack": [
             {
-              "label": "Board hole H9",
+              "label": "Board hole H12",
               "order": 1,
               "role": "board"
             },
@@ -285,7 +285,7 @@
               "gears:g24"
             ],
             "highlight_coords": [
-              "H9"
+              "H12"
             ]
           }
         },
@@ -299,16 +299,16 @@
             ],
             "mechanism_type": "gear_train"
           },
-          "check": "If the mesh binds, loosen both fasteners.",
+          "check": "Add idler gears between H6 and H12 when you want coupled rotation.",
           "coord_roles": [
             "board",
             "board"
           ],
           "coords": [
             "H6",
-            "H9"
+            "H12"
           ],
-          "instruction": "Use a handle hole on drive G3 and rotate slowly.",
+          "instruction": "Turn the drive gear and confirm both endpoint axles stay fixed and clear.",
           "n": 4,
           "parts": [
             {
@@ -355,7 +355,7 @@
               "role": "fastener-tabs"
             }
           ],
-          "title": "Turn the handle hole",
+          "title": "Check endpoint span",
           "visual_state": {
             "active_parts": [
               "gears:g24",
@@ -367,7 +367,7 @@
             ],
             "highlight_coords": [
               "H6",
-              "H9"
+              "H12"
             ]
           }
         }
@@ -1139,15 +1139,15 @@
       },
       "compatibility": [
         {
-          "board_distance_cells": 3.0,
-          "board_distance_mm": 60.0,
+          "board_distance_cells": 6.0,
+          "board_distance_mm": 120.0,
           "compatible": true,
           "error_mm": 0.0,
           "first_coord": "I6",
           "first_coord_role": "board_axle",
           "first_part": "gears:g24",
-          "required_center_distance_mm": 60.0,
-          "second_coord": "I9",
+          "required_center_distance_mm": 120.0,
+          "second_coord": "I12",
           "second_coord_role": "board_axle",
           "second_part": "gears:g24",
           "tolerance_mm": 3.6
@@ -1311,14 +1311,14 @@
             ],
             "mechanism_type": "gear_linkage"
           },
-          "check": "The gears move together.",
+          "check": "Inserted idlers provide coupling; endpoint gears do not overlap.",
           "coord_roles": [
             "board"
           ],
           "coords": [
-            "I9"
+            "I12"
           ],
-          "instruction": "Place output G3 at I9 and mesh it with drive G3.",
+          "instruction": "Place output G3 at I12 as the separated endpoint gear.",
           "n": 3,
           "parts": [
             {
@@ -1338,7 +1338,7 @@
           ],
           "stack": [
             {
-              "label": "Board hole I9",
+              "label": "Board hole I12",
               "order": 1,
               "role": "board"
             },
@@ -1365,7 +1365,7 @@
               "role": "fastener-tabs"
             }
           ],
-          "title": "Mesh output G3 gear",
+          "title": "Add output G3 gear",
           "visual_state": {
             "active_parts": [
               "spacers:s10",
@@ -1375,7 +1375,7 @@
               "gears:g24"
             ],
             "highlight_coords": [
-              "I9"
+              "I12"
             ]
           }
         },
@@ -1396,9 +1396,9 @@
           ],
           "coords": [
             "I6",
-            "I12"
+            "I9"
           ],
-          "instruction": "Fasten L4 through an off-center drive G3 handle hole only (not the board), then point the free end toward I12.",
+          "instruction": "Fasten L4 through an off-center drive G3 handle hole only (not the board), then point the free end toward the moving R point.",
           "n": 4,
           "parts": [
             {
@@ -1423,27 +1423,27 @@
               "role": "gear-handle-hole"
             },
             {
-              "label": "Paper fastener",
-              "order": 2,
-              "role": "paper-fastener"
-            },
-            {
               "label": "S10 spacer",
-              "order": 3,
-              "part": "spacers:s10",
-              "role": "spacer"
+              "order": 2,
+              "role": "spacer",
+              "part": "spacers:s10"
             },
             {
               "label": "L4 linkage",
-              "order": 4,
-              "part": "linkages:linkage-4-cell",
-              "role": "moving-part"
+              "order": 3,
+              "role": "moving-part",
+              "part": "linkages:linkage-4-cell"
             },
             {
               "label": "S10 spacer",
+              "order": 4,
+              "role": "top-spacer",
+              "part": "spacers:s10"
+            },
+            {
+              "label": "Paper fastener through gear handle hole",
               "order": 5,
-              "part": "spacers:s10",
-              "role": "top-spacer"
+              "role": "paper-fastener"
             },
             {
               "label": "Open tabs loosely",
@@ -1463,7 +1463,7 @@
             ],
             "highlight_coords": [
               "I6",
-              "I12"
+              "I9"
             ]
           }
         },
@@ -1483,10 +1483,10 @@
             "link_end_reference"
           ],
           "coords": [
-            "I9",
-            "I12"
+            "I12",
+            "I9"
           ],
-          "instruction": "Fasten a second L4 through an off-center output G3 handle hole only (not the board), then meet the first L4 at I12.",
+          "instruction": "Fasten a second L4 through an off-center output G3 handle hole only (not the board), then meet the first L4 at the moving R point.",
           "n": 5,
           "parts": [
             {
@@ -1506,36 +1506,42 @@
           ],
           "stack": [
             {
-              "label": "Output G3 handle hole near I9",
+              "label": "Output G3 handle hole near I12",
               "order": 1,
               "role": "gear-handle-hole"
             },
             {
-              "label": "Paper fastener",
+              "label": "S10 spacer",
               "order": 2,
-              "role": "paper-fastener"
+              "role": "spacer",
+              "part": "spacers:s10"
             },
             {
-              "label": "S10 spacer",
+              "label": "S10 spacer riser",
               "order": 3,
-              "part": "spacers:s10",
-              "role": "spacer"
+              "role": "spacer",
+              "part": "spacers:s10"
             },
             {
               "label": "L4 linkage",
               "order": 4,
-              "part": "linkages:linkage-4-cell",
-              "role": "moving-part"
+              "role": "moving-part",
+              "part": "linkages:linkage-4-cell"
             },
             {
               "label": "S10 spacer",
               "order": 5,
-              "part": "spacers:s10",
-              "role": "top-spacer"
+              "role": "top-spacer",
+              "part": "spacers:s10"
+            },
+            {
+              "label": "Paper fastener through gear handle hole",
+              "order": 6,
+              "role": "paper-fastener"
             },
             {
               "label": "Open tabs loosely",
-              "order": 6,
+              "order": 7,
               "role": "fastener-tabs"
             }
           ],
@@ -1551,8 +1557,8 @@
               "linkages:linkage-4-cell"
             ],
             "highlight_coords": [
-              "I9",
-              "I12"
+              "I12",
+              "I9"
             ]
           }
         },
@@ -1570,9 +1576,9 @@
             "link_end_reference"
           ],
           "coords": [
-            "I12"
+            "I9"
           ],
-          "instruction": "Fasten the two free L4 ends near I12 with one S10 spacer between them.",
+          "instruction": "Fasten the two free L4 ends near moving R with one S10 spacer between them.",
           "n": 6,
           "parts": [
             {
@@ -1630,7 +1636,7 @@
               "linkages:linkage-4-cell"
             ],
             "highlight_coords": [
-              "I12"
+              "I9"
             ]
           }
         }
