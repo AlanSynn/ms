@@ -382,7 +382,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Mechanisms' })).toBeVisible();
   await expect(page.getByTestId('design-mechanism-library')).toContainText('Four-bar linkage');
-  await expect(page.getByTestId('design-canvas').getByText('Letter sheet · 2cm grid')).toBeVisible();
+  await expect(page.getByTestId('design-canvas')).toHaveAttribute('data-scene-underlay', 'hidden');
+  await expect(page.getByTestId('design-canvas').getByTestId('scene-grid-label')).toBeHidden();
   await expect(page.getByTestId('design-three-puppet-canvas')).toBeVisible();
   const designPuppet = page.getByTestId('design-three-puppet-state');
   await expect(designPuppet).toHaveAttribute('data-three-renderer', 'webgl');
@@ -406,10 +407,10 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(designMechanism).toHaveAttribute('data-reference-coord-roles', /I5:board.*G6:link_end_reference.*G10:link_joint_reference.*I9:board/);
   await expect(page.getByTestId('design-parametric-editor'), 'Design reuses the same fabrication-backed parametric editor after Foundry export').toBeVisible();
   await expect(page.getByLabel('Input link length'), 'Foundry-selected 4bar remains visibly editable in Design').toBeVisible();
-  const persistedPathCount = await page.getByTestId('design-canvas').locator('path').evaluateAll(paths =>
+  const hiddenPathTelemetryCount = await page.getByTestId('design-canvas').locator('path').evaluateAll(paths =>
     paths.filter(path => (path.getAttribute('d') ?? '').includes('M 70.00 60.00') && (path.getAttribute('d') ?? '').includes('L 130.00 84.00')).length
   );
-  expect(persistedPathCount, 'drawn path persists into mechanism design canvas').toBeGreaterThan(0);
+  expect(hiddenPathTelemetryCount, 'drawn path remains as hidden Design telemetry without showing the legacy SVG underlay').toBeGreaterThan(0);
   const fittedAnchorX = Number(await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').inputValue());
   const fittedAnchorY = Number(await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').inputValue());
   expect(Number.isFinite(fittedAnchorX), 'foundry export keeps a finite placed anchor after path fitting').toBeTruthy();
@@ -899,7 +900,8 @@ test('Options and validation gates update browser blueprint output', async ({ pa
   await expect(page.getByTestId('path-canvas').getByText('Letter sheet · 2.5cm grid')).toBeVisible();
   await page.getByRole('button', { name: 'Drawing free path', exact: true }).click();
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
-  await expect(page.getByTestId('design-canvas').getByText('Letter sheet · 2.5cm grid')).toBeVisible();
+  await expect(page.getByTestId('design-canvas')).toHaveAttribute('data-scene-underlay', 'hidden');
+  await expect(page.getByTestId('design-canvas').getByTestId('scene-grid-label')).toBeHidden();
   await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').fill('0');
   await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').press('Enter');
   await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').fill('100');
@@ -1032,7 +1034,8 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await expect(page.getByTestId('scene-grid-label')).toContainText('Letter sheet · 0.98 in grid');
   await page.getByRole('button', { name: 'Drawing free path', exact: true }).click();
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
-  await expect(page.getByTestId('design-canvas').getByTestId('scene-grid-label')).toContainText('Letter sheet · 0.98 in grid');
+  await expect(page.getByTestId('design-canvas')).toHaveAttribute('data-scene-underlay', 'hidden');
+  await expect(page.getByTestId('design-canvas').getByTestId('scene-grid-label')).toBeHidden();
   await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').fill('0');
   await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').press('Enter');
   await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').fill('100');
@@ -2128,7 +2131,8 @@ test('Workflow tabs keep left workflow, center canvas, and right inspector roles
 
   await page.getByRole('button', { name: /Use mechanism/i }).click();
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
-  await assertPaneContract('Mechanisms', 'Letter sheet', 'Parameters');
+  await assertPaneContract('Mechanisms', '3D', 'Parameters');
+  await expect(page.getByTestId('design-canvas')).toHaveAttribute('data-scene-underlay', 'hidden');
 
   await clickStage(page, 'Blueprint');
   await assertPaneContract('Generate', 'Cut sheet', 'Cut sheet', '.blueprint-document-preview', '.blueprint-document-preview');

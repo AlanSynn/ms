@@ -28,6 +28,7 @@ interface CanvasProps {
     setAngle: React.Dispatch<React.SetStateAction<number>>;
     viewport?: CanvasViewport;
     setViewport?: React.Dispatch<React.SetStateAction<CanvasViewport>>;
+    hideSceneUnderlay?: boolean;
 }
 
 const VB_WIDTH = SCENE_VIEW.width;
@@ -68,7 +69,7 @@ const hasNoCrankDriverInCanvas = (type: MechanismConfig['type']) =>
     type === 'gear' || type === 'gear_linkage' || type === 'cam' || type === 'planetary_gear';
 
 export const Canvas: React.FC<CanvasProps> = ({
-    project, config, setConfig, selectedId, setSelectedId, isPlaying, showTrace, isDrawMode, userPath, setUserPath, angle, setAngle, viewport, setViewport
+    project, config, setConfig, selectedId, setSelectedId, isPlaying, showTrace, isDrawMode, userPath, setUserPath, angle, setAngle, viewport, setViewport, hideSceneUnderlay = false
 }) => {
     const [traces, setTraces] = useState<Record<string, Point[]>>({});
     const svgRef = useRef<SVGSVGElement>(null);
@@ -501,14 +502,21 @@ export const Canvas: React.FC<CanvasProps> = ({
                 ref={svgRef}
                 aria-label="Mechanism design canvas"
                 data-testid="design-canvas"
+                data-scene-underlay={hideSceneUnderlay ? 'hidden' : 'visible'}
                 viewBox={`0 0 ${VB_WIDTH} ${VB_HEIGHT}`}
                 className={`w-full h-full ${isPanning ? 'cursor-grabbing' : 'cursor-default'}`}
                 preserveAspectRatio="xMidYMid slice"
             >
                 <g transform={`translate(${INITIAL_OFFSET_X + viewOffset.x}, ${INITIAL_OFFSET_Y + viewOffset.y}) scale(${zoom}, -${zoom})`}>
 
-                    {/* Grid */}
-                    <SceneUnderlay project={project} animatedParts={animatedParts} previewSkeleton={motionPreview?.skeleton} />
+                    {/* Sheet grid / 2D character underlay is owned visually by Character and Path, not Design. */}
+                    {hideSceneUnderlay ? (
+                        <g data-testid="design-hidden-scene-underlay" style={{ display: 'none' }}>
+                            <SceneUnderlay project={project} animatedParts={animatedParts} previewSkeleton={motionPreview?.skeleton} />
+                        </g>
+                    ) : (
+                        <SceneUnderlay project={project} animatedParts={animatedParts} previewSkeleton={motionPreview?.skeleton} />
+                    )}
 
                     {/* RENDER MECHANISMS */}
                     {activeMechanisms.map(m => {

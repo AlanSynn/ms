@@ -966,6 +966,8 @@ assert(viewer3dText.includes('type Viewer3DContract') && viewer3dText.includes('
 assert(threePreviewText.includes('DEFAULT_PUPPET_VIEWER_LAYERS') && threePreviewText.includes('data-testid={`${testId}-toggle-${layer}`}') && appText.includes('foundry-toggle-grid'), '3D viewer top overlay toolbar wires shared layer toggles instead of decorative buttons');
 assert(appText.includes('data-viewer-contract={VIEWER3D_CONTRACT_VERSION}') && threePreviewText.includes('data-viewer-contract={VIEWER3D_CONTRACT_VERSION}'), '3D viewer state exposes a shared contract marker across tabs');
 assert(appText.includes('data-viewer-contract-state={JSON.stringify(viewerContract)}') && threePreviewText.includes('data-viewer-contract-state={JSON.stringify(viewerContract)}'), '3D viewer state exposes the normalized tab/layer contract payload for browser checks');
+assert(canvasText.includes('hideSceneUnderlay') && canvasText.includes("data-scene-underlay={hideSceneUnderlay ? 'hidden' : 'visible'}"), 'Mechanism Design canvas visually hides the letter-sheet and 2D character underlay while keeping design telemetry');
+assert(appText.includes('hideSceneUnderlay/>'), 'Mechanism Design uses the shared 2D/3D puppet viewport without the legacy letter-sheet underlay');
 assert(threePreviewText.includes('data-three-part-surface="solid-cut-plates"'), '3D puppet preview exposes the solid cut-plate surface contract');
 assert(threePreviewText.includes('data-three-part-art="top-texture-decal"'), '3D puppet preview exposes that artwork is rendered on top of plates');
 assert(threePreviewText.includes('TextureLoader'), '3D puppet preview loads character part images as surface decals');

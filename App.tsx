@@ -2713,7 +2713,7 @@ const MechanismDesign = ({ project, selectedMechanism, mechanismConfig, setMecha
         </div>),
             canvas: canvasPane(<div className="path-canvas-shell canvas-workspace overflow-hidden p-0">
             <CanvasZoomToolbar viewport={viewport} setViewport={setViewport} />
-            <Canvas project={project} config={mechanismConfig} setConfig={setMechanismConfig} selectedId={project.selectedMechanismId ?? null} setSelectedId={id => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: id ?? undefined })} isPlaying={isPlaying} showTrace={showTrace} isDrawMode={false} userPath={[]} setUserPath={() => {}} angle={angle} setAngle={setAngle} viewport={viewport} setViewport={setViewport}/>
+            <Canvas project={project} config={mechanismConfig} setConfig={setMechanismConfig} selectedId={project.selectedMechanismId ?? null} setSelectedId={id => dispatch({ type: 'set_mechanisms', mechanisms: project.mechanisms, selectedMechanismId: id ?? undefined })} isPlaying={isPlaying} showTrace={showTrace} isDrawMode={false} userPath={[]} setUserPath={() => {}} angle={angle} setAngle={setAngle} viewport={viewport} setViewport={setViewport} hideSceneUnderlay/>
         </div>),
             inspector: inspectorPane(<div className="stage-pane-stack">
             <div>
