@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"
-     width="119mm" height="129mm"
-     viewBox="0 0 119 129"
+     width="119mm" height="119mm"
+     viewBox="0 0 119 119"
      data-profile-key="motionsmith-ms4n"
      data-grid-pitch-mm="20"
      data-hole-diameter-mm="4">
@@ -13,6 +13,7 @@
       .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }
       .score { fill: none; stroke: #777777; stroke-width: 0.15; stroke-dasharray: 2 1; }
       .label { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }
+      .engrave { fill: #008000; font-family: Arial, Helvetica, sans-serif; font-size: 3.2px; font-weight: bold; }
       .tiny { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
       .small { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
       .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
@@ -36,5 +37,5 @@
   <circle cx="19.5" cy="59.5" r="2" class="drill linkage-hole bracket-hole crank-hole handle-hole" data-hole-role="linkage-bracket-crank-handle" data-attachment-kinds="linkage bracket crank handle" data-hole-diameter-mm="4" data-hole-index="9" data-hole-x-offset-mm="-40" data-hole-y-offset-mm="0" data-hole-radius-mm="40"/>
   <circle cx="99.5" cy="59.5" r="2" class="drill linkage-hole bracket-hole crank-hole handle-hole" data-hole-role="linkage-bracket-crank-handle" data-attachment-kinds="linkage bracket crank handle" data-hole-diameter-mm="4" data-hole-index="10" data-hole-x-offset-mm="40" data-hole-y-offset-mm="0" data-hole-radius-mm="40"/>
   <circle cx="59.5" cy="99.5" r="2" class="drill linkage-hole bracket-hole crank-hole handle-hole" data-hole-role="linkage-bracket-crank-handle" data-attachment-kinds="linkage bracket crank handle" data-hole-diameter-mm="4" data-hole-index="11" data-hole-x-offset-mm="0" data-hole-y-offset-mm="40" data-hole-radius-mm="40"/>
-  <text x="59.5" y="117" class="label" text-anchor="middle">G5 / 5-space gear / 40T</text>
+  <text x="59.5" y="69.5" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="40 Tooth Gear" style="font-size:6px">40 Tooth Gear</text>
 </svg>

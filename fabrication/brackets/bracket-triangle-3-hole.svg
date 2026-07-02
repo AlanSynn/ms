@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"
-     width="43mm" height="53mm"
-     viewBox="0 0 43 53"
+     width="43mm" height="43mm"
+     viewBox="0 0 43 43"
      data-profile-key="motionsmith-ms4n"
      data-grid-pitch-mm="20"
      data-hole-diameter-mm="4">
@@ -13,6 +13,7 @@
       .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }
       .score { fill: none; stroke: #777777; stroke-width: 0.15; stroke-dasharray: 2 1; }
       .label { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }
+      .engrave { fill: #008000; font-family: Arial, Helvetica, sans-serif; font-size: 3.2px; font-weight: bold; }
       .tiny { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
       .small { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
       .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
@@ -25,5 +26,5 @@
   <circle cx="10" cy="10" r="2" class="drill bracket-hole linkage-hole" data-hole-role="bracket" data-hole-diameter-mm="4" data-hole-index="0" data-hole-x-mm="10" data-hole-y-mm="10"/>
   <circle cx="30" cy="10" r="2" class="drill bracket-hole linkage-hole" data-hole-role="bracket" data-hole-diameter-mm="4" data-hole-index="1" data-hole-x-mm="30" data-hole-y-mm="10"/>
   <circle cx="10" cy="30" r="2" class="drill bracket-hole linkage-hole" data-hole-role="bracket" data-hole-diameter-mm="4" data-hole-index="2" data-hole-x-mm="10" data-hole-y-mm="30"/>
-  <text x="21.5" y="49" class="label" text-anchor="middle">Triangle 3-hole bracket</text>
+  <text x="19" y="5.8" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="Triangle Bracket" textLength="28" lengthAdjust="spacingAndGlyphs" style="font-size:2.4px">Triangle Bracket</text>
 </svg>

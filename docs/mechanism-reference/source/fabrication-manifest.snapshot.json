@@ -28,44 +28,53 @@
   "board_columns": 15,
   "board_rows": 15,
   "complete_cut_sheet": {
-    "actual_part_area_mm2": 145167.45,
+    "actual_part_area_mm2": 130856.0,
     "actual_size": true,
-    "height_mm": 460.0,
+    "excluded_part_categories": [
+      "ring_gears",
+      "cams",
+      "followers",
+      "brackets",
+      "handles"
+    ],
+    "height_mm": 420.0,
+    "included_part_categories": [
+      "gears",
+      "linkages",
+      "spacers"
+    ],
     "letter_area_mm2": 60322.46,
     "letter_fit_possible": false,
     "letter_size": false,
-    "note": "All unique parts are packed on one actual-size cutter-bed page.",
-    "part_count": 23,
+    "note": "Current starter kit: 2 gear sets, 2 linkage sets, and 24 spacer washers.",
+    "part_count": 40,
+    "part_quantities": {
+      "gears:g24": 2,
+      "gears:g40": 2,
+      "gears:g56": 2,
+      "gears:g8": 2,
+      "linkages:linkage-2-cell": 2,
+      "linkages:linkage-4-cell": 2,
+      "linkages:linkage-6-cell": 2,
+      "linkages:linkage-8-cell": 2,
+      "spacers:s10": 24
+    },
     "path": "complete-kit-cut-sheet.svg",
     "unique_part_ids": [
-      "gears:g8",
       "gears:g24",
       "gears:g40",
       "gears:g56",
-      "ring_gears:ring-g8-g24",
+      "gears:g8",
       "linkages:linkage-2-cell",
       "linkages:linkage-4-cell",
       "linkages:linkage-6-cell",
       "linkages:linkage-8-cell",
-      "cams:circle",
-      "cams:eccentric",
-      "cams:oval",
-      "cams:pear",
-      "followers:f3-round",
-      "followers:f4-roller",
-      "followers:f5-flat",
-      "followers:f6-linkage-output",
-      "brackets:2-hole-straight",
-      "brackets:3-hole-straight",
-      "brackets:l-3-hole",
-      "brackets:triangle-3-hole",
-      "spacers:s10",
-      "handles:folding-fork-tripod"
+      "spacers:s10"
     ],
-    "width_mm": 560.0
+    "width_mm": 500.0
   },
   "generated_at": "reproducible",
-  "generated_by": "scripts/generate_fabrication_templates.py",
+  "generated_by": "fabrication/generate_fabrication_templates.py",
   "grid_cell_cm": 2.0,
   "grid_pitch_mm": 20.0,
   "hole_diameter_mm": 4.0,
@@ -122,6 +131,7 @@
   "parts": {
     "brackets": [
       {
+        "engraving_label": "2 Hole Bracket",
         "hole_centers_mm": [
           [
             10.0,
@@ -140,6 +150,7 @@
         "pitch_mm": 20.0
       },
       {
+        "engraving_label": "3 Hole Bracket",
         "hole_centers_mm": [
           [
             10.0,
@@ -162,6 +173,7 @@
         "pitch_mm": 20.0
       },
       {
+        "engraving_label": "L Bracket",
         "hole_centers_mm": [
           [
             10.0,
@@ -184,6 +196,7 @@
         "pitch_mm": 20.0
       },
       {
+        "engraving_label": "Triangle Bracket",
         "hole_centers_mm": [
           [
             10.0,
@@ -236,6 +249,7 @@
         "base_radius_mm": 15.0,
         "cam_lobes": 1,
         "eccentricity_mm": 0.0,
+        "engraving_label": "Circle Cam",
         "high_dwell_deg": 270.0,
         "hole_diameter_mm": 4.0,
         "key": "circle",
@@ -277,6 +291,7 @@
         "base_radius_mm": 15.0,
         "cam_lobes": 1,
         "eccentricity_mm": 5.0,
+        "engraving_label": "Eccentric Cam",
         "high_dwell_deg": 60.0,
         "hole_diameter_mm": 4.0,
         "key": "eccentric",
@@ -318,6 +333,7 @@
         "base_radius_mm": 16.0,
         "cam_lobes": 2,
         "eccentricity_mm": 6.0,
+        "engraving_label": "Oval Cam",
         "high_dwell_deg": 30.0,
         "hole_diameter_mm": 4.0,
         "key": "oval",
@@ -359,6 +375,7 @@
         "base_radius_mm": 18.0,
         "cam_lobes": 1,
         "eccentricity_mm": 9.0,
+        "engraving_label": "Pear Cam",
         "high_dwell_deg": 45.0,
         "hole_diameter_mm": 4.0,
         "key": "pear",
@@ -378,6 +395,7 @@
         "body_width_mm": 14.0,
         "contact_kind": "rounded",
         "contact_style": "round_nose",
+        "engraving_label": "Round Follower",
         "foot_width_mm": 18.0,
         "guide_slot_centers_mm": [
           [
@@ -408,6 +426,7 @@
         "body_width_mm": 14.0,
         "contact_kind": "rounded",
         "contact_style": "roller_pin",
+        "engraving_label": "Roller Follower",
         "foot_width_mm": 18.0,
         "guide_slot_centers_mm": [
           [
@@ -443,6 +462,7 @@
         "body_width_mm": 14.0,
         "contact_kind": "flat",
         "contact_style": "flat_shoe",
+        "engraving_label": "Flat Follower",
         "foot_width_mm": 20.0,
         "guide_slot_centers_mm": [
           [
@@ -477,6 +497,7 @@
         "body_width_mm": 14.0,
         "contact_kind": "rounded",
         "contact_style": "linkage_output",
+        "engraving_label": "Linkage Follower",
         "foot_width_mm": 18.0,
         "guide_slot_centers_mm": [
           [
@@ -525,6 +546,7 @@
         "attachment_radii_mm": [],
         "board_space_diameter": 1.0,
         "board_space_radius": 0.5,
+        "engraving_label": "8 Tooth Gear",
         "hole_diameter_mm": 4.0,
         "key": "g8",
         "label": "G1 / 1-space gear",
@@ -532,7 +554,7 @@
         "outer_radius_mm": 11.5,
         "path": "gears/gear-8t.svg",
         "pitch_radius_mm": 10.0,
-        "root_radius_mm": 10.0,
+        "root_radius_mm": 8.438,
         "teeth": 8
       },
       {
@@ -567,6 +589,7 @@
         ],
         "board_space_diameter": 3.0,
         "board_space_radius": 1.5,
+        "engraving_label": "24 Tooth Gear",
         "hole_diameter_mm": 4.0,
         "key": "g24",
         "label": "G3 / 3-space gear",
@@ -643,6 +666,7 @@
         ],
         "board_space_diameter": 5.0,
         "board_space_radius": 2.5,
+        "engraving_label": "40 Tooth Gear",
         "hole_diameter_mm": 4.0,
         "key": "g40",
         "label": "G5 / 5-space gear",
@@ -786,6 +810,7 @@
         ],
         "board_space_diameter": 7.0,
         "board_space_radius": 3.5,
+        "engraving_label": "56 Tooth Gear",
         "hole_diameter_mm": 4.0,
         "key": "g56",
         "label": "G7 / 7-space gear",
@@ -803,6 +828,7 @@
         "double_side_fallback": false,
         "double_sided_effective_glue_area_mm2": 1368.0,
         "effective_glue_zone_area_mm2": 684.0,
+        "engraving_label": "Paper Tent Handle",
         "fabrication_note": "Simple rectangle handle: cut the outer rectangle and the two visible left-side slits, score the three prism folds on the right, fold each 10 mm tab strip into four layers so it fits the 4 mm hole, then hot-glue the strips.",
         "fold_line_count": 3,
         "fold_panel_count": 4,
@@ -892,6 +918,7 @@
     "linkages": [
       {
         "cells": 2,
+        "engraving_label": "3 Hole Linkage",
         "hole_count": 3,
         "hole_diameter_mm": 4.0,
         "key": "linkage-2-cell",
@@ -902,6 +929,7 @@
       },
       {
         "cells": 4,
+        "engraving_label": "5 Hole Linkage",
         "hole_count": 5,
         "hole_diameter_mm": 4.0,
         "key": "linkage-4-cell",
@@ -912,6 +940,7 @@
       },
       {
         "cells": 6,
+        "engraving_label": "7 Hole Linkage",
         "hole_count": 7,
         "hole_diameter_mm": 4.0,
         "key": "linkage-6-cell",
@@ -922,6 +951,7 @@
       },
       {
         "cells": 8,
+        "engraving_label": "9 Hole Linkage",
         "hole_count": 9,
         "hole_diameter_mm": 4.0,
         "key": "linkage-8-cell",
@@ -935,6 +965,7 @@
       {
         "compatible_planet_teeth": 24,
         "compatible_sun_teeth": 8,
+        "engraving_label": "56 Tooth Ring Gear",
         "hole_diameter_mm": 4.0,
         "inner_root_radius_mm": 71.062,
         "inner_tip_radius_mm": 68.562,
@@ -969,6 +1000,7 @@
     ],
     "spacers": [
       {
+        "engraving_label": "Spacer",
         "hole_centers_mm": [
           [
             9.0,
@@ -1106,5 +1138,5 @@
       "width_mm": 279.4
     }
   ],
-  "source_ssot": "automataii.shared.physical_kit"
+  "source_ssot": "fabrication/generate_fabrication_templates.py"
 }

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"
-     width="192mm" height="60mm"
-     viewBox="0 0 192 60"
+     width="192mm" height="50mm"
+     viewBox="0 0 192 50"
      data-profile-key="motionsmith-ms4n"
      data-grid-pitch-mm="20"
      data-hole-diameter-mm="4">
@@ -13,6 +13,7 @@
       .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }
       .score { fill: none; stroke: #777777; stroke-width: 0.15; stroke-dasharray: 2 1; }
       .label { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }
+      .engrave { fill: #008000; font-family: Arial, Helvetica, sans-serif; font-size: 3.2px; font-weight: bold; }
       .tiny { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
       .small { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
       .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
@@ -31,5 +32,5 @@
   <rect x="8" y="12" width="38" height="6" class="score glue-foot-score handle-glue-zone rectangular-tab-glue-zone" data-glue-foot-index="0" data-glue-zone="after-4mm-hole-pass-through" data-score-area-mm2="228"/>
   <rect x="8" y="22" width="38" height="6" class="score glue-foot-score handle-glue-zone rectangular-tab-glue-zone" data-glue-foot-index="1" data-glue-zone="after-4mm-hole-pass-through" data-score-area-mm2="228"/>
   <rect x="8" y="32" width="38" height="6" class="score glue-foot-score handle-glue-zone rectangular-tab-glue-zone" data-glue-foot-index="2" data-glue-zone="after-4mm-hole-pass-through" data-score-area-mm2="228"/>
-  <text x="96" y="56" class="label" text-anchor="middle">Triangular paper-tent glue handle</text>
+  <text x="112" y="25" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="Paper Tent Handle" textLength="62" lengthAdjust="spacingAndGlyphs" style="font-size:4px">Paper Tent Handle</text>
 </svg>

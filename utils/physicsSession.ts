@@ -408,7 +408,7 @@ export const buildKinematicPhysicsSession = (
       } else if (mechanism.type === 'gear') {
         addCrankConstraint();
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/output-radius`, 'rod', current.p2, current.j2, finite(mechanism.rockerLength), 'output pitch radius', mechanism.id);
-        addConstraint(constraints, `/physics/constraints/${mechanism.id}/gear-span`, 'guide', current.p1, current.p2, finite(gearTrainResolvedCenterDistance(mechanism)), 'gear endpoint span', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/gear-span`, 'guide', current.p1, current.p2, finite(gearTrainResolvedCenterDistance(mechanism)), 'gear mesh pair', mechanism.id);
       } else if (mechanism.type === 'gear_linkage') {
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/drive-handle-radius`, 'rod', current.p1, current.j1, finite(mechanism.couplerPointDist), 'off-center drive gear handle radius', mechanism.id);
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/output-handle-radius`, 'rod', current.p2, current.j2, finite(mechanism.couplerPointDist), 'off-center output gear handle radius', mechanism.id);

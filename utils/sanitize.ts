@@ -1,4 +1,5 @@
 import { MechanismConfig, MechanismType, Point } from '../types';
+import { normalizeMechanismToFabricationSet } from './mechanismReference';
 import { ALL_MECHANISM_TYPES } from './mechanismTemplates';
 
 export const MECHANISM_TYPES: MechanismType[] = [...ALL_MECHANISM_TYPES];
@@ -41,33 +42,36 @@ export const sanitizePoint = (point: Point | unknown, fallback: Point = { x: 0, 
     };
 };
 
-export const sanitizeMechanismRuntime = (mechanism: MechanismConfig): MechanismConfig => ({
-    ...mechanism,
-    type: sanitizeMechanismType(mechanism.type),
-    visible: mechanism.visible !== false,
-    enabled: mechanism.enabled !== false,
-    color: sanitizeHexColor(mechanism.color, '#3b82f6'),
-    anchorX: finiteNumber(mechanism.anchorX, 0),
-    anchorY: finiteNumber(mechanism.anchorY, 0),
-    groundAngle: finiteNumber(mechanism.groundAngle, 0),
-    groundLength: finiteNumber(mechanism.groundLength, 0),
-    crankLength: finiteNumber(mechanism.crankLength, 1),
-    couplerLength: finiteNumber(mechanism.couplerLength, 0),
-    rockerLength: finiteNumber(mechanism.rockerLength, 1),
-    sliderOffset: finiteNumber(mechanism.sliderOffset, 0),
-    couplerPointDist: finiteNumber(mechanism.couplerPointDist, 0),
-    couplerPointAngle: finiteNumber(mechanism.couplerPointAngle, 0),
-    speed1: finiteNumber(mechanism.speed1, 1),
-    speed2: finiteNumber(mechanism.speed2, 1),
-    gearRatio: mechanism.gearRatio === undefined ? undefined : finiteNumber(mechanism.gearRatio, 1),
-    gearTrainRadii: Array.isArray(mechanism.gearTrainRadii)
-        ? mechanism.gearTrainRadii.map(value => Math.max(1, Math.abs(finiteNumber(value, 1)))).filter(Number.isFinite).slice(0, 8)
-        : mechanism.gearTrainRadii,
-    camProfileSamples: Array.isArray(mechanism.camProfileSamples)
-        ? mechanism.camProfileSamples.map(value => Math.max(0.35, Math.min(1.65, Math.abs(finiteNumber(value, 1))))).filter(Number.isFinite).slice(0, 64)
-        : mechanism.camProfileSamples,
-    driverGroupId: typeof mechanism.driverGroupId === 'string' && mechanism.driverGroupId.trim() ? mechanism.driverGroupId.slice(0, 80) : undefined,
-    driverPhaseOffset: finiteNumber(mechanism.driverPhaseOffset, 0),
-    rodLength: mechanism.rodLength === undefined ? undefined : finiteNumber(mechanism.rodLength, 0),
-    phase: finiteNumber(mechanism.phase, 0)
-});
+export const sanitizeMechanismRuntime = (mechanism: MechanismConfig): MechanismConfig => {
+    const sanitized: MechanismConfig = {
+        ...mechanism,
+        type: sanitizeMechanismType(mechanism.type),
+        visible: mechanism.visible !== false,
+        enabled: mechanism.enabled !== false,
+        color: sanitizeHexColor(mechanism.color, '#3b82f6'),
+        anchorX: finiteNumber(mechanism.anchorX, 0),
+        anchorY: finiteNumber(mechanism.anchorY, 0),
+        groundAngle: finiteNumber(mechanism.groundAngle, 0),
+        groundLength: finiteNumber(mechanism.groundLength, 0),
+        crankLength: finiteNumber(mechanism.crankLength, 1),
+        couplerLength: finiteNumber(mechanism.couplerLength, 0),
+        rockerLength: finiteNumber(mechanism.rockerLength, 1),
+        sliderOffset: finiteNumber(mechanism.sliderOffset, 0),
+        couplerPointDist: finiteNumber(mechanism.couplerPointDist, 0),
+        couplerPointAngle: finiteNumber(mechanism.couplerPointAngle, 0),
+        speed1: finiteNumber(mechanism.speed1, 1),
+        speed2: finiteNumber(mechanism.speed2, 1),
+        gearRatio: mechanism.gearRatio === undefined ? undefined : finiteNumber(mechanism.gearRatio, 1),
+        gearTrainRadii: Array.isArray(mechanism.gearTrainRadii)
+            ? mechanism.gearTrainRadii.map(value => Math.max(1, Math.abs(finiteNumber(value, 1)))).filter(Number.isFinite).slice(0, 8)
+            : mechanism.gearTrainRadii,
+        camProfileSamples: Array.isArray(mechanism.camProfileSamples)
+            ? mechanism.camProfileSamples.map(value => Math.max(0.35, Math.min(1.65, Math.abs(finiteNumber(value, 1))))).filter(Number.isFinite).slice(0, 64)
+            : mechanism.camProfileSamples,
+        driverGroupId: typeof mechanism.driverGroupId === 'string' && mechanism.driverGroupId.trim() ? mechanism.driverGroupId.slice(0, 80) : undefined,
+        driverPhaseOffset: finiteNumber(mechanism.driverPhaseOffset, 0),
+        rodLength: mechanism.rodLength === undefined ? undefined : finiteNumber(mechanism.rodLength, 0),
+        phase: finiteNumber(mechanism.phase, 0)
+    };
+    return normalizeMechanismToFabricationSet(sanitized);
+};

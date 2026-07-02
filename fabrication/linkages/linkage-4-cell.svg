@@ -13,6 +13,7 @@
       .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }
       .score { fill: none; stroke: #777777; stroke-width: 0.15; stroke-dasharray: 2 1; }
       .label { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }
+      .engrave { fill: #008000; font-family: Arial, Helvetica, sans-serif; font-size: 3.2px; font-weight: bold; }
       .tiny { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
       .small { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
       .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
@@ -27,5 +28,6 @@
   <circle cx="54" cy="14" r="2" class="drill linkage-hole bracket-hole" data-hole-role="linkage-bracket" data-hole-diameter-mm="4" data-hole-index="2"/>
   <circle cx="74" cy="14" r="2" class="drill linkage-hole bracket-hole" data-hole-role="linkage-bracket" data-hole-diameter-mm="4" data-hole-index="3"/>
   <circle cx="94" cy="14" r="2" class="drill linkage-hole bracket-hole" data-hole-role="linkage-bracket" data-hole-diameter-mm="4" data-hole-index="4"/>
-  <text x="54" y="27" class="label" text-anchor="middle">4-cell linkage</text>
+  <text x="54" y="9.5" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="5 Hole Linkage" textLength="16.5" lengthAdjust="spacingAndGlyphs" style="font-size:3.8px">5 Hole</text>
+  <text x="54" y="18.5" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="5 Hole Linkage" textLength="16.5" lengthAdjust="spacingAndGlyphs" style="font-size:3.8px">Linkage</text>
 </svg>

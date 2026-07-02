@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"
-     width="62.4mm" height="74.4mm"
-     viewBox="0 0 62.4 74.4"
+     width="62.4mm" height="62.4mm"
+     viewBox="0 0 62.4 62.4"
      data-profile-key="motionsmith-ms4n"
      data-grid-pitch-mm="20"
      data-hole-diameter-mm="4">
@@ -13,6 +13,7 @@
       .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }
       .score { fill: none; stroke: #777777; stroke-width: 0.15; stroke-dasharray: 2 1; }
       .label { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }
+      .engrave { fill: #008000; font-family: Arial, Helvetica, sans-serif; font-size: 3.2px; font-weight: bold; }
       .tiny { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
       .small { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
       .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
@@ -29,5 +30,5 @@
   <circle cx="24.618" cy="47.091" r="2" class="drill linkage-hole bracket-hole crank-hole handle-hole" data-hole-role="linkage-bracket-crank-handle" data-attachment-kinds="linkage bracket crank handle" data-hole-diameter-mm="4" data-hole-index="1" data-hole-x-offset-mm="-6.582" data-hole-y-offset-mm="15.891"/>
   <circle cx="24.618" cy="15.309" r="2" class="drill linkage-hole bracket-hole crank-hole handle-hole" data-hole-role="linkage-bracket-crank-handle" data-attachment-kinds="linkage bracket crank handle" data-hole-diameter-mm="4" data-hole-index="2" data-hole-x-offset-mm="-6.582" data-hole-y-offset-mm="-15.891"/>
   <circle cx="37.782" cy="15.309" r="2" class="drill linkage-hole bracket-hole crank-hole handle-hole" data-hole-role="linkage-bracket-crank-handle" data-attachment-kinds="linkage bracket crank handle" data-hole-diameter-mm="4" data-hole-index="3" data-hole-x-offset-mm="6.582" data-hole-y-offset-mm="-15.891"/>
-  <text x="31.2" y="61.4" class="label" text-anchor="middle">Oval / smooth rise</text>
+  <text x="31.2" y="26.7" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="Oval Cam" textLength="14.144" lengthAdjust="spacingAndGlyphs" style="font-size:3.4px">Oval Cam</text>
 </svg>

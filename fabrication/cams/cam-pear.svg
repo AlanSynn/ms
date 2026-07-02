@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"
-     width="76.3mm" height="88.3mm"
-     viewBox="0 0 76.3 88.3"
+     width="76.3mm" height="76.3mm"
+     viewBox="0 0 76.3 76.3"
      data-profile-key="motionsmith-ms4n"
      data-grid-pitch-mm="20"
      data-hole-diameter-mm="4">
@@ -13,6 +13,7 @@
       .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }
       .score { fill: none; stroke: #777777; stroke-width: 0.15; stroke-dasharray: 2 1; }
       .label { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }
+      .engrave { fill: #008000; font-family: Arial, Helvetica, sans-serif; font-size: 3.2px; font-weight: bold; }
       .tiny { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
       .small { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
       .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
@@ -29,5 +30,5 @@
   <circle cx="32.027" cy="23.368" r="2" class="drill linkage-hole bracket-hole crank-hole handle-hole" data-hole-role="linkage-bracket-crank-handle" data-attachment-kinds="linkage bracket crank handle" data-hole-diameter-mm="4" data-hole-index="1" data-hole-x-offset-mm="-6.123" data-hole-y-offset-mm="-14.782"/>
   <circle cx="44.273" cy="23.368" r="2" class="drill linkage-hole bracket-hole crank-hole handle-hole" data-hole-role="linkage-bracket-crank-handle" data-attachment-kinds="linkage bracket crank handle" data-hole-diameter-mm="4" data-hole-index="2" data-hole-x-offset-mm="6.123" data-hole-y-offset-mm="-14.782"/>
   <circle cx="52.932" cy="32.027" r="2" class="drill linkage-hole bracket-hole crank-hole handle-hole" data-hole-role="linkage-bracket-crank-handle" data-attachment-kinds="linkage bracket crank handle" data-hole-diameter-mm="4" data-hole-index="3" data-hole-x-offset-mm="14.782" data-hole-y-offset-mm="-6.123"/>
-  <text x="38.15" y="75.3" class="label" text-anchor="middle">Pear / slow-fast</text>
+  <text x="38.15" y="33.65" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="Pear Cam" textLength="14.144" lengthAdjust="spacingAndGlyphs" style="font-size:3.4px">Pear Cam</text>
 </svg>

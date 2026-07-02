@@ -134,7 +134,7 @@ def gear_attachment_grid_offsets_mm(
     pitch_mm = grid_step_mm(grid_cell_cm)
     tooth_depth = profile.gear_radius_per_tooth_mm * (pitch_mm / DEFAULT_GRID_PITCH_MM)
     hole_radius = profile.hole_diameter_mm / 2.0
-    root_radius = max(hole_radius + 8.0, pitch_radius_mm - tooth_depth * 1.25)
+    root_radius = max(hole_radius + GEAR_ROOT_WEB_MM * (pitch_mm / DEFAULT_GRID_PITCH_MM), pitch_radius_mm - tooth_depth * 1.25)
     usable_radius = root_radius - hole_radius - 4.0
     if usable_radius < pitch_mm:
         return ()
@@ -289,7 +289,9 @@ CUT = "#ed1c24"
 DRILL = "#0071bc"
 SCORE = "#777777"
 TEXT = "#333333"
+ENGRAVE_TEXT = "#008000"
 FILL = "#ffffff"
+GEAR_ROOT_WEB_MM = 6.0
 PRINTABLE_LANDSCAPE_MM = (279.4, 215.9)
 PRINTABLE_PORTRAIT_MM = (215.9, 279.4)
 COMPLETE_KIT_CUT_SHEET_PATH = "complete-kit-cut-sheet.svg"
@@ -303,6 +305,11 @@ COMPLETE_KIT_CUT_SHEET_SIZE_CANDIDATES_MM = (
     (840.0, 640.0),
     (1000.0, 700.0),
 )
+COMPLETE_KIT_GEAR_COPIES = 2
+COMPLETE_KIT_LINKAGE_COPIES = 2
+COMPLETE_KIT_SPACER_COPIES = 24
+COMPLETE_KIT_INCLUDED_CATEGORIES = ("gears", "linkages", "spacers")
+COMPLETE_KIT_EXCLUDED_CATEGORIES = ("ring_gears", "cams", "followers", "brackets", "handles")
 
 
 @dataclass(frozen=True, slots=True)
@@ -500,6 +507,7 @@ def _svg_document(template: SvgTemplate, spec: FabricationSpec) -> str:
       .drill {{ fill: none; stroke: {DRILL}; stroke-width: 0.2; stroke-miterlimit: 10; }}
       .score {{ fill: none; stroke: {SCORE}; stroke-width: 0.15; stroke-dasharray: 2 1; }}
       .label {{ fill: {TEXT}; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }}
+      .engrave {{ fill: {ENGRAVE_TEXT}; font-family: Arial, Helvetica, sans-serif; font-size: 3.2px; font-weight: bold; }}
       .tiny {{ fill: {TEXT}; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }}
       .small {{ fill: {TEXT}; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }}
       .step-title {{ fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }}
@@ -549,6 +557,34 @@ def _text(
         f"  <text {_attrs(x=_fmt(x), y=_fmt(y), class_=class_name, text_anchor=anchor)}>"
         f"{escape(value)}</text>"
     )
+
+
+def _engrave_text(
+    x: float,
+    y: float,
+    value: str,
+    *,
+    font_size: float | None = None,
+    role: str = "part-label",
+    data_label: str | None = None,
+    transform: str | None = None,
+    text_length: float | None = None,
+) -> str:
+    attrs = _attrs(
+        x=_fmt(x),
+        y=_fmt(y),
+        class_="engrave",
+        text_anchor="middle",
+        dominant_baseline="middle",
+    )
+    attrs = f"{attrs} {_data_attrs(engrave_role=role, engrave_label=data_label or value)}"
+    if text_length is not None:
+        attrs = f'{attrs} textLength="{_fmt(text_length)}" lengthAdjust="spacingAndGlyphs"'
+    if font_size is not None:
+        attrs = f'{attrs} style="font-size:{_fmt(font_size)}px"'
+    if transform is not None:
+        attrs = f'{attrs} transform="{escape(transform)}"'
+    return f"  <text {attrs}>{escape(value)}</text>"
 
 
 def _rect(
@@ -628,7 +664,7 @@ def _gear_geometry(preset: GearPreset, spec: FabricationSpec) -> GearGeometry:
     pitch_scale = spec.pitch_mm / DEFAULT_GRID_PITCH_MM
     pitch_radius = gear_radius_for_teeth(preset.teeth, profile=spec.profile) * pitch_scale
     tooth_depth = spec.profile.gear_radius_per_tooth_mm * pitch_scale
-    root_radius = max(spec.hole_radius_mm + 8.0, pitch_radius - tooth_depth * 1.25)
+    root_radius = max(spec.hole_radius_mm + GEAR_ROOT_WEB_MM * pitch_scale, pitch_radius - tooth_depth * 1.25)
     outer_radius = pitch_radius + tooth_depth * 1.2
     max_attachment_radius = root_radius - spec.hole_radius_mm - 4.0
     candidate_radii = (spec.pitch_mm, spec.pitch_mm * 2.0, spec.pitch_mm * 3.0)
@@ -723,6 +759,48 @@ def _gear_outline_path(
     return " ".join(commands)
 
 
+def _gear_engraving_label(preset: GearPreset) -> str:
+    return f"{preset.teeth} Tooth Gear"
+
+
+def _linkage_engraving_label(cells: int) -> str:
+    return f"{cells + 1} Hole Linkage"
+
+
+def _spacer_engraving_label(_preset: SpacerPreset) -> str:
+    return "Spacer"
+
+
+def _ring_engraving_label(teeth: int) -> str:
+    return f"{teeth} Tooth Ring Gear"
+
+
+def _cam_engraving_label(preset: CamPreset) -> str:
+    return f"{preset.key.title()} Cam"
+
+
+def _follower_engraving_label(preset: FollowerPreset) -> str:
+    return {
+        "f3-round": "Round Follower",
+        "f4-roller": "Roller Follower",
+        "f5-flat": "Flat Follower",
+        "f6-linkage-output": "Linkage Follower",
+    }[preset.key]
+
+
+def _bracket_engraving_label(preset: BracketPreset) -> str:
+    return {
+        "2-hole-straight": "2 Hole Bracket",
+        "3-hole-straight": "3 Hole Bracket",
+        "l-3-hole": "L Bracket",
+        "triangle-3-hole": "Triangle Bracket",
+    }[preset.key]
+
+
+def _handle_engraving_label(_preset: HandlePreset) -> str:
+    return "Paper Tent Handle"
+
+
 def _gear_elements(
     preset: GearPreset, spec: FabricationSpec, *, label: bool = True
 ) -> tuple[list[str], dict[str, object]]:
@@ -777,13 +855,18 @@ def _gear_elements(
         )
         attachment_count += 1
     if label:
-        elements.append(
-            _text(cx, cy + geometry.outer_radius_mm + 6.0, f"{preset.label} / {preset.teeth}T")
-        )
+        label_value = _gear_engraving_label(preset)
+        if preset.teeth <= 8:
+            elements.append(_engrave_text(cx, cy - 4.9, "8 Tooth", font_size=2.7, data_label=label_value))
+            elements.append(_engrave_text(cx, cy + 4.9, "Gear", font_size=2.7, data_label=label_value))
+        else:
+            font_size = 5.0 if preset.teeth <= 24 else 6.0 if preset.teeth <= 40 else 7.0
+            elements.append(_engrave_text(cx, cy + 10.0, label_value, font_size=font_size))
     metadata: dict[str, object] = {
         "key": preset.key,
         "teeth": preset.teeth,
         "label": preset.label,
+        "engraving_label": _gear_engraving_label(preset),
         "pitch_radius_mm": round(geometry.pitch_radius_mm, 3),
         "outer_radius_mm": round(geometry.outer_radius_mm, 3),
         "root_radius_mm": round(geometry.root_radius_mm, 3),
@@ -808,7 +891,7 @@ def _gear_template(preset: GearPreset, spec: FabricationSpec) -> SvgTemplate:
     elements, metadata = _gear_elements(preset, spec)
     geometry = _gear_geometry(preset, spec)
     width = geometry.outer_radius_mm * 2.0 + 16.0
-    height = width + 10.0
+    height = width
     path = f"gears/gear-{preset.teeth}t.svg"
     metadata["path"] = path
     return SvgTemplate(
@@ -912,11 +995,17 @@ def _ring_gear_template(sun: GearPreset, planet: GearPreset, spec: FabricationSp
                 },
             )
         )
+    label_radius = (root_radius + outer_radius) / 2.0
     elements.append(
-        _text(
-            cx,
-            cy + outer_radius + 6.0,
-            f"R{ring_teeth} ring for G{sun.teeth}+G{planet.teeth}",
+        _engrave_text(
+            cx + label_radius / math.sqrt(2.0),
+            cy - label_radius / math.sqrt(2.0),
+            _ring_engraving_label(ring_teeth),
+            font_size=6.2,
+            transform=(
+                f"rotate(45 {_fmt(cx + label_radius / math.sqrt(2.0))} "
+                f"{_fmt(cy - label_radius / math.sqrt(2.0))})"
+            ),
         )
     )
     metadata: dict[str, object] = {
@@ -924,6 +1013,7 @@ def _ring_gear_template(sun: GearPreset, planet: GearPreset, spec: FabricationSp
         "teeth": ring_teeth,
         "internal_teeth": ring_teeth,
         "label": f"R{ring_teeth} internal ring gear",
+        "engraving_label": _ring_engraving_label(ring_teeth),
         "path": path,
         "compatible_sun_teeth": sun.teeth,
         "compatible_planet_teeth": planet.teeth,
@@ -937,7 +1027,7 @@ def _ring_gear_template(sun: GearPreset, planet: GearPreset, spec: FabricationSp
         "mount_hole_centers_mm": [[round(dx, 3), round(dy, 3)] for dx, dy in mount_offsets],
     }
     width = outer_radius * 2.0 + margin * 2.0
-    height = width + 10.0
+    height = width
     return SvgTemplate(
         path=path,
         title=f"Automataii fabrication planetary ring gear R{ring_teeth}",
@@ -990,11 +1080,14 @@ def _linkage_elements(
             )
         )
     if label:
-        elements.append(_text((x1 + x2) / 2.0, y + radius + 6.0, f"{cells}-cell linkage"))
+        label_value = _linkage_engraving_label(cells)
+        elements.append(_engrave_text((x1 + x2) / 2.0, y - 4.5, f"{cells + 1} Hole", font_size=3.8, data_label=label_value, text_length=16.5))
+        elements.append(_engrave_text((x1 + x2) / 2.0, y + 4.5, "Linkage", font_size=3.8, data_label=label_value, text_length=16.5))
     metadata: dict[str, object] = {
         "key": f"linkage-{cells}-cell",
         "cells": cells,
         "label": f"{cells}-cell linkage",
+        "engraving_label": _linkage_engraving_label(cells),
         "length_mm": round(length, 3),
         "pitch_mm": round(pitch_mm, 3),
         "hole_diameter_mm": spec.hole_diameter_mm,
@@ -1090,9 +1183,8 @@ def _follower_elements(
     body_height = preset.body_cells * pitch_mm
     travel_mm = preset.guide_slot_travel_cells * pitch_mm
     margin = 8.0 * scale
-    label_pad = 12.0 if label else 0.0
     width = foot_width + margin * 2.0
-    height = body_height + margin * 2.0 + label_pad
+    height = body_height + margin * 2.0
     cx = width / 2.0
     top_y = margin
     output_y_values = tuple(top_y + pitch_mm * (idx + 1) for idx in range(preset.output_hole_count))
@@ -1173,10 +1265,25 @@ def _follower_elements(
         )
         roller_axle_centers.append([round(0.0, 3), round(roller_y - top_y, 3)])
     if label:
-        elements.append(_text(cx, height - 4.0, preset.label))
+        label_value = _follower_engraving_label(preset)
+        elements.append(
+            _engrave_text(
+                cx - 4.8 * scale,
+                top_y + body_height / 2.0,
+                label_value,
+                font_size=3.0 * scale,
+                data_label=label_value,
+                text_length=min(body_height - 18.0 * scale, len(label_value) * 3.0 * scale * 1.08),
+                transform=(
+                    f"rotate(90 {_fmt(cx - 4.8 * scale)} "
+                    f"{_fmt(top_y + body_height / 2.0)})"
+                ),
+            )
+        )
     metadata: dict[str, object] = {
         "key": preset.key,
         "label": preset.label,
+        "engraving_label": _follower_engraving_label(preset),
         "contact_style": preset.contact_style,
         "contact_kind": contact_kind,
         "pitch_mm": round(pitch_mm, 3),
@@ -1220,14 +1327,14 @@ def _bracket_elements(
     pitch_mm = spec.pitch_mm
     scale = pitch_mm / DEFAULT_PHYSICAL_KIT_PROFILE.default_pitch_mm
     centers = tuple((x * scale, y * scale) for x, y in preset.hole_centers_mm)
+    min_center_x = min(x for x, _ in centers)
+    max_center_x = max(x for x, _ in centers)
     outline_bounds: tuple[tuple[float, float], ...]
     if preset.outline_points_mm is None:
-        min_x = min(x for x, _ in centers)
-        max_x = max(x for x, _ in centers)
         y = centers[0][1]
         radius = 7.0 * scale
-        outline = _rounded_capsule_path(min_x, y, max_x, radius)
-        outline_bounds = ((min_x - radius, y - radius), (max_x + radius, y + radius))
+        outline = _rounded_capsule_path(min_center_x, y, max_center_x, radius)
+        outline_bounds = ((min_center_x - radius, y - radius), (max_center_x + radius, y + radius))
     else:
         scaled_outline_points = tuple((x * scale, y * scale) for x, y in preset.outline_points_mm)
         outline = _polygon_path(scaled_outline_points)
@@ -1270,11 +1377,28 @@ def _bracket_elements(
     width = max(max_x + 4.0, 40.0)
     height = max(max_y + 4.0, 20.0)
     if label:
-        elements.append(_text(width / 2.0, height + 6.0, preset.label))
-        height += 10.0
+        label_value = _bracket_engraving_label(preset)
+        bracket_label_layout = {
+            "2-hole-straight": ((min_center_x + max_center_x) / 2.0, centers[0][1] - 4.2 * scale, 22.0 * scale, 2.4 * scale),
+            "3-hole-straight": ((min_center_x + max_center_x) / 2.0, centers[0][1] - 4.2 * scale, 24.0 * scale, 2.4 * scale),
+            "l-3-hole": (20.0 * scale, 5.8 * scale, 16.0 * scale, 2.6 * scale),
+            "triangle-3-hole": (19.0 * scale, 5.8 * scale, 28.0 * scale, 2.4 * scale),
+        }[preset.key]
+        label_x, label_y, text_length, font_size = bracket_label_layout
+        elements.append(
+            _engrave_text(
+                label_x,
+                label_y,
+                label_value,
+                font_size=font_size,
+                data_label=label_value,
+                text_length=text_length,
+            )
+        )
     metadata: dict[str, object] = {
         "key": preset.key,
         "label": preset.label,
+        "engraving_label": _bracket_engraving_label(preset),
         "path": preset.path,
         "pitch_mm": round(pitch_mm, 3),
         "hole_diameter_mm": spec.hole_diameter_mm,
@@ -1338,12 +1462,22 @@ def _spacer_elements(
     ]
     height = preset.outer_diameter_mm + margin * 2.0
     if label:
-        elements.append(_text(cx, height + 6.0, preset.label))
-        height += 10.0
+        label_x = cx + 3.2
+        label_y = cy
+        elements.append(
+            _engrave_text(
+                label_x,
+                label_y,
+                _spacer_engraving_label(preset),
+                font_size=1.6,
+                transform=f"rotate(90 {_fmt(label_x)} {_fmt(label_y)})",
+            )
+        )
     width = preset.outer_diameter_mm + margin * 2.0
     metadata: dict[str, object] = {
         "key": preset.key,
         "label": preset.label,
+        "engraving_label": _spacer_engraving_label(preset),
         "path": preset.path,
         "outer_diameter_mm": round(preset.outer_diameter_mm, 3),
         "inner_diameter_mm": spec.hole_diameter_mm,
@@ -1509,11 +1643,21 @@ def _handle_folding_fork_tripod_elements(
             )
         )
     if label:
-        elements.append(_text(width / 2.0, height + 6.0, preset.label))
-        height += 10.0
+        label_value = _handle_engraving_label(preset)
+        elements.append(
+            _engrave_text(
+                (body_left + body_right) / 2.0,
+                y_top + panel_height * 1.5,
+                label_value,
+                font_size=4.0 * scale,
+                data_label=label_value,
+                text_length=62.0 * scale,
+            )
+        )
     metadata: dict[str, object] = {
         "key": preset.key,
         "label": preset.label,
+        "engraving_label": _handle_engraving_label(preset),
         "path": preset.path,
         "kind": preset.kind,
         "pitch_mm": round(spec.pitch_mm, 3),
@@ -1555,9 +1699,9 @@ def _handle_folding_fork_tripod_elements(
         "seam_glue_tab_width_mm": round(seam_tab_width, 3),
         "overall_length_mm": round(width, 3),
         "width_mm": round(width, 3),
-        "height_mm": round(height if not label else height - 10.0, 3),
+        "height_mm": round(height, 3),
         "net_width_mm": round(width, 3),
-        "net_height_mm": round(height if not label else height - 10.0, 3),
+        "net_height_mm": round(height, 3),
         "attachment_style": "paper_tent_simple_rectangle_slits_fold_to_fit_4mm_then_hot_glue",
         "fabrication_note": (
             "Simple rectangle handle: cut the outer rectangle and the two visible left-side "
@@ -1781,12 +1925,23 @@ def _cam_elements(
         )
     label_pad = 0.0
     if label:
-        label_y = cy + actual_max_radius + 7.0
-        elements.append(_text(cx, label_y, preset.label))
-        label_pad = 12.0
+        label_value = _cam_engraving_label(preset)
+        label_font_size = 3.0 if preset.key == "eccentric" else 3.4
+        label_y = cy + 4.0 if preset.key == "eccentric" else cy - 4.5
+        elements.append(
+            _engrave_text(
+                cx,
+                label_y,
+                label_value,
+                font_size=label_font_size,
+                data_label=label_value,
+                text_length=len(label_value) * label_font_size * 0.52,
+            )
+        )
     metadata: dict[str, object] = {
         "key": preset.key,
         "label": preset.label,
+        "engraving_label": _cam_engraving_label(preset),
         "base_radius_mm": round(base_radius, 3),
         "eccentricity_mm": round(eccentricity, 3),
         "cam_lobes": int(float(params["cam_lobes"])),
@@ -1869,105 +2024,49 @@ def _sheet_label(title: str, subtitle: str) -> list[str]:
 
 
 def _complete_cut_part_templates(spec: FabricationSpec) -> tuple[CutSheetPartTemplate, ...]:
-    """Return one actual-size template for every physical kit part type."""
+    """Return the current classroom complete-kit cut list."""
 
     parts: list[CutSheetPartTemplate] = []
     for preset in spec.profile.gear_presets:
-        elements, _metadata = _gear_elements(preset, spec, label=False)
+        elements, _metadata = _gear_elements(preset, spec)
         geometry = _gear_geometry(preset, spec)
         size = geometry.outer_radius_mm * 2.0 + 16.0
-        parts.append(
-            CutSheetPartTemplate(
-                part_id=f"gears:{preset.key}",
-                label=f"G{preset.teeth}",
-                elements=tuple(elements),
-                width_mm=size,
-                height_mm=size,
+        for _ in range(COMPLETE_KIT_GEAR_COPIES):
+            parts.append(
+                CutSheetPartTemplate(
+                    part_id=f"gears:{preset.key}",
+                    label=f"G{preset.teeth}",
+                    elements=tuple(elements),
+                    width_mm=size,
+                    height_mm=size,
+                )
             )
-        )
-
-    ring = _ring_gear_template(spec.profile.gear_presets[0], spec.profile.gear_presets[1], spec)
-    parts.append(
-        CutSheetPartTemplate(
-            part_id=f"ring_gears:{ring.metadata['key']}",
-            label=f"R{ring.metadata['internal_teeth']}",
-            elements=tuple(element for element in ring.elements if "<text" not in element),
-            width_mm=ring.width_mm,
-            height_mm=ring.width_mm,
-        )
-    )
 
     for cells in spec.profile.linkage_length_cells:
-        elements, _metadata = _linkage_elements(cells, spec, label=False)
-        parts.append(
-            CutSheetPartTemplate(
-                part_id=f"linkages:linkage-{cells}-cell",
-                label=f"L{cells}",
-                elements=tuple(elements),
-                width_mm=cells * spec.pitch_mm + 28.0,
-                height_mm=28.0,
+        elements, _metadata = _linkage_elements(cells, spec)
+        for _ in range(COMPLETE_KIT_LINKAGE_COPIES):
+            parts.append(
+                CutSheetPartTemplate(
+                    part_id=f"linkages:linkage-{cells}-cell",
+                    label=f"L{cells}",
+                    elements=tuple(elements),
+                    width_mm=cells * spec.pitch_mm + 28.0,
+                    height_mm=28.0,
+                )
             )
-        )
-
-    for preset in spec.profile.cam_presets:
-        elements, _metadata, width, height = _cam_elements(preset, spec, label=False)
-        parts.append(
-            CutSheetPartTemplate(
-                part_id=f"cams:{preset.key}",
-                label=preset.key.title(),
-                elements=tuple(elements),
-                width_mm=width,
-                height_mm=height,
-            )
-        )
-
-    for preset in spec.profile.follower_presets:
-        elements, _metadata, width, height = _follower_elements(preset, spec, label=False)
-        parts.append(
-            CutSheetPartTemplate(
-                part_id=f"followers:{preset.key}",
-                label=preset.key.upper(),
-                elements=tuple(elements),
-                width_mm=width,
-                height_mm=height,
-            )
-        )
-
-    for preset in BRACKET_PRESETS:
-        elements, _metadata, width, height = _bracket_elements(preset, spec, label=False)
-        parts.append(
-            CutSheetPartTemplate(
-                part_id=f"brackets:{preset.key}",
-                label=preset.key,
-                elements=tuple(elements),
-                width_mm=width,
-                height_mm=height,
-            )
-        )
 
     for preset in SPACER_PRESETS:
-        elements, _metadata, width, height = _spacer_elements(preset, spec, label=False)
-        parts.append(
-            CutSheetPartTemplate(
-                part_id=f"spacers:{preset.key}",
-                label=preset.key.upper(),
-                elements=tuple(elements),
-                width_mm=width,
-                height_mm=height,
+        elements, _metadata, width, height = _spacer_elements(preset, spec)
+        for _ in range(COMPLETE_KIT_SPACER_COPIES):
+            parts.append(
+                CutSheetPartTemplate(
+                    part_id=f"spacers:{preset.key}",
+                    label=preset.key.upper(),
+                    elements=tuple(elements),
+                    width_mm=width,
+                    height_mm=height,
+                )
             )
-        )
-
-    for preset in HANDLE_PRESETS:
-        elements, _metadata, width, height = _handle_elements(preset, spec, label=False)
-        parts.append(
-            CutSheetPartTemplate(
-                part_id=f"handles:{preset.key}",
-                label=preset.key,
-                elements=tuple(elements),
-                width_mm=width,
-                height_mm=height,
-            )
-        )
     return tuple(parts)
 
 
@@ -2052,14 +2151,18 @@ def _placed_complete_part_group(placement: CutSheetPlacement) -> str:
         transform = f"translate({_fmt(placement.x_mm)} {_fmt(placement.y_mm)})"
         label_x = placement.x_mm
         label_y = max(4.0, placement.y_mm - 1.4)
+    has_on_part_engraving = part.part_id.startswith(("gears:", "ring_gears:", "linkages:", "spacers:", "cams:", "followers:", "brackets:", "handles:"))
+    external_label = "" if has_on_part_engraving else (
+        f'\n  <text x="{_fmt(label_x)}" y="{_fmt(label_y)}" class="tiny" '
+        f'text-anchor="start">{escape(part.label)}</text>'
+    )
     return (
         f'  <g class="complete-cut-part" data-part-id="{escape(part.part_id)}" '
         f'data-rotated="{str(placement.rotated).lower()}" '
         f'transform="{transform}">\n'
         f"{chr(10).join(part.elements)}\n"
-        "  </g>\n"
-        f'  <text x="{_fmt(label_x)}" y="{_fmt(label_y)}" class="tiny" '
-        f'text-anchor="start">{escape(part.label)}</text>'
+        "  </g>"
+        f"{external_label}"
     )
 
 
@@ -2082,15 +2185,18 @@ def _complete_kit_cut_sheet(spec: FabricationSpec) -> SvgTemplate:
         raise ValueError(f"{COMPLETE_KIT_CUT_SHEET_PATH} cannot fit generated kit parts")
     letter_area = PRINTABLE_LANDSCAPE_MM[0] * PRINTABLE_LANDSCAPE_MM[1]
     part_area = sum(part.width_mm * part.height_mm for part in parts)
+    part_quantities: dict[str, int] = {}
+    for part in parts:
+        part_quantities[part.part_id] = part_quantities.get(part.part_id, 0) + 1
     elements = [
         *_sheet_label(
             "Complete kit cut sheet",
-            "One actual-size cutter-bed master with every unique physical part type",
+            "Gears, linkages, and spacer washers for the classroom starter kit",
         ),
         _text(
             12.0,
             24.0,
-            "Actual size. Larger than Letter because all unique parts exceed one Letter page area.",
+            "Actual size. Includes two gear sets, two linkage sets, and extra spacers.",
             class_name="tiny",
             anchor="start",
         ),
@@ -2100,8 +2206,8 @@ def _complete_kit_cut_sheet(spec: FabricationSpec) -> SvgTemplate:
         path=COMPLETE_KIT_CUT_SHEET_PATH,
         title="Automataii complete kit cut sheet",
         desc=(
-            "One-page actual-size cutter-bed sheet containing every unique fabrication part type. "
-            "Use the Letter sheets for home-printable subsets."
+            "One-page actual-size cutter-bed sheet containing the current gear, linkage, "
+            "and spacer starter kit."
         ),
         width_mm=width_mm,
         height_mm=height_mm,
@@ -2113,11 +2219,14 @@ def _complete_kit_cut_sheet(spec: FabricationSpec) -> SvgTemplate:
             "actual_size": True,
             "letter_size": False,
             "part_count": len(parts),
-            "unique_part_ids": [part.part_id for part in parts],
+            "included_part_categories": list(COMPLETE_KIT_INCLUDED_CATEGORIES),
+            "excluded_part_categories": list(COMPLETE_KIT_EXCLUDED_CATEGORIES),
+            "unique_part_ids": sorted(part_quantities),
+            "part_quantities": part_quantities,
             "actual_part_area_mm2": round(part_area, 3),
             "letter_area_mm2": round(letter_area, 3),
             "letter_fit_possible": part_area <= letter_area,
-            "note": "All unique parts are packed on one actual-size cutter-bed page.",
+            "note": "Current starter kit: 2 gear sets, 2 linkage sets, and 24 spacer washers.",
         },
     )
 
@@ -2132,7 +2241,7 @@ def _build_sheets(spec: FabricationSpec) -> list[SvgTemplate]:
     )
     gear_positions = [(12.0, 30.0), (62.0, 30.0), (154.0, 30.0)]
     for gear_preset, (x, y) in zip(spec.profile.gear_presets[:3], gear_positions, strict=True):
-        elements, _ = _gear_elements(gear_preset, spec, label=False)
+        elements, _ = _gear_elements(gear_preset, spec)
         gear_sheet.extend(_translate(element, x, y) for element in elements)
     sheets.append(_sheet_template("01-gear-set", "Gear set A", ["gears"], gear_sheet, spec))
 
@@ -2140,7 +2249,7 @@ def _build_sheets(spec: FabricationSpec) -> list[SvgTemplate]:
         "10 Gear set B",
         "Large 7-space gear on its own Letter page at actual size",
     )
-    elements, _ = _gear_elements(spec.profile.gear_presets[3], spec, label=False)
+    elements, _ = _gear_elements(spec.profile.gear_presets[3], spec)
     large_gear_sheet.extend(_translate(element, 28.0, 36.0) for element in elements)
     sheets.append(
         _sheet_template(
@@ -2176,7 +2285,7 @@ def _build_sheets(spec: FabricationSpec) -> list[SvgTemplate]:
 
     linkage_sheet = _sheet_label("02 Linkage set", "2/4/6/8-cell board-compatible linkage bars")
     for idx, cells in enumerate(spec.profile.linkage_length_cells):
-        elements, _ = _linkage_elements(cells, spec, label=False)
+        elements, _ = _linkage_elements(cells, spec)
         linkage_sheet.extend(_translate(element, 12.0, 30.0 + idx * 38.0) for element in elements)
     sheets.append(
         _sheet_template("02-linkage-set", "Linkage set", ["linkages"], linkage_sheet, spec)
@@ -2185,7 +2294,7 @@ def _build_sheets(spec: FabricationSpec) -> list[SvgTemplate]:
     cam_sheet = _sheet_label("03 Cam set", "Circle, eccentric, oval, and pear cams")
     cam_positions = [(16.0, 24.0), (116.0, 24.0), (16.0, 118.0), (116.0, 118.0)]
     for cam_preset, (x, y) in zip(spec.profile.cam_presets, cam_positions, strict=True):
-        elements, _, _, _ = _cam_elements(cam_preset, spec, label=False)
+        elements, _, _, _ = _cam_elements(cam_preset, spec)
         cam_sheet.extend(_translate(element, x, y) for element in elements)
     sheets.append(_sheet_template("03-cam-set", "Cam set", ["cams"], cam_sheet, spec))
 
@@ -2195,20 +2304,20 @@ def _build_sheets(spec: FabricationSpec) -> list[SvgTemplate]:
     for gear_preset, (x, y) in zip(
         spec.profile.gear_presets[:2], [(14.0, 26.0), (104.0, 26.0)], strict=True
     ):
-        elements, _ = _gear_elements(gear_preset, spec, label=False)
+        elements, _ = _gear_elements(gear_preset, spec)
         prototype_a.extend(_translate(element, x, y) for element in elements)
     for cells, (x, y) in zip((2, 4), [(14.0, 118.0), (14.0, 150.0)], strict=True):
-        elements, _ = _linkage_elements(cells, spec, label=False)
+        elements, _ = _linkage_elements(cells, spec)
         prototype_a.extend(_translate(element, x, y) for element in elements)
     for cam_preset, (x, y) in zip(
         spec.profile.cam_presets[:2], [(190.0, 26.0), (190.0, 108.0)], strict=True
     ):
-        elements, _, _, _ = _cam_elements(cam_preset, spec, label=False)
+        elements, _, _, _ = _cam_elements(cam_preset, spec)
         prototype_a.extend(_translate(element, x, y) for element in elements)
     for bracket_preset, (x, y) in zip(
         BRACKET_PRESETS[:2], [(14.0, 180.0), (84.0, 180.0)], strict=True
     ):
-        elements, _, _, _ = _bracket_elements(bracket_preset, spec, label=False)
+        elements, _, _, _ = _bracket_elements(bracket_preset, spec)
         prototype_a.extend(_translate(element, x, y) for element in elements)
     sheets.append(
         _sheet_template(
@@ -2226,20 +2335,20 @@ def _build_sheets(spec: FabricationSpec) -> list[SvgTemplate]:
     for gear_preset, (x, y) in zip(
         spec.profile.gear_presets[2:3], [(12.0, 24.0)], strict=True
     ):
-        elements, _ = _gear_elements(gear_preset, spec, label=False)
+        elements, _ = _gear_elements(gear_preset, spec)
         prototype_b.extend(_translate(element, x, y) for element in elements)
     for cells, (x, y) in zip((6, 8), [(12.0, 118.0), (12.0, 154.0)], strict=True):
-        elements, _ = _linkage_elements(cells, spec, label=False)
+        elements, _ = _linkage_elements(cells, spec)
         prototype_b.extend(_translate(element, x, y) for element in elements)
     for cam_preset, (x, y) in zip(
         spec.profile.cam_presets[2:], [(12.0, 194.0), (112.0, 186.0)], strict=True
     ):
-        elements, _, _, _ = _cam_elements(cam_preset, spec, label=False)
+        elements, _, _, _ = _cam_elements(cam_preset, spec)
         prototype_b.extend(_translate(element, x, y) for element in elements)
     for bracket_preset, (x, y) in zip(
         BRACKET_PRESETS[2:], [(166.0, 122.0), (166.0, 158.0)], strict=True
     ):
-        elements, _, _, _ = _bracket_elements(bracket_preset, spec, label=False)
+        elements, _, _, _ = _bracket_elements(bracket_preset, spec)
         prototype_b.extend(_translate(element, x, y) for element in elements)
     sheets.append(
         _sheet_template(
@@ -2260,7 +2369,7 @@ def _build_sheets(spec: FabricationSpec) -> list[SvgTemplate]:
     )
     bracket_positions = [(12.0, 30.0), (12.0, 62.0), (12.0, 96.0), (72.0, 96.0)]
     for bracket_preset, (x, y) in zip(BRACKET_PRESETS, bracket_positions, strict=True):
-        elements, _, _, _ = _bracket_elements(bracket_preset, spec, label=False)
+        elements, _, _, _ = _bracket_elements(bracket_preset, spec)
         bracket_sheet.extend(_translate(element, x, y) for element in elements)
     sheets.append(
         _sheet_template("06-bracket-set", "Bracket set", ["brackets"], bracket_sheet, spec)
@@ -2277,7 +2386,7 @@ def _build_sheets(spec: FabricationSpec) -> list[SvgTemplate]:
         follower_positions,
         strict=True,
     ):
-        elements, _, _, _ = _follower_elements(follower_preset, spec, label=False)
+        elements, _, _, _ = _follower_elements(follower_preset, spec)
         follower_sheet.extend(_translate(element, x, y) for element in elements)
     sheets.append(
         _sheet_template("07-follower-set", "Follower set", ["followers"], follower_sheet, spec)
@@ -2290,11 +2399,8 @@ def _build_sheets(spec: FabricationSpec) -> list[SvgTemplate]:
     spacer_copies_per_size = 8
     for row, spacer_preset in enumerate(SPACER_PRESETS):
         y = 34.0 + row * 34.0
-        spacer_sheet.append(
-            _text(12.0, y + 5.0, spacer_preset.label, class_name="tiny", anchor="start")
-        )
         for col in range(spacer_copies_per_size):
-            elements, _, _, _ = _spacer_elements(spacer_preset, spec, label=False)
+            elements, _, _, _ = _spacer_elements(spacer_preset, spec)
             spacer_sheet.extend(_translate(element, 82.0 + col * 22.0, y) for element in elements)
     sheets.append(_sheet_template("08-spacer-set", "Spacer set", ["spacers"], spacer_sheet, spec))
 
@@ -2304,10 +2410,7 @@ def _build_sheets(spec: FabricationSpec) -> list[SvgTemplate]:
     )
     handle_positions = ((12.0, 34.0),)
     for handle_preset, (x, y) in zip(HANDLE_PRESETS, handle_positions, strict=True):
-        elements, _, _, _ = _handle_elements(handle_preset, spec, label=False)
-        handle_sheet.append(
-            _text(x, y - 3.0, handle_preset.label, class_name="tiny", anchor="start")
-        )
+        elements, _, _, _ = _handle_elements(handle_preset, spec)
         handle_sheet.extend(_translate(element, x, y) for element in elements)
     sheets.append(_sheet_template("11-handle-set", "Handle set", ["handles"], handle_sheet, spec))
 

@@ -40,6 +40,7 @@ exe build/
 
 # Temporary build files
 app-icon.png
+fabrication/board-final.svg
 
 test-results/
 playwright-report/

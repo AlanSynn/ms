@@ -1,6 +1,7 @@
 import type { JointState, MechanismConfig, MechanismType, PhysicalKitSettings, Point, ProjectMotionPath, ProjectState } from '../types';
 import type { FabricationRenderPlan } from './fabrication';
 import type { MechanismFeatureIssue, MechanismInteractionPolicy, MechanismPhysicsHint, MechanismProjectionHint, MechanismFeasibleRange } from './mechanismFeatureRegistry';
+import { normalizeMechanismToFabricationSet } from './mechanismReference';
 import { mechanismFeature } from './mechanismFeatureRegistry';
 
 export interface MechanismSnapshotSourceIds {
@@ -200,11 +201,12 @@ export const buildMechanismSnapshot = (project: ProjectState, mechanismId: strin
     const mechanism = project.mechanisms.find(item => item.id === mechanismId);
     if (!mechanism) return null;
 
-    const feature = mechanismFeature(mechanism.type);
-    const normalizedMechanism = snapshotMechanism(mechanism);
+    const sourceMechanism = normalizeMechanismToFabricationSet(mechanism);
+    const feature = mechanismFeature(sourceMechanism.type);
+    const normalizedMechanism = snapshotMechanism(sourceMechanism);
     const targetPath = snapshotPath(mechanism.targetPathId ? project.paths[mechanism.targetPathId] : undefined);
     const resolvedMechanism: MechanismConfig = {
-        ...mechanism,
+        ...sourceMechanism,
         anchorX: normalizedMechanism.anchorX,
         anchorY: normalizedMechanism.anchorY,
         groundAngle: normalizedMechanism.groundAngle,

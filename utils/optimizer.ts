@@ -1,8 +1,8 @@
 
 import { MechanismConfig, Point, MechanismType } from '../types';
-import { gearTrainOutputRatio, gearTrainResolvedCenterDistance, generateCurvePoints, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from './kinematics';
+import { generateCurvePoints } from './kinematics';
 import { AUTHORABLE_MECHANISM_TYPES } from './mechanismTemplates';
-import { normalizeGearLinkageToReference } from './mechanismReference';
+import { normalizeGearLinkageToReference, normalizeGearTrainToFabrication, normalizeMechanismToFabricationSet } from './mechanismReference';
 
 export const OPTIMIZER_MECHANISM_TYPES: MechanismType[] = [...AUTHORABLE_MECHANISM_TYPES];
 
@@ -531,17 +531,13 @@ export const generateSmartConfig = (targetPath?: Point[], forcedType?: Mechanism
     } else if (type === 'gear') {
         config.rockerLength = s(0.25);
         config.gearTrainRadii = [config.crankLength, config.rockerLength];
-        config.groundLength = gearTrainResolvedCenterDistance(config);
-        config.gearRatio = gearTrainOutputRatio(config);
-        config.speed2 = config.gearRatio;
+        Object.assign(config, normalizeGearTrainToFabrication(config));
         config.couplerLength = 0;
     } else if (type === 'gear_linkage') {
         Object.assign(config, normalizeGearLinkageToReference(config));
     } else if (type === 'planetary_gear') {
         config.rockerLength = s(0.18);
-        config.groundLength = config.crankLength + config.rockerLength;
-        config.gearRatio = planetaryCarrierOutputRatio(config.crankLength, config.rockerLength);
-        config.speed2 = planetaryPlanetSpinRatio(config.crankLength, config.rockerLength);
+        Object.assign(config, normalizeMechanismToFabricationSet(config));
         config.couplerLength = 0;
     } else if (type === '6bar') {
         if (targetPath && targetPath.length > 0) {
@@ -626,7 +622,7 @@ export const generateSmartConfig = (targetPath?: Point[], forcedType?: Mechanism
         enforceFiveBarConstraints(config);
     }
 
-    return config;
+    return normalizeMechanismToFabricationSet(config);
 };
 
 export const mutateConfig = (config: MechanismConfig, temperature: number = 1.0, fixedType: boolean = false, excludedType?: MechanismType): MechanismConfig => {
@@ -736,22 +732,11 @@ export const mutateConfig = (config: MechanismConfig, temperature: number = 1.0,
         enforceSixBarConstraints(newConfig);
     }
     if (newConfig.type === 'gear' || newConfig.type === 'gear_linkage' || newConfig.type === 'planetary_gear') {
-        if (newConfig.type === 'gear_linkage') {
-            Object.assign(newConfig, normalizeGearLinkageToReference(newConfig));
-        } else if (newConfig.type === 'gear') {
+        Object.assign(newConfig, normalizeMechanismToFabricationSet(newConfig));
+        if (newConfig.type === 'gear') {
             newConfig.couplerLength = 0;
-            const idlers = Array.isArray(newConfig.gearTrainRadii) && newConfig.gearTrainRadii.length > 2
-                ? newConfig.gearTrainRadii.slice(1, -1)
-                : [];
-            newConfig.gearTrainRadii = [newConfig.crankLength, ...idlers, newConfig.rockerLength];
-            newConfig.groundLength = gearTrainResolvedCenterDistance(newConfig);
-            newConfig.gearRatio = gearTrainOutputRatio(newConfig);
-            newConfig.speed2 = newConfig.gearRatio ?? newConfig.speed2;
-        } else {
+        } else if (newConfig.type === 'planetary_gear') {
             newConfig.couplerLength = 0;
-            newConfig.groundLength = newConfig.crankLength + newConfig.rockerLength;
-            newConfig.gearRatio = planetaryCarrierOutputRatio(newConfig.crankLength, newConfig.rockerLength);
-            newConfig.speed2 = planetaryPlanetSpinRatio(newConfig.crankLength, newConfig.rockerLength);
         }
     }
     if (newConfig.type === 'rack-pinion') {
@@ -763,7 +748,7 @@ export const mutateConfig = (config: MechanismConfig, temperature: number = 1.0,
         newConfig.couplerPointAngle = 0;
     }
 
-    return newConfig;
+    return normalizeMechanismToFabricationSet(newConfig);
 };
 
 // Local gradient refinement for 5-bar - fine-tune parameters after evolutionary search

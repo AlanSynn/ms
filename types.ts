@@ -156,6 +156,7 @@ export interface BodyPartLayer {
     name: string;
     textureUrl?: string;
     maskUrl?: string;
+    sourceImageFrame?: Bounds;
     contourPoints?: Point[];
     contourSource?: 'onnx-mask' | 'user' | 'imported';
     originalSvgPath?: string;
@@ -314,6 +315,7 @@ export interface CharacterPackageArtifact {
     partsInfo: unknown;
     charCfg: unknown;
     maskUrl?: string;
+    sourceTextureUrl?: string;
     keypoints?: unknown;
     replacementContext?: {
         mode: 'plain-load' | 'replace-character';

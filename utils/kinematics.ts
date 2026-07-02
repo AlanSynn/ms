@@ -1,7 +1,7 @@
 
 import { Point, MechanismConfig, JointState, AppSettings } from '../types';
 import { SCENE_PX_PER_MM } from './coordinates';
-import { FABRICATION_GEAR_RADIUS_PER_TOOTH_MM } from './fabricationContract';
+import { fabricationGearSpecForPitchRadius } from './fabricationContract';
 import { normalizeGearLinkageToReference } from './mechanismReference';
 
 const toRad = (deg: number) => (deg * Math.PI) / 180;
@@ -85,8 +85,9 @@ export const gearTrainMeshPhaseDegAt = (radii: number[], index: number) => {
     if (index % 2 === 0) return 0;
     const sceneRadius = Math.max(1, Math.abs(radii[index] ?? radii.at(-1) ?? radii[0] ?? 1));
     const pitchRadiusMm = sceneRadius / SCENE_PX_PER_MM;
-    const teeth = Math.max(1, Math.round(pitchRadiusMm / FABRICATION_GEAR_RADIUS_PER_TOOTH_MM));
-    return 180 / teeth;
+    // ponytail: preview phase follows the generated kit gear preset; move to a render helper if non-kit gears become real.
+    const teeth = Math.max(1, fabricationGearSpecForPitchRadius(pitchRadiusMm).teeth);
+    return 270 / teeth;
 };
 
 export const gearTrainMeshPhaseRadAt = (radii: number[], index: number) =>
@@ -97,14 +98,15 @@ export const gearTrainPitchCenterDistance = (config: Pick<MechanismConfig, 'cran
     return radii.slice(1).reduce((sum, radius, index) => sum + radii[index] + radius, 0);
 };
 
-export const gearTrainResolvedCenterDistance = (config: Pick<MechanismConfig, 'groundLength' | 'crankLength' | 'rockerLength' | 'gearTrainRadii'>) => {
+export const gearTrainResolvedCenterDistance = (config: Pick<MechanismConfig, 'groundLength' | 'crankLength' | 'rockerLength' | 'gearTrainRadii'> & Partial<Pick<MechanismConfig, 'type'>>) => {
     const pitchChainDistance = gearTrainPitchCenterDistance(config);
     const radii = gearTrainPitchRadii(config);
     if (radii.length > 2) return pitchChainDistance;
+    if (config.type !== 'gear_linkage') return pitchChainDistance;
     const requested = Number.isFinite(config.groundLength) ? Math.abs(config.groundLength ?? 0) : pitchChainDistance;
-    // Two endpoint gears are kit endpoints, not a completed mesh. If an old/custom
-    // config asks for pitch contact, migrate it to a one-idler-sized span so the
-    // viewport and assembly contract do not show impossible overlap.
+    // Gear-linkage endpoint gears are intentionally separated: each gear is a
+    // driving crank, and inserted idlers are the only optional mesh path. Plain
+    // gear trains use direct pitch contact instead.
     if (requested <= pitchChainDistance + 1e-6) return pitchChainDistance * 2;
     return Math.max(requested, pitchChainDistance);
 };
@@ -286,9 +288,8 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
             x: p1.x + inputRadius * Math.cos(angle1),
             y: p1.y + inputRadius * Math.sin(angle1)
         };
-        const hasInsertedIdlers = radii.length > 2;
-        const ratio = hasInsertedIdlers ? gearTrainOutputRatio(radii) : 0;
-        const outAngle = (hasInsertedIdlers ? angle1 * ratio + gearTrainMeshPhaseRadAt(radii, radii.length - 1) : 0) + (config.phase ?? 0);
+        const ratio = gearTrainOutputRatio(radii);
+        const outAngle = angle1 * ratio + gearTrainMeshPhaseRadAt(radii, radii.length - 1) + (config.phase ?? 0);
         const j2: Point = {
             x: p2.x + outputRadius * Math.cos(outAngle),
             y: p2.y + outputRadius * Math.sin(outAngle)
@@ -310,8 +311,14 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
         const centers = gearTrainCenters(referencePair);
         const p2 = centers.at(-1) ?? p1;
         const hasInsertedIdlers = radii.length > 2;
-        const ratio = hasInsertedIdlers ? gearTrainOutputRatio(radii) : 0;
-        const outAngle = (hasInsertedIdlers ? angle1 * ratio + gearTrainMeshPhaseRadAt(radii, radii.length - 1) : 0) + (config.phase ?? 0);
+        const directOutputRatio = Number.isFinite(referencePair.speed2)
+            ? (referencePair.speed2 ?? 1)
+            : Number.isFinite(referencePair.gearRatio)
+                ? (referencePair.gearRatio ?? 1)
+                : gearTrainOutputRatio(radii);
+        const ratio = hasInsertedIdlers ? gearTrainOutputRatio(radii) : directOutputRatio;
+        const meshPhase = hasInsertedIdlers ? gearTrainMeshPhaseRadAt(radii, radii.length - 1) : 0;
+        const outAngle = angle1 * ratio + meshPhase + (config.phase ?? 0);
         const handleRadius = Math.max(1, Math.abs(referencePair.couplerPointDist));
         const drivePin: Point = {
             x: p1.x + handleRadius * Math.cos(angle1),

@@ -434,6 +434,7 @@ const buildParts = (skeleton: StandardSkeleton, img: HTMLImageElement, mask: Ima
             name: def.name,
             textureUrl: crop.textureUrl,
             maskUrl: crop.maskUrl,
+            sourceImageFrame: { x: -crop.x - crop.width / 2, y: -crop.y - crop.height / 2, width: img.naturalWidth, height: img.naturalHeight },
             contourPoints: crop.contourPoints,
             contourSource: crop.contourPoints.length >= 3 ? 'onnx-mask' : undefined,
             anchorJointId: def.anchor,

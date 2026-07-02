@@ -1,6 +1,6 @@
 import { BodyPartLayer, FabricationIssue, FabricationPackage, FabricationRecipe, MechanismConfig, Point, ProjectState } from '../types';
 import { calculateLinkage, gearTrainOutputRatio, gearTrainResolvedCenterDistance, gearTrainPitchRadii, generateCurvePoints, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius as kinematicPlanetaryRingPitchRadius } from './kinematics';
-import { boardToScene, pathFromPoints, SCENE_PX_PER_MM, sceneToBoardRaw, sceneToSvg, sceneBoundsForSheet } from './coordinates';
+import { boardToScene, SCENE_PX_PER_MM, sceneToBoardRaw, sceneToSvg, sceneBoundsForSheet } from './coordinates';
 import { mechanismRequiredParts } from './project';
 import { REFERENCE_DEFAULTS, isReferenceExportReady, referenceRecipeForType, referenceStepCoordinateCallout, referenceSupportWarning } from './mechanismReference';
 import { mechanismBindingWarnings, preferredMotionJointId } from './motion';
@@ -391,6 +391,12 @@ export const readableFabricationStackSummary = (mechanism: Pick<MechanismConfig,
 const recipeBoardCallout = (recipe: Pick<FabricationRecipe, 'boardCoordinate' | 'board'>) =>
     fabricationBoardCoordinateCallout(recipe.boardCoordinate, recipe.board);
 
+const recipeTargetCallout = (recipe: Pick<FabricationRecipe, 'targetPartName' | 'targetPartId' | 'targetPathId' | 'targetAnchorJointId'>) => [
+    recipe.targetPartName || recipe.targetPartId,
+    recipe.targetPathId,
+    recipe.targetAnchorJointId
+].filter(Boolean).join(' · ');
+
 const mechanismTypeLabel = (type: MechanismConfig['type']) =>
     referenceRecipeForType(type).title || type.replace(/[-_]/g, ' ');
 
@@ -659,82 +665,268 @@ const createRecipe = (project: ProjectState, mechanism: MechanismConfig): Fabric
     };
 };
 
-const makeSvg = (project: ProjectState, recipes: FabricationRecipe[]) => {
+
+export const makeBlueprintSvg = (project: ProjectState, recipes: FabricationRecipe[]) => {
     const kit = project.settings.physicalKit;
     const bounds = sceneBoundsForSheet(kit);
     const esc = (value: unknown) => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[ch] ?? ch));
-    const color = (value: string | undefined) => /^#[0-9a-fA-F]{3,8}$/.test(value ?? '') ? value : '#64748b';
-    let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 680" width="900" height="680">`;
+    const label = (value: unknown, max = 24) => {
+        const text = String(value);
+        return esc(text.length > max ? `${text.slice(0, max - 1)}…` : text);
+    };
+    const requiredParts = Array.from(recipes.flatMap(recipe => recipe.requiredParts).reduce((map, part) => {
+        map.set(part.name, (map.get(part.name) ?? 0) + part.quantity);
+        return map;
+    }, new Map<string, number>()).entries());
+    let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 680" width="900" height="680" data-blueprint-source="fabrication-contract">`;
     svg += `<metadata>${esc(JSON.stringify({ project: project.metadata.name, profile: kit.profileKey, gridPitchMm: kit.gridPitchMm, mechanisms: recipes.map(r => r.mechanismId) }))}</metadata>`;
     svg += `<rect width="900" height="680" fill="#f8fafc"/>`;
+    svg += `<style><![CDATA[text{font-family:Manrope,Inter,Arial,sans-serif}.caps{font-size:11px;font-weight:900;letter-spacing:.14em;fill:#64748b}.body{font-size:11px;font-weight:800;fill:#1f2937}.muted{fill:#64748b}.chip{fill:#eef2ff;stroke:#c4b5fd;stroke-width:1}.sheet{fill:#fff;stroke:#0f172a;stroke-width:1.5}.hole{fill:#cbd5e1}.anchor{fill:#ef4444;stroke:#fff;stroke-width:2.5}.callout{fill:#fff7ed;stroke:#fed7aa;stroke-width:1.1}]]></style>`;
     const sheet = { x: 450 + bounds.x, y: 340 - bounds.y - bounds.height, width: bounds.width, height: bounds.height };
-    svg += `<rect x="${sheet.x}" y="${sheet.y}" width="${sheet.width}" height="${sheet.height}" fill="#fff" stroke="#0f172a" stroke-width="1.5"/>`;
-    for (let c = 0; c < kit.boardCells; c++) {
-        for (let r = 0; r < kit.boardCells; r++) {
-            const recipe = recipes.find(x => x.board.valid !== false && x.board.col === c && x.board.row === r);
+    svg += `<rect x="${svgNumber(sheet.x)}" y="${svgNumber(sheet.y)}" width="${svgNumber(sheet.width)}" height="${svgNumber(sheet.height)}" class="sheet"/>`;
+    for (let c = 0; c < kit.boardCells; c += 1) {
+        for (let r = 0; r < kit.boardCells; r += 1) {
+            const recipe = recipes.find(item => item.board.valid !== false && item.board.col === c && item.board.row === r);
             const { x, y } = sceneToSvg(boardToScene(c, r, kit));
-            if (r === 0) svg += `<text x="${x}" y="${y - 16}" font-size="8" font-family="Inter,Arial" font-weight="800" text-anchor="middle" fill="#64748b">${esc(fabricationBoardColumnLabel(c))}</text>`;
-            if (c === 0) svg += `<text x="${x - 16}" y="${y + 3}" font-size="8" font-family="Inter,Arial" font-weight="800" text-anchor="end" fill="#64748b">${esc(fabricationBoardRowLabel(r))}</text>`;
-            svg += `<circle cx="${x}" cy="${y}" r="${recipe ? 5 : 2}" fill="${recipe ? '#ef4444' : '#cbd5e1'}"/>`;
-            if (recipe) svg += `<text x="${x + 8}" y="${y - 8}" font-size="12" font-family="Inter,Arial" fill="#0f172a">${esc(recipe.mechanismId)} ${esc(recipeBoardCallout(recipe))}</text>`;
+            if (r === 0) svg += `<text x="${svgNumber(x)}" y="${svgNumber(y - 16)}" font-size="8" font-weight="900" text-anchor="middle" fill="#64748b">${esc(fabricationBoardColumnLabel(c))}</text>`;
+            if (c === 0) svg += `<text x="${svgNumber(x - 16)}" y="${svgNumber(y + 3)}" font-size="8" font-weight="900" text-anchor="end" fill="#64748b">${esc(fabricationBoardRowLabel(r))}</text>`;
+            svg += `<circle cx="${svgNumber(x)}" cy="${svgNumber(y)}" r="${recipe ? 5 : 2}" class="${recipe ? 'anchor' : 'hole'}"/>`;
+            if (recipe) {
+                const boardCallout = fabricationBoardCoordinateCallout(recipe.boardCoordinate, recipe.board);
+                const title = `${referenceRecipeForType(recipe.type).title} · ${boardCallout}`;
+                svg += `<g data-recipe-anchor="${esc(recipe.mechanismId)}" data-board-callout="${esc(boardCallout)}"><rect x="${svgNumber(Math.min(742, x + 9))}" y="${svgNumber(y - 19)}" width="132" height="24" rx="12" class="callout"/><text x="${svgNumber(Math.min(750, x + 17))}" y="${svgNumber(y - 3)}" class="body">${label(title, 22)}</text></g>`;
+            }
         }
     }
-    project.partOrder.forEach(partId => {
-        const part = project.parts[partId];
-        if (!part?.visible) return;
-        const p = sceneToSvg(part.transform);
-        const w = part.bounds.width * part.transform.scale;
-        const h = part.bounds.height * part.transform.scale;
-        svg += `<g transform="translate(${p.x} ${p.y}) rotate(${-(Number(part.transform.rotation) || 0)})"><rect x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" rx="12" fill="${color(part.fillColor)}" opacity="0.22" stroke="${color(part.fillColor)}"/></g>`;
-    });
-    project.mechanisms.filter(m => m.visible && m.enabled !== false).forEach(m => {
-        const points = generateCurvePoints(m, 72).points;
-        if (points.length > 1) svg += `<path d="${pathFromPoints(points)}" fill="none" stroke="${color(m.color)}" stroke-width="2" opacity="0.8"/>`;
+    svg += `<text x="30" y="54" class="caps">KIT PARTS</text>`;
+    (requiredParts.length ? requiredParts.slice(0, 14) : [['No mechanism module', 0] as [string, number]]).forEach(([name, quantity], index) => {
+        const y = 82 + index * 30;
+        svg += `<rect x="28" y="${svgNumber(y - 17)}" width="178" height="23" rx="11.5" class="chip"/>`;
+        svg += `<text x="42" y="${svgNumber(y - 1)}" class="body">${label(fabricationPartDisplayLabel(name), 18)}${quantity ? ` × ${quantity}` : ''}</text>`;
     });
     svg += `</svg>`;
     return svg;
 };
 
+
+export const makeBlueprintPreviewSvg = (project: ProjectState, recipes: FabricationRecipe[]) => {
+    const kit = project.settings.physicalKit;
+    const esc = (value: unknown) => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[ch] ?? ch));
+    const safeColor = (value: string | undefined) => /^#[0-9a-fA-F]{3,8}$/.test(value ?? '') ? value : '#64748b';
+    const label = (value: unknown, max = 28) => {
+        const text = String(value);
+        return esc(text.length > max ? `${text.slice(0, max - 1)}…` : text);
+    };
+    const partOutline = (part: BodyPartLayer, x: number, y: number, width: number, height: number, index: number) => {
+        const landmarks = partLandmarkLocalPoints(part, project.skeleton);
+        const outline = fabricablePartOutlinePoints(part, landmarks);
+        if (outline.length < 3) return '';
+        const bounds = partOutlineBounds(outline);
+        const scale = Math.min(width / Math.max(1, bounds.width), (height - 14) / Math.max(1, bounds.height));
+        const ox = (width - bounds.width * scale) / 2 - bounds.minX * scale;
+        const oy = 7 - bounds.minY * scale;
+        const xy = (point: Point) => `${svgNumber(ox + point.x * scale)} ${svgNumber(oy + point.y * scale)}`;
+        const d = `M ${xy(outline[0])} ${outline.slice(1).map(point => `L ${xy(point)}`).join(' ')} Z`;
+        const holes = landmarks
+            .filter(point => point.x >= bounds.minX - 1 && point.x <= bounds.maxX + 1 && point.y >= bounds.minY - 1 && point.y <= bounds.maxY + 1)
+            .map(point => `<circle cx="${svgNumber(ox + point.x * scale)}" cy="${svgNumber(oy + point.y * scale)}" r="${svgNumber(Math.max(2.2, kit.holeDiameterMm * 0.72))}" fill="#ffffff" stroke="#334155" stroke-width="1.2"/>`)
+            .join('');
+        return `<g data-cut-part="${esc(part.id)}" transform="translate(${svgNumber(x)} ${svgNumber(y)})"><rect width="${svgNumber(width)}" height="${svgNumber(height)}" rx="16" class="part-tile"/><path d="${d}" fill="#f8fafc" stroke="#172033" stroke-width="1.3"/><path d="${d}" fill="${esc(safeColor(part.fillColor))}" opacity="0.34"/>${holes}<circle cx="18" cy="18" r="10" class="part-number"/><text x="18" y="22" text-anchor="middle" class="number-label">${index + 1}</text></g>`;
+    };
+    const requiredParts = Array.from(recipes.flatMap(recipe => recipe.requiredParts).reduce((map, part) => {
+        map.set(part.name, (map.get(part.name) ?? 0) + part.quantity);
+        return map;
+    }, new Map<string, number>()).entries());
+    const parts = project.partOrder.map(id => project.parts[id]).filter((part): part is BodyPartLayer => Boolean(part?.visible));
+    const cells = Math.max(1, kit.boardCells);
+    const pitch = Math.min(34, 462 / Math.max(1, cells - 1));
+    const boardX = 350;
+    const boardY = 132;
+    const boardSize = pitch * Math.max(0, cells - 1);
+    let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 680" width="900" height="680" data-blueprint-source="fabrication-contract" data-blueprint-visual-mode="board-hero">`;
+    svg += `<metadata>${esc(JSON.stringify({ project: project.metadata.name, profile: kit.profileKey, gridPitchMm: kit.gridPitchMm, recipes: recipes.map(r => ({ id: r.mechanismId, type: r.type, board: r.boardCoordinate })) }))}</metadata>`;
+    svg += `<rect width="900" height="680" fill="#f8fafc"/>`;
+    svg += `<style><![CDATA[text{font-family:Manrope,Inter,Arial,sans-serif}.caps{font-size:12px;font-weight:900;letter-spacing:.16em;fill:#64748b}.body{font-size:12px;font-weight:800;fill:#1f2937}.muted{fill:#64748b}.board-label{font-size:10px;font-weight:900;fill:#64748b}.hole{fill:#cbd5e1}.anchor{fill:#ef4444;stroke:white;stroke-width:3}.anchor-ring{fill:rgba(239,68,68,.12);stroke:#ef4444;stroke-width:2.6}.part-card,.kit-card{fill:white;stroke:#e2e8f0;stroke-width:1.4}.part-tile{fill:#ffffff;stroke:#e2e8f0;stroke-width:1}.board-card{fill:white;stroke:#0f172a;stroke-width:1.8}.board-shadow{fill:#e2e8f0}.callout{fill:#fff7ed;stroke:#fed7aa;stroke-width:1.2}.chip{fill:#eef2ff;stroke:#c4b5fd;stroke-width:1}.part-number,.recipe-number{fill:#8b5cf6;stroke:#fff;stroke-width:2}.number-label{font-size:10px;font-weight:900;fill:#fff}.step-dot{fill:#ede9fe;stroke:#8b5cf6;stroke-width:1.4}.trace{fill:none;stroke:#8b5cf6;stroke-width:2;stroke-dasharray:8 8;opacity:.52}]]></style>`;
+    svg += `<g data-blueprint-flow="visual-summary"><circle cx="38" cy="36" r="10" class="step-dot"/><path d="M54 36H96" class="trace"/><circle cx="112" cy="36" r="10" class="step-dot"/><path d="M128 36H170" class="trace"/><circle cx="186" cy="36" r="10" class="step-dot"/><text x="210" y="41" class="caps">CUT · PLACE · BUILD</text></g>`;
+    svg += `<g data-blueprint-parts-panel"><text x="32" y="76" class="caps">PARTS</text><rect x="24" y="94" width="244" height="382" rx="22" class="part-card"/>`;
+    if (parts.length) {
+        parts.slice(0, 8).forEach((part, index) => {
+            const col = index % 2;
+            const row = Math.floor(index / 2);
+            svg += partOutline(part, 42 + col * 108, 114 + row * 84, 92, 70, index);
+        });
+        if (parts.length > 8) svg += `<text x="42" y="456" class="body muted">+${parts.length - 8}</text>`;
+    } else {
+        svg += `<rect x="64" y="206" width="164" height="74" rx="18" fill="#f8fafc" stroke="#e2e8f0"/><text x="146" y="249" text-anchor="middle" class="body muted">No cuts</text>`;
+    }
+    svg += `</g>`;
+    svg += `<g data-blueprint-kit-panel"><text x="32" y="514" class="caps">KIT</text><rect x="24" y="532" width="244" height="108" rx="22" class="kit-card"/>`;
+    const kitLines = requiredParts.length ? requiredParts.slice(0, 6) : [['No mechanism module', 0] as [string, number]];
+    kitLines.forEach(([name, quantity], index) => {
+        const x = 42 + (index % 2) * 106;
+        const y = 558 + Math.floor(index / 2) * 30;
+        svg += `<rect x="${x}" y="${svgNumber(y - 17)}" width="92" height="23" rx="11.5" class="chip"/>`;
+        svg += `<text x="${x + 10}" y="${svgNumber(y - 1)}" class="body">${label(fabricationPartDisplayLabel(name), 10)}${quantity ? ` ×${quantity}` : ''}</text>`;
+    });
+    svg += `</g>`;
+
+    svg += `<g data-blueprint-board-hero"><text x="${boardX - 30}" y="76" class="caps">BOARD</text><text x="${boardX + 28}" y="76" class="body muted">${cells}×${cells} · ${kit.gridPitchMm}mm</text>`;
+    svg += `<rect x="${boardX - 36}" y="${boardY - 36}" width="${boardSize + 72}" height="${boardSize + 72}" rx="28" class="board-shadow" opacity=".48" transform="translate(8 10)"/>`;
+    svg += `<rect x="${boardX - 36}" y="${boardY - 36}" width="${boardSize + 72}" height="${boardSize + 72}" rx="28" class="board-card"/>`;
+    for (let c = 0; c < cells; c += 1) {
+        for (let r = 0; r < cells; r += 1) {
+            const x = boardX + c * pitch;
+            const y = boardY + r * pitch;
+            const atCell = recipes.filter(recipe => recipe.board.valid !== false && recipe.board.col === c && recipe.board.row === r);
+            if (r === 0) svg += `<text x="${svgNumber(x)}" y="${svgNumber(boardY - 50)}" text-anchor="middle" class="board-label">${esc(fabricationBoardColumnLabel(c))}</text>`;
+            if (c === 0) svg += `<text x="${svgNumber(boardX - 48)}" y="${svgNumber(y + 3)}" text-anchor="end" class="board-label">${esc(fabricationBoardRowLabel(r))}</text>`;
+            svg += `<circle cx="${svgNumber(x)}" cy="${svgNumber(y)}" r="${atCell.length ? 5.5 : 2.4}" class="${atCell.length ? 'anchor' : 'hole'}"/>`;
+            if (atCell.length) {
+                atCell.slice(0, 2).forEach((recipe, index) => {
+                    const boardCallout = fabricationBoardCoordinateCallout(recipe.boardCoordinate, recipe.board);
+                    const calloutX = Math.min(806, x + 18);
+                    const calloutY = Math.max(112, y - 22 + index * 27);
+                    const recipeNumber = recipes.findIndex(item => item.mechanismId === recipe.mechanismId) + 1;
+                    svg += `<g data-recipe-anchor="${esc(recipe.mechanismId)}" data-board-callout="${esc(boardCallout)}" data-recipe-number="${recipeNumber}"><circle cx="${svgNumber(x)}" cy="${svgNumber(y)}" r="17" class="anchor-ring"/><rect x="${svgNumber(calloutX)}" y="${svgNumber(calloutY - 15)}" width="78" height="24" rx="12" class="callout"/><circle cx="${svgNumber(calloutX + 13)}" cy="${svgNumber(calloutY - 3)}" r="10" class="recipe-number"/><text x="${svgNumber(calloutX + 13)}" y="${svgNumber(calloutY + 1)}" text-anchor="middle" class="number-label">${recipeNumber}</text><text x="${svgNumber(calloutX + 29)}" y="${svgNumber(calloutY + 1)}" class="body">${esc(boardCallout.split(' · ')[0])}</text></g>`;
+                });
+            }
+        }
+    }
+    if (!recipes.length) svg += `<rect x="${svgNumber(boardX + boardSize / 2 - 84)}" y="${svgNumber(boardY + boardSize / 2 - 24)}" width="168" height="48" rx="24" class="chip"/><text x="${svgNumber(boardX + boardSize / 2)}" y="${svgNumber(boardY + boardSize / 2 + 4)}" text-anchor="middle" class="body muted">Add mechanism</text>`;
+    svg += `</g></svg>`;
+    return svg;
+};
+
+type CharacterPrintPart = {
+    part: BodyPartLayer;
+    sourceCenterMm: Point;
+    printCenterMm: Point;
+    outlineMm: Point[];
+    holeMm: Point[];
+};
+
+const transformedPartPoint = (part: BodyPartLayer, point: Point): Point => {
+    const angle = (part.transform.rotation * Math.PI) / 180;
+    const scale = Math.max(0.001, part.transform.scale);
+    const x = point.x * scale;
+    const y = point.y * scale;
+    return {
+        x: part.transform.x + x * Math.cos(angle) - y * Math.sin(angle),
+        y: part.transform.y + x * Math.sin(angle) + y * Math.cos(angle)
+    };
+};
+
+const printBoundsForPoints = (points: Point[]) => {
+    const xs = points.map(point => point.x);
+    const ys = points.map(point => point.y);
+    return {
+        minX: Math.min(...xs),
+        maxX: Math.max(...xs),
+        minY: Math.min(...ys),
+        maxY: Math.max(...ys),
+        width: Math.max(...xs) - Math.min(...xs),
+        height: Math.max(...ys) - Math.min(...ys)
+    };
+};
+
+const buildCharacterPrintLayout = (project: ProjectState) => {
+    const kit = project.settings.physicalKit;
+    const parts = project.partOrder.map(id => project.parts[id]).filter((part): part is BodyPartLayer => Boolean(part?.visible));
+    const source = parts.map(part => {
+        const landmarks = partLandmarkLocalPoints(part, project.skeleton);
+        const outline = fabricablePartOutlinePoints(part, landmarks);
+        if (outline.length < 3) return null;
+        const outlineScene = outline.map(point => transformedPartPoint(part, point));
+        const holeScene = landmarks
+            .filter(point => pointInsideOutline(point, outline, 0.5))
+            .map(point => transformedPartPoint(part, point));
+        const bounds = printBoundsForPoints(outlineScene);
+        return {
+            part,
+            outlineScene,
+            holeScene,
+            centerScene: {
+                x: (bounds.minX + bounds.maxX) / 2,
+                y: (bounds.minY + bounds.maxY) / 2
+            }
+        };
+    }).filter((item): item is NonNullable<typeof item> => Boolean(item));
+    if (!source.length) return { parts: [] as CharacterPrintPart[], scale: 1, holeRadiusMm: kit.holeDiameterMm / 2 };
+
+    const allScene = source.flatMap(item => item.outlineScene);
+    const allBounds = printBoundsForPoints(allScene);
+    const characterCenter = {
+        x: (allBounds.minX + allBounds.maxX) / 2,
+        y: (allBounds.minY + allBounds.maxY) / 2
+    };
+    const explodeScene = 10 * SCENE_PX_PER_MM;
+    const rawItems = source.map(item => {
+        const dx = item.centerScene.x - characterCenter.x;
+        const dy = item.centerScene.y - characterCenter.y;
+        const length = Math.hypot(dx, dy) || 1;
+        const offset = { x: (dx / length) * explodeScene, y: (dy / length) * explodeScene };
+        const toRawMm = (point: Point) => ({ x: (point.x + offset.x) / SCENE_PX_PER_MM, y: -(point.y + offset.y) / SCENE_PX_PER_MM });
+        const sourceCenterMm = { x: item.centerScene.x / SCENE_PX_PER_MM, y: -item.centerScene.y / SCENE_PX_PER_MM };
+        return {
+            part: item.part,
+            sourceCenterMm,
+            printCenterRawMm: toRawMm(item.centerScene),
+            outlineRawMm: item.outlineScene.map(toRawMm),
+            holeRawMm: item.holeScene.map(toRawMm)
+        };
+    });
+    const rawBounds = printBoundsForPoints(rawItems.flatMap(item => item.outlineRawMm));
+    const margin = 12;
+    const titleBand = 18;
+    const footerBand = 10;
+    const availableWidth = Math.max(1, kit.sheetWidthMm - margin * 2);
+    const availableHeight = Math.max(1, kit.sheetHeightMm - titleBand - footerBand);
+    const scale = Math.min(1, availableWidth / Math.max(1, rawBounds.width), availableHeight / Math.max(1, rawBounds.height));
+    const offset = {
+        x: kit.sheetWidthMm / 2 - ((rawBounds.minX + rawBounds.maxX) / 2) * scale,
+        y: titleBand + availableHeight / 2 - ((rawBounds.minY + rawBounds.maxY) / 2) * scale
+    };
+    const toPageMm = (point: Point) => ({ x: offset.x + point.x * scale, y: offset.y + point.y * scale });
+    return {
+        scale,
+        holeRadiusMm: Math.max(0.5, (kit.holeDiameterMm / 2) * scale),
+        parts: rawItems.map(item => ({
+            part: item.part,
+            sourceCenterMm: toPageMm(item.sourceCenterMm),
+            printCenterMm: toPageMm(item.printCenterRawMm),
+            outlineMm: item.outlineRawMm.map(toPageMm),
+            holeMm: item.holeRawMm.map(toPageMm)
+        }))
+    };
+};
+
 const makeCustomPartsSvg = (project: ProjectState) => {
     const kit = project.settings.physicalKit;
     const esc = (value: unknown) => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[ch] ?? ch));
-    const parts = project.partOrder.map(id => project.parts[id]).filter((part): part is BodyPartLayer => Boolean(part?.visible));
-    const margin = 10;
-    let cursorX = margin;
-    let cursorY = 18;
-    let rowHeight = 0;
-    const items: string[] = [];
-    parts.forEach(part => {
-        const landmarks = partLandmarkLocalPoints(part, project.skeleton);
-        const outline = fabricablePartOutlinePoints(part, landmarks);
-        if (outline.length < 3) return;
-        const bounds = partOutlineBounds(outline);
-        const widthMm = bounds.width / SCENE_PX_PER_MM + 18;
-        const heightMm = bounds.height / SCENE_PX_PER_MM + 22;
-        if (cursorX + widthMm > kit.sheetWidthMm - margin) {
-            cursorX = margin;
-            cursorY += rowHeight + 10;
-            rowHeight = 0;
-        }
-        const ox = cursorX + 9 - bounds.minX / SCENE_PX_PER_MM;
-        const oy = cursorY + 9 + bounds.maxY / SCENE_PX_PER_MM;
-        const point = (p: Point) => `${svgNumber(ox + p.x / SCENE_PX_PER_MM)} ${svgNumber(oy - p.y / SCENE_PX_PER_MM)}`;
-        const d = `M ${point(outline[0])} ${outline.slice(1).map(p => `L ${point(p)}`).join(' ')} Z`;
-        const holes = landmarks
-            .filter(p => p.x >= bounds.minX - 1 && p.x <= bounds.maxX + 1 && p.y >= bounds.minY - 1 && p.y <= bounds.maxY + 1)
-            .map(p => `<circle cx="${svgNumber(ox + p.x / SCENE_PX_PER_MM)}" cy="${svgNumber(oy - p.y / SCENE_PX_PER_MM)}" r="${svgNumber(kit.holeDiameterMm / 2)}" fill="none" stroke="#334155" stroke-width="0.35"/>`)
+    const layout = buildCharacterPrintLayout(project);
+    const point = (p: Point) => `${svgNumber(p.x)} ${svgNumber(p.y)}`;
+    const path = (points: Point[]) => points.length ? `M ${point(points[0])} ${points.slice(1).map(p => `L ${point(p)}`).join(' ')} Z` : '';
+    const items = layout.parts.map(({ part, outlineMm, holeMm, sourceCenterMm, printCenterMm }) => {
+        const d = path(outlineMm);
+        const holes = holeMm
+            .map(p => `<circle cx="${svgNumber(p.x)}" cy="${svgNumber(p.y)}" r="${svgNumber(layout.holeRadiusMm)}" fill="#ffffff" stroke="#334155" stroke-width="0.45"/>`)
             .join('');
-        items.push(`<g data-part-id="${esc(part.id)}"><path d="${d}" fill="#f8fafc" stroke="#172033" stroke-width="0.45"/><path d="${d}" fill="${esc(part.fillColor)}" opacity="0.16"/><text x="${svgNumber(cursorX + 8)}" y="${svgNumber(cursorY + heightMm - 5)}" font-family="Inter,Arial" font-size="4" font-weight="700" fill="#475569">${esc(part.name)}</text>${holes}</g>`);
-        cursorX += widthMm + 8;
-        rowHeight = Math.max(rowHeight, heightMm);
-    });
-    const height = Math.max(kit.sheetHeightMm, cursorY + rowHeight + margin);
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${kit.sheetWidthMm}mm" height="${height}mm" viewBox="0 0 ${kit.sheetWidthMm} ${height}">
-<metadata>${esc(JSON.stringify({ project: project.metadata.name, mode: 'custom-parts', units: 'mm', source: 'fabricablePartOutlinePoints' }))}</metadata>
+        return `<g data-part-id="${esc(part.id)}">
+<line x1="${svgNumber(sourceCenterMm.x)}" y1="${svgNumber(sourceCenterMm.y)}" x2="${svgNumber(printCenterMm.x)}" y2="${svgNumber(printCenterMm.y)}" stroke="#cbd5e1" stroke-width="0.35" stroke-dasharray="1.8 1.8"/>
+<path d="${d}" fill="#f8fafc" stroke="#172033" stroke-width="0.5"/>
+<path d="${d}" fill="${esc(part.fillColor)}" opacity="0.18"/>
+${holes}
+</g>`;
+    }).join('\n');
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${kit.sheetWidthMm}mm" height="${kit.sheetHeightMm}mm" viewBox="0 0 ${kit.sheetWidthMm} ${kit.sheetHeightMm}" data-character-print-page="letter" data-character-print-mode="whole-character-exploded">
+<metadata>${esc(JSON.stringify({ project: project.metadata.name, mode: 'custom-parts', printMode: 'whole-character-exploded', page: 'letter', units: 'mm', scale: layout.scale, source: 'fabricablePartOutlinePoints' }))}</metadata>
 <rect width="100%" height="100%" fill="#ffffff"/>
-<text x="10" y="10" font-family="Inter,Arial" font-size="5" font-weight="900" fill="#172033">MotionSmith custom parts · SVG/PDF/STL export</text>
-<text x="10" y="15" font-family="Inter,Arial" font-size="3.5" font-weight="700" fill="#64748b">Cut outlines and ${kit.holeDiameterMm}mm joint holes. Kit mode can use prefabricated modules instead.</text>
-${items.join('\n')}
+<rect x="6" y="6" width="${svgNumber(kit.sheetWidthMm - 12)}" height="${svgNumber(kit.sheetHeightMm - 12)}" rx="6" fill="none" stroke="#dbe3f0" stroke-width="0.5"/>
+<text x="10" y="12" font-family="Inter,Arial" font-size="5" font-weight="900" fill="#172033">MotionSmith character cut sheet</text>
+<text x="10" y="${svgNumber(kit.sheetHeightMm - 8)}" font-family="Inter,Arial" font-size="3.4" font-weight="700" fill="#64748b">${layout.parts.length} parts · ${kit.holeDiameterMm}mm holes · one letter page</text>
+<g data-character-exploded-sheet>
+${items}
+</g>
 </svg>`;
 };
 
@@ -800,50 +992,40 @@ const makeCustomPartsStl = (project: ProjectState) => {
 
 const makeCustomPartsPdf = (project: ProjectState) => {
     const kit = project.settings.physicalKit;
-    const placements: Array<{ part: BodyPartLayer; outline: Point[]; landmarks: Point[]; bounds: ReturnType<typeof partOutlineBounds>; cursorX: number; cursorY: number; widthMm: number; heightMm: number }> = [];
-    let cursorX = 10;
-    let cursorY = 18;
-    let rowHeight = 0;
-    project.partOrder.forEach(partId => {
-        const part = project.parts[partId];
-        if (!part?.visible) return;
-        const landmarks = partLandmarkLocalPoints(part, project.skeleton);
-        const outline = fabricablePartOutlinePoints(part, landmarks);
-        if (outline.length < 3) return;
-        const bounds = partOutlineBounds(outline);
-        const widthMm = bounds.width / SCENE_PX_PER_MM + 18;
-        const heightMm = bounds.height / SCENE_PX_PER_MM + 22;
-        if (cursorX + widthMm > kit.sheetWidthMm - 10) {
-            cursorX = 10;
-            cursorY += rowHeight + 10;
-            rowHeight = 0;
-        }
-        placements.push({ part, outline, landmarks, bounds, cursorX, cursorY, widthMm, heightMm });
-        cursorX += widthMm + 8;
-        rowHeight = Math.max(rowHeight, heightMm);
-    });
-    const heightMm = Math.max(kit.sheetHeightMm, cursorY + rowHeight + 10);
+    const layout = buildCharacterPrintLayout(project);
     const page = { width: 612, height: 792, margin: 38 };
-    const scale = Math.min((page.width - page.margin * 2) / kit.sheetWidthMm, (page.height - 120) / heightMm);
-    const toPdf = (xMm: number, yMm: number) => ({ x: page.margin + xMm * scale, y: page.height - page.margin - yMm * scale });
+    const pageScale = Math.min(page.width / kit.sheetWidthMm, page.height / kit.sheetHeightMm);
+    const toPdf = (point: Point) => ({ x: point.x * pageScale, y: page.height - point.y * pageScale });
+    const border = {
+        x: 6 * pageScale,
+        y: page.height - (kit.sheetHeightMm - 6) * pageScale,
+        width: (kit.sheetWidthMm - 12) * pageScale,
+        height: (kit.sheetHeightMm - 12) * pageScale
+    };
     const commands: string[] = [
-        `BT /F1 14 Tf ${page.margin} 760 Td (${pdfText(`${project.metadata.name} custom parts`)}) Tj ET`,
-        `BT /F1 9 Tf ${page.margin} 742 Td (${pdfText(`SVG/PDF/STL outlines / ${kit.profileKey} / ${kit.holeDiameterMm}mm holes`)}) Tj ET`,
-        '0.10 0.16 0.28 RG 0.97 0.98 1.00 rg 0.8 w'
+        `BT /F1 14 Tf ${num(page.margin)} ${num(page.height - 32)} Td (${pdfText('MotionSmith character cut sheet')}) Tj ET`,
+        `BT /F1 8 Tf ${num(page.margin)} ${num(page.height - 48)} Td (${pdfText(`${project.metadata.name} / whole-character-exploded / letter page / ${kit.holeDiameterMm}mm holes`)}) Tj ET`,
+        `0.86 0.89 0.94 RG 0.5 w ${num(border.x)} ${num(border.y)} ${num(border.width)} ${num(border.height)} re S`
     ];
-    placements.forEach(({ part, outline, landmarks, bounds, cursorX, cursorY, heightMm }) => {
-        const ox = cursorX + 9 - bounds.minX / SCENE_PX_PER_MM;
-        const oy = cursorY + 9 + bounds.maxY / SCENE_PX_PER_MM;
-        const mapped = outline.map(p => toPdf(ox + p.x / SCENE_PX_PER_MM, oy - p.y / SCENE_PX_PER_MM));
-        commands.push(`${num(mapped[0].x)} ${num(mapped[0].y)} m ${mapped.slice(1).map(p => `${num(p.x)} ${num(p.y)} l`).join(' ')} h B`);
-        commands.push(`0.29 0.33 0.43 rg BT /F1 7 Tf ${num(toPdf(cursorX + 8, cursorY + heightMm - 4).x)} ${num(toPdf(cursorX + 8, cursorY + heightMm - 4).y)} Td (${pdfText(part.name)}) Tj ET`);
-        landmarks.forEach(p => {
-            const center = toPdf(ox + p.x / SCENE_PX_PER_MM, oy - p.y / SCENE_PX_PER_MM);
-            commands.push('0.10 0.16 0.28 RG 1 1 1 rg 0.6 w');
-            commands.push(`${circlePath(center.x, center.y, Math.max(1.5, kit.holeDiameterMm * scale / 2))} B`);
+    layout.parts.forEach(({ part, outlineMm, holeMm, sourceCenterMm, printCenterMm }) => {
+        const source = toPdf(sourceCenterMm);
+        const target = toPdf(printCenterMm);
+        commands.push(`0.80 0.84 0.90 RG 0.35 w ${num(source.x)} ${num(source.y)} m ${num(target.x)} ${num(target.y)} l S`);
+        const mapped = outlineMm.map(toPdf);
+        if (mapped.length) {
+            commands.push('0.10 0.16 0.28 RG 0.97 0.98 1.00 rg 0.7 w');
+            commands.push(`${num(mapped[0].x)} ${num(mapped[0].y)} m ${mapped.slice(1).map(p => `${num(p.x)} ${num(p.y)} l`).join(' ')} h B`);
+            const label = toPdf(printCenterMm);
+            commands.push(`0.29 0.33 0.43 rg BT /F1 6 Tf ${num(label.x + 5)} ${num(label.y)} Td (${pdfText(part.name)}) Tj ET`);
+        }
+        holeMm.forEach(point => {
+            const center = toPdf(point);
+            const radius = Math.max(1.2, layout.holeRadiusMm * pageScale);
+            commands.push('0.10 0.16 0.28 RG 1 1 1 rg 0.5 w');
+            commands.push(`${circlePath(center.x, center.y, radius)} B`);
         });
-        commands.push('0.10 0.16 0.28 RG 0.97 0.98 1.00 rg 0.8 w');
     });
+    commands.push(`0.39 0.45 0.55 rg BT /F1 7 Tf ${num(page.margin)} ${num(30)} Td (${pdfText(`${layout.parts.length} parts on one letter page`)}) Tj ET`);
     return makePdfDocument(commands.join('\n'));
 };
 
@@ -903,15 +1085,17 @@ const makeAssemblyGuideHtml = (project: ProjectState, recipes: FabricationRecipe
     const esc = (value: unknown) => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] ?? ch));
     const firstRecipe = recipes[0];
     const explodedSvg = makeExplodedStackSvg(firstRecipe, esc);
-    const recipeSections = recipes.map(recipe => `<section>
+    const recipeSections = recipes.map(recipe => {
+        const target = recipeTargetCallout(recipe);
+        return `<section>
 <h2>${esc(recipe.mechanismId)} · ${esc(mechanismTypeLabel(recipe.type))}</h2>
 <p><strong>Board:</strong> ${esc(recipeBoardCallout(recipe))}</p>
-<p><strong>Target:</strong> ${esc(recipe.targetPartName ?? recipe.targetPartId ?? 'unbound')} · path ${esc(recipe.targetPathId ?? 'none')} · anchor ${esc(recipe.targetAnchorJointId ?? 'part default')} · ${recipe.targetPathPointCount ?? 0} path points</p>
+${target ? `<p class="target-chip"><strong>Target:</strong> ${esc(target)}</p>` : ''}
 ${recipe.warnings.length ? `<p><strong>Fix:</strong> ${recipe.warnings.map(esc).join('; ')}</p>` : '<p><strong>OK</strong></p>'}
 <h3>Required parts</h3><ul>${recipe.requiredParts.map(part => `<li>${esc(fabricationPartDisplayLabel(part.name))} × ${part.quantity}</li>`).join('')}</ul>
 <h3>15×15 board kit assembly</h3><ol class="stepper" data-testid="prefab-assembly-steps">${recipe.assemblySteps.map(step => `<li class="assembly-step" style="--i:${step.index}"><strong>${step.index}. ${esc(fabricationPartDisplayLabel(step.label))}</strong><span>${esc(fabricationPartDisplayLabel(step.instruction))}</span><em>${esc(step.role)} · ${esc(readableStepCoordinateCallout(step))} · Z ${step.zMm.toFixed(1)}mm</em></li>`).join('')}</ol>
-<h3>Steps</h3><ol>${recipe.steps.map(step => `<li>${esc(fabricationPartDisplayLabel(step))}</li>`).join('')}</ol>
-</section>`).join('');
+</section>`;
+    }).join('');
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(project.metadata.name)} assembly</title><style>
 body{margin:0;background:#f8f9ff;color:#172033;font-family:Inter,Arial,sans-serif;}
 .page{max-width:980px;margin:0 auto;padding:28px;}
@@ -922,6 +1106,7 @@ h1{margin:0;font-size:40px;line-height:.98;letter-spacing:-.05em;} h2{margin:0 0
 .exploded-guide{display:block;width:100%;margin:22px 0;border:1px solid #dbe3f0;border-radius:28px;background:#fff;box-shadow:0 22px 70px rgba(15,23,42,.10);}
 .guide-title{font-size:20px;font-weight:900;fill:#172033}.guide-label{font-size:18px;font-weight:900;fill:#64748b}.guide-muted{font-size:14px;font-weight:800;fill:#64748b}.guide-blue{font-size:18px;font-weight:900;fill:#4f46e5}
 .warning{border:1px solid #fed7aa;border-radius:14px;background:#fff7ed;padding:12px;margin:10px 0;font-weight:750;}
+.target-chip{display:inline-flex;gap:8px;border:1px solid #c7d2fe;border-radius:999px;background:#eef2ff;padding:8px 12px;font-weight:850;color:#334155;}
 section{break-inside:avoid;margin:18px 0;padding:20px;border:1px solid #dbe3f0;border-radius:22px;background:#fff;box-shadow:0 16px 46px rgba(15,23,42,.06);}
 li{margin:.32rem 0;line-height:1.42;}
 .stepper{display:grid;gap:10px;padding-left:0;list-style:none}.assembly-step{display:grid;gap:3px;border:1px solid #dbe3f0;border-radius:16px;padding:10px 12px;background:linear-gradient(135deg,#fff,#f8f9ff);animation:step-rise .8s ease both;animation-delay:calc(var(--i) * 90ms)}.assembly-step span{font-weight:750;color:#334155}.assembly-step em{font-style:normal;color:#64748b;font-weight:800;font-size:12px}@keyframes step-rise{from{opacity:.25;transform:translateY(12px)}to{opacity:1;transform:none}}
@@ -1022,10 +1207,9 @@ const makeAssemblyGuidePdf = (project: ProjectState, recipes: FabricationRecipe[
         ...warnings.map(warning => `Warning: ${warning}`),
         ...recipes.flatMap(recipe => [
             `${recipe.mechanismId} / ${mechanismTypeLabel(recipe.type)} / anchor ${recipeBoardCallout(recipe)}`,
-            `Target: ${recipe.targetPartName ?? recipe.targetPartId ?? 'unbound'} / path ${recipe.targetPathId ?? 'none'} / anchor ${recipe.targetAnchorJointId ?? 'part default'}`,
+            `Target: ${recipeTargetCallout(recipe) || 'none'}`,
             `Required parts: ${recipe.requiredParts.map(part => `${fabricationPartDisplayLabel(part.name)} x ${part.quantity}`).join(', ')}`,
-            ...recipe.assemblySteps.map(step => `Kit step ${step.index}: ${fabricationPartDisplayLabel(step.label)} / ${readableStepCoordinateCallout(step)} / Z ${step.zMm.toFixed(1)}mm`),
-            ...recipe.steps.map(fabricationPartDisplayLabel)
+            ...recipe.assemblySteps.map(step => `Kit step ${step.index}: ${fabricationPartDisplayLabel(step.label)} / ${readableStepCoordinateCallout(step)} / Z ${step.zMm.toFixed(1)}mm`)
         ])
     ]
 );
@@ -1084,7 +1268,7 @@ export const createFabricationPackage = (project: ProjectState): FabricationPack
         cutList,
         warnings: validation.warnings,
         validationIssues: validation.issues,
-        svg: makeSvg(project, recipes),
+        svg: makeBlueprintSvg(project, recipes),
         cutSheetPdf: makeCutSheetPdf(project, recipes),
         customPartsSvg: makeCustomPartsSvg(project),
         customPartsPdf: makeCustomPartsPdf(project),

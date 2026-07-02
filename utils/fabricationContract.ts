@@ -7,6 +7,7 @@ export const FABRICATION_DEFAULT_GRID_PITCH_MM = 20;
 export const FABRICATION_HOLE_DIAMETER_MM = 4;
 export const FABRICATION_HOLE_RADIUS_MM = FABRICATION_HOLE_DIAMETER_MM / 2;
 export const FABRICATION_GEAR_RADIUS_PER_TOOTH_MM = 1.25;
+export const FABRICATION_GEAR_ROOT_WEB_MM = 6;
 export const FABRICATION_LINKAGE_WIDTH_MM = 14;
 export const FABRICATION_LINKAGE_RADIUS_MM = FABRICATION_LINKAGE_WIDTH_MM / 2;
 export const FABRICATION_LINKAGE_MARGIN_MM = 7;
@@ -23,6 +24,7 @@ type GearPreset = {
 };
 
 export type FabricationGearSpec = GearPreset & {
+    engravingLabel: string;
     pitchRadiusMm: number;
     rootRadiusMm: number;
     outerRadiusMm: number;
@@ -34,6 +36,7 @@ export type FabricationLinkageSpec = {
     source: typeof FABRICATION_SOURCE_SSOT;
     key: `linkage-${number}-cell`;
     label: string;
+    engravingLabel: string;
     path: string;
     cells: number;
     lengthMm: number;
@@ -51,6 +54,7 @@ export type FabricationSpacerSpec = {
     source: typeof FABRICATION_SOURCE_SSOT;
     key: 's10';
     label: string;
+    engravingLabel: string;
     path: string;
     outerDiameterMm: number;
     innerDiameterMm: number;
@@ -63,6 +67,7 @@ export type FabricationRingGearSpec = {
     source: typeof FABRICATION_SOURCE_SSOT;
     key: 'ring-g8-g24';
     label: string;
+    engravingLabel: string;
     path: string;
     compatibleSunTeeth: number;
     compatiblePlanetTeeth: number;
@@ -86,6 +91,11 @@ const GEAR_PRESETS: readonly GearPreset[] = [
 export const FABRICATION_LINKAGE_LENGTH_CELLS = [2, 4, 6, 8] as const;
 const BOARD_COLUMNS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
+export const fabricationGearEngravingLabel = (teeth: number) => `${Math.round(teeth)} Tooth Gear`;
+export const fabricationLinkageEngravingLabel = (cells: number) => `${Math.round(cells) + 1} Hole Linkage`;
+export const fabricationSpacerEngravingLabel = () => 'Spacer';
+export const fabricationRingGearEngravingLabel = (teeth: number) => `${Math.round(teeth)} Tooth Ring Gear`;
+
 const roundHalfEven = (value: number, decimals = 3) => {
     const factor = 10 ** decimals;
     const scaled = value * factor;
@@ -103,7 +113,7 @@ export const fabricationGearRadiusForTeeth = (teeth: number, pitchMm = FABRICATI
 export const fabricationGearAttachmentOffsetsMm = (pitchRadiusMm: number, pitchMm = FABRICATION_DEFAULT_GRID_PITCH_MM): Point[] => {
     const scale = pitchMm / FABRICATION_DEFAULT_GRID_PITCH_MM;
     const toothDepth = FABRICATION_GEAR_RADIUS_PER_TOOTH_MM * scale;
-    const rootRadius = Math.max(FABRICATION_HOLE_RADIUS_MM + 8, pitchRadiusMm - toothDepth * 1.25);
+    const rootRadius = Math.max(FABRICATION_HOLE_RADIUS_MM + FABRICATION_GEAR_ROOT_WEB_MM * scale, pitchRadiusMm - toothDepth * 1.25);
     const usableRadius = rootRadius - FABRICATION_HOLE_RADIUS_MM - 4;
     if (usableRadius < pitchMm) return [];
     const maxCells = Math.floor(usableRadius / pitchMm);
@@ -125,10 +135,11 @@ const fabricationGearSpecFromPreset = (preset: GearPreset, pitchMm = FABRICATION
     const scale = pitchMm / FABRICATION_DEFAULT_GRID_PITCH_MM;
     const pitchRadiusMm = fabricationGearRadiusForTeeth(preset.teeth, pitchMm);
     const toothDepth = FABRICATION_GEAR_RADIUS_PER_TOOTH_MM * scale;
-    const rootRadiusMm = Math.max(FABRICATION_HOLE_RADIUS_MM + 8, pitchRadiusMm - toothDepth * 1.25);
+    const rootRadiusMm = Math.max(FABRICATION_HOLE_RADIUS_MM + FABRICATION_GEAR_ROOT_WEB_MM * scale, pitchRadiusMm - toothDepth * 1.25);
     const outerRadiusMm = pitchRadiusMm + toothDepth * 1.2;
     return {
         ...preset,
+        engravingLabel: fabricationGearEngravingLabel(preset.teeth),
         pitchRadiusMm: roundHalfEven(pitchRadiusMm),
         rootRadiusMm: roundHalfEven(rootRadiusMm),
         outerRadiusMm: roundHalfEven(outerRadiusMm),
@@ -155,6 +166,7 @@ export const fabricationLinkageSpecForCells = (cells: number, pitchMm = FABRICAT
         source: FABRICATION_SOURCE_SSOT,
         key: `linkage-${safeCells}-cell`,
         label: `${safeCells}-cell linkage`,
+        engravingLabel: fabricationLinkageEngravingLabel(safeCells),
         path: `linkages/linkage-${safeCells}-cell.svg`,
         cells: safeCells,
         lengthMm: roundHalfEven(lengthMm),
@@ -175,6 +187,7 @@ export const FABRICATION_SPACER_SPEC: FabricationSpacerSpec = {
     source: FABRICATION_SOURCE_SSOT,
     key: 's10',
     label: 'S10 spacer',
+    engravingLabel: fabricationSpacerEngravingLabel(),
     path: 'spacers/spacer-s10.svg',
     outerDiameterMm: 10,
     innerDiameterMm: FABRICATION_HOLE_DIAMETER_MM,
@@ -198,6 +211,7 @@ export const fabricationRingGearSpecForPitchRadius = (pitchRadiusMm = 70, pitchM
         source: FABRICATION_SOURCE_SSOT,
         key: 'ring-g8-g24',
         label: 'R56 internal ring gear',
+        engravingLabel: fabricationRingGearEngravingLabel(internalTeeth),
         path: 'ring_gears/ring-g8-g24.svg',
         compatibleSunTeeth: sun.teeth,
         compatiblePlanetTeeth: planet.teeth,

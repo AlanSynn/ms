@@ -95,11 +95,11 @@ const editableParametersForType = (type: MechanismType): Array<keyof MechanismCo
         case 'rack-pinion':
             return ['crankLength', 'sliderOffset', 'rodLength', 'rockerLength', 'phase'];
         case 'gear':
-            return ['gearTrainRadii', 'crankLength', 'rockerLength', 'groundLength', 'driverGroupId', 'driverPhaseOffset', 'phase'];
+            return ['gearTrainRadii', 'driverGroupId', 'driverPhaseOffset', 'phase'];
         case 'gear_linkage':
-            return ['gearTrainRadii', 'crankLength', 'rockerLength', 'groundLength', 'couplerPointDist', 'couplerLength', 'driverGroupId', 'driverPhaseOffset', 'phase'];
+            return ['gearTrainRadii', 'couplerPointDist', 'couplerLength', 'driverGroupId', 'driverPhaseOffset', 'phase'];
         case 'planetary_gear':
-            return ['crankLength', 'rockerLength', 'groundLength', 'couplerPointDist', 'driverGroupId', 'driverPhaseOffset', 'phase'];
+            return ['driverGroupId', 'driverPhaseOffset', 'phase'];
         case 'cam':
             return ['crankLength', 'rockerLength', 'sliderOffset', 'camProfileSamples', 'phase'];
         case '5bar':

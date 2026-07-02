@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"
-     width="18mm" height="28mm"
-     viewBox="0 0 18 28"
+     width="18mm" height="18mm"
+     viewBox="0 0 18 18"
      data-profile-key="motionsmith-ms4n"
      data-grid-pitch-mm="20"
      data-hole-diameter-mm="4">
@@ -13,6 +13,7 @@
       .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }
       .score { fill: none; stroke: #777777; stroke-width: 0.15; stroke-dasharray: 2 1; }
       .label { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }
+      .engrave { fill: #008000; font-family: Arial, Helvetica, sans-serif; font-size: 3.2px; font-weight: bold; }
       .tiny { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
       .small { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
       .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
@@ -23,5 +24,5 @@
   </defs>
   <circle cx="9" cy="9" r="5" class="cut spacer-outline washer-outline" data-spacer-key="s10" data-outer-diameter-mm="10" data-inner-diameter-mm="4"/>
   <circle cx="9" cy="9" r="2" class="drill spacer-hole axle-hole linkage-hole bracket-hole" data-hole-role="spacer" data-hole-diameter-mm="4" data-hole-index="0"/>
-  <text x="9" y="24" class="label" text-anchor="middle">S10 spacer</text>
+  <text x="12.2" y="9" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="Spacer" style="font-size:1.6px" transform="rotate(90 12.2 9)">Spacer</text>
 </svg>

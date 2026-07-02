@@ -6,9 +6,10 @@ import { extname, join, relative } from 'node:path';
 import { boardGridLines, boardToScene, bodyPartPivotScene, physicalKitPreset, placeBodyPartPivotAt, SCENE_PX_PER_MM, sceneToBoard, sceneToBoardRaw, sceneToSheetMm, sceneToSvg, sheetMmToScene } from '../utils/coordinates';
 import { CLASSROOM_LESSONS, classroomLessonById, createDefaultMechanism, createEmptyProject, createLessonProject, createSampleProject, handoffGate, loadProjectSnapshot, serializeProject, applyProjectAction, projectSelfCheck, mechanismRequiredParts, mechanismWithGeneratedPath, replaceCharacterProject, resetProjectToLessonBaseline } from '../utils/project';
 import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, PLANETARY_GEAR_PLANET_COUNT, fabricationBoardColumnLabel, fabricationBoardCoordinateCallout, fabricationBoardRowLabel, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, planetaryPlanetCenters, prefabAssemblySteps, sampleFeasibleRange, validateFabricationStack, validateForFabrication } from '../utils/fabrication';
+import { FABRICATION_GEAR_ROOT_WEB_MM, fabricationGearEngravingLabel, fabricationLinkageEngravingLabel, fabricationRingGearEngravingLabel, fabricationSpacerEngravingLabel } from '../utils/fabricationContract';
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
-import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainMeshPhaseDegAt, gearTrainMeshPhaseRadAt, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, gearTrainResolvedCenterDistance, generateCurvePoints, generateMechanismPointTraces, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius, sampledCamProfileScale } from '../utils/kinematics';
+import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainMeshPhaseDegAt, gearTrainMeshPhaseRadAt, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, gearTrainResolvedCenterDistance, gearTrainRotationRatioAt, generateCurvePoints, generateMechanismPointTraces, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius, sampledCamProfileScale } from '../utils/kinematics';
 import { animatedPartsForProject, describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainRootJointIds, motionPreviewForPath, motionPreviewForProject, motionPreviewForTarget, preferredMotionJointId } from '../utils/motion';
 import { buildToonSceneProjection } from '../utils/sceneProjection';
 import { buildFoundryPhysicsOverlay, buildKinematicPhysicsSession, mechanismPhysicsRule } from '../utils/physicsSession';
@@ -20,11 +21,12 @@ import { WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
 import { APP_COMMANDS, APP_MENU_GROUPS, commandById, commandIdForKeyboardEvent, validateAppCommandRegistry } from '../utils/appCommands';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_KERNEL_IMPORT, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, physicsKernelCapability, runRapierFrictionProbe } from '../utils/physicsKernel';
 import { formatGridLabel, formatGridPitch, formatGridReadout } from '../utils/units';
+import { buildCharacterAssemblyPlan } from '../utils/assemblyPlayback';
 import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, FOUNDRY_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, mechanismTemplateLabel } from '../utils/mechanismTemplates';
 import { MECHANISM_TYPES as SANITIZE_MECHANISM_TYPES, sanitizeMechanismRuntime } from '../utils/sanitize';
 import { generateSmartConfig, mutateConfig, OPTIMIZER_MECHANISM_TYPES } from '../utils/optimizer';
-import { isBoardFixedCoordRole, normalizeGearLinkageToReference, normalizeGearTrainToFabrication, REFERENCE_DEFAULTS, REFERENCE_EXPORT_READY_TYPES, REFERENCE_FOUNDRY_TYPES, REFERENCE_MECHANISM_RECIPES, referenceRecipeForType } from '../utils/mechanismReference';
-import type { BodyPartLayer, MechanismType, ProjectState } from '../types';
+import { isBoardFixedCoordRole, normalizeGearLinkageToReference, normalizeGearTrainToFabrication, normalizeMechanismToFabricationSet, REFERENCE_DEFAULTS, REFERENCE_EXPORT_READY_TYPES, REFERENCE_FOUNDRY_TYPES, REFERENCE_MECHANISM_RECIPES, referenceRecipeForType } from '../utils/mechanismReference';
+import type { BodyPartLayer, MechanismType, Point, ProjectState } from '../types';
 
 projectSelfCheck();
 
@@ -89,6 +91,8 @@ const agentsContract = readFileSync(join(process.cwd(), 'AGENTS.md'), 'utf8');
 const docsMap = readFileSync(join(process.cwd(), 'docs', 'README.md'), 'utf8');
 const noviceUiPlan = readFileSync(join(process.cwd(), 'docs', 'prd', 'novice-canva-style-ui-plan.md'), 'utf8');
 const classroomFieldPlan = readFileSync(join(process.cwd(), 'docs', 'prd', 'classroom-field-support-plan.md'), 'utf8');
+const classroomGuidedEntryPlan = readFileSync(join(process.cwd(), 'docs', 'prd', 'classroom-guided-entry-plan.md'), 'utf8');
+const classroomSensemakingPlan = readFileSync(join(process.cwd(), 'docs', 'prd', 'classroom-sensemaking-discoverability-plan.md'), 'utf8');
 const brandStaticFiles = [
   'App.tsx',
   'index.html',
@@ -189,7 +193,7 @@ assert(appCommandSource.includes('satisfies Record<AppCommandId, () => void>'), 
 const commandHandlerBlock = appCommandSource.match(/const commandHandlers = \{([\s\S]*?)\n\s*\} satisfies Record<AppCommandId, \(\) => void>;/)?.[1] ?? '';
 assert(commandHandlerBlock, 'App.tsx exposes the typed command handler map');
 assert.deepEqual(
-  [...commandHandlerBlock.matchAll(/'([^']+)':/g)].map(match => match[1]).sort(),
+  [...commandHandlerBlock.matchAll(/[\"']([^\"']+)[\"']:/g)].map(match => match[1]).sort(),
   [...commandIds].sort(),
   'every visible shell command has exactly one App.tsx handler'
 );
@@ -326,7 +330,7 @@ assert(playwrightConfigText.includes('PLAYWRIGHT_WORKERS'), 'browser worker coun
 assert(playwrightConfigText.includes('MAX_BROWSER_WORKERS'), 'browser worker defaults are bounded to avoid local over-parallelization');
 assert(playwrightConfigText.includes('Number.isInteger'), 'browser worker override validates positive integer input');
 assert(playwrightConfigText.includes('PLAYWRIGHT_SERVER') && playwrightConfigText.includes('preview'), 'browser tests can run against production preview without Vite HMR noise');
-assert.equal(packageJson.version, '0.0.3', 'release version is bumped for the LFS-backed GitHub Pages redeploy');
+assert.equal(packageJson.version, '0.0.4', 'release version is bumped for the LFS-backed GitHub Pages redeploy');
 assert.equal(tauriConfig.version, packageJson.version, 'Tauri config version stays aligned with package.json');
 assert(viteConfigText.includes('__APP_VERSION__') && viteConfigText.includes('packageVersion'), 'Vite exposes package.json version to the browser UI');
 assert.deepEqual(tauriConfig.bundle.icon, ['icons/icon.png', 'icons/icon.ico', 'icons/icon.icns'], 'Tauri bundle references the tracked MotionSmith png, ico, and icns icons');
@@ -374,6 +378,7 @@ assert(agentsContract.includes('package.json') && agentsContract.includes('src-t
 assert(agentsContract.includes('local-first browser/Tauri'), 'AGENTS.md excludes server scope and locks the app as local-first');
 assert(agentsContract.includes('Do not add backend/API server'), 'AGENTS.md explicitly excludes backend/API/auth/cloud work unless reopened');
 assert(agentsContract.includes('Guided classroom lesson templates must create real serializable `ProjectState` data') && agentsContract.includes('Blank starters stay mechanism-free'), 'AGENTS.md locks lesson templates to real state and keeps blank starters clean');
+assert(agentsContract.includes('Classroom entry is theme-guided first') && agentsContract.includes('open exploration stays secondary'), 'AGENTS.md locks guided project entry as the classroom-primary start');
 assert(agentsContract.includes('`Reset Lesson` must restore a known-good lesson baseline') && agentsContract.includes('preserving app settings'), 'AGENTS.md locks stable lesson reset semantics');
 assert(agentsContract.includes('Blueprint owns build files') && agentsContract.includes('Assembly owns animated step-by-step build'), 'AGENTS.md preserves Blueprint versus Assembly role split');
 assert(designContract.includes('Shared editor workbench'), 'DESIGN.md documents the shared editor workbench');
@@ -413,7 +418,42 @@ assert(classroomFieldPlan.includes('Details must be visible at the moment of act
 assert(classroomFieldPlan.includes('Stable reset and recovery') && classroomFieldPlan.includes('No rotation possible'), 'classroom plan requires stable reset for mechanism failure recovery');
 assert(classroomFieldPlan.includes('Blueprint as build-file screen') && classroomFieldPlan.includes('Assembly as animated build screen'), 'classroom plan preserves Blueprint/Assembly ownership split');
 assert(classroomFieldPlan.includes('No backend, auth, roster, analytics, cloud DB, teacher dashboard') && classroomFieldPlan.includes('Teacher pack workflow'), 'classroom plan excludes server scope while defining local teacher pack workflow');
+assert(docsMap.includes('prd/classroom-guided-entry-plan.md'), 'docs map registers the classroom guided entry plan');
+assert(classroomGuidedEntryPlan.includes('# Classroom Guided Entry Plan'), 'classroom guided entry PRD exists');
+assert(classroomGuidedEntryPlan.includes('Guided theme entry is primary') && classroomGuidedEntryPlan.includes('open exploration is secondary'), 'guided entry plan records the field-driven guided-first decision');
+assert(classroomGuidedEntryPlan.includes('No required upload') && classroomGuidedEntryPlan.includes('starter humanoid'), 'guided entry plan requires a built-in humanoid workflow without upload');
+assert(classroomGuidedEntryPlan.includes('Digital action -> physical artifact') && classroomGuidedEntryPlan.includes('Make an arm wave'), 'guided entry plan requires direct digital-to-physical theme cards');
+assert(classroomGuidedEntryPlan.includes('No full-screen tutorial') && classroomGuidedEntryPlan.includes('No backend, auth, roster, analytics, cloud DB, teacher dashboard'), 'guided entry plan keeps tutorial and server scope excluded');
+assert(classroomGuidedEntryPlan.includes('GuidedEntryDescriptor') && classroomGuidedEntryPlan.includes('Persist ids in `ProjectState.metadata`'), 'guided entry plan defines a shared descriptor seam instead of duplicated UI state');
+assert(docsMap.includes('prd/classroom-sensemaking-discoverability-plan.md'), 'docs map registers the classroom sensemaking discoverability plan');
+assert(classroomSensemakingPlan.includes('# Classroom Sensemaking Discoverability Plan'), 'classroom sensemaking PRD exists');
+assert(classroomSensemakingPlan.includes('Teachers missed the existing sensemaking entry point') && classroomSensemakingPlan.includes('Visible before optional'), 'sensemaking plan records the field failure and requires visible-by-default meaning');
+assert(classroomSensemakingPlan.includes('Direct translation') && classroomSensemakingPlan.includes('input action -> physical cause -> output motion'), 'sensemaking plan requires direct mechanism translation');
+assert(classroomSensemakingPlan.includes('Cause/action hints') && classroomSensemakingPlan.includes('Object + cause -> action'), 'sensemaking plan requires specific cause/action hints instead of general instructions');
+assert(classroomSensemakingPlan.includes('Clip as a spark, not a dependency') && classroomSensemakingPlan.includes('Generated loop') && classroomSensemakingPlan.includes('optional external URL'), 'sensemaking plan keeps clips optional and local-first');
+assert(classroomSensemakingPlan.includes('Four-bar linkage') && classroomSensemakingPlan.includes('Cam follower') && classroomSensemakingPlan.includes('Gear train') && classroomSensemakingPlan.includes('Planetary gear'), 'sensemaking plan covers core mechanism families');
+assert(classroomSensemakingPlan.includes('Assessment is local, formative, and one-tap') && classroomSensemakingPlan.includes('Teacher pack output') && classroomSensemakingPlan.includes('visual evidence cue'), 'sensemaking plan defines local assessment, evidence cues, and teacher-pack outputs');
+assert(classroomSensemakingPlan.includes('No teacher dashboard') && classroomSensemakingPlan.includes('No required YouTube dependency'), 'sensemaking plan excludes server and mandatory streaming scope');
 assert(CLASSROOM_LESSONS.some(lesson => lesson.id === 'waving-arm' && lesson.label === 'Waving arm' && lesson.actionLabel === 'Open lesson'), 'guided classroom lesson catalog exposes the waving-arm lesson as an English-only entry point');
+assert(CLASSROOM_LESSONS.some(lesson => lesson.id === 'my-character' && lesson.outcome === 'Start with my character' && lesson.actionLabel === 'Start' && lesson.buildCue === 'rig first'), 'guided classroom lesson catalog includes a result-first my-character starter without upload language');
+const minimumGuidedLessonIds = ['waving-arm', 'head-bob', 'walking-leg', 'spin-gears', 'my-character'] as const;
+for (const id of minimumGuidedLessonIds) {
+  assert(CLASSROOM_LESSONS.some(lesson => lesson.id === id), `${id} is present in the guided classroom theme library`);
+  assert.equal(classroomLessonById(id)?.startStage, 'character', `${id} starts in Character for immediate ownership edits`);
+}
+assert(CLASSROOM_LESSONS.every(lesson => lesson.outcome && lesson.buildCue && lesson.sensemaking?.directTranslation && lesson.sensemaking?.tryThis && lesson.sensemaking?.expectedAnswer && lesson.sensemaking?.evidenceCue && lesson.sensemaking?.clipSlot === 'generated-loop'), 'guided lesson entries carry result-first outcome, build cue, visible sensemaking, check answers, evidence cues, and generated-loop clip slots');
+for (const [type, metadata] of Object.entries(MECHANISM_TEMPLATE_LIBRARY)) {
+  assert(metadata.classroomSensemaking.directTranslation, `${type} has direct translation sensemaking`);
+  assert(metadata.classroomSensemaking.applicationCue, `${type} has an application cue`);
+  assert(metadata.classroomSensemaking.tryThis, `${type} has a direct interaction prompt`);
+  assert(metadata.classroomSensemaking.commonHint, `${type} has a specific cause/action hint`);
+  assert(metadata.classroomSensemaking.teacherTakeaway, `${type} has a teacher takeaway`);
+  assert(metadata.classroomSensemaking.studentCheck, `${type} has a one-tap student check`);
+  assert(metadata.classroomSensemaking.expectedAnswer, `${type} has a teacher-pack expected answer`);
+  assert(metadata.classroomSensemaking.evidenceCue, `${type} has an observable evidence cue`);
+  assert.equal(metadata.classroomSensemaking.clipSlot, 'generated-loop', `${type} defaults to generated-loop clips instead of required streaming`);
+}
+
 assert.equal(classroomLessonById('waving-arm')?.startStage, 'character', 'classroom lesson opens in Character so students inspect/edit the rig before drawing');
 assert.equal(classroomLesson.metadata.classroomLessonId, 'waving-arm', 'lesson ProjectState carries resettable classroom lesson metadata');
 assert.equal(classroomLesson.metadata.classroomLessonLabel, 'Waving arm', 'lesson ProjectState keeps the English-only classroom label');
@@ -425,6 +465,21 @@ assert((classroomLesson.mechanisms[0].generatedPath?.length ?? 0) >= 3, 'waving-
 const classroomLessonRoundTrip = loadProjectSnapshot(JSON.parse(serializeProject(classroomLesson)));
 assert.equal(classroomLessonRoundTrip.mechanisms[0].groundLength, classroomLesson.mechanisms[0].groundLength, 'lesson load preserves fitted mechanism geometry');
 assert(!validateForFabrication(classroomLessonRoundTrip).errors.some(error => error.includes('path outside sheet')), 'lesson load stays blueprint-ready');
+const headBobLesson = createLessonProject('head-bob');
+assert.equal(headBobLesson.mechanisms[0]?.type, 'cam', 'head-bob guided theme creates a real cam mechanism baseline');
+assert.equal(headBobLesson.selectedPathId, 'path-head-bob', 'head-bob guided theme creates an editable head lift path');
+const walkingLegLesson = createLessonProject('walking-leg');
+assert.equal(walkingLegLesson.mechanisms[0]?.type, '5bar', 'walking-leg guided theme creates a real five-bar mechanism baseline');
+assert.equal(walkingLegLesson.selectedPathId, 'path-right-foot-step', 'walking-leg guided theme creates an editable foot path');
+const spinGearsLesson = createLessonProject('spin-gears');
+assert.equal(spinGearsLesson.mechanisms[0]?.type, 'gear', 'spin-gears guided theme creates a real gear mechanism baseline');
+assert.equal(Object.keys(spinGearsLesson.paths).length, 0, 'spin-gears guided theme is mechanism-first without a hidden character path');
+const myCharacterLesson = createLessonProject('my-character');
+assert.equal(myCharacterLesson.metadata.classroomLessonId, 'my-character', 'my-character guided starter carries resettable classroom metadata');
+assert.equal(myCharacterLesson.mechanisms.length, 0, 'my-character guided starter stays mechanism-free');
+assert.equal(Object.keys(myCharacterLesson.paths).length, 0, 'my-character guided starter does not hide a pre-drawn path');
+assert.equal(myCharacterLesson.selectedPartId, 'torso', 'my-character guided starter lands with the editable torso selected');
+assert(Object.keys(myCharacterLesson.parts).length >= 14 && myCharacterLesson.skeleton, 'my-character guided starter creates a full editable humanoid rig');
 assert.throws(() => createLessonProject('missing' as never), /Unknown classroom lesson/, 'invalid classroom lesson IDs fail loudly instead of silently creating blank projects');
 const resetLessonState = resetProjectToLessonBaseline({
   ...classroomLesson,
@@ -556,7 +611,7 @@ assert.equal(referenceRecipeForType('4bar').assemblySteps.find(step => step.labe
 assert.equal(referenceRecipeForType('4bar').assemblySteps.find(step => step.label === 'Add coupler')?.stack[0]?.role, 'link-joint-hole', '4bar G6 coupler joint is a floating link joint');
 assert.equal(referenceRecipeForType('4bar').assemblySteps.find(step => step.label === 'Join output to coupler')?.stack[0]?.role, 'link-joint-hole', '4bar G10 output/coupler joint remains floating');
 assert.equal(referenceRecipeForType('gear').title, 'Gear train', 'gear recipe title matches the visible gear-only Foundry label');
-assert.equal(referenceRecipeForType('gear').assemblySteps.find(step => step.label === 'Add output G3 gear')?.boardCoordinate, 'H12', 'gear train output endpoint is separated at H12 until idlers fill the span');
+assert.equal(referenceRecipeForType('gear').assemblySteps.find(step => step.label === 'Add output G3 gear')?.boardCoordinate, 'H9', 'gear train output G3 sits at direct pitch contact with the drive G3');
 assert.equal(referenceRecipeForType('gear_linkage').assemblySteps.find(step => step.label === 'Add output G3 gear')?.boardCoordinate, 'I12', 'gear-linkage output endpoint is separated at I12 until idlers fill the span');
 assert.equal(referenceRecipeForType('gear_linkage').assemblySteps.find(step => step.label === 'Join moving connector')?.coordRoles[0], 'link_end_reference', 'gear-linkage R connector is a moving link-end reference, not a board axle');
 const gearLinkageDriveCrankStack = referenceRecipeForType('gear_linkage').assemblySteps.find(step => step.label === 'Add drive crank link')?.stack ?? [];
@@ -596,7 +651,10 @@ ALL_MECHANISM_TYPES.forEach(type => {
   assert(feature.physicsHints(mechanism).every(hint => hint.solver === 'kinematic-derived' && hint.preservesProjectState), `${type} feature declares derived physics sidecar behavior`);
 });
 assert(mechanismFeature('gear').interactionPolicy(createDefaultMechanism('gear')).editableParameters.includes('gearTrainRadii'), 'gear Foundry/Design editing exposes ordered fabrication gear sizes');
+assert(!mechanismFeature('gear').interactionPolicy(createDefaultMechanism('gear')).editableParameters.includes('groundLength'), 'gear Foundry/Design editing derives axle span from the selected fabrication gear sizes');
 assert(mechanismFeature('gear_linkage').interactionPolicy(createDefaultMechanism('gear_linkage')).editableParameters.includes('couplerLength'), 'gear-linkage Foundry/Design editing exposes the paired linkage length');
+assert(!mechanismFeature('gear_linkage').interactionPolicy(createDefaultMechanism('gear_linkage')).editableParameters.includes('groundLength'), 'gear-linkage Foundry/Design editing derives endpoint span from selected gears and idlers');
+assert(!mechanismFeature('planetary_gear').interactionPolicy(createDefaultMechanism('planetary_gear')).editableParameters.includes('groundLength'), 'planetary gear editing keeps the fixed G1/G3/R56 kit geometry');
 assert(mechanismFeature('cam').interactionPolicy(createDefaultMechanism('cam')).editableParameters.includes('camProfileSamples'), 'cam Foundry/Design editing exposes the editable lift profile');
 const sampleMechanismId = sample.mechanisms[0].id;
 const snapshotBeforeProject = serializeProject(sample);
@@ -612,11 +670,16 @@ assert(snapshotA.interactionPolicy.writesProjectState, 'mechanism snapshot inclu
 assert(snapshotA.projectionHints.every(hint => hint.zStackUsesFabricationPlan), 'mechanism snapshot includes fabrication-backed projection hints');
 assert(snapshotA.physicsHints.every(hint => hint.preservesProjectState), 'mechanism snapshot includes derived physics hints');
 assert(Array.isArray(snapshotA.fabricationPlan.validationErrors), 'mechanism snapshot includes fabrication plan validation result');
-const snapshotParamChanged = buildMechanismSnapshot({
+const snapshotOffPresetLinkNoop = buildMechanismSnapshot({
   ...sample,
   mechanisms: sample.mechanisms.map(mechanism => mechanism.id === sampleMechanismId ? { ...mechanism, crankLength: mechanism.crankLength + 1 } : mechanism)
 }, sampleMechanismId);
-assert(snapshotParamChanged && snapshotParamChanged.fingerprint !== snapshotA.fingerprint, 'snapshot fingerprint changes when mechanism params change');
+assert(snapshotOffPresetLinkNoop && snapshotOffPresetLinkNoop.fingerprint === snapshotA.fingerprint, 'snapshot fingerprint ignores off-preset linkage nudges that snap back to the same fabricated linkage');
+const snapshotParamChanged = buildMechanismSnapshot({
+  ...sample,
+  mechanisms: sample.mechanisms.map(mechanism => mechanism.id === sampleMechanismId ? { ...mechanism, groundLength: mechanism.groundLength + 1 } : mechanism)
+}, sampleMechanismId);
+assert(snapshotParamChanged && snapshotParamChanged.fingerprint !== snapshotA.fingerprint, 'snapshot fingerprint changes when an editable board-span parameter changes');
 const snapshotOutputGearChanged = buildMechanismSnapshot({
   ...sample,
   mechanisms: sample.mechanisms.map(mechanism => mechanism.id === sampleMechanismId ? { ...mechanism, showOutputGear: !(mechanism.showOutputGear ?? false) } : mechanism)
@@ -683,38 +746,82 @@ const gearMetadataMechanism = {
 gearMetadataMechanism.groundLength = gearTrainPitchCenterDistance(gearMetadataMechanism);
 gearMetadataMechanism.gearRatio = gearTrainOutputRatio(gearMetadataMechanism);
 const sanitizedGearMetadata = sanitizeMechanismRuntime(gearMetadataMechanism);
-assert.deepEqual(sanitizedGearMetadata.gearTrainRadii, [50, 20, 35, 30], 'sanitize preserves ordered gear train radii for multi-idler trains');
+const snappedGearMetadata = normalizeGearTrainToFabrication(gearMetadataMechanism);
+assert.deepEqual(sanitizedGearMetadata.gearTrainRadii, snappedGearMetadata.gearTrainRadii, 'sanitize preserves ordered gear train slots while snapping each radius to the fabrication gear set');
+assert.equal(sanitizedGearMetadata.groundLength, gearTrainPitchCenterDistance(sanitizedGearMetadata), 'sanitize derives gear train span from snapped fabrication gears');
 assert.equal(sanitizedGearMetadata.driverGroupId, 'main-drive', 'sanitize preserves driver group id');
 assert.equal(sanitizedGearMetadata.driverPhaseOffset, 0.45, 'sanitize preserves CDMC-style driver phase offset');
 const gearMetadataSnapshot = buildMechanismSnapshot({
   ...sample,
   mechanisms: [gearMetadataMechanism]
 }, gearMetadataMechanism.id);
-assert.deepEqual(gearMetadataSnapshot?.mechanism.gearTrainRadii, [50, 20, 35, 30], 'snapshot preserves multi-idler gear train radii');
+assert.deepEqual(gearMetadataSnapshot?.mechanism.gearTrainRadii, snappedGearMetadata.gearTrainRadii, 'snapshot stores only fabrication-set gear radii for multi-idler gear trains');
+assert.equal(gearMetadataSnapshot?.mechanism.groundLength, gearTrainPitchCenterDistance(snappedGearMetadata), 'snapshot stores the derived pitch span from snapped gear radii');
 assert.equal(gearMetadataSnapshot?.mechanism.driverGroupId, 'main-drive', 'snapshot preserves driver grouping metadata');
 assert.equal(gearMetadataSnapshot?.mechanism.driverPhaseOffset, 0.45, 'snapshot preserves driver phase metadata');
 assert.equal(buildMechanismSnapshot(sample, 'missing-mechanism'), null, 'missing mechanism snapshot returns null instead of fabricating data');
+const offSetFourBar = normalizeMechanismToFabricationSet({
+  ...createDefaultMechanism('4bar', 'off-set-fourbar'),
+  crankLength: 53,
+  couplerLength: 119,
+  rockerLength: 177,
+  groundLength: 123
+});
+assert(linkageSceneLengthIsFabricationPreset(offSetFourBar.crankLength), 'four-bar input link snaps to one of the four fabricated linkage sizes');
+assert(linkageSceneLengthIsFabricationPreset(offSetFourBar.couplerLength), 'four-bar coupler snaps to one of the four fabricated linkage sizes');
+assert(linkageSceneLengthIsFabricationPreset(offSetFourBar.rockerLength), 'four-bar output link snaps to one of the four fabricated linkage sizes');
+assert.equal(offSetFourBar.groundLength, 123, 'four-bar ground span remains a board pivot distance, not a fifth linkage blank');
+const loadedSetOnlyGear = loadProjectSnapshot({
+  ...createEmptyProject(),
+  mechanisms: [{
+    ...createDefaultMechanism('gear', 'loaded-gear-set-only'),
+    crankLength: 52,
+    rockerLength: 91,
+    gearTrainRadii: [52, 23, 91],
+    groundLength: 777
+  }]
+}).mechanisms[0];
+assert(loadedSetOnlyGear.gearTrainRadii?.every(gearSceneRadiusIsFabricationPreset), 'loaded gear snapshots snap every gear radius to the fabrication gear set');
+assert.equal(loadedSetOnlyGear.groundLength, gearTrainPitchCenterDistance(loadedSetOnlyGear), 'loaded gear snapshots derive center span from snapped gear radii');
+const loadedSetOnlyFourBar = loadProjectSnapshot({
+  ...createEmptyProject(),
+  mechanisms: [{
+    ...createDefaultMechanism('4bar', 'loaded-fourbar-set-only'),
+    crankLength: 53,
+    couplerLength: 119,
+    rockerLength: 177
+  }]
+}).mechanisms[0];
+assert(linkageSceneLengthIsFabricationPreset(loadedSetOnlyFourBar.crankLength), 'loaded four-bar snapshots snap input length to the fabricated linkage set');
+assert(linkageSceneLengthIsFabricationPreset(loadedSetOnlyFourBar.couplerLength), 'loaded four-bar snapshots snap coupler length to the fabricated linkage set');
+assert(linkageSceneLengthIsFabricationPreset(loadedSetOnlyFourBar.rockerLength), 'loaded four-bar snapshots snap output length to the fabricated linkage set');
 type FabricationManifest = {
   generated_by: string;
   source_ssot: string;
   grid_pitch_mm: number;
   hole_diameter_mm: number;
   managed_files: string[];
+  complete_cut_sheet: { path: string; part_count: number; included_part_categories: string[]; excluded_part_categories: string[]; unique_part_ids: string[]; part_quantities: Record<string, number> };
+  sheets: Array<{ key: string; label: string; path: string; contains: string[] }>;
   parts: {
-  gears: Array<{ key: string; teeth: number; pitch_radius_mm: number; root_radius_mm: number; outer_radius_mm: number; hole_diameter_mm: number; path: string; attachment_hole_centers_mm: number[][] }>;
-  linkages: Array<{ key: string; label: string; path: string; cells: number; length_mm: number; pitch_mm: number; hole_count: number; hole_diameter_mm: number }>;
-  ring_gears: Array<{ key: string; pitch_radius_mm: number; inner_tip_radius_mm: number; inner_root_radius_mm: number; outer_radius_mm: number; mount_radius_mm: number; mount_hole_centers_mm: number[][]; hole_diameter_mm: number; teeth: number }>;
-  cams: unknown[];
-  followers: unknown[];
-  spacers: Array<{ key: string; label: string; path: string; outer_diameter_mm: number; inner_diameter_mm: number; hole_diameter_mm: number; hole_centers_mm: number[][]; stackable: boolean }>;
+  gears: Array<{ key: string; label: string; engraving_label: string; teeth: number; pitch_radius_mm: number; root_radius_mm: number; outer_radius_mm: number; hole_diameter_mm: number; path: string; attachment_hole_centers_mm: number[][] }>;
+  linkages: Array<{ key: string; label: string; engraving_label: string; path: string; cells: number; length_mm: number; pitch_mm: number; hole_count: number; hole_diameter_mm: number }>;
+  ring_gears: Array<{ key: string; label: string; engraving_label: string; path: string; pitch_radius_mm: number; inner_tip_radius_mm: number; inner_root_radius_mm: number; outer_radius_mm: number; mount_radius_mm: number; mount_hole_centers_mm: number[][]; hole_diameter_mm: number; teeth: number; internal_teeth: number }>;
+  cams: Array<{ key: string; label: string; engraving_label: string; path: string }>;
+  followers: Array<{ key: string; label: string; engraving_label: string; path: string }>;
+  brackets: Array<{ key: string; label: string; engraving_label: string; path: string }>;
+  handles: Array<{ key: string; label: string; engraving_label: string; path: string }>;
+  spacers: Array<{ key: string; label: string; engraving_label: string; path: string; outer_diameter_mm: number; inner_diameter_mm: number; hole_diameter_mm: number; hole_centers_mm: number[][]; stackable: boolean }>;
   };
 };
 const fabricationManifest = JSON.parse(readFileSync(join(process.cwd(), 'fabrication', 'manifest.json'), 'utf8')) as FabricationManifest;
+const fabricationManifestSnapshot = JSON.parse(readFileSync(join(process.cwd(), 'docs', 'mechanism-reference', 'source', 'fabrication-manifest.snapshot.json'), 'utf8')) as FabricationManifest;
 const fabricationGeneratorPath = join(process.cwd(), 'fabrication', 'generate_fabrication_templates.py');
 assert(existsSync(fabricationGeneratorPath), 'fabrication generator lives beside the generated package');
 const fabricationGeneratorText = readFileSync(fabricationGeneratorPath, 'utf8');
 assert(fabricationGeneratorText.includes('DEFAULT_GRID_PITCH_MM = 20.0'), 'fabrication generator owns the 20 mm board pitch convention');
 assert(fabricationGeneratorText.includes('hole_diameter_mm=4.0'), 'fabrication generator owns the 4 mm hole convention');
+assert(fabricationGeneratorText.includes('GEAR_ROOT_WEB_MM = 6.0'), 'fabrication generator keeps gear root webs thin enough for 8T mesh clearance');
 assert(fabricationGeneratorText.includes('GearPreset("g24", "G3 / 3-space gear", 24)'), 'fabrication generator owns the G24 gear preset used by renderers');
 assert(fabricationGeneratorText.includes('FollowerPreset("f4-roller"'), 'fabrication generator owns the roller follower preset used by Foundry');
 assert(fabricationGeneratorText.includes('SOURCE_SSOT = "fabrication/generate_fabrication_templates.py"'), 'fabrication manifest source points at the checked-in generator');
@@ -722,6 +829,7 @@ const fabricationRuntimeText = readFileSync(join(process.cwd(), 'utils', 'fabric
 const fabricationContractText = readFileSync(join(process.cwd(), 'utils', 'fabricationContract.ts'), 'utf8');
 assert(fabricationContractText.includes(FABRICATION_SOURCE_SSOT), 'runtime fabrication contract declares the Python generator as source of truth');
 assert(fabricationContractText.includes('FABRICATION_GEAR_RADIUS_PER_TOOTH_MM = 1.25'), 'runtime fabrication contract keeps the generator gear radius/tooth rule centralized');
+assert(fabricationContractText.includes('FABRICATION_GEAR_ROOT_WEB_MM = 6'), 'runtime fabrication contract mirrors the generator gear root web rule');
 assert(fabricationContractText.includes('FABRICATION_LINKAGE_WIDTH_MM = 14'), 'runtime fabrication contract keeps the generator linkage width centralized');
 assert(fabricationContractText.includes("key: 's10'"), 'runtime fabrication contract keeps the S10 spacer centralized');
 assert(
@@ -735,6 +843,18 @@ assert(fabricationRuntimeText.includes("from './fabricationContract'"), 'fabrica
 assert(!fabricationRuntimeText.includes("rootRadiusMm: 28.438"), 'runtime gear constants are no longer duplicated outside the centralized contract');
 assert.equal(fabricationManifest.generated_by, 'fabrication/generate_fabrication_templates.py', 'fabrication manifest generated_by matches the checked-in generator');
 assert.equal(fabricationManifest.source_ssot, 'fabrication/generate_fabrication_templates.py', 'fabrication manifest source_ssot matches the checked-in generator');
+assert.deepEqual(fabricationManifestSnapshot, fabricationManifest, 'mechanism reference fabrication snapshot mirrors fabrication/manifest.json');
+const fabricationSvgManagedFiles = fabricationManifest.managed_files.filter(path => path.endsWith('.svg'));
+const assertSvgFilesParseAsXml = (rootDir: string, relPaths: string[], label: string) => {
+  assert(relPaths.length > 0, `${label} has managed SVG files to parse`);
+  execFileSync('python3', [
+    '-c',
+    'from pathlib import Path\nimport sys, xml.etree.ElementTree as ET\nroot = Path(sys.argv[1])\nfor rel in sys.argv[2:]:\n    ET.parse(root / rel)\n',
+    rootDir,
+    ...relPaths
+  ], { cwd: process.cwd(), stdio: 'pipe' });
+};
+assertSvgFilesParseAsXml(join(process.cwd(), 'fabrication'), fabricationSvgManagedFiles, 'committed fabrication package');
 
 const mainBoardSvg = readFileSync(join(process.cwd(), 'fabrication', 'board.svg'), 'utf8');
 const mainBoardTag = mainBoardSvg.match(/<svg\b[^>]*>/)?.[0];
@@ -803,7 +923,7 @@ try {
   assert.equal(generatedManifest.hole_diameter_mm, fabricationManifest.hole_diameter_mm, 'generator reproduces the committed hole diameter');
   assert.equal(generatedManifest.generated_by, 'fabrication/generate_fabrication_templates.py', 'regenerated manifest keeps the checked-in generator path');
   assert.equal(generatedManifest.source_ssot, 'fabrication/generate_fabrication_templates.py', 'regenerated manifest keeps the checked-in source-of-truth path');
-  (['gears', 'linkages', 'cams', 'followers', 'spacers'] as const).forEach(category => {
+  (['gears', 'linkages', 'ring_gears', 'cams', 'followers', 'brackets', 'handles', 'spacers'] as const).forEach(category => {
     assert.deepEqual(generatedManifest.parts[category], fabricationManifest.parts[category], `regenerated ${category} primitives match the committed fabrication contract`);
   });
   assert.deepEqual(generatedManifest.managed_files, fabricationManifest.managed_files, 'regenerated fabrication package contains the committed managed-file set');
@@ -814,11 +934,62 @@ try {
       `generator emits committed fabrication asset ${relPath}`
     );
   });
+  assertSvgFilesParseAsXml(generatedFabricationDir, fabricationSvgManagedFiles, 'regenerated fabrication package');
 } finally {
   rmSync(generatedFabricationDir, { recursive: true, force: true });
 }
-assert.deepEqual(FABRICATION_GEAR_SPECS.map(spec => ({ key: spec.key, teeth: spec.teeth, pitchRadiusMm: spec.pitchRadiusMm, rootRadiusMm: spec.rootRadiusMm, outerRadiusMm: spec.outerRadiusMm, holeDiameterMm: spec.holeDiameterMm, path: spec.path, attachmentHoleCentersMm: spec.attachmentHoleCentersMm.map(point => [point.x, point.y]) })), fabricationManifest.parts.gears.map(spec => ({ key: spec.key, teeth: spec.teeth, pitchRadiusMm: spec.pitch_radius_mm, rootRadiusMm: spec.root_radius_mm, outerRadiusMm: spec.outer_radius_mm, holeDiameterMm: spec.hole_diameter_mm, path: spec.path, attachmentHoleCentersMm: spec.attachment_hole_centers_mm })), 'runtime gear primitives mirror fabrication/manifest.json');
-assert.deepEqual(FABRICATION_LINKAGE_SPECS.map(spec => ({ key: spec.key, label: spec.label, path: spec.path, cells: spec.cells, lengthMm: spec.lengthMm, pitchMm: spec.pitchMm, holeCount: spec.holeCentersMm.length, holeDiameterMm: spec.holeDiameterMm })), fabricationManifest.parts.linkages.map(spec => ({ key: spec.key, label: spec.label, path: spec.path, cells: spec.cells, lengthMm: spec.length_mm, pitchMm: spec.pitch_mm, holeCount: spec.hole_count, holeDiameterMm: spec.hole_diameter_mm })), 'runtime linkage primitives mirror fabrication/manifest.json');
+assert.deepEqual(
+  FABRICATION_GEAR_SPECS.map(spec => ({
+    key: spec.key,
+    label: spec.label,
+    engravingLabel: spec.engravingLabel,
+    teeth: spec.teeth,
+    pitchRadiusMm: spec.pitchRadiusMm,
+    rootRadiusMm: spec.rootRadiusMm,
+    outerRadiusMm: spec.outerRadiusMm,
+    holeDiameterMm: spec.holeDiameterMm,
+    path: spec.path,
+    attachmentHoleCentersMm: spec.attachmentHoleCentersMm.map(point => [point.x, point.y])
+  })),
+  fabricationManifest.parts.gears.map(spec => ({
+    key: spec.key,
+    label: spec.label,
+    engravingLabel: spec.engraving_label,
+    teeth: spec.teeth,
+    pitchRadiusMm: spec.pitch_radius_mm,
+    rootRadiusMm: spec.root_radius_mm,
+    outerRadiusMm: spec.outer_radius_mm,
+    holeDiameterMm: spec.hole_diameter_mm,
+    path: spec.path,
+    attachmentHoleCentersMm: spec.attachment_hole_centers_mm
+  })),
+  'runtime gear primitives mirror fabrication/manifest.json'
+);
+assert.deepEqual(
+  FABRICATION_LINKAGE_SPECS.map(spec => ({
+    key: spec.key,
+    label: spec.label,
+    engravingLabel: spec.engravingLabel,
+    path: spec.path,
+    cells: spec.cells,
+    lengthMm: spec.lengthMm,
+    pitchMm: spec.pitchMm,
+    holeCount: spec.holeCentersMm.length,
+    holeDiameterMm: spec.holeDiameterMm
+  })),
+  fabricationManifest.parts.linkages.map(spec => ({
+    key: spec.key,
+    label: spec.label,
+    engravingLabel: spec.engraving_label,
+    path: spec.path,
+    cells: spec.cells,
+    lengthMm: spec.length_mm,
+    pitchMm: spec.pitch_mm,
+    holeCount: spec.hole_count,
+    holeDiameterMm: spec.hole_diameter_mm
+  })),
+  'runtime linkage primitives mirror fabrication/manifest.json'
+);
 assert.deepEqual(FABRICATION_LINKAGE_SPECS.find(spec => spec.cells === 4)?.holeCentersMm, [{ x: 14, y: 14 }, { x: 34, y: 14 }, { x: 54, y: 14 }, { x: 74, y: 14 }, { x: 94, y: 14 }], 'runtime linkage holes follow generator capsule margin and pitch');
 assert.equal(FABRICATION_LINKAGE_WIDTH_MM, 14, 'runtime linkage width is centralized from the Python generator convention');
 assert.equal(FABRICATION_HOLE_RADIUS_MM, 2, 'runtime hole radius is centralized from the Python generator convention');
@@ -830,6 +1001,7 @@ assert.deepEqual(FABRICATION_SPACER_SPEC, {
   source: FABRICATION_SOURCE_SSOT,
   key: fabricationManifest.parts.spacers[0].key,
   label: fabricationManifest.parts.spacers[0].label,
+  engravingLabel: fabricationManifest.parts.spacers[0].engraving_label,
   path: fabricationManifest.parts.spacers[0].path,
   outerDiameterMm: fabricationManifest.parts.spacers[0].outer_diameter_mm,
   innerDiameterMm: fabricationManifest.parts.spacers[0].inner_diameter_mm,
@@ -837,15 +1009,438 @@ assert.deepEqual(FABRICATION_SPACER_SPEC, {
   holeCentersMm: fabricationManifest.parts.spacers[0].hole_centers_mm.map(point => ({ x: point[0], y: point[1] })),
   stackable: fabricationManifest.parts.spacers[0].stackable
 }, 'runtime S10 spacer primitive mirrors fabrication/manifest.json');
-assert.deepEqual({ key: FABRICATION_RING_GEAR_SPEC.key, pitchRadiusMm: FABRICATION_RING_GEAR_SPEC.pitchRadiusMm, innerTipRadiusMm: FABRICATION_RING_GEAR_SPEC.innerTipRadiusMm, innerRootRadiusMm: FABRICATION_RING_GEAR_SPEC.innerRootRadiusMm, outerRadiusMm: FABRICATION_RING_GEAR_SPEC.outerRadiusMm, mountRadiusMm: FABRICATION_RING_GEAR_SPEC.mountRadiusMm, holeDiameterMm: FABRICATION_RING_GEAR_SPEC.holeDiameterMm, mountHoleCentersMm: FABRICATION_RING_GEAR_SPEC.mountHoleCentersMm.map(point => [point.x, point.y]) }, { key: fabricationManifest.parts.ring_gears[0].key, pitchRadiusMm: fabricationManifest.parts.ring_gears[0].pitch_radius_mm, innerTipRadiusMm: fabricationManifest.parts.ring_gears[0].inner_tip_radius_mm, innerRootRadiusMm: fabricationManifest.parts.ring_gears[0].inner_root_radius_mm, outerRadiusMm: fabricationManifest.parts.ring_gears[0].outer_radius_mm, mountRadiusMm: fabricationManifest.parts.ring_gears[0].mount_radius_mm, holeDiameterMm: fabricationManifest.parts.ring_gears[0].hole_diameter_mm, mountHoleCentersMm: fabricationManifest.parts.ring_gears[0].mount_hole_centers_mm }, 'runtime ring gear primitive mirrors fabrication/manifest.json');
+assert.deepEqual(
+  {
+    key: FABRICATION_RING_GEAR_SPEC.key,
+    label: FABRICATION_RING_GEAR_SPEC.label,
+    engravingLabel: FABRICATION_RING_GEAR_SPEC.engravingLabel,
+    pitchRadiusMm: FABRICATION_RING_GEAR_SPEC.pitchRadiusMm,
+    innerTipRadiusMm: FABRICATION_RING_GEAR_SPEC.innerTipRadiusMm,
+    innerRootRadiusMm: FABRICATION_RING_GEAR_SPEC.innerRootRadiusMm,
+    outerRadiusMm: FABRICATION_RING_GEAR_SPEC.outerRadiusMm,
+    mountRadiusMm: FABRICATION_RING_GEAR_SPEC.mountRadiusMm,
+    holeDiameterMm: FABRICATION_RING_GEAR_SPEC.holeDiameterMm,
+    mountHoleCentersMm: FABRICATION_RING_GEAR_SPEC.mountHoleCentersMm.map(point => [point.x, point.y])
+  },
+  {
+    key: fabricationManifest.parts.ring_gears[0].key,
+    label: fabricationManifest.parts.ring_gears[0].label,
+    engravingLabel: fabricationManifest.parts.ring_gears[0].engraving_label,
+    pitchRadiusMm: fabricationManifest.parts.ring_gears[0].pitch_radius_mm,
+    innerTipRadiusMm: fabricationManifest.parts.ring_gears[0].inner_tip_radius_mm,
+    innerRootRadiusMm: fabricationManifest.parts.ring_gears[0].inner_root_radius_mm,
+    outerRadiusMm: fabricationManifest.parts.ring_gears[0].outer_radius_mm,
+    mountRadiusMm: fabricationManifest.parts.ring_gears[0].mount_radius_mm,
+    holeDiameterMm: fabricationManifest.parts.ring_gears[0].hole_diameter_mm,
+    mountHoleCentersMm: fabricationManifest.parts.ring_gears[0].mount_hole_centers_mm
+  },
+  'runtime ring gear primitive mirrors fabrication/manifest.json'
+);
+assert.equal(FABRICATION_GEAR_ROOT_WEB_MM, 6, 'gear root web constant leaves clearance for the smallest gear mesh');
+assert.equal(fabricationGearEngravingLabel(8), '8 Tooth Gear', 'gear engraving spells out the student-visible tooth count');
+assert.equal(fabricationLinkageEngravingLabel(4), '5 Hole Linkage', 'linkage engraving spells out the student-visible hole count');
+assert.equal(fabricationSpacerEngravingLabel(), 'Spacer', 'spacer engraving uses a direct student-visible name');
+assert.equal(fabricationRingGearEngravingLabel(56), '56 Tooth Ring Gear', 'ring gear engraving spells out the student-visible tooth count');
+
+const textTags = (svg: string) => [...svg.matchAll(/<text\b[^>]*>[^<]*<\/text>/g)].map(match => match[0]);
+const circleTags = (svg: string) => [...svg.matchAll(/<circle\b[^>]*>/g)].map(match => match[0]);
+const pathTags = (svg: string) => [...svg.matchAll(/<path\b[^>]*>/g)].map(match => match[0]);
+const rectTags = (svg: string) => [...svg.matchAll(/<rect\b[^>]*>/g)].map(match => match[0]);
+const engravingTextTags = (svg: string) => textTags(svg).filter(tag => /\bclass="[^"]*\bengrave\b[^"]*"/.test(tag));
+const drillCircleTags = (svg: string) => circleTags(svg).filter(tag => /\bclass="[^"]*\bdrill\b[^"]*"/.test(tag));
+const ENGRAVING_COLOR = '#008000';
+const fontSizePx = (tag: string) => Number(tag.match(/font-size:([0-9.]+)px/)?.[1] ?? 3.2);
+const explicitTextLength = (tag: string) => {
+  const match = tag.match(/\btextLength="([0-9.]+)"/);
+  return match ? Number(match[1]) : null;
+};
+type TextCorner = { x: number; y: number };
+const rotatePoint = (point: TextCorner, angleDeg: number, cx: number, cy: number): TextCorner => {
+  const angle = (angleDeg * Math.PI) / 180;
+  const dx = point.x - cx;
+  const dy = point.y - cy;
+  return {
+    x: cx + dx * Math.cos(angle) - dy * Math.sin(angle),
+    y: cy + dx * Math.sin(angle) + dy * Math.cos(angle)
+  };
+};
+const textCornersFor = (tag: string) => {
+  const size = fontSizePx(tag);
+  const label = textValue(tag);
+  const width = explicitTextLength(tag) ?? label.length * size * 0.58;
+  const height = size;
+  const x = numAttr(tag, 'x');
+  const y = numAttr(tag, 'y');
+  const corners = [
+    { x: x - width / 2, y: y - height / 2 },
+    { x: x + width / 2, y: y - height / 2 },
+    { x: x + width / 2, y: y + height / 2 },
+    { x: x - width / 2, y: y + height / 2 }
+  ];
+  const rotate = tag.match(/transform="rotate\(([-0-9.]+)(?:\s+([-0-9.]+)\s+([-0-9.]+))?\)"/);
+  return rotate
+    ? corners.map(point => rotatePoint(point, Number(rotate[1]), Number(rotate[2] ?? x), Number(rotate[3] ?? y)))
+    : corners;
+};
+const pointInPolygon = (point: TextCorner, polygon: TextCorner[]) => {
+  let inside = false;
+  for (let index = 0, prev = polygon.length - 1; index < polygon.length; prev = index, index += 1) {
+    const a = polygon[index];
+    const b = polygon[prev];
+    if ((a.y > point.y) !== (b.y > point.y) && point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+};
+const pointToSegmentDistance = (point: TextCorner, start: TextCorner, end: TextCorner) => {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSq = dx * dx + dy * dy;
+  const t = lengthSq === 0 ? 0 : Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSq));
+  return Math.hypot(point.x - (start.x + t * dx), point.y - (start.y + t * dy));
+};
+const textDistanceFromCircleCenter = (corners: TextCorner[], cx: number, cy: number) => {
+  const point = { x: cx, y: cy };
+  if (pointInPolygon(point, corners)) return 0;
+  return Math.min(...corners.map((corner, index) => pointToSegmentDistance(point, corner, corners[(index + 1) % corners.length])));
+};
+const pathPoints = (tag: string) => {
+  const values = attr(tag, 'd').match(/[-+]?(?:\d+\.\d+|\d+)/g)?.map(Number) ?? [];
+  const points: TextCorner[] = [];
+  for (let index = 0; index + 1 < values.length; index += 2) points.push({ x: values[index], y: values[index + 1] });
+  return points;
+};
+const classTag = (tags: string[], className: string) => {
+  const tag = tags.find(item => new RegExp(`\\bclass="[^"]*\\b${className}\\b[^"]*"`).test(item));
+  assert(tag, `SVG has ${className}`);
+  return tag;
+};
+const insideLinkageCapsule = (point: TextCorner, cutTag: string) => {
+  const values = attr(cutTag, 'd').match(/[-+]?(?:\d+\.\d+|\d+)/g)?.map(Number) ?? [];
+  const x1 = values[0];
+  const topY = values[1];
+  const x2 = values[2];
+  const radius = values[4];
+  const cy = topY + radius;
+  return (point.x >= x1 && point.x <= x2 && Math.abs(point.y - cy) <= radius)
+    || Math.hypot(point.x - x1, point.y - cy) <= radius
+    || Math.hypot(point.x - x2, point.y - cy) <= radius;
+};
+const insideVerticalCapsule = (point: TextCorner, cutTag: string) => {
+  const values = attr(cutTag, 'd').match(/[-+]?(?:\d+\.\d+|\d+)/g)?.map(Number) ?? [];
+  const x1 = values[0];
+  const topY = values[1];
+  const radius = values[2];
+  const x2 = values[7];
+  const bottomY = values[10];
+  const cx = (x1 + x2) / 2;
+  return (point.y >= topY && point.y <= bottomY && Math.abs(point.x - cx) <= radius)
+    || Math.hypot(point.x - cx, point.y - topY) <= radius
+    || Math.hypot(point.x - cx, point.y - bottomY) <= radius;
+};
+const linkageCapsuleClearance = (point: TextCorner, cutTag: string) => {
+  const values = attr(cutTag, 'd').match(/[-+]?(?:\d+\.\d+|\d+)/g)?.map(Number) ?? [];
+  const x1 = values[0];
+  const topY = values[1];
+  const x2 = values[2];
+  const radius = values[4];
+  const cy = topY + radius;
+  if (point.x < x1) return radius - Math.hypot(point.x - x1, point.y - cy);
+  if (point.x > x2) return radius - Math.hypot(point.x - x2, point.y - cy);
+  return radius - Math.abs(point.y - cy);
+};
+const assertEngravingInsideCut = (relPath: string, svg: string, corners: TextCorner[]) => {
+  if (relPath.startsWith('cams/')) {
+    const outline = pathPoints(classTag(pathTags(svg), 'cam-outline'));
+    corners.forEach(corner => assert(pointInPolygon(corner, outline), `${relPath} engraving stays inside the red cam cut outline`));
+    return;
+  }
+  if (relPath.startsWith('followers/')) {
+    const outline = classTag(pathTags(svg), 'follower-outline');
+    const isCapsule = attr(outline, 'd').includes(' A ');
+    corners.forEach(corner => assert(isCapsule ? insideVerticalCapsule(corner, outline) : pointInPolygon(corner, pathPoints(outline)), `${relPath} engraving stays inside the red follower cut outline`));
+    return;
+  }
+  if (relPath.startsWith('brackets/')) {
+    const outline = classTag(pathTags(svg), 'bracket-outline');
+    const isCapsule = attr(outline, 'd').includes(' A ');
+    corners.forEach(corner => assert(isCapsule ? insideLinkageCapsule(corner, outline) : pointInPolygon(corner, pathPoints(outline)), `${relPath} engraving stays inside the red bracket cut outline`));
+    return;
+  }
+  if (relPath.startsWith('handles/')) {
+    const outline = classTag(rectTags(svg), 'handle-outline');
+    const left = numAttr(outline, 'x');
+    const top = numAttr(outline, 'y');
+    const right = left + numAttr(outline, 'width');
+    const bottom = top + numAttr(outline, 'height');
+    corners.forEach(corner => assert(corner.x >= left && corner.x <= right && corner.y >= top && corner.y <= bottom, `${relPath} engraving stays inside the red handle cut outline`));
+    return;
+  }
+  if (relPath.startsWith('gears/')) {
+    const outline = pathPoints(classTag(pathTags(svg), 'gear-outline'));
+    corners.forEach(corner => assert(pointInPolygon(corner, outline), `${relPath} engraving stays inside the red gear cut outline`));
+    return;
+  }
+  if (relPath.startsWith('linkages/')) {
+    const outline = classTag(pathTags(svg), 'linkage-outline');
+    corners.forEach(corner => {
+      assert(insideLinkageCapsule(corner, outline), `${relPath} engraving stays inside the red linkage cut outline`);
+      assert(linkageCapsuleClearance(corner, outline) >= 0.45, `${relPath} engraving keeps fabrication-safe clearance from the red linkage cut outline`);
+    });
+    return;
+  }
+  if (relPath.startsWith('spacers/')) {
+    const outline = classTag(circleTags(svg), 'spacer-outline');
+    const cx = numAttr(outline, 'cx');
+    const cy = numAttr(outline, 'cy');
+    const radius = numAttr(outline, 'r');
+    corners.forEach(corner => assert(Math.hypot(corner.x - cx, corner.y - cy) <= radius - 0.05, `${relPath} engraving stays inside the red spacer cut outline`));
+    return;
+  }
+  if (relPath.startsWith('ring_gears/')) {
+    const outer = classTag(circleTags(svg), 'ring-outer-outline');
+    const inner = pathPoints(classTag(pathTags(svg), 'ring-inner-gear-outline'));
+    const cx = numAttr(outer, 'cx');
+    const cy = numAttr(outer, 'cy');
+    const radius = numAttr(outer, 'r');
+    corners.forEach(corner => {
+      assert(Math.hypot(corner.x - cx, corner.y - cy) <= radius - 0.05, `${relPath} engraving stays inside the red ring outer cut outline`);
+      assert(!pointInPolygon(corner, inner), `${relPath} engraving stays outside the red ring inner cut void`);
+    });
+  }
+};
+const minimumEngravingFontSize = (label: string) => {
+  if (label === 'Spacer') return 1.6;
+  if (label === '8 Tooth Gear') return 2.7;
+  if (label === 'Paper Tent Handle') return 4.0;
+  if (label.endsWith('Cam')) return 3.0;
+  if (label.endsWith('Follower')) return 3.0;
+  if (label.endsWith('Bracket')) return 2.4;
+  if (label.endsWith('Tooth Ring Gear')) return 6.2;
+  if (label.endsWith('Tooth Gear')) return label.startsWith('24') ? 5.0 : label.startsWith('40') ? 6.0 : 7.0;
+  if (label.endsWith('Hole Linkage')) return 3.8;
+  return 3.2;
+};
+const assertEngravingSafety = (relPath: string, svg: string, expectedLabel: string, options: { requireStyle: boolean; context: string }) => {
+  if (options.requireStyle) assert(svg.includes(`.engrave { fill: ${ENGRAVING_COLOR};`), `${relPath} engravings use green text`);
+  const engravings = engravingTextTags(svg).filter(tag => attr(tag, 'data-engrave-label') === expectedLabel);
+  assert(engravings.length >= 1, `${options.context} ${relPath} has on-part engraving label ${expectedLabel}`);
+  assert.equal(engravings.map(textValue).join(' '), expectedLabel, `${options.context} ${relPath} visible engraving text spells out ${expectedLabel}`);
+  engravings.forEach(engraving => {
+    assert(fontSizePx(engraving) >= minimumEngravingFontSize(expectedLabel), `${options.context} ${relPath} engraving ${expectedLabel} uses the larger readable font size`);
+    if (/^(linkages|cams|followers|brackets|handles)\//.test(relPath)) {
+      assert(explicitTextLength(engraving) !== null, `${options.context} ${relPath} engraving pins rendered text length inside the cut area`);
+      assert.equal(attr(engraving, 'lengthAdjust'), 'spacingAndGlyphs', `${options.context} ${relPath} engraving uses SVG-enforced text length`);
+    }
+    const corners = textCornersFor(engraving);
+    assertEngravingInsideCut(relPath, svg, corners);
+    drillCircleTags(svg).forEach(circle => {
+      const distance = textDistanceFromCircleCenter(corners, numAttr(circle, 'cx'), numAttr(circle, 'cy'));
+      assert(distance > numAttr(circle, 'r') + 0.2, `${options.context} ${relPath} engraving ${expectedLabel} does not overlap drill hole ${attr(circle, 'data-hole-role')}`);
+    });
+  });
+};
+const assertEngravingAvoidsDrillHoles = (relPath: string, expectedLabel: string) => {
+  assertEngravingSafety(relPath, readFileSync(join(process.cwd(), 'fabrication', relPath), 'utf8'), expectedLabel, { requireStyle: true, context: 'individual SVG' });
+};
+const manifestOnPartEngravedParts = [
+  ...fabricationManifest.parts.cams.map(spec => ({ category: 'cams', spec })),
+  ...fabricationManifest.parts.followers.map(spec => ({ category: 'followers', spec })),
+  ...fabricationManifest.parts.brackets.map(spec => ({ category: 'brackets', spec })),
+  ...fabricationManifest.parts.handles.map(spec => ({ category: 'handles', spec }))
+] as const;
+const onPartEngravedPartSpecs = [
+  ...FABRICATION_GEAR_SPECS.map(spec => ({ partId: `gears:${spec.key}`, path: spec.path, label: spec.engravingLabel, oldExternalLabel: `G${spec.teeth}` })),
+  { partId: `ring_gears:${FABRICATION_RING_GEAR_SPEC.key}`, path: FABRICATION_RING_GEAR_SPEC.path, label: FABRICATION_RING_GEAR_SPEC.engravingLabel, oldExternalLabel: `R${FABRICATION_RING_GEAR_SPEC.internalTeeth}` },
+  ...FABRICATION_LINKAGE_SPECS.map(spec => ({ partId: `linkages:${spec.key}`, path: spec.path, label: spec.engravingLabel, oldExternalLabel: `L${spec.cells}` })),
+  { partId: `spacers:${FABRICATION_SPACER_SPEC.key}`, path: FABRICATION_SPACER_SPEC.path, label: FABRICATION_SPACER_SPEC.engravingLabel, oldExternalLabel: FABRICATION_SPACER_SPEC.key.toUpperCase() },
+  ...manifestOnPartEngravedParts.map(({ category, spec }) => ({ partId: `${category}:${spec.key}`, path: spec.path, label: spec.engraving_label, oldExternalLabel: spec.label }))
+];
+onPartEngravedPartSpecs.forEach(spec => assertEngravingAvoidsDrillHoles(spec.path, spec.label));
+const targetEngravingLabels = [
+  ...onPartEngravedPartSpecs.map(spec => spec.label)
+];
+targetEngravingLabels.forEach(label => {
+  assert(!/^\d+T\b|^[LR]\d+\b/.test(label), `engraving label ${label} avoids kid-unfriendly abbreviations`);
+});
+const completeKitCutSheet = readFileSync(join(process.cwd(), 'fabrication', 'complete-kit-cut-sheet.svg'), 'utf8');
+assert(completeKitCutSheet.includes(`.engrave { fill: ${ENGRAVING_COLOR};`), 'complete kit engravings use green text');
+const completeKitExpectedQuantities: Record<string, number> = Object.fromEntries([
+  ...FABRICATION_GEAR_SPECS.map(spec => [`gears:${spec.key}`, 2] as const),
+  ...FABRICATION_LINKAGE_SPECS.map(spec => [`linkages:${spec.key}`, 2] as const),
+  [`spacers:${FABRICATION_SPACER_SPEC.key}`, 24] as const
+]);
+const completeKitIncludedPartSpecs = onPartEngravedPartSpecs.filter(spec => spec.partId in completeKitExpectedQuantities);
+completeKitIncludedPartSpecs.map(spec => spec.label).forEach(label => {
+  assert(completeKitCutSheet.includes(`data-engrave-label="${label}"`), `complete kit cut sheet carries on-part engraving ${label}`);
+});
+const completeKitPartGroups = [...completeKitCutSheet.matchAll(/<g class="complete-cut-part" data-part-id="([^"]+)"[^>]*>\n([\s\S]*?)\n  <\/g>/g)]
+  .reduce((groups, match) => {
+    const partGroups = groups.get(match[1]) ?? [];
+    partGroups.push(`<svg>${match[2]}</svg>`);
+    groups.set(match[1], partGroups);
+    return groups;
+  }, new Map<string, string[]>());
+assert.deepEqual(fabricationManifest.complete_cut_sheet.part_quantities, completeKitExpectedQuantities, 'complete kit quantities are two gear sets, two linkage sets, and 24 spacers');
+assert.equal(fabricationManifest.complete_cut_sheet.part_count, 40, 'complete kit has 40 physical parts');
+assert.deepEqual(fabricationManifest.complete_cut_sheet.included_part_categories, ['gears', 'linkages', 'spacers'], 'complete kit schema declares included part categories');
+assert.deepEqual(fabricationManifest.complete_cut_sheet.excluded_part_categories, ['ring_gears', 'cams', 'followers', 'brackets', 'handles'], 'complete kit schema declares excluded part categories');
+assert.deepEqual(
+  Object.fromEntries([...completeKitPartGroups].map(([partId, groups]) => [partId, groups.length])),
+  completeKitExpectedQuantities,
+  'complete kit SVG part groups match manifest quantities'
+);
+fabricationManifest.complete_cut_sheet.excluded_part_categories.map(category => `${category}:`).forEach(prefix => {
+  assert(!completeKitCutSheet.includes(`data-part-id="${prefix}`), `complete kit excludes ${prefix} parts for now`);
+});
+const obsoleteExternalPartLabels = new Set(onPartEngravedPartSpecs.map(spec => spec.oldExternalLabel));
+fabricationManifest.parts.cams.forEach(spec => obsoleteExternalPartLabels.add(spec.key[0].toUpperCase() + spec.key.slice(1)));
+fabricationManifest.parts.followers.forEach(spec => obsoleteExternalPartLabels.add(spec.key.toUpperCase()));
+fabricationManifest.parts.brackets.forEach(spec => obsoleteExternalPartLabels.add(spec.key));
+fabricationManifest.parts.handles.forEach(spec => obsoleteExternalPartLabels.add(spec.key));
+const assertNoObsoleteExternalPartLabels = (relPath: string, svg: string) => {
+  const externalLabels = textTags(svg).filter(tag => !tag.includes('data-engrave-label') && obsoleteExternalPartLabels.has(textValue(tag)));
+  assert.deepEqual(externalLabels.map(textValue), [], `${relPath} suppresses obsolete external part labels for green-engraved parts`);
+};
+assertNoObsoleteExternalPartLabels('complete-kit-cut-sheet.svg', completeKitCutSheet);
+fabricationManifest.sheets.forEach(sheet => assertNoObsoleteExternalPartLabels(sheet.path, readFileSync(join(process.cwd(), 'fabrication', sheet.path), 'utf8')));
+completeKitIncludedPartSpecs.forEach(spec => {
+  const groupSvgs = completeKitPartGroups.get(spec.partId);
+  assert(groupSvgs, `complete kit cut sheet includes ${spec.partId}`);
+  groupSvgs.forEach(groupSvg => assertEngravingSafety(spec.path, groupSvg, spec.label, { requireStyle: false, context: `complete kit ${spec.partId}` }));
+});
+const g8Gear = FABRICATION_GEAR_SPECS.find(spec => spec.key === 'g8');
+assert(g8Gear, 'G8 gear exists for mesh-clearance verification');
+assert(g8Gear.rootRadiusMm < g8Gear.pitchRadiusMm, 'G8 gear root is below its pitch radius so an adjacent tooth can enter the valley');
+FABRICATION_GEAR_SPECS.forEach(driver => {
+  FABRICATION_GEAR_SPECS.forEach(driven => {
+    const centerDistance = driver.pitchRadiusMm + driven.pitchRadiusMm;
+    const outerOverlap = driver.outerRadiusMm + driven.outerRadiusMm - centerDistance;
+    const driverTipClearanceInDrivenRoot = centerDistance - driver.outerRadiusMm - driven.rootRadiusMm;
+    const drivenTipClearanceInDriverRoot = centerDistance - driven.outerRadiusMm - driver.rootRadiusMm;
+    assert(outerOverlap > 0, `${driver.key}/${driven.key} gears have tooth overlap at pitch-center spacing`);
+    assert(driverTipClearanceInDrivenRoot > 0, `${driver.key} tooth clears ${driven.key} root at pitch-center spacing`);
+    assert(drivenTipClearanceInDriverRoot > 0, `${driven.key} tooth clears ${driver.key} root at pitch-center spacing`);
+  });
+});
+const gearRadiusAtAngle = (outlinePoints: Point[], angle: number) => {
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+  let radius = 0;
+  outlinePoints.forEach((start, index) => {
+    const end = outlinePoints[(index + 1) % outlinePoints.length];
+    const sx = end.x - start.x;
+    const sy = end.y - start.y;
+    const det = dx * -sy - dy * -sx;
+    if (Math.abs(det) < 1e-9) return;
+    const rayT = (start.x * -sy - start.y * -sx) / det;
+    const edgeT = (dx * start.y - dy * start.x) / det;
+    if (rayT >= -1e-9 && edgeT >= -1e-9 && edgeT <= 1 + 1e-9) radius = Math.max(radius, rayT);
+  });
+  return radius;
+};
+type FabricationGearSpecForTest = typeof FABRICATION_GEAR_SPECS[number];
+type GearMeshResult = { minGapMm: number; maxGapMm: number };
+const gearPhaseForToothFraction = (gear: FabricationGearSpecForTest, fraction: number) => (Math.PI * 2 * fraction) / gear.teeth;
+const gearMeshIsSafe = (mesh: GearMeshResult) => mesh.minGapMm >= 0.05 && mesh.maxGapMm <= 0.75;
+const simulateGearPairCenterlineMesh = (
+  driver: FabricationGearSpecForTest,
+  driven: FabricationGearSpecForTest,
+  drivenPhaseRad: number,
+  rotationRatio = -driver.pitchRadiusMm / driven.pitchRadiusMm,
+  steps = 512
+) => {
+  const driverProfile = fabricationGearProfileForPitchRadius(driver.pitchRadiusMm).outlinePoints;
+  const drivenProfile = fabricationGearProfileForPitchRadius(driven.pitchRadiusMm).outlinePoints;
+  const centerDistance = driver.pitchRadiusMm + driven.pitchRadiusMm;
+  let minGapMm = Number.POSITIVE_INFINITY;
+  let maxGapMm = Number.NEGATIVE_INFINITY;
+  for (let step = 0; step < steps; step += 1) {
+    const input = (step / steps) * Math.PI * 2;
+    const driverRotation = input;
+    const drivenRotation = input * rotationRatio + drivenPhaseRad;
+    const gapMm = centerDistance - gearRadiusAtAngle(driverProfile, -driverRotation) - gearRadiusAtAngle(drivenProfile, Math.PI - drivenRotation);
+    minGapMm = Math.min(minGapMm, gapMm);
+    maxGapMm = Math.max(maxGapMm, gapMm);
+  }
+  return { minGapMm, maxGapMm };
+};
+const simulateGearPairCenterlineMeshForRadii = (
+  driverPitchRadiusMm: number,
+  drivenPitchRadiusMm: number,
+  drivenPhaseRad: number,
+  rotationRatio = -driverPitchRadiusMm / drivenPitchRadiusMm,
+  steps = 512
+) => {
+  const driverProfile = fabricationGearProfileForPitchRadius(driverPitchRadiusMm).outlinePoints;
+  const drivenProfile = fabricationGearProfileForPitchRadius(drivenPitchRadiusMm).outlinePoints;
+  const centerDistance = driverPitchRadiusMm + drivenPitchRadiusMm;
+  let minGapMm = Number.POSITIVE_INFINITY;
+  let maxGapMm = Number.NEGATIVE_INFINITY;
+  for (let step = 0; step < steps; step += 1) {
+    const input = (step / steps) * Math.PI * 2;
+    const driverRotation = input;
+    const drivenRotation = input * rotationRatio + drivenPhaseRad;
+    const gapMm = centerDistance - gearRadiusAtAngle(driverProfile, -driverRotation) - gearRadiusAtAngle(drivenProfile, Math.PI - drivenRotation);
+    minGapMm = Math.min(minGapMm, gapMm);
+    maxGapMm = Math.max(maxGapMm, gapMm);
+  }
+  return { minGapMm, maxGapMm };
+};
+const simulateGearTrainAdjacentMesh = (pitchRadiiMm: number[], pairIndex: number, steps = 512) => {
+  const profiles = pitchRadiiMm.map(radius => fabricationGearProfileForPitchRadius(radius).outlinePoints);
+  const sceneRadii = pitchRadiiMm.map(radius => radius * SCENE_PX_PER_MM);
+  let minGapMm = Number.POSITIVE_INFINITY;
+  let maxGapMm = Number.NEGATIVE_INFINITY;
+  for (let step = 0; step < steps; step += 1) {
+    const input = (step / steps) * Math.PI * 2;
+    const leftRotation = input * gearTrainRotationRatioAt(sceneRadii, pairIndex) + gearTrainMeshPhaseRadAt(sceneRadii, pairIndex);
+    const rightRotation = input * gearTrainRotationRatioAt(sceneRadii, pairIndex + 1) + gearTrainMeshPhaseRadAt(sceneRadii, pairIndex + 1);
+    const gapMm = pitchRadiiMm[pairIndex] + pitchRadiiMm[pairIndex + 1] - gearRadiusAtAngle(profiles[pairIndex], -leftRotation) - gearRadiusAtAngle(profiles[pairIndex + 1], Math.PI - rightRotation);
+    minGapMm = Math.min(minGapMm, gapMm);
+    maxGapMm = Math.max(maxGapMm, gapMm);
+  }
+  return { minGapMm, maxGapMm };
+};
+const gearMeshPhaseFractions = [0, 0.25, 0.5, 0.75] as const;
+FABRICATION_GEAR_SPECS.forEach(driven => {
+  const sweep = gearMeshPhaseFractions.map(fraction => ({
+    fraction,
+    mesh: simulateGearPairCenterlineMesh(g8Gear, driven, gearPhaseForToothFraction(driven, fraction))
+  }));
+  assert.deepEqual(
+    sweep.filter(({ mesh }) => gearMeshIsSafe(mesh)).map(({ fraction }) => fraction),
+    [0.75],
+    `8 Tooth Gear outline sweep selects the three-quarter tooth phase for ${driven.engravingLabel}: ${JSON.stringify(sweep)}`
+  );
+  const sceneRadii = [g8Gear.pitchRadiusMm * SCENE_PX_PER_MM, driven.pitchRadiusMm * SCENE_PX_PER_MM];
+  const appPhase = gearTrainMeshPhaseRadAt(sceneRadii, 1);
+  assert(Math.abs(appPhase - gearPhaseForToothFraction(driven, 0.75)) < 1e-9, `app gear phase matches the outline-sweep phase for ${driven.engravingLabel}`);
+  const appMesh = simulateGearPairCenterlineMesh(g8Gear, driven, appPhase, gearTrainRotationRatioAt(sceneRadii, 1));
+  assert(gearMeshIsSafe(appMesh), `8 Tooth Gear meshes with ${driven.engravingLabel} without tooth-on-tooth centerline jam or excess backlash: ${JSON.stringify(appMesh)}`);
+});
+const nonExactG24RadiusMm = 40;
+const nonExactG24SceneRadii = [nonExactG24RadiusMm * SCENE_PX_PER_MM, nonExactG24RadiusMm * SCENE_PX_PER_MM];
+assert.equal(fabricationGearProfileForPitchRadius(nonExactG24RadiusMm).preset.key, 'g24', 'non-exact gear radius renders with the nearest fabrication preset');
+assert.equal(gearTrainMeshPhaseDegAt(nonExactG24SceneRadii, 1), 11.25, 'non-exact gear phase uses the rendered fabrication preset tooth count');
+assert(
+  gearMeshIsSafe(simulateGearPairCenterlineMeshForRadii(nonExactG24RadiusMm, nonExactG24RadiusMm, gearTrainMeshPhaseRadAt(nonExactG24SceneRadii, 1), gearTrainRotationRatioAt(nonExactG24SceneRadii, 1))),
+  'non-exact equal-preset gears mesh safely with the app phase'
+);
+FABRICATION_GEAR_SPECS.forEach(output => {
+  const pitchRadiiMm = [g8Gear.pitchRadiusMm, g8Gear.pitchRadiusMm, output.pitchRadiusMm];
+  [0, 1].forEach(pairIndex => {
+    const mesh = simulateGearTrainAdjacentMesh(pitchRadiiMm, pairIndex);
+    assert(gearMeshIsSafe(mesh), `8 Tooth Gear idler train pair ${pairIndex} meshes safely with ${output.engravingLabel}: ${JSON.stringify(mesh)}`);
+  });
+});
 assert.equal(fabricationGearSpecForPitchRadius(27).key, 'g24', 'gear display chooses the nearest fabrication preset by physical pitch radius');
 const g24Profile = fabricationGearProfileForPitchRadius(60, 30);
 assert.equal(g24Profile.source, FABRICATION_SOURCE_SSOT, 'gear profile declares the Python generator source');
 assert.equal(g24Profile.preset.key, 'g24', 'gear profile preserves fabrication preset key');
 assert.equal(g24Profile.outlinePoints.length, 96, 'G24 profile uses fabrication tooth segmentation, not sparse saw teeth');
 assert.equal(g24Profile.attachmentHoleCenters.length, 4, 'G24 profile carries grid attachment holes into shared renderers');
-assert.equal(gearTrainMeshPhaseDegAt([60, 60], 1), 7.5, 'G3/G3 external mesh offsets the driven gear by half a tooth');
-assert(Math.abs(gearTrainMeshPhaseRadAt([60, 60], 1) - Math.PI / 24) < 1e-9, 'gear mesh phase has a radian form for inserted-idler 3D rotations');
+assert.equal(gearTrainMeshPhaseDegAt([60, 60], 1), 11.25, 'G3/G3 external mesh offsets the driven gear by three quarters of a tooth');
+assert(Math.abs(gearTrainMeshPhaseRadAt([60, 60], 1) - Math.PI / 16) < 1e-9, 'gear mesh phase has a radian form for inserted-idler 3D rotations');
 assert(fabricationGearPathD(30, 30).startsWith('M 28.44 0 L 31.43 2.06 L 31.23 4.11'), 'shared SVG gear path matches fabrication gear outline convention');
 assert(fabricationRingGearPathD(70).includes('M 90 0 A 90 90'), 'shared SVG ring gear path carries fabrication outer ring geometry');
 assert(fabricationRingGearPathD(70).includes('68.54'), 'shared SVG ring gear path carries internal tooth geometry');
@@ -895,19 +1490,25 @@ assert(appText.includes('S10<gear<fastener'), 'Foundry 3D gear train preview exp
 assert(appText.includes('foundry-parametric-editor') && appText.includes('design-parametric-editor'), 'Foundry and Design both mount the same compact parametric mechanism editor');
 assert(appText.includes('Drive gear size') && appText.includes('Output gear size') && appText.includes('Paired link length'), 'parametric editor exposes gear and linkage fabrication selectors instead of hidden generic numbers');
 assert(appText.includes('fittedGearTrainCenters') && appText.includes('pin-stacks-use-rendered-gear-centers'), 'Foundry 3D gear plates, axles, and spacer stacks share fitted preview gear centers instead of raw mechanism coordinates');
-assert(appText.includes('gearTrainMeshPhaseDegAt') && appText.includes('alternating-half-tooth-gap-phase'), 'Foundry 3D gear rendering still exposes mesh phase helpers for inserted idler chains');
+assert(appText.includes('gearTrainMeshPhaseDegAt') && appText.includes('alternating-three-quarter-tooth-gap-phase'), 'Foundry 3D gear rendering still exposes mesh phase helpers for inserted idler chains');
 assert(physicsSessionText.includes('velocityBetween') && physicsSessionText.includes('forceFromAcceleration'), 'Foundry force/velocity overlays are kinematic estimates, not hidden dynamic rigid-body claims');
 assert(assemblyWorkbenchText.includes('isBoardFixedCoordRole') && assemblyWorkbenchText.includes('data-floating-reference-coords'), 'assembly workbench separates board-fixed holes from moving reference coordinates');
-assert(assemblyWorkbenchText.includes('assembly-floating-references') && assemblyWorkbenchText.includes('readableCoordRole'), 'assembly workbench visualizes moving references without turning them into board holes');
+assert(assemblyWorkbenchText.includes('assembly-floating-references') && assemblyWorkbenchText.includes('fabricationBoardCoordinateCallout(entry.coord)'), 'assembly workbench visualizes moving references as compact callouts without turning them into board holes');
+assert(assemblyWorkbenchText.includes('data-board-mode={boardActive ?') && !assemblyWorkbenchText.includes('opacity={boardVisible ? 1 : 0.16}'), 'assembly workbench keeps the board readable and uses active/reference state instead of stale grey overlays');
+assert(!assemblyWorkbenchText.includes('{fabricationPartDisplayLabel(layer.label)}</text>'), 'assembly stack layers do not draw long labels over the board workspace');
+assert(assemblyWorkbenchText.includes('data-visual-level="guided-animation"') && assemblyWorkbenchText.includes('data-interaction-mode="visual-first"'), 'assembly workbench declares visual-first guided animation instead of document-style instruction pages');
+assert(assemblyWorkbenchText.includes('data-testid="assembly-visual-progress"') && assemblyWorkbenchText.includes('opacity={boardActive ? 1 : 0.42}'), 'assembly workbench uses compact visual progress and dims reference board state without hiding geometry');
+assert(!assemblyWorkbenchText.includes('Build module</text>') && !assemblyWorkbenchText.includes('Moving refs</text>'), 'assembly canvas avoids long overlay labels; details stay in inspector/metadata');
 assert(threePreviewText.includes('fabricationGearProfileForPitchRadius'), '3D foundry gear rendering uses shared fabrication gear geometry');
 assert(threePreviewText.includes('FABRICATION_LINKAGE_WIDTH_3D') && threePreviewText.includes('FABRICATION_HOLE_RADIUS_3D'), '3D puppet mechanism links use centralized fabrication linkage and hole dimensions');
 assert(threePreviewText.includes('sharedGeometryCache') && threePreviewText.includes('sharedFabricationGeometry'), '3D puppet preview caches fabrication geometry instead of rebuilding primitive meshes every frame');
-assert(threePreviewText.includes('const renderedMechanisms = useMemo(() => selectedMechanism ? [selectedMechanism] : []'), 'Design 3D preview renders the selected mechanism geometry while inventory telemetry covers the full project');
 assert(!threePreviewText.includes('scene.traverse(child =>'), '3D puppet preview does not traverse the whole scene every animation frame for telemetry');
-assert(threePreviewText.includes('fabricationRenderPlanForMechanism'), 'Mechanism Design 3D preview uses the same fabrication stack plan as Foundry');
-assert(threePreviewText.includes('coplanar-fixed-axles') && threePreviewText.includes('selectedGearPlaneZ'), 'Mechanism Design 3D preview keeps external gear train plates coplanar like Foundry');
-assert(threePreviewText.includes('planetary-coplanar-ring-sun-planet') && threePreviewText.includes('renderedLayerZForMechanism'), 'Mechanism Design 3D preview keeps planetary ring/sun/planet gears coplanar like Foundry');
-assert(threePreviewText.includes('data-three-stack-source'), 'Mechanism Design exposes fabrication stack provenance for browser verification');
+assert(appText.includes('const DesignFoundryPreview =') && appText.includes('data-testid="design-shared-foundry-preview"'), 'Mechanism Design owns a thin Foundry preview adapter instead of a separate mechanism renderer');
+assert((appText.match(/<ThreeFoundryPreview/g) ?? []).length >= 2, 'Foundry and Mechanism Design both mount ThreeFoundryPreview');
+assert(appText.includes('data-renderer-source="ThreeFoundryPreview"') && appText.includes('data-shared-with="foundry-preview"'), 'Mechanism Design advertises that its mechanism view is shared with Foundry');
+assert(appText.includes('fitMechanismSimulationWithContext(designMechanism, angle, fitContext)') && appText.includes('buildFoundryPhysicsOverlay('), 'Mechanism Design uses the same Foundry simulation fit and physics overlay path');
+assert(appText.includes('data-three-stack-source') && appText.includes('Design explode stack'), 'Mechanism Design exposes Foundry fabrication stack provenance and explode controls for browser verification');
+assert(!appText.includes('<Canvas project={project} config={mechanismConfig}'), 'Mechanism Design no longer mounts the legacy 2D design canvas mechanism renderer');
 assert(exporterText.includes('fabricationGearPathD'), 'SVG export gear rendering uses shared fabrication gear geometry');
 assert(appText.includes('fabricationGearProfileForPitchRadius'), 'Foundry gear helper uses shared fabrication gear holes/profile');
 assert(appText.includes('FABRICATION_LINKAGE_WIDTH_MM * SCENE_PX_PER_MM') && appText.includes('FABRICATION_HOLE_RADIUS_MM * SCENE_PX_PER_MM'), 'Foundry 2D mechanism plates use centralized fabrication linkage and hole dimensions');
@@ -919,13 +1520,13 @@ assert(appText.includes('time - (elapsed % FOUNDRY_ANIMATION_COMMIT_MS)'), 'Foun
 assert(appText.includes("scene.remove(old)") && appText.includes("disposeThreeObject(old)"), 'Foundry disposes noncached dynamic resources when replacing animation groups');
 assert(appText.includes('geometryCacheRef') && appText.includes('materialCacheRef'), 'Foundry caches reusable Three geometry/material resources during playback');
 assert(appText.includes('foundryCached') && appText.includes('data-three-geometry-cache-size'), 'Foundry tags cached resources and exposes cache size for browser perf tests');
-assert(appText.includes('const geom = new THREE.BufferGeometry().setFromPoints(points.map(point => to3(point, z)))'), 'Foundry path/trail line geometry is intentionally not long-cached because it can be phase-dependent');
+assert(appText.includes('const addPath = (points: Point[], z: number, mat: THREE.Material)') && appText.includes('new THREE.BufferGeometry().setFromPoints') && appText.includes('points.map((point) => to3(point, z))'), 'Foundry path/trail line geometry is intentionally not long-cached because it can be phase-dependent');
 assert(mechanismPreviewText.includes('sweepBounds') && appText.includes('data-three-fit-bounds=\"phase-invariant-sweep\"'), 'Foundry fitting bounds are sampled in the shared preview utility instead of jittering per animation frame');
 assert(appText.includes('data-three-static-grid-mode=\"persistent-scene-layer\"'), 'Foundry grid and plane live in a persistent scene layer, not the per-frame dynamic group');
 assert(mechanismPreviewText.includes('export const fitMechanismSimulation'), 'Foundry fitting/sweep simulation lives in the mechanism preview utility, not as stage-local UI code');
 assert(mechanismPreviewText.includes('createMechanismFitContext') && appText.includes('createMechanismFitContext(landedFoundry, 360, 240, 96)'), 'Foundry caches phase-invariant fit bounds instead of resampling the sweep every animation tick');
 assert(appText.includes('buildFoundryPhysicsOverlay') && physicsSessionText.includes('export const buildFoundryPhysicsOverlay'), 'Foundry force/velocity/constraint overlay math lives in PhysicsSession, not the React stage');
-assert(appText.includes('useMemo(() => sampleFeasibleRange(landedFoundry), [landedFoundry])'), 'Foundry feasible-range sampling is memoized by mechanism, not re-run on every animation render');
+assert(appText.includes('const range = useMemo(') && appText.includes('() => sampleFeasibleRange(landedFoundry)') && appText.includes('[landedFoundry]'), 'Foundry feasible-range sampling is memoized by mechanism, not re-run on every animation render');
 assert(viewportText.includes('WEBGL_PIXEL_RATIO_CAP') && appText.includes('WEBGL_PIXEL_RATIO_CAP') && threePreviewText.includes('WEBGL_PIXEL_RATIO_CAP'), 'WebGL renderer pixel ratio cap is shared across Foundry and puppet previews');
 assert(threePreviewText.includes("const PUPPET_CAMERA_PRESETS: Viewer3DCameraPreset[] = ['front', 'iso']"), 'puppet viewer toolbar exposes only the fixed 2D and orbitable 3D modes');
 assert(threePreviewText.includes('onWheel={handleViewerWheel}') && threePreviewText.includes('data-camera-yaw'), 'puppet 3D canvas exposes direct wheel zoom and orbit state for browser verification');
@@ -934,18 +1535,18 @@ const pathCanvasStart = appText.indexOf('canvas: canvasPane', pathStageStart);
 const pathInspectorStart = appText.indexOf('inspector: inspectorPane', pathCanvasStart);
 const pathCanvasBlock = appText.slice(pathCanvasStart, pathInspectorStart);
 assert(pathCanvasBlock.includes('path-view-2d') && pathCanvasBlock.includes('path-view-3d'), 'Path Editor exposes a persistent 2D/3D Path view switch');
-assert(pathCanvasBlock.includes("pathViewMode === '2d' ? <SceneSketch"), 'Path Editor 2D view uses editable SceneSketch for viewing, drawing, and point editing');
+assert(pathCanvasBlock.includes('pathViewMode === "2d"') && pathCanvasBlock.includes('<SceneSketch'), 'Path Editor 2D view uses editable SceneSketch for viewing, drawing, and point editing');
 assert(pathCanvasBlock.includes('<ThreePuppetPreview') && pathCanvasBlock.includes('testId="path-three-puppet"'), 'Path Editor 3D view uses ThreePuppetPreview');
-assert(pathCanvasBlock.includes("cameraPresets={['iso']}"), 'Path Editor 3D preview hides the preview-only 2D camera preset so editable 2D has one owner');
+assert(pathCanvasBlock.includes('cameraPresets={["iso"]}'), 'Path Editor 3D preview hides the preview-only 2D camera preset so editable 2D has one owner');
 assert(!pathCanvasBlock.includes('drawMode ? <SceneSketch'), 'Draw mode does not mount a special duplicate drawing canvas; it only forces the 2D Path view');
-assert(appText.includes("setPathViewMode('2d')"), 'Starting free-path drawing forces Path view back to 2D');
+assert(appText.includes('setPathViewMode("2d")'), 'Starting free-path drawing forces Path view back to 2D');
 assert(indexText.includes('bottom: calc(var(--ms-bottom-bars-height) + 10px)') && !indexText.includes('--ms-status-bar-height'), 'character import status dock floats 10px above the bottom status area instead of covering the canvas');
 assert(indexText.includes('.stage-player-row { position: absolute;') && appUiText.includes('data-testid="workspace-player-drag-handle"'), 'shared animation dock is an overlay with a draggable handle instead of a layout row');
 assert(appText.includes('data-three-pixel-ratio-cap') && threePreviewText.includes('data-three-pixel-ratio-cap'), '3D previews expose the pixel-ratio cap for browser performance checks');
 assert.equal(WEBGL_PIXEL_RATIO_CAP, 1.5, 'WebGL pixel-ratio cap avoids high-DPI overdraw while preserving sharp CAD-style previews');
 assert(!appText.includes('starShape'), 'Foundry sandbox no longer carries saw-tooth star gears');
 assert(!appText.includes('teeth * 2'), 'Foundry sandbox no longer carries sparse saw-tooth gear implementation');
-assert(appText.includes("if (key === 'gearRatio') return false"), 'Foundry hides stale gear-ratio controls when physical pitch radii define rotation');
+assert(appText.includes('if (key === "gearRatio") return false'), 'Foundry hides stale gear-ratio controls when physical pitch radii define rotation');
 const fitContext = createMechanismFitContext(sample.mechanisms[0], 360, 240, 96);
 const directFit = fitMechanismSimulation(sample.mechanisms[0], 1.234, 360, 240, 96);
 const cachedFit = fitMechanismSimulationWithContext(sample.mechanisms[0], 1.234, fitContext);
@@ -970,8 +1571,8 @@ assert(viewer3dText.includes('type Viewer3DContract') && viewer3dText.includes('
 assert(threePreviewText.includes('DEFAULT_PUPPET_VIEWER_LAYERS') && threePreviewText.includes('data-testid={`${testId}-toggle-${layer}`}') && appText.includes('foundry-toggle-grid'), '3D viewer top overlay toolbar wires shared layer toggles instead of decorative buttons');
 assert(appText.includes('data-viewer-contract={VIEWER3D_CONTRACT_VERSION}') && threePreviewText.includes('data-viewer-contract={VIEWER3D_CONTRACT_VERSION}'), '3D viewer state exposes a shared contract marker across tabs');
 assert(appText.includes('data-viewer-contract-state={JSON.stringify(viewerContract)}') && threePreviewText.includes('data-viewer-contract-state={JSON.stringify(viewerContract)}'), '3D viewer state exposes the normalized tab/layer contract payload for browser checks');
-assert(canvasText.includes('hideSceneUnderlay') && canvasText.includes("data-scene-underlay={hideSceneUnderlay ? 'hidden' : 'visible'}"), 'Mechanism Design canvas visually hides the letter-sheet and 2D character underlay while keeping design telemetry');
-assert(appText.includes('hideSceneUnderlay/>'), 'Mechanism Design uses the shared 2D/3D puppet viewport without the legacy letter-sheet underlay');
+assert(appText.includes('data-testid="design-shared-foundry-preview"') && appText.includes('showTrail={showTrace}'), 'Mechanism Design center is the shared Foundry workbench, not a hidden letter-sheet canvas');
+assert(!appText.includes('hideSceneUnderlay/>'), 'Mechanism Design no longer depends on the legacy 2D design canvas underlay toggle');
 assert(threePreviewText.includes('data-three-part-surface="solid-cut-plates"'), '3D puppet preview exposes the solid cut-plate surface contract');
 assert(threePreviewText.includes('data-three-part-art="top-texture-decal"'), '3D puppet preview exposes that artwork is rendered on top of plates');
 assert(threePreviewText.includes('TextureLoader'), '3D puppet preview loads character part images as surface decals');
@@ -1000,13 +1601,15 @@ assert(!appUiText.includes('MOTIONSMITH_VIDEO_URL'), 'welcome splash does not em
 assert(appUiText.includes('getting-started-dialog') && appUiText.includes('getting-started-gallery'), 'Getting Started is an explicit compact starter dialog');
 assert(appUiText.includes('Start a character.'), 'Getting Started uses a short result-oriented heading');
 assert(appUiText.includes('Starter rig') && appUiText.includes('Character file') && appUiText.includes('Open full project') && !appUiText.includes('>Humanoid<') && !appUiText.includes('>Package<') && !appUiText.includes('Import project'), 'Getting Started separates starter rig, character file, and full project entry points');
-assert(appUiText.includes('getting-started-card-humanoid') && appUiText.includes('getting-started-card-image') && appUiText.includes('getting-started-card-package') && appUiText.includes('getting-started-card-${template.id}') && appText.includes("id: 'girl'") && appText.includes("id: 'boy'"), 'Getting Started exposes compact starter/result choices including Girl and Boy');
+assert(appUiText.includes('getting-started-card-guided') && appUiText.includes('Pick a project') && appUiText.includes('guided-project-library') && appUiText.includes('guided-project-card-${lesson.id}'), 'Getting Started exposes guided projects as a secondary visible entry route without preloading them into the first screen');
+assert(appUiText.includes('data-evidence-cue') && appUiText.includes('data-expected-answer') && appUiText.includes('data-clip-slot'), 'Guided project cards carry local classroom check/evidence metadata without adding visible text load');
+assert(appUiText.includes('getting-started-card-humanoid') && appUiText.includes('getting-started-card-image') && appUiText.includes('getting-started-card-package') && appUiText.includes('getting-started-card-${template.id}') && appText.includes('id: "girl"') && appText.includes('id: "boy"'), 'Getting Started exposes compact starter/result choices including Girl and Boy');
 assert(!appUiText.includes('Local browser processing') && !appUiText.includes('Load art + skeleton') && !appUiText.includes('Full body rig') && !appUiText.includes('Browser ONNX rigging'), 'Getting Started avoids process/explanation copy');
 assert(!appUiText.includes('lesson-template-'), 'Getting Started does not show lesson cards in the first screen');
 assert(indexText.includes('.starter-thumb { width: 2.25rem; height: 2.25rem;'), 'Girl/Boy starter thumbnails stay compact');
 assert(appText.includes('return { present: createEmptyProject(), past: [], future: [] }'), 'App initializes an empty project instead of preloading a character');
 assert(appText.includes('setProject(createEmptyProject(), { resetHistory: true })'), 'New Project resets to an empty project instead of a starter character');
-assert(appText.includes("returnStage: 'character'"), 'Accepted character loads stay in the Character tab instead of jumping to Path');
+assert(appText.includes('returnStage: "character"'), 'Accepted character loads stay in the Character tab instead of jumping to Path');
 assert(appText.includes('character-import-review') && appText.includes('project={reviewedProject}') && appText.includes('showImportChecks = project.settings.debugVisuals'), 'Character imports preview the pending character and put approval in a centered overlay while checks stay dev-only');
 assert(appUiText.includes('Dev mode') && !appUiText.includes('Debug visuals'), 'Options expose debug overlays as Dev mode instead of novice-facing debug copy');
 assert(appText.includes('setShowGettingStarted(!hideNextTime)'), 'Splash close opens Getting Started unless a legacy hide flag is present');
@@ -1016,44 +1619,80 @@ assert(!indexText.includes('.onboarding-page'), 'CSS no longer keeps a full-scre
 assert(!indexText.includes('.welcome-simple'), 'CSS no longer keeps the old welcome video layout');
 assert(appText.includes('character-setup-panel'), 'Character tab exposes direct part settings instead of only getting-started cards');
 assert(appText.includes('character-part-list') && appText.includes('character-part-item-${part.id}'), 'Character tab owns body-part selection in the left workflow pane');
-assert(appText.includes('viewport={viewport} setViewport={setViewport} inputMode="always" testId="character-three-puppet"'), 'Character preview uses the shared canvas viewport and direct 2D/3D input instead of a detached default viewport');
-assert(appText.includes("setStage('character')"), 'Character edit controls stay in the functional Character tab');
+assert(appText.includes('viewport={viewport}') && appText.includes('setViewport={setViewport}') && appText.includes('inputMode="always"') && appText.includes('testId="character-three-puppet"'), 'Character preview uses the shared canvas viewport and direct 2D/3D input instead of a detached default viewport');
+assert(appText.includes('setStage("character")'), 'Character edit controls stay in the functional Character tab');
 assert(appText.includes('Art width') && appText.includes('Art offset X'), 'Character part inspector exposes artwork extent and offset controls');
 assert(appText.includes('data-testid="part-cut-controls"') && appText.includes('data-testid="cut-outline-dialog"') && appText.includes('Edit cut') && !appText.includes('Cut point X'), 'Character part inspector opens a canvas-first cut overlay instead of coordinate controls');
-assert(appText.includes('data-testid="cut-outline-art"') && appText.includes('part.textureUrl') && indexText.includes('.cut-outline-art { opacity: .72; pointer-events: none; }'), 'Character cut editor shows the selected part artwork under the editable contour');
-assert(appText.includes("contourSource: 'user'") && appText.includes('Auto cut') && appText.includes('Add point'), 'Character cut editor writes user contours and can bake/add contour points');
+assert(appText.includes('sourceTextureUrl={sourceTextureUrl}') && appText.includes('sourceImageFrame') && appText.includes('data-testid="cut-outline-art"') && indexText.includes('.cut-outline-part-window'), 'Character cut editor shows the full source picture behind a zoomed editable contour when available');
+assert(appText.includes('contourSource: "user"') && appText.includes('Auto cut') && appText.includes('Add point'), 'Character cut editor writes user contours and can bake/add contour points');
 assert(appText.includes('data-testid={`path-part-art-${part.id}`}') && appText.includes('part.bounds.x * part.transform.scale'), 'Path Editor renders artwork from the editable part bounds offset');
-assert(canvasText.includes('data-testid={`design-part-art-${part.id}`}') && canvasText.includes('part.bounds.x * part.transform.scale'), 'Mechanism Design renders artwork from the same editable part bounds offset');
 assert(appText.includes('partOutlinePathD(part, landmarks') && appText.includes('path-part-surface-mask'), 'Path Editor clips part art to the shared fabrication outline and hole mask');
-assert(canvasText.includes('partOutlinePathD(part, landmarks') && canvasText.includes('design-part-surface-mask'), 'Mechanism Design clips part art to the shared fabrication outline and hole mask');
+assert(appText.includes('data-testid="design-shared-foundry-preview"') && appText.includes('data-shared-with="foundry-preview"'), 'Mechanism Design shows mechanisms through the shared Foundry workbench instead of duplicating character-art plate rendering');
 assert(appText.includes('Choose new character.'), 'Character tab disables active-project artwork edits while a package review is pending');
-assert(appText.includes('disabled={partPanelDisabled} onClick={onEditCharacter}'), 'Pending package review disables active-character edit buttons');
-assert(appText.includes('disabled={partPanelDisabled} onClick={onSaveSkeleton}'), 'Pending package review disables active skeleton save controls');
+assert(appText.includes('disabled={partPanelDisabled}') && appText.includes('onClick={onEditCharacter}'), 'Pending package review disables active-character edit buttons');
+assert(appText.includes('disabled={partPanelDisabled}') && appText.includes('onClick={onSaveSkeleton}'), 'Pending package review disables active skeleton save controls');
 assert(appText.includes('stage-body editor-workbench relative min-h-0 flex-1 overflow-hidden'), 'shared workbench prevents right-pane scroll from moving the center canvas');
 assert(appText.includes('const [showSensemaking, setShowSensemaking] = useState(false)'), 'Foundry starts in compact tinkerable mode with sensemaking collapsed');
+assert(appText.includes('data-testid="foundry-visible-sensemaking"') && appText.includes('data-testid="design-visible-sensemaking"'), 'Foundry and Design show compact visible sensemaking by default instead of hiding all meaning behind details');
+assert(appText.includes('data-sensemaking-evidence') && appText.includes('data-sensemaking-answer') && appText.includes('data-sensemaking-clip'), 'Visible sensemaking cues expose teacher-pack check/evidence metadata through compact attributes, not extra prose');
 assert(appText.includes('compact-fabrication-stack') && appText.includes('data-testid="foundry-fabrication-stack"'), 'Foundry keeps fabrication stack visible as a compact action datum');
 assert(typesText.includes("'assembly'"), 'AppStage includes a dedicated Assembly tab');
 assert(appUiText.includes("{ id: 'assembly', label: 'Assembly' }"), 'workflow rail exposes Assembly as a separate stage');
-const blueprintCanvasStart = blueprintExportText.indexOf('canvas: canvasPane(<div className="blueprint-document-preview canvas-workspace" data-testid="blueprint-canvas-preview">');
-const blueprintInspectorStart = blueprintExportText.indexOf('inspector: inspectorPane(<section className="stage-pane-stack" data-testid="blueprint-detail-preview">', blueprintCanvasStart);
+const blueprintCanvasStart = blueprintExportText.indexOf('data-testid="blueprint-canvas-preview"');
+const blueprintInspectorStart = blueprintExportText.indexOf('data-testid="blueprint-detail-preview"', blueprintCanvasStart);
 assert(blueprintCanvasStart >= 0 && blueprintInspectorStart > blueprintCanvasStart, 'Blueprint layout exposes printable 2D canvas and cut-sheet inspector slots');
 const blueprintCanvasBlock = blueprintExportText.slice(blueprintCanvasStart, blueprintInspectorStart);
 const blueprintInspectorBlock = blueprintExportText.slice(blueprintInspectorStart, blueprintExportText.indexOf('        }}', blueprintInspectorStart));
 assert(blueprintCanvasBlock.includes('blueprint-svg-preview'), 'Blueprint center canvas previews the printable SVG cut sheet');
+assert(blueprintCanvasBlock.includes('data-visual-level="board-hero"') && blueprintExportText.includes('blueprint-more-exports'), 'Blueprint keeps the board preview central and collapses secondary downloads out of the primary workflow');
+assert(blueprintExportText.includes('const liveRecipes = activeMechanisms.map') && blueprintExportText.includes('const recipes = liveRecipes.length ? liveRecipes : (pkg?.recipes ?? [])') && blueprintExportText.includes('const previewSvg = makeBlueprintPreviewSvg(project, recipes)'), 'Blueprint center preview always renders the readable live view from live fabrication recipe data; export downloads keep the physical artifact SVG');
+assert(blueprintExportText.includes('data-testid="blueprint-sensemaking-label"') && assemblyWorkbenchText.includes('data-testid="assembly-workbench-sensemaking"') && appText.includes('data-testid="assembly-sensemaking-label"'), 'Blueprint and Assembly reuse mechanism sensemaking metadata for compact visual cues');
 assert(!blueprintCanvasBlock.includes('<Canvas project={project}'), 'Blueprint center canvas is a static output sheet, not the animated 3D/2.5D workbench');
 assert(!blueprintCanvasBlock.includes('assembly-guide-web-preview') && !blueprintInspectorBlock.includes('assembly-guide-web-preview'), 'Blueprint no longer embeds the assembly guide document');
+assert(fabricationRuntimeText.includes('svg: makeBlueprintSvg(project, recipes)'), 'export package uses the physical printable blueprint SVG, not the screen preview');
+const physicalBlueprintSvgStart = fabricationRuntimeText.indexOf('export const makeBlueprintSvg');
+const physicalBlueprintSvgEnd = fabricationRuntimeText.indexOf('export const makeBlueprintPreviewSvg', physicalBlueprintSvgStart);
+assert(physicalBlueprintSvgStart >= 0 && physicalBlueprintSvgEnd > physicalBlueprintSvgStart, 'fabrication runtime exposes a dedicated physical blueprint SVG renderer');
+const physicalBlueprintSvgBlock = fabricationRuntimeText.slice(physicalBlueprintSvgStart, physicalBlueprintSvgEnd);
+assert(physicalBlueprintSvgBlock.includes('data-blueprint-source="fabrication-contract"') && physicalBlueprintSvgBlock.includes('data-board-callout') && physicalBlueprintSvgBlock.includes('fabricationBoardColumnLabel') && physicalBlueprintSvgBlock.includes('fabricationBoardRowLabel'), 'physical export SVG keeps board labels and recipe callouts from the fabrication contract');
+assert(!physicalBlueprintSvgBlock.includes('data-cut-part') && !physicalBlueprintSvgBlock.includes('generateCurvePoints') && !physicalBlueprintSvgBlock.includes('opacity="0.22"'), 'physical export SVG excludes screen-only cut previews, foundry path overlays, and translucent character ghosts');
+const blueprintSvgStart = fabricationRuntimeText.indexOf('export const makeBlueprintPreviewSvg');
+const blueprintSvgEnd = fabricationRuntimeText.indexOf('const makeCustomPartsSvg', blueprintSvgStart);
+assert(blueprintSvgStart >= 0 && blueprintSvgEnd > blueprintSvgStart, 'fabrication runtime exposes a dedicated readable blueprint preview renderer');
+const blueprintSvgBlock = fabricationRuntimeText.slice(blueprintSvgStart, blueprintSvgEnd);
+assert(blueprintSvgBlock.includes('data-cut-part') && blueprintSvgBlock.includes('data-recipe-anchor'), 'Blueprint preview SVG shows cut parts and board anchors as first-class elements');
+assert(blueprintSvgBlock.includes('data-blueprint-visual-mode="board-hero"') && blueprintSvgBlock.includes('data-blueprint-board-hero') && blueprintSvgBlock.includes('CUT · PLACE · BUILD'), 'Blueprint preview SVG is a visual board-first layout, not a dense report');
+assert(!blueprintSvgBlock.includes('generateCurvePoints') && !blueprintSvgBlock.includes('opacity="0.22"'), 'Blueprint preview SVG avoids foundry path overlays and translucent character ghosts');
+assert(blueprintSvgBlock.includes('const ox = (width - bounds.width * scale)') && !blueprintSvgBlock.includes('const ox = x +'), 'Blueprint part cut previews use local SVG coordinates inside the translated tile, not double-translated paths');
 const assemblyStart = appText.indexOf('const AssemblyGuide =');
 assert(assemblyStart >= 0, 'AssemblyGuide component owns the assembly document workflow');
 const assemblyBlock = appText.slice(assemblyStart, appText.indexOf('const Options =', assemblyStart));
 assert(assemblyBlock.includes('data-testid="assembly-canvas-preview"') && assemblyBlock.includes('<AssemblyWorkbench'), 'Assembly tab renders the interactive stepper in the center canvas');
+assert(assemblyBlock.includes('const liveRecipes = activeMechanisms.map') && assemblyBlock.includes('liveRecipes.length ? liveRecipes : (pkg?.recipes ?? [])'), 'Assembly preview derives from live project mechanisms before falling back to an exported package');
+assert(assemblyBlock.includes('activeAssemblyMode === "character"') && assemblyBlock.includes('<CharacterAssemblyWorkbench') && !assemblyBlock.includes('{pkg && selectedRecipe && currentStep ?'), 'Assembly animation supports character and mechanism stages before generating PDF/HTML output');
 assert(assemblyWorkbenchText.includes('data-testid="assembly-stepper-workbench"'), 'Assembly workbench exposes a testable interactive stepper surface');
 assert(assemblyPlaybackText.includes('export const pendingRecipeForMechanism') && assemblyPlaybackText.includes('buildAssemblyPlaybackSteps'), 'Assembly recipe/playback derivation lives outside App.tsx');
 assert(assemblyPlaybackText.includes("motion: 'stack-layer'") && assemblyPlaybackText.includes("motion: 'move-to-board'") && assemblyPlaybackText.includes("motion: 'connect-character'") && assemblyPlaybackText.includes("motion: 'test-motion'"), 'Assembly playback declares a visual motion mode for every build phase');
+assert(assemblyBlock.includes('data-testid="assembly-mode-switch"') && appText.includes('data-testid="character-assembly-inspector"'), 'Assembly tab exposes a character assembly sub-stage with a compact inspector');
+assert(assemblyWorkbenchText.includes('data-testid="character-assembly-workbench"') && assemblyWorkbenchText.includes('data-testid="character-fixed-pins"') && assemblyWorkbenchText.includes('data-testid="character-free-pivots"'), 'Character assembly workbench separates fixed board pins from free limb pivots');
+assert(assemblyWorkbenchText.includes('characterBoardProjector') && assemblyWorkbenchText.includes('data-testid="character-board-layer"') && assemblyWorkbenchText.includes('data-layer-state={layerState}') && assemblyWorkbenchText.includes('data-testid="character-pin-alignment"'), 'Character assembly animates the character layer onto fixed board pins instead of leaving parts in a detached tray');
+assert(assemblyWorkbenchText.includes('data-testid="character-pin-stack"') && assemblyWorkbenchText.includes('data-pin-role={pin.role}') && assemblyWorkbenchText.includes('data-stack-parts={pin.stack.join'), 'Character assembly renders role-specific fixed/free pin stacks from the plan');
+assert(assemblyBlock.includes('activeAssemblyMode === "mechanism" &&') && assemblyBlock.includes('data-testid="assembly-lane-switch"') && assemblyBlock.includes('assembly-recipe-card text-left'), 'Character assembly mode hides mechanism-only lane and recipe controls');
+assert(assemblyPlaybackText.includes('export const buildCharacterAssemblyPlan') && assemblyPlaybackText.includes("kind: 'character'") && assemblyPlaybackText.includes('mechanismAssemblySteps: []') && assemblyPlaybackText.includes('sceneToBoardRaw(joint.position') && assemblyPlaybackText.includes('board?.valid ? board.label : undefined'), 'Character assembly plan is derived separately from mechanism recipe steps and does not fake clamped board holes');
 assert(appText.includes('stepProgressRef') && appText.includes('window.requestAnimationFrame(tick)'), 'Assembly playback advances with rAF progress instead of only jumping static steps');
 assert(assemblyWorkbenchText.includes('progress = 0') && assemblyWorkbenchText.includes('data-step-progress') && assemblyWorkbenchText.includes('moduleTranslate'), 'Assembly workbench receives live progress and moves the mechanism module per step');
 assert(assemblyWorkbenchText.includes('data-testid="assembly-parts-tray"') && assemblyWorkbenchText.includes('data-testid="assembly-mount-motion"') && assemblyWorkbenchText.includes('data-testid="assembly-character-connect"') && assemblyWorkbenchText.includes('data-testid="assembly-motion-dot"'), 'Assembly workbench visualizes parts, mounting, character connection, and test motion as step-specific simulation states');
 assert(!assemblyBlock.includes('data-testid="assembly-guide-preview-frame"'), 'Assembly center no longer defaults to an iframe document preview');
 assert(assemblyBlock.includes('data-testid="assembly-guide-preview"'), 'Assembly tab keeps selected recipe detail in the right inspector');
+const characterAssemblyPlan = buildCharacterAssemblyPlan(starterSample);
+assert.equal(characterAssemblyPlan.kind, 'character', 'character assembly plan carries a distinct stage kind');
+assert(characterAssemblyPlan.parts.length >= 10, 'character assembly plan includes the full starter body-part set');
+assert(characterAssemblyPlan.fixedPins.length > 0, 'character assembly plan identifies board-fixed pins');
+assert(characterAssemblyPlan.freePivots.length > 0, 'character assembly plan identifies free limb pivots');
+assert(characterAssemblyPlan.fixedPins.every(pin => pin.boardCoordinate && /^[A-O]([1-9]|1[0-5])$/.test(pin.boardCoordinate)), 'fixed character pins map to readable 15x15 board coordinates');
+assert(characterAssemblyPlan.freePivots.every(pin => !pin.boardCoordinate), 'free character pivots are never mislabeled as board holes');
+assert(characterAssemblyPlan.fixedPins.every(pin => fabricationBoardCoordinateCallout(pin.boardCoordinate ?? '', pin.board).includes('row') && fabricationBoardCoordinateCallout(pin.boardCoordinate ?? '', pin.board).includes('column')), 'fixed character pins expose row/column callouts for board assembly');
+assert.deepEqual(characterAssemblyPlan.mechanismAssemblySteps, [], 'character assembly does not reuse mechanism recipe steps');
 const oversizedCutPart: BodyPartLayer = {
   id: 'right_arm_lower',
   name: 'Right lower arm',
@@ -1161,7 +1800,14 @@ assert(pkg.sceneSnapshot.skeleton, 'fabrication snapshot includes skeleton');
 assert(pkg.cutSheetPdf.startsWith('%PDF-') && pkg.cutSheetPdf.includes('Cut sheet'), 'fabrication package includes a real PDF cut sheet artifact');
 assert(pkg.assemblyGuidePdf.startsWith('%PDF-'), 'fabrication package includes a PDF assembly artifact');
 assert(pkg.customPartsSvg.startsWith('<svg') && pkg.customPartsSvg.includes('custom-parts'), 'fabrication package includes custom parts SVG artifact');
-assert(pkg.customPartsPdf.startsWith('%PDF-'), 'fabrication package includes custom parts PDF artifact');
+assert(pkg.customPartsSvg.includes(`width="${twoFourBars.settings.physicalKit.sheetWidthMm}mm"`) && pkg.customPartsSvg.includes(`height="${twoFourBars.settings.physicalKit.sheetHeightMm}mm"`), 'character custom parts SVG is fixed to one letter-size page');
+assert(pkg.customPartsSvg.includes(`viewBox="0 0 ${twoFourBars.settings.physicalKit.sheetWidthMm} ${twoFourBars.settings.physicalKit.sheetHeightMm}"`), 'character custom parts SVG uses the letter page coordinate system');
+assert(pkg.customPartsSvg.includes('data-character-print-page="letter"') && pkg.customPartsSvg.includes('data-character-print-mode="whole-character-exploded"'), 'character custom parts SVG declares whole-character exploded print mode');
+assert(pkg.customPartsSvg.includes('data-character-exploded-sheet'), 'character custom parts SVG groups all parts on one exploded sheet');
+twoFourBars.partOrder.filter(partId => twoFourBars.parts[partId]?.visible).forEach(partId => {
+  assert(pkg.customPartsSvg.includes(`data-part-id="${partId}"`), `character custom parts SVG includes visible part ${partId} on the one-page sheet`);
+});
+assert(pkg.customPartsPdf.startsWith('%PDF-') && pkg.customPartsPdf.includes('whole-character-exploded'), 'fabrication package includes a one-page exploded character PDF artifact');
 assert(pkg.customPartsStl.startsWith('solid motionsmith_custom_parts'), 'fabrication package includes custom parts STL artifact');
 assert(pkg.customPartsStl.includes('mm_holes') && (pkg.customPartsStl.match(/facet normal/g) ?? []).length > 100, 'custom parts STL meshes extruded plates with joint-hole voids');
 assert(pkg.metadataJson.includes('validationIssues'), 'fabrication metadata includes structured validation issues');
@@ -1181,6 +1827,8 @@ assert(pkg.svg.includes('row') && pkg.svg.includes('column'), 'blueprint SVG rec
 assert(pkg.assemblyGuideHtml.includes('2-cell linkage (3 holes)'), 'assembly guide uses readable linkage names');
 assert(pkg.assemblyGuideHtml.includes('Spacer 10mm OD / 4mm hole'), 'assembly guide uses readable spacer names');
 assert(pkg.assemblyGuideHtml.includes('row') && pkg.assemblyGuideHtml.includes('column'), 'assembly guide includes row/column callouts');
+assert(pkg.assemblyGuideHtml.includes('<strong>Target:</strong> Right lower arm') && pkg.assemblyGuideHtml.includes('path-right-arm') && pkg.assemblyGuideHtml.includes('right_hand'), 'assembly guide keeps compact target/path/anchor connection details');
+assert(pkg.assemblyGuidePdf.includes('Target: Right lower arm') && pkg.assemblyGuidePdf.includes('path-right-arm'), 'assembly guide PDF keeps offline target/path connection details');
 assert(FABRICATION_RENDER_LAYER_Z_STEP >= FABRICATION_RENDER_PART_DEPTH + FABRICATION_RENDER_MIN_CLEARANCE, 'fabrication render z step includes part thickness plus spacer clearance');
 
 AUTHORABLE_MECHANISM_TYPES.forEach(type => {
@@ -1429,7 +2077,7 @@ ALL_MECHANISM_TYPES.forEach(type => {
   const expectedConstraint = ({
     cam: 'cam follower contact',
     'rack-pinion': 'rack linear guide',
-    gear: 'gear endpoint span',
+    gear: 'gear mesh pair',
     gear_linkage: 'drive L4 linkage arm',
     planetary_gear: 'planet gear mesh',
     piston: 'slider guide',
@@ -1591,21 +2239,21 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
     assert(state.isValid, 'gear train default has valid sampled poses');
     assertDistance(state.p1, state.j1, mechanism.crankLength, 'gear input pitch radius is preserved');
     assertDistance(state.p2, state.j2, mechanism.rockerLength, 'gear output pitch radius is preserved');
-    assertDistance(state.p1, state.p2, mechanism.groundLength, 'gear endpoint axles preserve the separated board span until idlers are inserted');
+    assertDistance(state.p1, state.p2, gearTrainPitchCenterDistance(mechanism), 'gear axles preserve direct pitch contact for the default two-gear mesh');
   });
   assert.equal(mechanism.crankLength, REFERENCE_DEFAULTS.gearTrain.driveRadius, 'gear train default uses the fabrication G3 drive gear pitch radius');
   assert.equal(mechanism.rockerLength, REFERENCE_DEFAULTS.gearTrain.outputRadius, 'gear train default uses the fabrication G3 output gear pitch radius');
-  assert.equal(mechanism.groundLength, REFERENCE_DEFAULTS.gearTrain.centerDistance, 'gear train default leaves a one-idler endpoint span instead of forcing A/B to mesh');
-  assert(mechanism.groundLength > gearTrainPitchCenterDistance(mechanism), 'two endpoint gears are separated placeholders until an idler closes the pitch chain');
-  assert.equal(gearTrainResolvedCenterDistance(mechanism), mechanism.groundLength, 'resolved center distance keeps the separated endpoint span');
+  assert.equal(mechanism.groundLength, gearTrainPitchCenterDistance(mechanism), 'gear train default directly meshes the two endpoint gears');
+  assert.equal(mechanism.groundLength, mechanism.crankLength + mechanism.rockerLength, 'two endpoint gears use tangent pitch circles');
+  assert.equal(gearTrainResolvedCenterDistance(mechanism), gearTrainPitchCenterDistance(mechanism), 'resolved center distance keeps the direct mesh pitch span');
   assert.equal(mechanism.gearRatio, gearPairOutputRatio(mechanism.crankLength, mechanism.rockerLength), 'gear train default ratio is derived from ordered pitch radii');
   assert.deepEqual(gearTrainPitchRadii(mechanism), [mechanism.crankLength, mechanism.rockerLength], 'gear train default stores the legacy two-gear pair as the ordered pitch-radius train');
   assert.equal(gearTrainOutputRatio(mechanism), gearPairOutputRatio(mechanism.crankLength, mechanism.rockerLength), 'two-gear train helper preserves legacy reverse rotation');
   const unequalGear = { ...mechanism, crankLength: 30, rockerLength: 60, groundLength: 90, gearRatio: -99, speed2: -99 };
   const unequalStart = calculateLinkage(unequalGear, 0);
   const unequalQuarter = calculateLinkage(unequalGear, Math.PI / 2);
-  assert(Math.hypot(unequalQuarter.j2.x - unequalStart.j2.x, unequalQuarter.j2.y - unequalStart.j2.y) < 1e-9, 'two-gear endpoint output ignores stale ratio fields until idlers are inserted');
-  assert(Math.hypot(unequalQuarter.p2.x - unequalQuarter.p1.x, unequalQuarter.p2.y - unequalQuarter.p1.y) > gearTrainPitchCenterDistance(unequalGear), 'two-gear endpoint configs never collapse to direct pitch contact');
+  assert(Math.hypot(unequalQuarter.j2.x - unequalStart.j2.x, unequalQuarter.j2.y - unequalStart.j2.y) > 1, 'two-gear mesh output follows the physical pitch ratio');
+  assertDistance(unequalQuarter.p1, unequalQuarter.p2, gearTrainPitchCenterDistance(unequalGear), 'two-gear configs collapse to direct pitch contact for plain gear trains');
   const g5 = gearSceneRadiusByKey('g40');
   const g1 = gearSceneRadiusByKey('g8');
   const g3 = gearSceneRadiusByKey('g24');
@@ -1622,12 +2270,14 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
   const driverOffsetState = calculateLinkage({ ...mechanism, driverPhaseOffset: Math.PI / 4 }, 0);
   assert(Math.abs(Math.atan2(driverOffsetState.j1.y - driverOffsetState.p1.y, driverOffsetState.j1.x - driverOffsetState.p1.x) - Math.PI / 4) < 1e-6, 'driver phase offset rotates the input driver before downstream constraints solve');
   Array.from({ length: 8 }, () => generateSmartConfig(undefined, 'gear')).forEach(config => {
-    assert(config.groundLength >= gearTrainPitchCenterDistance(config), 'optimizer never overlaps separated gear endpoint axles');
-    assert.equal(config.groundLength, gearTrainResolvedCenterDistance(config), 'optimizer applies the resolved endpoint-span contract');
+    assert(config.gearTrainRadii?.every(gearSceneRadiusIsFabricationPreset), 'optimizer generates plain gear sizes from the fabrication gear preset set');
+    assert.equal(config.groundLength, gearTrainPitchCenterDistance(config), 'optimizer keeps plain gear endpoints at direct pitch contact');
+    assert.equal(config.groundLength, gearTrainResolvedCenterDistance(config), 'optimizer applies the resolved direct-mesh contract');
   });
   const mutatedGear = mutateConfig({ ...mechanism, groundLength: 999 }, 1, true);
-  assert(mutatedGear.groundLength >= gearTrainPitchCenterDistance(mutatedGear), 'optimizer mutation keeps endpoint gear axles non-overlapping');
-  assert.equal(mutatedGear.groundLength, gearTrainResolvedCenterDistance(mutatedGear), 'optimizer mutation applies the resolved endpoint-span contract');
+  assert(mutatedGear.gearTrainRadii?.every(gearSceneRadiusIsFabricationPreset), 'optimizer mutation keeps plain gear sizes on the fabrication gear preset set');
+  assert.equal(mutatedGear.groundLength, gearTrainPitchCenterDistance(mutatedGear), 'optimizer mutation keeps endpoint gears at direct pitch contact');
+  assert.equal(mutatedGear.groundLength, gearTrainResolvedCenterDistance(mutatedGear), 'optimizer mutation applies the resolved direct-mesh contract');
   assert.equal(mutatedGear.gearRatio, gearTrainOutputRatio(mutatedGear), 'optimizer keeps gear ratio derived from ordered pitch radii');
   const gearOnlySvg = generateSVG({ speed: 1, rotation: 0, mechanisms: [mechanism] }, 0);
   const gearOnlyDxf = generateDXF({ speed: 1, rotation: 0, mechanisms: [mechanism] }, 0);
@@ -1654,6 +2304,9 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
   assert(mechanism.groundLength > gearTrainPitchCenterDistance(mechanism), 'gear-linkage default endpoint gears are separated until an idler closes the pitch chain');
   assert.equal(mechanism.couplerPointDist, REFERENCE_DEFAULTS.gearLinkage.handleRadius, 'gear-linkage shared crank-pin radius uses the reference one-cell offset');
   assert.equal(mechanism.couplerLength, REFERENCE_DEFAULTS.gearLinkage.outputLinkage, 'gear-linkage paired links use the reference L4 linkage');
+  const linkageStart = calculateLinkage(mechanism, 0);
+  const linkageQuarter = calculateLinkage(mechanism, Math.PI / 2);
+  assert(Math.hypot(linkageQuarter.j2.x - linkageStart.j2.x, linkageQuarter.j2.y - linkageStart.j2.y) > 1, 'gear-linkage output endpoint is a second driving crank, not a stationary placeholder');
   assert.deepEqual(requiredPartQuantities('gear_linkage'), { 'G3 / 3-space gear': 2, 'L4 linkage': 2, [FABRICATION_SPACER_SPEC.label]: 8 }, 'gear-linkage recipe uses two G3 gears, two L4 crank links, and S10 spacers without an output bracket');
   const dynamicGearLinkageParts = mechanismRequiredParts({ ...mechanism, gearTrainRadii: [gearSceneRadiusByKey('g40'), gearSceneRadiusByKey('g8'), gearSceneRadiusByKey('g56')], couplerLength: linkageSceneLengthByCells(6) });
   assert.equal(dynamicGearLinkageParts.find(part => part.name === 'G5 / 5-space gear')?.quantity, 1, 'gear-linkage required parts preserve a selected large drive gear');
@@ -1726,9 +2379,9 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
 const gearDefault = createDefaultMechanism('gear', 'contract-gear-endpoints');
 const gearStart = calculateLinkage(gearDefault, 0);
 const gearQuarter = calculateLinkage(gearDefault, Math.PI / 2);
-assert(Math.abs(Math.hypot(gearStart.p2.x - gearStart.p1.x, gearStart.p2.y - gearStart.p1.y) - gearDefault.groundLength) < 1e-9, 'gear template defaults keep endpoint gear axles separated for later idler insertion');
+assert(Math.abs(Math.hypot(gearStart.p2.x - gearStart.p1.x, gearStart.p2.y - gearStart.p1.y) - gearTrainPitchCenterDistance(gearDefault)) < 1e-9, 'gear template defaults mesh endpoint gear axles');
 assert(gearQuarter.j1.y > gearStart.j1.y, 'gear train input handle rotates from the drive axle');
-assert(Math.hypot(gearQuarter.j2.x - gearStart.j2.x, gearQuarter.j2.y - gearStart.j2.y) < 1e-9, 'no-idler endpoint output gear stays uncoupled until an idler is inserted');
+assert(Math.hypot(gearQuarter.j2.x - gearStart.j2.x, gearQuarter.j2.y - gearStart.j2.y) > 1, 'direct gear output counter-rotates without idlers');
 const endpointG3 = gearSceneRadiusByKey('g24');
 const idlerG1 = gearSceneRadiusByKey('g8');
 const idlerGear = normalizeGearTrainToFabrication({ ...gearDefault, gearTrainRadii: [endpointG3, idlerG1, endpointG3], groundLength: gearDefault.groundLength * 3 });
@@ -1736,7 +2389,7 @@ const idlerGearStart = calculateLinkage(idlerGear, 0);
 const idlerGearQuarter = calculateLinkage(idlerGear, Math.PI / 2);
 assert(Math.hypot(idlerGearQuarter.j2.x - idlerGearStart.j2.x, idlerGearQuarter.j2.y - idlerGearStart.j2.y) > 1, 'inserted idler chain couples endpoint gear rotation');
 const touchingLegacyGear = calculateLinkage({ ...gearDefault, groundLength: gearTrainPitchCenterDistance(gearDefault) }, 0);
-assert(Math.hypot(touchingLegacyGear.p2.x - touchingLegacyGear.p1.x, touchingLegacyGear.p2.y - touchingLegacyGear.p1.y) > gearTrainPitchCenterDistance(gearDefault), 'legacy two-gear pitch-contact configs migrate to a separated endpoint span');
+assertDistance(touchingLegacyGear.p1, touchingLegacyGear.p2, gearTrainPitchCenterDistance(gearDefault), 'legacy two-gear pitch-contact configs remain direct mesh');
 let exportedProject = applyProjectAction(sample, { type: 'set_export', fabricationPackage: createFabricationPackage(sample) });
 assert(exportedProject.lastExport, 'set_export stores generated fabrication package');
 exportedProject = applyProjectAction(exportedProject, { type: 'upsert_mechanism', mechanism: { ...exportedProject.mechanisms[0], enabled: false } });

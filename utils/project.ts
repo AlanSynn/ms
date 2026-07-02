@@ -16,7 +16,7 @@ import {
 } from '../types';
 import { defaultPhysicalKit, localPivotOffsetForScene, SCENE_PX_PER_MM, sceneBoundsForSheet } from './coordinates';
 import { FABRICATION_GEAR_SPECS, FABRICATION_RING_GEAR_SPEC } from './fabricationContract';
-import { REFERENCE_DEFAULTS, normalizeMechanismToReference, referenceRequiredPartsForMechanism } from './mechanismReference';
+import { REFERENCE_DEFAULTS, normalizeMechanismToFabricationSet, normalizeMechanismToReference, referenceRequiredPartsForMechanism } from './mechanismReference';
 import { defaultCamProfileSamples, gearTrainOutputRatio, generateCurvePoints, normalizeCamProfileSamples, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from './kinematics';
 import { clampNumber, finiteNumber, sanitizeHexColor, sanitizeMechanismType, sanitizePoint } from './sanitize';
 import { isUsableContourPoints } from './partGeometry';
@@ -267,7 +267,7 @@ export const createDefaultMechanism = (type: MechanismConfig['type'] = '4bar', i
     sceneAnchor: { x: -120, y: -40 },
     activeVisualPartIds: [],
     groundAngle: type === 'cam' || type === 'rack-pinion' ? 90 : 0,
-    groundLength: type === 'gear' ? REFERENCE_DEFAULTS.gearTrain.centerDistance : type === 'gear_linkage' ? REFERENCE_DEFAULTS.gearLinkage.centerDistance : type === 'planetary_gear' ? DEFAULT_PLANETARY_CARRIER_RADIUS : type === 'piston' || type === 'yoke' || type === 'cam' || type === 'rack-pinion' ? 0 : REFERENCE_DEFAULTS.fourBar.ground,
+    groundLength: type === 'gear' ? DEFAULT_DRIVE_GEAR_RADIUS + DEFAULT_OUTPUT_GEAR_RADIUS : type === 'gear_linkage' ? REFERENCE_DEFAULTS.gearLinkage.centerDistance : type === 'planetary_gear' ? DEFAULT_PLANETARY_CARRIER_RADIUS : type === 'piston' || type === 'yoke' || type === 'cam' || type === 'rack-pinion' ? 0 : REFERENCE_DEFAULTS.fourBar.ground,
     crankLength: type === '6bar' ? 55 : type === '5bar' ? 60 : type === 'gear' || type === 'gear_linkage' ? DEFAULT_DRIVE_GEAR_RADIUS : type === 'planetary_gear' ? DEFAULT_PLANETARY_SUN_RADIUS : type === 'piston' ? REFERENCE_DEFAULTS.sliderCrank.crank : type === 'cam' ? REFERENCE_DEFAULTS.cam.radius : type === 'rack-pinion' ? 42 : REFERENCE_DEFAULTS.fourBar.input,
     couplerLength: type === '6bar' ? 145 : type === 'piston' ? REFERENCE_DEFAULTS.sliderCrank.rod : type === 'gear_linkage' ? REFERENCE_DEFAULTS.gearLinkage.outputLinkage : type === 'yoke' || type === 'cam' || type === 'gear' || type === 'planetary_gear' || type === 'rack-pinion' ? 0 : REFERENCE_DEFAULTS.fourBar.coupler,
     rockerLength: type === '6bar' ? 110 : type === '5bar' ? 48 : type === 'quick-return' ? 130 : type === 'gear' || type === 'gear_linkage' ? DEFAULT_OUTPUT_GEAR_RADIUS : type === 'planetary_gear' ? DEFAULT_PLANETARY_PLANET_RADIUS : type === 'cam' ? REFERENCE_DEFAULTS.cam.followerTravel : type === 'rack-pinion' ? 380 : type === 'piston' ? 0 : REFERENCE_DEFAULTS.fourBar.output,
@@ -441,8 +441,98 @@ export const CLASSROOM_LESSONS = [
         shortLabel: 'Waving arm',
         description: 'Right hand path + fitted four-bar mechanism.',
         actionLabel: 'Open lesson',
+        outcome: 'Make an arm wave',
+        buildCue: 'four-bar',
         startStage: 'character' as AppStage,
-        mechanismType: '4bar' as MechanismConfig['type']
+        mechanismType: '4bar' as MechanismConfig['type'],
+        sensemaking: {
+            directTranslation: 'Crank turns -> rocker swings',
+            tryThis: 'Move the wrist path',
+            teacherTakeaway: 'Rotary motion can become swinging motion.',
+            studentCheck: 'Which pivot stays fixed?',
+            expectedAnswer: 'The board pivots stay fixed',
+            evidenceCue: 'right wrist follows the rocker arc',
+            clipSlot: 'generated-loop' as const
+        }
+    },
+    {
+        id: 'head-bob',
+        label: 'Head bob',
+        shortLabel: 'Head bob',
+        description: 'Head lift path + cam follower baseline.',
+        actionLabel: 'Open lesson',
+        outcome: 'Make a head bob',
+        buildCue: 'cam',
+        startStage: 'character' as AppStage,
+        mechanismType: 'cam' as MechanismConfig['type'],
+        sensemaking: {
+            directTranslation: 'Cam shape -> follower lifts',
+            tryThis: 'Drag the lift path',
+            teacherTakeaway: 'A shaped cam can turn rotation into timed lifting.',
+            studentCheck: 'Where does the follower touch?',
+            expectedAnswer: 'The follower touches the cam edge',
+            evidenceCue: 'head lift follows the cam profile',
+            clipSlot: 'generated-loop' as const
+        }
+    },
+    {
+        id: 'walking-leg',
+        label: 'Walking leg',
+        shortLabel: 'Walking leg',
+        description: 'Foot path + five-bar baseline.',
+        actionLabel: 'Open lesson',
+        outcome: 'Make a foot step',
+        buildCue: 'five-bar',
+        startStage: 'character' as AppStage,
+        mechanismType: '5bar' as MechanismConfig['type'],
+        sensemaking: {
+            directTranslation: 'Two cranks -> one trace point',
+            tryThis: 'Move the foot loop',
+            teacherTakeaway: 'Two inputs can combine to trace a walking-like path.',
+            studentCheck: 'Which two pivots drive it?',
+            expectedAnswer: 'The two fixed cranks drive the foot path',
+            evidenceCue: 'foot trace comes from two drivers',
+            clipSlot: 'generated-loop' as const
+        }
+    },
+    {
+        id: 'spin-gears',
+        label: 'Spin gears',
+        shortLabel: 'Spin gears',
+        description: 'Gear pair baseline with board-ready axles.',
+        actionLabel: 'Open lesson',
+        outcome: 'Make gears spin',
+        buildCue: 'gear pair',
+        startStage: 'character' as AppStage,
+        mechanismType: 'gear' as MechanismConfig['type'],
+        sensemaking: {
+            directTranslation: 'Touching teeth -> spin transfers',
+            tryThis: 'Swap gear size',
+            teacherTakeaway: 'Meshed gears transfer rotation and can change speed.',
+            studentCheck: 'Which gear turns opposite?',
+            expectedAnswer: 'The meshed gear turns opposite the driver',
+            evidenceCue: 'touching teeth transfer spin',
+            clipSlot: 'generated-loop' as const
+        }
+    },
+    {
+        id: 'my-character',
+        label: 'My character',
+        shortLabel: 'My character',
+        description: 'Blank starter rig with editable parts and joints.',
+        actionLabel: 'Start',
+        outcome: 'Start with my character',
+        buildCue: 'rig first',
+        startStage: 'character' as AppStage,
+        sensemaking: {
+            directTranslation: 'Parts + joints -> motion rig',
+            tryThis: 'Move a joint',
+            teacherTakeaway: 'A clean rig lets students personalize before choosing a mechanism.',
+            studentCheck: 'What makes a part bend?',
+            expectedAnswer: 'The joint controls where the part bends',
+            evidenceCue: 'parts keep visible joint holes',
+            clipSlot: 'generated-loop' as const
+        }
     }
 ] as const;
 
@@ -455,8 +545,110 @@ export const classroomLessonById = (id?: string): ClassroomLessonTemplate | unde
 export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState => {
     const lesson = classroomLessonById(lessonId);
     if (!lesson) throw new Error(`Unknown classroom lesson: ${lessonId}`);
-    const project = createSampleProject({ includeMechanism: true });
-    const mechanisms = project.mechanisms.map(mechanism => mechanismWithGeneratedPath(mechanism));
+
+    let project = createSampleProject({ includeMechanism: lesson.id === 'waving-arm' });
+    let paths = project.paths;
+    let mechanisms = project.mechanisms;
+    let selectedPartId = project.selectedPartId;
+    let selectedPathId = project.selectedPathId;
+    let selectedMechanismId = project.selectedMechanismId;
+
+    if (lesson.id === 'my-character') {
+        paths = {};
+        mechanisms = [];
+        selectedPartId = 'torso';
+        selectedPathId = undefined;
+        selectedMechanismId = undefined;
+    } else if (lesson.id === 'head-bob') {
+        const pathId = 'path-head-bob';
+        paths = {
+            [pathId]: {
+                id: pathId,
+                partId: 'head',
+                targetAnchorJointId: 'neck',
+                chainRootJointId: 'torso',
+                points: [{ x: 0, y: 124 }, { x: 0, y: 152 }, { x: 0, y: 124 }, { x: 0, y: 106 }],
+                duration: 1600,
+                closed: false,
+                enabled: true,
+                visible: true,
+                source: 'drawn',
+                warnings: []
+            }
+        };
+        const cam = createDefaultMechanism('cam', 'mech-head-bob');
+        Object.assign(cam, {
+            anchorX: 130,
+            anchorY: 96,
+            transform: { x: 130, y: 96, rotation: 0, scale: 1 },
+            sceneAnchor: { x: 130, y: 96 },
+            targetPartId: 'head',
+            targetPathId: pathId,
+            targetAnchorJointId: 'neck',
+            activeVisualPartIds: ['head'],
+            source: 'manual',
+            presetId: 'lesson-head-bob',
+            recommendation: lesson.description
+        } satisfies Partial<MechanismConfig>);
+        mechanisms = [mechanismWithGeneratedPath(cam)];
+        selectedPartId = 'head';
+        selectedPathId = pathId;
+        selectedMechanismId = cam.id;
+    } else if (lesson.id === 'walking-leg') {
+        const pathId = 'path-right-foot-step';
+        paths = {
+            [pathId]: {
+                id: pathId,
+                partId: 'right_foot_part',
+                targetAnchorJointId: 'right_foot',
+                chainRootJointId: 'right_hip',
+                points: [{ x: 52, y: -222 }, { x: 96, y: -238 }, { x: 126, y: -206 }, { x: 84, y: -186 }, { x: 42, y: -206 }],
+                duration: 1900,
+                closed: true,
+                enabled: true,
+                visible: true,
+                source: 'drawn',
+                warnings: []
+            }
+        };
+        const fiveBar = createDefaultMechanism('5bar', 'mech-walking-leg');
+        Object.assign(fiveBar, {
+            anchorX: 120,
+            anchorY: -130,
+            transform: { x: 120, y: -130, rotation: 0, scale: 1 },
+            sceneAnchor: { x: 120, y: -130 },
+            targetPartId: 'right_foot_part',
+            targetPathId: pathId,
+            targetAnchorJointId: 'right_foot',
+            activeVisualPartIds: ['right_foot_part'],
+            source: 'manual',
+            presetId: 'lesson-walking-leg',
+            recommendation: lesson.description
+        } satisfies Partial<MechanismConfig>);
+        mechanisms = [mechanismWithGeneratedPath(fiveBar)];
+        selectedPartId = 'right_foot_part';
+        selectedPathId = pathId;
+        selectedMechanismId = fiveBar.id;
+    } else if (lesson.id === 'spin-gears') {
+        paths = {};
+        const gear = createDefaultMechanism('gear', 'mech-spin-gears');
+        Object.assign(gear, {
+            anchorX: 0,
+            anchorY: 0,
+            transform: { x: 0, y: 0, rotation: 0, scale: 1 },
+            sceneAnchor: { x: 0, y: 0 },
+            source: 'manual',
+            presetId: 'lesson-spin-gears',
+            recommendation: lesson.description
+        } satisfies Partial<MechanismConfig>);
+        mechanisms = [mechanismWithGeneratedPath(gear)];
+        selectedPartId = undefined;
+        selectedPathId = undefined;
+        selectedMechanismId = gear.id;
+    } else {
+        mechanisms = project.mechanisms.map(mechanism => mechanismWithGeneratedPath(mechanism));
+    }
+
     return {
         ...project,
         metadata: {
@@ -465,7 +657,11 @@ export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState =
             classroomLessonId: lesson.id,
             classroomLessonLabel: lesson.label
         },
+        paths,
         mechanisms,
+        selectedPartId,
+        selectedPathId,
+        selectedMechanismId,
         characterPackage: project.characterPackage ? {
             ...project.characterPackage,
             replacementContext: {
@@ -723,6 +919,7 @@ export const createProjectFromProcessed = (input: {
             metadata: input.skeleton.metadata
         },
         maskUrl: input.maskUrl,
+        sourceTextureUrl: input.textureUrl,
         keypoints: input.keypoints,
         replacementContext: input.replacementContext
     };
@@ -989,6 +1186,13 @@ const normalizePartSnapshot = (id: string, value: unknown, skeleton: StandardSke
     const rawPivot = raw.localPivotOffset;
     const textureUrl = typeof raw.textureUrl === 'string' && raw.textureUrl.startsWith('data:image/') ? raw.textureUrl : undefined;
     const maskUrl = typeof raw.maskUrl === 'string' && raw.maskUrl.startsWith('data:image/') ? raw.maskUrl : undefined;
+    const rawSourceFrame = asRecord(raw.sourceImageFrame ?? raw.source_image_frame);
+    const sourceImageFrame = rawSourceFrame.width !== undefined && rawSourceFrame.height !== undefined ? {
+        x: finiteNumber(rawSourceFrame.x, 0),
+        y: finiteNumber(rawSourceFrame.y, 0),
+        width: clampNumber(rawSourceFrame.width, 1, 1, 20000),
+        height: clampNumber(rawSourceFrame.height, 1, 1, 20000)
+    } : undefined;
     const contourPoints = normalizeContourPoints(raw.contourPoints ?? raw.contour_points ?? raw.outlinePoints ?? raw.outline_points);
     const rawContourSource = raw.contourSource ?? raw.contour_source;
     const contourSource = rawContourSource === 'onnx-mask' || rawContourSource === 'user' || rawContourSource === 'imported' ? rawContourSource : contourPoints ? 'imported' : undefined;
@@ -997,6 +1201,7 @@ const normalizePartSnapshot = (id: string, value: unknown, skeleton: StandardSke
         name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.slice(0, 80) : id,
         textureUrl,
         maskUrl,
+        sourceImageFrame,
         contourPoints,
         contourSource,
         originalSvgPath: typeof raw.originalSvgPath === 'string' ? raw.originalSvgPath : typeof raw.original_svg_path === 'string' ? raw.original_svg_path : undefined,
@@ -1102,7 +1307,7 @@ const normalizeMechanismSnapshot = (value: unknown): MechanismConfig => {
         || Array.isArray(raw.gearTrainRadii)
         || Array.isArray(raw.camProfileSamples)
         || Array.isArray(raw.generatedPath);
-    return hasFittedGeometry ? normalized : normalizeMechanismToReference(normalized);
+    return hasFittedGeometry ? normalizeMechanismToFabricationSet(normalized) : normalizeMechanismToReference(normalized);
 };
 
 export const migrateProjectSnapshot = (raw: unknown): ProjectState => {

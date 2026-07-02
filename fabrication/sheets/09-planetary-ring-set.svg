@@ -13,6 +13,7 @@
       .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }
       .score { fill: none; stroke: #777777; stroke-width: 0.15; stroke-dasharray: 2 1; }
       .label { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }
+      .engrave { fill: #008000; font-family: Arial, Helvetica, sans-serif; font-size: 3.2px; font-weight: bold; }
       .tiny { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
       .small { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
       .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
@@ -45,6 +46,6 @@
   <circle cx="98" cy="178" r="2" class="drill ring-mount-hole bracket-hole" data-hole-role="ring-mount" data-hole-diameter-mm="4" data-hole-index="3" data-hole-x-offset-mm="0" data-hole-y-offset-mm="80" data-mount-radius-mm="80"/>
   </g>
   <g transform="translate(10 28)">
-  <text x="98" y="194" class="label" text-anchor="middle">R56 ring for G8+G24</text>
+  <text x="154.944" y="41.056" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="56 Tooth Ring Gear" style="font-size:6.2px" transform="rotate(45 154.944 41.056)">56 Tooth Ring Gear</text>
   </g>
 </svg>

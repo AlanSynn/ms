@@ -193,6 +193,10 @@ const part = (partId: string, category: string, key: string, label: string, quan
 const sceneToMm = (scene: number) => Math.abs(scene) / SCENE_PX_PER_MM;
 const sceneGearRadiusForSpec = (spec: FabricationGearSpec) => mmToScene(spec.pitchRadiusMm);
 const sceneLinkageLengthForSpec = (spec: FabricationLinkageSpec) => mmToScene(spec.lengthMm);
+const finiteSceneNumber = (value: unknown, fallback: number) =>
+    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+const nearestFabricationLinkageSceneLength = (value: unknown, fallback: number) =>
+    sceneLinkageLengthForSpec(fabricationLinkageSpecForSceneLength(finiteSceneNumber(value, fallback)));
 
 const attachmentGearSpecs = FABRICATION_GEAR_SPECS.filter(spec => spec.attachmentHoleCentersMm.length > 0);
 
@@ -276,7 +280,7 @@ export const normalizeGearTrainToFabrication = <T extends Partial<MechanismConfi
         ...mechanism,
         crankLength: radii[0],
         rockerLength: radii.at(-1) ?? radii[0],
-        groundLength: endpointSpanForRadii(radii, mechanism.groundLength, REFERENCE_DEFAULTS.gearTrain.centerDistance),
+        groundLength: pitchDistanceForRadii(radii),
         gearTrainRadii: radii,
         gearRatio: ratio,
         speed2: ratio,
@@ -433,8 +437,8 @@ const unsupportedRecipe = (type: MechanismType, canonicalKey: ReferenceCanonical
 const gearTrainSteps: ReferenceAssemblyStep[] = [
     step(1, 'Start at H6', 'place-fastener', ['H6'], ['board'], 'Place a paper fastener at H6.', 'The fastener turns freely.', bareFastener('H6')),
     step(2, 'Add drive G3 gear', 'add-part', ['H6'], ['board'], 'Add one S10 spacer, then place drive G3 on H6.', 'Drive G3 spins without rubbing.', movingPartStack('Board hole H6', 'G3 / 3-space gear', 'gears:g24')),
-    step(3, 'Add output G3 gear', 'add-part', ['H12'], ['board'], 'Place output G3 at H12 as the separated endpoint gear.', 'Insert idlers before expecting the endpoints to mesh.', movingPartStack('Board hole H12', 'G3 / 3-space gear', 'gears:g24')),
-    step(4, 'Check endpoint span', 'test-motion', ['H6', 'H12'], ['board', 'board'], 'Turn the drive gear and confirm both endpoint axles stay fixed and clear.', 'Add idler gears between H6 and H12 when you want coupled rotation.', movingPartStack('Board hole H6', 'G3 / 3-space gear', 'gears:g24'))
+    step(3, 'Add output G3 gear', 'add-part', ['H9'], ['board'], 'Place output G3 at H9 so its teeth mesh with drive G3.', 'The two G3 pitch circles touch without overlap.', movingPartStack('Board hole H9', 'G3 / 3-space gear', 'gears:g24')),
+    step(4, 'Check gear mesh', 'test-motion', ['H6', 'H9'], ['board', 'board'], 'Turn the drive gear and confirm the output gear counter-rotates on its fixed axle.', 'Both gear axles stay fixed and teeth stay meshed.', movingPartStack('Board hole H6', 'G3 / 3-space gear', 'gears:g24'))
 ];
 
 const camSteps: ReferenceAssemblyStep[] = [
@@ -537,7 +541,7 @@ export const REFERENCE_MECHANISM_RECIPES: Record<MechanismType, ReferenceMechani
         appType: 'gear',
         canonicalKey: 'gear_train',
         title: 'Gear train',
-        physicsRule: 'endpoint gear axles + optional idler mesh force',
+        physicsRule: 'meshed gear axles + optional idler train force',
         foundryVisible: true,
         exportReady: true,
         support: 'fabrication-ready',
@@ -616,16 +620,18 @@ export const normalizeGearLinkageToReference = <T extends Partial<MechanismConfi
     };
 };
 
+export const normalizeFourBarToFabrication = <T extends Partial<MechanismConfig>>(mechanism: T): T => ({
+    ...mechanism,
+    groundLength: finiteSceneNumber(mechanism.groundLength, REFERENCE_DEFAULTS.fourBar.ground),
+    crankLength: nearestFabricationLinkageSceneLength(mechanism.crankLength, REFERENCE_DEFAULTS.fourBar.input),
+    couplerLength: nearestFabricationLinkageSceneLength(mechanism.couplerLength, REFERENCE_DEFAULTS.fourBar.coupler),
+    rockerLength: nearestFabricationLinkageSceneLength(mechanism.rockerLength, REFERENCE_DEFAULTS.fourBar.output),
+    assemblyMode: mechanism.assemblyMode ?? 'open'
+});
+
 export const normalizeMechanismToReference = <T extends Partial<MechanismConfig> & Pick<MechanismConfig, 'type'>>(mechanism: T): T => {
     if (mechanism.type === '4bar') {
-        return {
-            ...mechanism,
-            groundLength: REFERENCE_DEFAULTS.fourBar.ground,
-            crankLength: REFERENCE_DEFAULTS.fourBar.input,
-            couplerLength: REFERENCE_DEFAULTS.fourBar.coupler,
-            rockerLength: REFERENCE_DEFAULTS.fourBar.output,
-            assemblyMode: mechanism.assemblyMode ?? 'open'
-        };
+        return normalizeFourBarToFabrication(mechanism);
     }
     if (mechanism.type === 'gear') {
         return normalizeGearTrainToFabrication(mechanism);
@@ -665,5 +671,13 @@ export const normalizeMechanismToReference = <T extends Partial<MechanismConfig>
             rodLength: REFERENCE_DEFAULTS.sliderCrank.rod
         };
     }
+    return mechanism;
+};
+
+export const normalizeMechanismToFabricationSet = <T extends Partial<MechanismConfig> & Pick<MechanismConfig, 'type'>>(mechanism: T): T => {
+    if (mechanism.type === '4bar') return normalizeFourBarToFabrication(mechanism);
+    if (mechanism.type === 'gear') return normalizeGearTrainToFabrication(mechanism);
+    if (mechanism.type === 'gear_linkage') return normalizeGearLinkageToReference(mechanism);
+    if (mechanism.type === 'planetary_gear') return normalizeMechanismToReference(mechanism);
     return mechanism;
 };

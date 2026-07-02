@@ -13,6 +13,7 @@
       .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }
       .score { fill: none; stroke: #777777; stroke-width: 0.15; stroke-dasharray: 2 1; }
       .label { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }
+      .engrave { fill: #008000; font-family: Arial, Helvetica, sans-serif; font-size: 3.2px; font-weight: bold; }
       .tiny { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
       .small { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
       .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
@@ -35,6 +36,12 @@
   <g transform="translate(12 30)">
   <circle cx="54" cy="14" r="2" class="drill linkage-hole bracket-hole" data-hole-role="linkage-bracket" data-hole-diameter-mm="4" data-hole-index="2"/>
   </g>
+  <g transform="translate(12 30)">
+  <text x="34" y="9.5" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="3 Hole Linkage" textLength="16.5" lengthAdjust="spacingAndGlyphs" style="font-size:3.8px">3 Hole</text>
+  </g>
+  <g transform="translate(12 30)">
+  <text x="34" y="18.5" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="3 Hole Linkage" textLength="16.5" lengthAdjust="spacingAndGlyphs" style="font-size:3.8px">Linkage</text>
+  </g>
   <g transform="translate(12 68)">
   <path d="M 14 7 L 94 7 A 7 7 0 0 1 94 21 L 14 21 A 7 7 0 0 1 14 7 Z" class="cut linkage-outline" data-cells="4" data-length-mm="80" data-pitch-mm="20" data-hole-count="5"/>
   </g>
@@ -52,6 +59,12 @@
   </g>
   <g transform="translate(12 68)">
   <circle cx="94" cy="14" r="2" class="drill linkage-hole bracket-hole" data-hole-role="linkage-bracket" data-hole-diameter-mm="4" data-hole-index="4"/>
+  </g>
+  <g transform="translate(12 68)">
+  <text x="54" y="9.5" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="5 Hole Linkage" textLength="16.5" lengthAdjust="spacingAndGlyphs" style="font-size:3.8px">5 Hole</text>
+  </g>
+  <g transform="translate(12 68)">
+  <text x="54" y="18.5" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="5 Hole Linkage" textLength="16.5" lengthAdjust="spacingAndGlyphs" style="font-size:3.8px">Linkage</text>
   </g>
   <g transform="translate(12 106)">
   <path d="M 14 7 L 134 7 A 7 7 0 0 1 134 21 L 14 21 A 7 7 0 0 1 14 7 Z" class="cut linkage-outline" data-cells="6" data-length-mm="120" data-pitch-mm="20" data-hole-count="7"/>
@@ -76,6 +89,12 @@
   </g>
   <g transform="translate(12 106)">
   <circle cx="134" cy="14" r="2" class="drill linkage-hole bracket-hole" data-hole-role="linkage-bracket" data-hole-diameter-mm="4" data-hole-index="6"/>
+  </g>
+  <g transform="translate(12 106)">
+  <text x="74" y="9.5" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="7 Hole Linkage" textLength="16.5" lengthAdjust="spacingAndGlyphs" style="font-size:3.8px">7 Hole</text>
+  </g>
+  <g transform="translate(12 106)">
+  <text x="74" y="18.5" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="7 Hole Linkage" textLength="16.5" lengthAdjust="spacingAndGlyphs" style="font-size:3.8px">Linkage</text>
   </g>
   <g transform="translate(12 144)">
   <path d="M 14 7 L 174 7 A 7 7 0 0 1 174 21 L 14 21 A 7 7 0 0 1 14 7 Z" class="cut linkage-outline" data-cells="8" data-length-mm="160" data-pitch-mm="20" data-hole-count="9"/>
@@ -106,5 +125,11 @@
   </g>
   <g transform="translate(12 144)">
   <circle cx="174" cy="14" r="2" class="drill linkage-hole bracket-hole" data-hole-role="linkage-bracket" data-hole-diameter-mm="4" data-hole-index="8"/>
+  </g>
+  <g transform="translate(12 144)">
+  <text x="94" y="9.5" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="9 Hole Linkage" textLength="16.5" lengthAdjust="spacingAndGlyphs" style="font-size:3.8px">9 Hole</text>
+  </g>
+  <g transform="translate(12 144)">
+  <text x="94" y="18.5" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="9 Hole Linkage" textLength="16.5" lengthAdjust="spacingAndGlyphs" style="font-size:3.8px">Linkage</text>
   </g>
 </svg>
