@@ -58,6 +58,8 @@ The editor follows a Canva/CAD-like shell with one shared scene state.
 
 - Character import/selection must create editable body parts, skeleton joints, bend directions, and anchors in `ProjectState`.
 - Free path drawing must be canvas-native and continuous; users should not need to type coordinates first.
+- Path Editor must render only character, skeleton, editable path, and path handles; it must not render mechanism geometry, mechanism pins, or mechanism overlays.
+- Mechanism Design is the first workflow tab that overlays character + path + mechanism together, and its mechanism visualization/animation must reuse the same Foundry renderer and fabrication/physics contracts.
 - IK must visibly support direct joints, two-joint limbs, three-joint limbs, and longer chains when the data permits it.
 - Bend/fold direction must be chosen with visible handles or compact toggles near the affected joint.
 - Mechanism binding must attach real end-effectors to selected body-part anchors; moving mechanisms must move the character preview.

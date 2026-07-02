@@ -1558,6 +1558,7 @@ const pathCanvasBlock = appText.slice(pathCanvasStart, pathInspectorStart);
 assert(pathCanvasBlock.includes('path-view-2d') && pathCanvasBlock.includes('path-view-3d'), 'Path Editor exposes a persistent 2D/3D Path view switch');
 assert(pathCanvasBlock.includes('pathViewMode === "2d"') && pathCanvasBlock.includes('<SceneSketch'), 'Path Editor 2D view uses editable SceneSketch for viewing, drawing, and point editing');
 assert(pathCanvasBlock.includes('<ThreePuppetPreview') && pathCanvasBlock.includes('testId="path-three-puppet"'), 'Path Editor 3D view uses ThreePuppetPreview');
+assert(pathCanvasBlock.includes('mechanisms={[]}'), 'Path Editor explicitly hides mechanism geometry so the tab shows only character plus path');
 assert(pathCanvasBlock.includes('cameraPresets={["iso"]}'), 'Path Editor 3D preview hides the preview-only 2D camera preset so editable 2D has one owner');
 assert(!pathCanvasBlock.includes('drawMode ? <SceneSketch'), 'Draw mode does not mount a special duplicate drawing canvas; it only forces the 2D Path view');
 assert(appText.includes('setPathViewMode("2d")'), 'Starting free-path drawing forces Path view back to 2D');
@@ -1602,6 +1603,7 @@ assert(threePreviewText.includes('part-art-decal'), '3D puppet preview names sur
 assert(threePreviewText.includes('cut-hole-ring'), '3D puppet preview draws raised joint-hole rings on part surfaces');
 assert(threePreviewText.includes('transparent: false, opacity: 1'), '3D puppet body plates are opaque assembled solids, not ghost overlays');
 assert(threePreviewText.includes('disposeOwnedMaterials(scene)'), '3D puppet preview disposes owned decal textures on unmount');
+assert(agentsContract.includes('Path Editor must render only character, skeleton, editable path') && agentsContract.includes('Mechanism Design is the first workflow tab that overlays character + path + mechanism together'), 'AGENTS.md locks tab-scoped rendering ownership for Path vs Mechanism Design');
 assert(designContract.includes('Getting Started is a compact modal dialog'), 'DESIGN.md separates Getting Started from full-screen onboarding');
 assert(designContract.includes('The Character tab is functional'), 'DESIGN.md defines Character as a functional editor tab');
 assert(appUiText.includes('splash-dialog') && appShellText.includes('MOTIONSMITH'), 'first-run welcome is a compact MotionSmith wordmark splash dialog');

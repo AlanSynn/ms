@@ -370,6 +370,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await page.mouse.up();
   await expect.poll(async () => Number(await pathPuppet.getAttribute('data-camera-yaw'))).toBeGreaterThan(yawBefore + 5);
   await expect(pathPuppet).toHaveAttribute('data-viewer-contract', 'shared-viewer3d:v1');
+  await expect(pathPuppet).toHaveAttribute('data-three-mechanism-count', '0');
+  await expect(pathPuppet).toHaveAttribute('data-three-selected-mechanism-type', '');
   await expect(pathPuppet).toHaveAttribute('data-layer-skeleton', 'shown');
   await page.getByTestId('path-three-puppet-toggle-skeleton').click();
   await expect(pathPuppet).toHaveAttribute('data-layer-skeleton', 'hidden');

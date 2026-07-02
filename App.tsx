@@ -3007,6 +3007,7 @@ const PathEditor = ({
                 project={project}
                 animatedParts={pathPreview?.parts ?? {}}
                 skeleton={pathPreview?.skeleton ?? project.skeleton}
+                mechanisms={[]}
                 angle={angle}
                 viewport={viewport}
                 setViewport={setViewport}
