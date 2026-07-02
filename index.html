@@ -140,8 +140,10 @@
       .app-shell .path-canvas-shell > svg[data-testid="path-canvas"] { height: 100%; min-height: 0; }
       .template-gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .55rem; align-content: end; }
       .guided-project-library { display: grid; grid-template-columns: 1fr; gap: .65rem; }
-      .guided-project-card { min-height: 7rem; }
-      .guided-project-card small { font-size: .82rem; line-height: 1.25; }
+      .guided-project-card { min-height: 7.25rem; gap: .55rem; }
+      .guided-card-cues { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .45rem; width: 100%; }
+      .guided-card-cues span { border: 1px solid var(--ms-line); border-radius: .85rem; background: rgba(255,255,255,.82); color: var(--ms-text-soft); padding: .42rem .5rem; font-size: .78rem; font-weight: 720; line-height: 1.05; }
+      .guided-card-cues em { display: block; margin-bottom: .18rem; color: var(--ms-muted); font-size: .56rem; font-style: normal; font-weight: 820; letter-spacing: .08em; text-transform: uppercase; }
       .character-setup-panel { min-height: 0; max-height: 100%; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--ms-line); border-radius: 1.2rem; background: rgba(255,255,255,.9); padding: .78rem; box-shadow: 0 14px 42px rgba(8,10,18,.06); }
       .part-art-controls { border: 1px solid var(--ms-line); border-radius: 1rem; background: var(--ms-bg-soft); padding: .7rem; }
       .template-tile { min-height: 5.25rem; border: 1px solid var(--ms-line); border-radius: 1.2rem; background: rgba(255,255,255,.88); padding: .72rem; text-align: left; box-shadow: 0 14px 42px rgba(8,10,18,.06); display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; transition: transform .18s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease; }
@@ -215,6 +217,13 @@
       .character-inspector { min-height: 0; overflow: auto; }
       .compact-workflow-row { display: flex; flex-wrap: wrap; gap: .35rem; }
       .compact-workflow-row span { display: inline-flex; align-items: center; min-height: 1.55rem; border: 1px solid var(--ms-line); border-radius: 999px; background: #fff; color: var(--ms-muted); padding: .18rem .48rem; font-size: .72rem; font-weight: 720; }
+      .lesson-ownership-cluster { border: 1px solid var(--ms-accent-line); border-radius: 1.1rem; background: linear-gradient(180deg, rgba(255,255,255,.94), rgba(246,243,255,.9)); padding: .72rem; box-shadow: 0 14px 42px rgba(139,92,246,.08); }
+      .lesson-ownership-head { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+      .lesson-ownership-head span { color: var(--ms-text); font-size: .76rem; font-weight: 780; text-align: right; }
+      .lesson-ownership-cues { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: .4rem; margin-top: .55rem; }
+      .lesson-ownership-cues span { border: 1px solid var(--ms-line); border-radius: .85rem; background: #fff; color: var(--ms-text-soft); padding: .42rem .5rem; font-size: .72rem; font-weight: 760; }
+      .lesson-ownership-actions { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .55rem; }
+      .lesson-ownership-actions .btn-secondary { min-height: 1.9rem; padding: .35rem .55rem; font-size: .68rem; }
       .character-part-list { border: 1px solid var(--ms-line); border-radius: 1.15rem; background: rgba(255,255,255,.84); padding: .72rem; }
       .character-part-list-item { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: .55rem; width: 100%; border: 1px solid var(--ms-line); border-radius: .95rem; background: #fff; color: var(--ms-text-soft); padding: .55rem .65rem; text-align: left; }
       .character-part-list-item:hover, .character-part-list-item.active { border-color: var(--ms-accent-line); background: var(--ms-accent-soft); color: var(--ms-accent); }

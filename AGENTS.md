@@ -17,6 +17,8 @@ MotionSmith is a tinkerable workbench, not a reading-heavy tutorial. Users shoul
 - AI/inference stays browser-local ONNX. If model caching or local inference fails, use starter/package workflows and show status; do not mock remote AI.
 - Guided classroom lesson templates must create real serializable `ProjectState` data. Blank starters stay mechanism-free; lessons may include paths/mechanisms only when they are editable and exportable.
 - Classroom entry is theme-guided first: guided project templates are the primary classroom start, while blank/import/open exploration stays secondary and always available. Keep this guidance in compact modal/left-pane/library surfaces, never as a center-canvas tutorial.
+- Guided project cards must show the result plus two novice cues only: `Change <editable thing>` and `Build <physical thing>`. Put direct-translation / sensemaking detail in stage context or teacher-pack metadata, not first-run cards.
+- Opening any guided project must land on Character with a compact `Make it yours` ownership cluster for parts, joints, path, mechanism fit, and reset. Guided starters are editable baselines, never locked demos.
 - Repository text and product UI are English-only. Do not add bilingual labels, Korean prose, or mixed-language examples; tests must block non-English Hangul text from returning.
 - Getting Started stays compact and result-first: Humanoid, Girl, Boy, Image, and Package tiles with tiny thumbnails only where useful, plus Import project as secondary. Avoid process/explanation copy in the first-run modal.
 - `Reset Lesson` must restore a known-good lesson baseline while preserving app settings; Foundry reset must restore finite mechanism preview state, not just stop playback.

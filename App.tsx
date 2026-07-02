@@ -88,6 +88,7 @@ import {
   resetProjectToLessonBaseline,
   serializeProject,
   type ClassroomLessonId,
+  type ClassroomLessonTemplate,
   uid,
   validatePath,
 } from "./utils/project";
@@ -800,6 +801,9 @@ const App: React.FC = () => {
   const selectedMechanism =
     project.mechanisms.find((m) => m.id === project.selectedMechanismId) ??
     project.mechanisms[0];
+  const activeClassroomLesson = classroomLessonById(
+    project.metadata.classroomLessonId,
+  );
   const playbackDurationMs =
     selectedMechanism?.targetPathId &&
     project.paths[selectedMechanism.targetPathId]
@@ -1122,6 +1126,7 @@ const App: React.FC = () => {
       setProject(loadProjectSnapshot(raw), { resetHistory: true });
       setCommandStatus(`Loaded project ${file.name}`);
       setShowWelcome(false);
+      setShowGettingStarted(false);
       setStage("path");
     } catch (error) {
       dispatch({
@@ -1644,6 +1649,8 @@ const App: React.FC = () => {
                 onImport={importProject}
                 onEditCharacter={editCharacterParts}
                 onSaveSkeleton={saveSkeleton}
+                activeClassroomLesson={activeClassroomLesson}
+                resetLesson={resetLesson}
                 goStage={goStage}
                 viewport={canvasViewport}
                 setViewport={setCanvasViewport}
@@ -1897,6 +1904,8 @@ const CharacterSelection = ({
   onImport,
   onEditCharacter,
   onSaveSkeleton,
+  activeClassroomLesson,
+  resetLesson,
   goStage,
   viewport,
   setViewport,
@@ -1918,6 +1927,8 @@ const CharacterSelection = ({
   onImport: (file: File) => void;
   onEditCharacter: () => void;
   onSaveSkeleton: () => void;
+  activeClassroomLesson?: ClassroomLessonTemplate;
+  resetLesson: () => void;
   goStage: (stage: AppStage) => void;
   viewport: CanvasViewport;
   setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
@@ -2057,6 +2068,62 @@ const CharacterSelection = ({
                       : "gray plates"}
                   </span>
                 </div>
+                {activeClassroomLesson && (
+                  <section
+                    className="lesson-ownership-cluster mt-4"
+                    data-testid="character-make-it-yours"
+                    aria-label="Make it yours"
+                  >
+                    <div className="lesson-ownership-head">
+                      <div className="section-title">Make it yours</div>
+                      <span>{activeClassroomLesson.outcome}</span>
+                    </div>
+                    <div className="lesson-ownership-cues">
+                      <span>Change {activeClassroomLesson.changeCue}</span>
+                      <span>Build {activeClassroomLesson.buildCue}</span>
+                    </div>
+                    <div className="lesson-ownership-actions">
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => goStage("character")}
+                      >
+                        Parts
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        disabled={partPanelDisabled}
+                        onClick={onEditCharacter}
+                      >
+                        Joints
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => goStage("path")}
+                      >
+                        Path
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() =>
+                          goStage(project.mechanisms.length ? "foundry" : "path")
+                        }
+                      >
+                        Fit
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={resetLesson}
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </section>
+                )}
                 <div className="mt-4 grid gap-2">
                   <button
                     className="btn-primary"

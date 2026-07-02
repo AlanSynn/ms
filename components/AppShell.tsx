@@ -12,6 +12,7 @@ export type GuidedLessonTile = {
     id: string;
     label: string;
     outcome: string;
+    changeCue: string;
     buildCue: string;
     actionLabel: string;
     sensemaking?: {
@@ -300,7 +301,7 @@ export const GettingStartedDialog = ({ starterTemplates, guidedLessons, onLesson
     const packageInputRef = useRef<HTMLInputElement>(null);
     const onnxInputRef = useRef<HTMLInputElement>(null);
     const importInputRef = useRef<HTMLInputElement>(null);
-    const [showGuided, setShowGuided] = useState(false);
+    const [showGuided, setShowGuided] = useState(true);
     useEffect(() => { dialogRef.current?.focus(); }, []);
     const trapDialogFocus = (event: React.KeyboardEvent) => {
         if (event.key === 'Escape') {
@@ -333,15 +334,18 @@ export const GettingStartedDialog = ({ starterTemplates, guidedLessons, onLesson
             <div className="getting-started-head">
                 <div>
                     <div className="section-title">Getting started</div>
-                    <h2 id="getting-started-title">{showGuided ? 'Pick a project.' : 'Start a character.'}</h2>
+                    <h2 id="getting-started-title">{showGuided ? 'Pick a project.' : 'Other starts.'}</h2>
                 </div>
-                <button type="button" className="btn-secondary" onClick={showGuided ? () => setShowGuided(false) : onClose}>{showGuided ? 'Back' : 'Skip'}</button>
+                <button type="button" className="btn-secondary" onClick={showGuided ? () => setShowGuided(false) : onClose}>{showGuided ? 'Starters' : 'Skip'}</button>
             </div>
             {showGuided ? <div className="guided-project-library" data-testid="guided-project-library">
-                {guidedLessons.map(lesson => <button key={lesson.id} type="button" className="template-tile primary guided-project-card" data-testid={`guided-project-card-${lesson.id}`} aria-label={lesson.actionLabel} data-build-cue={lesson.buildCue} data-evidence-cue={lesson.sensemaking?.evidenceCue ?? ''} data-expected-answer={lesson.sensemaking?.expectedAnswer ?? ''} data-clip-slot={lesson.sensemaking?.clipSlot ?? ''} onClick={() => onLesson(lesson.id)}>
+                {guidedLessons.map(lesson => <button key={lesson.id} type="button" className="template-tile primary guided-project-card" data-testid={`guided-project-card-${lesson.id}`} aria-label={`${lesson.actionLabel}: ${lesson.outcome}`} data-change-cue={lesson.changeCue} data-build-cue={lesson.buildCue} data-direct-translation={lesson.sensemaking?.directTranslation ?? ''} data-evidence-cue={lesson.sensemaking?.evidenceCue ?? ''} data-expected-answer={lesson.sensemaking?.expectedAnswer ?? ''} data-clip-slot={lesson.sensemaking?.clipSlot ?? ''} onClick={() => onLesson(lesson.id)}>
                     <span className="blueprint-pill">{lesson.buildCue}</span>
                     <strong>{lesson.outcome}</strong>
-                    <small>{lesson.sensemaking?.directTranslation ?? lesson.label}</small>
+                    <span className="guided-card-cues" aria-hidden="true">
+                        <span><em>Change</em> {lesson.changeCue}</span>
+                        <span><em>Build</em> {lesson.buildCue}</span>
+                    </span>
                     <b><Sparkles size={16}/> Open</b>
                 </button>)}
             </div> : <>

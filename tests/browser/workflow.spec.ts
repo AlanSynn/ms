@@ -2,7 +2,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createLessonProject, serializeProject } from '../../utils/project';
+import { CLASSROOM_LESSONS, createLessonProject, serializeProject } from '../../utils/project';
 import { FABRICATION_RENDER_LAYER_Z_STEP } from '../../utils/fabrication';
 
 const expectCleanPage = (pageErrors: string[], consoleErrors: string[]) => {
@@ -106,10 +106,14 @@ test('Getting Started guided project opens a real editable lesson', async ({ pag
   await dismissWelcomeSplash(page);
   const gettingStarted = page.getByTestId('getting-started-dialog');
   await expect(gettingStarted).toBeVisible();
-  await gettingStarted.getByTestId('getting-started-card-guided').click();
+  await expect(gettingStarted).toContainText('Pick a project.');
+  await expect(gettingStarted.getByTestId('guided-project-library')).toBeVisible();
   const wavingCard = gettingStarted.getByTestId('guided-project-card-waving-arm');
   await expect(wavingCard).toContainText('Make an arm wave');
-  await expect(wavingCard).toContainText('Crank turns');
+  await expect(wavingCard).toContainText('Change wrist path');
+  await expect(wavingCard).toContainText('Build four-bar');
+  await expect(wavingCard).not.toContainText('Crank turns');
+  await expect(wavingCard).toHaveAttribute('data-direct-translation', 'Crank turns -> rocker swings');
   await expect(wavingCard).toHaveAttribute('data-evidence-cue', 'right wrist follows the rocker arc');
   await expect(wavingCard).toHaveAttribute('data-expected-answer', 'The board pivots stay fixed');
   await expect(wavingCard).toHaveAttribute('data-clip-slot', 'generated-loop');
@@ -117,6 +121,12 @@ test('Getting Started guided project opens a real editable lesson', async ({ pag
 
   await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
   await expectProjectCounts(page, 14, 1, 1);
+  const makeItYours = page.getByTestId('character-make-it-yours');
+  await expect(makeItYours).toBeVisible();
+  await expect(makeItYours).toContainText('Make it yours');
+  await expect(makeItYours).toContainText('Change wrist path');
+  await expect(makeItYours).toContainText('Build four-bar');
+  await expect(makeItYours).not.toContainText('Crank turns -> rocker swings');
   await expect(page.getByTestId('status-bar')).toContainText('Make an arm wave ready');
   await page.getByRole('button', { name: /Foundry/i }).click();
   await expect(page.getByTestId('foundry-visible-sensemaking')).toContainText('Crank turns');
@@ -137,8 +147,14 @@ const importWavingArmLessonProject = async (page: Page, targetStage: 'character'
   await dismissWelcomeSplash(page);
   const projectPath = await writeWavingArmLessonProject();
   const gettingStarted = page.getByTestId('getting-started-dialog');
-  if (await gettingStarted.count()) await page.getByTestId('getting-started-import-input').setInputFiles(projectPath);
-  else await page.getByTestId('project-file-input').setInputFiles(projectPath);
+  if (await gettingStarted.count()) {
+    if (await gettingStarted.getByTestId('guided-project-library').count()) {
+      await gettingStarted.getByRole('button', { name: 'Starters' }).click();
+    }
+    await page.getByTestId('getting-started-import-input').setInputFiles(projectPath);
+  } else {
+    await page.getByTestId('project-file-input').setInputFiles(projectPath);
+  }
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
   if (targetStage === 'character') {
     await page.getByRole('button', { name: /^Character$/i }).click();
@@ -238,7 +254,32 @@ test('character → path → foundry → design → blueprint runs end-to-end in
 
   const gettingStarted = page.getByTestId('getting-started-dialog');
   await expect(gettingStarted).toBeVisible();
-  await expect(gettingStarted).toContainText('Start a character.');
+  await expect(gettingStarted).toContainText('Pick a project.');
+  const guidedLibrary = gettingStarted.getByTestId('guided-project-library');
+  await expect(guidedLibrary).toBeVisible();
+  await expect(gettingStarted.getByTestId('getting-started-gallery')).toHaveCount(0);
+  await expect(guidedLibrary).toContainText('Make an arm wave');
+  await expect(guidedLibrary).toContainText('Make a head bob');
+  await expect(guidedLibrary).toContainText('Make a foot step');
+  await expect(guidedLibrary).toContainText('Make gears spin');
+  await expect(guidedLibrary.getByTestId('guided-project-card-waving-arm')).toContainText('Change wrist path');
+  await expect(guidedLibrary.getByTestId('guided-project-card-waving-arm')).toContainText('Build four-bar');
+  await expect(guidedLibrary.getByTestId('guided-project-card-head-bob')).toContainText('Change head path');
+  await expect(guidedLibrary.getByTestId('guided-project-card-head-bob')).toContainText('Build cam');
+  await expect(guidedLibrary.getByTestId('guided-project-card-walking-leg')).toContainText('Change foot path');
+  await expect(guidedLibrary.getByTestId('guided-project-card-walking-leg')).toContainText('Build five-bar');
+  await expect(guidedLibrary.getByTestId('guided-project-card-spin-gears')).toContainText('Change gear size');
+  await expect(guidedLibrary.getByTestId('guided-project-card-spin-gears')).toContainText('Build gear pair');
+  for (const lesson of CLASSROOM_LESSONS) {
+    await expect(gettingStarted, `${lesson.id} direct translation stays out of Getting Started`).not.toContainText(lesson.sensemaking.directTranslation);
+  }
+  const myCharacterCard = gettingStarted.getByTestId('guided-project-card-my-character');
+  await expect(myCharacterCard).toContainText('Start with my character');
+  await expect(myCharacterCard).toContainText('Change joints');
+  await expect(myCharacterCard).toContainText('Build rig first');
+  await expect(myCharacterCard).toHaveAttribute('data-evidence-cue', 'parts keep visible joint holes');
+  await gettingStarted.getByRole('button', { name: 'Starters' }).click();
+  await expect(gettingStarted).toContainText('Other starts.');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Pick a project');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Starter rig');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).toContainText('Image');
@@ -259,20 +300,6 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Local browser processing');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('rigging');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Waving arm');
-  await gettingStarted.getByTestId('getting-started-card-guided').click();
-  await expect(gettingStarted).toContainText('Pick a project.');
-  await expect(gettingStarted.getByTestId('guided-project-library')).toContainText('Make an arm wave');
-  await expect(gettingStarted.getByTestId('guided-project-library')).toContainText('Make a head bob');
-  await expect(gettingStarted.getByTestId('guided-project-library')).toContainText('Make a foot step');
-  await expect(gettingStarted.getByTestId('guided-project-library')).toContainText('Make gears spin');
-  await expect(gettingStarted.getByTestId('guided-project-library')).toContainText('four-bar');
-  await expect(gettingStarted.getByTestId('guided-project-library')).toContainText('Crank turns');
-  const myCharacterCard = gettingStarted.getByTestId('guided-project-card-my-character');
-  await expect(myCharacterCard).toContainText('Start with my character');
-  await expect(myCharacterCard).toContainText('rig first');
-  await expect(myCharacterCard).toHaveAttribute('data-evidence-cue', 'parts keep visible joint holes');
-  await gettingStarted.getByRole('button', { name: 'Back' }).click();
-  await expect(gettingStarted).toContainText('Start a character.');
   await page.getByRole('button', { name: 'Skip' }).click();
 
   await expect(page.getByTestId('character-screen')).toBeVisible();
@@ -2510,6 +2537,8 @@ test('guided classroom lesson opens real baseline and can reset safely', async (
   await page.goto('/');
   await importWavingArmLessonProject(page, 'character');
   await expectProjectCounts(page, 14, 1, 1);
+  await expect(page.getByTestId('character-make-it-yours')).toContainText('Change wrist path');
+  await expect(page.getByTestId('character-make-it-yours')).toContainText('Build four-bar');
   const checklist = page.getByTestId('classroom-checklist');
   await expect(checklist).toContainText('Character');
   await expect(checklist).toContainText('Path');

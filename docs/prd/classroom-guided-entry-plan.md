@@ -10,6 +10,8 @@ Recent teacher feedback changes the entry assumption. The earlier hypothesis was
 
 Teachers repeatedly asked for a clearer start because they wanted students to understand what the app enables before worrying about digital setup, physical build steps, or character import. The app still needs creative freedom, but freedom should arrive after a concrete, working project baseline.
 
+Second synthesis: the entry needs motion-editing scaffolds, not only starter characters. Students should start from a working theme, see what will move, then choose what to change: wrist path, head path, foot path, gear size, or joints. Upload and blank-start routes remain available, but they are not the primary classroom posture.
+
 ## Decision
 
 MotionSmith should begin classroom use with a small set of project themes that create real editable projects. The first decision should answer:
@@ -84,16 +86,17 @@ Minimum project cards:
 Card copy policy:
 
 - One result label.
-- One build cue.
+- One `Change` cue naming the editable thing.
+- One `Build` cue naming the physical mechanism/artifact.
 - One action.
 - No process explanation.
 - No internal ids in default view.
 
 Examples:
 
-- `Arm wave` / `four-bar` / `Open`
-- `Head bob` / `cam` / `Open`
-- `Your character` / `rig first` / `Start`
+- `Make an arm wave` / `Change wrist path` / `Build four-bar` / `Open`
+- `Make a head bob` / `Change head path` / `Build cam` / `Open`
+- `Start with my character` / `Change joints` / `Build rig first` / `Start`
 
 ## Ownership model
 
@@ -161,6 +164,7 @@ type GuidedEntryDescriptor = {
   kind: 'lesson' | 'starter' | 'import';
   label: string;
   outcome: string;
+  changeCue: string;
   buildCue: string;
   startStage: AppStage;
   recommendedMechanismType?: MechanismConfig['type'];
@@ -236,7 +240,9 @@ Done when guided and free paths both produce the same kind of buildable, exporta
 
 Completed first production slice:
 
-- Getting Started now presents a compact primary guided route, then opens a secondary project library instead of crowding the first modal.
+- Getting Started now opens on guided theme projects first; starter/import/open exploration routes stay one click away as secondary choices.
+- Guided cards show result, `Change`, and `Build` cues only. Direct-translation sensemaking remains metadata for later stage context and teacher-pack use.
+- Character now gets a `Make it yours` ownership cluster after a guided lesson opens so students can move from baseline to personal edits immediately.
 - `Waving arm` creates real editable lesson state through `createLessonProject`, lands on Character, preserves reset baseline behavior, and carries outcome/build-cue/sensemaking metadata.
 - Minimum guided cards now create real editable state: arm wave/four-bar, head bob/cam, foot step/five-bar, gear spin/gear pair, and my-character/blank humanoid starter.
 - `Start with my character` creates a real blank humanoid starter from the guided library with editable parts and joints, no hidden mechanism, and no upload requirement.

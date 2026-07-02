@@ -435,13 +435,13 @@ assert(classroomSensemakingPlan.includes('Four-bar linkage') && classroomSensema
 assert(classroomSensemakingPlan.includes('Assessment is local, formative, and one-tap') && classroomSensemakingPlan.includes('Teacher pack output') && classroomSensemakingPlan.includes('visual evidence cue'), 'sensemaking plan defines local assessment, evidence cues, and teacher-pack outputs');
 assert(classroomSensemakingPlan.includes('No teacher dashboard') && classroomSensemakingPlan.includes('No required YouTube dependency'), 'sensemaking plan excludes server and mandatory streaming scope');
 assert(CLASSROOM_LESSONS.some(lesson => lesson.id === 'waving-arm' && lesson.label === 'Waving arm' && lesson.actionLabel === 'Open lesson'), 'guided classroom lesson catalog exposes the waving-arm lesson as an English-only entry point');
-assert(CLASSROOM_LESSONS.some(lesson => lesson.id === 'my-character' && lesson.outcome === 'Start with my character' && lesson.actionLabel === 'Start' && lesson.buildCue === 'rig first'), 'guided classroom lesson catalog includes a result-first my-character starter without upload language');
+assert(CLASSROOM_LESSONS.some(lesson => lesson.id === 'my-character' && lesson.outcome === 'Start with my character' && lesson.actionLabel === 'Start' && lesson.changeCue === 'joints' && lesson.buildCue === 'rig first'), 'guided classroom lesson catalog includes a result-first my-character starter without upload language');
 const minimumGuidedLessonIds = ['waving-arm', 'head-bob', 'walking-leg', 'spin-gears', 'my-character'] as const;
 for (const id of minimumGuidedLessonIds) {
   assert(CLASSROOM_LESSONS.some(lesson => lesson.id === id), `${id} is present in the guided classroom theme library`);
   assert.equal(classroomLessonById(id)?.startStage, 'character', `${id} starts in Character for immediate ownership edits`);
 }
-assert(CLASSROOM_LESSONS.every(lesson => lesson.outcome && lesson.buildCue && lesson.sensemaking?.directTranslation && lesson.sensemaking?.tryThis && lesson.sensemaking?.expectedAnswer && lesson.sensemaking?.evidenceCue && lesson.sensemaking?.clipSlot === 'generated-loop'), 'guided lesson entries carry result-first outcome, build cue, visible sensemaking, check answers, evidence cues, and generated-loop clip slots');
+assert(CLASSROOM_LESSONS.every(lesson => lesson.outcome && lesson.changeCue && lesson.buildCue && lesson.sensemaking?.directTranslation && lesson.sensemaking?.tryThis && lesson.sensemaking?.expectedAnswer && lesson.sensemaking?.evidenceCue && lesson.sensemaking?.clipSlot === 'generated-loop'), 'guided lesson entries carry result-first outcome, change cue, build cue, hidden sensemaking, check answers, evidence cues, and generated-loop clip slots');
 for (const [type, metadata] of Object.entries(MECHANISM_TEMPLATE_LIBRARY)) {
   assert(metadata.classroomSensemaking.directTranslation, `${type} has direct translation sensemaking`);
   assert(metadata.classroomSensemaking.applicationCue, `${type} has an application cue`);
@@ -455,6 +455,27 @@ for (const [type, metadata] of Object.entries(MECHANISM_TEMPLATE_LIBRARY)) {
 }
 
 assert.equal(classroomLessonById('waving-arm')?.startStage, 'character', 'classroom lesson opens in Character so students inspect/edit the rig before drawing');
+for (const lesson of CLASSROOM_LESSONS) {
+  const lessonProjectState = createLessonProject(lesson.id);
+  const roundTrip = loadProjectSnapshot(JSON.parse(serializeProject(lessonProjectState)));
+
+  assert.equal(roundTrip.metadata.classroomLessonId, lesson.id, `${lesson.id} carries classroom lesson metadata`);
+  assert.equal(roundTrip.metadata.classroomLessonLabel, lesson.label, `${lesson.id} carries classroom lesson label`);
+  assert(roundTrip.skeleton && Object.keys(roundTrip.skeleton.joints).length >= 17, `${lesson.id} creates a real editable skeleton`);
+  assert(Object.keys(roundTrip.parts).length >= 14, `${lesson.id} creates real editable body parts`);
+  assert(roundTrip.partOrder.length >= 14, `${lesson.id} creates a real part order`);
+  assert(roundTrip.settings.physicalKit.gridPitchMm > 0, `${lesson.id} carries real fabrication settings`);
+  assert.equal(roundTrip.processing.stage, 'ready', `${lesson.id} returns ready ProjectState`);
+
+  if (lesson.id === 'my-character') {
+    assert.equal(roundTrip.mechanisms.length, 0, `${lesson.id} stays mechanism-free`);
+    assert.equal(Object.keys(roundTrip.paths).length, 0, `${lesson.id} stays path-free`);
+  } else {
+    assert.equal(roundTrip.mechanisms.length, 1, `${lesson.id} creates one real editable mechanism`);
+    assert.equal(roundTrip.selectedMechanismId, roundTrip.mechanisms[0].id, `${lesson.id} selects its mechanism`);
+    assert((roundTrip.mechanisms[0].generatedPath?.length ?? 0) >= 3, `${lesson.id} mechanism has generated motion samples`);
+  }
+}
 assert.equal(classroomLesson.metadata.classroomLessonId, 'waving-arm', 'lesson ProjectState carries resettable classroom lesson metadata');
 assert.equal(classroomLesson.metadata.classroomLessonLabel, 'Waving arm', 'lesson ProjectState keeps the English-only classroom label');
 assert.equal(classroomLesson.mechanisms.length, 1, 'waving-arm lesson includes one real fitted mechanism instead of a mock recommendation card');
@@ -1599,13 +1620,15 @@ assert(!appText.includes('flex flex-col items-end gap-2'), 'top app bar does not
 assert(appText.includes('readStorageWithLegacy') && appText.includes('migrateStorageValue'), 'MotionSmith storage rename keeps legacy autosave/workspace migration hooks');
 assert(!appUiText.includes('MOTIONSMITH_VIDEO_URL'), 'welcome splash does not embed the old preview video');
 assert(appUiText.includes('getting-started-dialog') && appUiText.includes('getting-started-gallery'), 'Getting Started is an explicit compact starter dialog');
-assert(appUiText.includes('Start a character.'), 'Getting Started uses a short result-oriented heading');
+assert(appUiText.includes('const [showGuided, setShowGuided] = useState(true)') && appUiText.includes('Pick a project.') && appUiText.includes('Other starts.'), 'Getting Started defaults to guided theme projects while keeping secondary starts one click away');
 assert(appUiText.includes('Starter rig') && appUiText.includes('Character file') && appUiText.includes('Open full project') && !appUiText.includes('>Humanoid<') && !appUiText.includes('>Package<') && !appUiText.includes('Import project'), 'Getting Started separates starter rig, character file, and full project entry points');
-assert(appUiText.includes('getting-started-card-guided') && appUiText.includes('Pick a project') && appUiText.includes('guided-project-library') && appUiText.includes('guided-project-card-${lesson.id}'), 'Getting Started exposes guided projects as a secondary visible entry route without preloading them into the first screen');
-assert(appUiText.includes('data-evidence-cue') && appUiText.includes('data-expected-answer') && appUiText.includes('data-clip-slot'), 'Guided project cards carry local classroom check/evidence metadata without adding visible text load');
+assert(appUiText.includes('getting-started-card-guided') && appUiText.includes('Pick a project') && appUiText.includes('guided-project-library') && appUiText.includes('guided-project-card-${lesson.id}'), 'Getting Started exposes guided projects as the primary visible entry route while keeping open exploration available');
+assert(appUiText.includes('Change') && appUiText.includes('Build') && appUiText.includes('data-change-cue') && appUiText.includes('data-direct-translation') && appUiText.includes('data-evidence-cue') && appUiText.includes('data-expected-answer') && appUiText.includes('data-clip-slot'), 'Guided project cards show change/build cues while carrying local classroom check/evidence metadata without visible sensemaking text load');
+assert(appText.includes('character-make-it-yours') && appText.includes('Make it yours') && appText.includes('activeClassroomLesson.changeCue') && appText.includes('activeClassroomLesson.buildCue'), 'Guided lessons land on Character with compact ownership controls');
 assert(appUiText.includes('getting-started-card-humanoid') && appUiText.includes('getting-started-card-image') && appUiText.includes('getting-started-card-package') && appUiText.includes('getting-started-card-${template.id}') && appText.includes('id: "girl"') && appText.includes('id: "boy"'), 'Getting Started exposes compact starter/result choices including Girl and Boy');
 assert(!appUiText.includes('Local browser processing') && !appUiText.includes('Load art + skeleton') && !appUiText.includes('Full body rig') && !appUiText.includes('Browser ONNX rigging'), 'Getting Started avoids process/explanation copy');
-assert(!appUiText.includes('lesson-template-'), 'Getting Started does not show lesson cards in the first screen');
+assert(!appUiText.includes('Crank turns -> rocker swings') && !appUiText.includes('Cam shape -> follower lifts') && !appUiText.includes('Two cranks -> one trace point') && !appUiText.includes('Touching teeth -> spin transfers') && !appUiText.includes('Parts + joints -> motion rig'), 'Getting Started keeps direct-translation sensemaking out of visible first-run copy');
+assert(!appUiText.includes('lesson-template-'), 'Getting Started does not use legacy lesson-template cards');
 assert(indexText.includes('.starter-thumb { width: 2.25rem; height: 2.25rem;'), 'Girl/Boy starter thumbnails stay compact');
 assert(appText.includes('return { present: createEmptyProject(), past: [], future: [] }'), 'App initializes an empty project instead of preloading a character');
 assert(appText.includes('setProject(createEmptyProject(), { resetHistory: true })'), 'New Project resets to an empty project instead of a starter character');
