@@ -169,8 +169,9 @@ assert(viteConfigText.includes("base: isTauri ? './' : webBase"), 'Tauri stays r
 assert(viteConfigText.includes('chunkSizeWarningLimit: 2400'), 'Vite chunk warning budget is explicit for intentional lazy Rapier/ONNX browser chunks');
 assert(codebaseCleanupPlan.includes('Button and command audit lock') && codebaseCleanupPlan.includes('utils/appCommands.ts'), 'cleanup plan records the executable button/menu audit lock');
 assert(codebaseCleanupPlan.includes('Warning fixes locked') && codebaseCleanupPlan.includes('Rapier warning boundary'), 'cleanup plan records scoped warning fixes instead of broad suppression');
-assert(codebaseCleanupPlan.includes('`App.tsx` | 11362') && codebaseCleanupPlan.includes('First split'), 'cleanup plan records the current App.tsx hotspot and first split target');
+assert(codebaseCleanupPlan.includes('`App.tsx` | 11293') && codebaseCleanupPlan.includes('First split'), 'cleanup plan records the current App.tsx hotspot and first split target');
 assert(codebaseCleanupPlan.includes('`components/stages/character/ProgressBlock.tsx` | 84') && codebaseCleanupPlan.includes('character import progress UI lives outside the app shell'), 'cleanup plan records the extracted character progress seam');
+assert(codebaseCleanupPlan.includes('`components/ui/InspectorControls.tsx` | 70') && codebaseCleanupPlan.includes('shared inspector sliders/toggles live outside the app shell'), 'cleanup plan records the extracted inspector controls seam');
 assert(codebaseCleanupPlan.includes('`utils/mechanismRecommendations.ts` | 633') && codebaseCleanupPlan.includes('pure recommendation/fitting seam'), 'cleanup plan records the extracted mechanism recommendation seam');
 assert(codebaseCleanupPlan.includes('`utils/foundryCamera.ts` | 140') && codebaseCleanupPlan.includes('pure Foundry camera/projection seam'), 'cleanup plan records the extracted Foundry camera seam');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
