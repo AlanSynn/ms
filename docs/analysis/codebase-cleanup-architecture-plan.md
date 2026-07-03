@@ -27,9 +27,11 @@ Measured on 2026-07-03.
 
 | File | Lines | Decision |
 | --- | ---: | --- |
-| `App.tsx` | 11293 | First split. Extract by behavior-preserving seams only: command handlers, stage components, foundry/design renderer adapters, import dialogs, then helper reducers. No redesign mixed into extraction. |
+| `App.tsx` | 10651 | First split. Extract by behavior-preserving seams only: command handlers, stage components, foundry/design renderer adapters, import dialogs, then helper reducers. No redesign mixed into extraction. |
 | `components/stages/character/ProgressBlock.tsx` | 84 | Done: character import progress UI lives outside the app shell. Keep it presentation-only; ONNX/import state remains canonical `ProjectState.processing`. |
 | `components/ui/InspectorControls.tsx` | 70 | Done: shared inspector sliders/toggles live outside the app shell. Keep them presentation-only; stage/domain handlers own state mutation. |
+| `components/stages/character/PartInspector.tsx` | 276 | Done: selected-part inspector owns part toggles, cut controls, and artwork/transform fields outside the app shell. Keep it dispatch-only; no parallel part state except transient cut selection. |
+| `components/stages/character/CutOutlineEditorDialog.tsx` | 379 | Done: cut-outline editor owns modal pointer editing and contour viewport math outside the app shell. Keep it under the character seam until a pure contour helper is needed elsewhere. |
 | `utils/mechanismRecommendations.ts` | 633 | Done: pure recommendation/fitting seam shared by Foundry export and recommendation flows. Keep deterministic; no DOM/storage side effects. |
 | `utils/foundryCamera.ts` | 140 | Done: pure Foundry camera/projection seam shared by Foundry and Design previews. Keep deterministic; no DOM/storage side effects. |
 | `components/ThreePuppetPreview.tsx` | 1550 | Split after `App.tsx` seams stabilize. Keep one Three/Rapier boundary; move geometry/material/cache helpers only when duplicated or directly touched. |
@@ -82,12 +84,13 @@ Both gates passed after adding the golden-master gate and fixing the typed expor
    - Done: assembly workbench lives in `components/stages/assembly/AssemblyWorkbench.tsx`.
    - Done: `components/stages/character/ProgressBlock.tsx` owns the import progress card and status label outside `App.tsx`.
    - Done: `components/ui/InspectorControls.tsx` owns shared mini number and toggle controls used by inspectors.
-   - Next lowest-risk leaf seams before stage shells: extract the shared part/cut inspector cluster, then skeleton inspector. After those shared leaves are clean, extract `CharacterSelection` and `PathEditor`, then Options and Assembly Guide wrappers. Move `MechanismFoundry`, `MechanismDesign`, and `DesignFoundryPreview` only after their pure adapters are smaller. Each stage receives data/actions; no stage owns mechanism rules.
+   - Done: `components/stages/character/PartInspector.tsx` and `CutOutlineEditorDialog.tsx` own the shared part/cut inspector leaf used by Character and Path.
+   - Next lowest-risk leaf seam before stage shells: extract the skeleton inspector. After those shared leaves are clean, extract `CharacterSelection` and `PathEditor`, then Options and Assembly Guide wrappers. Move `MechanismFoundry`, `MechanismDesign`, and `DesignFoundryPreview` only after their pure adapters are smaller. Each stage receives data/actions; no stage owns mechanism rules.
 
 3. **Domain helpers**
    - Done: mechanism fitting/recommendations live in `utils/mechanismRecommendations.ts`.
    - Assembly playback derivation remains in `utils/assemblyPlayback.ts`.
-   - Cut-outline math leaves `App.tsx` for a pure helper module before any new cut UI work.
+   - Done: cut-outline math left `App.tsx` with the cut editor seam; extract it to a pure helper only when another consumer appears.
 
 4. **Renderer split**
    - `ThreePuppetPreview.tsx`: keep React wrapper small; move repeated geometry/material/cache helpers to renderer helpers.
