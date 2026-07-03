@@ -169,7 +169,7 @@ assert(viteConfigText.includes("base: isTauri ? './' : webBase"), 'Tauri stays r
 assert(viteConfigText.includes('chunkSizeWarningLimit: 2400'), 'Vite chunk warning budget is explicit for intentional lazy Rapier/ONNX browser chunks');
 assert(codebaseCleanupPlan.includes('Button and command audit lock') && codebaseCleanupPlan.includes('utils/appCommands.ts'), 'cleanup plan records the executable button/menu audit lock');
 assert(codebaseCleanupPlan.includes('Warning fixes locked') && codebaseCleanupPlan.includes('Rapier warning boundary'), 'cleanup plan records scoped warning fixes instead of broad suppression');
-assert(codebaseCleanupPlan.includes('`App.tsx` | 10244') && codebaseCleanupPlan.includes('First split'), 'cleanup plan records the current App.tsx hotspot and first split target');
+assert(codebaseCleanupPlan.includes('`App.tsx` | 10176') && codebaseCleanupPlan.includes('First split'), 'cleanup plan records the current App.tsx hotspot and first split target');
 assert(codebaseCleanupPlan.includes('`components/stages/character/ProgressBlock.tsx` | 84') && codebaseCleanupPlan.includes('character import progress UI lives outside the app shell'), 'cleanup plan records the extracted character progress seam');
 assert(codebaseCleanupPlan.includes('`components/ui/InspectorControls.tsx` | 70') && codebaseCleanupPlan.includes('shared inspector sliders/toggles live outside the app shell'), 'cleanup plan records the extracted inspector controls seam');
 assert(codebaseCleanupPlan.includes('`components/stages/character/PartInspector.tsx` | 276') && codebaseCleanupPlan.includes('selected-part inspector owns part toggles'), 'cleanup plan records the extracted part inspector seam');
@@ -178,6 +178,7 @@ assert(codebaseCleanupPlan.includes('`components/stages/character/SkeletonInspec
 assert(codebaseCleanupPlan.includes('`components/stages/character/CharacterImportOverlays.tsx` | 165') && codebaseCleanupPlan.includes('character import status/review overlays live outside the app shell'), 'cleanup plan records the extracted character import overlay seam');
 assert(codebaseCleanupPlan.includes('`components/stages/character/CharacterLessonOwnership.tsx` | 47') && codebaseCleanupPlan.includes('guided lesson ownership cues/actions live outside the app shell'), 'cleanup plan records the extracted guided lesson ownership seam');
 assert(codebaseCleanupPlan.includes('`components/stages/character/CharacterSetupPanel.tsx` | 53') && codebaseCleanupPlan.includes('Character setup right-inspector wrapper lives outside the app shell'), 'cleanup plan records the extracted character setup panel seam');
+assert(codebaseCleanupPlan.includes('`components/stages/character/CharacterImportControls.tsx` | 103') && codebaseCleanupPlan.includes('character import entry controls live outside the app shell'), 'cleanup plan records the extracted character import controls seam');
 assert(codebaseCleanupPlan.includes('`utils/mechanismRecommendations.ts` | 633') && codebaseCleanupPlan.includes('pure recommendation/fitting seam'), 'cleanup plan records the extracted mechanism recommendation seam');
 assert(codebaseCleanupPlan.includes('`utils/foundryCamera.ts` | 140') && codebaseCleanupPlan.includes('pure Foundry camera/projection seam'), 'cleanup plan records the extracted Foundry camera seam');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
@@ -1776,10 +1777,12 @@ const skeletonInspectorText = readFileSync(join(process.cwd(), 'components', 'st
 const characterImportOverlaysText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CharacterImportOverlays.tsx'), 'utf8');
 const characterLessonOwnershipText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CharacterLessonOwnership.tsx'), 'utf8');
 const characterSetupPanelText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CharacterSetupPanel.tsx'), 'utf8');
+const characterImportControlsText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CharacterImportControls.tsx'), 'utf8');
 const appText = readFileSync(join(process.cwd(), 'App.tsx'), 'utf8');
 const appShellText = readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8');
 const appUiText = `${appText}
-${appShellText}`;
+${appShellText}
+${characterImportControlsText}`;
 const typesText = readFileSync(join(process.cwd(), 'types.ts'), 'utf8');
 const indexText = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
 assert(canvasText.includes('fabricationGearPathD'), '2D canvas gear rendering uses shared fabrication gear geometry');
@@ -1948,11 +1951,12 @@ assert(appText.includes('returnStage: "character"'), 'Accepted character loads s
 assert(characterImportOverlaysText.includes('character-import-review') && appText.includes('<CharacterImportStatusDock') && appText.includes('reviewedProject={reviewedProject}') && appText.includes('<CharacterImportReviewDialog') && characterImportOverlaysText.includes('showImportChecks = project.settings.debugVisuals'), 'Character imports preview the pending character and put approval in a centered overlay while checks stay dev-only');
 assert(appUiText.includes('Dev mode') && !appUiText.includes('Debug visuals'), 'Options expose debug overlays as Dev mode instead of novice-facing debug copy');
 assert(!appText.includes('<WelcomeDialog') && !appUiText.includes('WelcomeDialog') && !appText.includes('setShowWelcome') && !appText.includes('setShowGettingStarted(!hideNextTime)') && appText.includes('const [showGettingStarted, setShowGettingStarted] = useState(false)'), 'Startup uses the static boot loader only; the editor opens directly to Character and Guide is explicit');
-assert(appText.includes('onOpenGettingStarted'), 'Character tab can reopen Getting Started without owning its starter gallery');
+assert(characterImportControlsText.includes('onOpenGettingStarted') && appText.includes('<CharacterImportControls'), 'Character tab can reopen Getting Started through extracted import controls without owning its starter gallery');
 assert(!appText.includes('Start with character art'), 'Character tab no longer carries the old hero/onboarding copy');
 assert(!indexText.includes('.onboarding-page'), 'CSS no longer keeps a full-screen onboarding page mode');
 assert(!indexText.includes('.welcome-simple'), 'CSS no longer keeps the old welcome video layout');
 assert(characterSetupPanelText.includes('character-setup-panel') && appText.includes('<CharacterSetupPanel'), 'Character tab exposes direct part settings through the extracted setup panel instead of only getting-started cards');
+assert(characterImportControlsText.includes('character-import-controls') && characterImportControlsText.includes('blank-package-input') && characterImportControlsText.includes('onnx-input') && characterImportControlsText.includes('onboarding-import-input') && characterImportControlsText.includes('Keep compatible mechanisms') && appText.includes('<CharacterImportControls'), 'Character import file controls live in the extracted import-controls seam with stable chooser ids');
 assert(appText.includes('character-part-list') && appText.includes('character-part-item-${part.id}'), 'Character tab owns body-part selection in the left workflow pane');
 assert(stageLayoutText.includes('showClassroomChecklist = true') && appText.includes('showClassroomChecklist={false}'), 'Character tab hides cross-stage classroom checklist chips while other stages can still opt into lesson progress');
 assert(appText.includes('viewport={viewport}') && appText.includes('setViewport={setViewport}') && appText.includes('mechanisms={[]}') && appText.includes('inputMode="always"') && appText.includes('testId="character-three-puppet"'), 'Character preview uses the shared canvas viewport with character-only layers instead of rendering path/mechanism content');

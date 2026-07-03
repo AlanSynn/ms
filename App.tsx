@@ -6,6 +6,7 @@ import {
 } from "./components/stages/assembly/AssemblyWorkbench";
 import { BlueprintExport } from "./components/stages/blueprint/BlueprintExport";
 import { PartInspector } from "./components/stages/character/PartInspector";
+import { CharacterImportControls } from "./components/stages/character/CharacterImportControls";
 import { CharacterLessonOwnership } from "./components/stages/character/CharacterLessonOwnership";
 import { CharacterSetupPanel } from "./components/stages/character/CharacterSetupPanel";
 import { processingLabel } from "./components/stages/character/ProgressBlock";
@@ -242,9 +243,7 @@ import {
 } from "./utils/mechanismRecommendations";
 import {
   Boxes,
-  BrainCircuit,
   Download,
-  FileJson,
   Loader2,
   Play,
   Plus,
@@ -1869,84 +1868,17 @@ const CharacterSelection = ({
                   onEditCharacter={onEditCharacter}
                   onResetLesson={resetLesson}
                 />
-                <div className="mt-4 grid gap-2">
-                  <button
-                    className="btn-primary"
-                    aria-label="Open Guide"
-                    onClick={onOpenGettingStarted}
-                  >
-                    <Sparkles size={16} /> Guide
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-secondary cursor-pointer"
-                    aria-label="Load character file"
-                    onClick={() => packageInputRef.current?.click()}
-                  >
-                    <FileJson size={16} /> Load character file
-                  </button>
-                  <input
-                    ref={packageInputRef}
-                    data-testid="blank-package-input"
-                    hidden
-                    type="file"
-                    multiple
-                    accept=".json,.yaml,.yml,image/png,image/jpeg,image/webp,image/svg+xml"
-                    onChange={(e) => {
-                      const files = e.currentTarget.files
-                        ? (Array.from(e.currentTarget.files) as File[])
-                        : [];
-                      e.currentTarget.value = "";
-                      if (files.length) onPackage(files);
-                    }}
-                  />
-                  <button
-                    className="btn-secondary"
-                    onClick={() => onnxInputRef.current?.click()}
-                  >
-                    <BrainCircuit size={16} /> Create from image
-                  </button>
-                  <input
-                    ref={onnxInputRef}
-                    data-testid="onnx-input"
-                    hidden
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    onChange={(e) => {
-                      const file = e.currentTarget.files?.[0];
-                      e.currentTarget.value = "";
-                      if (file) onProcess(file);
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="btn-secondary cursor-pointer"
-                    onClick={() => importInputRef.current?.click()}
-                  >
-                    <Upload size={16} /> Open full project
-                  </button>
-                  <input
-                    ref={importInputRef}
-                    data-testid="onboarding-import-input"
-                    hidden
-                    type="file"
-                    accept="application/json,.json"
-                    onChange={(e) => {
-                      const file = e.currentTarget.files?.[0];
-                      e.currentTarget.value = "";
-                      if (file) onImport(file);
-                    }}
-                  />
-                  <label className="replace-toggle">
-                    <input
-                      aria-label="Keep compatible mechanisms"
-                      type="checkbox"
-                      checked={replaceCharacter}
-                      onChange={(e) => setReplaceCharacter(e.target.checked)}
-                    />{" "}
-                    Keep mechanisms
-                  </label>
-                </div>
+                <CharacterImportControls
+                  packageInputRef={packageInputRef}
+                  onnxInputRef={onnxInputRef}
+                  importInputRef={importInputRef}
+                  onOpenGettingStarted={onOpenGettingStarted}
+                  onPackage={onPackage}
+                  onProcess={onProcess}
+                  onImport={onImport}
+                  replaceCharacter={replaceCharacter}
+                  setReplaceCharacter={setReplaceCharacter}
+                />
                 <details
                   className="advanced-panel mt-4"
                   data-testid="character-processing-panel"
