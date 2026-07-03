@@ -38,6 +38,32 @@ Measured on 2026-07-03.
 | `utils/webOnnx.ts` | 677 | Keep lazy/cached ONNX boundary. Split model loading from image post-processing only if touched. |
 | `utils/kinematics.ts` | 662 | Keep pure mechanism math together until a mechanism-specific solver needs extraction. |
 
+## Golden-master refactor gate
+
+Baseline: commit `e32cd7e` preserves the audited MotionSmith state before the `App.tsx` refactor.
+
+The contract test now hashes a stable golden master for:
+
+- sample `ProjectState` serialization
+- guided waving-arm lesson serialization
+- one mechanism snapshot plus the full mechanism snapshot set
+- toon scene projection
+- SVG and DXF export output
+- fabrication stacks
+
+This is the refactor tripwire. Extraction-only work should keep these hashes stable. If a hash changes, stop and prove the behavior change is intentional before updating the expected value.
+
+Golden masters do not replace UI evidence. App/stage JSX moves also need the command-contract test plus the relevant production-preview Playwright workflow, because hashes do not prove DOM wiring, menu behavior, drag/scroll boundaries, or visible stage routing.
+
+Current evidence:
+
+```bash
+bun run test
+bun run build
+```
+
+Both gates passed after adding the golden-master gate and fixing the typed exporter input.
+
 ## Split order
 
 1. **Command and app shell seams**
@@ -48,7 +74,7 @@ Measured on 2026-07-03.
    - Done: shared stage frame/navigation lives in `components/stages/stageLayout.tsx`.
    - Done: `BlueprintExport` lives in `components/stages/blueprint/BlueprintExport.tsx`.
    - Done: assembly workbench lives in `components/stages/assembly/AssemblyWorkbench.tsx`.
-   - Next: extract `MechanismFoundry`, `MechanismDesign`, `PathEditor`, `Character`, and Options only as touched. Each stage receives data/actions; no stage owns mechanism rules.
+   - Next lowest-risk shells: extract `CharacterSelection` and `PathEditor` first, then Options and Assembly Guide wrappers. Move `MechanismFoundry`, `MechanismDesign`, and `DesignFoundryPreview` only after their pure adapters are smaller. Each stage receives data/actions; no stage owns mechanism rules.
 
 3. **Domain helpers**
    - Mechanism fitting/recommendations leave `App.tsx` for pure helper modules.
@@ -69,6 +95,9 @@ Measured on 2026-07-03.
 - No one-implementation interfaces. Use plain typed functions and existing types.
 - New mechanism behavior enters `utils/mechanismReference.ts`, `utils/mechanismFeatureRegistry.ts`, `utils/kinematics.ts`, and fabrication manifest/contracts first, not stage UI.
 - Split by extraction only: move code, preserve names/behavior, then test. No redesign mixed into file moves.
+- Keep `ProjectState` as the domain aggregate root. Stage components receive data/actions; they do not own parallel canonical state.
+- New seams must be harness-friendly: deterministic inputs, typed outputs, and no hidden time/random/storage/DOM side effects outside the module's named boundary.
+- Golden-master hashes are behavior contracts. Do not update them during pure extraction unless a deliberate behavior change is documented and separately tested.
 - Keep all UI copy English-only and compact.
 - Commit per seam.
 

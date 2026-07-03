@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -29,6 +30,39 @@ import { isBoardFixedCoordRole, normalizeGearLinkageToReference, normalizeGearTr
 import type { BodyPartLayer, MechanismType, Point, ProjectState } from '../types';
 
 projectSelfCheck();
+
+const stableGoldenMasterJson = (value: unknown): string => JSON.stringify(value, (_key, item) => {
+  if (typeof item === 'number') return Number.isFinite(item) ? Number(item.toFixed(6)) : null;
+  return item;
+}, 2);
+
+const goldenMasterHash = (value: unknown): string =>
+  createHash('sha256').update(typeof value === 'string' ? value : stableGoldenMasterJson(value)).digest('hex');
+
+const stableProjectForGoldenMaster = (project: ProjectState): ProjectState => ({
+  ...project,
+  metadata: {
+    ...project.metadata,
+    id: '<project-id>',
+    createdAt: '<created-at>',
+    updatedAt: '<updated-at>'
+  },
+  characterPackage: project.characterPackage ? {
+    ...project.characterPackage,
+    createdAt: '<created-at>'
+  } : project.characterPackage,
+  lastExport: undefined,
+  lastFoundryExport: undefined
+});
+
+const stableMechanismSnapshotForGoldenMaster = <T extends { fingerprint: string; sourceIds: { projectId: string } }>(snapshot: T): T => ({
+  ...snapshot,
+  fingerprint: '<fingerprint>',
+  sourceIds: {
+    ...snapshot.sourceIds,
+    projectId: '<project-id>'
+  }
+});
 
 const textExtensions = new Set(['.bat', '.css', '.html', '.js', '.json', '.md', '.mjs', '.py', '.rs', '.sh', '.toml', '.ts', '.tsx', '.txt', '.yaml', '.yml']);
 const ignoredEnglishScanDirs = new Set(['.git', '.omx', 'dist', 'exe build', 'node_modules', 'playwright-report', 'src-tauri/target', 'test-results']);
@@ -196,8 +230,12 @@ assert(!APP_COMMANDS.some(command => /exit|updates/i.test(command.label)), 'brow
 APP_MENU_GROUPS.forEach(group => group.commandIds.forEach(id => assert.equal(commandById(id).menu, group.id, `${id} belongs to its declared menu group`)));
 const appCommandSource = readFileSync(join(process.cwd(), 'App.tsx'), 'utf8');
 assert(appCommandSource.includes('satisfies Record<AppCommandId, () => void>'), 'App command handlers are type-exhaustive against AppCommandId');
-const commandHandlerBlock = appCommandSource.match(/const commandHandlers = \{([\s\S]*?)\n\s*\} satisfies Record<AppCommandId, \(\) => void>;/)?.[1] ?? '';
-assert(commandHandlerBlock, 'App.tsx exposes the typed command handler map');
+const appCommandHandlerSource = readFileSync(join(process.cwd(), 'utils/appCommandHandlers.ts'), 'utf8');
+const commandHandlerBlock =
+  appCommandSource.match(/const commandHandlers = \{([\s\S]*?)\n\s*\} satisfies Record<AppCommandId, \(\) => void>;/)?.[1] ??
+  appCommandHandlerSource.match(/\): AppCommandHandlerMap => \(\{([\s\S]*?)\n\}\);/)?.[1] ??
+  '';
+assert(commandHandlerBlock, 'App shell exposes one typed command handler map');
 assert.deepEqual(
   [...commandHandlerBlock.matchAll(/[\"']([^\"']+)[\"']:/g)].map(match => match[1]).sort(),
   [...commandIds].sort(),
@@ -941,6 +979,49 @@ allMechanismSnapshots.forEach(snapshot => {
   assert(Array.isArray(snapshot.fabricationPlan.validationErrors), `${snapshot.mechanism.type} snapshot carries fabrication validation results`);
   assert(snapshot.projectionHints.length > 0 && snapshot.physicsHints.length > 0, `${snapshot.mechanism.type} snapshot carries adapter hints`);
 });
+const goldenSample = createSampleProject({ includeMechanism: true });
+const goldenLesson = createLessonProject('waving-arm');
+const goldenSnapshot = buildMechanismSnapshot(goldenSample, goldenSample.mechanisms[0].id);
+assert(goldenSnapshot, 'golden master sample has a mechanism snapshot');
+const goldenAllMechanismSnapshots = buildMechanismSnapshots({
+  ...goldenSample,
+  mechanisms: ALL_MECHANISM_TYPES.map(type => ({
+    ...createDefaultMechanism(type, `${type}-snapshot`),
+    targetPartId: 'right_arm_lower',
+    targetPathId: 'path-right-arm',
+    targetAnchorJointId: 'right_hand',
+    activeVisualPartIds: ['right_arm_lower']
+  }))
+});
+const goldenExportConfig = {
+  speed: goldenSample.settings.animationSpeed,
+  rotation: 0,
+  mechanisms: goldenSample.mechanisms
+};
+const goldenMaster = {
+  project: serializeProject(stableProjectForGoldenMaster(goldenSample)),
+  lesson: serializeProject(stableProjectForGoldenMaster(goldenLesson)),
+  mechanismSnapshot: stableMechanismSnapshotForGoldenMaster(goldenSnapshot),
+  allMechanismSnapshots: goldenAllMechanismSnapshots.map(stableMechanismSnapshotForGoldenMaster),
+  sceneProjection: buildToonSceneProjection(goldenSample),
+  svg: generateSVG(goldenExportConfig, Math.PI / 4),
+  dxf: generateDXF(goldenExportConfig, Math.PI / 4),
+  stacks: goldenSample.mechanisms.map(fabricationStackForMechanism)
+};
+assert.deepEqual(
+  Object.fromEntries(Object.entries(goldenMaster).map(([key, value]) => [key, goldenMasterHash(value)])),
+  {
+    project: '4c08b0863b79a436c5d9809602fb199dc44e5554262c5aef782ce954ba4eae5a',
+    lesson: '0f73e27db44680ec0fa74e277aa7acd9b9ed8953ef1af32f7864aa159e93f828',
+    mechanismSnapshot: '32355ffe3781027668eaae06923563234301242f08077cf2c5ff3ae1aa86e21e',
+    allMechanismSnapshots: 'e3a5c2be05c51e131ee9d4aba3ff2a05ae4dbf2e62a35631ec317fa8c6032e9b',
+    sceneProjection: '64b01ae59502ee6a8f04bdad651418565e1fb1e9593d7a6178cea04425dd1605',
+    svg: '943626770ae697a566ce73edfcf282215c4e55f82e77575d7df7393eeb1eb5d3',
+    dxf: 'dc52ca1acfa24ad70ae9028c58ad48a6c64fb5a8dcebf9fe4db2562d2d8aa336',
+    stacks: 'e55cc135c765896c41713823fdc9f831249073038e52bbdf9cc2a70f9690976f'
+  },
+  'golden master locks ProjectState, mechanism snapshot, scene projection, export, and fabrication stack behavior before App.tsx refactors'
+);
 const gearMetadataMechanism = {
   ...createDefaultMechanism('gear', 'snapshot-gear-metadata'),
   crankLength: 50,

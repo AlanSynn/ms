@@ -191,6 +191,7 @@ import {
   commandIdForKeyboardEvent,
   type AppCommandId,
 } from "./utils/appCommands";
+import { createAppCommandHandlers } from "./utils/appCommandHandlers";
 import {
   AUTHORABLE_MECHANISM_TYPES,
   FOUNDRY_MECHANISM_TYPES,
@@ -1459,34 +1460,25 @@ const App: React.FC = () => {
     setCommandStatus("Redo applied");
   };
   const aboutMotionSmith = () => setShowAbout(true);
-  const commandHandlers = {
-    "project.new": newProject,
-    "project.open": () => projectInputRef.current?.click(),
-    "project.recoverAutosave": recoverAutosave,
-    "project.save": saveProject,
-    "project.saveAs": saveProjectAs,
-    "project.exportCopy": exportProjectCopy,
-    "project.exportBlueprint": () => goStage("blueprint"),
-    "project.resetLesson": resetLesson,
-    "edit.undo": undoProject,
-    "edit.redo": redoProject,
-    "view.zoomIn": () => zoomCanvas(1.2),
-    "view.zoomOut": () => zoomCanvas(1 / 1.2),
-    "view.fit": fitCanvas,
-    "view.reset": fitCanvas,
-    "workspace.saveLayout": saveWorkspaceLayout,
-    "workspace.restoreLayout": restoreWorkspaceLayout,
-    "workspace.resetLayout": resetWorkspaceLayout,
-    "stage.character": () => goStage("character"),
-    "stage.path": () => goStage("path"),
-    "stage.foundry": () => goStage("foundry"),
-    "stage.design": () => goStage("design"),
-    "stage.blueprint": () => goStage("blueprint"),
-    "stage.assembly": () => goStage("assembly"),
-    "options.preferences": () => goStage("options"),
-    "help.shortcuts": () => setShowShortcuts(true),
-    "help.about": aboutMotionSmith,
-  } satisfies Record<AppCommandId, () => void>;
+  const commandHandlers = createAppCommandHandlers({
+    newProject,
+    openProject: () => projectInputRef.current?.click(),
+    recoverAutosave,
+    saveProject,
+    saveProjectAs,
+    exportProjectCopy,
+    resetLesson,
+    undoProject,
+    redoProject,
+    zoomCanvas,
+    fitCanvas,
+    saveWorkspaceLayout,
+    restoreWorkspaceLayout,
+    resetWorkspaceLayout,
+    goStage,
+    openShortcuts: () => setShowShortcuts(true),
+    openAbout: aboutMotionSmith,
+  }) satisfies Record<AppCommandId, () => void>;
   commandHandlersRef.current = commandHandlers;
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
