@@ -24,6 +24,7 @@ Use this file before adding new docs. If a doc does not fit below, update an exi
 - [`prd/classroom-field-support-plan.md`](prd/classroom-field-support-plan.md) — classroom field-study gap plan: web-first release, guided lesson templates, sensemaking, stable reset, and animated assembly.
 - [`prd/classroom-guided-entry-plan.md`](prd/classroom-guided-entry-plan.md) — teacher-feedback plan for theme-first classroom entry, starter ownership, and guided project templates.
 - [`prd/classroom-sensemaking-discoverability-plan.md`](prd/classroom-sensemaking-discoverability-plan.md) — teacher-feedback plan for visible mechanism meaning, direct hints, optional clips, and classroom checks.
+- [`prd/assembly-step-player-redesign-plan.md`](prd/assembly-step-player-redesign-plan.md) — active Assembly redesign plan: one-step visual build player, step-local parts, board mount, and character attach flow.
 - [`subsystem-governance-and-mechanism-contracts.md`](subsystem-governance-and-mechanism-contracts.md)
 - [`analysis/codebase-cleanup-architecture-plan.md`](analysis/codebase-cleanup-architecture-plan.md)
 

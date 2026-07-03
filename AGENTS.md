@@ -20,7 +20,8 @@ MotionSmith is a tinkerable workbench, not a reading-heavy tutorial. Users shoul
 - Guided project cards must show the result plus two novice cues only: `Change <editable thing>` and `Build <physical thing>`. Put direct-translation / sensemaking detail in stage context or teacher-pack metadata, not first-run cards.
 - Opening any guided project must land on Character with a compact `Make it yours` ownership cluster for parts, joints, path, mechanism fit, and reset. Guided starters are editable baselines, never locked demos.
 - Repository text and product UI are English-only. Do not add bilingual labels, Korean prose, or mixed-language examples; tests must block non-English Hangul text from returning.
-- Getting Started stays compact and result-first: Humanoid, Girl, Boy, Image, and Package tiles with tiny thumbnails only where useful, plus Import project as secondary. Avoid process/explanation copy in the first-run modal.
+- First-run startup is one static logo/wordmark/version boot loader that disappears when the editor is ready and releases directly to Character; do not render a second welcome modal or auto-open Getting Started.
+- Getting Started opens only from an explicit Guide/Starter action and stays compact/result-first: Guide, Starter rig, Girl, Boy, Image, and Character file tiles with tiny thumbnails only where useful, plus Open full project as secondary. Avoid process/explanation copy in the modal.
 - `Reset Lesson` must restore a known-good lesson baseline while preserving app settings; Foundry reset must restore finite mechanism preview state, not just stop playback.
 - Prefer direct manipulation over explanatory prose: draw on the canvas, drag joints, scrub playback, rotate the view, tune sliders, and see the result immediately.
 - Remove or collapse text that does not unlock an action, safety warning, blocker, or fabrication decision.

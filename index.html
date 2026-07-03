@@ -10,7 +10,7 @@
         font-style: normal;
         font-weight: 800;
         font-display: swap;
-        src: url('fonts/manrope-800-latin.woff2') format('woff2');
+        src: url('%BASE_URL%fonts/manrope-800-latin.woff2') format('woff2');
         unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
       }
       :root {
@@ -44,15 +44,18 @@
       button { border: 0; cursor: pointer; }
       button:disabled, input:disabled, select:disabled { cursor: not-allowed; opacity: .55; }
 
-      #boot-loader { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; background: radial-gradient(circle at 30% 20%, rgba(139,92,246,.16), transparent 34rem), var(--ms-bg-soft); color: var(--ms-text); }
-      #boot-loader .boot-card { width: min(22rem, calc(100vw - 2rem)); border: 1px solid var(--ms-line); border-radius: 1.5rem; background: rgba(255,255,255,.92); box-shadow: var(--ms-shadow); padding: 1rem; backdrop-filter: blur(18px); }
-      #boot-loader .boot-mark { font-family: var(--ms-font-display); font-size: 1.35rem; font-weight: 720; letter-spacing: -.04em; }
-      #boot-loader .boot-copy { margin-top: .35rem; color: var(--ms-muted); font-size: .82rem; font-weight: 620; }
-      #boot-loader .boot-track { height: .42rem; margin-top: .9rem; overflow: hidden; border-radius: 999px; background: var(--ms-accent-soft); }
-      #boot-loader .boot-bar { width: 45%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--ms-accent), var(--ms-tertiary)); animation: boot-slide 1.2s ease-in-out infinite; }
+      #boot-loader { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; background: radial-gradient(circle at 50% 22%, rgba(139,92,246,.14), transparent 32rem), rgba(248,249,255,.88); color: var(--ms-text); backdrop-filter: blur(18px) saturate(1.08); }
+      #boot-loader .boot-brand { display: grid; justify-items: center; gap: clamp(.45rem, 1.2vw, .9rem); padding: 1rem; text-align: center; animation: boot-breathe 1.8s ease-in-out infinite; }
+      #boot-loader .boot-logo { width: clamp(4.5rem, 12vw, 8rem); height: clamp(4.5rem, 12vw, 8rem); border-radius: clamp(1rem, 2vw, 1.6rem); object-fit: cover; filter: drop-shadow(0 22px 44px rgba(47,86,214,.20)); }
+      #boot-loader .boot-word { max-width: calc(100vw - 2rem); color: var(--ms-text); font-family: Manrope, var(--ms-font-display); font-size: clamp(2.4rem, 8vw, 6.5rem); line-height: .92; letter-spacing: clamp(.08em, .9vw, .24em); font-weight: 800; text-transform: uppercase; white-space: nowrap; }
+      #boot-loader .boot-version { color: rgba(100,116,139,.42); font-size: .72rem; font-weight: 760; letter-spacing: .16em; }
+      #boot-loader .boot-status { min-height: 1.1rem; color: rgba(100,116,139,.70); font-size: clamp(.72rem, 1.7vw, .95rem); font-weight: 760; letter-spacing: .08em; text-transform: uppercase; }
+      #boot-loader .boot-progress { width: min(22rem, calc(100vw - 4rem)); height: .38rem; overflow: hidden; border-radius: 999px; background: rgba(203,213,225,.62); }
+      #boot-loader .boot-progress > span { display: block; width: 8%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2f56d6, #8b5cf6); transition: width .18s ease; }
       body.app-ready #boot-loader { opacity: 0; pointer-events: none; transition: opacity .25s ease; }
-      @keyframes boot-slide { 0% { transform: translateX(-100%); } 50% { transform: translateX(75%); } 100% { transform: translateX(230%); } }
-      body { margin: 0; font-family: var(--ms-font-sans); font-weight: 500; background-color: var(--ms-bg-soft); color: var(--ms-text); -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision; }
+      @keyframes boot-breathe { 0%, 100% { opacity: .82; transform: scale(.985); } 50% { opacity: 1; transform: scale(1); } }
+      html, body, #root { height: 100%; }
+      body { margin: 0; overflow: hidden; overscroll-behavior: none; font-family: var(--ms-font-sans); font-weight: 500; background-color: var(--ms-bg-soft); color: var(--ms-text); -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision; }
       html.welcome-modal-open, body.welcome-modal-open { height: 100%; overflow: hidden; overscroll-behavior: none; }
       body.welcome-modal-open #root { height: 100%; overflow: hidden; }
       .min-h-screen{min-height:100vh}.min-h-0{min-height:0}.min-h-\[520px\]{min-height:520px}.min-h-\[560px\]{min-height:560px}.h-2{height:.5rem}.h-full{height:100%}.h-\[520px\]{height:520px}.h-\[calc\(100vh-160px\)\]{height:calc(100vh - 160px)}.w-2{width:.5rem}.w-full{width:100%}.max-w-xl{max-width:36rem}.max-w-3xl{max-width:48rem}.max-h-32{max-height:8rem}.flex-1{flex:1 1 0%}.min-w-0{min-width:0}
@@ -86,7 +89,7 @@
       .error { background: #fee2e2; color: #991b1b; }
       .ok { background: #dcfce7; color: #166534; }
       .row { display: flex; justify-content: space-between; gap: 1rem; border-radius: 1.25rem; background: var(--ms-bg-soft); padding: 1rem; border: 1px solid var(--ms-line); }
-      .app-shell { display: block; }
+      .app-shell { display: block; height: 100vh; max-height: 100vh; overflow: hidden; }
       .app-rail { position: fixed; left: 0; top: var(--ms-header-height); bottom: 0; width: 300px; z-index: 40; overflow: auto; background: rgba(255,255,255,.94); box-shadow: 0 4px 20px rgba(139,92,246,.05); }
       .workflow-rail { position: fixed; left: 0; top: 0; bottom: 0; z-index: 60; width: var(--ms-rail-width); display: flex; flex-direction: column; align-items: stretch; gap: .42rem; border-right: 1px solid var(--ms-line); border-radius: 0; border-left: 0; border-top: 0; border-bottom: 0; background: rgba(255,255,255,.94); box-shadow: 0 14px 36px rgba(15,23,42,.07); padding: .72rem .55rem; backdrop-filter: blur(18px); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
       .workflow-rail::-webkit-scrollbar { display: none; }
@@ -112,11 +115,11 @@
       .stage-body { margin-left: 0; padding-top: calc(var(--ms-header-height) + var(--ms-stage-top-gap)) !important; min-height: calc(100vh - var(--ms-bottom-bars-height)); }
       .editor-workbench { background-color: var(--ms-bg-soft); background-size: 40px 40px; background-image: linear-gradient(to right, rgba(139,92,246,.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(139,92,246,.06) 1px, transparent 1px); }
       .app-shell .stage-body { display: flex; flex-direction: column; gap: .65rem; flex: none; height: var(--ms-stage-body-height); margin-left: var(--ms-rail-width); margin-top: var(--ms-header-height); min-height: 0; overflow: hidden; padding: var(--ms-stage-top-gap) var(--ms-stage-gap) .7rem !important; }
-      .editor-stage-frame { flex: 1 1 auto; min-height: 0; height: 100%; display: grid; grid-template-columns: minmax(245px, var(--ms-left-pane-width)) minmax(0, 1fr) minmax(280px, var(--ms-right-pane-width)); grid-template-areas: "left canvas right"; gap: var(--ms-stage-gap); }
+      .editor-stage-frame { flex: 1 1 auto; min-height: 0; height: 100%; overflow: hidden; display: grid; grid-template-columns: minmax(245px, var(--ms-left-pane-width)) minmax(0, 1fr) minmax(280px, var(--ms-right-pane-width)); grid-template-areas: "left canvas right"; gap: var(--ms-stage-gap); }
       .stage-left-pane { grid-area: left; }
       .stage-canvas-pane { grid-area: canvas; }
       .stage-right-inspector { grid-area: right; }
-      .stage-left-pane, .stage-right-inspector { min-height: 0; overflow: auto; overscroll-behavior: contain; border-radius: 1.35rem; box-shadow: 0 12px 32px rgba(15,23,42,.06); }
+      .stage-left-pane, .stage-right-inspector { min-height: 0; height: 100%; max-height: 100%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-gutter: stable; border-radius: 1.35rem; box-shadow: 0 12px 32px rgba(15,23,42,.06); }
       .stage-left-pane-content, .stage-pane-stack { min-height: 0; display: grid; gap: 1rem; align-content: start; }
       .stage-left-pane-content { height: 100%; }
       .path-panel { height: 100%; overflow: auto; overscroll-behavior: contain; padding-right: .15rem; }
@@ -144,7 +147,7 @@
       .guided-card-cues { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .45rem; width: 100%; }
       .guided-card-cues span { border: 1px solid var(--ms-line); border-radius: .85rem; background: rgba(255,255,255,.82); color: var(--ms-text-soft); padding: .42rem .5rem; font-size: .78rem; font-weight: 720; line-height: 1.05; }
       .guided-card-cues em { display: block; margin-bottom: .18rem; color: var(--ms-muted); font-size: .56rem; font-style: normal; font-weight: 820; letter-spacing: .08em; text-transform: uppercase; }
-      .character-setup-panel { min-height: 0; max-height: 100%; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--ms-line); border-radius: 1.2rem; background: rgba(255,255,255,.9); padding: .78rem; box-shadow: 0 14px 42px rgba(8,10,18,.06); }
+      .character-setup-panel { min-height: 0; overflow: visible; border: 1px solid var(--ms-line); border-radius: 1.2rem; background: rgba(255,255,255,.9); padding: .78rem; box-shadow: 0 14px 42px rgba(8,10,18,.06); }
       .part-art-controls { border: 1px solid var(--ms-line); border-radius: 1rem; background: var(--ms-bg-soft); padding: .7rem; }
       .template-tile { min-height: 5.25rem; border: 1px solid var(--ms-line); border-radius: 1.2rem; background: rgba(255,255,255,.88); padding: .72rem; text-align: left; box-shadow: 0 14px 42px rgba(8,10,18,.06); display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; transition: transform .18s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease; }
       .template-tile.primary { background: linear-gradient(180deg, #ffffff, #f9faff); color: var(--ms-text); border-color: var(--ms-accent-line); box-shadow: 0 22px 70px rgba(139,92,246,.15); }
@@ -196,16 +199,9 @@
         .cut-outline-tools { align-items: stretch; flex-direction: column; }
         .cut-outline-actions { justify-content: flex-start; }
       }
-      .welcome-backdrop { background: rgba(248,250,252,.62); backdrop-filter: blur(10px) saturate(1.08); }
-      .welcome-dialog { width: min(96vw, 64rem); max-height: 94vh; border: 0; background: transparent; box-shadow: none; padding: clamp(.75rem, 3vw, 2rem); }
-      .splash-dialog { display: grid; justify-items: center; gap: 0; text-align: center; overflow: visible; }
-      .splash-brand { display: inline-flex; align-items: center; justify-content: center; gap: clamp(.75rem, 2.4vw, 1.75rem); max-width: min(100%, calc(100vw - 1.5rem)); min-width: 0; animation: splash-breathe 1.8s ease-in-out infinite; }
       .motionsmith-logo-mark { width: 2.55rem; height: 2.55rem; flex: none; border-radius: .9rem; object-fit: cover; filter: drop-shadow(0 8px 16px rgba(47,86,214,.14)); }
       .workflow-rail-app-icon { width: 2.35rem; height: 2.35rem; border-radius: .82rem; }
-      .splash-dialog .motionsmith-logo-mark { width: clamp(3.5rem, 8vw, 6.5rem); height: clamp(3.5rem, 8vw, 6.5rem); border-radius: 1.45rem; filter: drop-shadow(0 18px 40px rgba(47,86,214,.22)); }
-      .splash-dialog h2 { margin: 0; max-width: 100%; color: var(--ms-text); font-family: Manrope, var(--ms-font-display); font-size: clamp(2.4rem, 7vw, 5.25rem); line-height: .95; letter-spacing: clamp(.06em, .5vw, .16em); font-weight: 800; white-space: nowrap; }
-      .splash-version { margin-top: .7rem; color: rgba(100,116,139,.38); font-size: .72rem; font-weight: 760; letter-spacing: .16em; }
-      @keyframes splash-breathe { 0%, 100% { opacity: .82; transform: scale(.98); } 50% { opacity: 1; transform: scale(1); } }
+      .starter-backdrop { background: rgba(248,250,252,.62); backdrop-filter: blur(10px) saturate(1.08); }
       .getting-started-dialog { width: min(92vw, 42rem); max-height: min(86vh, 34rem); display: grid; gap: .85rem; padding: 1rem; overflow: auto; }
       .getting-started-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; border-bottom: 1px solid var(--ms-line); padding-bottom: .75rem; }
       .getting-started-head h2 { max-width: 24rem; margin: .2rem 0 0; color: var(--ms-text); font-size: clamp(1.35rem, 2.4vw, 2rem); line-height: .98; letter-spacing: -.045em; font-weight: 720; }
@@ -214,7 +210,7 @@
       .character-editor-frame { min-height: 0; }
       .character-preview-pane { position: relative; height: 100%; min-height: 24rem; overflow: hidden; border: 1px solid var(--ms-line); border-radius: 1.75rem; background: linear-gradient(90deg, rgba(148,163,184,.08) 1px, transparent 1px), linear-gradient(0deg, rgba(148,163,184,.08) 1px, transparent 1px), #fff; background-size: 40px 40px; }
       .character-preview-pane [data-testid$="canvas"] { height: 100%; }
-      .character-inspector { min-height: 0; overflow: auto; }
+      .character-inspector { min-height: 0; overflow: visible; }
       .compact-workflow-row { display: flex; flex-wrap: wrap; gap: .35rem; }
       .compact-workflow-row span { display: inline-flex; align-items: center; min-height: 1.55rem; border: 1px solid var(--ms-line); border-radius: 999px; background: #fff; color: var(--ms-muted); padding: .18rem .48rem; font-size: .72rem; font-weight: 720; }
       .lesson-ownership-cluster { border: 1px solid var(--ms-accent-line); border-radius: 1.1rem; background: linear-gradient(180deg, rgba(255,255,255,.94), rgba(246,243,255,.9)); padding: .72rem; box-shadow: 0 14px 42px rgba(139,92,246,.08); }
@@ -292,12 +288,13 @@
       .blueprint-more-exports[open] summary, .blueprint-more-exports summary:hover { color: var(--ms-accent); border-color: var(--ms-accent-line); background: var(--ms-accent-soft); }
       .blueprint-document-preview, .assembly-canvas-document { position: relative; height: 100%; min-height: 0; padding: .6rem; }
       .blueprint-document-title { position: absolute; left: 1.6rem; top: 1.45rem; z-index: 2; border: 1px solid var(--ms-line); border-radius: 999px; background: rgba(255,255,255,.9); color: var(--ms-muted); padding: .38rem .65rem; font-size: .72rem; font-weight: 720; letter-spacing: .04em; box-shadow: 0 12px 32px rgba(15,23,42,.07); }
-      .blueprint-document-preview img { display: block; width: 100%; height: 100%; object-fit: contain; border: 1px solid var(--ms-line); border-radius: 1.35rem; background: #fff; box-shadow: 0 22px 70px rgba(8,10,18,.09); }
+      .blueprint-document-preview .blueprint-svg-preview { display: block; width: 100%; height: 100%; overflow: hidden; border: 1px solid var(--ms-line); border-radius: 1.35rem; background: #fff; box-shadow: 0 22px 70px rgba(8,10,18,.09); }
+      .blueprint-document-preview .blueprint-svg-preview svg { display: block; width: 100%; height: 100%; }
       .blueprint-empty-state { display: grid; place-items: center; height: 100%; min-height: 24rem; border: 1px dashed var(--ms-line-strong); border-radius: 1.35rem; background: rgba(255,255,255,.72); color: var(--ms-muted); padding: 2rem; text-align: center; font-weight: 720; }
-      .assembly-stepper-workbench { position: relative; z-index: 1; height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--ms-line); border-radius: 1.45rem; background: linear-gradient(135deg, rgba(255,255,255,.96), rgba(239,244,255,.9)); box-shadow: 0 18px 46px rgba(8,10,18,.08); padding: .9rem; }
+      .assembly-stepper-workbench { position: relative; z-index: 1; height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--ms-line); border-radius: 1.45rem; background: #fff; box-shadow: 0 18px 46px rgba(8,10,18,.08); padding: .9rem; }
       .assembly-workbench-head { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; }
       .assembly-workbench-head h3 { margin: .15rem 0 0; color: var(--ms-text); font-size: 1.35rem; line-height: 1; letter-spacing: -.045em; font-weight: 720; }
-      .assembly-workbench-svg { flex: 1 1 auto; min-height: 0; width: 100%; margin-top: .6rem; border: 1px solid var(--ms-line); border-radius: 1.1rem; background-image: linear-gradient(to right, rgba(99,102,241,.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(99,102,241,.06) 1px, transparent 1px); background-size: 28px 28px; }
+      .assembly-workbench-svg { flex: 1 1 auto; min-height: 0; width: 100%; margin-top: .6rem; border: 1px solid var(--ms-line); border-radius: 1.1rem; background-color: #fff; background-image: linear-gradient(to right, rgba(99,102,241,.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(99,102,241,.06) 1px, transparent 1px); background-size: 28px 28px; }
       .assembly-svg-label { fill: var(--ms-muted); font-size: 19px; font-weight: 720; letter-spacing: .08em; text-transform: uppercase; }
       .assembly-svg-tiny { fill: var(--ms-text-soft); font-size: 12px; font-weight: 680; }
       .assembly-progress-dot { fill: #e2e8f0; stroke: #94a3b8; stroke-width: 2; }
@@ -307,11 +304,6 @@
       .assembly-active-layer { filter: drop-shadow(0 8px 14px rgba(124,58,237,.18)); }
       .assembly-active-hole { animation: assembly-pulse 1s ease-in-out infinite alternate; }
       .assembly-test-motion { animation: assembly-dash 1.4s linear infinite; }
-      .assembly-player-overlay { position: absolute; left: 50%; bottom: 1.25rem; z-index: 18; display: flex; align-items: center; gap: .45rem; min-width: min(34rem, calc(100% - 2rem)); transform: translateX(-50%); border: 1px solid var(--ms-line); border-radius: 999px; background: rgba(255,255,255,.92); box-shadow: 0 18px 46px rgba(8,10,18,.10); padding: .5rem .65rem; backdrop-filter: blur(14px); }
-      .assembly-player-overlay button { border: 1px solid var(--ms-line); border-radius: 999px; background: #fff; color: var(--ms-text); min-width: 2.3rem; min-height: 2.3rem; font-weight: 720; }
-      .assembly-player-overlay button:first-child { background: var(--ms-accent); color: #fff; border-color: transparent; }
-      .assembly-player-overlay input { flex: 1 1 auto; min-width: 7rem; }
-      .assembly-player-overlay span { color: var(--ms-muted); font-size: .75rem; font-weight: 720; }
       .assembly-step-button { display: flex; align-items: center; gap: .5rem; width: 100%; border: 1px solid transparent; border-radius: .9rem; background: #f8fafc; color: var(--ms-text-soft); padding: .45rem .55rem; text-align: left; font-size: .78rem; font-weight: 680; }
       .assembly-step-button span { display: inline-grid; place-items: center; width: 1.35rem; height: 1.35rem; border-radius: 999px; background: #fff; color: var(--ms-accent); font-size: .68rem; }
       .assembly-step-button.active { border-color: var(--ms-accent-line); background: var(--ms-accent-soft); color: var(--ms-accent); }
@@ -372,6 +364,9 @@
       .foundry-three-host, .foundry-three-canvas { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: inherit; }
       .foundry-three-canvas { display: block; }
       .foundry-preview-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+      .design-context-ghost { position: absolute; inset: 0; z-index: 2; pointer-events: none; opacity: .38; }
+      .design-context-ghost .three-puppet-overlay { z-index: 0; pointer-events: none; }
+      .design-context-ghost .three-puppet-host, .design-context-ghost .three-puppet-canvas { pointer-events: none !important; }
       .foundry-param-handle { pointer-events: auto; cursor: grab; filter: drop-shadow(0 2px 6px rgba(79,70,229,.22)); }
       .foundry-param-handle.is-draggable:hover { fill: #eef2ff; stroke-width: 4; }
       .foundry-param-handle.is-draggable:active { cursor: grabbing; }
@@ -449,7 +444,8 @@
         .quick-toolbar .btn-secondary, .quick-toolbar .btn-primary { padding-inline: .55rem; }
       }
       @media (max-width: 900px) {
-        .app-shell { display: block; }
+        body { overflow: auto; overscroll-behavior: auto; }
+        .app-shell { display: block; height: auto; max-height: none; overflow: visible; }
         .app-rail, .workflow-rail { display: none; }
         .app-header { position: sticky; left: 0; right: 0; height: auto; min-height: 3.55rem; padding: .7rem .9rem; flex-wrap: wrap; }
         .app-header-brand { width: 100%; }
@@ -458,9 +454,9 @@
         .workspace-steps { display: none; }
         .stage-body { margin-left: 0; padding-top: 1rem !important; }
         .app-shell .stage-body { height: auto; margin-top: 0; overflow: auto; }
-        .editor-stage-frame { height: auto; grid-template-columns: 1fr; grid-template-areas: "left" "canvas" "right"; }
-        .stage-left-pane, .stage-canvas-pane { min-height: auto; overflow: visible; }
-        .stage-right-inspector { min-height: 0; max-height: min(72vh, 42rem); overflow: auto; overscroll-behavior: contain; }
+        .editor-stage-frame { height: auto; overflow: visible; grid-template-columns: 1fr; grid-template-areas: "left" "canvas" "right"; }
+        .stage-left-pane, .stage-canvas-pane { min-height: auto; height: auto; max-height: none; overflow: visible; }
+        .stage-right-inspector { min-height: 0; height: auto; max-height: min(72vh, 42rem); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-gutter: stable; }
         .stage-nav-compact { display: grid; }
         .workflow-status-strip, .status-bar { margin-left: 0; }
         .stage-player-row { left: .75rem; right: .75rem; bottom: .75rem; }
@@ -472,11 +468,6 @@
         .path-panel { order: 1; }
         .stage-canvas-pane > .path-canvas-shell.canvas-workspace { order: 2; height: 58vh; min-height: 360px; }
         .path-canvas-shell svg { height: 58vh; min-height: 360px; }
-        .welcome-backdrop { padding: .75rem; }
-        .welcome-dialog { max-height: 94vh; padding: .85rem; border-radius: 0; }
-        .splash-brand { flex-direction: column; gap: .8rem; width: 100%; max-width: calc(100vw - 1.5rem); }
-        .splash-dialog .motionsmith-logo-mark { width: clamp(3.75rem, 18vw, 5.25rem); height: clamp(3.75rem, 18vw, 5.25rem); border-radius: 1.25rem; }
-        .splash-dialog h2 { font-size: clamp(1.65rem, 9vw, 3rem); letter-spacing: .12em; }
         .character-stage { height: auto; min-height: calc(100vh - var(--ms-bottom-bars-height) - 1rem); overflow: visible; }
         .character-status-dock { left: .75rem; right: .75rem; bottom: calc(var(--ms-bottom-bars-height) + 10px); width: auto; }
         .character-status-dock .import-status { max-height: 46vh; }
@@ -538,11 +529,13 @@
     </style>
 </head>
   <body>
-    <div id="boot-loader" role="status" aria-live="polite">
-      <div class="boot-card">
-        <div class="boot-mark">MotionSmith</div>
-        <div class="boot-copy">Loading…</div>
-        <div class="boot-track"><div class="boot-bar"></div></div>
+    <div id="boot-loader" role="status" aria-live="polite" aria-label="Loading MotionSmith">
+      <div class="boot-brand">
+        <img class="boot-logo" src="resources/icons/AppIcon.png" alt="" />
+        <div class="boot-word">MotionSmith</div>
+        <div class="boot-version">v%APP_VERSION%</div>
+        <div class="boot-status" data-boot-status>Preparing AI model</div>
+        <div class="boot-progress" aria-hidden="true"><span data-boot-progress></span></div>
       </div>
     </div>
     <div id="root"></div>

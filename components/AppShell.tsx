@@ -163,16 +163,29 @@ export const CanvasZoomToolbar = ({ viewport, setViewport }: { viewport: CanvasV
     </div>;
 };
 
-export const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, speed, drawMode }: {
+export type WorkspaceStepPlayback = {
+    stepIndex: number;
+    stepCount: number;
+    onStepChange: (index: number) => void;
+};
+
+export const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, speed, drawMode, stepPlayback }: {
     isPlaying: boolean;
     setIsPlaying: (value: boolean) => void;
     angle: number;
     setAngle: React.Dispatch<React.SetStateAction<number>>;
     speed: number;
     drawMode: boolean;
+    stepPlayback?: WorkspaceStepPlayback;
 }) => {
-    const progress = ((angle / (Math.PI * 2)) % 1 + 1) % 1;
+    const stepCount = Math.max(0, stepPlayback?.stepCount ?? 0);
+    const maxStepIndex = Math.max(0, stepCount - 1);
+    const stepIndex = Math.max(0, Math.min(maxStepIndex, stepPlayback?.stepIndex ?? 0));
+    const progress = stepPlayback
+        ? (maxStepIndex > 0 ? stepIndex / maxStepIndex : 0)
+        : ((angle / (Math.PI * 2)) % 1 + 1) % 1;
     const percent = Math.round(progress * 100);
+    const goStep = (next: number) => stepPlayback?.onStepChange(Math.max(0, Math.min(maxStepIndex, next)));
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const [dragging, setDragging] = useState(false);
     const dragStart = useRef<{ x: number; y: number; offset: { x: number; y: number } } | null>(null);
@@ -213,17 +226,19 @@ export const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, 
             <span aria-hidden="true">⋮⋮</span>
         </button>
         <div className="player-actions">
+            {stepPlayback && <button type="button" data-testid="workspace-player-prev-step" aria-label="Previous assembly step" disabled={stepIndex <= 0} onClick={() => goStep(stepIndex - 1)}>←</button>}
             <button type="button" aria-label={isPlaying ? 'Pause' : 'Play'} onClick={() => setIsPlaying(!isPlaying)}>{isPlaying ? 'Ⅱ' : '▶'}</button>
-            <button type="button" aria-label="Start over" onClick={() => setAngle(0)}>↺</button>
+            {stepPlayback && <button type="button" data-testid="workspace-player-next-step" aria-label="Next assembly step" disabled={stepIndex >= maxStepIndex} onClick={() => goStep(stepIndex + 1)}>→</button>}
+            <button type="button" aria-label="Start over" onClick={() => stepPlayback ? goStep(0) : setAngle(0)}>↺</button>
             <span>{speed.toFixed(1)}x</span>
         </div>
         <input
-            aria-label="Workspace scrubber"
+            aria-label={stepPlayback ? 'Assembly scrubber' : 'Workspace scrubber'}
             type="range"
             min={0}
-            max={100}
-            value={percent}
-            onChange={event => setAngle((Number(event.currentTarget.value) / 100) * Math.PI * 2)}
+            max={stepPlayback ? maxStepIndex : 100}
+            value={stepPlayback ? stepIndex : percent}
+            onChange={event => stepPlayback ? goStep(Number(event.currentTarget.value)) : setAngle((Number(event.currentTarget.value) / 100) * Math.PI * 2)}
         />
     </aside>;
 };
@@ -235,56 +250,6 @@ export const WorkflowStatusStrip = ({ stageLabel, blocker, nextAction }: { stage
         <span><strong>Next</strong> {nextAction}</span>
     </div>
 );
-
-export const WelcomeDialog = ({ onClose }: { onClose: (hideNextTime?: boolean) => void }) => {
-    const dialogRef = useRef<HTMLElement>(null);
-    const onCloseRef = useRef(onClose);
-    useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
-    useEffect(() => {
-        dialogRef.current?.focus();
-        const autoCloseTimer = window.setTimeout(() => onCloseRef.current(false), 5000);
-        return () => window.clearTimeout(autoCloseTimer);
-    }, []);
-    const trapDialogFocus = (event: React.KeyboardEvent) => {
-        if (event.key === 'Escape') {
-            event.preventDefault();
-            onClose(false);
-            return;
-        }
-        if (event.key !== 'Tab') return;
-        const dialog = dialogRef.current;
-        if (!dialog) return;
-        const focusables = Array.from(dialog.querySelectorAll('button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter((element): element is HTMLElement => element instanceof HTMLElement && element.offsetParent !== null);
-        if (!focusables.length) {
-            event.preventDefault();
-            dialog.focus();
-            return;
-        }
-        const first = focusables[0];
-        const last = focusables.at(-1)!;
-        const active = document.activeElement;
-        if (!dialog.contains(active)) {
-            event.preventDefault();
-            first.focus();
-        } else if (event.shiftKey && (active === first || active === dialog)) {
-            event.preventDefault();
-            last.focus();
-        } else if (!event.shiftKey && active === last) {
-            event.preventDefault();
-            first.focus();
-        }
-    };
-
-    return <div className="modal-backdrop welcome-backdrop" role="presentation">
-        <section ref={dialogRef} className="modal-sheet welcome-dialog splash-dialog animate-rise" role="dialog" aria-modal="true" aria-labelledby="welcome-dialog-title" data-testid="welcome-dialog" tabIndex={-1} onKeyDown={trapDialogFocus}>
-            <div className="splash-brand">
-                <MotionSmithLogoMark />
-                <h2 id="welcome-dialog-title">MOTIONSMITH</h2>
-            </div>
-            <span className="splash-version" aria-label={`Version ${APP_VERSION}`}>v{APP_VERSION}</span>
-        </section>
-    </div>;
-};
 
 export const GettingStartedDialog = ({ starterTemplates, guidedLessons, onLesson, onSample, onStarterImage, onPackage, onProcess, onImport, onClose }: {
     starterTemplates: StarterImageTemplate[];
@@ -301,7 +266,7 @@ export const GettingStartedDialog = ({ starterTemplates, guidedLessons, onLesson
     const packageInputRef = useRef<HTMLInputElement>(null);
     const onnxInputRef = useRef<HTMLInputElement>(null);
     const importInputRef = useRef<HTMLInputElement>(null);
-    const [showGuided, setShowGuided] = useState(true);
+    const [showGuided, setShowGuided] = useState(false);
     useEffect(() => { dialogRef.current?.focus(); }, []);
     const trapDialogFocus = (event: React.KeyboardEvent) => {
         if (event.key === 'Escape') {
@@ -329,14 +294,14 @@ export const GettingStartedDialog = ({ starterTemplates, guidedLessons, onLesson
         }
     };
 
-    return <div className="modal-backdrop welcome-backdrop" role="presentation">
+    return <div className="modal-backdrop starter-backdrop" role="presentation">
         <section ref={dialogRef} className="modal-sheet getting-started-dialog animate-rise" role="dialog" aria-modal="true" aria-labelledby="getting-started-title" data-testid="getting-started-dialog" tabIndex={-1} onKeyDown={trapDialogFocus}>
             <div className="getting-started-head">
                 <div>
                     <div className="section-title">Getting started</div>
-                    <h2 id="getting-started-title">{showGuided ? 'Pick a project.' : 'Other starts.'}</h2>
+                    <h2 id="getting-started-title">{showGuided ? 'Pick a project.' : 'Start.'}</h2>
                 </div>
-                <button type="button" className="btn-secondary" onClick={showGuided ? () => setShowGuided(false) : onClose}>{showGuided ? 'Starters' : 'Skip'}</button>
+                <button type="button" className="btn-secondary" onClick={showGuided ? () => setShowGuided(false) : onClose}>{showGuided ? 'Starters' : 'Close'}</button>
             </div>
             {showGuided ? <div className="guided-project-library" data-testid="guided-project-library">
                 {guidedLessons.map(lesson => <button key={lesson.id} type="button" className="template-tile primary guided-project-card" data-testid={`guided-project-card-${lesson.id}`} aria-label={`${lesson.actionLabel}: ${lesson.outcome}`} data-change-cue={lesson.changeCue} data-build-cue={lesson.buildCue} data-direct-translation={lesson.sensemaking?.directTranslation ?? ''} data-evidence-cue={lesson.sensemaking?.evidenceCue ?? ''} data-expected-answer={lesson.sensemaking?.expectedAnswer ?? ''} data-clip-slot={lesson.sensemaking?.clipSlot ?? ''} onClick={() => onLesson(lesson.id)}>
@@ -350,9 +315,9 @@ export const GettingStartedDialog = ({ starterTemplates, guidedLessons, onLesson
                 </button>)}
             </div> : <>
                 <div className="template-gallery" data-testid="getting-started-gallery">
-                    <button type="button" className="template-tile primary" data-testid="getting-started-card-guided" aria-label="Pick a guided project" onClick={() => setShowGuided(true)}>
+                    <button type="button" className="template-tile primary" data-testid="getting-started-card-guided" aria-label="Open Guide" onClick={() => setShowGuided(true)}>
                         <span className="template-icon-slot"><Sparkles size={18}/></span>
-                        <strong>Pick a project</strong>
+                        <strong>Guide</strong>
                         <b><Sparkles size={16}/> Open</b>
                     </button>
                     <button type="button" className="template-tile primary" data-testid="getting-started-card-humanoid" aria-label="Open starter rig" onClick={onSample}>

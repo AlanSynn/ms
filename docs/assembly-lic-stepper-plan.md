@@ -1,7 +1,7 @@
 # Assembly Stepper Plan — .lic-style build simulation
 
-Status: planned  
-Scope: Assembly tab, Blueprint handoff, fabrication kit/custom export handoff  
+Status: superseded by `docs/prd/assembly-step-player-redesign-plan.md`
+Scope: historical planning provenance for Assembly, Blueprint handoff, fabrication kit/custom export handoff
 Principle: show the build, do not explain it with paragraphs.
 
 ## Agent review summary

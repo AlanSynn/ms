@@ -20,7 +20,13 @@ export default defineConfig(() => {
     define: {
       __APP_VERSION__: JSON.stringify(packageVersion),
     },
-    plugins: [react()],
+    plugins: [
+      {
+        name: 'motionsmith-html-version',
+        transformIndexHtml: (html: string) => html.replace(/%APP_VERSION%/g, packageVersion),
+      },
+      react(),
+    ],
     publicDir: 'public',
     resolve: {
       alias: {
@@ -31,6 +37,9 @@ export default defineConfig(() => {
       target: process.env.TAURI_PLATFORM == 'windows' ? 'chrome105' : 'es2022',
       minify: process.env.TAURI_DEBUG ? false : 'esbuild' as const,
       sourcemap: !!process.env.TAURI_DEBUG,
+      // Rapier and ONNX are intentionally lazy client chunks; keep this explicit
+      // budget small enough to flag accidental bloat while avoiding false alarms.
+      chunkSizeWarningLimit: 2400,
     }
   };
 });

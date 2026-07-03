@@ -1,6 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 import { availableParallelism } from 'node:os';
 
+// Some shells set both FORCE_COLOR and NO_COLOR. Node warns before every Playwright
+// worker when both are inherited, so prefer the explicit force-color request for tests.
+if (process.env.FORCE_COLOR && process.env.NO_COLOR) delete process.env.NO_COLOR;
+
 const MAX_BROWSER_WORKERS = 4;
 const parseWorkerCount = (value: string | undefined) => {
   if (!value) return Math.max(1, Math.min(MAX_BROWSER_WORKERS, availableParallelism()));
@@ -9,10 +13,11 @@ const parseWorkerCount = (value: string | undefined) => {
   return parsed;
 };
 const workerCount = parseWorkerCount(process.env.PLAYWRIGHT_WORKERS);
-const serverMode = process.env.PLAYWRIGHT_SERVER ?? 'dev';
+const serverMode = process.env.PLAYWRIGHT_SERVER ?? 'preview';
+const cleanColorEnv = 'env -u NO_COLOR ';
 const webServerCommand = serverMode === 'preview'
-  ? 'bun run preview -- --host 127.0.0.1 --port 5173 --strictPort'
-  : 'bun run dev -- --host 127.0.0.1 --port 5173';
+  ? `${cleanColorEnv}bun run preview -- --host 127.0.0.1 --port 5173 --strictPort`
+  : `${cleanColorEnv}bun run dev -- --host 127.0.0.1 --port 5173`;
 
 export default defineConfig({
   testDir: './tests/browser',

@@ -10,9 +10,9 @@
     "tauri": "tauri",
     "build:exe": "bun scripts/with-rustup-cargo.mjs tauri build --bundles app",
     "test": "bun run test:contracts",
-    "test:contracts": "esbuild tests/project-contract.test.ts --bundle --platform=node --format=esm --outfile=/tmp/motionsmith-contract.mjs && bun /tmp/motionsmith-contract.mjs",
+    "test:contracts": "bun tests/project-contract.test.ts",
     "build:dmg": "bun scripts/with-rustup-cargo.mjs tauri build --bundles dmg",
-    "test:browser": "bun run build && PLAYWRIGHT_SERVER=preview playwright test",
+    "test:browser": "bun run build && env -u NO_COLOR PLAYWRIGHT_SERVER=preview playwright test",
     "build:tauri-frontend": "tsc && vite build --base ./"
   },
   "dependencies": {

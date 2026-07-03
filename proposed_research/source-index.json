@@ -1,0 +1,362 @@
+[
+  {
+    "id": "coros-2013-mechanical-characters",
+    "title": "Computational Design of Mechanical Characters",
+    "authors": "Stelian Coros, Bernhard Thomaszewski, Gioacchino Noris, Shinjiro Sueda, Moira Forberg, Robert W. Sumner, Wojciech Matusik, Bernd Bickel",
+    "year": 2013,
+    "category": "motion-to-mechanism",
+    "url": "https://cdfg.mit.edu/publications/computational-design-mechanical-characters",
+    "evidence_tag": "mechanical characters from articulated input and sketched motion curves; optimized mechanisms and gear trains",
+    "motionSmithUse": "Primary precedent for motion-first mechanical character synthesis and single-driver mechanism groups."
+  },
+  {
+    "id": "thomaszewski-2014-linkage-characters",
+    "title": "Computational Design of Linkage-Based Characters",
+    "authors": "Bernhard Thomaszewski, Stelian Coros, Damien Gauge, Vittorio Megaro, Eitan Grinspun, Markus Gross",
+    "year": 2014,
+    "category": "motion-to-mechanism",
+    "url": "https://la.disneyresearch.com/publication/computational-design-of-linkage-based-characters/",
+    "evidence_tag": "linkage-based characters combine form and function",
+    "motionSmithUse": "Reference for co-designing visible character form with mechanical linkage function."
+  },
+  {
+    "id": "zhu-2012-motion-guided-toys",
+    "title": "Motion-Guided Mechanical Toy Modeling",
+    "authors": "L. Zhu, W. Xu, J. Snyder, Y. Liu, G. Wang, B. Guo",
+    "year": 2012,
+    "category": "motion-to-mechanism",
+    "url": "https://www.microsoft.com/en-us/research/publication/motion-guided-mechanical-toy-modeling/",
+    "evidence_tag": "synthesizes mechanical toys from feature motions using parameterized mechanical parts",
+    "motionSmithUse": "Evidence for mechanism-library search/optimization from desired feature motion."
+  },
+  {
+    "id": "ceylan-2013-mechanical-automata",
+    "title": "Designing and Fabricating Mechanical Automata from Mocap Sequences",
+    "authors": "Duygu Ceylan, Wilmot Li, Niloy J. Mitra, Maneesh Agrawala, Mark Pauly",
+    "year": 2013,
+    "category": "motion-to-mechanism",
+    "url": "https://www.duygu-ceylan.com/duygu-ceylan/mechAuto.html",
+    "evidence_tag": "converts motion capture sequences into mechanical automata",
+    "motionSmithUse": "Reference for using keyframe/IK motion as mechanism synthesis input."
+  },
+  {
+    "id": "song-2017-wind-up-toys",
+    "title": "Computational Design of Wind-up Toys",
+    "authors": "Peng Song, Chi-Wing Fu, Hongbo Fu, Ligang Liu, Pheng-Ann Heng, Daniel Cohen-Or, Chiew-Lan Tai",
+    "year": 2017,
+    "category": "motion-to-mechanism",
+    "url": "https://geometry.cs.ucl.ac.uk/projects/2017/wind-up-toys/",
+    "evidence_tag": "motion-transfer trees and elemental mechanisms for compact fabricated wind-up toys",
+    "motionSmithUse": "Reference for composing multiple mechanisms under collision/fabrication constraints."
+  },
+  {
+    "id": "zhang-2017-retargeting-mechanisms",
+    "title": "Functionality-aware Retargeting of Mechanisms to 3D Shapes",
+    "authors": "Ran Zhang, Chi-Wing Fu, Daniel Cohen-Or, Ligang Liu",
+    "year": 2017,
+    "category": "template-retargeting",
+    "url": "https://cdl.ethz.ch/publications/functionality-aware-retargeting-of-mechanisms-to-3d-shapes/",
+    "evidence_tag": "retargets mechanical templates to shapes while preserving function and physical constraints",
+    "motionSmithUse": "Reference for preserving mechanisms when a character is replaced or resized."
+  },
+  {
+    "id": "baecher-2015-linkedit",
+    "title": "LinkEdit: Interactive Linkage Editing using Symbolic Kinematics",
+    "authors": "Moritz Bächer, Stelian Coros, Bernhard Thomaszewski",
+    "year": 2015,
+    "category": "interactive-linkage-editing",
+    "url": "https://la.disneyresearch.com/publication/linkedit/",
+    "evidence_tag": "interactive planar linkage editing preserving functional aspects through symbolic kinematics",
+    "motionSmithUse": "Model for direct drag handles that preserve mechanism closure and function."
+  },
+  {
+    "id": "cheng-2022-3d-cam-linkage",
+    "title": "Exact 3D Path Generation via 3D Cam-Linkage Mechanisms",
+    "authors": "Chenxi Cheng, Chengcheng Tang, Chi-Wing Fu",
+    "year": 2022,
+    "category": "cam-linkage-synthesis",
+    "url": "https://sutd-cgl.github.io/supp/Publication/projects/2022-SIGAsia-3DCamLinkage/index.html",
+    "evidence_tag": "3D cam-linkage mechanisms for exact path generation with collision/singularity considerations",
+    "motionSmithUse": "Long-term reference for exact cam/contact path synthesis beyond simple planar kits."
+  },
+  {
+    "id": "park-jang-2026-linkage-graph-learning",
+    "title": "Automated synthesis of planar linkage mechanisms with diverse joint types via spring-connected link models and contrastive graph learning",
+    "authors": "Hyunsoo Park, Ikjin Jang",
+    "year": 2026,
+    "category": "learning-based-mechanism-synthesis",
+    "url": "https://academic.oup.com/jcde/article/13/4/252/8554182",
+    "evidence_tag": "contrastive graph learning plus optimization for planar linkages with diverse joint types",
+    "motionSmithUse": "Reference for retrieval/refinement when mechanisms include prismatic and pin-slot joints."
+  },
+  {
+    "id": "nobari-2022-links",
+    "title": "LINKS: A Dataset of a Hundred Million Planar Linkage Mechanisms for Data-Driven Kinematic Design",
+    "authors": "Amin Heyrani Nobari, Akash Srivastava, Dan Gutfreund, Faez Ahmed",
+    "year": 2022,
+    "category": "mechanism-dataset",
+    "url": "https://arxiv.org/abs/2208.14567",
+    "evidence_tag": "100M planar linkages and 1.1B coupler curves",
+    "motionSmithUse": "Candidate retrieval corpus after adapting to MotionSmith kit and validation constraints."
+  },
+  {
+    "id": "nobari-2024-link",
+    "title": "LInK: Learning Joint Representations of Design and Performance Spaces through Contrastive Learning for Mechanism Synthesis",
+    "authors": "Amin H. Nobari, Muhammad Fathy Rashad, Faez Ahmed",
+    "year": 2024,
+    "category": "learning-based-mechanism-synthesis",
+    "url": "https://arxiv.org/html/2405.20592v2",
+    "evidence_tag": "contrastive curve/mechanism embeddings for retrieval and optimization",
+    "motionSmithUse": "Candidate architecture for path-to-mechanism retrieval before deterministic validation."
+  },
+  {
+    "id": "lin-2025-creative-mechanisms",
+    "title": "Creative Synthesis of Kinematic Mechanisms",
+    "authors": "Jiong Lin, Jialong Ning, Judah Goldfeder, Hod Lipson",
+    "year": 2025,
+    "category": "generative-mechanism-synthesis",
+    "url": "https://arxiv.org/html/2510.03308v2",
+    "evidence_tag": "cross-domain generation between mechanism images and motion curves with shared latent models",
+    "motionSmithUse": "Exploratory generative direction; output must be decoded to typed DSL before fabrication."
+  },
+  {
+    "id": "bolanos-2025-mechaformer",
+    "title": "MechaFormer: Sequence Learning for Kinematic Mechanism Design Automation",
+    "authors": "Diana Bolanos, Mohammadmehdi Ataei, Pradeep Kumar Jayaraman",
+    "year": 2025,
+    "category": "dsl-sequence-mechanism-synthesis",
+    "url": "https://arxiv.org/abs/2508.09005",
+    "evidence_tag": "target curve to DSL sequence for mechanism topology and geometric parameters",
+    "motionSmithUse": "Strong precedent for target-curve-to-typed-DSL candidate generation."
+  },
+  {
+    "id": "khan-2024-text2cad",
+    "title": "Text2CAD: Generating Sequential CAD Models from Beginner-to-Expert Level Text Prompts",
+    "authors": "Mohammad S. I. Khan et al.",
+    "year": 2024,
+    "category": "text-to-cad",
+    "url": "https://arxiv.org/abs/2409.17106",
+    "evidence_tag": "natural-language prompts to sequential parametric CAD designs",
+    "motionSmithUse": "Evidence for language-guided CAD operations, not a complete mechanism solver."
+  },
+  {
+    "id": "wu-2021-deepcad",
+    "title": "DeepCAD: A Deep Generative Network for Computer-Aided Design Models",
+    "authors": "Rundi Wu, Chang Xiao, Changxi Zheng",
+    "year": 2021,
+    "category": "cad-sequence-generation",
+    "url": "https://arxiv.org/abs/2105.09492",
+    "evidence_tag": "CAD operation sequence generation and dataset",
+    "motionSmithUse": "Supports editable operation-history outputs for generated parts."
+  },
+  {
+    "id": "xu-2022-skexgen",
+    "title": "SkexGen: Autoregressive Generation of CAD Construction Sequences with Disentangled Codebooks",
+    "authors": "Xiang Xu et al.",
+    "year": 2022,
+    "category": "cad-sequence-generation",
+    "url": "https://proceedings.mlr.press/v162/xu22k.html",
+    "evidence_tag": "autoregressive sketch/extrude CAD construction sequence generation",
+    "motionSmithUse": "Reference for parametric part geometry generation, not mechanism semantics."
+  },
+  {
+    "id": "autodesk-2023-cad-llm",
+    "title": "CAD-LLM: Large Language Model for CAD Generation",
+    "authors": "Autodesk Research",
+    "year": 2023,
+    "category": "text-to-cad",
+    "url": "https://www.research.autodesk.com/publications/ai-lab-cad-llm/",
+    "evidence_tag": "large language model research for CAD generation",
+    "motionSmithUse": "Adjacent language-to-CAD precedent; must be constrained by mechanism validators."
+  },
+  {
+    "id": "li-2025-cad-llama",
+    "title": "CAD-Llama: Leveraging Large Language Models for Computer-Aided Design Parametric 3D Model Generation",
+    "authors": "Li et al.",
+    "year": 2025,
+    "category": "text-to-cad",
+    "url": "https://arxiv.org/html/2505.04481v2",
+    "evidence_tag": "LLM-based parametric CAD model generation",
+    "motionSmithUse": "Reference for code/parameter generation sidecar, not physics-valid mechanism acceptance."
+  },
+  {
+    "id": "zhan-2026-fllumaone",
+    "title": "FllumaOne: A Code-Native Multimodal CAD Dataset with Executable Programs and Kernel-Validated Feature Histories",
+    "authors": "Zhan",
+    "year": 2026,
+    "category": "cad-as-code-dataset",
+    "url": "https://arxiv.org/abs/2606.17696",
+    "evidence_tag": "executable Python CAD programs with kernel-validated geometry and STEP outputs",
+    "motionSmithUse": "Reference for executable, kernel-validated CAD artifacts from mechanism DSL."
+  },
+  {
+    "id": "megaro-2017-cable-driven",
+    "title": "Designing Cable-Driven Actuation Networks for Kinematic Chains and Trees",
+    "authors": "Vittorio Megaro, Jonas Zehnder, Moritz Bächer, Stelian Coros, Markus Gross, Bernhard Thomaszewski",
+    "year": 2017,
+    "category": "cable-driven-actuation",
+    "url": "https://cdfg.mit.edu/publications/designing-cable-driven-actuation-networks-kinematic-chains-and-trees",
+    "evidence_tag": "optimizes cable routing for hinged kinematic chains/trees from target poses/keyframes",
+    "motionSmithUse": "Research branch for character motions that are hard to realize with planar linkages/gears."
+  },
+  {
+    "id": "build123d-docs",
+    "title": "build123d Documentation",
+    "authors": "build123d project",
+    "year": 2026,
+    "category": "cad-as-code-infrastructure",
+    "url": "https://build123d.readthedocs.io/",
+    "evidence_tag": "Python parametric BREP CAD framework built on Open Cascade",
+    "motionSmithUse": "Offline research/teacher-pack generator for exact mechanism parts and exports."
+  },
+  {
+    "id": "build123d-import-export",
+    "title": "build123d Importing and Exporting Objects",
+    "authors": "build123d project",
+    "year": 2026,
+    "category": "cad-as-code-infrastructure",
+    "url": "https://build123d.readthedocs.io/en/latest/import_export.html",
+    "evidence_tag": "documents CAD import/export including 2D exporters",
+    "motionSmithUse": "Potential route for SVG/DXF/STEP/STL artifacts from canonical DSL."
+  },
+  {
+    "id": "opencascade-build123d",
+    "title": "OpenCascade build123d project page",
+    "authors": "OpenCascade",
+    "year": 2026,
+    "category": "cad-as-code-infrastructure",
+    "url": "https://dev.opencascade.org/project/build123d",
+    "evidence_tag": "describes build123d as an Open Cascade BREP modeling framework for manufacturing/CAD outputs",
+    "motionSmithUse": "Supports kernel-validated offline CAD sidecar concept."
+  },
+  {
+    "id": "fogelson-2023-gcp-holo",
+    "title": "GCP-HOLO: Generating High-Order Linkage Graphs for Path Synthesis",
+    "authors": "Mitchell Fogelson, Conrad Tucker, Jonathan Cagan",
+    "year": 2023,
+    "category": "learning-based-mechanism-synthesis",
+    "url": "https://www.cmu.edu/me/idig/projects/Fogelson-linkage_synthesis.html",
+    "evidence_tag": "graph-convolution-policy search for high-order linkage graphs satisfying path synthesis",
+    "motionSmithUse": "Reference for generating varied linkage topologies beyond fixed 4bar templates."
+  },
+  {
+    "id": "deshpande-2019-assisted-variational-synthesis",
+    "title": "Computational Creativity Via Assisted Variational Synthesis of Mechanisms Using Deep Generative Models",
+    "authors": "Shrinath Deshpande, Anurag Purwar",
+    "year": 2019,
+    "category": "generative-mechanism-synthesis",
+    "url": "https://asmedigitalcollection.asme.org/mechanicaldesign/article/141/12/121402/956257/Computational-Creativity-Via-Assisted-Variational",
+    "evidence_tag": "VAE-assisted variational synthesis of mechanisms for motion generation problems",
+    "motionSmithUse": "Earlier generative-mechanism precedent; useful baseline for design-space priors."
+  },
+  {
+    "id": "deshpande-2021-image-path-synthesis",
+    "title": "An Image-Based Approach to Variational Path Synthesis of Linkages",
+    "authors": "Shrinath Deshpande, Anurag Purwar",
+    "year": 2021,
+    "category": "image-based-mechanism-synthesis",
+    "url": "https://researchconnect.suny.edu/en/publications/an-image-based-approach-to-variational-path-synthesis-of-linkages-2/",
+    "evidence_tag": "combines computer vision, mechanism synthesis, and machine learning for image-based variational path synthesis",
+    "motionSmithUse": "Relevant to imprecise drawn-path inputs, but output still needs typed mechanism/fabrication validation."
+  },
+  {
+    "id": "nurizada-2023-sketch-to-linkage",
+    "title": "Transforming Hand-Drawn Sketches of Linkage Mechanisms Into Their Digital Representation",
+    "authors": "Anar Nurizada, Anurag Purwar",
+    "year": 2023,
+    "category": "sketch-to-mechanism-recognition",
+    "url": "https://asmedigitalcollection.asme.org/computingengineering/article/24/1/011010/1170006/Transforming-Hand-Drawn-Sketches-of-Linkage",
+    "evidence_tag": "deep neural network plus topological knowledge for recognizing hand-drawn linkage sketches",
+    "motionSmithUse": "Useful for future sketch-recognition workflows, distinct from motion-to-mechanism synthesis."
+  },
+  {
+    "id": "three-million-linkage-dataset-2025",
+    "title": "A Dataset of 3M Single-DOF Planar 4-, 6-, and 8-Bar Linkage Mechanisms and Their Coupler Curves",
+    "authors": "ASME Journal of Mechanical Design authors",
+    "year": 2025,
+    "category": "mechanism-dataset",
+    "url": "https://asmedigitalcollection.asme.org/mechanicaldesign/article/147/4/041702/1207808/A-Dataset-of-3M-Single-DOF-Planar-4-6-and-8-Bar",
+    "evidence_tag": "dataset of single-DOF planar 4-, 6-, and 8-bar linkages and coupler curves",
+    "motionSmithUse": "Additional candidate corpus for retrieval/benchmarking after kit remapping."
+  },
+  {
+    "id": "pan-2021-joint-topology-trajectory",
+    "title": "Joint Search of Optimal Topology and Trajectory for Planar Linkages",
+    "authors": "Zherong Pan, Min Liu, Xifeng Gao, Dinesh Manocha",
+    "year": 2021,
+    "category": "motion-to-mechanism",
+    "url": "https://arxiv.org/abs/2109.03392",
+    "evidence_tag": "jointly searches linkage topology and trajectory for planar path synthesis",
+    "motionSmithUse": "Classical/optimization baseline bridging template search and learning-based synthesis."
+  },
+  {
+    "id": "lee-2024-fourbar-target-conditions",
+    "title": "Deep Generative Model-based Synthesis of Four-bar Linkage Mechanisms with Target Conditions",
+    "authors": "Sumin Lee, Jihoon Kim, Namwoo Kang",
+    "year": 2024,
+    "category": "generative-mechanism-synthesis",
+    "url": "https://arxiv.org/abs/2402.14882",
+    "evidence_tag": "conditional generative synthesis of four-bar linkages with target kinematic/quasi-static requirements",
+    "motionSmithUse": "Relevant baseline for constrained four-bar candidate generation."
+  },
+  {
+    "id": "islam-2024-tendon-cooptimization",
+    "title": "Task-Based Design and Policy Co-Optimization for Tendon-driven Underactuated Kinematic Chains",
+    "authors": "Sharfin Islam, Zhanpeng He, Matei Ciocarlie",
+    "year": 2024,
+    "category": "cable-driven-actuation",
+    "url": "https://arxiv.org/abs/2405.14566",
+    "evidence_tag": "co-optimizes tendon-driven morphology and control policy for task performance",
+    "motionSmithUse": "Modern tendon/cable research reference for non-linkage character actuation."
+  },
+  {
+    "id": "zharkov-2024-tendon-grippers",
+    "title": "Automatic Synthesis of Tendon-Driven Grippers",
+    "authors": "Kirill Zharkov, Mikhail Chaikovskii, Yefim Osipov, Rahaf Alshaowa, Ivan Borisov, Sergey Kolyubin",
+    "year": 2024,
+    "category": "cable-driven-actuation",
+    "url": "https://arxiv.org/abs/2410.07865",
+    "evidence_tag": "automatic morphology generation for tendon-driven grippers using grammar/search",
+    "motionSmithUse": "Evidence that cable/tendon design can be synthesized, but product use requires separate novice/fabrication validation."
+  },
+  {
+    "id": "guan-2025-cad-coder",
+    "title": "CAD-Coder: Text-to-CAD Generation with Chain-of-Thought and Geometric Reward",
+    "authors": "Yandong Guan, Xilin Wang, Ximing Xing, Jing Zhang, Dong Xu, Qian Yu",
+    "year": 2025,
+    "category": "text-to-cad",
+    "url": "https://arxiv.org/abs/2505.19713",
+    "evidence_tag": "text-to-CadQuery pipeline using reasoning and geometric reward",
+    "motionSmithUse": "Useful precedent for code-generation plus geometric reward; still needs mechanism validators."
+  },
+  {
+    "id": "xie-2025-text-to-cadquery",
+    "title": "Text-to-CadQuery: A New Paradigm for CAD Generation with Scalable Large Model Capabilities",
+    "authors": "Haoyang Xie, Feng Ju",
+    "year": 2025,
+    "category": "text-to-cad",
+    "url": "https://arxiv.org/abs/2505.06507",
+    "evidence_tag": "LLM-based generation of CadQuery CAD programs from text",
+    "motionSmithUse": "Adjacent CAD-as-code source for part generation, not mechanism synthesis itself."
+  },
+  {
+    "id": "fan-2025-caddesigner",
+    "title": "CADDesigner: Conceptual CAD Model Generation with a General-Purpose Agent",
+    "authors": "Fengxiao Fan, Jingzhe Ni, Xiaolong Yin, Sirui Wang, Xingyu Lu, Qiang Zou, Ruofeng Tong, Min Tang, Peng Du",
+    "year": 2025,
+    "category": "agentic-cad-as-code",
+    "url": "https://arxiv.org/abs/2508.01031",
+    "evidence_tag": "agentic iterative CAD code generation with visual feedback",
+    "motionSmithUse": "Agentic CAD sidecar precedent; MotionSmith must constrain outputs to mechanism DSL and validators."
+  },
+  {
+    "id": "chen-2026-cad-program-augmentation",
+    "title": "Learning From Design Procedure To Generate CAD Programs for Data Augmentation",
+    "authors": "Yan-Ying Chen, Dule Shu, Matthew Hong, Andrew Taber, Jonathan Li, Matthew Klenk",
+    "year": 2026,
+    "category": "cad-as-code",
+    "url": "https://arxiv.org/abs/2603.06894",
+    "evidence_tag": "CAD program generation from design procedures, adjacent to CadQuery/build123d program synthesis",
+    "motionSmithUse": "Supports executable CAD program datasets for research augmentation and teacher-pack generation."
+  }
+]

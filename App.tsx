@@ -24,7 +24,6 @@ import {
   STAGES,
   ShortcutHelpDialog,
   TopCommandBar,
-  WelcomeDialog,
   WorkflowRail,
   WorkflowStatusStrip,
   WorkspacePlayerDock,
@@ -93,7 +92,6 @@ import {
   validatePath,
 } from "./utils/project";
 import {
-  checkWebOnnxCache,
   processImageWithWebOnnx,
   warmWebOnnxCache,
   type WebOnnxCacheStatus,
@@ -114,6 +112,7 @@ import {
   FABRICATION_LINKAGE_SPECS,
   FABRICATION_LINKAGE_WIDTH_MM,
   FABRICATION_RENDER_LAYER_Z_STEP,
+  FABRICATION_RENDER_MIN_CLEARANCE,
   FABRICATION_RENDER_PART_DEPTH,
   FABRICATION_SPACER_SPEC,
   fabricationBoardCoordinateCallout,
@@ -131,6 +130,7 @@ import {
   planetaryRingPitchRadius,
   readableFabricationStackSummary,
   sampleFeasibleRange,
+  validateMechanismPreviewReadiness,
   validateForFabrication,
 } from "./utils/fabrication";
 import {
@@ -149,6 +149,7 @@ import {
 } from "./utils/coordinates";
 import { loadCharacterPackage } from "./utils/packageLoader";
 import {
+  animatedPartsForProject,
   describeMotionChain,
   mechanismBindingWarnings,
   motionAnchorJointIds,
@@ -387,25 +388,6 @@ const foundryLayerGeometryContract = (
 
 type FoundryRenderLayerLike = { label: string; renderKind: string };
 
-const foundryGroundLinkLayerIndexes = (
-  type: MechanismType,
-  layers: FoundryRenderLayerLike[],
-) => {
-  if (type !== "4bar") return undefined;
-  const input = layers.findIndex(
-    (item) => item.renderKind === "linkage" && /input|crank/i.test(item.label),
-  );
-  const output = layers.findIndex(
-    (item) =>
-      item.renderKind === "linkage" && /output|rocker/i.test(item.label),
-  );
-  const coupler = layers.findIndex(
-    (item) => item.renderKind === "linkage" && /coupler/i.test(item.label),
-  );
-  if (input < 0 || output < 0 || coupler < 0) return undefined;
-  return { input, output, coupler };
-};
-
 const foundryPlanetaryLayerIndexes = (
   type: MechanismType,
   layers: FoundryRenderLayerLike[],
@@ -440,8 +422,6 @@ const foundryRenderedLayerZForMechanism = (
       ? gearMeshPlaneZ
       : value,
   );
-  const fourBarLayers = foundryGroundLinkLayerIndexes(type, layers);
-  if (fourBarLayers) z[fourBarLayers.output] = z[fourBarLayers.input];
   const planetaryLayers = foundryPlanetaryLayerIndexes(type, layers);
   if (planetaryLayers && typeof gearMeshPlaneZ === "number") {
     z[planetaryLayers.ring] = gearMeshPlaneZ;
@@ -534,13 +514,11 @@ const projectHasUserWork = (project: ProjectState) =>
   Object.keys(project.paths).length > 0 ||
   project.mechanisms.length > 0;
 const STORAGE_KEYS = {
-  hideWelcome: "motionsmith.hideWelcome",
   autosave: "motionsmith.autosave",
   workspace: "motionsmith.workspace",
 } as const;
 const LEGACY_STORAGE_PREFIX = ["mech", "anim"].join("");
 const LEGACY_STORAGE_KEYS = {
-  hideWelcome: `${LEGACY_STORAGE_PREFIX}.hideWelcome`,
   autosave: `${LEGACY_STORAGE_PREFIX}.autosave`,
   workspace: `${LEGACY_STORAGE_PREFIX}.workspace`,
 } as const;
@@ -557,21 +535,38 @@ const migrateStorageValue = (key: string, value: string) => {
     // ponytail: migration is best-effort; legacy read fallback still works.
   }
 };
-const shouldHideWelcome = () => {
-  const stored = readStorageWithLegacy(
-    STORAGE_KEYS.hideWelcome,
-    LEGACY_STORAGE_KEYS.hideWelcome,
-  );
-  if (stored.fromLegacy && stored.value !== null)
-    migrateStorageValue(STORAGE_KEYS.hideWelcome, stored.value);
-  return stored.value === "1";
-};
-
 const initialOnnxCacheStatus = (): WebOnnxCacheStatus => ({
   stage: "checking",
   label: "AI pose model",
   progress: 0,
 });
+const bootLoaderLabel = (status: WebOnnxCacheStatus) => {
+  if (status.stage === "cached") return "AI ready";
+  if (status.stage === "downloading") {
+    const pct = Math.max(0, Math.min(100, Math.round(status.progress)));
+    return `Downloading AI model ${pct}%`;
+  }
+  if (status.stage === "error") return "Opening without AI model";
+  return "Preparing AI model";
+};
+const updateBootLoader = (status: WebOnnxCacheStatus) => {
+  const loader = document.getElementById("boot-loader");
+  if (!loader) return;
+  const label = loader.querySelector<HTMLElement>("[data-boot-status]");
+  if (label) label.textContent = bootLoaderLabel(status);
+  const bar = loader.querySelector<HTMLElement>("[data-boot-progress]");
+  if (bar) {
+    const fallback = status.stage === "checking" ? 8 : status.stage === "error" ? 100 : 0;
+    bar.style.width = `${Math.max(6, Math.min(100, status.progress || fallback))}%`;
+  }
+};
+const finishBootLoader = () => {
+  document.body.classList.add("app-ready");
+  return window.setTimeout(
+    () => document.getElementById("boot-loader")?.remove(),
+    320,
+  );
+};
 const processingLabel = (
   stage: ProjectState["processing"]["stage"],
   message: string,
@@ -693,18 +688,20 @@ const App: React.FC = () => {
     });
   };
   const [stage, setStage] = useState<AppStage>("character");
-  const [showWelcome, setShowWelcome] = useState(() => !shouldHideWelcome());
   const [showGettingStarted, setShowGettingStarted] = useState(false);
   const [angle, setAngle] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
+  const [assemblyPlaying, setAssemblyPlaying] = useState(false);
+  const [assemblyStepIndex, setAssemblyStepIndex] = useState(0);
+  const [assemblyStepProgress, setAssemblyStepProgress] = useState(0);
+  const [assemblyStepCount, setAssemblyStepCount] = useState(0);
   const [showTrace, setShowTrace] = useState(true);
   const [drawMode, setDrawMode] = useState(false);
   const [showTracking, setShowTracking] = useState(false);
   const [showRecommendations, setShowRecommendations] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
-  const modalOpen =
-    showWelcome || showGettingStarted || showShortcuts || showAbout;
+  const modalOpen = showGettingStarted || showShortcuts || showAbout;
   const [foundry, setFoundry] = useState<FoundryState>(() =>
     createDefaultMechanism("4bar", "foundry-preview"),
   );
@@ -730,18 +727,22 @@ const App: React.FC = () => {
   );
 
   useEffect(() => {
-    document.body.classList.add("app-ready");
-    const bootTimer = window.setTimeout(
-      () => document.getElementById("boot-loader")?.remove(),
-      320,
-    );
     let active = true;
-    checkWebOnnxCache().then((status) => {
-      if (active) setOnnxCacheStatus(status);
+    let bootTimer: number | undefined;
+    const publishBootStatus = (status: WebOnnxCacheStatus) => {
+      if (!active) return;
+      setOnnxCacheStatus(status);
+      updateBootLoader(status);
+    };
+    publishBootStatus(initialOnnxCacheStatus());
+    warmWebOnnxCache(publishBootStatus).then((status) => {
+      if (!active) return;
+      publishBootStatus(status);
+      bootTimer = finishBootLoader();
     });
     return () => {
       active = false;
-      window.clearTimeout(bootTimer);
+      if (bootTimer !== undefined) window.clearTimeout(bootTimer);
     };
   }, []);
 
@@ -815,7 +816,6 @@ const App: React.FC = () => {
       !isPlaying ||
       drawMode ||
       optimizerBusy ||
-      showWelcome ||
       showGettingStarted ||
       !SHARED_PLAYBACK_STAGES.includes(stage)
     )
@@ -845,7 +845,6 @@ const App: React.FC = () => {
     isPlaying,
     drawMode,
     optimizerBusy,
-    showWelcome,
     showGettingStarted,
     stage,
     playbackDurationMs,
@@ -990,7 +989,6 @@ const App: React.FC = () => {
       type: "set_processing",
       processing: { stage: "ready", message: "Check character", progress: 100 },
     });
-    setShowWelcome(false);
     setStage("character");
   };
 
@@ -1125,7 +1123,6 @@ const App: React.FC = () => {
       const raw = JSON.parse(await file.text());
       setProject(loadProjectSnapshot(raw), { resetHistory: true });
       setCommandStatus(`Loaded project ${file.name}`);
-      setShowWelcome(false);
       setShowGettingStarted(false);
       setStage("path");
     } catch (error) {
@@ -1141,7 +1138,6 @@ const App: React.FC = () => {
       setCommandStatus(
         `Project import failed: ${error instanceof Error ? error.message : String(error)}`,
       );
-      setShowWelcome(false);
       setShowGettingStarted(false);
       setStage("character");
     }
@@ -1149,7 +1145,6 @@ const App: React.FC = () => {
 
   const editCharacterParts = () => {
     setCommandStatus("Opened Character part, outline, and skeleton tools");
-    setShowWelcome(false);
     setStage("character");
   };
 
@@ -1272,7 +1267,6 @@ const App: React.FC = () => {
     setProject(createEmptyProject(), { resetHistory: true });
     setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
     setCommandStatus("New project");
-    setShowWelcome(!shouldHideWelcome());
     setShowGettingStarted(false);
     setStage("character");
   };
@@ -1291,7 +1285,6 @@ const App: React.FC = () => {
     setAngle(0);
     setIsPlaying(false);
     setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
-    setShowWelcome(false);
     setShowGettingStarted(false);
     setStage(lesson?.startStage ?? "character");
     setCommandStatus(`${lesson?.outcome ?? lessonProject.metadata.name} ready`);
@@ -1512,26 +1505,37 @@ const App: React.FC = () => {
       ? "bg-slate-950 text-slate-100"
       : "bg-slate-50 text-slate-950";
   const editorStage: AppStage = stage;
-  const closeWelcome = (hideNextTime = false) => {
-    if (hideNextTime) localStorage.setItem(STORAGE_KEYS.hideWelcome, "1");
-    setShowWelcome(false);
-    setShowGettingStarted(!hideNextTime);
-    setStage("character");
-  };
   const closeGettingStarted = () => {
     setShowGettingStarted(false);
     setStage("character");
   };
   const stageMeta = STAGES.find((s) => s.id === stage);
+  const goSharedAssemblyStep = (index: number) => {
+    const maxStepIndex = Math.max(0, assemblyStepCount - 1);
+    setAssemblyStepProgress(0);
+    setAssemblyStepIndex(Math.max(0, Math.min(maxStepIndex, index)));
+  };
+  const isAssemblyStage = editorStage === "assembly";
+  const showsWorkspacePlayer =
+    editorStage === "path" || editorStage === "design" || editorStage === "assembly";
   const playerDock =
-    !modalOpen && editorStage !== "foundry" && editorStage !== "character" ? (
+    !modalOpen && showsWorkspacePlayer ? (
       <WorkspacePlayerDock
-        isPlaying={isPlaying}
-        setIsPlaying={setIsPlaying}
+        isPlaying={isAssemblyStage ? assemblyPlaying : isPlaying}
+        setIsPlaying={isAssemblyStage ? setAssemblyPlaying : setIsPlaying}
         angle={angle}
         setAngle={setAngle}
         speed={project.settings.animationSpeed}
         drawMode={drawMode}
+        stepPlayback={
+          isAssemblyStage
+            ? {
+                stepIndex: assemblyStepIndex,
+                stepCount: assemblyStepCount,
+                onStepChange: goSharedAssemblyStep,
+              }
+            : undefined
+        }
       />
     ) : null;
 
@@ -1639,7 +1643,6 @@ const App: React.FC = () => {
                   if (!pendingCharacter) return;
                   setProject(pendingCharacter.project, { resetHistory: true });
                   setPendingCharacter(null);
-                  setShowWelcome(false);
                   setShowGettingStarted(false);
                   setStage(pendingCharacter.returnStage);
                 }}
@@ -1766,12 +1769,9 @@ const App: React.FC = () => {
                 selectedMechanism={selectedMechanism}
                 updateMechanism={updateMechanism}
                 dispatch={dispatch}
-                isPlaying={isPlaying}
-                setIsPlaying={setIsPlaying}
                 showTrace={showTrace}
                 setShowTrace={setShowTrace}
                 angle={angle}
-                setAngle={setAngle}
                 onOptimize={optimizeSelectedMechanism}
                 onRecommendations={() => setShowRecommendations(true)}
                 optimizerBusy={optimizerBusy}
@@ -1793,6 +1793,13 @@ const App: React.FC = () => {
                 project={project}
                 dispatch={dispatch}
                 goStage={goStage}
+                stepIndex={assemblyStepIndex}
+                setStepIndex={setAssemblyStepIndex}
+                stepProgress={assemblyStepProgress}
+                setStepProgress={setAssemblyStepProgress}
+                playing={assemblyPlaying}
+                setPlaying={setAssemblyPlaying}
+                setStepCount={setAssemblyStepCount}
               />
             )}
             {editorStage === "options" && (
@@ -1829,8 +1836,7 @@ const App: React.FC = () => {
           </footer>
         </section>
       </div>
-      {showWelcome && <WelcomeDialog onClose={closeWelcome} />}
-      {!showWelcome && showGettingStarted && (
+      {showGettingStarted && (
         <GettingStartedDialog
           starterTemplates={STARTER_IMAGE_TEMPLATES}
           guidedLessons={CLASSROOM_LESSONS}
@@ -1842,8 +1848,7 @@ const App: React.FC = () => {
           onSample={() => {
             setPendingCharacter(null);
             setProject(createSampleProject(), { resetHistory: true });
-            setShowWelcome(false);
-            setShowGettingStarted(false);
+                    setShowGettingStarted(false);
             setStage("character");
           }}
           onPackage={(files) => {
@@ -2051,6 +2056,7 @@ const CharacterSelection = ({
                 title="Character"
                 stage="character"
                 goStage={goStage}
+                showClassroomChecklist={false}
               >
                 <div
                   className="compact-workflow-row"
@@ -2073,46 +2079,25 @@ const CharacterSelection = ({
                     className="lesson-ownership-cluster mt-4"
                     data-testid="character-make-it-yours"
                     aria-label="Make it yours"
+                    data-change-cue={activeClassroomLesson.changeCue}
+                    data-build-cue={activeClassroomLesson.buildCue}
                   >
                     <div className="lesson-ownership-head">
                       <div className="section-title">Make it yours</div>
                       <span>{activeClassroomLesson.outcome}</span>
                     </div>
                     <div className="lesson-ownership-cues">
-                      <span>Change {activeClassroomLesson.changeCue}</span>
-                      <span>Build {activeClassroomLesson.buildCue}</span>
+                      <span>Select a part</span>
+                      <span>Place joints</span>
                     </div>
                     <div className="lesson-ownership-actions">
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={() => goStage("character")}
-                      >
-                        Parts
-                      </button>
                       <button
                         type="button"
                         className="btn-secondary"
                         disabled={partPanelDisabled}
                         onClick={onEditCharacter}
                       >
-                        Joints
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={() => goStage("path")}
-                      >
-                        Path
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={() =>
-                          goStage(project.mechanisms.length ? "foundry" : "path")
-                        }
-                      >
-                        Fit
+                        Edit rig
                       </button>
                       <button
                         type="button"
@@ -2127,10 +2112,10 @@ const CharacterSelection = ({
                 <div className="mt-4 grid gap-2">
                   <button
                     className="btn-primary"
-                    aria-label="Open Getting Started"
+                    aria-label="Open Guide"
                     onClick={onOpenGettingStarted}
                   >
-                    <Sparkles size={16} /> Starters
+                    <Sparkles size={16} /> Guide
                   </button>
                   <button
                     type="button"
@@ -2291,6 +2276,7 @@ const CharacterSelection = ({
                 <ThreePuppetPreview
                   project={reviewedProject}
                   skeleton={reviewedProject.skeleton}
+                  mechanisms={[]}
                   angle={0}
                   viewport={viewport}
                   setViewport={setViewport}
@@ -3008,6 +2994,8 @@ const PathEditor = ({
                 animatedParts={pathPreview?.parts ?? {}}
                 skeleton={pathPreview?.skeleton ?? project.skeleton}
                 mechanisms={[]}
+                paths={selectedPath ? [selectedPath] : []}
+                selectedPathId={selectedPath?.id}
                 angle={angle}
                 viewport={viewport}
                 setViewport={setViewport}
@@ -4601,51 +4589,6 @@ const snapMechanismAnchor = (
   });
 };
 
-const generatedPathCenter = (mechanism: MechanismConfig): Point | undefined => {
-  const points = mechanism.generatedPath?.length
-    ? mechanism.generatedPath
-    : generateCurvePoints(mechanism, 72).points;
-  if (!points.length) return undefined;
-  const xs = points.map((p) => p.x);
-  const ys = points.map((p) => p.y);
-  return {
-    x: (Math.min(...xs) + Math.max(...xs)) / 2,
-    y: (Math.min(...ys) + Math.max(...ys)) / 2,
-  };
-};
-
-const fitMechanismGeneratedPathToPath = (
-  mechanism: MechanismConfig,
-  path: ProjectMotionPath,
-) => {
-  const center = generatedPathCenter(mechanism);
-  if (!center || path.points.length < 3) return mechanism;
-  const metrics = pathMetrics(path);
-  const dx = metrics.cx - center.x;
-  const dy = metrics.cy - center.y;
-  if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return mechanism;
-  const anchor = {
-    x: (mechanism.anchorX ?? 0) + dx,
-    y: (mechanism.anchorY ?? 0) + dy,
-  };
-  return mechanismWithGeneratedPath({
-    ...mechanism,
-    anchorX: anchor.x,
-    anchorY: anchor.y,
-    sceneAnchor: anchor,
-    transform: {
-      ...(mechanism.transform ?? {
-        x: anchor.x,
-        y: anchor.y,
-        rotation: mechanism.groundAngle ?? 0,
-        scale: 1,
-      }),
-      x: anchor.x,
-      y: anchor.y,
-    },
-  });
-};
-
 const fitRecommendedMechanismToSheet = (
   project: ProjectState,
   mechanism: MechanismConfig,
@@ -4670,14 +4613,39 @@ const fitRecommendedMechanismToSheet = (
       dy = sheet.y + sheet.height - margin - bounds.maxY;
     if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return fitted;
     moved = true;
-    fitted = snapMechanismAnchor(
+    const previousAnchor = { x: fitted.anchorX ?? 0, y: fitted.anchorY ?? 0 };
+    const adjusted = snapMechanismAnchor(
       {
         ...fitted,
-        anchorX: (fitted.anchorX ?? 0) + dx,
-        anchorY: (fitted.anchorY ?? 0) + dy,
+        anchorX: previousAnchor.x + dx,
+        anchorY: previousAnchor.y + dy,
       },
       project,
     );
+    const adjustedAnchor = {
+      x: adjusted.anchorX ?? previousAnchor.x,
+      y: adjusted.anchorY ?? previousAnchor.y,
+    };
+    if (
+      Math.hypot(
+        adjustedAnchor.x - previousAnchor.x,
+        adjustedAnchor.y - previousAnchor.y,
+      ) < 0.01
+    ) {
+      const pitch = project.settings.physicalKit.gridPitchMm * SCENE_PX_PER_MM;
+      fitted = snapMechanismAnchor(
+        {
+          ...fitted,
+          anchorX:
+            previousAnchor.x + (dx < 0 ? -pitch : dx > 0 ? pitch : 0),
+          anchorY:
+            previousAnchor.y + (dy < 0 ? -pitch : dy > 0 ? pitch : 0),
+        },
+        project,
+      );
+    } else {
+      fitted = adjusted;
+    }
   }
   return moved
     ? {
@@ -4694,14 +4662,27 @@ const fabricationErrorsForCandidate = (
   project: ProjectState,
   mechanism: MechanismConfig,
 ) => {
-  const baseline = new Set(validateForFabrication(project).errors);
+  const readinessErrors = validateMechanismPreviewReadiness(mechanism).map(
+    (error) => `${mechanism.id}: ${error}`,
+  );
+  const siblingMechanisms = project.mechanisms.filter(
+    (m) => m.id !== mechanism.id,
+  );
+  const baseline = new Set(
+    validateForFabrication({ ...project, mechanisms: siblingMechanisms }).errors,
+  );
   const candidateProject: ProjectState = {
     ...project,
-    mechanisms: [...project.mechanisms, mechanism],
+    mechanisms: [...siblingMechanisms, mechanism],
   };
-  return validateForFabrication(candidateProject).errors.filter(
-    (error) => !baseline.has(error),
-  );
+  return [
+    ...new Set([
+      ...readinessErrors,
+      ...validateForFabrication(candidateProject).errors.filter(
+        (error) => !baseline.has(error),
+      ),
+    ]),
+  ];
 };
 
 const normalizeGearMeshMechanism = (
@@ -4887,11 +4868,74 @@ const createRecommendedMechanism = (
     warnings: score < 55 ? ["Low confidence. Check Foundry."] : [],
   };
   const normalized = mechanismWithGeneratedPath(
-    normalizeMechanismToReference(tuned),
+    normalizeGearMeshMechanism(normalizeMechanismToReference(tuned)),
   );
-  return fitRecommendedMechanismToSheet(
+  return fitRecommendedMechanismToSheet(project, normalized);
+};
+
+const localizeFittedMechanismAnchor = (
+  project: ProjectState,
+  fitted: MechanismConfig,
+  requestedAnchor?: Point,
+  maxDistance = 120,
+): MechanismConfig => {
+  if (!requestedAnchor) return fitted;
+  const current = { x: fitted.anchorX ?? 0, y: fitted.anchorY ?? 0 };
+  if (
+    !Number.isFinite(requestedAnchor.x) ||
+    !Number.isFinite(requestedAnchor.y) ||
+    !Number.isFinite(current.x) ||
+    !Number.isFinite(current.y)
+  ) {
+    return fitted;
+  }
+  const distance = Math.hypot(
+    current.x - requestedAnchor.x,
+    current.y - requestedAnchor.y,
+  );
+  if (distance <= maxDistance || distance < 0.01) return fitted;
+  const scale = maxDistance / distance;
+  return snapMechanismAnchor(
+    {
+      ...fitted,
+      anchorX: requestedAnchor.x + (current.x - requestedAnchor.x) * scale,
+      anchorY: requestedAnchor.y + (current.y - requestedAnchor.y) * scale,
+    },
     project,
-    fitMechanismGeneratedPathToPath(normalized, selectedPath),
+  );
+};
+
+const readyMechanismFallbackForPath = (
+  project: ProjectState,
+  mechanism: MechanismConfig,
+  path?: ProjectMotionPath,
+): MechanismConfig => {
+  const seedPoint = path?.points[0] ?? {
+    x: mechanism.anchorX ?? 0,
+    y: mechanism.anchorY ?? 0,
+  };
+  const boardAnchor = sceneToBoard(seedPoint, project.settings.physicalKit);
+  const anchor = boardToScene(
+    boardAnchor.col,
+    boardAnchor.row,
+    project.settings.physicalKit,
+  );
+  return snapMechanismAnchor(
+    normalizeGearMeshMechanism({
+      ...mechanism,
+      anchorX: anchor.x,
+      anchorY: anchor.y,
+      sceneAnchor: anchor,
+      targetPartId: path?.partId ?? mechanism.targetPartId,
+      targetPathId: path?.id ?? mechanism.targetPathId,
+      targetAnchorJointId:
+        mechanism.targetAnchorJointId ?? path?.targetAnchorJointId,
+      activeVisualPartIds:
+        path?.partId || mechanism.targetPartId
+          ? [path?.partId ?? mechanism.targetPartId!]
+          : (mechanism.activeVisualPartIds ?? []),
+    }),
+    project,
   );
 };
 
@@ -4912,23 +4956,58 @@ const fitMechanismToTargetPath = (
     mechanism.recommendation ?? "Fit",
     80,
   );
+  const fittedCandidate = localizeFittedMechanismAnchor(
+    project,
+    mechanismWithGeneratedPath({
+      ...fitted,
+      id: mechanism.id,
+      color: mechanism.color ?? fitted.color,
+      visible: mechanism.visible,
+      enabled: mechanism.enabled,
+      source: mechanism.source ?? fitted.source,
+      presetId: mechanism.presetId ?? fitted.presetId,
+      recommendation: mechanism.recommendation ?? fitted.recommendation,
+      warnings: mechanism.warnings ?? fitted.warnings,
+      targetPartId: path.partId,
+      targetPathId: path.id,
+      targetAnchorJointId:
+        mechanism.targetAnchorJointId ??
+        path.targetAnchorJointId ??
+        fitted.targetAnchorJointId,
+      activeVisualPartIds: [path.partId],
+    }),
+    Number.isFinite(mechanism.anchorX) && Number.isFinite(mechanism.anchorY)
+      ? { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 }
+      : undefined,
+  );
+  const fittedErrors = fabricationErrorsForCandidate(project, fittedCandidate);
+  if (!fittedErrors.length) {
+    return fittedCandidate;
+  }
+  const fallback = fitRecommendedMechanismToSheet(
+    project,
+    readyMechanismFallbackForPath(project, mechanism, path),
+  );
+  const fallbackErrors = fabricationErrorsForCandidate(project, fallback);
+  if (!fallbackErrors.length) return fallback;
+  const unchanged = mechanismWithGeneratedPath(
+    snapMechanismAnchor(
+      normalizeGearMeshMechanism(normalizeMechanismToReference(mechanism)),
+      project,
+    ),
+  );
+  const unchangedErrors = fabricationErrorsForCandidate(project, unchanged);
+  if (!unchangedErrors.length) return unchanged;
   return mechanismWithGeneratedPath({
-    ...fitted,
-    id: mechanism.id,
-    color: mechanism.color ?? fitted.color,
-    visible: mechanism.visible,
-    enabled: mechanism.enabled,
-    source: mechanism.source ?? fitted.source,
-    presetId: mechanism.presetId ?? fitted.presetId,
-    recommendation: mechanism.recommendation ?? fitted.recommendation,
-    warnings: mechanism.warnings ?? fitted.warnings,
-    targetPartId: path.partId,
-    targetPathId: path.id,
-    targetAnchorJointId:
-      mechanism.targetAnchorJointId ??
-      path.targetAnchorJointId ??
-      fitted.targetAnchorJointId,
-    activeVisualPartIds: [path.partId],
+    ...unchanged,
+    warnings: [
+      ...new Set([
+        ...(unchanged.warnings ?? []),
+        ...fittedErrors,
+        ...fallbackErrors,
+        ...unchangedErrors,
+      ]),
+    ],
   });
 };
 
@@ -4986,7 +5065,7 @@ const buildMechanismRecommendations = (
   ];
   return candidates
     .map((candidate) => {
-      const mechanism = createRecommendedMechanism(
+      const initialMechanism = createRecommendedMechanism(
         project,
         selectedPart,
         selectedPath,
@@ -4994,6 +5073,20 @@ const buildMechanismRecommendations = (
         candidate.reason,
         candidate.score,
       );
+      const initialErrors = fabricationErrorsForCandidate(
+        project,
+        initialMechanism,
+      );
+      const mechanism = initialErrors.length
+        ? fitRecommendedMechanismToSheet(
+            project,
+            readyMechanismFallbackForPath(
+              project,
+              initialMechanism,
+              selectedPath,
+            ),
+          )
+        : initialMechanism;
       const range = sampleFeasibleRange(mechanism);
       const fabricationErrors = fabricationErrorsForCandidate(
         project,
@@ -5022,6 +5115,7 @@ const buildMechanismRecommendations = (
         fabricationErrors,
       };
     })
+    .filter((option) => option.fabricationErrors.length === 0)
     .sort((a, b) => b.score - a.score);
 };
 
@@ -6630,9 +6724,6 @@ type DesignFoundryPreviewProps = {
   project: ProjectState;
   mechanism?: MechanismConfig;
   angle: number;
-  setAngle: React.Dispatch<React.SetStateAction<number>>;
-  isPlaying: boolean;
-  setIsPlaying: (v: boolean) => void;
   showTrace: boolean;
 };
 
@@ -6640,9 +6731,6 @@ const DesignFoundryPreview = ({
   project,
   mechanism,
   angle,
-  setAngle,
-  isPlaying,
-  setIsPlaying,
   showTrace,
 }: DesignFoundryPreviewProps) => {
   const [camera, setCamera] = useState<FoundryCamera>({
@@ -6754,6 +6842,27 @@ const DesignFoundryPreview = ({
       project.settings,
     ],
   );
+  const designContextPaths = useMemo(() => {
+    const targetPath = designMechanism?.targetPathId
+      ? project.paths[designMechanism.targetPathId]
+      : undefined;
+    const selectedPath = project.selectedPathId
+      ? project.paths[project.selectedPathId]
+      : undefined;
+    const firstVisiblePath = Object.values(project.paths).find(
+      (path) => path.visible !== false,
+    );
+    const path = targetPath ?? selectedPath ?? firstVisiblePath;
+    return path ? [path] : [];
+  }, [designMechanism?.targetPathId, project.paths, project.selectedPathId]);
+  const designContextAnimatedParts = useMemo(
+    () =>
+      designMechanism
+        ? animatedPartsForProject(project, [designMechanism], angle)
+        : {},
+    [angle, designMechanism, project],
+  );
+  const designContextPathId = designContextPaths[0]?.id;
 
   const updateProjectionSize = (size: FoundryOverlaySize) =>
     setProjectionSize((prev) =>
@@ -6857,10 +6966,6 @@ const DesignFoundryPreview = ({
     camera.preset === "custom"
       ? "Custom view"
       : FOUNDRY_VIEW_PRESETS[camera.preset].label;
-  const phaseDegrees = Math.round(
-    ((((angle / (Math.PI * 2)) % 1) + 1) % 1) * 360,
-  );
-
   return (
     <section
       className="design-shared-foundry-preview foundry-canvas-shell canvas-workspace"
@@ -6869,6 +6974,10 @@ const DesignFoundryPreview = ({
       data-shared-with="foundry-preview"
       data-mechanism-id={designMechanism.id}
       data-mechanism-type={designMechanism.type}
+      data-guided-context-mode="character-path-mechanism"
+      data-guided-context-part-count={project.partOrder.length}
+      data-guided-context-path-count={designContextPaths.length}
+      data-guided-context-path-id={designContextPathId ?? ""}
     >
       <div
         className="foundry-camera-hud design-foundry-camera-hud"
@@ -6974,6 +7083,33 @@ const DesignFoundryPreview = ({
         onWheel={handleWheel}
         onProjectionSizeChange={updateProjectionSize}
       >
+        {project.partOrder.length > 0 && (
+          <div
+            className="design-context-ghost"
+            data-testid="design-guided-context-overlay"
+            aria-hidden="true"
+          >
+            <ThreePuppetPreview
+              project={project}
+              animatedParts={designContextAnimatedParts}
+              skeleton={project.skeleton}
+              mechanisms={[]}
+              paths={designContextPaths}
+              selectedPathId={designContextPathId}
+              angle={angle}
+              inputMode="none"
+              testId="design-context-puppet"
+              cameraPresets={["iso"]}
+              showToolbar={false}
+              initialLayers={{
+                grid: false,
+                character: true,
+                skeleton: true,
+                mechanisms: false,
+              }}
+            />
+          </div>
+        )}
         <svg
           data-testid="design-foundry-preview-overlay"
           viewBox={`0 0 ${projectionSize.width} ${projectionSize.height}`}
@@ -6982,37 +7118,6 @@ const DesignFoundryPreview = ({
           data-renderer-source="ThreeFoundryPreview"
         />
       </ThreeFoundryPreview>
-      <div
-        className="foundry-playback-hud"
-        data-testid="design-foundry-playback-hud"
-      >
-        <button
-          type="button"
-          className="btn-primary"
-          aria-label={
-            isPlaying ? "Pause design preview" : "Play design preview"
-          }
-          onClick={() => setIsPlaying(!isPlaying)}
-        >
-          {isPlaying ? "Pause" : "Play"}
-        </button>
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={() => setAngle(0)}
-        >
-          Reset
-        </button>
-        <input
-          aria-label="Design playback angle"
-          type="range"
-          min="0"
-          max="360"
-          value={phaseDegrees}
-          onChange={(event) => setAngle(degToRad(Number(event.target.value)))}
-        />
-        <span>{phaseDegrees}°</span>
-      </div>
     </section>
   );
 };
@@ -7022,12 +7127,9 @@ const MechanismDesign = ({
   selectedMechanism,
   updateMechanism,
   dispatch,
-  isPlaying,
-  setIsPlaying,
   showTrace,
   setShowTrace,
   angle,
-  setAngle,
   onOptimize,
   onRecommendations,
   optimizerBusy,
@@ -7040,12 +7142,9 @@ const MechanismDesign = ({
   selectedMechanism?: MechanismConfig;
   updateMechanism: (id: string, updates: Partial<MechanismConfig>) => void;
   dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void;
-  isPlaying: boolean;
-  setIsPlaying: (v: boolean) => void;
   showTrace: boolean;
   setShowTrace: (v: boolean) => void;
   angle: number;
-  setAngle: React.Dispatch<React.SetStateAction<number>>;
   onOptimize: () => void;
   onRecommendations: () => void;
   optimizerBusy: boolean;
@@ -7138,14 +7237,6 @@ const MechanismDesign = ({
             >
               <div className="flex flex-wrap gap-2">
                 <button
-                  className="btn-secondary"
-                  aria-label={isPlaying ? "Play / Pause" : "Play"}
-                  onClick={() => setIsPlaying(!isPlaying)}
-                >
-                  <Play size={16} />
-                  {isPlaying ? "Pause" : "Play"}
-                </button>
-                <button
                   className={`btn-secondary ${showTrace ? "active" : ""}`}
                   onClick={() => setShowTrace(!showTrace)}
                 >
@@ -7232,9 +7323,6 @@ const MechanismDesign = ({
             project={project}
             mechanism={selectedMechanism}
             angle={angle}
-            setAngle={setAngle}
-            isPlaying={isPlaying}
-            setIsPlaying={setIsPlaying}
             showTrace={showTrace}
           />,
         ),
@@ -7427,10 +7515,24 @@ const AssemblyGuide = ({
   project,
   dispatch,
   goStage,
+  stepIndex,
+  setStepIndex,
+  stepProgress,
+  setStepProgress,
+  playing,
+  setPlaying,
+  setStepCount,
 }: {
   project: ProjectState;
   dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void;
   goStage: (stage: AppStage) => void;
+  stepIndex: number;
+  setStepIndex: React.Dispatch<React.SetStateAction<number>>;
+  stepProgress: number;
+  setStepProgress: React.Dispatch<React.SetStateAction<number>>;
+  playing: boolean;
+  setPlaying: React.Dispatch<React.SetStateAction<boolean>>;
+  setStepCount: React.Dispatch<React.SetStateAction<number>>;
 }) => {
   const validation = validateForFabrication(project);
   const create = () =>
@@ -7471,10 +7573,7 @@ const AssemblyGuide = ({
   const [lane, setLane] = useState<AssemblyLane>(() =>
     assemblyLaneForExportMode(project.settings.physicalKit.exportMode),
   );
-  const [stepIndex, setStepIndex] = useState(0);
-  const [stepProgress, setStepProgress] = useState(0);
   const stepProgressRef = useRef(0);
-  const [playing, setPlaying] = useState(false);
   const playbackSteps = selectedRecipe
     ? buildAssemblyPlaybackSteps(selectedRecipe, lane)
     : [];
@@ -7493,6 +7592,9 @@ const AssemblyGuide = ({
     ];
   const activeDisplayStep =
     activeAssemblyMode === "character" ? currentCharacterStep : currentStep;
+  useEffect(() => {
+    setStepCount(activeStepCount);
+  }, [activeStepCount, setStepCount]);
   const goAssemblyStep = (next: number | ((index: number) => number)) => {
     stepProgressRef.current = 0;
     setStepProgress(0);
@@ -7506,7 +7608,7 @@ const AssemblyGuide = ({
     setStepIndex(0);
     setStepProgress(0);
     setPlaying(false);
-  }, [activeAssemblyMode, selectedRecipe?.mechanismId, lane]);
+  }, [activeAssemblyMode, selectedRecipe?.mechanismId, lane, setPlaying, setStepIndex, setStepProgress]);
   useEffect(() => {
     if (!playing || activeStepCount < 2) return;
     let frame = 0;
@@ -7530,7 +7632,7 @@ const AssemblyGuide = ({
     };
     frame = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frame);
-  }, [playing, activeStepCount]);
+  }, [playing, activeStepCount, setStepIndex, setStepProgress]);
   const downloadAssemblyPdf = () =>
     pkg &&
     downloadText(
@@ -7700,110 +7802,20 @@ const AssemblyGuide = ({
             data-testid="assembly-canvas-preview"
           >
             {activeAssemblyMode === "character" && currentCharacterStep ? (
-              <>
-                <CharacterAssemblyWorkbench
-                  plan={characterAssemblyPlan}
-                  step={currentCharacterStep}
-                  kit={project.settings.physicalKit}
-                  progress={stepProgress}
-                />
-                <aside
-                  className="assembly-player-overlay"
-                  data-testid="assembly-player-overlay"
-                >
-                  <button
-                    aria-label={playing ? "Pause assembly" : "Play assembly"}
-                    onClick={() => setPlaying(!playing)}
-                  >
-                    {playing ? "Ⅱ" : "▶"}
-                  </button>
-                  <button
-                    aria-label="Previous assembly step"
-                    onClick={() =>
-                      goAssemblyStep((index) => Math.max(0, index - 1))
-                    }
-                  >
-                    ←
-                  </button>
-                  <button
-                    aria-label="Next assembly step"
-                    data-testid="assembly-next-step"
-                    onClick={() =>
-                      goAssemblyStep((index) =>
-                        Math.min(activeStepCount - 1, index + 1),
-                      )
-                    }
-                  >
-                    →
-                  </button>
-                  <input
-                    aria-label="Assembly scrubber"
-                    type="range"
-                    min={0}
-                    max={Math.max(0, activeStepCount - 1)}
-                    value={stepIndex}
-                    onChange={(event) =>
-                      goAssemblyStep(Number(event.currentTarget.value))
-                    }
-                  />
-                  <span>
-                    {currentCharacterStep.index}/{activeStepCount}
-                  </span>
-                </aside>
-              </>
+              <CharacterAssemblyWorkbench
+                plan={characterAssemblyPlan}
+                step={currentCharacterStep}
+                kit={project.settings.physicalKit}
+                progress={stepProgress}
+              />
             ) : selectedRecipe && currentStep ? (
-              <>
-                <AssemblyWorkbench
-                  recipe={selectedRecipe}
-                  lane={lane}
-                  step={currentStep}
-                  kit={project.settings.physicalKit}
-                  progress={stepProgress}
-                />
-                <aside
-                  className="assembly-player-overlay"
-                  data-testid="assembly-player-overlay"
-                >
-                  <button
-                    aria-label={playing ? "Pause assembly" : "Play assembly"}
-                    onClick={() => setPlaying(!playing)}
-                  >
-                    {playing ? "Ⅱ" : "▶"}
-                  </button>
-                  <button
-                    aria-label="Previous assembly step"
-                    onClick={() =>
-                      goAssemblyStep((index) => Math.max(0, index - 1))
-                    }
-                  >
-                    ←
-                  </button>
-                  <button
-                    aria-label="Next assembly step"
-                    data-testid="assembly-next-step"
-                    onClick={() =>
-                      goAssemblyStep((index) =>
-                        Math.min(activeStepCount - 1, index + 1),
-                      )
-                    }
-                  >
-                    →
-                  </button>
-                  <input
-                    aria-label="Assembly scrubber"
-                    type="range"
-                    min={0}
-                    max={Math.max(0, activeStepCount - 1)}
-                    value={stepIndex}
-                    onChange={(event) =>
-                      goAssemblyStep(Number(event.currentTarget.value))
-                    }
-                  />
-                  <span>
-                    {currentStep.index}/{activeStepCount}
-                  </span>
-                </aside>
-              </>
+              <AssemblyWorkbench
+                recipe={selectedRecipe}
+                lane={lane}
+                step={currentStep}
+                kit={project.settings.physicalKit}
+                progress={stepProgress}
+              />
             ) : (
               <div className="blueprint-empty-state">
                 {hasCharacterAssembly ? "Choose Character." : "Add a character first."}
@@ -8330,7 +8342,7 @@ const Options = ({
                   <option value="json">JSON</option>
                 </SelectField>
                 <SelectField
-                  label="Cut sheet"
+                  label="Download file"
                   value={kit.cutSheetFileType}
                   onChange={(cutSheetFileType) =>
                     updateKit({
@@ -9442,6 +9454,13 @@ const foundryLocalSpacerZsForPin = (
   renderedLayerZ: number[],
   layers: FoundryRenderLayerLike[],
 ) => {
+  const boardSideSpacerZ = (movingZ: number) =>
+    Number(
+      (
+        movingZ -
+        (FABRICATION_RENDER_PART_DEPTH + FABRICATION_RENDER_MIN_CLEARANCE) / 2
+      ).toFixed(3),
+    );
   const movingZ = pin.movingLayerIndexes
     .map((index) => renderedLayerZ[index])
     .filter((z): z is number => typeof z === "number")
@@ -9455,9 +9474,7 @@ const foundryLocalSpacerZsForPin = (
       .map((z, index) => Number(((uniqueMovingZ[index] + z) / 2).toFixed(3)));
   if (type === "4bar") {
     if ((pin.id === "A" || pin.id === "D") && uniqueMovingZ.length === 1) {
-      return [
-        Number((uniqueMovingZ[0] - FABRICATION_RENDER_PART_DEPTH).toFixed(3)),
-      ];
+      return [boardSideSpacerZ(uniqueMovingZ[0])];
     }
     if ((pin.id === "B" || pin.id === "C") && uniqueMovingZ.length >= 2)
       return betweenMovingLayers().slice(0, 1);
@@ -9489,7 +9506,7 @@ const foundryLocalSpacerZsForPin = (
         ? renderedLayerZ[gearLayerIndex]
         : undefined;
     return typeof gearZ === "number"
-      ? [Number((gearZ - FABRICATION_RENDER_PART_DEPTH).toFixed(3))]
+      ? [boardSideSpacerZ(gearZ)]
       : [];
   }
   return [];
@@ -9625,6 +9642,11 @@ const ThreeFoundryPreview = ({
     () => fabricationRenderPlanForMechanism(mechanism),
     [mechanism],
   );
+  const physicalValidationErrors = useMemo(
+    () => validateMechanismPreviewReadiness(mechanism),
+    [mechanism],
+  );
+  const physicalValidationSummary = physicalValidationErrors.join(" | ");
   const stackLayerZ = useMemo(
     () =>
       renderPlan.layers.map(
@@ -9754,7 +9776,8 @@ const ThreeFoundryPreview = ({
       ),
     [mechanism.type, renderPlan.layers, renderedLayerZ],
   );
-  const usesLocalSpacerPins = isGearTrain || isPlanetaryGear;
+  const usesLocalSpacerPins =
+    mechanism.type === "4bar" || isGearTrain || isPlanetaryGear;
   const pinStacks = useMemo(
     () =>
       foundryPinStacks(pinStackPoints, renderedLayerZ, {
@@ -9953,9 +9976,44 @@ const ThreeFoundryPreview = ({
           mechanism.rockerLength,
         )
       : gearPairOutputRatio(mechanism.crankLength, mechanism.rockerLength);
+  const localSpacerViolationCount = usesLocalSpacerPins
+    ? pinStackPoints.reduce((count, pin) => {
+        const movingZ = pin.movingLayerIndexes
+          .map((index) => renderedLayerZ[index])
+          .filter((z): z is number => typeof z === "number")
+          .sort((a, b) => a - b);
+        const uniqueMovingZ = movingZ.filter(
+          (z, index) => index === 0 || Math.abs(z - movingZ[index - 1]) > 0.001,
+        );
+        if (!uniqueMovingZ.length) return count;
+        const spacerZs = localSpacerZsForPin(pin);
+        const expectsLocalSpacer =
+          mechanism.type === "4bar"
+            ? pin.id === "A" ||
+              pin.id === "D" ||
+              ((pin.id === "B" || pin.id === "C") &&
+                uniqueMovingZ.length >= 2)
+            : isGearTrain || isPlanetaryGear;
+        if (!expectsLocalSpacer) return count;
+        if (!spacerZs.length) return count + 1;
+        const minZ = uniqueMovingZ[0];
+        const maxZ = uniqueMovingZ.at(-1) ?? minZ;
+        const invalid = spacerZs.some((z) =>
+          uniqueMovingZ.length === 1
+            ? !(
+                z < minZ &&
+                z >= minZ - FABRICATION_RENDER_LAYER_Z_STEP &&
+                z + FABRICATION_RENDER_MIN_CLEARANCE / 2 <=
+                  minZ - FABRICATION_RENDER_PART_DEPTH / 2 + 0.001
+              )
+            : !(z > minZ && z < maxZ),
+        );
+        return count + (invalid ? 1 : 0);
+      }, 0)
+    : 0;
   const zCollisionCount = pinStacks.filter(
     (pin) => pin.topZ <= pin.bottomZ || pin.lengthZ <= 0,
-  ).length;
+  ).length + localSpacerViolationCount;
   const visiblePathTraces = useMemo(
     () =>
       pathTraces.length
@@ -10151,6 +10209,22 @@ const ThreeFoundryPreview = ({
     const root = new THREE.Group();
     root.name = "foundry-dynamic";
     scene.add(root);
+    if (renderPlan.validationErrors.length || physicalValidationErrors.length) {
+      dynamicBuildCountRef.current += 1;
+      if (stateRef.current) {
+        stateRef.current.dataset.threeDynamicBuildCount = String(
+          dynamicBuildCountRef.current,
+        );
+        stateRef.current.dataset.threeGeometryCacheSize = String(
+          geometryCacheRef.current.size,
+        );
+        stateRef.current.dataset.threeMaterialCacheSize = String(
+          materialCacheRef.current.size,
+        );
+      }
+      renderCamera(cameraStateRef.current);
+      return;
+    }
     const geometryCache = geometryCacheRef.current;
     const materialCache = materialCacheRef.current;
     const cachedGeometry = <T extends THREE.BufferGeometry>(
@@ -10233,6 +10307,7 @@ const ThreeFoundryPreview = ({
       new THREE.Vector3((point.x - 180) / 18, (120 - point.y) / 18, z);
     const mmToThree = SCENE_PX_PER_MM / 18;
     const thickness = Math.max(0.2, kit.holeDiameterMm / 10);
+    const spacerDepth = Math.max(0.08, FABRICATION_RENDER_MIN_CLEARANCE);
     const barW = Math.max(0.34, FABRICATION_LINKAGE_WIDTH_MM * mmToThree);
     const holeR = Math.max(0.08, FABRICATION_HOLE_RADIUS_MM * mmToThree);
     const spacerOuterR =
@@ -10310,7 +10385,7 @@ const ThreeFoundryPreview = ({
     ) => {
       if (!point) return;
       const p = to3(point, z);
-      const geometryKey = `spacer:${spacerOuterR.toFixed(3)}:${spacerInnerR.toFixed(3)}:${thickness.toFixed(3)}`;
+      const geometryKey = `spacer:${spacerOuterR.toFixed(3)}:${spacerInnerR.toFixed(3)}:${spacerDepth.toFixed(3)}`;
       const washer = new THREE.Mesh(
         cachedGeometry(geometryKey, () => {
           const shape = new THREE.Shape();
@@ -10325,14 +10400,14 @@ const ThreeFoundryPreview = ({
           );
           shape.holes.push(circularHole(0, 0, spacerInnerR));
           return new THREE.ExtrudeGeometry(shape, {
-            depth: thickness,
+            depth: spacerDepth,
             bevelEnabled: true,
             bevelSize: 0.012,
           });
         }),
         mat,
       );
-      washer.position.set(p.x, p.y, z - thickness / 2);
+      washer.position.set(p.x, p.y, z - spacerDepth / 2);
       washer.castShadow = true;
       addEdges(washer, geometryKey);
       root.add(washer);
@@ -10966,6 +11041,7 @@ const ThreeFoundryPreview = ({
     renderedLayerZ,
     pinStacks,
     rigOpacity,
+    physicalValidationErrors,
   ]);
 
   return (
@@ -11150,7 +11226,7 @@ const ThreeFoundryPreview = ({
           .join(",")}
         data-three-board-pivot-spacer-z={boardPivotSpacerSummary}
         data-three-fourbar-ground-link-plane={
-          mechanism.type === "4bar" ? "A-D-ground-links-coplanar" : "not-4bar"
+          mechanism.type === "4bar" ? "fabrication-stack-separated" : "not-4bar"
         }
         data-three-board-pivot-fastener-contract={
           mechanism.type === "4bar"
@@ -11161,7 +11237,9 @@ const ThreeFoundryPreview = ({
         data-three-physical-pin-contract={assemblyPinContract}
         data-three-pin-stack-policy="per-pin-adjacent-stack"
         data-three-pin-stack-z-sources={
-          isGearTrain
+          mechanism.type === "4bar"
+            ? "fourbar-board-pivots-include-board-side-spacer"
+            : isGearTrain
             ? "gear-axles-include-board-side-spacer"
             : isPlanetaryGear
               ? "planetary-carrier-pins-include-local-spacers"
@@ -11169,6 +11247,7 @@ const ThreeFoundryPreview = ({
         }
         data-three-pin-stack-layer-indexes={pinStackLayerSummary}
         data-three-pin-stack-spans={pinSpanSummary}
+        data-three-pin-stack-clearance-contract="local-spacers-fill-adjacent-z-gaps"
         data-three-z-collision-count={zCollisionCount}
         data-three-ground-span-mode={
           mechanism.type === "4bar" ? "board-reference" : "rendered-reference"
@@ -11269,6 +11348,13 @@ const ThreeFoundryPreview = ({
           )
           .join(" → ")}
         data-three-stack-validation-errors={renderPlan.validationErrors.length}
+        data-three-physical-validation-errors={physicalValidationErrors.length}
+        data-three-physical-validation-summary={physicalValidationSummary}
+        data-three-preview-renderable={
+          renderPlan.validationErrors.length || physicalValidationErrors.length
+            ? "blocked"
+            : "ready"
+        }
         className="foundry-three-scene-state"
       />
       {children}

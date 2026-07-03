@@ -1,5 +1,5 @@
 import { BodyPartLayer, FabricationIssue, FabricationPackage, FabricationRecipe, MechanismConfig, Point, ProjectState } from '../types';
-import { calculateLinkage, gearTrainOutputRatio, gearTrainResolvedCenterDistance, gearTrainPitchRadii, generateCurvePoints, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius as kinematicPlanetaryRingPitchRadius } from './kinematics';
+import { calculateLinkage, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainResolvedCenterDistance, gearTrainPitchRadii, generateCurvePoints, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius as kinematicPlanetaryRingPitchRadius } from './kinematics';
 import { boardToScene, SCENE_PX_PER_MM, sceneToBoardRaw, sceneToSvg, sceneBoundsForSheet } from './coordinates';
 import { mechanismRequiredParts } from './project';
 import { REFERENCE_DEFAULTS, isReferenceExportReady, referenceRecipeForType, referenceStepCoordinateCallout, referenceSupportWarning } from './mechanismReference';
@@ -546,13 +546,94 @@ export const sampleFeasibleRange = (mechanism: MechanismConfig, samples = 96) =>
     };
 };
 
+const physicalTolerance = (value: number) => Math.max(1, Math.abs(value) * 0.03);
+
+const closePhysicalValue = (actual: number, expected: number) =>
+    Math.abs(actual - expected) <= physicalTolerance(expected || actual || 1);
+
+const closeToBoardPitch = (sceneLength: number) => {
+    const pitch = REFERENCE_DEFAULTS.pitchMm * SCENE_PX_PER_MM;
+    const cells = Math.max(1, Math.round(Math.abs(sceneLength) / Math.max(1, pitch)));
+    return closePhysicalValue(Math.abs(sceneLength), cells * pitch);
+};
+
+const closeToFabricationLinkage = (sceneLength: number, minHoleCount = 2) => {
+    const spec = fabricationLinkageSpecForSceneLength(sceneLength, REFERENCE_DEFAULTS.pitchMm, minHoleCount);
+    return closePhysicalValue(Math.abs(sceneLength), spec.lengthMm * SCENE_PX_PER_MM);
+};
+
+const uniqueMessages = (items: string[]) => [...new Set(items.filter(Boolean))];
+
+export const validateMechanismPreviewReadiness = (mechanism: MechanismConfig): string[] => {
+    const errors = [...validateFabricationStack(mechanism)];
+    const recipe = referenceRecipeForType(mechanism.type);
+    if (!recipe.exportReady) errors.push(recipe.reason ?? 'not fabrication-ready.');
+
+    const physicalNumbers = [
+        mechanism.crankLength,
+        mechanism.couplerLength,
+        mechanism.groundLength,
+        mechanism.rockerLength,
+        mechanism.sliderOffset,
+        mechanism.couplerPointDist,
+        mechanism.couplerPointAngle
+    ];
+    if (mechanism.type === '5bar' || mechanism.type === '6bar' || mechanism.type === 'piston') physicalNumbers.push(mechanism.rodLength ?? Number.NaN);
+    if (mechanism.type === 'gear' || mechanism.type === 'gear_linkage' || mechanism.type === 'planetary_gear') physicalNumbers.push(mechanism.gearRatio ?? Number.NaN, mechanism.speed2 ?? Number.NaN);
+    if (!physicalNumbers.every(Number.isFinite)) errors.push('bad dimension.');
+    if ((mechanism.type === 'gear' || mechanism.type === 'gear_linkage' || mechanism.type === 'planetary_gear') && (mechanism.gearRatio ?? 0) === 0) errors.push('gear ratio 0.');
+
+    if (mechanism.type === '4bar') {
+        const lengthsAreFabricationSnapped =
+            closeToBoardPitch(mechanism.groundLength) &&
+            closeToFabricationLinkage(mechanism.crankLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.driver) &&
+            closeToFabricationLinkage(mechanism.couplerLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.coupler) &&
+            closeToFabricationLinkage(mechanism.rockerLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.output);
+        if (!lengthsAreFabricationSnapped) errors.push('snap four-bar linkage lengths.');
+    }
+
+    if (mechanism.type === 'gear') {
+        const pitchSpan = gearTrainPitchCenterDistance(mechanism);
+        const resolvedSpan = gearTrainResolvedCenterDistance(mechanism);
+        if (!closePhysicalValue(Math.abs(mechanism.groundLength), pitchSpan) || !closePhysicalValue(resolvedSpan, pitchSpan)) {
+            errors.push('snap gear pitch.');
+        }
+    }
+    if (mechanism.type === 'gear_linkage') {
+        const radii = gearTrainPitchRadii(mechanism);
+        const pitchSpan = gearTrainPitchCenterDistance(mechanism);
+        const resolvedSpan = gearTrainResolvedCenterDistance(mechanism);
+        const actualGround = Math.abs(mechanism.groundLength);
+        if (radii.length > 2) {
+            if (!closePhysicalValue(actualGround, pitchSpan) || !closePhysicalValue(resolvedSpan, pitchSpan)) errors.push('snap gear pitch.');
+        } else {
+            if (actualGround <= pitchSpan + physicalTolerance(pitchSpan)) {
+                errors.push('gear linkage endpoint gears must be separated; add idler gears for meshing.');
+            }
+            if (!closePhysicalValue(actualGround, resolvedSpan)) errors.push('snap gear pitch.');
+        }
+    }
+    if (mechanism.type === 'planetary_gear') {
+        const expectedCarrier = Math.abs(mechanism.crankLength) + Math.abs(mechanism.rockerLength);
+        const expectedRing = Math.abs(mechanism.crankLength) + Math.abs(mechanism.rockerLength) * 2;
+        if (!closePhysicalValue(Math.abs(mechanism.groundLength), expectedCarrier)) errors.push('planetary carrier radius must equal sun plus planet.');
+        if (!closePhysicalValue(planetaryRingPitchRadius(mechanism), expectedRing)) errors.push('planetary ring radius must equal sun plus two planet radii.');
+    }
+
+    const range = sampleFeasibleRange(mechanism);
+    if (range.warning?.startsWith('No motion')) errors.push('No motion.');
+    return uniqueMessages(errors);
+};
+
 export const validateForFabrication = (project: ProjectState) => {
     const warnings: string[] = [];
     const errors: string[] = [];
     const issues: FabricationIssue[] = [];
     const add = (severity: FabricationIssue['severity'], message: string, extra: Partial<FabricationIssue> = {}) => {
+        const target = severity === 'error' ? errors : warnings;
+        if (target.includes(message)) return;
         issues.push({ severity, message, recoveryStage: severity === 'error' ? 'design' : 'blueprint', recoveryAction: 'Review item', ...extra });
-        (severity === 'error' ? errors : warnings).push(message);
+        target.push(message);
     };
     const sheet = sceneBoundsForSheet(project.settings.physicalKit);
     const snapTolerance = project.settings.physicsSnapMode === 'fast' ? 4 : project.settings.physicsSnapMode === 'high' ? 0.25 : 0.5;
@@ -574,8 +655,7 @@ export const validateForFabrication = (project: ProjectState) => {
         if (corners.some(p => !insideSheet(p))) add('warning', `${part.id}: visible part extends outside sheet bounds.`, { partId, recoveryStage: 'path', recoveryAction: 'Move part inside sheet' });
     });
     activeMechanisms.forEach(m => {
-        const recipe = referenceRecipeForType(m.type);
-        if (!recipe.exportReady) add('error', `${m.id}: ${recipe.reason ?? 'not fabrication-ready.'}`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Choose ready template' });
+        validateMechanismPreviewReadiness(m).forEach(message => add('error', `${m.id}: ${message}`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Choose ready template' }));
         (bindingWarnings[m.id] ?? []).forEach(message => add('error', `${m.id}: ${message}`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Rebind mechanism target' }));
         if (!m.id) add('error', 'Mechanism missing per-instance id.', { recoveryStage: 'design', recoveryAction: 'Select or recreate mechanism' });
         if (!m.targetPartId || !m.targetPathId) add('error', `${m.id}: choose target + path.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Choose target + path' });
@@ -591,7 +671,11 @@ export const validateForFabrication = (project: ProjectState) => {
         if (!physicalNumbers.every(Number.isFinite)) add('error', `${m.id}: bad dimension.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Fix dimensions' });
         if ((m.type === 'gear' || m.type === 'gear_linkage' || m.type === 'planetary_gear') && (m.gearRatio ?? 0) === 0) add('error', `${m.id}: gear ratio 0.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Choose non-zero ratio' });
         if (m.type === 'gear' || m.type === 'gear_linkage' || m.type === 'planetary_gear') {
-            const expectedCenterDistance = m.type === 'gear' || m.type === 'gear_linkage' ? gearTrainResolvedCenterDistance(m) : m.crankLength + m.rockerLength;
+            const expectedCenterDistance = m.type === 'gear'
+                ? gearTrainPitchCenterDistance(m)
+                : m.type === 'gear_linkage'
+                    ? gearTrainResolvedCenterDistance(m)
+                    : m.crankLength + m.rockerLength;
             if (Math.abs(m.groundLength - expectedCenterDistance) > Math.max(1, expectedCenterDistance * 0.03)) {
                 add(fabricationSeverity, `${m.id}: snap gear pitch.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Snap gear pitch' });
             }

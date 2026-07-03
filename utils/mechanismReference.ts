@@ -1,6 +1,6 @@
 import type { MechanismConfig, MechanismType } from '../types';
 import { SCENE_PX_PER_MM } from './coordinates';
-import { FABRICATION_GEAR_SPECS, FABRICATION_LINKAGE_SPECS, FABRICATION_SPACER_SPEC, type FabricationGearSpec, type FabricationLinkageSpec } from './fabricationContract';
+import { FABRICATION_DEFAULT_GRID_PITCH_MM, FABRICATION_GEAR_SPECS, FABRICATION_LINKAGE_SPECS, FABRICATION_SPACER_SPEC, type FabricationGearSpec, type FabricationLinkageSpec } from './fabricationContract';
 
 export type ReferenceSupport = 'fabrication-ready' | 'simulation-only' | 'unsupported';
 
@@ -67,7 +67,7 @@ export type ReferenceMechanismRecipe = {
 export const mmToScene = (mm: number) => mm * SCENE_PX_PER_MM;
 
 export const REFERENCE_DEFAULTS = {
-    pitchMm: 20,
+    pitchMm: FABRICATION_DEFAULT_GRID_PITCH_MM,
     holeMm: 4,
     spacerPart: FABRICATION_SPACER_SPEC.label,
     fourBar: {
@@ -195,8 +195,14 @@ const sceneGearRadiusForSpec = (spec: FabricationGearSpec) => mmToScene(spec.pit
 const sceneLinkageLengthForSpec = (spec: FabricationLinkageSpec) => mmToScene(spec.lengthMm);
 const finiteSceneNumber = (value: unknown, fallback: number) =>
     typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-const nearestFabricationLinkageSceneLength = (value: unknown, fallback: number) =>
-    sceneLinkageLengthForSpec(fabricationLinkageSpecForSceneLength(finiteSceneNumber(value, fallback)));
+const nearestFabricationLinkageSceneLength = (value: unknown, fallback: number, minHoleCount = 2) =>
+    sceneLinkageLengthForSpec(fabricationLinkageSpecForSceneLength(finiteSceneNumber(value, fallback), minHoleCount));
+const nearestBoardPitchSceneLength = (value: unknown, fallback: number) => {
+    const pitchMm = FABRICATION_DEFAULT_GRID_PITCH_MM;
+    const lengthMm = sceneToMm(finiteSceneNumber(value, fallback));
+    const cells = Math.max(1, Math.round(lengthMm / pitchMm));
+    return mmToScene(cells * pitchMm);
+};
 
 const attachmentGearSpecs = FABRICATION_GEAR_SPECS.filter(spec => spec.attachmentHoleCentersMm.length > 0);
 
@@ -208,9 +214,11 @@ export const fabricationGearSpecForSceneRadius = (sceneRadius: number, candidate
     );
 };
 
-export const fabricationLinkageSpecForSceneLength = (sceneLength: number) => {
+export const fabricationLinkageSpecForSceneLength = (sceneLength: number, minHoleCount = 2) => {
     const lengthMm = sceneToMm(sceneLength);
-    return FABRICATION_LINKAGE_SPECS.reduce((best, spec) =>
+    const candidates = FABRICATION_LINKAGE_SPECS.filter(spec => spec.holeCentersMm.length >= Math.max(2, minHoleCount));
+    const available = candidates.length ? candidates : FABRICATION_LINKAGE_SPECS;
+    return available.reduce((best, spec) =>
         Math.abs(spec.lengthMm - lengthMm) < Math.abs(best.lengthMm - lengthMm) ? spec : best
     );
 };
@@ -350,16 +358,14 @@ const movingPartStack = (coordLabel: string, label: string, partId: string, star
             { label: coordLabel, role: startRole },
             { label: FABRICATION_SPACER_SPEC.label, role: 'spacer', part: 'spacers:s10' },
             { label, role: 'moving-part', part: partId },
-            { label: FABRICATION_SPACER_SPEC.label, role: 'top-spacer', part: 'spacers:s10' },
             { label: 'Paper fastener through gear handle hole', role: 'paper-fastener' },
             { label: 'Open tabs loosely', role: 'fastener-tabs' }
         ])
         : stack([
             { label: coordLabel, role: startRole },
-            { label: 'Paper fastener', role: 'paper-fastener' },
             { label: FABRICATION_SPACER_SPEC.label, role: 'spacer', part: 'spacers:s10' },
             { label, role: 'moving-part', part: partId },
-            { label: FABRICATION_SPACER_SPEC.label, role: 'top-spacer', part: 'spacers:s10' },
+            { label: 'Paper fastener', role: 'paper-fastener' },
             { label: 'Open tabs loosely', role: 'fastener-tabs' }
         ]);
 
@@ -377,16 +383,15 @@ const gearLinkageCrankStack = (coordLabel: string, label: string, partId: string
     { label: FABRICATION_SPACER_SPEC.label, role: 'spacer', part: 'spacers:s10' },
     ...(clearanceSpacerCount === 2 ? [{ label: `${FABRICATION_SPACER_SPEC.label} riser`, role: 'spacer' as const, part: 'spacers:s10' }] : []),
     { label, role: 'moving-part', part: partId },
-    { label: FABRICATION_SPACER_SPEC.label, role: 'top-spacer', part: 'spacers:s10' },
     { label: 'Paper fastener through gear handle hole', role: 'paper-fastener' },
     { label: 'Open tabs loosely', role: 'fastener-tabs' }
 ]);
 
 const fixedPartStack = (coord: string, label: string, partId: string, repeat?: string) => stack([
     { label: `Board hole ${coord}`, role: 'board' },
-    { label: 'Paper fastener', role: 'paper-fastener' },
     { label: FABRICATION_SPACER_SPEC.label, role: 'spacer', part: 'spacers:s10' },
     { label, role: 'fixed-part', part: partId },
+    { label: 'Paper fastener head', role: 'paper-fastener' },
     { label: 'Open tabs behind board', role: 'fastener-tabs' },
     ...(repeat ? [{ label: repeat, role: 'repeat-fastener-sites' }] : [])
 ]);
@@ -622,10 +627,10 @@ export const normalizeGearLinkageToReference = <T extends Partial<MechanismConfi
 
 export const normalizeFourBarToFabrication = <T extends Partial<MechanismConfig>>(mechanism: T): T => ({
     ...mechanism,
-    groundLength: finiteSceneNumber(mechanism.groundLength, REFERENCE_DEFAULTS.fourBar.ground),
-    crankLength: nearestFabricationLinkageSceneLength(mechanism.crankLength, REFERENCE_DEFAULTS.fourBar.input),
-    couplerLength: nearestFabricationLinkageSceneLength(mechanism.couplerLength, REFERENCE_DEFAULTS.fourBar.coupler),
-    rockerLength: nearestFabricationLinkageSceneLength(mechanism.rockerLength, REFERENCE_DEFAULTS.fourBar.output),
+    groundLength: nearestBoardPitchSceneLength(mechanism.groundLength, REFERENCE_DEFAULTS.fourBar.ground),
+    crankLength: nearestFabricationLinkageSceneLength(mechanism.crankLength, REFERENCE_DEFAULTS.fourBar.input, 3),
+    couplerLength: nearestFabricationLinkageSceneLength(mechanism.couplerLength, REFERENCE_DEFAULTS.fourBar.coupler, 4),
+    rockerLength: nearestFabricationLinkageSceneLength(mechanism.rockerLength, REFERENCE_DEFAULTS.fourBar.output, 3),
     assemblyMode: mechanism.assemblyMode ?? 'open'
 });
 

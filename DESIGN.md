@@ -16,7 +16,7 @@ MotionSmith should feel like a friendly in-browser editor: Canva-simple for novi
 5. Tune parameters while the character, path, and mechanism stay aligned.
 6. Export a blueprint and assembly guide from the same scene state.
 
-No tab should feel like a separate app. The logo splash and Getting Started dialog may float above the editor, but every workflow tab shares the same workbench shell, viewport, grid, status strip, and animation controls.
+No tab should feel like a separate app. The static logo boot loader and Getting Started dialog may float above the editor, but every workflow tab shares the same workbench shell, viewport, grid, status strip, and animation controls.
 
 ## Visual direction
 
@@ -35,9 +35,9 @@ Avoid: dark CAD chrome, tiny low-contrast controls, dense ungrouped lists, fake 
 
 ### Splash and Getting Started
 
-The first-run splash is logo-only: MotionSmith mark, Start, and Do not show again. It must not teach, show galleries, embed videos, or replace the editor shell.
+The startup splash is the static boot loader only: MotionSmith mark, wordmark, and version. It disappears when the editor is ready, does not teach, and must not show galleries, persistence controls, embedded videos, or starter choices.
 
-Getting Started is a compact modal dialog, not a full-screen stage. It shows result-first starter choices: Humanoid, Girl, Boy, Image, and Package. Girl/Boy use tiny thumbnails, Import project is secondary, and process/explanation copy stays out. Closing it always lands on the Character tab with the editor shell still visible underneath.
+Getting Started is a compact modal dialog opened explicitly from the Character/Guide action, not a full-screen stage and not an automatic post-splash step. It shows result-first starter choices: Guide, Starter rig, Girl, Boy, Image, and Character file. Girl/Boy use tiny thumbnails, Open full project is secondary, and process/explanation copy stays out. The Guide tile opens guided project cards; closing always lands on the Character tab with the editor shell still visible underneath.
 
 ### Character tab
 

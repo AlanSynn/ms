@@ -104,7 +104,7 @@ export const BlueprintExport = ({
               stage="blueprint"
               goStage={goStage}
             >
-              <h3>Cut sheet</h3>
+              <h3>Board preview</h3>
               <div className="mt-4 space-y-2">
                 {validation.issues.map((issue, index) => (
                   <div
@@ -308,10 +308,12 @@ export const BlueprintExport = ({
             data-testid="blueprint-canvas-preview"
             data-visual-level="board-hero"
           >
-            <img
+            <div
               data-testid="blueprint-svg-preview"
-              alt="Cut sheet"
-              src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(previewSvg)}`}
+              className="blueprint-svg-preview"
+              role="img"
+              aria-label="Blueprint board preview"
+              dangerouslySetInnerHTML={{ __html: previewSvg }}
             />
           </div>,
         ),
@@ -322,7 +324,7 @@ export const BlueprintExport = ({
           >
             <div>
               <div className="section-title">Detail</div>
-              <h3>Cut sheet</h3>
+              <h3>Board preview</h3>
             </div>
             {selectedRecipe ? (
               <article

@@ -48,9 +48,9 @@ Job: brand/loading only.
 
 Job: choose the entry path without overwhelming the user.
 
-Primary route:
+Primary classroom route:
 
-- `Pick a guided project` opens the project/theme library.
+- `Guide` opens the project/theme library from the starter dialog or Character pane. It is prominent, but it is not auto-opened after the splash.
 
 Secondary routes:
 
@@ -229,7 +229,7 @@ Done when teachers can point to the screen and identify what digital action crea
 
 ### Phase 5 — End-to-end classroom QA
 
-- Browser flow: splash -> guided project -> Character -> Path edit -> Foundry/Design -> Blueprint -> Assembly.
+- Browser flow: static boot loader -> Character -> explicit Guide -> guided project -> Character -> Path edit -> Foundry/Design -> Blueprint -> Assembly.
 - Browser flow: skip guided entry -> blank/import project -> same downstream tools.
 - Contract checks: no server/cloud/auth/dashboard language; no fake project state; reset restores baselines.
 - Verify production preview at `/ms/` remains static and local-first.
@@ -240,7 +240,7 @@ Done when guided and free paths both produce the same kind of buildable, exporta
 
 Completed first production slice:
 
-- Getting Started now opens on guided theme projects first; starter/import/open exploration routes stay one click away as secondary choices.
+- Startup now uses only the static logo/version boot loader. Getting Started opens on compact starter choices only after the user clicks `Guide`; the `Guide` tile opens guided theme projects when selected.
 - Guided cards show result, `Change`, and `Build` cues only. Direct-translation sensemaking remains metadata for later stage context and teacher-pack use.
 - Character now gets a `Make it yours` ownership cluster after a guided lesson opens so students can move from baseline to personal edits immediately.
 - `Waving arm` creates real editable lesson state through `createLessonProject`, lands on Character, preserves reset baseline behavior, and carries outcome/build-cue/sensemaking metadata.

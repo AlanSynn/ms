@@ -15,6 +15,9 @@ const smooth = (value: number) => {
     return t * t * (3 - 2 * t);
 };
 
+const ASSEMBLY_REFERENCE_OPACITY = 0.86;
+const ASSEMBLY_QUIET_OPACITY = 0.72;
+
 const pointBounds = (points: Array<{ x: number; y: number }>) => {
     const xs = points.map(point => point.x);
     const ys = points.map(point => point.y);
@@ -133,6 +136,7 @@ export const AssemblyWorkbench = ({ recipe, lane, step, kit, progress = 0 }: { r
         data-active-board-coords={boardCoordEntries.map(entry => entry.coord).join(',')}
         data-floating-reference-coords={floatingCoordEntries.map(entry => entry.coord).join(',')}
         data-board-mode={boardActive ? 'active' : 'reference'}
+        data-board-opacity={boardActive ? '1' : String(ASSEMBLY_REFERENCE_OPACITY)}
         data-active-layer-label={activeLayerLabel}
         data-visual-level="guided-animation"
         data-interaction-mode="visual-first"
@@ -158,14 +162,14 @@ export const AssemblyWorkbench = ({ recipe, lane, step, kit, progress = 0 }: { r
             <g data-testid="assembly-visual-progress" className="assembly-visual-progress" aria-hidden="true">
                 {['parts-tray', 'assemble-module', 'mount-to-board', 'connect-character', 'test-motion'].map((phase, index) => {
                     const active = phase === step.phase || (phase === 'assemble-module' && step.phase === 'export');
-                    return <g key={phase} transform={`translate(${56 + index * 52} 48)`} opacity={active ? 1 : 0.28}>
+                    return <g key={phase} transform={`translate(${56 + index * 52} 48)`} opacity={active ? 1 : 0.5}>
                         <circle r="10" className={active ? 'assembly-progress-dot active' : 'assembly-progress-dot'}/>
                         {index < 4 && <line x1="14" y1="0" x2="38" y2="0" className="assembly-progress-line"/>}
                     </g>;
                 })}
             </g>
             <rect x="28" y="78" width="388" height="370" rx="28" fill="#fff" stroke="#dbe3f1"/>
-            <g data-testid="assembly-parts-tray" opacity={step.motion === 'parts-tray' || step.phase === 'export' ? 1 : 0.22}>
+            <g data-testid="assembly-parts-tray" opacity={step.motion === 'parts-tray' || step.phase === 'export' ? 1 : ASSEMBLY_QUIET_OPACITY}>
                 <rect x="446" y="124" width="346" height="252" rx="24" fill="#ffffff" stroke="#dbe3f1"/>
                 <title>{lane === 'kit' ? 'Parts tray' : 'Cut or print parts'}</title>
                 {recipe.requiredParts.slice(0, 8).map((part, index) => {
@@ -184,7 +188,7 @@ export const AssemblyWorkbench = ({ recipe, lane, step, kit, progress = 0 }: { r
                     const active = index <= currentLayer || step.phase !== 'assemble-module';
                     const entering = step.phase === 'assemble-module' && index === currentLayer;
                     const layerDrop = entering ? (1 - eased) * -36 : 0;
-                    const layerOpacity = entering ? 0.35 + 0.65 * eased : active ? 1 : 0.22;
+                    const layerOpacity = entering ? 0.45 + 0.55 * eased : active ? 1 : ASSEMBLY_QUIET_OPACITY;
                     return <g key={`${layer.label}-${index}`} className={active && index === currentLayer ? 'assembly-active-layer' : ''} transform={`translate(0 ${layerDrop.toFixed(1)})`} opacity={layerOpacity}>
                         <rect x={24 + index * 6} y={y + 7} width={184} height="28" rx="14" fill="#94a3b8" opacity=".28"/>
                         <rect x={20 + index * 6} y={y} width={184} height="28" rx="14" fill={index === currentLayer ? 'url(#assembly-layer-fill)' : 'url(#assembly-part-depth)'} stroke={index === currentLayer ? '#7c3aed' : '#94a3b8'} strokeWidth="2"/>
@@ -198,7 +202,12 @@ export const AssemblyWorkbench = ({ recipe, lane, step, kit, progress = 0 }: { r
                     <text x="72" y="121" className="assembly-svg-tiny">{recipe.type.replace(/[-_]/g, ' ')} module</text>
                 </g>}
             </g>
-            <g data-testid="assembly-board" data-board-mode={boardActive ? 'active' : 'reference'} opacity={boardActive ? 1 : 0.42}>
+            <g
+                data-testid="assembly-board"
+                data-board-mode={boardActive ? 'active' : 'reference'}
+                data-board-opacity={boardActive ? '1' : String(ASSEMBLY_REFERENCE_OPACITY)}
+                opacity={boardActive ? 1 : ASSEMBLY_REFERENCE_OPACITY}
+            >
                 <rect x="472" y="120" width="292" height="292" rx="22" fill="#ffffff" stroke="#cbd5e1" strokeWidth="2"/>
                 {Array.from({ length: kit.boardCells }).map((_, col) =>
                     <text key={`col-${col}`} x={494 + col * 18} y="116" className="assembly-svg-tiny" textAnchor="middle">{fabricationBoardColumnLabel(col)}</text>
@@ -296,7 +305,7 @@ export const CharacterAssemblyWorkbench = ({ plan, step, kit, progress = 0 }: { 
                 <filter id="character-pin-shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#64748b" floodOpacity=".2"/></filter>
             </defs>
             <rect x="38" y="84" width="410" height="382" rx="30" fill="#ffffff" stroke="#dbe3f1"/>
-            <g data-testid="character-assembly-board" opacity={step.phase === 'character-parts' ? 0.24 : 1}>
+            <g data-testid="character-assembly-board" opacity={step.phase === 'character-parts' ? ASSEMBLY_REFERENCE_OPACITY : 1}>
                 <rect x="472" y="120" width="292" height="292" rx="22" fill="#ffffff" stroke="#cbd5e1" strokeWidth="2"/>
                 {Array.from({ length: kit.boardCells }).map((_, col) =>
                     <text key={`character-col-${col}`} x={494 + col * 18} y="116" className="assembly-svg-tiny" textAnchor="middle">{fabricationBoardColumnLabel(col)}</text>
@@ -337,7 +346,7 @@ export const CharacterAssemblyWorkbench = ({ plan, step, kit, progress = 0 }: { 
                             key={part.id}
                             d={svgPathFromPoints(part.outline, projectPoint)}
                             fill={part.fillColor}
-                            fillOpacity="0.58"
+                            fillOpacity="0.82"
                             stroke="#64748b"
                             strokeWidth="2"
                             strokeLinejoin="round"

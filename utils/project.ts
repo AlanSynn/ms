@@ -168,6 +168,55 @@ const defaultSkeleton = () => buildSkeleton([
     joint('right_foot', 72, -218, 'right_knee')
 ]);
 
+const pointDistance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
+
+const skeletonPoint = (skeleton: StandardSkeleton, jointId: string): Point =>
+    skeleton.joints[jointId]?.position ?? { x: 0, y: 0 };
+
+const chainReach = (skeleton: StandardSkeleton, jointIds: string[]) =>
+    jointIds.slice(1).reduce((sum, jointId, index) => sum + pointDistance(skeletonPoint(skeleton, jointIds[index]), skeletonPoint(skeleton, jointId)), 0);
+
+const guidedArmWavePath = (skeleton: StandardSkeleton): Point[] => {
+    const shoulder = skeletonPoint(skeleton, 'right_shoulder');
+    const reach = chainReach(skeleton, ['right_shoulder', 'right_elbow', 'right_hand']);
+    const center = { x: shoulder.x + reach * 0.68, y: shoulder.y - reach * 0.12 };
+    const rx = reach * 0.24;
+    const ry = reach * 0.34;
+    return [
+        { x: center.x - rx * 0.25, y: center.y + ry * 0.82 },
+        { x: center.x + rx * 0.75, y: center.y + ry * 0.42 },
+        { x: center.x + rx, y: center.y - ry * 0.25 },
+        { x: center.x + rx * 0.12, y: center.y - ry },
+        { x: center.x - rx * 0.85, y: center.y - ry * 0.15 }
+    ];
+};
+
+const guidedHeadBobPath = (skeleton: StandardSkeleton): Point[] => {
+    const headTop = skeletonPoint(skeleton, 'head_top');
+    const reach = chainReach(skeleton, ['neck', 'head_top']);
+    const lift = Math.max(18, Math.min(34, reach * 0.45));
+    return [
+        { x: headTop.x, y: headTop.y - lift * 0.85 },
+        { x: headTop.x, y: headTop.y - lift * 0.05 },
+        { x: headTop.x, y: headTop.y - lift * 0.35 },
+        { x: headTop.x, y: headTop.y - lift * 0.65 }
+    ];
+};
+
+const guidedFootStepPath = (skeleton: StandardSkeleton): Point[] => {
+    const foot = skeletonPoint(skeleton, 'right_foot');
+    const reach = chainReach(skeleton, ['right_hip', 'right_knee', 'right_foot']);
+    const stride = Math.min(reach * 0.24, 36);
+    const lift = Math.min(reach * 0.2, 30);
+    return [
+        { x: foot.x - stride * 0.7, y: foot.y + 2 },
+        { x: foot.x + stride * 0.2, y: foot.y + lift * 0.25 },
+        { x: foot.x + stride * 0.75, y: foot.y + lift },
+        { x: foot.x + stride * 0.15, y: foot.y + lift * 1.25 },
+        { x: foot.x - stride * 0.85, y: foot.y + lift * 0.55 }
+    ];
+};
+
 type StarterPartShape = 'torso' | 'head' | 'limb' | 'hand' | 'foot';
 
 const capsuleContour = (width: number, height: number): Point[] => {
@@ -176,13 +225,24 @@ const capsuleContour = (width: number, height: number): Point[] => {
     const halfH = height / 2;
     const steps = 6;
     const points: Point[] = [];
-    for (let i = 0; i <= steps; i += 1) {
-        const t = Math.PI - (Math.PI * i) / steps;
-        points.push({ x: Math.cos(t) * r, y: -halfH + r + Math.sin(t) * r });
+    if (height >= width) {
+        for (let i = 0; i <= steps; i += 1) {
+            const t = Math.PI - (Math.PI * i) / steps;
+            points.push({ x: Math.cos(t) * r, y: halfH - r + Math.sin(t) * r });
+        }
+        for (let i = 0; i <= steps; i += 1) {
+            const t = -(Math.PI * i) / steps;
+            points.push({ x: Math.cos(t) * r, y: -halfH + r + Math.sin(t) * r });
+        }
+        return points;
     }
     for (let i = 0; i <= steps; i += 1) {
-        const t = -Math.PI * i / steps;
-        points.push({ x: Math.cos(t) * r, y: halfH - r + Math.sin(t) * r });
+        const t = Math.PI / 2 - (Math.PI * i) / steps;
+        points.push({ x: halfW - r + Math.cos(t) * r, y: Math.sin(t) * r });
+    }
+    for (let i = 0; i <= steps; i += 1) {
+        const t = -Math.PI / 2 - (Math.PI * i) / steps;
+        points.push({ x: -halfW + r + Math.cos(t) * r, y: Math.sin(t) * r });
     }
     return points;
 };
@@ -199,21 +259,22 @@ const starterContour = (shape: StarterPartShape, width: number, height: number):
     }
     if (shape === 'torso') {
         return [
-            { x: -hw * 0.58, y: -hh * 0.96 }, { x: hw * 0.58, y: -hh * 0.96 }, { x: hw * 0.82, y: -hh * 0.55 },
-            { x: hw * 0.9, y: hh * 0.62 }, { x: hw * 0.55, y: hh * 0.96 }, { x: -hw * 0.55, y: hh * 0.96 },
-            { x: -hw * 0.9, y: hh * 0.62 }, { x: -hw * 0.82, y: -hh * 0.55 }
+            { x: -hw * 0.76, y: -hh * 0.96 }, { x: hw * 0.76, y: -hh * 0.96 },
+            { x: hw * 0.96, y: -hh * 0.68 }, { x: hw * 0.98, y: hh * 0.76 },
+            { x: hw * 0.72, y: hh }, { x: -hw * 0.72, y: hh },
+            { x: -hw * 0.98, y: hh * 0.76 }, { x: -hw * 0.96, y: -hh * 0.68 }
         ];
     }
     if (shape === 'hand') {
         return [
-            { x: -hw * 0.6, y: -hh * 0.72 }, { x: hw * 0.55, y: -hh * 0.82 }, { x: hw * 0.88, y: -hh * 0.15 },
-            { x: hw * 0.52, y: hh * 0.82 }, { x: -hw * 0.5, y: hh * 0.72 }, { x: -hw * 0.88, y: hh * 0.08 }
+            { x: -hw * 0.6, y: -hh * 0.72 }, { x: hw * 0.55, y: -hh * 0.82 }, { x: hw * 0.9, y: -hh * 0.12 },
+            { x: hw * 0.58, y: hh * 0.98 }, { x: -hw * 0.58, y: hh * 0.98 }, { x: -hw * 0.9, y: hh * 0.08 }
         ];
     }
     if (shape === 'foot') {
         return [
-            { x: -hw * 0.92, y: -hh * 0.5 }, { x: hw * 0.35, y: -hh * 0.8 }, { x: hw * 0.94, y: -hh * 0.2 },
-            { x: hw * 0.72, y: hh * 0.62 }, { x: -hw * 0.58, y: hh * 0.82 }, { x: -hw * 0.96, y: hh * 0.25 }
+            { x: -hw * 0.92, y: -hh * 0.52 }, { x: hw * 0.35, y: -hh * 0.82 }, { x: hw * 0.94, y: -hh * 0.2 },
+            { x: hw * 0.76, y: hh * 0.72 }, { x: -hw * 0.58, y: hh * 0.96 }, { x: -hw * 0.96, y: hh * 0.3 }
         ];
     }
     return capsuleContour(width, height);
@@ -319,7 +380,14 @@ const reconcileMechanismTargets = (
     }
     const pathAnchorJointId = targetPathId ? paths[targetPathId]?.targetAnchorJointId : undefined;
     const targetAnchorJointId = targetPartId ? (mechanism.targetAnchorJointId ?? pathAnchorJointId ?? parts[targetPartId]?.anchorJointId) : undefined;
-    return mechanismWithGeneratedPath({ ...mechanism, targetPartId, targetPathId, targetAnchorJointId, activeVisualPartIds: targetPartId ? [targetPartId] : [] }, options);
+    const normalized = normalizeMechanismToFabricationSet({
+        ...mechanism,
+        targetPartId,
+        targetPathId,
+        targetAnchorJointId,
+        activeVisualPartIds: targetPartId ? [targetPartId] : []
+    });
+    return mechanismWithGeneratedPath(normalized, options);
 };
 
 export const createEmptyProject = (): ProjectState => ({
@@ -346,48 +414,47 @@ export const createSampleProject = (options: { includeMechanism?: boolean } = {}
     const includeMechanism = options.includeMechanism ?? false;
     const skeleton = defaultSkeleton();
     const partsArray = [
-        part('torso', 'Torso', 'torso', { x: 0, y: 20, rotation: 0, scale: 1 }, { width: 118, height: 176 }, '#cbd5e1', 0, 'torso'),
-        part('head', 'Head', 'neck', { x: 0, y: 154, rotation: 0, scale: 1 }, { width: 82, height: 82 }, '#e2e8f0', 5, 'head'),
-        part('left_arm_upper', 'Left upper arm', 'left_shoulder', { x: -78, y: 58, rotation: -20, scale: 1 }, { width: 38, height: 88 }, '#b6c2d2', 3, 'limb'),
-        part('left_arm_lower', 'Left lower arm', 'left_elbow', { x: -118, y: -8, rotation: -18, scale: 1 }, { width: 36, height: 88 }, '#b6c2d2', 3, 'limb'),
-        part('left_hand_part', 'Left hand', 'left_hand', { x: -136, y: -52, rotation: -18, scale: 1 }, { width: 34, height: 38 }, '#d1d5db', 4, 'hand'),
-        part('right_arm_upper', 'Right upper arm', 'right_shoulder', { x: 78, y: 58, rotation: 20, scale: 1 }, { width: 38, height: 88 }, '#b6c2d2', 3, 'limb'),
-        part('right_arm_lower', 'Right lower arm', 'right_elbow', { x: 118, y: -8, rotation: 18, scale: 1 }, { width: 36, height: 88 }, '#b6c2d2', 3, 'limb'),
-        part('right_hand_part', 'Right hand', 'right_hand', { x: 136, y: -52, rotation: 18, scale: 1 }, { width: 34, height: 38 }, '#d1d5db', 4, 'hand'),
-        part('left_leg_upper', 'Left upper leg', 'left_hip', { x: -43, y: -114, rotation: -8, scale: 1 }, { width: 42, height: 92 }, '#94a3b8', 1, 'limb'),
-        part('left_leg_lower', 'Left lower leg', 'left_knee', { x: -62, y: -190, rotation: -8, scale: 1 }, { width: 42, height: 94 }, '#94a3b8', 1, 'limb'),
-        part('left_foot_part', 'Left foot', 'left_foot', { x: -86, y: -238, rotation: -8, scale: 1 }, { width: 54, height: 34 }, '#94a3b8', 2, 'foot'),
-        part('right_leg_upper', 'Right upper leg', 'right_hip', { x: 43, y: -114, rotation: 8, scale: 1 }, { width: 42, height: 92 }, '#94a3b8', 1, 'limb'),
-        part('right_leg_lower', 'Right lower leg', 'right_knee', { x: 62, y: -190, rotation: 8, scale: 1 }, { width: 42, height: 94 }, '#94a3b8', 1, 'limb'),
-        part('right_foot_part', 'Right foot', 'right_foot', { x: 86, y: -238, rotation: 8, scale: 1 }, { width: 54, height: 34 }, '#94a3b8', 2, 'foot')
+        part('torso', 'Torso', 'torso', { x: 0, y: 12, rotation: 0, scale: 1 }, { width: 132, height: 220 }, '#cbd5e1', 0, 'torso'),
+        part('head', 'Head', 'neck', { x: 0, y: 152, rotation: 0, scale: 1 }, { width: 78, height: 78 }, '#e2e8f0', 5, 'head'),
+        part('left_arm_upper', 'Left upper arm', 'left_shoulder', { x: -80, y: 56, rotation: -20, scale: 1 }, { width: 44, height: 104 }, '#b6c2d2', 3, 'limb'),
+        part('left_arm_lower', 'Left lower arm', 'left_elbow', { x: -116, y: -10, rotation: -18, scale: 1 }, { width: 42, height: 104 }, '#b6c2d2', 3, 'limb'),
+        part('left_hand_part', 'Left hand', 'left_hand', { x: -134, y: -54, rotation: -18, scale: 1 }, { width: 40, height: 42 }, '#d1d5db', 4, 'hand'),
+        part('right_arm_upper', 'Right upper arm', 'right_shoulder', { x: 80, y: 56, rotation: 20, scale: 1 }, { width: 44, height: 104 }, '#b6c2d2', 3, 'limb'),
+        part('right_arm_lower', 'Right lower arm', 'right_elbow', { x: 116, y: -10, rotation: 18, scale: 1 }, { width: 42, height: 104 }, '#b6c2d2', 3, 'limb'),
+        part('right_hand_part', 'Right hand', 'right_hand', { x: 134, y: -54, rotation: 18, scale: 1 }, { width: 40, height: 42 }, '#d1d5db', 4, 'hand'),
+        part('left_leg_upper', 'Left upper leg', 'left_hip', { x: -42, y: -114, rotation: -8, scale: 1 }, { width: 48, height: 108 }, '#94a3b8', 1, 'limb'),
+        part('left_leg_lower', 'Left lower leg', 'left_knee', { x: -60, y: -194, rotation: -8, scale: 1 }, { width: 48, height: 112 }, '#94a3b8', 1, 'limb'),
+        part('left_foot_part', 'Left foot', 'left_foot', { x: -82, y: -238, rotation: -8, scale: 1 }, { width: 66, height: 58 }, '#94a3b8', 2, 'foot'),
+        part('right_leg_upper', 'Right upper leg', 'right_hip', { x: 42, y: -114, rotation: 8, scale: 1 }, { width: 48, height: 108 }, '#94a3b8', 1, 'limb'),
+        part('right_leg_lower', 'Right lower leg', 'right_knee', { x: 60, y: -194, rotation: 8, scale: 1 }, { width: 48, height: 112 }, '#94a3b8', 1, 'limb'),
+        part('right_foot_part', 'Right foot', 'right_foot', { x: 82, y: -238, rotation: 8, scale: 1 }, { width: 66, height: 58 }, '#94a3b8', 2, 'foot')
     ].map(p => ({ ...p, localPivotOffset: localPivotOffsetForScene(p, skeleton.joints[p.anchorJointId]?.position ?? p.transform), localPivotJointId: p.anchorJointId }));
     const mechanisms = includeMechanism ? [createDefaultMechanism('4bar', 'mech-1')] : [];
     if (mechanisms[0]) {
         mechanisms[0].targetPartId = 'right_arm_lower';
         mechanisms[0].targetPathId = 'path-right-arm';
         mechanisms[0].targetAnchorJointId = 'right_hand';
-        Object.assign(mechanisms[0], {
-            anchorX: 120,
+        Object.assign(mechanisms[0], normalizeMechanismToFabricationSet({
+            ...mechanisms[0],
+            anchorX: 0,
             anchorY: 200,
-            transform: { x: 120, y: 200, rotation: 331.4, scale: 1 },
-            sceneAnchor: { x: 120, y: 200 },
+            transform: { x: 0, y: 200, rotation: 331.4, scale: 1 },
+            sceneAnchor: { x: 0, y: 200 },
             groundAngle: 331.4,
-            groundLength: 180.1,
-            crankLength: 54.7,
-            couplerLength: 108.5,
-            rockerLength: 137,
-            couplerPointDist: 180,
+            groundLength: 160,
+            crankLength: 80,
+            couplerLength: 240,
+            rockerLength: 160,
+            couplerPointDist: 160,
             couplerPointAngle: -13.2,
             assemblyMode: 'crossed',
             source: 'optimized',
             presetId: 'sample-fitted',
             recommendation: 'sample path fit'
-        });
+        }));
     }
 
-    const pathPoints: Point[] = [
-        { x: 70, y: 60 }, { x: 130, y: 84 }, { x: 174, y: 34 }, { x: 142, y: -34 }, { x: 82, y: -18 }
-    ];
+    const pathPoints = guidedArmWavePath(skeleton);
 
     return {
         ...createEmptyProject(),
@@ -552,6 +619,7 @@ export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState =
     if (!lesson) throw new Error(`Unknown classroom lesson: ${lessonId}`);
 
     let project = createSampleProject({ includeMechanism: lesson.id === 'waving-arm' });
+    const lessonSkeleton = project.skeleton ?? defaultSkeleton();
     let paths = project.paths;
     let mechanisms = project.mechanisms;
     let selectedPartId = project.selectedPartId;
@@ -570,9 +638,9 @@ export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState =
             [pathId]: {
                 id: pathId,
                 partId: 'head',
-                targetAnchorJointId: 'neck',
-                chainRootJointId: 'torso',
-                points: [{ x: 0, y: 124 }, { x: 0, y: 152 }, { x: 0, y: 124 }, { x: 0, y: 106 }],
+                targetAnchorJointId: 'head_top',
+                chainRootJointId: 'neck',
+                points: guidedHeadBobPath(lessonSkeleton),
                 duration: 1600,
                 closed: false,
                 enabled: true,
@@ -589,7 +657,7 @@ export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState =
             sceneAnchor: { x: 130, y: 96 },
             targetPartId: 'head',
             targetPathId: pathId,
-            targetAnchorJointId: 'neck',
+            targetAnchorJointId: 'head_top',
             activeVisualPartIds: ['head'],
             source: 'manual',
             presetId: 'lesson-head-bob',
@@ -607,7 +675,7 @@ export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState =
                 partId: 'right_foot_part',
                 targetAnchorJointId: 'right_foot',
                 chainRootJointId: 'right_hip',
-                points: [{ x: 52, y: -222 }, { x: 96, y: -238 }, { x: 126, y: -206 }, { x: 84, y: -186 }, { x: 42, y: -206 }],
+                points: guidedFootStepPath(lessonSkeleton),
                 duration: 1900,
                 closed: true,
                 enabled: true,

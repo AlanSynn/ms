@@ -204,9 +204,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             mechanisms: prev.mechanisms.map(m => {
                 if (m.id !== id) return m;
                 const next = { ...m, ...snapAnchorUpdates(m, updates) };
-                const normalized = next.type === 'gear' || next.type === 'gear_linkage' || next.type === 'planetary_gear'
-                    ? normalizeMechanismToReference(next)
-                    : next;
+                const normalized = normalizeMechanismToReference(next);
                 return mechanismWithGeneratedPath(normalized);
             })
         }));

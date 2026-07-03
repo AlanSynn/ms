@@ -1,53 +1,75 @@
 # Codebase Cleanup + Architecture Split Plan
 
 Status: active cleanup plan
-Last refreshed: 2026-06-29
+Last refreshed: 2026-07-03
 
 ## Goal
 
-Keep MotionSmith easy to change: small files, one domain rule source, no duplicate canvas/mechanism logic.
+Keep MotionSmith easy to change without changing behavior: small files, one domain rule source, no duplicate canvas/mechanism logic, and no visible control that does nothing.
+
+## Button and command audit lock
+
+- `utils/appCommands.ts` is the only shell command registry. Menu labels, shortcuts, and command ids come from that registry.
+- `App.tsx` must keep `commandHandlers` typed as `Record<AppCommandId, () => void>` so adding a menu command requires adding one handler.
+- `components/AppShell.tsx` renders menu items with `data-command-id` and calls the registry-backed handler.
+- `tests/project-contract.test.ts` statically scans the primary UI files and fails if a `<button>` has no `onClick`, `onPointerDown`, submit type, or command-registry id.
+- `tests/browser/workflow.spec.ts` exercises every top menu command and requires a visible result, download, file chooser, stage change, modal, status change, undo, or redo.
+
+## Warning fixes locked
+
+- Rapier warning boundary: `utils/physicsKernel.ts` filters only the exact upstream `@dimforge/rapier3d-compat@0.19.3` wasm-bindgen initialization deprecation and restores `console.warn` in `finally`. All other warnings/errors must still surface.
+- Splash font URL: `index.html` must load Manrope through `%BASE_URL%fonts/manrope-800-latin.woff2` so Vite, GitHub Pages `/ms/`, and Tauri builds agree.
+- Chunk budget: `vite.config.ts` keeps `chunkSizeWarningLimit: 2400` because Rapier, ONNX, and the current monolithic app intentionally create lazy browser chunks. This is not permission for growth; `App.tsx` remains the first refactor target.
 
 ## Current hotspots
 
+Measured on 2026-07-03.
+
 | File | Lines | Decision |
 | --- | ---: | --- |
-| `App.tsx` | 4087 | Split first. Keep shrinking into stage/domain seams. |
-| `components/ThreePuppetPreview.tsx` | 1326 | Split after App seams stabilize. Keep renderer behavior intact. |
-| `utils/fabrication.ts` | 1049 | Split only along existing domain seams: manifest lookup, render plan, validation/export. |
-| `utils/project.ts` | 1022 | Split only reducer/defaults/migrations if edits continue. |
-| `components/TrackingModal.tsx` | 930 | Leave until tracking flow changes. |
-| `components/Canvas.tsx` | 919 | Leave until mechanism renderer unification pass. |
-| `components/Controls.tsx` | 715 | Deleted: runtime-unused legacy UI; contract test now locks absence. |
+| `App.tsx` | 12171 | First split. Extract by behavior-preserving seams only: command handlers, stage components, foundry/design renderer adapters, import dialogs, then helper reducers. No redesign mixed into extraction. |
+| `components/ThreePuppetPreview.tsx` | 1550 | Split after `App.tsx` seams stabilize. Keep one Three/Rapier boundary; move geometry/material/cache helpers only when duplicated or directly touched. |
+| `utils/project.ts` | 1439 | Split only reducer/defaults/migrations if touched. Preserve snapshot compatibility and `ProjectState` shape. |
+| `utils/fabrication.ts` | 1364 | Split manifest lookup, render plan, validation/export. Fabrication rules still come from `fabrication/generate_fabrication_templates.py` and `utils/fabricationContract.ts`. |
+| `components/Canvas.tsx` | 1025 | Leave until renderer unification pass. Do not create a second canvas engine. |
+| `components/TrackingModal.tsx` | 930 | Leave until import flow changes. Keep browser-local ONNX behavior. |
+| `utils/optimizer.ts` | 791 | Split only if mechanism fitting changes. Do not weaken fit constraints. |
+| `utils/mechanismReference.ts` | 688 | Keep as mechanism recipe source; split only generated/reference tables if they grow again. |
+| `utils/webOnnx.ts` | 677 | Keep lazy/cached ONNX boundary. Split model loading from image post-processing only if touched. |
+| `utils/kinematics.ts` | 662 | Keep pure mechanism math together until a mechanism-specific solver needs extraction. |
 
 ## Split order
 
-1. **App shell helpers**
-   - Done: shared stage frame/navigation moved to `components/stages/stageLayout.tsx`.
-   - Remaining shell-only constants stay in `App.tsx` until they have a second user. No abstraction for its own sake.
+1. **Command and app shell seams**
+   - Keep `AppShell` rendering and command registry separate from app-state mutation.
+   - Next safe extraction: move `commandHandlers` construction into a pure `utils/appCommandHandlers.ts` factory that receives state setters/actions. Lock with existing command contract first.
 
 2. **Stage components**
-   - Done: `BlueprintExport` moved to `components/stages/blueprint/BlueprintExport.tsx`; assembly workbench moved to `components/stages/assembly/AssemblyWorkbench.tsx`.
-   - Next: move `MechanismFoundry`, `MechanismDesign`, `PathEditor`, `CharacterSelection`, `AssemblyGuide`, `Options` only as touched.
-   - Each stage receives data/actions; no stage owns mechanism rules.
+   - Done: shared stage frame/navigation lives in `components/stages/stageLayout.tsx`.
+   - Done: `BlueprintExport` lives in `components/stages/blueprint/BlueprintExport.tsx`.
+   - Done: assembly workbench lives in `components/stages/assembly/AssemblyWorkbench.tsx`.
+   - Next: extract `MechanismFoundry`, `MechanismDesign`, `PathEditor`, `Character`, and Options only as touched. Each stage receives data/actions; no stage owns mechanism rules.
 
 3. **Domain helpers**
-   - Mechanism fitting/recommendations leave `App.tsx` for a pure helper module.
-   - Done: assembly playback derivation lives in `utils/assemblyPlayback.ts`.
-   - Cut-outline math leaves `App.tsx` for a pure helper module.
+   - Mechanism fitting/recommendations leave `App.tsx` for pure helper modules.
+   - Assembly playback derivation remains in `utils/assemblyPlayback.ts`.
+   - Cut-outline math leaves `App.tsx` for a pure helper module before any new cut UI work.
 
 4. **Renderer split**
-   - `ThreePuppetPreview.tsx`: keep React wrapper small; move geometry/material/cache helpers to one renderer helper if repeated.
-   - Avoid new renderer framework.
+   - `ThreePuppetPreview.tsx`: keep React wrapper small; move repeated geometry/material/cache helpers to renderer helpers.
+   - Avoid new renderer frameworks unless a contract test proves the imperative Three/Rapier boundary cannot meet requirements.
 
 5. **Delete legacy**
-   - `components/Controls.tsx` removed because runtime import graph did not use it. Future legacy UI should not be kept for tests only.
+   - Runtime-unused `components/Controls.tsx` and `utils/zStack.ts` are gone and locked by contract tests.
+   - Future legacy UI must be deleted or given a real runtime owner; do not keep files for tests only.
 
 ## Rules
 
-- One reason per file. UI file composes; domain file computes; renderer file draws; exporter file exports.
-- No one-implementation interfaces. Use plain functions and existing types.
-- New domain rule enters `utils/mechanismReference.ts` / `utils/mechanismFeatureRegistry.ts` / fabrication manifest first, not stage UI.
-- Split by extraction only: move code, keep names, then test. No redesign mixed into file moves.
+- One reason per file. UI composes; domain computes; renderer draws; exporter serializes.
+- No one-implementation interfaces. Use plain typed functions and existing types.
+- New mechanism behavior enters `utils/mechanismReference.ts`, `utils/mechanismFeatureRegistry.ts`, `utils/kinematics.ts`, and fabrication manifest/contracts first, not stage UI.
+- Split by extraction only: move code, preserve names/behavior, then test. No redesign mixed into file moves.
+- Keep all UI copy English-only and compact.
 - Commit per seam.
 
 ## Verification
@@ -55,24 +77,23 @@ Keep MotionSmith easy to change: small files, one domain rule source, no duplica
 After each split:
 
 ```bash
-bun run test:contracts
+bun run test
 bun run build
 ```
 
 After UI/renderer movement:
 
 ```bash
-bun run test:browser
+env -u NO_COLOR PLAYWRIGHT_WORKERS=4 bunx playwright test tests/browser/workflow.spec.ts --workers=4
 ```
 
+Stop only when the relevant contract, build, and browser evidence passes without new warnings.
 
 ## Cleanup applied 2026-06-29
 
 - Removed generated local artifacts: `.DS_Store`, Python `__pycache__`, `dist/`, `test-results/`, `src-tauri/target/`, `src-tauri/gen/`.
 - Moved large ignored ONNX reference repo out of docs to local archive: `../MechAnim-local-archive/.../docs-to-port-web-onnx/repo`.
 - Removed runtime-unused source: `components/Controls.tsx`, `utils/zStack.ts`.
-
 - Extracted shared stage frame/nav shell to `components/stages/stageLayout.tsx`.
 - Extracted blueprint stage to `components/stages/blueprint/BlueprintExport.tsx`.
 - Extracted assembly workbench plus assembly playback derivation to `components/stages/assembly/AssemblyWorkbench.tsx` and `utils/assemblyPlayback.ts`.
-- `App.tsx` reduced from 4444 to 4087 lines.

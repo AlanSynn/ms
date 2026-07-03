@@ -16,10 +16,29 @@ type RapierModule = typeof import('@dimforge/rapier3d-compat');
 
 let rapierModulePromise: Promise<RapierModule> | null = null;
 
+const RAPIER_INIT_DEPRECATION_WARNING =
+  'using deprecated parameters for the initialization function; pass a single object instead';
+
+const initRapierCompat = async (module: RapierModule) => {
+  // @dimforge/rapier3d-compat@0.19.3 calls its generated wasm initializer with
+  // the pre-wasm-bindgen-0.2.100 argument shape. Keep the warning boundary here
+  // so app/tests stay clean while preserving every other Rapier warning/error.
+  const warn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    if (args.length === 1 && args[0] === RAPIER_INIT_DEPRECATION_WARNING) return;
+    warn(...args);
+  };
+  try {
+    await module.init();
+  } finally {
+    console.warn = warn;
+  }
+};
+
 export const loadRapierPhysicsKernel = async (): Promise<RapierModule> => {
   if (!rapierModulePromise) {
     rapierModulePromise = import('@dimforge/rapier3d-compat').then(async module => {
-      await module.init();
+      await initRapierCompat(module);
       return module;
     });
   }
