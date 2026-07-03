@@ -169,7 +169,7 @@ assert(viteConfigText.includes("base: isTauri ? './' : webBase"), 'Tauri stays r
 assert(viteConfigText.includes('chunkSizeWarningLimit: 2400'), 'Vite chunk warning budget is explicit for intentional lazy Rapier/ONNX browser chunks');
 assert(codebaseCleanupPlan.includes('Button and command audit lock') && codebaseCleanupPlan.includes('utils/appCommands.ts'), 'cleanup plan records the executable button/menu audit lock');
 assert(codebaseCleanupPlan.includes('Warning fixes locked') && codebaseCleanupPlan.includes('Rapier warning boundary'), 'cleanup plan records scoped warning fixes instead of broad suppression');
-assert(codebaseCleanupPlan.includes('`App.tsx` | 10279') && codebaseCleanupPlan.includes('First split'), 'cleanup plan records the current App.tsx hotspot and first split target');
+assert(codebaseCleanupPlan.includes('`App.tsx` | 10244') && codebaseCleanupPlan.includes('First split'), 'cleanup plan records the current App.tsx hotspot and first split target');
 assert(codebaseCleanupPlan.includes('`components/stages/character/ProgressBlock.tsx` | 84') && codebaseCleanupPlan.includes('character import progress UI lives outside the app shell'), 'cleanup plan records the extracted character progress seam');
 assert(codebaseCleanupPlan.includes('`components/ui/InspectorControls.tsx` | 70') && codebaseCleanupPlan.includes('shared inspector sliders/toggles live outside the app shell'), 'cleanup plan records the extracted inspector controls seam');
 assert(codebaseCleanupPlan.includes('`components/stages/character/PartInspector.tsx` | 276') && codebaseCleanupPlan.includes('selected-part inspector owns part toggles'), 'cleanup plan records the extracted part inspector seam');
@@ -177,6 +177,7 @@ assert(codebaseCleanupPlan.includes('`components/stages/character/CutOutlineEdit
 assert(codebaseCleanupPlan.includes('`components/stages/character/SkeletonInspector.tsx` | 225') && codebaseCleanupPlan.includes('skeleton inspector owns joint/anchor editing'), 'cleanup plan records the extracted skeleton inspector seam');
 assert(codebaseCleanupPlan.includes('`components/stages/character/CharacterImportOverlays.tsx` | 165') && codebaseCleanupPlan.includes('character import status/review overlays live outside the app shell'), 'cleanup plan records the extracted character import overlay seam');
 assert(codebaseCleanupPlan.includes('`components/stages/character/CharacterLessonOwnership.tsx` | 47') && codebaseCleanupPlan.includes('guided lesson ownership cues/actions live outside the app shell'), 'cleanup plan records the extracted guided lesson ownership seam');
+assert(codebaseCleanupPlan.includes('`components/stages/character/CharacterSetupPanel.tsx` | 53') && codebaseCleanupPlan.includes('Character setup right-inspector wrapper lives outside the app shell'), 'cleanup plan records the extracted character setup panel seam');
 assert(codebaseCleanupPlan.includes('`utils/mechanismRecommendations.ts` | 633') && codebaseCleanupPlan.includes('pure recommendation/fitting seam'), 'cleanup plan records the extracted mechanism recommendation seam');
 assert(codebaseCleanupPlan.includes('`utils/foundryCamera.ts` | 140') && codebaseCleanupPlan.includes('pure Foundry camera/projection seam'), 'cleanup plan records the extracted Foundry camera seam');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
@@ -1774,6 +1775,7 @@ const cutOutlineEditorText = readFileSync(join(process.cwd(), 'components', 'sta
 const skeletonInspectorText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'SkeletonInspector.tsx'), 'utf8');
 const characterImportOverlaysText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CharacterImportOverlays.tsx'), 'utf8');
 const characterLessonOwnershipText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CharacterLessonOwnership.tsx'), 'utf8');
+const characterSetupPanelText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CharacterSetupPanel.tsx'), 'utf8');
 const appText = readFileSync(join(process.cwd(), 'App.tsx'), 'utf8');
 const appShellText = readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8');
 const appUiText = `${appText}
@@ -1950,14 +1952,14 @@ assert(appText.includes('onOpenGettingStarted'), 'Character tab can reopen Getti
 assert(!appText.includes('Start with character art'), 'Character tab no longer carries the old hero/onboarding copy');
 assert(!indexText.includes('.onboarding-page'), 'CSS no longer keeps a full-screen onboarding page mode');
 assert(!indexText.includes('.welcome-simple'), 'CSS no longer keeps the old welcome video layout');
-assert(appText.includes('character-setup-panel'), 'Character tab exposes direct part settings instead of only getting-started cards');
+assert(characterSetupPanelText.includes('character-setup-panel') && appText.includes('<CharacterSetupPanel'), 'Character tab exposes direct part settings through the extracted setup panel instead of only getting-started cards');
 assert(appText.includes('character-part-list') && appText.includes('character-part-item-${part.id}'), 'Character tab owns body-part selection in the left workflow pane');
 assert(stageLayoutText.includes('showClassroomChecklist = true') && appText.includes('showClassroomChecklist={false}'), 'Character tab hides cross-stage classroom checklist chips while other stages can still opt into lesson progress');
 assert(appText.includes('viewport={viewport}') && appText.includes('setViewport={setViewport}') && appText.includes('mechanisms={[]}') && appText.includes('inputMode="always"') && appText.includes('testId="character-three-puppet"'), 'Character preview uses the shared canvas viewport with character-only layers instead of rendering path/mechanism content');
 assert(threePreviewText.includes(".filter(layer => layer !== 'mechanisms' || mechanismsToRender.length > 0)"), 'Shared 3D viewer hides the mechanism layer toggle when a tab passes no mechanisms to render');
 assert(appText.includes('setStage("character")'), 'Character edit controls stay in the functional Character tab');
 assert(partInspectorText.includes('Art width') && partInspectorText.includes('Art offset X'), 'Character part inspector exposes artwork extent and offset controls');
-assert(skeletonInspectorText.includes('Selected part anchor') && skeletonInspectorText.includes('Remove joint') && appText.includes('<SkeletonInspector'), 'Character skeleton inspector owns joint controls outside App.tsx while App keeps the shared call sites');
+assert(skeletonInspectorText.includes('Selected part anchor') && skeletonInspectorText.includes('Remove joint') && characterSetupPanelText.includes('<SkeletonInspector'), 'Character setup panel routes anchor editing to the extracted skeleton inspector outside App.tsx');
 assert(partInspectorText.includes('data-testid="part-cut-controls"') && cutOutlineEditorText.includes('data-testid="cut-outline-dialog"') && partInspectorText.includes('Edit cut') && !partInspectorText.includes('Cut point X') && !cutOutlineEditorText.includes('Cut point X'), 'Character part inspector opens a canvas-first cut overlay instead of coordinate controls');
 assert(partInspectorText.includes('sourceTextureUrl={sourceTextureUrl}') && cutOutlineEditorText.includes('sourceImageFrame') && cutOutlineEditorText.includes('data-testid="cut-outline-art"') && indexText.includes('.cut-outline-part-window'), 'Character cut editor shows the full source picture behind a zoomed editable contour when available');
 assert(partInspectorText.includes('contourSource: "user"') && cutOutlineEditorText.includes('Auto cut') && cutOutlineEditorText.includes('Add point'), 'Character cut editor writes user contours and can bake/add contour points');
