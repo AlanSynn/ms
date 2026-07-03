@@ -376,4 +376,3 @@ export const CutOutlineEditorDialog = ({
   );
   return createPortal(dialog, document.body);
 };
-

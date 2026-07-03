@@ -27,12 +27,13 @@ Measured on 2026-07-03.
 
 | File | Lines | Decision |
 | --- | ---: | --- |
-| `App.tsx` | 10434 | First split. Extract by behavior-preserving seams only: command handlers, stage components, foundry/design renderer adapters, import dialogs, then helper reducers. No redesign mixed into extraction. |
+| `App.tsx` | 10307 | First split. Extract by behavior-preserving seams only: command handlers, stage components, foundry/design renderer adapters, import dialogs, then helper reducers. No redesign mixed into extraction. |
 | `components/stages/character/ProgressBlock.tsx` | 84 | Done: character import progress UI lives outside the app shell. Keep it presentation-only; ONNX/import state remains canonical `ProjectState.processing`. |
 | `components/ui/InspectorControls.tsx` | 70 | Done: shared inspector sliders/toggles live outside the app shell. Keep them presentation-only; stage/domain handlers own state mutation. |
 | `components/stages/character/PartInspector.tsx` | 276 | Done: selected-part inspector owns part toggles, cut controls, and artwork/transform fields outside the app shell. Keep it dispatch-only; no parallel part state except transient cut selection. |
 | `components/stages/character/CutOutlineEditorDialog.tsx` | 379 | Done: cut-outline editor owns modal pointer editing and contour viewport math outside the app shell. Keep it under the character seam until a pure contour helper is needed elsewhere. |
 | `components/stages/character/SkeletonInspector.tsx` | 225 | Done: skeleton inspector owns joint/anchor editing outside the app shell. Keep it dispatch-only; joint math stays in `ProjectState` actions and coordinate helpers. |
+| `components/stages/character/CharacterImportOverlays.tsx` | 165 | Done: character import status/review overlays live outside the app shell. Keep it presentation-only; package acceptance and ONNX/import state remain App/ProjectState-owned. |
 | `utils/mechanismRecommendations.ts` | 633 | Done: pure recommendation/fitting seam shared by Foundry export and recommendation flows. Keep deterministic; no DOM/storage side effects. |
 | `utils/foundryCamera.ts` | 140 | Done: pure Foundry camera/projection seam shared by Foundry and Design previews. Keep deterministic; no DOM/storage side effects. |
 | `components/ThreePuppetPreview.tsx` | 1550 | Split after `App.tsx` seams stabilize. Keep one Three/Rapier boundary; move geometry/material/cache helpers only when duplicated or directly touched. |
@@ -67,9 +68,10 @@ Current evidence:
 ```bash
 bun run test
 bun run build
+env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_WORKERS=4 bunx playwright test tests/browser/workflow.spec.ts --workers=4
 ```
 
-Both gates passed after adding the golden-master gate and fixing the typed exporter input.
+All gates passed; the production-preview browser workflow reported 40 passed tests.
 
 ## Split order
 
@@ -87,6 +89,7 @@ Both gates passed after adding the golden-master gate and fixing the typed expor
    - Done: `components/ui/InspectorControls.tsx` owns shared mini number and toggle controls used by inspectors.
    - Done: `components/stages/character/PartInspector.tsx` and `CutOutlineEditorDialog.tsx` own the shared part/cut inspector leaf used by Character and Path.
    - Done: `components/stages/character/SkeletonInspector.tsx` owns shared joint/anchor editing used by Character and Path.
+   - Done: `components/stages/character/CharacterImportOverlays.tsx` owns import progress and pending package review overlays used by Character.
    - Next lowest-risk stage seam: extract `CharacterSelection` after its setup/list/import review leaves are small enough to move without changing behavior, then extract `PathEditor`. Move Options and Assembly Guide wrappers after those shared character leaves are clean. Move `MechanismFoundry`, `MechanismDesign`, and `DesignFoundryPreview` only after their pure adapters are smaller. Each stage receives data/actions; no stage owns mechanism rules.
 
 3. **Domain helpers**

@@ -131,6 +131,8 @@ Keep files compact by responsibility, not by ceremony. Split code when one file 
 - Large-file refactors need a baseline commit plus a golden-master gate before extraction. The gate must lock the current `ProjectState`, mechanism snapshot/projection, fabrication stack, and export behavior that the refactor might touch.
 - Golden-master gates are necessary, not sufficient, for UI extraction. Pair App/stage JSX moves with command-contract tests and production-preview browser coverage for the touched workflow.
 - Treat `ProjectState` as the domain aggregate root. UI stages may issue commands/actions; domain modules own rules and invariants; renderer/export modules receive already-derived plans.
+- Use domain-driven vocabulary consistently: `ProjectState` aggregate, mechanism recipe, fabrication stack, scene projection, command handler, and stage adapter mean the same thing in docs, tests, and code.
+- Keep harness engineering first-class: every extracted seam should be callable from tests with serializable fixtures, stable ids, and deterministic outputs before UI wiring depends on it.
 - Make seams harness-friendly: extracted modules expose typed functions/components with explicit inputs and no hidden clocks, random ids, storage, network, or DOM mutation unless that side effect is the module's named boundary.
 - If a golden-master hash changes during a refactor, stop and prove the behavior change is intentional before updating the hash. Pure extraction should not require hash updates.
 - When touching `App.tsx`, prefer extracting an existing seam over adding code there. A new feature may enter `App.tsx` only as top-level composition or command wiring.

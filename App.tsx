@@ -6,8 +6,13 @@ import {
 } from "./components/stages/assembly/AssemblyWorkbench";
 import { BlueprintExport } from "./components/stages/blueprint/BlueprintExport";
 import { PartInspector } from "./components/stages/character/PartInspector";
-import { ProgressBlock, processingLabel } from "./components/stages/character/ProgressBlock";
+import { processingLabel } from "./components/stages/character/ProgressBlock";
 import { SkeletonInspector } from "./components/stages/character/SkeletonInspector";
+import {
+  CharacterImportReviewDialog,
+  CharacterImportStatusDock,
+  type PendingCharacterReview,
+} from "./components/stages/character/CharacterImportOverlays";
 import { MiniNumber, Toggle } from "./components/ui/InspectorControls";
 import {
   EditorStageFrame,
@@ -234,10 +239,8 @@ import {
   type MechanismRecommendation,
 } from "./utils/mechanismRecommendations";
 import {
-  AlertCircle,
   Boxes,
   BrainCircuit,
-  CheckCircle2,
   Download,
   FileJson,
   Loader2,
@@ -472,9 +475,6 @@ const finishBootLoader = () => {
     320,
   );
 };
-const compactPackageSummary = (summary: string) =>
-  summary.replace(/ready to review/gi, "ready");
-
 const workflowStatusFor = (
   stage: AppStage,
   project: ProjectState,
@@ -596,11 +596,8 @@ const App: React.FC = () => {
   const [foundry, setFoundry] = useState<FoundryState>(() =>
     createDefaultMechanism("4bar", "foundry-preview"),
   );
-  const [pendingCharacter, setPendingCharacter] = useState<{
-    project: ProjectState;
-    summary: string;
-    returnStage: AppStage;
-  } | null>(null);
+  const [pendingCharacter, setPendingCharacter] =
+    useState<PendingCharacterReview | null>(null);
   const [replaceCharacter, setReplaceCharacter] = useState(false);
   const [optimizerBusy, setOptimizerBusy] = useState(false);
   const [canvasViewport, setCanvasViewport] = useState<CanvasViewport>(
@@ -1799,11 +1796,7 @@ const CharacterSelection = ({
 }: {
   project: ProjectState;
   dispatch: (action: Parameters<typeof applyProjectAction>[1]) => void;
-  pendingCharacter: {
-    project: ProjectState;
-    summary: string;
-    returnStage: AppStage;
-  } | null;
+  pendingCharacter: PendingCharacterReview | null;
   replaceCharacter: boolean;
   setReplaceCharacter: (v: boolean) => void;
   onOpenGettingStarted: () => void;
@@ -1821,63 +1814,6 @@ const CharacterSelection = ({
   setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
 }) => {
   const reviewedProject = pendingCharacter?.project ?? project;
-  const artifact = reviewedProject.characterPackage;
-  const isPlainReview =
-    artifact?.replacementContext?.mode !== "replace-character";
-  const isReplacementReview =
-    artifact?.replacementContext?.mode === "replace-character";
-  const showImportProgress = Boolean(
-    project.settings.detailedProcessingSteps ||
-    [
-      "downloading-model",
-      "loading-model",
-      "running-onnx",
-      "extracting-parts",
-      "normalizing",
-      "error",
-    ].includes(project.processing.stage),
-  );
-  const showImportChecks = project.settings.debugVisuals;
-  const checks = [
-    { label: "parts", ok: Boolean(artifact?.partsInfo) },
-    {
-      label: "skeleton",
-      ok: Boolean(artifact?.charCfg && reviewedProject.skeleton),
-    },
-    {
-      label: "art",
-      ok: reviewedProject.partOrder.some((id) =>
-        Boolean(
-          reviewedProject.parts[id]?.textureUrl ||
-          reviewedProject.parts[id]?.maskUrl,
-        ),
-      ),
-    },
-    {
-      label: "outlines",
-      ok: reviewedProject.partOrder.some((id) =>
-        Boolean(
-          reviewedProject.parts[id]?.originalSvgPath ||
-          reviewedProject.parts[id]?.enhancedSvgPath,
-        ),
-      ),
-    },
-    {
-      label: "clean load",
-      ok: Boolean(
-        artifact && isPlainReview && reviewedProject.mechanisms.length === 0,
-      ),
-    },
-    {
-      label: "kept mechanisms",
-      ok: Boolean(
-        artifact &&
-        isReplacementReview &&
-        reviewedProject.mechanisms.length > 0 &&
-        artifact.replacementContext?.rebindingSummary.includes("preserved"),
-      ),
-    },
-  ];
   const packageInputRef = useRef<HTMLInputElement>(null);
   const onnxInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -1891,37 +1827,6 @@ const CharacterSelection = ({
       ? project.parts[project.selectedPartId]
       : undefined) ?? editableParts[0];
   const selectedPartId = selectedEditablePart?.id ?? "";
-  const pendingStats = pendingCharacter
-    ? `${pendingCharacter.project.partOrder.length} parts · ${Object.keys(pendingCharacter.project.skeleton?.joints ?? {}).length} joints`
-    : "";
-  const importStatusPanel = (
-    <details className="advanced-panel import-status" open>
-      <summary>Import</summary>
-      <div className="mt-3">
-        <ProgressBlock project={project} />
-      </div>
-      {showImportChecks && (
-        <details className="advanced-panel mt-6">
-          <summary>Checks</summary>
-          <div className="mt-3 grid gap-3 text-sm text-slate-600">
-            {checks.map((item) => (
-              <div key={item.label} className="flex items-center gap-2">
-                {item.ok ? (
-                  <CheckCircle2 size={16} className="text-emerald-600" />
-                ) : (
-                  <AlertCircle size={16} className="text-amber-600" />
-                )}
-                <span className={item.ok ? "" : "font-bold text-amber-700"}>
-                  {item.label}
-                </span>
-              </div>
-            ))}
-          </div>
-        </details>
-      )}
-    </details>
-  );
-
   return (
     <>
       <section
@@ -2217,47 +2122,15 @@ const CharacterSelection = ({
           }}
         />
       </section>
-      {showImportProgress && (
-        <aside
-          className="character-status-dock"
-          data-testid="character-status-dock"
-          role="dialog"
-          aria-label="Import"
-          aria-live="polite"
-        >
-          {importStatusPanel}
-        </aside>
-      )}
-      {pendingCharacter && (
-        <section
-          className="character-import-review"
-          data-testid="character-import-review"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Use imported character"
-        >
-          <div className="character-import-review-card">
-            <div className="character-import-review-status">
-              <CheckCircle2 size={24} />
-              <span>Ready</span>
-            </div>
-            <div className="character-import-review-title">
-              {pendingCharacter.project.metadata.name}
-            </div>
-            <div className="character-import-review-meta">
-              {pendingStats || compactPackageSummary(pendingCharacter.summary)}
-            </div>
-            <div className="character-import-review-actions">
-              <button className="btn-primary" onClick={onAccept}>
-                Use it
-              </button>
-              <button className="btn-secondary" onClick={onDiscard}>
-                Skip
-              </button>
-            </div>
-          </div>
-        </section>
-      )}
+      <CharacterImportStatusDock
+        project={project}
+        reviewedProject={reviewedProject}
+      />
+      <CharacterImportReviewDialog
+        pendingCharacter={pendingCharacter}
+        onAccept={onAccept}
+        onDiscard={onDiscard}
+      />
     </>
   );
 };

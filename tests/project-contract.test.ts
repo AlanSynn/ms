@@ -169,12 +169,13 @@ assert(viteConfigText.includes("base: isTauri ? './' : webBase"), 'Tauri stays r
 assert(viteConfigText.includes('chunkSizeWarningLimit: 2400'), 'Vite chunk warning budget is explicit for intentional lazy Rapier/ONNX browser chunks');
 assert(codebaseCleanupPlan.includes('Button and command audit lock') && codebaseCleanupPlan.includes('utils/appCommands.ts'), 'cleanup plan records the executable button/menu audit lock');
 assert(codebaseCleanupPlan.includes('Warning fixes locked') && codebaseCleanupPlan.includes('Rapier warning boundary'), 'cleanup plan records scoped warning fixes instead of broad suppression');
-assert(codebaseCleanupPlan.includes('`App.tsx` | 10434') && codebaseCleanupPlan.includes('First split'), 'cleanup plan records the current App.tsx hotspot and first split target');
+assert(codebaseCleanupPlan.includes('`App.tsx` | 10307') && codebaseCleanupPlan.includes('First split'), 'cleanup plan records the current App.tsx hotspot and first split target');
 assert(codebaseCleanupPlan.includes('`components/stages/character/ProgressBlock.tsx` | 84') && codebaseCleanupPlan.includes('character import progress UI lives outside the app shell'), 'cleanup plan records the extracted character progress seam');
 assert(codebaseCleanupPlan.includes('`components/ui/InspectorControls.tsx` | 70') && codebaseCleanupPlan.includes('shared inspector sliders/toggles live outside the app shell'), 'cleanup plan records the extracted inspector controls seam');
 assert(codebaseCleanupPlan.includes('`components/stages/character/PartInspector.tsx` | 276') && codebaseCleanupPlan.includes('selected-part inspector owns part toggles'), 'cleanup plan records the extracted part inspector seam');
 assert(codebaseCleanupPlan.includes('`components/stages/character/CutOutlineEditorDialog.tsx` | 379') && codebaseCleanupPlan.includes('cut-outline editor owns modal pointer editing'), 'cleanup plan records the extracted cut outline editor seam');
 assert(codebaseCleanupPlan.includes('`components/stages/character/SkeletonInspector.tsx` | 225') && codebaseCleanupPlan.includes('skeleton inspector owns joint/anchor editing'), 'cleanup plan records the extracted skeleton inspector seam');
+assert(codebaseCleanupPlan.includes('`components/stages/character/CharacterImportOverlays.tsx` | 165') && codebaseCleanupPlan.includes('character import status/review overlays live outside the app shell'), 'cleanup plan records the extracted character import overlay seam');
 assert(codebaseCleanupPlan.includes('`utils/mechanismRecommendations.ts` | 633') && codebaseCleanupPlan.includes('pure recommendation/fitting seam'), 'cleanup plan records the extracted mechanism recommendation seam');
 assert(codebaseCleanupPlan.includes('`utils/foundryCamera.ts` | 140') && codebaseCleanupPlan.includes('pure Foundry camera/projection seam'), 'cleanup plan records the extracted Foundry camera seam');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
@@ -501,6 +502,7 @@ assert(agentsContract.includes('Guided classroom lesson templates must create re
 assert(agentsContract.includes('Classroom entry is theme-guided first') && agentsContract.includes('open exploration stays secondary'), 'AGENTS.md locks guided project entry as the classroom-primary start');
 assert(agentsContract.includes('`Reset Lesson` must restore a known-good lesson baseline') && agentsContract.includes('preserving app settings'), 'AGENTS.md locks stable lesson reset semantics');
 assert(agentsContract.includes('Blueprint owns build files') && agentsContract.includes('Assembly owns animated step-by-step build'), 'AGENTS.md preserves Blueprint versus Assembly role split');
+assert(agentsContract.includes('Use domain-driven vocabulary consistently') && agentsContract.includes('Keep harness engineering first-class'), 'AGENTS.md locks DDD vocabulary and harness-friendly seam rules');
 assert(designContract.includes('Shared editor workbench'), 'DESIGN.md documents the shared editor workbench');
 assert(designContract.includes('Project governance: `AGENTS.md`'), 'DESIGN.md points contributors at the project agent contract');
 assert(designContract.includes('#8b5cf6'), 'DESIGN.md uses the MotionSmith light primary color');
@@ -1769,6 +1771,7 @@ const stageLayoutText = readFileSync(join(process.cwd(), 'components', 'stages',
 const partInspectorText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'PartInspector.tsx'), 'utf8');
 const cutOutlineEditorText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CutOutlineEditorDialog.tsx'), 'utf8');
 const skeletonInspectorText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'SkeletonInspector.tsx'), 'utf8');
+const characterImportOverlaysText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CharacterImportOverlays.tsx'), 'utf8');
 const appText = readFileSync(join(process.cwd(), 'App.tsx'), 'utf8');
 const appShellText = readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8');
 const appUiText = `${appText}
@@ -1938,7 +1941,7 @@ assert(indexText.includes('.starter-thumb { width: 2.25rem; height: 2.25rem;'), 
 assert(appText.includes('return { present: createEmptyProject(), past: [], future: [] }'), 'App initializes an empty project instead of preloading a character');
 assert(appText.includes('setProject(createEmptyProject(), { resetHistory: true })'), 'New Project resets to an empty project instead of a starter character');
 assert(appText.includes('returnStage: "character"'), 'Accepted character loads stay in the Character tab instead of jumping to Path');
-assert(appText.includes('character-import-review') && appText.includes('project={reviewedProject}') && appText.includes('showImportChecks = project.settings.debugVisuals'), 'Character imports preview the pending character and put approval in a centered overlay while checks stay dev-only');
+assert(characterImportOverlaysText.includes('character-import-review') && appText.includes('<CharacterImportStatusDock') && appText.includes('reviewedProject={reviewedProject}') && appText.includes('<CharacterImportReviewDialog') && characterImportOverlaysText.includes('showImportChecks = project.settings.debugVisuals'), 'Character imports preview the pending character and put approval in a centered overlay while checks stay dev-only');
 assert(appUiText.includes('Dev mode') && !appUiText.includes('Debug visuals'), 'Options expose debug overlays as Dev mode instead of novice-facing debug copy');
 assert(!appText.includes('<WelcomeDialog') && !appUiText.includes('WelcomeDialog') && !appText.includes('setShowWelcome') && !appText.includes('setShowGettingStarted(!hideNextTime)') && appText.includes('const [showGettingStarted, setShowGettingStarted] = useState(false)'), 'Startup uses the static boot loader only; the editor opens directly to Character and Guide is explicit');
 assert(appText.includes('onOpenGettingStarted'), 'Character tab can reopen Getting Started without owning its starter gallery');
