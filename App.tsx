@@ -6,6 +6,7 @@ import {
 } from "./components/stages/assembly/AssemblyWorkbench";
 import { BlueprintExport } from "./components/stages/blueprint/BlueprintExport";
 import { PartInspector } from "./components/stages/character/PartInspector";
+import { CharacterLessonOwnership } from "./components/stages/character/CharacterLessonOwnership";
 import { processingLabel } from "./components/stages/character/ProgressBlock";
 import { SkeletonInspector } from "./components/stages/character/SkeletonInspector";
 import {
@@ -1861,41 +1862,12 @@ const CharacterSelection = ({
                       : "gray plates"}
                   </span>
                 </div>
-                {activeClassroomLesson && (
-                  <section
-                    className="lesson-ownership-cluster mt-4"
-                    data-testid="character-make-it-yours"
-                    aria-label="Make it yours"
-                    data-change-cue={activeClassroomLesson.changeCue}
-                    data-build-cue={activeClassroomLesson.buildCue}
-                  >
-                    <div className="lesson-ownership-head">
-                      <div className="section-title">Make it yours</div>
-                      <span>{activeClassroomLesson.outcome}</span>
-                    </div>
-                    <div className="lesson-ownership-cues">
-                      <span>Select a part</span>
-                      <span>Place joints</span>
-                    </div>
-                    <div className="lesson-ownership-actions">
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        disabled={partPanelDisabled}
-                        onClick={onEditCharacter}
-                      >
-                        Edit rig
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={resetLesson}
-                      >
-                        Reset
-                      </button>
-                    </div>
-                  </section>
-                )}
+                <CharacterLessonOwnership
+                  activeClassroomLesson={activeClassroomLesson}
+                  partPanelDisabled={partPanelDisabled}
+                  onEditCharacter={onEditCharacter}
+                  onResetLesson={resetLesson}
+                />
                 <div className="mt-4 grid gap-2">
                   <button
                     className="btn-primary"
