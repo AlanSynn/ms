@@ -27,7 +27,8 @@ Measured on 2026-07-03.
 
 | File | Lines | Decision |
 | --- | ---: | --- |
-| `App.tsx` | 11441 | First split. Extract by behavior-preserving seams only: command handlers, stage components, foundry/design renderer adapters, import dialogs, then helper reducers. No redesign mixed into extraction. |
+| `App.tsx` | 11362 | First split. Extract by behavior-preserving seams only: command handlers, stage components, foundry/design renderer adapters, import dialogs, then helper reducers. No redesign mixed into extraction. |
+| `components/stages/character/ProgressBlock.tsx` | 84 | Done: character import progress UI lives outside the app shell. Keep it presentation-only; ONNX/import state remains canonical `ProjectState.processing`. |
 | `utils/mechanismRecommendations.ts` | 633 | Done: pure recommendation/fitting seam shared by Foundry export and recommendation flows. Keep deterministic; no DOM/storage side effects. |
 | `utils/foundryCamera.ts` | 140 | Done: pure Foundry camera/projection seam shared by Foundry and Design previews. Keep deterministic; no DOM/storage side effects. |
 | `components/ThreePuppetPreview.tsx` | 1550 | Split after `App.tsx` seams stabilize. Keep one Three/Rapier boundary; move geometry/material/cache helpers only when duplicated or directly touched. |
@@ -78,7 +79,8 @@ Both gates passed after adding the golden-master gate and fixing the typed expor
    - Done: shared stage frame/navigation lives in `components/stages/stageLayout.tsx`.
    - Done: `BlueprintExport` lives in `components/stages/blueprint/BlueprintExport.tsx`.
    - Done: assembly workbench lives in `components/stages/assembly/AssemblyWorkbench.tsx`.
-   - Next lowest-risk shells: extract `CharacterSelection` and `PathEditor` first, then Options and Assembly Guide wrappers. Move `MechanismFoundry`, `MechanismDesign`, and `DesignFoundryPreview` only after their pure adapters are smaller. Each stage receives data/actions; no stage owns mechanism rules.
+   - Done: `components/stages/character/ProgressBlock.tsx` owns the import progress card and status label outside `App.tsx`.
+   - Next lowest-risk leaf seams before stage shells: extract the shared part/cut inspector cluster, then skeleton inspector. After those shared leaves are clean, extract `CharacterSelection` and `PathEditor`, then Options and Assembly Guide wrappers. Move `MechanismFoundry`, `MechanismDesign`, and `DesignFoundryPreview` only after their pure adapters are smaller. Each stage receives data/actions; no stage owns mechanism rules.
 
 3. **Domain helpers**
    - Done: mechanism fitting/recommendations live in `utils/mechanismRecommendations.ts`.
