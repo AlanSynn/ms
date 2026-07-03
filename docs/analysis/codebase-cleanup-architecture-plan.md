@@ -27,7 +27,8 @@ Measured on 2026-07-03.
 
 | File | Lines | Decision |
 | --- | ---: | --- |
-| `App.tsx` | 12062 | First split. Extract by behavior-preserving seams only: command handlers, stage components, foundry/design renderer adapters, import dialogs, then helper reducers. No redesign mixed into extraction. |
+| `App.tsx` | 11441 | First split. Extract by behavior-preserving seams only: command handlers, stage components, foundry/design renderer adapters, import dialogs, then helper reducers. No redesign mixed into extraction. |
+| `utils/mechanismRecommendations.ts` | 633 | Done: pure recommendation/fitting seam shared by Foundry export and recommendation flows. Keep deterministic; no DOM/storage side effects. |
 | `utils/foundryCamera.ts` | 140 | Done: pure Foundry camera/projection seam shared by Foundry and Design previews. Keep deterministic; no DOM/storage side effects. |
 | `components/ThreePuppetPreview.tsx` | 1550 | Split after `App.tsx` seams stabilize. Keep one Three/Rapier boundary; move geometry/material/cache helpers only when duplicated or directly touched. |
 | `utils/project.ts` | 1439 | Split only reducer/defaults/migrations if touched. Preserve snapshot compatibility and `ProjectState` shape. |
@@ -71,6 +72,7 @@ Both gates passed after adding the golden-master gate and fixing the typed expor
    - Keep `AppShell` rendering and command registry separate from app-state mutation.
    - Done: `utils/appCommandHandlers.ts` owns the typed command handler factory that receives state setters/actions and stays locked by the command contract.
    - Done: `utils/foundryCamera.ts` owns deterministic Foundry camera presets, clamp/project/unproject helpers, and shared overlay sizing for Foundry and Design previews.
+   - Done: `utils/mechanismRecommendations.ts` owns fabrication-gated recommendation fitting and fallback logic outside the app shell.
 
 2. **Stage components**
    - Done: shared stage frame/navigation lives in `components/stages/stageLayout.tsx`.
@@ -79,7 +81,7 @@ Both gates passed after adding the golden-master gate and fixing the typed expor
    - Next lowest-risk shells: extract `CharacterSelection` and `PathEditor` first, then Options and Assembly Guide wrappers. Move `MechanismFoundry`, `MechanismDesign`, and `DesignFoundryPreview` only after their pure adapters are smaller. Each stage receives data/actions; no stage owns mechanism rules.
 
 3. **Domain helpers**
-   - Mechanism fitting/recommendations leave `App.tsx` for pure helper modules.
+   - Done: mechanism fitting/recommendations live in `utils/mechanismRecommendations.ts`.
    - Assembly playback derivation remains in `utils/assemblyPlayback.ts`.
    - Cut-outline math leaves `App.tsx` for a pure helper module before any new cut UI work.
 
