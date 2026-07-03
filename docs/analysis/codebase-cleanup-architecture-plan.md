@@ -27,7 +27,8 @@ Measured on 2026-07-03.
 
 | File | Lines | Decision |
 | --- | ---: | --- |
-| `App.tsx` | 12171 | First split. Extract by behavior-preserving seams only: command handlers, stage components, foundry/design renderer adapters, import dialogs, then helper reducers. No redesign mixed into extraction. |
+| `App.tsx` | 12062 | First split. Extract by behavior-preserving seams only: command handlers, stage components, foundry/design renderer adapters, import dialogs, then helper reducers. No redesign mixed into extraction. |
+| `utils/foundryCamera.ts` | 140 | Done: pure Foundry camera/projection seam shared by Foundry and Design previews. Keep deterministic; no DOM/storage side effects. |
 | `components/ThreePuppetPreview.tsx` | 1550 | Split after `App.tsx` seams stabilize. Keep one Three/Rapier boundary; move geometry/material/cache helpers only when duplicated or directly touched. |
 | `utils/project.ts` | 1439 | Split only reducer/defaults/migrations if touched. Preserve snapshot compatibility and `ProjectState` shape. |
 | `utils/fabrication.ts` | 1364 | Split manifest lookup, render plan, validation/export. Fabrication rules still come from `fabrication/generate_fabrication_templates.py` and `utils/fabricationContract.ts`. |
@@ -68,7 +69,8 @@ Both gates passed after adding the golden-master gate and fixing the typed expor
 
 1. **Command and app shell seams**
    - Keep `AppShell` rendering and command registry separate from app-state mutation.
-   - Next safe extraction: move `commandHandlers` construction into a pure `utils/appCommandHandlers.ts` factory that receives state setters/actions. Lock with existing command contract first.
+   - Done: `utils/appCommandHandlers.ts` owns the typed command handler factory that receives state setters/actions and stays locked by the command contract.
+   - Done: `utils/foundryCamera.ts` owns deterministic Foundry camera presets, clamp/project/unproject helpers, and shared overlay sizing for Foundry and Design previews.
 
 2. **Stage components**
    - Done: shared stage frame/navigation lives in `components/stages/stageLayout.tsx`.

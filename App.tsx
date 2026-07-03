@@ -174,11 +174,9 @@ import {
 } from "./utils/viewport";
 import { formatGridLabel, formatGridReadout } from "./utils/units";
 import {
-  VIEWER3D_CAMERA_PRESETS,
   VIEWER3D_CONTRACT_VERSION,
   createViewer3DContract,
   viewer3DLayerDataValue,
-  type Viewer3DCameraPreset,
 } from "./utils/viewer3d";
 import {
   assemblyLaneForExportMode,
@@ -192,6 +190,23 @@ import {
   type AppCommandId,
 } from "./utils/appCommands";
 import { createAppCommandHandlers } from "./utils/appCommandHandlers";
+import {
+  FOUNDRY_ANIMATION_COMMIT_MS,
+  FOUNDRY_OVERLAY_SIZE,
+  FOUNDRY_VIEW_PRESETS,
+  clampFoundryPitch,
+  clampFoundryZoom,
+  degToRad,
+  foundryCameraDistance,
+  foundryCameraPosition,
+  foundryCameraTarget,
+  projectFoundryOverlayPoint,
+  unprojectFoundryOverlayPoint,
+  type FoundryCamera,
+  type FoundryCameraPreset,
+  type FoundryOverlaySize,
+  type FoundryViewPreset,
+} from "./utils/foundryCamera";
 import {
   AUTHORABLE_MECHANISM_TYPES,
   FOUNDRY_MECHANISM_TYPES,
@@ -235,122 +250,6 @@ import girlStarterThumbUrl from "./resources/examples/thumbs/girl-thumb.png?url"
 import boyStarterThumbUrl from "./resources/examples/thumbs/boy-thumb.png?url";
 
 type FoundryState = MechanismConfig;
-type FoundryViewPreset = Viewer3DCameraPreset | "side" | "custom";
-type FoundryCamera = {
-  yaw: number;
-  pitch: number;
-  zoom: number;
-  preset: FoundryViewPreset;
-  pan: Point;
-};
-type FoundryCameraPreset = {
-  label: string;
-  yaw: number;
-  pitch: number;
-  zoom: number;
-};
-const foundryPreset = (preset: Viewer3DCameraPreset): FoundryCameraPreset => ({
-  label: VIEWER3D_CAMERA_PRESETS[preset].foundryLabel,
-  ...VIEWER3D_CAMERA_PRESETS[preset].foundry,
-});
-
-const FOUNDRY_VIEW_PRESETS: Record<
-  Exclude<FoundryViewPreset, "custom">,
-  FoundryCameraPreset
-> = {
-  front: foundryPreset("front"),
-  iso: foundryPreset("iso"),
-  side: { label: "Side", yaw: 64, pitch: 12, zoom: 0.86 },
-  top: foundryPreset("top"),
-};
-
-const clampFoundryPitch = (value: number) => Math.max(-64, Math.min(68, value));
-const clampFoundryZoom = (value: number) =>
-  Math.max(0.45, Math.min(2.4, value));
-const degToRad = (deg: number) => (deg * Math.PI) / 180;
-const foundryCameraDistance = (camera: FoundryCamera) =>
-  17 / clampFoundryZoom(camera.zoom);
-type FoundryOverlaySize = { width: number; height: number };
-const FOUNDRY_OVERLAY_SIZE: FoundryOverlaySize = { width: 360, height: 240 };
-const FOUNDRY_ANIMATION_COMMIT_MS = 1000 / 30;
-const FOUNDRY_CAMERA_TARGET_Z = 0.25;
-const foundryCameraTarget = (camera: FoundryCamera) =>
-  new THREE.Vector3(
-    camera.pan?.x ?? 0,
-    camera.pan?.y ?? 0,
-    FOUNDRY_CAMERA_TARGET_Z,
-  );
-
-const foundryCameraPosition = (camera: FoundryCamera) => {
-  const { yaw, pitch } = camera;
-  const distance = foundryCameraDistance(camera);
-  const yawRad = (yaw * Math.PI) / 180;
-  const pitchRad = (pitch * Math.PI) / 180;
-  const target = foundryCameraTarget(camera);
-  return target
-    .clone()
-    .add(
-      new THREE.Vector3(
-        Math.sin(yawRad) * Math.cos(pitchRad) * distance,
-        Math.sin(pitchRad) * distance,
-        Math.cos(yawRad) * Math.cos(pitchRad) * distance,
-      ),
-    );
-};
-
-const projectFoundryOverlayPoint = (
-  point: Point | undefined,
-  camera: FoundryCamera,
-  size: FoundryOverlaySize = FOUNDRY_OVERLAY_SIZE,
-  z = 0,
-): Point | undefined => {
-  if (!point) return undefined;
-  const width = Math.max(1, size.width);
-  const height = Math.max(1, size.height);
-  const cam = new THREE.PerspectiveCamera(38, width / height, 0.1, 100);
-  cam.position.copy(foundryCameraPosition(camera));
-  cam.lookAt(foundryCameraTarget(camera));
-  cam.updateMatrixWorld();
-  cam.updateProjectionMatrix();
-  const projected = new THREE.Vector3(
-    (point.x - 180) / 18,
-    (120 - point.y) / 18,
-    z,
-  ).project(cam);
-  return {
-    x: ((projected.x + 1) / 2) * width,
-    y: ((1 - projected.y) / 2) * height,
-  };
-};
-
-const unprojectFoundryOverlayPoint = (
-  point: Point,
-  camera: FoundryCamera,
-  size: FoundryOverlaySize = FOUNDRY_OVERLAY_SIZE,
-  z = 0,
-): Point | undefined => {
-  const width = Math.max(1, size.width);
-  const height = Math.max(1, size.height);
-  const cam = new THREE.PerspectiveCamera(38, width / height, 0.1, 100);
-  cam.position.copy(foundryCameraPosition(camera));
-  cam.lookAt(foundryCameraTarget(camera));
-  cam.updateMatrixWorld();
-  cam.updateProjectionMatrix();
-  const ndc = new THREE.Vector2(
-    (point.x / width) * 2 - 1,
-    1 - (point.y / height) * 2,
-  );
-  const ray = new THREE.Raycaster();
-  ray.setFromCamera(ndc, cam);
-  const dz = ray.ray.direction.z;
-  if (!Number.isFinite(dz) || Math.abs(dz) < 1e-5) return undefined;
-  const t = (z - ray.ray.origin.z) / dz;
-  if (!Number.isFinite(t)) return undefined;
-  const hit = ray.ray.origin
-    .clone()
-    .add(ray.ray.direction.clone().multiplyScalar(t));
-  return { x: hit.x * 18 + 180, y: 120 - hit.y * 18 };
-};
 
 const foundryLayerGeometryContract = (
   type: MechanismType,
