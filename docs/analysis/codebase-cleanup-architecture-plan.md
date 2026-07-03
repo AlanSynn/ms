@@ -27,7 +27,7 @@ Measured on 2026-07-03.
 
 | File | Lines | Decision |
 | --- | ---: | --- |
-| `App.tsx` | 10176 | First split. Extract by behavior-preserving seams only: command handlers, stage components, foundry/design renderer adapters, import dialogs, then helper reducers. No redesign mixed into extraction. |
+| `App.tsx` | 9940 | First split. Extract by behavior-preserving seams only: command handlers, stage components, foundry/design renderer adapters, import dialogs, then helper reducers. No redesign mixed into extraction. |
 | `components/stages/character/ProgressBlock.tsx` | 84 | Done: character import progress UI lives outside the app shell. Keep it presentation-only; ONNX/import state remains canonical `ProjectState.processing`. |
 | `components/ui/InspectorControls.tsx` | 70 | Done: shared inspector sliders/toggles live outside the app shell. Keep them presentation-only; stage/domain handlers own state mutation. |
 | `components/stages/character/PartInspector.tsx` | 276 | Done: selected-part inspector owns part toggles, cut controls, and artwork/transform fields outside the app shell. Keep it dispatch-only; no parallel part state except transient cut selection. |
@@ -37,6 +37,7 @@ Measured on 2026-07-03.
 | `components/stages/character/CharacterLessonOwnership.tsx` | 47 | Done: guided lesson ownership cues/actions live outside the app shell. Keep it presentation-only; lesson reset/edit handlers stay in App command wiring. |
 | `components/stages/character/CharacterSetupPanel.tsx` | 53 | Done: Character setup right-inspector wrapper lives outside the app shell. Keep it layout-only; PartInspector/SkeletonInspector own edit controls and ProjectState actions own mutation. |
 | `components/stages/character/CharacterImportControls.tsx` | 103 | Done: character import entry controls live outside the app shell. Keep it ref/input-only; package processing and ProjectState mutation stay in App/project actions. |
+| `components/stages/character/CharacterSelection.tsx` | 259 | Done: Character stage wrapper lives outside the app shell. Keep it orchestration-only for Character panes; import/package handlers and ProjectState history remain App-owned. |
 | `utils/mechanismRecommendations.ts` | 633 | Done: pure recommendation/fitting seam shared by Foundry export and recommendation flows. Keep deterministic; no DOM/storage side effects. |
 | `utils/foundryCamera.ts` | 140 | Done: pure Foundry camera/projection seam shared by Foundry and Design previews. Keep deterministic; no DOM/storage side effects. |
 | `components/ThreePuppetPreview.tsx` | 1550 | Split after `App.tsx` seams stabilize. Keep one Three/Rapier boundary; move geometry/material/cache helpers only when duplicated or directly touched. |
@@ -96,7 +97,8 @@ All gates passed; the production-preview browser workflow reported 40 passed tes
    - Done: `components/stages/character/CharacterLessonOwnership.tsx` owns guided lesson ownership cues/actions used by Character.
    - Done: `components/stages/character/CharacterSetupPanel.tsx` owns the Character right-inspector setup wrapper while part/joint controls remain in their leaf inspectors.
    - Done: `components/stages/character/CharacterImportControls.tsx` owns Character import/guide entry controls while file processing and package acceptance remain outside the component.
-   - Next lowest-risk stage seam: extract `CharacterSelection` after its setup/list/import review leaves are small enough to move without changing behavior, then extract `PathEditor`. Move Options and Assembly Guide wrappers after those shared character leaves are clean. Move `MechanismFoundry`, `MechanismDesign`, and `DesignFoundryPreview` only after their pure adapters are smaller. Each stage receives data/actions; no stage owns mechanism rules.
+   - Done: `components/stages/character/CharacterSelection.tsx` owns the Character stage wrapper once its setup/list/import leaves were small enough to move without changing behavior.
+   - Next lowest-risk stage seam: extract `PathEditor`, then move Options and Assembly Guide wrappers after shared character leaves are clean. Move `MechanismFoundry`, `MechanismDesign`, and `DesignFoundryPreview` only after their pure adapters are smaller. Each stage receives data/actions; no stage owns mechanism rules.
 
 3. **Domain helpers**
    - Done: mechanism fitting/recommendations live in `utils/mechanismRecommendations.ts`.
