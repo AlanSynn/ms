@@ -129,6 +129,7 @@ const assemblyStepPlayerPlan = readFileSync(join(process.cwd(), 'docs', 'prd', '
 const classroomGuidedEntryPlan = readFileSync(join(process.cwd(), 'docs', 'prd', 'classroom-guided-entry-plan.md'), 'utf8');
 const classroomSensemakingPlan = readFileSync(join(process.cwd(), 'docs', 'prd', 'classroom-sensemaking-discoverability-plan.md'), 'utf8');
 const codebaseCleanupPlan = readFileSync(join(process.cwd(), 'docs', 'analysis', 'codebase-cleanup-architecture-plan.md'), 'utf8');
+const normalizedCodebaseCleanupPlan = codebaseCleanupPlan.replace(/\s+/g, ' ');
 const brandStaticFiles = [
   'App.tsx',
   'index.html',
@@ -167,24 +168,25 @@ const viteConfigText = readFileSync(join(process.cwd(), 'vite.config.ts'), 'utf8
 assert(viteConfigText.includes("const webBase = process.env.VITE_BASE_PATH ?? '/'"), 'web deployment base can be set by VITE_BASE_PATH for project Pages');
 assert(viteConfigText.includes("base: isTauri ? './' : webBase"), 'Tauri stays relative while web builds can target /ms/');
 assert(viteConfigText.includes('chunkSizeWarningLimit: 2400'), 'Vite chunk warning budget is explicit for intentional lazy Rapier/ONNX browser chunks');
-assert(codebaseCleanupPlan.includes('Button and command audit lock') && codebaseCleanupPlan.includes('utils/appCommands.ts'), 'cleanup plan records the executable button/menu audit lock');
-assert(codebaseCleanupPlan.includes('Warning fixes locked') && codebaseCleanupPlan.includes('Rapier warning boundary'), 'cleanup plan records scoped warning fixes instead of broad suppression');
-assert(codebaseCleanupPlan.includes('`App.tsx` | 8732') && codebaseCleanupPlan.includes('Command/Character/Path seams are extracted'), 'cleanup plan records the current App.tsx hotspot and completed stage seams');
-assert(codebaseCleanupPlan.includes('`components/stages/character/ProgressBlock.tsx` | 84') && codebaseCleanupPlan.includes('character import progress UI lives outside the app shell'), 'cleanup plan records the extracted character progress seam');
-assert(codebaseCleanupPlan.includes('`components/ui/InspectorControls.tsx` | 70') && codebaseCleanupPlan.includes('shared inspector sliders/toggles live outside the app shell'), 'cleanup plan records the extracted inspector controls seam');
-assert(codebaseCleanupPlan.includes('`components/stages/character/PartInspector.tsx` | 276') && codebaseCleanupPlan.includes('selected-part inspector owns part toggles'), 'cleanup plan records the extracted part inspector seam');
-assert(codebaseCleanupPlan.includes('`components/stages/character/CutOutlineEditorDialog.tsx` | 379') && codebaseCleanupPlan.includes('cut-outline editor owns modal pointer editing'), 'cleanup plan records the extracted cut outline editor seam');
-assert(codebaseCleanupPlan.includes('`components/stages/character/SkeletonInspector.tsx` | 225') && codebaseCleanupPlan.includes('skeleton inspector owns joint/anchor editing'), 'cleanup plan records the extracted skeleton inspector seam');
-assert(codebaseCleanupPlan.includes('`components/stages/character/CharacterImportOverlays.tsx` | 165') && codebaseCleanupPlan.includes('character import status/review overlays live outside the app shell'), 'cleanup plan records the extracted character import overlay seam');
-assert(codebaseCleanupPlan.includes('`components/stages/character/CharacterLessonOwnership.tsx` | 47') && codebaseCleanupPlan.includes('guided lesson ownership cues/actions live outside the app shell'), 'cleanup plan records the extracted guided lesson ownership seam');
-assert(codebaseCleanupPlan.includes('`components/stages/character/CharacterSetupPanel.tsx` | 53') && codebaseCleanupPlan.includes('Character setup right-inspector wrapper lives outside the app shell'), 'cleanup plan records the extracted character setup panel seam');
-assert(codebaseCleanupPlan.includes('`components/stages/character/CharacterImportControls.tsx` | 103') && codebaseCleanupPlan.includes('character import entry controls live outside the app shell'), 'cleanup plan records the extracted character import controls seam');
-assert(codebaseCleanupPlan.includes('`components/stages/character/CharacterSelection.tsx` | 259') && codebaseCleanupPlan.includes('Character stage wrapper lives outside the app shell'), 'cleanup plan records the extracted CharacterSelection stage seam');
-assert(codebaseCleanupPlan.includes('`components/stages/path/PathEditor.tsx` | 376') && codebaseCleanupPlan.includes('Path stage wrapper lives outside the app shell'), 'cleanup plan records the extracted PathEditor stage seam');
-assert(codebaseCleanupPlan.includes('`components/stages/path/SceneSketch.tsx` | 398') && codebaseCleanupPlan.includes('editable 2D path canvas owns SVG pointer/draw wiring'), 'cleanup plan records the extracted SceneSketch canvas seam');
-assert(codebaseCleanupPlan.includes('`components/stages/path/PartShape.tsx` | 132') && codebaseCleanupPlan.includes('Path Editor part rendering owns artwork/plate clipping'), 'cleanup plan records the extracted Path part rendering seam');
-assert(codebaseCleanupPlan.includes('`utils/mechanismRecommendations.ts` | 633') && codebaseCleanupPlan.includes('pure recommendation/fitting seam'), 'cleanup plan records the extracted mechanism recommendation seam');
-assert(codebaseCleanupPlan.includes('`utils/foundryCamera.ts` | 140') && codebaseCleanupPlan.includes('pure Foundry camera/projection seam'), 'cleanup plan records the extracted Foundry camera seam');
+assert(normalizedCodebaseCleanupPlan.includes('Button and command audit lock') && normalizedCodebaseCleanupPlan.includes('utils/appCommands.ts'), 'cleanup plan records the executable button/menu audit lock');
+assert(normalizedCodebaseCleanupPlan.includes('Warning fixes locked') && normalizedCodebaseCleanupPlan.includes('Rapier warning boundary'), 'cleanup plan records scoped warning fixes instead of broad suppression');
+assert(normalizedCodebaseCleanupPlan.includes('`App.tsx` | 8646') && normalizedCodebaseCleanupPlan.includes('Command/Character/Path recommendation seams are extracted'), 'cleanup plan records the current App.tsx hotspot and completed stage seams');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/ProgressBlock.tsx` | 84') && normalizedCodebaseCleanupPlan.includes('character import progress UI lives outside the app shell'), 'cleanup plan records the extracted character progress seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/ui/InspectorControls.tsx` | 70') && normalizedCodebaseCleanupPlan.includes('shared inspector sliders/toggles live outside the app shell'), 'cleanup plan records the extracted inspector controls seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/PartInspector.tsx` | 276') && normalizedCodebaseCleanupPlan.includes('selected-part inspector owns part toggles'), 'cleanup plan records the extracted part inspector seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/CutOutlineEditorDialog.tsx` | 379') && normalizedCodebaseCleanupPlan.includes('cut-outline editor owns modal pointer editing'), 'cleanup plan records the extracted cut outline editor seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/SkeletonInspector.tsx` | 225') && normalizedCodebaseCleanupPlan.includes('skeleton inspector owns joint/anchor editing'), 'cleanup plan records the extracted skeleton inspector seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/CharacterImportOverlays.tsx` | 165') && normalizedCodebaseCleanupPlan.includes('character import status/review overlays live outside the app shell'), 'cleanup plan records the extracted character import overlay seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/CharacterLessonOwnership.tsx` | 47') && normalizedCodebaseCleanupPlan.includes('guided lesson ownership cues/actions live outside the app shell'), 'cleanup plan records the extracted guided lesson ownership seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/CharacterSetupPanel.tsx` | 53') && normalizedCodebaseCleanupPlan.includes('Character setup right-inspector wrapper lives outside the app shell'), 'cleanup plan records the extracted character setup panel seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/CharacterImportControls.tsx` | 103') && normalizedCodebaseCleanupPlan.includes('character import entry controls live outside the app shell'), 'cleanup plan records the extracted character import controls seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/CharacterSelection.tsx` | 259') && normalizedCodebaseCleanupPlan.includes('Character stage wrapper lives outside the app shell'), 'cleanup plan records the extracted CharacterSelection stage seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/path/PathEditor.tsx` | 376') && normalizedCodebaseCleanupPlan.includes('Path stage wrapper lives outside the app shell'), 'cleanup plan records the extracted PathEditor stage seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/path/MechanismRecommendationSheet.tsx` | 127') && normalizedCodebaseCleanupPlan.includes('Path recommendation modal lives outside the app shell'), 'cleanup plan records the extracted Path recommendation modal seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/path/SceneSketch.tsx` | 398') && normalizedCodebaseCleanupPlan.includes('editable 2D path canvas owns SVG pointer/draw wiring'), 'cleanup plan records the extracted SceneSketch canvas seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/path/PartShape.tsx` | 132') && normalizedCodebaseCleanupPlan.includes('Path Editor part rendering owns artwork/plate clipping'), 'cleanup plan records the extracted Path part rendering seam');
+assert(normalizedCodebaseCleanupPlan.includes('`utils/mechanismRecommendations.ts` | 633') && normalizedCodebaseCleanupPlan.includes('pure recommendation/fitting seam'), 'cleanup plan records the extracted mechanism recommendation seam');
+assert(normalizedCodebaseCleanupPlan.includes('`utils/foundryCamera.ts` | 140') && normalizedCodebaseCleanupPlan.includes('pure Foundry camera/projection seam'), 'cleanup plan records the extracted Foundry camera seam');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
 assert(readFileSync(join(process.cwd(), 'App.tsx'), 'utf8').includes('motionsmith.autosave') && readFileSync(join(process.cwd(), 'App.tsx'), 'utf8').includes('motionsmith.workspace'), 'local storage namespace uses the MotionSmith slug for persistent state');
 assert.deepEqual(validateAppCommandRegistry(), [], 'application command registry is internally consistent');
@@ -1784,6 +1786,7 @@ const characterSetupPanelText = readFileSync(join(process.cwd(), 'components', '
 const characterImportControlsText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CharacterImportControls.tsx'), 'utf8');
 const characterSelectionText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CharacterSelection.tsx'), 'utf8');
 const pathEditorText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'PathEditor.tsx'), 'utf8');
+const mechanismRecommendationSheetText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'MechanismRecommendationSheet.tsx'), 'utf8');
 const pathCanvasPaneText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'PathCanvasPane.tsx'), 'utf8');
 const sceneSketchText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'SceneSketch.tsx'), 'utf8');
 const partShapeText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'PartShape.tsx'), 'utf8');
@@ -1853,7 +1856,7 @@ assert(appText.includes('FABRICATION_LINKAGE_WIDTH_MM * SCENE_PX_PER_MM') && app
 assert(appText.includes('fabricationRingGearPathD'), '2D Foundry planetary preview uses shared ring gear geometry');
 assert(appText.includes('fabricationRingGearProfileForPitchRadius'), '3D Foundry ring uses shared fabrication ring gear geometry');
 assert(appText.includes('SHARED_PLAYBACK_STAGES') && appText.includes('!SHARED_PLAYBACK_STAGES.includes(stage)'), 'shared playback rAF only runs on stages that actually consume the animated angle');
-assert(appText.includes('const showsWorkspacePlayer =') && appText.includes('editorStage === "path" || editorStage === "design" || editorStage === "assembly"'), 'shared playback dock is restricted to Path, Mechanism Design, and Assembly instead of leaking onto unrelated tabs');
+assert(appText.includes('const showsWorkspacePlayer =') && appText.includes('editorStage === "path"') && appText.includes('editorStage === "design"') && appText.includes('editorStage === "assembly"'), 'shared playback dock is restricted to Path, Mechanism Design, and Assembly instead of leaking onto unrelated tabs');
 assert(appUiText.includes('workspace-player-prev-step') && appUiText.includes('workspace-player-next-step') && appUiText.includes('Assembly scrubber'), 'shared playback dock owns Assembly previous/next step controls and scrubber');
 assert(!appText.includes('data-testid="design-foundry-playback-hud"'), 'Mechanism Design uses the shared workspace player instead of a duplicate local playback HUD');
 assert(appText.includes('FOUNDRY_ANIMATION_COMMIT_MS') && appText.includes('data-three-animation-commit-ms'), 'Foundry exposes a bounded animation commit budget for browser perf tests');
@@ -1872,6 +1875,7 @@ assert(viewportText.includes('WEBGL_PIXEL_RATIO_CAP') && appText.includes('WEBGL
 assert(threePreviewText.includes("const PUPPET_CAMERA_PRESETS: Viewer3DCameraPreset[] = ['front', 'iso']"), 'puppet viewer toolbar exposes only the fixed 2D and orbitable 3D modes');
 assert(threePreviewText.includes('onWheel={handleViewerWheel}') && threePreviewText.includes('data-camera-yaw'), 'puppet 3D canvas exposes direct wheel zoom and orbit state for browser verification');
 assert(appText.includes('<PathEditor'), 'App.tsx delegates Path Editor stage to the extracted PathEditor seam');
+assert(appText.includes('<MechanismRecommendationSheet') && mechanismRecommendationSheetText.includes('buildMechanismRecommendations') && mechanismRecommendationSheetText.includes('mechanismWithGeneratedPath'), 'App.tsx delegates the Path recommendation modal while recommendation scoring and generated-path wrapping stay outside the app shell');
 assert(pathCanvasPaneText.includes('path-view-2d') && pathCanvasPaneText.includes('path-view-3d'), 'Path Editor exposes a persistent 2D/3D Path view switch');
 assert(pathCanvasPaneText.includes('pathViewMode === "2d"') && pathCanvasPaneText.includes('<SceneSketch'), 'Path Editor 2D view uses editable SceneSketch for viewing, drawing, and point editing');
 assert(sceneSketchText.includes('data-testid="path-canvas"'), 'SceneSketch owns the editable 2D path canvas');

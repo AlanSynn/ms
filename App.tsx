@@ -7,6 +7,7 @@ import {
 import { BlueprintExport } from "./components/stages/blueprint/BlueprintExport";
 import { CharacterSelection } from "./components/stages/character/CharacterSelection";
 import { PathEditor } from "./components/stages/path/PathEditor";
+import { MechanismRecommendationSheet } from "./components/stages/path/MechanismRecommendationSheet";
 import { processingLabel } from "./components/stages/character/ProgressBlock";
 import type { PendingCharacterReview } from "./components/stages/character/CharacterImportOverlays";
 import { MiniNumber, Toggle } from "./components/ui/InspectorControls";
@@ -213,11 +214,9 @@ import {
   pointsToSvgPath,
 } from "./utils/mechanismPreview";
 import {
-  buildMechanismRecommendations,
   fitMechanismToTargetPath,
   fitRecommendedMechanismToSheet,
   normalizeGearMeshMechanism,
-  type MechanismRecommendation,
 } from "./utils/mechanismRecommendations";
 import {
   Boxes,
@@ -440,7 +439,8 @@ const updateBootLoader = (status: WebOnnxCacheStatus) => {
   if (label) label.textContent = bootLoaderLabel(status);
   const bar = loader.querySelector<HTMLElement>("[data-boot-progress]");
   if (bar) {
-    const fallback = status.stage === "checking" ? 8 : status.stage === "error" ? 100 : 0;
+    const fallback =
+      status.stage === "checking" ? 8 : status.stage === "error" ? 100 : 0;
     bar.style.width = `${Math.max(6, Math.min(100, status.progress || fallback))}%`;
   }
 };
@@ -1372,7 +1372,9 @@ const App: React.FC = () => {
   };
   const isAssemblyStage = editorStage === "assembly";
   const showsWorkspacePlayer =
-    editorStage === "path" || editorStage === "design" || editorStage === "assembly";
+    editorStage === "path" ||
+    editorStage === "design" ||
+    editorStage === "assembly";
   const playerDock =
     !modalOpen && showsWorkspacePlayer ? (
       <WorkspacePlayerDock
@@ -1695,7 +1697,9 @@ const App: React.FC = () => {
         <GettingStartedDialog
           starterTemplates={STARTER_IMAGE_TEMPLATES}
           guidedLessons={CLASSROOM_LESSONS}
-          onLesson={(lessonId) => openClassroomLesson(lessonId as ClassroomLessonId)}
+          onLesson={(lessonId) =>
+            openClassroomLesson(lessonId as ClassroomLessonId)
+          }
           onStarterImage={(template) => {
             setShowGettingStarted(false);
             loadStarterImage(template);
@@ -1703,7 +1707,7 @@ const App: React.FC = () => {
           onSample={() => {
             setPendingCharacter(null);
             setProject(createSampleProject(), { resetHistory: true });
-                    setShowGettingStarted(false);
+            setShowGettingStarted(false);
             setStage("character");
           }}
           onPackage={(files) => {
@@ -1747,116 +1751,6 @@ const App: React.FC = () => {
         }}
       />
     </main>
-  );
-};
-
-const MechanismRecommendationSheet = ({
-  isOpen,
-  project,
-  selectedPart,
-  selectedPath,
-  onClose,
-  onApply,
-}: {
-  isOpen: boolean;
-  project: ProjectState;
-  selectedPart?: BodyPartLayer;
-  selectedPath?: ProjectMotionPath;
-  onClose: () => void;
-  onApply: (mechanism: MechanismConfig) => void;
-}) => {
-  const recommendations = useMemo(
-    () => buildMechanismRecommendations(project, selectedPart, selectedPath),
-    [project, selectedPart, selectedPath],
-  );
-  const apply = (option: MechanismRecommendation) => {
-    onApply(
-      mechanismWithGeneratedPath({
-        ...option.mechanism,
-        id: uid("mech"),
-        presetId: `recommendation-${option.type}`,
-        recommendation: `${option.reason} Score ${option.score}/100.`,
-        warnings: option.mechanism.warnings,
-      }),
-    );
-  };
-  if (!isOpen) return null;
-  return (
-    <div className="modal-backdrop" role="presentation">
-      <section
-        className="modal-sheet recommendation-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="recommendation-dialog-title"
-        data-testid="recommendation-sheet"
-      >
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="section-title">Recommendations</div>
-            <h3 id="recommendation-dialog-title">Recommended mechanisms</h3>
-          </div>
-          <button className="btn-secondary" onClick={onClose}>
-            Close
-          </button>
-        </div>
-        {!recommendations.length ? (
-          <div
-            className="recommendation-empty"
-            data-testid="recommendation-empty"
-          >
-            Need 3+ points.
-          </div>
-        ) : (
-          <div className="recommendation-grid mt-5">
-            {recommendations.map((option) => (
-              <article
-                key={option.type}
-                className="recommendation-card recommendation-option"
-                data-testid={`recommendation-card-${option.type}`}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="font-bold text-slate-800">
-                      {option.label}
-                    </div>
-                    <div className="text-xs font-black uppercase tracking-wider text-slate-500">
-                      {option.type} · score {option.score}/100
-                    </div>
-                  </div>
-                  <span className="recommendation-score">{option.score}</span>
-                </div>
-                <svg
-                  viewBox="0 0 220 120"
-                  className="recommendation-preview mt-3"
-                  aria-hidden="true"
-                >
-                  <path
-                    d={option.previewPath}
-                    fill="none"
-                    stroke={option.mechanism.color}
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <p className="mt-3">{option.reason}</p>
-                <p
-                  className={`mt-2 text-xs ${option.fabricationErrors.length ? "font-bold text-amber-700" : "text-slate-500"}`}
-                >
-                  {option.feasibility}
-                </p>
-                <button
-                  className="btn-primary mt-4"
-                  disabled={!!option.fabricationErrors.length}
-                  onClick={() => apply(option)}
-                >
-                  Use
-                </button>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
   );
 };
 
@@ -2709,7 +2603,9 @@ const MechanismFoundry = ({
                         {item.label}
                       </div>
                       <div>{item.goodFor}</div>
-                      <small>{item.classroomSensemaking.directTranslation}</small>
+                      <small>
+                        {item.classroomSensemaking.directTranslation}
+                      </small>
                     </button>
                   );
                 })}
@@ -3924,10 +3820,18 @@ const MechanismDesign = ({
                 <div
                   className="sensemaking-cue"
                   data-testid="design-visible-sensemaking"
-                  data-sensemaking-check={selectedLibrary.classroomSensemaking.studentCheck}
-                  data-sensemaking-answer={selectedLibrary.classroomSensemaking.expectedAnswer}
-                  data-sensemaking-evidence={selectedLibrary.classroomSensemaking.evidenceCue}
-                  data-sensemaking-clip={selectedLibrary.classroomSensemaking.clipSlot}
+                  data-sensemaking-check={
+                    selectedLibrary.classroomSensemaking.studentCheck
+                  }
+                  data-sensemaking-answer={
+                    selectedLibrary.classroomSensemaking.expectedAnswer
+                  }
+                  data-sensemaking-evidence={
+                    selectedLibrary.classroomSensemaking.evidenceCue
+                  }
+                  data-sensemaking-clip={
+                    selectedLibrary.classroomSensemaking.clipSlot
+                  }
                 >
                   <span className="cue-title">Why it moves</span>
                   <strong>
@@ -4212,9 +4116,10 @@ const AssemblyGuide = ({
   const activePlaybackSteps =
     activeAssemblyMode === "character" ? characterPlaybackSteps : playbackSteps;
   const activeStepCount = activePlaybackSteps.length;
-  const selectedSensemaking = activeAssemblyMode === "mechanism" && selectedRecipe
-    ? MECHANISM_LIBRARY[selectedRecipe.type].classroomSensemaking
-    : undefined;
+  const selectedSensemaking =
+    activeAssemblyMode === "mechanism" && selectedRecipe
+      ? MECHANISM_LIBRARY[selectedRecipe.type].classroomSensemaking
+      : undefined;
   const currentStep =
     playbackSteps[Math.min(stepIndex, Math.max(0, playbackSteps.length - 1))];
   const currentCharacterStep =
@@ -4239,7 +4144,14 @@ const AssemblyGuide = ({
     setStepIndex(0);
     setStepProgress(0);
     setPlaying(false);
-  }, [activeAssemblyMode, selectedRecipe?.mechanismId, lane, setPlaying, setStepIndex, setStepProgress]);
+  }, [
+    activeAssemblyMode,
+    selectedRecipe?.mechanismId,
+    lane,
+    setPlaying,
+    setStepIndex,
+    setStepProgress,
+  ]);
   useEffect(() => {
     if (!playing || activeStepCount < 2) return;
     let frame = 0;
@@ -4252,9 +4164,7 @@ const AssemblyGuide = ({
       if (next >= 1) {
         stepProgressRef.current = 0;
         setStepProgress(0);
-        setStepIndex((index) =>
-          index >= activeStepCount - 1 ? 0 : index + 1,
-        );
+        setStepIndex((index) => (index >= activeStepCount - 1 ? 0 : index + 1));
       } else {
         stepProgressRef.current = next;
         setStepProgress(next);
@@ -4449,7 +4359,9 @@ const AssemblyGuide = ({
               />
             ) : (
               <div className="blueprint-empty-state">
-                {hasCharacterAssembly ? "Choose Character." : "Add a character first."}
+                {hasCharacterAssembly
+                  ? "Choose Character."
+                  : "Add a character first."}
               </div>
             )}
           </div>,
@@ -4501,7 +4413,10 @@ const AssemblyGuide = ({
                 {characterAssemblyPlan.fixedPins.some(
                   (pin) => !pin.boardCoordinate || pin.board?.valid === false,
                 ) && (
-                  <div className="warn mt-3" data-testid="character-pin-blocker">
+                  <div
+                    className="warn mt-3"
+                    data-testid="character-pin-blocker"
+                  >
                     Move fixed pins onto the board.
                   </div>
                 )}
@@ -4533,7 +4448,9 @@ const AssemblyGuide = ({
                       {currentCharacterStep.instruction}
                     </div>
                     {currentCharacterStep.check && (
-                      <div className="ok mt-3">{currentCharacterStep.check}</div>
+                      <div className="ok mt-3">
+                        {currentCharacterStep.check}
+                      </div>
                     )}
                   </div>
                 )}
@@ -6066,9 +5983,7 @@ const foundryLocalSpacerZsForPin = (
       typeof gearLayerIndex === "number"
         ? renderedLayerZ[gearLayerIndex]
         : undefined;
-    return typeof gearZ === "number"
-      ? [boardSideSpacerZ(gearZ)]
-      : [];
+    return typeof gearZ === "number" ? [boardSideSpacerZ(gearZ)] : [];
   }
   return [];
 };
@@ -6552,8 +6467,7 @@ const ThreeFoundryPreview = ({
           mechanism.type === "4bar"
             ? pin.id === "A" ||
               pin.id === "D" ||
-              ((pin.id === "B" || pin.id === "C") &&
-                uniqueMovingZ.length >= 2)
+              ((pin.id === "B" || pin.id === "C") && uniqueMovingZ.length >= 2)
             : isGearTrain || isPlanetaryGear;
         if (!expectsLocalSpacer) return count;
         if (!spacerZs.length) return count + 1;
@@ -6572,9 +6486,9 @@ const ThreeFoundryPreview = ({
         return count + (invalid ? 1 : 0);
       }, 0)
     : 0;
-  const zCollisionCount = pinStacks.filter(
-    (pin) => pin.topZ <= pin.bottomZ || pin.lengthZ <= 0,
-  ).length + localSpacerViolationCount;
+  const zCollisionCount =
+    pinStacks.filter((pin) => pin.topZ <= pin.bottomZ || pin.lengthZ <= 0)
+      .length + localSpacerViolationCount;
   const visiblePathTraces = useMemo(
     () =>
       pathTraces.length
@@ -7801,10 +7715,10 @@ const ThreeFoundryPreview = ({
           mechanism.type === "4bar"
             ? "fourbar-board-pivots-include-board-side-spacer"
             : isGearTrain
-            ? "gear-axles-include-board-side-spacer"
-            : isPlanetaryGear
-              ? "planetary-carrier-pins-include-local-spacers"
-              : "moving-layers-only"
+              ? "gear-axles-include-board-side-spacer"
+              : isPlanetaryGear
+                ? "planetary-carrier-pins-include-local-spacers"
+                : "moving-layers-only"
         }
         data-three-pin-stack-layer-indexes={pinStackLayerSummary}
         data-three-pin-stack-spans={pinSpanSummary}
