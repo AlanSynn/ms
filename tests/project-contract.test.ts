@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { extname, join, relative } from 'node:path';
+import * as THREE from 'three';
 import { boardGridLines, boardToScene, bodyPartPivotScene, physicalKitPreset, placeBodyPartPivotAt, SCENE_PX_PER_MM, sceneToBoard, sceneToBoardRaw, sceneToSheetMm, sceneToSvg, sheetMmToScene } from '../utils/coordinates';
 import { CLASSROOM_LESSONS, classroomLessonById, createDefaultMechanism, createEmptyProject, createLessonProject, createSampleProject, handoffGate, loadProjectSnapshot, serializeProject, applyProjectAction, projectSelfCheck, mechanismRequiredParts, mechanismWithGeneratedPath, replaceCharacterProject, resetProjectToLessonBaseline } from '../utils/project';
 import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, PLANETARY_GEAR_PLANET_COUNT, fabricationBoardColumnLabel, fabricationBoardCoordinateCallout, fabricationBoardRowLabel, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, planetaryPlanetCenters, prefabAssemblySteps, sampleFeasibleRange, validateFabricationStack, validateForFabrication, validateMechanismPreviewReadiness } from '../utils/fabrication';
@@ -19,6 +20,7 @@ import { MECHANISM_FEATURE_REGISTRY, mechanismFeature, validateMechanismFeatureR
 import { buildMechanismSnapshot, buildMechanismSnapshots } from '../utils/mechanismSnapshot';
 import { createMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext } from '../utils/mechanismPreview';
 import { WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
+import { cachedThreeResource, clearThreeGroup, disposeThreeObjectGraph, setRendererPixelRatioCap } from '../utils/threeResourceKit';
 import { APP_COMMANDS, APP_MENU_GROUPS, commandById, commandIdForKeyboardEvent, validateAppCommandRegistry } from '../utils/appCommands';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_KERNEL_IMPORT, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, physicsKernelCapability, runRapierFrictionProbe } from '../utils/physicsKernel';
 import { formatGridLabel, formatGridPitch, formatGridReadout } from '../utils/units';
@@ -190,7 +192,8 @@ assert(normalizedCodebaseCleanupPlan.includes('`utils/mechanismRecommendations.t
 assert(normalizedCodebaseCleanupPlan.includes('`utils/foundryCamera.ts` | 140') && normalizedCodebaseCleanupPlan.includes('pure Foundry camera/projection seam'), 'cleanup plan records the extracted Foundry camera seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/MechanismLinkagePreview.tsx` | 851') && normalizedCodebaseCleanupPlan.includes('Foundry SVG mechanism preview leaf lives outside the app shell'), 'cleanup plan records the extracted Foundry SVG preview seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/foundryPreviewGeometry.ts` | 23') && normalizedCodebaseCleanupPlan.includes('fitted gear-center helper shared by SVG and Three previews'), 'cleanup plan records the shared Foundry preview geometry helper seam');
-assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/ThreeFoundryPreview.tsx` | 1947') && normalizedCodebaseCleanupPlan.includes('shared Foundry/Design Three renderer seam lives outside the app shell'), 'cleanup plan records the extracted shared Foundry Three renderer seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/ThreeFoundryPreview.tsx` | 1931') && normalizedCodebaseCleanupPlan.includes('shared Foundry/Design Three renderer seam lives outside the app shell'), 'cleanup plan records the extracted shared Foundry Three renderer seam');
+assert(normalizedCodebaseCleanupPlan.includes('`utils/threeResourceKit.ts` | 86') && normalizedCodebaseCleanupPlan.includes('shared Three cache/disposal/pixel-ratio helpers'), 'cleanup plan records the extracted shared Three resource helper seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/foundryRenderInventory.ts` | 152') && normalizedCodebaseCleanupPlan.includes('rendered inventory counts live outside the WebGL renderer'), 'cleanup plan records the extracted Foundry render inventory helper seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/foundryPreviewStacks.ts` | 475') && normalizedCodebaseCleanupPlan.includes('Foundry pin-stack/z-order helper seam lives outside the app shell'), 'cleanup plan records the extracted Foundry pin-stack helper seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/MechanismFoundry.tsx` | 931') && normalizedCodebaseCleanupPlan.includes('Mechanism Foundry stage wrapper lives outside the app shell'), 'cleanup plan records the extracted MechanismFoundry stage seam');
@@ -1816,6 +1819,7 @@ ${designInspectorPanelText}`;
 const mechanismLinkagePreviewText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'MechanismLinkagePreview.tsx'), 'utf8');
 const foundryPreviewGeometryText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryPreviewGeometry.ts'), 'utf8');
 const threeFoundryPreviewText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'ThreeFoundryPreview.tsx'), 'utf8');
+const threeResourceKitText = readFileSync(join(process.cwd(), 'utils', 'threeResourceKit.ts'), 'utf8');
 const foundryRenderInventoryText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryRenderInventory.ts'), 'utf8');
 const foundryPreviewStacksText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryPreviewStacks.ts'), 'utf8');
 const mechanismFoundryText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'MechanismFoundry.tsx'), 'utf8');
@@ -1829,6 +1833,7 @@ ${foundryInspectorPanelText}`;
 const optionsText = readFileSync(join(process.cwd(), 'components', 'stages', 'options', 'Options.tsx'), 'utf8');
 const foundry3dText = `${foundryStageText}
 ${threeFoundryPreviewText}
+${threeResourceKitText}
 ${foundryRenderInventoryText}
 ${foundryPreviewStacksText}`;
 const appShellText = readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8');
@@ -1880,6 +1885,70 @@ assert(!assemblyWorkbenchText.includes('Build module</text>') && !assemblyWorkbe
 assert(threePreviewText.includes('fabricationGearProfileForPitchRadius'), '3D foundry gear rendering uses shared fabrication gear geometry');
 assert(threePreviewText.includes('FABRICATION_LINKAGE_WIDTH_3D') && threePreviewText.includes('FABRICATION_HOLE_RADIUS_3D'), '3D puppet mechanism links use centralized fabrication linkage and hole dimensions');
 assert(threePreviewText.includes('sharedGeometryCache') && threePreviewText.includes('sharedFabricationGeometry'), '3D puppet preview caches fabrication geometry instead of rebuilding primitive meshes every frame');
+assert(threeResourceKitText.includes('export const cachedThreeResource') && threeResourceKitText.includes('export const disposeThreeObjectGraph') && threeResourceKitText.includes('export const setRendererPixelRatioCap'), '3D previews share Three resource cache/disposal/pixel-ratio helpers instead of duplicating renderer plumbing');
+{
+  const cache = new Map<string, THREE.BufferGeometry>();
+  const firstGeometry = cachedThreeResource(cache, 'box', () => new THREE.BoxGeometry(1, 2, 3), 'sharedTestGeometry');
+  const secondGeometry = cachedThreeResource(cache, 'box', () => {
+    throw new Error('cache miss after cached geometry');
+  }, 'sharedTestGeometry');
+  assert.equal(secondGeometry, firstGeometry, 'shared Three resource helper reuses cached geometry');
+  assert.equal(firstGeometry.userData.sharedTestGeometry, true, 'shared Three resource helper marks reusable resources');
+
+  const keepGeometry = new THREE.BoxGeometry(1, 1, 1);
+  keepGeometry.userData.keep = true;
+  const disposableGeometry = new THREE.BoxGeometry(1, 1, 1);
+  const keepMaterial = new THREE.MeshBasicMaterial();
+  keepMaterial.userData.keep = true;
+  const disposableMaterial = new THREE.MeshBasicMaterial();
+  let disposedGeometryCount = 0;
+  let disposedMaterialCount = 0;
+  keepGeometry.dispose = () => {
+    throw new Error('kept geometry disposed');
+  };
+  keepMaterial.dispose = () => {
+    throw new Error('kept material disposed');
+  };
+  disposableGeometry.dispose = () => {
+    disposedGeometryCount += 1;
+  };
+  disposableMaterial.dispose = () => {
+    disposedMaterialCount += 1;
+  };
+  const root = new THREE.Group();
+  root.add(new THREE.Mesh(keepGeometry, keepMaterial));
+  root.add(new THREE.Mesh(disposableGeometry, disposableMaterial));
+  disposeThreeObjectGraph(root, {
+    keepGeometry: geometry => Boolean(geometry.userData.keep),
+    keepMaterial: material => Boolean(material.userData.keep)
+  });
+  assert.equal(disposedGeometryCount, 1, 'shared Three disposal helper disposes unmarked geometry');
+  assert.equal(disposedMaterialCount, 1, 'shared Three disposal helper disposes unmarked material');
+
+  const group = new THREE.Group();
+  const child = new THREE.Group();
+  group.add(child);
+  let clearedChildCount = 0;
+  clearThreeGroup(group, () => {
+    clearedChildCount += 1;
+  });
+  assert.equal(group.children.length, 0, 'shared Three group helper removes children');
+  assert.equal(clearedChildCount, 1, 'shared Three group helper delegates child disposal');
+
+  const previousWindow = (globalThis as { window?: unknown }).window;
+  try {
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: { devicePixelRatio: WEBGL_PIXEL_RATIO_CAP + 10 } });
+    let pixelRatio = 0;
+    setRendererPixelRatioCap({ setPixelRatio: (value: number) => { pixelRatio = value; } } as unknown as THREE.WebGLRenderer);
+    assert.equal(pixelRatio, WEBGL_PIXEL_RATIO_CAP, 'shared Three pixel-ratio helper caps device pixel ratio');
+  } finally {
+    if (previousWindow === undefined) {
+      delete (globalThis as { window?: unknown }).window;
+    } else {
+      Object.defineProperty(globalThis, 'window', { configurable: true, value: previousWindow });
+    }
+  }
+}
 assert(!threePreviewText.includes('scene.traverse(child =>'), '3D puppet preview does not traverse the whole scene every animation frame for telemetry');
 assert(threePreviewText.includes("const pinSites = mechanism.type === 'gear'") && threePreviewText.includes('boardToMovingZ(zDriverGear)') && !threePreviewText.includes('[state.p1, state.p2, state.j1, state.j2, state.aux, state.effector].forEach'), '3D puppet mechanism pins use per-site z spans instead of one global pin tower through empty planes');
 assert(mechanismDesignText.includes('<DesignFoundryPreview') && designFoundryPreviewText.includes('export const DesignFoundryPreview') && designFoundryPreviewText.includes('data-testid="design-shared-foundry-preview"'), 'Mechanism Design owns a thin Foundry preview adapter instead of a separate mechanism renderer');

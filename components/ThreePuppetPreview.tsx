@@ -10,6 +10,7 @@ import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STA
 import { DEFAULT_PUPPET_VIEWER_LAYERS, VIEWER3D_CAMERA_PRESETS, VIEWER3D_CONTRACT_VERSION, createViewer3DContract, viewer3DLayerDataValue, type Viewer3DCameraPreset, type Viewer3DTabKey } from '../utils/viewer3d';
 import { REFERENCE_AUTHORABLE_TYPES, referenceRequiredPartsHoleCount } from '../utils/mechanismReference';
 import { mechanismRequiredParts } from '../utils/project';
+import { cachedThreeResource, clearThreeGroup, disposeMarkedThreeMaterials, disposeThreeObjectGraph, setRendererPixelRatioCap } from '../utils/threeResourceKit';
 
 const VIEW_SCALE = 35;
 const FABRICATION_LINKAGE_WIDTH_3D = Math.max(0.16, (FABRICATION_LINKAGE_WIDTH_MM * SCENE_PX_PER_MM) / VIEW_SCALE);
@@ -93,14 +94,8 @@ const clampOrbitPitch = (pitch: number) => Math.max(-68, Math.min(78, pitch));
 
 const sharedGeometryCache = new Map<string, THREE.BufferGeometry>();
 
-const cachedGeometry = <T extends THREE.BufferGeometry>(key: string, factory: () => T): T => {
-  const cached = sharedGeometryCache.get(key);
-  if (cached) return cached as T;
-  const geometry = factory();
-  geometry.userData.sharedFabricationGeometry = true;
-  sharedGeometryCache.set(key, geometry);
-  return geometry;
-};
+const cachedGeometry = <T extends THREE.BufferGeometry>(key: string, factory: () => T): T =>
+  cachedThreeResource(sharedGeometryCache, key, factory, 'sharedFabricationGeometry');
 
 const geometryKeyNumber = (value: number) => Number.isFinite(value) ? value.toFixed(3) : 'nan';
 
@@ -109,33 +104,24 @@ const attachCachedEdges = (mesh: THREE.Mesh, geometry: THREE.BufferGeometry, edg
   mesh.add(new THREE.LineSegments(edgeGeometry, edgeMaterial));
 };
 
-const disposeObject = (object: THREE.Object3D, disposeMaterials = false) => object.traverse(child => {
-  const mesh = child as THREE.Mesh;
-  if (mesh.geometry && !mesh.geometry.userData?.sharedFabricationGeometry) mesh.geometry.dispose();
-  if (!disposeMaterials) return;
-  const material = mesh.material;
-  if (Array.isArray(material)) material.forEach(item => item.dispose());
-  else material?.dispose?.();
-});
-
-const disposeOwnedMaterials = (object: THREE.Object3D) => object.traverse(child => {
-  const material = (child as THREE.Mesh).material;
-  const materials = Array.isArray(material) ? material : material ? [material] : [];
-  materials.forEach(item => {
-    if (!item.userData?.ownedByPartArt) return;
-    const map = (item as THREE.MeshBasicMaterial).map;
-    map?.dispose();
-    item.dispose();
+const disposeObject = (object: THREE.Object3D, disposeMaterials = false) =>
+  disposeThreeObjectGraph(object, {
+    disposeMaterials,
+    keepGeometry: geometry => Boolean(geometry.userData?.sharedFabricationGeometry)
   });
-});
 
-const clearGroup = (group: THREE.Group) => {
-  [...group.children].forEach(child => {
-    group.remove(child);
+const disposeOwnedMaterials = (object: THREE.Object3D) =>
+  disposeMarkedThreeMaterials(
+    object,
+    material => Boolean(material.userData?.ownedByPartArt),
+    material => (material as THREE.MeshBasicMaterial).map?.dispose()
+  );
+
+const clearGroup = (group: THREE.Group) =>
+  clearThreeGroup(group, child => {
     disposeOwnedMaterials(child);
     disposeObject(child, false);
   });
-};
 
 const createPartArtMaterial = (part: BodyPartLayer, onLoaded: () => void) => {
   const material = new THREE.MeshBasicMaterial({
@@ -728,7 +714,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       return;
     }
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, WEBGL_PIXEL_RATIO_CAP));
+    setRendererPixelRatioCap(renderer);
     renderer.domElement.dataset.testid = `${testId}-canvas`;
     renderer.domElement.className = 'three-puppet-canvas';
     host.appendChild(renderer.domElement);

@@ -48,7 +48,8 @@ Measured on 2026-07-03.
 | `utils/foundryCamera.ts`                                    |   140 | Done: pure Foundry camera/projection seam shared by Foundry and Design previews. Keep deterministic; no DOM/storage side effects.                                                                                                                     |
 | `components/stages/foundry/MechanismLinkagePreview.tsx`     |   851 | Done: Foundry SVG mechanism preview leaf lives outside the app shell. Keep it behavior-identical; split internal shape helpers only after renderer contracts stay green.                                                                              |
 | `components/stages/foundry/foundryPreviewGeometry.ts`       |    23 | Done: fitted gear-center helper shared by SVG and Three previews. Keep it pure and deterministic so Foundry/Design share the same fitted axle positions.                                                                                              |
-| `components/stages/foundry/ThreeFoundryPreview.tsx`         |  1947 | Done: shared Foundry/Design Three renderer seam lives outside the app shell. Keep it behavior-identical; split renderer internals only behind contract/browser evidence.                                                                              |
+| `components/stages/foundry/ThreeFoundryPreview.tsx`         |  1931 | Done: shared Foundry/Design Three renderer seam lives outside the app shell. Keep it behavior-identical; split renderer internals only behind contract/browser evidence.                                                                              |
+| `utils/threeResourceKit.ts`                                 |    86 | Done: shared Three cache/disposal/pixel-ratio helpers serve Foundry and puppet previews. Keep this renderer plumbing-only; scene construction and telemetry stay in renderer owners.                                                                  |
 | `components/stages/foundry/foundryRenderInventory.ts`       |   152 | Done: Foundry rendered inventory counts live outside the WebGL renderer. Keep it pure and backed by mechanism-reference/fabrication-required parts.                                                                                                    |
 | `components/stages/foundry/foundryPreviewStacks.ts`         |   475 | Done: Foundry pin-stack/z-order helper seam lives outside the app shell. Keep it pure and shared so SVG/Three/Design z-stack semantics do not drift.                                                                                                  |
 | `components/stages/foundry/MechanismFoundry.tsx`            |   931 | Done: Mechanism Foundry stage wrapper lives outside the app shell while still consuming shared Foundry renderer, fabrication, camera, and mechanism parameter contracts. Keep shrinking by leaf panes/adapters only.                                  |
@@ -61,7 +62,7 @@ Measured on 2026-07-03.
 | `components/stages/mechanism/DesignWorkflowPanel.tsx`       |   165 | Done: Mechanism Design left workflow pane owns library chips, visible sensemaking cues, recommendation/blueprint actions, and binding blockers. Keep it ProjectState/action driven.                                                                   |
 | `components/stages/mechanism/DesignInspectorPanel.tsx`      |   274 | Done: Mechanism Design right inspector pane owns selected mechanism binding, parametric editor, numeric controls, warnings, and export/delete actions. Keep mechanism rules in shared utils.                                                          |
 | `components/stages/mechanism/DesignFoundryPreview.tsx`      |   430 | Done: Design's Foundry preview adapter lives outside App and keeps `ThreeFoundryPreview` as the single mechanism renderer shared with Foundry. Keep it adapter-only; renderer rules stay in Foundry/physics/fabrication helpers.                      |
-| `components/ThreePuppetPreview.tsx`                         |  1550 | Split after `App.tsx` seams stabilize. Keep one Three/Rapier boundary; move geometry/material/cache helpers only when duplicated or directly touched.                                                                                                 |
+| `components/ThreePuppetPreview.tsx`                         |  1536 | Split after `App.tsx` seams stabilize. Keep one Three/Rapier boundary; move geometry/material/cache helpers only when duplicated or directly touched.                                                                                                 |
 | `utils/project.ts`                                          |  1439 | Split only reducer/defaults/migrations if touched. Preserve snapshot compatibility and `ProjectState` shape.                                                                                                                                          |
 | `utils/fabrication.ts`                                      |  1364 | Split manifest lookup, render plan, validation/export. Fabrication rules still come from `fabrication/generate_fabrication_templates.py` and `utils/fabricationContract.ts`.                                                                          |
 | `components/Canvas.tsx`                                     |  1025 | Leave until renderer unification pass. Do not create a second canvas engine.                                                                                                                                                                          |
@@ -141,6 +142,17 @@ env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_WORKERS=2 ./node_modules/.b
 
 Use this gate for pure `ThreeFoundryPreview.tsx` helper movement. The golden master now also hashes all mechanism Foundry render plans, so renderer extraction cannot silently drift fabrication-visible parts.
 
+Latest shared Three resource helper evidence:
+
+```bash
+bun run test:contracts
+bun run build
+GIT_OPTIONAL_LOCKS=0 git -c core.fsmonitor=false diff --check
+env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_WORKERS=2 ./node_modules/.bin/playwright test tests/browser/workflow.spec.ts -g "Path Editor 3D view uses ThreePuppetPreview|Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking|Foundry supports CAD-style 3D camera presets and drag orbit|character → path → foundry → design → blueprint runs end-to-end in browser" --workers=2
+```
+
+Use this gate when changing shared Three cache/disposal/pixel-ratio helpers. It proves the helper seam still preserves puppet 3D rendering plus Foundry/Design shared preview behavior.
+
 ## Split order
 
 1. **Command and app shell seams**
@@ -167,7 +179,7 @@ Use this gate for pure `ThreeFoundryPreview.tsx` helper movement. The golden mas
    - Done: `components/stages/options/Options.tsx` owns the Options stage wrapper outside `App.tsx`; Options still receives ProjectState/actions and does not own persistence or export rules.
    - Done: `components/stages/assembly/AssemblyGuide.tsx` owns the Assembly Guide stage wrapper outside `App.tsx`; Assembly still receives ProjectState/actions and shell playback state while recipe/stack derivation stays in shared utils.
    - Done: `components/stages/mechanism/MechanismDesign.tsx` owns only the Mechanism Design stage composition outside `App.tsx`; `DesignWorkflowPanel.tsx`, `DesignInspectorPanel.tsx`, and `DesignFoundryPreview.tsx` own the left pane, right pane, and shared Foundry preview adapter. Design still receives ProjectState/actions and does not own mechanism rules.
-   - Next lowest-risk stage seam: continue splitting `ThreeFoundryPreview.tsx` internals only behind renderer contracts, starting with pure telemetry/attribute builders, then shared geometry/material/cache helpers. Keep shared fabrication/physics contracts centralized.
+   - Next lowest-risk stage seam: continue splitting `ThreeFoundryPreview.tsx` internals only behind renderer contracts, starting with pure telemetry/attribute builders or geometry builders. Shared geometry/material/cache helpers already live in `utils/threeResourceKit.ts`; keep shared fabrication/physics contracts centralized.
 
 3. **Domain helpers**
    - Done: mechanism fitting/recommendations live in `utils/mechanismRecommendations.ts`.
@@ -176,7 +188,8 @@ Use this gate for pure `ThreeFoundryPreview.tsx` helper movement. The golden mas
 
 4. **Renderer split**
    - Done: `ThreeFoundryPreview.tsx` is now the shared Foundry/Design Three renderer seam; continue by extracting materials, geometry builders, and overlay groups from that file without changing props or telemetry.
-   - `ThreePuppetPreview.tsx`: keep React wrapper small; move repeated geometry/material/cache helpers to renderer helpers.
+   - Done: `utils/threeResourceKit.ts` owns repeated Three cache, disposal, and pixel-ratio plumbing for Foundry and puppet previews.
+   - `ThreePuppetPreview.tsx`: keep React wrapper small; move only repeated renderer plumbing or pure geometry helpers when duplicated or directly touched.
    - Avoid new renderer frameworks unless a contract test proves the imperative Three/Rapier boundary cannot meet requirements.
 
 5. **Delete legacy**

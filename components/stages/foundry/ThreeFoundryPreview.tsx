@@ -60,6 +60,11 @@ import {
   type FoundryOverlaySize,
 } from "../../../utils/foundryCamera";
 import { fitMechanismSimulation } from "../../../utils/mechanismPreview";
+import {
+  cachedThreeResource,
+  disposeThreeObjectGraph,
+  setRendererPixelRatioCap,
+} from "../../../utils/threeResourceKit";
 import { fittedGearTrainCenters } from "./foundryPreviewGeometry";
 import { foundryRenderedInventory } from "./foundryRenderInventory";
 import {
@@ -117,17 +122,12 @@ type ThreeFoundryPreviewProps = {
   children: React.ReactNode;
 };
 
+const FOUNDRY_CACHE_MARKER = "foundryCached";
+
 const disposeThreeObject = (object: THREE.Object3D) =>
-  object.traverse((child) => {
-    const mesh = child as THREE.Mesh;
-    if (mesh.geometry && !mesh.geometry.userData.foundryCached)
-      mesh.geometry.dispose();
-    const material = mesh.material;
-    if (Array.isArray(material))
-      material.forEach((item) => {
-        if (!item.userData.foundryCached) item.dispose();
-      });
-    else if (material && !material.userData.foundryCached) material.dispose();
+  disposeThreeObjectGraph(object, {
+    keepGeometry: (geometry) => Boolean(geometry.userData[FOUNDRY_CACHE_MARKER]),
+    keepMaterial: (material) => Boolean(material.userData[FOUNDRY_CACHE_MARKER]),
   });
 
 export const ThreeFoundryPreview = ({
@@ -704,9 +704,7 @@ export const ThreeFoundryPreview = ({
     const host = hostRef.current;
     if (!host) return;
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(
-      Math.min(window.devicePixelRatio || 1, WEBGL_PIXEL_RATIO_CAP),
-    );
+    setRendererPixelRatioCap(renderer);
     renderer.shadowMap.enabled = false;
     renderer.domElement.className = "foundry-three-canvas";
     renderer.domElement.dataset.testid = "foundry-three-canvas";
@@ -814,25 +812,11 @@ export const ThreeFoundryPreview = ({
     const cachedGeometry = <T extends THREE.BufferGeometry>(
       key: string,
       create: () => T,
-    ): T => {
-      const existing = geometryCache.get(key) as T | undefined;
-      if (existing) return existing;
-      const geometry = create();
-      geometry.userData.foundryCached = true;
-      geometryCache.set(key, geometry);
-      return geometry;
-    };
+    ): T => cachedThreeResource(geometryCache, key, create, FOUNDRY_CACHE_MARKER);
     const cachedMaterial = <T extends THREE.Material>(
       key: string,
       create: () => T,
-    ): T => {
-      const existing = materialCache.get(key) as T | undefined;
-      if (existing) return existing;
-      const material = create();
-      material.userData.foundryCached = true;
-      materialCache.set(key, material);
-      return material;
-    };
+    ): T => cachedThreeResource(materialCache, key, create, FOUNDRY_CACHE_MARKER);
     const materialForLayer = (
       colorValue: string,
       roughness = 0.66,
