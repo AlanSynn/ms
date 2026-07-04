@@ -27,7 +27,7 @@ Measured on 2026-07-03.
 
 | File                                                          | Lines | Decision                                                                                                                                                                                                                                                                                                                              |
 | ------------------------------------------------------------- | ----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `App.tsx`                                                     |   695 | First split continues. App wires state/actions into the shell without owning shell markup. Command keyboard binding, boot/cache lifecycle, project history, autosave/workspace persistence, project/session command actions, derived selection state, path draw/tracking actions, workspace player dock, shared playback loop, modal inert effect, starter image template assets, stage router, workspace status, and workspace shell chrome are extracted; keep shrinking by behavior-preserving seams only. No redesign mixed into extraction. |
+| `App.tsx`                                                     |   494 | First split continues. App wires state/actions into the shell without owning shell markup. Command keyboard binding, boot/cache lifecycle, project history, autosave/workspace persistence, project/session command actions, derived selection state, path draw/tracking actions, character import/review actions, workspace player dock, shared playback loop, modal inert effect, starter image template assets, stage router, workspace status, and workspace shell chrome are extracted; keep shrinking by behavior-preserving seams only. No redesign mixed into extraction. |
 | `components/AppWorkspaceShell.tsx`                             |   221 | Done: workspace shell chrome lives outside App.tsx; owns header, workflow rail, quick toolbar, stage router host, status strip/footer, startup/help/about/recommendation/tracking modal mounts. Keep it presentation-only; no ProjectState mutation or fabrication validation. |
 | `utils/workflowStatus.ts`                                      |    63 | Done: workflow status text is derived outside the workspace shell from ProjectState plus fabrication validation. Keep validation decisions here or deeper in domain utilities, not in presentation components. |
 | `components/AppStageRouter.tsx`                               |   243 | Done: shared stage-to-component routing and player-dock placement live outside App. Keep it presentation-only; ProjectState mutation callbacks and domain/fabrication rules stay in App hooks/utils until their own seam is extracted. |
@@ -37,6 +37,7 @@ Measured on 2026-07-03.
 | `hooks/useModalInertEffect.ts`                                |    28 | Done: startup/help/about modal inert, `aria-hidden`, and body/document modal classes live outside App. Keep it DOM-effect only; modal state, project import, and start actions stay App-owned. |
 | `resources/starterImageTemplates.ts`                          |    22 | Done: starter image template assets and labels live outside App. Keep it static asset metadata only; import processing, pending-review state, and package replacement stay App/project-command owned. |
 | `hooks/useAppPathActions.ts`                                  |    89 | Done: Path draw mode, tracking modal state, path point upsert/validation, and tracked-path transfer live outside App. Keep it path-action only; no canvas rendering, playback timing, or mechanism fitting. |
+| `hooks/useAppCharacterImportActions.ts`                      |   284 | Done: character ONNX image import, starter image/package/project import, pending review, replacement review, skeleton export, and Getting Started entry actions live outside App. Keep it intake/review-only; no mechanism fitting, canvas rendering, or stage UI. |
 | `hooks/useAppCommandBindings.ts`                              |    36 | Done: application keyboard shortcut binding owns latest-handler ref, typing-target guard, and global keydown dispatch outside App shell. Keep it hook-only; command registry/handler creation stay in utils.                                                                                                                          |
 | `hooks/useAppProjectCommands.ts`                              |   292 | Done: project/session command actions own new/save/copy/autosave recovery/workspace layout/zoom/undo/redo/lesson/sample command wiring outside App shell. Keep command ids in `utils/appCommands.ts` and pure handler mapping in `utils/appCommandHandlers.ts`.                                                                       |
 | `hooks/useAppOnnxBootstrap.ts`                                |    88 | Done: startup AI cache warmup, static boot-loader DOM lifecycle, and manual ONNX cache retry status live outside App shell. Keep browser-local inference/cache policy in `utils/webOnnx.ts`.                                                                                                                                          |
@@ -194,6 +195,17 @@ env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_WORKERS=2 ./node_modules/.b
 
 Use this gate when changing shared Three cache/disposal/pixel-ratio helpers. It proves the helper seam still preserves puppet 3D rendering plus Foundry/Design shared preview behavior.
 
+Latest App character import action extraction evidence:
+
+```bash
+bun run test:contracts
+bun run build
+GIT_OPTIONAL_LOCKS=0 git -c core.fsmonitor=false diff --check
+env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_WORKERS=2 bunx playwright test tests/browser/workflow.spec.ts -g "Character tab processing|Create from image upload|Load package review|Replacement package|Every top menu command|guided classroom lesson" --workers=2
+```
+
+Use this gate when moving character intake/review actions. It proves ONNX image intake, package/project import, replacement review, command wiring, and guided lesson startup still route through real browser workflows.
+
 ## Split order
 
 1. **Command and app shell seams**
@@ -208,6 +220,7 @@ Use this gate when changing shared Three cache/disposal/pixel-ratio helpers. It 
    - Done: `hooks/useModalInertEffect.ts` owns startup/help/about modal inert DOM attributes/classes outside `App.tsx`; modal state/actions remain App-owned.
    - Done: `resources/starterImageTemplates.ts` owns starter image template asset metadata outside `App.tsx`; import/review actions remain App-owned.
    - Done: `hooks/useAppPathActions.ts` owns Path draw/tracking state plus path point validation/upsert transfer outside `App.tsx`; path canvas rendering and playback stay in their own seams.
+   - Done: `hooks/useAppCharacterImportActions.ts` owns character ONNX image import, starter image/package/project import, pending/replacement review, skeleton export, and Getting Started entry actions outside `App.tsx`; it stays intake/review-only and does not own mechanism fitting or UI rendering.
    - Done: `utils/projectPersistence.ts` owns MotionSmith storage keys, legacy migration, project snapshot filenames, autosave snapshots, and workspace layout serialization/restore outside `App.tsx`.
    - Done: `utils/foundryCamera.ts` owns deterministic Foundry camera presets, clamp/project/unproject helpers, and shared overlay sizing for Foundry and Design previews.
    - Done: `utils/mechanismRecommendations.ts` owns fabrication-gated recommendation fitting and fallback logic outside the app shell.
