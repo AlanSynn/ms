@@ -50,7 +50,8 @@ Measured on 2026-07-03.
 | `components/stages/foundry/foundryPreviewGeometry.ts`       |    23 | Done: fitted gear-center helper shared by SVG and Three previews. Keep it pure and deterministic so Foundry/Design share the same fitted axle positions.                                                                                              |
 | `components/stages/foundry/ThreeFoundryPreview.tsx`         |  2082 | Done: shared Foundry/Design Three renderer seam lives outside the app shell. Keep it behavior-identical; split renderer internals only behind contract/browser evidence.                                                                              |
 | `components/stages/foundry/foundryPreviewStacks.ts`         |   475 | Done: Foundry pin-stack/z-order helper seam lives outside the app shell. Keep it pure and shared so SVG/Three/Design z-stack semantics do not drift.                                                                                                  |
-| `components/stages/foundry/MechanismFoundry.tsx`            |  1269 | Done: Mechanism Foundry stage wrapper lives outside the app shell while still consuming shared Foundry renderer, fabrication, camera, and mechanism parameter contracts. Keep shrinking by leaf panes/adapters only.                                  |
+| `components/stages/foundry/MechanismFoundry.tsx`            |   931 | Done: Mechanism Foundry stage wrapper lives outside the app shell while still consuming shared Foundry renderer, fabrication, camera, and mechanism parameter contracts. Keep shrinking by leaf panes/adapters only.                                  |
+| `components/stages/foundry/FoundryCanvasPane.tsx`            |   531 | Done: Foundry center canvas owns Three preview, toolbar, overlay SVG, and pointer surfaces outside the stage wrapper. Keep it render-only; projection, sampling, and mutations stay in the stage/domain helpers.                                      |
 | `components/stages/foundry/FoundryWorkflowPanel.tsx`        |   238 | Done: Foundry left workflow pane owns target summary, anchor pick, visible sensemaking, fabrication stack, and template gallery outside the stage wrapper. Keep it presentation/action only.                                                          |
 | `components/stages/foundry/FoundryInspectorPanel.tsx`       |   231 | Done: Foundry right inspector owns physics readout, opacity/explode controls, parametric editor, advanced parameters, and overlay toggles outside the stage wrapper. Keep mechanism rules in shared utils.                                            |
 | `components/stages/options/Options.tsx`                     |   488 | Done: Options stage wrapper lives outside the app shell while still consuming shared units, kit preset, and inspector control seams. Keep it settings UI-only; ProjectState actions own mutation.                                                     |
@@ -116,6 +117,17 @@ env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_WORKERS=2 ./node_modules/.b
 
 All targeted gates passed after splitting Foundry left workflow and right inspector panes into `FoundryWorkflowPanel.tsx` and `FoundryInspectorPanel.tsx`.
 
+Latest Foundry canvas extraction evidence:
+
+```bash
+bun run test:contracts
+bun run build
+GIT_OPTIONAL_LOCKS=0 git -c core.fsmonitor=false diff --check
+env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_WORKERS=2 ./node_modules/.bin/playwright test tests/browser/workflow.spec.ts -g "Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking|Foundry supports CAD-style 3D camera presets and drag orbit|Every workflow right inspector uses the shared scroll container|character → path → foundry → design → blueprint runs end-to-end in browser" --workers=2
+```
+
+Use this gate for canvas-only movement. It proves the extracted `FoundryCanvasPane.tsx` still mounts the shared Three preview, toolbar state, pointer overlays, stage scroll boundaries, and end-to-end workflow routing.
+
 ## Split order
 
 1. **Command and app shell seams**
@@ -138,11 +150,11 @@ All targeted gates passed after splitting Foundry left workflow and right inspec
    - Done: `components/stages/character/CharacterImportControls.tsx` owns Character import/guide entry controls while file processing and package acceptance remain outside the component.
    - Done: `components/stages/character/CharacterSelection.tsx` owns the Character stage wrapper once its setup/list/import leaves were small enough to move without changing behavior.
    - Done: `components/stages/path/PathEditor.tsx`, `PathWorkflowPanel.tsx`, `PathCanvasPane.tsx`, `PathInspectorPanel.tsx`, `SceneSketch.tsx`, `PartShape.tsx`, and `MechanismRecommendationSheet.tsx` own the Path Editor UI seam outside `App.tsx`; Path still receives ProjectState/actions and does not own mechanism rules. `components/stages/mechanism/MechanismParametricEditor.tsx` owns the shared Foundry/Design compact gear/link/idler/cam parameter UI outside `App.tsx`, and `mechanismParamPolicy.ts` owns deterministic legacy numeric parameter visibility/clamping.
-   - Done: `components/stages/foundry/MechanismFoundry.tsx`, `FoundryWorkflowPanel.tsx`, `FoundryInspectorPanel.tsx`, `MechanismLinkagePreview.tsx`, `foundryPreviewGeometry.ts`, `ThreeFoundryPreview.tsx`, and `foundryPreviewStacks.ts` own the Foundry stage/renderer seams outside `App.tsx`; Foundry and Mechanism Design still mount the same Three preview component and share pin-stack/z-order contracts.
+   - Done: `components/stages/foundry/MechanismFoundry.tsx`, `FoundryCanvasPane.tsx`, `FoundryWorkflowPanel.tsx`, `FoundryInspectorPanel.tsx`, `MechanismLinkagePreview.tsx`, `foundryPreviewGeometry.ts`, `ThreeFoundryPreview.tsx`, and `foundryPreviewStacks.ts` own the Foundry stage/renderer seams outside `App.tsx`; Foundry and Mechanism Design still mount the same Three preview component and share pin-stack/z-order contracts.
    - Done: `components/stages/options/Options.tsx` owns the Options stage wrapper outside `App.tsx`; Options still receives ProjectState/actions and does not own persistence or export rules.
    - Done: `components/stages/assembly/AssemblyGuide.tsx` owns the Assembly Guide stage wrapper outside `App.tsx`; Assembly still receives ProjectState/actions and shell playback state while recipe/stack derivation stays in shared utils.
    - Done: `components/stages/mechanism/MechanismDesign.tsx` owns only the Mechanism Design stage composition outside `App.tsx`; `DesignWorkflowPanel.tsx`, `DesignInspectorPanel.tsx`, and `DesignFoundryPreview.tsx` own the left pane, right pane, and shared Foundry preview adapter. Design still receives ProjectState/actions and does not own mechanism rules.
-   - Next lowest-risk stage seam: split `MechanismFoundry.tsx` canvas pane or `ThreeFoundryPreview.tsx` internals only behind renderer contracts. Keep shared fabrication/physics contracts centralized.
+   - Next lowest-risk stage seam: split `ThreeFoundryPreview.tsx` internals only behind renderer contracts, starting with pure geometry/material helpers. Keep shared fabrication/physics contracts centralized.
 
 3. **Domain helpers**
    - Done: mechanism fitting/recommendations live in `utils/mechanismRecommendations.ts`.

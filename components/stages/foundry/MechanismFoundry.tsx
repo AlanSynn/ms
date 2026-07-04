@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ThreeFoundryPreview } from "./ThreeFoundryPreview";
+import { FoundryCanvasPane } from "./FoundryCanvasPane";
 import { FoundryInspectorPanel } from "./FoundryInspectorPanel";
 import { FoundryWorkflowPanel } from "./FoundryWorkflowPanel";
 import {
@@ -52,7 +52,6 @@ import {
   projectFoundryOverlayPoint,
   unprojectFoundryOverlayPoint,
   type FoundryCamera,
-  type FoundryCameraPreset,
   type FoundryOverlaySize,
   type FoundryViewPreset,
 } from "../../../utils/foundryCamera";
@@ -68,7 +67,6 @@ import {
   pointsToSvgPath,
 } from "../../../utils/mechanismPreview";
 import { normalizeGearMeshMechanism } from "../../../utils/mechanismRecommendations";
-import { VIEWER3D_CONTRACT_VERSION } from "../../../utils/viewer3d";
 import { createDefaultMechanism, uid } from "../../../utils/project";
 import { preferredMotionJointId } from "../../../utils/motion";
 
@@ -828,409 +826,73 @@ export const MechanismFoundry = ({
           />,
         ),
         canvas: canvasPane(
-          <section className="path-canvas-shell foundry-canvas-shell canvas-workspace p-0">
-            <div className="foundry-sim-badge" data-testid="foundry-sim-badge">
-              <span className={foundryPlaying ? "status-pulse" : ""} />
-              {foundryPlaying ? "Active Sim" : "Paused"}
-            </div>
-            <div
-              className="foundry-camera-hud"
-              data-testid="foundry-camera-controls"
-              aria-label="Shared 3D viewer toolbar"
-              data-viewer-contract={VIEWER3D_CONTRACT_VERSION}
-            >
-              <span
-                className="foundry-camera-readout"
-                data-testid="foundry-camera-readout"
-              >
-                3D {foundryCameraLabel} · {Math.round(foundryCamera.zoom * 100)}
-                %
-              </span>
-              {(
-                Object.entries(FOUNDRY_VIEW_PRESETS) as Array<
-                  [Exclude<FoundryViewPreset, "custom">, FoundryCameraPreset]
-                >
-              ).map(([preset, view]) => (
-                <button
-                  key={preset}
-                  type="button"
-                  data-testid={`foundry-camera-preset-${preset}`}
-                  className={foundryCamera.preset === preset ? "active" : ""}
-                  aria-pressed={foundryCamera.preset === preset}
-                  onClick={() => setCameraPreset(preset)}
-                >
-                  {view.label}
-                </button>
-              ))}
-              <span className="viewer-toolbar-divider" aria-hidden="true" />
-              <button
-                type="button"
-                data-testid="foundry-toggle-grid"
-                className={showFoundryGrid ? "active" : ""}
-                aria-label="Grid layer"
-                aria-pressed={showFoundryGrid}
-                onClick={() => setShowFoundryGrid(!showFoundryGrid)}
-              >
-                Grid
-              </button>
-              <button
-                type="button"
-                data-testid="foundry-toggle-paths"
-                className={showPathPreview ? "active" : ""}
-                aria-label="Path layer"
-                aria-pressed={showPathPreview}
-                onClick={() => setShowPathPreview(!showPathPreview)}
-              >
-                Path
-              </button>
-              <button
-                type="button"
-                data-testid="foundry-toggle-forces"
-                className={showForces ? "active" : ""}
-                aria-label="Force vector layer"
-                aria-pressed={showForces}
-                onClick={() => setShowForces(!showForces)}
-              >
-                Force
-              </button>
-              <button
-                type="button"
-                data-testid="foundry-toggle-velocity"
-                className={showVelocity ? "active" : ""}
-                aria-label="Speed vector layer"
-                aria-pressed={showVelocity}
-                onClick={() => setShowVelocity(!showVelocity)}
-              >
-                v
-              </button>
-              <button
-                type="button"
-                data-testid="foundry-toggle-trail"
-                className={showTrail ? "active" : ""}
-                aria-label="Motion trace layer"
-                aria-pressed={showTrail}
-                onClick={() => setShowTrail(!showTrail)}
-              >
-                Trace
-              </button>
-            </div>
-            <div
-              className="foundry-playback-hud foundry-toolbar"
-              data-testid="foundry-toolbar"
-              aria-label="Foundry playback"
-            >
-              <button
-                className={`btn-secondary ${foundryPlaying ? "active" : ""}`}
-                onClick={() => setFoundryPlaying(!foundryPlaying)}
-              >
-                {foundryPlaying ? "Pause" : "Play"}
-              </button>
-              <button className="btn-secondary" onClick={resetFoundryPreview}>
-                Reset
-              </button>
-              <input
-                aria-label="Foundry phase"
-                type="range"
-                min="0"
-                max="360"
-                value={foundryPhaseDegrees}
-                onChange={(event) => {
-                  setFoundryPlaying(false);
-                  setFoundryPhase((Number(event.target.value) * Math.PI) / 180);
-                }}
-              />
-              <span>{foundryPhaseDegrees}°</span>
-            </div>
-            <ThreeFoundryPreview
-              mechanism={landedFoundry}
-              simulation={selectedPhysicalSimulation}
-              kit={project.settings.physicalKit}
-              camera={foundryCamera}
-              rigOpacity={foundryRigOpacity / 100}
-              color={foundry.color}
-              pathPoints={previewPoints}
-              pathTraces={foundryPointTraces}
-              showGrid={showFoundryGrid}
-              showPathPreview={showPathPreview}
-              showTrail={showTrail}
-              showForces={showForces}
-              showVelocity={showVelocity}
-              explode={foundryExplode / 100}
-              physicsRule={physicsRule}
-              velocityMagnitude={velocityMagnitude}
-              forceMagnitude={forceMagnitude}
-              frictionCoefficient={project.settings.simulationFriction}
-              frictionMagnitude={frictionMagnitude}
-              constraintError={constraintError}
-              cameraLabel={foundryCameraLabel}
-              isPickingAnchor={isPickingAnchor}
-              isOrbiting={isOrbitingFoundry}
-              isZooming={isZoomingFoundry}
-              isPanning={isPanningFoundry}
-              onAnchorPick={handleAnchorPick}
-              onPointerDown={handleFoundryPointerDown}
-              onPointerMove={handleFoundryPointerMove}
-              onPointerUp={finishFoundryOrbit}
-              onPointerCancel={finishFoundryOrbit}
-              onWheel={handleFoundryWheel}
-              onProjectionSizeChange={updateFoundryProjectionSize}
-            >
-              <svg
-                data-testid="foundry-preview-overlay"
-                viewBox={`0 0 ${foundryProjectionSize.width} ${foundryProjectionSize.height}`}
-                className="foundry-preview-overlay"
-                aria-label="Foundry physical joint overlay"
-                data-projection-aspect={(
-                  foundryProjectionSize.width /
-                  Math.max(1, foundryProjectionSize.height)
-                ).toFixed(3)}
-              >
-                {showForces &&
-                  projectedPlayhead &&
-                  projectedForceTip &&
-                  projectedDriveOrigin &&
-                  projectedDriveTip && (
-                    <g
-                      data-testid="foundry-forces-overlay"
-                      className="physics-vector physics-force"
-                      data-projection="three-camera"
-                      data-origin-source={playheadSource}
-                      data-physics-rule={physicsRule}
-                      data-fx={forceRaw.x.toFixed(3)}
-                      data-fy={forceRaw.y.toFixed(3)}
-                      data-force-magnitude={forceMagnitude.toFixed(3)}
-                      data-friction-magnitude={frictionMagnitude.toFixed(3)}
-                      data-constraint-error={constraintError.toFixed(3)}
-                      stroke="#ef4444"
-                      strokeWidth="3"
-                      strokeLinecap="round"
-                    >
-                      <defs>
-                        <marker
-                          id="foundry-arrow-force-overlay"
-                          markerWidth="7"
-                          markerHeight="7"
-                          refX="6"
-                          refY="3.5"
-                          orient="auto"
-                          markerUnits="strokeWidth"
-                        >
-                          <path d="M 0 0 L 7 3.5 L 0 7 z" fill="#ef4444" />
-                        </marker>
-                      </defs>
-                      <defs>
-                        <marker
-                          id="foundry-arrow-friction-overlay"
-                          markerWidth="7"
-                          markerHeight="7"
-                          refX="6"
-                          refY="3.5"
-                          orient="auto"
-                          markerUnits="strokeWidth"
-                        >
-                          <path d="M 0 0 L 7 3.5 L 0 7 z" fill="#f59e0b" />
-                        </marker>
-                      </defs>
-                      <line
-                        data-testid="foundry-force-vector"
-                        x1={projectedPlayhead.x}
-                        y1={projectedPlayhead.y}
-                        x2={projectedForceTip.x}
-                        y2={projectedForceTip.y}
-                        markerEnd="url(#foundry-arrow-force-overlay)"
-                      />
-                      <line
-                        data-testid="foundry-drive-force-vector"
-                        x1={projectedDriveOrigin.x}
-                        y1={projectedDriveOrigin.y}
-                        x2={projectedDriveTip.x}
-                        y2={projectedDriveTip.y}
-                        opacity="0.68"
-                        markerEnd="url(#foundry-arrow-force-overlay)"
-                      />
-                      {projectedFrictionTip && (
-                        <line
-                          data-testid="foundry-friction-vector"
-                          x1={projectedPlayhead.x}
-                          y1={projectedPlayhead.y}
-                          x2={projectedFrictionTip.x}
-                          y2={projectedFrictionTip.y}
-                          stroke="#f59e0b"
-                          markerEnd="url(#foundry-arrow-friction-overlay)"
-                        />
-                      )}
-                      <text
-                        x={projectedForceTip.x + 5}
-                        y={projectedForceTip.y - 3}
-                      >
-                        F / a
-                      </text>
-                      <text
-                        x={projectedDriveTip.x + 5}
-                        y={projectedDriveTip.y + 9}
-                      >
-                        drive τ
-                      </text>
-                      {projectedFrictionTip && (
-                        <text
-                          x={projectedFrictionTip.x + 5}
-                          y={projectedFrictionTip.y + 9}
-                          fill="#92400e"
-                        >
-                          μ
-                        </text>
-                      )}
-                    </g>
-                  )}
-                {showVelocity && projectedPlayhead && projectedVelocityTip && (
-                  <g
-                    data-testid="foundry-velocity-overlay"
-                    className="physics-vector physics-velocity"
-                    data-projection="three-camera"
-                    data-origin-source={playheadSource}
-                    data-vx={velocityRaw.x.toFixed(3)}
-                    data-vy={velocityRaw.y.toFixed(3)}
-                    data-speed={velocityMagnitude.toFixed(3)}
-                    stroke="#10b981"
-                    strokeWidth="4"
-                    strokeLinecap="round"
-                  >
-                    <defs>
-                      <marker
-                        id="foundry-arrow-velocity-overlay"
-                        markerWidth="7"
-                        markerHeight="7"
-                        refX="6"
-                        refY="3.5"
-                        orient="auto"
-                        markerUnits="strokeWidth"
-                      >
-                        <path d="M 0 0 L 7 3.5 L 0 7 z" fill="#10b981" />
-                      </marker>
-                    </defs>
-                    <line
-                      data-testid="foundry-velocity-vector"
-                      x1={projectedPlayhead.x}
-                      y1={projectedPlayhead.y}
-                      x2={projectedVelocityTip.x}
-                      y2={projectedVelocityTip.y}
-                      markerEnd="url(#foundry-arrow-velocity-overlay)"
-                    />
-                    <text
-                      x={projectedVelocityTip.x + 5}
-                      y={projectedVelocityTip.y - 3}
-                    >
-                      v
-                    </text>
-                  </g>
-                )}
-                {projectedPlayhead && (
-                  <circle
-                    data-testid="foundry-playhead"
-                    data-projection="three-camera"
-                    data-origin-source={playheadSource}
-                    cx={projectedPlayhead.x}
-                    cy={projectedPlayhead.y}
-                    r="7"
-                    fill="#f472b6"
-                    stroke="white"
-                    strokeWidth="3"
-                  />
-                )}
-                {foundryParamHandles.length > 0 && (
-                  <g
-                    data-testid="foundry-param-handles"
-                    data-handle-contract="4bar-A-B-C-D"
-                    data-projection="three-camera"
-                    data-handle-z-contract="board-pivots-bottom-floating-top"
-                    data-handle-z-map={foundryParamHandleZSummary}
-                  >
-                    {foundryParamHandles.map((handle) => (
-                      <g
-                        key={handle.id}
-                        transform={`translate(${handle.screen!.x} ${handle.screen!.y})`}
-                        data-testid={`foundry-param-handle-group-${handle.id}`}
-                      >
-                        <circle
-                          data-testid={`foundry-param-handle-${handle.id}`}
-                          className={`foundry-param-handle ${handle.draggable ? "is-draggable" : "is-locked"}`}
-                          data-param-handle={handle.id}
-                          data-param-role={handle.label}
-                          data-draggable={String(handle.draggable)}
-                          data-projection-z={handle.z.toFixed(2)}
-                          r={handle.draggable ? 8 : 6}
-                          fill={handle.draggable ? "#ffffff" : "#e2e8f0"}
-                          stroke={handle.draggable ? "#4f46e5" : "#64748b"}
-                          strokeWidth="3"
-                          onPointerDown={
-                            handle.draggable
-                              ? handleFoundryParamPointerDown(
-                                  handle.id as "B" | "C" | "D",
-                                )
-                              : undefined
-                          }
-                          onPointerMove={
-                            handle.draggable
-                              ? handleFoundryParamPointerMove
-                              : undefined
-                          }
-                          onPointerUp={
-                            handle.draggable
-                              ? handleFoundryParamPointerUp
-                              : undefined
-                          }
-                          onPointerCancel={
-                            handle.draggable
-                              ? handleFoundryParamPointerUp
-                              : undefined
-                          }
-                        />
-                        <text className="foundry-param-label" x="10" y="-8">
-                          {handle.id}
-                        </text>
-                      </g>
-                    ))}
-                  </g>
-                )}
-                {(isPickingAnchor || manualAnchor) && projectedAnchorMarker && (
-                  <g
-                    data-testid="foundry-anchor-marker"
-                    data-projection="three-camera"
-                    transform={`translate(${projectedAnchorMarker.x} ${projectedAnchorMarker.y})`}
-                  >
-                    <circle
-                      r="8"
-                      fill="#ffffff"
-                      stroke="#8b5cf6"
-                      strokeWidth="3"
-                    />
-                    <path
-                      d="M -13 0 H 13 M 0 -13 V 13"
-                      stroke="#8b5cf6"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                    />
-                    <text
-                      x="12"
-                      y="-10"
-                      fill="#5b21b6"
-                      fontSize="8"
-                      fontWeight="900"
-                    >
-                      {landingBoard.label}
-                    </text>
-                  </g>
-                )}
-              </svg>
-            </ThreeFoundryPreview>
-            <div hidden data-testid="foundry-toolbar-state">
-              Toolbar: {foundryPlaying ? "playing" : "paused"} · grid{" "}
-              {showFoundryGrid ? "shown" : "hidden"} · path{" "}
-              {showPathPreview ? "shown" : "hidden"} · camera{" "}
-              {foundryCameraLabel} · phase{" "}
-              {Math.round((foundryPhase * 180) / Math.PI)}°
-            </div>
-          </section>,
+          <FoundryCanvasPane
+            foundry={foundry}
+            landedFoundry={landedFoundry}
+            foundryPlaying={foundryPlaying}
+            foundryPhase={foundryPhase}
+            foundryPhaseDegrees={foundryPhaseDegrees}
+            foundryCamera={foundryCamera}
+            foundryCameraLabel={foundryCameraLabel}
+            foundryRigOpacity={foundryRigOpacity}
+            foundryExplode={foundryExplode}
+            foundryProjectionSize={foundryProjectionSize}
+            selectedPhysicalSimulation={selectedPhysicalSimulation}
+            previewPoints={previewPoints}
+            foundryPointTraces={foundryPointTraces}
+            kit={project.settings.physicalKit}
+            showFoundryGrid={showFoundryGrid}
+            showPathPreview={showPathPreview}
+            showTrail={showTrail}
+            showForces={showForces}
+            showVelocity={showVelocity}
+            isPickingAnchor={isPickingAnchor}
+            isOrbitingFoundry={isOrbitingFoundry}
+            isZoomingFoundry={isZoomingFoundry}
+            isPanningFoundry={isPanningFoundry}
+            physicsRule={physicsRule}
+            velocityMagnitude={velocityMagnitude}
+            forceMagnitude={forceMagnitude}
+            frictionCoefficient={project.settings.simulationFriction}
+            frictionMagnitude={frictionMagnitude}
+            constraintError={constraintError}
+            projectedPlayhead={projectedPlayhead}
+            projectedVelocityTip={projectedVelocityTip}
+            projectedForceTip={projectedForceTip}
+            projectedFrictionTip={projectedFrictionTip}
+            projectedDriveOrigin={projectedDriveOrigin}
+            projectedDriveTip={projectedDriveTip}
+            projectedAnchorMarker={projectedAnchorMarker}
+            playheadSource={playheadSource}
+            velocityRaw={velocityRaw}
+            forceRaw={forceRaw}
+            foundryParamHandles={foundryParamHandles}
+            foundryParamHandleZSummary={foundryParamHandleZSummary}
+            hasManualAnchor={Boolean(manualAnchor)}
+            landingBoardLabel={landingBoard.label}
+            onSetCameraPreset={setCameraPreset}
+            onToggleGrid={() => setShowFoundryGrid((value) => !value)}
+            onTogglePathPreview={() => setShowPathPreview((value) => !value)}
+            onToggleForces={() => setShowForces((value) => !value)}
+            onToggleVelocity={() => setShowVelocity((value) => !value)}
+            onToggleTrail={() => setShowTrail((value) => !value)}
+            onTogglePlaying={() => setFoundryPlaying((value) => !value)}
+            onResetPreview={resetFoundryPreview}
+            onPhaseChange={(degrees) => {
+              setFoundryPlaying(false);
+              setFoundryPhase((degrees * Math.PI) / 180);
+            }}
+            onAnchorPick={handleAnchorPick}
+            onPointerDown={handleFoundryPointerDown}
+            onPointerMove={handleFoundryPointerMove}
+            onPointerUp={finishFoundryOrbit}
+            onPointerCancel={finishFoundryOrbit}
+            onWheel={handleFoundryWheel}
+            onProjectionSizeChange={updateFoundryProjectionSize}
+            onParamPointerDown={handleFoundryParamPointerDown}
+            onParamPointerMove={handleFoundryParamPointerMove}
+            onParamPointerUp={handleFoundryParamPointerUp}
+          />,
         ),
         inspector: inspectorPane(
           <FoundryInspectorPanel
