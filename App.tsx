@@ -1,11 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { AssemblyGuide } from "./components/stages/assembly/AssemblyGuide";
-import { BlueprintExport } from "./components/stages/blueprint/BlueprintExport";
-import { CharacterSelection } from "./components/stages/character/CharacterSelection";
-import { PathEditor } from "./components/stages/path/PathEditor";
-import { MechanismFoundry } from "./components/stages/foundry/MechanismFoundry";
-import { MechanismDesign } from "./components/stages/mechanism/MechanismDesign";
-import { Options } from "./components/stages/options/Options";
+import { AppStageRouter } from "./components/AppStageRouter";
 import { MechanismRecommendationSheet } from "./components/stages/path/MechanismRecommendationSheet";
 import { processingLabel } from "./components/stages/character/ProgressBlock";
 import type { PendingCharacterReview } from "./components/stages/character/CharacterImportOverlays";
@@ -28,6 +22,7 @@ import {
   BodyPartLayer,
   CanvasViewport,
   GlobalConfig,
+  FoundryExportPackage,
   MechanismConfig,
   MechanismType,
   Point,
@@ -689,6 +684,81 @@ const App: React.FC = () => {
       />
     ) : null;
 
+  const acceptPendingCharacter = () => {
+    if (!pendingCharacter) return;
+    setProject(pendingCharacter.project, { resetHistory: true });
+    setPendingCharacter(null);
+    setShowGettingStarted(false);
+    setStage(pendingCharacter.returnStage);
+  };
+
+  const exportFoundryMechanism = (pkg: FoundryExportPackage) => {
+    const existingTarget = project.mechanisms.find(
+      (mechanism) =>
+        mechanism.targetPartId === pkg.targetPartId &&
+        mechanism.targetPathId === pkg.targetPathId &&
+        preferredMotionJointId(
+          project,
+          mechanism.targetPartId,
+          mechanism.targetAnchorJointId,
+        ) === pkg.targetAnchorJointId,
+    );
+    const activeVisualPartIds = selectedPart ? [selectedPart.id] : [];
+    const rawMechanism = mechanismWithGeneratedPath(
+      {
+        ...foundry,
+        id: existingTarget?.id ?? pkg.mechanismId,
+        anchorX: pkg.pivot.x,
+        anchorY: pkg.pivot.y,
+        targetPartId: pkg.targetPartId,
+        targetPathId: pkg.targetPathId,
+        targetAnchorJointId: pkg.targetAnchorJointId,
+        presetId: pkg.metadata.selectedPreset,
+        recommendation: pkg.metadata.recommendation,
+        source: "foundry",
+        foundryExport: pkg,
+        generatedPath: pkg.generatedPath,
+        warnings: pkg.warnings,
+        activeVisualPartIds,
+      },
+      { preserveGeneratedPath: true },
+    );
+    const fittedMechanism = pkg.targetPathId
+      ? fitMechanismToTargetPath(project, rawMechanism, pkg.targetPathId)
+      : fitRecommendedMechanismToSheet(project, rawMechanism);
+    const generatedPath =
+      fittedMechanism.generatedPath ??
+      rawMechanism.generatedPath ??
+      pkg.generatedPath;
+    const mechanism = mechanismWithGeneratedPath(
+      {
+        ...fittedMechanism,
+        foundryExport: {
+          ...pkg,
+          parameters: { ...fittedMechanism },
+          pivot: {
+            x: fittedMechanism.anchorX ?? pkg.pivot.x,
+            y: fittedMechanism.anchorY ?? pkg.pivot.y,
+          },
+          outputPoint: generatedPath[0] ?? pkg.outputPoint,
+          generatedPath,
+        },
+        generatedPath,
+        warnings: [
+          ...new Set([
+            ...(fittedMechanism.warnings ?? []),
+            ...(pkg.warnings ?? []),
+          ]),
+        ],
+        activeVisualPartIds,
+      },
+      { preserveGeneratedPath: true },
+    );
+    dispatch({ type: "set_foundry_export", foundryExport: pkg });
+    dispatch({ type: "upsert_mechanism", mechanism });
+    setStage("design");
+  };
+
   useEffect(() => {
     const shell = appShellRef.current;
     if (modalOpen) {
@@ -780,198 +850,58 @@ const App: React.FC = () => {
             }
           />
 
-          <div
-            className="stage-body editor-workbench relative min-h-0 flex-1 overflow-hidden p-7"
-            data-testid="shared-workbench"
-          >
-            {editorStage === "character" && (
-              <CharacterSelection
-                project={project}
-                dispatch={dispatch}
-                pendingCharacter={pendingCharacter}
-                replaceCharacter={replaceCharacter}
-                setReplaceCharacter={setReplaceCharacter}
-                onOpenGettingStarted={() => setShowGettingStarted(true)}
-                onAccept={() => {
-                  if (!pendingCharacter) return;
-                  setProject(pendingCharacter.project, { resetHistory: true });
-                  setPendingCharacter(null);
-                  setShowGettingStarted(false);
-                  setStage(pendingCharacter.returnStage);
-                }}
-                onDiscard={() => setPendingCharacter(null)}
-                onProcess={runWebOnnx}
-                onPackage={importCharacterPackage}
-                onImport={importProject}
-                onEditCharacter={editCharacterParts}
-                onSaveSkeleton={saveSkeleton}
-                activeClassroomLesson={activeClassroomLesson}
-                resetLesson={commandHandlers["project.resetLesson"]}
-                goStage={goStage}
-                viewport={canvasViewport}
-                setViewport={setCanvasViewport}
-              />
-            )}
-            {editorStage === "path" && (
-              <PathEditor
-                project={project}
-                sortedParts={sortedParts}
-                selectedPart={selectedPart}
-                selectedPath={selectedPath}
-                drawMode={drawMode}
-                setDrawMode={setDrawMode}
-                dispatch={dispatch}
-                setPathPoints={setPathPoints}
-                openTracking={() => setShowTracking(true)}
-                isPlaying={isPlaying}
-                setIsPlaying={setIsPlaying}
-                angle={angle}
-                setAngle={setAngle}
-                onNext={() => goStage("foundry")}
-                goStage={goStage}
-                viewport={canvasViewport}
-                setViewport={setCanvasViewport}
-              />
-            )}
-            {editorStage === "foundry" && (
-              <MechanismFoundry
-                project={project}
-                foundry={foundry}
-                setFoundry={setFoundry}
-                selectedPart={selectedPart}
-                selectedPath={selectedPath}
-                goStage={goStage}
-                onExport={(pkg) => {
-                  const existingTarget = project.mechanisms.find(
-                    (m) =>
-                      m.targetPartId === pkg.targetPartId &&
-                      m.targetPathId === pkg.targetPathId &&
-                      preferredMotionJointId(
-                        project,
-                        m.targetPartId,
-                        m.targetAnchorJointId,
-                      ) === pkg.targetAnchorJointId,
-                  );
-                  const rawMechanism = mechanismWithGeneratedPath(
-                    {
-                      ...foundry,
-                      id: existingTarget?.id ?? pkg.mechanismId,
-                      anchorX: pkg.pivot.x,
-                      anchorY: pkg.pivot.y,
-                      targetPartId: pkg.targetPartId,
-                      targetPathId: pkg.targetPathId,
-                      targetAnchorJointId: pkg.targetAnchorJointId,
-                      presetId: pkg.metadata.selectedPreset,
-                      recommendation: pkg.metadata.recommendation,
-                      source: "foundry",
-                      foundryExport: pkg,
-                      generatedPath: pkg.generatedPath,
-                      warnings: pkg.warnings,
-                      activeVisualPartIds: selectedPart
-                        ? [selectedPart.id]
-                        : [],
-                    },
-                    { preserveGeneratedPath: true },
-                  );
-                  const fittedMechanism = pkg.targetPathId
-                    ? fitMechanismToTargetPath(
-                        project,
-                        rawMechanism,
-                        pkg.targetPathId,
-                      )
-                    : fitRecommendedMechanismToSheet(project, rawMechanism);
-                  const generatedPath =
-                    fittedMechanism.generatedPath ??
-                    rawMechanism.generatedPath ??
-                    pkg.generatedPath;
-                  const mech = mechanismWithGeneratedPath(
-                    {
-                      ...fittedMechanism,
-                      foundryExport: {
-                        ...pkg,
-                        parameters: { ...fittedMechanism },
-                        pivot: {
-                          x: fittedMechanism.anchorX ?? pkg.pivot.x,
-                          y: fittedMechanism.anchorY ?? pkg.pivot.y,
-                        },
-                        outputPoint: generatedPath[0] ?? pkg.outputPoint,
-                        generatedPath,
-                      },
-                      generatedPath,
-                      warnings: [
-                        ...new Set([
-                          ...(fittedMechanism.warnings ?? []),
-                          ...(pkg.warnings ?? []),
-                        ]),
-                      ],
-                      activeVisualPartIds: selectedPart
-                        ? [selectedPart.id]
-                        : [],
-                    },
-                    { preserveGeneratedPath: true },
-                  );
-                  dispatch({ type: "set_foundry_export", foundryExport: pkg });
-                  dispatch({ type: "upsert_mechanism", mechanism: mech });
-                  setStage("design");
-                }}
-              />
-            )}
-            {editorStage === "design" && (
-              <MechanismDesign
-                project={project}
-                selectedMechanism={selectedMechanism}
-                updateMechanism={updateMechanism}
-                dispatch={dispatch}
-                showTrace={showTrace}
-                setShowTrace={setShowTrace}
-                angle={angle}
-                onOptimize={optimizeSelectedMechanism}
-                onRecommendations={() => setShowRecommendations(true)}
-                optimizerBusy={optimizerBusy}
-                exportSvg={exportMechanismSvg}
-                exportDxf={exportMechanismDxf}
-                onBlueprint={() => goStage("blueprint")}
-                goStage={goStage}
-              />
-            )}
-            {editorStage === "blueprint" && (
-              <BlueprintExport
-                project={project}
-                dispatch={dispatch}
-                goStage={goStage}
-              />
-            )}
-            {editorStage === "assembly" && (
-              <AssemblyGuide
-                project={project}
-                dispatch={dispatch}
-                goStage={goStage}
-                stepIndex={assemblyStepIndex}
-                setStepIndex={setAssemblyStepIndex}
-                stepProgress={assemblyStepProgress}
-                setStepProgress={setAssemblyStepProgress}
-                playing={assemblyPlaying}
-                setPlaying={setAssemblyPlaying}
-                setStepCount={setAssemblyStepCount}
-              />
-            )}
-            {editorStage === "options" && (
-              <Options
-                project={project}
-                dispatch={dispatch}
-                goStage={goStage}
-              />
-            )}
-            {playerDock && (
-              <div
-                className="stage-player-row"
-                data-testid="stage-player-row"
-                aria-label="Shared playback controls"
-              >
-                {playerDock}
-              </div>
-            )}
-          </div>
+          <AppStageRouter
+            editorStage={editorStage}
+            project={project}
+            dispatch={dispatch}
+            goStage={goStage}
+            playerDock={playerDock}
+            pendingCharacter={pendingCharacter}
+            replaceCharacter={replaceCharacter}
+            setReplaceCharacter={setReplaceCharacter}
+            onOpenGettingStarted={() => setShowGettingStarted(true)}
+            onAcceptPendingCharacter={acceptPendingCharacter}
+            onDiscardPendingCharacter={() => setPendingCharacter(null)}
+            onProcessCharacter={runWebOnnx}
+            onPackageCharacter={importCharacterPackage}
+            onImportProject={importProject}
+            onEditCharacter={editCharacterParts}
+            onSaveSkeleton={saveSkeleton}
+            activeClassroomLesson={activeClassroomLesson}
+            resetLesson={commandHandlers["project.resetLesson"]}
+            sortedParts={sortedParts}
+            selectedPart={selectedPart}
+            selectedPath={selectedPath}
+            drawMode={drawMode}
+            setDrawMode={setDrawMode}
+            setPathPoints={setPathPoints}
+            openTracking={() => setShowTracking(true)}
+            isPlaying={isPlaying}
+            setIsPlaying={setIsPlaying}
+            angle={angle}
+            setAngle={setAngle}
+            viewport={canvasViewport}
+            setViewport={setCanvasViewport}
+            foundry={foundry}
+            setFoundry={setFoundry}
+            onFoundryExport={exportFoundryMechanism}
+            selectedMechanism={selectedMechanism}
+            updateMechanism={updateMechanism}
+            showTrace={showTrace}
+            setShowTrace={setShowTrace}
+            onOptimize={optimizeSelectedMechanism}
+            onRecommendations={() => setShowRecommendations(true)}
+            optimizerBusy={optimizerBusy}
+            exportSvg={exportMechanismSvg}
+            exportDxf={exportMechanismDxf}
+            assemblyStepIndex={assemblyStepIndex}
+            setAssemblyStepIndex={setAssemblyStepIndex}
+            assemblyStepProgress={assemblyStepProgress}
+            setAssemblyStepProgress={setAssemblyStepProgress}
+            assemblyPlaying={assemblyPlaying}
+            setAssemblyPlaying={setAssemblyPlaying}
+            setAssemblyStepCount={setAssemblyStepCount}
+          />
           <WorkflowStatusStrip
             {...workflowStatusFor(
               editorStage,

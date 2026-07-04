@@ -176,7 +176,7 @@ assert(viteConfigText.includes("base: isTauri ? './' : webBase"), 'Tauri stays r
 assert(viteConfigText.includes('chunkSizeWarningLimit: 2400'), 'Vite chunk warning budget is explicit for intentional lazy Rapier/ONNX browser chunks');
 assert(normalizedCodebaseCleanupPlan.includes('Button and command audit lock') && normalizedCodebaseCleanupPlan.includes('utils/appCommands.ts'), 'cleanup plan records the executable button/menu audit lock');
 assert(normalizedCodebaseCleanupPlan.includes('Warning fixes locked') && normalizedCodebaseCleanupPlan.includes('Rapier warning boundary'), 'cleanup plan records scoped warning fixes instead of broad suppression');
-assert(normalizedCodebaseCleanupPlan.includes('`App.tsx` | 1046') && normalizedCodebaseCleanupPlan.includes('Command keyboard binding, boot/cache lifecycle, project history, autosave/workspace persistence, project/session command actions, and Character/Path/Foundry/Options/Assembly/Mechanism Design stage seams are extracted') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppOnnxBootstrap.ts` | 88') && normalizedCodebaseCleanupPlan.includes('`hooks/useProjectHistory.ts` | 98') && normalizedCodebaseCleanupPlan.includes('`hooks/useProjectAutosave.ts` | 23') && normalizedCodebaseCleanupPlan.includes('`utils/projectPersistence.ts` | 158') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppProjectCommands.ts` | 292'), 'cleanup plan records the current App.tsx hotspot and completed command/persistence/stage seams');
+assert(normalizedCodebaseCleanupPlan.includes('`App.tsx` | 976') && normalizedCodebaseCleanupPlan.includes('project/session command actions, and the stage router are extracted') && normalizedCodebaseCleanupPlan.includes('`components/AppStageRouter.tsx` | 243') && normalizedCodebaseCleanupPlan.includes('shared stage-to-component routing and player-dock placement') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppOnnxBootstrap.ts` | 88') && normalizedCodebaseCleanupPlan.includes('`hooks/useProjectHistory.ts` | 98') && normalizedCodebaseCleanupPlan.includes('`hooks/useProjectAutosave.ts` | 23') && normalizedCodebaseCleanupPlan.includes('`utils/projectPersistence.ts` | 158') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppProjectCommands.ts` | 292'), 'cleanup plan records the current App.tsx hotspot and completed command/persistence/stage-router seams');
 assert(normalizedCodebaseCleanupPlan.includes('`hooks/useAppCommandBindings.ts` | 36') && normalizedCodebaseCleanupPlan.includes('application keyboard shortcut binding owns latest-handler ref'), 'cleanup plan records the extracted keyboard command binding hook seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/ProgressBlock.tsx` | 84') && normalizedCodebaseCleanupPlan.includes('character import progress UI lives outside the app shell'), 'cleanup plan records the extracted character progress seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/ui/InspectorControls.tsx` | 70') && normalizedCodebaseCleanupPlan.includes('shared inspector sliders/toggles live outside the app shell'), 'cleanup plan records the extracted inspector controls seam');
@@ -1826,6 +1826,7 @@ const pathCanvasPaneText = readFileSync(join(process.cwd(), 'components', 'stage
 const sceneSketchText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'SceneSketch.tsx'), 'utf8');
 const partShapeText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'PartShape.tsx'), 'utf8');
 const appText = readFileSync(join(process.cwd(), 'App.tsx'), 'utf8');
+const appStageRouterText = readFileSync(join(process.cwd(), 'components', 'AppStageRouter.tsx'), 'utf8');
 const appOnnxBootstrapText = readFileSync(join(process.cwd(), 'hooks', 'useAppOnnxBootstrap.ts'), 'utf8');
 const appAutosaveHookText = readFileSync(join(process.cwd(), 'hooks', 'useProjectAutosave.ts'), 'utf8');
 const projectPersistenceText = readFileSync(join(process.cwd(), 'utils', 'projectPersistence.ts'), 'utf8');
@@ -1865,6 +1866,7 @@ ${foundryRenderInventoryText}
 ${foundryPreviewStacksText}`;
 const appShellText = readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8');
 const appUiText = `${appText}
+${appStageRouterText}
 ${appShellText}
 ${characterImportControlsText}
 ${characterSelectionText}
@@ -1873,9 +1875,10 @@ ${mechanismDesignStageText}
 ${designFoundryPreviewText}`;
 const typesText = readFileSync(join(process.cwd(), 'types.ts'), 'utf8');
 const indexText = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
-assert(appText.includes('<MechanismFoundry') && !appText.includes('const MechanismFoundry = ({') && mechanismFoundryText.includes('export const MechanismFoundry'), 'App.tsx delegates the Mechanism Foundry stage to an extracted stage seam');
-assert(appText.includes('<MechanismDesign') && !appText.includes('const MechanismDesign = ({') && mechanismDesignText.includes('export const MechanismDesign'), 'App.tsx delegates Mechanism Design to an extracted stage seam');
-assert(appText.includes('<Options') && !appText.includes('const Options = ({') && optionsText.includes('export const Options') && optionsText.includes('OPTIONS_SECTION_MANIFEST'), 'App.tsx delegates the Options stage to an extracted stage seam');
+assert(appText.includes('<AppStageRouter') && appStageRouterText.includes('<MechanismFoundry') && !appText.includes('<MechanismFoundry') && !appStageRouterText.includes('const MechanismFoundry = ({') && mechanismFoundryText.includes('export const MechanismFoundry'), 'App.tsx delegates stage routing to AppStageRouter and AppStageRouter delegates the Mechanism Foundry stage');
+assert(appStageRouterText.includes('<MechanismDesign') && !appText.includes('<MechanismDesign') && !appStageRouterText.includes('const MechanismDesign = ({') && mechanismDesignText.includes('export const MechanismDesign'), 'AppStageRouter delegates Mechanism Design to an extracted stage seam');
+assert(appStageRouterText.includes('<Options') && !appText.includes('<Options') && !appStageRouterText.includes('const Options = ({') && optionsText.includes('export const Options') && optionsText.includes('OPTIONS_SECTION_MANIFEST'), 'AppStageRouter delegates the Options stage to an extracted stage seam');
+assert(appStageRouterText.includes('onFoundryExport') && !appStageRouterText.includes('fitMechanismToTargetPath') && appText.includes('exportFoundryMechanism') && appText.includes('fitMechanismToTargetPath'), 'AppStageRouter remains a presentation router while App owns foundry export ProjectState mutation');
 assert(mechanismFoundryText.includes('<FoundryWorkflowPanel') && foundryWorkflowPanelText.includes('data-testid="foundry-target-summary"'), 'MechanismFoundry delegates the left Foundry workflow pane without changing target controls');
 assert(mechanismFoundryText.includes('<FoundryInspectorPanel') && foundryInspectorPanelText.includes('testId="foundry-parametric-editor"') && foundryInspectorPanelText.includes('Mechanism options'), 'MechanismFoundry delegates the right Foundry inspector without changing parametric editor or advanced options');
 assert(mechanismFoundryText.includes('<FoundryCanvasPane') && foundryCanvasPaneText.includes('<ThreeFoundryPreview') && foundryCanvasPaneText.includes('data-testid="foundry-preview-overlay"') && foundryCanvasPaneText.includes('data-testid="foundry-toolbar-state"'), 'MechanismFoundry delegates the center Foundry canvas without changing 3D preview overlays');
@@ -2028,7 +2031,7 @@ assert(foundry3dText.includes('const range = useMemo(') && foundry3dText.include
 assert(viewportText.includes('WEBGL_PIXEL_RATIO_CAP') && foundry3dText.includes('WEBGL_PIXEL_RATIO_CAP') && threePreviewText.includes('WEBGL_PIXEL_RATIO_CAP'), 'WebGL renderer pixel ratio cap is shared across Foundry and puppet previews');
 assert(threePreviewText.includes("const PUPPET_CAMERA_PRESETS: Viewer3DCameraPreset[] = ['front', 'iso']"), 'puppet viewer toolbar exposes only the fixed 2D and orbitable 3D modes');
 assert(threePreviewText.includes('onWheel={handleViewerWheel}') && threePreviewText.includes('data-camera-yaw'), 'puppet 3D canvas exposes direct wheel zoom and orbit state for browser verification');
-assert(appText.includes('<PathEditor'), 'App.tsx delegates Path Editor stage to the extracted PathEditor seam');
+assert(appStageRouterText.includes('<PathEditor') && !appText.includes('<PathEditor'), 'AppStageRouter delegates Path Editor stage to the extracted PathEditor seam');
 assert(appText.includes('<MechanismRecommendationSheet') && mechanismRecommendationSheetText.includes('buildMechanismRecommendations') && mechanismRecommendationSheetText.includes('mechanismWithGeneratedPath'), 'App.tsx delegates the Path recommendation modal while recommendation scoring and generated-path wrapping stay outside the app shell');
 assert(pathCanvasPaneText.includes('path-view-2d') && pathCanvasPaneText.includes('path-view-3d'), 'Path Editor exposes a persistent 2D/3D Path view switch');
 assert(pathCanvasPaneText.includes('pathViewMode === "2d"') && pathCanvasPaneText.includes('<SceneSketch'), 'Path Editor 2D view uses editable SceneSketch for viewing, drawing, and point editing');
@@ -2141,7 +2144,7 @@ assert(designFoundryPreviewText.includes('data-testid="design-shared-foundry-pre
 assert(characterSelectionText.includes('Choose new character.'), 'Character tab disables active-project artwork edits while a package review is pending');
 assert(characterSelectionText.includes('disabled={partPanelDisabled}') && characterSelectionText.includes('onClick={onEditCharacter}'), 'Pending package review disables active-character edit buttons');
 assert(characterSelectionText.includes('disabled={partPanelDisabled}') && characterSelectionText.includes('onClick={onSaveSkeleton}'), 'Pending package review disables active skeleton save controls');
-assert(appText.includes('stage-body editor-workbench relative min-h-0 flex-1 overflow-hidden'), 'shared workbench prevents right-pane scroll from moving the center canvas');
+assert(appStageRouterText.includes('stage-body editor-workbench relative min-h-0 flex-1 overflow-hidden'), 'shared workbench prevents right-pane scroll from moving the center canvas');
 assert(indexText.includes('.stage-left-pane, .stage-right-inspector { min-height: 0; height: 100%; max-height: 100%; overflow-x: hidden; overflow-y: auto;') && indexText.includes('.character-setup-panel { min-height: 0; overflow: visible;') && indexText.includes('.character-inspector { min-height: 0; overflow: visible; }'), 'right inspector owns the single vertical scroll container for all stages, including Character');
 const paneWheelCaptureCount = stageLayoutText.match(/onWheelCapture={keepPaneWheelOnPane}/g)?.length ?? 0;
 assert(stageLayoutText.includes('keepPaneWheelOnPane') && paneWheelCaptureCount >= 2, 'workflow and inspector panes keep wheel scrolling on their panes even when the pointer is over sliders or number fields');
@@ -2181,7 +2184,7 @@ assert(blueprintSvgBlock.includes('data-cut-part') && blueprintSvgBlock.includes
 assert(blueprintSvgBlock.includes('data-blueprint-visual-mode="board-hero"') && blueprintSvgBlock.includes('data-blueprint-board-hero') && blueprintSvgBlock.includes('CUT · PLACE · BUILD'), 'Blueprint preview SVG is a visual board-first layout, not a dense report');
 assert(!blueprintSvgBlock.includes('generateCurvePoints') && !blueprintSvgBlock.includes('opacity="0.22"'), 'Blueprint preview SVG avoids foundry path overlays and translucent character ghosts');
 assert(blueprintSvgBlock.includes('const ox = (width - bounds.width * scale)') && !blueprintSvgBlock.includes('const ox = x +'), 'Blueprint part cut previews use local SVG coordinates inside the translated tile, not double-translated paths');
-assert(appText.includes('<AssemblyGuide') && !appText.includes('const AssemblyGuide = ({') && assemblyGuideText.includes('export const AssemblyGuide'), 'App.tsx delegates Assembly Guide stage to an extracted stage seam');
+assert(appStageRouterText.includes('<AssemblyGuide') && !appText.includes('<AssemblyGuide') && !appStageRouterText.includes('const AssemblyGuide = ({') && assemblyGuideText.includes('export const AssemblyGuide'), 'AppStageRouter delegates Assembly Guide stage to an extracted stage seam');
 const assemblyBlock = assemblyGuideText;
 assert(assemblyBlock.includes('data-testid="assembly-canvas-preview"') && assemblyBlock.includes('<AssemblyWorkbench'), 'Assembly tab renders the interactive stepper in the center canvas');
 assert(assemblyBlock.includes('const liveRecipes = activeMechanisms.map') && assemblyBlock.includes('liveRecipes.length ? liveRecipes : (pkg?.recipes ?? [])'), 'Assembly preview derives from live project mechanisms before falling back to an exported package');
