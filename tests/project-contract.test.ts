@@ -169,13 +169,14 @@ assert(readFileSync(join(process.cwd(), 'index.html'), 'utf8').includes('<title>
 const appCommandBindingsHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppCommandBindings.ts'), 'utf8');
 const appCommandsSource = readFileSync(join(process.cwd(), 'utils/appCommands.ts'), 'utf8');
 const appCommandHandlerSource = readFileSync(join(process.cwd(), 'utils/appCommandHandlers.ts'), 'utf8');
+const appProjectCommandsHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppProjectCommands.ts'), 'utf8');
 const viteConfigText = readFileSync(join(process.cwd(), 'vite.config.ts'), 'utf8');
 assert(viteConfigText.includes("const webBase = process.env.VITE_BASE_PATH ?? '/'"), 'web deployment base can be set by VITE_BASE_PATH for project Pages');
 assert(viteConfigText.includes("base: isTauri ? './' : webBase"), 'Tauri stays relative while web builds can target /ms/');
 assert(viteConfigText.includes('chunkSizeWarningLimit: 2400'), 'Vite chunk warning budget is explicit for intentional lazy Rapier/ONNX browser chunks');
 assert(normalizedCodebaseCleanupPlan.includes('Button and command audit lock') && normalizedCodebaseCleanupPlan.includes('utils/appCommands.ts'), 'cleanup plan records the executable button/menu audit lock');
 assert(normalizedCodebaseCleanupPlan.includes('Warning fixes locked') && normalizedCodebaseCleanupPlan.includes('Rapier warning boundary'), 'cleanup plan records scoped warning fixes instead of broad suppression');
-assert(normalizedCodebaseCleanupPlan.includes('`App.tsx` | 1209') && normalizedCodebaseCleanupPlan.includes('Command keyboard binding, boot/cache lifecycle, project history, autosave/workspace persistence, and Character/Path/Foundry/Options/Assembly/Mechanism Design stage seams are extracted') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppOnnxBootstrap.ts` | 88') && normalizedCodebaseCleanupPlan.includes('`hooks/useProjectHistory.ts` | 98') && normalizedCodebaseCleanupPlan.includes('`hooks/useProjectAutosave.ts` | 23') && normalizedCodebaseCleanupPlan.includes('`utils/projectPersistence.ts` | 158'), 'cleanup plan records the current App.tsx hotspot and completed command/persistence/stage seams');
+assert(normalizedCodebaseCleanupPlan.includes('`App.tsx` | 1046') && normalizedCodebaseCleanupPlan.includes('Command keyboard binding, boot/cache lifecycle, project history, autosave/workspace persistence, project/session command actions, and Character/Path/Foundry/Options/Assembly/Mechanism Design stage seams are extracted') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppOnnxBootstrap.ts` | 88') && normalizedCodebaseCleanupPlan.includes('`hooks/useProjectHistory.ts` | 98') && normalizedCodebaseCleanupPlan.includes('`hooks/useProjectAutosave.ts` | 23') && normalizedCodebaseCleanupPlan.includes('`utils/projectPersistence.ts` | 158') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppProjectCommands.ts` | 292'), 'cleanup plan records the current App.tsx hotspot and completed command/persistence/stage seams');
 assert(normalizedCodebaseCleanupPlan.includes('`hooks/useAppCommandBindings.ts` | 36') && normalizedCodebaseCleanupPlan.includes('application keyboard shortcut binding owns latest-handler ref'), 'cleanup plan records the extracted keyboard command binding hook seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/ProgressBlock.tsx` | 84') && normalizedCodebaseCleanupPlan.includes('character import progress UI lives outside the app shell'), 'cleanup plan records the extracted character progress seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/ui/InspectorControls.tsx` | 70') && normalizedCodebaseCleanupPlan.includes('shared inspector sliders/toggles live outside the app shell'), 'cleanup plan records the extracted inspector controls seam');
@@ -276,7 +277,7 @@ APP_MENU_GROUPS.forEach(group => group.commandIds.forEach(id => assert.equal(com
 const appCommandSource = readFileSync(join(process.cwd(), 'App.tsx'), 'utf8');
 const appProjectHistoryHookText = readFileSync(join(process.cwd(), 'hooks', 'useProjectHistory.ts'), 'utf8');
 assert(appCommandSource.includes('useProjectHistory(createEmptyProject)') && !appCommandSource.includes('setProjectHistory') && !appCommandSource.includes('applyProjectAction(prev, action)') && appProjectHistoryHookText.includes('projectSelfCheck()') && appProjectHistoryHookText.includes('applyProjectAction') && appProjectHistoryHookText.includes('PROJECT_HISTORY_LIMIT') && appProjectHistoryHookText.includes('undoProject') && appProjectHistoryHookText.includes('redoProject'), 'App delegates ProjectState history, reducer dispatch, and undo/redo stack management to useProjectHistory');
-assert(appCommandSource.includes('satisfies AppCommandHandlerMap') && appCommandsSource.includes('export type AppCommandHandlerMap = Record<AppCommandId, () => void>'), 'App command handlers are type-exhaustive against AppCommandId through the shared command handler map type');
+assert(appProjectCommandsHookText.includes('satisfies AppCommandHandlerMap') && appCommandsSource.includes('export type AppCommandHandlerMap = Record<AppCommandId, () => void>'), 'App command handlers are type-exhaustive against AppCommandId through the shared command handler map type');
 const commandHandlerBlock =
   appCommandSource.match(/const commandHandlers = \{([\s\S]*?)\n\s*\} satisfies AppCommandHandlerMap;/)?.[1] ??
   appCommandHandlerSource.match(/\): AppCommandHandlerMap => \(\{([\s\S]*?)\n\}\);/)?.[1] ??
@@ -287,7 +288,7 @@ assert.deepEqual(
   [...commandIds].sort(),
   'every visible shell command has exactly one App.tsx handler'
 );
-assert(appCommandSource.includes('setShowAbout(true)'), 'About command opens a real modal instead of only writing status text');
+assert(appProjectCommandsHookText.includes('setShowAbout(true)'), 'About command opens a real modal instead of only writing status text');
 assert(!appCommandSource.includes('showDirectoryPicker'), 'browser UI omits fake output-folder selection until downloads can write there');
 const visibleUiSource = [
   'App.tsx',
@@ -2099,7 +2100,7 @@ assert(indexText.includes('--ms-font-sans') && indexText.includes('font-family: 
 assert(appText.includes('app-header-brand') && appText.includes('app-header-actions') && appText.includes('quick-toolbar'), 'top app bar separates brand, menus, and quick actions into compact zones');
 assert(indexText.includes('.app-header-brand') && indexText.includes('.app-header-actions') && indexText.includes('border-radius: 999px'), 'top app bar keeps the brand and current stage in one slick editor row');
 assert(!appText.includes('flex flex-col items-end gap-2'), 'top app bar does not stack menu and quick actions vertically');
-assert(appText.includes('useProjectAutosave(project)') && appText.includes('readAutosaveProject') && appText.includes('readWorkspaceLayoutSnapshot') && appText.includes('writeWorkspaceLayoutSnapshot') && appAutosaveHookText.includes('writeAutosaveSnapshot') && projectPersistenceText.includes('readStorageWithLegacy') && projectPersistenceText.includes('migrateStorageValue'), 'MotionSmith storage rename keeps legacy autosave/workspace migration hooks behind the persistence seam');
+assert(appText.includes('useProjectAutosave(project)') && appProjectCommandsHookText.includes('readAutosaveProject') && appProjectCommandsHookText.includes('readWorkspaceLayoutSnapshot') && appProjectCommandsHookText.includes('writeWorkspaceLayoutSnapshot') && appAutosaveHookText.includes('writeAutosaveSnapshot') && projectPersistenceText.includes('readStorageWithLegacy') && projectPersistenceText.includes('migrateStorageValue'), 'MotionSmith storage rename keeps legacy autosave/workspace migration hooks behind the persistence seam');
 assert(!appUiText.includes('MOTIONSMITH_VIDEO_URL'), 'welcome splash does not embed the old preview video');
 assert(appUiText.includes('getting-started-dialog') && appUiText.includes('getting-started-gallery'), 'Getting Started is an explicit compact starter dialog');
 assert(appUiText.includes('const [showGuided, setShowGuided] = useState(false)') && appUiText.includes('Start.') && appUiText.includes('Pick a project.'), 'Getting Started opens as starter choices and moves guided projects behind the explicit Guide tile');
@@ -2113,7 +2114,7 @@ assert(!appUiText.includes('Crank turns -> rocker swings') && !appUiText.include
 assert(!appUiText.includes('lesson-template-'), 'Getting Started does not use legacy lesson-template cards');
 assert(indexText.includes('.starter-thumb { width: 2.25rem; height: 2.25rem;'), 'Girl/Boy starter thumbnails stay compact');
 assert(appText.includes('useProjectHistory(createEmptyProject)') && appProjectHistoryHookText.includes('return { present: createInitialProject(), past: [], future: [] }'), 'App initializes an empty project through the ProjectState history hook instead of preloading a character');
-assert(appText.includes('setProject(createEmptyProject(), { resetHistory: true })'), 'New Project resets to an empty project instead of a starter character');
+assert(appProjectCommandsHookText.includes('setProject(createEmptyProject(), { resetHistory: true })'), 'New Project resets to an empty project instead of a starter character');
 assert(appText.includes('returnStage: "character"'), 'Accepted character loads stay in the Character tab instead of jumping to Path');
 assert(characterImportOverlaysText.includes('character-import-review') && characterSelectionText.includes('<CharacterImportStatusDock') && characterSelectionText.includes('reviewedProject={reviewedProject}') && characterSelectionText.includes('<CharacterImportReviewDialog') && characterImportOverlaysText.includes('showImportChecks = project.settings.debugVisuals'), 'Character imports preview the pending character and put approval in a centered overlay while checks stay dev-only');
 assert(appUiText.includes('Dev mode') && !appUiText.includes('Debug visuals'), 'Options expose debug overlays as Dev mode instead of novice-facing debug copy');

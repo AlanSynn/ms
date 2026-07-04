@@ -50,17 +50,12 @@ import {
   classroomLessonById,
   createDefaultMechanism,
   createEmptyProject,
-  createLessonProject,
   createProjectFromProcessed,
   loadProjectSnapshot,
-  createSampleProject,
   downloadText,
   handoffGate,
   mechanismWithGeneratedPath,
   replaceCharacterProject,
-  resetProjectToLessonBaseline,
-  serializeProject,
-  type ClassroomLessonId,
   uid,
   validatePath,
 } from "./utils/project";
@@ -68,19 +63,12 @@ import { processImageWithWebOnnx } from "./utils/webOnnx";
 import { validateForFabrication } from "./utils/fabrication";
 import { loadCharacterPackage } from "./utils/packageLoader";
 import { preferredMotionJointId } from "./utils/motion";
-import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT } from "./utils/viewport";
-import { type AppCommandHandlerMap } from "./utils/appCommands";
-import { createAppCommandHandlers } from "./utils/appCommandHandlers";
+import { DEFAULT_CANVAS_VIEWPORT } from "./utils/viewport";
 import { useAppCommandBindings } from "./hooks/useAppCommandBindings";
 import { useAppOnnxBootstrap } from "./hooks/useAppOnnxBootstrap";
 import { useProjectAutosave } from "./hooks/useProjectAutosave";
 import { useProjectHistory } from "./hooks/useProjectHistory";
-import {
-  projectSnapshotFileName,
-  readAutosaveProject,
-  readWorkspaceLayoutSnapshot,
-  writeWorkspaceLayoutSnapshot,
-} from "./utils/projectPersistence";
+import { useAppProjectCommands } from "./hooks/useAppProjectCommands";
 import {
   fitMechanismToTargetPath,
   fitRecommendedMechanismToSheet,
@@ -112,12 +100,6 @@ const STARTER_IMAGE_TEMPLATES: StarterImageTemplate[] = [
   },
 ];
 
-const isAppStage = (value: unknown): value is AppStage =>
-  typeof value === "string" && STAGES.some((stage) => stage.id === value);
-const projectHasUserWork = (project: ProjectState) =>
-  project.partOrder.length > 0 ||
-  Object.keys(project.paths).length > 0 ||
-  project.mechanisms.length > 0;
 const workflowStatusFor = (
   stage: AppStage,
   project: ProjectState,
@@ -643,169 +625,28 @@ const App: React.FC = () => {
     );
     setCommandStatus("Exported mechanism DXF");
   };
-  const downloadProjectSnapshot = (suffix: string, status: string) => {
-    downloadText(
-      projectSnapshotFileName(project.metadata.name, suffix),
-      serializeProject(project),
-    );
-    setCommandStatus(status);
-  };
-  const saveProject = () => downloadProjectSnapshot("", "Project saved");
-  const saveProjectAs = () =>
-    downloadProjectSnapshot(`-${Date.now()}`, "Project saved");
-  const exportProjectCopy = () =>
-    downloadProjectSnapshot("-copy", "Project copied");
-  const newProject = () => {
-    if (
-      projectHasUserWork(project) &&
-      !window.confirm("Discard current project and start new?")
-    ) {
-      setCommandStatus("Cancelled");
-      return;
-    }
-    setPendingCharacter(null);
-    setProject(createEmptyProject(), { resetHistory: true });
-    setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
-    setCommandStatus("New project");
-    setShowGettingStarted(false);
-    setStage("character");
-  };
-  const foundryPreviewFromProject = (lessonProject: ProjectState) => {
-    const mechanism = lessonProject.mechanisms[0];
-    return mechanism
-      ? { ...mechanism, id: "foundry-preview" }
-      : createDefaultMechanism("4bar", "foundry-preview");
-  };
-  const openClassroomLesson = (lessonId: ClassroomLessonId) => {
-    const lesson = classroomLessonById(lessonId);
-    const lessonProject = createLessonProject(lessonId);
-    setPendingCharacter(null);
-    setProject(lessonProject, { resetHistory: true });
-    setFoundry(foundryPreviewFromProject(lessonProject));
-    setAngle(0);
-    setIsPlaying(false);
-    setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
-    setShowGettingStarted(false);
-    setStage(lesson?.startStage ?? "character");
-    setCommandStatus(`${lesson?.outcome ?? lessonProject.metadata.name} ready`);
-  };
-  const resetLesson = () => {
-    const lesson = classroomLessonById(project.metadata.classroomLessonId);
-    const resetProject = resetProjectToLessonBaseline(project);
-    if (!lesson || !resetProject) {
-      setCommandStatus("No lesson");
-      return;
-    }
-    setPendingCharacter(null);
-    setProject(resetProject, { resetHistory: true });
-    setFoundry(foundryPreviewFromProject(resetProject));
-    setAngle(0);
-    setIsPlaying(false);
-    setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
-    setStage(lesson.startStage);
-    setCommandStatus("Lesson reset");
-  };
-  const recoverAutosave = () => {
-    try {
-      const recoveredProject = readAutosaveProject();
-      if (!recoveredProject) {
-        setCommandStatus("No autosave found");
-        return;
-      }
-      setProject(recoveredProject, { resetHistory: true });
-      setCommandStatus("Recovered browser autosave snapshot");
-      setStage("path");
-    } catch (error) {
-      setCommandStatus(
-        `Autosave recovery failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  };
-  const saveWorkspaceLayout = () => {
-    writeWorkspaceLayoutSnapshot({
+  const { commandHandlers, openClassroomLesson, openSampleProject } =
+    useAppProjectCommands({
+      project,
       stage,
-      viewport: canvasViewport,
-      toolbarVisible: project.settings.toolbarVisible,
-      partPanelVisible: project.settings.partPanelVisible,
+      canvasViewport,
+      setProject,
+      dispatch,
+      undoProjectHistory,
+      redoProjectHistory,
+      setStage,
+      setFoundry,
+      setAngle,
+      setIsPlaying,
+      setCanvasViewport,
+      setPendingCharacter,
+      setShowGettingStarted,
+      setShowAbout,
+      setShowShortcuts,
+      setCommandStatus,
+      openProjectPicker: () => projectInputRef.current?.click(),
+      goStage,
     });
-    setCommandStatus("Workspace layout saved");
-  };
-  const restoreWorkspaceLayout = () => {
-    try {
-      const layout = readWorkspaceLayoutSnapshot({
-        isAppStage,
-        currentToolbarVisible: project.settings.toolbarVisible,
-        currentPartPanelVisible: project.settings.partPanelVisible,
-      });
-      if (!layout) {
-        setCommandStatus("No workspace layout saved");
-        return;
-      }
-      if (layout.viewport) setCanvasViewport(layout.viewport);
-      if (layout.visibility) {
-        dispatch({
-          type: "update_settings",
-          settings: layout.visibility,
-        });
-      }
-      if (layout.stage) goStage(layout.stage);
-      setCommandStatus(
-        layout.warnings.length
-          ? `Workspace layout restored; ${layout.warnings.join("; ")}`
-          : "Workspace layout restored",
-      );
-    } catch (error) {
-      setCommandStatus(
-        `Workspace restore failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  };
-  const resetWorkspaceLayout = () => {
-    setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
-    dispatch({
-      type: "update_settings",
-      settings: { toolbarVisible: true, partPanelVisible: true },
-    });
-    setCommandStatus("Workspace layout reset");
-  };
-  const zoomCanvas = (factor: number) => {
-    const nextZoom = clampCanvasZoom(canvasViewport.zoom * factor);
-    setCanvasViewport((prev) => ({
-      ...prev,
-      zoom: clampCanvasZoom(prev.zoom * factor),
-    }));
-    setCommandStatus(`Canvas zoom ${Math.round(nextZoom * 100)}%`);
-  };
-  const fitCanvas = () => {
-    setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
-    setCommandStatus("Canvas fitted to sheet");
-  };
-  const undoProject = () => {
-    setCommandStatus(undoProjectHistory() ? "Undo applied" : "Nothing to undo");
-  };
-  const redoProject = () => {
-    setCommandStatus(redoProjectHistory() ? "Redo applied" : "Nothing to redo");
-  };
-  const aboutMotionSmith = () => setShowAbout(true);
-  const commandHandlers = createAppCommandHandlers({
-    newProject,
-    openProject: () => projectInputRef.current?.click(),
-    recoverAutosave,
-    saveProject,
-    saveProjectAs,
-    exportProjectCopy,
-    resetLesson,
-    undoProject,
-    redoProject,
-    zoomCanvas,
-    fitCanvas,
-    saveWorkspaceLayout,
-    restoreWorkspaceLayout,
-    resetWorkspaceLayout,
-    goStage,
-    openShortcuts: () => setShowShortcuts(true),
-    openAbout: aboutMotionSmith,
-  }) satisfies AppCommandHandlerMap;
   useAppCommandBindings({ commandHandlers, disabled: modalOpen });
   const themeClass =
     project.settings.theme === "dark"
@@ -912,7 +753,10 @@ const App: React.FC = () => {
                       }
                     />
                   </label>
-                  <button className="btn-secondary" onClick={saveProject}>
+                  <button
+                    className="btn-secondary"
+                    onClick={commandHandlers["project.save"]}
+                  >
                     <Download size={16} /> Snapshot
                   </button>
                   <button
@@ -962,7 +806,7 @@ const App: React.FC = () => {
                 onEditCharacter={editCharacterParts}
                 onSaveSkeleton={saveSkeleton}
                 activeClassroomLesson={activeClassroomLesson}
-                resetLesson={resetLesson}
+                resetLesson={commandHandlers["project.resetLesson"]}
                 goStage={goStage}
                 viewport={canvasViewport}
                 setViewport={setCanvasViewport}
@@ -1149,19 +993,12 @@ const App: React.FC = () => {
         <GettingStartedDialog
           starterTemplates={STARTER_IMAGE_TEMPLATES}
           guidedLessons={CLASSROOM_LESSONS}
-          onLesson={(lessonId) =>
-            openClassroomLesson(lessonId as ClassroomLessonId)
-          }
+          onLesson={openClassroomLesson}
           onStarterImage={(template) => {
             setShowGettingStarted(false);
             loadStarterImage(template);
           }}
-          onSample={() => {
-            setPendingCharacter(null);
-            setProject(createSampleProject(), { resetHistory: true });
-            setShowGettingStarted(false);
-            setStage("character");
-          }}
+          onSample={openSampleProject}
           onPackage={(files) => {
             setShowGettingStarted(false);
             importCharacterPackage(files);
