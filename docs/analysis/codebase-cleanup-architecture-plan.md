@@ -48,7 +48,8 @@ Measured on 2026-07-03.
 | `utils/foundryCamera.ts`                                    |   140 | Done: pure Foundry camera/projection seam shared by Foundry and Design previews. Keep deterministic; no DOM/storage side effects.                                                                                                                     |
 | `components/stages/foundry/MechanismLinkagePreview.tsx`     |   851 | Done: Foundry SVG mechanism preview leaf lives outside the app shell. Keep it behavior-identical; split internal shape helpers only after renderer contracts stay green.                                                                              |
 | `components/stages/foundry/foundryPreviewGeometry.ts`       |    23 | Done: fitted gear-center helper shared by SVG and Three previews. Keep it pure and deterministic so Foundry/Design share the same fitted axle positions.                                                                                              |
-| `components/stages/foundry/ThreeFoundryPreview.tsx`         |  2082 | Done: shared Foundry/Design Three renderer seam lives outside the app shell. Keep it behavior-identical; split renderer internals only behind contract/browser evidence.                                                                              |
+| `components/stages/foundry/ThreeFoundryPreview.tsx`         |  1947 | Done: shared Foundry/Design Three renderer seam lives outside the app shell. Keep it behavior-identical; split renderer internals only behind contract/browser evidence.                                                                              |
+| `components/stages/foundry/foundryRenderInventory.ts`       |   152 | Done: Foundry rendered inventory counts live outside the WebGL renderer. Keep it pure and backed by mechanism-reference/fabrication-required parts.                                                                                                    |
 | `components/stages/foundry/foundryPreviewStacks.ts`         |   475 | Done: Foundry pin-stack/z-order helper seam lives outside the app shell. Keep it pure and shared so SVG/Three/Design z-stack semantics do not drift.                                                                                                  |
 | `components/stages/foundry/MechanismFoundry.tsx`            |   931 | Done: Mechanism Foundry stage wrapper lives outside the app shell while still consuming shared Foundry renderer, fabrication, camera, and mechanism parameter contracts. Keep shrinking by leaf panes/adapters only.                                  |
 | `components/stages/foundry/FoundryCanvasPane.tsx`            |   531 | Done: Foundry center canvas owns Three preview, toolbar, overlay SVG, and pointer surfaces outside the stage wrapper. Keep it render-only; projection, sampling, and mutations stay in the stage/domain helpers.                                      |
@@ -81,6 +82,7 @@ The contract test now hashes a stable golden master for:
 - one mechanism snapshot plus the full mechanism snapshot set
 - toon scene projection
 - SVG and DXF export output
+- all mechanism Foundry render plans
 - fabrication stacks
 
 This is the refactor tripwire. Extraction-only work should keep these hashes stable. If a hash changes, stop and prove the behavior change is intentional before updating the expected value.
@@ -128,6 +130,17 @@ env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_WORKERS=2 ./node_modules/.b
 
 Use this gate for canvas-only movement. It proves the extracted `FoundryCanvasPane.tsx` still mounts the shared Three preview, toolbar state, pointer overlays, stage scroll boundaries, and end-to-end workflow routing.
 
+Latest Foundry renderer helper extraction evidence:
+
+```bash
+bun run test:contracts
+bun run build
+GIT_OPTIONAL_LOCKS=0 git -c core.fsmonitor=false diff --check
+env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_WORKERS=2 ./node_modules/.bin/playwright test tests/browser/workflow.spec.ts -g "Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking|Foundry supports CAD-style 3D camera presets and drag orbit|character → path → foundry → design → blueprint runs end-to-end in browser" --workers=2
+```
+
+Use this gate for pure `ThreeFoundryPreview.tsx` helper movement. The golden master now also hashes all mechanism Foundry render plans, so renderer extraction cannot silently drift fabrication-visible parts.
+
 ## Split order
 
 1. **Command and app shell seams**
@@ -154,7 +167,7 @@ Use this gate for canvas-only movement. It proves the extracted `FoundryCanvasPa
    - Done: `components/stages/options/Options.tsx` owns the Options stage wrapper outside `App.tsx`; Options still receives ProjectState/actions and does not own persistence or export rules.
    - Done: `components/stages/assembly/AssemblyGuide.tsx` owns the Assembly Guide stage wrapper outside `App.tsx`; Assembly still receives ProjectState/actions and shell playback state while recipe/stack derivation stays in shared utils.
    - Done: `components/stages/mechanism/MechanismDesign.tsx` owns only the Mechanism Design stage composition outside `App.tsx`; `DesignWorkflowPanel.tsx`, `DesignInspectorPanel.tsx`, and `DesignFoundryPreview.tsx` own the left pane, right pane, and shared Foundry preview adapter. Design still receives ProjectState/actions and does not own mechanism rules.
-   - Next lowest-risk stage seam: split `ThreeFoundryPreview.tsx` internals only behind renderer contracts, starting with pure geometry/material helpers. Keep shared fabrication/physics contracts centralized.
+   - Next lowest-risk stage seam: continue splitting `ThreeFoundryPreview.tsx` internals only behind renderer contracts, starting with pure telemetry/attribute builders, then shared geometry/material/cache helpers. Keep shared fabrication/physics contracts centralized.
 
 3. **Domain helpers**
    - Done: mechanism fitting/recommendations live in `utils/mechanismRecommendations.ts`.

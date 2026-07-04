@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type {
   MechanismConfig,
-  MechanismType,
   PhysicalKitSettings,
   Point,
 } from "../../../types";
@@ -45,9 +44,7 @@ import {
   loadRapierPhysicsKernel,
   physicsKernelErrorMessage,
 } from "../../../utils/physicsKernel";
-import {
-  WEBGL_PIXEL_RATIO_CAP,
-} from "../../../utils/viewport";
+import { WEBGL_PIXEL_RATIO_CAP } from "../../../utils/viewport";
 import {
   VIEWER3D_CONTRACT_VERSION,
   createViewer3DContract,
@@ -63,9 +60,8 @@ import {
   type FoundryOverlaySize,
 } from "../../../utils/foundryCamera";
 import { fitMechanismSimulation } from "../../../utils/mechanismPreview";
-import { mechanismRequiredParts } from "../../../utils/project";
-import { referenceRequiredPartsHoleCount } from "../../../utils/mechanismReference";
 import { fittedGearTrainCenters } from "./foundryPreviewGeometry";
+import { foundryRenderedInventory } from "./foundryRenderInventory";
 import {
   foundryAssemblyPinContract,
   foundryAssemblyPinPoints,
@@ -119,137 +115,6 @@ type ThreeFoundryPreviewProps = {
   onWheel: React.WheelEventHandler<HTMLDivElement>;
   onProjectionSizeChange: (size: FoundryOverlaySize) => void;
   children: React.ReactNode;
-};
-
-const foundryRenderedInventory = (type: MechanismType) => {
-  const fallback = {
-    "4bar": {
-      parts: 5,
-      holes: 15,
-      slots: 0,
-      gears: 0,
-      racks: 0,
-      cams: 0,
-      followers: 0,
-      endStops: 0,
-    },
-    piston: {
-      parts: 6,
-      holes: 15,
-      slots: 1,
-      gears: 0,
-      racks: 0,
-      cams: 0,
-      followers: 0,
-      endStops: 0,
-    },
-    yoke: {
-      parts: 7,
-      holes: 15,
-      slots: 2,
-      gears: 0,
-      racks: 0,
-      cams: 0,
-      followers: 0,
-      endStops: 0,
-    },
-    "quick-return": {
-      parts: 6,
-      holes: 15,
-      slots: 1,
-      gears: 0,
-      racks: 0,
-      cams: 0,
-      followers: 0,
-      endStops: 0,
-    },
-    "5bar": {
-      parts: 7,
-      holes: 25,
-      slots: 0,
-      gears: 0,
-      racks: 0,
-      cams: 0,
-      followers: 0,
-      endStops: 0,
-    },
-    "6bar": {
-      parts: 7,
-      holes: 25,
-      slots: 0,
-      gears: 0,
-      racks: 0,
-      cams: 0,
-      followers: 0,
-      endStops: 0,
-    },
-    cam: {
-      parts: 8,
-      holes: 16,
-      slots: 1,
-      gears: 0,
-      racks: 0,
-      cams: 1,
-      followers: 1,
-      endStops: 0,
-    },
-    "rack-pinion": {
-      parts: 10,
-      holes: 20,
-      slots: 1,
-      gears: 1,
-      racks: 1,
-      cams: 0,
-      followers: 0,
-      endStops: 2,
-    },
-    gear: {
-      parts: 8,
-      holes: 29,
-      slots: 0,
-      gears: 2,
-      racks: 0,
-      cams: 0,
-      followers: 0,
-      endStops: 0,
-    },
-    gear_linkage: {
-      parts: 9,
-      holes: 31,
-      slots: 0,
-      gears: 2,
-      racks: 0,
-      cams: 0,
-      followers: 0,
-      endStops: 0,
-    },
-    planetary_gear: {
-      parts: 7,
-      holes: 18,
-      slots: 0,
-      gears: 3,
-      racks: 0,
-      cams: 0,
-      followers: 0,
-      endStops: 0,
-    },
-    crank: {
-      parts: 5,
-      holes: 15,
-      slots: 0,
-      gears: 0,
-      racks: 0,
-      cams: 0,
-      followers: 0,
-      endStops: 0,
-    },
-  }[type];
-  const referenceHoleCount = referenceRequiredPartsHoleCount(
-    mechanismRequiredParts({ type }),
-  );
-  return referenceHoleCount
-    ? { ...fallback, holes: referenceHoleCount }
-    : fallback;
 };
 
 const disposeThreeObject = (object: THREE.Object3D) =>
