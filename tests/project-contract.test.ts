@@ -166,13 +166,17 @@ assert(brandStaticText.includes('MotionSmith'), 'MotionSmith appears across stat
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')).name, 'motionsmith-character-motion-designer', 'package name uses the MotionSmith slug');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'metadata.json'), 'utf8')).name, 'MotionSmith: Character Motion Designer', 'metadata product name uses MotionSmith');
 assert(readFileSync(join(process.cwd(), 'index.html'), 'utf8').includes('<title>MotionSmith - Mechanical Character Designer</title>'), 'HTML title uses MotionSmith');
+const appCommandBindingsHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppCommandBindings.ts'), 'utf8');
+const appCommandsSource = readFileSync(join(process.cwd(), 'utils/appCommands.ts'), 'utf8');
+const appCommandHandlerSource = readFileSync(join(process.cwd(), 'utils/appCommandHandlers.ts'), 'utf8');
 const viteConfigText = readFileSync(join(process.cwd(), 'vite.config.ts'), 'utf8');
 assert(viteConfigText.includes("const webBase = process.env.VITE_BASE_PATH ?? '/'"), 'web deployment base can be set by VITE_BASE_PATH for project Pages');
 assert(viteConfigText.includes("base: isTauri ? './' : webBase"), 'Tauri stays relative while web builds can target /ms/');
 assert(viteConfigText.includes('chunkSizeWarningLimit: 2400'), 'Vite chunk warning budget is explicit for intentional lazy Rapier/ONNX browser chunks');
 assert(normalizedCodebaseCleanupPlan.includes('Button and command audit lock') && normalizedCodebaseCleanupPlan.includes('utils/appCommands.ts'), 'cleanup plan records the executable button/menu audit lock');
 assert(normalizedCodebaseCleanupPlan.includes('Warning fixes locked') && normalizedCodebaseCleanupPlan.includes('Rapier warning boundary'), 'cleanup plan records scoped warning fixes instead of broad suppression');
-assert(normalizedCodebaseCleanupPlan.includes('`App.tsx` | 1463') && normalizedCodebaseCleanupPlan.includes('Options/Assembly/Mechanism Design stage seams are extracted'), 'cleanup plan records the current App.tsx hotspot and completed stage seams');
+assert(normalizedCodebaseCleanupPlan.includes('`App.tsx` | 1442') && normalizedCodebaseCleanupPlan.includes('Command keyboard binding and Character/Path/Foundry/Options/Assembly/Mechanism Design stage seams are extracted'), 'cleanup plan records the current App.tsx hotspot and completed command/stage seams');
+assert(normalizedCodebaseCleanupPlan.includes('`hooks/useAppCommandBindings.ts` | 34') && normalizedCodebaseCleanupPlan.includes('application keyboard shortcut binding owns latest-handler ref'), 'cleanup plan records the extracted keyboard command binding hook seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/ProgressBlock.tsx` | 84') && normalizedCodebaseCleanupPlan.includes('character import progress UI lives outside the app shell'), 'cleanup plan records the extracted character progress seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/ui/InspectorControls.tsx` | 70') && normalizedCodebaseCleanupPlan.includes('shared inspector sliders/toggles live outside the app shell'), 'cleanup plan records the extracted inspector controls seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/PartInspector.tsx` | 276') && normalizedCodebaseCleanupPlan.includes('selected-part inspector owns part toggles'), 'cleanup plan records the extracted part inspector seam');
@@ -205,6 +209,14 @@ assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/Foundr
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
 assert(readFileSync(join(process.cwd(), 'App.tsx'), 'utf8').includes('motionsmith.autosave') && readFileSync(join(process.cwd(), 'App.tsx'), 'utf8').includes('motionsmith.workspace'), 'local storage namespace uses the MotionSmith slug for persistent state');
 assert.deepEqual(validateAppCommandRegistry(), [], 'application command registry is internally consistent');
+assert(
+  readFileSync(join(process.cwd(), 'App.tsx'), 'utf8').includes('useAppCommandBindings({ commandHandlers, disabled: modalOpen })') &&
+  appCommandsSource.includes('export type AppCommandHandlerMap = Record<AppCommandId, () => void>') &&
+  appCommandBindingsHookText.includes('commandIdForKeyboardEvent') &&
+  appCommandBindingsHookText.includes('isTypingShortcutTarget') &&
+  appCommandBindingsHookText.includes('commandHandlersRef.current[commandId]?.()'),
+  'App delegates global keyboard command binding to a hook without changing shortcut dispatch guards'
+);
 const commandIds = new Set(APP_COMMANDS.map(command => command.id));
 const expectedAppCommandIds = [
   'project.new',
@@ -261,10 +273,9 @@ assert.equal(commandIdForKeyboardEvent({ key: '5', ctrlKey: false, metaKey: fals
 assert(!APP_COMMANDS.some(command => /exit|updates/i.test(command.label)), 'browser menu omits old placeholder Exit and Check for Updates items');
 APP_MENU_GROUPS.forEach(group => group.commandIds.forEach(id => assert.equal(commandById(id).menu, group.id, `${id} belongs to its declared menu group`)));
 const appCommandSource = readFileSync(join(process.cwd(), 'App.tsx'), 'utf8');
-assert(appCommandSource.includes('satisfies Record<AppCommandId, () => void>'), 'App command handlers are type-exhaustive against AppCommandId');
-const appCommandHandlerSource = readFileSync(join(process.cwd(), 'utils/appCommandHandlers.ts'), 'utf8');
+assert(appCommandSource.includes('satisfies AppCommandHandlerMap') && appCommandsSource.includes('export type AppCommandHandlerMap = Record<AppCommandId, () => void>'), 'App command handlers are type-exhaustive against AppCommandId through the shared command handler map type');
 const commandHandlerBlock =
-  appCommandSource.match(/const commandHandlers = \{([\s\S]*?)\n\s*\} satisfies Record<AppCommandId, \(\) => void>;/)?.[1] ??
+  appCommandSource.match(/const commandHandlers = \{([\s\S]*?)\n\s*\} satisfies AppCommandHandlerMap;/)?.[1] ??
   appCommandHandlerSource.match(/\): AppCommandHandlerMap => \(\{([\s\S]*?)\n\}\);/)?.[1] ??
   '';
 assert(commandHandlerBlock, 'App shell exposes one typed command handler map');

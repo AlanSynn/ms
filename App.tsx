@@ -83,10 +83,10 @@ import {
   normalizeCanvasViewport,
 } from "./utils/viewport";
 import {
-  commandIdForKeyboardEvent,
-  type AppCommandId,
+  type AppCommandHandlerMap,
 } from "./utils/appCommands";
 import { createAppCommandHandlers } from "./utils/appCommandHandlers";
+import { useAppCommandBindings } from "./hooks/useAppCommandBindings";
 import {
   fitMechanismToTargetPath,
   fitRecommendedMechanismToSheet,
@@ -246,11 +246,6 @@ const projectFileStem = (name: string) =>
   (name.trim() || "MotionSmith-project")
     .replace(/[^a-z0-9._-]+/gi, "-")
     .replace(/^-+|-+$/g, "") || "MotionSmith-project";
-const isTypingShortcutTarget = (target: EventTarget | null) =>
-  target instanceof HTMLElement &&
-  (target.isContentEditable ||
-    ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
-
 const App: React.FC = () => {
   const [projectHistory, setProjectHistory] = useState<ProjectHistoryState>(
     () => {
@@ -314,10 +309,6 @@ const App: React.FC = () => {
   const projectInputRef = useRef<HTMLInputElement>(null);
   const latestProjectRef = useRef<ProjectState | null>(null);
   const appShellRef = useRef<HTMLDivElement>(null);
-  const commandHandlersRef = useRef<Record<AppCommandId, () => void> | null>(
-    null,
-  );
-
   useEffect(() => {
     let active = true;
     let bootTimer: number | undefined;
@@ -1047,20 +1038,8 @@ const App: React.FC = () => {
     goStage,
     openShortcuts: () => setShowShortcuts(true),
     openAbout: aboutMotionSmith,
-  }) satisfies Record<AppCommandId, () => void>;
-  commandHandlersRef.current = commandHandlers;
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (modalOpen) return;
-      if (isTypingShortcutTarget(event.target)) return;
-      const commandId = commandIdForKeyboardEvent(event);
-      if (!commandId) return;
-      event.preventDefault();
-      commandHandlersRef.current?.[commandId]?.();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [modalOpen]);
+  }) satisfies AppCommandHandlerMap;
+  useAppCommandBindings({ commandHandlers, disabled: modalOpen });
   const themeClass =
     project.settings.theme === "dark"
       ? "bg-slate-950 text-slate-100"

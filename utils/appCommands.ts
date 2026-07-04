@@ -47,6 +47,7 @@ const APP_COMMAND_DEFINITIONS = [
 ] as const satisfies readonly AppCommandSpec[];
 
 export type AppCommandId = typeof APP_COMMAND_DEFINITIONS[number]['id'];
+export type AppCommandHandlerMap = Record<AppCommandId, () => void>;
 export type AppCommand = AppCommandSpec & { id: AppCommandId };
 export const APP_COMMANDS = APP_COMMAND_DEFINITIONS as readonly AppCommand[];
 

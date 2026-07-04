@@ -27,7 +27,8 @@ Measured on 2026-07-03.
 
 | File                                                        | Lines | Decision                                                                                                                                                                                                                                              |
 | ----------------------------------------------------------- | ----: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `App.tsx`                                                   |  1463 | First split continues. Command/Character/Path/Foundry/Options/Assembly/Mechanism Design stage seams are extracted; keep shrinking by behavior-preserving stage seams only. No redesign mixed into extraction.                                         |
+| `App.tsx`                                                   |  1442 | First split continues. Command keyboard binding and Character/Path/Foundry/Options/Assembly/Mechanism Design stage seams are extracted; keep shrinking by behavior-preserving seams only. No redesign mixed into extraction.                         |
+| `hooks/useAppCommandBindings.ts`                            |    34 | Done: application keyboard shortcut binding owns latest-handler ref, typing-target guard, and global keydown dispatch outside App shell. Keep it hook-only; command registry/handler creation stay in utils.                                           |
 | `components/stages/character/ProgressBlock.tsx`             |    84 | Done: character import progress UI lives outside the app shell. Keep it presentation-only; ONNX/import state remains canonical `ProjectState.processing`.                                                                                             |
 | `components/ui/InspectorControls.tsx`                       |    70 | Done: shared inspector sliders/toggles live outside the app shell. Keep them presentation-only; stage/domain handlers own state mutation.                                                                                                             |
 | `components/stages/character/PartInspector.tsx`             |   276 | Done: selected-part inspector owns part toggles, cut controls, and artwork/transform fields outside the app shell. Keep it dispatch-only; no parallel part state except transient cut selection.                                                      |
@@ -183,6 +184,7 @@ Use this gate when changing shared Three cache/disposal/pixel-ratio helpers. It 
 1. **Command and app shell seams**
    - Keep `AppShell` rendering and command registry separate from app-state mutation.
    - Done: `utils/appCommandHandlers.ts` owns the typed command handler factory that receives state setters/actions and stays locked by the command contract.
+   - Done: `hooks/useAppCommandBindings.ts` owns global keyboard command binding, modal disable, latest-handler ref, and typing-target shortcut bypass outside `App.tsx`.
    - Done: `utils/foundryCamera.ts` owns deterministic Foundry camera presets, clamp/project/unproject helpers, and shared overlay sizing for Foundry and Design previews.
    - Done: `utils/mechanismRecommendations.ts` owns fabrication-gated recommendation fitting and fallback logic outside the app shell.
 

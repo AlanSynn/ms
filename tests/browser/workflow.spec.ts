@@ -2672,6 +2672,21 @@ test('Command menu and shared canvas zoom persist across workflow stages', async
   await expect.poll(async () => page.getByTestId('canvas-zoom-readout').textContent(), { message: 'shifted plus zoom shortcut updates the shared canvas' }).not.toBe(zoomBeforeShiftPlus);
   await page.keyboard.press('Control+=');
   await expect(page.getByTestId('status-bar')).toContainText(/Canvas zoom/);
+  await page.evaluate(() => {
+    const input = document.createElement('input');
+    input.setAttribute('data-testid', 'shortcut-typing-guard-input');
+    input.style.position = 'fixed';
+    input.style.left = '16px';
+    input.style.top = '16px';
+    document.body.append(input);
+  });
+  const typingGuardInput = page.getByTestId('shortcut-typing-guard-input');
+  await typingGuardInput.focus();
+  await page.keyboard.press('Alt+5');
+  await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
+  await typingGuardInput.press('a');
+  await expect(typingGuardInput).toHaveValue('a');
+  await page.evaluate(() => document.querySelector('[data-testid="shortcut-typing-guard-input"]')?.remove());
   await page.keyboard.press('Alt+5');
   await expect(page.getByRole('heading', { name: 'Blueprint' })).toBeVisible();
 });

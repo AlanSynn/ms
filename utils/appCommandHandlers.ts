@@ -1,7 +1,5 @@
 import type { AppStage } from "../types";
-import type { AppCommandId } from "./appCommands";
-
-type AppCommandHandlerMap = Record<AppCommandId, () => void>;
+import type { AppCommandHandlerMap } from "./appCommands";
 
 type CreateAppCommandHandlersOptions = {
   newProject: () => void;
