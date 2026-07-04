@@ -170,7 +170,7 @@ assert(viteConfigText.includes("base: isTauri ? './' : webBase"), 'Tauri stays r
 assert(viteConfigText.includes('chunkSizeWarningLimit: 2400'), 'Vite chunk warning budget is explicit for intentional lazy Rapier/ONNX browser chunks');
 assert(normalizedCodebaseCleanupPlan.includes('Button and command audit lock') && normalizedCodebaseCleanupPlan.includes('utils/appCommands.ts'), 'cleanup plan records the executable button/menu audit lock');
 assert(normalizedCodebaseCleanupPlan.includes('Warning fixes locked') && normalizedCodebaseCleanupPlan.includes('Rapier warning boundary'), 'cleanup plan records scoped warning fixes instead of broad suppression');
-assert(normalizedCodebaseCleanupPlan.includes('`App.tsx` | 4839') && normalizedCodebaseCleanupPlan.includes('shared Foundry/Design Three preview seams are extracted'), 'cleanup plan records the current App.tsx hotspot and completed Foundry renderer seams');
+assert(normalizedCodebaseCleanupPlan.includes('`App.tsx` | 3321') && normalizedCodebaseCleanupPlan.includes('MechanismFoundry wrapper seams are extracted'), 'cleanup plan records the current App.tsx hotspot and completed Foundry stage seams');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/ProgressBlock.tsx` | 84') && normalizedCodebaseCleanupPlan.includes('character import progress UI lives outside the app shell'), 'cleanup plan records the extracted character progress seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/ui/InspectorControls.tsx` | 70') && normalizedCodebaseCleanupPlan.includes('shared inspector sliders/toggles live outside the app shell'), 'cleanup plan records the extracted inspector controls seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/PartInspector.tsx` | 276') && normalizedCodebaseCleanupPlan.includes('selected-part inspector owns part toggles'), 'cleanup plan records the extracted part inspector seam');
@@ -192,6 +192,7 @@ assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/Mechan
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/foundryPreviewGeometry.ts` | 23') && normalizedCodebaseCleanupPlan.includes('fitted gear-center helper shared by SVG and Three previews'), 'cleanup plan records the shared Foundry preview geometry helper seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/ThreeFoundryPreview.tsx` | 2082') && normalizedCodebaseCleanupPlan.includes('shared Foundry/Design Three renderer seam lives outside the app shell'), 'cleanup plan records the extracted shared Foundry Three renderer seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/foundryPreviewStacks.ts` | 475') && normalizedCodebaseCleanupPlan.includes('Foundry pin-stack/z-order helper seam lives outside the app shell'), 'cleanup plan records the extracted Foundry pin-stack helper seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/MechanismFoundry.tsx` | 1571') && normalizedCodebaseCleanupPlan.includes('Mechanism Foundry stage wrapper lives outside the app shell'), 'cleanup plan records the extracted MechanismFoundry stage seam');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
 assert(readFileSync(join(process.cwd(), 'App.tsx'), 'utf8').includes('motionsmith.autosave') && readFileSync(join(process.cwd(), 'App.tsx'), 'utf8').includes('motionsmith.workspace'), 'local storage namespace uses the MotionSmith slug for persistent state');
 assert.deepEqual(validateAppCommandRegistry(), [], 'application command registry is internally consistent');
@@ -1802,7 +1803,9 @@ const mechanismLinkagePreviewText = readFileSync(join(process.cwd(), 'components
 const foundryPreviewGeometryText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryPreviewGeometry.ts'), 'utf8');
 const threeFoundryPreviewText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'ThreeFoundryPreview.tsx'), 'utf8');
 const foundryPreviewStacksText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryPreviewStacks.ts'), 'utf8');
-const foundry3dText = `${threeFoundryPreviewText}
+const mechanismFoundryText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'MechanismFoundry.tsx'), 'utf8');
+const foundry3dText = `${mechanismFoundryText}
+${threeFoundryPreviewText}
 ${foundryPreviewStacksText}`;
 const appShellText = readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8');
 const appUiText = `${appText}
@@ -1811,7 +1814,8 @@ ${characterImportControlsText}
 ${characterSelectionText}`;
 const typesText = readFileSync(join(process.cwd(), 'types.ts'), 'utf8');
 const indexText = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
-assert(appText.includes('<MechanismLinkagePreview') && mechanismLinkagePreviewText.includes('export const MechanismLinkagePreview') && foundryPreviewGeometryText.includes('export const fittedGearTrainCenters'), 'App.tsx delegates 2D Foundry SVG preview to extracted foundry renderer seam');
+assert(appText.includes('<MechanismFoundry') && !appText.includes('const MechanismFoundry = ({') && mechanismFoundryText.includes('export const MechanismFoundry'), 'App.tsx delegates the Mechanism Foundry stage to an extracted stage seam');
+assert(mechanismFoundryText.includes('<MechanismLinkagePreview') && mechanismLinkagePreviewText.includes('export const MechanismLinkagePreview') && foundryPreviewGeometryText.includes('export const fittedGearTrainCenters'), 'MechanismFoundry delegates 2D Foundry SVG preview to extracted foundry renderer seam');
 assert(canvasText.includes('fabricationGearPathD'), '2D canvas gear rendering uses shared fabrication gear geometry');
 assert(canvasText.includes('data-reference-topology={referenceTopologySummary(m.type)}'), '2D design canvas exposes mechanism-reference topology telemetry');
 assert(canvasText.includes('data-reference-coord-roles={coordRoleSummary}'), '2D design canvas exposes mechanism-reference coordinate role telemetry');
@@ -1826,10 +1830,10 @@ assert(foundry3dText.includes('/planet|G3|3-space/i'), 'Foundry 3D planetary ren
 assert(foundry3dText.includes('board-side>S10-spacer>gear>fastener-head'), 'Foundry 3D gear train preview documents lower-z board-side gear axle ordering');
 assert(foundry3dText.includes('S10<gear<fastener'), 'Foundry 3D gear train preview exposes the runtime lower-z S10, gear, fastener z-order contract');
 assert(foundry3dText.includes('data-three-pin-stack-clearance-contract="local-spacers-fill-adjacent-z-gaps"') && foundry3dText.includes('FABRICATION_RENDER_MIN_CLEARANCE / 2'), 'Foundry local spacer validation fills board-to-part and part-to-part z gaps instead of allowing floating full-depth washers');
-assert(appText.includes('foundry-parametric-editor') && appText.includes('design-parametric-editor'), 'Foundry and Design both mount the same compact parametric mechanism editor');
+assert(mechanismFoundryText.includes('foundry-parametric-editor') && appText.includes('design-parametric-editor'), 'Foundry and Design both mount the same compact parametric mechanism editor');
 assert(mechanismParametricEditorText.includes('Drive gear size') && mechanismParametricEditorText.includes('Output gear size') && mechanismParametricEditorText.includes('Paired link length'), 'parametric editor exposes gear and linkage fabrication selectors instead of hidden generic numbers');
-assert(appText.includes('<MechanismParametricEditor') && mechanismParametricEditorText.includes('gearTrainPitchRadii') && mechanismParametricEditorText.includes('defaultCamProfileSamples'), 'App.tsx delegates compact parametric gear/link/cam controls to a mechanism stage seam');
-assert(appText.includes('MECHANISM_PARAM_META') && mechanismParamPolicyText.includes('shouldShowMechanismParam') && mechanismParamPolicyText.includes('clampMechanismParam'), 'App.tsx delegates legacy numeric mechanism parameter policy to a pure mechanism stage helper');
+assert(mechanismFoundryText.includes('<MechanismParametricEditor') && appText.includes('<MechanismParametricEditor') && mechanismParametricEditorText.includes('gearTrainPitchRadii') && mechanismParametricEditorText.includes('defaultCamProfileSamples'), 'Foundry and Design delegate compact parametric gear/link/cam controls to a mechanism stage seam');
+assert(mechanismFoundryText.includes('MECHANISM_PARAM_META') && appText.includes('MECHANISM_PARAM_META') && mechanismParamPolicyText.includes('shouldShowMechanismParam') && mechanismParamPolicyText.includes('clampMechanismParam'), 'Foundry and Design delegate legacy numeric mechanism parameter policy to a pure mechanism stage helper');
 assert(foundryPreviewGeometryText.includes('export const fittedGearTrainCenters') && foundry3dText.includes('pin-stacks-use-rendered-gear-centers'), 'Foundry 3D gear plates, axles, and spacer stacks share fitted preview gear centers instead of raw mechanism coordinates');
 assert(foundry3dText.includes('gearTrainMeshPhaseDegAt') && foundry3dText.includes('alternating-three-quarter-tooth-gap-phase'), 'Foundry 3D gear rendering still exposes mesh phase helpers for inserted idler chains');
 assert(physicsSessionText.includes('velocityBetween') && physicsSessionText.includes('forceFromAcceleration'), 'Foundry force/velocity overlays are kinematic estimates, not hidden dynamic rigid-body claims');
@@ -1846,8 +1850,8 @@ assert(threePreviewText.includes('sharedGeometryCache') && threePreviewText.incl
 assert(!threePreviewText.includes('scene.traverse(child =>'), '3D puppet preview does not traverse the whole scene every animation frame for telemetry');
 assert(threePreviewText.includes("const pinSites = mechanism.type === 'gear'") && threePreviewText.includes('boardToMovingZ(zDriverGear)') && !threePreviewText.includes('[state.p1, state.p2, state.j1, state.j2, state.aux, state.effector].forEach'), '3D puppet mechanism pins use per-site z spans instead of one global pin tower through empty planes');
 assert(appText.includes('const DesignFoundryPreview =') && appText.includes('data-testid="design-shared-foundry-preview"'), 'Mechanism Design owns a thin Foundry preview adapter instead of a separate mechanism renderer');
-assert((appText.match(/<ThreeFoundryPreview/g) ?? []).length >= 2, 'Foundry and Mechanism Design both mount ThreeFoundryPreview');
-assert(appText.includes('data-renderer-source="ThreeFoundryPreview"') && appText.includes('data-shared-with="foundry-preview"'), 'Mechanism Design advertises that its mechanism view is shared with Foundry');
+assert(((appText + mechanismFoundryText).match(/<ThreeFoundryPreview/g) ?? []).length >= 2, 'Foundry and Mechanism Design both mount ThreeFoundryPreview');
+assert(appText.includes('data-renderer-source="ThreeFoundryPreview"') && appText.includes('data-shared-with="foundry-preview"') && mechanismFoundryText.includes('<ThreeFoundryPreview'), 'Mechanism Design advertises that its mechanism view is shared with Foundry while Foundry mounts the same preview component');
 assert(appText.includes('fitMechanismSimulationWithContext(designMechanism, angle, fitContext)') && appText.includes('buildFoundryPhysicsOverlay('), 'Mechanism Design uses the same Foundry simulation fit and physics overlay path');
 assert(foundry3dText.includes('data-three-stack-source') && appText.includes('Design explode stack'), 'Mechanism Design exposes Foundry fabrication stack provenance and explode controls for browser verification');
 assert(!appText.includes('<Canvas project={project} config={mechanismConfig}'), 'Mechanism Design no longer mounts the legacy 2D design canvas mechanism renderer');
@@ -1876,7 +1880,7 @@ assert(appText.includes('const showsWorkspacePlayer =') && appText.includes('edi
 assert(appUiText.includes('workspace-player-prev-step') && appUiText.includes('workspace-player-next-step') && appUiText.includes('Assembly scrubber'), 'shared playback dock owns Assembly previous/next step controls and scrubber');
 assert(!appText.includes('data-testid="design-foundry-playback-hud"'), 'Mechanism Design uses the shared workspace player instead of a duplicate local playback HUD');
 assert(foundry3dText.includes('FOUNDRY_ANIMATION_COMMIT_MS') && foundry3dText.includes('data-three-animation-commit-ms'), 'Foundry exposes a bounded animation commit budget for browser perf tests');
-assert(appText.includes('time - (elapsed % FOUNDRY_ANIMATION_COMMIT_MS)'), 'Foundry playback carries requestAnimationFrame remainder instead of dropping animation time under load');
+assert(foundry3dText.includes('time - (elapsed % FOUNDRY_ANIMATION_COMMIT_MS)'), 'Foundry playback carries requestAnimationFrame remainder instead of dropping animation time under load');
 assert(foundry3dText.includes("scene.remove(old)") && foundry3dText.includes("disposeThreeObject(old)"), 'Foundry disposes noncached dynamic resources when replacing animation groups');
 assert(foundry3dText.includes('geometryCacheRef') && foundry3dText.includes('materialCacheRef'), 'Foundry caches reusable Three geometry/material resources during playback');
 assert(foundry3dText.includes('foundryCached') && foundry3dText.includes('data-three-geometry-cache-size'), 'Foundry tags cached resources and exposes cache size for browser perf tests');
@@ -1884,9 +1888,9 @@ assert(foundry3dText.includes('const addPath = (points: Point[], z: number, mat:
 assert(mechanismPreviewText.includes('sweepBounds') && foundry3dText.includes('data-three-fit-bounds=\"phase-invariant-sweep\"'), 'Foundry fitting bounds are sampled in the shared preview utility instead of jittering per animation frame');
 assert(foundry3dText.includes('data-three-static-grid-mode=\"persistent-scene-layer\"'), 'Foundry grid and plane live in a persistent scene layer, not the per-frame dynamic group');
 assert(mechanismPreviewText.includes('export const fitMechanismSimulation'), 'Foundry fitting/sweep simulation lives in the mechanism preview utility, not as stage-local UI code');
-assert(mechanismPreviewText.includes('createMechanismFitContext') && appText.includes('createMechanismFitContext(landedFoundry, 360, 240, 96)'), 'Foundry caches phase-invariant fit bounds instead of resampling the sweep every animation tick');
-assert(appText.includes('buildFoundryPhysicsOverlay') && physicsSessionText.includes('export const buildFoundryPhysicsOverlay'), 'Foundry force/velocity/constraint overlay math lives in PhysicsSession, not the React stage');
-assert(appText.includes('const range = useMemo(') && appText.includes('() => sampleFeasibleRange(landedFoundry)') && appText.includes('[landedFoundry]'), 'Foundry feasible-range sampling is memoized by mechanism, not re-run on every animation render');
+assert(mechanismPreviewText.includes('createMechanismFitContext') && foundry3dText.includes('createMechanismFitContext(landedFoundry, 360, 240, 96)'), 'Foundry caches phase-invariant fit bounds instead of resampling the sweep every animation tick');
+assert(foundry3dText.includes('buildFoundryPhysicsOverlay') && physicsSessionText.includes('export const buildFoundryPhysicsOverlay'), 'Foundry force/velocity/constraint overlay math lives in PhysicsSession, not the React stage');
+assert(foundry3dText.includes('const range = useMemo(') && foundry3dText.includes('() => sampleFeasibleRange(landedFoundry)') && foundry3dText.includes('[landedFoundry]'), 'Foundry feasible-range sampling is memoized by mechanism, not re-run on every animation render');
 assert(viewportText.includes('WEBGL_PIXEL_RATIO_CAP') && foundry3dText.includes('WEBGL_PIXEL_RATIO_CAP') && threePreviewText.includes('WEBGL_PIXEL_RATIO_CAP'), 'WebGL renderer pixel ratio cap is shared across Foundry and puppet previews');
 assert(threePreviewText.includes("const PUPPET_CAMERA_PRESETS: Viewer3DCameraPreset[] = ['front', 'iso']"), 'puppet viewer toolbar exposes only the fixed 2D and orbitable 3D modes');
 assert(threePreviewText.includes('onWheel={handleViewerWheel}') && threePreviewText.includes('data-camera-yaw'), 'puppet 3D canvas exposes direct wheel zoom and orbit state for browser verification');
@@ -1907,8 +1911,8 @@ assert(indexText.includes('bottom: calc(var(--ms-bottom-bars-height) + 10px)') &
 assert(indexText.includes('.stage-player-row { position: absolute;') && appUiText.includes('data-testid="workspace-player-drag-handle"'), 'shared animation dock is an overlay with a draggable handle instead of a layout row');
 assert(foundry3dText.includes('data-three-pixel-ratio-cap') && threePreviewText.includes('data-three-pixel-ratio-cap'), '3D previews expose the pixel-ratio cap for browser performance checks');
 assert.equal(WEBGL_PIXEL_RATIO_CAP, 1.5, 'WebGL pixel-ratio cap avoids high-DPI overdraw while preserving sharp CAD-style previews');
-assert(!appText.includes('starShape'), 'Foundry sandbox no longer carries saw-tooth star gears');
-assert(!appText.includes('teeth * 2'), 'Foundry sandbox no longer carries sparse saw-tooth gear implementation');
+assert(!foundry3dText.includes('starShape'), 'Foundry sandbox no longer carries saw-tooth star gears');
+assert(!foundry3dText.includes('teeth * 2'), 'Foundry sandbox no longer carries sparse saw-tooth gear implementation');
 assert(mechanismParamPolicyText.includes('if (key === "gearRatio") return false'), 'Foundry hides stale gear-ratio controls when physical pitch radii define rotation');
 const fitContext = createMechanismFitContext(sample.mechanisms[0], 360, 240, 96);
 const directFit = fitMechanismSimulation(sample.mechanisms[0], 1.234, 360, 240, 96);
@@ -1931,8 +1935,8 @@ assert(appUiText.includes('data-testid="onnx-cache-status"') && appText.includes
 assert(indexText.includes('id="boot-loader"') && indexText.includes('Loading MotionSmith') && indexText.includes('boot-version') && indexText.includes('data-boot-status') && indexText.includes('data-boot-progress'), 'static boot loader covers slow startup with logo, wordmark, version, and AI model progress');
 assert(viewer3dText.includes('VIEWER3D_CAMERA_PRESETS') && threePreviewText.includes('three-puppet-view-toolbar') && foundryCameraText.includes('foundryPreset'), '3D puppet and foundry previews share one viewer camera preset contract');
 assert(viewer3dText.includes('type Viewer3DContract') && viewer3dText.includes('createViewer3DContract'), '3D viewers expose one shared OOP-style contract object for tab adapters');
-assert(threePreviewText.includes('DEFAULT_PUPPET_VIEWER_LAYERS') && threePreviewText.includes('data-testid={`${testId}-toggle-${layer}`}') && appText.includes('foundry-toggle-grid'), '3D viewer top overlay toolbar wires shared layer toggles instead of decorative buttons');
-assert(appText.includes('data-viewer-contract={VIEWER3D_CONTRACT_VERSION}') && foundry3dText.includes('data-viewer-contract={VIEWER3D_CONTRACT_VERSION}') && threePreviewText.includes('data-viewer-contract={VIEWER3D_CONTRACT_VERSION}'), '3D viewer state exposes a shared contract marker across tabs');
+assert(threePreviewText.includes('DEFAULT_PUPPET_VIEWER_LAYERS') && threePreviewText.includes('data-testid={`${testId}-toggle-${layer}`}') && foundry3dText.includes('foundry-toggle-grid'), '3D viewer top overlay toolbar wires shared layer toggles instead of decorative buttons');
+assert(foundry3dText.includes('data-viewer-contract={VIEWER3D_CONTRACT_VERSION}') && threePreviewText.includes('data-viewer-contract={VIEWER3D_CONTRACT_VERSION}'), '3D viewer state exposes a shared contract marker across tabs');
 assert(foundry3dText.includes('data-viewer-contract-state={JSON.stringify(viewerContract)}') && threePreviewText.includes('data-viewer-contract-state={JSON.stringify(viewerContract)}'), '3D viewer state exposes the normalized tab/layer contract payload for browser checks');
 assert(appText.includes('data-testid="design-shared-foundry-preview"') && appText.includes('showTrail={showTrace}'), 'Mechanism Design center is the shared Foundry workbench, not a hidden letter-sheet canvas');
 assert(!appText.includes('hideSceneUnderlay/>'), 'Mechanism Design no longer depends on the legacy 2D design canvas underlay toggle');
@@ -2005,10 +2009,13 @@ assert(appText.includes('stage-body editor-workbench relative min-h-0 flex-1 ove
 assert(indexText.includes('.stage-left-pane, .stage-right-inspector { min-height: 0; height: 100%; max-height: 100%; overflow-x: hidden; overflow-y: auto;') && indexText.includes('.character-setup-panel { min-height: 0; overflow: visible;') && indexText.includes('.character-inspector { min-height: 0; overflow: visible; }'), 'right inspector owns the single vertical scroll container for all stages, including Character');
 const paneWheelCaptureCount = stageLayoutText.match(/onWheelCapture={keepPaneWheelOnPane}/g)?.length ?? 0;
 assert(stageLayoutText.includes('keepPaneWheelOnPane') && paneWheelCaptureCount >= 2, 'workflow and inspector panes keep wheel scrolling on their panes even when the pointer is over sliders or number fields');
-assert(appText.includes('const [showSensemaking, setShowSensemaking] = useState(false)'), 'Foundry starts in compact tinkerable mode with sensemaking collapsed');
-assert(appText.includes('data-testid="foundry-visible-sensemaking"') && appText.includes('data-testid="design-visible-sensemaking"'), 'Foundry and Design show compact visible sensemaking by default instead of hiding all meaning behind details');
-assert(appText.includes('data-sensemaking-evidence') && appText.includes('data-sensemaking-answer') && appText.includes('data-sensemaking-clip'), 'Visible sensemaking cues expose teacher-pack check/evidence metadata through compact attributes, not extra prose');
-assert(appText.includes('compact-fabrication-stack') && appText.includes('data-testid="foundry-fabrication-stack"'), 'Foundry keeps fabrication stack visible as a compact action datum');
+assert(mechanismFoundryText.includes('const [showSensemaking, setShowSensemaking] = useState(false)'), 'Foundry starts in compact tinkerable mode with sensemaking collapsed');
+assert(mechanismFoundryText.includes('data-testid="foundry-visible-sensemaking"') && appText.includes('data-testid="design-visible-sensemaking"'), 'Foundry and Design show compact visible sensemaking by default instead of hiding all meaning behind details');
+assert(`${appText}
+${mechanismFoundryText}`.includes('data-sensemaking-evidence') && `${appText}
+${mechanismFoundryText}`.includes('data-sensemaking-answer') && `${appText}
+${mechanismFoundryText}`.includes('data-sensemaking-clip'), 'Visible sensemaking cues expose teacher-pack check/evidence metadata through compact attributes, not extra prose');
+assert(mechanismFoundryText.includes('compact-fabrication-stack') && mechanismFoundryText.includes('data-testid="foundry-fabrication-stack"'), 'Foundry keeps fabrication stack visible as a compact action datum');
 assert(typesText.includes("'assembly'"), 'AppStage includes a dedicated Assembly tab');
 assert(appUiText.includes("{ id: 'assembly', label: 'Assembly' }"), 'workflow rail exposes Assembly as a separate stage');
 const blueprintCanvasStart = blueprintExportText.indexOf('data-testid="blueprint-canvas-preview"');
