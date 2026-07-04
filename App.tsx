@@ -6,7 +6,6 @@ import type { PendingCharacterReview } from "./components/stages/character/Chara
 import {
   SHARED_PLAYBACK_STAGES,
   STAGES,
-  WorkspacePlayerDock,
   type StarterImageTemplate,
 } from "./components/AppShell";
 import {
@@ -54,6 +53,7 @@ import { useProjectAutosave } from "./hooks/useProjectAutosave";
 import { useProjectHistory } from "./hooks/useProjectHistory";
 import { useAppProjectCommands } from "./hooks/useAppProjectCommands";
 import { useAppDerivedState } from "./hooks/useAppDerivedState";
+import { useWorkspacePlayerDock } from "./hooks/useWorkspacePlayerDock";
 import { workflowStatusFor } from "./utils/workflowStatus";
 import {
   fitMechanismToTargetPath,
@@ -96,10 +96,6 @@ const App: React.FC = () => {
   const [showGettingStarted, setShowGettingStarted] = useState(false);
   const [angle, setAngle] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [assemblyPlaying, setAssemblyPlaying] = useState(false);
-  const [assemblyStepIndex, setAssemblyStepIndex] = useState(0);
-  const [assemblyStepProgress, setAssemblyStepProgress] = useState(0);
-  const [assemblyStepCount, setAssemblyStepCount] = useState(0);
   const [showTrace, setShowTrace] = useState(true);
   const [drawMode, setDrawMode] = useState(false);
   const [showTracking, setShowTracking] = useState(false);
@@ -563,36 +559,25 @@ const App: React.FC = () => {
     setShowGettingStarted(false);
     setStage("character");
   };
-  const goSharedAssemblyStep = (index: number) => {
-    const maxStepIndex = Math.max(0, assemblyStepCount - 1);
-    setAssemblyStepProgress(0);
-    setAssemblyStepIndex(Math.max(0, Math.min(maxStepIndex, index)));
-  };
-  const isAssemblyStage = editorStage === "assembly";
-  const showsWorkspacePlayer =
-    editorStage === "path" ||
-    editorStage === "design" ||
-    editorStage === "assembly";
-  const playerDock =
-    !modalOpen && showsWorkspacePlayer ? (
-      <WorkspacePlayerDock
-        isPlaying={isAssemblyStage ? assemblyPlaying : isPlaying}
-        setIsPlaying={isAssemblyStage ? setAssemblyPlaying : setIsPlaying}
-        angle={angle}
-        setAngle={setAngle}
-        speed={project.settings.animationSpeed}
-        drawMode={drawMode}
-        stepPlayback={
-          isAssemblyStage
-            ? {
-                stepIndex: assemblyStepIndex,
-                stepCount: assemblyStepCount,
-                onStepChange: goSharedAssemblyStep,
-              }
-            : undefined
-        }
-      />
-    ) : null;
+  const {
+    playerDock,
+    assemblyStepIndex,
+    setAssemblyStepIndex,
+    assemblyStepProgress,
+    setAssemblyStepProgress,
+    assemblyPlaying,
+    setAssemblyPlaying,
+    setAssemblyStepCount,
+  } = useWorkspacePlayerDock({
+    editorStage,
+    modalOpen,
+    isPlaying,
+    setIsPlaying,
+    angle,
+    setAngle,
+    speed: project.settings.animationSpeed,
+    drawMode,
+  });
 
   const acceptPendingCharacter = () => {
     if (!pendingCharacter) return;
