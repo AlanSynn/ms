@@ -48,8 +48,9 @@ Measured on 2026-07-03.
 | `utils/foundryCamera.ts`                                    |   140 | Done: pure Foundry camera/projection seam shared by Foundry and Design previews. Keep deterministic; no DOM/storage side effects.                                                                                                                     |
 | `components/stages/foundry/MechanismLinkagePreview.tsx`     |   851 | Done: Foundry SVG mechanism preview leaf lives outside the app shell. Keep it behavior-identical; split internal shape helpers only after renderer contracts stay green.                                                                              |
 | `components/stages/foundry/foundryPreviewGeometry.ts`       |    23 | Done: fitted gear-center helper shared by SVG and Three previews. Keep it pure and deterministic so Foundry/Design share the same fitted axle positions.                                                                                              |
-| `components/stages/foundry/ThreeFoundryPreview.tsx`         |  1700 | Done: shared Foundry/Design Three renderer seam delegates browser telemetry to `FoundryPreviewStateProbe.tsx`. Keep it behavior-identical; split renderer internals only behind contract/browser evidence.                                          |
+| `components/stages/foundry/ThreeFoundryPreview.tsx`         |  1169 | Done: shared Foundry/Design Three renderer seam delegates browser telemetry and primitive mesh/material builders outside the render body. Keep it behavior-identical; split render-layer dispatch only behind contract/browser evidence.              |
 | `components/stages/foundry/FoundryPreviewStateProbe.tsx`    |   472 | Done: Foundry/Design browser telemetry probe owns the `foundry-camera-rig` data contract outside WebGL scene construction. Keep it attribute-only; scene construction stays in `ThreeFoundryPreview.tsx`.                                           |
+| `components/stages/foundry/foundryThreePrimitives.ts`       |   517 | Done: Foundry Three primitive factory owns cached geometry/material builders, mesh primitives, path lines, pins, and cached-disposal marker outside the renderer body. Keep it primitive-only; mechanism layout/z-stack rules stay in shared helpers. |
 | `utils/threeResourceKit.ts`                                 |    86 | Done: shared Three cache/disposal/pixel-ratio helpers serve Foundry and puppet previews. Keep this renderer plumbing-only; scene construction and telemetry stay in renderer owners.                                                                  |
 | `components/stages/foundry/foundryRenderInventory.ts`       |   152 | Done: Foundry rendered inventory counts live outside the WebGL renderer. Keep it pure and backed by mechanism-reference/fabrication-required parts.                                                                                                    |
 | `components/stages/foundry/foundryPreviewStacks.ts`         |   475 | Done: Foundry pin-stack/z-order helper seam lives outside the app shell. Keep it pure and shared so SVG/Three/Design z-stack semantics do not drift.                                                                                                  |
@@ -154,6 +155,18 @@ env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_WORKERS=2 ./node_modules/.b
 
 Use this gate when moving Foundry browser telemetry out of the WebGL scene body. It proves the `foundry-camera-rig` contract still drives Foundry and Design browser checks.
 
+
+Latest Foundry primitive factory extraction evidence:
+
+```bash
+bun run test:contracts
+bun run build
+GIT_OPTIONAL_LOCKS=0 git -c core.fsmonitor=false diff --check
+env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_WORKERS=2 ./node_modules/.bin/playwright test tests/browser/workflow.spec.ts -g "Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking|Foundry supports CAD-style 3D camera presets and drag orbit|Mechanism Design center workspace renders the same shared Foundry mechanism templates|character → path → foundry → design → blueprint runs end-to-end in browser" --workers=2
+```
+
+Use this gate when moving Foundry Three primitive mesh/material builders out of the WebGL scene body. It proves cached disposal, pin/path/link/gear/cam/rack rendering, and shared Foundry/Design browser contracts still hold.
+
 Latest shared Three resource helper evidence:
 
 ```bash
@@ -187,11 +200,11 @@ Use this gate when changing shared Three cache/disposal/pixel-ratio helpers. It 
    - Done: `components/stages/character/CharacterImportControls.tsx` owns Character import/guide entry controls while file processing and package acceptance remain outside the component.
    - Done: `components/stages/character/CharacterSelection.tsx` owns the Character stage wrapper once its setup/list/import leaves were small enough to move without changing behavior.
    - Done: `components/stages/path/PathEditor.tsx`, `PathWorkflowPanel.tsx`, `PathCanvasPane.tsx`, `PathInspectorPanel.tsx`, `SceneSketch.tsx`, `PartShape.tsx`, and `MechanismRecommendationSheet.tsx` own the Path Editor UI seam outside `App.tsx`; Path still receives ProjectState/actions and does not own mechanism rules. `components/stages/mechanism/MechanismParametricEditor.tsx` owns the shared Foundry/Design compact gear/link/idler/cam parameter UI outside `App.tsx`, and `mechanismParamPolicy.ts` owns deterministic legacy numeric parameter visibility/clamping.
-   - Done: `components/stages/foundry/MechanismFoundry.tsx`, `FoundryCanvasPane.tsx`, `FoundryWorkflowPanel.tsx`, `FoundryInspectorPanel.tsx`, `MechanismLinkagePreview.tsx`, `foundryPreviewGeometry.ts`, `ThreeFoundryPreview.tsx`, and `foundryPreviewStacks.ts` own the Foundry stage/renderer seams outside `App.tsx`; Foundry and Mechanism Design still mount the same Three preview component and share pin-stack/z-order contracts.
+   - Done: `components/stages/foundry/MechanismFoundry.tsx`, `FoundryCanvasPane.tsx`, `FoundryWorkflowPanel.tsx`, `FoundryInspectorPanel.tsx`, `MechanismLinkagePreview.tsx`, `foundryPreviewGeometry.ts`, `ThreeFoundryPreview.tsx`, `foundryThreePrimitives.ts`, and `foundryPreviewStacks.ts` own the Foundry stage/renderer seams outside `App.tsx`; Foundry and Mechanism Design still mount the same Three preview component and share pin-stack/z-order contracts.
    - Done: `components/stages/options/Options.tsx` owns the Options stage wrapper outside `App.tsx`; Options still receives ProjectState/actions and does not own persistence or export rules.
    - Done: `components/stages/assembly/AssemblyGuide.tsx` owns the Assembly Guide stage wrapper outside `App.tsx`; Assembly still receives ProjectState/actions and shell playback state while recipe/stack derivation stays in shared utils.
    - Done: `components/stages/mechanism/MechanismDesign.tsx` owns only the Mechanism Design stage composition outside `App.tsx`; `DesignWorkflowPanel.tsx`, `DesignInspectorPanel.tsx`, and `DesignFoundryPreview.tsx` own the left pane, right pane, and shared Foundry preview adapter. Design still receives ProjectState/actions and does not own mechanism rules.
-   - Next lowest-risk stage seam: continue splitting `ThreeFoundryPreview.tsx` internals only behind renderer contracts, starting with geometry/material group builders now that telemetry lives in `FoundryPreviewStateProbe.tsx`. Shared geometry/material/cache helpers already live in `utils/threeResourceKit.ts`; keep shared fabrication/physics contracts centralized.
+   - Next lowest-risk stage seam: continue splitting `ThreeFoundryPreview.tsx` internals only behind renderer contracts, starting with render-layer dispatch now that telemetry and primitive builders live in their own seams. Shared geometry/material/cache helpers already live in `utils/threeResourceKit.ts`; keep shared fabrication/physics contracts centralized.
 
 3. **Domain helpers**
    - Done: mechanism fitting/recommendations live in `utils/mechanismRecommendations.ts`.
@@ -199,7 +212,7 @@ Use this gate when changing shared Three cache/disposal/pixel-ratio helpers. It 
    - Done: cut-outline math left `App.tsx` with the cut editor seam; extract it to a pure helper only when another consumer appears.
 
 4. **Renderer split**
-   - Done: `ThreeFoundryPreview.tsx` is now the shared Foundry/Design Three renderer seam and `FoundryPreviewStateProbe.tsx` owns its browser telemetry; continue by extracting materials, geometry builders, and overlay groups without changing props or data attributes.
+   - Done: `ThreeFoundryPreview.tsx` is now the shared Foundry/Design Three renderer seam; `FoundryPreviewStateProbe.tsx` owns browser telemetry and `foundryThreePrimitives.ts` owns cached primitive builders. Continue by extracting render-layer dispatch without changing props or data attributes.
    - Done: `utils/threeResourceKit.ts` owns repeated Three cache, disposal, and pixel-ratio plumbing for Foundry and puppet previews.
    - `ThreePuppetPreview.tsx`: keep React wrapper small; move only repeated renderer plumbing or pure geometry helpers when duplicated or directly touched.
    - Avoid new renderer frameworks unless a contract test proves the imperative Three/Rapier boundary cannot meet requirements.
