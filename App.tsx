@@ -8,6 +8,11 @@ import { BlueprintExport } from "./components/stages/blueprint/BlueprintExport";
 import { CharacterSelection } from "./components/stages/character/CharacterSelection";
 import { PathEditor } from "./components/stages/path/PathEditor";
 import { MechanismParametricEditor } from "./components/stages/mechanism/MechanismParametricEditor";
+import {
+  clampMechanismParam,
+  MECHANISM_PARAM_META,
+  shouldShowMechanismParam,
+} from "./components/stages/mechanism/mechanismParamPolicy";
 import { MechanismRecommendationSheet } from "./components/stages/path/MechanismRecommendationSheet";
 import { processingLabel } from "./components/stages/character/ProgressBlock";
 import type { PendingCharacterReview } from "./components/stages/character/CharacterImportOverlays";
@@ -365,29 +370,6 @@ const OPTIONS_SECTION_MANIFEST = [
 type OptionsSectionMeta = (typeof OPTIONS_SECTION_MANIFEST)[number];
 const optionSection = (id: OptionsSectionMeta["id"]) =>
   OPTIONS_SECTION_MANIFEST.find((section) => section.id === id)!;
-const PARAMS: Array<{
-  key: keyof MechanismConfig;
-  label: string;
-  min: number;
-  max: number;
-  step?: number;
-}> = [
-  { key: "anchorX", label: "anchor X", min: -260, max: 260, step: 40 },
-  { key: "anchorY", label: "anchor Y", min: -260, max: 260, step: 40 },
-  { key: "groundAngle", label: "ground angle", min: -180, max: 180 },
-  { key: "crankLength", label: "crank", min: 10, max: 180 },
-  { key: "groundLength", label: "ground", min: 0, max: 280 },
-  { key: "couplerLength", label: "coupler", min: 0, max: 320 },
-  { key: "rockerLength", label: "rocker / gear", min: 0, max: 220 },
-  { key: "sliderOffset", label: "slider offset", min: -120, max: 120 },
-  { key: "couplerPointDist", label: "output dist", min: 0, max: 220 },
-  { key: "couplerPointAngle", label: "output angle", min: -180, max: 180 },
-  { key: "gearRatio", label: "gear ratio", min: -6, max: 6, step: 0.1 },
-  { key: "rodLength", label: "rod length", min: 10, max: 260 },
-  { key: "speed2", label: "second speed", min: -5, max: 5, step: 0.1 },
-  { key: "phase", label: "phase", min: -3.14, max: 3.14, step: 0.01 },
-];
-
 const isAppStage = (value: unknown): value is AppStage =>
   typeof value === "string" && STAGES.some((stage) => stage.id === value);
 const projectHasUserWork = (project: ProjectState) =>
@@ -2254,11 +2236,6 @@ const MechanismFoundry = ({
     }
     setFoundry(normalizeGearMeshMechanism({ ...foundry, [key]: value }));
   };
-  const clampFoundryParam = (key: keyof MechanismConfig, value: number) => {
-    const param = PARAMS.find((item) => item.key === key);
-    if (!param) return value;
-    return Math.max(param.min, Math.min(param.max, value));
-  };
   const updateFoundryParams = (updates: Partial<MechanismConfig>) => {
     setFoundry(normalizeGearMeshMechanism({ ...foundry, ...updates }));
   };
@@ -2295,13 +2272,13 @@ const MechanismFoundry = ({
     if (handle === "B") {
       updateFoundryParam(
         "crankLength",
-        clampFoundryParam("crankLength", sceneDistance(s.p1, point)),
+        clampMechanismParam("crankLength", sceneDistance(s.p1, point)),
       );
       return;
     }
     if (handle === "D") {
       updateFoundryParams({
-        groundLength: clampFoundryParam(
+        groundLength: clampMechanismParam(
           "groundLength",
           sceneDistance(s.p1, point),
         ),
@@ -2311,11 +2288,11 @@ const MechanismFoundry = ({
       return;
     }
     updateFoundryParams({
-      couplerLength: clampFoundryParam(
+      couplerLength: clampMechanismParam(
         "couplerLength",
         sceneDistance(s.j1, point),
       ),
-      rockerLength: clampFoundryParam(
+      rockerLength: clampMechanismParam(
         "rockerLength",
         sceneDistance(s.p2, point),
       ),
@@ -3168,20 +3145,20 @@ const MechanismFoundry = ({
                     </option>
                   ))}
                 </select>
-                {PARAMS.filter((p) => showParam(foundry.type, p.key)).map(
-                  (p) => (
-                    <React.Fragment key={String(p.key)}>
-                      <MiniNumber
-                        label={p.label}
-                        value={Number(foundry[p.key] ?? 0)}
-                        min={p.min}
-                        max={p.max}
-                        step={p.step}
-                        onChange={(value) => updateFoundryParam(p.key, value)}
-                      />
-                    </React.Fragment>
-                  ),
-                )}
+                {MECHANISM_PARAM_META.filter((p) =>
+                  shouldShowMechanismParam(foundry.type, p.key),
+                ).map((p) => (
+                  <React.Fragment key={String(p.key)}>
+                    <MiniNumber
+                      label={p.label}
+                      value={Number(foundry[p.key] ?? 0)}
+                      min={p.min}
+                      max={p.max}
+                      step={p.step}
+                      onChange={(value) => updateFoundryParam(p.key, value)}
+                    />
+                  </React.Fragment>
+                ))}
               </div>
             </details>
             <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
@@ -3964,8 +3941,8 @@ const MechanismDesign = ({
                   testId="design-parametric-editor"
                 />
                 <div className="section-title">Parameters</div>
-                {PARAMS.filter((p) =>
-                  showParam(selectedMechanism.type, p.key),
+                {MECHANISM_PARAM_META.filter((p) =>
+                  shouldShowMechanismParam(selectedMechanism.type, p.key),
                 ).map((p) => (
                   <React.Fragment key={String(p.key)}>
                     <MiniNumber
@@ -5020,55 +4997,6 @@ const SelectField = ({
     </select>
   </label>
 );
-
-const showParam = (type: MechanismType, key: keyof MechanismConfig) => {
-  const compactParametricKeys: Partial<
-    Record<MechanismType, Array<keyof MechanismConfig>>
-  > = {
-    "4bar": ["crankLength", "couplerLength", "rockerLength"],
-    gear: [
-      "crankLength",
-      "rockerLength",
-      "gearRatio",
-      "gearTrainRadii",
-      "groundLength",
-      "couplerPointDist",
-      "couplerPointAngle",
-      "speed2",
-    ],
-    gear_linkage: [
-      "crankLength",
-      "rockerLength",
-      "couplerLength",
-      "gearRatio",
-      "gearTrainRadii",
-      "groundLength",
-      "couplerPointDist",
-      "couplerPointAngle",
-      "speed2",
-    ],
-  };
-  if (compactParametricKeys[type]?.includes(key)) return false;
-  if (key === "speed2") return type === "5bar";
-  if (key === "phase")
-    return ["5bar", "gear", "gear_linkage", "planetary_gear"].includes(type);
-  if (key === "gearRatio") return false;
-  if (key === "rodLength") return ["5bar", "6bar", "piston"].includes(type);
-  if (key === "groundLength")
-    return ![
-      "cam",
-      "yoke",
-      "rack-pinion",
-      "gear",
-      "gear_linkage",
-      "planetary_gear",
-    ].includes(type);
-  if (key === "couplerLength")
-    return !["cam", "gear", "planetary_gear", "yoke", "rack-pinion"].includes(
-      type,
-    );
-  return true;
-};
 
 type ThreeFoundryPreviewProps = {
   mechanism: MechanismConfig;
