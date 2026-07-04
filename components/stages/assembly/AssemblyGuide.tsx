@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
 import { AssemblyCanvasPane } from "./AssemblyCanvasPane";
 import { AssemblyControlPanel } from "./AssemblyControlPanel";
 import { AssemblyInspectorPanel } from "./AssemblyInspectorPanel";
+import { useAssemblyGuidePlayback } from "./useAssemblyGuidePlayback";
 import {
   EditorStageFrame,
   canvasPane,
@@ -86,7 +87,6 @@ export const AssemblyGuide = ({
   const [lane, setLane] = useState<AssemblyLane>(() =>
     assemblyLaneForExportMode(project.settings.physicalKit.exportMode),
   );
-  const stepProgressRef = useRef(0);
   const playbackSteps = selectedRecipe
     ? buildAssemblyPlaybackSteps(selectedRecipe, lane)
     : [];
@@ -102,56 +102,15 @@ export const AssemblyGuide = ({
     ];
   const activeDisplayStep =
     activeAssemblyMode === "character" ? currentCharacterStep : currentStep;
-
-  useEffect(() => {
-    setStepCount(activeStepCount);
-  }, [activeStepCount, setStepCount]);
-
-  const goAssemblyStep = (next: number | ((index: number) => number)) => {
-    stepProgressRef.current = 0;
-    setStepProgress(0);
-    setStepIndex((index) => {
-      const nextIndex = typeof next === "function" ? next(index) : next;
-      return Math.max(0, Math.min(Math.max(0, activeStepCount - 1), nextIndex));
-    });
-  };
-
-  useEffect(() => {
-    stepProgressRef.current = 0;
-    setStepIndex(0);
-    setStepProgress(0);
-    setPlaying(false);
-  }, [
-    activeAssemblyMode,
-    selectedRecipe?.mechanismId,
-    lane,
+  const { goAssemblyStep } = useAssemblyGuidePlayback({
+    activeStepCount,
+    resetKey: `${activeAssemblyMode}:${selectedRecipe?.mechanismId ?? "none"}:${lane}`,
+    playing,
     setPlaying,
+    setStepCount,
     setStepIndex,
     setStepProgress,
-  ]);
-
-  useEffect(() => {
-    if (!playing || activeStepCount < 2) return;
-    let frame = 0;
-    let last = performance.now();
-    const stepMs = 1400;
-    const tick = (time: number) => {
-      const delta = Math.min(120, time - last);
-      last = time;
-      const next = stepProgressRef.current + delta / stepMs;
-      if (next >= 1) {
-        stepProgressRef.current = 0;
-        setStepProgress(0);
-        setStepIndex((index) => (index >= activeStepCount - 1 ? 0 : index + 1));
-      } else {
-        stepProgressRef.current = next;
-        setStepProgress(next);
-      }
-      frame = window.requestAnimationFrame(tick);
-    };
-    frame = window.requestAnimationFrame(tick);
-    return () => window.cancelAnimationFrame(frame);
-  }, [playing, activeStepCount, setStepIndex, setStepProgress]);
+  });
 
   const downloadAssemblyPdf = () =>
     pkg &&

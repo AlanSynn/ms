@@ -730,6 +730,9 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect.poll(async () => Number(await assemblyWorkbench.getAttribute('data-step-progress')), { message: 'shared player animates the active assembly step' }).toBeGreaterThan(0);
   const pauseAssembly = sharedAssemblyPlayer.getByRole('button', { name: 'Pause' });
   if (await pauseAssembly.count()) await pauseAssembly.click();
+  await sharedAssemblyPlayer.getByRole('button', { name: 'Start over' }).click();
+  await expect(page.getByLabel('Assembly scrubber')).toHaveValue('0');
+  await expect.poll(async () => Number(await assemblyWorkbench.getAttribute('data-step-progress')), { message: 'shared player start-over resets assembly progress' }).toBe(0);
   await page.getByTestId('assembly-step-list').getByRole('button', { name: /Connect character/i }).click();
   await expect(page.getByTestId('assembly-character-connect')).toBeVisible();
   await page.getByTestId('assembly-step-list').getByRole('button', { name: /Test motion/i }).click();
