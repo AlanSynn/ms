@@ -170,7 +170,7 @@ assert(viteConfigText.includes("base: isTauri ? './' : webBase"), 'Tauri stays r
 assert(viteConfigText.includes('chunkSizeWarningLimit: 2400'), 'Vite chunk warning budget is explicit for intentional lazy Rapier/ONNX browser chunks');
 assert(normalizedCodebaseCleanupPlan.includes('Button and command audit lock') && normalizedCodebaseCleanupPlan.includes('utils/appCommands.ts'), 'cleanup plan records the executable button/menu audit lock');
 assert(normalizedCodebaseCleanupPlan.includes('Warning fixes locked') && normalizedCodebaseCleanupPlan.includes('Rapier warning boundary'), 'cleanup plan records scoped warning fixes instead of broad suppression');
-assert(normalizedCodebaseCleanupPlan.includes('`App.tsx` | 3321') && normalizedCodebaseCleanupPlan.includes('MechanismFoundry wrapper seams are extracted'), 'cleanup plan records the current App.tsx hotspot and completed Foundry stage seams');
+assert(normalizedCodebaseCleanupPlan.includes('`App.tsx` | 2845') && normalizedCodebaseCleanupPlan.includes('Options stage wrapper seams are extracted'), 'cleanup plan records the current App.tsx hotspot and completed Options stage seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/ProgressBlock.tsx` | 84') && normalizedCodebaseCleanupPlan.includes('character import progress UI lives outside the app shell'), 'cleanup plan records the extracted character progress seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/ui/InspectorControls.tsx` | 70') && normalizedCodebaseCleanupPlan.includes('shared inspector sliders/toggles live outside the app shell'), 'cleanup plan records the extracted inspector controls seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/PartInspector.tsx` | 276') && normalizedCodebaseCleanupPlan.includes('selected-part inspector owns part toggles'), 'cleanup plan records the extracted part inspector seam');
@@ -1804,6 +1804,7 @@ const foundryPreviewGeometryText = readFileSync(join(process.cwd(), 'components'
 const threeFoundryPreviewText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'ThreeFoundryPreview.tsx'), 'utf8');
 const foundryPreviewStacksText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryPreviewStacks.ts'), 'utf8');
 const mechanismFoundryText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'MechanismFoundry.tsx'), 'utf8');
+const optionsText = readFileSync(join(process.cwd(), 'components', 'stages', 'options', 'Options.tsx'), 'utf8');
 const foundry3dText = `${mechanismFoundryText}
 ${threeFoundryPreviewText}
 ${foundryPreviewStacksText}`;
@@ -1811,10 +1812,12 @@ const appShellText = readFileSync(join(process.cwd(), 'components', 'AppShell.ts
 const appUiText = `${appText}
 ${appShellText}
 ${characterImportControlsText}
-${characterSelectionText}`;
+${characterSelectionText}
+${optionsText}`;
 const typesText = readFileSync(join(process.cwd(), 'types.ts'), 'utf8');
 const indexText = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
 assert(appText.includes('<MechanismFoundry') && !appText.includes('const MechanismFoundry = ({') && mechanismFoundryText.includes('export const MechanismFoundry'), 'App.tsx delegates the Mechanism Foundry stage to an extracted stage seam');
+assert(appText.includes('<Options') && !appText.includes('const Options = ({') && optionsText.includes('export const Options') && optionsText.includes('OPTIONS_SECTION_MANIFEST'), 'App.tsx delegates the Options stage to an extracted stage seam');
 assert(mechanismFoundryText.includes('<MechanismLinkagePreview') && mechanismLinkagePreviewText.includes('export const MechanismLinkagePreview') && foundryPreviewGeometryText.includes('export const fittedGearTrainCenters'), 'MechanismFoundry delegates 2D Foundry SVG preview to extracted foundry renderer seam');
 assert(canvasText.includes('fabricationGearPathD'), '2D canvas gear rendering uses shared fabrication gear geometry');
 assert(canvasText.includes('data-reference-topology={referenceTopologySummary(m.type)}'), '2D design canvas exposes mechanism-reference topology telemetry');
@@ -2047,7 +2050,9 @@ assert(!blueprintSvgBlock.includes('generateCurvePoints') && !blueprintSvgBlock.
 assert(blueprintSvgBlock.includes('const ox = (width - bounds.width * scale)') && !blueprintSvgBlock.includes('const ox = x +'), 'Blueprint part cut previews use local SVG coordinates inside the translated tile, not double-translated paths');
 const assemblyStart = appText.indexOf('const AssemblyGuide =');
 assert(assemblyStart >= 0, 'AssemblyGuide component owns the assembly document workflow');
-const assemblyBlock = appText.slice(assemblyStart, appText.indexOf('const Options =', assemblyStart));
+const assemblyEnd = appText.indexOf('export default App;', assemblyStart);
+assert(assemblyEnd > assemblyStart, 'AssemblyGuide block ends before the default App export');
+const assemblyBlock = appText.slice(assemblyStart, assemblyEnd);
 assert(assemblyBlock.includes('data-testid="assembly-canvas-preview"') && assemblyBlock.includes('<AssemblyWorkbench'), 'Assembly tab renders the interactive stepper in the center canvas');
 assert(assemblyBlock.includes('const liveRecipes = activeMechanisms.map') && assemblyBlock.includes('liveRecipes.length ? liveRecipes : (pkg?.recipes ?? [])'), 'Assembly preview derives from live project mechanisms before falling back to an exported package');
 assert(assemblyBlock.includes('activeAssemblyMode === "character"') && assemblyBlock.includes('<CharacterAssemblyWorkbench') && !assemblyBlock.includes('{pkg && selectedRecipe && currentStep ?'), 'Assembly animation supports character and mechanism stages before generating PDF/HTML output');
