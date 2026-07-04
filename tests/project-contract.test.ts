@@ -192,7 +192,8 @@ assert(normalizedCodebaseCleanupPlan.includes('`utils/mechanismRecommendations.t
 assert(normalizedCodebaseCleanupPlan.includes('`utils/foundryCamera.ts` | 140') && normalizedCodebaseCleanupPlan.includes('pure Foundry camera/projection seam'), 'cleanup plan records the extracted Foundry camera seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/MechanismLinkagePreview.tsx` | 851') && normalizedCodebaseCleanupPlan.includes('Foundry SVG mechanism preview leaf lives outside the app shell'), 'cleanup plan records the extracted Foundry SVG preview seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/foundryPreviewGeometry.ts` | 23') && normalizedCodebaseCleanupPlan.includes('fitted gear-center helper shared by SVG and Three previews'), 'cleanup plan records the shared Foundry preview geometry helper seam');
-assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/ThreeFoundryPreview.tsx` | 1931') && normalizedCodebaseCleanupPlan.includes('shared Foundry/Design Three renderer seam lives outside the app shell'), 'cleanup plan records the extracted shared Foundry Three renderer seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/ThreeFoundryPreview.tsx` | 1700') && normalizedCodebaseCleanupPlan.includes('shared Foundry/Design Three renderer seam delegates browser telemetry'), 'cleanup plan records the extracted shared Foundry Three renderer seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/FoundryPreviewStateProbe.tsx` | 472') && normalizedCodebaseCleanupPlan.includes('Foundry/Design browser telemetry probe owns the `foundry-camera-rig` data contract'), 'cleanup plan records the extracted Foundry telemetry probe seam');
 assert(normalizedCodebaseCleanupPlan.includes('`utils/threeResourceKit.ts` | 86') && normalizedCodebaseCleanupPlan.includes('shared Three cache/disposal/pixel-ratio helpers'), 'cleanup plan records the extracted shared Three resource helper seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/foundryRenderInventory.ts` | 152') && normalizedCodebaseCleanupPlan.includes('rendered inventory counts live outside the WebGL renderer'), 'cleanup plan records the extracted Foundry render inventory helper seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/foundryPreviewStacks.ts` | 475') && normalizedCodebaseCleanupPlan.includes('Foundry pin-stack/z-order helper seam lives outside the app shell'), 'cleanup plan records the extracted Foundry pin-stack helper seam');
@@ -1819,6 +1820,7 @@ ${designInspectorPanelText}`;
 const mechanismLinkagePreviewText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'MechanismLinkagePreview.tsx'), 'utf8');
 const foundryPreviewGeometryText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryPreviewGeometry.ts'), 'utf8');
 const threeFoundryPreviewText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'ThreeFoundryPreview.tsx'), 'utf8');
+const foundryPreviewStateProbeText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'FoundryPreviewStateProbe.tsx'), 'utf8');
 const threeResourceKitText = readFileSync(join(process.cwd(), 'utils', 'threeResourceKit.ts'), 'utf8');
 const foundryRenderInventoryText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryRenderInventory.ts'), 'utf8');
 const foundryPreviewStacksText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryPreviewStacks.ts'), 'utf8');
@@ -1833,6 +1835,7 @@ ${foundryInspectorPanelText}`;
 const optionsText = readFileSync(join(process.cwd(), 'components', 'stages', 'options', 'Options.tsx'), 'utf8');
 const foundry3dText = `${foundryStageText}
 ${threeFoundryPreviewText}
+${foundryPreviewStateProbeText}
 ${threeResourceKitText}
 ${foundryRenderInventoryText}
 ${foundryPreviewStacksText}`;
@@ -1854,6 +1857,7 @@ assert(mechanismFoundryText.includes('<FoundryInspectorPanel') && foundryInspect
 assert(mechanismFoundryText.includes('<FoundryCanvasPane') && foundryCanvasPaneText.includes('<ThreeFoundryPreview') && foundryCanvasPaneText.includes('data-testid="foundry-preview-overlay"') && foundryCanvasPaneText.includes('data-testid="foundry-toolbar-state"'), 'MechanismFoundry delegates the center Foundry canvas without changing 3D preview overlays');
 assert(foundryWorkflowPanelText.includes('<MechanismLinkagePreview') && mechanismLinkagePreviewText.includes('export const MechanismLinkagePreview') && foundryPreviewGeometryText.includes('export const fittedGearTrainCenters'), 'Foundry workflow delegates 2D Foundry SVG preview to extracted foundry renderer seam');
 assert(threeFoundryPreviewText.includes('foundryRenderedInventory(mechanism.type)') && foundryRenderInventoryText.includes('export const foundryRenderedInventory') && foundryRenderInventoryText.includes('referenceRequiredPartsHoleCount'), 'Foundry Three renderer delegates rendered inventory counts to a pure helper');
+assert(threeFoundryPreviewText.includes('<FoundryPreviewStateProbe') && foundryPreviewStateProbeText.includes('data-testid="foundry-camera-rig"') && foundryPreviewStateProbeText.includes('data-three-animation-commit-ms'), 'Foundry Three renderer delegates browser telemetry to a probe seam without changing the camera-rig data contract');
 assert(canvasText.includes('fabricationGearPathD'), '2D canvas gear rendering uses shared fabrication gear geometry');
 assert(canvasText.includes('data-reference-topology={referenceTopologySummary(m.type)}'), '2D design canvas exposes mechanism-reference topology telemetry');
 assert(canvasText.includes('data-reference-coord-roles={coordRoleSummary}'), '2D design canvas exposes mechanism-reference coordinate role telemetry');
