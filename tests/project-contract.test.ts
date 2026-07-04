@@ -209,7 +209,16 @@ assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/Mechan
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/FoundryCanvasPane.tsx` | 531') && normalizedCodebaseCleanupPlan.includes('Foundry center canvas owns Three preview, toolbar, overlay SVG, and pointer surfaces'), 'cleanup plan records the extracted Foundry canvas pane seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/FoundryWorkflowPanel.tsx` | 238') && normalizedCodebaseCleanupPlan.includes('Foundry left workflow pane owns target summary'), 'cleanup plan records the extracted Foundry workflow pane seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/FoundryInspectorPanel.tsx` | 231') && normalizedCodebaseCleanupPlan.includes('Foundry right inspector owns physics readout'), 'cleanup plan records the extracted Foundry inspector pane seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/AppShell.tsx` | 9') && normalizedCodebaseCleanupPlan.includes('compatibility re-export barrel for shell leaves'), 'cleanup plan records AppShell as a compatibility shell barrel');
+assert(normalizedCodebaseCleanupPlan.includes('`components/shell/workflowStages.ts` | 22') && normalizedCodebaseCleanupPlan.includes('workflow stage labels and shared playback stage list'), 'cleanup plan records the extracted workflow stage metadata seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/shell/GettingStartedDialog.tsx` | 133') && normalizedCodebaseCleanupPlan.includes('Getting Started modal is a shell leaf outside AppShell'), 'cleanup plan records the extracted Getting Started shell leaf seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/shell/OnnxCacheStatusPill.tsx` | 15') && normalizedCodebaseCleanupPlan.includes('ONNX cache chip is a shell leaf outside AppShell'), 'cleanup plan records the extracted ONNX cache chip seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/shell/WorkflowRail.tsx` | 23') && normalizedCodebaseCleanupPlan.includes('workflow rail and version mark are shell leaves outside AppShell'), 'cleanup plan records the extracted workflow rail seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/shell/TopCommandBar.tsx` | 29') && normalizedCodebaseCleanupPlan.includes('top menu rendering is a shell leaf outside AppShell'), 'cleanup plan records the extracted top command bar seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/shell/ShellDialogs.tsx` | 51') && normalizedCodebaseCleanupPlan.includes('shortcut/about dialogs are shell leaves outside AppShell'), 'cleanup plan records the extracted shell dialogs seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/shell/CanvasZoomToolbar.tsx` | 14') && normalizedCodebaseCleanupPlan.includes('shared canvas zoom controls live outside AppShell'), 'cleanup plan records the extracted canvas zoom toolbar seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/shell/WorkspacePlayerDock.tsx` | 81') && normalizedCodebaseCleanupPlan.includes('floating workspace player dock view lives outside AppShell'), 'cleanup plan records the extracted workspace player dock view seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/shell/WorkflowStatusStrip.tsx` | 7') && normalizedCodebaseCleanupPlan.includes('compact workflow status strip lives outside AppShell'), 'cleanup plan records the extracted workflow status strip seam');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
 assert(readFileSync(join(process.cwd(), 'utils', 'projectPersistence.ts'), 'utf8').includes('motionsmith.autosave') && readFileSync(join(process.cwd(), 'utils', 'projectPersistence.ts'), 'utf8').includes('motionsmith.workspace'), 'local storage namespace uses the MotionSmith slug for persistent state');
 assert.deepEqual(validateAppCommandRegistry(), [], 'application command registry is internally consistent');
@@ -280,6 +289,14 @@ const appCommandSource = readFileSync(join(process.cwd(), 'App.tsx'), 'utf8');
 const appWorkspaceShellCommandSource = readFileSync(join(process.cwd(), 'components', 'AppWorkspaceShell.tsx'), 'utf8');
 const appShellCommandSource = readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8');
 const gettingStartedDialogCommandSource = readFileSync(join(process.cwd(), 'components', 'shell', 'GettingStartedDialog.tsx'), 'utf8');
+const onnxCachePillCommandSource = readFileSync(join(process.cwd(), 'components', 'shell', 'OnnxCacheStatusPill.tsx'), 'utf8');
+const workflowRailCommandSource = readFileSync(join(process.cwd(), 'components', 'shell', 'WorkflowRail.tsx'), 'utf8');
+const topCommandBarCommandSource = readFileSync(join(process.cwd(), 'components', 'shell', 'TopCommandBar.tsx'), 'utf8');
+const shellDialogsCommandSource = readFileSync(join(process.cwd(), 'components', 'shell', 'ShellDialogs.tsx'), 'utf8');
+const canvasZoomToolbarCommandSource = readFileSync(join(process.cwd(), 'components', 'shell', 'CanvasZoomToolbar.tsx'), 'utf8');
+const workspacePlayerDockCommandSource = readFileSync(join(process.cwd(), 'components', 'shell', 'WorkspacePlayerDock.tsx'), 'utf8');
+const workflowStatusStripCommandSource = readFileSync(join(process.cwd(), 'components', 'shell', 'WorkflowStatusStrip.tsx'), 'utf8');
+const workflowStagesCommandSource = readFileSync(join(process.cwd(), 'components', 'shell', 'workflowStages.ts'), 'utf8');
 const appProjectHistoryHookText = readFileSync(join(process.cwd(), 'hooks', 'useProjectHistory.ts'), 'utf8');
 assert(appCommandSource.includes('useProjectHistory(createEmptyProject)') && !appCommandSource.includes('setProjectHistory') && !appCommandSource.includes('applyProjectAction(prev, action)') && appProjectHistoryHookText.includes('projectSelfCheck()') && appProjectHistoryHookText.includes('applyProjectAction') && appProjectHistoryHookText.includes('PROJECT_HISTORY_LIMIT') && appProjectHistoryHookText.includes('undoProject') && appProjectHistoryHookText.includes('redoProject'), 'App delegates ProjectState history, reducer dispatch, and undo/redo stack management to useProjectHistory');
 assert(appProjectCommandsHookText.includes('satisfies AppCommandHandlerMap') && appCommandsSource.includes('export type AppCommandHandlerMap = Record<AppCommandId, () => void>'), 'App command handlers are type-exhaustive against AppCommandId through the shared command handler map type');
@@ -298,6 +315,8 @@ assert(!appCommandSource.includes('showDirectoryPicker'), 'browser UI omits fake
 assert(appCommandSource.includes('<AppWorkspaceShell') && appCommandSource.includes('workflowStatus={workflowStatus}') && appCommandSource.includes('stageRouterProps={stageRouterProps}') && !appCommandSource.includes('app-header') && !appCommandSource.includes('quick-toolbar') && !appCommandSource.includes('WorkflowStatusStrip'), 'App delegates workspace shell markup to AppWorkspaceShell while preserving status and stage-router props');
 assert(appWorkspaceShellCommandSource.includes('<AppStageRouter') && appWorkspaceShellCommandSource.includes('<TopCommandBar') && appWorkspaceShellCommandSource.includes('commandHandlers={commandHandlers}') && appWorkspaceShellCommandSource.includes('<WorkflowRail') && appWorkspaceShellCommandSource.includes('<WorkflowStatusStrip {...workflowStatus}') && appWorkspaceShellCommandSource.includes('<GettingStartedDialog') && appWorkspaceShellCommandSource.includes('<ShortcutHelpDialog') && appWorkspaceShellCommandSource.includes('<AboutDialog') && appWorkspaceShellCommandSource.includes('<MechanismRecommendationSheet') && appWorkspaceShellCommandSource.includes('onApply={onApplyRecommendation}') && appWorkspaceShellCommandSource.includes('<TrackingModal') && appWorkspaceShellCommandSource.includes('onTransfer={onTransferTracking}'), 'AppWorkspaceShell preserves command, status, modal, recommendation, and tracking prop wiring');
 assert(appShellCommandSource.includes("export { GettingStartedDialog") && gettingStartedDialogCommandSource.includes('export const GettingStartedDialog') && gettingStartedDialogCommandSource.includes('data-testid="getting-started-dialog"') && appWorkspaceShellCommandSource.includes('<GettingStartedDialog'), 'Getting Started dialog is an extracted shell leaf while preserving workspace mount wiring');
+assert(!appShellCommandSource.includes('<') && !appShellCommandSource.includes('useState') && appShellCommandSource.includes("export { WorkflowRail") && appShellCommandSource.includes("export { TopCommandBar") && appShellCommandSource.includes("export { WorkspacePlayerDock") && appShellCommandSource.includes("export { SHARED_PLAYBACK_STAGES, STAGES"), 'AppShell is a compatibility re-export barrel, not a JSX/state owner');
+assert(onnxCachePillCommandSource.includes('data-testid="onnx-cache-status"') && workflowRailCommandSource.includes('data-testid="workspace-steps"') && topCommandBarCommandSource.includes('data-testid="top-command-bar"') && shellDialogsCommandSource.includes('data-testid="shortcut-help-dialog"') && shellDialogsCommandSource.includes('data-testid="about-dialog"') && canvasZoomToolbarCommandSource.includes('data-testid="canvas-zoom-readout"') && workspacePlayerDockCommandSource.includes('data-testid="workspace-player-dock"') && workspacePlayerDockCommandSource.includes('data-testid="workspace-player-drag-handle"') && workflowStatusStripCommandSource.includes('data-testid="workflow-status-strip"') && workflowStagesCommandSource.includes("id: 'assembly'"), 'extracted shell leaves preserve existing test ids and workflow metadata');
 for (const forbiddenShellBoundary of ['validateForFabrication', 'applyProjectAction', 'ProjectAction', 'dispatch(', 'setProject(']) {
   assert(!appWorkspaceShellCommandSource.includes(forbiddenShellBoundary), `AppWorkspaceShell must stay presentation-only and exclude ${forbiddenShellBoundary}`);
 }
@@ -307,6 +326,14 @@ const visibleUiSource = [
   'components/TrackingModal.tsx',
   'components/AppShell.tsx',
   'components/shell/GettingStartedDialog.tsx',
+  'components/shell/OnnxCacheStatusPill.tsx',
+  'components/shell/WorkflowRail.tsx',
+  'components/shell/TopCommandBar.tsx',
+  'components/shell/ShellDialogs.tsx',
+  'components/shell/CanvasZoomToolbar.tsx',
+  'components/shell/WorkspacePlayerDock.tsx',
+  'components/shell/WorkflowStatusStrip.tsx',
+  'components/shell/workflowStages.ts',
   'components/stages/stageLayout.tsx',
   'components/stages/blueprint/BlueprintExport.tsx',
   'components/stages/assembly/AssemblyWorkbench.tsx',
@@ -383,7 +410,7 @@ assert(!visibleUiSource.includes('CameraCaptureDialog'), 'browser hardware camer
 assert(!visibleUiSource.includes('getUserMedia'), 'browser hardware camera capture API is not used by the app UI');
 assert(existsSync(join(process.cwd(), 'public', 'fonts', 'manrope-800-latin.woff2')), 'Manrope splash font is self-hosted instead of loaded from a runtime CDN');
 assert(existsSync(join(process.cwd(), 'resources', 'icons', 'AppIcon.png')) && existsSync(join(process.cwd(), 'resources', 'icons', 'AppIcon.icns')), 'canonical MotionSmith icon assets live under resources/icons');
-assert(readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8').includes("../resources/icons/AppIcon.png?url"), 'welcome splash and rail use the canonical resources icon');
+assert(readFileSync(join(process.cwd(), 'components', 'shell', 'WorkflowRail.tsx'), 'utf8').includes("../../resources/icons/AppIcon.png?url"), 'workflow rail uses the canonical resources icon');
 assert(readFileSync(join(process.cwd(), 'components', 'AppWorkspaceShell.tsx'), 'utf8').includes("../resources/icons/AppIcon.png?url"), 'top app bar uses the canonical resources icon');
 assert(!readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8').includes('src-tauri/icons/icon.png'), 'welcome splash does not reuse the old Tauri grid icon path');
 assert(!readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8').includes('<svg className="motionsmith-logo-mark"'), 'welcome splash does not keep an inline dummy logo SVG');
@@ -1884,12 +1911,22 @@ ${threeResourceKitText}
 ${foundryRenderInventoryText}
 ${foundryPreviewStacksText}`;
 const appShellText = readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8');
-const gettingStartedDialogText = readFileSync(join(process.cwd(), 'components', 'shell', 'GettingStartedDialog.tsx'), 'utf8');
+const shellUiText = [
+  'GettingStartedDialog.tsx',
+  'OnnxCacheStatusPill.tsx',
+  'WorkflowRail.tsx',
+  'TopCommandBar.tsx',
+  'ShellDialogs.tsx',
+  'CanvasZoomToolbar.tsx',
+  'WorkspacePlayerDock.tsx',
+  'WorkflowStatusStrip.tsx',
+  'workflowStages.ts'
+].map(file => readFileSync(join(process.cwd(), 'components', 'shell', file), 'utf8')).join('\n');
 const appUiText = `${appText}
 ${appWorkspaceShellText}
 ${appStageRouterText}
 ${appShellText}
-${gettingStartedDialogText}
+${shellUiText}
 ${characterImportControlsText}
 ${characterSelectionText}
 ${optionsText}
@@ -2121,7 +2158,7 @@ assert(indexText.includes('id="boot-loader"') && indexText.includes('aria-label=
 assert(indexText.includes('resources/icons/AppIcon.png') && !indexText.includes('src-tauri/icons/icon.png'), 'startup boot loader uses the canonical MotionSmith app icon instead of the old blue grid path');
 assert(indexText.includes('#boot-loader .boot-word') && indexText.includes('max-width: calc(100vw - 2rem)') && indexText.includes('white-space: nowrap'), 'startup wordmark is viewport-constrained instead of clipped');
 assert(appText.includes('useAppOnnxBootstrap') && appOnnxBootstrapText.includes('warmWebOnnxCache(publishBootStatus)') && appOnnxBootstrapText.includes('finishBootLoader()') && appOnnxBootstrapText.includes('document.getElementById("boot-loader")?.remove()'), 'React keeps the static boot loader through AI model warmup before opening the editor');
-assert(appShellText.includes('const APP_VERSION = __APP_VERSION__') && appShellText.includes('workflow-rail-version') && indexText.includes('v%APP_VERSION%'), 'startup boot loader and editor rail show the package version subtly');
+assert(shellUiText.includes('const APP_VERSION = __APP_VERSION__') && shellUiText.includes('workflow-rail-version') && indexText.includes('v%APP_VERSION%'), 'startup boot loader and editor rail show the package version subtly');
 assert(indexText.includes('.boot-version') && indexText.includes('.workflow-rail-version'), 'version labels use low-emphasis styling');
 assert(appWorkspaceShellText.includes('../resources/icons/AppIcon.png?url') && indexText.includes('.app-header-icon'), 'top bar renders the canonical MotionSmith app icon with dedicated sizing');
 assert(indexText.includes("font-family: 'Manrope'") && indexText.includes('fonts/manrope-800-latin.woff2'), 'startup boot loader uses self-hosted Manrope wordmark styling');
