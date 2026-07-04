@@ -27,7 +27,7 @@ Measured on 2026-07-03.
 
 | File                                                       | Lines | Decision                                                                                                                                                                                                   |
 | ---------------------------------------------------------- | ----: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `App.tsx`                                                  |  2311 | First split continues. Command/Character/Path recommendation/Mechanism parametric/policy, Foundry SVG preview/geometry, shared Foundry/Design Three preview, MechanismFoundry wrapper, and Options and AssemblyGuide stage wrapper seams are extracted; keep shrinking by behavior-preserving stage seams only. No redesign mixed into extraction. |
+| `App.tsx`                                                  |  1513 | First split continues. Command/Character/Path/Foundry/Options/Assembly/Mechanism Design stage seams are extracted; keep shrinking by behavior-preserving stage seams only. No redesign mixed into extraction. |
 | `components/stages/character/ProgressBlock.tsx`            |    84 | Done: character import progress UI lives outside the app shell. Keep it presentation-only; ONNX/import state remains canonical `ProjectState.processing`.                                                  |
 | `components/ui/InspectorControls.tsx`                      |    70 | Done: shared inspector sliders/toggles live outside the app shell. Keep them presentation-only; stage/domain handlers own state mutation.                                                                  |
 | `components/stages/character/PartInspector.tsx`            |   276 | Done: selected-part inspector owns part toggles, cut controls, and artwork/transform fields outside the app shell. Keep it dispatch-only; no parallel part state except transient cut selection.           |
@@ -53,6 +53,8 @@ Measured on 2026-07-03.
 | `components/stages/foundry/MechanismFoundry.tsx`             |  1571 | Done: Mechanism Foundry stage wrapper lives outside the app shell while still consuming shared Foundry renderer, fabrication, camera, and mechanism parameter contracts. Split only pure adapters next. |
 | `components/stages/options/Options.tsx`                       |   488 | Done: Options stage wrapper lives outside the app shell while still consuming shared units, kit preset, and inspector control seams. Keep it settings UI-only; ProjectState actions own mutation. |
 | `components/stages/assembly/AssemblyGuide.tsx`                 |   550 | Done: Assembly Guide stage wrapper lives outside the app shell while still consuming shared assembly playback, fabrication, and workbench seams. Keep it orchestration-only; recipe/stack rules stay in utils/fabrication and utils/assemblyPlayback. |
+| `components/stages/mechanism/MechanismDesign.tsx`             |   440 | Done: Mechanism Design stage wrapper lives outside the app shell while still consuming shared Foundry preview, parametric editor, target binding, and export handoff seams. Split only panel leaves next. |
+| `components/stages/mechanism/DesignFoundryPreview.tsx`        |   430 | Done: Design's Foundry preview adapter lives outside App and keeps `ThreeFoundryPreview` as the single mechanism renderer shared with Foundry. Keep it adapter-only; renderer rules stay in Foundry/physics/fabrication helpers. |
 | `components/ThreePuppetPreview.tsx`                        |  1550 | Split after `App.tsx` seams stabilize. Keep one Three/Rapier boundary; move geometry/material/cache helpers only when duplicated or directly touched.                                                      |
 | `utils/project.ts`                                         |  1439 | Split only reducer/defaults/migrations if touched. Preserve snapshot compatibility and `ProjectState` shape.                                                                                               |
 | `utils/fabrication.ts`                                     |  1364 | Split manifest lookup, render plan, validation/export. Fabrication rules still come from `fabrication/generate_fabrication_templates.py` and `utils/fabricationContract.ts`.                               |
@@ -90,6 +92,16 @@ env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_WORKERS=4 bunx playwright t
 
 All gates passed; the production-preview browser workflow reported 40 passed tests.
 
+Latest Mechanism Design extraction evidence:
+
+```bash
+bun run test:contracts
+bun run build
+env -u NO_COLOR PLAYWRIGHT_SERVER=preview PLAYWRIGHT_WORKERS=2 ./node_modules/.bin/playwright test tests/browser/workflow.spec.ts -g "Mechanism Design center workspace renders the same shared Foundry mechanism templates|Mechanism Design shared Foundry preview keeps placed anchors on the fabrication grid|Mechanism Design library chips, target filters, delete, and enabled export work|Workflow tabs keep left workflow, center canvas, and right inspector roles|Command menu and shared canvas zoom persist across workflow stages" --workers=2
+```
+
+All targeted gates passed after moving `MechanismDesign` and `DesignFoundryPreview` out of `App.tsx`.
+
 ## Split order
 
 1. **Command and app shell seams**
@@ -115,7 +127,8 @@ All gates passed; the production-preview browser workflow reported 40 passed tes
    - Done: `components/stages/foundry/MechanismFoundry.tsx`, `MechanismLinkagePreview.tsx`, `foundryPreviewGeometry.ts`, `ThreeFoundryPreview.tsx`, and `foundryPreviewStacks.ts` own the Foundry stage/renderer seams outside `App.tsx`; Foundry and Mechanism Design still mount the same Three preview component and share pin-stack/z-order contracts.
    - Done: `components/stages/options/Options.tsx` owns the Options stage wrapper outside `App.tsx`; Options still receives ProjectState/actions and does not own persistence or export rules.
    - Done: `components/stages/assembly/AssemblyGuide.tsx` owns the Assembly Guide stage wrapper outside `App.tsx`; Assembly still receives ProjectState/actions and shell playback state while recipe/stack derivation stays in shared utils.
-   - Next lowest-risk stage seam: move `MechanismDesign` wrapper with `DesignFoundryPreview` as one behavior-preserving seam so Foundry/Design preview parity remains shared. Each stage receives data/actions; no stage owns mechanism rules.
+   - Done: `components/stages/mechanism/MechanismDesign.tsx` owns the Mechanism Design stage wrapper outside `App.tsx`, and `DesignFoundryPreview.tsx` owns its thin shared-Foundry preview adapter. Design still receives ProjectState/actions and does not own mechanism rules.
+   - Next lowest-risk stage seam: split `MechanismDesign.tsx` into summary/workflow and inspector leaves. Keep `DesignFoundryPreview` untouched unless Foundry/Design renderer parity fails.
 
 3. **Domain helpers**
    - Done: mechanism fitting/recommendations live in `utils/mechanismRecommendations.ts`.
