@@ -24,7 +24,8 @@ import { cachedThreeResource, clearThreeGroup, disposeThreeObjectGraph, setRende
 import { APP_COMMANDS, APP_MENU_GROUPS, commandById, commandIdForKeyboardEvent, validateAppCommandRegistry } from '../utils/appCommands';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_KERNEL_IMPORT, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, physicsKernelCapability, runRapierFrictionProbe } from '../utils/physicsKernel';
 import { formatGridLabel, formatGridPitch, formatGridReadout } from '../utils/units';
-import { buildCharacterAssemblyPlan } from '../utils/assemblyPlayback';
+import { buildCharacterAssemblyPlan, type CharacterAssemblyPlan } from '../utils/assemblyPlayback';
+import { assemblyCoordToSvg, characterBoardProjector, characterCanvasProjector, smoothAssemblyProgress, svgPathFromPoints } from '../components/stages/assembly/assemblyGeometry';
 import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, FOUNDRY_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, mechanismTemplateLabel } from '../utils/mechanismTemplates';
 import { MECHANISM_TYPES as SANITIZE_MECHANISM_TYPES, sanitizeMechanismRuntime } from '../utils/sanitize';
 import { generateSmartConfig, mutateConfig, OPTIMIZER_MECHANISM_TYPES } from '../utils/optimizer';
@@ -219,6 +220,7 @@ assert(normalizedCodebaseCleanupPlan.includes('`components/shell/ShellDialogs.ts
 assert(normalizedCodebaseCleanupPlan.includes('`components/shell/CanvasZoomToolbar.tsx` | 14') && normalizedCodebaseCleanupPlan.includes('shared canvas zoom controls live outside AppShell'), 'cleanup plan records the extracted canvas zoom toolbar seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/shell/WorkspacePlayerDock.tsx` | 81') && normalizedCodebaseCleanupPlan.includes('floating workspace player dock view lives outside AppShell'), 'cleanup plan records the extracted workspace player dock view seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/shell/WorkflowStatusStrip.tsx` | 7') && normalizedCodebaseCleanupPlan.includes('compact workflow status strip lives outside AppShell'), 'cleanup plan records the extracted workflow status strip seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/assembly/assemblyGeometry.ts` | 97') && normalizedCodebaseCleanupPlan.includes('DOM-free Assembly coordinate, smoothing, and character projector helpers'), 'cleanup plan records the extracted assembly geometry/projector seam');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
 assert(readFileSync(join(process.cwd(), 'utils', 'projectPersistence.ts'), 'utf8').includes('motionsmith.autosave') && readFileSync(join(process.cwd(), 'utils', 'projectPersistence.ts'), 'utf8').includes('motionsmith.workspace'), 'local storage namespace uses the MotionSmith slug for persistent state');
 assert.deepEqual(validateAppCommandRegistry(), [], 'application command registry is internally consistent');
@@ -1835,6 +1837,7 @@ couplerSpecForNonExactSpan.holeCentersMm.slice(1).forEach((point, index) => {
 });
 const projectText = readFileSync(join(process.cwd(), 'utils', 'project.ts'), 'utf8');
 const assemblyWorkbenchText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'AssemblyWorkbench.tsx'), 'utf8');
+const assemblyGeometryText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'assemblyGeometry.ts'), 'utf8');
 const assemblyGuideText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'AssemblyGuide.tsx'), 'utf8');
 const blueprintExportText = readFileSync(join(process.cwd(), 'components', 'stages', 'blueprint', 'BlueprintExport.tsx'), 'utf8');
 const assemblyPlaybackText = readFileSync(join(process.cwd(), 'utils', 'assemblyPlayback.ts'), 'utf8');
@@ -2254,6 +2257,8 @@ assert(assemblyBlock.includes('data-testid="assembly-canvas-preview"') && assemb
 assert(assemblyBlock.includes('const liveRecipes = activeMechanisms.map') && assemblyBlock.includes('liveRecipes.length ? liveRecipes : (pkg?.recipes ?? [])'), 'Assembly preview derives from live project mechanisms before falling back to an exported package');
 assert(assemblyBlock.includes('activeAssemblyMode === "character"') && assemblyBlock.includes('<CharacterAssemblyWorkbench') && !assemblyBlock.includes('{pkg && selectedRecipe && currentStep ?'), 'Assembly animation supports character and mechanism stages before generating PDF/HTML output');
 assert(assemblyWorkbenchText.includes('data-testid="assembly-stepper-workbench"'), 'Assembly workbench exposes a testable interactive stepper surface');
+assert(assemblyWorkbenchText.includes("from './assemblyGeometry'") && assemblyWorkbenchText.includes('smoothAssemblyProgress') && !assemblyWorkbenchText.includes('const assemblyCoordToSvg =') && !assemblyWorkbenchText.includes('const characterBoardProjector ='), 'Assembly workbench delegates pure coordinate/projector helpers to assemblyGeometry');
+assert(assemblyGeometryText.includes('export const assemblyCoordToSvg') && assemblyGeometryText.includes('export const characterBoardProjector') && !assemblyGeometryText.includes('<') && !assemblyGeometryText.includes('document.'), 'assemblyGeometry is a DOM-free deterministic helper seam');
 assert(assemblyPlaybackText.includes('export const pendingRecipeForMechanism') && assemblyPlaybackText.includes('buildAssemblyPlaybackSteps'), 'Assembly recipe/playback derivation lives outside App.tsx');
 assert(assemblyPlaybackText.includes("motion: 'stack-layer'") && assemblyPlaybackText.includes("motion: 'move-to-board'") && assemblyPlaybackText.includes("motion: 'connect-character'") && assemblyPlaybackText.includes("motion: 'test-motion'"), 'Assembly playback declares a visual motion mode for every build phase');
 assert(assemblyBlock.includes('data-testid="assembly-mode-switch"') && assemblyBlock.includes('data-testid="character-assembly-inspector"'), 'Assembly tab exposes a character assembly sub-stage with a compact inspector');
@@ -2268,6 +2273,40 @@ assert(assemblyWorkbenchText.includes('progress = 0') && assemblyWorkbenchText.i
 assert(assemblyWorkbenchText.includes('data-testid="assembly-parts-tray"') && assemblyWorkbenchText.includes('data-testid="assembly-mount-motion"') && assemblyWorkbenchText.includes('data-testid="assembly-character-connect"') && assemblyWorkbenchText.includes('data-testid="assembly-motion-dot"'), 'Assembly workbench visualizes parts, mounting, character connection, and test motion as step-specific simulation states');
 assert(!assemblyBlock.includes('data-testid="assembly-guide-preview-frame"'), 'Assembly center no longer defaults to an iframe document preview');
 assert(assemblyBlock.includes('data-testid="assembly-guide-preview"'), 'Assembly tab keeps selected recipe detail in the right inspector');
+assert.deepEqual(assemblyCoordToSvg('A1'), { x: 494, y: 142 }, 'assembly board coordinate A1 maps to SVG origin slot');
+assert.deepEqual(assemblyCoordToSvg('O15'), { x: 746, y: 394 }, 'assembly board coordinate O15 maps to final board slot');
+assert.equal(assemblyCoordToSvg('P1'), null, 'assembly board coordinate parser rejects non-15x15 columns');
+assert.equal(smoothAssemblyProgress(-1), 0, 'assembly progress easing clamps below zero');
+assert.equal(smoothAssemblyProgress(0.5), 0.5, 'assembly progress easing preserves the midpoint');
+assert.equal(smoothAssemblyProgress(2), 1, 'assembly progress easing clamps above one');
+assert.equal(svgPathFromPoints([{ x: 0, y: 0 }, { x: 1, y: 2 }], point => ({ x: point.x + 10, y: point.y + 20 })), 'M 10.0 20.0 L 11.0 22.0 Z', 'assembly path helper is deterministic and projection-driven');
+const roundAssemblyPoint = (point: { x: number; y: number }) => ({ x: Number(point.x.toFixed(3)), y: Number(point.y.toFixed(3)) });
+const projectorPlan: CharacterAssemblyPlan = {
+  kind: 'character',
+  parts: [{ id: 'torso', name: 'Torso', fillColor: '#ffffff', outline: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }], pivot: { x: 0, y: 0 } }],
+  fixedPins: [
+    { id: 'fixed-a', jointId: 'a', label: 'A', role: 'fixed_pin', scene: { x: 0, y: 0 }, boardCoordinate: 'A1', partIds: [], partNames: [], stack: [] },
+    { id: 'fixed-b', jointId: 'b', label: 'B', role: 'fixed_pin', scene: { x: 100, y: 0 }, boardCoordinate: 'B1', partIds: [], partNames: [], stack: [] }
+  ],
+  freePivots: [],
+  steps: [],
+  mechanismAssemblySteps: [],
+  boardCells: 15
+};
+const pairedBoardProjector = characterBoardProjector(projectorPlan);
+assert.equal(pairedBoardProjector.anchorPinId, 'fixed-a', 'assembly board projector anchors to the first valid fixed pin pair');
+assert.equal(pairedBoardProjector.anchorBoardCoordinate, 'A1', 'assembly board projector preserves the board anchor label');
+assert.deepEqual(roundAssemblyPoint(pairedBoardProjector.project({ x: 100, y: 0 })), { x: 512, y: 142 }, 'assembly board projector maps the second fixed pin onto its board hole');
+assert.deepEqual(roundAssemblyPoint(pairedBoardProjector.project({ x: 0, y: 100 })), { x: 494, y: 160 }, 'assembly board projector keeps pair-derived rotation and scale deterministic');
+const oneAnchorBoardProjector = characterBoardProjector({ ...projectorPlan, fixedPins: [projectorPlan.fixedPins[0]] });
+assert.equal(oneAnchorBoardProjector.anchorPinId, 'fixed-a', 'assembly board projector falls back to a single fixed pin anchor');
+assert.deepEqual(roundAssemblyPoint(oneAnchorBoardProjector.project({ x: 10, y: 10 })), { x: 516, y: 164 }, 'single-anchor assembly projector uses the fit scale deterministically');
+const noAnchorBoardProjector = characterBoardProjector({ ...projectorPlan, fixedPins: [] });
+assert.equal(noAnchorBoardProjector.anchorPinId, undefined, 'assembly board projector supports no-anchor fit mode');
+assert.deepEqual(roundAssemblyPoint(noAnchorBoardProjector.project({ x: 0, y: 0 })), { x: 508, y: 156 }, 'no-anchor assembly projector centers the character on the board work area');
+const canvasProject = characterCanvasProjector(projectorPlan);
+assert.deepEqual(roundAssemblyPoint(canvasProject({ x: 0, y: 0 })), { x: 96, y: 136 }, 'assembly canvas projector centers fixture bounds in the character tray');
+assert.deepEqual(roundAssemblyPoint(canvasProject({ x: 100, y: 100 })), { x: 396, y: 436 }, 'assembly canvas projector preserves deterministic tray scale');
 const characterAssemblyPlan = buildCharacterAssemblyPlan(starterSample);
 assert.equal(characterAssemblyPlan.kind, 'character', 'character assembly plan carries a distinct stage kind');
 assert(characterAssemblyPlan.parts.length >= 10, 'character assembly plan includes the full starter body-part set');

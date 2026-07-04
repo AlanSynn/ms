@@ -26,6 +26,7 @@ Keep MotionSmith easy to change without changing behavior: small files, one doma
 - Source of truth is back to the original `/Users/alansynn/Documents/MechAnim` working tree; no temporary clone is authoritative.
 - `App.tsx` is now a 493-line composition shell, so the next risky work is not another App split.
 - Retired the dead `components/Canvas.tsx` seam because runtime code no longer imported it; contracts now pin that it stays deleted.
+- Completed low-risk Assembly geometry seam: DOM-free coordinate, smoothing, and character projectors now live in `components/stages/assembly/assemblyGeometry.ts`.
 - Next safe production seams, in order: split Blueprint preview/download sections, split Assembly playback/view sections, then split pure `utils/fabrication.ts` concerns behind golden-master output hashes.
 - High-risk seams that need stronger harnesses before editing: `components/ThreePuppetPreview.tsx`, `utils/project.ts`, `utils/fabrication.ts`, and `components/TrackingModal.tsx`.
 - Local ignored junk can be removed when seen: `.DS_Store`, `resources/.DS_Store`, `resources/examples/.DS_Store`, `fabrication/__pycache__/`, `fabrication/board-final.svg`, and `test-results/`. Do not delete `.agents/`, `.omx/`, `docs/to-port-web-onnx/`, `dist/`, or `node_modules/` as cleanup.
@@ -97,6 +98,8 @@ Measured on 2026-07-03.
 | `components/stages/foundry/FoundryInspectorPanel.tsx`         |   231 | Done: Foundry right inspector owns physics readout, opacity/explode controls, parametric editor, advanced parameters, and overlay toggles outside the stage wrapper. Keep mechanism rules in shared utils.                                                                                                                            |
 | `components/stages/options/Options.tsx`                       |   488 | Done: Options stage wrapper lives outside the app shell while still consuming shared units, kit preset, and inspector control seams. Keep it settings UI-only; ProjectState actions own mutation.                                                                                                                                     |
 | `components/stages/assembly/AssemblyGuide.tsx`                |   550 | Done: Assembly Guide stage wrapper lives outside the app shell while still consuming shared assembly playback, fabrication, and workbench seams. Keep it orchestration-only; recipe/stack rules stay in utils/fabrication and utils/assemblyPlayback.                                                                                 |
+| `components/stages/assembly/AssemblyWorkbench.tsx`            |   329 | Done: Assembly stepper/character workbench owns JSX only and delegates DOM-free coordinate, smoothing, and character projector helpers to `assemblyGeometry.ts`; keep new geometry math there and leave recipe/playback rules in `utils/assemblyPlayback.ts`.                                                                 |
+| `components/stages/assembly/assemblyGeometry.ts`              |    97 | Done: DOM-free Assembly coordinate, smoothing, and character projector helpers are harnessable outside JSX. Keep deterministic; no React, DOM, ProjectState mutation, or fabrication rule ownership.                                                                                                                          |
 | `components/stages/mechanism/MechanismDesign.tsx`             |    77 | Done: Mechanism Design is now an orchestration-only stage wrapper composing workflow, shared preview, and inspector panes. Keep it free of mechanism math and long stage internals.                                                                                                                                                   |
 | `components/stages/mechanism/DesignWorkflowPanel.tsx`         |   165 | Done: Mechanism Design left workflow pane owns library chips, visible sensemaking cues, recommendation/blueprint actions, and binding blockers. Keep it ProjectState/action driven.                                                                                                                                                   |
 | `components/stages/mechanism/DesignInspectorPanel.tsx`        |   274 | Done: Mechanism Design right inspector pane owns selected mechanism binding, parametric editor, numeric controls, warnings, and export/delete actions. Keep mechanism rules in shared utils.                                                                                                                                          |
@@ -110,6 +113,8 @@ Measured on 2026-07-03.
 | `utils/mechanismReference.ts`                                 |   688 | Keep as mechanism recipe source; split only generated/reference tables if they grow again.                                                                                                                                                                                                                                            |
 | `utils/webOnnx.ts`                                            |   677 | Keep lazy/cached ONNX boundary. Split model loading from image post-processing only if touched.                                                                                                                                                                                                                                       |
 | `utils/kinematics.ts`                                         |   662 | Keep pure mechanism math together until a mechanism-specific solver needs extraction.                                                                                                                                                                                                                                                 |
+
+- Extracted helper seam: `components/stages/assembly/assemblyGeometry.ts` | 97 lines | DOM-free Assembly coordinate, smoothing, and character projector helpers.
 
 ## Golden-master refactor gate
 
@@ -247,7 +252,7 @@ Use this gate when moving character intake/review actions. It proves ONNX image 
 2. **Stage components**
    - Done: shared stage frame/navigation lives in `components/stages/stageLayout.tsx`.
    - Done: `BlueprintExport` lives in `components/stages/blueprint/BlueprintExport.tsx`.
-   - Done: assembly workbench lives in `components/stages/assembly/AssemblyWorkbench.tsx`.
+   - Done: assembly workbench lives in `components/stages/assembly/AssemblyWorkbench.tsx`; DOM-free Assembly coordinate, smoothing, and character projector helpers live in `components/stages/assembly/assemblyGeometry.ts`.
    - Done: `components/stages/character/ProgressBlock.tsx` owns the import progress card and status label outside `App.tsx`.
    - Done: `components/ui/InspectorControls.tsx` owns shared mini number and toggle controls used by inspectors.
    - Done: `components/stages/character/PartInspector.tsx` and `CutOutlineEditorDialog.tsx` own the shared part/cut inspector leaf used by Character and Path.
@@ -320,4 +325,4 @@ Stop only when the relevant contract, build, and browser evidence passes without
 - Removed runtime-unused source: `components/Controls.tsx`, `utils/zStack.ts`.
 - Extracted shared stage frame/nav shell to `components/stages/stageLayout.tsx`.
 - Extracted blueprint stage to `components/stages/blueprint/BlueprintExport.tsx`.
-- Extracted assembly workbench plus assembly playback derivation to `components/stages/assembly/AssemblyWorkbench.tsx` and `utils/assemblyPlayback.ts`.
+- Extracted assembly workbench plus assembly playback derivation to `components/stages/assembly/AssemblyWorkbench.tsx` and `utils/assemblyPlayback.ts`; extracted DOM-free Assembly coordinate, smoothing, and character projector helpers to `components/stages/assembly/assemblyGeometry.ts`.

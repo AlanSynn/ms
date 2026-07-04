@@ -3,103 +3,19 @@ import type { AssemblyLane, AssemblyPlaybackStep, CharacterAssemblyPin, Characte
 import { fabricationBoardColumnLabel, fabricationBoardCoordinateCallout, fabricationBoardRowLabel, fabricationPartDisplayLabel } from '../../../utils/fabrication';
 import { MECHANISM_TEMPLATE_LIBRARY } from '../../../utils/mechanismTemplates';
 import { isBoardFixedCoordRole } from '../../../utils/mechanismReference';
+import {
+    ASSEMBLY_QUIET_OPACITY,
+    ASSEMBLY_REFERENCE_OPACITY,
+    assemblyCoordToSvg,
+    characterBoardProjector,
+    characterCanvasProjector,
+    smoothAssemblyProgress,
+    svgPathFromPoints
+} from './assemblyGeometry';
 
-const assemblyCoordToSvg = (coord: string) => {
-    const match = /^([A-O])([1-9]|1[0-5])$/i.exec(coord.trim());
-    if (!match) return null;
-    return { x: 494 + (match[1].toUpperCase().charCodeAt(0) - 65) * 18, y: 142 + (Number(match[2]) - 1) * 18 };
-};
-
-const smooth = (value: number) => {
-    const t = Math.max(0, Math.min(1, value));
-    return t * t * (3 - 2 * t);
-};
-
-const ASSEMBLY_REFERENCE_OPACITY = 0.86;
-const ASSEMBLY_QUIET_OPACITY = 0.72;
-
-const pointBounds = (points: Array<{ x: number; y: number }>) => {
-    const xs = points.map(point => point.x);
-    const ys = points.map(point => point.y);
-    return {
-        minX: Math.min(...xs),
-        maxX: Math.max(...xs),
-        minY: Math.min(...ys),
-        maxY: Math.max(...ys),
-        width: Math.max(...xs) - Math.min(...xs),
-        height: Math.max(...ys) - Math.min(...ys)
-    };
-};
-
-const characterCanvasProjector = (plan: CharacterAssemblyPlan) => {
-    const allPoints = plan.parts.flatMap(part => [...part.outline, part.pivot]);
-    const bounds = allPoints.length ? pointBounds(allPoints) : { minX: -120, maxX: 120, minY: -160, maxY: 160, width: 240, height: 320 };
-    const scale = Math.min(300 / Math.max(1, bounds.width), 360 / Math.max(1, bounds.height));
-    const offsetX = 246 - (bounds.minX + bounds.width / 2) * scale;
-    const offsetY = 286 - (bounds.minY + bounds.height / 2) * scale;
-    return (point: { x: number; y: number }) => ({ x: point.x * scale + offsetX, y: point.y * scale + offsetY });
-};
-
-const distance = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
-
-const characterBoardProjector = (plan: CharacterAssemblyPlan) => {
-    const allPoints = plan.parts.flatMap(part => [...part.outline, part.pivot]);
-    const bounds = allPoints.length ? pointBounds(allPoints) : { minX: -120, maxX: 120, minY: -160, maxY: 160, width: 240, height: 320 };
-    const fitScale = Math.min(220 / Math.max(1, bounds.width), 248 / Math.max(1, bounds.height));
-    const anchoredPins = plan.fixedPins
-        .map(pin => ({ pin, board: pin.boardCoordinate ? assemblyCoordToSvg(pin.boardCoordinate) : null }))
-        .filter((entry): entry is { pin: CharacterAssemblyPlan['fixedPins'][number]; board: { x: number; y: number } } => Boolean(entry.board));
-    const pair = anchoredPins.flatMap((first, firstIndex) =>
-        anchoredPins.slice(firstIndex + 1).map(second => ({ first, second }))
-    ).find(({ first, second }) => distance(first.pin.scene, second.pin.scene) > 1 && distance(first.board, second.board) > 1);
-    if (pair) {
-        const sceneAngle = Math.atan2(pair.second.pin.scene.y - pair.first.pin.scene.y, pair.second.pin.scene.x - pair.first.pin.scene.x);
-        const boardAngle = Math.atan2(pair.second.board.y - pair.first.board.y, pair.second.board.x - pair.first.board.x);
-        const scale = distance(pair.first.board, pair.second.board) / distance(pair.first.pin.scene, pair.second.pin.scene);
-        const rotation = boardAngle - sceneAngle;
-        const cos = Math.cos(rotation);
-        const sin = Math.sin(rotation);
-        return {
-            anchorPinId: pair.first.pin.id,
-            anchorBoardCoordinate: pair.first.pin.boardCoordinate,
-            project: (point: { x: number; y: number }) => {
-                const x = (point.x - pair.first.pin.scene.x) * scale;
-                const y = (point.y - pair.first.pin.scene.y) * scale;
-                return {
-                    x: pair.first.board.x + x * cos - y * sin,
-                    y: pair.first.board.y + x * sin + y * cos
-                };
-            }
-        };
-    }
-    const anchor = anchoredPins[0];
-    if (anchor) {
-        return {
-            anchorPinId: anchor.pin.id,
-            anchorBoardCoordinate: anchor.pin.boardCoordinate,
-            project: (point: { x: number; y: number }) => ({
-                x: anchor.board.x + (point.x - anchor.pin.scene.x) * fitScale,
-                y: anchor.board.y + (point.y - anchor.pin.scene.y) * fitScale
-            })
-        };
-    }
-    const offsetX = 618 - (bounds.minX + bounds.width / 2) * fitScale;
-    const offsetY = 266 - (bounds.minY + bounds.height / 2) * fitScale;
-    return {
-        anchorPinId: undefined,
-        anchorBoardCoordinate: undefined,
-        project: (point: { x: number; y: number }) => ({ x: point.x * fitScale + offsetX, y: point.y * fitScale + offsetY })
-    };
-};
-
-const svgPathFromPoints = (points: Array<{ x: number; y: number }>, project: (point: { x: number; y: number }) => { x: number; y: number }) => {
-    if (!points.length) return '';
-    const projected = points.map(project);
-    return `M ${projected[0].x.toFixed(1)} ${projected[0].y.toFixed(1)} ${projected.slice(1).map(point => `L ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ')} Z`;
-};
 
 export const AssemblyWorkbench = ({ recipe, lane, step, kit, progress = 0 }: { recipe: FabricationRecipe; lane: AssemblyLane; step: AssemblyPlaybackStep; kit: PhysicalKitSettings; progress?: number }) => {
-    const eased = smooth(progress);
+    const eased = smoothAssemblyProgress(progress);
     const sensemaking = MECHANISM_TEMPLATE_LIBRARY[recipe.type].classroomSensemaking;
     const boardActive = lane === 'kit' && ['mount-to-board', 'connect-character', 'test-motion'].includes(step.phase);
     const stack = step.stack.length ? step.stack : recipe.assemblySteps.flatMap(item => item.stack ?? []).slice(0, 5);
@@ -257,7 +173,7 @@ export const CharacterAssemblyWorkbench = ({ plan, step, kit, progress = 0 }: { 
     const trayProjectPoint = characterCanvasProjector(plan);
     const boardProjector = characterBoardProjector(plan);
     const activePinIds = new Set(step.pinIds);
-    const eased = smooth(progress);
+    const eased = smoothAssemblyProgress(progress);
     const mountedProgress = step.phase === 'attach-character' ? 0.35 + eased * 0.65 : step.phase === 'test-character' ? 1 : 0;
     const layerState = mountedProgress >= 1 ? 'mounted' : mountedProgress > 0 ? 'moving-to-board' : 'parts-tray';
     const projectPoint = (point: { x: number; y: number }) => {
