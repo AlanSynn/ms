@@ -77,7 +77,7 @@ Do not put broad galleries, recipe lists, onboarding choices, primary navigation
 ## Component rules
 
 - Keep React/Vite and the existing inline CSS utility system in `index.html`; do not introduce Tailwind/CDN/build-tool dependencies.
-- Keep `SceneSketch` for path drawing and `Canvas` for mechanism/blueprint rendering until a tested shared scene component exists. Do not over-unify canvas engines just for style.
+- Keep `SceneSketch` for path drawing, `ThreePuppetPreview` for character/path 3D, shared `ThreeFoundryPreview` for Foundry/Design mechanisms, and blueprint SVG renderers for output sheets. Do not revive `Canvas.tsx` or over-unify renderers just for style.
 - Use existing components/state paths before adding abstractions.
 - Add test IDs only for persistent product contracts such as shared workbench, sidebar, workflow steps, and player dock.
 

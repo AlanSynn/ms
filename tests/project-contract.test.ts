@@ -300,7 +300,6 @@ for (const forbiddenShellBoundary of ['validateForFabrication', 'applyProjectAct
 const visibleUiSource = [
   'App.tsx',
   'components/AppWorkspaceShell.tsx',
-  'components/Canvas.tsx',
   'components/TrackingModal.tsx',
   'components/AppShell.tsx',
   'components/stages/stageLayout.tsx',
@@ -1802,7 +1801,6 @@ assert.equal(couplerSpecForNonExactSpan.cells, 4, 'min-hole linkage selection sn
 couplerSpecForNonExactSpan.holeCentersMm.slice(1).forEach((point, index) => {
   assert.equal(point.x - couplerSpecForNonExactSpan.holeCentersMm[index].x, 20, 'linkage hole spacing stays on the fabrication generator pitch');
 });
-const canvasText = readFileSync(join(process.cwd(), 'components', 'Canvas.tsx'), 'utf8');
 const projectText = readFileSync(join(process.cwd(), 'utils', 'project.ts'), 'utf8');
 const assemblyWorkbenchText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'AssemblyWorkbench.tsx'), 'utf8');
 const assemblyGuideText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'AssemblyGuide.tsx'), 'utf8');
@@ -1905,13 +1903,11 @@ assert(threeFoundryPreviewText.includes('foundryRenderedInventory(mechanism.type
 assert(threeFoundryPreviewText.includes('<FoundryPreviewStateProbe') && foundryPreviewStateProbeText.includes('data-testid="foundry-camera-rig"') && foundryPreviewStateProbeText.includes('data-three-animation-commit-ms'), 'Foundry Three renderer delegates browser telemetry to a probe seam without changing the camera-rig data contract');
 assert(threeFoundryPreviewText.includes('createFoundryThreePrimitiveFactory') && threeFoundryPreviewText.includes('disposeFoundryThreeObject') && foundryThreePrimitivesText.includes('export const createFoundryThreePrimitiveFactory') && foundryThreePrimitivesText.includes('addGear') && foundryThreePrimitivesText.includes('addBar') && foundryThreePrimitivesText.includes('export const disposeFoundryThreeObject'), 'Foundry Three renderer delegates primitive mesh/material builders and cached disposal to the primitive factory seam');
 assert(threeFoundryPreviewText.includes('renderFoundryDynamicLayers') && foundryThreeRenderLayersText.includes('export const renderFoundryDynamicLayers') && foundryThreeRenderLayersText.includes('renderLinkageLayer') && foundryThreeRenderLayersText.includes('renderGearLayer') && foundryThreeRenderLayersText.includes('foundrySpacerTouchesPin'), 'Foundry Three renderer delegates dynamic layer placement to a shared render-layer helper without changing fabrication z-stack dispatch');
-assert(canvasText.includes('fabricationGearPathD'), '2D canvas gear rendering uses shared fabrication gear geometry');
-assert(canvasText.includes('data-reference-topology={referenceTopologySummary(m.type)}'), '2D design canvas exposes mechanism-reference topology telemetry');
-assert(canvasText.includes('data-reference-coord-roles={coordRoleSummary}'), '2D design canvas exposes mechanism-reference coordinate role telemetry');
-assert(canvasText.includes('const showCrankDriver = !hasNoCrankDriverInCanvas(m.type)'), '2D design canvas does not draw generic crank rods over gear/cam/planetary mechanisms');
-assert(canvasText.includes("if (type === 'gear') return 'fixed gear centers only; no rods; external mesh sequence'"), '2D design canvas labels gear trains as gears-only mechanisms');
-assert(canvasText.includes("if (type === 'cam') return 'rotating cam profile; guided follower block; no linkage rods'"), '2D design canvas labels cam followers as cam-plus-follower mechanisms');
-assert(canvasText.includes('RingGearPath') && canvasText.includes('planetaryPlanetSpinRatio'), '2D design canvas renders planetary gears as ring/sun/planet/carrier geometry');
+assert(!existsSync(join(process.cwd(), 'components', 'Canvas.tsx')), 'legacy Canvas renderer stays deleted; active views use SceneSketch, ThreePuppetPreview, ThreeFoundryPreview, and blueprint SVG renderers');
+assert(exporterText.includes('fabricationGearPathD'), 'blueprint/export gear rendering uses shared fabrication gear geometry');
+assert(mechanismLinkagePreviewText.includes('mechanismReferenceTopologySummary') && mechanismLinkagePreviewText.includes('data-reference-topology'), 'active Foundry SVG renderer exposes mechanism-reference topology telemetry');
+assert(mechanismLinkagePreviewText.includes('referenceCoordRoles') && mechanismLinkagePreviewText.includes('data-reference-coord-roles'), 'active Foundry SVG renderer exposes mechanism-reference coordinate role telemetry');
+assert(mechanismLinkagePreviewText.includes('fabricationRingGearPathD') && foundry3dText.includes('fabricationRingGearProfileForPitchRadius'), 'active Foundry/Design renderers use shared ring/sun/planet/carrier gear geometry');
 assert(foundry3dText.includes('fixed-gear-axles-only'), 'Foundry 3D gear train preview declares fixed gear axles rather than generic mechanism pins');
 assert(foundry3dText.includes('coplanar-fixed-axles') && foundry3dText.includes('gear-axles-include-board-side-spacer'), 'Foundry 3D gear train preview keeps gear plates coplanar and spans board-side local spacer stacks');
 assert(foundry3dText.includes('planetary-coplanar-ring-sun-planet') && foundry3dText.includes('planetary-carrier-pins-include-local-spacers'), 'Foundry 3D planetary preview keeps ring/sun/planet coplanar while carrier pins use local S10 spacers');
@@ -2021,7 +2017,6 @@ assert(mechanismRecommendationsText.includes('const fittedErrors = fabricationEr
 assert(mechanismRecommendationsText.includes('const unchanged = mechanismWithGeneratedPath(') && mechanismRecommendationsText.includes('const unchangedErrors = fabricationErrorsForCandidate(project, unchanged)'), 'path fitting falls back to the previous/snapped mechanism instead of returning an invalid fit candidate');
 assert(mechanismRecommendationsText.includes('previousAnchor') && mechanismRecommendationsText.includes('gridPitchMm * SCENE_PX_PER_MM'), 'recommendation sheet fitting nudges by whole board holes when a sub-hole correction snaps back to the same invalid anchor');
 assert(projectText.includes('normalizeMechanismToFabricationSet({') && projectText.includes('const reconcileMechanismTargets'), 'ProjectState reducers centrally normalize saved mechanisms to fabrication-ready reference sets');
-assert(canvasText.includes('const normalized = normalizeMechanismToReference(next)'), 'legacy 2D canvas edits normalize every mechanism type through the reference contract before regenerating paths');
 assert(mechanismRecommendationsText.includes('localizeFittedMechanismAnchor') && mechanismRecommendationsText.includes('maxDistance = 120'), 'Foundry export preserves the picked board anchor locality when fitting a mechanism to a path');
 assert(!appText.includes('A-D-ground-links-coplanar'), '4bar previews no longer collapse ground/output links into one impossible z plane');
 assert(foundry3dText.includes('fabrication-stack-separated'), '4bar previews keep fabrication stack-separated z order in Foundry and Design');
@@ -2082,7 +2077,6 @@ const directFit = fitMechanismSimulation(sample.mechanisms[0], 1.234, 360, 240, 
 const cachedFit = fitMechanismSimulationWithContext(sample.mechanisms[0], 1.234, fitContext);
 assert.deepEqual(cachedFit.pathPoints, directFit.pathPoints, 'cached Foundry fit preserves the direct preview path exactly');
 assert(Math.hypot(cachedFit.state.effector.x - directFit.state.effector.x, cachedFit.state.effector.y - directFit.state.effector.y) < 1e-9, 'cached Foundry fit maps the live effector exactly like direct fit');
-assert(!canvasText.includes('toothWidth'), '2D canvas no longer carries a separate saw-tooth gear implementation');
 assert(!threePreviewText.includes('teeth * 2'), '3D preview no longer carries a separate saw-tooth gear implementation');
 assert(threePreviewText.includes('fabricablePartOutlinePoints'), '3D puppet preview uses shared model/user contour outlines instead of raw image crop rectangles');
 assert(webOnnxText.includes('contourFromCropMask') && webOnnxText.includes("contourSource: crop.contourPoints.length >= 3 ? 'onnx-mask'"), 'browser ONNX preserves mask-derived part contours for fabrication plates');

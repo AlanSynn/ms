@@ -214,7 +214,7 @@ type ToonSceneProjection = {
 - The `blueprint` stage may default the lens to `blueprint`, but lens switching must not change `stage`.
 - `CanvasViewport` remains the 2D pan/zoom state and is reused by locked 2.5D/SVG overlay.
 - Existing persisted selected ids (`selectedPartId`, `selectedPathId`, `selectedMechanismId`) remain the source of truth for project selection until a transient richer `SelectionState` is introduced.
-- `Canvas.tsx` keeps the existing SVG/HTML authoring layer for drawing and reducer writes through M3. A future `ToonWorkbench` consumes projection data for rendering/picking and mirrors selection back through existing ids.
+- `SceneSketch`, `ThreePuppetPreview`, shared `ThreeFoundryPreview`, and blueprint SVG renderers own the active authoring/output surfaces. Do not revive deleted `Canvas.tsx`; future workbench changes must consume projection data and mirror selection through existing ids.
 - Lens switches, camera unlock/lock, renderer toggles, and physics replay are “view-only” actions: they must not change serialized `ProjectState`, `metadata.updatedAt`, or `lastExport`.
 
 ## 6. Implementation milestones

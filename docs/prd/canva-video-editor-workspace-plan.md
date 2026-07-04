@@ -270,7 +270,7 @@ Acceptance:
 
 ### M1 — editor shell and global player
 
-First files: `App.tsx`, `components/Canvas.tsx`, `tests/browser/workflow.spec.ts`; touch `types.ts` only if the local `PlayerState` type needs sharing.
+First files: `App.tsx`, shared stage preview adapters, and `tests/browser/workflow.spec.ts`; touch `types.ts` only if the local `PlayerState` type needs sharing.
 
 Deliverables:
 
@@ -286,7 +286,7 @@ Acceptance:
 
 ### M2 — contextual inspector
 
-First files: `App.tsx`, `components/Canvas.tsx`, `tests/browser/workflow.spec.ts`; touch `utils/project.ts` only for existing selected-id cleanup bugs.
+First files: `App.tsx`, shared stage preview adapters, and `tests/browser/workflow.spec.ts`; touch `utils/project.ts` only for existing selected-id cleanup bugs.
 
 Deliverables:
 
@@ -375,9 +375,9 @@ Designer review:
 
 Architect review:
 
-- Current app is already close: shared `ProjectState`, stage shell, reusable `Canvas`, broad browser tests.
+- Current app is already close: shared `ProjectState`, stage shell, shared preview adapters, and broad browser tests.
 - Safest path is extraction, not rewrite.
-- Biggest risks: coordinate drift, over-unifying `SceneSketch` and `Canvas` too early, weakening blueprint validation.
+- Biggest risks: coordinate drift, over-unifying `SceneSketch`, `ThreePuppetPreview`, `ThreeFoundryPreview`, and blueprint SVG too early, weakening blueprint validation.
 
 Research review:
 

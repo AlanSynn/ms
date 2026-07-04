@@ -343,13 +343,13 @@ Acceptance:
 ### M4 — Mechanism Design pane migration
 
 - Left: instance list + workflow actions.
-- Center: existing `Canvas` only.
+- Center: shared `ThreeFoundryPreview`/Design adapter only; no deleted legacy Canvas renderer.
 - Right: selected mechanism inspector.
 
 Acceptance:
 
 - selecting a mechanism in left updates right inspector;
-- numeric edits update center canvas;
+- numeric edits update the shared center preview;
 - recommendation/fit/export flows still pass.
 
 ### M5 — Blueprint/Options pane migration

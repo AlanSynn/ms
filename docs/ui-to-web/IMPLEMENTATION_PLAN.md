@@ -49,7 +49,7 @@ Verified before this plan:
 | Area | Required by docs | Current gap | Implementation decision |
 | --- | --- | --- | --- |
 | App shell menu | File/View/Edit/Options/Help actions + optional toolbar | Header only exposes Import/Save/Export; no menu mapping | Add a compact command bar with real File/View/Edit/Options/Help action groups and status copy. Keep it novice-friendly, not old Qt chrome-heavy. |
-| Persistent viewport | Tab switching preserves pan/zoom | `Canvas` owns local zoom/pan per mount; every stage remount loses viewport | Hoist `CanvasViewport` state into `App` and pass to all `Canvas` instances. |
+| Persistent viewport | Tab switching preserves pan/zoom | Viewport/camera state can drift across preview adapters if each remount owns it | Hoist `CanvasViewport`/camera state into `App` and pass it to active preview adapters. |
 | Canvas zoom toolbar | +/−/fit/reset/1:1 style controls | Mouse wheel exists; panel buttons partial/missing | Add shared `CanvasZoomToolbar` overlay bound to hoisted viewport. |
 | Options dialog | Groups: Appearance, Simulation, Performance, Debugging, Workflow, Fabrication, Units | Options page has fewer controls and no modal/drawer framing | Expand `AppSettings` minimally and implement grouped options using real settings. |
 | Manual segmentation editor | Add/remove joints/layers, anchors, preview/apply | Full editor not present; current import package covers processed packages only | Add a real lightweight in-browser Character Edit drawer backed by `ProjectState`: part add/remove, joint add/remove/lock, anchor assignment, apply immediately. Avoid image-bound polygon tracing until source image editing is needed. |
@@ -89,7 +89,7 @@ Deliverables:
 
 - `TopCommandBar` with File/View/Edit/Options/Help groups mapped to real handlers or honest disabled states with status text.
 - Optional toolbar still controlled by settings.
-- Hoisted `CanvasViewport` state reused across Path, Foundry preview, Design, and Blueprint preview where a `Canvas` is mounted.
+- Hoisted `CanvasViewport` state reused across Path, Foundry preview, Design, and Blueprint preview adapters.
 - Shared zoom toolbar: zoom in/out, fit/center, reset/1:1.
 
 Acceptance:

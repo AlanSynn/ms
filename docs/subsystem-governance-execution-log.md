@@ -71,7 +71,7 @@ Current local dependency check uses `package.json` + `bun.lock`; latest version 
 - M2: snapshot fingerprint now changes for mechanism parameters, output gear display/radius fields, target ids, relevant path data, and physical-kit changes while preserving the input `ProjectState`.
 - M2 rework: expanded the snapshot mechanism payload to carry the complete persisted behavior/rendering parameter set from `MechanismConfig` before stage adapters consume snapshots.
 - M2: contract coverage now checks deterministic snapshots, recursive freeze behavior, every mechanism type, fabrication plan validation results, adapter hints, and missing-id null behavior.
-- M3 slice 1: moved Canvas drag-handle availability into `MechanismFeatureRegistry.interactionPolicy` and kept `Canvas.tsx` as a policy consumer instead of another mechanism-type registry.
+- M3 slice 1: moved drag-handle availability into `MechanismFeatureRegistry.interactionPolicy`; `Canvas.tsx` was later retired once runtime surfaces no longer imported it.
 - M3 slice 2 agent review: architecture lane confirmed the registry/snapshot seam exists but is not yet authoritative across all render/export surfaces; UI lane confirmed Character selection, Blueprint guide preview, and Foundry display controls still violated pane ownership.
 - M3 slice 2: Character now keeps Getting Started as a starter dialog while the Character tab owns the body-part object list, selected-part detail, skeleton controls, shared viewport, and direct part/skeleton edit command without routing to Path.
 - M3 slice 2: the shared workbench container is overflow-hidden in desktop layout so right-pane scrolling cannot move the center canvas.

@@ -191,7 +191,7 @@ Tasks:
 
 Files likely touched:
 - `App.tsx`
-- `components/Canvas.tsx` only if existing renderer can be reused safely
+- Shared assembly/Foundry render seams only; do not revive deleted `components/Canvas.tsx`
 - optional small component file if `App.tsx` becomes harder to read
 
 Tasks:

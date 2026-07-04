@@ -1,7 +1,7 @@
 # Codebase Cleanup + Architecture Split Plan
 
 Status: active cleanup plan
-Last refreshed: 2026-07-03
+Last refreshed: 2026-07-04
 
 ## Goal
 
@@ -20,6 +20,15 @@ Keep MotionSmith easy to change without changing behavior: small files, one doma
 - Rapier warning boundary: `utils/physicsKernel.ts` filters only the exact upstream `@dimforge/rapier3d-compat@0.19.3` wasm-bindgen initialization deprecation and restores `console.warn` in `finally`. All other warnings/errors must still surface.
 - Splash font URL: `index.html` must load Manrope through `%BASE_URL%fonts/manrope-800-latin.woff2` so Vite, GitHub Pages `/ms/`, and Tauri builds agree.
 - Chunk budget: `vite.config.ts` keeps `chunkSizeWarningLimit: 2400` because Rapier, ONNX, and the current monolithic app intentionally create lazy browser chunks. This is not permission for growth; `App.tsx` remains the first refactor target.
+
+## 2026-07-04 permission recovery audit
+
+- Source of truth is back to the original `/Users/alansynn/Documents/MechAnim` working tree; no temporary clone is authoritative.
+- `App.tsx` is now a 493-line composition shell, so the next risky work is not another App split.
+- Retired the dead `components/Canvas.tsx` seam because runtime code no longer imported it; contracts now pin that it stays deleted.
+- Next safe production seams, in order: split `components/AppShell.tsx` widgets, split Blueprint preview/download sections, split Assembly playback/view sections, then split pure `utils/fabrication.ts` concerns behind golden-master output hashes.
+- High-risk seams that need stronger harnesses before editing: `components/ThreePuppetPreview.tsx`, `utils/project.ts`, `utils/fabrication.ts`, and `components/TrackingModal.tsx`.
+- Local ignored junk can be removed when seen: `.DS_Store`, `resources/.DS_Store`, `resources/examples/.DS_Store`, `fabrication/__pycache__/`, `fabrication/board-final.svg`, and `test-results/`. Do not delete `.agents/`, `.omx/`, `docs/to-port-web-onnx/`, `dist/`, or `node_modules/` as cleanup.
 
 ## Current hotspots
 
@@ -85,7 +94,7 @@ Measured on 2026-07-03.
 | `components/ThreePuppetPreview.tsx`                           |  1536 | Split after `App.tsx` seams stabilize. Keep one Three/Rapier boundary; move geometry/material/cache helpers only when duplicated or directly touched.                                                                                                                                                                                 |
 | `utils/project.ts`                                            |  1439 | Split only reducer/defaults/migrations if touched. Preserve snapshot compatibility and `ProjectState` shape.                                                                                                                                                                                                                          |
 | `utils/fabrication.ts`                                        |  1364 | Split manifest lookup, render plan, validation/export. Fabrication rules still come from `fabrication/generate_fabrication_templates.py` and `utils/fabricationContract.ts`.                                                                                                                                                          |
-| `components/Canvas.tsx`                                       |  1025 | Leave until renderer unification pass. Do not create a second canvas engine.                                                                                                                                                                                                                                                          |
+| `components/Canvas.tsx`                                       |     0 | Deleted 2026-07-04: runtime had no importers and tests/docs were the only owners. Do not revive; active views use `SceneSketch`, `ThreePuppetPreview`, shared `ThreeFoundryPreview`, and blueprint SVG renderers.                                                                                                                     |
 | `components/TrackingModal.tsx`                                |   930 | Leave until import flow changes. Keep browser-local ONNX behavior.                                                                                                                                                                                                                                                                    |
 | `utils/optimizer.ts`                                          |   791 | Split only if mechanism fitting changes. Do not weaken fit constraints.                                                                                                                                                                                                                                                               |
 | `utils/mechanismReference.ts`                                 |   688 | Keep as mechanism recipe source; split only generated/reference tables if they grow again.                                                                                                                                                                                                                                            |

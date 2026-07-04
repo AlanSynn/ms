@@ -750,7 +750,7 @@ For this web rebuild, use the current web inventory first:
 | Project load/state | `types.ts`, `utils/project.ts`, `utils/sanitize.ts` | Project schema, reducer/actions, migrations, snapshot serialization. |
 | Coordinates/physical kit | `utils/coordinates.ts` | Letter sheet, 2 cm grid, board/scene/sheet/SVG transforms. |
 | Path Editor | `App.tsx`, `components/TrackingModal.tsx` | Part/layer editing, skeleton anchor editing, path drawing/editing/playback. |
-| Mechanism Foundry/Design | `App.tsx`, `components/Canvas.tsx`, `utils/kinematics.ts`, `utils/optimizer.ts` | Mechanism instances, direct handles, generated paths, fit/recommendation. |
+| Mechanism Foundry/Design | `components/stages/foundry/*`, `components/stages/mechanism/*`, `components/ThreePuppetPreview.tsx`, `utils/kinematics.ts`, `utils/optimizer.ts` | Mechanism instances, direct handles, generated paths, fit/recommendation, and shared Foundry/Design 3D mechanism rendering. |
 | Blueprint/export | `utils/fabrication.ts`, `utils/exporter.ts`, `tests/project-contract.test.ts` | Per-instance recipes, strict export validation, SVG/DXF/JSON/guide output. |
 
 Historical Automataii source paths from the original Qt app are listed below
