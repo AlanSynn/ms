@@ -10,16 +10,9 @@ import {
   CanvasViewport,
   FoundryExportPackage,
   MechanismConfig,
-  MechanismType,
-  Point,
-  ProjectMotionPath,
   ProjectState,
 } from "./types";
 import { generateDXF, generateSVG } from "./utils/exporter";
-import {
-  generateCurvePoints,
-  generateMechanismPointTraces,
-} from "./utils/kinematics";
 import {
   evaluateFitness,
   generateSmartConfig,
@@ -36,8 +29,6 @@ import {
   handoffGate,
   mechanismWithGeneratedPath,
   replaceCharacterProject,
-  uid,
-  validatePath,
 } from "./utils/project";
 import { processImageWithWebOnnx } from "./utils/webOnnx";
 import { loadCharacterPackage } from "./utils/packageLoader";
@@ -52,6 +43,7 @@ import { useAppDerivedState } from "./hooks/useAppDerivedState";
 import { useWorkspacePlayerDock } from "./hooks/useWorkspacePlayerDock";
 import { useWorkspacePlaybackLoop } from "./hooks/useWorkspacePlaybackLoop";
 import { useModalInertEffect } from "./hooks/useModalInertEffect";
+import { useAppPathActions } from "./hooks/useAppPathActions";
 import { workflowStatusFor } from "./utils/workflowStatus";
 import {
   fitMechanismToTargetPath,
@@ -74,8 +66,6 @@ const App: React.FC = () => {
   const [angle, setAngle] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [showTrace, setShowTrace] = useState(true);
-  const [drawMode, setDrawMode] = useState(false);
-  const [showTracking, setShowTracking] = useState(false);
   const [showRecommendations, setShowRecommendations] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
@@ -126,6 +116,20 @@ const App: React.FC = () => {
     playbackDurationMs,
     mechanismConfig,
   } = useAppDerivedState(project);
+  const {
+    drawMode,
+    setDrawMode,
+    showTracking,
+    setPathPoints,
+    openTracking,
+    closeTracking,
+    transferTrackedPath,
+  } = useAppPathActions({
+    project,
+    selectedPart,
+    dispatch,
+    setStage,
+  });
   const activeClassroomLesson = classroomLessonById(
     project.metadata.classroomLessonId,
   );
@@ -187,48 +191,6 @@ const App: React.FC = () => {
               : [],
           });
     dispatch({ type: "upsert_mechanism", mechanism: fitted });
-  };
-
-  const setPathPoints = (
-    points: Point[],
-    source: ProjectMotionPath["source"] = "drawn",
-  ) => {
-    const partId = selectedPart?.id;
-    if (!partId || project.parts[partId]?.locked) return;
-    const existing = (Object.values(project.paths) as ProjectMotionPath[]).find(
-      (path) => path.partId === partId,
-    );
-    const id =
-      project.selectedPathId &&
-      project.paths[project.selectedPathId]?.partId === partId
-        ? project.selectedPathId
-        : (existing?.id ?? `path-${partId}`);
-    const current = project.paths[id];
-    dispatch({
-      type: "upsert_path",
-      path: validatePath({
-        id,
-        partId,
-        targetAnchorJointId: current?.targetAnchorJointId,
-        chainRootJointId: current?.chainRootJointId,
-        smoothness: current?.smoothness ?? 0,
-        points,
-        timedPoints: points.map((p, i) => ({
-          ...p,
-          time:
-            points.length <= 1
-              ? 0
-              : (i / (points.length - 1)) *
-                (current?.duration ?? project.settings.animationDurationMs),
-        })),
-        duration: current?.duration ?? project.settings.animationDurationMs,
-        closed: current?.closed ?? false,
-        enabled: current?.enabled ?? true,
-        visible: current?.visible ?? true,
-        source,
-        warnings: [],
-      }),
-    });
   };
 
   const queueCharacterReview = (next: ProjectState, summary: string) => {
@@ -622,11 +584,6 @@ const App: React.FC = () => {
     setShowRecommendations(false);
     setStage("design");
   };
-  const transferTrackedPath = (path: Point[]) => {
-    setPathPoints(path, "tracked");
-    setShowTracking(false);
-    setStage("path");
-  };
   const stageLabel =
     STAGES.find((item) => item.id === editorStage)?.label ?? editorStage;
   const workflowStatus = workflowStatusFor(
@@ -662,7 +619,7 @@ const App: React.FC = () => {
     drawMode,
     setDrawMode,
     setPathPoints,
-    openTracking: () => setShowTracking(true),
+    openTracking,
     isPlaying,
     setIsPlaying,
     angle,
@@ -723,7 +680,7 @@ const App: React.FC = () => {
       onCloseRecommendations={() => setShowRecommendations(false)}
       onApplyRecommendation={applyRecommendedMechanism}
       showTracking={showTracking}
-      onCloseTracking={() => setShowTracking(false)}
+      onCloseTracking={closeTracking}
       onTransferTracking={transferTrackedPath}
     />
   );
