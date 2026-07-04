@@ -4,6 +4,10 @@ import type { Dispatch, SetStateAction } from "react";
 import { AssemblyCanvasPane } from "./AssemblyCanvasPane";
 import { AssemblyControlPanel } from "./AssemblyControlPanel";
 import { AssemblyInspectorPanel } from "./AssemblyInspectorPanel";
+import {
+  buildAssemblyGuideModel,
+  type AssemblyGuideMode,
+} from "./assemblyGuideModel";
 import { useAssemblyGuidePlayback } from "./useAssemblyGuidePlayback";
 import {
   EditorStageFrame,
@@ -15,9 +19,6 @@ import type { AppStage, ProjectAction, ProjectState } from "../../../types";
 import { downloadText } from "../../../utils/project";
 import {
   assemblyLaneForExportMode,
-  buildAssemblyPlaybackSteps,
-  buildCharacterAssemblyPlan,
-  pendingRecipeForMechanism,
   type AssemblyLane,
 } from "../../../utils/assemblyPlayback";
 import {
@@ -55,56 +56,39 @@ export const AssemblyGuide = ({
       fabricationPackage: createFabricationPackage(project),
     });
   const pkg = project.lastExport;
-  const activeMechanisms = project.mechanisms.filter(
-    (m) => m.visible && m.enabled !== false,
-  );
-  const liveRecipes = activeMechanisms.map((mechanism) =>
-    pendingRecipeForMechanism(project, mechanism),
-  );
-  const recipes = liveRecipes.length ? liveRecipes : (pkg?.recipes ?? []);
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
-  const selectedRecipe =
-    recipes.find((recipe) => recipe.mechanismId === selectedRecipeId) ??
-    recipes[0];
-  const characterAssemblyPlan = useMemo(
-    () => buildCharacterAssemblyPlan(project),
-    [project],
-  );
-  const hasCharacterAssembly =
-    characterAssemblyPlan.parts.length > 0 &&
-    characterAssemblyPlan.steps.length > 0;
-  const [assemblyMode, setAssemblyMode] = useState<"mechanism" | "character">(
-    "mechanism",
-  );
-  const activeAssemblyMode: "mechanism" | "character" =
-    assemblyMode === "character" && hasCharacterAssembly
-      ? "character"
-      : selectedRecipe
-        ? "mechanism"
-        : hasCharacterAssembly
-          ? "character"
-          : "mechanism";
+  const [assemblyMode, setAssemblyMode] =
+    useState<AssemblyGuideMode>("mechanism");
   const [lane, setLane] = useState<AssemblyLane>(() =>
     assemblyLaneForExportMode(project.settings.physicalKit.exportMode),
   );
-  const playbackSteps = selectedRecipe
-    ? buildAssemblyPlaybackSteps(selectedRecipe, lane)
-    : [];
-  const characterPlaybackSteps = characterAssemblyPlan.steps;
-  const activePlaybackSteps =
-    activeAssemblyMode === "character" ? characterPlaybackSteps : playbackSteps;
-  const activeStepCount = activePlaybackSteps.length;
-  const currentStep =
-    playbackSteps[Math.min(stepIndex, Math.max(0, playbackSteps.length - 1))];
-  const currentCharacterStep =
-    characterPlaybackSteps[
-      Math.min(stepIndex, Math.max(0, characterPlaybackSteps.length - 1))
-    ];
-  const activeDisplayStep =
-    activeAssemblyMode === "character" ? currentCharacterStep : currentStep;
+  const {
+    recipes,
+    selectedRecipe,
+    characterAssemblyPlan,
+    hasCharacterAssembly,
+    activeAssemblyMode,
+    activePlaybackSteps,
+    activeStepCount,
+    currentStep,
+    currentCharacterStep,
+    activeDisplayStep,
+    resetKey,
+  } = useMemo(
+    () =>
+      buildAssemblyGuideModel({
+        project,
+        pkg,
+        selectedRecipeId,
+        assemblyMode,
+        lane,
+        stepIndex,
+      }),
+    [project, pkg, selectedRecipeId, assemblyMode, lane, stepIndex],
+  );
   const { goAssemblyStep } = useAssemblyGuidePlayback({
     activeStepCount,
-    resetKey: `${activeAssemblyMode}:${selectedRecipe?.mechanismId ?? "none"}:${lane}`,
+    resetKey,
     playing,
     setPlaying,
     setStepCount,
