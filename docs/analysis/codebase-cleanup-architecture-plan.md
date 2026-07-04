@@ -27,7 +27,8 @@ Keep MotionSmith easy to change without changing behavior: small files, one doma
 - `App.tsx` is now a 493-line composition shell, so the next risky work is not another App split.
 - Retired the dead `components/Canvas.tsx` seam because runtime code no longer imported it; contracts now pin that it stays deleted.
 - Completed low-risk Assembly geometry seam: DOM-free coordinate, smoothing, and character projectors now live in `components/stages/assembly/assemblyGeometry.ts`.
-- Next safe production seams, in order: split Blueprint preview/download sections, split Assembly playback/view sections, then split pure `utils/fabrication.ts` concerns behind golden-master output hashes.
+- Completed low-risk Blueprint control seam: left workflow, package generation, downloads, and recipe list now live in `components/stages/blueprint/BlueprintControlPanel.tsx`.
+- Next safe production seams, in order: split Blueprint preview/inspector sections, split Assembly playback/view sections, then split pure `utils/fabrication.ts` concerns behind golden-master output hashes.
 - High-risk seams that need stronger harnesses before editing: `components/ThreePuppetPreview.tsx`, `utils/project.ts`, `utils/fabrication.ts`, and `components/TrackingModal.tsx`.
 - Local ignored junk can be removed when seen: `.DS_Store`, `resources/.DS_Store`, `resources/examples/.DS_Store`, `fabrication/__pycache__/`, `fabrication/board-final.svg`, and `test-results/`. Do not delete `.agents/`, `.omx/`, `docs/to-port-web-onnx/`, `dist/`, or `node_modules/` as cleanup.
 
@@ -96,6 +97,8 @@ Measured on 2026-07-03.
 | `components/stages/foundry/FoundryCanvasPane.tsx`             |   531 | Done: Foundry center canvas owns Three preview, toolbar, overlay SVG, and pointer surfaces outside the stage wrapper. Keep it render-only; projection, sampling, and mutations stay in the stage/domain helpers.                                                                                                                      |
 | `components/stages/foundry/FoundryWorkflowPanel.tsx`          |   238 | Done: Foundry left workflow pane owns target summary, anchor pick, visible sensemaking, fabrication stack, and template gallery outside the stage wrapper. Keep it presentation/action only.                                                                                                                                          |
 | `components/stages/foundry/FoundryInspectorPanel.tsx`         |   231 | Done: Foundry right inspector owns physics readout, opacity/explode controls, parametric editor, advanced parameters, and overlay toggles outside the stage wrapper. Keep mechanism rules in shared utils.                                                                                                                            |
+| `components/stages/blueprint/BlueprintExport.tsx`            |   164 | Done: Blueprint stage wrapper owns live recipe derivation plus center preview/inspector composition only; left workflow controls and downloads are delegated to `BlueprintControlPanel.tsx`. Keep export rendering in utils/fabrication. |
+| `components/stages/blueprint/BlueprintControlPanel.tsx`      |   258 | Done: Blueprint left workflow controls, package generation, download buttons, and recipe list live outside the stage wrapper. Keep it presentation/action-only; preview SVG and export package rules stay in BlueprintExport/utils. |
 | `components/stages/options/Options.tsx`                       |   488 | Done: Options stage wrapper lives outside the app shell while still consuming shared units, kit preset, and inspector control seams. Keep it settings UI-only; ProjectState actions own mutation.                                                                                                                                     |
 | `components/stages/assembly/AssemblyGuide.tsx`                |   550 | Done: Assembly Guide stage wrapper lives outside the app shell while still consuming shared assembly playback, fabrication, and workbench seams. Keep it orchestration-only; recipe/stack rules stay in utils/fabrication and utils/assemblyPlayback.                                                                                 |
 | `components/stages/assembly/AssemblyWorkbench.tsx`            |   329 | Done: Assembly stepper/character workbench owns JSX only and delegates DOM-free coordinate, smoothing, and character projector helpers to `assemblyGeometry.ts`; keep new geometry math there and leave recipe/playback rules in `utils/assemblyPlayback.ts`.                                                                 |
@@ -251,7 +254,7 @@ Use this gate when moving character intake/review actions. It proves ONNX image 
 
 2. **Stage components**
    - Done: shared stage frame/navigation lives in `components/stages/stageLayout.tsx`.
-   - Done: `BlueprintExport` lives in `components/stages/blueprint/BlueprintExport.tsx`.
+   - Done: `BlueprintExport` lives in `components/stages/blueprint/BlueprintExport.tsx`; its left workflow/download controls live in `components/stages/blueprint/BlueprintControlPanel.tsx`.
    - Done: assembly workbench lives in `components/stages/assembly/AssemblyWorkbench.tsx`; DOM-free Assembly coordinate, smoothing, and character projector helpers live in `components/stages/assembly/assemblyGeometry.ts`.
    - Done: `components/stages/character/ProgressBlock.tsx` owns the import progress card and status label outside `App.tsx`.
    - Done: `components/ui/InspectorControls.tsx` owns shared mini number and toggle controls used by inspectors.
@@ -324,5 +327,5 @@ Stop only when the relevant contract, build, and browser evidence passes without
 - Moved large ignored ONNX reference repo out of docs to local archive: `../MechAnim-local-archive/.../docs-to-port-web-onnx/repo`.
 - Removed runtime-unused source: `components/Controls.tsx`, `utils/zStack.ts`.
 - Extracted shared stage frame/nav shell to `components/stages/stageLayout.tsx`.
-- Extracted blueprint stage to `components/stages/blueprint/BlueprintExport.tsx`.
+- Extracted blueprint stage to `components/stages/blueprint/BlueprintExport.tsx`; extracted Blueprint left workflow/download panel to `components/stages/blueprint/BlueprintControlPanel.tsx`.
 - Extracted assembly workbench plus assembly playback derivation to `components/stages/assembly/AssemblyWorkbench.tsx` and `utils/assemblyPlayback.ts`; extracted DOM-free Assembly coordinate, smoothing, and character projector helpers to `components/stages/assembly/assemblyGeometry.ts`.
