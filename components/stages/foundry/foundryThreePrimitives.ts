@@ -515,3 +515,7 @@ export const createFoundryThreePrimitiveFactory = ({
     addPath,
   };
 };
+
+export type FoundryThreePrimitiveFactory = ReturnType<
+  typeof createFoundryThreePrimitiveFactory
+>;

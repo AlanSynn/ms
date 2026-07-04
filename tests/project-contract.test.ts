@@ -196,8 +196,9 @@ assert(normalizedCodebaseCleanupPlan.includes('`utils/mechanismRecommendations.t
 assert(normalizedCodebaseCleanupPlan.includes('`utils/foundryCamera.ts` | 140') && normalizedCodebaseCleanupPlan.includes('pure Foundry camera/projection seam'), 'cleanup plan records the extracted Foundry camera seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/MechanismLinkagePreview.tsx` | 851') && normalizedCodebaseCleanupPlan.includes('Foundry SVG mechanism preview leaf lives outside the app shell'), 'cleanup plan records the extracted Foundry SVG preview seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/foundryPreviewGeometry.ts` | 23') && normalizedCodebaseCleanupPlan.includes('fitted gear-center helper shared by SVG and Three previews'), 'cleanup plan records the shared Foundry preview geometry helper seam');
-assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/ThreeFoundryPreview.tsx` | 1169') && normalizedCodebaseCleanupPlan.includes('shared Foundry/Design Three renderer seam delegates browser telemetry and primitive mesh/material builders'), 'cleanup plan records the extracted shared Foundry Three renderer seam');
-assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/foundryThreePrimitives.ts` | 517') && normalizedCodebaseCleanupPlan.includes('Foundry Three primitive factory owns cached geometry/material builders'), 'cleanup plan records the extracted Foundry Three primitive factory seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/ThreeFoundryPreview.tsx` | 938') && normalizedCodebaseCleanupPlan.includes('shared Foundry/Design Three renderer seam delegates browser telemetry, primitive mesh/material builders, and dynamic render-layer dispatch'), 'cleanup plan records the extracted shared Foundry Three renderer seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/foundryThreePrimitives.ts` | 521') && normalizedCodebaseCleanupPlan.includes('Foundry Three primitive factory owns cached geometry/material builders'), 'cleanup plan records the extracted Foundry Three primitive factory seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/foundryThreeRenderLayers.ts` | 312') && normalizedCodebaseCleanupPlan.includes('Foundry dynamic render-layer dispatch owns path/trail, linkage, gear, cam, guide, spacer, rack, follower, pin, and clip placement'), 'cleanup plan records the extracted Foundry render-layer dispatch seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/FoundryPreviewStateProbe.tsx` | 472') && normalizedCodebaseCleanupPlan.includes('Foundry/Design browser telemetry probe owns the `foundry-camera-rig` data contract'), 'cleanup plan records the extracted Foundry telemetry probe seam');
 assert(normalizedCodebaseCleanupPlan.includes('`utils/threeResourceKit.ts` | 86') && normalizedCodebaseCleanupPlan.includes('shared Three cache/disposal/pixel-ratio helpers'), 'cleanup plan records the extracted shared Three resource helper seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/foundryRenderInventory.ts` | 152') && normalizedCodebaseCleanupPlan.includes('rendered inventory counts live outside the WebGL renderer'), 'cleanup plan records the extracted Foundry render inventory helper seam');
@@ -1834,6 +1835,7 @@ const foundryPreviewGeometryText = readFileSync(join(process.cwd(), 'components'
 const threeFoundryPreviewText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'ThreeFoundryPreview.tsx'), 'utf8');
 const foundryPreviewStateProbeText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'FoundryPreviewStateProbe.tsx'), 'utf8');
 const foundryThreePrimitivesText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryThreePrimitives.ts'), 'utf8');
+const foundryThreeRenderLayersText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryThreeRenderLayers.ts'), 'utf8');
 const threeResourceKitText = readFileSync(join(process.cwd(), 'utils', 'threeResourceKit.ts'), 'utf8');
 const foundryRenderInventoryText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryRenderInventory.ts'), 'utf8');
 const foundryPreviewStacksText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryPreviewStacks.ts'), 'utf8');
@@ -1850,6 +1852,7 @@ const foundry3dText = `${foundryStageText}
 ${threeFoundryPreviewText}
 ${foundryPreviewStateProbeText}
 ${foundryThreePrimitivesText}
+${foundryThreeRenderLayersText}
 ${threeResourceKitText}
 ${foundryRenderInventoryText}
 ${foundryPreviewStacksText}`;
@@ -1873,6 +1876,7 @@ assert(foundryWorkflowPanelText.includes('<MechanismLinkagePreview') && mechanis
 assert(threeFoundryPreviewText.includes('foundryRenderedInventory(mechanism.type)') && foundryRenderInventoryText.includes('export const foundryRenderedInventory') && foundryRenderInventoryText.includes('referenceRequiredPartsHoleCount'), 'Foundry Three renderer delegates rendered inventory counts to a pure helper');
 assert(threeFoundryPreviewText.includes('<FoundryPreviewStateProbe') && foundryPreviewStateProbeText.includes('data-testid="foundry-camera-rig"') && foundryPreviewStateProbeText.includes('data-three-animation-commit-ms'), 'Foundry Three renderer delegates browser telemetry to a probe seam without changing the camera-rig data contract');
 assert(threeFoundryPreviewText.includes('createFoundryThreePrimitiveFactory') && threeFoundryPreviewText.includes('disposeFoundryThreeObject') && foundryThreePrimitivesText.includes('export const createFoundryThreePrimitiveFactory') && foundryThreePrimitivesText.includes('addGear') && foundryThreePrimitivesText.includes('addBar') && foundryThreePrimitivesText.includes('export const disposeFoundryThreeObject'), 'Foundry Three renderer delegates primitive mesh/material builders and cached disposal to the primitive factory seam');
+assert(threeFoundryPreviewText.includes('renderFoundryDynamicLayers') && foundryThreeRenderLayersText.includes('export const renderFoundryDynamicLayers') && foundryThreeRenderLayersText.includes('renderLinkageLayer') && foundryThreeRenderLayersText.includes('renderGearLayer') && foundryThreeRenderLayersText.includes('foundrySpacerTouchesPin'), 'Foundry Three renderer delegates dynamic layer placement to a shared render-layer helper without changing fabrication z-stack dispatch');
 assert(canvasText.includes('fabricationGearPathD'), '2D canvas gear rendering uses shared fabrication gear geometry');
 assert(canvasText.includes('data-reference-topology={referenceTopologySummary(m.type)}'), '2D design canvas exposes mechanism-reference topology telemetry');
 assert(canvasText.includes('data-reference-coord-roles={coordRoleSummary}'), '2D design canvas exposes mechanism-reference coordinate role telemetry');
