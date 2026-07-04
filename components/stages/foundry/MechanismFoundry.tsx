@@ -1,8 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Boxes } from "lucide-react";
-import { MechanismParametricEditor } from "../mechanism/MechanismParametricEditor";
-import { MechanismLinkagePreview } from "./MechanismLinkagePreview";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ThreeFoundryPreview } from "./ThreeFoundryPreview";
+import { FoundryInspectorPanel } from "./FoundryInspectorPanel";
+import { FoundryWorkflowPanel } from "./FoundryWorkflowPanel";
 import {
   foundryAssemblyPinPoints,
   foundryPinStackPoints,
@@ -10,15 +9,9 @@ import {
   foundryRenderedLayerZForMechanism,
   isMovingRenderKind,
 } from "./foundryPreviewStacks";
-import {
-  clampMechanismParam,
-  MECHANISM_PARAM_META,
-  shouldShowMechanismParam,
-} from "../mechanism/mechanismParamPolicy";
-import { MiniNumber } from "../../ui/InspectorControls";
+import { clampMechanismParam } from "../mechanism/mechanismParamPolicy";
 import {
   EditorStageFrame,
-  StageLeftSummary,
   canvasPane,
   inspectorPane,
   workflowPane,
@@ -42,7 +35,6 @@ import { buildFoundryPhysicsOverlay } from "../../../utils/physicsSession";
 import {
   FABRICATION_RENDER_LAYER_Z_STEP,
   fabricationRenderPlanForMechanism,
-  fabricationStackSummary,
   sampleFeasibleRange,
 } from "../../../utils/fabrication";
 import {
@@ -68,11 +60,9 @@ import {
   FOUNDRY_MECHANISM_TYPES,
   FOUNDRY_PRESETS,
   MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY,
-  mechanismTemplateLabel,
 } from "../../../utils/mechanismTemplates";
 import {
   createMechanismFitContext,
-  fitMechanismSimulation,
   fitMechanismSimulationWithContext,
   fitPointsToBox,
   pointsToSvgPath,
@@ -781,192 +771,61 @@ export const MechanismFoundry = ({
       source: "mechanism-foundry",
     };
   };
+  const useFoundryMechanism = () => onExport(makePackage());
+  const selectFoundryMechanismType = (type: MechanismType) =>
+    setAnchoredFoundry({
+      ...createDefaultMechanism(type, "foundry-preview"),
+      color: foundry.color,
+      presetId: "balanced",
+      recommendation: FOUNDRY_PRESETS.balanced.recommendation,
+    });
+  const selectFoundryPreset = (presetId: string) => {
+    const preset = FOUNDRY_PRESETS[presetId];
+    const { label: _label, ...updates } = preset;
+    const base =
+      presetId === "balanced"
+        ? createDefaultMechanism(foundry.type, "foundry-preview")
+        : foundry;
+    setAnchoredFoundry({
+      ...base,
+      color: foundry.color,
+      ...updates,
+      presetId,
+      recommendation: preset.recommendation,
+    });
+  };
   return (
     <EditorStageFrame
       stage="foundry"
       className="foundry-stage-frame"
       layout={{
         workflow: workflowPane(
-          <div className="stage-pane-stack">
-            <StageLeftSummary
-              project={project}
-              title="Foundry"
-              stage="foundry"
-              goStage={goStage}
-            >
-              <div
-                className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600"
-                data-testid="foundry-target-summary"
-              >
-                <div className="font-bold text-slate-800">
-                  Target {selectedPart?.name ?? "none"} ·{" "}
-                  {selectedPath?.points.length ?? 0} pts
-                </div>
-                <div>
-                  Board hole {landingBoard.label} · chain{" "}
-                  {targetChainRootJointId ?? "none"} →{" "}
-                  {targetIkJointId ?? "none"}
-                </div>
-                {snapDistance > 0.5 && (
-                  <div>
-                    Snap {snapDistance.toFixed(0)} → {landingBoard.label}
-                  </div>
-                )}
-                <div>
-                  <strong>Range</strong>{" "}
-                  {range.percentValid === 1 ? "360°" : feasibilityText}
-                </div>
-                <div data-testid="foundry-feasibility">
-                  <strong>Status</strong> {feasibilityText}
-                </div>
-                <div data-testid="foundry-anchor-status">
-                  {isPickingAnchor
-                    ? "Pick board hole."
-                    : manualAnchor
-                      ? "Anchor picked."
-                      : (foundry.recommendation ??
-                        FOUNDRY_PRESETS.balanced.recommendation)}
-                </div>
-              </div>
-              <button
-                type="button"
-                data-testid="foundry-pick-anchor"
-                className={`btn-secondary w-full ${isPickingAnchor ? "active" : ""}`}
-                onClick={() => setIsPickingAnchor((value) => !value)}
-              >
-                {isPickingAnchor
-                  ? "Cancel anchor pick"
-                  : "Pick anchor on canvas"}
-              </button>
-              <button
-                className="btn-primary w-full"
-                aria-label="Use mechanism"
-                disabled={hardBlocked}
-                onClick={() => onExport(makePackage())}
-              >
-                <Boxes size={16} /> Use mechanism
-              </button>
-              {!targetReady && <div className="warning">Need 3+ points.</div>}
-              {range.warning && <div className="warning">{range.warning}</div>}
-              <div
-                className="sensemaking-cue"
-                data-testid="foundry-visible-sensemaking"
-                data-sensemaking-check={classroomSensemaking.studentCheck}
-                data-sensemaking-answer={classroomSensemaking.expectedAnswer}
-                data-sensemaking-evidence={classroomSensemaking.evidenceCue}
-                data-sensemaking-clip={classroomSensemaking.clipSlot}
-              >
-                <span className="cue-title">Why it moves</span>
-                <strong>{classroomSensemaking.directTranslation}</strong>
-                <small>{classroomSensemaking.tryThis}</small>
-              </div>
-              <div
-                className="compact-fabrication-stack"
-                data-testid="foundry-fabrication-stack"
-              >
-                <strong>Stack</strong>
-                <span>{fabricationStackSummary(foundry)}</span>
-              </div>
-              <h4 className="section-title mt-4">Templates</h4>
-              <div
-                className="mechanism-choice-grid"
-                data-testid="foundry-mechanism-gallery"
-              >
-                {FOUNDRY_MECHANISM_TYPES.map((type) => {
-                  const item = MECHANISM_LIBRARY[type];
-                  const cardMechanism = {
-                    ...createDefaultMechanism(type, `foundry-card-${type}`),
-                    color: foundry.color,
-                  };
-                  const cardSimulation = fitMechanismSimulation(
-                    cardMechanism,
-                    foundryPhase,
-                    180,
-                    96,
-                    48,
-                  );
-                  return (
-                    <button
-                      key={type}
-                      type="button"
-                      className={`recommendation-card mechanism-choice ${foundry.type === type ? "active" : ""}`}
-                      onClick={() =>
-                        setAnchoredFoundry({
-                          ...createDefaultMechanism(type, "foundry-preview"),
-                          color: foundry.color,
-                          presetId: "balanced",
-                          recommendation:
-                            FOUNDRY_PRESETS.balanced.recommendation,
-                        })
-                      }
-                    >
-                      <svg
-                        viewBox="0 0 180 96"
-                        className="mechanism-choice-sim"
-                        data-testid={`foundry-mini-simulation-${type}`}
-                        aria-hidden="true"
-                      >
-                        <path
-                          d={cardSimulation.pathD}
-                          fill="none"
-                          stroke={foundry.color}
-                          strokeWidth="2.5"
-                          strokeLinecap="round"
-                          opacity="0.45"
-                        />
-                        <MechanismLinkagePreview
-                          mechanism={cardMechanism}
-                          simulation={cardSimulation}
-                          kit={project.settings.physicalKit}
-                          testId={`foundry-mini-linkage-${type}`}
-                          compact
-                        />
-                      </svg>
-                      <div className="font-bold text-slate-800">
-                        {item.label}
-                      </div>
-                      <div>{item.goodFor}</div>
-                      <small>
-                        {item.classroomSensemaking.directTranslation}
-                      </small>
-                    </button>
-                  );
-                })}
-              </div>
-              {showSensemaking && (
-                <div
-                  className="recommendation-card"
-                  data-testid="foundry-mechanism-library"
-                >
-                  <div className="font-bold text-slate-800">
-                    {library.label}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <span className="blueprint-pill">{physicsRule}</span>
-                    <span className="blueprint-pill">
-                      {fabricationStackSummary(foundry)}
-                    </span>
-                    <span className="blueprint-pill">{feasibilityText}</span>
-                    <span className="blueprint-pill">
-                      {classroomSensemaking.studentCheck}
-                    </span>
-                    <span className="blueprint-pill">
-                      {classroomSensemaking.evidenceCue}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm text-slate-600">
-                    {classroomSensemaking.teacherTakeaway}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-600">
-                    {classroomSensemaking.commonHint}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Answer: {classroomSensemaking.expectedAnswer}
-                  </p>
-                </div>
-              )}
-            </StageLeftSummary>
-          </div>,
+          <FoundryWorkflowPanel
+            project={project}
+            selectedPart={selectedPart}
+            selectedPath={selectedPath}
+            goStage={goStage}
+            foundry={foundry}
+            foundryPhase={foundryPhase}
+            landingBoardLabel={landingBoard.label}
+            targetChainRootJointId={targetChainRootJointId}
+            targetIkJointId={targetIkJointId}
+            snapDistance={snapDistance}
+            rangePercentValid={range.percentValid}
+            rangeWarning={range.warning}
+            feasibilityText={feasibilityText}
+            targetReady={targetReady}
+            isPickingAnchor={isPickingAnchor}
+            hasManualAnchor={Boolean(manualAnchor)}
+            hardBlocked={hardBlocked}
+            showSensemaking={showSensemaking}
+            classroomSensemaking={classroomSensemaking}
+            physicsRule={physicsRule}
+            libraryLabel={library.label}
+            onToggleAnchorPick={() => setIsPickingAnchor((value) => !value)}
+            onUseMechanism={useFoundryMechanism}
+            onSelectMechanismType={selectFoundryMechanismType}
+          />,
         ),
         canvas: canvasPane(
           <section className="path-canvas-shell foundry-canvas-shell canvas-workspace p-0">
@@ -1374,196 +1233,35 @@ export const MechanismFoundry = ({
           </section>,
         ),
         inspector: inspectorPane(
-          <div className="stage-pane-stack">
-            <div>
-              <div className="section-title">Selected mechanism</div>
-              <h3>{library.label}</h3>
-              <div
-                className="physics-readout mt-3"
-                data-testid="foundry-physics-readout"
-              >
-                <strong>Motion</strong>
-                <span>{physicsRule}</span>
-                <span>
-                  v {velocityMagnitude.toFixed(1)} · F{" "}
-                  {forceMagnitude.toFixed(1)} · μ{" "}
-                  {project.settings.simulationFriction.toFixed(2)}
-                </span>
-                <span>
-                  constraint err {constraintError.toFixed(2)} · mass{" "}
-                  {project.settings.simulationMassKg.toFixed(1)}kg
-                </span>
-              </div>
-            </div>
-            <div
-              className="foundry-opacity-panel inspector-control-card"
-              data-testid="foundry-opacity-panel"
-            >
-              <div>
-                <span>Rig Opacity</span>
-                <strong>{foundryRigOpacity}%</strong>
-              </div>
-              <input
-                aria-label="Rig opacity"
-                type="range"
-                min="35"
-                max="100"
-                value={foundryRigOpacity}
-                onChange={(event) =>
-                  setFoundryRigOpacity(Number(event.target.value))
-                }
-              />
-            </div>
-            <div
-              className="foundry-opacity-panel inspector-control-card"
-              data-testid="foundry-explode-panel"
-            >
-              <div>
-                <span>Exploded view</span>
-                <strong>{foundryExplode}%</strong>
-              </div>
-              <input
-                aria-label="Exploded view"
-                type="range"
-                min="0"
-                max="100"
-                value={foundryExplode}
-                onChange={(event) =>
-                  setFoundryExplode(Number(event.target.value))
-                }
-              />
-            </div>
-            <MechanismParametricEditor
-              mechanism={foundry}
-              onChange={updateFoundryParams}
-              testId="foundry-parametric-editor"
-            />
-            <details className="advanced-panel">
-              <summary>Mechanism options</summary>
-              <div className="mt-3 space-y-3">
-                <select
-                  aria-label="Foundry mechanism type"
-                  className="field"
-                  value={foundry.type}
-                  onChange={(e) =>
-                    setAnchoredFoundry({
-                      ...createDefaultMechanism(
-                        e.target.value as MechanismType,
-                        "foundry-preview",
-                      ),
-                      color: foundry.color,
-                      presetId: "balanced",
-                      recommendation: FOUNDRY_PRESETS.balanced.recommendation,
-                    })
-                  }
-                >
-                  {FOUNDRY_MECHANISM_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {mechanismTemplateLabel(t)}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  aria-label="Foundry preset"
-                  className="field"
-                  value={foundry.presetId ?? "balanced"}
-                  onChange={(e) => {
-                    const presetId = e.target.value;
-                    const preset = FOUNDRY_PRESETS[presetId];
-                    const { label: _label, ...updates } = preset;
-                    const base =
-                      presetId === "balanced"
-                        ? createDefaultMechanism(
-                            foundry.type,
-                            "foundry-preview",
-                          )
-                        : foundry;
-                    setAnchoredFoundry({
-                      ...base,
-                      color: foundry.color,
-                      ...updates,
-                      presetId,
-                      recommendation: preset.recommendation,
-                    });
-                  }}
-                >
-                  {Object.entries(FOUNDRY_PRESETS).map(([id, preset]) => (
-                    <option key={id} value={id}>
-                      {preset.label}
-                    </option>
-                  ))}
-                </select>
-                {MECHANISM_PARAM_META.filter((p) =>
-                  shouldShowMechanismParam(foundry.type, p.key),
-                ).map((p) => (
-                  <React.Fragment key={String(p.key)}>
-                    <MiniNumber
-                      label={p.label}
-                      value={Number(foundry[p.key] ?? 0)}
-                      min={p.min}
-                      max={p.max}
-                      step={p.step}
-                      onChange={(value) => updateFoundryParam(p.key, value)}
-                    />
-                  </React.Fragment>
-                ))}
-              </div>
-            </details>
-            <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
-              <div className="font-bold text-slate-800">Preview overlays</div>
-              <div className="foundry-toolbar mt-2">
-                <button
-                  type="button"
-                  className={`btn-secondary ${showForces ? "active" : ""}`}
-                  aria-pressed={showForces}
-                  onClick={() => setShowForces(!showForces)}
-                >
-                  Forces
-                </button>
-                <button
-                  type="button"
-                  className={`btn-secondary ${showVelocity ? "active" : ""}`}
-                  aria-pressed={showVelocity}
-                  onClick={() => setShowVelocity(!showVelocity)}
-                >
-                  Velocity
-                </button>
-                <button
-                  type="button"
-                  className={`btn-secondary ${showTrail ? "active" : ""}`}
-                  aria-pressed={showTrail}
-                  onClick={() => setShowTrail(!showTrail)}
-                >
-                  Trail
-                </button>
-                <button
-                  type="button"
-                  className={`btn-secondary ${showPathPreview ? "active" : ""}`}
-                  aria-pressed={showPathPreview}
-                  onClick={() => setShowPathPreview(!showPathPreview)}
-                >
-                  Path
-                </button>
-                <button
-                  type="button"
-                  className={`btn-secondary ${showSensemaking ? "active" : ""}`}
-                  aria-label="Show details"
-                  aria-pressed={showSensemaking}
-                  onClick={() => setShowSensemaking(!showSensemaking)}
-                >
-                  Details
-                </button>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  aria-label="Hide details"
-                  onClick={() => setShowSensemaking(false)}
-                >
-                  Hide details
-                </button>
-              </div>
-            </div>
-          </div>,
+          <FoundryInspectorPanel
+            foundry={foundry}
+            libraryLabel={library.label}
+            physicsRule={physicsRule}
+            velocityMagnitude={velocityMagnitude}
+            forceMagnitude={forceMagnitude}
+            simulationFriction={project.settings.simulationFriction}
+            constraintError={constraintError}
+            simulationMassKg={project.settings.simulationMassKg}
+            foundryRigOpacity={foundryRigOpacity}
+            foundryExplode={foundryExplode}
+            showForces={showForces}
+            showVelocity={showVelocity}
+            showTrail={showTrail}
+            showPathPreview={showPathPreview}
+            showSensemaking={showSensemaking}
+            onRigOpacityChange={setFoundryRigOpacity}
+            onExplodeChange={setFoundryExplode}
+            onUpdateParams={updateFoundryParams}
+            onChangeParam={updateFoundryParam}
+            onSetMechanismType={selectFoundryMechanismType}
+            onSetPreset={selectFoundryPreset}
+            onToggleForces={() => setShowForces((value) => !value)}
+            onToggleVelocity={() => setShowVelocity((value) => !value)}
+            onToggleTrail={() => setShowTrail((value) => !value)}
+            onTogglePathPreview={() => setShowPathPreview((value) => !value)}
+            onToggleSensemaking={() => setShowSensemaking((value) => !value)}
+            onHideSensemaking={() => setShowSensemaking(false)}
+          />,
         ),
       }}
     />
