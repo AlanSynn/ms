@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { AppWorkspaceShell } from "./components/AppWorkspaceShell";
 import type { AppStageRouterProps } from "./components/AppStageRouter";
 import { processingLabel } from "./components/stages/character/ProgressBlock";
@@ -50,6 +50,7 @@ import { useAppProjectCommands } from "./hooks/useAppProjectCommands";
 import { useAppDerivedState } from "./hooks/useAppDerivedState";
 import { useWorkspacePlayerDock } from "./hooks/useWorkspacePlayerDock";
 import { useWorkspacePlaybackLoop } from "./hooks/useWorkspacePlaybackLoop";
+import { useModalInertEffect } from "./hooks/useModalInertEffect";
 import { workflowStatusFor } from "./utils/workflowStatus";
 import {
   fitMechanismToTargetPath,
@@ -618,26 +619,7 @@ const App: React.FC = () => {
     setStage("design");
   };
 
-  useEffect(() => {
-    const shell = appShellRef.current;
-    if (modalOpen) {
-      shell?.setAttribute("inert", "");
-      shell?.setAttribute("aria-hidden", "true");
-      document.documentElement.classList.add("welcome-modal-open");
-      document.body.classList.add("welcome-modal-open");
-    } else {
-      shell?.removeAttribute("inert");
-      shell?.removeAttribute("aria-hidden");
-      document.documentElement.classList.remove("welcome-modal-open");
-      document.body.classList.remove("welcome-modal-open");
-    }
-    return () => {
-      shell?.removeAttribute("inert");
-      shell?.removeAttribute("aria-hidden");
-      document.documentElement.classList.remove("welcome-modal-open");
-      document.body.classList.remove("welcome-modal-open");
-    };
-  }, [modalOpen]);
+  useModalInertEffect(appShellRef, modalOpen);
 
   const startFromStarterImage = (template: StarterImageTemplate) => {
     setShowGettingStarted(false);
