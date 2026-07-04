@@ -25,6 +25,7 @@ import { useAppCharacterImportActions } from "./hooks/useAppCharacterImportActio
 import { workflowStatusFor } from "./utils/workflowStatus";
 import { useAppMechanismActions } from "./hooks/useAppMechanismActions";
 import { navigateAppStage } from "./utils/appStageNavigation";
+import { buildAppStageRouterProps } from "./utils/appStageRouterProps";
 
 type FoundryState = MechanismConfig;
 
@@ -218,58 +219,72 @@ const App: React.FC = () => {
     selectedPath,
   );
 
-  const stageRouterProps: AppStageRouterProps = {
+  const stageRouterProps: AppStageRouterProps = buildAppStageRouterProps({
     editorStage,
     project,
     dispatch,
     goStage,
     playerDock,
-    pendingCharacter,
-    replaceCharacter,
-    setReplaceCharacter,
-    onOpenGettingStarted: () => setShowGettingStarted(true),
-    onAcceptPendingCharacter: acceptPendingCharacter,
-    onDiscardPendingCharacter: () => setPendingCharacter(null),
-    onProcessCharacter: runWebOnnx,
-    onPackageCharacter: importCharacterPackage,
-    onImportProject: importProject,
-    onEditCharacter: editCharacterParts,
-    onSaveSkeleton: saveSkeleton,
-    activeClassroomLesson,
-    resetLesson: commandHandlers["project.resetLesson"],
-    sortedParts,
-    selectedPart,
-    selectedPath,
-    drawMode,
-    setDrawMode,
-    setPathPoints,
-    openTracking,
-    isPlaying,
-    setIsPlaying,
-    angle,
-    setAngle,
-    viewport: canvasViewport,
-    setViewport: setCanvasViewport,
-    foundry,
-    setFoundry,
-    onFoundryExport: exportFoundryMechanism,
-    selectedMechanism,
-    updateMechanism,
-    showTrace,
-    setShowTrace,
-    onOptimize: optimizeSelectedMechanism,
-    onRecommendations: () => setShowRecommendations(true),
-    optimizerBusy,
-    exportSvg: exportMechanismSvg,
-    exportDxf: exportMechanismDxf,
-    assemblyStepIndex,
-    setAssemblyStepIndex,
-    assemblyStepProgress,
-    setAssemblyStepProgress,
-    assemblyPlaying,
-    setAssemblyPlaying,
-    setAssemblyStepCount,
-  };
+    character: {
+      pendingCharacter,
+      replaceCharacter,
+      setReplaceCharacter,
+      onOpenGettingStarted: () => setShowGettingStarted(true),
+      onAcceptPendingCharacter: acceptPendingCharacter,
+      onDiscardPendingCharacter: () => setPendingCharacter(null),
+      onProcessCharacter: runWebOnnx,
+      onPackageCharacter: importCharacterPackage,
+      onImportProject: importProject,
+      onEditCharacter: editCharacterParts,
+      onSaveSkeleton: saveSkeleton,
+      activeClassroomLesson,
+      resetLesson: commandHandlers["project.resetLesson"],
+    },
+    selection: {
+      sortedParts,
+      selectedPart,
+      selectedPath,
+      selectedMechanism,
+    },
+    path: {
+      drawMode,
+      setDrawMode,
+      setPathPoints,
+      openTracking,
+      isPlaying,
+      setIsPlaying,
+      angle,
+      setAngle,
+    },
+    viewport: {
+      viewport: canvasViewport,
+      setViewport: setCanvasViewport,
+    },
+    foundryStage: {
+      foundry,
+      setFoundry,
+      onFoundryExport: exportFoundryMechanism,
+    },
+    mechanism: {
+      updateMechanism,
+      showTrace,
+      setShowTrace,
+      onOptimize: optimizeSelectedMechanism,
+      onRecommendations: () => setShowRecommendations(true),
+      optimizerBusy,
+      exportSvg: exportMechanismSvg,
+      exportDxf: exportMechanismDxf,
+    },
+    assembly: {
+      assemblyStepIndex,
+      setAssemblyStepIndex,
+      assemblyStepProgress,
+      setAssemblyStepProgress,
+      assemblyPlaying,
+      setAssemblyPlaying,
+      setAssemblyStepCount,
+    },
+  });
 
   return (
     <AppWorkspaceShell
