@@ -4,6 +4,7 @@ import type { AppStageRouterProps } from "./components/AppStageRouter";
 import { processingLabel } from "./components/stages/character/ProgressBlock";
 import type { PendingCharacterReview } from "./components/stages/character/CharacterImportOverlays";
 import { STAGES, type StarterImageTemplate } from "./components/AppShell";
+import { STARTER_IMAGE_TEMPLATES } from "./resources/starterImageTemplates";
 import {
   AppStage,
   CanvasViewport,
@@ -57,29 +58,8 @@ import {
   fitRecommendedMechanismToSheet,
   normalizeGearMeshMechanism,
 } from "./utils/mechanismRecommendations";
-import girlStarterUrl from "./resources/examples/raw/girl.png?url";
-import boyStarterUrl from "./resources/examples/raw/boy.PNG?url";
-import girlStarterThumbUrl from "./resources/examples/thumbs/girl-thumb.png?url";
-import boyStarterThumbUrl from "./resources/examples/thumbs/boy-thumb.png?url";
 
 type FoundryState = MechanismConfig;
-
-const STARTER_IMAGE_TEMPLATES: StarterImageTemplate[] = [
-  {
-    id: "girl",
-    label: "Girl",
-    fileName: "girl.png",
-    url: girlStarterUrl,
-    thumbUrl: girlStarterThumbUrl,
-  },
-  {
-    id: "boy",
-    label: "Boy",
-    fileName: "boy.PNG",
-    url: boyStarterUrl,
-    thumbUrl: boyStarterThumbUrl,
-  },
-];
 
 const App: React.FC = () => {
   const {
