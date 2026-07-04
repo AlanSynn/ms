@@ -5,6 +5,8 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } 
 import { tmpdir } from 'node:os';
 import { extname, join, relative } from 'node:path';
 import * as THREE from 'three';
+import { createElement } from 'react';
+import { renderToString } from 'react-dom/server';
 import { boardGridLines, boardToScene, bodyPartPivotScene, physicalKitPreset, placeBodyPartPivotAt, SCENE_PX_PER_MM, sceneToBoard, sceneToBoardRaw, sceneToSheetMm, sceneToSvg, sheetMmToScene } from '../utils/coordinates';
 import { CLASSROOM_LESSONS, classroomLessonById, createDefaultMechanism, createEmptyProject, createLessonProject, createSampleProject, handoffGate, loadProjectSnapshot, serializeProject, applyProjectAction, projectSelfCheck, mechanismRequiredParts, mechanismWithGeneratedPath, replaceCharacterProject, resetProjectToLessonBaseline } from '../utils/project';
 import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, PLANETARY_GEAR_PLANET_COUNT, fabricationBoardColumnLabel, fabricationBoardCoordinateCallout, fabricationBoardRowLabel, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, planetaryPlanetCenters, prefabAssemblySteps, sampleFeasibleRange, validateFabricationStack, validateForFabrication, validateMechanismPreviewReadiness } from '../utils/fabrication';
@@ -25,12 +27,13 @@ import { APP_COMMANDS, APP_MENU_GROUPS, commandById, commandIdForKeyboardEvent, 
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_KERNEL_IMPORT, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, physicsKernelCapability, runRapierFrictionProbe } from '../utils/physicsKernel';
 import { formatGridLabel, formatGridPitch, formatGridReadout } from '../utils/units';
 import { buildCharacterAssemblyPlan, type CharacterAssemblyPlan } from '../utils/assemblyPlayback';
+import { useAppMechanismActions } from '../hooks/useAppMechanismActions';
 import { assemblyCoordToSvg, characterBoardProjector, characterCanvasProjector, smoothAssemblyProgress, svgPathFromPoints } from '../components/stages/assembly/assemblyGeometry';
 import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, FOUNDRY_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, mechanismTemplateLabel } from '../utils/mechanismTemplates';
 import { MECHANISM_TYPES as SANITIZE_MECHANISM_TYPES, sanitizeMechanismRuntime } from '../utils/sanitize';
 import { generateSmartConfig, mutateConfig, OPTIMIZER_MECHANISM_TYPES } from '../utils/optimizer';
 import { isBoardFixedCoordRole, normalizeGearLinkageToReference, normalizeGearTrainToFabrication, normalizeMechanismToFabricationSet, normalizeMechanismToReference, REFERENCE_DEFAULTS, REFERENCE_EXPORT_READY_TYPES, REFERENCE_FOUNDRY_TYPES, REFERENCE_MECHANISM_RECIPES, referenceRecipeForType } from '../utils/mechanismReference';
-import type { BodyPartLayer, MechanismType, Point, ProjectState } from '../types';
+import type { AppStage, BodyPartLayer, FoundryExportPackage, MechanismConfig, MechanismType, Point, ProjectAction, ProjectState } from '../types';
 
 projectSelfCheck();
 
@@ -92,6 +95,57 @@ assert(!readFileSync(onnxPath).subarray(0, 64).toString('utf8').startsWith('vers
 const emptyProject = createEmptyProject();
 const starterSample = createSampleProject();
 const sample = createSampleProject({ includeMechanism: true });
+
+type MechanismActionHarness = ReturnType<typeof useAppMechanismActions>;
+
+const renderMechanismActionHarness = (overrides: {
+  project?: ProjectState;
+  selectedPart?: BodyPartLayer;
+  selectedPath?: ProjectState['paths'][string];
+  selectedMechanism?: MechanismConfig;
+  foundry?: MechanismConfig;
+  angle?: number;
+} = {}) => {
+  const project = overrides.project ?? createSampleProject({ includeMechanism: true });
+  const selectedMechanism = overrides.selectedMechanism ?? project.mechanisms[0];
+  const selectedPart =
+    overrides.selectedPart ??
+    (selectedMechanism?.targetPartId ? project.parts[selectedMechanism.targetPartId] : undefined);
+  const selectedPath =
+    overrides.selectedPath ??
+    (selectedMechanism?.targetPathId ? project.paths[selectedMechanism.targetPathId] : undefined);
+  const dispatches: ProjectAction[] = [];
+  let stage: AppStage = 'character';
+  let commandStatus = '';
+  let recommendationsShown = true;
+  let actions: MechanismActionHarness | undefined;
+  const Harness = () => {
+    actions = useAppMechanismActions({
+      project,
+      dispatch: (action) => dispatches.push(action),
+      selectedPart,
+      selectedPath,
+      selectedMechanism,
+      foundry: overrides.foundry ?? createDefaultMechanism('4bar', 'foundry-preview-contract'),
+      mechanismConfig: { speed: project.settings.animationSpeed, rotation: 0, mechanisms: project.mechanisms },
+      angle: overrides.angle ?? 0,
+      setStage: (nextStage) => { stage = nextStage; },
+      setCommandStatus: (status) => { commandStatus = status; },
+      setShowRecommendations: (shown) => { recommendationsShown = shown; },
+    });
+    return null;
+  };
+  renderToString(createElement(Harness));
+  assert(actions, 'mechanism action harness renders the hook');
+  return {
+    actions,
+    dispatches,
+    stage: () => stage,
+    commandStatus: () => commandStatus,
+    recommendationsShown: () => recommendationsShown,
+  };
+};
+
 const classroomLesson = createLessonProject('waving-arm');
 const expectedCanvasDragHandles: Record<MechanismType, MechanismDragHandle[]> = {
   crank: ['P1', 'J1'],
@@ -172,13 +226,14 @@ const appCommandBindingsHookText = readFileSync(join(process.cwd(), 'hooks', 'us
 const appCommandsSource = readFileSync(join(process.cwd(), 'utils/appCommands.ts'), 'utf8');
 const appCommandHandlerSource = readFileSync(join(process.cwd(), 'utils/appCommandHandlers.ts'), 'utf8');
 const appProjectCommandsHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppProjectCommands.ts'), 'utf8');
+const appMechanismActionsHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppMechanismActions.ts'), 'utf8');
 const viteConfigText = readFileSync(join(process.cwd(), 'vite.config.ts'), 'utf8');
 assert(viteConfigText.includes("const webBase = process.env.VITE_BASE_PATH ?? '/'"), 'web deployment base can be set by VITE_BASE_PATH for project Pages');
 assert(viteConfigText.includes("base: isTauri ? './' : webBase"), 'Tauri stays relative while web builds can target /ms/');
 assert(viteConfigText.includes('chunkSizeWarningLimit: 2400'), 'Vite chunk warning budget is explicit for intentional lazy Rapier/ONNX browser chunks');
 assert(normalizedCodebaseCleanupPlan.includes('Button and command audit lock') && normalizedCodebaseCleanupPlan.includes('utils/appCommands.ts'), 'cleanup plan records the executable button/menu audit lock');
 assert(normalizedCodebaseCleanupPlan.includes('Warning fixes locked') && normalizedCodebaseCleanupPlan.includes('Rapier warning boundary'), 'cleanup plan records scoped warning fixes instead of broad suppression');
-assert(normalizedCodebaseCleanupPlan.includes('App wires state/actions into the shell without owning shell markup') && normalizedCodebaseCleanupPlan.includes('`components/AppWorkspaceShell.tsx`') && normalizedCodebaseCleanupPlan.includes('workspace shell chrome lives outside App.tsx') && normalizedCodebaseCleanupPlan.includes('no ProjectState mutation or fabrication validation') && normalizedCodebaseCleanupPlan.includes('`utils/workflowStatus.ts`') && normalizedCodebaseCleanupPlan.includes('fabrication-aware status derivation') && normalizedCodebaseCleanupPlan.includes('`components/AppStageRouter.tsx`') && normalizedCodebaseCleanupPlan.includes('shared stage-to-component routing and player-dock placement') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppDerivedState.ts`') && normalizedCodebaseCleanupPlan.includes('selected part/path/mechanism, playback duration, sorted parts, and global mechanism config') && normalizedCodebaseCleanupPlan.includes('`hooks/useWorkspacePlayerDock.tsx`') && normalizedCodebaseCleanupPlan.includes('workspace player dock visibility') && normalizedCodebaseCleanupPlan.includes('Assembly step dock state') && normalizedCodebaseCleanupPlan.includes('`hooks/useWorkspacePlaybackLoop.ts`') && normalizedCodebaseCleanupPlan.includes('shared playback rAF loop and Path draw reset') && normalizedCodebaseCleanupPlan.includes('`hooks/useModalInertEffect.ts`') && normalizedCodebaseCleanupPlan.includes('modal inert') && normalizedCodebaseCleanupPlan.includes('`resources/starterImageTemplates.ts`') && normalizedCodebaseCleanupPlan.includes('starter image template assets') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppPathActions.ts`') && normalizedCodebaseCleanupPlan.includes('Path draw mode, tracking modal state, path point upsert/validation, and tracked-path transfer') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppCharacterImportActions.ts`') && normalizedCodebaseCleanupPlan.includes('character ONNX image import, starter image/package/project import, pending review, replacement review, skeleton export') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppOnnxBootstrap.ts`') && normalizedCodebaseCleanupPlan.includes('`hooks/useProjectHistory.ts`') && normalizedCodebaseCleanupPlan.includes('`hooks/useProjectAutosave.ts`') && normalizedCodebaseCleanupPlan.includes('`utils/projectPersistence.ts`') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppProjectCommands.ts`'), 'cleanup plan records the current App.tsx hotspot and completed command/persistence/derived-state/stage-router/shell/status/player seams without brittle line-count locking');
+assert(normalizedCodebaseCleanupPlan.includes('App wires state/action hooks into the shell without owning shell markup') && normalizedCodebaseCleanupPlan.includes('`components/AppWorkspaceShell.tsx`') && normalizedCodebaseCleanupPlan.includes('workspace shell chrome lives outside App.tsx') && normalizedCodebaseCleanupPlan.includes('no ProjectState mutation or fabrication validation') && normalizedCodebaseCleanupPlan.includes('`utils/workflowStatus.ts`') && normalizedCodebaseCleanupPlan.includes('fabrication-aware status derivation') && normalizedCodebaseCleanupPlan.includes('`components/AppStageRouter.tsx`') && normalizedCodebaseCleanupPlan.includes('shared stage-to-component routing and player-dock placement') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppDerivedState.ts`') && normalizedCodebaseCleanupPlan.includes('selected part/path/mechanism, playback duration, sorted parts, and global mechanism config') && normalizedCodebaseCleanupPlan.includes('`hooks/useWorkspacePlayerDock.tsx`') && normalizedCodebaseCleanupPlan.includes('workspace player dock visibility') && normalizedCodebaseCleanupPlan.includes('Assembly step dock state') && normalizedCodebaseCleanupPlan.includes('`hooks/useWorkspacePlaybackLoop.ts`') && normalizedCodebaseCleanupPlan.includes('shared playback rAF loop and Path draw reset') && normalizedCodebaseCleanupPlan.includes('`hooks/useModalInertEffect.ts`') && normalizedCodebaseCleanupPlan.includes('modal inert') && normalizedCodebaseCleanupPlan.includes('`resources/starterImageTemplates.ts`') && normalizedCodebaseCleanupPlan.includes('starter image template assets') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppPathActions.ts`') && normalizedCodebaseCleanupPlan.includes('Path draw mode, tracking modal state, path point upsert/validation, and tracked-path transfer') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppCharacterImportActions.ts`') && normalizedCodebaseCleanupPlan.includes('character ONNX image import, starter image/package/project import, pending review, replacement review, skeleton export') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppMechanismActions.ts`') && normalizedCodebaseCleanupPlan.includes('mechanism update, Foundry export, recommendation apply, optimizer loop, and SVG/DXF export actions') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppOnnxBootstrap.ts`') && normalizedCodebaseCleanupPlan.includes('`hooks/useProjectHistory.ts`') && normalizedCodebaseCleanupPlan.includes('`hooks/useProjectAutosave.ts`') && normalizedCodebaseCleanupPlan.includes('`utils/projectPersistence.ts`') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppProjectCommands.ts`'), 'cleanup plan records the current App.tsx hotspot and completed command/persistence/derived-state/stage-router/shell/status/player seams without brittle line-count locking');
 assert(normalizedCodebaseCleanupPlan.includes('`hooks/useAppCommandBindings.ts` | 36') && normalizedCodebaseCleanupPlan.includes('application keyboard shortcut binding owns latest-handler ref'), 'cleanup plan records the extracted keyboard command binding hook seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/ProgressBlock.tsx` | 84') && normalizedCodebaseCleanupPlan.includes('character import progress UI lives outside the app shell'), 'cleanup plan records the extracted character progress seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/ui/InspectorControls.tsx` | 70') && normalizedCodebaseCleanupPlan.includes('shared inspector sliders/toggles live outside the app shell'), 'cleanup plan records the extracted inspector controls seam');
@@ -1942,7 +1997,66 @@ const indexText = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
 assert(appText.includes('<AppWorkspaceShell') && !appText.includes('<AppStageRouter') && appWorkspaceShellText.includes('<AppStageRouter') && appStageRouterText.includes('<MechanismFoundry') && !appText.includes('<MechanismFoundry') && !appStageRouterText.includes('const MechanismFoundry = ({') && mechanismFoundryText.includes('export const MechanismFoundry'), 'App.tsx delegates workspace chrome to AppWorkspaceShell, which delegates stage routing to AppStageRouter');
 assert(appStageRouterText.includes('<MechanismDesign') && !appText.includes('<MechanismDesign') && !appStageRouterText.includes('const MechanismDesign = ({') && mechanismDesignText.includes('export const MechanismDesign'), 'AppStageRouter delegates Mechanism Design to an extracted stage seam');
 assert(appStageRouterText.includes('<Options') && !appText.includes('<Options') && !appStageRouterText.includes('const Options = ({') && optionsText.includes('export const Options') && optionsText.includes('OPTIONS_SECTION_MANIFEST'), 'AppStageRouter delegates the Options stage to an extracted stage seam');
-assert(appStageRouterText.includes('onFoundryExport') && !appStageRouterText.includes('fitMechanismToTargetPath') && appText.includes('exportFoundryMechanism') && appText.includes('fitMechanismToTargetPath'), 'AppStageRouter remains a presentation router while App owns foundry export ProjectState mutation');
+assert(
+  appStageRouterText.includes('onFoundryExport') &&
+    !appStageRouterText.includes('fitMechanismToTargetPath') &&
+    appText.includes('useAppMechanismActions') &&
+    appMechanismActionsHookText.includes('exportFoundryMechanism') &&
+    appMechanismActionsHookText.includes('fitMechanismToTargetPath') &&
+    appMechanismActionsHookText.includes('fitRecommendedMechanismToSheet') &&
+    appMechanismActionsHookText.includes('normalizeGearMeshMechanism') &&
+    appMechanismActionsHookText.includes('optimizeSelectedMechanism') &&
+    appMechanismActionsHookText.includes('exportMechanismSvg') &&
+    appMechanismActionsHookText.includes('exportMechanismDxf') &&
+    appMechanismActionsHookText.includes('applyRecommendedMechanism') &&
+    !appText.includes('fitMechanismToTargetPath') &&
+    !appText.includes('generateSmartConfig') &&
+    !appText.includes('generateSVG') &&
+    !appText.includes('generateDXF'),
+  'AppStageRouter remains a presentation router while App delegates mechanism mutation/export/fitting actions to useAppMechanismActions',
+);
+const mechanismUpdateHarness = renderMechanismActionHarness();
+mechanismUpdateHarness.actions.updateMechanism('mech-1', { targetPartId: 'head' });
+const mechanismUpdateDispatch = mechanismUpdateHarness.dispatches[0] as { type: string; mechanism: MechanismConfig };
+assert.equal(mechanismUpdateDispatch.type, 'upsert_mechanism', 'mechanism action hook dispatches an updated mechanism');
+assert.equal(mechanismUpdateDispatch.mechanism.targetPartId, 'head', 'mechanism update action keeps target part edits behavior-backed');
+assert.equal(mechanismUpdateDispatch.mechanism.targetPathId, undefined, 'mechanism update action clears an incompatible path when the target part changes');
+assert.deepEqual(mechanismUpdateDispatch.mechanism.activeVisualPartIds, ['head'], 'mechanism update action preserves the active visual part behavior');
+
+const foundryExportProject = createSampleProject({ includeMechanism: true });
+const foundryExportPath = foundryExportProject.paths['path-right-arm'];
+const foundryExportMechanism = createDefaultMechanism('4bar', 'foundry-preview-contract');
+const foundryExportPackage: FoundryExportPackage = {
+  id: 'foundry-export-contract',
+  createdAt: '2026-07-04T00:00:00.000Z',
+  mechanismId: 'foundry-exported-contract',
+  mechanismType: '4bar',
+  parameters: { ...foundryExportMechanism },
+  pivot: { x: 120, y: 90 },
+  outputPoint: foundryExportPath.points[0],
+  generatedPath: foundryExportPath.points,
+  simulationSummary: 'ready',
+  visual: { color: foundryExportMechanism.color, scale: 1, constraintsVisible: true },
+  animation: { duration: 1800, steps: 60, loop: true },
+  metadata: { sourceTab: 'mechanism-foundry', selectedPreset: 'four-bar', recommendation: 'contract fit' },
+  targetPartId: 'right_arm_lower',
+  targetPathId: 'path-right-arm',
+  targetAnchorJointId: 'right_hand',
+  warnings: ['contract warning'],
+  source: 'mechanism-foundry',
+};
+const foundryExportHarness = renderMechanismActionHarness({ project: foundryExportProject, foundry: foundryExportMechanism });
+foundryExportHarness.actions.exportFoundryMechanism(foundryExportPackage);
+assert.deepEqual(foundryExportHarness.dispatches.map(action => action.type), ['set_foundry_export', 'upsert_mechanism'], 'Foundry export action preserves dispatch order');
+assert.equal(foundryExportHarness.stage(), 'design', 'Foundry export action still navigates to Design');
+const hookFoundryUpsert = foundryExportHarness.dispatches[1] as { type: string; mechanism: MechanismConfig };
+assert.equal(hookFoundryUpsert.mechanism.id, 'mech-1', 'Foundry export updates the existing matching target instead of duplicating it');
+assert.equal(hookFoundryUpsert.mechanism.source, 'foundry', 'Foundry export preserves source metadata');
+assert.equal(hookFoundryUpsert.mechanism.targetPathId, 'path-right-arm', 'Foundry export preserves the selected target path');
+assert.equal(hookFoundryUpsert.mechanism.foundryExport?.metadata.recommendation, 'contract fit', 'Foundry export embeds package metadata for downstream Design/Blueprint parity');
+assert(hookFoundryUpsert.mechanism.generatedPath && hookFoundryUpsert.mechanism.generatedPath.length >= 3, 'Foundry export keeps a generated path for simulation and fit checks');
+assert(hookFoundryUpsert.mechanism.warnings?.includes('contract warning'), 'Foundry export preserves package warnings');
+
 assert(appText.includes('useAppDerivedState(project)') && !appText.includes('const sortedParts = useMemo') && appDerivedStateHookText.includes('selectedMechanism') && appDerivedStateHookText.includes('playbackDurationMs') && appDerivedStateHookText.includes('mechanismConfig: GlobalConfig') && appDerivedStateHookText.includes('current?.partId === selectedPart.id'), 'App delegates selected part/path/mechanism/playback/config derivation to a pure hook without changing selection defaults');
 assert(mechanismFoundryText.includes('<FoundryWorkflowPanel') && foundryWorkflowPanelText.includes('data-testid="foundry-target-summary"'), 'MechanismFoundry delegates the left Foundry workflow pane without changing target controls');
 assert(mechanismFoundryText.includes('<FoundryInspectorPanel') && foundryInspectorPanelText.includes('testId="foundry-parametric-editor"') && foundryInspectorPanelText.includes('Mechanism options'), 'MechanismFoundry delegates the right Foundry inspector without changing parametric editor or advanced options');

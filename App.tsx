@@ -3,28 +3,14 @@ import { AppWorkspaceShell } from "./components/AppWorkspaceShell";
 import type { AppStageRouterProps } from "./components/AppStageRouter";
 import { STAGES } from "./components/AppShell";
 import { STARTER_IMAGE_TEMPLATES } from "./resources/starterImageTemplates";
-import {
-  AppStage,
-  CanvasViewport,
-  FoundryExportPackage,
-  MechanismConfig,
-} from "./types";
-import { generateDXF, generateSVG } from "./utils/exporter";
-import {
-  evaluateFitness,
-  generateSmartConfig,
-  mutateConfig,
-} from "./utils/optimizer";
+import { AppStage, CanvasViewport, MechanismConfig } from "./types";
 import {
   CLASSROOM_LESSONS,
   classroomLessonById,
   createDefaultMechanism,
   createEmptyProject,
-  downloadText,
   handoffGate,
-  mechanismWithGeneratedPath,
 } from "./utils/project";
-import { preferredMotionJointId } from "./utils/motion";
 import { DEFAULT_CANVAS_VIEWPORT } from "./utils/viewport";
 import { useAppCommandBindings } from "./hooks/useAppCommandBindings";
 import { useAppOnnxBootstrap } from "./hooks/useAppOnnxBootstrap";
@@ -38,11 +24,7 @@ import { useModalInertEffect } from "./hooks/useModalInertEffect";
 import { useAppPathActions } from "./hooks/useAppPathActions";
 import { useAppCharacterImportActions } from "./hooks/useAppCharacterImportActions";
 import { workflowStatusFor } from "./utils/workflowStatus";
-import {
-  fitMechanismToTargetPath,
-  fitRecommendedMechanismToSheet,
-  normalizeGearMeshMechanism,
-} from "./utils/mechanismRecommendations";
+import { useAppMechanismActions } from "./hooks/useAppMechanismActions";
 
 type FoundryState = MechanismConfig;
 
@@ -66,7 +48,6 @@ const App: React.FC = () => {
   const [foundry, setFoundry] = useState<FoundryState>(() =>
     createDefaultMechanism("4bar", "foundry-preview"),
   );
-  const [optimizerBusy, setOptimizerBusy] = useState(false);
   const [canvasViewport, setCanvasViewport] = useState<CanvasViewport>(
     DEFAULT_CANVAS_VIEWPORT,
   );
@@ -148,6 +129,28 @@ const App: React.FC = () => {
   const activeClassroomLesson = classroomLessonById(
     project.metadata.classroomLessonId,
   );
+  const {
+    optimizerBusy,
+    updateMechanism,
+    optimizeSelectedMechanism,
+    exportMechanismSvg,
+    exportMechanismDxf,
+    exportFoundryMechanism,
+    applyRecommendedMechanism,
+  } = useAppMechanismActions({
+    project,
+    dispatch,
+    selectedPart,
+    selectedPath,
+    selectedMechanism,
+    foundry,
+    mechanismConfig,
+    angle,
+    setStage,
+    setCommandStatus,
+    setShowRecommendations,
+  });
+
   useWorkspacePlaybackLoop({
     stage,
     isPlaying,
@@ -161,107 +164,6 @@ const App: React.FC = () => {
     setDrawMode,
   });
 
-  const updateMechanism = (id: string, updates: Partial<MechanismConfig>) => {
-    const mechanism = project.mechanisms.find((m) => m.id === id);
-    if (!mechanism) return;
-    const nextUpdates = { ...updates };
-    if (updates.targetPathId) {
-      const path = project.paths[updates.targetPathId];
-      if (path) {
-        nextUpdates.targetPartId = path.partId;
-        nextUpdates.targetAnchorJointId =
-          path.targetAnchorJointId ??
-          preferredMotionJointId(
-            project,
-            path.partId,
-            mechanism.targetAnchorJointId,
-            { preferDistalWhenRoot: !mechanism.targetAnchorJointId },
-          );
-      }
-    }
-    if (updates.targetPartId !== undefined) {
-      const pathId = updates.targetPathId ?? mechanism.targetPathId;
-      if (pathId && project.paths[pathId]?.partId !== updates.targetPartId)
-        nextUpdates.targetPathId = undefined;
-      nextUpdates.targetAnchorJointId = updates.targetPartId
-        ? preferredMotionJointId(project, updates.targetPartId, undefined, {
-            preferDistalWhenRoot: true,
-          })
-        : undefined;
-    }
-    const next = { ...mechanism, ...nextUpdates };
-    const normalized = normalizeGearMeshMechanism(next);
-    const fitted =
-      nextUpdates.targetPathId &&
-      (updates.targetPathId !== undefined || updates.targetPartId !== undefined)
-        ? fitMechanismToTargetPath(
-            project,
-            normalized,
-            nextUpdates.targetPathId,
-          )
-        : mechanismWithGeneratedPath({
-            ...normalized,
-            activeVisualPartIds: normalized.targetPartId
-              ? [normalized.targetPartId]
-              : [],
-          });
-    dispatch({ type: "upsert_mechanism", mechanism: fitted });
-  };
-
-  const optimizeSelectedMechanism = async () => {
-    if (!selectedMechanism || !selectedPath || selectedPath.points.length < 3)
-      return;
-    setOptimizerBusy(true);
-    await new Promise((r) => setTimeout(r, 16));
-    let best = generateSmartConfig(selectedPath.points, selectedMechanism.type);
-    let bestScore = evaluateFitness(best, selectedPath.points);
-    const iterations =
-      project.settings.performancePreset === "fast"
-        ? 120
-        : project.settings.performancePreset === "high"
-          ? 520
-          : 260;
-    for (let i = 0; i < iterations; i++) {
-      const candidate =
-        i < 80
-          ? generateSmartConfig(selectedPath.points, selectedMechanism.type)
-          : mutateConfig(best, 0.45, true);
-      const score = evaluateFitness(candidate, selectedPath.points);
-      if (score < bestScore) {
-        best = candidate;
-        bestScore = score;
-      }
-    }
-    updateMechanism(selectedMechanism.id, {
-      ...best,
-      id: selectedMechanism.id,
-      color: selectedMechanism.color,
-      visible: true,
-      targetPartId: selectedPart?.id,
-      targetPathId: selectedPath.id,
-      source: "optimized",
-      warnings:
-        bestScore > 350 ? [`Loose fit score ${Math.round(bestScore)}`] : [],
-    });
-    setOptimizerBusy(false);
-  };
-
-  const exportMechanismSvg = () => {
-    downloadText(
-      `mechanisms-${Date.now()}.svg`,
-      generateSVG(mechanismConfig, angle),
-      "image/svg+xml",
-    );
-    setCommandStatus("Exported mechanism SVG");
-  };
-  const exportMechanismDxf = () => {
-    downloadText(
-      `mechanisms-${Date.now()}.dxf`,
-      generateDXF(mechanismConfig, angle),
-      "application/dxf",
-    );
-    setCommandStatus("Exported mechanism DXF");
-  };
   const { commandHandlers, openClassroomLesson, openSampleProject } =
     useAppProjectCommands({
       project,
@@ -314,80 +216,9 @@ const App: React.FC = () => {
     drawMode,
   });
 
-  const exportFoundryMechanism = (pkg: FoundryExportPackage) => {
-    const existingTarget = project.mechanisms.find(
-      (mechanism) =>
-        mechanism.targetPartId === pkg.targetPartId &&
-        mechanism.targetPathId === pkg.targetPathId &&
-        preferredMotionJointId(
-          project,
-          mechanism.targetPartId,
-          mechanism.targetAnchorJointId,
-        ) === pkg.targetAnchorJointId,
-    );
-    const activeVisualPartIds = selectedPart ? [selectedPart.id] : [];
-    const rawMechanism = mechanismWithGeneratedPath(
-      {
-        ...foundry,
-        id: existingTarget?.id ?? pkg.mechanismId,
-        anchorX: pkg.pivot.x,
-        anchorY: pkg.pivot.y,
-        targetPartId: pkg.targetPartId,
-        targetPathId: pkg.targetPathId,
-        targetAnchorJointId: pkg.targetAnchorJointId,
-        presetId: pkg.metadata.selectedPreset,
-        recommendation: pkg.metadata.recommendation,
-        source: "foundry",
-        foundryExport: pkg,
-        generatedPath: pkg.generatedPath,
-        warnings: pkg.warnings,
-        activeVisualPartIds,
-      },
-      { preserveGeneratedPath: true },
-    );
-    const fittedMechanism = pkg.targetPathId
-      ? fitMechanismToTargetPath(project, rawMechanism, pkg.targetPathId)
-      : fitRecommendedMechanismToSheet(project, rawMechanism);
-    const generatedPath =
-      fittedMechanism.generatedPath ??
-      rawMechanism.generatedPath ??
-      pkg.generatedPath;
-    const mechanism = mechanismWithGeneratedPath(
-      {
-        ...fittedMechanism,
-        foundryExport: {
-          ...pkg,
-          parameters: { ...fittedMechanism },
-          pivot: {
-            x: fittedMechanism.anchorX ?? pkg.pivot.x,
-            y: fittedMechanism.anchorY ?? pkg.pivot.y,
-          },
-          outputPoint: generatedPath[0] ?? pkg.outputPoint,
-          generatedPath,
-        },
-        generatedPath,
-        warnings: [
-          ...new Set([
-            ...(fittedMechanism.warnings ?? []),
-            ...(pkg.warnings ?? []),
-          ]),
-        ],
-        activeVisualPartIds,
-      },
-      { preserveGeneratedPath: true },
-    );
-    dispatch({ type: "set_foundry_export", foundryExport: pkg });
-    dispatch({ type: "upsert_mechanism", mechanism });
-    setStage("design");
-  };
 
   useModalInertEffect(appShellRef, modalOpen);
 
-  const applyRecommendedMechanism = (mechanism: MechanismConfig) => {
-    dispatch({ type: "upsert_mechanism", mechanism });
-    setShowRecommendations(false);
-    setStage("design");
-  };
   const stageLabel =
     STAGES.find((item) => item.id === editorStage)?.label ?? editorStage;
   const workflowStatus = workflowStatusFor(
