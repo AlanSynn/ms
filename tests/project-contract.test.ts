@@ -400,6 +400,8 @@ const visibleUiSource = [
   'components/stages/stageLayout.tsx',
   'components/stages/blueprint/BlueprintExport.tsx',
   'components/stages/assembly/AssemblyWorkbench.tsx',
+  'components/stages/assembly/MechanismAssemblyWorkbench.tsx',
+  'components/stages/assembly/CharacterAssemblyWorkbench.tsx',
   'utils/fabrication.ts',
   'utils/assemblyPlayback.ts',
   'utils/mechanismTemplates.ts',
@@ -1897,7 +1899,10 @@ couplerSpecForNonExactSpan.holeCentersMm.slice(1).forEach((point, index) => {
   assert.equal(point.x - couplerSpecForNonExactSpan.holeCentersMm[index].x, 20, 'linkage hole spacing stays on the fabrication generator pitch');
 });
 const projectText = readFileSync(join(process.cwd(), 'utils', 'project.ts'), 'utf8');
-const assemblyWorkbenchText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'AssemblyWorkbench.tsx'), 'utf8');
+const assemblyWorkbenchBarrelText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'AssemblyWorkbench.tsx'), 'utf8');
+const mechanismAssemblyWorkbenchText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'MechanismAssemblyWorkbench.tsx'), 'utf8');
+const characterAssemblyWorkbenchText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'CharacterAssemblyWorkbench.tsx'), 'utf8');
+const assemblyWorkbenchText = [assemblyWorkbenchBarrelText, mechanismAssemblyWorkbenchText, characterAssemblyWorkbenchText].join('\n');
 const assemblyGeometryText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'assemblyGeometry.ts'), 'utf8');
 const assemblyGuideText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'AssemblyGuide.tsx'), 'utf8');
 const assemblyControlPanelText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'AssemblyControlPanel.tsx'), 'utf8');
@@ -2389,6 +2394,9 @@ assert(assemblyCanvasPaneText.includes('data-testid="assembly-canvas-preview"') 
 assert(assemblyBlock.includes('const liveRecipes = activeMechanisms.map') && assemblyBlock.includes('liveRecipes.length ? liveRecipes : (pkg?.recipes ?? [])'), 'Assembly preview derives from live project mechanisms before falling back to an exported package');
 assert(assemblyBlock.includes('activeAssemblyMode === "character"') && assemblyCanvasPaneText.includes('<CharacterAssemblyWorkbench') && !assemblyCanvasPaneText.includes('{pkg && selectedRecipe && currentStep ?'), 'Assembly animation supports character and mechanism stages before generating PDF/HTML output');
 assert(assemblyWorkbenchText.includes('data-testid="assembly-stepper-workbench"'), 'Assembly workbench exposes a testable interactive stepper surface');
+assert(assemblyWorkbenchBarrelText.includes("export { AssemblyWorkbench }") && assemblyWorkbenchBarrelText.includes("export { CharacterAssemblyWorkbench }") && !assemblyWorkbenchBarrelText.includes('<') && !assemblyWorkbenchBarrelText.includes('useState'), 'AssemblyWorkbench is now a compatibility barrel, not a JSX/state owner');
+assert(mechanismAssemblyWorkbenchText.includes('data-testid="assembly-stepper-workbench"') && !mechanismAssemblyWorkbenchText.includes('CharacterAssemblyWorkbench'), 'MechanismAssemblyWorkbench owns the mechanism assembly canvas only');
+assert(characterAssemblyWorkbenchText.includes('data-testid="character-assembly-workbench"') && !characterAssemblyWorkbenchText.includes('data-testid="assembly-stepper-workbench"'), 'CharacterAssemblyWorkbench owns the character assembly canvas only');
 assert(assemblyWorkbenchText.includes("from './assemblyGeometry'") && assemblyWorkbenchText.includes('smoothAssemblyProgress') && !assemblyWorkbenchText.includes('const assemblyCoordToSvg =') && !assemblyWorkbenchText.includes('const characterBoardProjector ='), 'Assembly workbench delegates pure coordinate/projector helpers to assemblyGeometry');
 assert(assemblyGeometryText.includes('export const assemblyCoordToSvg') && assemblyGeometryText.includes('export const characterBoardProjector') && !assemblyGeometryText.includes('<') && !assemblyGeometryText.includes('document.'), 'assemblyGeometry is a DOM-free deterministic helper seam');
 assert(assemblyPlaybackText.includes('export const pendingRecipeForMechanism') && assemblyPlaybackText.includes('buildAssemblyPlaybackSteps'), 'Assembly recipe/playback derivation lives outside App.tsx');
