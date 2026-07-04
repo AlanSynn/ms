@@ -128,6 +128,7 @@ Keep files compact by responsibility, not by ceremony. Split code when one file 
 - New mechanism behavior enters the shared domain path first: `utils/mechanismReference.ts`, `utils/mechanismFeatureRegistry.ts`, `utils/kinematics.ts`, fabrication manifest/recipes, then UI. No stage component may invent a private mechanism rule.
 - File-size target: keep new files under roughly 400 lines and refactor files over roughly 800 lines when already touching them. Do not churn stable large files just to satisfy a number; move behavior with tests.
 - Refactor by extraction only unless the task is a redesign: move code, preserve names/behavior, run tests, then simplify. Never mix huge file moves with feature changes.
+- UI leaf extraction must preserve existing public mount/import contracts with temporary re-exports until call sites move; contract tests should lock the mount before compatibility exports are removed.
 - Large-file refactors need a baseline commit plus a golden-master gate before extraction. The gate must lock the current `ProjectState`, mechanism snapshot/projection, fabrication stack, and export behavior that the refactor might touch.
 - Golden-master gates are necessary, not sufficient, for UI extraction. Pair App/stage JSX moves with command-contract tests and production-preview browser coverage for the touched workflow.
 - Treat `ProjectState` as the domain aggregate root. UI stages may issue commands/actions; domain modules own rules and invariants; renderer/export modules receive already-derived plans.

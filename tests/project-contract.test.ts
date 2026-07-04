@@ -209,6 +209,7 @@ assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/Mechan
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/FoundryCanvasPane.tsx` | 531') && normalizedCodebaseCleanupPlan.includes('Foundry center canvas owns Three preview, toolbar, overlay SVG, and pointer surfaces'), 'cleanup plan records the extracted Foundry canvas pane seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/FoundryWorkflowPanel.tsx` | 238') && normalizedCodebaseCleanupPlan.includes('Foundry left workflow pane owns target summary'), 'cleanup plan records the extracted Foundry workflow pane seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/FoundryInspectorPanel.tsx` | 231') && normalizedCodebaseCleanupPlan.includes('Foundry right inspector owns physics readout'), 'cleanup plan records the extracted Foundry inspector pane seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/shell/GettingStartedDialog.tsx` | 133') && normalizedCodebaseCleanupPlan.includes('Getting Started modal is a shell leaf outside AppShell'), 'cleanup plan records the extracted Getting Started shell leaf seam');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
 assert(readFileSync(join(process.cwd(), 'utils', 'projectPersistence.ts'), 'utf8').includes('motionsmith.autosave') && readFileSync(join(process.cwd(), 'utils', 'projectPersistence.ts'), 'utf8').includes('motionsmith.workspace'), 'local storage namespace uses the MotionSmith slug for persistent state');
 assert.deepEqual(validateAppCommandRegistry(), [], 'application command registry is internally consistent');
@@ -277,6 +278,8 @@ assert(!APP_COMMANDS.some(command => /exit|updates/i.test(command.label)), 'brow
 APP_MENU_GROUPS.forEach(group => group.commandIds.forEach(id => assert.equal(commandById(id).menu, group.id, `${id} belongs to its declared menu group`)));
 const appCommandSource = readFileSync(join(process.cwd(), 'App.tsx'), 'utf8');
 const appWorkspaceShellCommandSource = readFileSync(join(process.cwd(), 'components', 'AppWorkspaceShell.tsx'), 'utf8');
+const appShellCommandSource = readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8');
+const gettingStartedDialogCommandSource = readFileSync(join(process.cwd(), 'components', 'shell', 'GettingStartedDialog.tsx'), 'utf8');
 const appProjectHistoryHookText = readFileSync(join(process.cwd(), 'hooks', 'useProjectHistory.ts'), 'utf8');
 assert(appCommandSource.includes('useProjectHistory(createEmptyProject)') && !appCommandSource.includes('setProjectHistory') && !appCommandSource.includes('applyProjectAction(prev, action)') && appProjectHistoryHookText.includes('projectSelfCheck()') && appProjectHistoryHookText.includes('applyProjectAction') && appProjectHistoryHookText.includes('PROJECT_HISTORY_LIMIT') && appProjectHistoryHookText.includes('undoProject') && appProjectHistoryHookText.includes('redoProject'), 'App delegates ProjectState history, reducer dispatch, and undo/redo stack management to useProjectHistory');
 assert(appProjectCommandsHookText.includes('satisfies AppCommandHandlerMap') && appCommandsSource.includes('export type AppCommandHandlerMap = Record<AppCommandId, () => void>'), 'App command handlers are type-exhaustive against AppCommandId through the shared command handler map type');
@@ -294,6 +297,7 @@ assert(appProjectCommandsHookText.includes('setShowAbout(true)'), 'About command
 assert(!appCommandSource.includes('showDirectoryPicker'), 'browser UI omits fake output-folder selection until downloads can write there');
 assert(appCommandSource.includes('<AppWorkspaceShell') && appCommandSource.includes('workflowStatus={workflowStatus}') && appCommandSource.includes('stageRouterProps={stageRouterProps}') && !appCommandSource.includes('app-header') && !appCommandSource.includes('quick-toolbar') && !appCommandSource.includes('WorkflowStatusStrip'), 'App delegates workspace shell markup to AppWorkspaceShell while preserving status and stage-router props');
 assert(appWorkspaceShellCommandSource.includes('<AppStageRouter') && appWorkspaceShellCommandSource.includes('<TopCommandBar') && appWorkspaceShellCommandSource.includes('commandHandlers={commandHandlers}') && appWorkspaceShellCommandSource.includes('<WorkflowRail') && appWorkspaceShellCommandSource.includes('<WorkflowStatusStrip {...workflowStatus}') && appWorkspaceShellCommandSource.includes('<GettingStartedDialog') && appWorkspaceShellCommandSource.includes('<ShortcutHelpDialog') && appWorkspaceShellCommandSource.includes('<AboutDialog') && appWorkspaceShellCommandSource.includes('<MechanismRecommendationSheet') && appWorkspaceShellCommandSource.includes('onApply={onApplyRecommendation}') && appWorkspaceShellCommandSource.includes('<TrackingModal') && appWorkspaceShellCommandSource.includes('onTransfer={onTransferTracking}'), 'AppWorkspaceShell preserves command, status, modal, recommendation, and tracking prop wiring');
+assert(appShellCommandSource.includes("export { GettingStartedDialog") && gettingStartedDialogCommandSource.includes('export const GettingStartedDialog') && gettingStartedDialogCommandSource.includes('data-testid="getting-started-dialog"') && appWorkspaceShellCommandSource.includes('<GettingStartedDialog'), 'Getting Started dialog is an extracted shell leaf while preserving workspace mount wiring');
 for (const forbiddenShellBoundary of ['validateForFabrication', 'applyProjectAction', 'ProjectAction', 'dispatch(', 'setProject(']) {
   assert(!appWorkspaceShellCommandSource.includes(forbiddenShellBoundary), `AppWorkspaceShell must stay presentation-only and exclude ${forbiddenShellBoundary}`);
 }
@@ -302,6 +306,7 @@ const visibleUiSource = [
   'components/AppWorkspaceShell.tsx',
   'components/TrackingModal.tsx',
   'components/AppShell.tsx',
+  'components/shell/GettingStartedDialog.tsx',
   'components/stages/stageLayout.tsx',
   'components/stages/blueprint/BlueprintExport.tsx',
   'components/stages/assembly/AssemblyWorkbench.tsx',
@@ -1879,10 +1884,12 @@ ${threeResourceKitText}
 ${foundryRenderInventoryText}
 ${foundryPreviewStacksText}`;
 const appShellText = readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8');
+const gettingStartedDialogText = readFileSync(join(process.cwd(), 'components', 'shell', 'GettingStartedDialog.tsx'), 'utf8');
 const appUiText = `${appText}
 ${appWorkspaceShellText}
 ${appStageRouterText}
 ${appShellText}
+${gettingStartedDialogText}
 ${characterImportControlsText}
 ${characterSelectionText}
 ${optionsText}
