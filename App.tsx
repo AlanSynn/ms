@@ -9,7 +9,6 @@ import {
   classroomLessonById,
   createDefaultMechanism,
   createEmptyProject,
-  handoffGate,
 } from "./utils/project";
 import { DEFAULT_CANVAS_VIEWPORT } from "./utils/viewport";
 import { useAppCommandBindings } from "./hooks/useAppCommandBindings";
@@ -25,6 +24,7 @@ import { useAppPathActions } from "./hooks/useAppPathActions";
 import { useAppCharacterImportActions } from "./hooks/useAppCharacterImportActions";
 import { workflowStatusFor } from "./utils/workflowStatus";
 import { useAppMechanismActions } from "./hooks/useAppMechanismActions";
+import { navigateAppStage } from "./utils/appStageNavigation";
 
 type FoundryState = MechanismConfig;
 
@@ -58,27 +58,16 @@ const App: React.FC = () => {
   const appShellRef = useRef<HTMLDivElement>(null);
   useProjectAutosave(project);
 
-  const goStage = (target: AppStage) => {
-    const gate = handoffGate(project, target);
-    if (!gate.ok && "recoveryStage" in gate) {
-      dispatch({
-        type: "set_processing",
-        processing: {
-          stage: "error",
-          message: gate.message,
-          progress: 0,
-          error: gate.message,
-        },
-      });
-      setCommandStatus(gate.message);
-      setStage(gate.recoveryStage);
-    } else {
-      setCommandStatus(
-        `Opened ${STAGES.find((s) => s.id === target)?.label ?? target}`,
-      );
-      setStage(target);
-    }
-  };
+  const goStage = (target: AppStage) =>
+    navigateAppStage({
+      project,
+      target,
+      dispatch,
+      setStage,
+      setCommandStatus,
+      stageLabel: (item) =>
+        STAGES.find((stageItem) => stageItem.id === item)?.label ?? item,
+    });
   const {
     sortedParts,
     selectedPart,

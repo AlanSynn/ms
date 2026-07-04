@@ -28,6 +28,7 @@ import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_KERNEL_IMP
 import { formatGridLabel, formatGridPitch, formatGridReadout } from '../utils/units';
 import { buildCharacterAssemblyPlan, type CharacterAssemblyPlan } from '../utils/assemblyPlayback';
 import { useAppMechanismActions } from '../hooks/useAppMechanismActions';
+import { navigateAppStage } from '../utils/appStageNavigation';
 import { assemblyCoordToSvg, characterBoardProjector, characterCanvasProjector, smoothAssemblyProgress, svgPathFromPoints } from '../components/stages/assembly/assemblyGeometry';
 import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, FOUNDRY_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, mechanismTemplateLabel } from '../utils/mechanismTemplates';
 import { MECHANISM_TYPES as SANITIZE_MECHANISM_TYPES, sanitizeMechanismRuntime } from '../utils/sanitize';
@@ -227,6 +228,7 @@ const appCommandsSource = readFileSync(join(process.cwd(), 'utils/appCommands.ts
 const appCommandHandlerSource = readFileSync(join(process.cwd(), 'utils/appCommandHandlers.ts'), 'utf8');
 const appProjectCommandsHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppProjectCommands.ts'), 'utf8');
 const appMechanismActionsHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppMechanismActions.ts'), 'utf8');
+const appStageNavigationText = readFileSync(join(process.cwd(), 'utils', 'appStageNavigation.ts'), 'utf8');
 const viteConfigText = readFileSync(join(process.cwd(), 'vite.config.ts'), 'utf8');
 assert(viteConfigText.includes("const webBase = process.env.VITE_BASE_PATH ?? '/'"), 'web deployment base can be set by VITE_BASE_PATH for project Pages');
 assert(viteConfigText.includes("base: isTauri ? './' : webBase"), 'Tauri stays relative while web builds can target /ms/');
@@ -234,6 +236,7 @@ assert(viteConfigText.includes('chunkSizeWarningLimit: 2400'), 'Vite chunk warni
 assert(normalizedCodebaseCleanupPlan.includes('Button and command audit lock') && normalizedCodebaseCleanupPlan.includes('utils/appCommands.ts'), 'cleanup plan records the executable button/menu audit lock');
 assert(normalizedCodebaseCleanupPlan.includes('Warning fixes locked') && normalizedCodebaseCleanupPlan.includes('Rapier warning boundary'), 'cleanup plan records scoped warning fixes instead of broad suppression');
 assert(normalizedCodebaseCleanupPlan.includes('App wires state/action hooks into the shell without owning shell markup') && normalizedCodebaseCleanupPlan.includes('`components/AppWorkspaceShell.tsx`') && normalizedCodebaseCleanupPlan.includes('workspace shell chrome lives outside App.tsx') && normalizedCodebaseCleanupPlan.includes('no ProjectState mutation or fabrication validation') && normalizedCodebaseCleanupPlan.includes('`utils/workflowStatus.ts`') && normalizedCodebaseCleanupPlan.includes('fabrication-aware status derivation') && normalizedCodebaseCleanupPlan.includes('`components/AppStageRouter.tsx`') && normalizedCodebaseCleanupPlan.includes('shared stage-to-component routing and player-dock placement') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppDerivedState.ts`') && normalizedCodebaseCleanupPlan.includes('selected part/path/mechanism, playback duration, sorted parts, and global mechanism config') && normalizedCodebaseCleanupPlan.includes('`hooks/useWorkspacePlayerDock.tsx`') && normalizedCodebaseCleanupPlan.includes('workspace player dock visibility') && normalizedCodebaseCleanupPlan.includes('Assembly step dock state') && normalizedCodebaseCleanupPlan.includes('`hooks/useWorkspacePlaybackLoop.ts`') && normalizedCodebaseCleanupPlan.includes('shared playback rAF loop and Path draw reset') && normalizedCodebaseCleanupPlan.includes('`hooks/useModalInertEffect.ts`') && normalizedCodebaseCleanupPlan.includes('modal inert') && normalizedCodebaseCleanupPlan.includes('`resources/starterImageTemplates.ts`') && normalizedCodebaseCleanupPlan.includes('starter image template assets') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppPathActions.ts`') && normalizedCodebaseCleanupPlan.includes('Path draw mode, tracking modal state, path point upsert/validation, and tracked-path transfer') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppCharacterImportActions.ts`') && normalizedCodebaseCleanupPlan.includes('character ONNX image import, starter image/package/project import, pending review, replacement review, skeleton export') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppMechanismActions.ts`') && normalizedCodebaseCleanupPlan.includes('mechanism update, Foundry export, recommendation apply, optimizer loop, and SVG/DXF export actions') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppOnnxBootstrap.ts`') && normalizedCodebaseCleanupPlan.includes('`hooks/useProjectHistory.ts`') && normalizedCodebaseCleanupPlan.includes('`hooks/useProjectAutosave.ts`') && normalizedCodebaseCleanupPlan.includes('`utils/projectPersistence.ts`') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppProjectCommands.ts`'), 'cleanup plan records the current App.tsx hotspot and completed command/persistence/derived-state/stage-router/shell/status/player seams without brittle line-count locking');
+assert(normalizedCodebaseCleanupPlan.includes('`utils/appStageNavigation.ts`') && normalizedCodebaseCleanupPlan.includes('stage handoff gate, recovery dispatch, and stage-open status'), 'cleanup plan records the extracted stage navigation seam');
 assert(normalizedCodebaseCleanupPlan.includes('`hooks/useAppCommandBindings.ts` | 36') && normalizedCodebaseCleanupPlan.includes('application keyboard shortcut binding owns latest-handler ref'), 'cleanup plan records the extracted keyboard command binding hook seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/ProgressBlock.tsx` | 84') && normalizedCodebaseCleanupPlan.includes('character import progress UI lives outside the app shell'), 'cleanup plan records the extracted character progress seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/ui/InspectorControls.tsx` | 70') && normalizedCodebaseCleanupPlan.includes('shared inspector sliders/toggles live outside the app shell'), 'cleanup plan records the extracted inspector controls seam');
@@ -1997,6 +2000,7 @@ const indexText = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
 assert(appText.includes('<AppWorkspaceShell') && !appText.includes('<AppStageRouter') && appWorkspaceShellText.includes('<AppStageRouter') && appStageRouterText.includes('<MechanismFoundry') && !appText.includes('<MechanismFoundry') && !appStageRouterText.includes('const MechanismFoundry = ({') && mechanismFoundryText.includes('export const MechanismFoundry'), 'App.tsx delegates workspace chrome to AppWorkspaceShell, which delegates stage routing to AppStageRouter');
 assert(appStageRouterText.includes('<MechanismDesign') && !appText.includes('<MechanismDesign') && !appStageRouterText.includes('const MechanismDesign = ({') && mechanismDesignText.includes('export const MechanismDesign'), 'AppStageRouter delegates Mechanism Design to an extracted stage seam');
 assert(appStageRouterText.includes('<Options') && !appText.includes('<Options') && !appStageRouterText.includes('const Options = ({') && optionsText.includes('export const Options') && optionsText.includes('OPTIONS_SECTION_MANIFEST'), 'AppStageRouter delegates the Options stage to an extracted stage seam');
+assert(appText.includes('navigateAppStage({') && appStageNavigationText.includes('handoffGate(project, target)') && appStageNavigationText.includes('set_processing') && !appText.includes('handoffGate(project'), 'App delegates stage handoff side effects to navigateAppStage while preserving recovery processing dispatch');
 assert(
   appStageRouterText.includes('onFoundryExport') &&
     !appStageRouterText.includes('fitMechanismToTargetPath') &&
@@ -3432,6 +3436,44 @@ assert.equal(handoffGate({ ...sample, parts: {}, partOrder: [], skeleton: null, 
 assert.equal(handoffGate({ ...sample, mechanisms: [] }, 'design').ok, true, 'stage handoff allows Design to add the first mechanism after character load');
 assert.equal(handoffGate(sample, 'blueprint').ok, true, 'stage handoff permits blueprint when mechanisms are valid');
 assert.equal(handoffGate(sample, 'assembly').ok, true, 'stage handoff permits assembly guide when mechanisms are valid');
+{
+  const stageDispatches: ProjectAction[] = [];
+  let navigatedStage: AppStage = 'character';
+  let status = '';
+  const gate = navigateAppStage({
+    project: sample,
+    target: 'blueprint',
+    dispatch: action => stageDispatches.push(action),
+    setStage: next => { navigatedStage = next; },
+    setCommandStatus: next => { status = next; },
+    stageLabel: target => target === 'blueprint' ? 'Blueprint' : target,
+  });
+  assert.equal(gate.ok, true, 'stage navigation returns the handoff gate result');
+  assert.deepEqual(stageDispatches, [], 'stage navigation does not dispatch processing on valid navigation');
+  assert.equal(navigatedStage, 'blueprint', 'stage navigation keeps valid target transition');
+  assert.equal(status, 'Opened Blueprint', 'stage navigation keeps valid status copy');
+}
+{
+  const blockedProject = { ...sample, parts: {}, partOrder: [], skeleton: null, paths: {}, mechanisms: [] };
+  const stageDispatches: ProjectAction[] = [];
+  let navigatedStage: AppStage = 'path';
+  let status = '';
+  const gate = navigateAppStage({
+    project: blockedProject,
+    target: 'path',
+    dispatch: action => stageDispatches.push(action),
+    setStage: next => { navigatedStage = next; },
+    setCommandStatus: next => { status = next; },
+    stageLabel: target => target,
+  });
+  assert.equal(gate.ok, false, 'stage navigation surfaces blocked handoff gates');
+  assert.equal(navigatedStage, 'character', 'stage navigation sends blocked flows to recovery stage');
+  assert.equal(status, 'Load a character package before entering this workflow.', 'stage navigation preserves blocked handoff status');
+  assert.equal(stageDispatches[0]?.type, 'set_processing', 'stage navigation dispatches processing error on blocked handoff');
+  if (stageDispatches[0]?.type === 'set_processing') {
+    assert.equal(stageDispatches[0].processing.error, 'Load a character package before entering this workflow.', 'stage navigation preserves processing error copy');
+  }
+}
 const reassignedElbowPivot = bodyPartPivotScene({ ...sample.parts.right_arm_lower, anchorJointId: 'right_elbow' }, sample.skeleton);
 assert(Math.hypot(reassignedElbowPivot.x - (sample.skeleton?.joints.right_elbow.position.x ?? 0), reassignedElbowPivot.y - (sample.skeleton?.joints.right_elbow.position.y ?? 0)) < 1e-9, 'pivot can follow reassigned skeleton anchor');
 const placed = placeBodyPartPivotAt({ ...sample.parts.right_arm_lower, anchorJointId: 'right_elbow' }, { x: 12, y: 34 }, sample.skeleton);
