@@ -1,25 +1,16 @@
 import React, { useEffect, useRef, useState } from "react";
-import { AppStageRouter } from "./components/AppStageRouter";
-import { MechanismRecommendationSheet } from "./components/stages/path/MechanismRecommendationSheet";
+import { AppWorkspaceShell } from "./components/AppWorkspaceShell";
+import type { AppStageRouterProps } from "./components/AppStageRouter";
 import { processingLabel } from "./components/stages/character/ProgressBlock";
 import type { PendingCharacterReview } from "./components/stages/character/CharacterImportOverlays";
-import { TrackingModal } from "./components/TrackingModal";
 import {
-  AboutDialog,
-  GettingStartedDialog,
-  OnnxCacheStatusPill,
   SHARED_PLAYBACK_STAGES,
   STAGES,
-  ShortcutHelpDialog,
-  TopCommandBar,
-  WorkflowRail,
-  WorkflowStatusStrip,
   WorkspacePlayerDock,
   type StarterImageTemplate,
 } from "./components/AppShell";
 import {
   AppStage,
-  BodyPartLayer,
   CanvasViewport,
   FoundryExportPackage,
   MechanismConfig,
@@ -54,7 +45,6 @@ import {
   validatePath,
 } from "./utils/project";
 import { processImageWithWebOnnx } from "./utils/webOnnx";
-import { validateForFabrication } from "./utils/fabrication";
 import { loadCharacterPackage } from "./utils/packageLoader";
 import { preferredMotionJointId } from "./utils/motion";
 import { DEFAULT_CANVAS_VIEWPORT } from "./utils/viewport";
@@ -64,13 +54,12 @@ import { useProjectAutosave } from "./hooks/useProjectAutosave";
 import { useProjectHistory } from "./hooks/useProjectHistory";
 import { useAppProjectCommands } from "./hooks/useAppProjectCommands";
 import { useAppDerivedState } from "./hooks/useAppDerivedState";
+import { workflowStatusFor } from "./utils/workflowStatus";
 import {
   fitMechanismToTargetPath,
   fitRecommendedMechanismToSheet,
   normalizeGearMeshMechanism,
 } from "./utils/mechanismRecommendations";
-import { Download, Upload } from "lucide-react";
-import motionSmithIconUrl from "./resources/icons/AppIcon.png?url";
 import girlStarterUrl from "./resources/examples/raw/girl.png?url";
 import boyStarterUrl from "./resources/examples/raw/boy.PNG?url";
 import girlStarterThumbUrl from "./resources/examples/thumbs/girl-thumb.png?url";
@@ -94,56 +83,6 @@ const STARTER_IMAGE_TEMPLATES: StarterImageTemplate[] = [
     thumbUrl: boyStarterThumbUrl,
   },
 ];
-
-const workflowStatusFor = (
-  stage: AppStage,
-  project: ProjectState,
-  selectedPart?: BodyPartLayer,
-  selectedPath?: ProjectMotionPath,
-) => {
-  const stageLabel = STAGES.find((item) => item.id === stage)?.label ?? stage;
-  const validation = validateForFabrication(project);
-  const enabledMechanisms = project.mechanisms.filter(
-    (m) => m.visible && m.enabled !== false,
-  );
-  let blocker = "OK";
-  let nextAction = "Keep going";
-  if (!project.partOrder.length) {
-    blocker = "No character";
-    nextAction = "Load character";
-  } else if (stage === "path") {
-    blocker = selectedPart?.locked
-      ? `${selectedPart.name} locked`
-      : selectedPath && selectedPath.points.length >= 3
-        ? "OK"
-        : "Need 3 points";
-    nextAction =
-      selectedPath && selectedPath.points.length >= 3
-        ? "Open Foundry"
-        : "Draw path";
-  } else if (stage === "foundry") {
-    blocker =
-      selectedPath && selectedPath.points.length >= 3 ? "OK" : "No path";
-    nextAction =
-      selectedPath && selectedPath.points.length >= 3
-        ? "Pick one"
-        : "Draw path";
-  } else if (stage === "design") {
-    blocker = enabledMechanisms.length ? "OK" : "No mechanism";
-    nextAction = enabledMechanisms.length ? "Check target" : "Pick mechanism";
-  } else if (stage === "blueprint") {
-    blocker = validation.errors[0] ?? validation.warnings[0] ?? "OK";
-    nextAction = validation.errors.length ? "Fix" : "Make sheets";
-  } else if (stage === "assembly") {
-    blocker = validation.errors[0] ?? validation.warnings[0] ?? "OK";
-    nextAction = validation.errors.length ? "Fix blueprint" : "Build";
-  } else if (stage === "options") {
-    nextAction = "Tune settings";
-  } else {
-    nextAction = "Choose starter";
-  }
-  return { stageLabel, blocker, nextAction };
-};
 
 const App: React.FC = () => {
   const {
@@ -624,7 +563,6 @@ const App: React.FC = () => {
     setShowGettingStarted(false);
     setStage("character");
   };
-  const stageMeta = STAGES.find((s) => s.id === stage);
   const goSharedAssemblyStep = (index: number) => {
     const maxStepIndex = Math.max(0, assemblyStepCount - 1);
     setAssemblyStepProgress(0);
@@ -752,196 +690,131 @@ const App: React.FC = () => {
     };
   }, [modalOpen]);
 
-  return (
-    <main
-      className={`min-h-screen overflow-hidden ${themeClass}`}
-      data-theme={project.settings.theme}
-    >
-      <div
-        className="pointer-events-none fixed inset-0 opacity-70"
-        style={{
-          background:
-            "radial-gradient(circle at 15% 10%, rgba(90,108,255,.12), transparent 28%), radial-gradient(circle at 85% 20%, rgba(90,108,255,.08), transparent 24%), linear-gradient(120deg, rgba(8,10,18,.04), transparent)",
-        }}
-      />
-      <div ref={appShellRef} className="relative grid min-h-screen app-shell">
-        <WorkflowRail stage={stage} goStage={goStage} />
-        <section className="relative flex min-w-0 flex-col">
-          <header className="app-header border-b border-slate-300/70 bg-white/50 backdrop-blur-xl">
-            <div className="app-header-brand">
-              <img
-                className="brand-kicker app-header-icon"
-                src={motionSmithIconUrl}
-                alt=""
-                aria-hidden="true"
-                decoding="async"
-                draggable={false}
-              />
-              <h1 className="brand-title">MotionSmith</h1>
-              <h2 className="current-stage-title">{stageMeta?.label}</h2>
-            </div>
-            <div className="app-header-actions">
-              <TopCommandBar commandHandlers={commandHandlers} />
-              {project.settings.toolbarVisible && (
-                <div className="quick-toolbar" data-testid="quick-toolbar">
-                  <label className="btn-secondary cursor-pointer">
-                    <Upload size={16} /> Import
-                    <input
-                      hidden
-                      type="file"
-                      accept="application/json,.json"
-                      onChange={(e) =>
-                        e.target.files?.[0] && importProject(e.target.files[0])
-                      }
-                    />
-                  </label>
-                  <button
-                    className="btn-secondary"
-                    onClick={commandHandlers["project.save"]}
-                  >
-                    <Download size={16} /> Snapshot
-                  </button>
-                  <button
-                    className="btn-primary"
-                    onClick={() => goStage("blueprint")}
-                  >
-                    <Download size={16} /> Export
-                  </button>
-                </div>
-              )}
-            </div>
-          </header>
-          <input
-            ref={projectInputRef}
-            data-testid="project-file-input"
-            hidden
-            type="file"
-            accept="application/json,.motionsmith.json,.json"
-            onChange={(e) =>
-              e.target.files?.[0] && importProject(e.target.files[0])
-            }
-          />
+  const startFromStarterImage = (template: StarterImageTemplate) => {
+    setShowGettingStarted(false);
+    loadStarterImage(template);
+  };
+  const startFromPackage = (files: FileList | File[]) => {
+    setShowGettingStarted(false);
+    importCharacterPackage(files);
+  };
+  const startFromImage = (file: File) => {
+    setShowGettingStarted(false);
+    runWebOnnx(file);
+  };
+  const startFromProject = (file: File) => {
+    setShowGettingStarted(false);
+    importProject(file);
+  };
+  const applyRecommendedMechanism = (mechanism: MechanismConfig) => {
+    dispatch({ type: "upsert_mechanism", mechanism });
+    setShowRecommendations(false);
+    setStage("design");
+  };
+  const transferTrackedPath = (path: Point[]) => {
+    setPathPoints(path, "tracked");
+    setShowTracking(false);
+    setStage("path");
+  };
+  const stageLabel =
+    STAGES.find((item) => item.id === editorStage)?.label ?? editorStage;
+  const workflowStatus = workflowStatusFor(
+    editorStage,
+    stageLabel,
+    project,
+    selectedPart,
+    selectedPath,
+  );
 
-          <AppStageRouter
-            editorStage={editorStage}
-            project={project}
-            dispatch={dispatch}
-            goStage={goStage}
-            playerDock={playerDock}
-            pendingCharacter={pendingCharacter}
-            replaceCharacter={replaceCharacter}
-            setReplaceCharacter={setReplaceCharacter}
-            onOpenGettingStarted={() => setShowGettingStarted(true)}
-            onAcceptPendingCharacter={acceptPendingCharacter}
-            onDiscardPendingCharacter={() => setPendingCharacter(null)}
-            onProcessCharacter={runWebOnnx}
-            onPackageCharacter={importCharacterPackage}
-            onImportProject={importProject}
-            onEditCharacter={editCharacterParts}
-            onSaveSkeleton={saveSkeleton}
-            activeClassroomLesson={activeClassroomLesson}
-            resetLesson={commandHandlers["project.resetLesson"]}
-            sortedParts={sortedParts}
-            selectedPart={selectedPart}
-            selectedPath={selectedPath}
-            drawMode={drawMode}
-            setDrawMode={setDrawMode}
-            setPathPoints={setPathPoints}
-            openTracking={() => setShowTracking(true)}
-            isPlaying={isPlaying}
-            setIsPlaying={setIsPlaying}
-            angle={angle}
-            setAngle={setAngle}
-            viewport={canvasViewport}
-            setViewport={setCanvasViewport}
-            foundry={foundry}
-            setFoundry={setFoundry}
-            onFoundryExport={exportFoundryMechanism}
-            selectedMechanism={selectedMechanism}
-            updateMechanism={updateMechanism}
-            showTrace={showTrace}
-            setShowTrace={setShowTrace}
-            onOptimize={optimizeSelectedMechanism}
-            onRecommendations={() => setShowRecommendations(true)}
-            optimizerBusy={optimizerBusy}
-            exportSvg={exportMechanismSvg}
-            exportDxf={exportMechanismDxf}
-            assemblyStepIndex={assemblyStepIndex}
-            setAssemblyStepIndex={setAssemblyStepIndex}
-            assemblyStepProgress={assemblyStepProgress}
-            setAssemblyStepProgress={setAssemblyStepProgress}
-            assemblyPlaying={assemblyPlaying}
-            setAssemblyPlaying={setAssemblyPlaying}
-            setAssemblyStepCount={setAssemblyStepCount}
-          />
-          <WorkflowStatusStrip
-            {...workflowStatusFor(
-              editorStage,
-              project,
-              selectedPart,
-              selectedPath,
-            )}
-          />
-          <footer className="status-bar" data-testid="status-bar">
-            <span>{commandStatus}</span>
-            <OnnxCacheStatusPill
-              status={onnxCacheStatus}
-              onDownload={cacheOnnxModel}
-            />
-          </footer>
-        </section>
-      </div>
-      {showGettingStarted && (
-        <GettingStartedDialog
-          starterTemplates={STARTER_IMAGE_TEMPLATES}
-          guidedLessons={CLASSROOM_LESSONS}
-          onLesson={openClassroomLesson}
-          onStarterImage={(template) => {
-            setShowGettingStarted(false);
-            loadStarterImage(template);
-          }}
-          onSample={openSampleProject}
-          onPackage={(files) => {
-            setShowGettingStarted(false);
-            importCharacterPackage(files);
-          }}
-          onProcess={(file) => {
-            setShowGettingStarted(false);
-            runWebOnnx(file);
-          }}
-          onImport={(file) => {
-            setShowGettingStarted(false);
-            importProject(file);
-          }}
-          onClose={closeGettingStarted}
-        />
-      )}
-      {showShortcuts && (
-        <ShortcutHelpDialog onClose={() => setShowShortcuts(false)} />
-      )}
-      {showAbout && <AboutDialog onClose={() => setShowAbout(false)} />}
-      <MechanismRecommendationSheet
-        isOpen={showRecommendations}
-        project={project}
-        selectedPart={selectedPart}
-        selectedPath={selectedPath}
-        onClose={() => setShowRecommendations(false)}
-        onApply={(mechanism) => {
-          dispatch({ type: "upsert_mechanism", mechanism });
-          setShowRecommendations(false);
-          setStage("design");
-        }}
-      />
-      <TrackingModal
-        isOpen={showTracking}
-        onClose={() => setShowTracking(false)}
-        onTransfer={(path) => {
-          setPathPoints(path, "tracked");
-          setShowTracking(false);
-          setStage("path");
-        }}
-      />
-    </main>
+  const stageRouterProps: AppStageRouterProps = {
+    editorStage,
+    project,
+    dispatch,
+    goStage,
+    playerDock,
+    pendingCharacter,
+    replaceCharacter,
+    setReplaceCharacter,
+    onOpenGettingStarted: () => setShowGettingStarted(true),
+    onAcceptPendingCharacter: acceptPendingCharacter,
+    onDiscardPendingCharacter: () => setPendingCharacter(null),
+    onProcessCharacter: runWebOnnx,
+    onPackageCharacter: importCharacterPackage,
+    onImportProject: importProject,
+    onEditCharacter: editCharacterParts,
+    onSaveSkeleton: saveSkeleton,
+    activeClassroomLesson,
+    resetLesson: commandHandlers["project.resetLesson"],
+    sortedParts,
+    selectedPart,
+    selectedPath,
+    drawMode,
+    setDrawMode,
+    setPathPoints,
+    openTracking: () => setShowTracking(true),
+    isPlaying,
+    setIsPlaying,
+    angle,
+    setAngle,
+    viewport: canvasViewport,
+    setViewport: setCanvasViewport,
+    foundry,
+    setFoundry,
+    onFoundryExport: exportFoundryMechanism,
+    selectedMechanism,
+    updateMechanism,
+    showTrace,
+    setShowTrace,
+    onOptimize: optimizeSelectedMechanism,
+    onRecommendations: () => setShowRecommendations(true),
+    optimizerBusy,
+    exportSvg: exportMechanismSvg,
+    exportDxf: exportMechanismDxf,
+    assemblyStepIndex,
+    setAssemblyStepIndex,
+    assemblyStepProgress,
+    setAssemblyStepProgress,
+    assemblyPlaying,
+    setAssemblyPlaying,
+    setAssemblyStepCount,
+  };
+
+  return (
+    <AppWorkspaceShell
+      themeClass={themeClass}
+      appShellRef={appShellRef}
+      projectInputRef={projectInputRef}
+      project={project}
+      stage={stage}
+      goStage={goStage}
+      commandHandlers={commandHandlers}
+      importProject={importProject}
+      stageRouterProps={stageRouterProps}
+      workflowStatus={workflowStatus}
+      commandStatus={commandStatus}
+      onnxCacheStatus={onnxCacheStatus}
+      cacheOnnxModel={cacheOnnxModel}
+      showGettingStarted={showGettingStarted}
+      starterTemplates={STARTER_IMAGE_TEMPLATES}
+      guidedLessons={CLASSROOM_LESSONS}
+      onLesson={openClassroomLesson}
+      onStarterImage={startFromStarterImage}
+      onSample={openSampleProject}
+      onPackage={startFromPackage}
+      onProcess={startFromImage}
+      onImport={startFromProject}
+      onCloseGettingStarted={closeGettingStarted}
+      showShortcuts={showShortcuts}
+      onCloseShortcuts={() => setShowShortcuts(false)}
+      showAbout={showAbout}
+      onCloseAbout={() => setShowAbout(false)}
+      showRecommendations={showRecommendations}
+      onCloseRecommendations={() => setShowRecommendations(false)}
+      onApplyRecommendation={applyRecommendedMechanism}
+      showTracking={showTracking}
+      onCloseTracking={() => setShowTracking(false)}
+      onTransferTracking={transferTrackedPath}
+    />
   );
 };
 

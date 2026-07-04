@@ -134,6 +134,7 @@ const codebaseCleanupPlan = readFileSync(join(process.cwd(), 'docs', 'analysis',
 const normalizedCodebaseCleanupPlan = codebaseCleanupPlan.replace(/\s+/g, ' ');
 const brandStaticFiles = [
   'App.tsx',
+  'components/AppWorkspaceShell.tsx',
   'index.html',
   'package.json',
   'bun.lock',
@@ -176,7 +177,7 @@ assert(viteConfigText.includes("base: isTauri ? './' : webBase"), 'Tauri stays r
 assert(viteConfigText.includes('chunkSizeWarningLimit: 2400'), 'Vite chunk warning budget is explicit for intentional lazy Rapier/ONNX browser chunks');
 assert(normalizedCodebaseCleanupPlan.includes('Button and command audit lock') && normalizedCodebaseCleanupPlan.includes('utils/appCommands.ts'), 'cleanup plan records the executable button/menu audit lock');
 assert(normalizedCodebaseCleanupPlan.includes('Warning fixes locked') && normalizedCodebaseCleanupPlan.includes('Rapier warning boundary'), 'cleanup plan records scoped warning fixes instead of broad suppression');
-assert(normalizedCodebaseCleanupPlan.includes('`App.tsx` | 948') && normalizedCodebaseCleanupPlan.includes('project/session command actions, derived selection state, and the stage router are extracted') && normalizedCodebaseCleanupPlan.includes('`components/AppStageRouter.tsx` | 243') && normalizedCodebaseCleanupPlan.includes('shared stage-to-component routing and player-dock placement') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppDerivedState.ts` | 65') && normalizedCodebaseCleanupPlan.includes('selected part/path/mechanism, playback duration, sorted parts, and global mechanism config') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppOnnxBootstrap.ts` | 88') && normalizedCodebaseCleanupPlan.includes('`hooks/useProjectHistory.ts` | 98') && normalizedCodebaseCleanupPlan.includes('`hooks/useProjectAutosave.ts` | 23') && normalizedCodebaseCleanupPlan.includes('`utils/projectPersistence.ts` | 158') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppProjectCommands.ts` | 292'), 'cleanup plan records the current App.tsx hotspot and completed command/persistence/derived-state/stage-router seams');
+assert(normalizedCodebaseCleanupPlan.includes('App wires state/actions into the shell without owning shell markup') && normalizedCodebaseCleanupPlan.includes('`components/AppWorkspaceShell.tsx`') && normalizedCodebaseCleanupPlan.includes('workspace shell chrome lives outside App.tsx') && normalizedCodebaseCleanupPlan.includes('no ProjectState mutation or fabrication validation') && normalizedCodebaseCleanupPlan.includes('`utils/workflowStatus.ts`') && normalizedCodebaseCleanupPlan.includes('fabrication-aware status derivation') && normalizedCodebaseCleanupPlan.includes('`components/AppStageRouter.tsx`') && normalizedCodebaseCleanupPlan.includes('shared stage-to-component routing and player-dock placement') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppDerivedState.ts`') && normalizedCodebaseCleanupPlan.includes('selected part/path/mechanism, playback duration, sorted parts, and global mechanism config') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppOnnxBootstrap.ts`') && normalizedCodebaseCleanupPlan.includes('`hooks/useProjectHistory.ts`') && normalizedCodebaseCleanupPlan.includes('`hooks/useProjectAutosave.ts`') && normalizedCodebaseCleanupPlan.includes('`utils/projectPersistence.ts`') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppProjectCommands.ts`'), 'cleanup plan records the current App.tsx hotspot and completed command/persistence/derived-state/stage-router/shell/status seams without brittle line-count locking');
 assert(normalizedCodebaseCleanupPlan.includes('`hooks/useAppCommandBindings.ts` | 36') && normalizedCodebaseCleanupPlan.includes('application keyboard shortcut binding owns latest-handler ref'), 'cleanup plan records the extracted keyboard command binding hook seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/ProgressBlock.tsx` | 84') && normalizedCodebaseCleanupPlan.includes('character import progress UI lives outside the app shell'), 'cleanup plan records the extracted character progress seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/ui/InspectorControls.tsx` | 70') && normalizedCodebaseCleanupPlan.includes('shared inspector sliders/toggles live outside the app shell'), 'cleanup plan records the extracted inspector controls seam');
@@ -275,6 +276,7 @@ assert.equal(commandIdForKeyboardEvent({ key: '5', ctrlKey: false, metaKey: fals
 assert(!APP_COMMANDS.some(command => /exit|updates/i.test(command.label)), 'browser menu omits old placeholder Exit and Check for Updates items');
 APP_MENU_GROUPS.forEach(group => group.commandIds.forEach(id => assert.equal(commandById(id).menu, group.id, `${id} belongs to its declared menu group`)));
 const appCommandSource = readFileSync(join(process.cwd(), 'App.tsx'), 'utf8');
+const appWorkspaceShellCommandSource = readFileSync(join(process.cwd(), 'components', 'AppWorkspaceShell.tsx'), 'utf8');
 const appProjectHistoryHookText = readFileSync(join(process.cwd(), 'hooks', 'useProjectHistory.ts'), 'utf8');
 assert(appCommandSource.includes('useProjectHistory(createEmptyProject)') && !appCommandSource.includes('setProjectHistory') && !appCommandSource.includes('applyProjectAction(prev, action)') && appProjectHistoryHookText.includes('projectSelfCheck()') && appProjectHistoryHookText.includes('applyProjectAction') && appProjectHistoryHookText.includes('PROJECT_HISTORY_LIMIT') && appProjectHistoryHookText.includes('undoProject') && appProjectHistoryHookText.includes('redoProject'), 'App delegates ProjectState history, reducer dispatch, and undo/redo stack management to useProjectHistory');
 assert(appProjectCommandsHookText.includes('satisfies AppCommandHandlerMap') && appCommandsSource.includes('export type AppCommandHandlerMap = Record<AppCommandId, () => void>'), 'App command handlers are type-exhaustive against AppCommandId through the shared command handler map type');
@@ -290,8 +292,14 @@ assert.deepEqual(
 );
 assert(appProjectCommandsHookText.includes('setShowAbout(true)'), 'About command opens a real modal instead of only writing status text');
 assert(!appCommandSource.includes('showDirectoryPicker'), 'browser UI omits fake output-folder selection until downloads can write there');
+assert(appCommandSource.includes('<AppWorkspaceShell') && appCommandSource.includes('workflowStatus={workflowStatus}') && appCommandSource.includes('stageRouterProps={stageRouterProps}') && !appCommandSource.includes('app-header') && !appCommandSource.includes('quick-toolbar') && !appCommandSource.includes('WorkflowStatusStrip'), 'App delegates workspace shell markup to AppWorkspaceShell while preserving status and stage-router props');
+assert(appWorkspaceShellCommandSource.includes('<AppStageRouter') && appWorkspaceShellCommandSource.includes('<TopCommandBar') && appWorkspaceShellCommandSource.includes('commandHandlers={commandHandlers}') && appWorkspaceShellCommandSource.includes('<WorkflowRail') && appWorkspaceShellCommandSource.includes('<WorkflowStatusStrip {...workflowStatus}') && appWorkspaceShellCommandSource.includes('<GettingStartedDialog') && appWorkspaceShellCommandSource.includes('<ShortcutHelpDialog') && appWorkspaceShellCommandSource.includes('<AboutDialog') && appWorkspaceShellCommandSource.includes('<MechanismRecommendationSheet') && appWorkspaceShellCommandSource.includes('onApply={onApplyRecommendation}') && appWorkspaceShellCommandSource.includes('<TrackingModal') && appWorkspaceShellCommandSource.includes('onTransfer={onTransferTracking}'), 'AppWorkspaceShell preserves command, status, modal, recommendation, and tracking prop wiring');
+for (const forbiddenShellBoundary of ['validateForFabrication', 'applyProjectAction', 'ProjectAction', 'dispatch(', 'setProject(']) {
+  assert(!appWorkspaceShellCommandSource.includes(forbiddenShellBoundary), `AppWorkspaceShell must stay presentation-only and exclude ${forbiddenShellBoundary}`);
+}
 const visibleUiSource = [
   'App.tsx',
+  'components/AppWorkspaceShell.tsx',
   'components/Canvas.tsx',
   'components/TrackingModal.tsx',
   'components/AppShell.tsx',
@@ -372,7 +380,7 @@ assert(!visibleUiSource.includes('getUserMedia'), 'browser hardware camera captu
 assert(existsSync(join(process.cwd(), 'public', 'fonts', 'manrope-800-latin.woff2')), 'Manrope splash font is self-hosted instead of loaded from a runtime CDN');
 assert(existsSync(join(process.cwd(), 'resources', 'icons', 'AppIcon.png')) && existsSync(join(process.cwd(), 'resources', 'icons', 'AppIcon.icns')), 'canonical MotionSmith icon assets live under resources/icons');
 assert(readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8').includes("../resources/icons/AppIcon.png?url"), 'welcome splash and rail use the canonical resources icon');
-assert(readFileSync(join(process.cwd(), 'App.tsx'), 'utf8').includes("./resources/icons/AppIcon.png?url"), 'top app bar uses the canonical resources icon');
+assert(readFileSync(join(process.cwd(), 'components', 'AppWorkspaceShell.tsx'), 'utf8').includes("../resources/icons/AppIcon.png?url"), 'top app bar uses the canonical resources icon');
 assert(!readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8').includes('src-tauri/icons/icon.png'), 'welcome splash does not reuse the old Tauri grid icon path');
 assert(!readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8').includes('<svg className="motionsmith-logo-mark"'), 'welcome splash does not keep an inline dummy logo SVG');
 assert(readFileSync(join(process.cwd(), 'index.html'), 'utf8').includes("font-family: 'Manrope'") && readFileSync(join(process.cwd(), 'index.html'), 'utf8').includes("%BASE_URL%fonts/manrope-800-latin.woff2"), 'welcome splash uses a base-aware local Manrope wordmark font');
@@ -1826,6 +1834,7 @@ const pathCanvasPaneText = readFileSync(join(process.cwd(), 'components', 'stage
 const sceneSketchText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'SceneSketch.tsx'), 'utf8');
 const partShapeText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'PartShape.tsx'), 'utf8');
 const appText = readFileSync(join(process.cwd(), 'App.tsx'), 'utf8');
+const appWorkspaceShellText = readFileSync(join(process.cwd(), 'components', 'AppWorkspaceShell.tsx'), 'utf8');
 const appStageRouterText = readFileSync(join(process.cwd(), 'components', 'AppStageRouter.tsx'), 'utf8');
 const appDerivedStateHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppDerivedState.ts'), 'utf8');
 const appOnnxBootstrapText = readFileSync(join(process.cwd(), 'hooks', 'useAppOnnxBootstrap.ts'), 'utf8');
@@ -1867,6 +1876,7 @@ ${foundryRenderInventoryText}
 ${foundryPreviewStacksText}`;
 const appShellText = readFileSync(join(process.cwd(), 'components', 'AppShell.tsx'), 'utf8');
 const appUiText = `${appText}
+${appWorkspaceShellText}
 ${appStageRouterText}
 ${appShellText}
 ${characterImportControlsText}
@@ -1876,7 +1886,7 @@ ${mechanismDesignStageText}
 ${designFoundryPreviewText}`;
 const typesText = readFileSync(join(process.cwd(), 'types.ts'), 'utf8');
 const indexText = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
-assert(appText.includes('<AppStageRouter') && appStageRouterText.includes('<MechanismFoundry') && !appText.includes('<MechanismFoundry') && !appStageRouterText.includes('const MechanismFoundry = ({') && mechanismFoundryText.includes('export const MechanismFoundry'), 'App.tsx delegates stage routing to AppStageRouter and AppStageRouter delegates the Mechanism Foundry stage');
+assert(appText.includes('<AppWorkspaceShell') && !appText.includes('<AppStageRouter') && appWorkspaceShellText.includes('<AppStageRouter') && appStageRouterText.includes('<MechanismFoundry') && !appText.includes('<MechanismFoundry') && !appStageRouterText.includes('const MechanismFoundry = ({') && mechanismFoundryText.includes('export const MechanismFoundry'), 'App.tsx delegates workspace chrome to AppWorkspaceShell, which delegates stage routing to AppStageRouter');
 assert(appStageRouterText.includes('<MechanismDesign') && !appText.includes('<MechanismDesign') && !appStageRouterText.includes('const MechanismDesign = ({') && mechanismDesignText.includes('export const MechanismDesign'), 'AppStageRouter delegates Mechanism Design to an extracted stage seam');
 assert(appStageRouterText.includes('<Options') && !appText.includes('<Options') && !appStageRouterText.includes('const Options = ({') && optionsText.includes('export const Options') && optionsText.includes('OPTIONS_SECTION_MANIFEST'), 'AppStageRouter delegates the Options stage to an extracted stage seam');
 assert(appStageRouterText.includes('onFoundryExport') && !appStageRouterText.includes('fitMechanismToTargetPath') && appText.includes('exportFoundryMechanism') && appText.includes('fitMechanismToTargetPath'), 'AppStageRouter remains a presentation router while App owns foundry export ProjectState mutation');
@@ -2034,7 +2044,7 @@ assert(viewportText.includes('WEBGL_PIXEL_RATIO_CAP') && foundry3dText.includes(
 assert(threePreviewText.includes("const PUPPET_CAMERA_PRESETS: Viewer3DCameraPreset[] = ['front', 'iso']"), 'puppet viewer toolbar exposes only the fixed 2D and orbitable 3D modes');
 assert(threePreviewText.includes('onWheel={handleViewerWheel}') && threePreviewText.includes('data-camera-yaw'), 'puppet 3D canvas exposes direct wheel zoom and orbit state for browser verification');
 assert(appStageRouterText.includes('<PathEditor') && !appText.includes('<PathEditor'), 'AppStageRouter delegates Path Editor stage to the extracted PathEditor seam');
-assert(appText.includes('<MechanismRecommendationSheet') && mechanismRecommendationSheetText.includes('buildMechanismRecommendations') && mechanismRecommendationSheetText.includes('mechanismWithGeneratedPath'), 'App.tsx delegates the Path recommendation modal while recommendation scoring and generated-path wrapping stay outside the app shell');
+assert(appWorkspaceShellText.includes('<MechanismRecommendationSheet') && mechanismRecommendationSheetText.includes('buildMechanismRecommendations') && mechanismRecommendationSheetText.includes('mechanismWithGeneratedPath'), 'AppWorkspaceShell mounts the Path recommendation modal while recommendation scoring and generated-path wrapping stay outside the app shell');
 assert(pathCanvasPaneText.includes('path-view-2d') && pathCanvasPaneText.includes('path-view-3d'), 'Path Editor exposes a persistent 2D/3D Path view switch');
 assert(pathCanvasPaneText.includes('pathViewMode === "2d"') && pathCanvasPaneText.includes('<SceneSketch'), 'Path Editor 2D view uses editable SceneSketch for viewing, drawing, and point editing');
 assert(sceneSketchText.includes('data-testid="path-canvas"'), 'SceneSketch owns the editable 2D path canvas');
@@ -2098,13 +2108,13 @@ assert(indexText.includes('#boot-loader .boot-word') && indexText.includes('max-
 assert(appText.includes('useAppOnnxBootstrap') && appOnnxBootstrapText.includes('warmWebOnnxCache(publishBootStatus)') && appOnnxBootstrapText.includes('finishBootLoader()') && appOnnxBootstrapText.includes('document.getElementById("boot-loader")?.remove()'), 'React keeps the static boot loader through AI model warmup before opening the editor');
 assert(appShellText.includes('const APP_VERSION = __APP_VERSION__') && appShellText.includes('workflow-rail-version') && indexText.includes('v%APP_VERSION%'), 'startup boot loader and editor rail show the package version subtly');
 assert(indexText.includes('.boot-version') && indexText.includes('.workflow-rail-version'), 'version labels use low-emphasis styling');
-assert(appText.includes('./resources/icons/AppIcon.png?url') && indexText.includes('.app-header-icon'), 'top bar renders the canonical MotionSmith app icon with dedicated sizing');
+assert(appWorkspaceShellText.includes('../resources/icons/AppIcon.png?url') && indexText.includes('.app-header-icon'), 'top bar renders the canonical MotionSmith app icon with dedicated sizing');
 assert(indexText.includes("font-family: 'Manrope'") && indexText.includes('fonts/manrope-800-latin.woff2'), 'startup boot loader uses self-hosted Manrope wordmark styling');
 assert(!appShellText.includes('welcome-dialog') && !appShellText.includes('Skip forever') && !appShellText.includes('>Start<'), 'startup has no second React welcome modal or persistence/start controls');
 assert(indexText.includes('--ms-font-sans') && indexText.includes('font-family: var(--ms-font-sans)') && indexText.includes('.brand-title'), 'global typography uses the shared modern MotionSmith font stack');
-assert(appText.includes('app-header-brand') && appText.includes('app-header-actions') && appText.includes('quick-toolbar'), 'top app bar separates brand, menus, and quick actions into compact zones');
+assert(appWorkspaceShellText.includes('app-header-brand') && appWorkspaceShellText.includes('app-header-actions') && appWorkspaceShellText.includes('quick-toolbar'), 'top app bar separates brand, menus, and quick actions into compact zones');
 assert(indexText.includes('.app-header-brand') && indexText.includes('.app-header-actions') && indexText.includes('border-radius: 999px'), 'top app bar keeps the brand and current stage in one slick editor row');
-assert(!appText.includes('flex flex-col items-end gap-2'), 'top app bar does not stack menu and quick actions vertically');
+assert(!appWorkspaceShellText.includes('flex flex-col items-end gap-2'), 'top app bar does not stack menu and quick actions vertically');
 assert(appText.includes('useProjectAutosave(project)') && appProjectCommandsHookText.includes('readAutosaveProject') && appProjectCommandsHookText.includes('readWorkspaceLayoutSnapshot') && appProjectCommandsHookText.includes('writeWorkspaceLayoutSnapshot') && appAutosaveHookText.includes('writeAutosaveSnapshot') && projectPersistenceText.includes('readStorageWithLegacy') && projectPersistenceText.includes('migrateStorageValue'), 'MotionSmith storage rename keeps legacy autosave/workspace migration hooks behind the persistence seam');
 assert(!appUiText.includes('MOTIONSMITH_VIDEO_URL'), 'welcome splash does not embed the old preview video');
 assert(appUiText.includes('getting-started-dialog') && appUiText.includes('getting-started-gallery'), 'Getting Started is an explicit compact starter dialog');
