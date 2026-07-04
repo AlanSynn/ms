@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { AppStageRouter } from "./components/AppStageRouter";
 import { MechanismRecommendationSheet } from "./components/stages/path/MechanismRecommendationSheet";
 import { processingLabel } from "./components/stages/character/ProgressBlock";
@@ -21,7 +21,6 @@ import {
   AppStage,
   BodyPartLayer,
   CanvasViewport,
-  GlobalConfig,
   FoundryExportPackage,
   MechanismConfig,
   MechanismType,
@@ -64,6 +63,7 @@ import { useAppOnnxBootstrap } from "./hooks/useAppOnnxBootstrap";
 import { useProjectAutosave } from "./hooks/useProjectAutosave";
 import { useProjectHistory } from "./hooks/useProjectHistory";
 import { useAppProjectCommands } from "./hooks/useAppProjectCommands";
+import { useAppDerivedState } from "./hooks/useAppDerivedState";
 import {
   fitMechanismToTargetPath,
   fitRecommendedMechanismToSheet,
@@ -206,36 +206,17 @@ const App: React.FC = () => {
       setStage(target);
     }
   };
-  const sortedParts = useMemo(
-    () => project.partOrder.map((id) => project.parts[id]).filter(Boolean),
-    [project.parts, project.partOrder],
-  );
-  const selectedPart = project.selectedPartId
-    ? project.parts[project.selectedPartId]
-    : sortedParts[0];
-  const selectedPath = useMemo(() => {
-    if (!selectedPart) return undefined;
-    const current = project.selectedPathId
-      ? project.paths[project.selectedPathId]
-      : undefined;
-    return current?.partId === selectedPart.id
-      ? current
-      : (Object.values(project.paths) as ProjectMotionPath[]).find(
-          (path) => path.partId === selectedPart.id,
-        );
-  }, [project.paths, project.selectedPathId, selectedPart]);
-  const selectedMechanism =
-    project.mechanisms.find((m) => m.id === project.selectedMechanismId) ??
-    project.mechanisms[0];
+  const {
+    sortedParts,
+    selectedPart,
+    selectedPath,
+    selectedMechanism,
+    playbackDurationMs,
+    mechanismConfig,
+  } = useAppDerivedState(project);
   const activeClassroomLesson = classroomLessonById(
     project.metadata.classroomLessonId,
   );
-  const playbackDurationMs =
-    selectedMechanism?.targetPathId &&
-    project.paths[selectedMechanism.targetPathId]
-      ? project.paths[selectedMechanism.targetPathId].duration
-      : (selectedPath?.duration ?? project.settings.animationDurationMs);
-
   useEffect(() => {
     if (
       !isPlaying ||
@@ -280,15 +261,6 @@ const App: React.FC = () => {
   useEffect(() => {
     if (stage !== "path" && drawMode) setDrawMode(false);
   }, [stage, drawMode]);
-
-  const mechanismConfig: GlobalConfig = useMemo(
-    () => ({
-      speed: project.settings.animationSpeed,
-      rotation: 0,
-      mechanisms: project.mechanisms,
-    }),
-    [project.settings.animationSpeed, project.mechanisms],
-  );
 
   const updateMechanism = (id: string, updates: Partial<MechanismConfig>) => {
     const mechanism = project.mechanisms.find((m) => m.id === id);
