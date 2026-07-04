@@ -33,7 +33,6 @@ import {
   Point,
   ProjectMotionPath,
   ProjectState,
-  ProjectAction,
 } from "./types";
 import { generateDXF, generateSVG } from "./utils/exporter";
 import {
@@ -47,7 +46,6 @@ import {
   mutateConfig,
 } from "./utils/optimizer";
 import {
-  applyProjectAction,
   CLASSROOM_LESSONS,
   classroomLessonById,
   createDefaultMechanism,
@@ -59,7 +57,6 @@ import {
   downloadText,
   handoffGate,
   mechanismWithGeneratedPath,
-  projectSelfCheck,
   replaceCharacterProject,
   resetProjectToLessonBaseline,
   serializeProject,
@@ -70,20 +67,14 @@ import {
 import { processImageWithWebOnnx } from "./utils/webOnnx";
 import { validateForFabrication } from "./utils/fabrication";
 import { loadCharacterPackage } from "./utils/packageLoader";
-import {
-  preferredMotionJointId,
-} from "./utils/motion";
-import {
-  clampCanvasZoom,
-  DEFAULT_CANVAS_VIEWPORT,
-} from "./utils/viewport";
-import {
-  type AppCommandHandlerMap,
-} from "./utils/appCommands";
+import { preferredMotionJointId } from "./utils/motion";
+import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT } from "./utils/viewport";
+import { type AppCommandHandlerMap } from "./utils/appCommands";
 import { createAppCommandHandlers } from "./utils/appCommandHandlers";
 import { useAppCommandBindings } from "./hooks/useAppCommandBindings";
 import { useAppOnnxBootstrap } from "./hooks/useAppOnnxBootstrap";
 import { useProjectAutosave } from "./hooks/useProjectAutosave";
+import { useProjectHistory } from "./hooks/useProjectHistory";
 import {
   projectSnapshotFileName,
   readAutosaveProject,
@@ -177,50 +168,14 @@ const workflowStatusFor = (
   return { stageLabel, blocker, nextAction };
 };
 
-const PROJECT_HISTORY_LIMIT = 80;
-type ProjectHistoryState = {
-  present: ProjectState;
-  past: ProjectState[];
-  future: ProjectState[];
-};
-const isUndoableProjectAction = (action: ProjectAction) =>
-  ![
-    "set_processing",
-    "select_part",
-    "set_export",
-    "set_foundry_export",
-  ].includes(action.type);
 const App: React.FC = () => {
-  const [projectHistory, setProjectHistory] = useState<ProjectHistoryState>(
-    () => {
-      projectSelfCheck();
-      return { present: createEmptyProject(), past: [], future: [] };
-    },
-  );
-  const project = projectHistory.present;
-  const setProject = (
-    update: React.SetStateAction<ProjectState>,
-    options: { history?: boolean; resetHistory?: boolean } = {},
-  ) => {
-    setProjectHistory((prev) => {
-      const next =
-        typeof update === "function"
-          ? (update as (previous: ProjectState) => ProjectState)(prev.present)
-          : update;
-      if (next === prev.present) return prev;
-      if (options.resetHistory) return { present: next, past: [], future: [] };
-      if (options.history)
-        return {
-          present: next,
-          past: [
-            ...prev.past.slice(-(PROJECT_HISTORY_LIMIT - 1)),
-            prev.present,
-          ],
-          future: [],
-        };
-      return { ...prev, present: next };
-    });
-  };
+  const {
+    project,
+    setProject,
+    dispatch,
+    undoProject: undoProjectHistory,
+    redoProject: redoProjectHistory,
+  } = useProjectHistory(createEmptyProject);
   const [stage, setStage] = useState<AppStage>("character");
   const [showGettingStarted, setShowGettingStarted] = useState(false);
   const [angle, setAngle] = useState(0);
@@ -253,10 +208,6 @@ const App: React.FC = () => {
   const appShellRef = useRef<HTMLDivElement>(null);
   useProjectAutosave(project);
 
-  const dispatch = (action: ProjectAction) =>
-    setProject((prev) => applyProjectAction(prev, action), {
-      history: isUndoableProjectAction(action),
-    });
   const goStage = (target: AppStage) => {
     const gate = handoffGate(project, target);
     if (!gate.ok && "recoveryStage" in gate) {
@@ -830,36 +781,10 @@ const App: React.FC = () => {
     setCommandStatus("Canvas fitted to sheet");
   };
   const undoProject = () => {
-    if (!projectHistory.past.length) {
-      setCommandStatus("Nothing to undo");
-      return;
-    }
-    setProjectHistory((prev) => {
-      if (!prev.past.length) return prev;
-      const previous = prev.past[prev.past.length - 1];
-      return {
-        present: previous,
-        past: prev.past.slice(0, -1),
-        future: [prev.present, ...prev.future].slice(0, PROJECT_HISTORY_LIMIT),
-      };
-    });
-    setCommandStatus("Undo applied");
+    setCommandStatus(undoProjectHistory() ? "Undo applied" : "Nothing to undo");
   };
   const redoProject = () => {
-    if (!projectHistory.future.length) {
-      setCommandStatus("Nothing to redo");
-      return;
-    }
-    setProjectHistory((prev) => {
-      if (!prev.future.length) return prev;
-      const [next, ...future] = prev.future;
-      return {
-        present: next,
-        past: [...prev.past.slice(-(PROJECT_HISTORY_LIMIT - 1)), prev.present],
-        future,
-      };
-    });
-    setCommandStatus("Redo applied");
+    setCommandStatus(redoProjectHistory() ? "Redo applied" : "Nothing to redo");
   };
   const aboutMotionSmith = () => setShowAbout(true);
   const commandHandlers = createAppCommandHandlers({
