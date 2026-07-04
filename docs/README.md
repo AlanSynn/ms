@@ -1,7 +1,7 @@
 # MotionSmith Docs Map
 
 Status: active docs index
-Last refreshed: 2026-06-29
+Last refreshed: 2026-07-04
 
 Use this file before adding new docs. If a doc does not fit below, update an existing doc first.
 
@@ -27,6 +27,12 @@ Use this file before adding new docs. If a doc does not fit below, update an exi
 - [`prd/assembly-step-player-redesign-plan.md`](prd/assembly-step-player-redesign-plan.md) — active Assembly redesign plan: one-step visual build player, step-local parts, board mount, and character attach flow.
 - [`subsystem-governance-and-mechanism-contracts.md`](subsystem-governance-and-mechanism-contracts.md)
 - [`analysis/codebase-cleanup-architecture-plan.md`](analysis/codebase-cleanup-architecture-plan.md)
+
+## Current refactor cockpit
+
+- Start with [`analysis/codebase-cleanup-architecture-plan.md`](analysis/codebase-cleanup-architecture-plan.md) before moving code. It tracks completed seams, the next safe slice, and deferred high-risk boundaries.
+- Use [`subsystem-governance-and-mechanism-contracts.md`](subsystem-governance-and-mechanism-contracts.md) for subsystem ownership and harness rules.
+- Lock pure extractions in [`../tests/project-contract.test.ts`](../tests/project-contract.test.ts), then run the targeted production-preview Playwright flow for any touched UI/workbench path.
 
 ## Historical / evidence docs
 

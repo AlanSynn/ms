@@ -47,5 +47,6 @@ playwright-report/
 
 # Local agent/runtime state
 .omx/
+.omc/
 .agents/
 skills-lock.json

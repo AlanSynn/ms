@@ -101,7 +101,7 @@ test('Context help opens compact registry popovers', async ({ page }) => {
 
   await page.goto('/');
   await openCharacterScreen(page, { loadStarter: false });
-  const imageHelp = page.getByRole('button', { name: 'Help: Image' }).first();
+  const imageHelp = page.locator('[data-help-id="character.createFromImage"]').getByTestId('context-help-trigger');
   await expect(imageHelp).toBeVisible();
   await imageHelp.click();
   const popover = page.getByTestId('context-help-popover');
@@ -855,8 +855,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await page.getByTestId('workspace-steps').getByRole('button', { name: 'Options' }).click();
   await expect(page.getByRole('heading', { name: 'Options' })).toBeVisible();
   await expect(page.getByTestId('options-fabrication')).toBeVisible();
-  await expect(page.getByLabel('Export')).toHaveValue('both');
-  await expect(page.getByLabel('Format')).toHaveValue('both');
+  await expect(page.getByRole('combobox', { name: 'Export', exact: true })).toHaveValue('both');
+  await expect(page.getByRole('combobox', { name: 'Format', exact: true })).toHaveValue('both');
 
   expectCleanPage(pageErrors, consoleErrors);
 });
@@ -1279,7 +1279,7 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await expect(page.getByTestId('rig-structure-drawer')).toBeVisible();
   await page.getByRole('button', { name: /Options/i }).click();
 
-  await page.getByLabel('Dev mode').check();
+  await page.locator('label').filter({ hasText: 'Dev mode' }).locator('input[type="checkbox"]').check();
   await page.getByRole('button', { name: /Path Editor/i }).click();
   await expect(page.getByTestId('canvas-debug-visuals')).toBeVisible();
   await page.getByRole('button', { name: /Options/i }).click();

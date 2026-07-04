@@ -34,7 +34,8 @@ export const ContextHelp = ({
       <button
         type="button"
         className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white text-[11px] font-black leading-none text-slate-500 shadow-sm transition hover:border-violet-400 hover:text-violet-600 focus:outline-none focus:ring-2 focus:ring-violet-300"
-        aria-label={`Help: ${entry.title}`}
+        aria-label="Context help"
+        title={entry.title}
         aria-controls={open ? popoverId : undefined}
         aria-expanded={open}
         data-testid="context-help-trigger"

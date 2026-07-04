@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { X, Upload, Crosshair, Play, Square, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import { Point } from '../types';
+import { smoothTrackingPoints, trackingPointsToWorldPath } from '../utils/trackingPath';
 
 import { parseGIF, decompressFrames } from 'gifuct-js';
 
@@ -84,7 +85,6 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
         if (!file) return;
 
         setVideoState(prev => ({ ...prev, isLoading: true, file }));
-        setTrackingRect(null);
         setTrackingRect(null);
         setError(null);
         setIsPlaying(false);
@@ -451,60 +451,10 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
                 const scaleX = canvas.width / videoState.width;
                 const scaleY = canvas.height / videoState.height;
 
-                // Calculate display points (smoothed or original)
-                let displayPoints = manualPoints;
-
-                if (enableSmoothing && manualPoints.length >= 3) {
-                    const smoothed: { x: number; y: number }[] = [];
-                    const pointCount = manualPoints.length;
-                    const segmentsPerEdge = 20;
-
-                    // For closed paths: iterate all segments including last-to-first
-                    // For open paths: iterate only n-1 segments  
-                    const numSegments = connectEndPoints ? pointCount : pointCount - 1;
-
-                    for (let i = 0; i < numSegments; i++) {
-                        let p0, p1, p2, p3;
-
-                        if (connectEndPoints) {
-                            // Closed path: wrap around using modulo
-                            p0 = manualPoints[(i - 1 + pointCount) % pointCount];
-                            p1 = manualPoints[i];
-                            p2 = manualPoints[(i + 1) % pointCount];
-                            p3 = manualPoints[(i + 2) % pointCount];
-                        } else {
-                            // Open path: clamp to endpoints
-                            p0 = manualPoints[Math.max(0, i - 1)];
-                            p1 = manualPoints[i];
-                            p2 = manualPoints[Math.min(pointCount - 1, i + 1)];
-                            p3 = manualPoints[Math.min(pointCount - 1, i + 2)];
-                        }
-
-                        for (let t = 0; t < segmentsPerEdge; t++) {
-                            const tt = t / segmentsPerEdge;
-                            const tt2 = tt * tt;
-                            const tt3 = tt2 * tt;
-
-                            const x = 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * tt +
-                                (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * tt2 +
-                                (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * tt3);
-                            const y = 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * tt +
-                                (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * tt2 +
-                                (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * tt3);
-
-                            smoothed.push({ x, y });
-                        }
-                    }
-
-                    // For open paths, add the last point
-                    if (!connectEndPoints && smoothed.length > 0) {
-                        smoothed.push(manualPoints[pointCount - 1]);
-                    }
-
-                    if (smoothed.length > 0) {
-                        displayPoints = smoothed;
-                    }
-                }
+                const displayPoints = smoothTrackingPoints(manualPoints, {
+                    enabled: enableSmoothing,
+                    connectEndPoints
+                });
 
                 // Draw the path (smoothed or straight lines)
                 if (displayPoints.length > 1) {
@@ -578,100 +528,11 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
 
     // Transfer path to main canvas - normalized and centered
     const handleTransfer = () => {
-        // Get source points based on mode
-        let sourcePoints: { x: number; y: number }[];
-
-        // MANUAL MODE: Use manual points (closed loop)
         if (manualPoints.length < 2) return;
-        sourcePoints = [...manualPoints];
-
-        // Apply smoothing if enabled (Catmull-Rom spline interpolation)
-        if (enableSmoothing && sourcePoints.length >= 3) {
-            const smoothed: { x: number; y: number }[] = [];
-            const pointCount = sourcePoints.length;
-            const segmentsPerEdge = 20;
-
-            // For closed paths: iterate all segments including last-to-first
-            // For open paths: iterate only n-1 segments  
-            const numSegments = connectEndPoints ? pointCount : pointCount - 1;
-
-            for (let i = 0; i < numSegments; i++) {
-                let p0, p1, p2, p3;
-
-                if (connectEndPoints) {
-                    // Closed path: wrap around using modulo
-                    p0 = sourcePoints[(i - 1 + pointCount) % pointCount];
-                    p1 = sourcePoints[i];
-                    p2 = sourcePoints[(i + 1) % pointCount];
-                    p3 = sourcePoints[(i + 2) % pointCount];
-                } else {
-                    // Open path: clamp to endpoints
-                    p0 = sourcePoints[Math.max(0, i - 1)];
-                    p1 = sourcePoints[i];
-                    p2 = sourcePoints[Math.min(pointCount - 1, i + 1)];
-                    p3 = sourcePoints[Math.min(pointCount - 1, i + 2)];
-                }
-
-                for (let t = 0; t < segmentsPerEdge; t++) {
-                    const tt = t / segmentsPerEdge;
-                    const tt2 = tt * tt;
-                    const tt3 = tt2 * tt;
-
-                    const x = 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * tt +
-                        (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * tt2 +
-                        (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * tt3);
-                    const y = 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * tt +
-                        (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * tt2 +
-                        (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * tt3);
-
-                    smoothed.push({ x, y });
-                }
-            }
-
-            // For open paths, add the last point
-            if (!connectEndPoints && smoothed.length > 0) {
-                smoothed.push(sourcePoints[pointCount - 1]);
-            }
-
-            if (smoothed.length > 0) {
-                sourcePoints = smoothed;
-            }
-        }
-
-        // Main canvas world coordinates: origin (0,0) is at center
-        const CANVAS_CENTER_X = 0;
-        const CANVAS_CENTER_Y = 0;
-
-        // Calculate bounding box
-        const xs = sourcePoints.map(p => p.x);
-        const ys = sourcePoints.map(p => p.y);
-        const minX = Math.min(...xs);
-        const maxX = Math.max(...xs);
-        const minY = Math.min(...ys);
-        const maxY = Math.max(...ys);
-
-        const pathWidth = maxX - minX;
-        const pathHeight = maxY - minY;
-
-        // Determine scale to fit path nicely (~30% of 600 viewport)
-        const targetSize = 180;
-        const scale = targetSize / Math.max(pathWidth, pathHeight, 1);
-
-        // Calculate path center
-        const pathCenterX = minX + pathWidth / 2;
-        const pathCenterY = minY + pathHeight / 2;
-
-        // Transform: center, scale, flip Y
-        const points: Point[] = sourcePoints.map(p => ({
-            x: CANVAS_CENTER_X + (p.x - pathCenterX) * scale,
-            y: CANVAS_CENTER_Y - (p.y - pathCenterY) * scale
-        }));
-
-        // For closed paths in manual mode, duplicate first point at end to close polyline
-        if (connectEndPoints && points.length > 1) {
-            points.push({ ...points[0] });
-        }
-
+        const points: Point[] = trackingPointsToWorldPath(manualPoints, {
+            enabled: enableSmoothing,
+            connectEndPoints
+        });
         onTransfer(points);
         onClose();
     };

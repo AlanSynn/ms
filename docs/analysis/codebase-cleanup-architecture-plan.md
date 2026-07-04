@@ -34,6 +34,17 @@ Keep MotionSmith easy to change without changing behavior: small files, one doma
 - High-risk seams that need stronger harnesses before editing: `components/ThreePuppetPreview.tsx`, `utils/project.ts`, `utils/fabrication.ts`, and `components/TrackingModal.tsx`.
 - Local ignored junk can be removed when seen: `.DS_Store`, `resources/.DS_Store`, `resources/examples/.DS_Store`, `fabrication/__pycache__/`, `fabrication/board-final.svg`, and `test-results/`. Do not delete `.agents/`, `.omx/`, `docs/to-port-web-onnx/`, `dist/`, or `node_modules/` as cleanup.
 
+
+## 2026-07-04 team refactor audit synthesis
+
+- OMX team audit `read-only-production-fe7e2fac` completed with three read-only architect lanes over `.omx/context/production-refactor-team-20260704T225118Z.md`.
+- Team consensus: the next code slice after this pass is a narrow `AssemblyGuide` playback/reset hook extraction; defer `ThreePuppetPreview`, broad `utils/project.ts`, broad `utils/fabrication.ts`, and any further `TrackingModal` media-flow movement until stronger targeted harnesses exist.
+- Worker-3 coverage finding: `components/TrackingModal.tsx` had App-level mount wiring and locked-part Trace browser coverage, but lacked a harnessable seam for manual point smoothing/transfer.
+- Implemented next safe slice: `utils/trackingPath.ts` now owns Catmull-Rom smoothing and world-path normalization; `TrackingModal` delegates to it without changing labels, controls, media flow, or transfer semantics.
+- Contract lock: `tests/project-contract.test.ts` asserts the TrackingModal helper seam, open/closed smoothing sample counts, short-path passthrough, and centered/flipped/closed transfer output.
+- Runtime-state hygiene: `.omc/` is local OMX/HUD state and must stay ignored like `.omx/`; English-only scanning excludes it so prompt caches cannot fail product-copy checks.
+- Current validated gates for this slice: `bun run test`, `bun run build`, targeted production-preview Playwright for Options/context-help plus end-to-end/Assembly paths, and `git diff --check`.
+
 ## Current hotspots
 
 Measured on 2026-07-03.

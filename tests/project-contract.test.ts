@@ -30,6 +30,7 @@ import { buildCharacterAssemblyPlan, type CharacterAssemblyPlan } from '../utils
 import { useAppMechanismActions } from '../hooks/useAppMechanismActions';
 import { navigateAppStage } from '../utils/appStageNavigation';
 import { assemblyCoordToSvg, characterBoardProjector, characterCanvasProjector, smoothAssemblyProgress, svgPathFromPoints } from '../components/stages/assembly/assemblyGeometry';
+import { smoothTrackingPoints, trackingPointsToWorldPath } from '../utils/trackingPath';
 import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, FOUNDRY_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, mechanismTemplateLabel } from '../utils/mechanismTemplates';
 import { MECHANISM_TYPES as SANITIZE_MECHANISM_TYPES, sanitizeMechanismRuntime } from '../utils/sanitize';
 import { generateSmartConfig, mutateConfig, OPTIMIZER_MECHANISM_TYPES } from '../utils/optimizer';
@@ -72,7 +73,7 @@ const stableMechanismSnapshotForGoldenMaster = <T extends { fingerprint: string;
 });
 
 const textExtensions = new Set(['.bat', '.css', '.html', '.js', '.json', '.md', '.mjs', '.py', '.rs', '.sh', '.toml', '.ts', '.tsx', '.txt', '.yaml', '.yml']);
-const ignoredEnglishScanDirs = new Set(['.git', '.omx', 'dist', 'exe build', 'node_modules', 'playwright-report', 'src-tauri/target', 'test-results']);
+const ignoredEnglishScanDirs = new Set(['.git', '.omc', '.omx', 'dist', 'exe build', 'node_modules', 'playwright-report', 'src-tauri/target', 'test-results']);
 const filesWithHangul: string[] = [];
 const scanEnglishOnlyText = (dir: string) => {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -367,6 +368,7 @@ const canvasZoomToolbarCommandSource = readFileSync(join(process.cwd(), 'compone
 const workspacePlayerDockCommandSource = readFileSync(join(process.cwd(), 'components', 'shell', 'WorkspacePlayerDock.tsx'), 'utf8');
 const workflowStatusStripCommandSource = readFileSync(join(process.cwd(), 'components', 'shell', 'WorkflowStatusStrip.tsx'), 'utf8');
 const workflowStagesCommandSource = readFileSync(join(process.cwd(), 'components', 'shell', 'workflowStages.ts'), 'utf8');
+const trackingModalSource = readFileSync(join(process.cwd(), 'components', 'TrackingModal.tsx'), 'utf8');
 const appProjectHistoryHookText = readFileSync(join(process.cwd(), 'hooks', 'useProjectHistory.ts'), 'utf8');
 assert(appCommandSource.includes('useProjectHistory(createEmptyProject)') && !appCommandSource.includes('setProjectHistory') && !appCommandSource.includes('applyProjectAction(prev, action)') && appProjectHistoryHookText.includes('projectSelfCheck()') && appProjectHistoryHookText.includes('applyProjectAction') && appProjectHistoryHookText.includes('PROJECT_HISTORY_LIMIT') && appProjectHistoryHookText.includes('undoProject') && appProjectHistoryHookText.includes('redoProject'), 'App delegates ProjectState history, reducer dispatch, and undo/redo stack management to useProjectHistory');
 assert(appProjectCommandsHookText.includes('satisfies AppCommandHandlerMap') && appCommandsSource.includes('export type AppCommandHandlerMap = Record<AppCommandId, () => void>'), 'App command handlers are type-exhaustive against AppCommandId through the shared command handler map type');
@@ -2441,6 +2443,15 @@ assert.equal(smoothAssemblyProgress(-1), 0, 'assembly progress easing clamps bel
 assert.equal(smoothAssemblyProgress(0.5), 0.5, 'assembly progress easing preserves the midpoint');
 assert.equal(smoothAssemblyProgress(2), 1, 'assembly progress easing clamps above one');
 assert.equal(svgPathFromPoints([{ x: 0, y: 0 }, { x: 1, y: 2 }], point => ({ x: point.x + 10, y: point.y + 20 })), 'M 10.0 20.0 L 11.0 22.0 Z', 'assembly path helper is deterministic and projection-driven');
+assert(trackingModalSource.includes("from '../utils/trackingPath'") && !trackingModalSource.includes('segmentsPerEdge = 20'), 'Tracking modal delegates path smoothing/normalization to a DOM-free helper seam');
+assert.deepEqual(smoothTrackingPoints([{ x: 0, y: 0 }, { x: 10, y: 0 }], { enabled: true }), [{ x: 0, y: 0 }, { x: 10, y: 0 }], 'tracking smoothing leaves short manual paths unchanged');
+assert.equal(smoothTrackingPoints([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }], { connectEndPoints: true, segmentsPerEdge: 2 }).length, 6, 'closed tracking smoothing samples every wrapped segment');
+assert.equal(smoothTrackingPoints([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }], { connectEndPoints: false, segmentsPerEdge: 2 }).length, 5, 'open tracking smoothing samples edge segments and preserves the final point');
+assert.deepEqual(
+  trackingPointsToWorldPath([{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 50 }, { x: 0, y: 50 }], { enabled: false, connectEndPoints: true }),
+  [{ x: -90, y: 45 }, { x: 90, y: 45 }, { x: 90, y: -45 }, { x: -90, y: -45 }, { x: -90, y: 45 }],
+  'tracking path transfer centers, scales, flips Y, and closes the polyline exactly once'
+);
 const roundAssemblyPoint = (point: { x: number; y: number }) => ({ x: Number(point.x.toFixed(3)), y: Number(point.y.toFixed(3)) });
 const projectorPlan: CharacterAssemblyPlan = {
   kind: 'character',
