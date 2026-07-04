@@ -36,6 +36,7 @@ Visible runtime copy should be labels, status chips, direct actions, or blockers
 
 - Keep buttons, chips, pane headers, and setting labels to short nouns or verbs; prefer one to three words.
 - Remove explanatory paragraphs from visible stage panes. Move rare necessary detail into tooltips, docs, or collapsed diagnostics.
+- Use `utils/contextHelp.ts` and `components/ui/ContextHelp.tsx` for any visible `?` help affordance; keep entries short, locale-ready, and centralized instead of inlining explanations in stages.
 - Warnings must be direct blockers or next actions such as `Fix: ...`, `No path`, or `Unlock part`; do not write theory or tutorial prose.
 - Getting Started shows only starter choices. Character shows parts/joints. Path shows draw/edit controls. Foundry shows template, stack, status, and Use. Design shows target and parameters. Blueprint shows cut sheets/downloads. Assembly shows steps, parts, and board coordinates. Options shows setting names.
 - Keep all runtime UI English-only and novice-readable; avoid jargon unless it names a physical part the user can see or fabricate.

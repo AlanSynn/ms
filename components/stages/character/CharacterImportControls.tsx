@@ -1,6 +1,8 @@
 import type { RefObject } from "react";
 import { BrainCircuit, FileJson, Sparkles, Upload } from "lucide-react";
 
+import { ContextHelp } from "../../ui/ContextHelp";
+
 export const CharacterImportControls = ({
   packageInputRef,
   onnxInputRef,
@@ -53,12 +55,15 @@ export const CharacterImportControls = ({
         if (files.length) onPackage(files);
       }}
     />
-    <button
-      className="btn-secondary"
-      onClick={() => onnxInputRef.current?.click()}
-    >
-      <BrainCircuit size={16} /> Create from image
-    </button>
+    <div className="flex items-center gap-2">
+      <button
+        className="btn-secondary flex-1"
+        onClick={() => onnxInputRef.current?.click()}
+      >
+        <BrainCircuit size={16} /> Create from image
+      </button>
+      <ContextHelp helpId="character.createFromImage" />
+    </div>
     <input
       ref={onnxInputRef}
       data-testid="onnx-input"
@@ -97,7 +102,10 @@ export const CharacterImportControls = ({
         checked={replaceCharacter}
         onChange={(e) => setReplaceCharacter(e.target.checked)}
       />{" "}
-      Keep mechanisms
+      <span className="inline-flex items-center gap-1">
+        Keep mechanisms
+        <ContextHelp helpId="character.keepMechanisms" />
+      </span>
     </label>
   </div>
 );

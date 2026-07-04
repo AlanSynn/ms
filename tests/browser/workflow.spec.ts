@@ -91,6 +91,28 @@ const switchGettingStartedToStarters = async (page: Page) => {
   await expect(dialog.getByTestId('getting-started-gallery')).toBeVisible();
 };
 
+test('Context help opens compact registry popovers', async ({ page }) => {
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  await page.goto('/');
+  await openCharacterScreen(page, { loadStarter: false });
+  const imageHelp = page.getByRole('button', { name: 'Help: Image' }).first();
+  await expect(imageHelp).toBeVisible();
+  await imageHelp.click();
+  const popover = page.getByTestId('context-help-popover');
+  await expect(popover).toBeVisible();
+  await expect(popover).toContainText('Turn one picture');
+  await expect(imageHelp).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Escape');
+  await expect(popover).toHaveCount(0);
+  expectCleanPage(pageErrors, consoleErrors);
+});
+
 test('Character part cut outline editor bakes and edits contour points', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];

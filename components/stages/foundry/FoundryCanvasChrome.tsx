@@ -5,6 +5,7 @@ import type {
 } from "../../../utils/foundryCamera";
 import { FOUNDRY_VIEW_PRESETS } from "../../../utils/foundryCamera";
 import { VIEWER3D_CONTRACT_VERSION } from "../../../utils/viewer3d";
+import { ContextHelp } from "../../ui/ContextHelp";
 
 export const FoundrySimBadge = ({ foundryPlaying }: { foundryPlaying: boolean }) => (
   <div className="foundry-sim-badge" data-testid="foundry-sim-badge">
@@ -56,6 +57,7 @@ export const FoundryCameraControls = ({
     >
       3D {foundryCameraLabel} · {Math.round(foundryCamera.zoom * 100)}%
     </span>
+    <ContextHelp helpId="viewer.layers" className="shrink-0" />
     {(
       Object.entries(FOUNDRY_VIEW_PRESETS) as Array<
         [Exclude<FoundryViewPreset, "custom">, FoundryCameraPreset]

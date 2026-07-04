@@ -12,6 +12,7 @@ import { referenceRecipeForType } from "../../../utils/mechanismReference";
 import { MECHANISM_TEMPLATE_LIBRARY } from "../../../utils/mechanismTemplates";
 import { downloadText } from "../../../utils/project";
 import { StageLeftSummary } from "../stageLayout";
+import { ContextHelp } from "../../ui/ContextHelp";
 
 type BlueprintValidation = {
   issues: FabricationIssue[];
@@ -83,7 +84,10 @@ export const BlueprintControlPanel = ({
         stage="blueprint"
         goStage={goStage}
       >
-        <h3>Board preview</h3>
+        <div className="flex items-center gap-2">
+          <h3>Board preview</h3>
+          <ContextHelp helpId="blueprint.boardPreview" />
+        </div>
         <div className="mt-4 space-y-2">
           {validation.issues.map((issue, index) => (
             <div
@@ -184,7 +188,10 @@ export const BlueprintControlPanel = ({
                   </div>
                   {exportMode !== "prefab-board" && (
                     <div data-testid="custom-parts-export-lane">
-                      <div className="font-bold text-slate-800">Custom parts</div>
+                      <div className="flex items-center gap-2">
+                        <div className="font-bold text-slate-800">Custom parts</div>
+                        <ContextHelp helpId="blueprint.customParts" />
+                      </div>
                       <div className="mt-2 flex flex-wrap gap-2">
                         <button className="btn-secondary" onClick={downloadCustomSvg}>
                           SVG
@@ -204,7 +211,10 @@ export const BlueprintControlPanel = ({
                   )}
                   {exportMode !== "custom-parts" && (
                     <div data-testid="prefab-board-export-lane">
-                      <div className="font-bold text-slate-800">Prefab kit</div>
+                      <div className="flex items-center gap-2">
+                        <div className="font-bold text-slate-800">Prefab kit</div>
+                        <ContextHelp helpId="blueprint.prefabKit" />
+                      </div>
                       <div className="mt-2 flex flex-wrap gap-2">
                         <button
                           className="btn-secondary"

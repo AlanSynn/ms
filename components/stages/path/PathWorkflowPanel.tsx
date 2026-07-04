@@ -1,5 +1,6 @@
 import { Play, Plus, Route, Trash2 } from "lucide-react";
 
+import { ContextHelp } from "../../ui/ContextHelp";
 import { MiniNumber } from "../../ui/InspectorControls";
 import { PartInspector } from "../character/PartInspector";
 import { SkeletonInspector } from "../character/SkeletonInspector";
@@ -61,7 +62,10 @@ export const PathWorkflowPanel = ({
 }: PathWorkflowPanelProps) => (
   <div className="path-panel stage-pane-stack" data-testid="novice-path-panel">
     <StageLeftSummary project={project} title="Path" stage="path" goStage={goStage}>
-      <h3>Draw path</h3>
+      <div className="flex items-center gap-2">
+        <h3>Draw path</h3>
+        <ContextHelp helpId="path.draw" />
+      </div>
       <select
         aria-label="Selected body part"
         className="field mt-2"
@@ -124,6 +128,7 @@ export const PathWorkflowPanel = ({
           </div>
           <MiniNumber
             label="Smoothness"
+            helpId="path.smoothness"
             value={selectedPath.smoothness ?? 0}
             min={0}
             max={100}
@@ -146,9 +151,12 @@ export const PathWorkflowPanel = ({
       <details className="advanced-panel mt-4">
         <summary>More</summary>
         <div className="mt-3 flex flex-wrap gap-2">
-          <button className="btn-secondary" disabled={pathLocked} onClick={openTracking}>
-            <Route size={16} /> Trace
-          </button>
+          <span className="inline-flex items-center gap-1">
+            <button className="btn-secondary" disabled={pathLocked} onClick={openTracking}>
+              <Route size={16} /> Trace
+            </button>
+            <ContextHelp helpId="path.trace" />
+          </span>
           <button
             className="btn-secondary"
             aria-label={isPlaying ? "Play / Stop" : "Play"}

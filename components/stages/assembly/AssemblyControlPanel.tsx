@@ -13,6 +13,7 @@ import {
   MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY,
 } from "../../../utils/mechanismTemplates";
 import { referenceRecipeForType } from "../../../utils/mechanismReference";
+import { ContextHelp } from "../../ui/ContextHelp";
 
 type AssemblyMode = "mechanism" | "character";
 type AssemblyStepItem = Pick<
@@ -161,7 +162,10 @@ export const AssemblyControlPanel = ({
           className="mt-4 rounded-2xl bg-white p-3 shadow-sm"
           data-testid="assembly-step-list"
         >
-          <div className="section-title">Steps</div>
+          <div className="flex items-center gap-2">
+            <div className="section-title">Steps</div>
+            <ContextHelp helpId="assembly.steps" />
+          </div>
           <div className="mt-2 grid gap-1">
             {activePlaybackSteps.map((step, index) => (
               <button

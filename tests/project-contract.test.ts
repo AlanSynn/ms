@@ -234,6 +234,8 @@ const appProjectCommandsHookText = readFileSync(join(process.cwd(), 'hooks', 'us
 const appMechanismActionsHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppMechanismActions.ts'), 'utf8');
 const appStageNavigationText = readFileSync(join(process.cwd(), 'utils', 'appStageNavigation.ts'), 'utf8');
 const appStageRouterPropsText = readFileSync(join(process.cwd(), 'utils', 'appStageRouterProps.ts'), 'utf8');
+const contextHelpSource = readFileSync(join(process.cwd(), 'utils', 'contextHelp.ts'), 'utf8');
+const contextHelpComponentSource = readFileSync(join(process.cwd(), 'components', 'ui', 'ContextHelp.tsx'), 'utf8');
 const viteConfigText = readFileSync(join(process.cwd(), 'vite.config.ts'), 'utf8');
 assert(viteConfigText.includes("const webBase = process.env.VITE_BASE_PATH ?? '/'"), 'web deployment base can be set by VITE_BASE_PATH for project Pages');
 assert(viteConfigText.includes("base: isTauri ? './' : webBase"), 'Tauri stays relative while web builds can target /ms/');
@@ -662,6 +664,19 @@ assert(agentsContract.includes('tinkerable workbench'), 'AGENTS.md codifies the 
 assert(agentsContract.includes('direct manipulation'), 'AGENTS.md prioritizes direct manipulation over explanatory text');
 assert(agentsContract.includes('Result-first UI copy policy'), 'AGENTS.md locks result-first visible UI copy policy');
 assert(agentsContract.includes('Visible runtime copy should be labels, status chips, direct actions, or blockers'), 'AGENTS.md blocks reading-heavy runtime copy');
+assert(agentsContract.includes('utils/contextHelp.ts') && agentsContract.includes('components/ui/ContextHelp.tsx'), 'AGENTS.md requires centralized locale-ready contextual help instead of inline stage explanations');
+assert(contextHelpSource.includes('export type HelpLocale = "en"') && contextHelpSource.includes('Record<') && contextHelpSource.includes('ContextHelpId') && contextHelpSource.includes('DEFAULT_HELP_LOCALE'), 'contextual help copy is locale-ready and centrally registered');
+assert(contextHelpComponentSource.includes('contextHelpFor') && contextHelpComponentSource.includes('data-testid="context-help-trigger"') && contextHelpComponentSource.includes('role="tooltip"'), 'contextual help renders compact reusable question-mark popovers from the registry');
+assert(!contextHelpComponentSource.includes('Turn one picture') && !contextHelpComponentSource.includes('Block exports when'), 'contextual help component does not inline copy outside the central registry');
+const contextHelpConsumerSource = [
+  'components/stages/character/CharacterImportControls.tsx',
+  'components/stages/path/PathWorkflowPanel.tsx',
+  'components/stages/foundry/FoundryCanvasChrome.tsx',
+  'components/stages/blueprint/BlueprintControlPanel.tsx',
+  'components/stages/assembly/AssemblyControlPanel.tsx',
+  'components/stages/options/Options.tsx'
+].map(file => readFileSync(join(process.cwd(), file), 'utf8')).join('\n');
+assert(['character.createFromImage', 'path.draw', 'viewer.layers', 'blueprint.boardPreview', 'assembly.steps', 'options.fabricationExport'].every(helpId => contextHelpConsumerSource.includes(helpId)), 'high-friction UI controls attach contextual help through shared help ids');
 assert(agentsContract.includes('3D physics'), 'AGENTS.md codifies the 3D physics simulation direction');
 assert(agentsContract.includes('fabrication'), 'AGENTS.md codifies fabrication-oriented mechanisms');
 assert(agentsContract.includes('canonical `ProjectState`'), 'AGENTS.md requires one canonical ProjectState across workflows');

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { MiniNumber, Toggle } from "../../ui/InspectorControls";
+import { ContextHelp } from "../../ui/ContextHelp";
 import {
   EditorStageFrame,
   StageLeftSummary,
@@ -9,6 +10,7 @@ import {
   workflowPane,
 } from "../stageLayout";
 import type { AppStage, ProjectAction, ProjectState } from "../../../types";
+import type { ContextHelpId } from "../../../utils/contextHelp";
 import { physicalKitPreset } from "../../../utils/coordinates";
 import { formatGridLabel, formatGridReadout } from "../../../utils/units";
 
@@ -293,6 +295,7 @@ export const Options = ({
               <SettingsSection section={optionSection("debugging")}>
                 <Toggle
                   label="Dev mode"
+                  helpId="options.devMode"
                   checked={project.settings.debugVisuals}
                   onChange={(debugVisuals) => updateSettings({ debugVisuals })}
                 />
@@ -325,6 +328,7 @@ export const Options = ({
               <SettingsSection section={optionSection("fabrication")}>
                 <SelectField
                   label="Export"
+                  helpId="options.fabricationExport"
                   value={kit.exportMode}
                   onChange={(exportMode) =>
                     updateKit({
@@ -368,6 +372,7 @@ export const Options = ({
                 </SelectField>
                 <Toggle
                   label="Strict checks"
+                  helpId="options.strictChecks"
                   checked={project.settings.fabricationReadyMode}
                   onChange={(fabricationReadyMode) =>
                     updateSettings({ fabricationReadyMode })
@@ -465,17 +470,22 @@ const SettingsSection = ({
 
 const SelectField = ({
   label,
+  helpId,
   value,
   onChange,
   children,
 }: {
   label: string;
+  helpId?: ContextHelpId;
   value: string;
   onChange: (value: string) => void;
   children: ReactNode;
 }) => (
   <label className="block text-xs font-black uppercase tracking-wider text-slate-500">
-    <span>{label}</span>
+    <span className="inline-flex items-center gap-1">
+      {label}
+      {helpId && <ContextHelp helpId={helpId} />}
+    </span>
     <select
       aria-label={label}
       className="field mt-1"
