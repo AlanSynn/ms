@@ -54,10 +54,10 @@ import {
   createEmptyProject,
   createLessonProject,
   createProjectFromProcessed,
+  loadProjectSnapshot,
   createSampleProject,
   downloadText,
   handoffGate,
-  loadProjectSnapshot,
   mechanismWithGeneratedPath,
   projectSelfCheck,
   replaceCharacterProject,
@@ -76,7 +76,6 @@ import {
 import {
   clampCanvasZoom,
   DEFAULT_CANVAS_VIEWPORT,
-  normalizeCanvasViewport,
 } from "./utils/viewport";
 import {
   type AppCommandHandlerMap,
@@ -84,6 +83,13 @@ import {
 import { createAppCommandHandlers } from "./utils/appCommandHandlers";
 import { useAppCommandBindings } from "./hooks/useAppCommandBindings";
 import { useAppOnnxBootstrap } from "./hooks/useAppOnnxBootstrap";
+import { useProjectAutosave } from "./hooks/useProjectAutosave";
+import {
+  projectSnapshotFileName,
+  readAutosaveProject,
+  readWorkspaceLayoutSnapshot,
+  writeWorkspaceLayoutSnapshot,
+} from "./utils/projectPersistence";
 import {
   fitMechanismToTargetPath,
   fitRecommendedMechanismToSheet,
@@ -121,28 +127,6 @@ const projectHasUserWork = (project: ProjectState) =>
   project.partOrder.length > 0 ||
   Object.keys(project.paths).length > 0 ||
   project.mechanisms.length > 0;
-const STORAGE_KEYS = {
-  autosave: "motionsmith.autosave",
-  workspace: "motionsmith.workspace",
-} as const;
-const LEGACY_STORAGE_PREFIX = ["mech", "anim"].join("");
-const LEGACY_STORAGE_KEYS = {
-  autosave: `${LEGACY_STORAGE_PREFIX}.autosave`,
-  workspace: `${LEGACY_STORAGE_PREFIX}.workspace`,
-} as const;
-const readStorageWithLegacy = (key: string, legacyKey: string) => {
-  const current = localStorage.getItem(key);
-  if (current !== null) return { value: current, fromLegacy: false };
-  const legacy = localStorage.getItem(legacyKey);
-  return { value: legacy, fromLegacy: legacy !== null };
-};
-const migrateStorageValue = (key: string, value: string) => {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // ponytail: migration is best-effort; legacy read fallback still works.
-  }
-};
 const workflowStatusFor = (
   stage: AppStage,
   project: ProjectState,
@@ -206,10 +190,6 @@ const isUndoableProjectAction = (action: ProjectAction) =>
     "set_export",
     "set_foundry_export",
   ].includes(action.type);
-const projectFileStem = (name: string) =>
-  (name.trim() || "MotionSmith-project")
-    .replace(/[^a-z0-9._-]+/gi, "-")
-    .replace(/^-+|-+$/g, "") || "MotionSmith-project";
 const App: React.FC = () => {
   const [projectHistory, setProjectHistory] = useState<ProjectHistoryState>(
     () => {
@@ -270,8 +250,8 @@ const App: React.FC = () => {
   const { onnxCacheStatus, setOnnxCacheStatus, cacheOnnxModel } =
     useAppOnnxBootstrap(setCommandStatus);
   const projectInputRef = useRef<HTMLInputElement>(null);
-  const latestProjectRef = useRef<ProjectState | null>(null);
   const appShellRef = useRef<HTMLDivElement>(null);
+  useProjectAutosave(project);
 
   const dispatch = (action: ProjectAction) =>
     setProject((prev) => applyProjectAction(prev, action), {
@@ -696,31 +676,6 @@ const App: React.FC = () => {
     setOptimizerBusy(false);
   };
 
-  useEffect(() => {
-    latestProjectRef.current = project;
-  }, [project]);
-
-  useEffect(() => {
-    if (!project.settings.autosave) return;
-    const writeAutosave = () => {
-      try {
-        localStorage.setItem(
-          STORAGE_KEYS.autosave,
-          serializeProject(latestProjectRef.current ?? project),
-        );
-      } catch {
-        // ponytail: browser autosave is best-effort; manual snapshot download stays available.
-      }
-    };
-    writeAutosave();
-    const intervalMs = Math.max(
-      1000,
-      project.settings.autosaveIntervalSeconds * 1000,
-    );
-    const interval = window.setInterval(writeAutosave, intervalMs);
-    return () => window.clearInterval(interval);
-  }, [project.settings.autosave, project.settings.autosaveIntervalSeconds]);
-
   const exportMechanismSvg = () => {
     downloadText(
       `mechanisms-${Date.now()}.svg`,
@@ -738,9 +693,8 @@ const App: React.FC = () => {
     setCommandStatus("Exported mechanism DXF");
   };
   const downloadProjectSnapshot = (suffix: string, status: string) => {
-    const stem = projectFileStem(project.metadata.name);
     downloadText(
-      `${stem}${suffix}.motionsmith.json`,
+      projectSnapshotFileName(project.metadata.name, suffix),
       serializeProject(project),
     );
     setCommandStatus(status);
@@ -802,19 +756,12 @@ const App: React.FC = () => {
   };
   const recoverAutosave = () => {
     try {
-      const stored = readStorageWithLegacy(
-        STORAGE_KEYS.autosave,
-        LEGACY_STORAGE_KEYS.autosave,
-      );
-      if (!stored.value) {
+      const recoveredProject = readAutosaveProject();
+      if (!recoveredProject) {
         setCommandStatus("No autosave found");
         return;
       }
-      setProject(loadProjectSnapshot(JSON.parse(stored.value)), {
-        resetHistory: true,
-      });
-      if (stored.fromLegacy)
-        migrateStorageValue(STORAGE_KEYS.autosave, stored.value);
+      setProject(recoveredProject, { resetHistory: true });
       setCommandStatus("Recovered browser autosave snapshot");
       setStage("path");
     } catch (error) {
@@ -824,75 +771,36 @@ const App: React.FC = () => {
     }
   };
   const saveWorkspaceLayout = () => {
-    localStorage.setItem(
-      STORAGE_KEYS.workspace,
-      JSON.stringify({
-        stage,
-        viewport: canvasViewport,
-        toolbarVisible: project.settings.toolbarVisible,
-        partPanelVisible: project.settings.partPanelVisible,
-      }),
-    );
+    writeWorkspaceLayoutSnapshot({
+      stage,
+      viewport: canvasViewport,
+      toolbarVisible: project.settings.toolbarVisible,
+      partPanelVisible: project.settings.partPanelVisible,
+    });
     setCommandStatus("Workspace layout saved");
   };
   const restoreWorkspaceLayout = () => {
     try {
-      const stored = readStorageWithLegacy(
-        STORAGE_KEYS.workspace,
-        LEGACY_STORAGE_KEYS.workspace,
-      );
-      if (!stored.value) {
+      const layout = readWorkspaceLayoutSnapshot({
+        isAppStage,
+        currentToolbarVisible: project.settings.toolbarVisible,
+        currentPartPanelVisible: project.settings.partPanelVisible,
+      });
+      if (!layout) {
         setCommandStatus("No workspace layout saved");
         return;
       }
-      const layout = JSON.parse(stored.value) as Partial<{
-        stage: unknown;
-        viewport: unknown;
-        toolbarVisible: unknown;
-        partPanelVisible: unknown;
-      }>;
-      if (stored.fromLegacy)
-        migrateStorageValue(STORAGE_KEYS.workspace, stored.value);
-      const warnings: string[] = [];
-      if (layout.viewport !== undefined) {
-        const viewport = normalizeCanvasViewport(layout.viewport);
-        if (viewport) setCanvasViewport(viewport);
-        else warnings.push("ignored invalid workspace viewport");
-      }
-      if (
-        layout.toolbarVisible !== undefined ||
-        layout.partPanelVisible !== undefined
-      ) {
-        const toolbarVisible =
-          typeof layout.toolbarVisible === "boolean"
-            ? layout.toolbarVisible
-            : project.settings.toolbarVisible;
-        const partPanelVisible =
-          typeof layout.partPanelVisible === "boolean"
-            ? layout.partPanelVisible
-            : project.settings.partPanelVisible;
-        if (
-          layout.toolbarVisible !== undefined &&
-          typeof layout.toolbarVisible !== "boolean"
-        )
-          warnings.push("ignored invalid toolbar visibility");
-        if (
-          layout.partPanelVisible !== undefined &&
-          typeof layout.partPanelVisible !== "boolean"
-        )
-          warnings.push("ignored invalid panel visibility");
+      if (layout.viewport) setCanvasViewport(layout.viewport);
+      if (layout.visibility) {
         dispatch({
           type: "update_settings",
-          settings: { toolbarVisible, partPanelVisible },
+          settings: layout.visibility,
         });
       }
-      if (layout.stage !== undefined) {
-        if (isAppStage(layout.stage)) goStage(layout.stage);
-        else warnings.push("ignored invalid workspace stage");
-      }
+      if (layout.stage) goStage(layout.stage);
       setCommandStatus(
-        warnings.length
-          ? `Workspace layout restored; ${warnings.join("; ")}`
+        layout.warnings.length
+          ? `Workspace layout restored; ${layout.warnings.join("; ")}`
           : "Workspace layout restored",
       );
     } catch (error) {

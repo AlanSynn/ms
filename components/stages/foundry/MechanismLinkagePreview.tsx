@@ -1,6 +1,5 @@
 import type {
   MechanismConfig,
-  MechanismType,
   PhysicalKitSettings,
   Point,
 } from "../../../types";
@@ -14,35 +13,19 @@ import {
   fabricationRingGearProfileForPitchRadius,
   planetaryRingPitchRadius,
 } from "../../../utils/fabrication";
-import { degToRad } from "../../../utils/foundryCamera";
-import {
-  gearTrainPitchRadii,
-  sampledCamProfileScale,
-} from "../../../utils/kinematics";
+import { gearTrainPitchRadii } from "../../../utils/kinematics";
 import { referenceRecipeForType } from "../../../utils/mechanismReference";
 import { fitMechanismSimulation } from "../../../utils/mechanismPreview";
 import { SCENE_PX_PER_MM } from "../../../utils/coordinates";
 import { fittedGearTrainCenters } from "./foundryPreviewGeometry";
-
-const mechanismReferenceTopologySummary = (type: MechanismType) => {
-  if (type === "4bar")
-    return "A-B input; B-C coupler; C-D output; D-A board-ground";
-  if (type === "gear")
-    return "fixed gear centers only; no rods; external mesh sequence";
-  if (type === "gear_linkage")
-    return "fixed gear centers; drive/output gear handle pins; two L4 links meet at shared R fastener";
-  if (type === "cam")
-    return "rotating cam profile; guided follower block; no linkage rods";
-  if (type === "planetary_gear")
-    return "fixed ring; sun input; planet on carrier; carrier output";
-  if (type === "5bar")
-    return "A-B-C-D-E closed chain; A-E board-ground; simulation-only";
-  if (type === "6bar")
-    return "A-B-C-D four-bar plus C-E-D dyad; simulation-only";
-  if (type === "piston")
-    return "crank-slider guide; slider-crank fabrication recipe";
-  return `${type} simulation topology`;
-};
+import {
+  axisForAngle,
+  camProfilePathD,
+  mechanismReferenceTopologySummary,
+  rackTeethPath,
+  referenceCoordRoles,
+  vectorAxis,
+} from "./mechanismLinkagePreviewHelpers";
 
 export const MechanismLinkagePreview = ({
   mechanism,
@@ -91,10 +74,6 @@ export const MechanismLinkagePreview = ({
     holeR * 3.5,
     compact ? 8 : 14,
   );
-  const axisForAngle = (deg: number) => ({
-    x: Math.cos(degToRad(deg)),
-    y: -Math.sin(degToRad(deg)),
-  });
   const trackAxis = axisForAngle(mechanism.groundAngle ?? 0);
   const normalAxis = { x: -trackAxis.y, y: trackAxis.x };
   const inputReferencePoint = mechanism.type === "cam" && s.aux ? s.aux : s.j1;
@@ -115,17 +94,6 @@ export const MechanismLinkagePreview = ({
   const previewGearCenters = isGearTrainPreview
     ? fittedGearTrainCenters(previewGearRadii, s.p1, s.p2)
     : [];
-  const vectorAxis = (
-    a: Point | undefined,
-    b: Point | undefined,
-    fallback = trackAxis,
-  ) => {
-    if (!a || !b) return fallback;
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const len = Math.hypot(dx, dy);
-    return len > 0.5 ? { x: dx / len, y: dy / len } : fallback;
-  };
   const link = (
     a: Point | undefined,
     b: Point | undefined,
@@ -274,7 +242,7 @@ export const MechanismLinkagePreview = ({
     );
   };
   const guide = (center: Point, a: Point, b: Point, key: string) =>
-    guideAxis(center, vectorAxis(a, b), key);
+    guideAxis(center, vectorAxis(a, b, trackAxis), key);
   const slotPlate = (
     center: Point,
     axis: Point,
@@ -437,15 +405,7 @@ export const MechanismLinkagePreview = ({
   ) => {
     const len = Math.max(length, barWidth * 6);
     const angle = (Math.atan2(axis.y, axis.x) * 180) / Math.PI;
-    const toothCount = Math.max(
-      8,
-      Math.min(24, Math.round(len / Math.max(holeR * 2.4, 4))),
-    );
-    const step = len / toothCount;
-    const teeth = Array.from({ length: toothCount }, (_, index) => {
-      const x = -len / 2 + index * step;
-      return `M ${x} ${-barWidth / 2} L ${x + step / 2} ${-barWidth / 2 - holeR * 1.2} L ${x + step} ${-barWidth / 2}`;
-    }).join(" ");
+    const teeth = rackTeethPath(len, barWidth, holeR);
     return (
       <g
         key={key}
@@ -496,11 +456,7 @@ export const MechanismLinkagePreview = ({
   };
   const camProfile = (center: Point, length: number) => {
     const base = radius(length, compact ? 10 : 20, compact ? 34 : 66);
-    const points = Array.from({ length: 42 }, (_, index) => {
-      const angle = (index / 42) * Math.PI * 2;
-      const lift = sampledCamProfileScale(angle, mechanism.camProfileSamples);
-      return `${Math.cos(angle) * base * lift} ${Math.sin(angle) * base * lift}`;
-    });
+    const pathD = camProfilePathD(base, mechanism.camProfileSamples);
     return (
       <g
         key="cam-body"
@@ -512,11 +468,11 @@ export const MechanismLinkagePreview = ({
           data-testid={thicknessTestId}
           className="mechanism-thickness"
           transform={`translate(${depth} ${depth})`}
-          d={`M ${points.join(" L ")} Z`}
+          d={pathD}
         />
         <path
           className="mechanism-cam-profile mechanism-face"
-          d={`M ${points.join(" L ")} Z`}
+          d={pathD}
         />
         <circle
           data-testid={fabricationTest("hole")}
@@ -743,7 +699,7 @@ export const MechanismLinkagePreview = ({
         link(s.p1, s.j1, "driver", "mechanism-driver", "driver"),
         slotPlate(
           { x: (s.p2.x + s.j2.x) / 2, y: (s.p2.y + s.j2.y) / 2 },
-          vectorAxis(s.p2, s.j2),
+          vectorAxis(s.p2, s.j2, trackAxis),
           Math.hypot(s.j2.x - s.p2.x, s.j2.y - s.p2.y),
           "slotted-rocker",
           "mechanism-link",
@@ -770,7 +726,7 @@ export const MechanismLinkagePreview = ({
         ),
         slotPlate(
           s.effector,
-          vectorAxis(s.j2, s.effector),
+          vectorAxis(s.j2, s.effector, trackAxis),
           barWidth * 3.2,
           "output-bracket",
           "mechanism-output",
@@ -801,14 +757,7 @@ export const MechanismLinkagePreview = ({
     ];
   })();
   const referenceRecipe = referenceRecipeForType(mechanism.type);
-  const referenceCoordRoles = referenceRecipe.assemblySteps
-    .flatMap((step) =>
-      step.coords.map(
-        (coord, index) =>
-          `${coord}:${step.coordRoles[index] ?? "moving_reference"}`,
-      ),
-    )
-    .join("|");
+  const coordRoles = referenceCoordRoles(referenceRecipe);
   return (
     <g
       data-testid={testId}
@@ -821,7 +770,7 @@ export const MechanismLinkagePreview = ({
         mechanism.type,
       )}
       data-reference-stack-labels={referenceRecipe.stackLabels.join(" → ")}
-      data-reference-coord-roles={referenceCoordRoles}
+      data-reference-coord-roles={coordRoles}
       data-reference-export-ready={
         referenceRecipe.exportReady ? "true" : "false"
       }
