@@ -3,11 +3,7 @@ import { AppWorkspaceShell } from "./components/AppWorkspaceShell";
 import type { AppStageRouterProps } from "./components/AppStageRouter";
 import { processingLabel } from "./components/stages/character/ProgressBlock";
 import type { PendingCharacterReview } from "./components/stages/character/CharacterImportOverlays";
-import {
-  SHARED_PLAYBACK_STAGES,
-  STAGES,
-  type StarterImageTemplate,
-} from "./components/AppShell";
+import { STAGES, type StarterImageTemplate } from "./components/AppShell";
 import {
   AppStage,
   CanvasViewport,
@@ -20,7 +16,6 @@ import {
 } from "./types";
 import { generateDXF, generateSVG } from "./utils/exporter";
 import {
-  animationDeltaRadians,
   generateCurvePoints,
   generateMechanismPointTraces,
 } from "./utils/kinematics";
@@ -54,6 +49,7 @@ import { useProjectHistory } from "./hooks/useProjectHistory";
 import { useAppProjectCommands } from "./hooks/useAppProjectCommands";
 import { useAppDerivedState } from "./hooks/useAppDerivedState";
 import { useWorkspacePlayerDock } from "./hooks/useWorkspacePlayerDock";
+import { useWorkspacePlaybackLoop } from "./hooks/useWorkspacePlaybackLoop";
 import { workflowStatusFor } from "./utils/workflowStatus";
 import {
   fitMechanismToTargetPath,
@@ -152,50 +148,18 @@ const App: React.FC = () => {
   const activeClassroomLesson = classroomLessonById(
     project.metadata.classroomLessonId,
   );
-  useEffect(() => {
-    if (
-      !isPlaying ||
-      drawMode ||
-      optimizerBusy ||
-      showGettingStarted ||
-      !SHARED_PLAYBACK_STAGES.includes(stage)
-    )
-      return;
-    let frame = 0;
-    let last = performance.now();
-    const tick = (time: number) => {
-      const dt = Math.min(64, time - last);
-      last = time;
-      setAngle(
-        (prev) =>
-          (prev +
-            animationDeltaRadians(
-              dt,
-              playbackDurationMs,
-              project.settings.animationSpeed,
-              project.settings.timingProfile,
-              prev,
-            )) %
-          (Math.PI * 2),
-      );
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [
+  useWorkspacePlaybackLoop({
+    stage,
     isPlaying,
     drawMode,
     optimizerBusy,
     showGettingStarted,
-    stage,
     playbackDurationMs,
-    project.settings.animationSpeed,
-    project.settings.timingProfile,
-  ]);
-
-  useEffect(() => {
-    if (stage !== "path" && drawMode) setDrawMode(false);
-  }, [stage, drawMode]);
+    animationSpeed: project.settings.animationSpeed,
+    timingProfile: project.settings.timingProfile,
+    setAngle,
+    setDrawMode,
+  });
 
   const updateMechanism = (id: string, updates: Partial<MechanismConfig>) => {
     const mechanism = project.mechanisms.find((m) => m.id === id);
