@@ -22,7 +22,7 @@ import type { AppCommandHandlerMap } from "../utils/appCommands";
 import type { WebOnnxCacheStatus } from "../utils/webOnnx";
 import type { WorkflowStatus } from "../utils/workflowStatus";
 
-type AppWorkspaceShellProps = {
+export type AppWorkspaceShellProps = {
   themeClass: string;
   appShellRef: RefObject<HTMLDivElement | null>;
   projectInputRef: RefObject<HTMLInputElement | null>;
