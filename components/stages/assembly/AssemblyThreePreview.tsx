@@ -40,6 +40,7 @@ import type {
   CharacterAssemblyPlan,
   CharacterAssemblyStep,
 } from "../../../utils/assemblyPlayback";
+import type { AssemblySceneFrame } from "../../../utils/assemblySceneFrame";
 
 const assemblyViewport = (): CanvasViewport => ({
   offset: { x: -110, y: -20 },
@@ -136,11 +137,13 @@ export const AssemblyCharacterThreePreview = ({
   plan,
   step,
   progress,
+  sceneFrame,
 }: {
   project: ProjectState;
   plan: CharacterAssemblyPlan;
   step: CharacterAssemblyStep;
   progress: number;
+  sceneFrame: AssemblySceneFrame;
 }) => {
   const [viewport, setViewport] = useState<CanvasViewport>(assemblyViewport);
   const angle = step.phase === "test-character" ? progress * Math.PI * 2 : 0;
@@ -170,6 +173,10 @@ export const AssemblyCharacterThreePreview = ({
       data-assembly-three-mode="character"
       data-assembly-three-phase={step.phase}
       data-assembly-three-progress={Math.round(progress * 100)}
+      data-assembly-frame-version={sceneFrame.version}
+      data-assembly-motion-kind={sceneFrame.motion}
+      data-assembly-explode-axis={sceneFrame.explodeAxis}
+      data-active-board-coords={sceneFrame.activeBoardCoords.join(",")}
       aria-label="3D character assembly simulation"
     >
       <ThreePuppetPreview
@@ -208,15 +215,16 @@ export const AssemblyMechanismThreePreview = ({
   mechanism,
   step,
   progress,
+  sceneFrame,
 }: {
   project: ProjectState;
   mechanism: MechanismConfig;
   step: AssemblyPlaybackStep;
   progress: number;
+  sceneFrame: AssemblySceneFrame;
 }) => {
   const angle = progress * Math.PI * 2;
   const explode = mechanismExplodeForStep(step, progress);
-  const [viewport, setViewport] = useState<CanvasViewport>(assemblyViewport);
   const [camera, setCamera] = useState<FoundryCamera>({
     ...FOUNDRY_VIEW_PRESETS.iso,
     preset: "iso",
@@ -244,23 +252,6 @@ export const AssemblyMechanismThreePreview = ({
     physicalSimulation,
     physicsOverlay,
   } = useMechanismPreviewModel(project, mechanism, angle);
-  const activeProjectMechanisms = useMemo(
-    () =>
-      project.mechanisms.filter(
-        (projectMechanism) =>
-          projectMechanism.visible !== false &&
-          projectMechanism.enabled !== false,
-      ),
-    [project.mechanisms],
-  );
-  const animatedParts = useMemo(
-    () => animatedPartsForProject(project, [mechanism], angle),
-    [angle, mechanism, project],
-  );
-  const animatedSceneObjects = useMemo(
-    () => animatedSceneObjectsForProject(project, [mechanism], angle),
-    [angle, mechanism, project],
-  );
 
   const updateProjectionSize = (size: FoundryOverlaySize) =>
     setProjectionSize((prev) =>
@@ -362,6 +353,15 @@ export const AssemblyMechanismThreePreview = ({
       data-assembly-three-phase={step.phase}
       data-assembly-three-progress={Math.round(progress * 100)}
       data-assembly-three-explode={Math.round(explode * 100)}
+      data-assembly-frame-version={sceneFrame.version}
+      data-assembly-motion-kind={sceneFrame.motion}
+      data-assembly-explode-axis={sceneFrame.explodeAxis}
+      data-active-board-coords={sceneFrame.activeBoardCoords.join(",")}
+      data-floating-reference-coords={sceneFrame.floatingReferenceCoords.join(",")}
+      data-mechanism-scene-contract-version={sceneFrame.mechanismContract?.version ?? ""}
+      data-mechanism-scene-contract-mechanism-id={sceneFrame.mechanismContract?.mechanismId ?? ""}
+      data-mechanism-scene-contract-stack-source={sceneFrame.mechanismContract?.stackSource ?? ""}
+      data-mechanism-scene-contract-layer-count={sceneFrame.mechanismContract?.layers.length ?? 0}
       aria-label="3D mechanism assembly simulation"
     >
       <ThreeFoundryPreview
@@ -397,39 +397,9 @@ export const AssemblyMechanismThreePreview = ({
         onPointerCancel={finishPointerMove}
         onWheel={handleWheel}
         onProjectionSizeChange={updateProjectionSize}
+        assemblySceneFrame={sceneFrame}
       >
         <div className="assembly-three-hud">Exploded build</div>
-        <div
-          className="assembly-context-ghost"
-          data-testid="assembly-character-context-ghost"
-          data-assembly-motion-mechanism-id={mechanism.id}
-          data-assembly-rendered-mechanism-ids={activeProjectMechanisms
-            .map((projectMechanism) => projectMechanism.id)
-            .join(",")}
-          aria-hidden="true"
-        >
-          <ThreePuppetPreview
-            project={project}
-            animatedParts={animatedParts}
-            animatedSceneObjects={animatedSceneObjects}
-            skeleton={project.skeleton}
-            mechanisms={activeProjectMechanisms}
-            paths={[]}
-            angle={angle}
-            viewport={viewport}
-            setViewport={setViewport}
-            inputMode="none"
-            testId="assembly-three-puppet"
-            cameraPresets={["iso"]}
-            showToolbar={false}
-            initialLayers={{
-              grid: false,
-              character: true,
-              skeleton: true,
-              mechanisms: true,
-            }}
-          />
-        </div>
         <svg
           data-testid="assembly-foundry-preview-overlay"
           viewBox={`0 0 ${projectionSize.width} ${projectionSize.height}`}

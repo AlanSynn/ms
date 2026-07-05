@@ -3,6 +3,14 @@
 Status: active implementation plan  
 Date: 2026-07-02  
 Scope: Assembly tab, Blueprint handoff, fabrication recipe playback, character mount steps  
+Canonical override: `foundry-assembly-ssot-plan.md` is the stricter Foundry/Design/Assembly SSOT for mechanism visuals, `MechanismSceneContract`, `AssemblySceneFrame`, and z-only `explode_z`. This PRD remains the Assembly UX execution plan.
+
+## 2026-07-05 implementation cutover note
+
+The current implementation no longer uses the lower SVG workbench or nested character ghost as scene authority. `AssemblySceneFrame` is a pure frame model and `AssemblyThreePreview` passes it into `ThreeFoundryPreview`; the shared Three renderer consumes the frame for layer focus, board markers, floating references, z guides, mount/connect travel, and scrub-path telemetry. Historical references below to ghost targets mean reference/target affordances only, not a second SVG simulation truth.
+
+Legacy motion names in current code/tests (`place-part`, `stack-layer`, `snap-to-board`, `move-to-board`, `connect-character`, `play-test`, `test-motion`) are migration aliases only; new contracts use `none`, `explode_z`, `mount_travel_xy`, `connect_travel_xy`, and `scrub_time`.
+
 Decision: opacity tweaks are insufficient. Assembly must be rebuilt as a step-local visual build player.
 
 ## Why the current approach fails
@@ -69,7 +77,7 @@ The new behavior must be testable from DOM attributes and pure domain output:
 - board coordinates only for board-fixed roles,
 - floating reference coordinates separated from board holes,
 - current phase,
-- current motion type,
+- current motion kind (`none`, `explode_z`, `mount_travel_xy`, `connect_travel_xy`, or `scrub_time`),
 - visible part count.
 
 ## Target workflow
@@ -201,6 +209,8 @@ type AssemblyScenePhase =
   | 'character-fixed-pins'
   | 'character-free-pivots';
 
+type AssemblyMotionKind = 'none' | 'explode_z' | 'mount_travel_xy' | 'connect_travel_xy' | 'scrub_time';
+
 interface AssemblyVisiblePart {
   id: string;
   label: string;
@@ -223,10 +233,20 @@ interface AssemblySceneFrame {
   floatingReferenceCoords: string[];
   stack: AssemblyStepStackItem[];
   cameraKey: 'bench' | 'board-close' | 'board-overview' | 'character-connect' | 'test';
-  motion: 'none' | 'place-part' | 'stack-layer' | 'snap-to-board' | 'connect-character' | 'play-test';
+  motion: AssemblyMotionKind;
   warning?: string;
 }
 ```
+
+Legacy migration aliases:
+
+| Current/legacy name | New motion kind | Note |
+|---|---|---|
+| `place-part` | `none` or `connect_travel_xy` | static highlight by default; use travel only for explicit connector/attachment motion |
+| `stack-layer` | `explode_z` | z separation only |
+| `snap-to-board`, `move-to-board` | `mount_travel_xy` | module/tray moves to board coordinate |
+| `connect-character` | `connect_travel_xy` | character/object connector travel |
+| `play-test`, `test-motion` | `scrub_time` | mechanism playback/test scrub |
 
 Rules:
 
@@ -272,15 +292,17 @@ No general tutorial prose.
 Files:
 
 - `utils/assemblyPlayback.ts`
-- `utils/assemblyScene.ts`
-- `components/stages/assembly/AssemblyWorkbench.tsx`
+- `utils/assemblySceneFrame.ts`
+- `utils/mechanismSceneContract.ts`
+- `components/stages/assembly/AssemblySceneFrame.tsx`
+- `components/stages/assembly/AssemblyThreePreview.tsx`
 - `tests/project-contract.test.ts`
 - `tests/browser/workflow.spec.ts`
 
 Work:
 
 1. Add `AssemblySceneFrame` builder as a pure function.
-2. Add DOM attributes for phase, active parts, hidden/context/active board mode, active board coords, floating references, and visible part count.
+2. Add DOM attributes for phase, canonical motion kind, active parts, hidden/context/active board mode, active board coords, floating references, and visible part count.
 3. Add contract tests for no board holes from moving references.
 4. Add contract test that per-step tray does not use `recipe.requiredParts.slice(...)`.
 
@@ -288,16 +310,17 @@ Work:
 
 Files:
 
-- `components/stages/assembly/AssemblyWorkbench.tsx`
+- `components/stages/assembly/AssemblySceneFrame.tsx`
+- `components/stages/assembly/AssemblyThreePreview.tsx`
 - optional small files under `components/stages/assembly/`
 
 Work:
 
-1. Render from `AssemblySceneFrame` only.
-2. Split renderers by phase: parts tray, module bench, board mount, character attach, test motion.
+1. Render center build facts from `AssemblySceneFrame` only; Three remains the visual scene truth.
+2. Split future Three/read-only render affordances by phase and canonical motion kind: parts tray, module bench, board mount, character attach, test motion.
 3. Hide board in gather/build-module frames.
 4. Render only active parts plus installed support parts.
-5. Remove long labels from the SVG canvas.
+5. Do not reintroduce long labels or SVG canvas authority below the Three scene.
 
 ### Phase C - Make module assembly physically legible
 
@@ -305,13 +328,13 @@ Files:
 
 - `utils/fabrication.ts`
 - `utils/mechanismReference.ts`
-- `components/stages/assembly/AssemblyWorkbench.tsx`
+- `components/stages/assembly/AssemblySceneFrame.tsx`
 
 Work:
 
 1. Use canonical linkage, gear, spacer, clip, and pin display labels.
 2. Use the same z stack order as Foundry and Design.
-3. Show exploded z lanes only for the current stack action.
+3. Show `explode_z` lanes only for the current stack action; no x/y travel under `explode_z`.
 4. Fail closed if a recipe does not have enough stack data.
 
 ### Phase D - Board mount and character attach
@@ -319,8 +342,10 @@ Work:
 Files:
 
 - `utils/assemblyPlayback.ts`
-- `utils/assemblyScene.ts`
-- `components/stages/assembly/AssemblyWorkbench.tsx`
+- `utils/assemblySceneFrame.ts`
+- `utils/mechanismSceneContract.ts`
+- `components/stages/assembly/AssemblySceneFrame.tsx`
+- `components/stages/assembly/AssemblyThreePreview.tsx`
 
 Work:
 
@@ -335,7 +360,7 @@ Files:
 
 - `utils/fabrication.ts`
 - `components/stages/blueprint/BlueprintExport.tsx`
-- `components/stages/assembly/AssemblyWorkbench.tsx`
+- `components/stages/assembly/AssemblySceneFrame.tsx`
 
 Work:
 

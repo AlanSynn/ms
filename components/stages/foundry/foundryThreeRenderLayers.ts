@@ -17,6 +17,10 @@ import {
   type FoundryPinStackPoint,
 } from "./foundryPreviewStacks";
 import type { FoundryThreePrimitiveFactory } from "./foundryThreePrimitives";
+import {
+  foundryAssemblyLayerState,
+  type FoundryAssemblySceneFrame,
+} from "./foundryAssemblySceneOverlay";
 
 type VisiblePathTrace = {
   points: Point[];
@@ -45,6 +49,7 @@ type FoundryDynamicLayerRenderOptions = {
   gearCenters: Point[];
   gearUsesMeshPhases: boolean;
   gearOutputRatioForDisplay: number;
+  assemblySceneFrame?: FoundryAssemblySceneFrame;
 };
 
 export const renderFoundryDynamicLayers = ({
@@ -65,6 +70,7 @@ export const renderFoundryDynamicLayers = ({
   gearCenters,
   gearUsesMeshPhases,
   gearOutputRatioForDisplay,
+  assemblySceneFrame,
 }: FoundryDynamicLayerRenderOptions) => {
   const {
     material,
@@ -240,9 +246,15 @@ export const renderFoundryDynamicLayers = ({
   let gearTrainLayerIndex = 0;
   renderPlan.layers.forEach((layerItem, index) => {
     const z = renderedLayerZ[index] ?? layerItem.z;
+    const assemblyLayerState = foundryAssemblyLayerState(
+      assemblySceneFrame,
+      layerItem,
+    );
     const mat = materialForLayer(
-      layerItem.color,
-      layerItem.role === "spacer" ? 0.55 : 0.66,
+      assemblyLayerState.color,
+      layerItem.role === "spacer"
+        ? Math.min(0.72, assemblyLayerState.opacity)
+        : assemblyLayerState.opacity,
       layerItem.role === "spacer" ? 0.06 : 0.03,
     );
     if (layerItem.renderKind === "clip") return;

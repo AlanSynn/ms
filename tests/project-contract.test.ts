@@ -42,6 +42,8 @@ import { APP_COMMANDS, APP_MENU_GROUPS, commandById, commandIdForKeyboardEvent, 
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_KERNEL_IMPORT, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, physicsKernelCapability, runRapierFrictionProbe } from '../utils/physicsKernel';
 import { formatGridLabel, formatGridPitch, formatGridReadout } from '../utils/units';
 import { buildCharacterAssemblyPlan, type CharacterAssemblyPlan } from '../utils/assemblyPlayback';
+import { buildCharacterAssemblySceneFrame, buildMechanismAssemblySceneFrame } from '../utils/assemblySceneFrame';
+import { buildMechanismSceneContract } from '../utils/mechanismSceneContract';
 import { buildAssemblyGuideModel } from '../components/stages/assembly/assemblyGuideModel';
 import { useAppMechanismActions } from '../hooks/useAppMechanismActions';
 import { createStageNavigator, navigateAppStage } from '../utils/appStageNavigation';
@@ -530,9 +532,7 @@ const visibleUiSource = [
   'components/shell/workflowStages.ts',
   'components/stages/stageLayout.tsx',
   'components/stages/blueprint/BlueprintExport.tsx',
-  'components/stages/assembly/AssemblyWorkbench.tsx',
-  'components/stages/assembly/MechanismAssemblyWorkbench.tsx',
-  'components/stages/assembly/CharacterAssemblyWorkbench.tsx',
+  'components/stages/assembly/AssemblySceneFrame.tsx',
   'utils/fabrication.ts',
   'utils/fabricationAssemblyGuide.ts',
   'utils/fabricationBlueprintSvg.ts',
@@ -546,6 +546,8 @@ const visibleUiSource = [
   'utils/fabricationStackModel.ts',
   'utils/simplePdf.ts',
   'utils/assemblyPlayback.ts',
+  'utils/assemblySceneFrame.ts',
+  'utils/mechanismSceneContract.ts',
   'utils/mechanismTemplates.ts',
   'utils/appCommands.ts'
 ].map(file => readFileSync(join(process.cwd(), file), 'utf8')).join('\n');
@@ -2600,10 +2602,10 @@ couplerSpecForNonExactSpan.holeCentersMm.slice(1).forEach((point, index) => {
   assert.equal(point.x - couplerSpecForNonExactSpan.holeCentersMm[index].x, 20, 'linkage hole spacing stays on the fabrication generator pitch');
 });
 const projectText = readFileSync(join(process.cwd(), 'utils', 'project.ts'), 'utf8');
-const assemblyWorkbenchBarrelText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'AssemblyWorkbench.tsx'), 'utf8');
-const mechanismAssemblyWorkbenchText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'MechanismAssemblyWorkbench.tsx'), 'utf8');
-const characterAssemblyWorkbenchText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'CharacterAssemblyWorkbench.tsx'), 'utf8');
-const assemblyWorkbenchText = [assemblyWorkbenchBarrelText, mechanismAssemblyWorkbenchText, characterAssemblyWorkbenchText].join('\n');
+const assemblySceneFrameComponentText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'AssemblySceneFrame.tsx'), 'utf8');
+const assemblySceneFrameText = readFileSync(join(process.cwd(), 'utils', 'assemblySceneFrame.ts'), 'utf8');
+const mechanismSceneContractText = readFileSync(join(process.cwd(), 'utils', 'mechanismSceneContract.ts'), 'utf8');
+const assemblyWorkbenchText = [assemblySceneFrameComponentText, assemblySceneFrameText, mechanismSceneContractText].join('\n');
 const assemblyGeometryText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'assemblyGeometry.ts'), 'utf8');
 const assemblyGuideText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'AssemblyGuide.tsx'), 'utf8');
 const assemblyGuidePlaybackHookText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'useAssemblyGuidePlayback.ts'), 'utf8');
@@ -2678,6 +2680,7 @@ const threeFoundryPreviewText = readFileSync(join(process.cwd(), 'components', '
 const foundryPreviewStateProbeText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'FoundryPreviewStateProbe.tsx'), 'utf8');
 const foundryThreePrimitivesText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryThreePrimitives.ts'), 'utf8');
 const foundryThreeRenderLayersText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryThreeRenderLayers.ts'), 'utf8');
+const foundryAssemblySceneOverlayText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryAssemblySceneOverlay.ts'), 'utf8');
 const threeResourceKitText = readFileSync(join(process.cwd(), 'utils', 'threeResourceKit.ts'), 'utf8');
 const foundryRenderInventoryText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryRenderInventory.ts'), 'utf8');
 const foundryPreviewStacksText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryPreviewStacks.ts'), 'utf8');
@@ -2875,12 +2878,11 @@ assert(foundryStageText.includes('MECHANISM_PARAM_META') && mechanismDesignStage
 assert(foundryPreviewGeometryText.includes('export const fittedGearTrainCenters') && foundry3dText.includes('pin-stacks-use-rendered-gear-centers'), 'Foundry 3D gear plates, axles, and spacer stacks share fitted preview gear centers instead of raw mechanism coordinates');
 assert(foundry3dText.includes('gearTrainMeshPhaseDegAt') && foundry3dText.includes('alternating-three-quarter-tooth-gap-phase'), 'Foundry 3D gear rendering still exposes mesh phase helpers for inserted idler chains');
 assert(physicsSessionText.includes('velocityBetween') && physicsSessionText.includes('forceFromAcceleration'), 'Foundry force/velocity overlays are kinematic estimates, not hidden dynamic rigid-body claims');
-assert(assemblyWorkbenchText.includes('isBoardFixedCoordRole') && assemblyWorkbenchText.includes('data-floating-reference-coords'), 'assembly workbench separates board-fixed holes from moving reference coordinates');
-assert(assemblyWorkbenchText.includes('assembly-floating-references') && assemblyWorkbenchText.includes('fabricationBoardCoordinateCallout(entry.coord)'), 'assembly workbench visualizes moving references as compact callouts without turning them into board holes');
-assert(assemblyWorkbenchText.includes('data-board-mode={boardActive ?') && !assemblyWorkbenchText.includes('opacity={boardVisible ? 1 : 0.16}'), 'assembly workbench keeps the board readable and uses active/reference state instead of stale grey overlays');
-assert(!assemblyWorkbenchText.includes('{fabricationPartDisplayLabel(layer.label)}</text>'), 'assembly stack layers do not draw long labels over the board workspace');
-assert(assemblyWorkbenchText.includes('data-visual-level="guided-animation"') && assemblyWorkbenchText.includes('data-interaction-mode="visual-first"'), 'assembly workbench declares visual-first guided animation instead of document-style instruction pages');
-assert(assemblyWorkbenchText.includes('data-testid="assembly-visual-progress"') && assemblyWorkbenchText.includes('data-board-opacity={boardActive ?') && assemblyWorkbenchText.includes('ASSEMBLY_REFERENCE_OPACITY'), 'assembly workbench uses compact visual progress and keeps reference board state readable without hiding geometry');
+assert(assemblySceneFrameText.includes('isBoardFixedCoordRole') && assemblySceneFrameComponentText.includes('data-floating-reference-coords'), 'AssemblySceneFrame separates board-fixed holes from moving reference coordinates');
+assert(assemblySceneFrameComponentText.includes('assembly-floating-references') && assemblySceneFrameComponentText.includes('data-active-board-coords'), 'AssemblySceneFrame visualizes moving references as compact callouts without turning them into board holes');
+assert(assemblySceneFrameText.includes("boardMode: boardModeForMechanismStep") && !assemblySceneFrameComponentText.includes('<svg'), 'AssemblySceneFrame keeps board state in a pure frame and does not render a second SVG workspace');
+assert(!assemblyWorkbenchText.includes('{fabricationPartDisplayLabel(layer.label)}</text>'), 'assembly scene frame does not draw long labels over the board workspace');
+assert(assemblySceneFrameComponentText.includes('data-testid="assembly-readonly-step-strip"') && assemblySceneFrameComponentText.includes('data-testid="assembly-visual-progress"'), 'AssemblySceneFrame exposes a compact read-only step strip beside the Three build scene');
 assert(!assemblyWorkbenchText.includes('Build module</text>') && !assemblyWorkbenchText.includes('Moving refs</text>'), 'assembly canvas avoids long overlay labels; details stay in inspector/metadata');
 assert(threePreviewText.includes('fabricationGearProfileForPitchRadius'), '3D foundry gear rendering uses shared fabrication gear geometry');
 assert(threePreviewText.includes('FABRICATION_LINKAGE_WIDTH_3D') && threePreviewText.includes('FABRICATION_HOLE_RADIUS_3D'), '3D puppet mechanism links use centralized fabrication linkage and hole dimensions');
@@ -3032,11 +3034,17 @@ const assertMotionFitSourceContracts = () => {
 
   const assemblyFittedMechanismContinuity =
     assemblyGuideModelText.includes('project.selectedMechanismId') &&
-    assemblyThreePreviewText.includes('activeProjectMechanisms') &&
-    assemblyThreePreviewText.includes('animatedPartsForProject(project, [mechanism], angle)') &&
-    assemblyThreePreviewText.includes('data-assembly-motion-mechanism-id={mechanism.id}') &&
-    assemblyThreePreviewText.includes('data-assembly-rendered-mechanism-ids={activeProjectMechanisms');
-  assert.equal(assemblyFittedMechanismContinuity, true, 'Assembly defaults to the selected fitted mechanism, drives the character ghost from that mechanism, and still renders all active ProjectState mechanisms in the Three context preview');
+    assemblyCanvasPaneText.includes('buildMechanismAssemblySceneFrame') &&
+    assemblyThreePreviewText.includes('data-mechanism-scene-contract-mechanism-id={sceneFrame.mechanismContract?.mechanismId') &&
+    assemblyThreePreviewText.includes('assemblySceneFrame={sceneFrame}') &&
+    assemblyThreePreviewText.includes('ThreeFoundryPreview') &&
+    threeFoundryPreviewText.includes('assemblySceneFrame?: FoundryAssemblySceneFrame') &&
+    threeFoundryPreviewText.includes('renderFoundryAssemblySceneOverlay') &&
+    foundryThreeRenderLayersText.includes('foundryAssemblyLayerState') &&
+    foundryPreviewStateProbeText.includes('data-three-assembly-scene') &&
+    foundryAssemblySceneOverlayText.includes('boardCoordToPreviewPoint') &&
+    !assemblyThreePreviewText.includes('assembly-character-context-ghost');
+  assert.equal(assemblyFittedMechanismContinuity, true, 'Assembly defaults to the selected fitted mechanism and drives the shared Three scene contract without a nested character ghost or SVG fallback');
 };
 assertMotionFitSourceContracts();
 assert.equal(pathWorkflowPanelText.includes('Choose mechanism'), false, 'Path Editor omits the old choose-mechanism button from the left workflow pane');
@@ -3226,7 +3234,7 @@ assert(!blueprintCanvasBlock.includes('<img') && !blueprintCanvasBlock.includes(
 assert(blueprintCanvasBlock.includes('data-visual-level="board-hero"') && blueprintControlPanelText.includes('blueprint-more-exports'), 'Blueprint keeps the board preview central and collapses secondary downloads out of the primary workflow');
 assert(blueprintExportText.includes('<BlueprintControlPanel') && blueprintControlPanelText.includes('data-testid="blueprint-control-panel"') && blueprintControlPanelText.includes('aria-label="Generate package"') && blueprintExportText.includes('<BlueprintDetailPanel') && blueprintDetailPanelText.includes('data-testid="blueprint-stack-summary"'), 'Blueprint left workflow controls/downloads and right recipe detail live outside the stage wrapper behind tested panel seams');
 assert(blueprintExportText.includes('const liveRecipes = activeMechanisms.map') && blueprintExportText.includes('const recipes = liveRecipes.length ? liveRecipes : (pkg?.recipes ?? [])') && blueprintExportText.includes('const previewSvg = makeBlueprintPreviewSvg(project, recipes)'), 'Blueprint center preview always renders the readable live view from live fabrication recipe data; export downloads keep the physical artifact SVG');
-assert(blueprintExportText.includes('<BlueprintDetailPanel') && blueprintDetailPanelText.includes('data-testid="blueprint-sensemaking-label"') && blueprintDetailPanelText.includes('readableFabricationStackSummary') && assemblyWorkbenchText.includes('data-testid="assembly-workbench-sensemaking"') && assemblyInspectorPanelText.includes('data-testid="assembly-sensemaking-label"'), 'Blueprint delegates detail inspector rendering while Blueprint and Assembly reuse mechanism sensemaking metadata for compact visual cues');
+assert(blueprintExportText.includes('<BlueprintDetailPanel') && blueprintDetailPanelText.includes('data-testid="blueprint-sensemaking-label"') && blueprintDetailPanelText.includes('readableFabricationStackSummary') && assemblySceneFrameComponentText.includes('data-testid="assembly-scene-sensemaking"') && assemblyInspectorPanelText.includes('data-testid="assembly-sensemaking-label"'), 'Blueprint delegates detail inspector rendering while Blueprint and Assembly reuse mechanism sensemaking metadata for compact visual cues');
 assert(!blueprintCanvasBlock.includes('<Canvas project={project}'), 'Blueprint center canvas is a static output sheet, not the animated 3D/2.5D workbench');
 assert(!blueprintCanvasBlock.includes('assembly-guide-web-preview') && !blueprintInspectorBlock.includes('assembly-guide-web-preview'), 'Blueprint no longer embeds the assembly guide document');
 assert(fabricationRuntimeText.includes('svg: makeBlueprintSvg(project, recipes)'), 'export package uses the physical printable blueprint SVG, not the screen preview');
@@ -3247,25 +3255,22 @@ assert(blueprintSvgBlock.includes('const ox = (width - bounds.width * scale)') &
 assert(appStageRouterText.includes('<AssemblyGuide') && !appText.includes('<AssemblyGuide') && !appStageRouterText.includes('const AssemblyGuide = ({') && assemblyGuideText.includes('export const AssemblyGuide'), 'AppStageRouter delegates Assembly Guide stage to an extracted stage seam');
 const assemblyBlock = assemblyGuideText;
 assert(assemblyBlock.includes('<AssemblyControlPanel') && assemblyBlock.includes('<AssemblyCanvasPane') && assemblyBlock.includes('<AssemblyInspectorPanel') && !assemblyBlock.includes('data-testid="assembly-control-panel"') && !assemblyBlock.includes('data-testid="assembly-guide-preview"'), 'Assembly Guide stage wrapper delegates workflow, canvas, and inspector panes to extracted leaf seams');
-assert(assemblyCanvasPaneText.includes('data-testid="assembly-canvas-preview"') && assemblyCanvasPaneText.includes('<AssemblyWorkbench'), 'Assembly tab renders the interactive stepper in the center canvas');
+assert(assemblyCanvasPaneText.includes('data-testid="assembly-canvas-preview"') && assemblyCanvasPaneText.includes('<AssemblySceneFrame') && !assemblyCanvasPaneText.includes('<AssemblyWorkbench') && !assemblyCanvasPaneText.includes('<CharacterAssemblyWorkbench'), 'Assembly tab renders one Three-backed scene frame instead of a lower SVG workbench');
 assert(assemblyCanvasPaneText.includes('<AssemblyCharacterThreePreview') && assemblyCanvasPaneText.includes('<AssemblyMechanismThreePreview') && assemblyThreePreviewText.includes('ThreePuppetPreview') && assemblyThreePreviewText.includes('ThreeFoundryPreview'), 'Assembly canvas reuses shared Three character and mechanism renderers for the live build simulation');
 assert(assemblyThreePreviewText.includes('testId="assembly-three-puppet"') && assemblyThreePreviewText.includes('data-testid="assembly-mechanism-three-preview"') && threePreviewText.includes('assemblyOverlay') && threePreviewText.includes('data-assembly-phase'), 'Assembly Three preview preserves artwork-aware puppet telemetry and exposes step phase/progress for harnesses');
 assert(assemblyBlock.includes('buildAssemblyGuideModel') && !assemblyBlock.includes('const liveRecipes = activeMechanisms.map') && assemblyGuideModelText.includes('const liveRecipes = activeMechanisms.map') && assemblyGuideModelText.includes('liveRecipes.length ? liveRecipes : (pkg?.recipes ?? [])'), 'Assembly Guide delegates live recipe fallback to the DOM-free model seam');
-assert(assemblyGuideModelText.includes('activeAssemblyMode === "character"') && assemblyCanvasPaneText.includes('<CharacterAssemblyWorkbench') && !assemblyCanvasPaneText.includes('{pkg && selectedRecipe && currentStep ?'), 'Assembly animation supports character and mechanism stages before generating PDF/HTML output');
-assert(assemblyWorkbenchText.includes('data-testid="assembly-stepper-workbench"'), 'Assembly workbench exposes a testable interactive stepper surface');
-assert(assemblyWorkbenchBarrelText.includes("export { AssemblyWorkbench }") && assemblyWorkbenchBarrelText.includes("export { CharacterAssemblyWorkbench }") && !assemblyWorkbenchBarrelText.includes('<') && !assemblyWorkbenchBarrelText.includes('useState'), 'AssemblyWorkbench is now a compatibility barrel, not a JSX/state owner');
-assert(mechanismAssemblyWorkbenchText.includes('data-testid="assembly-stepper-workbench"') && !mechanismAssemblyWorkbenchText.includes('CharacterAssemblyWorkbench'), 'MechanismAssemblyWorkbench owns the mechanism assembly canvas only');
-assert(characterAssemblyWorkbenchText.includes('data-testid="character-assembly-workbench"') && !characterAssemblyWorkbenchText.includes('data-testid="assembly-stepper-workbench"'), 'CharacterAssemblyWorkbench owns the character assembly canvas only');
-assert(assemblyWorkbenchText.includes("from './assemblyGeometry'") && assemblyWorkbenchText.includes('smoothAssemblyProgress') && !assemblyWorkbenchText.includes('const assemblyCoordToSvg =') && !assemblyWorkbenchText.includes('const characterBoardProjector ='), 'Assembly workbench delegates pure coordinate/projector helpers to assemblyGeometry');
+assert(assemblyGuideModelText.includes('activeAssemblyMode === "character"') && assemblyCanvasPaneText.includes('buildCharacterAssemblySceneFrame') && assemblyCanvasPaneText.includes('buildMechanismAssemblySceneFrame') && !assemblyCanvasPaneText.includes('{pkg && selectedRecipe && currentStep ?'), 'Assembly animation supports character and mechanism stages through DOM-free scene frames before generating PDF/HTML output');
+assert(!existsSync(join(process.cwd(), 'components', 'stages', 'assembly', 'AssemblyWorkbench.tsx')) && !existsSync(join(process.cwd(), 'components', 'stages', 'assembly', 'MechanismAssemblyWorkbench.tsx')) && !existsSync(join(process.cwd(), 'components', 'stages', 'assembly', 'CharacterAssemblyWorkbench.tsx')), 'legacy Assembly SVG workbench files are deleted rather than preserved as a second scene authority');
+assert(assemblySceneFrameComponentText.includes('data-testid="assembly-readonly-step-strip"') && assemblySceneFrameComponentText.includes('data-assembly-motion-kind') && assemblySceneFrameComponentText.includes('data-mechanism-scene-contract-version'), 'AssemblySceneFrame exposes a testable read-only scene contract strip');
+assert(assemblySceneFrameText.includes('export const buildMechanismAssemblySceneFrame') && assemblySceneFrameText.includes('export const buildCharacterAssemblySceneFrame') && !assemblySceneFrameText.includes('document.') && !assemblySceneFrameText.includes('window.'), 'AssemblySceneFrame builders are DOM-free deterministic helpers');
+assert(mechanismSceneContractText.includes('export const buildMechanismSceneContract') && mechanismSceneContractText.includes('fabricationRenderPlanForMechanism') && mechanismSceneContractText.includes("stackSource: 'fabricationStackForMechanism'"), 'MechanismSceneContract derives mechanism layers from the same fabrication render plan as Foundry');
 assert(assemblyGeometryText.includes('export const assemblyCoordToSvg') && assemblyGeometryText.includes('export const characterBoardProjector') && !assemblyGeometryText.includes('<') && !assemblyGeometryText.includes('document.'), 'assemblyGeometry is a DOM-free deterministic helper seam');
 assert(assemblyPlaybackText.includes('export const pendingRecipeForMechanism') && assemblyPlaybackText.includes('buildAssemblyPlaybackSteps'), 'Assembly recipe/playback derivation lives outside App.tsx');
 assert(assemblyGuideModelText.includes('export const buildAssemblyGuideModel') && assemblyGuideModelText.includes('pendingRecipeForMechanism') && assemblyGuideModelText.includes('buildCharacterAssemblyPlan') && assemblyGuideModelText.includes('resetKey: `${activeAssemblyMode}:${selectedRecipe?.mechanismId ?? "none"}:${lane}`') && !assemblyGuideModelText.includes('useState') && !assemblyGuideModelText.includes('window.') && !assemblyGuideModelText.includes('document.') && !assemblyGuideModelText.includes('dispatch('), 'Assembly guide model helper is a pure derivation seam for recipes, mode, steps, and reset key');
 assert(assemblyBlock.includes('const {') && assemblyBlock.includes('resetKey,') && assemblyBlock.includes('buildAssemblyGuideModel({') && assemblyBlock.includes('createFabricationPackage(project)') && assemblyBlock.includes('window.open') && assemblyBlock.includes('downloadText'), 'Assembly Guide keeps IO and pane wiring while delegating pure model derivation');
-assert(assemblyPlaybackText.includes("motion: 'stack-layer'") && assemblyPlaybackText.includes("motion: 'move-to-board'") && assemblyPlaybackText.includes("motion: 'connect-character'") && assemblyPlaybackText.includes("motion: 'test-motion'"), 'Assembly playback declares a visual motion mode for every build phase');
+assert(assemblyPlaybackText.includes("motion: 'explode_z'") && assemblyPlaybackText.includes("motion: 'mount_travel_xy'") && assemblyPlaybackText.includes("motion: 'connect_travel_xy'") && assemblyPlaybackText.includes("motion: 'scrub_time'"), 'Assembly playback declares canonical visual motion modes for every build phase');
 assert(assemblyControlPanelText.includes('data-testid="assembly-mode-switch"') && assemblyInspectorPanelText.includes('data-testid="character-assembly-inspector"'), 'Assembly tab exposes a character assembly sub-stage with a compact inspector');
-assert(assemblyWorkbenchText.includes('data-testid="character-assembly-workbench"') && assemblyWorkbenchText.includes('data-testid="character-fixed-pins"') && assemblyWorkbenchText.includes('data-testid="character-free-pivots"'), 'Character assembly workbench separates fixed board pins from free limb pivots');
-assert(assemblyWorkbenchText.includes('characterBoardProjector') && assemblyWorkbenchText.includes('data-testid="character-board-layer"') && assemblyWorkbenchText.includes('data-layer-state={layerState}') && assemblyWorkbenchText.includes('data-testid="character-pin-alignment"'), 'Character assembly animates the character layer onto fixed board pins instead of leaving parts in a detached tray');
-assert(assemblyWorkbenchText.includes('data-testid="character-pin-stack"') && assemblyWorkbenchText.includes('data-pin-role={pin.role}') && assemblyWorkbenchText.includes('data-stack-parts={pin.stack.join'), 'Character assembly renders role-specific fixed/free pin stacks from the plan');
+assert(assemblySceneFrameText.includes("step.phase === 'fixed-pins'") && assemblySceneFrameText.includes("step.phase === 'free-pivots'") && assemblySceneFrameText.includes('activePins'), 'Character assembly frame separates fixed board pins from free limb pivots without a second SVG scene');
 assert(assemblyControlPanelText.includes('activeAssemblyMode === "mechanism" &&') && assemblyControlPanelText.includes('data-testid="assembly-lane-switch"') && assemblyControlPanelText.includes('assembly-recipe-card text-left'), 'Character assembly mode hides mechanism-only lane and recipe controls');
 assert(assemblyPlaybackText.includes('export const buildCharacterAssemblyPlan') && assemblyPlaybackText.includes("kind: 'character'") && assemblyPlaybackText.includes('mechanismAssemblySteps: []') && assemblyPlaybackText.includes('sceneToBoardRaw(joint.position') && assemblyPlaybackText.includes('board?.valid ? board.label : undefined'), 'Character assembly plan is derived separately from mechanism recipe steps and does not fake clamped board holes');
 assert(assemblyBlock.includes('useAssemblyGuidePlayback') && !assemblyBlock.includes('stepProgressRef') && !assemblyBlock.includes('window.requestAnimationFrame(tick)'), 'Assembly Guide delegates playback timing/reset choreography to a harnessable hook seam');
@@ -3285,8 +3290,8 @@ const assemblyGuideCharacterModel = buildAssemblyGuideModel({ project: sample, s
 assert.equal(assemblyGuideCharacterModel.activeAssemblyMode, 'character', 'Assembly guide model switches to character assembly when requested and available');
 assert(assemblyGuideCharacterModel.currentCharacterStep && assemblyGuideCharacterModel.resetKey.startsWith('character:'), 'Assembly guide model returns character steps and mode-aware reset key');
 assert(assemblyBlock.includes('goAssemblyStep={goAssemblyStep}') && !assemblyBlock.includes('data-testid="assembly-player-overlay"'), 'Assembly tab keeps shared player step navigation and no duplicate local player');
-assert(assemblyWorkbenchText.includes('progress = 0') && assemblyWorkbenchText.includes('data-step-progress') && assemblyWorkbenchText.includes('moduleTranslate'), 'Assembly workbench receives live progress and moves the mechanism module per step');
-assert(assemblyWorkbenchText.includes('data-testid="assembly-parts-tray"') && assemblyWorkbenchText.includes('data-testid="assembly-mount-motion"') && assemblyWorkbenchText.includes('data-testid="assembly-character-connect"') && assemblyWorkbenchText.includes('data-testid="assembly-motion-dot"'), 'Assembly workbench visualizes parts, mounting, character connection, and test motion as step-specific simulation states');
+assert(assemblySceneFrameText.includes('progress = 0') && assemblySceneFrameComponentText.includes('data-progress={Math.round(frame.progress * 100)}') && assemblyThreePreviewText.includes('data-assembly-three-progress={Math.round(progress * 100)}'), 'Assembly scene frame and Three preview receive live progress instead of moving a duplicate SVG module');
+assert(assemblySceneFrameText.includes('motion: step.motion') && assemblySceneFrameText.includes("step.motion === 'explode_z'") && assemblySceneFrameText.includes("step.phase === 'test-character'"), 'Assembly scene frame visualizes parts, mounting, character connection, and test motion through canonical frame motion states');
 assert(!assemblyBlock.includes('data-testid="assembly-guide-preview-frame"'), 'Assembly center no longer defaults to an iframe document preview');
 assert(assemblyInspectorPanelText.includes('data-testid="assembly-guide-preview"'), 'Assembly tab keeps selected recipe detail in the right inspector');
 assert.deepEqual(assemblyCoordToSvg('A1'), { x: 494, y: 142 }, 'assembly board coordinate A1 maps to SVG origin slot');

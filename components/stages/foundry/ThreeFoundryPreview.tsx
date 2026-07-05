@@ -43,6 +43,11 @@ import { setRendererPixelRatioCap } from "../../../utils/threeResourceKit";
 import { fittedGearTrainCenters } from "./foundryPreviewGeometry";
 import { FoundryPreviewStateProbe } from "./FoundryPreviewStateProbe";
 import {
+  foundryAssemblyLayerFocusSummary,
+  renderFoundryAssemblySceneOverlay,
+  type FoundryAssemblySceneFrame,
+} from "./foundryAssemblySceneOverlay";
+import {
   createFoundryThreePrimitiveFactory,
   disposeFoundryThreeObject,
 } from "./foundryThreePrimitives";
@@ -99,6 +104,7 @@ type ThreeFoundryPreviewProps = {
   onPointerCancel: React.PointerEventHandler<HTMLDivElement>;
   onWheel: React.WheelEventHandler<HTMLDivElement>;
   onProjectionSizeChange: (size: FoundryOverlaySize) => void;
+  assemblySceneFrame?: FoundryAssemblySceneFrame;
   children: React.ReactNode;
 };
 
@@ -135,6 +141,7 @@ export const ThreeFoundryPreview = ({
   onPointerCancel,
   onWheel,
   onProjectionSizeChange,
+  assemblySceneFrame,
   children,
 }: ThreeFoundryPreviewProps) => {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -612,7 +619,11 @@ export const ThreeFoundryPreview = ({
           );
           return Math.max(contactGap, axisError);
         })()
-      : 0;
+    : 0;
+  const assemblyLayerFocusSummary = useMemo(
+    () => foundryAssemblyLayerFocusSummary(assemblySceneFrame, renderPlan.layers),
+    [assemblySceneFrame, renderPlan.layers],
+  );
   useEffect(() => {
     let active = true;
     loadRapierPhysicsKernel()
@@ -808,6 +819,18 @@ export const ThreeFoundryPreview = ({
       gearCenters,
       gearUsesMeshPhases,
       gearOutputRatioForDisplay,
+      assemblySceneFrame,
+    });
+    renderFoundryAssemblySceneOverlay({
+      root,
+      frame: assemblySceneFrame,
+      mechanism,
+      simulation,
+      kit,
+      pinBottomZ,
+      pinTopZ,
+      pathLayerZ,
+      pathPoints,
     });
 
     dynamicBuildCountRef.current += 1;
@@ -838,6 +861,11 @@ export const ThreeFoundryPreview = ({
     pinStacks,
     rigOpacity,
     physicalValidationErrors,
+    assemblySceneFrame,
+    pinBottomZ,
+    pinTopZ,
+    pathPoints,
+    localSpacerZForPin,
   ]);
 
   return (
@@ -931,6 +959,8 @@ export const ThreeFoundryPreview = ({
         renderedLayerZ={renderedLayerZ}
         physicalValidationErrors={physicalValidationErrors}
         physicalValidationSummary={physicalValidationSummary}
+        assemblySceneFrame={assemblySceneFrame}
+        assemblyLayerFocusSummary={assemblyLayerFocusSummary}
       />
       {children}
     </div>

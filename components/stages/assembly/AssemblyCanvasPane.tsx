@@ -1,7 +1,4 @@
-import {
-  AssemblyWorkbench,
-  CharacterAssemblyWorkbench,
-} from "./AssemblyWorkbench";
+import { AssemblySceneFrame } from "./AssemblySceneFrame";
 import {
   AssemblyCharacterThreePreview,
   AssemblyMechanismThreePreview,
@@ -17,6 +14,10 @@ import type {
   CharacterAssemblyPlan,
   CharacterAssemblyStep,
 } from "../../../utils/assemblyPlayback";
+import {
+  buildCharacterAssemblySceneFrame,
+  buildMechanismAssemblySceneFrame,
+} from "../../../utils/assemblySceneFrame";
 
 type AssemblyMode = "mechanism" | "character";
 
@@ -42,54 +43,64 @@ export const AssemblyCanvasPane = ({
   kit: PhysicalKitSettings;
   progress: number;
   hasCharacterAssembly: boolean;
-}) => (
-  <div
-    className="assembly-canvas-document canvas-workspace"
-    data-testid="assembly-canvas-preview"
-  >
-    {activeAssemblyMode === "character" && currentCharacterStep ? (
-      <div className="assembly-simulation-stack" data-testid="assembly-character-simulation-stack">
-        <AssemblyCharacterThreePreview
-          project={project}
-          plan={characterAssemblyPlan}
-          step={currentCharacterStep}
-          progress={progress}
-        />
-        <CharacterAssemblyWorkbench
-          plan={characterAssemblyPlan}
-          step={currentCharacterStep}
-          kit={kit}
-          progress={progress}
-        />
-      </div>
-    ) : selectedRecipe && currentStep ? (
-      <div className="assembly-simulation-stack" data-testid="assembly-mechanism-simulation-stack">
-        {project.mechanisms.find(
-          (mechanism) => mechanism.id === selectedRecipe.mechanismId,
-        ) && (
+}) => {
+  const selectedMechanism = selectedRecipe
+    ? project.mechanisms.find(
+        (mechanism) => mechanism.id === selectedRecipe.mechanismId,
+      )
+    : undefined;
+  const characterFrame = currentCharacterStep
+    ? buildCharacterAssemblySceneFrame({
+        plan: characterAssemblyPlan,
+        step: currentCharacterStep,
+        kit,
+        progress,
+      })
+    : undefined;
+  const mechanismFrame =
+    selectedRecipe && currentStep && selectedMechanism
+      ? buildMechanismAssemblySceneFrame({
+          recipe: selectedRecipe,
+          mechanism: selectedMechanism,
+          step: currentStep,
+          lane,
+          kit,
+          progress,
+        })
+      : undefined;
+
+  return (
+    <div
+      className="assembly-canvas-document canvas-workspace"
+      data-testid="assembly-canvas-preview"
+    >
+      {activeAssemblyMode === "character" && currentCharacterStep && characterFrame ? (
+        <div className="assembly-simulation-stack" data-testid="assembly-character-simulation-stack">
+          <AssemblyCharacterThreePreview
+            project={project}
+            plan={characterAssemblyPlan}
+            step={currentCharacterStep}
+            progress={progress}
+            sceneFrame={characterFrame}
+          />
+          <AssemblySceneFrame frame={characterFrame} />
+        </div>
+      ) : selectedRecipe && currentStep && selectedMechanism && mechanismFrame ? (
+        <div className="assembly-simulation-stack" data-testid="assembly-mechanism-simulation-stack">
           <AssemblyMechanismThreePreview
             project={project}
-            mechanism={
-              project.mechanisms.find(
-                (mechanism) => mechanism.id === selectedRecipe.mechanismId,
-              )!
-            }
+            mechanism={selectedMechanism}
             step={currentStep}
             progress={progress}
+            sceneFrame={mechanismFrame}
           />
-        )}
-        <AssemblyWorkbench
-          recipe={selectedRecipe}
-          lane={lane}
-          step={currentStep}
-          kit={kit}
-          progress={progress}
-        />
-      </div>
-    ) : (
-      <div className="blueprint-empty-state">
-        {hasCharacterAssembly ? "Choose Character." : "Add a character first."}
-      </div>
-    )}
-  </div>
-);
+          <AssemblySceneFrame frame={mechanismFrame} />
+        </div>
+      ) : (
+        <div className="blueprint-empty-state">
+          {hasCharacterAssembly ? "Choose Character." : "Add a character first."}
+        </div>
+      )}
+    </div>
+  );
+};

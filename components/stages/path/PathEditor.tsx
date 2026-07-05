@@ -25,7 +25,6 @@ import {
   preferredMotionJointId,
 } from "../../../utils/motion";
 import { addDrawSamplePoint, normalizeDrawTimedPoints, type DrawSamplePoint } from "../../../utils/pathDrawing";
-import { uid } from "../../../utils/project";
 import { PathCanvasPane } from "./PathCanvasPane";
 import { PathInspectorPanel } from "./PathInspectorPanel";
 import { PathWorkflowPanel } from "./PathWorkflowPanel";
@@ -179,28 +178,6 @@ export const PathEditor = ({
       jointId: bendJoint.id,
       updates: { bendDirection },
     });
-  const addJointAtIkHandle = () => {
-    if (!project.skeleton || !selectedPart || !selectedIkJointId) return;
-    const parent = project.skeleton.joints[selectedIkJointId];
-    if (!parent) return;
-    const id = uid("joint");
-    dispatch({
-      type: "add_joint",
-      joint: {
-        id,
-        name: "Motion handle",
-        position: { x: parent.position.x + 34, y: parent.position.y - 34 },
-        parentId: parent.id,
-        locked: false,
-        bendDirection: 1,
-      },
-    });
-    if (selectedPath && !pathLocked)
-      dispatch({
-        type: "upsert_path",
-        path: { ...selectedPath, targetAnchorJointId: id },
-      });
-  };
   const movePoint = (e: React.MouseEvent<SVGSVGElement>) => {
     if (isFreeDrawing && svgRef.current && !pathLocked) {
       appendFreePoint(svgPointerToScene(svgRef.current, e.clientX, e.clientY));
@@ -242,43 +219,6 @@ export const PathEditor = ({
     setPathViewMode("2d");
     if (drawMode) stopDrawing();
     setDrawMode(!drawMode);
-  };
-  const addLayer = () => {
-    const base = selectedPart;
-    const id = uid("part");
-    const anchorJointId =
-      base?.anchorJointId ??
-      project.skeleton?.rootJointIds[0] ??
-      Object.keys(project.skeleton?.joints ?? {})[0] ??
-      "root";
-    dispatch({
-      type: "upsert_part",
-      part: base
-        ? {
-            ...base,
-            id,
-            name: `${base.name} copy`,
-            transform: {
-              ...base.transform,
-              x: base.transform.x + 24,
-              y: base.transform.y - 24,
-            },
-            zIndex: Math.max(0, ...sortedParts.map((p) => p.zIndex)) + 1,
-          }
-        : {
-            id,
-            name: "New layer",
-            anchorJointId,
-            transform: { x: 0, y: 0, rotation: 0, scale: 1 },
-            zIndex: sortedParts.length,
-            opacity: 0.9,
-            visible: true,
-            locked: false,
-            selectable: true,
-            bounds: { x: -40, y: -40, width: 80, height: 80 },
-            fillColor: "#64748b",
-          },
-    });
   };
   const pathMechanism = selectedPath
     ? project.mechanisms.find(
@@ -336,8 +276,6 @@ export const PathEditor = ({
             setIsPlaying={setIsPlaying}
             setAngle={setAngle}
             deletePoint={deletePoint}
-            addLayer={addLayer}
-            addJointAtIkHandle={addJointAtIkHandle}
           />,
         ),
         canvas: canvasPane(

@@ -20,7 +20,7 @@ Key notes translated into product constraints:
 ## Agent review synthesis
 
 - `analyst`: current system partially supports web, onboarding, blueprint, and assembly, but lacks classroom approval checklist, lesson templates, stable lesson reset, and teacher-friendly local package flow.
-- `explore`: existing anchors are `WelcomeDialog`, `GettingStartedDialog`, `ShortcutHelpDialog`, `AboutDialog`, Foundry/Design reset controls, `BlueprintExport`, `AssemblyWorkbench`, `utils/appCommands.ts`, `docs/deployment.md`, and tag-gated GitHub Pages workflow.
+- `explore`: existing anchors are `WelcomeDialog`, `GettingStartedDialog`, `ShortcutHelpDialog`, `AboutDialog`, Foundry/Design reset controls, `BlueprintExport`, `AssemblyGuide`/`AssemblySceneFrame`, `utils/appCommands.ts`, `docs/deployment.md`, and tag-gated GitHub Pages workflow.
 - `designer`: keep splash tiny; keep Getting Started to three setup choices; put classroom lessons in a secondary lesson/library path; left pane acts as tutorial conductor; center canvas remains pure workbench; right pane stays inspector; assembly uses low-text exploded animation.
 - `test-engineer`: add contract/browser coverage for `/ms/` static deploy, guided real starter flow, sensemaking discoverability, stable Foundry reset, animated Assembly, and no server/cloud calls.
 

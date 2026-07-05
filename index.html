@@ -301,26 +301,21 @@
       .blueprint-document-preview .blueprint-svg-preview { display: block; width: 100%; height: 100%; overflow: hidden; border: 1px solid var(--ms-line); border-radius: 1.35rem; background: #fff; box-shadow: 0 22px 70px rgba(8,10,18,.09); }
       .blueprint-document-preview .blueprint-svg-preview svg { display: block; width: 100%; height: 100%; }
       .blueprint-empty-state { display: grid; place-items: center; height: 100%; min-height: 24rem; border: 1px dashed var(--ms-line-strong); border-radius: 1.35rem; background: rgba(255,255,255,.72); color: var(--ms-muted); padding: 2rem; text-align: center; font-weight: 720; }
-      .assembly-simulation-stack { height: 100%; min-height: 0; display: grid; grid-template-rows: minmax(17rem, 1.35fr) minmax(12rem, .85fr); gap: .6rem; }
+      .assembly-simulation-stack { height: 100%; min-height: 0; display: grid; grid-template-rows: minmax(18rem, 1fr) auto; gap: .6rem; }
       .assembly-three-preview { position: relative; min-height: 0; overflow: hidden; border: 1px solid var(--ms-line); border-radius: 1.45rem; background: #fff; box-shadow: 0 18px 46px rgba(8,10,18,.08); }
       .assembly-three-preview .three-puppet-overlay { z-index: 1; pointer-events: auto; }
       .assembly-three-preview .foundry-preview { height: 100% !important; min-height: 0; border: 0; border-radius: inherit; }
-      .assembly-context-ghost { position: absolute; inset: 0; z-index: 2; pointer-events: none; opacity: .32; }
-      .assembly-context-ghost .three-puppet-overlay, .assembly-context-ghost .three-puppet-host, .assembly-context-ghost .three-puppet-canvas { pointer-events: none !important; }
       .assembly-three-hud { position: absolute; left: .8rem; top: .8rem; z-index: 34; border: 1px solid var(--ms-line); border-radius: 999px; background: rgba(255,255,255,.9); color: var(--ms-accent); box-shadow: 0 12px 30px rgba(15,23,42,.08); padding: .36rem .62rem; font-size: .72rem; font-weight: 780; pointer-events: none; backdrop-filter: blur(12px); }
-      .assembly-stepper-workbench { position: relative; z-index: 1; height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--ms-line); border-radius: 1.45rem; background: #fff; box-shadow: 0 18px 46px rgba(8,10,18,.08); padding: .9rem; }
-      .assembly-workbench-head { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; }
-      .assembly-workbench-head h3 { margin: .15rem 0 0; color: var(--ms-text); font-size: 1.35rem; line-height: 1; letter-spacing: -.045em; font-weight: 720; }
-      .assembly-workbench-svg { flex: 1 1 auto; min-height: 0; width: 100%; margin-top: .6rem; border: 1px solid var(--ms-line); border-radius: 1.1rem; background-color: #fff; background-image: linear-gradient(to right, rgba(99,102,241,.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(99,102,241,.06) 1px, transparent 1px); background-size: 28px 28px; }
-      .assembly-svg-label { fill: var(--ms-muted); font-size: 19px; font-weight: 720; letter-spacing: .08em; text-transform: uppercase; }
-      .assembly-svg-tiny { fill: var(--ms-text-soft); font-size: 12px; font-weight: 680; }
-      .assembly-progress-dot { fill: #e2e8f0; stroke: #94a3b8; stroke-width: 2; }
-      .assembly-progress-dot.active { fill: var(--ms-accent); stroke: #fff; filter: drop-shadow(0 8px 14px rgba(139,92,246,.22)); }
-      .assembly-progress-line { stroke: #cbd5e1; stroke-width: 3; stroke-linecap: round; }
-      .assembly-layer-step-number { fill: var(--ms-accent); stroke: #fff; stroke-width: 2; }
-      .assembly-active-layer { filter: drop-shadow(0 8px 14px rgba(124,58,237,.18)); }
-      .assembly-active-hole { animation: assembly-pulse 1s ease-in-out infinite alternate; }
-      .assembly-test-motion { animation: assembly-dash 1.4s linear infinite; }
+      .assembly-scene-frame { position: relative; z-index: 1; display: grid; gap: .55rem; overflow: hidden; border: 1px solid var(--ms-line); border-radius: 1.45rem; background: #fff; box-shadow: 0 18px 46px rgba(8,10,18,.08); padding: .9rem; }
+      .assembly-scene-frame-head { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; }
+      .assembly-scene-frame-head h3 { margin: .15rem 0 0; color: var(--ms-text); font-size: 1.15rem; line-height: 1; letter-spacing: -.04em; font-weight: 760; }
+      .assembly-scene-instruction, .assembly-scene-check { margin: 0; color: var(--ms-text-soft); font-size: .86rem; font-weight: 720; }
+      .assembly-visual-progress { height: .45rem; overflow: hidden; border-radius: 999px; background: #e2e8f0; }
+      .assembly-visual-progress span { display: block; height: 100%; border-radius: inherit; background: var(--ms-accent); transition: width .18s ease; }
+      .assembly-scene-sensemaking { border: 1px solid var(--ms-accent-line); border-radius: 1rem; background: var(--ms-accent-soft); color: var(--ms-accent); padding: .55rem .7rem; font-size: .82rem; font-weight: 760; }
+      .assembly-scene-meta, .assembly-scene-part-list { display: flex; flex-wrap: wrap; gap: .4rem; }
+      .assembly-scene-meta span, .assembly-scene-part-list span { border: 1px solid var(--ms-line); border-radius: 999px; background: #f8fafc; color: var(--ms-text-soft); padding: .28rem .48rem; font-size: .72rem; font-weight: 720; }
+      .assembly-scene-part-list span[data-active="true"] { border-color: var(--ms-accent-line); background: var(--ms-accent-soft); color: var(--ms-accent); }
       .assembly-step-button { display: flex; align-items: center; gap: .5rem; width: 100%; border: 1px solid transparent; border-radius: .9rem; background: #f8fafc; color: var(--ms-text-soft); padding: .45rem .55rem; text-align: left; font-size: .78rem; font-weight: 680; }
       .assembly-step-button span { display: inline-grid; place-items: center; width: 1.35rem; height: 1.35rem; border-radius: 999px; background: #fff; color: var(--ms-accent); font-size: .68rem; }
       .assembly-step-button.active { border-color: var(--ms-accent-line); background: var(--ms-accent-soft); color: var(--ms-accent); }
@@ -479,6 +474,7 @@
         .app-shell .stage-body { height: auto; margin-top: 0; overflow: auto; }
         .editor-stage-frame { height: auto; overflow: visible; grid-template-columns: 1fr; grid-template-areas: "left" "canvas" "right"; }
         .stage-left-pane, .stage-canvas-pane { min-height: auto; height: auto; max-height: none; overflow: visible; }
+        .stage-canvas-pane { min-height: 360px; }
         .stage-right-inspector { min-height: 0; height: auto; max-height: min(72vh, 42rem); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-gutter: stable; }
         .stage-nav-compact { display: grid; }
         .workflow-status-strip, .status-bar { margin-left: 0; }

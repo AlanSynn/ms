@@ -6,7 +6,7 @@ import { fabricablePartOutlinePoints, partLandmarkJointIds, partLandmarkLocalPoi
 import { mechanismRequiredParts } from './project';
 
 export type AssemblyLane = 'kit' | 'custom';
-export type AssemblyMotionKind = 'parts-tray' | 'stack-layer' | 'move-to-board' | 'connect-character' | 'test-motion';
+export type AssemblyMotionKind = 'none' | 'explode_z' | 'mount_travel_xy' | 'connect_travel_xy' | 'scrub_time';
 
 export type AssemblyPlaybackStep = {
     index: number;
@@ -200,7 +200,7 @@ export const buildAssemblyPlaybackSteps = (recipe: FabricationRecipe, lane: Asse
             index: 1,
             label: lane === 'custom' ? 'Export parts' : 'Gather kit parts',
             phase: lane === 'custom' ? 'export' : 'prepare-parts',
-            motion: 'parts-tray',
+            motion: 'none',
             action: lane === 'custom' ? 'export' : 'show-parts',
             coords: [],
             coordRoles: [],
@@ -213,7 +213,7 @@ export const buildAssemblyPlaybackSteps = (recipe: FabricationRecipe, lane: Asse
             index: index + 2,
             label: fabricationPartDisplayLabel(step.label),
             phase: 'assemble-module' as const,
-            motion: 'stack-layer' as const,
+            motion: 'explode_z' as const,
             action: step.action ?? 'stack',
             coords: step.coords?.length ? step.coords : [step.boardCoordinate],
             coordRoles: step.coordRoles?.length ? step.coordRoles : [step.role],
@@ -227,7 +227,7 @@ export const buildAssemblyPlaybackSteps = (recipe: FabricationRecipe, lane: Asse
         index: steps.length + 1,
         label: lane === 'kit' ? 'Mount module to board' : 'Mount custom module',
         phase: 'mount-to-board',
-        motion: 'move-to-board',
+        motion: 'mount_travel_xy',
         action: 'mount',
         coords: boardCoords.length ? boardCoords : [recipe.boardCoordinate],
         coordRoles: boardCoords.length ? boardCoords.map(() => lane === 'kit' ? 'board' : 'custom-base') : [lane === 'kit' ? 'board' : 'custom-base'],
@@ -241,7 +241,7 @@ export const buildAssemblyPlaybackSteps = (recipe: FabricationRecipe, lane: Asse
         index: steps.length + 2,
         label: 'Connect character',
         phase: 'connect-character',
-        motion: 'connect-character',
+        motion: 'connect_travel_xy',
         action: 'connect',
         coords: [recipe.boardCoordinate],
         coordRoles: ['output'],
@@ -253,7 +253,7 @@ export const buildAssemblyPlaybackSteps = (recipe: FabricationRecipe, lane: Asse
         index: steps.length + 3,
         label: 'Test motion',
         phase: 'test-motion',
-        motion: 'test-motion',
+        motion: 'scrub_time',
         action: 'test',
         coords: [recipe.boardCoordinate],
         coordRoles: ['motion'],

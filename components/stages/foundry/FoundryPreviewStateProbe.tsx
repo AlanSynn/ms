@@ -31,6 +31,7 @@ import {
   foundryLayerGeometryContract,
   type FoundryPinStackPoint,
 } from "./foundryPreviewStacks";
+import type { FoundryAssemblySceneFrame } from "./foundryAssemblySceneOverlay";
 
 type FoundryRenderedInventory = {
   parts: number;
@@ -120,6 +121,8 @@ type FoundryPreviewStateProbeProps = {
   renderedLayerZ: number[];
   physicalValidationErrors: string[];
   physicalValidationSummary: string;
+  assemblySceneFrame?: FoundryAssemblySceneFrame;
+  assemblyLayerFocusSummary: string;
 };
 
 export const FoundryPreviewStateProbe = ({
@@ -190,6 +193,8 @@ export const FoundryPreviewStateProbe = ({
   renderedLayerZ,
   physicalValidationErrors,
   physicalValidationSummary,
+  assemblySceneFrame,
+  assemblyLayerFocusSummary,
 }: FoundryPreviewStateProbeProps) => {
   const isGearTrain =
     mechanism.type === "gear" || mechanism.type === "gear_linkage";
@@ -481,6 +486,32 @@ export const FoundryPreviewStateProbe = ({
         renderPlan.validationErrors.length || physicalValidationErrors.length
           ? "blocked"
           : "ready"
+      }
+      data-three-assembly-scene={
+        assemblySceneFrame ? "contract-driven" : "none"
+      }
+      data-three-assembly-frame-version={assemblySceneFrame?.version ?? ""}
+      data-three-assembly-phase={assemblySceneFrame?.phase ?? ""}
+      data-three-assembly-motion-kind={assemblySceneFrame?.motion ?? ""}
+      data-three-assembly-board-mode={assemblySceneFrame?.boardMode ?? ""}
+      data-three-assembly-active-board-coords={
+        assemblySceneFrame?.activeBoardCoords.join(",") ?? ""
+      }
+      data-three-assembly-floating-reference-coords={
+        assemblySceneFrame?.floatingReferenceCoords.join(",") ?? ""
+      }
+      data-three-assembly-visible-part-count={
+        assemblySceneFrame?.visibleParts.length ?? 0
+      }
+      data-three-assembly-active-part-ids={
+        assemblySceneFrame?.activePartIds.join(",") ?? ""
+      }
+      data-three-assembly-rendered-layer-focus={assemblyLayerFocusSummary}
+      data-three-assembly-rendered-board-marker-count={
+        assemblySceneFrame?.activeBoardCoords.length ?? 0
+      }
+      data-three-assembly-rendered-floating-marker-count={
+        assemblySceneFrame?.floatingReferenceCoords.length ?? 0
       }
       className="foundry-three-scene-state"
     />

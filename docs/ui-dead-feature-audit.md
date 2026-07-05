@@ -22,11 +22,11 @@ If a control does not meet one of those conditions, remove it instead of adding 
 | Top command bar | File/Edit/View/Go/Options/Help menus execute the same registry commands as shortcuts. | Implemented. Keep all new toolbar/menu actions registry-backed. |
 | Welcome / Getting Started | Starter, package load, local ONNX image import, project import, and “do not show again” must open real workflows. | Implemented. Hardware camera capture remains absent. |
 | Character | Load package, create from image, accept/discard generated package, part/outline/art/skeleton editing, save skeleton. | Implemented. Copy was compacted from “placeholder plates” to “gray plates” to avoid placeholder-like wording. |
-| Path | Draw/clear path, track video/GIF, play/reset, visibility/enabled state, selected point deletion, layer/joint/IK edits. | Implemented. Removed the duplicate “Add body part” alias because it called the same `addLayer` path as “Add layer” and looked like a second feature. |
+| Path | Draw/clear path, track video/GIF, play/reset, visibility/enabled state, selected point deletion, target selection, and path topology. | Implemented. Rig creation/editing controls are Character-owned; Path no longer exposes Add layer, Remove layer, or New handle controls. |
 | Mechanism Foundry | Mechanism type selection, anchor picking, layer toggles, play/reset, parameters, and “Use mechanism” export a real mechanism package. | Implemented and covered by existing browser tests. Keep future mechanism buttons backed by `mechanismFeatureRegistry`/fabrication recipes. |
 | Mechanism Design | Playback/trace, library insertion, fit-path optimization, recommendation generation, delete, and blueprint navigation. | Implemented. Fit/recommendation controls run optimizer/recommendation code and are not static cards. |
 | Blueprint | Generate fabrication package; download JSON/SVG/PDF/STL/HTML/metadata; preview 2D cut sheet; navigate to assembly. | Implemented. Blueprint stays a 2D document preview; step-by-step assembly lives in Assembly. |
-| Assembly | Kit/custom lane choice, recipe cards, step controls, animated workbench, PDF/HTML guide download. | Implemented. Stepper uses `prefabAssemblySteps` and `AssemblyWorkbench` rather than a static text guide. |
+| Assembly | Kit/custom lane choice, recipe cards, step controls, Three build preview, read-only step strip, PDF/HTML guide download. | Implemented. Stepper uses `prefabAssemblySteps`, `AssemblySceneFrame`, and the Three preview rather than a static guide, lower SVG workbench, or nested ghost. |
 | Options | Theme, toolbar/panel visibility, physics/fabrication/export settings, and reset all update real settings. | Implemented. Keep settings compact and avoid “studio/debug” explanatory panels unless tied to real settings. |
 
 ## Retired / unnecessary in current browser build
@@ -51,5 +51,5 @@ If a control does not meet one of those conditions, remove it instead of adding 
 - `utils/appCommands.ts` is the app-shell command registry.
 - `App.tsx` keeps `commandHandlers satisfies Record<AppCommandId, () => void>` so new menu commands require handlers.
 - `tests/project-contract.test.ts` rejects reintroduced fake output-folder, camera, Exit, Check for Updates, duplicated “Add body part,” and placeholder-like visible copy.
-- Browser workflow tests exercise Keyboard Shortcuts and About dialogs from the real menu, path-layer creation, the Path rig drawer having exactly one Add Layer action, stage navigation, blueprint exports, and assembly stepper controls.
+- Browser workflow tests exercise Keyboard Shortcuts and About dialogs from the real menu, Character-owned rig actions, absence of Path rig creation controls, stage navigation, blueprint exports, and assembly stepper controls.
 - Future rule: add a visible control only after adding its handler, state mutation/export/navigation path, and at least one contract or browser assertion.

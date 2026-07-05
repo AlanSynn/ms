@@ -1,9 +1,7 @@
-import { Play, Plus, Route, Trash2 } from "lucide-react";
+import { Play, Route, Trash2 } from "lucide-react";
 
 import { ContextHelp } from "../../ui/ContextHelp";
 import { MiniNumber } from "../../ui/InspectorControls";
-import { PartInspector } from "../character/PartInspector";
-import { SkeletonInspector } from "../character/SkeletonInspector";
 import { StageLeftSummary } from "../stageLayout";
 import type {
   AppStage,
@@ -34,8 +32,6 @@ interface PathWorkflowPanelProps {
   setIsPlaying: (value: boolean) => void;
   setAngle: React.Dispatch<React.SetStateAction<number>>;
   deletePoint: () => void;
-  addLayer: () => void;
-  addJointAtIkHandle: () => void;
 }
 
 export const PathWorkflowPanel = ({
@@ -58,8 +54,6 @@ export const PathWorkflowPanel = ({
   setIsPlaying,
   setAngle,
   deletePoint,
-  addLayer,
-  addJointAtIkHandle,
 }: PathWorkflowPanelProps) => (
   <div className="path-panel stage-pane-stack" data-testid="novice-path-panel">
     <StageLeftSummary project={project} title="Path" stage="path" goStage={goStage}>
@@ -218,59 +212,6 @@ export const PathWorkflowPanel = ({
           {selectedPath ? "Motion timing ready" : "No timing"}
         </div>
       </details>
-      {project.settings.partPanelVisible ? (
-        <details className="advanced-panel mt-4" data-testid="rig-structure-drawer">
-          <summary>Rig setup</summary>
-          <div className="mt-3 space-y-3">
-            <div>
-              <h4 className="section-title">Rig</h4>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button className="btn-secondary" onClick={addLayer}>
-                <Plus size={16} /> Add layer
-              </button>
-              {selectedPart && (
-                <button
-                  className="btn-secondary"
-                  disabled={selectedPart.locked}
-                  onClick={() =>
-                    dispatch({
-                      type: "delete_part",
-                      partId: selectedPart.id,
-                    })
-                  }
-                >
-                  <Trash2 size={16} /> Remove layer
-                </button>
-              )}
-              <button
-                className="btn-secondary"
-                disabled={!selectedPart || Boolean(selectedSceneObject) || pathLocked}
-                onClick={addJointAtIkHandle}
-              >
-                <Plus size={16} /> New handle
-              </button>
-            </div>
-            {selectedPart && (
-              <PartInspector
-                part={selectedPart}
-                skeleton={project.skeleton}
-                sourceTextureUrl={project.characterPackage?.sourceTextureUrl}
-                dispatch={dispatch}
-              />
-            )}
-            <div className="divider mt-4" />
-            <SkeletonInspector project={project} dispatch={dispatch} />
-          </div>
-        </details>
-      ) : (
-        <div
-          className="rounded-2xl border border-slate-200 bg-white p-3 text-sm font-bold text-slate-500"
-          data-testid="rig-structure-hidden"
-        >
-          Part panel hidden.
-        </div>
-      )}
     </StageLeftSummary>
   </div>
 );

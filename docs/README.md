@@ -1,7 +1,7 @@
 # MotionSmith Docs Map
 
 Status: active docs index
-Last refreshed: 2026-07-04
+Last refreshed: 2026-07-05
 
 Use this file before adding new docs. If a doc does not fit below, update an existing doc first.
 
@@ -10,6 +10,7 @@ Use this file before adding new docs. If a doc does not fit below, update an exi
 - [`../AGENTS.md`](../AGENTS.md) — repo operating contract, architecture discipline, verification gates.
 - [`../DESIGN.md`](../DESIGN.md) — UI/UX design contract.
 - [`platform-rebuild-porting-flow.md`](platform-rebuild-porting-flow.md) — parent rebuild requirements.
+- [`workbench-flow-ux-contract.md`](workbench-flow-ux-contract.md) — canonical tab/pane/button/tooltip flow contract and UX drift ledger.
 - [`app-command-shortcuts.md`](app-command-shortcuts.md) — app commands, menu items, keyboard shortcuts.
 - [`mechanism-reference/`](mechanism-reference/) — physical mechanism, spacer, z-stack, schema, and assembly rules.
 - [`mechanism-blueprint-manual.md`](mechanism-blueprint-manual.md) — blueprint/export behavior.
@@ -25,8 +26,14 @@ Use this file before adding new docs. If a doc does not fit below, update an exi
 - [`prd/classroom-guided-entry-plan.md`](prd/classroom-guided-entry-plan.md) — teacher-feedback plan for theme-first classroom entry, starter ownership, and guided project templates.
 - [`prd/classroom-sensemaking-discoverability-plan.md`](prd/classroom-sensemaking-discoverability-plan.md) — teacher-feedback plan for visible mechanism meaning, direct hints, optional clips, and classroom checks.
 - [`prd/assembly-step-player-redesign-plan.md`](prd/assembly-step-player-redesign-plan.md) — active Assembly redesign plan: one-step visual build player, step-local parts, board mount, and character attach flow.
+- [`prd/foundry-assembly-ssot-plan.md`](prd/foundry-assembly-ssot-plan.md) — active Foundry/Design/Assembly SSOT plan for mechanism visuals, `MechanismSceneContract`, and z-only assembly explode.
+- [`prd/mechanism-workbench-instance-board-plan.md`](prd/mechanism-workbench-instance-board-plan.md) — active multi-instance, scene-object target, and 15×15 board-fit plan.
 - [`subsystem-governance-and-mechanism-contracts.md`](subsystem-governance-and-mechanism-contracts.md)
 - [`analysis/codebase-cleanup-architecture-plan.md`](analysis/codebase-cleanup-architecture-plan.md)
+
+## Completed implementation contracts
+
+- [`prd/mechanism-fit-flow-hardening.md`](prd/mechanism-fit-flow-hardening.md) — implemented user-path → Foundry fit → Design → Blueprint/Assembly continuity contract. Use as behavior evidence, not an active plan.
 
 ## Current refactor cockpit
 
@@ -39,7 +46,7 @@ Use this file before adding new docs. If a doc does not fit below, update an exi
 Keep these for provenance; do not treat them as current UI contract unless `DESIGN.md` or active plans cite them.
 
 - [`ui-to-web/`](ui-to-web/) — Qt-to-web inventory, screenshots, porting evidence.
-- [`ui-pane-tab-redesign-plan.md`](ui-pane-tab-redesign-plan.md) — prior pane redesign notes.
+- [`ui-pane-tab-redesign-plan.md`](ui-pane-tab-redesign-plan.md) — historical pane redesign notes; current contract is `workbench-flow-ux-contract.md` plus `subsystem-governance-and-mechanism-contracts.md`.
 - [`prd/canva-video-editor-workspace-plan.md`](prd/canva-video-editor-workspace-plan.md) — superseded by current pane/workbench contract.
 - [`prd/realistic-25d-3d-physics-platform-plan.md`](prd/realistic-25d-3d-physics-platform-plan.md) — superseded by toon 2.5D main + 3D unlock plan.
 - [`assembly-lic-stepper-plan.md`](assembly-lic-stepper-plan.md) — planning provenance; assembly behavior now belongs in `mechanism-reference/05-assembly-process-guides.md` plus implementation tests.
