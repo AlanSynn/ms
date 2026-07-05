@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { BodyPartLayer, CanvasViewport, MechanismConfig, MechanismType, Point, ProjectMotionPath, ProjectState, SceneObject, StandardSkeleton } from '../types';
 import { boardGridLines, defaultPhysicalKit, SCENE_PX_PER_MM, sceneBoundsForSheet } from '../utils/coordinates';
-import { calculateLinkage, sampledCamProfileScale, gearPairOutputRatio, gearTrainCenters, gearTrainMeshPhaseRadAt, gearTrainOutputRatio, gearTrainPitchRadii, gearTrainRotationRatioAt, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from '../utils/kinematics';
-import { FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRenderPlanForMechanism, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, type FabricationLinkageRoleLengths, type FabricationRenderLayer, type FabricationRenderPlan } from '../utils/fabrication';
+import { calculateLinkage, normalizeCamProfileSamples, sampledCamProfileScale, gearPairOutputRatio, gearTrainCenters, gearTrainMeshPhaseRadAt, gearTrainOutputRatio, gearTrainPitchRadii, gearTrainRotationRatioAt, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from '../utils/kinematics';
+import { FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRenderPlanForMechanism, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, validateMechanismPreviewReadiness, type FabricationLinkageRoleLengths, type FabricationRenderLayer, type FabricationRenderPlan } from '../utils/fabrication';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, pointInsideOutline } from '../utils/partGeometry';
 import { clampCanvasZoom, WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, loadRapierPhysicsKernel, physicsKernelErrorMessage } from '../utils/physicsKernel';
@@ -78,7 +78,7 @@ type MechanismInventory = {
   endStops: number;
 };
 
-type ViewerPickKind = 'object' | 'part';
+type ViewerPickKind = 'object' | 'part' | 'mechanism';
 type ViewerScreenTarget = {
   kind: ViewerPickKind;
   id: string;
@@ -685,12 +685,13 @@ const mechanismGeometrySignature = (mechanisms: MechanismConfig[]) => mechanisms
   mechanism.rockerLength,
   mechanism.rodLength,
   mechanism.couplerPointDist,
+  mechanism.camProfileSamples?.join(',') ?? '',
   mechanism.outputGearRadius,
   mechanism.gearTrainRadii?.join(',') ?? '',
   mechanism.showOutputGear
 ].join(':')).join('|');
 
-export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneObjects = {}, skeleton, mechanisms, paths, selectedPathId, angle = 0, viewport, setViewport, inputMode = 'always', testId = 'three-puppet', cameraPresets = PUPPET_CAMERA_PRESETS, showToolbar = true, initialLayers, assemblyOverlay, onSelectPart, onSelectSceneObject, onSelectOnlyPointerDown, onSelectOnlyPointerMove, onSelectOnlyPointerUp, onSelectOnlyPointerCancel, onSelectOnlyWheel }: {
+export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneObjects = {}, skeleton, mechanisms, paths, selectedPathId, angle = 0, viewport, setViewport, inputMode = 'always', testId = 'three-puppet', cameraPresets = PUPPET_CAMERA_PRESETS, showToolbar = true, initialLayers, assemblyOverlay, onSelectPart, onSelectSceneObject, onSelectMechanism, onSelectOnlyPointerDown, onSelectOnlyPointerMove, onSelectOnlyPointerUp, onSelectOnlyPointerCancel, onSelectOnlyWheel }: {
   project?: ProjectState;
   animatedParts?: Record<string, BodyPartLayer>;
   animatedSceneObjects?: Record<string, SceneObject>;
@@ -709,6 +710,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   assemblyOverlay?: PuppetAssemblyOverlay;
   onSelectPart?: (partId: string) => void;
   onSelectSceneObject?: (objectId: string) => void;
+  onSelectMechanism?: (mechanismId: string) => void;
   onSelectOnlyPointerDown?: React.PointerEventHandler<HTMLDivElement>;
   onSelectOnlyPointerMove?: React.PointerEventHandler<HTMLDivElement>;
   onSelectOnlyPointerUp?: React.PointerEventHandler<HTMLDivElement>;
@@ -789,6 +791,9 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   const renderedMechanisms = mechanismsToRender;
   const selectedTelemetry = useMemo(() => selectedMechanism ? mechanismTelemetry(selectedMechanism, angle) : null, [selectedMechanism, angle]);
   const selectedRenderPlan = useMemo(() => selectedMechanism ? fabricationRenderPlanForMechanism(selectedMechanism) : null, [selectedMechanism]);
+  const selectedCamProfile = useMemo(() => selectedMechanism?.type === 'cam'
+    ? normalizeCamProfileSamples(selectedMechanism.camProfileSamples).map(value => value.toFixed(2)).join(',')
+    : '', [selectedMechanism]);
   const selectedGearPlaneZ = useMemo(() => {
     if (!selectedMechanism || !selectedRenderPlan) return undefined;
     return gearMeshPlaneZForMechanism(selectedMechanism, selectedRenderPlan);
@@ -833,6 +838,10 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   }, [selectedRenderPlan]);
   const stackValidationErrors = useMemo(
     () => mechanismsToRender.reduce((sum, mechanism) => sum + fabricationRenderPlanForMechanism(mechanism).validationErrors.length, 0),
+    [mechanismsToRender]
+  );
+  const physicalValidationErrors = useMemo(
+    () => mechanismsToRender.reduce((sum, mechanism) => sum + validateMechanismPreviewReadiness(mechanism).length, 0),
     [mechanismsToRender]
   );
   const mechanismInventory = mechanismsToRender.reduce((sum, mechanism) => addInventory(sum, puppetMechanismInventory(mechanism)), zeroInventory());
@@ -909,7 +918,13 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     const partTargets = Array.from(partMeshesRef.current.entries())
       .map(([id, object]) => targetForObject('part', id, object))
       .filter((target): target is ViewerScreenTarget => Boolean(target));
-    return [...objectTargets, ...partTargets];
+    const mechanismTargets = roots.mechanismsLayer.children
+      .map(object => {
+        const mechanismId = typeof object.userData.mechanismId === 'string' ? object.userData.mechanismId : '';
+        return mechanismId ? targetForObject('mechanism', mechanismId, object) : null;
+      })
+      .filter((target): target is ViewerScreenTarget => Boolean(target));
+    return [...objectTargets, ...partTargets, ...mechanismTargets];
   };
 
   const roundedScreenTargets = (targets: ViewerScreenTarget[]) => targets.map(target => ({
@@ -938,6 +953,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
         stateRef.current.dataset.threeRenderTriangles = String(renderer.info.render.triangles);
         stateRef.current.dataset.threeSceneObjectScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'object'));
         stateRef.current.dataset.threePartScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'part'));
+        stateRef.current.dataset.threeMechanismScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'mechanism'));
       }
     }
   };
@@ -1240,6 +1256,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     mechanismRefs.current.clear();
     renderedMechanisms.forEach(mechanism => {
       const group = new THREE.Group();
+      group.userData.mechanismId = mechanism.id;
       const sceneLinkLengths = fabricationLinkageSceneLengthsForMechanism(mechanism);
       const linkLengths = Object.fromEntries(Object.entries(sceneLinkLengths).map(([role, length]) => [role, Math.max(0.08, length / VIEW_SCALE)])) as Record<LinkKey, number>;
       const pitchMm = project?.settings.physicalKit.gridPitchMm ?? 20;
@@ -1317,11 +1334,14 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
         group.add(pin);
         return pin;
       });
+      group.traverse(node => {
+        node.userData.mechanismId = mechanism.id;
+      });
       roots.mechanismsLayer.add(group);
       mechanismRefs.current.set(mechanism.id, { links, gears, pins, extras });
     });
     render();
-  }, [mechanismSignature, renderedMechanisms, rendererStatus]);
+  }, [mechanismSignature, project?.settings.physicalKit.gridPitchMm, rendererStatus]);
 
   useEffect(() => {
     if (rendererStatus !== 'webgl') return;
@@ -1641,8 +1661,8 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     setViewport?.(prev => ({ ...prev, offset: { x: start.offset.x + dx, y: start.offset.y + dy } }));
   };
 
-  const pickViewerTarget = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (inputMode === 'none' || (!onSelectPart && !onSelectSceneObject)) return;
+  const pickViewerTarget = (event: Pick<React.PointerEvent<HTMLDivElement>, 'clientX' | 'clientY'>) => {
+    if (inputMode === 'none' || (!onSelectPart && !onSelectSceneObject && !onSelectMechanism)) return;
     const renderer = rendererRef.current;
     const camera = cameraRef.current;
     const roots = rootsRef.current;
@@ -1665,21 +1685,15 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
           onSelectPart?.(partId);
           return true;
         }
+        const mechanismId = typeof node.userData.mechanismId === 'string' ? node.userData.mechanismId : undefined;
+        if (mechanismId) {
+          onSelectMechanism?.(mechanismId);
+          return true;
+        }
         node = node.parent;
       }
       return false;
     };
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(pointer, camera);
-    const objectHits = raycaster.intersectObjects([roots.objectsLayer], true);
-    for (const hit of objectHits) {
-      if (selectFromNode(hit.object)) return;
-    }
-    const partHits = raycaster.intersectObjects([roots.partsLayer], true);
-    for (const hit of partHits) {
-      if (selectFromNode(hit.object)) return;
-    }
-
     const targets = collectViewerScreenTargets()
       .filter(target => target.visible)
       .map(target => ({
@@ -1701,7 +1715,29 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     const projectedPart = bestTarget('part');
     if (projectedPart) {
       onSelectPart?.(projectedPart.id);
+      return;
     }
+    const projectedMechanism = bestTarget('mechanism');
+    if (projectedMechanism) {
+      onSelectMechanism?.(projectedMechanism.id);
+      return;
+    }
+
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(pointer, camera);
+    const objectHits = raycaster.intersectObjects([roots.objectsLayer], true);
+    for (const hit of objectHits) {
+      if (selectFromNode(hit.object)) return;
+    }
+    const partHits = raycaster.intersectObjects([roots.partsLayer], true);
+    for (const hit of partHits) {
+      if (selectFromNode(hit.object)) return;
+    }
+    const mechanismHits = raycaster.intersectObjects([roots.mechanismsLayer], true);
+    for (const hit of mechanismHits) {
+      if (selectFromNode(hit.object)) return;
+    }
+
   };
 
   const finishViewerDrag = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -1860,8 +1896,11 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       data-joint-placement="skeleton-anchors"
       data-three-rebuild-mode="static-topology-dynamic-transforms"
       data-three-supported-mechanism-types={SUPPORTED_MECHANISM_TYPES.join(',')}
+      data-mechanism-type={selectedTelemetry?.type ?? ''}
+      data-path-preview={pathsToRender.length > 0 ? 'shown' : 'hidden'}
       data-three-selected-mechanism-type={selectedTelemetry?.type ?? ''}
       data-three-selected-mechanism-id={selectedMechanism?.id ?? ''}
+      data-three-selectable-mechanism-count={onSelectMechanism ? mechanismsToRender.length : 0}
       data-three-selected-mechanism-generated-path-count={selectedMechanism?.generatedPath?.length ?? 0}
       data-three-mechanism-ids={mechanismsToRender.map(mechanism => mechanism.id).join(',')}
       data-three-rendered-mechanism-ids={renderedMechanisms.map(mechanism => mechanism.id).join(',')}
@@ -1898,16 +1937,20 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       data-three-rendered-layer-colors={selectedRenderPlan?.layers.map(item => item.color).join(',') ?? ''}
       data-three-rendered-layer-z={selectedRenderedLayerZ.map(z => z.toFixed(2)).join(',')}
       data-three-stack-validation-errors={stackValidationErrors}
+      data-three-physical-validation-errors={physicalValidationErrors}
+      data-three-preview-renderable={selectedRenderPlan && physicalValidationErrors === 0 ? 'ready' : selectedRenderPlan ? 'blocked' : ''}
       data-three-spacer-key={FABRICATION_SPACER_SPEC.key}
       data-three-spacer-label={FABRICATION_SPACER_SPEC.label}
       data-three-spacer-mm={`${FABRICATION_SPACER_SPEC.outerDiameterMm}x${FABRICATION_SPACER_SPEC.innerDiameterMm}`}
       data-three-primary-rotation-deg={fixed3(selectedTelemetry?.primaryRotationDeg)}
+      data-pinion-rotation-deg={fixed3(selectedTelemetry?.primaryRotationDeg)}
       data-three-secondary-rotation-deg={fixed3(selectedTelemetry?.secondaryRotationDeg)}
       data-three-gear-radii={selectedMechanism ? ((selectedMechanism.type === 'gear' || selectedMechanism.type === 'gear_linkage') ? gearTrainPitchRadii(selectedMechanism).map(radius => radius.toFixed(2)).join(',') : selectedMechanism.type === 'planetary_gear' ? planetaryGearRadii(selectedMechanism).map(radius => radius.toFixed(2)).join(',') : `${selectedMechanism.crankLength.toFixed(2)},${selectedMechanism.rockerLength.toFixed(2)}`) : ''}
       data-three-gear-output-ratio={selectedMechanism ? selectedGearOutputRatio.toFixed(3) : ''}
       data-three-secondary-speed={selectedMechanism ? (selectedMechanism.speed2 ?? selectedMechanism.gearRatio ?? 1).toFixed(3) : ''}
       data-three-planet-count={selectedMechanism?.type === 'planetary_gear' ? planetaryGearConventionForMechanism(selectedMechanism).planetCount : 0}
       data-three-gear-linkage-mode={selectedMechanism?.type === 'gear_linkage' ? 'two-gear-two-link-coupler' : 'none'}
+      data-three-gear-train-linkage-mode={selectedMechanism?.type === 'gear' ? 'gear-only-train' : ''}
       data-three-gear-plane-mode={selectedGearPlaneMode}
       data-three-gear-plane-z={typeof selectedGearPlaneZ === 'number' ? selectedGearPlaneZ.toFixed(2) : ''}
       data-three-linkage-pin-radius={selectedMechanism?.type === 'gear_linkage' ? selectedMechanism.couplerPointDist.toFixed(2) : ''}
@@ -1917,6 +1960,9 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       data-three-planetary-output={selectedMechanism?.type === 'planetary_gear' ? planetaryGearConventionForMechanism(selectedMechanism).outputMember : ''}
       data-three-planetary-ring-radius={selectedMechanism?.type === 'planetary_gear' ? planetaryGearConventionForMechanism(selectedMechanism).ringPitchRadius.toFixed(2) : ''}
       data-three-planetary-carrier-radius={selectedMechanism?.type === 'planetary_gear' ? planetaryGearConventionForMechanism(selectedMechanism).carrierPitchRadius.toFixed(2) : ''}
+      data-three-fourbar-ground-link-plane={selectedMechanism?.type === '4bar' ? 'fabrication-stack-separated' : ''}
+      data-three-cam-contact-mode={selectedMechanism?.type === 'cam' ? 'sampled-profile-on-guide-axis' : ''}
+      data-cam-profile={selectedCamProfile}
       data-three-rack-x={fixed3(selectedTelemetry?.rackX)}
       data-three-rack-y={fixed3(selectedTelemetry?.rackY)}
       data-three-rack-guide-x={fixed3(selectedTelemetry?.rackGuideX)}
@@ -1930,14 +1976,17 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       data-three-scene-prop-ids={sceneObjects.map(object => object.id).join(',')}
       data-three-scene-object-screen-targets="[]"
       data-three-part-screen-targets="[]"
+      data-three-mechanism-screen-targets="[]"
       data-three-joint-count={joints.length}
       data-three-bone-count={bones.length}
       data-three-part-hole-count={holeCount}
+      data-three-hole-count={mechanismInventory.holes}
       data-three-path-count={pathsToRender.length}
       data-three-selected-path-id={selectedPathId ?? ''}
       data-three-mechanism-count={mechanismsToRender.length}
       data-three-mechanism-link-count={mechanismLinkCount}
       data-three-mechanism-hole-count={mechanismInventory.holes}
+      data-three-dynamic-build-count={estimatedObjectCount}
       data-three-slot-count={mechanismInventory.slots}
       data-three-gear-count={mechanismInventory.gears}
       data-three-rack-count={mechanismInventory.racks}

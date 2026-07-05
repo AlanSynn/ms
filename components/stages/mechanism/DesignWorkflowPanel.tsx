@@ -94,6 +94,7 @@ export const DesignWorkflowPanel = ({
         <div className="flex flex-wrap gap-2">
           <button
             className={`btn-secondary ${showTrace ? "active" : ""}`}
+            data-testid="design-toggle-trace"
             onClick={() => setShowTrace(!showTrace)}
           >
             Trace

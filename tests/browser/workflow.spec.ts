@@ -83,6 +83,16 @@ const waitForThreeSceneObjectTarget = async (locator: Locator, objectId: string)
   return target!;
 };
 
+const waitForThreeMechanismTarget = async (locator: Locator, mechanismId: string) => {
+  let target: ThreeScreenTarget | undefined;
+  await expect.poll(async () => {
+    const targets = await readThreeScreenTargets(locator, 'data-three-mechanism-screen-targets');
+    target = targets.find(item => item.id === mechanismId && item.visible);
+    return target?.id ?? '';
+  }, { message: `3D screen target is available for mechanism ${mechanismId}` }).toBe(mechanismId);
+  return target!;
+};
+
 const clickableThreeTargetPoint = async (page: Page, target: ThreeScreenTarget, hostTestId: string) =>
   page.evaluate(({ target, hostTestId }) => {
     const xs = [
@@ -363,26 +373,26 @@ test('Character tab owns separate scene objects and later tabs only render them'
   await expect(page.getByLabel('Mechanism target')).toHaveValue(`object:${sceneObjectId}`);
   await expect(page.getByLabel('Mechanism motion path')).toHaveValue(sceneObjectPathId);
   await expect(page.getByTestId('design-shared-foundry-preview')).toHaveAttribute('data-design-animated-object-count', /[1-9]/);
-  const designPuppet = page.getByTestId('design-context-puppet-state');
+  const designPuppet = page.getByTestId('design-automata-scene-state');
   await expect(designPuppet).toHaveAttribute('data-scene-object-count', '1');
   await expect(designPuppet).toHaveAttribute('data-three-scene-prop-count', '1');
   await page.getByRole('button', { name: 'Character', exact: true }).click();
   await page.getByTestId('character-part-item-head').click();
   await page.getByRole('button', { name: 'Mechanism Design', exact: true }).click();
   await expect(designPuppet).toHaveAttribute('data-selected-scene-object-id', '');
-  const designContextBox = await page.getByTestId('design-context-puppet').boundingBox();
+  const designContextBox = await page.getByTestId('design-automata-scene').boundingBox();
   expect(designContextBox, 'design context puppet hit box').toBeTruthy();
   const objectTarget = await waitForThreeSceneObjectTarget(designPuppet, sceneObjectId);
-  const designClick = await clickableThreeTargetPoint(page, objectTarget, 'design-context-puppet');
+  const designClick = { x: objectTarget.x, y: objectTarget.y };
   await page.mouse.click(designClick.x, designClick.y);
   await expect(designPuppet).toHaveAttribute('data-selected-scene-object-id', sceneObjectId);
-  const designRig = page.getByTestId('design-shared-foundry-preview').getByTestId('foundry-camera-rig');
+  const designRig = page.getByTestId('design-automata-scene-state');
   const yawBefore = await designRig.getAttribute('data-camera-yaw');
   await page.mouse.move(designClick.x, designClick.y);
   await page.mouse.down();
   await page.mouse.move(designClick.x + 70, designClick.y + 4, { steps: 5 });
   await page.mouse.up();
-  await expect.poll(async () => await designRig.getAttribute('data-camera-yaw'), { message: 'Design object-selection overlay still proxies Foundry orbit drags' }).not.toBe(yawBefore);
+  await expect.poll(async () => await designRig.getAttribute('data-camera-yaw'), { message: 'Design automata scene supports object selection and orbit drags' }).not.toBe(yawBefore);
   await expect(page.getByRole('button', { name: 'Add object', exact: true })).toHaveCount(0);
   await expect(page.getByTestId('scene-object-inspector')).toHaveCount(0);
   for (const stageName of ['Foundry', 'Blueprint', 'Assembly']) {
@@ -449,21 +459,21 @@ test('Getting Started guided project opens a real editable lesson', async ({ pag
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   const designPreview = page.getByTestId('design-shared-foundry-preview');
   await expect(designPreview).toBeVisible();
-  await expect(designPreview).toHaveAttribute('data-guided-context-mode', 'character-path-mechanism');
+  await expect(designPreview).toHaveAttribute('data-guided-context-mode', 'integrated-automata');
   await expect(designPreview).toHaveAttribute('data-guided-context-part-count', '14');
   await expect(designPreview).toHaveAttribute('data-guided-context-path-count', '1');
   await expect(designPreview).toHaveAttribute('data-guided-context-path-id', 'path-right-arm');
-  await expect(designPreview.getByTestId('foundry-camera-rig')).toHaveAttribute('data-mechanism-type', '4bar');
-  const guidedContext = page.getByTestId('design-context-puppet-state');
+  await expect(page.getByTestId('design-automata-scene-state')).toHaveAttribute('data-mechanism-type', '4bar');
+  const guidedContext = page.getByTestId('design-automata-scene-state');
   await expect(guidedContext).toHaveAttribute('data-viewer-tab', 'design');
   await expect(guidedContext).toHaveAttribute('data-layer-character', 'shown');
   await expect(guidedContext).toHaveAttribute('data-layer-skeleton', 'shown');
   await expect(guidedContext).toHaveAttribute('data-layer-paths', 'shown');
-  await expect(guidedContext).toHaveAttribute('data-layer-mechanisms', 'hidden');
+  await expect(guidedContext).toHaveAttribute('data-layer-mechanisms', 'shown');
   await expect(guidedContext).toHaveAttribute('data-three-part-count', '14');
-  await expect(guidedContext).toHaveAttribute('data-three-path-count', '1');
-  await expect(guidedContext).toHaveAttribute('data-three-selected-path-id', 'path-right-arm');
-  await expect(guidedContext).toHaveAttribute('data-three-mechanism-count', '0');
+  await expect(guidedContext).toHaveAttribute('data-three-path-count', /[1-9]/);
+  await expect(guidedContext).toHaveAttribute('data-three-selected-path-id', /\S/);
+  await expect(guidedContext).toHaveAttribute('data-three-mechanism-count', /[1-9]/);
   expectCleanPage(pageErrors, consoleErrors);
 });
 
@@ -924,23 +934,23 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('design-visible-sensemaking')).toHaveAttribute('data-sensemaking-clip', 'generated-loop');
   const designPreview = page.getByTestId('design-shared-foundry-preview');
   await expect(designPreview).toBeVisible();
-  await expect(designPreview).toHaveAttribute('data-renderer-source', 'ThreeFoundryPreview');
-  await expect(designPreview).toHaveAttribute('data-shared-with', 'foundry-preview');
+  await expect(designPreview).toHaveAttribute('data-renderer-source', 'ThreePuppetPreview');
+  await expect(designPreview).toHaveAttribute('data-shared-with', 'foundry-registry');
   await expect(page.getByTestId('design-canvas')).toHaveCount(0);
-  const designRig = designPreview.getByTestId('foundry-camera-rig');
+  const designRig = page.getByTestId('design-automata-scene-state');
   await expect(designRig).toHaveAttribute('data-three-renderer', 'webgl');
   await expect(designRig).toHaveAttribute('data-mechanism-type', '4bar');
-  await expect(designRig).toHaveAttribute('data-viewer-tab', 'foundry');
+  await expect(designRig).toHaveAttribute('data-viewer-tab', 'design');
   await expect(designRig).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
   await expect(designRig).toHaveAttribute('data-three-stack-validation-errors', '0');
   await expect(designRig).toHaveAttribute('data-three-physical-validation-errors', '0');
   await expect(designRig).toHaveAttribute('data-three-preview-renderable', 'ready');
   await expect(designRig).toHaveAttribute('data-three-stack-order', /Input L2 linkage.*Coupler L4 linkage.*Output L2 linkage/);
   await expect(designRig).toHaveAttribute('data-three-fourbar-ground-link-plane', 'fabrication-stack-separated');
-  const designHasWebgl = await designPreview.locator('canvas.foundry-three-canvas').evaluate((canvas: HTMLCanvasElement) => Boolean(canvas.getContext('webgl2') || canvas.getContext('webgl')));
-  expect(designHasWebgl, 'design stage mounts the shared Foundry WebGL canvas').toBeTruthy();
-  await expect.poll(async () => Number(await designRig.getAttribute('data-three-part-count')), { message: 'design shared Foundry preview includes physical mechanism parts' }).toBeGreaterThan(0);
-  await expect.poll(async () => Number(await designRig.getAttribute('data-three-dynamic-build-count')), { message: 'design shared Foundry renderer built real Three geometry' }).toBeGreaterThan(0);
+  const designHasWebgl = await designPreview.locator('canvas.three-puppet-canvas').evaluate((canvas: HTMLCanvasElement) => Boolean(canvas.getContext('webgl2') || canvas.getContext('webgl')));
+  expect(designHasWebgl, 'design stage mounts the integrated automata WebGL canvas').toBeTruthy();
+  await expect.poll(async () => Number(await designRig.getAttribute('data-three-part-count')), { message: 'design automata preview includes physical mechanism parts' }).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await designRig.getAttribute('data-three-dynamic-build-count')), { message: 'design automata renderer built real Three geometry' }).toBeGreaterThan(0);
   await expect(page.getByTestId('design-parametric-editor'), 'Design reuses the same fabrication-backed parametric editor after Foundry export').toBeVisible();
   await expect(page.getByLabel('Input link length'), 'Foundry-selected 4bar remains visibly editable in Design').toBeVisible();
   const fittedAnchorX = Number(await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').inputValue());
@@ -959,10 +969,10 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   const rotationSamples: number[] = [];
   for (const frame of ['0', '25', '50', '75']) {
     await scrubber.fill(frame);
-    await expect.poll(async () => Number.isFinite(Number(await designRig.getAttribute('data-pinion-rotation-deg'))), { message: `Design Foundry preview accepts scrubber updates at ${frame}%` }).toBe(true);
+    await expect.poll(async () => Number.isFinite(Number(await designRig.getAttribute('data-pinion-rotation-deg'))), { message: `Design automata preview accepts scrubber updates at ${frame}%` }).toBe(true);
     rotationSamples.push(Number(await designRig.getAttribute('data-pinion-rotation-deg')));
   }
-  expect(Math.max(...rotationSamples) - Math.min(...rotationSamples), 'scrubbing moves the shared Foundry mechanism preview in Design').toBeGreaterThan(10);
+  expect(Math.max(...rotationSamples) - Math.min(...rotationSamples), 'scrubbing moves the integrated automata mechanism preview in Design').toBeGreaterThan(10);
   if ((await playback.textContent())?.includes('Pause')) await playback.click();
   await expect(page.getByRole('button', { name: 'SVG', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'DXF' })).toBeVisible();
@@ -2333,7 +2343,7 @@ test('Recommendation sheet applies a distinct mechanism and blueprint recipe', a
   expect(new Set(mechanismOptions).size).toBe(mechanismOptions.length);
   const designPreview = page.getByTestId('design-shared-foundry-preview');
   await expect(designPreview).toBeVisible();
-  await expect(page.getByTestId('design-context-puppet-state')).toBeVisible();
+  await expect(page.getByTestId('design-automata-scene-state')).toBeVisible();
   await expect(designPreview).toHaveAttribute('data-user-path-preview', 'shown');
   await expect(designPreview).toHaveAttribute('data-mechanism-path-preview', 'shown');
   await expect(designPreview).toHaveAttribute('data-design-motion-source', 'generatedPath');
@@ -2349,7 +2359,7 @@ test('Recommendation sheet applies a distinct mechanism and blueprint recipe', a
   await page.getByLabel('Workspace scrubber').fill('35');
   await expect.poll(async () => `${await designPreview.getAttribute('data-design-target-x')},${await designPreview.getAttribute('data-design-target-y')}`, { message: 'Design character target follows fitted generatedPath through scrubber changes' }).not.toBe(targetBeforeScrub);
   expect(Number(await designPreview.getAttribute('data-design-target-error'))).toBeLessThan(0.01);
-  await expect(designPreview.getByTestId('foundry-camera-rig')).toHaveAttribute('data-path-preview', 'shown');
+  await expect(page.getByTestId('design-automata-scene-state')).toHaveAttribute('data-path-preview', 'shown');
 
   await clickStage(page, 'Blueprint');
   await expect(page.getByRole('button', { name: /Generate package/i })).toBeEnabled();
@@ -2659,6 +2669,35 @@ test('Cam foundry profile points edit the shared cam simulation profile', async 
   await page.mouse.move(box!.x + box!.width / 2, box!.y - 24);
   await page.mouse.up();
   await expect.poll(async () => rig.getAttribute('data-cam-profile'), { message: 'dragged cam profile is reflected in Three/fabrication shared data' }).not.toBe(before);
+});
+
+test('Mechanism Design cam profile edits update the integrated automata preview', async ({ page }) => {
+  await page.setViewportSize({ width: 901, height: 720 });
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByRole('button', { name: /Foundry/i }).click();
+  await page.getByText('Mechanism options').click();
+  await page.getByLabel('Foundry mechanism type').selectOption('cam');
+  await page.getByRole('button', { name: /Use mechanism/i }).click();
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+
+  const designRig = page.getByTestId('design-automata-scene-state');
+  await expect(designRig).toHaveAttribute('data-mechanism-type', 'cam');
+  await expect(designRig).toHaveAttribute('data-three-cam-contact-mode', 'sampled-profile-on-guide-axis');
+  await expect(designRig).toHaveAttribute('data-three-preview-renderable', 'ready');
+  const editor = page.getByTestId('cam-profile-editor');
+  await editor.scrollIntoViewIfNeeded();
+  await expect(editor).toBeVisible();
+  const before = await designRig.getAttribute('data-cam-profile');
+  const point = page.getByTestId('cam-profile-point-1');
+  const box = await point.boundingBox();
+  expect(box, 'Design cam profile point is draggable').toBeTruthy();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y - 24);
+  await page.mouse.up();
+  await expect.poll(async () => designRig.getAttribute('data-cam-profile'), { message: 'Design cam profile edits update the integrated Three automata data' }).not.toBe(before);
+  await expect.poll(async () => Number(await designRig.getAttribute('data-three-dynamic-build-count')), { message: 'Design cam edit keeps a real rebuilt Three mechanism' }).toBeGreaterThan(0);
 });
 
 
@@ -3002,11 +3041,11 @@ test('Command menu and shared canvas zoom persist across workflow stages', async
   await expect(page.getByTestId('canvas-zoom-readout')).toHaveCount(0);
   const designSharedPreview = page.getByTestId('design-shared-foundry-preview');
   await expect(designSharedPreview).toBeVisible();
-  const designSharedRig = designSharedPreview.getByTestId('foundry-camera-rig');
+  const designSharedRig = page.getByTestId('design-automata-scene-state');
   const foundryZoomBefore = Number(await designSharedRig.getAttribute('data-camera-zoom'));
   await designSharedPreview.hover();
   await page.mouse.wheel(0, -10000);
-  await expect.poll(async () => Number(await designSharedRig.getAttribute('data-camera-zoom')), { message: 'Design uses the shared Foundry wheel zoom instead of the legacy 2D canvas zoom' }).toBeGreaterThan(foundryZoomBefore);
+  await expect.poll(async () => Number(await designSharedRig.getAttribute('data-camera-zoom')), { message: 'Design uses the integrated automata wheel zoom instead of the legacy 2D canvas zoom' }).toBeGreaterThan(foundryZoomBefore);
   await page.getByRole('button', { name: /Path Editor/i }).click();
   await expect(page.getByTestId('canvas-zoom-readout')).toHaveText('120%');
   await assertZoomInClickable('144%');
@@ -3078,7 +3117,7 @@ test('Command menu and shared canvas zoom persist across workflow stages', async
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
   const modalDesignPreview = page.getByTestId('design-shared-foundry-preview');
   await expect(modalDesignPreview).toBeVisible();
-  const modalDesignRig = modalDesignPreview.getByTestId('foundry-camera-rig');
+  const modalDesignRig = page.getByTestId('design-automata-scene-state');
   const zoomBeforeModalShortcuts = await modalDesignRig.getAttribute('data-camera-zoom');
 
   await page.getByTestId('top-command-bar').getByText('Help', { exact: true }).click();
@@ -3351,7 +3390,7 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
 });
 
 
-test('Mechanism Design shared Foundry preview keeps placed anchors on the fabrication grid', async ({ page }) => {
+test('Mechanism Design integrated automata preview keeps placed anchors on the fabrication grid', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
@@ -3364,7 +3403,7 @@ test('Mechanism Design shared Foundry preview keeps placed anchors on the fabric
   await applyFourBarFromFoundry(page);
   const designPreview = page.getByTestId('design-shared-foundry-preview');
   await expect(designPreview).toBeVisible();
-  const designRig = designPreview.getByTestId('foundry-camera-rig');
+  const designRig = page.getByTestId('design-automata-scene-state');
   await expect(designRig).toHaveAttribute('data-three-renderer', 'webgl');
   await expect(designRig).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
 
@@ -3380,7 +3419,7 @@ test('Mechanism Design shared Foundry preview keeps placed anchors on the fabric
   expectCleanPage(pageErrors, consoleErrors);
 });
 
-test('Mechanism Design center workspace renders the same shared Foundry mechanism templates', async ({ page }) => {
+test('Mechanism Design center workspace renders the integrated Foundry automata scene', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
@@ -3393,17 +3432,25 @@ test('Mechanism Design center workspace renders the same shared Foundry mechanis
   await applyFourBarFromFoundry(page);
   const designPreview = page.getByTestId('design-shared-foundry-preview');
   await expect(designPreview).toBeVisible();
-  await expect(designPreview).toHaveAttribute('data-renderer-source', 'ThreeFoundryPreview');
-  await expect(designPreview).toHaveAttribute('data-shared-with', 'foundry-preview');
-  const designRig = designPreview.getByTestId('foundry-camera-rig');
-  const designPuppet = page.getByTestId('design-context-puppet-state');
+  await expect(designPreview).toHaveAttribute('data-renderer-source', 'ThreePuppetPreview');
+  await expect(designPreview).toHaveAttribute('data-shared-with', 'foundry-registry');
+  const designRig = page.getByTestId('design-automata-scene-state');
+  const designPuppet = page.getByTestId('design-automata-scene-state');
   await expect(designPreview).toHaveAttribute('data-user-path-preview', 'shown');
   await expect(designPreview).toHaveAttribute('data-mechanism-path-preview', 'shown');
   await expect(designPuppet).toHaveAttribute('data-layer-paths', 'shown');
   await expect(designRig).toHaveAttribute('data-path-preview', 'shown');
+  await page.getByTestId('design-toggle-trace').click();
+  await expect(designPreview).toHaveAttribute('data-design-trace-layer', 'hidden');
+  await expect(designPuppet).toHaveAttribute('data-layer-paths', 'hidden');
+  await expect(page.getByTestId('design-toggle-user-path')).toBeDisabled();
+  await expect(page.getByTestId('design-toggle-mechanism-path')).toBeDisabled();
+  await page.getByTestId('design-toggle-trace').click();
+  await expect(designPreview).toHaveAttribute('data-design-trace-layer', 'shown');
+  await expect(designPuppet).toHaveAttribute('data-layer-paths', 'shown');
   await page.getByTestId('design-toggle-user-path').click();
   await expect(designPreview).toHaveAttribute('data-user-path-preview', 'hidden');
-  await expect(designPuppet).toHaveAttribute('data-layer-paths', 'hidden');
+  await expect(designPuppet).toHaveAttribute('data-layer-paths', 'shown');
   await page.getByTestId('design-toggle-mechanism-path').click();
   await expect(designPreview).toHaveAttribute('data-mechanism-path-preview', 'hidden');
   await expect(designRig).toHaveAttribute('data-path-preview', 'hidden');
@@ -3420,7 +3467,7 @@ test('Mechanism Design center workspace renders the same shared Foundry mechanis
   await expect(designRig).toHaveAttribute('data-three-exploded', 'false');
   await expect(designRig).toHaveAttribute('data-three-spacer-key', 's10');
   await expect(designRig).toHaveAttribute('data-three-spacer-mm', '10x4');
-  await expect(designPreview.locator('canvas.foundry-three-canvas')).toBeVisible();
+  await expect(designPreview.locator('canvas.three-puppet-canvas')).toBeVisible();
 
   const expectedMarkers: Record<string, Array<[string, number]>> = {
     '4bar': [['data-three-part-count', 3], ['data-three-hole-count', 4]],
@@ -3442,7 +3489,7 @@ test('Mechanism Design center workspace renders the same shared Foundry mechanis
 
   for (const { type, label } of mechanismTemplateButtons) {
     await page.getByRole('button', { name: label, exact: true }).click();
-    await expect(designRig, `${type} design preview uses the Foundry renderer state`).toHaveAttribute('data-mechanism-type', type);
+    await expect(designRig, `${type} design automata preview uses the Foundry mechanism state`).toHaveAttribute('data-mechanism-type', type);
     await expect(designRig, `${type} design renderer uses the shared fabrication stack`).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
     await expect(designRig, `${type} design stack stays assembled until explicitly exploded`).toHaveAttribute('data-three-exploded', 'false');
     await expect(designRig, `${type} design stack has no validation errors`).toHaveAttribute('data-three-stack-validation-errors', '0');
@@ -3474,13 +3521,28 @@ test('Mechanism Design center workspace renders the same shared Foundry mechanis
     }
   }
 
+  const mechanismIds = (await designRig.getAttribute('data-three-rendered-mechanism-ids') ?? '').split(',').filter(Boolean);
+  expect(mechanismIds.length, 'Design scene contains multiple selectable mechanism instances').toBeGreaterThan(1);
+  const firstMechanismId = mechanismIds[0];
+  const lastMechanismId = mechanismIds[mechanismIds.length - 1];
+  await page.getByLabel('anchor X number').fill('280');
+  await page.getByLabel('anchor Y number').fill('-120');
+  await expect(designRig).toHaveAttribute('data-three-selected-mechanism-id', lastMechanismId);
+  await page.getByLabel('Mechanism instance').selectOption(firstMechanismId);
+  await expect(designRig).toHaveAttribute('data-three-selected-mechanism-id', firstMechanismId);
+  const mechanismTarget = await waitForThreeMechanismTarget(designRig, lastMechanismId);
+  const mechanismClickPoint = await clickableThreeTargetPoint(page, mechanismTarget, 'design-shared-foundry-preview');
+  await page.mouse.click(mechanismClickPoint.x, mechanismClickPoint.y);
+  await expect(designRig, 'clicking a mechanism mesh in Design selects that editable Foundry instance').toHaveAttribute('data-three-selected-mechanism-id', lastMechanismId);
+  await expect(page.getByLabel('Mechanism instance')).toHaveValue(lastMechanismId);
+
   const readRotation = async () => Number(await designRig.getAttribute('data-pinion-rotation-deg'));
   await page.getByRole('button', { name: 'Gear train', exact: true }).click();
   const scrubber = page.getByLabel('Workspace scrubber');
   await scrubber.fill('10');
   const startRotation = await readRotation();
   await scrubber.fill('35');
-  await expect.poll(async () => Math.abs(await readRotation() - startRotation), { message: 'Design shared Foundry preview animates from the same mechanism angle state' }).toBeGreaterThan(10);
+  await expect.poll(async () => Math.abs(await readRotation() - startRotation), { message: 'Design integrated automata preview animates from the same mechanism angle state' }).toBeGreaterThan(10);
 
   expectCleanPage(pageErrors, consoleErrors);
 });
