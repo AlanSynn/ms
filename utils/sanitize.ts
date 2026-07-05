@@ -1,6 +1,9 @@
 import { MechanismConfig, MechanismType, Point } from '../types';
 import { normalizeMechanismToFabricationSet } from './mechanismReference';
 import { ALL_MECHANISM_TYPES } from './mechanismTemplates';
+import { finiteNumber, svgNumber } from './numberFormat';
+
+export { finiteNumber, svgNumber } from './numberFormat';
 
 export const MECHANISM_TYPES: MechanismType[] = [...ALL_MECHANISM_TYPES];
 
@@ -15,23 +18,9 @@ export const sanitizeHexColor = (value: unknown, fallback = '#64748b'): string =
     return /^#[0-9a-fA-F]{3,8}$/.test(trimmed) ? trimmed : fallback;
 };
 
-export const finiteNumber = (value: unknown, fallback = 0): number => {
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
-    if (typeof value === 'string' && value.trim() !== '') {
-        const parsed = Number(value);
-        if (Number.isFinite(parsed)) return parsed;
-    }
-    return fallback;
-};
-
 export const clampNumber = (value: unknown, fallback: number, min: number, max: number): number => {
     const parsed = finiteNumber(value, fallback);
     return Math.min(max, Math.max(min, parsed));
-};
-
-export const svgNumber = (value: unknown, fallback = 0): string => {
-    const parsed = finiteNumber(value, fallback);
-    return Number.isInteger(parsed) ? String(parsed) : parsed.toFixed(2);
 };
 
 export const sanitizePoint = (point: Point | unknown, fallback: Point = { x: 0, y: 0 }): Point => {

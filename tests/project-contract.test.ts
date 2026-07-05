@@ -9,8 +9,9 @@ import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { boardGridLines, boardToScene, bodyPartPivotScene, physicalKitPreset, placeBodyPartPivotAt, SCENE_PX_PER_MM, sceneToBoard, sceneToBoardRaw, sceneToSheetMm, sceneToSvg, sheetMmToScene } from '../utils/coordinates';
 import { CLASSROOM_LESSONS, classroomLessonById, createDefaultMechanism, createEmptyProject, createLessonProject, createSampleProject, handoffGate, loadProjectSnapshot, serializeProject, applyProjectAction, projectSelfCheck, mechanismRequiredParts, mechanismWithGeneratedPath, replaceCharacterProject, resetProjectToLessonBaseline } from '../utils/project';
-import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, PLANETARY_GEAR_PLANET_COUNT, fabricationBoardColumnLabel, fabricationBoardCoordinateCallout, fabricationBoardRowLabel, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRingGearPathD, fabricationRenderPlanForMechanism, fabricationStackForMechanism, planetaryPlanetCenters, prefabAssemblySteps, sampleFeasibleRange, validateFabricationStack, validateForFabrication, validateMechanismPreviewReadiness } from '../utils/fabrication';
+import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, PLANETARY_GEAR_PLANET_COUNT, fabricationBoardColumnLabel, fabricationBoardCoordinateCallout, fabricationBoardRowLabel, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRenderPlanForMechanism, fabricationStackForMechanism, planetaryPlanetCenters, prefabAssemblySteps, sampleFeasibleRange, validateFabricationStack, validateForFabrication, validateMechanismPreviewReadiness } from '../utils/fabrication';
 import { FABRICATION_GEAR_ROOT_WEB_MM, fabricationGearEngravingLabel, fabricationLinkageEngravingLabel, fabricationRingGearEngravingLabel, fabricationSpacerEngravingLabel } from '../utils/fabricationContract';
+import { fabricationGearPathD as profileFabricationGearPathD, fabricationGearProfileForPitchRadius as profileFabricationGearProfileForPitchRadius, fabricationRingGearPathD as profileFabricationRingGearPathD, fabricationRingGearProfileForPitchRadius as profileFabricationRingGearProfileForPitchRadius } from '../utils/fabricationProfiles';
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
 import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainMeshPhaseDegAt, gearTrainMeshPhaseRadAt, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, gearTrainResolvedCenterDistance, gearTrainRotationRatioAt, generateCurvePoints, generateMechanismPointTraces, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius, sampledCamProfileScale } from '../utils/kinematics';
@@ -293,6 +294,13 @@ assert(normalizedCodebaseCleanupPlan.includes('`components/shell/WorkflowStatusS
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/assembly/assemblyGeometry.ts` | 97') && normalizedCodebaseCleanupPlan.includes('DOM-free Assembly coordinate, smoothing, and character projector helpers'), 'cleanup plan records the extracted assembly geometry/projector seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/assembly/useAssemblyGuidePlayback.ts` | 75') && normalizedCodebaseCleanupPlan.includes('Assembly shared-player step count, reset-to-zero/stop, step clamp, and rAF progress loop'), 'cleanup plan records the extracted Assembly playback/reset hook seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/assembly/assemblyGuideModel.ts` | 100') && normalizedCodebaseCleanupPlan.includes('Assembly live recipe fallback, character/mechanism mode resolution, active steps, selected display step, and playback reset key'), 'cleanup plan records the extracted Assembly guide model seam');
+assert(
+  normalizedCodebaseCleanupPlan.includes('`utils/fabricationProfiles.ts` | 127')
+  && normalizedCodebaseCleanupPlan.includes('gear/ring profile geometry and SVG path derivation live outside the fabrication runtime')
+  && normalizedCodebaseCleanupPlan.includes('`utils/numberFormat.ts` | 13')
+  && normalizedCodebaseCleanupPlan.includes('neutral finite/svg number formatting lives outside broad import sanitizing'),
+  'cleanup plan records the extracted fabrication profile and number formatting seams'
+);
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintExport.tsx` | 88') && normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintControlPanel.tsx` | 258') && normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintDetailPanel.tsx` | 100') && normalizedCodebaseCleanupPlan.includes('Blueprint left workflow controls, package generation, download buttons, and recipe list live outside the stage wrapper') && normalizedCodebaseCleanupPlan.includes('Blueprint right inspector recipe title, board callout, sensemaking cue, required-part chips, stack summary, and export grid status live outside the stage wrapper'), 'cleanup plan records the extracted Blueprint control/detail panel seams');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
 assert(readFileSync(join(process.cwd(), 'utils', 'projectPersistence.ts'), 'utf8').includes('motionsmith.autosave') && readFileSync(join(process.cwd(), 'utils', 'projectPersistence.ts'), 'utf8').includes('motionsmith.workspace'), 'local storage namespace uses the MotionSmith slug for persistent state');
@@ -416,6 +424,7 @@ const visibleUiSource = [
   'components/stages/assembly/MechanismAssemblyWorkbench.tsx',
   'components/stages/assembly/CharacterAssemblyWorkbench.tsx',
   'utils/fabrication.ts',
+  'utils/fabricationProfiles.ts',
   'utils/assemblyPlayback.ts',
   'utils/mechanismTemplates.ts',
   'utils/appCommands.ts'
@@ -1293,7 +1302,9 @@ assert(fabricationGeneratorText.includes('GearPreset("g24", "G3 / 3-space gear",
 assert(fabricationGeneratorText.includes('FollowerPreset("f4-roller"'), 'fabrication generator owns the roller follower preset used by Foundry');
 assert(fabricationGeneratorText.includes('SOURCE_SSOT = "fabrication/generate_fabrication_templates.py"'), 'fabrication manifest source points at the checked-in generator');
 const fabricationRuntimeText = readFileSync(join(process.cwd(), 'utils', 'fabrication.ts'), 'utf8');
+const fabricationProfilesText = readFileSync(join(process.cwd(), 'utils', 'fabricationProfiles.ts'), 'utf8');
 const fabricationContractText = readFileSync(join(process.cwd(), 'utils', 'fabricationContract.ts'), 'utf8');
+const numberFormatText = readFileSync(join(process.cwd(), 'utils', 'numberFormat.ts'), 'utf8');
 assert(fabricationContractText.includes(FABRICATION_SOURCE_SSOT), 'runtime fabrication contract declares the Python generator as source of truth');
 assert(fabricationContractText.includes('FABRICATION_GEAR_RADIUS_PER_TOOTH_MM = 1.25'), 'runtime fabrication contract keeps the generator gear radius/tooth rule centralized');
 assert(fabricationContractText.includes('FABRICATION_GEAR_ROOT_WEB_MM = 6'), 'runtime fabrication contract mirrors the generator gear root web rule');
@@ -1307,6 +1318,43 @@ const mechanismReferenceText = readFileSync('docs/mechanism-reference/03-mechani
 assert(mechanismReferenceText.includes('external gear train are coplanar on fixed board axles'), 'gear train mechanism reference requires inserted idler gears to share one pitch plane');
 assert(mechanismReferenceText.includes('must pass through the gear centre and the adjacent board-side `S10` spacer'), 'gear train mechanism reference requires visible axles to pass through gears and local board-side spacers');
 assert(fabricationRuntimeText.includes("from './fabricationContract'"), 'fabrication runtime consumes centralized fabricationContract instead of hardcoded primitive tables');
+assert(
+  fabricationRuntimeText.includes("from './fabricationProfiles'")
+  && fabricationRuntimeText.includes("from './numberFormat'")
+  && fabricationProfilesText.includes("from './fabricationContract'")
+  && fabricationProfilesText.includes("from './numberFormat'"),
+  'fabrication runtime re-exports pure gear/ring profile helpers from a cycle-free fabricationProfiles seam and neutral number formatting'
+);
+[
+  './fabrication',
+  './sanitize',
+  './project',
+  './exporter',
+  './physicsKernel',
+  './mechanismReference',
+  './mechanismTemplates',
+  '../components',
+  'react',
+  'three',
+  '@dimforge/rapier3d-compat'
+].forEach(moduleName => {
+  assert(
+    !fabricationProfilesText.includes(`from '${moduleName}'`) && !fabricationProfilesText.includes(`from "${moduleName}"`),
+    `fabricationProfiles stays pure and must not import ${moduleName}`
+  );
+});
+[
+  'ProjectState',
+  'FabricationPackage',
+  'createFabricationPackage',
+  'document.',
+  'window.',
+  'localStorage',
+  'createElement'
+].forEach(forbiddenText => {
+  assert(!fabricationProfilesText.includes(forbiddenText), `fabricationProfiles stays geometry-only and must not reference ${forbiddenText}`);
+});
+assert(numberFormatText.includes('export const finiteNumber') && numberFormatText.includes('export const svgNumber'), 'neutral numberFormat seam owns finite/svg number formatting without domain imports');
 assert(!fabricationRuntimeText.includes("rootRadiusMm: 28.438"), 'runtime gear constants are no longer duplicated outside the centralized contract');
 assert.equal(fabricationManifest.generated_by, 'fabrication/generate_fabrication_templates.py', 'fabrication manifest generated_by matches the checked-in generator');
 assert.equal(fabricationManifest.source_ssot, 'fabrication/generate_fabrication_templates.py', 'fabrication manifest source_ssot matches the checked-in generator');
@@ -1911,6 +1959,12 @@ assert(Math.abs(gearTrainMeshPhaseRadAt([60, 60], 1) - Math.PI / 16) < 1e-9, 'ge
 assert(fabricationGearPathD(30, 30).startsWith('M 28.44 0 L 31.43 2.06 L 31.23 4.11'), 'shared SVG gear path matches fabrication gear outline convention');
 assert(fabricationRingGearPathD(70).includes('M 90 0 A 90 90'), 'shared SVG ring gear path carries fabrication outer ring geometry');
 assert(fabricationRingGearPathD(70).includes('68.54'), 'shared SVG ring gear path carries internal tooth geometry');
+const ringProfile = fabricationRingGearProfileForPitchRadius(70);
+assert.equal(ringProfile.mountHoleRadius, FABRICATION_HOLE_RADIUS_MM * (ringProfile.pitchRadius / FABRICATION_RING_GEAR_SPEC.pitchRadiusMm), 'ring gear profile preserves scaled mount-hole radius from the fabrication facade');
+assert.deepEqual(profileFabricationGearProfileForPitchRadius(60, 30), g24Profile, 'fabricationProfiles preserves public gear profile behavior behind the fabrication facade');
+assert.equal(profileFabricationGearPathD(30, 30), fabricationGearPathD(30, 30), 'fabricationProfiles preserves public gear SVG path behavior behind the fabrication facade');
+assert.deepEqual(profileFabricationRingGearProfileForPitchRadius(70), ringProfile, 'fabricationProfiles preserves public ring gear profile behavior behind the fabrication facade');
+assert.equal(profileFabricationRingGearPathD(70), fabricationRingGearPathD(70), 'fabricationProfiles preserves public ring gear SVG path behavior behind the fabrication facade');
 const defaultPlanetary = createDefaultMechanism('planetary_gear');
 const planetaryLinkLengths = fabricationLinkageSceneLengthsForMechanism(defaultPlanetary);
 assert.equal(planetaryLinkLengths.driver, defaultPlanetary.groundLength, 'planetary carrier linkage blank uses carrier radius, not short sun or planet radius');
