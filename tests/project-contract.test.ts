@@ -12,6 +12,7 @@ import { CLASSROOM_LESSONS, classroomLessonById, createDefaultMechanism, createE
 import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, PLANETARY_GEAR_PLANET_COUNT, fabricationBoardColumnLabel, fabricationBoardCoordinateCallout, fabricationBoardRowLabel, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, makeBlueprintPreviewSvg, makeBlueprintSvg, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRenderPlanForMechanism, fabricationStackForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryPlanetCenters, prefabAssemblySteps, readableFabricationStackSummary, sampleFeasibleRange, validateFabricationStack, validateForFabrication, validateMechanismPreviewReadiness } from '../utils/fabrication';
 import { FABRICATION_GEAR_ROOT_WEB_MM, fabricationGearEngravingLabel, fabricationLinkageEngravingLabel, fabricationRingGearEngravingLabel, fabricationSpacerEngravingLabel } from '../utils/fabricationContract';
 import { makeBlueprintPreviewSvg as directMakeBlueprintPreviewSvg, makeBlueprintSvg as directMakeBlueprintSvg } from '../utils/fabricationBlueprintSvg';
+import { buildCharacterPrintLayout as directBuildCharacterPrintLayout } from '../utils/fabricationCharacterPrintLayout';
 import { fabricationGearPathD as profileFabricationGearPathD, fabricationGearProfileForPitchRadius as profileFabricationGearProfileForPitchRadius, fabricationRingGearPathD as profileFabricationRingGearPathD, fabricationRingGearProfileForPitchRadius as profileFabricationRingGearProfileForPitchRadius } from '../utils/fabricationProfiles';
 import { closePhysicalValue as readinessClosePhysicalValue, closeToBoardPitch as readinessCloseToBoardPitch, closeToFabricationLinkage as readinessCloseToFabricationLinkage, physicalTolerance as readinessPhysicalTolerance, sampleFeasibleRange as readinessSampleFeasibleRange } from '../utils/fabricationReadiness';
 import { FABRICATION_RENDER_LAYER_Z_STEP as renderPlanLayerZStep, FABRICATION_RENDER_MIN_CLEARANCE as renderPlanMinClearance, FABRICATION_RENDER_PART_DEPTH as renderPlanPartDepth, fabricationRenderPlanForMechanism as renderPlanForMechanism, validateFabricationStack as renderPlanValidateFabricationStack } from '../utils/fabricationRenderPlan';
@@ -316,8 +317,10 @@ assert(
   && normalizedCodebaseCleanupPlan.includes('`utils/fabricationSizing.ts` | 121')
   && normalizedCodebaseCleanupPlan.includes('pure planetary gear convention and linkage sizing')
   && normalizedCodebaseCleanupPlan.includes('`utils/simplePdf.ts` | 43')
-  && normalizedCodebaseCleanupPlan.includes('import-free PDF document primitives'),
-  'cleanup plan records the extracted fabrication profile, number formatting, stack model, readiness, render-plan, Blueprint SVG, sizing, and PDF primitive seams'
+  && normalizedCodebaseCleanupPlan.includes('import-free PDF document primitives')
+  && normalizedCodebaseCleanupPlan.includes('`utils/fabricationCharacterPrintLayout.ts`')
+  && normalizedCodebaseCleanupPlan.includes('pure character cut-sheet layout model'),
+  'cleanup plan records the extracted fabrication profile, number formatting, stack model, readiness, render-plan, Blueprint SVG, sizing, PDF primitive, and character print layout seams'
 );
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintExport.tsx` | 88') && normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintControlPanel.tsx` | 258') && normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintDetailPanel.tsx` | 100') && normalizedCodebaseCleanupPlan.includes('Blueprint left workflow controls, package generation, download buttons, and recipe list live outside the stage wrapper') && normalizedCodebaseCleanupPlan.includes('Blueprint right inspector recipe title, board callout, sensemaking cue, required-part chips, stack summary, and export grid status live outside the stage wrapper'), 'cleanup plan records the extracted Blueprint control/detail panel seams');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
@@ -1343,6 +1346,7 @@ const fabricationRenderPlanText = readFileSync(join(process.cwd(), 'utils', 'fab
 const fabricationSizingText = readFileSync(join(process.cwd(), 'utils', 'fabricationSizing.ts'), 'utf8');
 const fabricationStackModelText = readFileSync(join(process.cwd(), 'utils', 'fabricationStackModel.ts'), 'utf8');
 const simplePdfSourceText = readFileSync(join(process.cwd(), 'utils', 'simplePdf.ts'), 'utf8');
+const fabricationCharacterPrintLayoutText = readFileSync(join(process.cwd(), 'utils', 'fabricationCharacterPrintLayout.ts'), 'utf8');
 const fabricationContractText = readFileSync(join(process.cwd(), 'utils', 'fabricationContract.ts'), 'utf8');
 const numberFormatText = readFileSync(join(process.cwd(), 'utils', 'numberFormat.ts'), 'utf8');
 const staticImportModules = (source: string) => Array.from(new Set([
@@ -1371,9 +1375,10 @@ assert(
   && fabricationRuntimeText.includes("from './fabricationStackModel'")
   && fabricationRuntimeText.includes("from './numberFormat'")
   && fabricationRuntimeText.includes("from './simplePdf'")
+  && fabricationRuntimeText.includes("from './fabricationCharacterPrintLayout'")
   && fabricationProfilesText.includes("from './fabricationContract'")
   && fabricationProfilesText.includes("from './numberFormat'"),
-  'fabrication runtime consumes extracted profile/stack/render helpers, PDF primitives, and Blueprint SVG renderers from focused seams'
+  'fabrication runtime consumes extracted profile/stack/render helpers, character print layout, PDF primitives, and Blueprint SVG renderers from focused seams'
 );
 [
   './fabrication',
@@ -1604,6 +1609,45 @@ assert.deepEqual(
   '@dimforge/rapier3d-compat'
 ].forEach(forbiddenText => {
   assert(!simplePdfSourceText.includes(forbiddenText), `simplePdf stays domain-free and must not reference ${forbiddenText}`);
+});
+assert.deepEqual(
+  staticImportModules(fabricationCharacterPrintLayoutText),
+  ['../types', './coordinates', './partGeometry'].sort(),
+  'fabricationCharacterPrintLayout owns character cut-sheet layout with an exact pure import set'
+);
+[
+  './fabrication',
+  './fabricationContract',
+  './project',
+  './exporter',
+  './physicsKernel',
+  './sanitize',
+  '../components',
+  'react',
+  'three',
+  '@dimforge/rapier3d-compat'
+].forEach(moduleName => {
+  assert(
+    !fabricationCharacterPrintLayoutText.includes(`from '${moduleName}'`) && !fabricationCharacterPrintLayoutText.includes(`from "${moduleName}"`),
+    `fabricationCharacterPrintLayout stays pure and must not import ${moduleName}`
+  );
+});
+[
+  'FabricationPackage',
+  'FabricationRecipe',
+  'MechanismConfig',
+  'createFabricationPackage',
+  'validateForFabrication',
+  'makeCustomPartsSvg',
+  'makeCustomPartsPdf',
+  'makeCustomPartsStl',
+  'makeAssemblyGuideHtml',
+  'document.',
+  'window.',
+  'localStorage',
+  'createElement'
+].forEach(forbiddenText => {
+  assert(!fabricationCharacterPrintLayoutText.includes(forbiddenText), `fabricationCharacterPrintLayout stays layout-only and must not reference ${forbiddenText}`);
 });
 assert(numberFormatText.includes('export const finiteNumber') && numberFormatText.includes('export const svgNumber'), 'neutral numberFormat seam owns finite/svg number formatting without domain imports');
 assert(!fabricationRuntimeText.includes("rootRadiusMm: 28.438"), 'runtime gear constants are no longer duplicated outside the centralized contract');
@@ -2924,6 +2968,32 @@ const twoFourBars = {
 const pkg = createFabricationPackage(twoFourBars);
 assert.equal(directMakeBlueprintSvg(twoFourBars, pkg.recipes), makeBlueprintSvg(twoFourBars, pkg.recipes), 'fabrication facade preserves the direct printable Blueprint SVG renderer');
 assert.equal(directMakeBlueprintPreviewSvg(twoFourBars, pkg.recipes), makeBlueprintPreviewSvg(twoFourBars, pkg.recipes), 'fabrication facade preserves the direct readable Blueprint preview renderer');
+const visibleCharacterPartIds = twoFourBars.partOrder.filter(partId => twoFourBars.parts[partId]?.visible);
+const characterPrintLayout = directBuildCharacterPrintLayout(twoFourBars);
+assert.equal(characterPrintLayout.parts.length, visibleCharacterPartIds.length, 'character print layout includes every visible character part exactly once');
+assert(characterPrintLayout.scale > 0 && characterPrintLayout.scale <= 1, 'character print layout keeps a bounded positive page scale');
+assert(characterPrintLayout.holeRadiusMm >= 0.5, 'character print layout keeps printable joint holes above the minimum radius');
+assert(characterPrintLayout.parts.every(item => visibleCharacterPartIds.includes(item.part.id) && item.outlineMm.length >= 3 && item.holeMm.length > 0), 'character print layout emits printable outlines and holes for visible parts');
+const lowerArmPrintLayout = characterPrintLayout.parts.find(item => item.part.id === 'right_arm_lower');
+assert(lowerArmPrintLayout && Number.isFinite(lowerArmPrintLayout.printCenterMm.x) && Number.isFinite(lowerArmPrintLayout.printCenterMm.y), 'character print layout keeps known sample part placement finite');
+const roundedLayoutPoint = (point: Point) => ({ x: Number(point.x.toFixed(3)), y: Number(point.y.toFixed(3)) });
+assert.deepEqual(
+  lowerArmPrintLayout && {
+    printCenter: roundedLayoutPoint(lowerArmPrintLayout.printCenterMm),
+    sourceCenter: roundedLayoutPoint(lowerArmPrintLayout.sourceCenterMm),
+    firstOutline: roundedLayoutPoint(lowerArmPrintLayout.outlineMm[0]),
+    outlineCount: lowerArmPrintLayout.outlineMm.length,
+    holeCount: lowerArmPrintLayout.holeMm.length
+  },
+  {
+    printCenter: { x: 175.347, y: 127.947 },
+    sourceCenter: { x: 165.623, y: 130.277 },
+    firstOutline: { x: 160.571, y: 116.45 },
+    outlineCount: 14,
+    holeCount: 2
+  },
+  'character print layout preserves rounded sample placement for the right lower arm'
+);
 assert(simplePdfDocument('BT ET').startsWith('%PDF-1.4'), 'simplePdf creates a PDF document');
 const simplePdfSinglePage = simplePdfMakeSimplePdf('Title', ['Line']);
 assert(simplePdfSinglePage.startsWith('%PDF-1.4') && simplePdfSinglePage.includes('(Title)') && simplePdfSinglePage.includes('(Line)'), 'simplePdf single-page helper preserves visible text lines');
@@ -2941,7 +3011,7 @@ assert(pkg.customPartsSvg.includes(`width="${twoFourBars.settings.physicalKit.sh
 assert(pkg.customPartsSvg.includes(`viewBox="0 0 ${twoFourBars.settings.physicalKit.sheetWidthMm} ${twoFourBars.settings.physicalKit.sheetHeightMm}"`), 'character custom parts SVG uses the letter page coordinate system');
 assert(pkg.customPartsSvg.includes('data-character-print-page="letter"') && pkg.customPartsSvg.includes('data-character-print-mode="whole-character-exploded"'), 'character custom parts SVG declares whole-character exploded print mode');
 assert(pkg.customPartsSvg.includes('data-character-exploded-sheet'), 'character custom parts SVG groups all parts on one exploded sheet');
-twoFourBars.partOrder.filter(partId => twoFourBars.parts[partId]?.visible).forEach(partId => {
+visibleCharacterPartIds.forEach(partId => {
   assert(pkg.customPartsSvg.includes(`data-part-id="${partId}"`), `character custom parts SVG includes visible part ${partId} on the one-page sheet`);
 });
 assert(pkg.customPartsPdf.startsWith('%PDF-') && pkg.customPartsPdf.includes('whole-character-exploded'), 'fabrication package includes a one-page exploded character PDF artifact');
