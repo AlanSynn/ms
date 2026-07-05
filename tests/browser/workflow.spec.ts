@@ -2179,6 +2179,11 @@ test('Recommendation sheet applies a distinct mechanism and blueprint recipe', a
   await expect(page.getByTestId('recommendation-sheet')).toBeVisible();
   await expect(page.getByTestId('recommendation-sheet')).toContainText('Recommended mechanisms');
   await expect(page.getByTestId('recommendation-card-4bar')).toBeVisible();
+  const fitPreview = page.getByTestId('recommendation-fit-preview-4bar');
+  await expect(fitPreview).toHaveAttribute('data-board-cells', '15');
+  await expect(fitPreview).toHaveAttribute('data-user-path-preview', 'shown');
+  await expect(fitPreview).toHaveAttribute('data-mechanism-path-preview', 'shown');
+  await expect(page.getByTestId('recommendation-linkage-4bar')).toBeVisible();
   await page.getByTestId('recommendation-card-4bar').getByRole('button', { name: /^Use$/ }).click();
   await expect(page.getByTestId('recommendation-sheet')).toHaveCount(0);
   const mechanismOptions = await page.getByLabel('Mechanism instance').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));

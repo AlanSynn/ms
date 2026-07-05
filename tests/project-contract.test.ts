@@ -276,11 +276,11 @@ assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/Char
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/CharacterImportControls.tsx` | 103') && normalizedCodebaseCleanupPlan.includes('character import entry controls live outside the app shell'), 'cleanup plan records the extracted character import controls seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/CharacterSelection.tsx` | 259') && normalizedCodebaseCleanupPlan.includes('Character stage wrapper lives outside the app shell'), 'cleanup plan records the extracted CharacterSelection stage seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/path/PathEditor.tsx` | 376') && normalizedCodebaseCleanupPlan.includes('Path stage wrapper lives outside the app shell'), 'cleanup plan records the extracted PathEditor stage seam');
-assert(normalizedCodebaseCleanupPlan.includes('`components/stages/path/MechanismRecommendationSheet.tsx` | 127') && normalizedCodebaseCleanupPlan.includes('Path recommendation modal lives outside the app shell'), 'cleanup plan records the extracted Path recommendation modal seam');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/path/MechanismRecommendationSheet.tsx` | 230') && normalizedCodebaseCleanupPlan.includes('Path recommendation modal lives outside the app shell and previews board-fit overlays'), 'cleanup plan records the extracted Path recommendation modal seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/path/SceneSketch.tsx` | 398') && normalizedCodebaseCleanupPlan.includes('editable 2D path canvas owns SVG pointer/draw wiring'), 'cleanup plan records the extracted SceneSketch canvas seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/path/PartShape.tsx` | 132') && normalizedCodebaseCleanupPlan.includes('Path Editor part rendering owns artwork/plate clipping'), 'cleanup plan records the extracted Path part rendering seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/mechanism/mechanismParamPolicy.ts` | 88') && normalizedCodebaseCleanupPlan.includes('numeric parameter metadata, visibility policy, and clamping'), 'cleanup plan records the extracted mechanism parameter policy seam');
-assert(normalizedCodebaseCleanupPlan.includes('`utils/mechanismRecommendations.ts` | 633') && normalizedCodebaseCleanupPlan.includes('pure recommendation/fitting seam'), 'cleanup plan records the extracted mechanism recommendation seam');
+assert(normalizedCodebaseCleanupPlan.includes('`utils/mechanismRecommendations.ts` | 637') && normalizedCodebaseCleanupPlan.includes('pure recommendation/fitting seam'), 'cleanup plan records the extracted mechanism recommendation seam');
 assert(normalizedCodebaseCleanupPlan.includes('`utils/foundryCamera.ts` | 140') && normalizedCodebaseCleanupPlan.includes('pure Foundry camera/projection seam'), 'cleanup plan records the extracted Foundry camera seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/MechanismLinkagePreview.tsx` | 800') && normalizedCodebaseCleanupPlan.includes('Foundry SVG mechanism preview leaf lives outside the app shell and delegates pure topology/path helpers') && normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/mechanismLinkagePreviewHelpers.ts` | 76'), 'cleanup plan records the extracted Foundry SVG preview helper seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/foundryPreviewGeometry.ts` | 23') && normalizedCodebaseCleanupPlan.includes('fitted gear-center helper shared by SVG and Three previews'), 'cleanup plan records the shared Foundry preview geometry helper seam');
@@ -2736,7 +2736,19 @@ foundryExportHarness.actions.exportFoundryMechanism(foundryExportPackage);
 assert.deepEqual(foundryExportHarness.dispatches.map(action => action.type), ['set_foundry_export', 'upsert_mechanism'], 'Foundry export action preserves dispatch order');
 assert.equal(foundryExportHarness.stage(), 'design', 'Foundry export action still navigates to Design');
 const hookFoundryUpsert = foundryExportHarness.dispatches[1] as { type: string; mechanism: MechanismConfig };
-assert.equal(hookFoundryUpsert.mechanism.id, 'mech-1', 'Foundry export updates the existing matching target instead of duplicating it');
+assert.equal(hookFoundryUpsert.mechanism.id, 'mech-1', 'Foundry export refits the existing exact target instead of creating duplicate target drivers');
+const independentDifferentTargetInsert = applyProjectAction(foundryExportProject, {
+  type: 'upsert_mechanism',
+  mechanism: {
+    ...hookFoundryUpsert.mechanism,
+    id: 'foundry-second-target',
+    targetPartId: 'head',
+    targetPathId: undefined,
+    targetAnchorJointId: undefined,
+    activeVisualPartIds: ['head']
+  }
+});
+assert.equal(independentDifferentTargetInsert.mechanisms.length, foundryExportProject.mechanisms.length + 1, 'mechanism storage remains id-based so same-kind mechanisms can exist as separate target instances');
 assert.equal(hookFoundryUpsert.mechanism.source, 'foundry', 'Foundry export preserves source metadata');
 assert.equal(hookFoundryUpsert.mechanism.targetPathId, 'path-right-arm', 'Foundry export preserves the selected target path');
 assert.equal(hookFoundryUpsert.mechanism.foundryExport?.metadata.recommendation, 'contract fit', 'Foundry export embeds package metadata for downstream Design/Blueprint parity');
@@ -2749,6 +2761,7 @@ assert(mechanismFoundryText.includes('<FoundryInspectorPanel') && foundryInspect
 assert(foundryInspectorPanelText.includes('data-testid="foundry-visible-sensemaking"') && foundryInspectorPanelText.includes('<ClassroomExampleVideo') && !foundryWorkflowPanelText.includes('data-testid="foundry-visible-sensemaking"') && !foundryInspectorPanelText.includes('Preview overlays') && !foundryInspectorPanelText.includes('foundry-physics-readout'), 'Foundry right inspector owns sensemaking first while removing stale preview-overlay and Motion readout cards');
 assert(mechanismFoundryText.includes('<FoundryCanvasPane') && foundryCanvasPaneText.includes('<ThreeFoundryPreview') && foundryCanvasPaneText.includes('<FoundryOverlayLayer') && foundryCanvasChromeText.includes('data-testid="foundry-toolbar"') && foundryCanvasChromeText.includes('data-testid="foundry-camera-controls"') && foundryOverlayLayerText.includes('data-testid="foundry-preview-overlay"') && foundryOverlayLayerText.includes('data-testid="foundry-param-handles"') && foundryCanvasPaneText.includes('data-testid="foundry-toolbar-state"'), 'MechanismFoundry delegates the center Foundry canvas without changing 3D preview overlays');
 assert(foundryWorkflowPanelText.includes('<MechanismLinkagePreview') && mechanismLinkagePreviewText.includes('export const MechanismLinkagePreview') && mechanismLinkagePreviewText.includes('mechanismLinkagePreviewHelpers') && mechanismLinkagePreviewHelpersText.includes('mechanismReferenceTopologySummary') && mechanismLinkagePreviewHelpersText.includes('camProfilePathD') && foundryPreviewGeometryText.includes('export const fittedGearTrainCenters'), 'Foundry workflow delegates 2D Foundry SVG preview to extracted foundry renderer/helper seams');
+assert(foundryWorkflowPanelText.includes('ghostSimulations') && foundryWorkflowPanelText.includes('foundry-mini-ghost'), 'Foundry gallery cards show moving front-view mechanism poses instead of a single static icon');
 assert(threeFoundryPreviewText.includes('foundryRenderedInventory(mechanism.type)') && foundryRenderInventoryText.includes('export const foundryRenderedInventory') && foundryRenderInventoryText.includes('referenceRequiredPartsHoleCount'), 'Foundry Three renderer delegates rendered inventory counts to a pure helper');
 assert(threeFoundryPreviewText.includes('<FoundryPreviewStateProbe') && foundryPreviewStateProbeText.includes('data-testid="foundry-camera-rig"') && foundryPreviewStateProbeText.includes('data-three-animation-commit-ms'), 'Foundry Three renderer delegates browser telemetry to a probe seam without changing the camera-rig data contract');
 assert(threeFoundryPreviewText.includes('createFoundryThreePrimitiveFactory') && threeFoundryPreviewText.includes('disposeFoundryThreeObject') && foundryThreePrimitivesText.includes('export const createFoundryThreePrimitiveFactory') && foundryThreePrimitivesText.includes('addGear') && foundryThreePrimitivesText.includes('addBar') && foundryThreePrimitivesText.includes('export const disposeFoundryThreeObject'), 'Foundry Three renderer delegates primitive mesh/material builders and cached disposal to the primitive factory seam');
@@ -2953,7 +2966,7 @@ assert(foundry3dText.includes('const addPath = (points: Point[], z: number, mat:
 assert(mechanismPreviewText.includes('sweepBounds') && foundry3dText.includes('data-three-fit-bounds=\"phase-invariant-sweep\"'), 'Foundry fitting bounds are sampled in the shared preview utility instead of jittering per animation frame');
 assert(foundry3dText.includes('data-three-static-grid-mode=\"persistent-scene-layer\"'), 'Foundry grid and plane live in a persistent scene layer, not the per-frame dynamic group');
 assert(mechanismPreviewText.includes('export const fitMechanismSimulation'), 'Foundry fitting/sweep simulation lives in the mechanism preview utility, not as stage-local UI code');
-assert(mechanismPreviewText.includes('createMechanismFitContext') && foundry3dText.includes('createMechanismFitContext(landedFoundry, 360, 240, 96)'), 'Foundry caches phase-invariant fit bounds instead of resampling the sweep every animation tick');
+assert(mechanismPreviewText.includes('createMechanismFitContext') && foundry3dText.includes('createMechanismFitContext(') && foundry3dText.includes('selectedPath?.points ?? []'), 'Foundry caches phase-invariant fit bounds and includes the user path in the same fitted coordinate basis');
 const foundryCardFitContextContract =
   foundryWorkflowPanelText.includes('const cardContext = createMechanismFitContext(') &&
   foundryWorkflowPanelText.includes('fitMechanismSimulationWithContext(') &&
@@ -2966,6 +2979,7 @@ assert(threePreviewText.includes("const PUPPET_CAMERA_PRESETS: Viewer3DCameraPre
 assert(threePreviewText.includes('onWheel={handleViewerWheel}') && threePreviewText.includes('data-camera-yaw'), 'puppet 3D canvas exposes direct wheel zoom and orbit state for browser verification');
 assert(appStageRouterText.includes('<PathEditor') && !appText.includes('<PathEditor'), 'AppStageRouter delegates Path Editor stage to the extracted PathEditor seam');
 assert(appWorkspaceShellText.includes('<MechanismRecommendationSheet') && mechanismRecommendationSheetText.includes('buildMechanismRecommendations') && mechanismRecommendationSheetText.includes('mechanismWithGeneratedPath'), 'AppWorkspaceShell mounts the Path recommendation modal while recommendation scoring and generated-path wrapping stay outside the app shell');
+assert(mechanismRecommendationSheetText.includes('RecommendationFitPreview') && mechanismRecommendationSheetText.includes('<MechanismLinkagePreview') && mechanismRecommendationSheetText.includes('data-board-cells') && mechanismRecommendationSheetText.includes('data-user-path-preview') && mechanismRecommendationSheetText.includes('data-mechanism-path-preview'), 'recommendation modal previews board fit with user path, fitted mechanism path, and the actual front-view mechanism');
 assert(pathCanvasPaneText.includes('path-view-2d') && pathCanvasPaneText.includes('path-view-3d'), 'Path Editor exposes a persistent 2D/3D Path view switch');
 assert(pathCanvasPaneText.includes('pathViewMode === "2d"') && pathCanvasPaneText.includes('<SceneSketch'), 'Path Editor 2D view uses editable SceneSketch for viewing, drawing, and point editing');
 assert(sceneSketchText.includes('data-testid="path-canvas"'), 'SceneSketch owns the editable 2D path canvas');
@@ -4036,7 +4050,16 @@ assert.equal(objectPathMechanism.targetSceneObjectId, 'object-piggy', 'mechanism
 assert.equal(objectPathMechanism.targetPartId, undefined, 'object-target mechanisms clear stale body-part targets');
 assert.equal(objectPathMechanism.targetAnchorJointId, undefined, 'object-target mechanisms do not keep stale skeleton handles');
 assert.deepEqual(mechanismBindingWarnings(objectPathMechanismProject, [objectPathMechanism]), {}, 'object-target mechanism accepts a matching object-owned path');
-assert(buildMechanismRecommendations(objectOwnedPathProject, undefined, objectOwnedPathProject.paths['path-object-piggy']).length > 0, 'mechanism recommendations support object-owned paths without a selected body part');
+const objectPathRecommendations = buildMechanismRecommendations(objectOwnedPathProject, undefined, objectOwnedPathProject.paths['path-object-piggy']);
+assert(objectPathRecommendations.length > 0, 'mechanism recommendations support object-owned paths without a selected body part');
+const objectPathRecommendationAnchor = {
+  x: objectPathRecommendations[0].mechanism.anchorX ?? Number.NaN,
+  y: objectPathRecommendations[0].mechanism.anchorY ?? Number.NaN
+};
+const objectPathRecommendationBoard = sceneToBoardRaw(objectPathRecommendationAnchor, objectOwnedPathProject.settings.physicalKit);
+const objectPathRecommendationSnap = boardToScene(objectPathRecommendationBoard.col, objectPathRecommendationBoard.row, objectOwnedPathProject.settings.physicalKit);
+assert(objectPathRecommendationBoard.valid && /^[A-O]([1-9]|1[0-5])$/.test(objectPathRecommendationBoard.label), 'object-path mechanism recommendations fit to a valid 15x15 fabrication-board hole');
+assert(Math.hypot(objectPathRecommendationSnap.x - objectPathRecommendationAnchor.x, objectPathRecommendationSnap.y - objectPathRecommendationAnchor.y) < 1e-9, 'object-path fitted mechanisms store hole-snapped anchors for board-ready assembly');
 const objectGeneratedPathSentinel = [{ x: 777, y: 888 }, { x: 779, y: 886 }, { x: 775, y: 884 }];
 const objectPathSentinelProject: ProjectState = {
   ...objectPathMechanismProject,

@@ -11,11 +11,12 @@ MotionSmith should keep the classroom flow stable while letting students add mul
 
 1. **Foundry thumbnails are front-view previews, not separate drawings.**
    - Reuse the same `MechanismLinkagePreview` + `mechanismPreview` fit context used by Foundry-style preview code.
-   - Cards may show a compact motion cue, but must not introduce another renderer.
+   - Cards show compact ghost poses plus the effector sweep so rotation is visible without introducing another renderer.
 
 2. **Design edits mechanism instances.**
    - `ProjectState.mechanisms[]` remains the canonical independent-instance store.
    - Design right pane edits the selected instance by default; users can duplicate/add same-type mechanisms and bind each separately.
+   - Foundry `Use mechanism` is target-aware: it refits an existing exact target to avoid duplicate-driver conflicts, while different targets remain separate id-based instances.
    - Batch editing is deferred until there is a clear classroom need; it risks changing multiple mechanisms unintentionally.
 
 3. **Path targets are owner-based.**
@@ -26,6 +27,7 @@ MotionSmith should keep the classroom flow stable while letting students add mul
 4. **Board legality is enforced once.**
    - Use `coordinates.ts`, `project.ts`, and `fabrication.ts` as the single fabrication-kit authority.
    - Blueprint remains the 2D print/board surface; Assembly remains the 3D exploded assembly surface.
+   - Recommendation/add previews show the default 15×15 board fit, the user path, and the fitted generated path before adding the instance.
    - Unsupported mechanism families stay blocked until they have real reference recipes.
 
 ## Implementation slices

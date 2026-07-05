@@ -10,6 +10,12 @@ import {
   buildMechanismRecommendations,
   type MechanismRecommendation,
 } from "../../../utils/mechanismRecommendations";
+import {
+  createMechanismFitContext,
+  fitMechanismSimulationWithContext,
+  pointsToSvgPath,
+} from "../../../utils/mechanismPreview";
+import { MechanismLinkagePreview } from "../foundry/MechanismLinkagePreview";
 
 type MechanismRecommendationSheetProps = {
   isOpen: boolean;
@@ -18,6 +24,111 @@ type MechanismRecommendationSheetProps = {
   selectedPath?: ProjectMotionPath;
   onClose: () => void;
   onApply: (mechanism: MechanismConfig) => void;
+};
+
+const RecommendationFitPreview = ({
+  option,
+  project,
+  selectedPath,
+}: {
+  option: MechanismRecommendation;
+  project: ProjectState;
+  selectedPath?: ProjectMotionPath;
+}) => {
+  const context = useMemo(
+    () =>
+      createMechanismFitContext(
+        option.mechanism,
+        220,
+        136,
+        96,
+        selectedPath?.points ?? [],
+      ),
+    [option.mechanism, selectedPath?.points],
+  );
+  const current = useMemo(
+    () => fitMechanismSimulationWithContext(option.mechanism, 0, context),
+    [context, option.mechanism],
+  );
+  const ghost = useMemo(
+    () =>
+      [Math.PI * 0.65, Math.PI * 1.3].map((phase) =>
+        fitMechanismSimulationWithContext(option.mechanism, phase, context),
+      ),
+    [context, option.mechanism],
+  );
+  const userPathD = useMemo(() => {
+    if (!selectedPath || selectedPath.points.length < 2) return "";
+    return pointsToSvgPath(selectedPath.points.map(context.map));
+  }, [context, selectedPath]);
+
+  return (
+    <svg
+      viewBox="0 0 220 136"
+      className="recommendation-preview mt-3"
+      aria-hidden="true"
+      data-testid={`recommendation-fit-preview-${option.type}`}
+      data-board-cells={project.settings.physicalKit.boardCells}
+      data-user-path-preview={userPathD ? "shown" : "hidden"}
+      data-mechanism-path-preview={current.pathD ? "shown" : "hidden"}
+    >
+      <text x="10" y="18" fill="#64748b" fontSize="10" fontWeight="900">
+        {project.settings.physicalKit.boardCells}×
+        {project.settings.physicalKit.boardCells} board
+      </text>
+      {userPathD && (
+        <path
+          d={userPathD}
+          fill="none"
+          stroke="#10b981"
+          strokeWidth="3"
+          strokeDasharray="7 6"
+          strokeLinecap="round"
+          opacity="0.85"
+        />
+      )}
+      <path
+        d={current.pathD}
+        fill="none"
+        stroke={option.mechanism.color}
+        strokeWidth="3"
+        strokeLinecap="round"
+        opacity="0.65"
+      />
+      <g className="mechanism-choice-sim">
+        {ghost.map((simulation, index) => (
+          <g
+            key={index}
+            opacity={index === 0 ? 0.2 : 0.13}
+            className="mechanism-choice-ghost"
+          >
+            <MechanismLinkagePreview
+              mechanism={option.mechanism}
+              simulation={simulation}
+              kit={project.settings.physicalKit}
+              testId={`recommendation-ghost-${option.type}-${index}`}
+              compact
+            />
+          </g>
+        ))}
+        <MechanismLinkagePreview
+          mechanism={option.mechanism}
+          simulation={current}
+          kit={project.settings.physicalKit}
+          testId={`recommendation-linkage-${option.type}`}
+          compact
+        />
+      </g>
+      <circle
+        cx={current.state.effector.x}
+        cy={current.state.effector.y}
+        r="4"
+        fill="#2563eb"
+        stroke="white"
+        strokeWidth="1.5"
+      />
+    </svg>
+  );
 };
 
 export const MechanismRecommendationSheet = ({
@@ -91,19 +202,11 @@ export const MechanismRecommendationSheet = ({
                   </div>
                   <span className="recommendation-score">{option.score}</span>
                 </div>
-                <svg
-                  viewBox="0 0 220 120"
-                  className="recommendation-preview mt-3"
-                  aria-hidden="true"
-                >
-                  <path
-                    d={option.previewPath}
-                    fill="none"
-                    stroke={option.mechanism.color}
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                  />
-                </svg>
+                <RecommendationFitPreview
+                  option={option}
+                  project={project}
+                  selectedPath={selectedPath}
+                />
                 <p className="mt-3">{option.reason}</p>
                 <p
                   className={`mt-2 text-xs ${option.fabricationErrors.length ? "font-bold text-amber-700" : "text-slate-500"}`}

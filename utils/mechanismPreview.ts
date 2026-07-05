@@ -22,7 +22,7 @@ export type MechanismFitContext = {
   map: (point: Point) => Point;
 };
 
-export const createMechanismFitContext = (mechanism: MechanismConfig, width: number, height: number, resolution = 72): MechanismFitContext => {
+export const createMechanismFitContext = (mechanism: MechanismConfig, width: number, height: number, resolution = 72, extraPoints: Point[] = []): MechanismFitContext => {
   const pathPoints = generateCurvePoints(mechanism, resolution).points;
   const sweepBounds: Point[] = [];
   const addRadiusBounds = (center: Point | undefined, radius: number, target = sweepBounds) => {
@@ -45,7 +45,7 @@ export const createMechanismFitContext = (mechanism: MechanismConfig, width: num
       addRadiusBounds(sampleState.p2, mechanism.rockerLength);
     }
   }
-  const source = [...pathPoints, ...sweepBounds];
+  const source = [...pathPoints, ...sweepBounds, ...extraPoints];
   if (!source.length) {
     const map = (point: Point): Point => point;
     return { pathPoints: [], pathD: '', scale: 1, map };

@@ -79,6 +79,18 @@ export const DesignFoundryPreview = ({
     () => (mechanism ? normalizeGearMeshMechanism(mechanism) : undefined),
     [mechanism],
   );
+  const contextPathPoints = useMemo(() => {
+    const targetPath = designMechanism?.targetPathId
+      ? project.paths[designMechanism.targetPathId]
+      : undefined;
+    const selectedPath = project.selectedPathId
+      ? project.paths[project.selectedPathId]
+      : undefined;
+    const firstVisiblePath = Object.values(project.paths).find(
+      (path) => path.visible !== false,
+    );
+    return (targetPath ?? selectedPath ?? firstVisiblePath)?.points ?? [];
+  }, [designMechanism?.targetPathId, project.paths, project.selectedPathId]);
   const rawPointTraces = useMemo(
     () =>
       designMechanism
@@ -89,9 +101,15 @@ export const DesignFoundryPreview = ({
   const fitContext = useMemo(
     () =>
       designMechanism
-        ? createMechanismFitContext(designMechanism, 360, 240, 96)
+        ? createMechanismFitContext(
+            designMechanism,
+            360,
+            240,
+            96,
+            contextPathPoints,
+          )
         : undefined,
-    [designMechanism],
+    [contextPathPoints, designMechanism],
   );
   const selectedSimulation = useMemo(
     () =>

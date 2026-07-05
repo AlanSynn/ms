@@ -107,6 +107,14 @@ export const FoundryWorkflowPanel = ({
             foundryPhase,
             cardContext,
           );
+          const ghostSimulations = [Math.PI * 0.65, Math.PI * 1.3].map(
+            (offset) =>
+              fitMechanismSimulationWithContext(
+                cardMechanism,
+                foundryPhase + offset,
+                cardContext,
+              ),
+          );
           return (
             <button
               key={type}
@@ -128,6 +136,21 @@ export const FoundryWorkflowPanel = ({
                   strokeLinecap="round"
                   opacity="0.45"
                 />
+                {ghostSimulations.map((simulation, index) => (
+                  <g
+                    key={index}
+                    opacity={index === 0 ? 0.22 : 0.14}
+                    className="mechanism-choice-ghost"
+                  >
+                    <MechanismLinkagePreview
+                      mechanism={cardMechanism}
+                      simulation={simulation}
+                      kit={project.settings.physicalKit}
+                      testId={`foundry-mini-ghost-${type}-${index}`}
+                      compact
+                    />
+                  </g>
+                ))}
                 <MechanismLinkagePreview
                   mechanism={cardMechanism}
                   simulation={cardSimulation}

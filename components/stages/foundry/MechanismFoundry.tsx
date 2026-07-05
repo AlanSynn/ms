@@ -188,8 +188,15 @@ export const MechanismFoundry = ({
     : undefined;
   const feasibilityText = range.warning ?? "360°";
   const foundryFitContext = useMemo(
-    () => createMechanismFitContext(landedFoundry, 360, 240, 96),
-    [landedFoundry],
+    () =>
+      createMechanismFitContext(
+        landedFoundry,
+        360,
+        240,
+        96,
+        selectedPath?.points ?? [],
+      ),
+    [landedFoundry, selectedPath?.points],
   );
   const selectedSimulation = useMemo(
     () =>
