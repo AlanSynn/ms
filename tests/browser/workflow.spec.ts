@@ -1258,6 +1258,10 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await applyFourBarFromFoundry(page);
   await page.getByRole('button', { name: /Options/i }).click();
   await expect(page.getByRole('heading', { name: 'Options' })).toBeVisible();
+  const optionsPreview = page.getByRole('img', { name: 'Options preview canvas' });
+  await expect(optionsPreview).toBeVisible();
+  await expect(optionsPreview).toContainText(/Letter sheet .* grid/);
+  await expect(optionsPreview).toContainText(/theme .* speed .* export/);
   for (const section of ['appearance', 'simulation', 'performance', 'debugging', 'workflow', 'fabrication', 'units']) {
     await expect(page.getByTestId(`options-${section}`)).toBeVisible();
   }

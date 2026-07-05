@@ -2366,6 +2366,7 @@ ${foundryOverlayLayerText}
 ${foundryWorkflowPanelText}
 ${foundryInspectorPanelText}`;
 const optionsText = readFileSync(join(process.cwd(), 'components', 'stages', 'options', 'Options.tsx'), 'utf8');
+const optionsPreviewCanvasText = readFileSync(join(process.cwd(), 'components', 'stages', 'options', 'OptionsPreviewCanvas.tsx'), 'utf8');
 const foundry3dText = `${foundryStageText}
 ${threeFoundryPreviewText}
 ${foundryPreviewStateProbeText}
@@ -2394,6 +2395,7 @@ ${shellUiText}
 ${characterImportControlsText}
 ${characterSelectionText}
 ${optionsText}
+${optionsPreviewCanvasText}
 ${mechanismDesignStageText}
 ${designFoundryPreviewText}`;
 const typesText = readFileSync(join(process.cwd(), 'types.ts'), 'utf8');
@@ -2401,6 +2403,18 @@ const indexText = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
 assert(appText.includes('<AppWorkspaceShell') && !appText.includes('<AppStageRouter') && appWorkspaceShellText.includes('<AppStageRouter') && appStageRouterText.includes('<MechanismFoundry') && !appText.includes('<MechanismFoundry') && !appStageRouterText.includes('const MechanismFoundry = ({') && mechanismFoundryText.includes('export const MechanismFoundry'), 'App.tsx delegates workspace chrome to AppWorkspaceShell, which delegates stage routing to AppStageRouter');
 assert(appStageRouterText.includes('<MechanismDesign') && !appText.includes('<MechanismDesign') && !appStageRouterText.includes('const MechanismDesign = ({') && mechanismDesignText.includes('export const MechanismDesign'), 'AppStageRouter delegates Mechanism Design to an extracted stage seam');
 assert(appStageRouterText.includes('<Options') && !appText.includes('<Options') && !appStageRouterText.includes('const Options = ({') && optionsText.includes('export const Options') && optionsText.includes('OPTIONS_SECTION_MANIFEST'), 'AppStageRouter delegates the Options stage to an extracted stage seam');
+assert(optionsText.includes('<OptionsPreviewCanvas settings={project.settings} />') && !optionsText.includes('aria-label="Options preview canvas"') && optionsPreviewCanvasText.includes('export const OptionsPreviewCanvas') && optionsPreviewCanvasText.includes('aria-label="Options preview canvas"') && optionsPreviewCanvasText.includes('formatGridLabel(settings.physicalKit, settings.gridUnit)'), 'Options stage delegates the static center preview canvas to a presentation-only leaf');
+[
+  'dispatch(',
+  'ProjectAction',
+  'update_settings',
+  'physicalKitPreset',
+  'localStorage',
+  'window.',
+  'document.'
+].forEach(forbiddenOptionsPreviewBoundary => {
+  assert(!optionsPreviewCanvasText.includes(forbiddenOptionsPreviewBoundary), `OptionsPreviewCanvas stays presentation-only and excludes ${forbiddenOptionsPreviewBoundary}`);
+});
 assert(appText.includes('navigateAppStage({') && appStageNavigationText.includes('handoffGate(project, target)') && appStageNavigationText.includes('set_processing') && !appText.includes('handoffGate(project'), 'App delegates stage handoff side effects to navigateAppStage while preserving recovery processing dispatch');
 assert(
   appStageRouterText.includes('onFoundryExport') &&
