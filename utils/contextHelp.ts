@@ -84,8 +84,8 @@ export const CONTEXT_HELP: Record<
   },
   "blueprint.customParts": {
     en: {
-      title: "Custom parts",
-      body: "Download cut files for making your own parts from sheet material.",
+      title: "Character sheet",
+      body: "Print 1–2 letter pages with spaced character cut parts.",
     },
   },
   "blueprint.prefabKit": {

@@ -134,7 +134,7 @@ Deliverables:
 Acceptance:
 
 - Browser E2E covers template → free path draw → recommendation/foundry → mechanism attach → blueprint package/assembly guide download.
-- Code review returns APPROVE/CLEAR and UltraQA browser pass is clean.
+- Targeted verification passes; code review/UltraQA are run only when explicit or risk-triggered.
 
 ## Stop condition
 

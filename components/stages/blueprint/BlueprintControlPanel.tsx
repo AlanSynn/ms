@@ -139,6 +139,9 @@ export const BlueprintControlPanel = ({
                 <button className="btn-secondary" onClick={() => goStage("assembly")}>
                   Assembly
                 </button>
+                <button className="btn-secondary" onClick={downloadCustomPdf}>
+                  Character PDF
+                </button>
               </div>
               <details className="blueprint-more-exports mt-3">
                 <summary>More files</summary>
@@ -186,29 +189,27 @@ export const BlueprintControlPanel = ({
                       Assembly PDF
                     </button>
                   </div>
-                  {exportMode !== "prefab-board" && (
-                    <div data-testid="custom-parts-export-lane">
-                      <div className="flex items-center gap-2">
-                        <div className="font-bold text-slate-800">Custom parts</div>
-                        <ContextHelp helpId="blueprint.customParts" />
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <button className="btn-secondary" onClick={downloadCustomSvg}>
-                          SVG
-                        </button>
-                        <button className="btn-secondary" onClick={downloadCustomPdf}>
-                          PDF
-                        </button>
-                        <button
-                          className="btn-secondary"
-                          data-testid="download-custom-stl"
-                          onClick={downloadCustomStl}
-                        >
-                          STL
-                        </button>
-                      </div>
+                  <div data-testid="custom-parts-export-lane">
+                    <div className="flex items-center gap-2">
+                      <div className="font-bold text-slate-800">Character sheet</div>
+                      <ContextHelp helpId="blueprint.customParts" />
                     </div>
-                  )}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button className="btn-secondary" onClick={downloadCustomSvg}>
+                        SVG
+                      </button>
+                      <button className="btn-secondary" onClick={downloadCustomPdf}>
+                        PDF
+                      </button>
+                      <button
+                        className="btn-secondary"
+                        data-testid="download-custom-stl"
+                        onClick={downloadCustomStl}
+                      >
+                        STL
+                      </button>
+                    </div>
+                  </div>
                   {exportMode !== "custom-parts" && (
                     <div data-testid="prefab-board-export-lane">
                       <div className="flex items-center gap-2">

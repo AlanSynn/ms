@@ -11,8 +11,12 @@ import {
   MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY,
 } from "../../../utils/mechanismTemplates";
 import {
+  createFoundryPlaybackFrame,
+  generateFoundryPlaybackPointTraces,
+} from "../../../utils/foundryPlayback";
+import {
   createMechanismFitContext,
-  fitMechanismSimulationWithContext,
+  pointsToSvgPath,
 } from "../../../utils/mechanismPreview";
 import { createDefaultMechanism } from "../../../utils/project";
 import { StageLeftSummary } from "../stageLayout";
@@ -100,18 +104,28 @@ export const FoundryWorkflowPanel = ({
             96,
             96,
           );
-          const cardSimulation = fitMechanismSimulationWithContext(
+          const cardSimulation = createFoundryPlaybackFrame(
             cardMechanism,
             foundryPhase,
             cardContext,
-          );
+          ).simulation;
+          const cardPlaybackTraces = generateFoundryPlaybackPointTraces(
+            cardMechanism,
+            96,
+          ).traces;
+          const cardPlaybackTrace =
+            cardPlaybackTraces.find((trace) => trace.primary) ??
+            cardPlaybackTraces[0];
+          const cardPathD = cardPlaybackTrace
+            ? pointsToSvgPath(cardPlaybackTrace.points.map(cardContext.map))
+            : cardSimulation.pathD;
           const ghostSimulations = [Math.PI * 0.65, Math.PI * 1.3].map(
             (offset) =>
-              fitMechanismSimulationWithContext(
+              createFoundryPlaybackFrame(
                 cardMechanism,
                 foundryPhase + offset,
                 cardContext,
-              ),
+              ).simulation,
           );
           return (
             <button
@@ -127,7 +141,7 @@ export const FoundryWorkflowPanel = ({
                 aria-hidden="true"
               >
                 <path
-                  d={cardSimulation.pathD}
+                  d={cardPathD}
                   fill="none"
                   stroke={foundry.color}
                   strokeWidth="2.5"

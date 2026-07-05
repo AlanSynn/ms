@@ -7,7 +7,7 @@ import type {
 } from "../../../types";
 import { boardToScene } from "../../../utils/coordinates";
 import type { FabricationRenderPlan } from "../../../utils/fabrication";
-import type { fitMechanismSimulation } from "../../../utils/mechanismPreview";
+import type { MechanismPreviewSimulation } from "../../../utils/mechanismPreview";
 import type { AssemblySceneFrame } from "../../../utils/assemblySceneFrame";
 
 export type FoundryAssemblySceneFrame = AssemblySceneFrame;
@@ -24,7 +24,7 @@ type FoundryAssemblySceneOverlayOptions = {
   root: THREE.Group;
   frame?: AssemblySceneFrame;
   mechanism: MechanismConfig;
-  simulation: ReturnType<typeof fitMechanismSimulation>;
+  simulation: MechanismPreviewSimulation;
   kit: PhysicalKitSettings;
   pinBottomZ: number;
   pinTopZ: number;
@@ -128,7 +128,7 @@ const boardCoordToPreviewPoint = (
   coord: string,
   kit: PhysicalKitSettings,
   mechanism: MechanismConfig,
-  simulation: ReturnType<typeof fitMechanismSimulation>,
+  simulation: MechanismPreviewSimulation,
 ): Point | null => {
   const scenePoint = boardCoordToScenePoint(coord, kit);
   if (!scenePoint) return null;

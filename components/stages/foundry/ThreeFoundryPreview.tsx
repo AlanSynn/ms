@@ -38,7 +38,7 @@ import {
   type FoundryCamera,
   type FoundryOverlaySize,
 } from "../../../utils/foundryCamera";
-import { fitMechanismSimulation } from "../../../utils/mechanismPreview";
+import type { MechanismPreviewSimulation } from "../../../utils/mechanismPreview";
 import { setRendererPixelRatioCap } from "../../../utils/threeResourceKit";
 import { fittedGearTrainCenters } from "./foundryPreviewGeometry";
 import { FoundryPreviewStateProbe } from "./FoundryPreviewStateProbe";
@@ -68,7 +68,7 @@ import {
 
 type ThreeFoundryPreviewProps = {
   mechanism: MechanismConfig;
-  simulation: ReturnType<typeof fitMechanismSimulation>;
+  simulation: MechanismPreviewSimulation;
   kit: PhysicalKitSettings;
   camera: FoundryCamera;
   rigOpacity: number;
@@ -191,17 +191,7 @@ export const ThreeFoundryPreview = ({
           parts: Math.max(baseInv.parts, gearRadii.length + 4),
         }
       : baseInv;
-  const driveReferencePoint =
-    mechanism.type === "cam" && simulation.state.aux
-      ? simulation.state.aux
-      : simulation.state.j1;
-  const pinionRotation =
-    (Math.atan2(
-      driveReferencePoint.y - simulation.state.p1.y,
-      driveReferencePoint.x - simulation.state.p1.x,
-    ) *
-      180) /
-    Math.PI;
+  const pinionRotation = simulation.driveAngleDeg;
   const renderPlan = useMemo(
     () => fabricationRenderPlanForMechanism(mechanism),
     [mechanism],

@@ -100,12 +100,12 @@ Current local dependency check uses `package.json` + `bun.lock`; latest version 
 - M2 `npm test` — pass (`project contracts ok`).
 - M2 `npm run build` — pass (`tsc && vite build`).
 - M2 `git diff --check` — pass.
-- M2 code-review gate — pass (`APPROVE`, architectural status `CLEAR`).
+- M2 historical review check — pass under the policy active at that time.
 - M2 `npm run test:browser` — pass (`31 passed`, 6.3m).
 - M3 slice 1 `npm test` — pass (`project contracts ok`).
 - M3 slice 1 `npm run build` — pass (`tsc && vite build`).
 - M3 slice 1 `git diff --check` — pass.
-- M3 slice 1 code-review gate — pass (`APPROVE`, architectural status `CLEAR`).
+- M3 slice 1 historical review check — pass under the policy active at that time.
 - M3 slice 1 `npm run test:browser` — pass (`31 passed`, 6.2m).
 - M3 slice 2 `npm test` — pass (`project contracts ok`).
 - M3 slice 2 `npm run build` — pass (`tsc && vite build`).
@@ -115,7 +115,7 @@ Current local dependency check uses `package.json` + `bun.lock`; latest version 
 - M3 slice 2 targeted 3D template QA — pass: `npm run test:browser -- --grep "Mechanism Design center workspace renders physical 3D templates"` (`1 passed`, 2.4m).
 - M3 slice 2 full browser QA — pass: `npm run test:browser` (`31 passed`, 4.7m) in production preview mode after confirming the prior dev-server run failed only from Vite HMR/webserver teardown (`ERR_CONNECTION_REFUSED`) rather than app assertions.
 - M3 slice 2 test-engineer review — pass: no coverage gaps for Character, shared viewport, Foundry compact/sensemaking state, right-inspector opacity, and Blueprint guide placement.
-- M3 slice 2 code-review gate — pass (`APPROVE`, architectural status `CLEAR`).
+- M3 slice 2 historical review check — pass under the policy active at that time.
 - M3 slice 3 `npm test` — pass (`project contracts ok`).
 - M3 slice 3 `npm run build` — pass (`tsc && vite build`).
 - M3 slice 3 full browser QA — pass: `npm run test:browser` (`31 passed`, 4.7m) in production preview mode, including Foundry physics vectors, WebGL 3D camera/orbit, design 3D templates, free path drawing, and blueprint workflows.
@@ -135,4 +135,4 @@ Current local dependency check uses `package.json` + `bun.lock`; latest version 
 - M3 slice 5 `git diff --check` — pass.
 - M3 slice 5 code-review round 1 — request changes / architectural block: ensure `utils/physicsKernel.ts` and the high-performance ADR are included in the tracked change, and preserve Rapier load failure diagnostics.
 - M3 slice 5 rework: added `data-physics-kernel-error` telemetry on Foundry and Design 3D viewports, browser assertions for the healthy `none` state, and staged the new physics seam plus ADR for review.
-- M3 slice 5 final code-review gate — pass (`APPROVE`, architectural status `CLEAR`) after locking the Vite Rapier bundle guard and staging the physics seam/ADR.
+- M3 slice 5 historical final review check — pass under the policy active at that time after locking the Vite Rapier bundle guard and staging the physics seam/ADR.

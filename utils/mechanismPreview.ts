@@ -1,4 +1,4 @@
-import type { MechanismConfig, Point } from '../types';
+import type { JointState, MechanismConfig, Point } from '../types';
 import { calculateLinkage, generateCurvePoints, planetaryRingPitchRadius } from './kinematics';
 
 export const pointsToSvgPath = (points: Point[]) => points.length ? `M ${points.map(p => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' L ')}` : '';
@@ -14,6 +14,18 @@ export const fitPointsToBox = (points: Point[], width: number, height: number): 
 };
 
 export const fitPathToBox = (points: Point[], width: number, height: number) => pointsToSvgPath(fitPointsToBox(points, width, height));
+
+
+export type MechanismPreviewSimulation = {
+  inputAngleRad: number;
+  inputAngleDeg: number;
+  driveAngleRad: number;
+  driveAngleDeg: number;
+  pathPoints: Point[];
+  pathD: string;
+  scale: number;
+  state: JointState;
+};
 
 export type MechanismFitContext = {
   pathPoints: Point[];
@@ -60,10 +72,15 @@ export const createMechanismFitContext = (mechanism: MechanismConfig, width: num
   return { pathPoints: fittedPath, pathD: pointsToSvgPath(fittedPath), scale, map };
 };
 
-export const fitMechanismSimulationWithContext = (mechanism: MechanismConfig, angle: number, context: MechanismFitContext) => {
+export const fitMechanismSimulationWithContext = (mechanism: MechanismConfig, angle: number, context: MechanismFitContext): MechanismPreviewSimulation => {
   const state = calculateLinkage(mechanism, angle);
   const map = context.map;
+  const driveAngleRad = angle * (mechanism.speed1 ?? 1) + (mechanism.driverPhaseOffset ?? 0);
   return {
+    inputAngleRad: angle,
+    inputAngleDeg: (angle * 180) / Math.PI,
+    driveAngleRad,
+    driveAngleDeg: (driveAngleRad * 180) / Math.PI,
     pathPoints: context.pathPoints,
     pathD: context.pathD,
     scale: context.scale,

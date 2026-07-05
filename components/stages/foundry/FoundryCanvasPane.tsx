@@ -11,7 +11,7 @@ import {
   type FoundryViewPreset,
 } from "../../../utils/foundryCamera";
 import { SCENE_PX_PER_MM } from "../../../utils/coordinates";
-import { fitMechanismSimulation, pointsToSvgPath } from "../../../utils/mechanismPreview";
+import { pointsToSvgPath, type MechanismPreviewSimulation } from "../../../utils/mechanismPreview";
 import {
   FoundryCameraControls,
   FoundryPlaybackPanel,
@@ -34,7 +34,7 @@ type FoundryCanvasPaneProps = {
   foundryRigOpacity: number;
   foundryExplode: number;
   foundryProjectionSize: FoundryOverlaySize;
-  selectedPhysicalSimulation: ReturnType<typeof fitMechanismSimulation>;
+  selectedPhysicalSimulation: MechanismPreviewSimulation;
   previewPoints: Point[];
   foundryPointTraces: Array<{
     id: string;

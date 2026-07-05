@@ -585,7 +585,7 @@ export interface MechanismPointTrace {
     primary: boolean;
 }
 
-const compactTraceDefinitions = (
+export const mechanismTraceDefinitionsForState = (
     type: MechanismConfig['type'],
     state: JointState
 ): Array<{ id: string; label: string; point?: Point; primary?: boolean }> => {
@@ -647,7 +647,7 @@ export const generateMechanismPointTraces = (config: MechanismConfig, resolution
         const state = calculateLinkage(config, angle);
         if (!state.isValid) continue;
         validCount++;
-        compactTraceDefinitions(config.type, state).forEach(def => {
+        mechanismTraceDefinitionsForState(config.type, state).forEach(def => {
             if (!def.point || !Number.isFinite(def.point.x) || !Number.isFinite(def.point.y)) return;
             const trace = traces.get(def.id) ?? { id: def.id, label: def.label, points: [], primary: Boolean(def.primary) };
             trace.primary = trace.primary || Boolean(def.primary);

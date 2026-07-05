@@ -32,6 +32,10 @@ import {
   generateCurvePoints,
   generateMechanismPointTraces,
 } from "../../../utils/kinematics";
+import {
+  createFoundryPlaybackFrame,
+  generateFoundryPlaybackPointTraces,
+} from "../../../utils/foundryPlayback";
 import { buildFoundryPhysicsOverlay } from "../../../utils/physicsSession";
 import {
   FABRICATION_RENDER_LAYER_Z_STEP,
@@ -63,7 +67,6 @@ import {
 } from "../../../utils/mechanismTemplates";
 import {
   createMechanismFitContext,
-  fitMechanismSimulationWithContext,
   fitPointsToBox,
   pointsToSvgPath,
 } from "../../../utils/mechanismPreview";
@@ -203,7 +206,7 @@ export const MechanismFoundry = ({
     y: 120 - (landing.y / SCENE_VIEW.height) * 240,
   };
   const rawFoundryPointTraces = useMemo(() => {
-    const traces = generateMechanismPointTraces(landedFoundry, 96).traces;
+    const traces = generateFoundryPlaybackPointTraces(landedFoundry, 96).traces;
     const generatedPath = landedFoundry.generatedPath ?? [];
     if (!generatedPath.length || traces.length < 2) return traces;
     const fittedTrace = traces.reduce((best, trace) =>
@@ -247,15 +250,16 @@ export const MechanismFoundry = ({
       ),
     [landedFoundry, selectedPath?.points],
   );
-  const selectedSimulation = useMemo(
+  const foundryPlaybackFrame = useMemo(
     () =>
-      fitMechanismSimulationWithContext(
+      createFoundryPlaybackFrame(
         landedFoundry,
         foundryPhase,
         foundryFitContext,
       ),
     [landedFoundry, foundryPhase, foundryFitContext],
   );
+  const selectedSimulation = foundryPlaybackFrame.simulation;
   const foundryPointTraces = useMemo(
     () =>
       rawFoundryPointTraces.map((trace) => ({
@@ -288,14 +292,14 @@ export const MechanismFoundry = ({
       buildFoundryPhysicsOverlay(
         landedFoundry,
         selectedPhysicalSimulation,
-        foundryPhase,
+        foundryPlaybackFrame.playbackPhaseRad,
         project.settings,
         previewPoints,
       ),
     [
       landedFoundry,
       selectedPhysicalSimulation,
-      foundryPhase,
+      foundryPlaybackFrame.playbackPhaseRad,
       project.settings,
       previewPoints,
     ],

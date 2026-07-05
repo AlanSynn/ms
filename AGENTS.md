@@ -145,6 +145,8 @@ Keep files compact by responsibility, not by ceremony. Split code when one file 
 
 Before claiming completion, run the smallest checks that prove the changed contract.
 
+- Review policy is proportional: code review, architect review, and UltraQA are optional tools for explicit review requests, security/release risk, broad architecture changes, or unresolved uncertainty. Do not require `APPROVE`, `CLEAR`, or a clean review artifact for every local change once verification evidence is sufficient.
+- `WATCH`/`COMMENT` review findings are advisory by default. Treat `BLOCK`/`REQUEST CHANGES` as blocking only when they identify a concrete unresolved correctness, safety, product-contract, or maintainability failure.
 - Contract/docs changes: `bun run test`, `bun run build`, and contract assertions that lock the new rule.
 - UI/workbench changes: add or update browser tests, then run the relevant Playwright flow plus build/contracts.
 - Browser tests should preserve coverage while optimizing wall time: prefer bounded Playwright parallel workers (`fullyParallel`) and `PLAYWRIGHT_WORKERS=<n>` / `--workers=<n>` over deleting assertions, shortening workflows, or weakening checks. Use `--workers=1` only to reproduce order-dependent failures.

@@ -4,6 +4,7 @@ import { fabricablePartOutlinePoints, partLandmarkLocalPoints, pointInsideOutlin
 
 export type CharacterPrintPart = {
     part: BodyPartLayer;
+    pageIndex: number;
     sourceCenterMm: Point;
     printCenterMm: Point;
     outlineMm: Point[];
@@ -13,6 +14,8 @@ export type CharacterPrintPart = {
 export type CharacterPrintLayout = {
     parts: CharacterPrintPart[];
     scale: number;
+    pageCount: number;
+    partPaddingMm: number;
     holeRadiusMm: number;
 };
 
@@ -62,51 +65,83 @@ export const buildCharacterPrintLayout = (project: ProjectState): CharacterPrint
             }
         };
     }).filter((item): item is NonNullable<typeof item> => Boolean(item));
-    if (!source.length) return { parts: [], scale: 1, holeRadiusMm: kit.holeDiameterMm / 2 };
+    const partPaddingMm = 4;
+    if (!source.length) return { parts: [], scale: 1, pageCount: 1, partPaddingMm, holeRadiusMm: kit.holeDiameterMm / 2 };
 
-    const allScene = source.flatMap(item => item.outlineScene);
-    const allBounds = printBoundsForPoints(allScene);
-    const characterCenter = {
-        x: (allBounds.minX + allBounds.maxX) / 2,
-        y: (allBounds.minY + allBounds.maxY) / 2
-    };
-    const explodeScene = 10 * SCENE_PX_PER_MM;
     const rawItems = source.map(item => {
-        const dx = item.centerScene.x - characterCenter.x;
-        const dy = item.centerScene.y - characterCenter.y;
-        const length = Math.hypot(dx, dy) || 1;
-        const offset = { x: (dx / length) * explodeScene, y: (dy / length) * explodeScene };
-        const toRawMm = (point: Point) => ({ x: (point.x + offset.x) / SCENE_PX_PER_MM, y: -(point.y + offset.y) / SCENE_PX_PER_MM });
-        const sourceCenterMm = { x: item.centerScene.x / SCENE_PX_PER_MM, y: -item.centerScene.y / SCENE_PX_PER_MM };
+        const toRawMm = (point: Point) => ({ x: point.x / SCENE_PX_PER_MM, y: -point.y / SCENE_PX_PER_MM });
+        const outlineRawMm = item.outlineScene.map(toRawMm);
+        const rawBounds = printBoundsForPoints(outlineRawMm);
         return {
             part: item.part,
-            sourceCenterMm,
-            printCenterRawMm: toRawMm(item.centerScene),
-            outlineRawMm: item.outlineScene.map(toRawMm),
-            holeRawMm: item.holeScene.map(toRawMm)
+            centerRawMm: toRawMm(item.centerScene),
+            outlineRawMm,
+            holeRawMm: item.holeScene.map(toRawMm),
+            rawBounds
         };
     });
-    const rawBounds = printBoundsForPoints(rawItems.flatMap(item => item.outlineRawMm));
-    const margin = 12;
+    const margin = 10;
     const titleBand = 18;
     const footerBand = 10;
-    const availableWidth = Math.max(1, kit.sheetWidthMm - margin * 2);
-    const availableHeight = Math.max(1, kit.sheetHeightMm - titleBand - footerBand);
-    const scale = Math.min(1, availableWidth / Math.max(1, rawBounds.width), availableHeight / Math.max(1, rawBounds.height));
-    const offset = {
-        x: kit.sheetWidthMm / 2 - ((rawBounds.minX + rawBounds.maxX) / 2) * scale,
-        y: titleBand + availableHeight / 2 - ((rawBounds.minY + rawBounds.maxY) / 2) * scale
+    const maxPages = 2;
+    const pageRight = kit.sheetWidthMm - margin;
+    const pageBottom = kit.sheetHeightMm - footerBand;
+    const packAtScale = (scale: number): CharacterPrintPart[] | null => {
+        let pageIndex = 0;
+        let cursorX = margin;
+        let cursorY = titleBand;
+        let rowHeight = 0;
+        const packed: CharacterPrintPart[] = [];
+        const newRow = () => {
+            cursorX = margin;
+            cursorY += rowHeight;
+            rowHeight = 0;
+        };
+        const newPage = () => {
+            pageIndex += 1;
+            cursorX = margin;
+            cursorY = titleBand;
+            rowHeight = 0;
+        };
+        for (const item of rawItems) {
+            const itemWidth = item.rawBounds.width * scale + partPaddingMm * 2;
+            const itemHeight = item.rawBounds.height * scale + partPaddingMm * 2;
+            if (cursorX > margin && cursorX + itemWidth > pageRight) newRow();
+            if (cursorY + itemHeight > pageBottom) newPage();
+            if (pageIndex >= maxPages) return null;
+            const origin = {
+                x: cursorX + partPaddingMm - item.rawBounds.minX * scale,
+                y: cursorY + partPaddingMm - item.rawBounds.minY * scale
+            };
+            const toPageMm = (point: Point) => ({ x: origin.x + point.x * scale, y: origin.y + point.y * scale });
+            const printCenterMm = toPageMm(item.centerRawMm);
+            packed.push({
+                part: item.part,
+                pageIndex,
+                sourceCenterMm: printCenterMm,
+                printCenterMm,
+                outlineMm: item.outlineRawMm.map(toPageMm),
+                holeMm: item.holeRawMm.map(toPageMm)
+            });
+            cursorX += itemWidth;
+            rowHeight = Math.max(rowHeight, itemHeight);
+        }
+        return packed;
     };
-    const toPageMm = (point: Point) => ({ x: offset.x + point.x * scale, y: offset.y + point.y * scale });
+    let low = 0.05;
+    let high = 1;
+    for (let i = 0; i < 18; i += 1) {
+        const mid = (low + high) / 2;
+        if (packAtScale(mid)) low = mid;
+        else high = mid;
+    }
+    const scale = packAtScale(1) ? 1 : low;
+    const packed = packAtScale(scale) ?? packAtScale(0.05) ?? [];
     return {
         scale,
+        pageCount: Math.max(1, Math.min(maxPages, packed.reduce((max, item) => Math.max(max, item.pageIndex + 1), 1))),
+        partPaddingMm,
         holeRadiusMm: Math.max(0.5, (kit.holeDiameterMm / 2) * scale),
-        parts: rawItems.map(item => ({
-            part: item.part,
-            sourceCenterMm: toPageMm(item.sourceCenterMm),
-            printCenterMm: toPageMm(item.printCenterRawMm),
-            outlineMm: item.outlineRawMm.map(toPageMm),
-            holeMm: item.holeRawMm.map(toPageMm)
-        }))
+        parts: packed
     };
 };

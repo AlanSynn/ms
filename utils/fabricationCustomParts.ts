@@ -9,26 +9,39 @@ export const makeCustomPartsSvg = (project: ProjectState) => {
     const kit = project.settings.physicalKit;
     const esc = (value: unknown) => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[ch] ?? ch));
     const layout = buildCharacterPrintLayout(project);
+    const totalHeightMm = kit.sheetHeightMm * layout.pageCount;
     const point = (p: Point) => `${svgNumber(p.x)} ${svgNumber(p.y)}`;
     const path = (points: Point[]) => points.length ? `M ${point(points[0])} ${points.slice(1).map(p => `L ${point(p)}`).join(' ')} Z` : '';
-    const items = layout.parts.map(({ part, outlineMm, holeMm, sourceCenterMm, printCenterMm }) => {
+    const pageY = (pageIndex: number) => pageIndex * kit.sheetHeightMm;
+    const shift = (point: Point, pageIndex: number) => ({ x: point.x, y: point.y + pageY(pageIndex) });
+    const pageFrames = Array.from({ length: layout.pageCount }, (_, pageIndex) => {
+        const y = pageY(pageIndex);
+        return `<g data-character-sheet-page="${pageIndex + 1}">
+<rect x="6" y="${svgNumber(y + 6)}" width="${svgNumber(kit.sheetWidthMm - 12)}" height="${svgNumber(kit.sheetHeightMm - 12)}" rx="6" fill="none" stroke="#dbe3f0" stroke-width="0.5"/>
+<text x="10" y="${svgNumber(y + 12)}" font-family="Inter,Arial" font-size="5" font-weight="900" fill="#172033">MotionSmith character cut sheet</text>
+<text x="${svgNumber(kit.sheetWidthMm - 38)}" y="${svgNumber(y + 12)}" font-family="Inter,Arial" font-size="3.4" font-weight="800" fill="#64748b">Page ${pageIndex + 1}/${layout.pageCount}</text>
+<text x="10" y="${svgNumber(y + kit.sheetHeightMm - 8)}" font-family="Inter,Arial" font-size="3.4" font-weight="700" fill="#64748b">${layout.parts.filter(part => part.pageIndex === pageIndex).length} parts · ${kit.holeDiameterMm}mm holes · ${layout.partPaddingMm}mm spacing</text>
+</g>`;
+    }).join('\n');
+    const items = layout.parts.map(({ part, pageIndex, outlineMm, holeMm, sourceCenterMm, printCenterMm }) => {
+        const shiftedOutline = outlineMm.map(point => shift(point, pageIndex));
         const d = path(outlineMm);
+        const shiftedD = path(shiftedOutline);
         const holes = holeMm
+            .map(p => shift(p, pageIndex))
             .map(p => `<circle cx="${svgNumber(p.x)}" cy="${svgNumber(p.y)}" r="${svgNumber(layout.holeRadiusMm)}" fill="#ffffff" stroke="#334155" stroke-width="0.45"/>`)
             .join('');
         return `<g data-part-id="${esc(part.id)}">
-<line x1="${svgNumber(sourceCenterMm.x)}" y1="${svgNumber(sourceCenterMm.y)}" x2="${svgNumber(printCenterMm.x)}" y2="${svgNumber(printCenterMm.y)}" stroke="#cbd5e1" stroke-width="0.35" stroke-dasharray="1.8 1.8"/>
-<path d="${d}" fill="#f8fafc" stroke="#172033" stroke-width="0.5"/>
-<path d="${d}" fill="${esc(part.fillColor)}" opacity="0.18"/>
+<line x1="${svgNumber(sourceCenterMm.x)}" y1="${svgNumber(sourceCenterMm.y + pageY(pageIndex))}" x2="${svgNumber(printCenterMm.x)}" y2="${svgNumber(printCenterMm.y + pageY(pageIndex))}" stroke="#cbd5e1" stroke-width="0.35" stroke-dasharray="1.8 1.8"/>
+<path d="${shiftedD || d}" fill="#f8fafc" stroke="#172033" stroke-width="0.5"/>
+<path d="${shiftedD || d}" fill="${esc(part.fillColor)}" opacity="0.18"/>
 ${holes}
 </g>`;
     }).join('\n');
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${kit.sheetWidthMm}mm" height="${kit.sheetHeightMm}mm" viewBox="0 0 ${kit.sheetWidthMm} ${kit.sheetHeightMm}" data-character-print-page="letter" data-character-print-mode="whole-character-exploded">
-<metadata>${esc(JSON.stringify({ project: project.metadata.name, mode: 'custom-parts', printMode: 'whole-character-exploded', page: 'letter', units: 'mm', scale: layout.scale, source: 'fabricablePartOutlinePoints' }))}</metadata>
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${kit.sheetWidthMm}mm" height="${totalHeightMm}mm" viewBox="0 0 ${kit.sheetWidthMm} ${totalHeightMm}" data-character-print-page="letter" data-character-print-page-count="${layout.pageCount}" data-character-print-mode="whole-character-exploded">
+<metadata>${esc(JSON.stringify({ project: project.metadata.name, mode: 'custom-parts', printMode: 'whole-character-exploded', page: 'letter', pageCount: layout.pageCount, spacingMm: layout.partPaddingMm, units: 'mm', scale: layout.scale, source: 'fabricablePartOutlinePoints' }))}</metadata>
 <rect width="100%" height="100%" fill="#ffffff"/>
-<rect x="6" y="6" width="${svgNumber(kit.sheetWidthMm - 12)}" height="${svgNumber(kit.sheetHeightMm - 12)}" rx="6" fill="none" stroke="#dbe3f0" stroke-width="0.5"/>
-<text x="10" y="12" font-family="Inter,Arial" font-size="5" font-weight="900" fill="#172033">MotionSmith character cut sheet</text>
-<text x="10" y="${svgNumber(kit.sheetHeightMm - 8)}" font-family="Inter,Arial" font-size="3.4" font-weight="700" fill="#64748b">${layout.parts.length} parts · ${kit.holeDiameterMm}mm holes · one letter page</text>
+${pageFrames}
 <g data-character-exploded-sheet>
 ${items}
 </g>
@@ -107,12 +120,13 @@ export const makeCustomPartsPdf = (project: ProjectState) => {
         width: (kit.sheetWidthMm - 12) * pageScale,
         height: (kit.sheetHeightMm - 12) * pageScale
     };
-    const commands: string[] = [
-        `BT /F1 14 Tf ${num(page.margin)} ${num(page.height - 32)} Td (${pdfText('MotionSmith character cut sheet')}) Tj ET`,
-        `BT /F1 8 Tf ${num(page.margin)} ${num(page.height - 48)} Td (${pdfText(`${project.metadata.name} / whole-character-exploded / letter page / ${kit.holeDiameterMm}mm holes`)}) Tj ET`,
-        `0.86 0.89 0.94 RG 0.5 w ${num(border.x)} ${num(border.y)} ${num(border.width)} ${num(border.height)} re S`
-    ];
-    layout.parts.forEach(({ part, outlineMm, holeMm, sourceCenterMm, printCenterMm }) => {
+    const pageContents = Array.from({ length: layout.pageCount }, (_, pageIndex) => {
+        const commands: string[] = [
+            `BT /F1 14 Tf ${num(page.margin)} ${num(page.height - 32)} Td (${pdfText('MotionSmith character cut sheet')}) Tj ET`,
+            `BT /F1 8 Tf ${num(page.margin)} ${num(page.height - 48)} Td (${pdfText(`${project.metadata.name} / character-sheet-page-count ${layout.pageCount} / page ${pageIndex + 1} of ${layout.pageCount} / ${kit.holeDiameterMm}mm holes / ${layout.partPaddingMm}mm spacing`)}) Tj ET`,
+            `0.86 0.89 0.94 RG 0.5 w ${num(border.x)} ${num(border.y)} ${num(border.width)} ${num(border.height)} re S`
+        ];
+        layout.parts.filter(item => item.pageIndex === pageIndex).forEach(({ part, outlineMm, holeMm, sourceCenterMm, printCenterMm }) => {
         const source = toPdf(sourceCenterMm);
         const target = toPdf(printCenterMm);
         commands.push(`0.80 0.84 0.90 RG 0.35 w ${num(source.x)} ${num(source.y)} m ${num(target.x)} ${num(target.y)} l S`);
@@ -129,7 +143,9 @@ export const makeCustomPartsPdf = (project: ProjectState) => {
             commands.push('0.10 0.16 0.28 RG 1 1 1 rg 0.5 w');
             commands.push(`${circlePath(center.x, center.y, radius)} B`);
         });
+        });
+        commands.push(`0.39 0.45 0.55 rg BT /F1 7 Tf ${num(page.margin)} ${num(30)} Td (${pdfText(`${layout.parts.filter(item => item.pageIndex === pageIndex).length} parts / page ${pageIndex + 1} of ${layout.pageCount}`)}) Tj ET`);
+        return commands.join('\n');
     });
-    commands.push(`0.39 0.45 0.55 rg BT /F1 7 Tf ${num(page.margin)} ${num(30)} Td (${pdfText(`${layout.parts.length} parts on one letter page`)}) Tj ET`);
-    return makePdfDocument(commands.join('\n'));
+    return makePdfDocument(pageContents);
 };

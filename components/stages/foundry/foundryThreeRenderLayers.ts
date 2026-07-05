@@ -3,14 +3,14 @@ import type { MechanismConfig, Point } from "../../../types";
 import {
   gearTrainMeshPhaseDegAt,
   gearTrainRotationRatioAt,
-  planetaryPlanetSpinRatio,
 } from "../../../utils/kinematics";
+import { foundryPlanetaryPlanetRotationDeg } from "../../../utils/foundryPlayback";
 import {
   planetaryRingPitchRadius,
   type FabricationRenderPlan,
 } from "../../../utils/fabrication";
 import { degToRad } from "../../../utils/foundryCamera";
-import type { fitMechanismSimulation } from "../../../utils/mechanismPreview";
+import type { MechanismPreviewSimulation } from "../../../utils/mechanismPreview";
 import {
   foundrySpacerTouchesPin,
   type FoundryPinStack,
@@ -33,7 +33,7 @@ type LocalSpacerZForPin = (
 
 type FoundryDynamicLayerRenderOptions = {
   mechanism: MechanismConfig;
-  simulation: ReturnType<typeof fitMechanismSimulation>;
+  simulation: MechanismPreviewSimulation;
   primitives: FoundryThreePrimitiveFactory;
   renderPlan: FabricationRenderPlan;
   renderedLayerZ: number[];
@@ -202,13 +202,12 @@ export const renderFoundryDynamicLayers = ({
             center,
             mechanism.rockerLength,
             z,
-            angle *
-              planetaryPlanetSpinRatio(
-                mechanism.crankLength,
-                mechanism.rockerLength,
-              ) +
-              ((mechanism.phase ?? 0) * 180) / Math.PI +
-              index * (360 / planetCount),
+            foundryPlanetaryPlanetRotationDeg(
+              mechanism,
+              angle,
+              index,
+              planetCount,
+            ),
             mat,
           ),
         );

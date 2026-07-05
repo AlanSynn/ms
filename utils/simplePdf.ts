@@ -1,10 +1,19 @@
-export const makePdfDocument = (content: string) => {
+export const makePdfDocument = (content: string | string[]) => {
+    const pages = Array.isArray(content) && content.length ? content : [Array.isArray(content) ? '' : content];
+    const fontObject = pages.length * 2 + 3;
+    const pageObjects = pages.map((_, index) => 3 + index * 2);
     const objects = [
         '1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj',
-        '2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj',
-        '3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj',
-        '4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj',
-        `5 0 obj << /Length ${content.length} >> stream\n${content}\nendstream endobj`
+        `2 0 obj << /Type /Pages /Kids [${pageObjects.map(id => `${id} 0 R`).join(' ')}] /Count ${pages.length} >> endobj`,
+        ...pages.flatMap((pageContent, index) => {
+            const pageObject = pageObjects[index];
+            const contentObject = pageObject + 1;
+            return [
+                `${pageObject} 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 ${fontObject} 0 R >> >> /Contents ${contentObject} 0 R >> endobj`,
+                `${contentObject} 0 obj << /Length ${pageContent.length} >> stream\n${pageContent}\nendstream endobj`
+            ];
+        }),
+        `${fontObject} 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj`
     ];
     let pdf = '%PDF-1.4\n';
     const offsets = [0];

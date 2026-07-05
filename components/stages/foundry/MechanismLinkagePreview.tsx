@@ -13,9 +13,12 @@ import {
   fabricationRingGearProfileForPitchRadius,
   planetaryRingPitchRadius,
 } from "../../../utils/fabrication";
-import { gearTrainPitchRadii } from "../../../utils/kinematics";
+import {
+  gearTrainPitchRadii,
+} from "../../../utils/kinematics";
+import { foundryPlanetaryPlanetRotationDeg } from "../../../utils/foundryPlayback";
 import { referenceRecipeForType } from "../../../utils/mechanismReference";
-import { fitMechanismSimulation } from "../../../utils/mechanismPreview";
+import type { MechanismPreviewSimulation } from "../../../utils/mechanismPreview";
 import { SCENE_PX_PER_MM } from "../../../utils/coordinates";
 import { fittedGearTrainCenters } from "./foundryPreviewGeometry";
 import {
@@ -35,7 +38,7 @@ export const MechanismLinkagePreview = ({
   compact = false,
 }: {
   mechanism: MechanismConfig;
-  simulation: ReturnType<typeof fitMechanismSimulation>;
+  simulation: MechanismPreviewSimulation;
   kit: PhysicalKitSettings;
   testId: string;
   compact?: boolean;
@@ -76,16 +79,7 @@ export const MechanismLinkagePreview = ({
   );
   const trackAxis = axisForAngle(mechanism.groundAngle ?? 0);
   const normalAxis = { x: -trackAxis.y, y: trackAxis.x };
-  const inputReferencePoint = mechanism.type === "cam" && s.aux ? s.aux : s.j1;
-  const inputAngleDeg =
-    (Math.atan2(
-      inputReferencePoint.y - s.p1.y,
-      inputReferencePoint.x - s.p1.x,
-    ) *
-      180) /
-    Math.PI;
-  const outputAngleDeg =
-    (Math.atan2(s.j2.y - s.p2.y, s.j2.x - s.p2.x) * 180) / Math.PI;
+  const driveAngleDeg = simulation.driveAngleDeg;
   const isGearTrainPreview =
     mechanism.type === "gear" || mechanism.type === "gear_linkage";
   const previewGearRadii = isGearTrainPreview
@@ -462,7 +456,7 @@ export const MechanismLinkagePreview = ({
         key="cam-body"
         data-testid={fabricationTest("cam")}
         className="mechanism-part mechanism-cam"
-        transform={`translate(${center.x} ${center.y}) rotate(${inputAngleDeg})`}
+        transform={`translate(${center.x} ${center.y}) rotate(${driveAngleDeg})`}
       >
         <path
           data-testid={thicknessTestId}
@@ -533,7 +527,7 @@ export const MechanismLinkagePreview = ({
             "rack-pinion-gear",
             compact ? 8 : 16,
             compact ? 34 : 62,
-            inputAngleDeg,
+            driveAngleDeg,
           )}
         </>
       )}
@@ -558,7 +552,7 @@ export const MechanismLinkagePreview = ({
               `gear-${index}`,
               compact ? 8 : 16,
               compact ? 34 : 62,
-              inputAngleDeg * ratio +
+              driveAngleDeg * ratio +
                 (index === previewGearRadii.length - 1
                   ? ((mechanism.phase ?? 0) * 180) / Math.PI
                   : 0),
@@ -581,7 +575,7 @@ export const MechanismLinkagePreview = ({
             "sun",
             compact ? 7 : 12,
             compact ? 22 : 42,
-            inputAngleDeg,
+            driveAngleDeg,
           )}
           {(() => {
             const planetCenters = [s.p2];
@@ -594,7 +588,12 @@ export const MechanismLinkagePreview = ({
                 `planet-${index + 1}`,
                 compact ? 7 : 12,
                 compact ? 22 : 42,
-                outputAngleDeg + index * (360 / planetCount),
+                foundryPlanetaryPlanetRotationDeg(
+                  mechanism,
+                  driveAngleDeg,
+                  index,
+                  planetCount,
+                ),
               ),
             );
           })()}

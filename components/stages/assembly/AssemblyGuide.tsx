@@ -103,6 +103,13 @@ export const AssemblyGuide = ({
       pkg.assemblyGuidePdf,
       "application/pdf",
     );
+  const downloadCharacterPdf = () =>
+    pkg &&
+    downloadText(
+      `${pkg.id}-character-sheet.pdf`,
+      pkg.customPartsPdf,
+      "application/pdf",
+    );
 
   const printGuide = () => {
     if (!pkg) return;
@@ -131,6 +138,7 @@ export const AssemblyGuide = ({
             onCreate={create}
             onPrint={printGuide}
             onDownloadPdf={downloadAssemblyPdf}
+            onDownloadCharacterPdf={downloadCharacterPdf}
             activeAssemblyMode={activeAssemblyMode}
             setAssemblyMode={setAssemblyMode}
             hasCharacterAssembly={hasCharacterAssembly}

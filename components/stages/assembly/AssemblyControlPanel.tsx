@@ -29,6 +29,7 @@ export const AssemblyControlPanel = ({
   onCreate,
   onPrint,
   onDownloadPdf,
+  onDownloadCharacterPdf,
   activeAssemblyMode,
   setAssemblyMode,
   hasCharacterAssembly,
@@ -48,6 +49,7 @@ export const AssemblyControlPanel = ({
   onCreate: () => void;
   onPrint: () => void;
   onDownloadPdf: () => void;
+  onDownloadCharacterPdf: () => void;
   activeAssemblyMode: AssemblyMode;
   setAssemblyMode: Dispatch<SetStateAction<AssemblyMode>>;
   hasCharacterAssembly: boolean;
@@ -83,6 +85,11 @@ export const AssemblyControlPanel = ({
         {packageReady && (
           <button className="btn-secondary" onClick={onDownloadPdf}>
             PDF
+          </button>
+        )}
+        {packageReady && (
+          <button className="btn-secondary" onClick={onDownloadCharacterPdf}>
+            Character PDF
           </button>
         )}
       </div>

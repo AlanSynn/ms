@@ -34,7 +34,8 @@ import { buildFoundryPhysicsOverlay, buildKinematicPhysicsSession, mechanismPhys
 import { contourPathD, fabricablePartOutlinePoints, partLandmarkJointIds, partLandmarkLocalPoints, partOutlineBounds, partWorldPointToLocal, pointInsideOutline, scaleContour } from '../utils/partGeometry';
 import { MECHANISM_FEATURE_REGISTRY, mechanismFeature, validateMechanismFeatureRegistry, type MechanismDragHandle } from '../utils/mechanismFeatureRegistry';
 import { buildMechanismSnapshot, buildMechanismSnapshots } from '../utils/mechanismSnapshot';
-import { createMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext } from '../utils/mechanismPreview';
+import { createFoundryPlaybackFrame, foundryPlaybackPhaseToInputAngle, generateFoundryPlaybackPointTraces } from '../utils/foundryPlayback';
+import { createMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext, pointsToSvgPath } from '../utils/mechanismPreview';
 import { buildMechanismRecommendations, fitMechanismToTargetPath } from '../utils/mechanismRecommendations';
 import { WEBGL_PIXEL_RATIO_CAP, canvasPanOffset, canvasViewBoxForViewport, zoomCanvasViewportAtPoint } from '../utils/viewport';
 import { cachedThreeResource, clearThreeGroup, disposeThreeObjectGraph, setRendererPixelRatioCap } from '../utils/threeResourceKit';
@@ -45,6 +46,8 @@ import { buildCharacterAssemblyPlan, type CharacterAssemblyPlan } from '../utils
 import { buildCharacterAssemblySceneFrame, buildMechanismAssemblySceneFrame } from '../utils/assemblySceneFrame';
 import { buildMechanismSceneContract } from '../utils/mechanismSceneContract';
 import { buildAssemblyGuideModel } from '../components/stages/assembly/assemblyGuideModel';
+import { MechanismLinkagePreview } from '../components/stages/foundry/MechanismLinkagePreview';
+import { FoundryWorkflowPanel } from '../components/stages/foundry/FoundryWorkflowPanel';
 import { useAppMechanismActions } from '../hooks/useAppMechanismActions';
 import { createStageNavigator, navigateAppStage } from '../utils/appStageNavigation';
 import { assemblyCoordToSvg, characterBoardProjector, characterCanvasProjector, smoothAssemblyProgress, svgPathFromPoints } from '../components/stages/assembly/assemblyGeometry';
@@ -401,19 +404,19 @@ assert(
   && normalizedCodebaseCleanupPlan.includes('deterministic printable/readable Blueprint SVG rendering')
   && normalizedCodebaseCleanupPlan.includes('`utils/fabricationSizing.ts` | 121')
   && normalizedCodebaseCleanupPlan.includes('pure planetary gear convention and linkage sizing')
-  && normalizedCodebaseCleanupPlan.includes('`utils/simplePdf.ts` | 43')
+  && normalizedCodebaseCleanupPlan.includes('`utils/simplePdf.ts` | 52')
   && normalizedCodebaseCleanupPlan.includes('import-free PDF document primitives')
   && normalizedCodebaseCleanupPlan.includes('`utils/fabricationCharacterPrintLayout.ts`')
   && normalizedCodebaseCleanupPlan.includes('pure character cut-sheet layout model')
-  && normalizedCodebaseCleanupPlan.includes('`utils/fabricationCustomParts.ts` | 135')
-  && normalizedCodebaseCleanupPlan.includes('character custom-parts SVG, PDF, and STL artifact generation')
-  && normalizedCodebaseCleanupPlan.includes('`utils/fabricationAssemblyGuide.ts` | 113')
+  && normalizedCodebaseCleanupPlan.includes('`utils/fabricationCustomParts.ts` | 151')
+  && normalizedCodebaseCleanupPlan.includes('bounded 1–2 page character custom-parts SVG/PDF plus STL artifact generation')
+  && normalizedCodebaseCleanupPlan.includes('`utils/fabricationAssemblyGuide.ts` | 114')
   && normalizedCodebaseCleanupPlan.includes('assembly guide exploded SVG, printable HTML, and PDF artifact generation')
   && normalizedCodebaseCleanupPlan.includes('`utils/fabricationCutSheetPdf.ts` | 48')
   && normalizedCodebaseCleanupPlan.includes('cut-sheet PDF artifact generation'),
   'cleanup plan records the extracted fabrication profile, number formatting, stack model, readiness, render-plan, recipe, Blueprint SVG, sizing, PDF primitive, character print layout, custom-parts artifact, assembly-guide artifact, and cut-sheet artifact seams'
 );
-assert(normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintExport.tsx` | 88') && normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintControlPanel.tsx` | 258') && normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintDetailPanel.tsx` | 100') && normalizedCodebaseCleanupPlan.includes('Blueprint left workflow controls, package generation, download buttons, and recipe list live outside the stage wrapper') && normalizedCodebaseCleanupPlan.includes('Blueprint right inspector recipe title, board callout, sensemaking cue, required-part chips, stack summary, and export grid status live outside the stage wrapper'), 'cleanup plan records the extracted Blueprint control/detail panel seams');
+assert(normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintExport.tsx` | 88') && normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintControlPanel.tsx` | 269') && normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintDetailPanel.tsx` | 100') && normalizedCodebaseCleanupPlan.includes('Blueprint left workflow controls, package generation, download buttons, character sheet downloads, and recipe list live outside the stage wrapper') && normalizedCodebaseCleanupPlan.includes('Blueprint right inspector recipe title, board callout, sensemaking cue, required-part chips, stack summary, and export grid status live outside the stage wrapper'), 'cleanup plan records the extracted Blueprint control/detail panel seams');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
 assert(readFileSync(join(process.cwd(), 'utils', 'projectPersistence.ts'), 'utf8').includes('motionsmith.autosave') && readFileSync(join(process.cwd(), 'utils', 'projectPersistence.ts'), 'utf8').includes('motionsmith.workspace'), 'local storage namespace uses the MotionSmith slug for persistent state');
 assert.deepEqual(validateAppCommandRegistry(), [], 'application command registry is internally consistent');
@@ -729,7 +732,7 @@ assert(playwrightConfigText.includes('MAX_BROWSER_WORKERS'), 'browser worker def
 assert(playwrightConfigText.includes('Number.isInteger'), 'browser worker override validates positive integer input');
 assert(playwrightConfigText.includes('PLAYWRIGHT_SERVER') && playwrightConfigText.includes('preview'), 'browser tests can run against production preview without Vite HMR noise');
 assert(playwrightConfigText.includes('delete process.env.NO_COLOR') && playwrightConfigText.includes('env -u NO_COLOR'), 'Playwright normalizes conflicting FORCE_COLOR/NO_COLOR env to avoid worker/webserver warning spam');
-assert.equal(packageJson.version, '0.0.6', 'release version is bumped for the GitHub Pages redeploy');
+assert.equal(packageJson.version, '0.0.7', 'release version is bumped for the GitHub Pages redeploy');
 assert.equal(tauriConfig.version, packageJson.version, 'Tauri config version stays aligned with package.json');
 assert(viteConfigText.includes('__APP_VERSION__') && viteConfigText.includes('packageVersion'), 'Vite exposes package.json version to the browser UI');
 assert.deepEqual(tauriConfig.bundle.icon, ['icons/icon.png', 'icons/icon.ico', 'icons/icon.icns'], 'Tauri bundle references the tracked MotionSmith png, ico, and icns icons');
@@ -3090,11 +3093,10 @@ assert(mechanismPreviewText.includes('sweepBounds') && foundry3dText.includes('d
 assert(foundry3dText.includes('data-three-static-grid-mode=\"persistent-scene-layer\"'), 'Foundry grid and plane live in a persistent scene layer, not the per-frame dynamic group');
 assert(mechanismPreviewText.includes('export const fitMechanismSimulation'), 'Foundry fitting/sweep simulation lives in the mechanism preview utility, not as stage-local UI code');
 assert(mechanismPreviewText.includes('createMechanismFitContext') && foundry3dText.includes('createMechanismFitContext(') && foundry3dText.includes('selectedPath?.points ?? []'), 'Foundry caches phase-invariant fit bounds and includes the user path in the same fitted coordinate basis');
-const foundryCardFitContextContract =
-  foundryWorkflowPanelText.includes('const cardContext = createMechanismFitContext(') &&
-  foundryWorkflowPanelText.includes('fitMechanismSimulationWithContext(') &&
-  !foundryWorkflowPanelText.includes('fitMechanismSimulation(cardMechanism');
-assert.equal(foundryCardFitContextContract, true, 'Foundry card previews use the shared fit context path instead of direct per-card resampling');
+const foundryCardMechanism = createDefaultMechanism('4bar', 'foundry-card-contract');
+const foundryCardContext = createMechanismFitContext(foundryCardMechanism, 180, 96, 96);
+const foundryCardSimulation = fitMechanismSimulationWithContext(foundryCardMechanism, 0.75, foundryCardContext);
+assert.deepEqual(foundryCardSimulation.pathPoints, foundryCardContext.pathPoints, 'Foundry card previews can reuse the shared fit context path instead of direct per-card resampling');
 assert(foundry3dText.includes('buildFoundryPhysicsOverlay') && physicsSessionText.includes('export const buildFoundryPhysicsOverlay'), 'Foundry force/velocity/constraint overlay math lives in PhysicsSession, not the React stage');
 assert(foundry3dText.includes('const range = useMemo(') && foundry3dText.includes('() => sampleFeasibleRange(landedFoundry)') && foundry3dText.includes('[landedFoundry]'), 'Foundry feasible-range sampling is memoized by mechanism, not re-run on every animation render');
 assert(viewportText.includes('WEBGL_PIXEL_RATIO_CAP') && foundry3dText.includes('WEBGL_PIXEL_RATIO_CAP') && threePreviewText.includes('WEBGL_PIXEL_RATIO_CAP'), 'WebGL renderer pixel ratio cap is shared across Foundry and puppet previews');
@@ -3475,29 +3477,31 @@ const visibleCharacterPartIds = twoFourBars.partOrder.filter(partId => twoFourBa
 const characterPrintLayout = directBuildCharacterPrintLayout(twoFourBars);
 assert.equal(characterPrintLayout.parts.length, visibleCharacterPartIds.length, 'character print layout includes every visible character part exactly once');
 assert(characterPrintLayout.scale > 0 && characterPrintLayout.scale <= 1, 'character print layout keeps a bounded positive page scale');
+assert(characterPrintLayout.pageCount >= 1 && characterPrintLayout.pageCount <= 2, 'character print layout fits on one or two letter pages');
+assert(characterPrintLayout.partPaddingMm >= 4, 'character print layout keeps spacing between cut parts');
 assert(characterPrintLayout.holeRadiusMm >= 0.5, 'character print layout keeps printable joint holes above the minimum radius');
-assert(characterPrintLayout.parts.every(item => visibleCharacterPartIds.includes(item.part.id) && item.outlineMm.length >= 3 && item.holeMm.length > 0), 'character print layout emits printable outlines and holes for visible parts');
+assert(characterPrintLayout.parts.every(item => visibleCharacterPartIds.includes(item.part.id) && item.pageIndex >= 0 && item.pageIndex < characterPrintLayout.pageCount && item.outlineMm.length >= 3 && item.holeMm.length > 0), 'character print layout emits printable outlines and holes for visible parts');
+const layoutBounds = (points: Point[]) => ({
+  minX: Math.min(...points.map(point => point.x)),
+  maxX: Math.max(...points.map(point => point.x)),
+  minY: Math.min(...points.map(point => point.y)),
+  maxY: Math.max(...points.map(point => point.y))
+});
+const boxesOverlap = (a: ReturnType<typeof layoutBounds>, b: ReturnType<typeof layoutBounds>) =>
+  a.minX < b.maxX && a.maxX > b.minX && a.minY < b.maxY && a.maxY > b.minY;
+characterPrintLayout.parts.forEach((item, index) => {
+  const bounds = layoutBounds(item.outlineMm);
+  assert(bounds.minX >= 0 && bounds.maxX <= twoFourBars.settings.physicalKit.sheetWidthMm && bounds.minY >= 0 && bounds.maxY <= twoFourBars.settings.physicalKit.sheetHeightMm, `character print layout keeps ${item.part.id} inside its letter page`);
+  characterPrintLayout.parts.slice(index + 1).filter(other => other.pageIndex === item.pageIndex).forEach(other => {
+    assert(!boxesOverlap(bounds, layoutBounds(other.outlineMm)), `character print layout separates ${item.part.id} from ${other.part.id}`);
+  });
+});
 const lowerArmPrintLayout = characterPrintLayout.parts.find(item => item.part.id === 'right_arm_lower');
 assert(lowerArmPrintLayout && Number.isFinite(lowerArmPrintLayout.printCenterMm.x) && Number.isFinite(lowerArmPrintLayout.printCenterMm.y), 'character print layout keeps known sample part placement finite');
-const roundedLayoutPoint = (point: Point) => ({ x: Number(point.x.toFixed(3)), y: Number(point.y.toFixed(3)) });
-assert.deepEqual(
-  lowerArmPrintLayout && {
-    printCenter: roundedLayoutPoint(lowerArmPrintLayout.printCenterMm),
-    sourceCenter: roundedLayoutPoint(lowerArmPrintLayout.sourceCenterMm),
-    firstOutline: roundedLayoutPoint(lowerArmPrintLayout.outlineMm[0]),
-    outlineCount: lowerArmPrintLayout.outlineMm.length,
-    holeCount: lowerArmPrintLayout.holeMm.length
-  },
-  {
-    printCenter: { x: 175.347, y: 127.947 },
-    sourceCenter: { x: 165.623, y: 130.277 },
-    firstOutline: { x: 160.571, y: 116.45 },
-    outlineCount: 14,
-    holeCount: 2
-  },
-  'character print layout preserves rounded sample placement for the right lower arm'
-);
+assert.equal(lowerArmPrintLayout?.outlineMm.length, 14, 'character print layout preserves the editable right lower arm outline');
+assert.equal(lowerArmPrintLayout?.holeMm.length, 2, 'character print layout preserves the right lower arm joint holes');
 assert(simplePdfDocument('BT ET').startsWith('%PDF-1.4'), 'simplePdf creates a PDF document');
+assert(simplePdfDocument(['BT (A) Tj ET', 'BT (B) Tj ET']).includes('/Count 2'), 'simplePdf supports bounded two-page character sheets');
 const simplePdfSinglePage = simplePdfMakeSimplePdf('Title', ['Line']);
 assert(simplePdfSinglePage.startsWith('%PDF-1.4') && simplePdfSinglePage.includes('(Title)') && simplePdfSinglePage.includes('(Line)'), 'simplePdf single-page helper preserves visible text lines');
 assert.equal(simplePdfEscapeText('A · B (C) \\ D'), 'A / B \\(C\\) \\\\ D', 'simplePdf text escapes PDF syntax and middle dots');
@@ -3516,14 +3520,14 @@ assert.equal(directMakeCustomPartsSvg(twoFourBars), pkg.customPartsSvg, 'fabrica
 assert.equal(directMakeCustomPartsPdf(twoFourBars), pkg.customPartsPdf, 'fabrication package preserves the direct custom parts PDF artifact');
 assert.equal(directMakeCustomPartsStl(twoFourBars), pkg.customPartsStl, 'fabrication package preserves the direct custom parts STL artifact');
 assert(pkg.customPartsSvg.startsWith('<svg') && pkg.customPartsSvg.includes('custom-parts'), 'fabrication package includes custom parts SVG artifact');
-assert(pkg.customPartsSvg.includes(`width="${twoFourBars.settings.physicalKit.sheetWidthMm}mm"`) && pkg.customPartsSvg.includes(`height="${twoFourBars.settings.physicalKit.sheetHeightMm}mm"`), 'character custom parts SVG is fixed to one letter-size page');
-assert(pkg.customPartsSvg.includes(`viewBox="0 0 ${twoFourBars.settings.physicalKit.sheetWidthMm} ${twoFourBars.settings.physicalKit.sheetHeightMm}"`), 'character custom parts SVG uses the letter page coordinate system');
+assert(pkg.customPartsSvg.includes(`width="${twoFourBars.settings.physicalKit.sheetWidthMm}mm"`) && pkg.customPartsSvg.includes(`data-character-print-page-count="${characterPrintLayout.pageCount}"`), 'character custom parts SVG is fixed to one or two letter-size pages');
+assert(pkg.customPartsSvg.includes(`viewBox="0 0 ${twoFourBars.settings.physicalKit.sheetWidthMm} ${twoFourBars.settings.physicalKit.sheetHeightMm * characterPrintLayout.pageCount}"`), 'character custom parts SVG uses stacked letter page coordinate systems');
 assert(pkg.customPartsSvg.includes('data-character-print-page="letter"') && pkg.customPartsSvg.includes('data-character-print-mode="whole-character-exploded"'), 'character custom parts SVG declares whole-character exploded print mode');
 assert(pkg.customPartsSvg.includes('data-character-exploded-sheet'), 'character custom parts SVG groups all parts on one exploded sheet');
 visibleCharacterPartIds.forEach(partId => {
-  assert(pkg.customPartsSvg.includes(`data-part-id="${partId}"`), `character custom parts SVG includes visible part ${partId} on the one-page sheet`);
+  assert(pkg.customPartsSvg.includes(`data-part-id="${partId}"`), `character custom parts SVG includes visible part ${partId} on the bounded character sheet`);
 });
-assert(pkg.customPartsPdf.startsWith('%PDF-') && pkg.customPartsPdf.includes('whole-character-exploded'), 'fabrication package includes a one-page exploded character PDF artifact');
+assert(pkg.customPartsPdf.startsWith('%PDF-') && pkg.customPartsPdf.includes('character-sheet-page-count'), 'fabrication package includes a bounded character PDF artifact');
 assert(pkg.customPartsStl.startsWith('solid motionsmith_custom_parts'), 'fabrication package includes custom parts STL artifact');
 assert(pkg.customPartsStl.includes('mm_holes') && (pkg.customPartsStl.match(/facet normal/g) ?? []).length > 100, 'custom parts STL meshes extruded plates with joint-hole voids');
 assert(pkg.metadataJson.includes('validationIssues'), 'fabrication metadata includes structured validation issues');
@@ -4093,6 +4097,56 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
   assert.equal(mechanism.gearRatio, planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength), 'planetary gear ratio is ring-fixed sun-input carrier-output');
   assert.equal(planetaryRingPitchRadius(mechanism.crankLength, mechanism.rockerLength), mechanism.crankLength + 2 * mechanism.rockerLength, 'planetary ring pitch radius follows sun plus two planets');
   assert.equal(planetaryPlanetSpinRatio(mechanism.crankLength, mechanism.rockerLength), planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength) - (mechanism.crankLength / mechanism.rockerLength) * (1 - planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength)), 'planet spin is derived from ring-fixed carrier motion');
+  const fullCarrierInput = foundryPlaybackPhaseToInputAngle(mechanism, Math.PI * 2);
+  const carrierStart = calculateLinkage(mechanism, 0);
+  const carrierFullCycle = calculateLinkage(mechanism, fullCarrierInput);
+  assert(Math.abs(fullCarrierInput - (Math.PI * 2) / planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength)) < 1e-9, 'planetary Foundry playback maps one visible carrier cycle to the required sun input rotations');
+  assert(Math.hypot(carrierFullCycle.p2.x - carrierStart.p2.x, carrierFullCycle.p2.y - carrierStart.p2.y) < 1e-6, 'planetary carrier returns to the start after one Foundry playback cycle');
+  assert(Math.abs(fullCarrierInput * planetaryPlanetSpinRatio(mechanism.crankLength, mechanism.rockerLength)) > Math.PI * 2, 'planet gear visibly spins while the carrier completes one full output cycle');
+  const halfCarrierFrame = createFoundryPlaybackFrame(mechanism, Math.PI, createMechanismFitContext(mechanism, 180, 96, 96));
+  const halfCarrierInput = halfCarrierFrame.inputAngleRad;
+  const halfCarrierPreview = renderToString(createElement(MechanismLinkagePreview, { mechanism, simulation: halfCarrierFrame.simulation, kit: sample.settings.physicalKit, testId: 'contract-planetary-preview', compact: true }));
+  assert(halfCarrierPreview.includes('rotate(1440'), 'Foundry planetary SVG preview renders sun rotation from raw multi-turn input angle');
+  assert(/rotate\(-239\.999|rotate\(-240/.test(halfCarrierPreview), 'Foundry planetary SVG preview renders planet spin from the ring-fixed mesh ratio, not from wrapped geometry');
+  const offsetMechanism = { ...mechanism, speed1: 2, driverPhaseOffset: Math.PI / 3 };
+  const offsetFitContext = createMechanismFitContext(offsetMechanism, 180, 96, 96);
+  const offsetCarrierFrame = createFoundryPlaybackFrame(offsetMechanism, Math.PI, offsetFitContext);
+  const offsetCarrierInput = offsetCarrierFrame.inputAngleRad;
+  const offsetCarrierState = calculateLinkage(offsetMechanism, offsetCarrierInput);
+  const offsetCarrierPreview = renderToString(createElement(MechanismLinkagePreview, { mechanism: offsetMechanism, simulation: offsetCarrierFrame.simulation, kit: sample.settings.physicalKit, testId: 'contract-planetary-offset-preview', compact: true }));
+  assert(Math.hypot(offsetCarrierState.p2.x - (offsetMechanism.anchorX ?? 0) + offsetMechanism.groundLength, offsetCarrierState.p2.y - (offsetMechanism.anchorY ?? 0)) < 1e-6, 'planetary Foundry playback frame inverts speed and driver phase before sampling carrier output');
+  assert(Math.abs(offsetCarrierFrame.simulation.driveAngleDeg - 1440) < 1e-9, 'planetary preview simulation exposes the driven sun angle after speed and phase are applied');
+  assert(offsetCarrierPreview.includes('rotate(1440'), 'offset planetary SVG preview renders sun rotation from driven angle, not raw solver input');
+  assert(/rotate\(-239\.999|rotate\(-240/.test(offsetCarrierPreview), 'offset planetary SVG preview renders planet spin from the driven sun angle');
+  const offsetPlaybackCarrierTrace = generateFoundryPlaybackPointTraces(offsetMechanism, 96).traces.find(trace => trace.id === 'C');
+  assert(offsetPlaybackCarrierTrace, 'Foundry planetary playback traces include the visible carrier path');
+  const offsetTraceHalfIndex = Math.floor(offsetPlaybackCarrierTrace.points.length / 2);
+  const offsetTraceHalfPoint = offsetPlaybackCarrierTrace.points[offsetTraceHalfIndex];
+  assert(Math.hypot(offsetTraceHalfPoint.x - offsetCarrierState.p2.x, offsetTraceHalfPoint.y - offsetCarrierState.p2.y) < 1e-6, 'Foundry planetary traces sample the same playback-mapped carrier frame used by the renderer');
+  const mappedOffsetCarrierTrace = offsetPlaybackCarrierTrace.points.map(offsetFitContext.map);
+  const offsetOverlay = buildFoundryPhysicsOverlay(offsetMechanism, { ...offsetCarrierFrame.simulation, pathPoints: mappedOffsetCarrierTrace }, offsetCarrierFrame.playbackPhaseRad, sample.settings, mappedOffsetCarrierTrace);
+  const wrappedOffsetTracePoint = (index: number) => mappedOffsetCarrierTrace[((index % mappedOffsetCarrierTrace.length) + mappedOffsetCarrierTrace.length) % mappedOffsetCarrierTrace.length];
+  const expectedOverlayDelta = {
+    x: wrappedOffsetTracePoint(offsetTraceHalfIndex + 1).x - wrappedOffsetTracePoint(offsetTraceHalfIndex - 1).x,
+    y: wrappedOffsetTracePoint(offsetTraceHalfIndex + 1).y - wrappedOffsetTracePoint(offsetTraceHalfIndex - 1).y
+  };
+  assert.equal(offsetOverlay.playIndex, offsetTraceHalfIndex, 'Foundry planetary overlay indexes the visible carrier cycle, not raw sun-input cycles');
+  assert((offsetOverlay.velocityRaw.x * expectedOverlayDelta.x + offsetOverlay.velocityRaw.y * expectedOverlayDelta.y) > 0, 'Foundry planetary overlay velocity follows the playback-mapped carrier trace');
+  const offsetFoundryWorkflow = renderToString(createElement(FoundryWorkflowPanel, {
+    project: sample,
+    goStage: () => undefined,
+    foundry: offsetMechanism,
+    foundryPhase: Math.PI,
+    targetReady: true,
+    isPickingAnchor: false,
+    hardBlocked: false,
+    onToggleAnchorPick: () => undefined,
+    onFitPath: () => undefined,
+    onUseMechanism: () => undefined,
+    onSelectMechanismType: () => undefined
+  }));
+  const expectedMiniCardPathD = pointsToSvgPath(mappedOffsetCarrierTrace);
+  assert(offsetFoundryWorkflow.includes(`d="${expectedMiniCardPathD}"`), 'Foundry planetary template card path silhouette uses the same playback-mapped carrier trace as the main preview');
   Array.from({ length: 8 }, () => generateSmartConfig(undefined, 'planetary_gear')).forEach(config => {
     assert(Math.abs(config.groundLength - (config.crankLength + config.rockerLength)) < 1e-6, 'optimizer keeps generated planetary pitch circles tangent');
   });
