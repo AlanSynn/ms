@@ -7,6 +7,7 @@ import { mechanismBindingWarnings, preferredMotionJointId } from './motion';
 import { makeBlueprintPreviewSvg, makeBlueprintSvg } from './fabricationBlueprintSvg';
 import { FABRICATION_LINKAGE_ROLE_MIN_HOLES, planetaryRingPitchRadius } from './fabricationSizing';
 import { svgNumber } from './numberFormat';
+import { circlePath, hexRgb, makePdfDocument, makeSimplePdf, num, pdfText } from './simplePdf';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlineBounds, pointInsideOutline } from './partGeometry';
 import {
     closePhysicalValue,
@@ -671,44 +672,6 @@ li{margin:.32rem 0;line-height:1.42;}
 </style></head><body><main class="page"><div class="print-actions"><strong>Printable assembly guide</strong><button onclick="window.print()">Print guide</button></div><h1>${esc(project.metadata.name)} assembly guide</h1><p class="subtitle">Profile ${esc(project.settings.physicalKit.profileKey)} · ${project.settings.physicalKit.gridPitchMm}mm grid · exploded view.</p>${explodedSvg}${warnings.map(w => `<p class="warning"><strong>Fix:</strong> ${esc(w)}</p>`).join('')}${recipeSections}</main></body></html>`;
 };
 
-const makePdfDocument = (content: string) => {
-    const objects = [
-        '1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj',
-        '2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj',
-        '3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj',
-        '4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj',
-        `5 0 obj << /Length ${content.length} >> stream\n${content}\nendstream endobj`
-    ];
-    let pdf = '%PDF-1.4\n';
-    const offsets = [0];
-    objects.forEach(obj => { offsets.push(pdf.length); pdf += `${obj}\n`; });
-    const xref = pdf.length;
-    pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map(n => String(n).padStart(10, '0') + ' 00000 n ').join('\n')}\n`;
-    pdf += `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
-    return pdf;
-};
-
-const pdfText = (value: unknown) => String(value)
-    .replace(/·/g, '/')
-    .replace(/[^\x20-\x7E]/g, '?')
-    .replace(/[()\\]/g, '\\$&')
-    .slice(0, 120);
-
-const num = (value: number) => Number.isFinite(value) ? value.toFixed(2) : '0';
-
-const circlePath = (x: number, y: number, r: number) => {
-    const k = r * 0.5522847498;
-    return `${num(x + r)} ${num(y)} m ${num(x + r)} ${num(y + k)} ${num(x + k)} ${num(y + r)} ${num(x)} ${num(y + r)} c ${num(x - k)} ${num(y + r)} ${num(x - r)} ${num(y + k)} ${num(x - r)} ${num(y)} c ${num(x - r)} ${num(y - k)} ${num(x - k)} ${num(y - r)} ${num(x)} ${num(y - r)} c ${num(x + k)} ${num(y - r)} ${num(x + r)} ${num(y - k)} ${num(x + r)} ${num(y)} c h`;
-};
-
-const hexRgb = (value: string | undefined) => {
-    const safe = /^#[0-9a-fA-F]{6}$/.test(value ?? '') ? value! : '#5a6cff';
-    const r = parseInt(safe.slice(1, 3), 16) / 255;
-    const g = parseInt(safe.slice(3, 5), 16) / 255;
-    const b = parseInt(safe.slice(5, 7), 16) / 255;
-    return `${num(r)} ${num(g)} ${num(b)}`;
-};
-
 const makeCutSheetPdf = (project: ProjectState, recipes: FabricationRecipe[]) => {
     const kit = project.settings.physicalKit;
     const bounds = sceneBoundsForSheet(kit);
@@ -746,12 +709,6 @@ const makeCutSheetPdf = (project: ProjectState, recipes: FabricationRecipe[]) =>
         commands.push(`0.10 0.16 0.28 rg BT /F1 8 Tf ${page.margin} ${118 - index * 10} Td (${pdfText(`${recipe.mechanismId}: ${mechanismTypeLabel(recipe.type)} anchor ${recipeBoardCallout(recipe)}`)}) Tj ET`);
     });
     return makePdfDocument(commands.join('\n'));
-};
-
-const makeSimplePdf = (title: string, lines: string[]) => {
-    const text = [title, ...lines].slice(0, 46);
-    const content = `BT /F1 14 Tf 50 760 Td ${text.map((line, i) => `${i ? '0 -16 Td ' : ''}(${pdfText(line)}) Tj`).join(' ')} ET`;
-    return makePdfDocument(content);
 };
 
 const makeAssemblyGuidePdf = (project: ProjectState, recipes: FabricationRecipe[], warnings: string[]) => makeSimplePdf(

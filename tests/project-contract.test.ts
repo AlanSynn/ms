@@ -17,6 +17,7 @@ import { closePhysicalValue as readinessClosePhysicalValue, closeToBoardPitch as
 import { FABRICATION_RENDER_LAYER_Z_STEP as renderPlanLayerZStep, FABRICATION_RENDER_MIN_CLEARANCE as renderPlanMinClearance, FABRICATION_RENDER_PART_DEPTH as renderPlanPartDepth, fabricationRenderPlanForMechanism as renderPlanForMechanism, validateFabricationStack as renderPlanValidateFabricationStack } from '../utils/fabricationRenderPlan';
 import { FABRICATION_LINKAGE_ROLE_MIN_HOLES as sizingRoleMinHoles, PLANETARY_GEAR_PLANET_COUNT as sizingPlanetCount, fabricationLinkageHoleCountsForMechanism as sizingFabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism as sizingFabricationLinkageSceneLengthsForMechanism, planetaryGearConventionForMechanism as sizingPlanetaryGearConventionForMechanism, planetaryPlanetCenters as sizingPlanetaryPlanetCenters } from '../utils/fabricationSizing';
 import { fabricationLinkageSpecForSceneLength as stackModelFabricationLinkageSpecForSceneLength, fabricationStackForMechanism as stackModelFabricationStackForMechanism, fabricationStackSummary as stackModelFabricationStackSummary, readableFabricationStackSummary as stackModelReadableFabricationStackSummary } from '../utils/fabricationStackModel';
+import { circlePath as simplePdfCirclePath, hexRgb as simplePdfHexRgb, makePdfDocument as simplePdfDocument, makeSimplePdf as simplePdfMakeSimplePdf, num as simplePdfNum, pdfText as simplePdfEscapeText } from '../utils/simplePdf';
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
 import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainMeshPhaseDegAt, gearTrainMeshPhaseRadAt, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, gearTrainResolvedCenterDistance, gearTrainRotationRatioAt, generateCurvePoints, generateMechanismPointTraces, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius, sampledCamProfileScale } from '../utils/kinematics';
@@ -313,8 +314,10 @@ assert(
   && normalizedCodebaseCleanupPlan.includes('`utils/fabricationBlueprintSvg.ts` | 142')
   && normalizedCodebaseCleanupPlan.includes('deterministic printable/readable Blueprint SVG rendering')
   && normalizedCodebaseCleanupPlan.includes('`utils/fabricationSizing.ts` | 121')
-  && normalizedCodebaseCleanupPlan.includes('pure planetary gear convention and linkage sizing'),
-  'cleanup plan records the extracted fabrication profile, number formatting, stack model, readiness, render-plan, Blueprint SVG, and sizing seams'
+  && normalizedCodebaseCleanupPlan.includes('pure planetary gear convention and linkage sizing')
+  && normalizedCodebaseCleanupPlan.includes('`utils/simplePdf.ts` | 43')
+  && normalizedCodebaseCleanupPlan.includes('import-free PDF document primitives'),
+  'cleanup plan records the extracted fabrication profile, number formatting, stack model, readiness, render-plan, Blueprint SVG, sizing, and PDF primitive seams'
 );
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintExport.tsx` | 88') && normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintControlPanel.tsx` | 258') && normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintDetailPanel.tsx` | 100') && normalizedCodebaseCleanupPlan.includes('Blueprint left workflow controls, package generation, download buttons, and recipe list live outside the stage wrapper') && normalizedCodebaseCleanupPlan.includes('Blueprint right inspector recipe title, board callout, sensemaking cue, required-part chips, stack summary, and export grid status live outside the stage wrapper'), 'cleanup plan records the extracted Blueprint control/detail panel seams');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
@@ -445,6 +448,7 @@ const visibleUiSource = [
   'utils/fabricationRenderPlan.ts',
   'utils/fabricationSizing.ts',
   'utils/fabricationStackModel.ts',
+  'utils/simplePdf.ts',
   'utils/assemblyPlayback.ts',
   'utils/mechanismTemplates.ts',
   'utils/appCommands.ts'
@@ -1338,6 +1342,7 @@ const fabricationReadinessText = readFileSync(join(process.cwd(), 'utils', 'fabr
 const fabricationRenderPlanText = readFileSync(join(process.cwd(), 'utils', 'fabricationRenderPlan.ts'), 'utf8');
 const fabricationSizingText = readFileSync(join(process.cwd(), 'utils', 'fabricationSizing.ts'), 'utf8');
 const fabricationStackModelText = readFileSync(join(process.cwd(), 'utils', 'fabricationStackModel.ts'), 'utf8');
+const simplePdfSourceText = readFileSync(join(process.cwd(), 'utils', 'simplePdf.ts'), 'utf8');
 const fabricationContractText = readFileSync(join(process.cwd(), 'utils', 'fabricationContract.ts'), 'utf8');
 const numberFormatText = readFileSync(join(process.cwd(), 'utils', 'numberFormat.ts'), 'utf8');
 const staticImportModules = (source: string) => Array.from(new Set([
@@ -1365,9 +1370,10 @@ assert(
   && fabricationRuntimeText.includes("from './fabricationRenderPlan'")
   && fabricationRuntimeText.includes("from './fabricationStackModel'")
   && fabricationRuntimeText.includes("from './numberFormat'")
+  && fabricationRuntimeText.includes("from './simplePdf'")
   && fabricationProfilesText.includes("from './fabricationContract'")
   && fabricationProfilesText.includes("from './numberFormat'"),
-  'fabrication runtime re-exports extracted profile/stack/render helpers and Blueprint SVG renderers from focused seams'
+  'fabrication runtime consumes extracted profile/stack/render helpers, PDF primitives, and Blueprint SVG renderers from focused seams'
 );
 [
   './fabrication',
@@ -1576,6 +1582,28 @@ assert.deepEqual(
   'createElement'
 ].forEach(forbiddenText => {
   assert(!fabricationBlueprintSvgText.includes(forbiddenText), `fabricationBlueprintSvg stays SVG-render-only and must not reference ${forbiddenText}`);
+});
+assert.deepEqual(
+  staticImportModules(simplePdfSourceText),
+  [],
+  'simplePdf stays import-free and deterministic'
+);
+[
+  'ProjectState',
+  'FabricationPackage',
+  'FabricationRecipe',
+  'MechanismConfig',
+  'createFabricationPackage',
+  'validateForFabrication',
+  'document.',
+  'window.',
+  'localStorage',
+  'createElement',
+  'react',
+  'three',
+  '@dimforge/rapier3d-compat'
+].forEach(forbiddenText => {
+  assert(!simplePdfSourceText.includes(forbiddenText), `simplePdf stays domain-free and must not reference ${forbiddenText}`);
 });
 assert(numberFormatText.includes('export const finiteNumber') && numberFormatText.includes('export const svgNumber'), 'neutral numberFormat seam owns finite/svg number formatting without domain imports');
 assert(!fabricationRuntimeText.includes("rootRadiusMm: 28.438"), 'runtime gear constants are no longer duplicated outside the centralized contract');
@@ -2896,6 +2924,14 @@ const twoFourBars = {
 const pkg = createFabricationPackage(twoFourBars);
 assert.equal(directMakeBlueprintSvg(twoFourBars, pkg.recipes), makeBlueprintSvg(twoFourBars, pkg.recipes), 'fabrication facade preserves the direct printable Blueprint SVG renderer');
 assert.equal(directMakeBlueprintPreviewSvg(twoFourBars, pkg.recipes), makeBlueprintPreviewSvg(twoFourBars, pkg.recipes), 'fabrication facade preserves the direct readable Blueprint preview renderer');
+assert(simplePdfDocument('BT ET').startsWith('%PDF-1.4'), 'simplePdf creates a PDF document');
+const simplePdfSinglePage = simplePdfMakeSimplePdf('Title', ['Line']);
+assert(simplePdfSinglePage.startsWith('%PDF-1.4') && simplePdfSinglePage.includes('(Title)') && simplePdfSinglePage.includes('(Line)'), 'simplePdf single-page helper preserves visible text lines');
+assert.equal(simplePdfEscapeText('A · B (C) \\ D'), 'A / B \\(C\\) \\\\ D', 'simplePdf text escapes PDF syntax and middle dots');
+assert.equal(simplePdfNum(Number.NaN), '0', 'simplePdf number helper clamps non-finite values');
+assert(simplePdfCirclePath(1, 2, 3).endsWith(' c h'), 'simplePdf circle helper emits a closed Bezier path');
+assert.equal(simplePdfHexRgb('#336699'), '0.20 0.40 0.60', 'simplePdf converts safe hex colors to PDF RGB');
+assert.equal(simplePdfHexRgb('bad'), '0.35 0.42 1.00', 'simplePdf falls back to MotionSmith blue for invalid PDF colors');
 assert.equal(pkg.recipes.length, 2, 'duplicate same-type mechanisms create separate recipes');
 assert(pkg.sceneSnapshot.skeleton, 'fabrication snapshot includes skeleton');
 assert(pkg.cutSheetPdf.startsWith('%PDF-') && pkg.cutSheetPdf.includes('Cut sheet'), 'fabrication package includes a real PDF cut sheet artifact');
