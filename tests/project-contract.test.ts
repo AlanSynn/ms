@@ -13,6 +13,7 @@ import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADI
 import { FABRICATION_GEAR_ROOT_WEB_MM, fabricationGearEngravingLabel, fabricationLinkageEngravingLabel, fabricationRingGearEngravingLabel, fabricationSpacerEngravingLabel } from '../utils/fabricationContract';
 import { makeBlueprintPreviewSvg as directMakeBlueprintPreviewSvg, makeBlueprintSvg as directMakeBlueprintSvg } from '../utils/fabricationBlueprintSvg';
 import { buildCharacterPrintLayout as directBuildCharacterPrintLayout } from '../utils/fabricationCharacterPrintLayout';
+import { makeCustomPartsPdf as directMakeCustomPartsPdf, makeCustomPartsStl as directMakeCustomPartsStl, makeCustomPartsSvg as directMakeCustomPartsSvg } from '../utils/fabricationCustomParts';
 import { fabricationGearPathD as profileFabricationGearPathD, fabricationGearProfileForPitchRadius as profileFabricationGearProfileForPitchRadius, fabricationRingGearPathD as profileFabricationRingGearPathD, fabricationRingGearProfileForPitchRadius as profileFabricationRingGearProfileForPitchRadius } from '../utils/fabricationProfiles';
 import { createFabricationRecipe as directCreateFabricationRecipe } from '../utils/fabricationRecipes';
 import { closePhysicalValue as readinessClosePhysicalValue, closeToBoardPitch as readinessCloseToBoardPitch, closeToFabricationLinkage as readinessCloseToFabricationLinkage, physicalTolerance as readinessPhysicalTolerance, sampleFeasibleRange as readinessSampleFeasibleRange } from '../utils/fabricationReadiness';
@@ -322,8 +323,10 @@ assert(
   && normalizedCodebaseCleanupPlan.includes('`utils/simplePdf.ts` | 43')
   && normalizedCodebaseCleanupPlan.includes('import-free PDF document primitives')
   && normalizedCodebaseCleanupPlan.includes('`utils/fabricationCharacterPrintLayout.ts`')
-  && normalizedCodebaseCleanupPlan.includes('pure character cut-sheet layout model'),
-  'cleanup plan records the extracted fabrication profile, number formatting, stack model, readiness, render-plan, recipe, Blueprint SVG, sizing, PDF primitive, and character print layout seams'
+  && normalizedCodebaseCleanupPlan.includes('pure character cut-sheet layout model')
+  && normalizedCodebaseCleanupPlan.includes('`utils/fabricationCustomParts.ts` | 135')
+  && normalizedCodebaseCleanupPlan.includes('character custom-parts SVG, PDF, and STL artifact generation'),
+  'cleanup plan records the extracted fabrication profile, number formatting, stack model, readiness, render-plan, recipe, Blueprint SVG, sizing, PDF primitive, character print layout, and custom-parts artifact seams'
 );
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintExport.tsx` | 88') && normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintControlPanel.tsx` | 258') && normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintDetailPanel.tsx` | 100') && normalizedCodebaseCleanupPlan.includes('Blueprint left workflow controls, package generation, download buttons, and recipe list live outside the stage wrapper') && normalizedCodebaseCleanupPlan.includes('Blueprint right inspector recipe title, board callout, sensemaking cue, required-part chips, stack summary, and export grid status live outside the stage wrapper'), 'cleanup plan records the extracted Blueprint control/detail panel seams');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
@@ -449,6 +452,7 @@ const visibleUiSource = [
   'components/stages/assembly/CharacterAssemblyWorkbench.tsx',
   'utils/fabrication.ts',
   'utils/fabricationBlueprintSvg.ts',
+  'utils/fabricationCustomParts.ts',
   'utils/fabricationProfiles.ts',
   'utils/fabricationReadiness.ts',
   'utils/fabricationRenderPlan.ts',
@@ -1347,6 +1351,7 @@ assert(fabricationGeneratorText.includes('FollowerPreset("f4-roller"'), 'fabrica
 assert(fabricationGeneratorText.includes('SOURCE_SSOT = "fabrication/generate_fabrication_templates.py"'), 'fabrication manifest source points at the checked-in generator');
 const fabricationRuntimeText = readFileSync(join(process.cwd(), 'utils', 'fabrication.ts'), 'utf8');
 const fabricationBlueprintSvgText = readFileSync(join(process.cwd(), 'utils', 'fabricationBlueprintSvg.ts'), 'utf8');
+const fabricationCustomPartsText = readFileSync(join(process.cwd(), 'utils', 'fabricationCustomParts.ts'), 'utf8');
 const fabricationProfilesText = readFileSync(join(process.cwd(), 'utils', 'fabricationProfiles.ts'), 'utf8');
 const fabricationRecipesText = readFileSync(join(process.cwd(), 'utils', 'fabricationRecipes.ts'), 'utf8');
 const fabricationReadinessText = readFileSync(join(process.cwd(), 'utils', 'fabricationReadiness.ts'), 'utf8');
@@ -1380,14 +1385,13 @@ assert(
   && fabricationRuntimeText.includes("from './fabricationProfiles'")
   && fabricationRuntimeText.includes("from './fabricationReadiness'")
   && fabricationRuntimeText.includes("from './fabricationRenderPlan'")
+  && fabricationRuntimeText.includes("from './fabricationCustomParts'")
   && fabricationRuntimeText.includes("from './fabricationRecipes'")
   && fabricationRuntimeText.includes("from './fabricationStackModel'")
-  && fabricationRuntimeText.includes("from './numberFormat'")
   && fabricationRuntimeText.includes("from './simplePdf'")
-  && fabricationRuntimeText.includes("from './fabricationCharacterPrintLayout'")
   && fabricationProfilesText.includes("from './fabricationContract'")
   && fabricationProfilesText.includes("from './numberFormat'"),
-  'fabrication runtime consumes extracted profile/stack/render/recipe helpers, character print layout, PDF primitives, and Blueprint SVG renderers from focused seams'
+  'fabrication runtime consumes extracted profile/stack/render/recipe/custom-parts helpers, PDF primitives, and Blueprint SVG renderers from focused seams'
 );
 [
   './fabrication',
@@ -1631,6 +1635,41 @@ assert.deepEqual(
   'createElement'
 ].forEach(forbiddenText => {
   assert(!fabricationBlueprintSvgText.includes(forbiddenText), `fabricationBlueprintSvg stays SVG-render-only and must not reference ${forbiddenText}`);
+});
+assert.deepEqual(
+  staticImportModules(fabricationCustomPartsText),
+  ['../types', './coordinates', './fabricationCharacterPrintLayout', './numberFormat', './partGeometry', './simplePdf'].sort(),
+  'fabricationCustomParts owns custom character cut-sheet artifacts with an exact focused import set'
+);
+[
+  './fabrication',
+  './project',
+  './exporter',
+  './physicsKernel',
+  './sanitize',
+  '../components',
+  'react',
+  'three',
+  '@dimforge/rapier3d-compat'
+].forEach(moduleName => {
+  assert(
+    !fabricationCustomPartsText.includes(`from '${moduleName}'`) && !fabricationCustomPartsText.includes(`from "${moduleName}"`),
+    `fabricationCustomParts stays artifact-only and must not import ${moduleName}`
+  );
+});
+[
+  'FabricationPackage',
+  'FabricationRecipe',
+  'MechanismConfig',
+  'createFabricationPackage',
+  'validateForFabrication',
+  'makeAssemblyGuideHtml',
+  'document.',
+  'window.',
+  'localStorage',
+  'createElement'
+].forEach(forbiddenText => {
+  assert(!fabricationCustomPartsText.includes(forbiddenText), `fabricationCustomParts stays custom-artifact-only and must not reference ${forbiddenText}`);
 });
 assert.deepEqual(
   staticImportModules(simplePdfSourceText),
@@ -3078,6 +3117,9 @@ assert.equal(pkg.recipes.length, 2, 'duplicate same-type mechanisms create separ
 assert(pkg.sceneSnapshot.skeleton, 'fabrication snapshot includes skeleton');
 assert(pkg.cutSheetPdf.startsWith('%PDF-') && pkg.cutSheetPdf.includes('Cut sheet'), 'fabrication package includes a real PDF cut sheet artifact');
 assert(pkg.assemblyGuidePdf.startsWith('%PDF-'), 'fabrication package includes a PDF assembly artifact');
+assert.equal(directMakeCustomPartsSvg(twoFourBars), pkg.customPartsSvg, 'fabrication package preserves the direct custom parts SVG artifact');
+assert.equal(directMakeCustomPartsPdf(twoFourBars), pkg.customPartsPdf, 'fabrication package preserves the direct custom parts PDF artifact');
+assert.equal(directMakeCustomPartsStl(twoFourBars), pkg.customPartsStl, 'fabrication package preserves the direct custom parts STL artifact');
 assert(pkg.customPartsSvg.startsWith('<svg') && pkg.customPartsSvg.includes('custom-parts'), 'fabrication package includes custom parts SVG artifact');
 assert(pkg.customPartsSvg.includes(`width="${twoFourBars.settings.physicalKit.sheetWidthMm}mm"`) && pkg.customPartsSvg.includes(`height="${twoFourBars.settings.physicalKit.sheetHeightMm}mm"`), 'character custom parts SVG is fixed to one letter-size page');
 assert(pkg.customPartsSvg.includes(`viewBox="0 0 ${twoFourBars.settings.physicalKit.sheetWidthMm} ${twoFourBars.settings.physicalKit.sheetHeightMm}"`), 'character custom parts SVG uses the letter page coordinate system');
