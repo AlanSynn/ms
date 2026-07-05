@@ -77,6 +77,11 @@ export const scaleContour = (points: Point[], factor: number): Point[] => {
     }));
 };
 
+export const contourPathD = (points: Point[], flipY = false) =>
+    points.length
+        ? `M ${points.map(point => `${point.x.toFixed(2)} ${(flipY ? -point.y : point.y).toFixed(2)}`).join(' L ')} Z`
+        : '';
+
 export const partWorldPointToLocal = (part: BodyPartLayer, point: Point): Point => {
     const rotation = -(part.transform.rotation * Math.PI) / 180;
     const scale = Math.max(0.001, part.transform.scale);

@@ -8,11 +8,7 @@ import {
   zoomCutViewport,
   type CutViewport,
 } from "../../../utils/cutEditorViewport";
-
-const contourPathD = (points: Point[], flipY = false) =>
-  points.length
-    ? `M ${points.map((point) => `${point.x.toFixed(2)} ${(flipY ? -point.y : point.y).toFixed(2)}`).join(" L ")} Z`
-    : "";
+import { contourPathD } from "../../../utils/partGeometry";
 
 export const CutOutlineEditorDialog = ({
   part,
