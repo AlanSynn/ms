@@ -2224,6 +2224,9 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await page.getByLabel('Input link length').selectOption('2');
   await page.getByLabel('Coupler link length').selectOption('4');
   await page.getByLabel('Output link length').selectOption('2');
+  await expect(threeScene, '4bar link-size selectors override the active Foundry instance with exact fabrication link blanks').toHaveAttribute('data-three-stack-order', /Input L2 linkage.*Coupler L4 linkage.*Output L2 linkage/);
+  await expect(page.getByTestId('foundry-motion-warning')).toContainText(/Motion may jam|No full motion/);
+  await expect(page.getByTestId('stage-left-pane')).not.toContainText(/Motion may jam|No full motion/);
   await expect(page.getByTestId('stage-left-pane')).not.toContainText(/Motion [0-9]+%/);
   await expect(page.getByTestId('stage-left-pane')).not.toContainText(/Range|Status/i);
   await page.getByRole('button', { name: /Use mechanism/i }).click();
@@ -2418,14 +2421,17 @@ test('Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking'
   const inspector = page.getByTestId('stage-right-inspector');
   await expect(inspector.getByTestId('foundry-visible-sensemaking')).toContainText('Crank turns');
   await expect(inspector).not.toContainText('Preview overlays');
+  await expect(inspector.getByTestId('foundry-fabrication-stack')).toContainText(/^Stack\s*Back Clip.*S10 spacer.*Front Clip/);
+  await expect(page.getByTestId('stage-left-pane').getByTestId('foundry-fabrication-stack')).toHaveCount(0);
   await expect(inspector.getByTestId('foundry-view-controls')).toBeVisible();
   await expect(inspector.getByTestId('foundry-parametric-editor')).toContainText('Link sizes');
   expect(await inspector.evaluate((root) => {
     const topOf = (testId: string) =>
       root.querySelector(`[data-testid="${testId}"]`)?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY;
-    return topOf('foundry-visible-sensemaking') < topOf('foundry-view-controls')
+    return topOf('foundry-visible-sensemaking') < topOf('foundry-fabrication-stack')
+      && topOf('foundry-fabrication-stack') < topOf('foundry-view-controls')
       && topOf('foundry-view-controls') < topOf('foundry-parametric-editor');
-  }), 'Foundry right pane orders sensemaking before compact view controls and editable link sizes').toBe(true);
+  }), 'Foundry right pane orders sensemaking, Stack, compact view controls, then editable link sizes').toBe(true);
   await page.getByTestId('foundry-toggle-user-path').click();
   await expect(foundryCanvasPane).toHaveAttribute('data-user-path-preview', 'hidden');
   await expect(page.getByTestId('foundry-user-path-overlay')).toHaveCount(0);

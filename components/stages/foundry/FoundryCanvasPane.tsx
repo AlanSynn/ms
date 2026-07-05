@@ -56,6 +56,7 @@ type FoundryCanvasPaneProps = {
   isZoomingFoundry: boolean;
   isPanningFoundry: boolean;
   physicsRule: string;
+  motionWarning?: string | null;
   velocityMagnitude: number;
   forceMagnitude: number;
   frictionCoefficient: number;
@@ -127,6 +128,7 @@ export const FoundryCanvasPane = ({
   isZoomingFoundry,
   isPanningFoundry,
   physicsRule,
+  motionWarning,
   velocityMagnitude,
   forceMagnitude,
   frictionCoefficient,
@@ -257,6 +259,11 @@ export const FoundryCanvasPane = ({
       onToggleVelocity={onToggleVelocity}
       onToggleTrail={onToggleTrail}
     />
+    {motionWarning && (
+      <div className="warning foundry-motion-warning" data-testid="foundry-motion-warning">
+        {motionWarning}
+      </div>
+    )}
     <FoundryPlaybackPanel
       foundryPlaying={foundryPlaying}
       foundryPhaseDegrees={foundryPhaseDegrees}

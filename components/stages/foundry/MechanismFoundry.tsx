@@ -71,7 +71,7 @@ import {
   fitMechanismToTargetPath,
   normalizeGearMeshMechanism,
 } from "../../../utils/mechanismRecommendations";
-import { createDefaultMechanism, uid } from "../../../utils/project";
+import { createDefaultMechanism, mechanismWithGeneratedPath, uid } from "../../../utils/project";
 import { preferredMotionJointId } from "../../../utils/motion";
 
 const traceDistanceToGeneratedPath = (
@@ -231,6 +231,11 @@ export const MechanismFoundry = ({
   const library = MECHANISM_LIBRARY[foundry.type];
   const classroomSensemaking = library.classroomSensemaking;
   const feasibilityText = range.warning ?? "360°";
+  const motionWarning = range.warning
+    ? range.warning.startsWith("No motion")
+      ? "No full motion. Try reset or smaller links."
+      : "Motion may jam. Try a smaller move."
+    : null;
   const foundryFitContext = useMemo(
     () =>
       createMechanismFitContext(
@@ -600,6 +605,25 @@ export const MechanismFoundry = ({
       preset: "custom",
     }));
   };
+  const refreshEditedFoundryMechanism = (mechanism: MechanismConfig) => {
+    const normalized = normalizeGearMeshMechanism(mechanism);
+    if (normalized.type !== "4bar" || !normalized.generatedPath?.length)
+      return mechanismWithGeneratedPath(normalized);
+    const bcTraces = generateMechanismPointTraces(normalized, 96).traces.filter(
+      (trace) => trace.id === "B" || trace.id === "C",
+    );
+    if (bcTraces.length === 0) return mechanismWithGeneratedPath(normalized);
+    const selectedTrace = bcTraces.reduce((best, trace) =>
+      traceDistanceToGeneratedPath(trace, normalized.generatedPath ?? []) <
+      traceDistanceToGeneratedPath(best, normalized.generatedPath ?? [])
+        ? trace
+        : best,
+    );
+    return mechanismWithGeneratedPath(
+      { ...normalized, generatedPath: selectedTrace.points },
+      { preserveGeneratedPath: true },
+    );
+  };
   const updateFoundryParam = (key: keyof MechanismConfig, value: number) => {
     if (key === "anchorX" || key === "anchorY") {
       const anchor = {
@@ -608,7 +632,7 @@ export const MechanismFoundry = ({
       };
       setManualAnchor(anchor);
       setFoundry(
-        normalizeGearMeshMechanism({
+        refreshEditedFoundryMechanism({
           ...foundry,
           [key]: value,
           sceneAnchor: anchor,
@@ -626,10 +650,10 @@ export const MechanismFoundry = ({
       );
       return;
     }
-    setFoundry(normalizeGearMeshMechanism({ ...foundry, [key]: value }));
+    setFoundry(refreshEditedFoundryMechanism({ ...foundry, [key]: value }));
   };
   const updateFoundryParams = (updates: Partial<MechanismConfig>) => {
-    setFoundry(normalizeGearMeshMechanism({ ...foundry, ...updates }));
+    setFoundry(refreshEditedFoundryMechanism({ ...foundry, ...updates }));
   };
   const foundryPointFromOverlayEvent = (
     event: React.PointerEvent<SVGCircleElement>,
@@ -890,7 +914,6 @@ export const MechanismFoundry = ({
             goStage={goStage}
             foundry={foundry}
             foundryPhase={foundryPhase}
-            rangeWarning={range.warning}
             targetReady={targetReady}
             isPickingAnchor={isPickingAnchor}
             hardBlocked={hardBlocked}
@@ -929,6 +952,7 @@ export const MechanismFoundry = ({
             isZoomingFoundry={isZoomingFoundry}
             isPanningFoundry={isPanningFoundry}
             physicsRule={physicsRule}
+            motionWarning={motionWarning}
             velocityMagnitude={velocityMagnitude}
             forceMagnitude={forceMagnitude}
             frictionCoefficient={project.settings.simulationFriction}

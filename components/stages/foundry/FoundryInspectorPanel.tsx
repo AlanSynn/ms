@@ -121,6 +121,13 @@ export const FoundryInspectorPanel = ({
       )}
       <ClassroomExampleVideo example={useExample} />
     </div>
+    <div
+      className="compact-fabrication-stack"
+      data-testid="foundry-fabrication-stack"
+    >
+      <strong>Stack</strong>
+      <span>{fabricationStackSummary(foundry)}</span>
+    </div>
     <div className="foundry-view-controls" data-testid="foundry-view-controls">
       <div className="section-title">View</div>
       <div className="foundry-view-controls-grid">

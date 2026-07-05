@@ -6,7 +6,6 @@ import type {
   MechanismType,
   ProjectState,
 } from "../../../types";
-import { fabricationStackSummary } from "../../../utils/fabrication";
 import {
   FOUNDRY_MECHANISM_TYPES,
   MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY,
@@ -24,7 +23,6 @@ export const FoundryWorkflowPanel = ({
   goStage,
   foundry,
   foundryPhase,
-  rangeWarning,
   targetReady,
   isPickingAnchor,
   hardBlocked,
@@ -37,7 +35,6 @@ export const FoundryWorkflowPanel = ({
   goStage: (stage: AppStage) => void;
   foundry: MechanismConfig;
   foundryPhase: number;
-  rangeWarning?: string | null;
   targetReady: boolean;
   isPickingAnchor: boolean;
   hardBlocked: boolean;
@@ -46,12 +43,6 @@ export const FoundryWorkflowPanel = ({
   onUseMechanism: () => void;
   onSelectMechanismType: (type: MechanismType) => void;
 }) => {
-  const motionWarning = rangeWarning
-    ? rangeWarning.startsWith("No motion")
-      ? "No full motion. Try reset or smaller links."
-      : "Motion may jam. Try a smaller move."
-    : null;
-
   return (
   <div className="stage-pane-stack">
     <StageLeftSummary
@@ -89,14 +80,6 @@ export const FoundryWorkflowPanel = ({
         <Boxes size={16} /> Use mechanism
       </button>
       {!targetReady && <div className="warning">Draw a path first.</div>}
-      {motionWarning && <div className="warning">{motionWarning}</div>}
-      <div
-        className="compact-fabrication-stack"
-        data-testid="foundry-fabrication-stack"
-      >
-        <strong>Stack</strong>
-        <span>{fabricationStackSummary(foundry)}</span>
-      </div>
       <h4 className="section-title mt-4">Templates</h4>
       <div
         className="mechanism-choice-grid"

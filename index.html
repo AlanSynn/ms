@@ -346,7 +346,7 @@
       .three-puppet-state { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
       .path-canvas-shell > svg[data-testid="path-canvas"], .canvas-surface > svg[data-testid="design-canvas"] { position: relative; z-index: 10; }
       .foundry-preview { position: relative; overflow: hidden; background-color: rgba(255,255,255,.92); background-size: 24px 24px; background-image: linear-gradient(to right, rgba(90,108,255,.055) 1px, transparent 1px), linear-gradient(to bottom, rgba(90,108,255,.055) 1px, transparent 1px); border: 1px solid rgba(148,163,184,.22); box-shadow: inset 0 1px 0 rgba(255,255,255,.92); cursor: grab; touch-action: none; }
-      .foundry-camera-hud, .foundry-sim-badge, .foundry-opacity-panel, .foundry-playback-hud { position: absolute; z-index: 28; border: 1px solid var(--ms-line); background: rgba(255,255,255,.88); box-shadow: 0 18px 52px rgba(8,10,18,.10); backdrop-filter: blur(18px); pointer-events: auto; }
+      .foundry-camera-hud, .foundry-sim-badge, .foundry-opacity-panel, .foundry-playback-hud, .foundry-motion-warning { position: absolute; z-index: 28; border: 1px solid var(--ms-line); background: rgba(255,255,255,.88); box-shadow: 0 18px 52px rgba(8,10,18,.10); backdrop-filter: blur(18px); pointer-events: auto; }
       .foundry-camera-hud { left: 50%; top: .85rem; transform: translateX(-50%); display: inline-flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: .3rem; max-width: calc(100% - 1.7rem); border-radius: 1rem; padding: .35rem; }
       .foundry-camera-hud { pointer-events: none; }
       .foundry-camera-hud button { pointer-events: auto; }
@@ -365,6 +365,7 @@
       .compact-fabrication-stack { display: grid; gap: .35rem; border: 1px solid var(--ms-line); border-radius: 1rem; background: #fff; color: var(--ms-muted); padding: .65rem .75rem; font-size: .74rem; font-weight: 650; }
       .compact-fabrication-stack strong { color: var(--ms-text); font-size: .7rem; font-weight: 720; letter-spacing: .08em; text-transform: uppercase; }
       .compact-fabrication-stack span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .foundry-motion-warning { left: 50%; bottom: 4.75rem; transform: translateX(-50%); width: min(31rem, calc(100% - 2rem)); margin: 0; background: #fef3c7; color: #92400e; border-color: rgba(251,191,36,.32); pointer-events: none; }
       .foundry-playback-hud { left: 50%; bottom: .9rem; transform: translateX(-50%); display: flex; align-items: center; gap: .55rem; width: min(31rem, calc(100% - 2rem)); border-radius: 1rem; padding: .45rem .55rem; border-bottom: 2px solid var(--ms-accent); }
       .foundry-playback-hud button { padding: .48rem .72rem; font-size: .76rem; }
       .foundry-playback-hud input { flex: 1 1 auto; min-width: 8rem; }
@@ -376,6 +377,7 @@
         .foundry-camera-readout { display: none; }
         .foundry-sim-badge { top: auto; bottom: 5.4rem; }
         .foundry-opacity-panel { left: .85rem; right: auto; top: 8.15rem; width: min(8.5rem, calc(100% - 1.7rem)); }
+        .foundry-motion-warning { bottom: 6.25rem; width: min(18rem, calc(100% - 2rem)); }
         .foundry-playback-hud { flex-wrap: wrap; justify-content: center; width: min(18rem, calc(100% - 2rem)); }
         .foundry-playback-hud input { flex-basis: 6rem; min-width: 6rem; }
       }
