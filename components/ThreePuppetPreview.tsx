@@ -720,7 +720,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
     () => mechanismsToRender.find(mechanism => mechanism.id === project?.selectedMechanismId) ?? mechanismsToRender[0],
     [mechanismsToRender, project?.selectedMechanismId]
   );
-  const renderedMechanisms = useMemo(() => selectedMechanism ? [selectedMechanism] : [], [selectedMechanism]);
+  const renderedMechanisms = mechanismsToRender;
   const selectedTelemetry = useMemo(() => selectedMechanism ? mechanismTelemetry(selectedMechanism, angle) : null, [selectedMechanism, angle]);
   const selectedRenderPlan = useMemo(() => selectedMechanism ? fabricationRenderPlanForMechanism(selectedMechanism) : null, [selectedMechanism]);
   const selectedGearPlaneZ = useMemo(() => {
@@ -1604,6 +1604,11 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
       data-three-rebuild-mode="static-topology-dynamic-transforms"
       data-three-supported-mechanism-types={SUPPORTED_MECHANISM_TYPES.join(',')}
       data-three-selected-mechanism-type={selectedTelemetry?.type ?? ''}
+      data-three-selected-mechanism-id={selectedMechanism?.id ?? ''}
+      data-three-selected-mechanism-generated-path-count={selectedMechanism?.generatedPath?.length ?? 0}
+      data-three-mechanism-ids={mechanismsToRender.map(mechanism => mechanism.id).join(',')}
+      data-three-rendered-mechanism-ids={renderedMechanisms.map(mechanism => mechanism.id).join(',')}
+      data-three-mechanism-generated-path-counts={mechanismsToRender.map(mechanism => `${mechanism.id}:${mechanism.generatedPath?.length ?? 0}`).join(',')}
       data-three-stack-source={selectedRenderPlan ? 'fabricationStackForMechanism' : ''}
       data-three-stack-mode="assembled-spacer-separated"
       data-three-part-surface="solid-cut-plates"

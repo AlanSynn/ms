@@ -2164,6 +2164,25 @@ test('Recommendation sheet applies a distinct mechanism and blueprint recipe', a
   const mechanismOptions = await page.getByLabel('Mechanism instance').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));
   expect(mechanismOptions).toHaveLength(initialMechanisms + 1);
   expect(new Set(mechanismOptions).size).toBe(mechanismOptions.length);
+  const designPreview = page.getByTestId('design-shared-foundry-preview');
+  await expect(designPreview).toBeVisible();
+  await expect(page.getByTestId('design-context-puppet-state')).toBeVisible();
+  await expect(designPreview).toHaveAttribute('data-user-path-preview', 'shown');
+  await expect(designPreview).toHaveAttribute('data-mechanism-path-preview', 'shown');
+  await expect(designPreview).toHaveAttribute('data-design-motion-source', 'generatedPath');
+  expect(Number(await designPreview.getAttribute('data-design-generated-path-count'))).toBeGreaterThanOrEqual(3);
+  await expect(designPreview).toHaveAttribute('data-design-target-joint-id', /\S/);
+  const targetErrorAttr = await designPreview.getAttribute('data-design-target-error');
+  expect(targetErrorAttr).toMatch(/^\d+(\.\d+)?$/);
+  const targetError = Number(targetErrorAttr);
+  expect(Number.isFinite(targetError)).toBe(true);
+  expect(targetError).toBeLessThan(0.01);
+  expect(Number(await designPreview.getAttribute('data-design-animated-part-count'))).toBeGreaterThan(0);
+  const targetBeforeScrub = `${await designPreview.getAttribute('data-design-target-x')},${await designPreview.getAttribute('data-design-target-y')}`;
+  await page.getByLabel('Workspace scrubber').fill('35');
+  await expect.poll(async () => `${await designPreview.getAttribute('data-design-target-x')},${await designPreview.getAttribute('data-design-target-y')}`, { message: 'Design character target follows fitted generatedPath through scrubber changes' }).not.toBe(targetBeforeScrub);
+  expect(Number(await designPreview.getAttribute('data-design-target-error'))).toBeLessThan(0.01);
+  await expect(designPreview.getByTestId('foundry-camera-rig')).toHaveAttribute('data-path-preview', 'shown');
 
   await clickStage(page, 'Blueprint');
   await expect(page.getByRole('button', { name: /Generate package/i })).toBeEnabled();
@@ -2171,14 +2190,26 @@ test('Recommendation sheet applies a distinct mechanism and blueprint recipe', a
   const metadata = await downloadMetadataJson(page);
   expect(metadata.recipes).toHaveLength(initialMechanisms + 1);
   expect(new Set(metadata.recipes.map((recipe: { mechanismId: string }) => recipe.mechanismId)).size).toBe(initialMechanisms + 1);
-  const appliedRecommendation = metadata.sceneSnapshot.mechanisms.find((mechanism: { id: string; presetId?: string; source?: string; targetPathId?: string; targetPartId?: string }) => mechanism.source === 'optimized' && mechanism.presetId?.startsWith('recommendation-'));
+  const appliedRecommendation = metadata.sceneSnapshot.mechanisms.find((mechanism: { id: string; presetId?: string; source?: string; targetPathId?: string; targetPartId?: string; generatedPath?: Array<{ x: number; y: number }> }) => mechanism.source === 'optimized' && mechanism.presetId?.startsWith('recommendation-'));
   expect(appliedRecommendation).toBeTruthy();
   expect(appliedRecommendation?.targetPartId).toBe('right_arm_lower');
   expect(appliedRecommendation?.targetPathId).toBe('path-right-arm');
+  expect(appliedRecommendation?.generatedPath?.length ?? 0).toBeGreaterThanOrEqual(3);
   const appliedRecipe = metadata.recipes.find((recipe: { mechanismId: string; offsetFromBoardMm?: { x: number; y: number } }) => recipe.mechanismId === appliedRecommendation?.id);
   expect(appliedRecipe).toBeTruthy();
   expect(Math.abs(appliedRecipe?.offsetFromBoardMm?.x ?? Number.NaN)).toBeLessThan(0.01);
   expect(Math.abs(appliedRecipe?.offsetFromBoardMm?.y ?? Number.NaN)).toBeLessThan(0.01);
+  await clickStage(page, 'Assembly');
+  await expect(page.getByTestId('assembly-mechanism-three-preview')).toBeVisible();
+  const assemblyThree = page.getByTestId('assembly-three-puppet-state');
+  const assemblyGhost = page.getByTestId('assembly-character-context-ghost');
+  await expect(assemblyGhost).toHaveAttribute('data-assembly-motion-mechanism-id', appliedRecommendation?.id ?? 'missing');
+  await expect(assemblyGhost).toHaveAttribute('data-assembly-rendered-mechanism-ids', new RegExp(appliedRecommendation?.id ?? 'missing'));
+  await expect(assemblyThree).toHaveAttribute('data-three-mechanism-ids', new RegExp(appliedRecommendation?.id ?? 'missing'));
+  await expect(assemblyThree).toHaveAttribute('data-three-rendered-mechanism-ids', new RegExp(appliedRecommendation?.id ?? 'missing'));
+  await expect(assemblyThree).toHaveAttribute('data-three-mechanism-generated-path-counts', new RegExp(`${appliedRecommendation?.id ?? 'missing'}:${appliedRecommendation?.generatedPath?.length ?? 0}`));
+  expect(Number(await assemblyThree.getAttribute('data-three-mechanism-count'))).toBeGreaterThan(0);
+  expect(Number(await assemblyThree.getAttribute('data-three-mechanism-link-count'))).toBeGreaterThan(0);
 
   await page.goto('/');
   await openWavingArmTemplate(page);
@@ -2203,6 +2234,15 @@ test('Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking'
   await expect(page.getByTestId('foundry-toolbar')).toBeVisible();
   const threeScene = page.getByTestId('foundry-camera-rig');
   await expect(threeScene).toHaveAttribute('data-path-preview', 'hidden');
+  const foundryCanvasPane = page.getByTestId('foundry-canvas-pane');
+  await expect(foundryCanvasPane).toHaveAttribute('data-user-path-preview', 'shown');
+  await expect(foundryCanvasPane).toHaveAttribute('data-mechanism-path-preview', 'hidden');
+  await expect(foundryCanvasPane).toHaveAttribute('data-user-path-basis', 'mechanism-fit-context');
+  await expect(foundryCanvasPane).toHaveAttribute('data-user-path-bounds', /-?\d+\.\d{2},-?\d+\.\d{2},-?\d+\.\d{2},-?\d+\.\d{2}/);
+  const foundryFitError = Number(await foundryCanvasPane.getAttribute('data-user-to-mech-fit-error'));
+  expect(Number.isFinite(foundryFitError)).toBe(true);
+  expect(foundryFitError).toBeGreaterThanOrEqual(0);
+  await expect(page.getByTestId('foundry-user-path-overlay')).toBeVisible();
   const inspector = page.getByTestId('stage-right-inspector');
   await expect(inspector.getByTestId('foundry-visible-sensemaking')).toContainText('Crank turns');
   await expect(inspector).not.toContainText('Preview overlays');
@@ -2214,12 +2254,21 @@ test('Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking'
     return topOf('foundry-visible-sensemaking') < topOf('foundry-view-controls')
       && topOf('foundry-view-controls') < topOf('foundry-parametric-editor');
   }), 'Foundry right pane orders sensemaking before compact view controls and editable link sizes').toBe(true);
+  await page.getByTestId('foundry-toggle-user-path').click();
+  await expect(foundryCanvasPane).toHaveAttribute('data-user-path-preview', 'hidden');
+  await expect(page.getByTestId('foundry-user-path-overlay')).toHaveCount(0);
+  await page.getByTestId('foundry-toggle-user-path').click();
+  await expect(foundryCanvasPane).toHaveAttribute('data-user-path-preview', 'shown');
+  await expect(page.getByTestId('foundry-user-path-overlay')).toBeVisible();
   await page.getByTestId('foundry-toggle-paths').click();
+  await expect(foundryCanvasPane).toHaveAttribute('data-mechanism-path-preview', 'shown');
   await expect(threeScene).toHaveAttribute('data-path-preview', 'shown');
+  await expect(threeScene).toHaveAttribute('data-three-primary-path-bounds', /-?\d+\.\d{2},-?\d+\.\d{2},-?\d+\.\d{2},-?\d+\.\d{2}/);
   await expect(threeScene).toHaveAttribute('data-three-path-source', 'moving-joints');
   await expect(threeScene).toHaveAttribute('data-three-path-trace-ids', 'B,C');
   await expect(threeScene).toHaveAttribute('data-three-primary-path-id', 'C');
   await page.getByTestId('foundry-toggle-paths').click();
+  await expect(foundryCanvasPane).toHaveAttribute('data-mechanism-path-preview', 'hidden');
   await expect(threeScene).toHaveAttribute('data-path-preview', 'hidden');
   await page.getByTestId('foundry-toggle-trail').click();
   await expect(threeScene).toHaveAttribute('data-trail', 'shown');
@@ -2247,6 +2296,8 @@ test('Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking'
   await expect(page.getByTestId('foundry-toolbar-state')).toContainText('paused');
   await expect(page.getByTestId('foundry-toolbar-state')).not.toBeVisible();
   await expect(threeScene).toHaveAttribute('data-path-preview', 'hidden');
+  await expect(foundryCanvasPane).toHaveAttribute('data-user-path-preview', 'shown');
+  await expect(page.getByTestId('foundry-user-path-overlay')).toBeVisible();
   await expect(threeScene).toHaveAttribute('data-trail', 'hidden');
   await expect(threeScene).toHaveAttribute('data-layer-forces', 'shown');
   await expect(threeScene).toHaveAttribute('data-layer-velocity', 'shown');
@@ -2346,6 +2397,7 @@ test('Foundry supports CAD-style 3D camera presets and drag orbit', async ({ pag
   const previewBox = await preview.boundingBox();
   expect(previewBox, 'foundry preview supports direct orbit dragging and anchor picking').toBeTruthy();
   await page.getByTestId('foundry-pick-anchor').click();
+  await expect(preview).toHaveClass(/is-picking-anchor/);
   await page.mouse.click(previewBox!.x + previewBox!.width * 0.5, previewBox!.y + previewBox!.height * 0.5);
   const pickedMarker = await page.getByTestId('foundry-anchor-marker').getAttribute('transform');
   const pickedCoords = pickedMarker?.match(/translate\(([-\d.]+) ([-\d.]+)/);
@@ -3407,7 +3459,11 @@ test('Draw mode forces 2D Path view and accepts free path strokes on SceneSketch
   await expect(page.getByTestId('view-lens-hud')).toHaveCount(0);
   await expect(page.getByTestId('toon-renderer-shell')).toHaveCount(0);
 
-  const beforeDraw = Number((await page.getByTestId('free-draw-status').textContent())?.match(/^(\d+)/)?.[1] ?? 0);
+  const readFreeDrawPointCount = async () => {
+    const value = await page.getByTestId('free-draw-status').getAttribute('data-point-count');
+    return Number(value ?? 0);
+  };
+  const beforeDraw = await readFreeDrawPointCount();
   const canvasBox = await page.getByTestId('path-canvas').boundingBox();
   expect(canvasBox, 'path canvas box').toBeTruthy();
 
@@ -3416,8 +3472,8 @@ test('Draw mode forces 2D Path view and accepts free path strokes on SceneSketch
   await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.45 + 34, canvasBox!.y + canvasBox!.height * 0.45 + 22, { steps: 4 });
   await page.mouse.up();
 
-  await expect.poll(async () =>
-    Number((await page.getByTestId('free-draw-status').textContent())?.match(/^(\d+)/)?.[1] ?? 0),
+  await expect.poll(
+    readFreeDrawPointCount,
     { message: 'draw mode accepts pointer input on simplified canvas' }
   ).toBeGreaterThan(beforeDraw);
 });

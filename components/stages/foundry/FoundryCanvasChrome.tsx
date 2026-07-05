@@ -18,12 +18,14 @@ type FoundryCameraControlsProps = {
   foundryCamera: FoundryCamera;
   foundryCameraLabel: string;
   showFoundryGrid: boolean;
+  showUserPathPreview: boolean;
   showPathPreview: boolean;
   showForces: boolean;
   showVelocity: boolean;
   showTrail: boolean;
   onSetCameraPreset: (preset: Exclude<FoundryViewPreset, "custom">) => void;
   onToggleGrid: () => void;
+  onToggleUserPathPreview: () => void;
   onTogglePathPreview: () => void;
   onToggleForces: () => void;
   onToggleVelocity: () => void;
@@ -34,12 +36,14 @@ export const FoundryCameraControls = ({
   foundryCamera,
   foundryCameraLabel,
   showFoundryGrid,
+  showUserPathPreview,
   showPathPreview,
   showForces,
   showVelocity,
   showTrail,
   onSetCameraPreset,
   onToggleGrid,
+  onToggleUserPathPreview,
   onTogglePathPreview,
   onToggleForces,
   onToggleVelocity,
@@ -87,13 +91,23 @@ export const FoundryCameraControls = ({
     </button>
     <button
       type="button"
+      data-testid="foundry-toggle-user-path"
+      className={showUserPathPreview ? "active" : ""}
+      aria-label="User path layer"
+      aria-pressed={showUserPathPreview}
+      onClick={onToggleUserPathPreview}
+    >
+      User path
+    </button>
+    <button
+      type="button"
       data-testid="foundry-toggle-paths"
       className={showPathPreview ? "active" : ""}
-      aria-label="Path layer"
+      aria-label="Mechanism path layer"
       aria-pressed={showPathPreview}
       onClick={onTogglePathPreview}
     >
-      Path
+      Mech path
     </button>
     <button
       type="button"

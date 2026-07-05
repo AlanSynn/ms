@@ -236,9 +236,18 @@ export const AssemblyMechanismThreePreview = ({
     physicalSimulation,
     physicsOverlay,
   } = useMechanismPreviewModel(project, mechanism, angle);
+  const activeProjectMechanisms = useMemo(
+    () =>
+      project.mechanisms.filter(
+        (projectMechanism) =>
+          projectMechanism.visible !== false &&
+          projectMechanism.enabled !== false,
+      ),
+    [project.mechanisms],
+  );
   const animatedParts = useMemo(
-    () => animatedPartsForProject(project, [designMechanism], angle),
-    [angle, designMechanism, project],
+    () => animatedPartsForProject(project, [mechanism], angle),
+    [angle, mechanism, project],
   );
 
   const updateProjectionSize = (size: FoundryOverlaySize) =>
@@ -381,13 +390,17 @@ export const AssemblyMechanismThreePreview = ({
         <div
           className="assembly-context-ghost"
           data-testid="assembly-character-context-ghost"
+          data-assembly-motion-mechanism-id={mechanism.id}
+          data-assembly-rendered-mechanism-ids={activeProjectMechanisms
+            .map((projectMechanism) => projectMechanism.id)
+            .join(",")}
           aria-hidden="true"
         >
           <ThreePuppetPreview
             project={project}
             animatedParts={animatedParts}
             skeleton={project.skeleton}
-            mechanisms={[designMechanism]}
+            mechanisms={activeProjectMechanisms}
             paths={[]}
             angle={angle}
             viewport={viewport}

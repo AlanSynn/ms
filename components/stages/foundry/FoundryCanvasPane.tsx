@@ -1,7 +1,16 @@
-import React from "react";
-import type { MechanismConfig, PhysicalKitSettings, Point } from "../../../types";
-import type { FoundryCamera, FoundryOverlaySize, FoundryViewPreset } from "../../../utils/foundryCamera";
-import { fitMechanismSimulation } from "../../../utils/mechanismPreview";
+import React, { useMemo } from "react";
+import type {
+  MechanismConfig,
+  PhysicalKitSettings,
+  Point,
+} from "../../../types";
+import {
+  projectFoundryOverlayPoint,
+  type FoundryCamera,
+  type FoundryOverlaySize,
+  type FoundryViewPreset,
+} from "../../../utils/foundryCamera";
+import { fitMechanismSimulation, pointsToSvgPath } from "../../../utils/mechanismPreview";
 import {
   FoundryCameraControls,
   FoundryPlaybackPanel,
@@ -32,8 +41,10 @@ type FoundryCanvasPaneProps = {
     points: Point[];
     primary: boolean;
   }>;
+  userPathPoints: Point[];
   kit: PhysicalKitSettings;
   showFoundryGrid: boolean;
+  showUserPathPreview: boolean;
   showPathPreview: boolean;
   showTrail: boolean;
   showForces: boolean;
@@ -64,6 +75,7 @@ type FoundryCanvasPaneProps = {
   landingBoardLabel: string;
   onSetCameraPreset: (preset: Exclude<FoundryViewPreset, "custom">) => void;
   onToggleGrid: () => void;
+  onToggleUserPathPreview: () => void;
   onTogglePathPreview: () => void;
   onToggleForces: () => void;
   onToggleVelocity: () => void;
@@ -99,8 +111,10 @@ export const FoundryCanvasPane = ({
   selectedPhysicalSimulation,
   previewPoints,
   foundryPointTraces,
+  userPathPoints,
   kit,
   showFoundryGrid,
+  showUserPathPreview,
   showPathPreview,
   showTrail,
   showForces,
@@ -131,6 +145,7 @@ export const FoundryCanvasPane = ({
   landingBoardLabel,
   onSetCameraPreset,
   onToggleGrid,
+  onToggleUserPathPreview,
   onTogglePathPreview,
   onToggleForces,
   onToggleVelocity,
@@ -148,19 +163,81 @@ export const FoundryCanvasPane = ({
   onParamPointerDown,
   onParamPointerMove,
   onParamPointerUp,
-}: FoundryCanvasPaneProps) => (
-  <section className="path-canvas-shell foundry-canvas-shell canvas-workspace p-0">
+}: FoundryCanvasPaneProps) => {
+  const pathFitError = useMemo(() => {
+    if (!userPathPoints.length || !previewPoints.length) return undefined;
+    const total = userPathPoints.reduce((sum, userPoint) => {
+      const nearest = previewPoints.reduce(
+        (best, mechPoint) =>
+          Math.min(
+            best,
+            Math.hypot(userPoint.x - mechPoint.x, userPoint.y - mechPoint.y),
+          ),
+        Number.POSITIVE_INFINITY,
+      );
+      return sum + nearest;
+    }, 0);
+    return total / userPathPoints.length;
+  }, [previewPoints, userPathPoints]);
+  const userPathBounds = useMemo(() => {
+    if (!userPathPoints.length) return "";
+    const xs = userPathPoints.map((point) => point.x);
+    const ys = userPathPoints.map((point) => point.y);
+    return [
+      Math.min(...xs),
+      Math.min(...ys),
+      Math.max(...xs),
+      Math.max(...ys),
+    ]
+      .map((value) => value.toFixed(2))
+      .join(",");
+  }, [userPathPoints]);
+  const userPathD = useMemo(() => {
+    if (!showUserPathPreview || userPathPoints.length < 2) return "";
+    const projected = userPathPoints
+      .map((point) =>
+        projectFoundryOverlayPoint(
+          point,
+          foundryCamera,
+          foundryProjectionSize,
+          0.08,
+        ),
+      )
+      .filter((point): point is Point => Boolean(point));
+    return projected.length >= 2 ? pointsToSvgPath(projected) : "";
+  }, [
+    foundryCamera,
+    foundryProjectionSize,
+    showUserPathPreview,
+    userPathPoints,
+  ]);
+
+  return (
+    <section
+      className="path-canvas-shell foundry-canvas-shell canvas-workspace p-0"
+      data-testid="foundry-canvas-pane"
+      data-user-path-preview={showUserPathPreview ? "shown" : "hidden"}
+      data-mechanism-path-preview={showPathPreview ? "shown" : "hidden"}
+      data-user-path-basis="mechanism-fit-context"
+      data-user-path-bounds={userPathBounds}
+      data-user-path-point-count={userPathPoints.length}
+      data-user-to-mech-fit-error={
+        pathFitError === undefined ? "missing" : pathFitError.toFixed(2)
+      }
+    >
     <FoundrySimBadge foundryPlaying={foundryPlaying} />
     <FoundryCameraControls
       foundryCamera={foundryCamera}
       foundryCameraLabel={foundryCameraLabel}
       showFoundryGrid={showFoundryGrid}
+      showUserPathPreview={showUserPathPreview}
       showPathPreview={showPathPreview}
       showForces={showForces}
       showVelocity={showVelocity}
       showTrail={showTrail}
       onSetCameraPreset={onSetCameraPreset}
       onToggleGrid={onToggleGrid}
+      onToggleUserPathPreview={onToggleUserPathPreview}
       onTogglePathPreview={onTogglePathPreview}
       onToggleForces={onToggleForces}
       onToggleVelocity={onToggleVelocity}
@@ -207,6 +284,24 @@ export const FoundryCanvasPane = ({
       onWheel={onWheel}
       onProjectionSizeChange={onProjectionSizeChange}
     >
+      {userPathD && (
+        <svg
+          data-testid="foundry-user-path-overlay"
+          viewBox={`0 0 ${foundryProjectionSize.width} ${foundryProjectionSize.height}`}
+          className="foundry-preview-overlay"
+          aria-hidden="true"
+        >
+          <path
+            d={userPathD}
+            fill="none"
+            stroke="#10b981"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeDasharray="10 8"
+            opacity="0.85"
+          />
+        </svg>
+      )}
       <FoundryOverlayLayer
         foundryProjectionSize={foundryProjectionSize}
         showForces={showForces}
@@ -238,9 +333,11 @@ export const FoundryCanvasPane = ({
     </ThreeFoundryPreview>
     <div hidden data-testid="foundry-toolbar-state">
       Toolbar: {foundryPlaying ? "playing" : "paused"} · grid{" "}
-      {showFoundryGrid ? "shown" : "hidden"} · path{" "}
+      {showFoundryGrid ? "shown" : "hidden"} · user path{" "}
+      {showUserPathPreview ? "shown" : "hidden"} · mech path{" "}
       {showPathPreview ? "shown" : "hidden"} · camera {foundryCameraLabel} ·
       phase {Math.round((foundryPhase * 180) / Math.PI)}°
     </div>
-  </section>
-);
+    </section>
+  );
+};

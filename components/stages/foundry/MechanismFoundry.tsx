@@ -94,6 +94,7 @@ export const MechanismFoundry = ({
   const [showForces, setShowForces] = useState(true);
   const [showVelocity, setShowVelocity] = useState(true);
   const [showTrail, setShowTrail] = useState(false);
+  const [showUserPathPreview, setShowUserPathPreview] = useState(true);
   const [showPathPreview, setShowPathPreview] = useState(false);
   const [showFoundryGrid, setShowFoundryGrid] = useState(true);
   const [showSensemaking, setShowSensemaking] = useState(false);
@@ -207,6 +208,10 @@ export const MechanismFoundry = ({
       foundryPointTraces[0]?.points ??
       fitPointsToBox(preview, 360, 240),
     [foundryPointTraces, preview],
+  );
+  const foundryUserPathPoints = useMemo(
+    () => selectedPath?.points.map(foundryFitContext.map) ?? [],
+    [foundryFitContext, selectedPath],
   );
   const selectedPhysicalSimulation = useMemo(
     () => ({
@@ -682,6 +687,7 @@ export const MechanismFoundry = ({
     setShowForces(true);
     setShowVelocity(true);
     setShowTrail(false);
+    setShowUserPathPreview(true);
     setShowPathPreview(false);
     setFoundryExplode(0);
     setFoundryCamera({
@@ -821,8 +827,10 @@ export const MechanismFoundry = ({
             selectedPhysicalSimulation={selectedPhysicalSimulation}
             previewPoints={previewPoints}
             foundryPointTraces={foundryPointTraces}
+            userPathPoints={foundryUserPathPoints}
             kit={project.settings.physicalKit}
             showFoundryGrid={showFoundryGrid}
+            showUserPathPreview={showUserPathPreview}
             showPathPreview={showPathPreview}
             showTrail={showTrail}
             showForces={showForces}
@@ -853,6 +861,9 @@ export const MechanismFoundry = ({
             landingBoardLabel={landingBoard.label}
             onSetCameraPreset={setCameraPreset}
             onToggleGrid={() => setShowFoundryGrid((value) => !value)}
+            onToggleUserPathPreview={() =>
+              setShowUserPathPreview((value) => !value)
+            }
             onTogglePathPreview={() => setShowPathPreview((value) => !value)}
             onToggleForces={() => setShowForces((value) => !value)}
             onToggleVelocity={() => setShowVelocity((value) => !value)}

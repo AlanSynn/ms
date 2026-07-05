@@ -194,6 +194,21 @@ export const FoundryPreviewStateProbe = ({
   const isGearTrain =
     mechanism.type === "gear" || mechanism.type === "gear_linkage";
   const isPlanetaryGear = mechanism.type === "planetary_gear";
+  const primaryPath = visiblePathTraces.find((trace) => trace.primary);
+  const primaryPathBounds = primaryPath?.points.length
+    ? (() => {
+        const xs = primaryPath.points.map((point) => point.x);
+        const ys = primaryPath.points.map((point) => point.y);
+        return [
+          Math.min(...xs),
+          Math.min(...ys),
+          Math.max(...xs),
+          Math.max(...ys),
+        ]
+          .map((value) => value.toFixed(2))
+          .join(",");
+      })()
+    : "";
 
   return (
     <div
@@ -398,6 +413,7 @@ export const FoundryPreviewStateProbe = ({
         .map((trace) => trace.id)
         .join(",")}
       data-three-primary-path-id={primaryPathId}
+      data-three-primary-path-bounds={primaryPathBounds}
       data-three-path-z={pathLayerZ.toFixed(2)}
       data-path-preview={showPathPreview ? "shown" : "hidden"}
       data-trail={showTrail ? "shown" : "hidden"}

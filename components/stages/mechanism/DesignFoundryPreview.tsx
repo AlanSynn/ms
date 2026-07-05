@@ -1,10 +1,19 @@
 import React, { useMemo, useRef, useState } from "react";
 import { ThreePuppetPreview } from "../../ThreePuppetPreview";
 import { ThreeFoundryPreview } from "../foundry/ThreeFoundryPreview";
-import type { MechanismConfig, Point, ProjectState } from "../../../types";
+import type {
+  MechanismConfig,
+  Point,
+  ProjectMotionPath,
+  ProjectState,
+} from "../../../types";
 import { buildFoundryPhysicsOverlay } from "../../../utils/physicsSession";
-import { animatedPartsForProject } from "../../../utils/motion";
 import {
+  motionPreviewForProject,
+  pointOnProjectPath,
+} from "../../../utils/motion";
+import {
+  calculateLinkage,
   generateCurvePoints,
   generateMechanismPointTraces,
 } from "../../../utils/kinematics";
@@ -162,14 +171,58 @@ export const DesignFoundryPreview = ({
     const path = targetPath ?? selectedPath ?? firstVisiblePath;
     return path ? [path] : [];
   }, [designMechanism?.targetPathId, project.paths, project.selectedPathId]);
-  const designContextAnimatedParts = useMemo(
+  const designMotionPreview = useMemo(
     () =>
       designMechanism
-        ? animatedPartsForProject(project, [designMechanism], angle)
-        : {},
+        ? motionPreviewForProject(project, [designMechanism], angle)
+        : undefined,
     [angle, designMechanism, project],
   );
+  const designContextAnimatedParts = designMotionPreview?.parts ?? {};
   const designContextPathId = designContextPaths[0]?.id;
+  const generatedTarget = useMemo(() => {
+    if (!designMechanism?.generatedPath?.length) return undefined;
+    const generatedPath: ProjectMotionPath = {
+      id: `${designMechanism.id}-generated-path`,
+      partId: designMechanism.targetPartId ?? "",
+      targetAnchorJointId: designMechanism.targetAnchorJointId,
+      points: designMechanism.generatedPath,
+      duration: 1,
+      closed: true,
+      enabled: true,
+      visible: true,
+      source: "generated",
+      warnings: [],
+    };
+    return pointOnProjectPath(generatedPath, angle);
+  }, [
+    angle,
+    designMechanism?.generatedPath,
+    designMechanism?.id,
+    designMechanism?.targetAnchorJointId,
+    designMechanism?.targetPartId,
+  ]);
+  const fittedTargetError =
+    generatedTarget && designMotionPreview?.target
+      ? Math.hypot(
+          designMotionPreview.target.x - generatedTarget.x,
+          designMotionPreview.target.y - generatedTarget.y,
+        )
+      : undefined;
+  const rawEffectorDistance =
+    designMechanism && designMotionPreview?.target
+      ? (() => {
+          const raw = calculateLinkage(designMechanism, angle).effector;
+          return Math.hypot(
+            designMotionPreview.target!.x - raw.x,
+            designMotionPreview.target!.y - raw.y,
+          );
+        })()
+      : undefined;
+  const hasGeneratedMotionTarget =
+    Boolean(generatedTarget && designMotionPreview?.target) &&
+    fittedTargetError !== undefined &&
+    Number.isFinite(fittedTargetError);
 
   const updateProjectionSize = (size: FoundryOverlaySize) =>
     setProjectionSize((prev) =>
@@ -287,6 +340,34 @@ export const DesignFoundryPreview = ({
       data-guided-context-path-id={designContextPathId ?? ""}
       data-user-path-preview={showUserPathPreview ? "shown" : "hidden"}
       data-mechanism-path-preview={showMechanismPathPreview ? "shown" : "hidden"}
+      data-design-motion-source={
+        hasGeneratedMotionTarget
+          ? "generatedPath"
+          : generatedTarget
+            ? "missing-target"
+            : "linkage-effector"
+      }
+      data-design-generated-path-count={designMechanism.generatedPath?.length ?? 0}
+      data-design-target-joint-id={designMotionPreview?.targetJointId ?? ""}
+      data-design-target-error={
+        hasGeneratedMotionTarget ? fittedTargetError.toFixed(3) : "missing"
+      }
+      data-design-target-x={
+        hasGeneratedMotionTarget
+          ? designMotionPreview!.target!.x.toFixed(2)
+          : "missing"
+      }
+      data-design-target-y={
+        hasGeneratedMotionTarget
+          ? designMotionPreview!.target!.y.toFixed(2)
+          : "missing"
+      }
+      data-design-animated-part-count={
+        Object.keys(designContextAnimatedParts).length
+      }
+      data-design-raw-effector-distance={
+        rawEffectorDistance === undefined ? "" : rawEffectorDistance.toFixed(3)
+      }
     >
       <div
         className="foundry-camera-hud design-foundry-camera-hud"

@@ -53,6 +53,7 @@ export const buildAssemblyGuideModel = ({
   const recipes = liveRecipes.length ? liveRecipes : (pkg?.recipes ?? []);
   const selectedRecipe =
     recipes.find((recipe) => recipe.mechanismId === selectedRecipeId) ??
+    recipes.find((recipe) => recipe.mechanismId === project.selectedMechanismId) ??
     recipes[0];
   const characterAssemblyPlan = buildCharacterAssemblyPlan(project);
   const hasCharacterAssembly =

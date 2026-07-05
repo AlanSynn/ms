@@ -2808,6 +2808,7 @@ assert(threeResourceKitText.includes('export const cachedThreeResource') && thre
   }
 }
 assert(!threePreviewText.includes('scene.traverse(child =>'), '3D puppet preview does not traverse the whole scene every animation frame for telemetry');
+assert.equal(threePreviewText.includes('const renderedMechanisms = mechanismsToRender') && threePreviewText.includes('data-three-selected-mechanism-id') && threePreviewText.includes('data-three-rendered-mechanism-ids') && threePreviewText.includes('data-three-mechanism-generated-path-counts'), true, '3D puppet preview renders active mechanisms and exposes mechanism ids/generated path counts so Assembly can prove fitted-mechanism continuity');
 assert(threePreviewText.includes("const pinSites = mechanism.type === 'gear'") && threePreviewText.includes('boardToMovingZ(zDriverGear)') && !threePreviewText.includes('[state.p1, state.p2, state.j1, state.j2, state.aux, state.effector].forEach'), '3D puppet mechanism pins use per-site z spans instead of one global pin tower through empty planes');
 assert(mechanismDesignText.includes('<DesignFoundryPreview') && designFoundryPreviewText.includes('export const DesignFoundryPreview') && designFoundryPreviewText.includes('data-testid="design-shared-foundry-preview"'), 'Mechanism Design owns a thin Foundry preview adapter instead of a separate mechanism renderer');
 assert(((designFoundryPreviewText + foundryCanvasPaneText).match(/<ThreeFoundryPreview/g) ?? []).length >= 2, 'Foundry and Mechanism Design both mount ThreeFoundryPreview');
@@ -2841,7 +2842,60 @@ assert(modalInertHookText.includes('setAttribute("inert", "")') && modalInertHoo
 assert(appText.includes('STARTER_IMAGE_TEMPLATES') && !appText.includes('girl.png?url') && starterImageTemplatesText.includes('girl.png?url') && starterImageTemplatesText.includes('boy.PNG?url') && starterImageTemplatesText.includes('girl-thumb.png?url') && starterImageTemplatesText.includes('boy-thumb.png?url'), 'App delegates starter image template assets to resources/starterImageTemplates without changing starter labels or package URLs');
 assert(appText.includes('useAppPathActions({') && !appText.includes('const setPathPoints =') && !appText.includes('setShowTracking(false);\n    setStage("path")') && appPathActionsHookText.includes('validatePath') && appPathActionsHookText.includes('ProjectMotionPath["source"] = "drawn"') && appPathActionsHookText.includes('setPathPoints(path, "tracked")') && appPathActionsHookText.includes('setStage("path")'), 'App delegates Path draw/tracking actions to useAppPathActions while preserving validated drawn/tracked path upserts');
 assert(appPathActionsHookText.includes('closed: current?.closed ?? true'), 'new drawn/tracked paths default to closed loops while preserving existing open paths');
-assert(!readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'PathWorkflowPanel.tsx'), 'utf8').includes('Choose mechanism'), 'Path Editor omits the old choose-mechanism button from the left workflow pane');
+const pathWorkflowPanelText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'PathWorkflowPanel.tsx'), 'utf8');
+
+const assertMotionFitSourceContracts = () => {
+  const foundryCameraClickThrough =
+    indexText.includes('.foundry-camera-hud { pointer-events: none; }') &&
+    indexText.includes('.foundry-camera-hud button { pointer-events: auto; }') &&
+    indexText.includes('flex-wrap: nowrap; justify-content: flex-start') &&
+    indexText.includes('overflow-x: auto; overflow-y: hidden');
+  assert.equal(foundryCameraClickThrough, true, 'Foundry camera HUD background clicks pass through to the 3D pick/orbit surface while the buttons remain clickable');
+
+  const foundrySplitPathControls =
+    foundryCanvasChromeText.includes('data-testid="foundry-toggle-user-path"') &&
+    foundryCanvasChromeText.includes('User path') &&
+    foundryCanvasChromeText.includes('Mech path') &&
+    foundryCanvasPaneText.includes('data-user-path-preview') &&
+    foundryCanvasPaneText.includes('data-mechanism-path-preview') &&
+    foundryCanvasPaneText.includes('data-user-path-basis="mechanism-fit-context"') &&
+    foundryCanvasPaneText.includes('data-user-to-mech-fit-error') &&
+    foundryCanvasPaneText.includes('data-testid="foundry-user-path-overlay"') &&
+    mechanismFoundryText.includes('selectedPath?.points.map(foundryFitContext.map)') &&
+    foundryPreviewStateProbeText.includes('data-three-primary-path-bounds');
+  assert.equal(foundrySplitPathControls, true, 'Foundry separates the drawn user path from the generated mechanism path in the same fit-context coordinate basis so students can compare fit before applying the mechanism');
+
+  const designGeneratedPathMotion =
+    designFoundryPreviewText.includes('motionPreviewForProject(project, [designMechanism], angle)') &&
+    designFoundryPreviewText.includes('data-design-motion-source={') &&
+    designFoundryPreviewText.includes('hasGeneratedMotionTarget') &&
+    designFoundryPreviewText.includes('? "generatedPath"') &&
+    designFoundryPreviewText.includes('data-design-target-error') &&
+    designFoundryPreviewText.includes('data-design-target-x') &&
+    designFoundryPreviewText.includes('data-design-animated-part-count');
+  assert.equal(designGeneratedPathMotion, true, 'Mechanism Design fails closed unless the selected fitted mechanism drives character motion from generatedPath through motionPreviewForProject');
+
+  const puppetMechanismContinuity =
+    threePreviewText.includes('data-three-selected-mechanism-generated-path-count') &&
+    threePreviewText.includes('data-three-rendered-mechanism-ids') &&
+    threePreviewText.includes('data-three-mechanism-generated-path-counts');
+  assert.equal(puppetMechanismContinuity, true, '3D puppet preview exposes mechanism identity and generatedPath counts so Blueprint/Assembly continuity can be verified after fitting');
+
+  const pathEditorHarnessTelemetry =
+    pathWorkflowPanelText.includes('data-point-count={pointCount}') &&
+    pathWorkflowPanelText.includes('data-draw-mode={drawMode ? "drawing" : "idle"}');
+  assert.equal(pathEditorHarnessTelemetry, true, 'Path Editor keeps compact visible copy while exposing free-draw point telemetry for browser harnesses');
+
+  const assemblyFittedMechanismContinuity =
+    assemblyGuideModelText.includes('project.selectedMechanismId') &&
+    assemblyThreePreviewText.includes('activeProjectMechanisms') &&
+    assemblyThreePreviewText.includes('animatedPartsForProject(project, [mechanism], angle)') &&
+    assemblyThreePreviewText.includes('data-assembly-motion-mechanism-id={mechanism.id}') &&
+    assemblyThreePreviewText.includes('data-assembly-rendered-mechanism-ids={activeProjectMechanisms');
+  assert.equal(assemblyFittedMechanismContinuity, true, 'Assembly defaults to the selected fitted mechanism, drives the character ghost from that mechanism, and still renders all active ProjectState mechanisms in the Three context preview');
+};
+assertMotionFitSourceContracts();
+assert.equal(pathWorkflowPanelText.includes('Choose mechanism'), false, 'Path Editor omits the old choose-mechanism button from the left workflow pane');
 
 assert(appText.includes('useAppCharacterImportActions({') && !appText.includes('const runWebOnnx =') && !appText.includes('const importCharacterPackage =') && !appText.includes('const importProject =') && !appText.includes('const acceptPendingCharacter =') && appCharacterImportActionsHookText.includes('createProjectFromProcessed') && appCharacterImportActionsHookText.includes('processImageWithWebOnnx') && appCharacterImportActionsHookText.includes('loadCharacterPackage') && appCharacterImportActionsHookText.includes('loadProjectSnapshot') && appCharacterImportActionsHookText.includes('setProject(pendingCharacter.project, { resetHistory: true })') && appCharacterImportActionsHookText.includes('returnStage: "character"'), 'App delegates character import/review actions to useAppCharacterImportActions while preserving ONNX/package/project import review semantics');
 assert(workspacePlayerDockHookText.includes('const showsWorkspacePlayer =') && workspacePlayerDockHookText.includes('editorStage === "path"') && workspacePlayerDockHookText.includes('editorStage === "design"') && workspacePlayerDockHookText.includes('editorStage === "assembly"'), 'shared playback dock is restricted to Path, Mechanism Design, and Assembly instead of leaking onto unrelated tabs');
@@ -3063,6 +3117,10 @@ const assemblyGuideLiveModel = buildAssemblyGuideModel({ project: sample, select
 assert.equal(assemblyGuideLiveModel.selectedRecipe?.mechanismId, sample.mechanisms[0].id, 'Assembly guide model prefers live project mechanisms before package recipes');
 assert.equal(assemblyGuideLiveModel.activeAssemblyMode, 'mechanism', 'Assembly guide model defaults to mechanism mode when a live recipe exists');
 assert(assemblyGuideLiveModel.activeStepCount > 0 && assemblyGuideLiveModel.resetKey.includes(sample.mechanisms[0].id), 'Assembly guide model exposes active steps and a recipe-keyed reset key');
+const secondAssemblyMechanism = mechanismWithGeneratedPath({ ...createDefaultMechanism('4bar', 'selected-assembly-mech'), anchorX: 80, anchorY: 40 });
+const selectedAssemblyProject = { ...sample, mechanisms: [...sample.mechanisms, secondAssemblyMechanism], selectedMechanismId: secondAssemblyMechanism.id };
+const selectedAssemblyModel = buildAssemblyGuideModel({ project: selectedAssemblyProject, selectedRecipeId: null, assemblyMode: 'mechanism', lane: 'kit', stepIndex: 0 });
+assert.equal(selectedAssemblyModel.selectedRecipe?.mechanismId, secondAssemblyMechanism.id, 'Assembly guide model follows selectedMechanismId so newly fitted mechanisms become the default build target');
 const hiddenMechanismProject = { ...sample, mechanisms: sample.mechanisms.map(mechanism => ({ ...mechanism, visible: false })) };
 const assemblyGuidePackageModel = buildAssemblyGuideModel({ project: hiddenMechanismProject, pkg: createFabricationPackage(sample), selectedRecipeId: null, assemblyMode: 'mechanism', lane: 'kit', stepIndex: 0 });
 assert.equal(assemblyGuidePackageModel.selectedRecipe?.mechanismId, sample.mechanisms[0].id, 'Assembly guide model falls back to exported package recipes when no mechanisms are live');

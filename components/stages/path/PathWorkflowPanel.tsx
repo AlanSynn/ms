@@ -94,7 +94,12 @@ export const PathWorkflowPanel = ({
           <Trash2 size={16} /> Clear path
         </button>
       </div>
-      <div className="free-draw-status" data-testid="free-draw-status">
+      <div
+        className="free-draw-status"
+        data-testid="free-draw-status"
+        data-point-count={pointCount}
+        data-draw-mode={drawMode ? "drawing" : "idle"}
+      >
         {selectedPath
           ? pointCount >= 3
             ? "Path ready"
