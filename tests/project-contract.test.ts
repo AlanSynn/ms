@@ -14,6 +14,7 @@ import { FABRICATION_GEAR_ROOT_WEB_MM, fabricationGearEngravingLabel, fabricatio
 import { makeAssemblyGuideHtml as directMakeAssemblyGuideHtml, makeAssemblyGuidePdf as directMakeAssemblyGuidePdf } from '../utils/fabricationAssemblyGuide';
 import { makeBlueprintPreviewSvg as directMakeBlueprintPreviewSvg, makeBlueprintSvg as directMakeBlueprintSvg } from '../utils/fabricationBlueprintSvg';
 import { buildCharacterPrintLayout as directBuildCharacterPrintLayout } from '../utils/fabricationCharacterPrintLayout';
+import { makeCutSheetPdf as directMakeCutSheetPdf } from '../utils/fabricationCutSheetPdf';
 import { makeCustomPartsPdf as directMakeCustomPartsPdf, makeCustomPartsStl as directMakeCustomPartsStl, makeCustomPartsSvg as directMakeCustomPartsSvg } from '../utils/fabricationCustomParts';
 import { fabricationGearPathD as profileFabricationGearPathD, fabricationGearProfileForPitchRadius as profileFabricationGearProfileForPitchRadius, fabricationRingGearPathD as profileFabricationRingGearPathD, fabricationRingGearProfileForPitchRadius as profileFabricationRingGearProfileForPitchRadius } from '../utils/fabricationProfiles';
 import { createFabricationRecipe as directCreateFabricationRecipe } from '../utils/fabricationRecipes';
@@ -328,8 +329,10 @@ assert(
   && normalizedCodebaseCleanupPlan.includes('`utils/fabricationCustomParts.ts` | 135')
   && normalizedCodebaseCleanupPlan.includes('character custom-parts SVG, PDF, and STL artifact generation')
   && normalizedCodebaseCleanupPlan.includes('`utils/fabricationAssemblyGuide.ts` | 113')
-  && normalizedCodebaseCleanupPlan.includes('assembly guide exploded SVG, printable HTML, and PDF artifact generation'),
-  'cleanup plan records the extracted fabrication profile, number formatting, stack model, readiness, render-plan, recipe, Blueprint SVG, sizing, PDF primitive, character print layout, custom-parts artifact, and assembly-guide artifact seams'
+  && normalizedCodebaseCleanupPlan.includes('assembly guide exploded SVG, printable HTML, and PDF artifact generation')
+  && normalizedCodebaseCleanupPlan.includes('`utils/fabricationCutSheetPdf.ts` | 48')
+  && normalizedCodebaseCleanupPlan.includes('cut-sheet PDF artifact generation'),
+  'cleanup plan records the extracted fabrication profile, number formatting, stack model, readiness, render-plan, recipe, Blueprint SVG, sizing, PDF primitive, character print layout, custom-parts artifact, assembly-guide artifact, and cut-sheet artifact seams'
 );
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintExport.tsx` | 88') && normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintControlPanel.tsx` | 258') && normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintDetailPanel.tsx` | 100') && normalizedCodebaseCleanupPlan.includes('Blueprint left workflow controls, package generation, download buttons, and recipe list live outside the stage wrapper') && normalizedCodebaseCleanupPlan.includes('Blueprint right inspector recipe title, board callout, sensemaking cue, required-part chips, stack summary, and export grid status live outside the stage wrapper'), 'cleanup plan records the extracted Blueprint control/detail panel seams');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
@@ -456,6 +459,7 @@ const visibleUiSource = [
   'utils/fabrication.ts',
   'utils/fabricationAssemblyGuide.ts',
   'utils/fabricationBlueprintSvg.ts',
+  'utils/fabricationCutSheetPdf.ts',
   'utils/fabricationCustomParts.ts',
   'utils/fabricationProfiles.ts',
   'utils/fabricationReadiness.ts',
@@ -1356,6 +1360,7 @@ assert(fabricationGeneratorText.includes('SOURCE_SSOT = "fabrication/generate_fa
 const fabricationRuntimeText = readFileSync(join(process.cwd(), 'utils', 'fabrication.ts'), 'utf8');
 const fabricationAssemblyGuideText = readFileSync(join(process.cwd(), 'utils', 'fabricationAssemblyGuide.ts'), 'utf8');
 const fabricationBlueprintSvgText = readFileSync(join(process.cwd(), 'utils', 'fabricationBlueprintSvg.ts'), 'utf8');
+const fabricationCutSheetPdfText = readFileSync(join(process.cwd(), 'utils', 'fabricationCutSheetPdf.ts'), 'utf8');
 const fabricationCustomPartsText = readFileSync(join(process.cwd(), 'utils', 'fabricationCustomParts.ts'), 'utf8');
 const fabricationProfilesText = readFileSync(join(process.cwd(), 'utils', 'fabricationProfiles.ts'), 'utf8');
 const fabricationRecipesText = readFileSync(join(process.cwd(), 'utils', 'fabricationRecipes.ts'), 'utf8');
@@ -1387,6 +1392,7 @@ assert(fabricationRuntimeText.includes("from './fabricationContract'"), 'fabrica
 assert(
   fabricationRuntimeText.includes("from './fabricationBlueprintSvg'")
   && fabricationRuntimeText.includes("from './fabricationAssemblyGuide'")
+  && fabricationRuntimeText.includes("from './fabricationCutSheetPdf'")
   && fabricationRuntimeText.includes("from './fabricationSizing'")
   && fabricationRuntimeText.includes("from './fabricationProfiles'")
   && fabricationRuntimeText.includes("from './fabricationReadiness'")
@@ -1394,10 +1400,9 @@ assert(
   && fabricationRuntimeText.includes("from './fabricationCustomParts'")
   && fabricationRuntimeText.includes("from './fabricationRecipes'")
   && fabricationRuntimeText.includes("from './fabricationStackModel'")
-  && fabricationRuntimeText.includes("from './simplePdf'")
   && fabricationProfilesText.includes("from './fabricationContract'")
   && fabricationProfilesText.includes("from './numberFormat'"),
-  'fabrication runtime consumes extracted profile/stack/render/recipe/custom-parts/assembly-guide helpers, PDF primitives, and Blueprint SVG renderers from focused seams'
+  'fabrication runtime consumes extracted profile/stack/render/recipe/custom-parts/assembly-guide/cut-sheet helpers, PDF primitives, and Blueprint SVG renderers from focused seams'
 );
 [
   './fabrication',
@@ -1676,6 +1681,40 @@ assert.deepEqual(
   'createElement'
 ].forEach(forbiddenText => {
   assert(!fabricationBlueprintSvgText.includes(forbiddenText), `fabricationBlueprintSvg stays SVG-render-only and must not reference ${forbiddenText}`);
+});
+assert.deepEqual(
+  staticImportModules(fabricationCutSheetPdfText),
+  ['../types', './coordinates', './fabricationContract', './fabricationRecipes', './kinematics', './simplePdf'].sort(),
+  'fabricationCutSheetPdf owns cut-sheet PDF artifacts with an exact focused import set'
+);
+[
+  './fabrication',
+  './project',
+  './exporter',
+  './physicsKernel',
+  './sanitize',
+  '../components',
+  'react',
+  'three',
+  '@dimforge/rapier3d-compat'
+].forEach(moduleName => {
+  assert(
+    !fabricationCutSheetPdfText.includes(`from '${moduleName}'`) && !fabricationCutSheetPdfText.includes(`from "${moduleName}"`),
+    `fabricationCutSheetPdf stays artifact-only and must not import ${moduleName}`
+  );
+});
+[
+  'FabricationPackage',
+  'createFabricationPackage',
+  'validateForFabrication',
+  'makeAssemblyGuideHtml',
+  'makeCustomPartsSvg',
+  'document.',
+  'window.',
+  'localStorage',
+  'createElement'
+].forEach(forbiddenText => {
+  assert(!fabricationCutSheetPdfText.includes(forbiddenText), `fabricationCutSheetPdf stays cut-sheet-only and must not reference ${forbiddenText}`);
 });
 assert.deepEqual(
   staticImportModules(fabricationCustomPartsText),
@@ -3157,6 +3196,7 @@ assert.equal(simplePdfHexRgb('bad'), '0.35 0.42 1.00', 'simplePdf falls back to 
 assert.equal(pkg.recipes.length, 2, 'duplicate same-type mechanisms create separate recipes');
 assert(pkg.sceneSnapshot.skeleton, 'fabrication snapshot includes skeleton');
 assert(pkg.cutSheetPdf.startsWith('%PDF-') && pkg.cutSheetPdf.includes('Cut sheet'), 'fabrication package includes a real PDF cut sheet artifact');
+assert.equal(directMakeCutSheetPdf(twoFourBars, pkg.recipes), pkg.cutSheetPdf, 'fabrication package preserves the direct cut-sheet PDF artifact');
 assert(pkg.assemblyGuidePdf.startsWith('%PDF-'), 'fabrication package includes a PDF assembly artifact');
 assert.equal(directMakeAssemblyGuideHtml(twoFourBars, pkg.recipes, pkg.warnings), pkg.assemblyGuideHtml, 'fabrication package preserves the direct assembly guide HTML artifact');
 assert.equal(directMakeAssemblyGuidePdf(twoFourBars, pkg.recipes, pkg.warnings), pkg.assemblyGuidePdf, 'fabrication package preserves the direct assembly guide PDF artifact');
