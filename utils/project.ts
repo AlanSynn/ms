@@ -1218,7 +1218,7 @@ export const validatePath = (path: ProjectMotionPath): ProjectMotionPath => {
         points,
         timedPoints: Array.isArray(raw.timedPoints) ? raw.timedPoints.map(p => ({ ...sanitizePoint(p), time: finiteNumber(asRecord(p).time, 0) })).slice(0, 2000) : undefined,
         duration: clampNumber(raw.duration, 1800, 100, 120000),
-        closed: Boolean(raw.closed),
+        closed: raw.closed === undefined ? true : Boolean(raw.closed),
         enabled: typeof raw.enabled === 'boolean' ? raw.enabled : true,
         visible: typeof raw.visible === 'boolean' ? raw.visible : true,
         source,

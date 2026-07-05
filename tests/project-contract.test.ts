@@ -26,7 +26,7 @@ import { circlePath as simplePdfCirclePath, hexRgb as simplePdfHexRgb, makePdfDo
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
 import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainMeshPhaseDegAt, gearTrainMeshPhaseRadAt, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, gearTrainResolvedCenterDistance, gearTrainRotationRatioAt, generateCurvePoints, generateMechanismPointTraces, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius, sampledCamProfileScale } from '../utils/kinematics';
-import { animatedPartsForProject, describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainRootJointIds, motionPreviewForPath, motionPreviewForProject, motionPreviewForTarget, preferredMotionJointId } from '../utils/motion';
+import { animatedPartsForProject, describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainRootJointIds, motionPreviewForPath, motionPreviewForProject, motionPreviewForTarget, pointOnProjectPath, preferredMotionJointId } from '../utils/motion';
 import { buildToonSceneProjection } from '../utils/sceneProjection';
 import { buildFoundryPhysicsOverlay, buildKinematicPhysicsSession, mechanismPhysicsRule } from '../utils/physicsSession';
 import { fabricablePartOutlinePoints, partLandmarkJointIds, partLandmarkLocalPoints, partOutlineBounds, partWorldPointToLocal, pointInsideOutline } from '../utils/partGeometry';
@@ -2839,6 +2839,7 @@ assert(appText.includes('useWorkspacePlaybackLoop({') && !appText.includes('requ
 assert(modalInertHookText.includes('setAttribute("inert", "")') && modalInertHookText.includes('aria-hidden') && modalInertHookText.includes('welcome-modal-open') && appText.includes('useModalInertEffect(appShellRef, modalOpen)') && !appText.includes('document.documentElement.classList.add("welcome-modal-open")') && !appText.includes('useEffect, useRef'), 'App delegates startup/help/about modal inert DOM side effects to useModalInertEffect');
 assert(appText.includes('STARTER_IMAGE_TEMPLATES') && !appText.includes('girl.png?url') && starterImageTemplatesText.includes('girl.png?url') && starterImageTemplatesText.includes('boy.PNG?url') && starterImageTemplatesText.includes('girl-thumb.png?url') && starterImageTemplatesText.includes('boy-thumb.png?url'), 'App delegates starter image template assets to resources/starterImageTemplates without changing starter labels or package URLs');
 assert(appText.includes('useAppPathActions({') && !appText.includes('const setPathPoints =') && !appText.includes('setShowTracking(false);\n    setStage("path")') && appPathActionsHookText.includes('validatePath') && appPathActionsHookText.includes('ProjectMotionPath["source"] = "drawn"') && appPathActionsHookText.includes('setPathPoints(path, "tracked")') && appPathActionsHookText.includes('setStage("path")'), 'App delegates Path draw/tracking actions to useAppPathActions while preserving validated drawn/tracked path upserts');
+assert(appPathActionsHookText.includes('closed: current?.closed ?? true'), 'new drawn/tracked paths default to closed loops while preserving existing open paths');
 
 assert(appText.includes('useAppCharacterImportActions({') && !appText.includes('const runWebOnnx =') && !appText.includes('const importCharacterPackage =') && !appText.includes('const importProject =') && !appText.includes('const acceptPendingCharacter =') && appCharacterImportActionsHookText.includes('createProjectFromProcessed') && appCharacterImportActionsHookText.includes('processImageWithWebOnnx') && appCharacterImportActionsHookText.includes('loadCharacterPackage') && appCharacterImportActionsHookText.includes('loadProjectSnapshot') && appCharacterImportActionsHookText.includes('setProject(pendingCharacter.project, { resetHistory: true })') && appCharacterImportActionsHookText.includes('returnStage: "character"'), 'App delegates character import/review actions to useAppCharacterImportActions while preserving ONNX/package/project import review semantics');
 assert(workspacePlayerDockHookText.includes('const showsWorkspacePlayer =') && workspacePlayerDockHookText.includes('editorStage === "path"') && workspacePlayerDockHookText.includes('editorStage === "design"') && workspacePlayerDockHookText.includes('editorStage === "assembly"'), 'shared playback dock is restricted to Path, Mechanism Design, and Assembly instead of leaking onto unrelated tabs');
@@ -4261,6 +4262,24 @@ const ikProject: ProjectState = {
   partOrder: [...sample.partOrder, 'right_hand_part'],
   mechanisms: [{ ...sample.mechanisms[0], targetAnchorJointId: 'right_hand' }]
 };
+{
+  const squarePoints = [
+    { x: 0, y: 0 },
+    { x: 10, y: 0 },
+    { x: 10, y: 10 },
+    { x: 0, y: 10 }
+  ];
+  const squarePath = {
+    ...ikProject.paths['path-right-arm'],
+    timedPoints: squarePoints.map((point, index) => ({ ...point, time: (index / (squarePoints.length - 1)) * 1200 })),
+    points: squarePoints,
+    duration: 1200,
+  };
+  const openPoint = pointOnProjectPath({ ...squarePath, closed: false }, Math.PI * 2 * 0.875);
+  const closedPoint = pointOnProjectPath({ ...squarePath, closed: true }, Math.PI * 2 * 0.875);
+  assert(Math.abs(openPoint.x - 3.75) < 1e-9 && Math.abs(openPoint.y - 10) < 1e-9, 'open path playback follows the drawn polyline without a return segment');
+  assert(Math.abs(closedPoint.x) < 1e-9 && Math.abs(closedPoint.y - 5) < 1e-9, 'closed path playback follows the return segment back to the first point');
+}
 const pathPreview = motionPreviewForPath(ikProject, ikProject.paths['path-right-arm'], 0);
 assert(pathPreview.parts.right_arm_lower, 'path editor preview moves selected limb at current frame');
 assert(pathPreview.parts.right_arm_upper, 'path editor preview includes the upper arm when the hand path uses a shoulder-root chain');

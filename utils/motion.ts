@@ -27,29 +27,73 @@ export interface MotionChainDescriptor {
     warning?: string;
 }
 
+const cyclePhase = (angle: number) => (((angle / (Math.PI * 2)) % 1) + 1) % 1;
+
+const pointBetween = (a: Point, b: Point, t: number): Point => ({
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t
+});
+
+const projectPathSegments = (points: Point[], closed: boolean) => {
+    const segments = points.slice(1).map((p, i) => ({
+        a: points[i],
+        b: p,
+        length: Math.hypot(p.x - points[i].x, p.y - points[i].y)
+    }));
+    if (closed && points.length > 2) {
+        const first = points[0];
+        const last = points.at(-1)!;
+        const length = Math.hypot(first.x - last.x, first.y - last.y);
+        if (length > 1e-6) segments.push({ a: last, b: first, length });
+    }
+    return segments;
+};
+
 export const pointOnProjectPath = (path: ProjectMotionPath, angle: number): Point => {
+    const phase = cyclePhase(angle);
     if (path.timedPoints?.length) {
         const timed = [...path.timedPoints].sort((a, b) => a.time - b.time);
         const duration = path.duration || timed.at(-1)?.time || 1;
-        const time = (((angle / (Math.PI * 2)) % 1) + 1) % 1 * duration;
+        const lastTimed = timed.at(-1);
+        if (path.closed && timed.length > 1 && lastTimed && lastTimed.time >= duration - 1e-6) {
+            const segments = projectPathSegments(timed, true);
+            const total = segments.reduce((sum, seg) => sum + seg.length, 0) || 1;
+            let target = phase * total;
+            for (const seg of segments) {
+                if (target <= seg.length) {
+                    return pointBetween(seg.a, seg.b, target / (seg.length || 1));
+                }
+                target -= seg.length;
+            }
+            return timed[0] ?? { x: 0, y: 0 };
+        }
+        const time = phase * duration;
         let prev = timed[0];
         for (const next of timed.slice(1)) {
             if (time <= next.time) {
                 const span = Math.max(1e-6, next.time - prev.time);
                 const t = Math.max(0, Math.min(1, (time - prev.time) / span));
-                return { x: prev.x + (next.x - prev.x) * t, y: prev.y + (next.y - prev.y) * t };
+                return pointBetween(prev, next, t);
             }
             prev = next;
         }
+        if (path.closed && timed.length > 1) {
+            const last = lastTimed!;
+            const returnDuration = duration - last.time;
+            if (returnDuration > 1e-6) {
+                const t = Math.max(0, Math.min(1, (time - last.time) / returnDuration));
+                return pointBetween(last, timed[0], t);
+            }
+        }
         return timed.at(-1) ?? { x: 0, y: 0 };
     }
-    const segments = path.points.slice(1).map((p, i) => ({ a: path.points[i], b: p, length: Math.hypot(p.x - path.points[i].x, p.y - path.points[i].y) }));
+    const segments = projectPathSegments(path.points, path.closed);
     const total = segments.reduce((sum, seg) => sum + seg.length, 0) || 1;
-    let target = (((angle / (Math.PI * 2)) % 1) + 1) % 1 * total;
+    let target = phase * total;
     for (const seg of segments) {
         if (target <= seg.length) {
             const t = target / (seg.length || 1);
-            return { x: seg.a.x + (seg.b.x - seg.a.x) * t, y: seg.a.y + (seg.b.y - seg.a.y) * t };
+            return pointBetween(seg.a, seg.b, t);
         }
         target -= seg.length;
     }

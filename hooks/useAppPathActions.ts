@@ -56,7 +56,7 @@ export const useAppPathActions = ({
                   (current?.duration ?? project.settings.animationDurationMs),
           })),
           duration: current?.duration ?? project.settings.animationDurationMs,
-          closed: current?.closed ?? false,
+          closed: current?.closed ?? true,
           enabled: current?.enabled ?? true,
           visible: current?.visible ?? true,
           source,
