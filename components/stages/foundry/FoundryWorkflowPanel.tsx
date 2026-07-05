@@ -7,7 +7,14 @@ import type {
   ProjectMotionPath,
   ProjectState,
 } from "../../../types";
+import { ClassroomExampleVideo } from "../../ui/ClassroomExampleVideo";
 import { fabricationStackSummary } from "../../../utils/fabrication";
+import {
+  classroomAssessmentFor,
+  classroomCueTitleFor,
+  classroomUseExampleFor,
+  formatClassroomAssessmentPrompt,
+} from "../../../utils/classroomContent";
 import {
   FOUNDRY_MECHANISM_TYPES,
   FOUNDRY_PRESETS,
@@ -71,7 +78,15 @@ export const FoundryWorkflowPanel = ({
   onToggleAnchorPick: () => void;
   onUseMechanism: () => void;
   onSelectMechanismType: (type: MechanismType) => void;
-}) => (
+}) => {
+  const assessment = classroomAssessmentFor(
+    foundry.type,
+    project.settings.classroomAssessmentKey,
+    "foundry",
+  );
+  const useExample = classroomUseExampleFor(foundry.type);
+
+  return (
   <div className="stage-pane-stack">
     <StageLeftSummary
       project={project}
@@ -138,10 +153,18 @@ export const FoundryWorkflowPanel = ({
         data-sensemaking-evidence={classroomSensemaking.evidenceCue}
         data-sensemaking-clip={classroomSensemaking.clipSlot}
       >
-        <span className="cue-title">Why it moves</span>
+        <span className="cue-title">{classroomCueTitleFor("foundry")}</span>
         <strong>{classroomSensemaking.directTranslation}</strong>
         <small>{classroomSensemaking.tryThis}</small>
+        <small
+          data-testid="classroom-assessment-prompt"
+          data-assessment-key={project.settings.classroomAssessmentKey}
+          data-assessment-kind={assessment.kind}
+        >
+          {formatClassroomAssessmentPrompt(assessment)}
+        </small>
       </div>
+      <ClassroomExampleVideo example={useExample} />
       <div
         className="compact-fabrication-stack"
         data-testid="foundry-fabrication-stack"
@@ -235,4 +258,5 @@ export const FoundryWorkflowPanel = ({
       )}
     </StageLeftSummary>
   </div>
-);
+  );
+};

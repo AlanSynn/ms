@@ -218,6 +218,7 @@ export interface AppSettings {
     simulationMassKg: number;
     debugVisuals: boolean;
     detailedProcessingSteps: boolean;
+    classroomAssessmentKey: string;
     gridUnit: 'cm' | 'inch' | 'px';
     fabricationReadyMode: boolean;
     physicalKit: PhysicalKitSettings;

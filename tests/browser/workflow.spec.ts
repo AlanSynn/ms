@@ -230,6 +230,80 @@ test('Getting Started guided project opens a real editable lesson', async ({ pag
   expectCleanPage(pageErrors, consoleErrors);
 });
 
+test('classroom assessment slug and mechanism example video work end-to-end', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+  const youtubeRequests: string[] = [];
+  await page.route('https://www.youtube-nocookie.com/**', async route => {
+    youtubeRequests.push(route.request().url());
+    await route.abort();
+  });
+
+  await page.goto('/?assessment=motion-journal');
+  await waitForBootLoader(page);
+  await page.getByRole('button', { name: /Open Guide/i }).click();
+  const gettingStarted = page.getByTestId('getting-started-dialog');
+  await gettingStarted.getByTestId('getting-started-card-guided').click();
+  await gettingStarted.getByTestId('guided-project-card-waving-arm').click();
+
+  await page.getByRole('button', { name: /Foundry/i }).click();
+  const assessmentPrompt = page.getByTestId('classroom-assessment-prompt').first();
+  await expect(assessmentPrompt).toHaveAttribute('data-assessment-key', 'motion-journal');
+  await expect(assessmentPrompt).toContainText('What changed');
+  const example = page.getByTestId('classroom-example-video').first();
+  await expect(example).toContainText('Used for: waving arms');
+  await expect(example).toContainText('Two fixed board pivots');
+  const generatedLoop = example.getByTestId('classroom-generated-loop');
+  await expect(generatedLoop).toHaveAttribute('data-clip-slot', 'generated-loop');
+  await expect(generatedLoop).toHaveAttribute('data-renderer-source', 'MechanismLinkagePreview');
+  await expect(generatedLoop).toHaveAttribute('data-reduced-motion', 'true');
+  await expect(generatedLoop.getByTestId('classroom-generated-loop-linkage')).toHaveAttribute('data-mechanism-type', '4bar');
+  const reducedMotionPath = generatedLoop.locator('path').first();
+  const reducedMotionPathD = await reducedMotionPath.getAttribute('d');
+  await page.waitForTimeout(250);
+  expect(await reducedMotionPath.getAttribute('d')).toBe(reducedMotionPathD);
+  await expect(example.getByTestId('classroom-example-video-frame')).toHaveCount(0);
+  expect(youtubeRequests, 'optional video does not load before the teacher/student opens it').toEqual([]);
+  await example.getByTestId('classroom-example-video-toggle').click();
+  const frame = example.getByTestId('classroom-example-video-frame');
+  await expect(frame).toHaveAttribute('src', /^https:\/\/www\.youtube-nocookie\.com\/embed\/1Ty_1LF3Qv0$/);
+  await expect(example.getByTestId('classroom-video-fallback')).toContainText('Use the generated loop', { timeout: 5000 });
+
+  await page.getByRole('button', { name: /Mechanism Design/i }).click();
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+  const designPrompt = page.getByTestId('design-visible-sensemaking').getByTestId('classroom-assessment-prompt');
+  await expect(designPrompt).toHaveAttribute('data-assessment-key', 'motion-journal');
+  await expect(designPrompt).toContainText('What changed');
+
+  await page.getByRole('button', { name: /Assembly/i }).click();
+  await expect(page.getByRole('heading', { name: 'Assembly' })).toBeVisible();
+  await page.getByRole('button', { name: /Generate package/i }).click();
+  const assemblyPrompt = page.getByTestId('assembly-guide-preview').getByTestId('classroom-assessment-prompt');
+  await expect(assemblyPrompt).toHaveAttribute('data-assessment-key', 'motion-journal');
+  await expect(assemblyPrompt).toContainText('What should move freely');
+
+  await page.getByRole('button', { name: /Options/i }).click();
+  await expect(page.getByRole('heading', { name: 'Options' })).toBeVisible();
+  const assessmentKeyInput = page.getByLabel('Assessment key');
+  await assessmentKeyInput.fill('school-a-2026');
+  await assessmentKeyInput.press('Enter');
+  const status = page.getByTestId('options-assessment-status');
+  await expect(status).toHaveAttribute('data-requested-assessment-key', 'school-a-2026');
+  await expect(status).toHaveAttribute('data-active-assessment-key', 'default');
+  await expect(status).toContainText('Using default prompts');
+
+  await page.getByRole('button', { name: /Foundry/i }).click();
+  const fallbackPrompt = page.getByTestId('classroom-assessment-prompt').first();
+  await expect(fallbackPrompt).toHaveAttribute('data-assessment-key', 'school-a-2026');
+  await expect(fallbackPrompt).toContainText('Which two pivots stay fixed');
+  expectCleanPage(pageErrors, consoleErrors);
+});
+
 
 const writeWavingArmLessonProject = async () => {
   const dir = await mkdtemp(join(tmpdir(), 'motionsmith-lesson-'));

@@ -165,6 +165,7 @@ export const AssemblyGuide = ({
             currentCharacterStep={currentCharacterStep}
             selectedRecipe={selectedRecipe}
             currentStep={currentStep}
+            assessmentKey={project.settings.classroomAssessmentKey}
             goStage={goStage}
           />,
         ),

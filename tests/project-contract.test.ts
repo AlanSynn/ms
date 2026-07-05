@@ -45,6 +45,7 @@ import { createStageNavigator, navigateAppStage } from '../utils/appStageNavigat
 import { assemblyCoordToSvg, characterBoardProjector, characterCanvasProjector, smoothAssemblyProgress, svgPathFromPoints } from '../components/stages/assembly/assemblyGeometry';
 import { smoothTrackingPoints, trackingPointsToWorldPath } from '../utils/trackingPath';
 import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, FOUNDRY_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, mechanismTemplateLabel } from '../utils/mechanismTemplates';
+import { CLASSROOM_ASSESSMENT_KEYS, CLASSROOM_COPY, classroomAssessmentFor, classroomAssessmentKeyFromSearch, classroomAssessmentKeyHint, classroomAssessmentStatusText, classroomCueTitleFor, classroomUseExampleFor, DEFAULT_CLASSROOM_ASSESSMENT_KEY, formatClassroomAssessmentPrompt, formatClassroomUseExampleLabel, normalizeClassroomAssessmentKey, resolveClassroomAssessmentBundle, youtubeNoCookieEmbedUrl } from '../utils/classroomContent';
 import { MECHANISM_TYPES as SANITIZE_MECHANISM_TYPES, sanitizeMechanismRuntime } from '../utils/sanitize';
 import { generateSmartConfig, mutateConfig, OPTIMIZER_MECHANISM_TYPES } from '../utils/optimizer';
 import { isBoardFixedCoordRole, normalizeGearLinkageToReference, normalizeGearTrainToFabrication, normalizeMechanismToFabricationSet, normalizeMechanismToReference, REFERENCE_DEFAULTS, REFERENCE_EXPORT_READY_TYPES, REFERENCE_FOUNDRY_TYPES, REFERENCE_MECHANISM_RECIPES, referenceRecipeForType } from '../utils/mechanismReference';
@@ -250,6 +251,7 @@ const appStageNavigationText = readFileSync(join(process.cwd(), 'utils', 'appSta
 const appStageRouterPropsText = readFileSync(join(process.cwd(), 'utils', 'appStageRouterProps.ts'), 'utf8');
 const contextHelpSource = readFileSync(join(process.cwd(), 'utils', 'contextHelp.ts'), 'utf8');
 const contextHelpComponentSource = readFileSync(join(process.cwd(), 'components', 'ui', 'ContextHelp.tsx'), 'utf8');
+const classroomExampleVideoSource = readFileSync(join(process.cwd(), 'components', 'ui', 'ClassroomExampleVideo.tsx'), 'utf8');
 const viteConfigText = readFileSync(join(process.cwd(), 'vite.config.ts'), 'utf8');
 assert(viteConfigText.includes("const webBase = process.env.VITE_BASE_PATH ?? '/'"), 'web deployment base can be set by VITE_BASE_PATH for project Pages');
 assert(viteConfigText.includes("base: isTauri ? './' : webBase"), 'Tauri stays relative while web builds can target /ms/');
@@ -801,6 +803,46 @@ for (const [type, metadata] of Object.entries(MECHANISM_TEMPLATE_LIBRARY)) {
   assert(metadata.classroomSensemaking.evidenceCue, `${type} has an observable evidence cue`);
   assert.equal(metadata.classroomSensemaking.clipSlot, 'generated-loop', `${type} defaults to generated-loop clips instead of required streaming`);
 }
+assert.equal(emptyProject.settings.classroomAssessmentKey, DEFAULT_CLASSROOM_ASSESSMENT_KEY, 'empty projects default to the bundled classroom assessment key');
+assert.equal(normalizeClassroomAssessmentKey(' Motion Journal!! '), 'motion-journal', 'teacher assessment keys normalize to stable slugs');
+assert.equal(normalizeClassroomAssessmentKey('School A 2026!'), 'school-a-2026', 'custom school assessment keys preserve a shareable slug');
+assert.equal(classroomAssessmentKeyFromSearch('?assessment=Motion%20Journal'), 'motion-journal', 'assessment query parameter selects a teacher prompt bundle');
+assert.equal(classroomAssessmentKeyFromSearch('?assessmentKey=School%20A'), 'school-a', 'assessmentKey query parameter is also supported');
+assert(CLASSROOM_ASSESSMENT_KEYS.includes('default') && CLASSROOM_ASSESSMENT_KEYS.includes('motion-journal'), 'classroom assessment bundles expose the default and motion-journal presets');
+const customAssessment = loadProjectSnapshot({
+  ...JSON.parse(serializeProject(emptyProject)),
+  settings: { ...emptyProject.settings, classroomAssessmentKey: 'School A 2026!' }
+});
+assert.equal(customAssessment.settings.classroomAssessmentKey, 'school-a-2026', 'custom assessment keys persist as sanitized local settings');
+const fallbackAssessment = resolveClassroomAssessmentBundle(customAssessment.settings.classroomAssessmentKey);
+assert.equal(fallbackAssessment.requestedKey, 'school-a-2026', 'unknown classroom assessment slug stays recoverable for teacher pack handoff');
+assert.equal(fallbackAssessment.activeKey, 'default', 'unknown classroom assessment slug falls back to the bundled default prompts');
+assert.equal(fallbackAssessment.isFallback, true, 'unknown classroom assessment slug reports fallback status');
+assert.equal(classroomAssessmentStatusText(fallbackAssessment), CLASSROOM_COPY.assessmentFallback, 'fallback assessment status copy is owned by the classroom content seam');
+assert.equal(classroomAssessmentKeyHint(), 'Try: default, motion-journal', 'assessment key hint copy is owned by the classroom content seam');
+assert(classroomAssessmentFor('4bar', 'motion-journal').prompt.includes('motion'), 'alternate assessment bundle changes the prompt copy');
+assert.equal(classroomCueTitleFor('foundry'), CLASSROOM_COPY.cueTitle.foundry, 'classroom cue titles are centralized for stage use');
+assert.equal(formatClassroomAssessmentPrompt(classroomAssessmentFor('4bar', 'default')), 'Check: Which two pivots stay fixed on the board?', 'assessment prompt prefix formatting is centralized');
+const serializedLessonForContentCheck = serializeProject(createLessonProject('waving-arm'));
+assert(!serializedLessonForContentCheck.includes('youtube.com') && !serializedLessonForContentCheck.includes('youtube-nocookie'), 'serialized ProjectState does not store external classroom video URLs');
+assert(!serializedLessonForContentCheck.includes('What changed in the') && !serializedLessonForContentCheck.includes('Which two pivots stay fixed'), 'serialized ProjectState stores assessment keys, not assessment prompt copy');
+for (const type of ALL_MECHANISM_TYPES) {
+  const example = classroomUseExampleFor(type);
+  assert.equal(example.mechanismType, type, `${type} classroom use example matches its mechanism type`);
+  assert(example.useCase && example.generatedSummary, `${type} has a generated/local mechanism-use explanation`);
+  assert(formatClassroomUseExampleLabel(example).startsWith(`${CLASSROOM_COPY.useExamplePrefix}:`), `${type} use-example label formatting is centralized`);
+  assert.equal(example.clipSlot, 'generated-loop', `${type} keeps generated/local loops as the primary classroom video path`);
+  if (example.youtubeId) {
+    const embedUrl = youtubeNoCookieEmbedUrl(example.youtubeId);
+    assert(embedUrl?.startsWith('https://www.youtube-nocookie.com/embed/'), `${type} optional browser video uses the privacy-enhanced embed host`);
+    assert(!embedUrl?.includes('autoplay'), `${type} optional browser video does not autoplay`);
+  }
+}
+assert(classroomExampleVideoSource.includes('data-testid="classroom-generated-loop"') && classroomExampleVideoSource.includes('fitMechanismSimulation(mechanism, phase') && classroomExampleVideoSource.includes('<MechanismLinkagePreview'), 'classroom example video component shows a local generated loop from the shared mechanism simulation/preview path before any optional external iframe');
+assert(classroomExampleVideoSource.includes('prefers-reduced-motion: reduce') && classroomExampleVideoSource.includes('if (reducedMotion) return;') && classroomExampleVideoSource.includes('data-reduced-motion'), 'classroom generated loops respect reduced-motion by not starting the animation loop');
+assert.equal(CLASSROOM_COPY.videoUnavailable, 'Video unavailable. Use the generated loop.', 'video fallback copy is owned by the classroom content seam');
+assert(classroomExampleVideoSource.includes('data-testid="classroom-video-fallback"') && classroomExampleVideoSource.includes('CLASSROOM_COPY.videoUnavailable'), 'classroom example video component keeps a local fallback if an optional external video is blocked');
+assert(classroomExampleVideoSource.includes('sandbox="allow-scripts allow-same-origin allow-presentation"') && classroomExampleVideoSource.includes('referrerPolicy="strict-origin-when-cross-origin"') && !classroomExampleVideoSource.includes('clipboard-write') && !classroomExampleVideoSource.includes('gyroscope') && !classroomExampleVideoSource.includes('web-share'), 'optional classroom video embeds use restricted iframe permissions');
 
 assert.equal(classroomLessonById('waving-arm')?.startStage, 'character', 'classroom lesson opens in Character so students inspect/edit the rig before drawing');
 for (const lesson of CLASSROOM_LESSONS) {
@@ -1253,8 +1295,8 @@ const goldenMaster = {
 assert.deepEqual(
   Object.fromEntries(Object.entries(goldenMaster).map(([key, value]) => [key, goldenMasterHash(value)])),
   {
-    project: '4c08b0863b79a436c5d9809602fb199dc44e5554262c5aef782ce954ba4eae5a',
-    lesson: '0f73e27db44680ec0fa74e277aa7acd9b9ed8953ef1af32f7864aa159e93f828',
+    project: '48b34d2ec8cb220da68f5ed543cd94c123e2a3c57a5e49e85c8b7dc403fd9d99',
+    lesson: '6ab9b118df760420f3a31f19bee5a9c4faafa27e4f7fbe02701dfd9993b122f6',
     mechanismSnapshot: '32355ffe3781027668eaae06923563234301242f08077cf2c5ff3ae1aa86e21e',
     allMechanismSnapshots: 'e3a5c2be05c51e131ee9d4aba3ff2a05ae4dbf2e62a35631ec317fa8c6032e9b',
     sceneProjection: '64b01ae59502ee6a8f04bdad651418565e1fb1e9593d7a6178cea04425dd1605',

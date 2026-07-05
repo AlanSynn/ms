@@ -1,7 +1,7 @@
 # Classroom Sensemaking Discoverability Plan
 
 Status: active planning artifact
-Last refreshed: 2026-07-02
+Last refreshed: 2026-07-05
 Scope: mechanism meaning, classroom takeaways, short clips, direct hints, and assessment hooks across Foundry, Design, Blueprint, and Assembly.
 
 ## Field signal
@@ -239,6 +239,23 @@ Remaining expansion:
 
 - Convert more blocker warnings to the central `object + cause -> action` hint taxonomy.
 - Add local clip assets or optional external clip URLs only after generated-loop fallbacks remain usable offline.
+
+## Implementation snapshot — 2026-07-05
+
+Completed classroom-configuration slice:
+
+- Added a local classroom assessment key model so schools can select bundled prompt sets by project setting or URL query (`?assessment=` / `?assessmentKey=`) without server accounts or dashboards.
+- Kept unknown assessment slugs as requested keys while resolving visible prompts to the bundled default, so future teacher- or school-provided bundles can attach to the same key without rewriting saved projects.
+- Added default and `motion-journal` assessment bundles behind one content seam, with prompts shared by Foundry, Mechanism Design, and Assembly instead of stage-local copy.
+- Added per-mechanism use examples with generated-loop-first classroom video slots and optional click-to-load YouTube no-cookie embeds.
+- Rendered generated loops from the same mechanism defaults and simulation preview path used by the workbench, preserving the generated-loop fallback when external video is unavailable or reduced motion is active.
+
+Remaining expansion:
+
+- Load teacher-authored assessment bundles from a local imported package, Options key, or future static classroom pack while keeping `ProjectState` to the selected key only.
+- Add locale-ready bundle files before exposing multilingual UI; runtime UI remains English-only until the product language contract changes.
+- Curate and periodically review optional external video ids; external media must remain enrichment, never a required classroom dependency.
+- Extend teacher-pack and printable outputs to include the active assessment key, prompt set label, mechanism use example, and reflection prompt.
 
 ## Verification plan
 

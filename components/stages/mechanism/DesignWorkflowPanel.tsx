@@ -1,4 +1,5 @@
 import { Sparkles } from "lucide-react";
+import { ClassroomExampleVideo } from "../../ui/ClassroomExampleVideo";
 import { StageLeftSummary } from "../stageLayout";
 import type {
   AppStage,
@@ -10,6 +11,12 @@ import type {
 import { sampleFeasibleRange } from "../../../utils/fabrication";
 import { mechanismBindingWarnings } from "../../../utils/motion";
 import { fitMechanismToTargetPath } from "../../../utils/mechanismRecommendations";
+import {
+  classroomAssessmentFor,
+  classroomCueTitleFor,
+  classroomUseExampleFor,
+  formatClassroomAssessmentPrompt,
+} from "../../../utils/classroomContent";
 import {
   AUTHORABLE_MECHANISM_TYPES,
   MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY,
@@ -44,6 +51,16 @@ export const DesignWorkflowPanel = ({
 }: DesignWorkflowPanelProps) => {
   const selectedLibrary = selectedMechanism
     ? MECHANISM_LIBRARY[selectedMechanism.type]
+    : undefined;
+  const selectedAssessment = selectedMechanism
+    ? classroomAssessmentFor(
+        selectedMechanism.type,
+        project.settings.classroomAssessmentKey,
+        "design",
+      )
+    : undefined;
+  const selectedUseExample = selectedMechanism
+    ? classroomUseExampleFor(selectedMechanism.type)
     : undefined;
   const selectedRange = selectedMechanism
     ? sampleFeasibleRange(selectedMechanism)
@@ -142,13 +159,23 @@ export const DesignWorkflowPanel = ({
             }
             data-sensemaking-clip={selectedLibrary.classroomSensemaking.clipSlot}
           >
-            <span className="cue-title">Why it moves</span>
+            <span className="cue-title">{classroomCueTitleFor("design")}</span>
             <strong>
               {selectedLibrary.classroomSensemaking.directTranslation}
             </strong>
             <small>{selectedLibrary.classroomSensemaking.tryThis}</small>
+            {selectedAssessment && (
+              <small
+                data-testid="classroom-assessment-prompt"
+                data-assessment-key={project.settings.classroomAssessmentKey}
+                data-assessment-kind={selectedAssessment.kind}
+              >
+                {formatClassroomAssessmentPrompt(selectedAssessment)}
+              </small>
+            )}
           </div>
         )}
+        {selectedUseExample && <ClassroomExampleVideo example={selectedUseExample} />}
         {Object.entries(bindingWarnings).map(([id, warnings]) =>
           warnings.length ? (
             <div className="warning" key={id}>

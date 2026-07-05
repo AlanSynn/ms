@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 
 import type { AppStageRouterProps } from "../components/AppStageRouter";
 import type { AppWorkspaceShellProps } from "../components/AppWorkspaceShell";
@@ -12,6 +12,7 @@ import {
   createEmptyProject,
 } from "../utils/project";
 import { DEFAULT_CANVAS_VIEWPORT } from "../utils/viewport";
+import { classroomAssessmentKeyFromSearch } from "../utils/classroomContent";
 import { workflowStatusFor } from "../utils/workflowStatus";
 import { createStageNavigator } from "../utils/appStageNavigation";
 import { buildAppStageRouterProps } from "../utils/appStageRouterProps";
@@ -58,7 +59,25 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     useAppOnnxBootstrap(setCommandStatus);
   const projectInputRef = useRef<HTMLInputElement>(null);
   const appShellRef = useRef<HTMLDivElement>(null);
+  const assessmentQueryApplied = useRef(false);
   useProjectAutosave(project);
+
+  useEffect(() => {
+    if (assessmentQueryApplied.current || typeof window === "undefined") return;
+    assessmentQueryApplied.current = true;
+    const assessmentKey = classroomAssessmentKeyFromSearch(
+      window.location.search,
+    );
+    if (
+      assessmentKey &&
+      assessmentKey !== project.settings.classroomAssessmentKey
+    ) {
+      dispatch({
+        type: "update_settings",
+        settings: { classroomAssessmentKey: assessmentKey },
+      });
+    }
+  }, [dispatch, project.settings.classroomAssessmentKey]);
 
   const goStage = createStageNavigator({
     project,

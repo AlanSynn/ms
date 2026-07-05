@@ -156,7 +156,14 @@ export const useAppProjectCommands = ({
       setCommandStatus("Lesson unavailable");
       return;
     }
-    const lessonProject = createLessonProject(lesson.id);
+    const lessonProjectBase = createLessonProject(lesson.id);
+    const lessonProject = {
+      ...lessonProjectBase,
+      settings: {
+        ...lessonProjectBase.settings,
+        classroomAssessmentKey: project.settings.classroomAssessmentKey,
+      },
+    };
     openLessonProject(lessonProject, lesson.startStage);
     setCommandStatus(`${lesson.outcome ?? lessonProject.metadata.name} ready`);
   };

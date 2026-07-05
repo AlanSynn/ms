@@ -20,6 +20,7 @@ import { REFERENCE_DEFAULTS, normalizeMechanismToFabricationSet, normalizeMechan
 import { defaultCamProfileSamples, gearTrainOutputRatio, generateCurvePoints, normalizeCamProfileSamples, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from './kinematics';
 import { clampNumber, finiteNumber, sanitizeHexColor, sanitizeMechanismType, sanitizePoint } from './sanitize';
 import { isUsableContourPoints } from './partGeometry';
+import { DEFAULT_CLASSROOM_ASSESSMENT_KEY, normalizeClassroomAssessmentKey } from './classroomContent';
 
 export const APP_STATE_VERSION = 1;
 
@@ -50,6 +51,7 @@ export const defaultSettings = (): AppSettings => ({
     simulationMassKg: 1,
     debugVisuals: false,
     detailedProcessingSteps: false,
+    classroomAssessmentKey: DEFAULT_CLASSROOM_ASSESSMENT_KEY,
     gridUnit: 'cm',
     fabricationReadyMode: true,
     physicalKit: defaultPhysicalKit()
@@ -92,6 +94,7 @@ const normalizeAppSettings = (value: unknown, fallback = defaultSettings()): App
         simulationMassKg: clampNumber(raw.simulationMassKg, fallback.simulationMassKg, 0.05, 10),
         debugVisuals: typeof raw.debugVisuals === 'boolean' ? raw.debugVisuals : fallback.debugVisuals,
         detailedProcessingSteps: typeof raw.detailedProcessingSteps === 'boolean' ? raw.detailedProcessingSteps : fallback.detailedProcessingSteps,
+        classroomAssessmentKey: normalizeClassroomAssessmentKey(raw.classroomAssessmentKey ?? asRecord(raw.classroom).assessmentKey, fallback.classroomAssessmentKey),
         gridUnit: pickOne(raw.gridUnit, ['cm', 'inch', 'px'] as const, fallback.gridUnit),
         fabricationReadyMode: typeof raw.fabricationReadyMode === 'boolean' ? raw.fabricationReadyMode : fallback.fabricationReadyMode,
         physicalKit: normalizePhysicalKitSettings(raw.physicalKit, fallback.physicalKit)

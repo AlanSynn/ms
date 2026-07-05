@@ -1,4 +1,5 @@
 import type { AppStage, FabricationRecipe } from "../../../types";
+import { ClassroomExampleVideo } from "../../ui/ClassroomExampleVideo";
 import type {
   AssemblyPlaybackStep,
   CharacterAssemblyPlan,
@@ -13,6 +14,12 @@ import {
   MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY,
 } from "../../../utils/mechanismTemplates";
 import { referenceRecipeForType } from "../../../utils/mechanismReference";
+import {
+  classroomAssessmentFor,
+  classroomCueTitleFor,
+  classroomUseExampleFor,
+  formatClassroomAssessmentPrompt,
+} from "../../../utils/classroomContent";
 
 type AssemblyMode = "mechanism" | "character";
 type AssemblyDisplayStep = AssemblyPlaybackStep | CharacterAssemblyStep;
@@ -24,6 +31,7 @@ export const AssemblyInspectorPanel = ({
   currentCharacterStep,
   selectedRecipe,
   currentStep,
+  assessmentKey,
   goStage,
 }: {
   activeAssemblyMode: AssemblyMode;
@@ -32,11 +40,20 @@ export const AssemblyInspectorPanel = ({
   currentCharacterStep?: CharacterAssemblyStep;
   selectedRecipe?: FabricationRecipe;
   currentStep?: AssemblyPlaybackStep;
+  assessmentKey: string;
   goStage: (stage: AppStage) => void;
 }) => {
   const selectedSensemaking =
     activeAssemblyMode === "mechanism" && selectedRecipe
       ? MECHANISM_LIBRARY[selectedRecipe.type].classroomSensemaking
+      : undefined;
+  const selectedAssessment =
+    activeAssemblyMode === "mechanism" && selectedRecipe
+      ? classroomAssessmentFor(selectedRecipe.type, assessmentKey, "assembly")
+      : undefined;
+  const selectedUseExample =
+    activeAssemblyMode === "mechanism" && selectedRecipe
+      ? classroomUseExampleFor(selectedRecipe.type)
       : undefined;
 
   return (
@@ -150,11 +167,21 @@ export const AssemblyInspectorPanel = ({
               data-sensemaking-evidence={selectedSensemaking.evidenceCue}
               data-sensemaking-clip={selectedSensemaking.clipSlot}
             >
-              <span className="cue-title">Motion</span>
+              <span className="cue-title">{classroomCueTitleFor("assembly")}</span>
               <strong>{selectedSensemaking.directTranslation}</strong>
               <small>{selectedSensemaking.studentCheck}</small>
+              {selectedAssessment && (
+                <small
+                  data-testid="classroom-assessment-prompt"
+                  data-assessment-key={assessmentKey}
+                  data-assessment-kind={selectedAssessment.kind}
+                >
+                  {formatClassroomAssessmentPrompt(selectedAssessment)}
+                </small>
+              )}
             </div>
           )}
+          {selectedUseExample && <ClassroomExampleVideo example={selectedUseExample} />}
           <details className="blueprint-more-exports mt-3">
             <summary>Parts</summary>
             <div className="mt-2 flex flex-wrap gap-2">

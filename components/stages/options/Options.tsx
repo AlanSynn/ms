@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import { MiniNumber, Toggle } from "../../ui/InspectorControls";
 import {
   EditorStageFrame,
@@ -8,6 +10,11 @@ import {
 } from "../stageLayout";
 import type { AppStage, ProjectAction, ProjectState } from "../../../types";
 import { physicalKitPreset } from "../../../utils/coordinates";
+import {
+  classroomAssessmentKeyHint,
+  classroomAssessmentStatusText,
+  resolveClassroomAssessmentBundle,
+} from "../../../utils/classroomContent";
 import { formatGridReadout } from "../../../utils/units";
 import { OptionsPreviewCanvas } from "./OptionsPreviewCanvas";
 import {
@@ -32,10 +39,21 @@ export const Options = ({
   const updateKit = (
     physicalKit: Partial<ProjectState["settings"]["physicalKit"]>,
   ) => updateSettings({ physicalKit: { ...kit, ...physicalKit } });
+  const [assessmentKeyInput, setAssessmentKeyInput] = useState(
+    project.settings.classroomAssessmentKey,
+  );
+  useEffect(() => {
+    setAssessmentKeyInput(project.settings.classroomAssessmentKey);
+  }, [project.settings.classroomAssessmentKey]);
+  const commitAssessmentKey = () =>
+    updateSettings({ classroomAssessmentKey: assessmentKeyInput });
   const durationSeconds = Number(
     (project.settings.animationDurationMs / 1000).toFixed(1),
   );
   const unitSummary = formatGridReadout(kit, project.settings.gridUnit);
+  const assessmentBundle = resolveClassroomAssessmentBundle(
+    project.settings.classroomAssessmentKey,
+  );
   return (
     <EditorStageFrame
       stage="options"
@@ -227,6 +245,35 @@ export const Options = ({
                     updateSettings({ autosaveIntervalSeconds })
                   }
                 />
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-500">
+                  Assessment key
+                  <input
+                    type="text"
+                    className="field mt-1"
+                    aria-label="Assessment key"
+                    data-testid="options-assessment-key"
+                    value={assessmentKeyInput}
+                    onChange={(event) =>
+                      setAssessmentKeyInput(event.currentTarget.value)
+                    }
+                    onBlur={commitAssessmentKey}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") commitAssessmentKey();
+                    }}
+                  />
+                </label>
+                <div
+                  className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600"
+                  data-testid="options-assessment-status"
+                  data-requested-assessment-key={assessmentBundle.requestedKey}
+                  data-active-assessment-key={assessmentBundle.activeKey}
+                >
+                  <div className="font-bold text-slate-800">
+                    {assessmentBundle.bundle.label}
+                  </div>
+                  <div>{classroomAssessmentStatusText(assessmentBundle)}</div>
+                  <div>{classroomAssessmentKeyHint()}</div>
+                </div>
               </SettingsSection>
               <SettingsSection section={optionSection("fabrication")}>
                 <SelectField
