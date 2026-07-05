@@ -248,12 +248,15 @@ export const useAppMechanismActions = ({
             ) === pkg.targetAnchorJointId),
       );
       const activeVisualPartIds = selectedPart ? [selectedPart.id] : [];
+      const fittedFoundryParameters = pkg.parameters as Partial<MechanismConfig>;
       const rawMechanism = mechanismWithGeneratedPath(
         {
           ...foundry,
+          ...fittedFoundryParameters,
           id: existingTarget?.id ?? pkg.mechanismId,
           anchorX: pkg.pivot.x,
           anchorY: pkg.pivot.y,
+          color: fittedFoundryParameters.color ?? foundry.color,
           targetPartId: pkg.targetPartId,
           targetSceneObjectId: pkg.targetSceneObjectId,
           targetPathId: pkg.targetPathId,
@@ -268,9 +271,10 @@ export const useAppMechanismActions = ({
         },
         { preserveGeneratedPath: true },
       );
-      const fittedMechanism = pkg.targetPathId
-        ? fitMechanismToTargetPath(project, rawMechanism, pkg.targetPathId)
-        : fitRecommendedMechanismToSheet(project, rawMechanism);
+      const fittedMechanism = fitRecommendedMechanismToSheet(
+        project,
+        normalizeGearMeshMechanism(rawMechanism),
+      );
       const generatedPath =
         fittedMechanism.generatedPath ??
         rawMechanism.generatedPath ??

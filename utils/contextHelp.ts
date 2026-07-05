@@ -7,6 +7,7 @@ export type ContextHelpId =
   | "path.draw"
   | "path.smoothness"
   | "path.trace"
+  | "foundry.fitPath"
   | "viewer.layers"
   | "blueprint.boardPreview"
   | "blueprint.customParts"
@@ -61,6 +62,12 @@ export const CONTEXT_HELP: Record<
     en: {
       title: "Trace",
       body: "Load a short motion clip and copy the tracked path onto the canvas.",
+    },
+  },
+  "foundry.fitPath": {
+    en: {
+      title: "Fit path",
+      body: "Snap the mechanism to the 15×15 board and match the drawn path with kit parts.",
     },
   },
   "viewer.layers": {

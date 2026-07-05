@@ -1,4 +1,5 @@
-import { Boxes } from "lucide-react";
+import { Boxes, Sparkles } from "lucide-react";
+import { ContextHelp } from "../../ui/ContextHelp";
 import type {
   AppStage,
   MechanismConfig,
@@ -28,6 +29,7 @@ export const FoundryWorkflowPanel = ({
   isPickingAnchor,
   hardBlocked,
   onToggleAnchorPick,
+  onFitPath,
   onUseMechanism,
   onSelectMechanismType,
 }: {
@@ -40,6 +42,7 @@ export const FoundryWorkflowPanel = ({
   isPickingAnchor: boolean;
   hardBlocked: boolean;
   onToggleAnchorPick: () => void;
+  onFitPath: () => void;
   onUseMechanism: () => void;
   onSelectMechanismType: (type: MechanismType) => void;
 }) => {
@@ -57,6 +60,18 @@ export const FoundryWorkflowPanel = ({
       stage="foundry"
       goStage={goStage}
     >
+      <div className="flex items-center gap-2" data-testid="foundry-fit-path-row">
+        <button
+          type="button"
+          data-testid="foundry-fit-path"
+          className="btn-primary flex-1"
+          disabled={!targetReady}
+          onClick={onFitPath}
+        >
+          <Sparkles size={16} /> Fit path
+        </button>
+        <ContextHelp helpId="foundry.fitPath" />
+      </div>
       <button
         type="button"
         data-testid="foundry-pick-anchor"

@@ -883,6 +883,12 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByLabel('Foundry preset')).toHaveValue('balanced');
   await expect(page.getByTestId('foundry-target-summary')).toHaveCount(0);
   await expect(page.getByTestId('stage-left-pane')).not.toContainText(/Board hole|chain|Target .*pts|Range 360|Status 360|balanced default/i);
+  await expect(page.getByTestId('foundry-fit-path')).toBeVisible();
+  await expect(page.getByTestId('foundry-fit-path-row').getByTestId('context-help-trigger')).toBeVisible();
+  await expect(page.getByTestId('foundry-canvas-pane')).toHaveAttribute('data-fit-board-cells', '15');
+  await expect(page.getByTestId('foundry-canvas-pane')).toHaveAttribute('data-fit-target-path', /\S+/);
+  await page.getByTestId('foundry-fit-path').click();
+  await expect(page.getByTestId('foundry-canvas-pane')).toHaveAttribute('data-mechanism-path-preview', 'shown');
   const foundryInspector = page.getByTestId('stage-right-inspector');
   await expect(foundryInspector.getByTestId('foundry-visible-sensemaking')).toContainText('Crank turns');
   await expect(foundryInspector.getByTestId('foundry-visible-sensemaking')).toContainText('rocker swings');

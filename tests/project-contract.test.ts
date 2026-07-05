@@ -2785,12 +2785,21 @@ assert.deepEqual(mechanismUpdateDispatch.mechanism.activeVisualPartIds, ['head']
 const foundryExportProject = createSampleProject({ includeMechanism: true });
 const foundryExportPath = foundryExportProject.paths['path-right-arm'];
 const foundryExportMechanism = createDefaultMechanism('4bar', 'foundry-preview-contract');
+const foundryExportFittedParameters = {
+  ...foundryExportMechanism,
+  crankLength: 160,
+  groundLength: 240,
+  couplerLength: 240,
+  rockerLength: 160,
+  anchorX: 120,
+  anchorY: 90,
+};
 const foundryExportPackage: FoundryExportPackage = {
   id: 'foundry-export-contract',
   createdAt: '2026-07-04T00:00:00.000Z',
   mechanismId: 'foundry-exported-contract',
   mechanismType: '4bar',
-  parameters: { ...foundryExportMechanism },
+  parameters: foundryExportFittedParameters,
   pivot: { x: 120, y: 90 },
   outputPoint: foundryExportPath.points[0],
   generatedPath: foundryExportPath.points,
@@ -2824,12 +2833,18 @@ const independentDifferentTargetInsert = applyProjectAction(foundryExportProject
 assert.equal(independentDifferentTargetInsert.mechanisms.length, foundryExportProject.mechanisms.length + 1, 'mechanism storage remains id-based so same-kind mechanisms can exist as separate target instances');
 assert.equal(hookFoundryUpsert.mechanism.source, 'foundry', 'Foundry export preserves source metadata');
 assert.equal(hookFoundryUpsert.mechanism.targetPathId, 'path-right-arm', 'Foundry export preserves the selected target path');
+assert.equal(hookFoundryUpsert.mechanism.crankLength, foundryExportFittedParameters.crankLength, 'Foundry export carries the fitted input linkage length into Design');
+assert.equal(hookFoundryUpsert.mechanism.groundLength, foundryExportFittedParameters.groundLength, 'Foundry export carries the fitted ground span into Design');
+assert.equal(hookFoundryUpsert.mechanism.couplerLength, foundryExportFittedParameters.couplerLength, 'Foundry export carries the fitted coupler length into Design');
+assert.equal(hookFoundryUpsert.mechanism.rockerLength, foundryExportFittedParameters.rockerLength, 'Foundry export carries the fitted output linkage length into Design');
 assert.equal(hookFoundryUpsert.mechanism.foundryExport?.metadata.recommendation, 'contract fit', 'Foundry export embeds package metadata for downstream Design/Blueprint parity');
 assert(hookFoundryUpsert.mechanism.generatedPath && hookFoundryUpsert.mechanism.generatedPath.length >= 3, 'Foundry export keeps a generated path for simulation and fit checks');
 assert(hookFoundryUpsert.mechanism.warnings?.includes('contract warning'), 'Foundry export preserves package warnings');
+assert(appMechanismActionsHookText.includes('fittedFoundryParameters') && appMechanismActionsHookText.includes('...fittedFoundryParameters'), 'Foundry export carries the fitted preview parameters into Design instead of rebuilding only from controller defaults');
 
 assert(appText.includes('useAppDerivedState(project)') && !appText.includes('const sortedParts = useMemo') && appDerivedStateHookText.includes('selectedMechanism') && appDerivedStateHookText.includes('playbackDurationMs') && appDerivedStateHookText.includes('mechanismConfig: GlobalConfig') && appDerivedStateHookText.includes('current?.partId === selectedPart.id'), 'App delegates selected part/path/mechanism/playback/config derivation to a pure hook without changing selection defaults');
 assert(mechanismFoundryText.includes('<FoundryWorkflowPanel') && foundryWorkflowPanelText.includes('data-testid="foundry-pick-anchor"') && !foundryWorkflowPanelText.includes('data-testid="foundry-target-summary"') && !foundryWorkflowPanelText.includes('Board hole') && !foundryWorkflowPanelText.includes('Range') && !foundryWorkflowPanelText.includes('Status'), 'Foundry left pane keeps action controls while hiding raw target, board-hole, range, and status readouts from the default student UI');
+assert(mechanismFoundryText.includes('fitMechanismToTargetPath') && mechanismFoundryText.includes('selectedPathFitSignature') && foundryWorkflowPanelText.includes('data-testid="foundry-fit-path"') && foundryWorkflowPanelText.includes('foundry.fitPath') && foundryCanvasPaneText.includes('data-fit-board-cells') && foundryCanvasPaneText.includes('data-fit-target-path'), 'Foundry exposes a prominent path-fit action, refits same-length path edits, and verifies the fitted 15x15 board target in the canvas telemetry');
 assert(mechanismFoundryText.includes('<FoundryInspectorPanel') && foundryInspectorPanelText.includes('testId="foundry-parametric-editor"') && foundryInspectorPanelText.includes('Mechanism options') && foundryInspectorPanelText.includes('data-testid="foundry-view-controls"'), 'MechanismFoundry delegates the right Foundry inspector without changing parametric editor, compact view controls, or advanced options');
 assert(foundryInspectorPanelText.includes('data-testid="foundry-visible-sensemaking"') && foundryInspectorPanelText.includes('<ClassroomExampleVideo') && !foundryWorkflowPanelText.includes('data-testid="foundry-visible-sensemaking"') && !foundryInspectorPanelText.includes('Preview overlays') && !foundryInspectorPanelText.includes('foundry-physics-readout'), 'Foundry right inspector owns sensemaking first while removing stale preview-overlay and Motion readout cards');
 assert(mechanismFoundryText.includes('<FoundryCanvasPane') && foundryCanvasPaneText.includes('<ThreeFoundryPreview') && foundryCanvasPaneText.includes('<FoundryOverlayLayer') && foundryCanvasChromeText.includes('data-testid="foundry-toolbar"') && foundryCanvasChromeText.includes('data-testid="foundry-camera-controls"') && foundryOverlayLayerText.includes('data-testid="foundry-preview-overlay"') && foundryOverlayLayerText.includes('data-testid="foundry-param-handles"') && foundryCanvasPaneText.includes('data-testid="foundry-toolbar-state"'), 'MechanismFoundry delegates the center Foundry canvas without changing 3D preview overlays');

@@ -10,6 +10,7 @@ import {
   type FoundryOverlaySize,
   type FoundryViewPreset,
 } from "../../../utils/foundryCamera";
+import { SCENE_PX_PER_MM } from "../../../utils/coordinates";
 import { fitMechanismSimulation, pointsToSvgPath } from "../../../utils/mechanismPreview";
 import {
   FoundryCameraControls,
@@ -211,6 +212,14 @@ export const FoundryCanvasPane = ({
     showUserPathPreview,
     userPathPoints,
   ]);
+  const anchorGrid = useMemo(() => {
+    const pitch = kit.gridPitchMm * SCENE_PX_PER_MM;
+    const x = landedFoundry.anchorX ?? 0;
+    const y = landedFoundry.anchorY ?? 0;
+    return Number.isFinite(x) && Number.isFinite(y) && pitch > 0
+      ? `${(x / pitch).toFixed(0)},${(y / pitch).toFixed(0)}`
+      : "";
+  }, [kit.gridPitchMm, landedFoundry.anchorX, landedFoundry.anchorY]);
 
   return (
     <section
@@ -221,6 +230,9 @@ export const FoundryCanvasPane = ({
       data-user-path-basis="mechanism-fit-context"
       data-user-path-bounds={userPathBounds}
       data-user-path-point-count={userPathPoints.length}
+      data-fit-board-cells={kit.boardCells}
+      data-fit-anchor-grid={anchorGrid}
+      data-fit-target-path={landedFoundry.targetPathId ?? ""}
       data-user-to-mech-fit-error={
         pathFitError === undefined ? "missing" : pathFitError.toFixed(2)
       }

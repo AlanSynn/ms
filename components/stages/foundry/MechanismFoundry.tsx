@@ -67,7 +67,10 @@ import {
   fitPointsToBox,
   pointsToSvgPath,
 } from "../../../utils/mechanismPreview";
-import { normalizeGearMeshMechanism } from "../../../utils/mechanismRecommendations";
+import {
+  fitMechanismToTargetPath,
+  normalizeGearMeshMechanism,
+} from "../../../utils/mechanismRecommendations";
 import { createDefaultMechanism, uid } from "../../../utils/project";
 import { preferredMotionJointId } from "../../../utils/motion";
 
@@ -127,14 +130,43 @@ export const MechanismFoundry = ({
     pointerId: number;
     handle: "B" | "C" | "D";
   } | null>(null);
+  const lastPathFitSignatureRef = useRef("");
   const targetReady = Boolean(
     (selectedPart || selectedSceneObject) &&
     selectedPath &&
     selectedPath.enabled &&
     selectedPath.points.length >= 3,
   );
+  const selectedPathFitSignature = selectedPath
+    ? [
+        selectedPath.id,
+        selectedPath.partId,
+        selectedPath.sceneObjectId ?? "",
+        selectedPath.targetAnchorJointId ?? "",
+        selectedPath.closed ? "closed" : "open",
+        ...selectedPath.points.map(
+          (point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`,
+        ),
+      ].join("|")
+    : "";
+  const targetIkJointId = selectedPart
+    ? preferredMotionJointId(
+        project,
+        selectedPart.id,
+        selectedPath?.targetAnchorJointId,
+        { preferDistalWhenRoot: !selectedPath?.targetAnchorJointId },
+      )
+    : undefined;
+  const foundryPathAnchor =
+    selectedPath &&
+    foundry.targetPathId === selectedPath.id &&
+    Number.isFinite(foundry.anchorX) &&
+    Number.isFinite(foundry.anchorY)
+      ? { x: foundry.anchorX ?? 0, y: foundry.anchorY ?? 0 }
+      : undefined;
   const rawLanding =
     manualAnchor ??
+    foundryPathAnchor ??
     selectedPath?.points[0] ??
     (selectedSceneObject
       ? selectedSceneObject.transform
@@ -178,14 +210,6 @@ export const MechanismFoundry = ({
   );
   const library = MECHANISM_LIBRARY[foundry.type];
   const classroomSensemaking = library.classroomSensemaking;
-  const targetIkJointId = selectedPart
-    ? preferredMotionJointId(
-        project,
-        selectedPart.id,
-        selectedPath?.targetAnchorJointId,
-        { preferDistalWhenRoot: !selectedPath?.targetAnchorJointId },
-      )
-    : undefined;
   const feasibilityText = range.warning ?? "360°";
   const foundryFitContext = useMemo(
     () =>
@@ -692,6 +716,33 @@ export const MechanismFoundry = ({
   });
   const setAnchoredFoundry = (mechanism: MechanismConfig) =>
     setFoundry(normalizeGearMeshMechanism(keepCurrentAnchor(mechanism)));
+  const createPathFittedFoundry = (mechanism: MechanismConfig) => {
+    const anchored = keepCurrentAnchor(mechanism);
+    if (!targetReady || !selectedPath) return normalizeGearMeshMechanism(anchored);
+    return fitMechanismToTargetPath(
+      project,
+      {
+        ...anchored,
+        targetPartId: selectedPath.sceneObjectId ? undefined : selectedPath.partId,
+        targetSceneObjectId: selectedPath.sceneObjectId,
+        targetPathId: selectedPath.id,
+        targetAnchorJointId: selectedPath.sceneObjectId ? undefined : targetIkJointId,
+        activeVisualPartIds: selectedPath.sceneObjectId ? [] : [selectedPath.partId],
+        source: "optimized",
+        recommendation: mechanism.recommendation ?? "Fit path",
+      },
+      selectedPath.id,
+    );
+  };
+  const applyPathFit = (mechanism = foundry) => {
+    setFoundryPlaying(false);
+    setFoundryPhase(0);
+    setManualAnchor(null);
+    setShowUserPathPreview(true);
+    setShowPathPreview(true);
+    lastPathFitSignatureRef.current = selectedPathFitSignature;
+    setFoundry(createPathFittedFoundry(mechanism));
+  };
   const resetFoundryPreview = () => {
     setFoundryPlaying(false);
     setFoundryPhase(0);
@@ -715,6 +766,22 @@ export const MechanismFoundry = ({
       recommendation: FOUNDRY_PRESETS.balanced.recommendation,
     });
   };
+  useEffect(() => {
+    if (!targetReady || !selectedPath || manualAnchor) return;
+    const needsFit =
+      foundry.targetPathId !== selectedPath.id ||
+      lastPathFitSignatureRef.current !== selectedPathFitSignature;
+    if (!needsFit) return;
+    lastPathFitSignatureRef.current = selectedPathFitSignature;
+    setFoundry(createPathFittedFoundry(foundry));
+  }, [
+    foundry.type,
+    foundry.targetPathId,
+    manualAnchor,
+    selectedPath?.id,
+    selectedPathFitSignature,
+    targetReady,
+  ]);
   useEffect(() => {
     if (!foundryPlaying) return;
     let frame = 0;
@@ -784,13 +851,16 @@ export const MechanismFoundry = ({
     };
   };
   const useFoundryMechanism = () => onExport(makePackage());
-  const selectFoundryMechanismType = (type: MechanismType) =>
-    setAnchoredFoundry({
+  const selectFoundryMechanismType = (type: MechanismType) => {
+    const next = {
       ...createDefaultMechanism(type, "foundry-preview"),
       color: foundry.color,
       presetId: "balanced",
       recommendation: FOUNDRY_PRESETS.balanced.recommendation,
-    });
+    };
+    if (targetReady && selectedPath) applyPathFit(next);
+    else setAnchoredFoundry(next);
+  };
   const selectFoundryPreset = (presetId: string) => {
     const preset = FOUNDRY_PRESETS[presetId];
     const { label: _label, ...updates } = preset;
@@ -798,13 +868,15 @@ export const MechanismFoundry = ({
       presetId === "balanced"
         ? createDefaultMechanism(foundry.type, "foundry-preview")
         : foundry;
-    setAnchoredFoundry({
+    const next = {
       ...base,
       color: foundry.color,
       ...updates,
       presetId,
       recommendation: preset.recommendation,
-    });
+    };
+    if (targetReady && selectedPath) applyPathFit(next);
+    else setAnchoredFoundry(next);
   };
   return (
     <EditorStageFrame
@@ -822,6 +894,7 @@ export const MechanismFoundry = ({
             isPickingAnchor={isPickingAnchor}
             hardBlocked={hardBlocked}
             onToggleAnchorPick={() => setIsPickingAnchor((value) => !value)}
+            onFitPath={() => applyPathFit()}
             onUseMechanism={useFoundryMechanism}
             onSelectMechanismType={selectFoundryMechanismType}
           />,
