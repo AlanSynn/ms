@@ -7,7 +7,7 @@ import { extname, join, relative } from 'node:path';
 import * as THREE from 'three';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
-import { boardGridLines, boardToScene, bodyPartPivotScene, physicalKitPreset, placeBodyPartPivotAt, SCENE_PX_PER_MM, sceneToBoard, sceneToBoardRaw, sceneToSheetMm, sceneToSvg, sheetMmToScene } from '../utils/coordinates';
+import { boardGridLines, boardToScene, bodyPartPivotScene, physicalKitPreset, placeBodyPartPivotAt, SCENE_PX_PER_MM, SCENE_VIEW, sceneToBoard, sceneToBoardRaw, sceneToSheetMm, sceneToSvg, sheetMmToScene } from '../utils/coordinates';
 import { CLASSROOM_LESSONS, classroomLessonById, createDefaultMechanism, createDefaultSceneObject, createEmptyProject, createLessonProject, createSampleProject, handoffGate, loadProjectSnapshot, serializeProject, applyProjectAction, projectSelfCheck, mechanismRequiredParts, mechanismWithGeneratedPath, replaceCharacterProject, resetProjectToLessonBaseline } from '../utils/project';
 import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, PLANETARY_GEAR_PLANET_COUNT, fabricationBoardColumnLabel, fabricationBoardCoordinateCallout, fabricationBoardRowLabel, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, makeBlueprintPreviewSvg, makeBlueprintSvg, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRenderPlanForMechanism, fabricationStackForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryPlanetCenters, prefabAssemblySteps, readableFabricationStackSummary, sampleFeasibleRange, validateFabricationStack, validateForFabrication, validateMechanismPreviewReadiness } from '../utils/fabrication';
 import { FABRICATION_GEAR_ROOT_WEB_MM, fabricationGearEngravingLabel, fabricationLinkageEngravingLabel, fabricationRingGearEngravingLabel, fabricationSpacerEngravingLabel } from '../utils/fabricationContract';
@@ -36,7 +36,7 @@ import { MECHANISM_FEATURE_REGISTRY, mechanismFeature, validateMechanismFeatureR
 import { buildMechanismSnapshot, buildMechanismSnapshots } from '../utils/mechanismSnapshot';
 import { createMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext } from '../utils/mechanismPreview';
 import { buildMechanismRecommendations } from '../utils/mechanismRecommendations';
-import { WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
+import { WEBGL_PIXEL_RATIO_CAP, canvasPanOffset, canvasViewBoxForViewport, zoomCanvasViewportAtPoint } from '../utils/viewport';
 import { cachedThreeResource, clearThreeGroup, disposeThreeObjectGraph, setRendererPixelRatioCap } from '../utils/threeResourceKit';
 import { APP_COMMANDS, APP_MENU_GROUPS, commandById, commandIdForKeyboardEvent, validateAppCommandRegistry } from '../utils/appCommands';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_KERNEL_IMPORT, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, physicsKernelCapability, runRapierFrictionProbe } from '../utils/physicsKernel';
@@ -103,6 +103,28 @@ assert(pannedCutViewport && pannedCutViewport.minX < zoomedCutViewport.minX && p
 assert.deepEqual(clientPointToCutPoint({ viewport: cutViewport, svgRect: cutSvgRect, clientX: 200, clientY: 150 }), { x: 230, y: 105 }, 'cut pointer mapping rounds to 0.1 and flips Y back to cut space');
 assert.deepEqual(scaleContour([{ x: 0, y: 0 }, { x: 10, y: 0 }], 1.2), [{ x: -1, y: 0 }, { x: 11, y: 0 }], 'cut contour scaling stays centered on the contour centroid');
 assert.equal(contourPathD([{ x: 1, y: 2 }, { x: 3, y: -4 }], true), 'M 1.00 -2.00 L 3.00 4.00 Z', 'cut contour SVG path helper preserves two-decimal formatting and optional Y flip');
+const closeEnough = (actual: number, expected: number) => Math.abs(actual - expected) < 1e-9;
+const pathCanvasViewBox = canvasViewBoxForViewport({ offset: { x: 90, y: -68 }, zoom: 1.5 }, SCENE_VIEW);
+assert(closeEnough(pathCanvasViewBox.x, 90) && closeEnough(pathCanvasViewBox.y, 158.66666666666669), 'path canvas viewBox preserves shared offset and zoom math');
+assert.deepEqual(canvasPanOffset({
+  startOffset: { x: 10, y: 20 },
+  startClientX: 100,
+  startClientY: 50,
+  clientX: 150,
+  clientY: 80,
+  rect: { width: 450, height: 340 },
+  scene: SCENE_VIEW
+}), { x: 110, y: 80 }, 'path canvas drag-pan scales pointer movement by scene dimensions');
+const centeredPathZoom = zoomCanvasViewportAtPoint({
+  viewport: { offset: { x: 0, y: 0 }, zoom: 1 },
+  rect: { left: 0, top: 0, width: 900, height: 680 },
+  clientX: 450,
+  clientY: 340,
+  deltaY: -200,
+  scene: SCENE_VIEW
+});
+assert.equal(centeredPathZoom.zoom, 1.2, 'path canvas wheel zoom keeps the existing zoom response');
+assert(closeEnough(centeredPathZoom.offset.x, 0) && closeEnough(centeredPathZoom.offset.y, 0), 'path canvas center wheel zoom preserves centered offset');
 
 const stableGoldenMasterJson = (value: unknown): string => JSON.stringify(value, (_key, item) => {
   if (typeof item === 'number') return Number.isFinite(item) ? Number(item.toFixed(6)) : null;
@@ -3150,6 +3172,7 @@ assert(skeletonInspectorText.includes('Selected part anchor') && skeletonInspect
 assert(partInspectorText.includes('data-testid="part-cut-controls"') && cutOutlineEditorText.includes('data-testid="cut-outline-dialog"') && partInspectorText.includes('Edit cut') && !partInspectorText.includes('Cut point X') && !cutOutlineEditorText.includes('Cut point X'), 'Character part inspector opens a canvas-first cut overlay instead of coordinate controls');
 assert(partInspectorText.includes('sourceTextureUrl={sourceTextureUrl}') && cutOutlineEditorText.includes('sourceImageFrame') && cutOutlineEditorText.includes('data-testid="cut-outline-art"') && indexText.includes('.cut-outline-part-window'), 'Character cut editor shows the full source picture behind a zoomed editable contour when available');
 assert(partInspectorText.includes('contourSource: "user"') && cutOutlineEditorText.includes('Auto cut') && cutOutlineEditorText.includes('Add point'), 'Character cut editor writes user contours and can bake/add contour points');
+assert(cutOutlineEditorText.includes('setPointerCapture') && cutOutlineEditorText.includes('onPointerCancel={stopDrag}') && !cutOutlineEditorText.includes('onPointerLeave={stopDrag}'), 'Character cut editor keeps captured drag-pan/point-drag active when the pointer leaves the SVG edge');
 assert(partShapeText.includes('data-testid={`path-part-${part.id}`}') && partShapeText.includes('data-testid={`path-part-art-${part.id}`}') && partShapeText.includes('part.bounds.x * part.transform.scale'), 'Path Editor renders artwork from the editable part bounds offset');
 assert(partShapeText.includes('partOutlinePathD(part, landmarks') && partShapeText.includes('path-part-surface-mask'), 'Path Editor clips part art to the shared fabrication outline and hole mask');
 assert(designFoundryPreviewText.includes('data-testid="design-shared-foundry-preview"') && designFoundryPreviewText.includes('data-shared-with="foundry-preview"'), 'Mechanism Design shows mechanisms through the shared Foundry workbench instead of duplicating character-art plate rendering');

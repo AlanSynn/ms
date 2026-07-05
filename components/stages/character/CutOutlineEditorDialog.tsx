@@ -49,6 +49,7 @@ export const CutOutlineEditorDialog = ({
     moved: boolean;
   } | null>(null);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const [isPanning, setIsPanning] = useState(false);
   const [viewOverride, setViewOverride] = useState<CutViewport | null>(null);
   const fallbackImageFrame = {
     x: part.bounds.x,
@@ -147,8 +148,11 @@ export const CutOutlineEditorDialog = ({
       svgRef.current.releasePointerCapture(event.pointerId);
     dragIndexRef.current = null;
     panRef.current = null;
+    setIsPanning(false);
     setDraggingIndex(null);
   };
+  const wheelFactor = (deltaY: number) =>
+    Math.exp(Math.max(-180, Math.min(180, deltaY)) * 0.0012);
   const dialog = (
     <div
       className="modal-backdrop cut-outline-backdrop"
@@ -182,14 +186,15 @@ export const CutOutlineEditorDialog = ({
         <div className="cut-outline-canvas-wrap">
           <svg
             ref={svgRef}
-            className={`cut-outline-canvas ${panRef.current?.moved ? "panning" : ""}`}
+            className={`cut-outline-canvas ${isPanning ? "panning" : ""}`}
             data-testid="cut-outline-canvas"
             viewBox={`${viewport.minX} ${viewport.minY} ${viewport.width} ${viewport.height}`}
             role="img"
             aria-label="Cut outline editing canvas"
             onWheel={(event) => {
               event.preventDefault();
-              zoomViewAt(event.clientX, event.clientY, event.deltaY > 0 ? 1.12 : 0.88);
+              event.stopPropagation();
+              zoomViewAt(event.clientX, event.clientY, wheelFactor(event.deltaY));
             }}
             onPointerDown={(event) => {
               const target = event.target as Element;
@@ -201,6 +206,7 @@ export const CutOutlineEditorDialog = ({
                 startViewport: viewport,
                 moved: false,
               };
+              setIsPanning(true);
               svgRef.current?.setPointerCapture(event.pointerId);
             }}
             onPointerMove={(event) => {
@@ -225,7 +231,6 @@ export const CutOutlineEditorDialog = ({
               stopDrag(event);
             }}
             onPointerCancel={stopDrag}
-            onPointerLeave={stopDrag}
           >
           <defs>
             <pattern

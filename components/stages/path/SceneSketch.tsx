@@ -16,7 +16,11 @@ import {
   SCENE_VIEW,
 } from "../../../utils/coordinates";
 import { motionPreviewForPath, preferredMotionJointId } from "../../../utils/motion";
-import { clampCanvasZoom } from "../../../utils/viewport";
+import {
+  canvasPanOffset,
+  canvasViewBoxForViewport,
+  zoomCanvasViewportAtPoint,
+} from "../../../utils/viewport";
 import { formatGridLabel } from "../../../utils/units";
 import { PartShape } from "./PartShape";
 
@@ -138,30 +142,12 @@ export const SceneSketch = ({
       />
     );
   });
-  const viewWidth = SCENE_VIEW.width / viewport.zoom;
-  const viewHeight = SCENE_VIEW.height / viewport.zoom;
-  const viewX =
-    (SCENE_VIEW.width - viewWidth) / 2 - viewport.offset.x / viewport.zoom;
-  const viewY =
-    (SCENE_VIEW.height - viewHeight) / 2 - viewport.offset.y / viewport.zoom;
+  const viewBox = canvasViewBoxForViewport(viewport, SCENE_VIEW);
   const [panStart, setPanStart] = useState<{
     x: number;
     y: number;
     offset: Point;
   } | null>(null);
-  const scalePan = (e: React.MouseEvent<SVGSVGElement>) => {
-    const rect = svgRef.current?.getBoundingClientRect();
-    return rect
-      ? {
-          x:
-            ((e.clientX - (panStart?.x ?? e.clientX)) * SCENE_VIEW.width) /
-            rect.width,
-          y:
-            ((e.clientY - (panStart?.y ?? e.clientY)) * SCENE_VIEW.height) /
-            rect.height,
-        }
-      : { x: 0, y: 0 };
-  };
   const handlePanOrDrawDown = (e: React.MouseEvent<SVGSVGElement>) => {
     if (
       !drawMode &&
@@ -179,13 +165,18 @@ export const SceneSketch = ({
   };
   const handleMove = (e: React.MouseEvent<SVGSVGElement>) => {
     if (panStart) {
-      const delta = scalePan(e);
+      const offset = canvasPanOffset({
+        startOffset: panStart.offset,
+        startClientX: panStart.x,
+        startClientY: panStart.y,
+        clientX: e.clientX,
+        clientY: e.clientY,
+        rect: svgRef.current?.getBoundingClientRect(),
+        scene: SCENE_VIEW,
+      });
       setViewport((prev) => ({
         ...prev,
-        offset: {
-          x: panStart.offset.x + delta.x,
-          y: panStart.offset.y + delta.y,
-        },
+        offset,
       }));
       return;
     }
@@ -199,29 +190,21 @@ export const SceneSketch = ({
     const rect = svgRef.current?.getBoundingClientRect();
     if (!rect) return;
     e.stopPropagation();
-    const nextZoom = clampCanvasZoom(viewport.zoom * (1 - e.deltaY * 0.001));
-    const fx = (e.clientX - rect.left) / rect.width;
-    const fy = (e.clientY - rect.top) / rect.height;
-    const worldX = viewX + fx * viewWidth;
-    const worldY = viewY + fy * viewHeight;
-    const nextViewWidth = SCENE_VIEW.width / nextZoom;
-    const nextViewHeight = SCENE_VIEW.height / nextZoom;
-    const nextViewX = worldX - fx * nextViewWidth;
-    const nextViewY = worldY - fy * nextViewHeight;
-    setViewport({
-      zoom: nextZoom,
-      offset: {
-        x: ((SCENE_VIEW.width - nextViewWidth) / 2 - nextViewX) * nextZoom,
-        y: ((SCENE_VIEW.height - nextViewHeight) / 2 - nextViewY) * nextZoom,
-      },
-    });
+    setViewport(zoomCanvasViewportAtPoint({
+      viewport,
+      rect,
+      clientX: e.clientX,
+      clientY: e.clientY,
+      deltaY: e.deltaY,
+      scene: SCENE_VIEW,
+    }));
   };
   return (
     <svg
       ref={svgRef}
       aria-label="Path editor canvas"
       data-testid="path-canvas"
-      viewBox={`${viewX} ${viewY} ${viewWidth} ${viewHeight}`}
+      viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`}
       className={`h-[calc(100vh-160px)] min-h-[560px] w-full bg-[#f8fbff] ${drawMode ? "cursor-crosshair" : panStart ? "cursor-grabbing" : "cursor-grab"}`}
       onMouseDown={handlePanOrDrawDown}
       onMouseMove={handleMove}
