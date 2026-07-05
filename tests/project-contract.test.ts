@@ -35,7 +35,7 @@ import { contourPathD, fabricablePartOutlinePoints, partLandmarkJointIds, partLa
 import { MECHANISM_FEATURE_REGISTRY, mechanismFeature, validateMechanismFeatureRegistry, type MechanismDragHandle } from '../utils/mechanismFeatureRegistry';
 import { buildMechanismSnapshot, buildMechanismSnapshots } from '../utils/mechanismSnapshot';
 import { createMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext } from '../utils/mechanismPreview';
-import { buildMechanismRecommendations } from '../utils/mechanismRecommendations';
+import { buildMechanismRecommendations, fitMechanismToTargetPath } from '../utils/mechanismRecommendations';
 import { WEBGL_PIXEL_RATIO_CAP, canvasPanOffset, canvasViewBoxForViewport, zoomCanvasViewportAtPoint } from '../utils/viewport';
 import { cachedThreeResource, clearThreeGroup, disposeThreeObjectGraph, setRendererPixelRatioCap } from '../utils/threeResourceKit';
 import { APP_COMMANDS, APP_MENU_GROUPS, commandById, commandIdForKeyboardEvent, validateAppCommandRegistry } from '../utils/appCommands';
@@ -2849,7 +2849,26 @@ assert(appMechanismActionsHookText.includes('fittedFoundryParameters') && appMec
 
 assert(appText.includes('useAppDerivedState(project)') && !appText.includes('const sortedParts = useMemo') && appDerivedStateHookText.includes('selectedMechanism') && appDerivedStateHookText.includes('playbackDurationMs') && appDerivedStateHookText.includes('mechanismConfig: GlobalConfig') && appDerivedStateHookText.includes('current?.partId === selectedPart.id'), 'App delegates selected part/path/mechanism/playback/config derivation to a pure hook without changing selection defaults');
 assert(mechanismFoundryText.includes('<FoundryWorkflowPanel') && foundryWorkflowPanelText.includes('data-testid="foundry-pick-anchor"') && !foundryWorkflowPanelText.includes('data-testid="foundry-target-summary"') && !foundryWorkflowPanelText.includes('Board hole') && !foundryWorkflowPanelText.includes('Range') && !foundryWorkflowPanelText.includes('Status'), 'Foundry left pane keeps action controls while hiding raw target, board-hole, range, and status readouts from the default student UI');
-assert(mechanismFoundryText.includes('fitMechanismToTargetPath') && mechanismFoundryText.includes('selectedPathFitSignature') && foundryWorkflowPanelText.includes('data-testid="foundry-fit-path"') && foundryWorkflowPanelText.includes('foundry.fitPath') && foundryCanvasPaneText.includes('data-fit-board-cells') && foundryCanvasPaneText.includes('data-fit-target-path'), 'Foundry exposes a prominent path-fit action, refits same-length path edits, and verifies the fitted 15x15 board target in the canvas telemetry');
+assert(mechanismFoundryText.includes('fitMechanismToTargetPath') && mechanismFoundryText.includes('onFitPath={() => applyPathFit()}') && !mechanismFoundryText.includes('lastPathFitSignatureRef') && !mechanismFoundryText.includes('applyPathFit(next)') && foundryWorkflowPanelText.includes('data-testid="foundry-fit-path"') && foundryWorkflowPanelText.includes('foundry.fitPath') && foundryCanvasPaneText.includes('data-fit-board-cells') && foundryCanvasPaneText.includes('data-fit-target-path'), 'Foundry exposes a prominent Fit path action while preserving the default mechanism until the user clicks Fit');
+const foundryFitContractSeed = createDefaultMechanism('4bar', 'foundry-fit-contract');
+const foundryFitContract = fitMechanismToTargetPath(sample, foundryFitContractSeed, 'path-right-arm');
+assert.equal(foundryFitContract.id, foundryFitContractSeed.id, 'Fit path preserves the active Foundry preview instance id');
+assert.equal(foundryFitContract.targetPathId, 'path-right-arm', 'Fit path writes the selected drawn path only after the explicit Fit action');
+assert(
+  [foundryFitContract.groundLength, foundryFitContract.crankLength, foundryFitContract.couplerLength, foundryFitContract.rockerLength].every(linkageSceneLengthIsFabricationPreset),
+  '4bar path fitting searches within the four physical linkage sizes instead of inventing arbitrary linkage lengths',
+);
+assert(sampleFeasibleRange(foundryFitContract).percentValid >= 0.98, '4bar path fitting only accepts full-rotation kit candidates');
+const foundryFitGenerated = foundryFitContract.generatedPath ?? [];
+const foundryFitTraces = generateMechanismPointTraces(foundryFitContract, 36).traces.filter(trace => trace.id === 'B' || trace.id === 'C');
+assert(
+  foundryFitGenerated.length > 1 &&
+    foundryFitTraces.some(trace =>
+      trace.points.length === foundryFitGenerated.length &&
+      Math.hypot(trace.points[0].x - foundryFitGenerated[0].x, trace.points[0].y - foundryFitGenerated[0].y) < 1e-6
+    ),
+  '4bar path fitting exposes the closest physical B/C joint trace as the generated mechanism path',
+);
 assert(mechanismFoundryText.includes('<FoundryInspectorPanel') && foundryInspectorPanelText.includes('testId="foundry-parametric-editor"') && foundryInspectorPanelText.includes('Mechanism options') && foundryInspectorPanelText.includes('data-testid="foundry-view-controls"'), 'MechanismFoundry delegates the right Foundry inspector without changing parametric editor, compact view controls, or advanced options');
 assert(foundryInspectorPanelText.includes('data-testid="foundry-visible-sensemaking"') && foundryInspectorPanelText.includes('<ClassroomExampleVideo') && !foundryWorkflowPanelText.includes('data-testid="foundry-visible-sensemaking"') && !foundryInspectorPanelText.includes('Preview overlays') && !foundryInspectorPanelText.includes('foundry-physics-readout'), 'Foundry right inspector owns sensemaking first while removing stale preview-overlay and Motion readout cards');
 assert(mechanismFoundryText.includes('<FoundryCanvasPane') && foundryCanvasPaneText.includes('<ThreeFoundryPreview') && foundryCanvasPaneText.includes('<FoundryOverlayLayer') && foundryCanvasChromeText.includes('data-testid="foundry-toolbar"') && foundryCanvasChromeText.includes('data-testid="foundry-camera-controls"') && foundryOverlayLayerText.includes('data-testid="foundry-preview-overlay"') && foundryOverlayLayerText.includes('data-testid="foundry-param-handles"') && foundryCanvasPaneText.includes('data-testid="foundry-toolbar-state"'), 'MechanismFoundry delegates the center Foundry canvas without changing 3D preview overlays');
@@ -2864,6 +2883,7 @@ assert(exporterText.includes('fabricationGearPathD'), 'blueprint/export gear ren
 assert(mechanismLinkagePreviewText.includes('mechanismReferenceTopologySummary') && mechanismLinkagePreviewText.includes('data-reference-topology'), 'active Foundry SVG renderer exposes mechanism-reference topology telemetry');
 assert(mechanismLinkagePreviewText.includes('referenceCoordRoles') && mechanismLinkagePreviewText.includes('data-reference-coord-roles'), 'active Foundry SVG renderer exposes mechanism-reference coordinate role telemetry');
 assert(mechanismLinkagePreviewText.includes('fabricationRingGearPathD') && foundry3dText.includes('fabricationRingGearProfileForPitchRadius'), 'active Foundry/Design renderers use shared ring/sun/planet/carrier gear geometry');
+assert(threePreviewText.includes("mechDrive: new THREE.MeshStandardMaterial({ color: '#60a5fa'") && threePreviewText.includes("mechCoupler: new THREE.MeshStandardMaterial({ color: '#60a5fa'") && threePreviewText.includes("mechOutput: new THREE.MeshStandardMaterial({ color: '#60a5fa'"), 'integrated Design/Assembly puppet preview uses the Foundry linkage color instead of a private mechanism palette');
 assert(foundry3dText.includes('fixed-gear-axles-only'), 'Foundry 3D gear train preview declares fixed gear axles rather than generic mechanism pins');
 assert(foundry3dText.includes('coplanar-fixed-axles') && foundry3dText.includes('gear-axles-include-board-side-spacer'), 'Foundry 3D gear train preview keeps gear plates coplanar and spans board-side local spacer stacks');
 assert(foundry3dText.includes('planetary-coplanar-ring-sun-planet') && foundry3dText.includes('planetary-carrier-pins-include-local-spacers'), 'Foundry 3D planetary preview keeps ring/sun/planet coplanar while carrier pins use local S10 spacers');

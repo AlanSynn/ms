@@ -8,6 +8,7 @@ import { motionAnchorJointIds, preferredMotionJointId } from "./motion";
 import { MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY } from "./mechanismTemplates";
 import { normalizeMechanismToFabricationSet, normalizeMechanismToReference } from "./mechanismReference";
 import { fitPathToBox } from "./mechanismPreview";
+import { fitFourBarKitMechanismToPath } from "./fourBarPathFit";
 
 export type MechanismRecommendation = {
   type: MechanismType;
@@ -462,6 +463,10 @@ export const fitMechanismToTargetPath = (
   const object = path?.sceneObjectId ? project.sceneObjects[path.sceneObjectId] : undefined;
   if (!path || (!part && !object) || path.points.length < 3)
     return snapMechanismAnchor(normalizeGearMeshMechanism(mechanism), project);
+  if (mechanism.type === "4bar") {
+    const fittedFourBar = fitFourBarKitMechanismToPath(project, mechanism, path);
+    if (fittedFourBar) return fittedFourBar;
+  }
   const fitted = createRecommendedMechanism(
     project,
     part,

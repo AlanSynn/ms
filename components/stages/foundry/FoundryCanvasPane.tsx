@@ -43,6 +43,7 @@ type FoundryCanvasPaneProps = {
     primary: boolean;
   }>;
   userPathPoints: Point[];
+  targetPathId?: string;
   kit: PhysicalKitSettings;
   showFoundryGrid: boolean;
   showUserPathPreview: boolean;
@@ -113,6 +114,7 @@ export const FoundryCanvasPane = ({
   previewPoints,
   foundryPointTraces,
   userPathPoints,
+  targetPathId,
   kit,
   showFoundryGrid,
   showUserPathPreview,
@@ -232,7 +234,7 @@ export const FoundryCanvasPane = ({
       data-user-path-point-count={userPathPoints.length}
       data-fit-board-cells={kit.boardCells}
       data-fit-anchor-grid={anchorGrid}
-      data-fit-target-path={landedFoundry.targetPathId ?? ""}
+      data-fit-target-path={targetPathId ?? landedFoundry.targetPathId ?? ""}
       data-user-to-mech-fit-error={
         pathFitError === undefined ? "missing" : pathFitError.toFixed(2)
       }

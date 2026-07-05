@@ -74,6 +74,25 @@ import {
 import { createDefaultMechanism, uid } from "../../../utils/project";
 import { preferredMotionJointId } from "../../../utils/motion";
 
+const traceDistanceToGeneratedPath = (
+  trace: { points: Point[] },
+  generatedPath: Point[],
+) => {
+  if (!trace.points.length || !generatedPath.length) return Number.POSITIVE_INFINITY;
+  const count = Math.min(12, trace.points.length, generatedPath.length);
+  return Array.from({ length: count }, (_, index) => {
+    const generatedIndex = Math.round(
+      (index * (generatedPath.length - 1)) / Math.max(1, count - 1),
+    );
+    const traceIndex = Math.round(
+      (index * (trace.points.length - 1)) / Math.max(1, count - 1),
+    );
+    const a = generatedPath[generatedIndex];
+    const b = trace.points[traceIndex];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }).reduce((sum, distance) => sum + distance, 0);
+};
+
 export const MechanismFoundry = ({
   project,
   foundry,
@@ -130,25 +149,12 @@ export const MechanismFoundry = ({
     pointerId: number;
     handle: "B" | "C" | "D";
   } | null>(null);
-  const lastPathFitSignatureRef = useRef("");
   const targetReady = Boolean(
     (selectedPart || selectedSceneObject) &&
     selectedPath &&
     selectedPath.enabled &&
     selectedPath.points.length >= 3,
   );
-  const selectedPathFitSignature = selectedPath
-    ? [
-        selectedPath.id,
-        selectedPath.partId,
-        selectedPath.sceneObjectId ?? "",
-        selectedPath.targetAnchorJointId ?? "",
-        selectedPath.closed ? "closed" : "open",
-        ...selectedPath.points.map(
-          (point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`,
-        ),
-      ].join("|")
-    : "";
   const targetIkJointId = selectedPart
     ? preferredMotionJointId(
         project,
@@ -167,6 +173,9 @@ export const MechanismFoundry = ({
   const rawLanding =
     manualAnchor ??
     foundryPathAnchor ??
+    (Number.isFinite(foundry.anchorX) && Number.isFinite(foundry.anchorY)
+      ? { x: foundry.anchorX ?? 0, y: foundry.anchorY ?? 0 }
+      : undefined) ??
     selectedPath?.points[0] ??
     (selectedSceneObject
       ? selectedSceneObject.transform
@@ -193,10 +202,21 @@ export const MechanismFoundry = ({
     x: 180 + (landing.x / SCENE_VIEW.width) * 360,
     y: 120 - (landing.y / SCENE_VIEW.height) * 240,
   };
-  const rawFoundryPointTraces = useMemo(
-    () => generateMechanismPointTraces(landedFoundry, 96).traces,
-    [landedFoundry],
-  );
+  const rawFoundryPointTraces = useMemo(() => {
+    const traces = generateMechanismPointTraces(landedFoundry, 96).traces;
+    const generatedPath = landedFoundry.generatedPath ?? [];
+    if (!generatedPath.length || traces.length < 2) return traces;
+    const fittedTrace = traces.reduce((best, trace) =>
+      traceDistanceToGeneratedPath(trace, generatedPath) <
+      traceDistanceToGeneratedPath(best, generatedPath)
+        ? trace
+        : best,
+    );
+    return traces.map((trace) => ({
+      ...trace,
+      primary: trace.id === fittedTrace.id,
+    }));
+  }, [landedFoundry]);
   const preview = useMemo(
     () =>
       rawFoundryPointTraces.find((trace) => trace.primary)?.points ??
@@ -740,7 +760,6 @@ export const MechanismFoundry = ({
     setManualAnchor(null);
     setShowUserPathPreview(true);
     setShowPathPreview(true);
-    lastPathFitSignatureRef.current = selectedPathFitSignature;
     setFoundry(createPathFittedFoundry(mechanism));
   };
   const resetFoundryPreview = () => {
@@ -766,22 +785,6 @@ export const MechanismFoundry = ({
       recommendation: FOUNDRY_PRESETS.balanced.recommendation,
     });
   };
-  useEffect(() => {
-    if (!targetReady || !selectedPath || manualAnchor) return;
-    const needsFit =
-      foundry.targetPathId !== selectedPath.id ||
-      lastPathFitSignatureRef.current !== selectedPathFitSignature;
-    if (!needsFit) return;
-    lastPathFitSignatureRef.current = selectedPathFitSignature;
-    setFoundry(createPathFittedFoundry(foundry));
-  }, [
-    foundry.type,
-    foundry.targetPathId,
-    manualAnchor,
-    selectedPath?.id,
-    selectedPathFitSignature,
-    targetReady,
-  ]);
   useEffect(() => {
     if (!foundryPlaying) return;
     let frame = 0;
@@ -858,8 +861,7 @@ export const MechanismFoundry = ({
       presetId: "balanced",
       recommendation: FOUNDRY_PRESETS.balanced.recommendation,
     };
-    if (targetReady && selectedPath) applyPathFit(next);
-    else setAnchoredFoundry(next);
+    setAnchoredFoundry(next);
   };
   const selectFoundryPreset = (presetId: string) => {
     const preset = FOUNDRY_PRESETS[presetId];
@@ -875,8 +877,7 @@ export const MechanismFoundry = ({
       presetId,
       recommendation: preset.recommendation,
     };
-    if (targetReady && selectedPath) applyPathFit(next);
-    else setAnchoredFoundry(next);
+    setAnchoredFoundry(next);
   };
   return (
     <EditorStageFrame
@@ -915,6 +916,7 @@ export const MechanismFoundry = ({
             previewPoints={previewPoints}
             foundryPointTraces={foundryPointTraces}
             userPathPoints={foundryUserPathPoints}
+            targetPathId={selectedPath?.id}
             kit={project.settings.physicalKit}
             showFoundryGrid={showFoundryGrid}
             showUserPathPreview={showUserPathPreview}
