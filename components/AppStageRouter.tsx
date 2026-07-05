@@ -169,7 +169,6 @@ export const AppStageRouter = ({
         setIsPlaying={setIsPlaying}
         angle={angle}
         setAngle={setAngle}
-        onNext={() => goStage("foundry")}
         goStage={goStage}
         viewport={viewport}
         setViewport={setViewport}

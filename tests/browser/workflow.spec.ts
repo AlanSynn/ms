@@ -1629,7 +1629,7 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await page.mouse.move(canvasBox!.x + 365, canvasBox!.y + 230);
   await page.mouse.up();
   await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
-  await expect(page.getByTestId('novice-path-panel').getByRole('button', { name: 'Choose mechanism' })).toBeEnabled();
+  await expect(page.getByTestId('novice-path-panel').getByRole('button', { name: 'Choose mechanism' })).toHaveCount(0);
 
   await page.getByLabel('Selected body part').selectOption('right_arm_lower');
   await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');

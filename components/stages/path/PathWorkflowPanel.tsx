@@ -34,7 +34,6 @@ interface PathWorkflowPanelProps {
   deletePoint: () => void;
   addLayer: () => void;
   addJointAtIkHandle: () => void;
-  onNext: () => void;
 }
 
 export const PathWorkflowPanel = ({
@@ -58,7 +57,6 @@ export const PathWorkflowPanel = ({
   deletePoint,
   addLayer,
   addJointAtIkHandle,
-  onNext,
 }: PathWorkflowPanelProps) => (
   <div className="path-panel stage-pane-stack" data-testid="novice-path-panel">
     <StageLeftSummary project={project} title="Path" stage="path" goStage={goStage}>
@@ -94,14 +92,6 @@ export const PathWorkflowPanel = ({
           onClick={clearPath}
         >
           <Trash2 size={16} /> Clear path
-        </button>
-        <button
-          className="btn-secondary"
-          aria-label="Choose mechanism"
-          disabled={pointCount < 3 || pathLocked}
-          onClick={onNext}
-        >
-          Choose
         </button>
       </div>
       <div className="free-draw-status" data-testid="free-draw-status">

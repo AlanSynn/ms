@@ -42,7 +42,6 @@ export const PathEditor = ({
   setIsPlaying,
   angle,
   setAngle,
-  onNext,
   goStage,
   viewport,
   setViewport,
@@ -63,7 +62,6 @@ export const PathEditor = ({
   setIsPlaying: (v: boolean) => void;
   angle: number;
   setAngle: React.Dispatch<React.SetStateAction<number>>;
-  onNext: () => void;
   goStage: (stage: AppStage) => void;
   viewport: CanvasViewport;
   setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
@@ -320,7 +318,6 @@ export const PathEditor = ({
             deletePoint={deletePoint}
             addLayer={addLayer}
             addJointAtIkHandle={addJointAtIkHandle}
-            onNext={onNext}
           />,
         ),
         canvas: canvasPane(
