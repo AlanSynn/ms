@@ -2367,6 +2367,7 @@ ${foundryWorkflowPanelText}
 ${foundryInspectorPanelText}`;
 const optionsText = readFileSync(join(process.cwd(), 'components', 'stages', 'options', 'Options.tsx'), 'utf8');
 const optionsPreviewCanvasText = readFileSync(join(process.cwd(), 'components', 'stages', 'options', 'OptionsPreviewCanvas.tsx'), 'utf8');
+const optionsSettingsControlsText = readFileSync(join(process.cwd(), 'components', 'stages', 'options', 'OptionsSettingsControls.tsx'), 'utf8');
 const foundry3dText = `${foundryStageText}
 ${threeFoundryPreviewText}
 ${foundryPreviewStateProbeText}
@@ -2396,6 +2397,7 @@ ${characterImportControlsText}
 ${characterSelectionText}
 ${optionsText}
 ${optionsPreviewCanvasText}
+${optionsSettingsControlsText}
 ${mechanismDesignStageText}
 ${designFoundryPreviewText}`;
 const typesText = readFileSync(join(process.cwd(), 'types.ts'), 'utf8');
@@ -2404,6 +2406,7 @@ assert(appText.includes('<AppWorkspaceShell') && !appText.includes('<AppStageRou
 assert(appStageRouterText.includes('<MechanismDesign') && !appText.includes('<MechanismDesign') && !appStageRouterText.includes('const MechanismDesign = ({') && mechanismDesignText.includes('export const MechanismDesign'), 'AppStageRouter delegates Mechanism Design to an extracted stage seam');
 assert(appStageRouterText.includes('<Options') && !appText.includes('<Options') && !appStageRouterText.includes('const Options = ({') && optionsText.includes('export const Options') && optionsText.includes('OPTIONS_SECTION_MANIFEST'), 'AppStageRouter delegates the Options stage to an extracted stage seam');
 assert(optionsText.includes('<OptionsPreviewCanvas settings={project.settings} />') && !optionsText.includes('aria-label="Options preview canvas"') && optionsPreviewCanvasText.includes('export const OptionsPreviewCanvas') && optionsPreviewCanvasText.includes('aria-label="Options preview canvas"') && optionsPreviewCanvasText.includes('formatGridLabel(settings.physicalKit, settings.gridUnit)'), 'Options stage delegates the static center preview canvas to a presentation-only leaf');
+assert(optionsText.includes('from "./OptionsSettingsControls"') && !optionsText.includes('const OPTIONS_SECTION_MANIFEST =') && optionsSettingsControlsText.includes('export const OPTIONS_SECTION_MANIFEST') && optionsSettingsControlsText.includes('export const SettingsSection') && optionsSettingsControlsText.includes('export const SelectField') && optionsSettingsControlsText.includes('ContextHelp helpId={helpId}'), 'Options stage delegates section metadata and field wrappers to a UI-only controls leaf');
 [
   'dispatch(',
   'ProjectAction',
@@ -2414,6 +2417,17 @@ assert(optionsText.includes('<OptionsPreviewCanvas settings={project.settings} /
   'document.'
 ].forEach(forbiddenOptionsPreviewBoundary => {
   assert(!optionsPreviewCanvasText.includes(forbiddenOptionsPreviewBoundary), `OptionsPreviewCanvas stays presentation-only and excludes ${forbiddenOptionsPreviewBoundary}`);
+});
+[
+  'dispatch(',
+  'ProjectAction',
+  'update_settings',
+  'physicalKitPreset',
+  'localStorage',
+  'window.',
+  'document.'
+].forEach(forbiddenOptionsControlsBoundary => {
+  assert(!optionsSettingsControlsText.includes(forbiddenOptionsControlsBoundary), `OptionsSettingsControls stays UI-only and excludes ${forbiddenOptionsControlsBoundary}`);
 });
 assert(appText.includes('navigateAppStage({') && appStageNavigationText.includes('handoffGate(project, target)') && appStageNavigationText.includes('set_processing') && !appText.includes('handoffGate(project'), 'App delegates stage handoff side effects to navigateAppStage while preserving recovery processing dispatch');
 assert(
