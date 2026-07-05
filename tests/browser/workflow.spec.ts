@@ -1746,6 +1746,8 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(page.getByTestId('stage-right-inspector').getByTestId('foundry-visible-sensemaking')).toContainText('Crank turns');
   await expect(page.getByTestId('foundry-mechanism-gallery')).not.toContainText('Crank turns -> rocker swings');
   await expect(page.locator('[data-testid^="foundry-mini-simulation-"]')).toHaveCount(5);
+  await expect(page.locator('[data-testid^="foundry-mini-linkage-"]')).toHaveCount(5);
+  await expect(page.locator('[data-testid^="foundry-mini-ghost-"]')).toHaveCount(10);
   await expect(page.getByTestId('foundry-three-canvas')).toBeVisible();
   const threeScene = page.getByTestId('foundry-camera-rig');
   await expect(threeScene).toHaveAttribute('data-three-renderer', 'webgl');
