@@ -27,6 +27,7 @@ import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
 import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainMeshPhaseDegAt, gearTrainMeshPhaseRadAt, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, gearTrainResolvedCenterDistance, gearTrainRotationRatioAt, generateCurvePoints, generateMechanismPointTraces, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius, sampledCamProfileScale } from '../utils/kinematics';
 import { animatedPartsForProject, describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainRootJointIds, motionPreviewForPath, motionPreviewForProject, motionPreviewForTarget, pointOnProjectPath, preferredMotionJointId } from '../utils/motion';
+import { addDrawSamplePoint, normalizeDrawTimedPoints } from '../utils/pathDrawing';
 import { buildToonSceneProjection } from '../utils/sceneProjection';
 import { buildFoundryPhysicsOverlay, buildKinematicPhysicsSession, mechanismPhysicsRule } from '../utils/physicsSession';
 import { fabricablePartOutlinePoints, partLandmarkJointIds, partLandmarkLocalPoints, partOutlineBounds, partWorldPointToLocal, pointInsideOutline } from '../utils/partGeometry';
@@ -4508,6 +4509,44 @@ const ikProject: ProjectState = {
   const closedPoint = pointOnProjectPath({ ...squarePath, closed: true }, Math.PI * 2 * 0.875);
   assert(Math.abs(openPoint.x - 3.75) < 1e-9 && Math.abs(openPoint.y - 10) < 1e-9, 'open path playback follows the drawn polyline without a return segment');
   assert(Math.abs(closedPoint.x) < 1e-9 && Math.abs(closedPoint.y - 5) < 1e-9, 'closed path playback follows the return segment back to the first point');
+}
+{
+  const firstStroke = [
+    { x: 0, y: 0, time: 100 },
+    { x: 30, y: 0, time: 220 },
+    { x: 60, y: 0, time: 620 },
+  ];
+  const timedStroke = normalizeDrawTimedPoints(firstStroke, 1000);
+  assert(timedStroke && timedStroke[0].time === 0 && Math.abs(timedStroke[1].time - 230.76923076923077) < 1e-6 && timedStroke[2].time === 1000, 'drawn timed points preserve relative hand pacing instead of redistributing evenly');
+  const jitterIgnored = addDrawSamplePoint([{ x: 0, y: 0, time: 0 }], { x: 1, y: 1 }, 120);
+  assert.equal(jitterIgnored.length, 1, 'draw sampling ignores tiny jitter even when time passes');
+  const quickJump = addDrawSamplePoint([{ x: 0, y: 0, time: 0 }], { x: 112, y: 0 }, 16);
+  assert(quickJump.length > 2 && quickJump.length <= 5, 'fast freehand jumps are lightly interpolated instead of storing raw dense pointer events or skipping the shape');
+  const replaceStroke = addDrawSamplePoint(quickJump, { x: 5, y: 5 }, 800, true);
+  assert.deepEqual(replaceStroke, [{ x: 5, y: 5, time: 800 }], 'starting a new free-draw stroke replaces the previous draft path');
+  const closedStrokeTiming = normalizeDrawTimedPoints(firstStroke, 1000, { closed: true });
+  assert(closedStrokeTiming && closedStrokeTiming.at(-1)?.time === 850, 'closed free-draw timing reserves part of the cycle for the return segment');
+}
+{
+  const timedClosedPath = {
+    ...ikProject.paths['path-right-arm'],
+    points: [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 100 },
+    ],
+    timedPoints: [
+      { x: 0, y: 0, time: 0 },
+      { x: 100, y: 0, time: 200 },
+      { x: 100, y: 100, time: 700 },
+    ],
+    duration: 1000,
+    closed: true,
+  };
+  const heldPacingPoint = pointOnProjectPath(timedClosedPath, Math.PI);
+  const returnPoint = pointOnProjectPath(timedClosedPath, Math.PI * 2 * 0.85);
+  assert(Math.abs(heldPacingPoint.x - 100) < 1e-9 && Math.abs(heldPacingPoint.y - 60) < 1e-9, 'closed timed path playback preserves non-uniform hand pacing before the return segment');
+  assert(Math.abs(returnPoint.x - 50) < 1e-9 && Math.abs(returnPoint.y - 50) < 1e-9, 'closed timed path playback uses the reserved return segment back to the first point');
 }
 const pathPreview = motionPreviewForPath(ikProject, ikProject.paths['path-right-arm'], 0);
 assert(pathPreview.parts.right_arm_lower, 'path editor preview moves selected limb at current frame');

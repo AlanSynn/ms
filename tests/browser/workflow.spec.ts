@@ -722,9 +722,15 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.locator('[data-testid="path-canvas"], [data-testid="path-three-puppet-canvas"]')).toHaveCount(1);
   const pathCanvas = page.getByTestId('path-canvas');
   await expect(pathCanvas).toBeVisible();
-  await pathCanvas.click({ position: { x: 260, y: 220 } });
-  await pathCanvas.click({ position: { x: 320, y: 250 } });
+  const e2ePathBox = await pathCanvas.boundingBox();
+  expect(e2ePathBox, 'e2e path canvas can receive a one-stroke draw gesture').toBeTruthy();
+  await page.mouse.move(e2ePathBox!.x + 260, e2ePathBox!.y + 220);
+  await page.mouse.down();
+  await page.mouse.move(e2ePathBox!.x + 290, e2ePathBox!.y + 235, { steps: 2 });
+  await page.mouse.move(e2ePathBox!.x + 320, e2ePathBox!.y + 250, { steps: 2 });
+  await page.mouse.up();
   await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
+  await expect(page.getByTestId('free-draw-status')).toHaveAttribute('data-draw-mode', 'idle');
 
   await page.getByRole('button', { name: /Foundry/i }).click();
   await expect(page.getByRole('heading', { name: 'Foundry' })).toBeVisible();
@@ -1655,6 +1661,10 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await page.mouse.move(canvasBox!.x + 365, canvasBox!.y + 230);
   await page.mouse.up();
   await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
+  await expect(page.getByTestId('free-draw-status')).toHaveAttribute('data-draw-mode', 'idle');
+  const newHeadPath = pathCanvas.getByTestId('selected-motion-path');
+  await expect(newHeadPath).toHaveAttribute('data-path-closed', 'true');
+  await expect(newHeadPath).toHaveAttribute('d', /Z$/);
   await expect(page.getByTestId('novice-path-panel').getByRole('button', { name: 'Choose mechanism' })).toHaveCount(0);
 
   await page.getByLabel('Motion target').selectOption('right_arm_lower');
@@ -1720,7 +1730,7 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   expect(await page.getByTestId('path-part-art-right_arm_lower').getAttribute('x'), 'art offset control moves the visible path-editor artwork').not.toBe(artXBefore);
   const partLocked = page.locator('label').filter({ hasText: 'Locked' }).first().locator('input[type="checkbox"]');
   await partLocked.check();
-  await expect(page.getByRole('button', { name: 'Drawing free path', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Draw free path', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Trace', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Clear path', exact: true })).toBeDisabled();
   await expect(page.getByLabel('X number').first()).toBeDisabled();
@@ -3505,8 +3515,27 @@ test('Draw mode forces 2D Path view and accepts free path strokes on SceneSketch
   await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.45 + 34, canvasBox!.y + canvasBox!.height * 0.45 + 22, { steps: 4 });
   await page.mouse.up();
 
+  await expect(page.getByRole('button', { name: 'Draw free path', exact: true })).toHaveClass(/btn-secondary/);
+  await expect(page.getByTestId('free-draw-status')).toHaveAttribute('data-draw-mode', 'idle');
   await expect.poll(
     readFreeDrawPointCount,
     { message: 'draw mode accepts pointer input on simplified canvas' }
-  ).toBeGreaterThan(beforeDraw);
+  ).toBeGreaterThanOrEqual(3);
+  const firstDrawCount = await readFreeDrawPointCount();
+  expect(firstDrawCount, 'one released stroke creates a compact path').toBeLessThanOrEqual(12);
+
+  await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Drawing free path', exact: true })).toHaveClass(/btn-primary active/);
+  await expect(page.getByTestId('free-draw-status')).toHaveAttribute('data-draw-mode', 'drawing');
+  await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.62, canvasBox!.y + canvasBox!.height * 0.36);
+  await page.mouse.down();
+  await page.mouse.move(canvasBox!.x + canvasBox!.width * 0.62 + 28, canvasBox!.y + canvasBox!.height * 0.36 + 18, { steps: 4 });
+  await page.mouse.up();
+
+  await expect(page.getByRole('button', { name: 'Draw free path', exact: true })).toHaveClass(/btn-secondary/);
+  await expect(page.getByTestId('free-draw-status')).toHaveAttribute('data-draw-mode', 'idle');
+  const secondDrawCount = await readFreeDrawPointCount();
+  expect(secondDrawCount, 'redraw replaces previous stroke instead of appending').toBeLessThanOrEqual(firstDrawCount + 1);
+  expect(secondDrawCount, 'replacement stroke still has enough points').toBeGreaterThanOrEqual(3);
+  expect(beforeDraw, 'fixture starts with an existing path so replacement is a real behavior change').toBeGreaterThan(0);
 });

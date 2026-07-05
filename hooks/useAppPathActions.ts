@@ -30,7 +30,11 @@ export const useAppPathActions = ({
   const [showTracking, setShowTracking] = useState(false);
 
   const setPathPoints = useCallback(
-    (points: Point[], source: ProjectMotionPath["source"] = "drawn") => {
+    (
+      points: Point[],
+      source: ProjectMotionPath["source"] = "drawn",
+      timedPoints?: ProjectMotionPath["timedPoints"],
+    ) => {
       const targetKind = selectedSceneObject ? "scene-object" : "part";
       const targetId = selectedSceneObject?.id ?? selectedPart?.id;
       if (!targetId) return;
@@ -64,14 +68,16 @@ export const useAppPathActions = ({
           chainRootJointId: selectedSceneObject ? undefined : current?.chainRootJointId,
           smoothness: current?.smoothness ?? 0,
           points,
-          timedPoints: points.map((p, i) => ({
-            ...p,
-            time:
-              points.length <= 1
-                ? 0
-                : (i / (points.length - 1)) *
-                  (current?.duration ?? project.settings.animationDurationMs),
-          })),
+          timedPoints:
+            timedPoints ??
+            points.map((p, i) => ({
+              ...p,
+              time:
+                points.length <= 1
+                  ? 0
+                  : (i / (points.length - 1)) *
+                    (current?.duration ?? project.settings.animationDurationMs),
+            })),
           duration: current?.duration ?? project.settings.animationDurationMs,
           closed: current?.closed ?? true,
           enabled: current?.enabled ?? true,

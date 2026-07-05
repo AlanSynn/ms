@@ -24,6 +24,7 @@ import {
   motionPreviewForPath,
   preferredMotionJointId,
 } from "../../../utils/motion";
+import { addDrawSamplePoint, normalizeDrawTimedPoints, type DrawSamplePoint } from "../../../utils/pathDrawing";
 import { uid } from "../../../utils/project";
 import { PathCanvasPane } from "./PathCanvasPane";
 import { PathInspectorPanel } from "./PathInspectorPanel";
@@ -59,6 +60,7 @@ export const PathEditor = ({
   setPathPoints: (
     points: Point[],
     source?: ProjectMotionPath["source"],
+    timedPoints?: ProjectMotionPath["timedPoints"],
   ) => void;
   openTracking: () => void;
   isPlaying: boolean;
@@ -70,7 +72,7 @@ export const PathEditor = ({
   setViewport: React.Dispatch<React.SetStateAction<CanvasViewport>>;
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
-  const freeDraftRef = useRef<Point[] | null>(null);
+  const freeDraftRef = useRef<DrawSamplePoint[] | null>(null);
   const [dragPoint, setDragPoint] = useState<number | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
   const [isFreeDrawing, setIsFreeDrawing] = useState(false);
@@ -112,15 +114,24 @@ export const PathEditor = ({
     setSelectedPoint(null);
   }, [selectedPart?.id, selectedSceneObject?.id]);
   const appendFreePoint = (point: Point, seed = false) => {
-    const base =
-      seed || !freeDraftRef.current
-        ? [...(selectedPath?.points ?? [])]
-        : freeDraftRef.current;
-    const last = base.at(-1);
-    if (last && Math.hypot(last.x - point.x, last.y - point.y) < 5) return;
-    const next = [...base, point].slice(-2000);
+    const next = addDrawSamplePoint(
+      freeDraftRef.current,
+      point,
+      performance.now(),
+      seed,
+    );
+    if (next === freeDraftRef.current) return;
+    const timed = normalizeDrawTimedPoints(
+      next,
+      selectedPath?.duration ?? project.settings.animationDurationMs,
+      { closed: selectedPath?.closed ?? true },
+    );
     freeDraftRef.current = next;
-    setPathPoints(next, "drawn");
+    setPathPoints(
+      timed.map(({ x, y }) => ({ x, y })),
+      "drawn",
+      timed,
+    );
   };
   const onCanvasDown = (e: React.MouseEvent<SVGSVGElement>) => {
     if (!drawMode || !svgRef.current || pathLocked || e.button !== 0) return;
@@ -202,9 +213,11 @@ export const PathEditor = ({
     setPathPoints(points, selectedPath.source);
   };
   const stopDrawing = () => {
+    const finishedFreeStroke = Boolean(freeDraftRef.current?.length);
     setDragPoint(null);
     setIsFreeDrawing(false);
     freeDraftRef.current = null;
+    if (finishedFreeStroke) setDrawMode(false);
   };
   const deletePoint = () => {
     if (selectedPoint === null || !selectedPath || pathLocked) return;

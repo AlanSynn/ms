@@ -380,6 +380,8 @@ export const SceneSketch = ({
         .map((path) => (
           <path
             key={path.id}
+            data-testid={path.id === selectedPath?.id ? "selected-motion-path" : undefined}
+            data-path-closed={path.id === selectedPath?.id ? String(path.closed) : undefined}
             d={pathFromPoints(path.points, path.closed, path.smoothness)}
             fill="none"
             stroke={path.enabled ? "#5a6cff" : "#94a3b8"}

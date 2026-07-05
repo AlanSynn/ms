@@ -50,6 +50,7 @@ export type AppStageRouterProps = {
   setPathPoints: (
     points: Point[],
     source?: ProjectMotionPath["source"],
+    timedPoints?: ProjectMotionPath["timedPoints"],
   ) => void;
   openTracking: () => void;
   isPlaying: boolean;
