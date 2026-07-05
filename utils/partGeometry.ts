@@ -58,6 +58,25 @@ const farthestPair = (points: Point[]): [Point, Point] => {
     return best;
 };
 
+const contourCentroid = (points: Point[]): Point => {
+    if (!points.length) return { x: 0, y: 0 };
+    return points.reduce(
+        (sum, point) => ({
+            x: sum.x + point.x / points.length,
+            y: sum.y + point.y / points.length
+        }),
+        { x: 0, y: 0 }
+    );
+};
+
+export const scaleContour = (points: Point[], factor: number): Point[] => {
+    const center = contourCentroid(points);
+    return points.map(point => ({
+        x: center.x + (point.x - center.x) * factor,
+        y: center.y + (point.y - center.y) * factor
+    }));
+};
+
 export const partWorldPointToLocal = (part: BodyPartLayer, point: Point): Point => {
     const rotation = -(part.transform.rotation * Math.PI) / 180;
     const scale = Math.max(0.001, part.transform.scale);

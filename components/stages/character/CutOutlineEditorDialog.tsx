@@ -9,25 +9,6 @@ import {
   type CutViewport,
 } from "../../../utils/cutEditorViewport";
 
-const contourCentroid = (points: Point[]): Point => {
-  if (!points.length) return { x: 0, y: 0 };
-  return points.reduce(
-    (sum, point) => ({
-      x: sum.x + point.x / points.length,
-      y: sum.y + point.y / points.length,
-    }),
-    { x: 0, y: 0 },
-  );
-};
-
-export const scaleContour = (points: Point[], factor: number): Point[] => {
-  const center = contourCentroid(points);
-  return points.map((point) => ({
-    x: center.x + (point.x - center.x) * factor,
-    y: center.y + (point.y - center.y) * factor,
-  }));
-};
-
 const contourPathD = (points: Point[], flipY = false) =>
   points.length
     ? `M ${points.map((point) => `${point.x.toFixed(2)} ${(flipY ? -point.y : point.y).toFixed(2)}`).join(" L ")} Z`

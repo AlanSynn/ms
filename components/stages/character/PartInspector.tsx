@@ -4,9 +4,10 @@ import {
   fabricablePartOutlinePoints,
   isUsableContourPoints,
   partLandmarkLocalPoints,
+  scaleContour,
 } from "../../../utils/partGeometry";
 import { MiniNumber, Toggle } from "../../ui/InspectorControls";
-import { CutOutlineEditorDialog, scaleContour } from "./CutOutlineEditorDialog";
+import { CutOutlineEditorDialog } from "./CutOutlineEditorDialog";
 
 export const PartInspector = ({
   part,
