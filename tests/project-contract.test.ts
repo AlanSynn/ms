@@ -9,12 +9,13 @@ import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { boardGridLines, boardToScene, bodyPartPivotScene, physicalKitPreset, placeBodyPartPivotAt, SCENE_PX_PER_MM, sceneToBoard, sceneToBoardRaw, sceneToSheetMm, sceneToSvg, sheetMmToScene } from '../utils/coordinates';
 import { CLASSROOM_LESSONS, classroomLessonById, createDefaultMechanism, createEmptyProject, createLessonProject, createSampleProject, handoffGate, loadProjectSnapshot, serializeProject, applyProjectAction, projectSelfCheck, mechanismRequiredParts, mechanismWithGeneratedPath, replaceCharacterProject, resetProjectToLessonBaseline } from '../utils/project';
-import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, PLANETARY_GEAR_PLANET_COUNT, fabricationBoardColumnLabel, fabricationBoardCoordinateCallout, fabricationBoardRowLabel, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, makeBlueprintPreviewSvg, makeBlueprintSvg, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRenderPlanForMechanism, fabricationStackForMechanism, fabricationStackSummary, planetaryPlanetCenters, prefabAssemblySteps, readableFabricationStackSummary, sampleFeasibleRange, validateFabricationStack, validateForFabrication, validateMechanismPreviewReadiness } from '../utils/fabrication';
+import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, PLANETARY_GEAR_PLANET_COUNT, fabricationBoardColumnLabel, fabricationBoardCoordinateCallout, fabricationBoardRowLabel, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, makeBlueprintPreviewSvg, makeBlueprintSvg, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRenderPlanForMechanism, fabricationStackForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryPlanetCenters, prefabAssemblySteps, readableFabricationStackSummary, sampleFeasibleRange, validateFabricationStack, validateForFabrication, validateMechanismPreviewReadiness } from '../utils/fabrication';
 import { FABRICATION_GEAR_ROOT_WEB_MM, fabricationGearEngravingLabel, fabricationLinkageEngravingLabel, fabricationRingGearEngravingLabel, fabricationSpacerEngravingLabel } from '../utils/fabricationContract';
 import { makeBlueprintPreviewSvg as directMakeBlueprintPreviewSvg, makeBlueprintSvg as directMakeBlueprintSvg } from '../utils/fabricationBlueprintSvg';
 import { fabricationGearPathD as profileFabricationGearPathD, fabricationGearProfileForPitchRadius as profileFabricationGearProfileForPitchRadius, fabricationRingGearPathD as profileFabricationRingGearPathD, fabricationRingGearProfileForPitchRadius as profileFabricationRingGearProfileForPitchRadius } from '../utils/fabricationProfiles';
 import { closePhysicalValue as readinessClosePhysicalValue, closeToBoardPitch as readinessCloseToBoardPitch, closeToFabricationLinkage as readinessCloseToFabricationLinkage, physicalTolerance as readinessPhysicalTolerance, sampleFeasibleRange as readinessSampleFeasibleRange } from '../utils/fabricationReadiness';
 import { FABRICATION_RENDER_LAYER_Z_STEP as renderPlanLayerZStep, FABRICATION_RENDER_MIN_CLEARANCE as renderPlanMinClearance, FABRICATION_RENDER_PART_DEPTH as renderPlanPartDepth, fabricationRenderPlanForMechanism as renderPlanForMechanism, validateFabricationStack as renderPlanValidateFabricationStack } from '../utils/fabricationRenderPlan';
+import { FABRICATION_LINKAGE_ROLE_MIN_HOLES as sizingRoleMinHoles, PLANETARY_GEAR_PLANET_COUNT as sizingPlanetCount, fabricationLinkageHoleCountsForMechanism as sizingFabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism as sizingFabricationLinkageSceneLengthsForMechanism, planetaryGearConventionForMechanism as sizingPlanetaryGearConventionForMechanism, planetaryPlanetCenters as sizingPlanetaryPlanetCenters } from '../utils/fabricationSizing';
 import { fabricationLinkageSpecForSceneLength as stackModelFabricationLinkageSpecForSceneLength, fabricationStackForMechanism as stackModelFabricationStackForMechanism, fabricationStackSummary as stackModelFabricationStackSummary, readableFabricationStackSummary as stackModelReadableFabricationStackSummary } from '../utils/fabricationStackModel';
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
@@ -310,8 +311,10 @@ assert(
   && normalizedCodebaseCleanupPlan.includes('`utils/fabricationRenderPlan.ts` | 105')
   && normalizedCodebaseCleanupPlan.includes('pure moving-stack validation, render-layer z-order, base layer, and render-plan summaries')
   && normalizedCodebaseCleanupPlan.includes('`utils/fabricationBlueprintSvg.ts` | 142')
-  && normalizedCodebaseCleanupPlan.includes('deterministic printable/readable Blueprint SVG rendering'),
-  'cleanup plan records the extracted fabrication profile, number formatting, stack model, readiness, render-plan, and Blueprint SVG seams'
+  && normalizedCodebaseCleanupPlan.includes('deterministic printable/readable Blueprint SVG rendering')
+  && normalizedCodebaseCleanupPlan.includes('`utils/fabricationSizing.ts` | 121')
+  && normalizedCodebaseCleanupPlan.includes('pure planetary gear convention and linkage sizing'),
+  'cleanup plan records the extracted fabrication profile, number formatting, stack model, readiness, render-plan, Blueprint SVG, and sizing seams'
 );
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintExport.tsx` | 88') && normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintControlPanel.tsx` | 258') && normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintDetailPanel.tsx` | 100') && normalizedCodebaseCleanupPlan.includes('Blueprint left workflow controls, package generation, download buttons, and recipe list live outside the stage wrapper') && normalizedCodebaseCleanupPlan.includes('Blueprint right inspector recipe title, board callout, sensemaking cue, required-part chips, stack summary, and export grid status live outside the stage wrapper'), 'cleanup plan records the extracted Blueprint control/detail panel seams');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
@@ -440,6 +443,7 @@ const visibleUiSource = [
   'utils/fabricationProfiles.ts',
   'utils/fabricationReadiness.ts',
   'utils/fabricationRenderPlan.ts',
+  'utils/fabricationSizing.ts',
   'utils/fabricationStackModel.ts',
   'utils/assemblyPlayback.ts',
   'utils/mechanismTemplates.ts',
@@ -1053,6 +1057,9 @@ const roleMinimumFourBar = mechanismWithGeneratedPath(normalizeMechanismToFabric
   rockerLength: 80
 }));
 const roleMinimumFourBarHoleCounts = fabricationLinkageHoleCountsForMechanism(roleMinimumFourBar);
+assert.deepEqual(sizingRoleMinHoles, FABRICATION_LINKAGE_ROLE_MIN_HOLES, 'fabricationSizing preserves public linkage role minimum holes behind the fabrication facade');
+assert.deepEqual(sizingFabricationLinkageSceneLengthsForMechanism(roleMinimumFourBar), fabricationLinkageSceneLengthsForMechanism(roleMinimumFourBar), 'fabricationSizing preserves public linkage scene lengths behind the fabrication facade');
+assert.deepEqual(sizingFabricationLinkageHoleCountsForMechanism(roleMinimumFourBar), roleMinimumFourBarHoleCounts, 'fabricationSizing preserves public linkage hole counts behind the fabrication facade');
 assert(roleMinimumFourBarHoleCounts.driver >= 3, 'four-bar input link normalization preserves enough holes for a board pivot plus moving joint');
 assert(roleMinimumFourBarHoleCounts.coupler >= 4, 'four-bar coupler normalization upgrades too-short path fits to a fabricated linkage with enough moving-joint holes');
 assert(roleMinimumFourBarHoleCounts.output >= 3, 'four-bar output link normalization preserves enough holes for a board pivot plus moving joint');
@@ -1329,6 +1336,7 @@ const fabricationBlueprintSvgText = readFileSync(join(process.cwd(), 'utils', 'f
 const fabricationProfilesText = readFileSync(join(process.cwd(), 'utils', 'fabricationProfiles.ts'), 'utf8');
 const fabricationReadinessText = readFileSync(join(process.cwd(), 'utils', 'fabricationReadiness.ts'), 'utf8');
 const fabricationRenderPlanText = readFileSync(join(process.cwd(), 'utils', 'fabricationRenderPlan.ts'), 'utf8');
+const fabricationSizingText = readFileSync(join(process.cwd(), 'utils', 'fabricationSizing.ts'), 'utf8');
 const fabricationStackModelText = readFileSync(join(process.cwd(), 'utils', 'fabricationStackModel.ts'), 'utf8');
 const fabricationContractText = readFileSync(join(process.cwd(), 'utils', 'fabricationContract.ts'), 'utf8');
 const numberFormatText = readFileSync(join(process.cwd(), 'utils', 'numberFormat.ts'), 'utf8');
@@ -1351,6 +1359,7 @@ assert(mechanismReferenceText.includes('must pass through the gear centre and th
 assert(fabricationRuntimeText.includes("from './fabricationContract'"), 'fabrication runtime consumes centralized fabricationContract instead of hardcoded primitive tables');
 assert(
   fabricationRuntimeText.includes("from './fabricationBlueprintSvg'")
+  && fabricationRuntimeText.includes("from './fabricationSizing'")
   && fabricationRuntimeText.includes("from './fabricationProfiles'")
   && fabricationRuntimeText.includes("from './fabricationReadiness'")
   && fabricationRuntimeText.includes("from './fabricationRenderPlan'")
@@ -1497,6 +1506,41 @@ assert(
   'createElement'
 ].forEach(forbiddenText => {
   assert(!fabricationRenderPlanText.includes(forbiddenText), `fabricationRenderPlan stays render-plan-only and must not reference ${forbiddenText}`);
+});
+assert.deepEqual(
+  staticImportModules(fabricationSizingText),
+  ['../types', './fabricationContract', './fabricationStackModel', './kinematics'].sort(),
+  'fabricationSizing owns planetary/linkage sizing with an exact pure import set'
+);
+[
+  './fabrication',
+  './project',
+  './exporter',
+  './physicsKernel',
+  './sanitize',
+  '../components',
+  'react',
+  'three',
+  '@dimforge/rapier3d-compat'
+].forEach(moduleName => {
+  assert(
+    !fabricationSizingText.includes(`from '${moduleName}'`) && !fabricationSizingText.includes(`from "${moduleName}"`),
+    `fabricationSizing stays pure and must not import ${moduleName}`
+  );
+});
+[
+  'ProjectState',
+  'FabricationPackage',
+  'createFabricationPackage',
+  'validateForFabrication',
+  'validateMechanismPreviewReadiness',
+  'fabricationRenderPlanForMechanism',
+  'document.',
+  'window.',
+  'localStorage',
+  'createElement'
+].forEach(forbiddenText => {
+  assert(!fabricationSizingText.includes(forbiddenText), `fabricationSizing stays sizing-only and must not reference ${forbiddenText}`);
 });
 assert.deepEqual(
   staticImportModules(fabricationBlueprintSvgText),
@@ -3415,7 +3459,10 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
 
 {
   const mechanism = createDefaultMechanism('planetary_gear', 'contract-planetary-physical');
+  assert.equal(sizingPlanetCount, PLANETARY_GEAR_PLANET_COUNT, 'fabricationSizing preserves public planetary planet count behind the fabrication facade');
   assert.equal(PLANETARY_GEAR_PLANET_COUNT, 1, 'planetary gear recipe is intentionally fixed to one fabricated planet until multi-planet carriers exist');
+  assert.deepEqual(sizingPlanetaryPlanetCenters({ x: 0, y: 0 }, mechanism, Math.PI / 4), planetaryPlanetCenters({ x: 0, y: 0 }, mechanism, Math.PI / 4), 'fabricationSizing preserves public planetary center sampling behind the fabrication facade');
+  assert.deepEqual(sizingPlanetaryGearConventionForMechanism(mechanism), planetaryGearConventionForMechanism(mechanism), 'fabricationSizing preserves public planetary convention behind the fabrication facade');
   assert.equal(planetaryPlanetCenters({ x: 0, y: 0 }, mechanism, 0).length, 1, 'planetary planet center helper matches the single-planet fabrication recipe');
   [0, Math.PI / 2, Math.PI].forEach(angle => {
     const state = calculateLinkage(mechanism, angle);
