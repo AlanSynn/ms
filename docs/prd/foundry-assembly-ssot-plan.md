@@ -104,6 +104,10 @@ No x/y movement is valid under `explode_z`.
 - Must not grow a live 3D assembly simulator.
 - Labels must match Assembly labels.
 
+## Current state caveat
+
+Assembly consumes `MechanismSceneContract` through `AssemblySceneFrame` and the shared Foundry Three renderer. Design exposes generated-path and feature telemetry through the current integrated automata preview, but full Design cutoff to contract-backed layer/z/pin parity remains incomplete. Foundry itself still has temporary stage-local renderer branches for mechanism-type presentation glue in `ThreeFoundryPreview` and `foundryPreviewStacks`; those branches must migrate toward shared helpers/contracts when they encode pin, z, stack, or primitive semantics. Until those cutoffs land, no new Design or Assembly code may invent private mechanism stack, z, pin, or fabrication rules.
+
 ## Implementation slices
 
 1. Done baseline: `utils/mechanismSceneContract.ts` + contract/probe telemetry. Remaining hardening: migrate more pure Foundry pin helpers out of stage files before broader reuse.

@@ -1,109 +1,54 @@
-# MotionSmith: Character Motion Designer
+# MotionSmith
 
-![MotionSmith Dashboard](https://github.com/moh-d-m4x/MotionSmith/blob/main/ref/MotionSmith_Dashboard.png?raw=true)
+MotionSmith is a local-first browser/Tauri workbench for classroom automata projects. Students start from a working character or guided template, draw one visible motion path, fit a buildable mechanism, preview the automata, then export blueprint files and a step-by-step assembly guide.
 
-**MotionSmith** is a powerful web-based tool for designing, simulating, and optimizing mechanical linkages and character motion. It combines interactive 2D physics simulation with genetic algorithms to help users create complex mechanisms that follow specific motion paths.
+Live classroom web build: <https://alansynn.com/ms/>
 
-<p align="center">
-  <a href="https://alansynn.com/">
-    <img src="https://img.shields.io/badge/🚀_Try_it-live!-blue?style=for-the-badge" alt="Try it live!" height="50">
-  </a>
-</p>
+## Classroom flow
 
-## 🚀 Features
+1. Open **Getting Started**.
+2. Choose **Guide**, **Starter rig**, a built-in image starter, **Image**, or **Character file**.
+3. Edit the character or add scene objects in **Character**.
+4. Draw a target motion in **Path**.
+5. Fit and study a mechanism in **Foundry**.
+6. Tune the fitted mechanism instance in **Design**.
+7. Generate local build files in **Blueprint**.
+8. Assemble from the Three-backed step view in **Assembly**.
 
-### 🛠️ Interactive Mechanism Design
-- **Multiple Mechanism Types**: Support for 4-bar, 5-bar, Piston, and Scotch Yoke mechanisms.
-- **Drag-and-Drop Editor**: Intuitively adjust link lengths, anchor points, and joint positions directly on the canvas.
-- **Real-time Simulation**: Visualize motion instantly as you modify the design.
-- **Parametric Controls**: Fine-tune specific values like crank length, ground distance, and speed ratios.
+MotionSmith is static and local-first: no account, backend, cloud save, roster, dashboard, server inference, or server export job is required. Browser autosave, portable project snapshots, ONNX processing, blueprint downloads, and assembly guidance stay on the device.
 
-![Draw Mode](https://github.com/moh-d-m4x/MotionSmith/blob/main/ref/Draw_Mode.png?raw=true)
+## Current capabilities
 
-### 🧬 Machine Optimization
-- **Path Drawing**: Draw a desired motion path directly on the canvas.
-- **Genetic Algorithm**: Automatically evolve mechanism configurations to match your drawn path.
-- **Smart Generation**: Uses Monte Carlo search and evolutionary strategies to find the best fit.
-- **Shape Preservation**: Optimization algorithms respect the "DNA" of mechanism types, preserving speed ratios and key characteristics while fitting the curve.
+- Editable character parts, joints, anchors, outlines, and scene-object images.
+- Freehand open or closed motion paths for body parts or scene objects.
+- Fabrication-aware mechanism fitting on the default 15 x 15 kit board.
+- Foundry-derived mechanism visuals for physical links, holes, pins, gears, cams, spacers, clips, and z-stacks.
+- Integrated Design preview where fitted mechanisms drive character or object motion.
+- Local blueprint/package exports for prefab-board and custom-part workflows.
+- Three-backed Assembly steps for mechanism and character build order.
+- Local classroom assessment keys, sensemaking prompts, generated-loop examples, and optional reviewed video slots.
 
-### ✍️ Manual Motion Tracking
-- **Import Video/GIF**: Upload reference footage of motion.
-- **Manual Annotation**: Click to define points on video frames.
-- **Path Smoothing**: Automatically smooth your manually placed points using Catmull-Rom splines.
-- **Path Extraction**: Convert your annotated path into a target for mechanism optimization.
-- **Loop Closing**: Option to automatically connect the start and end points for cyclic motion.
+## Development
 
-![Tracking Modal](https://github.com/moh-d-m4x/MotionSmith/blob/main/ref/Tracking_Modal_1.png?raw=true)
-![Tracking Moda2](https://github.com/moh-d-m4x/MotionSmith/blob/main/ref/Tracking_Modal_2.png?raw=true)
-
-### 📤 Export & Integration (alpha)
-- **SVG Export**: Export your mechanism and path as scalable vector graphics.
-- **DXF Export**: Generate CAD-ready files for laser cutting or 3D modeling.
-- **Presets**: Save and load your favorite mechanism configurations.
-
-## 📦 Getting Started
-
-### Prerequisites
-- **Bun**: v1.3.14 or newer
-
-### Installation
-
-1.  **Clone the repository**
-    ```bash
-    git clone https://github.com/yourusername/motionsmith.git
-    cd motionsmith
-    ```
-
-2.  **Install Dependencies**
-    ```bash
-    bun install
-    ```
-
-### Running the Application
-
-**Quick Start (Windows):**
-```bash
-run_browser.bat
-```
-
-**Manual Start:**
+Prerequisite: Bun 1.3.14 or newer.
 
 ```bash
-# In the root directory
+bun install
 bun run dev
 ```
-Open `http://localhost:1420` in your browser.
 
-## 📖 Usage Guide
+Open the printed Vite URL in a browser.
 
-### Designing a Mechanism
-1.  **Select a Mechanism**: Choose from presets like "Crank-Rocker" or "Piston Pusher" in the left sidebar.
-2.  **Modify**: Click "Draw Mode" to toggle interaction. Drag joints to resize or anchors to move.
-3.  **Adjust**: Use the sliders in the sidebar for precise control over lengths and angles.
+## Verification
 
-### Optimizing for a Path
-1.  **Draw**: Enable "Draw Mode" and sketch a loop or curve on the canvas.
-2.  **Select**: Click on the mechanism you want to fit to the path.
-3.  **Optimize**: Click the "Optimize" button. to iterate through variations to match your drawing.
-4.  **Refine**: Adjust the optimization duration or seed mechanism for better results.
+```bash
+bun run test:contracts
+bun run build
+PLAYWRIGHT_WORKERS=2 env -u NO_COLOR PLAYWRIGHT_SERVER=preview playwright test
+```
 
-### Using Manual Tracking
-1.  **Open Tracker**: Click the "Track Video" button in the controls.
-2.  **Upload**: Select a video file or GIF containing the motion you want to replicate.
-3.  **Annotate**: 
-    - Click on the canvas to place a points.
-    - Drag points to adjust them.
-4.  **Refine**:
-    - Check "Smooth Path" to create a smooth curve through your points.
-    - Check "Connect Ends" if the motion is a closed loop.
-5.  **Transfer**: Click "Transfer as Drawing" to send the tracked path to the main editor for optimization.
+For the full documentation map and active contracts, start with [`docs/README.md`](docs/README.md).
 
-## 🛠️ Technology Stack
+## License
 
-- **Runtime / package manager**: Bun 1.3
-- **Frontend**: React 19, TypeScript 6, Vite 8, TailwindCSS, Lucide React
-- **Simulation**: Custom kinematic solvers, Three.js 0.185, browser ONNX runtime
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT. See [`LICENSE`](LICENSE).

@@ -21,9 +21,9 @@ MotionSmith should begin classroom use with a small set of project themes that c
 The answer should be a visible result, not a technical process. Examples:
 
 - `Make an arm wave`
-- `Make legs walk`
+- `Make a foot step`
 - `Make a head bob`
-- `Make a sign spin`
+- `Make gears spin`
 - `Start with my character`
 
 Each guided option must create real `ProjectState` data: character parts, joints, paths, anchors, optional mechanism, fabrication metadata, and reset baseline. No guided entry may be a screenshot, mock tutorial, fake recommendation, or canned animation.
@@ -78,9 +78,9 @@ Minimum project cards:
 | Theme card | Digital action -> physical artifact | Starter data |
 | --- | --- | --- |
 | `Make an arm wave` | Draw/fit a wrist path -> four-bar swings an arm | starter humanoid, right hand path, four-bar baseline |
-| `Make legs walk` | Pair foot paths -> linked leg motion | starter humanoid, leg paths, paired mechanism metadata |
+| `Make a foot step` | Tune a foot path -> linked step motion | starter humanoid, foot path, paired mechanism metadata |
 | `Make a head bob` | Tune lift path -> cam follower lifts head | starter humanoid, head path, cam baseline |
-| `Make a sign spin` | Pick gears -> gear train transfers rotation | sign/prop starter, gear train baseline |
+| `Make gears spin` | Pick gears -> gear train transfers rotation | prop/object starter, gear train baseline |
 | `Start with my character` | Import or blank rig -> editable parts and joints | blank starter or user package, no hidden mechanism |
 
 Card copy policy:

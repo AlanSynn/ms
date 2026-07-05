@@ -67,6 +67,7 @@ The safer path is boring: strengthen canonical state, pure derived adapters, det
 1. **`ProjectState` is the only persisted authoring truth.**
    - Body parts, skeleton, paths, mechanisms, physical-kit settings, export snapshots, and metadata live here.
    - UI pane layout, camera, hover, drag, orbit, playback time, and transient selection are UI/session state.
+   - Current implementation note: serialized project snapshots also carry recovery-compatible selected ids, processing status, and last-result/export-adjacent fields. Treat those as compatibility/recovery fields, not a license to add more transient UI state to `ProjectState`; normalize stale references during migrations before relying on them.
 
 2. **Renderers never own project geometry.**
    - 2D and 3D renderers own DOM/GPU objects, caches, camera controls, and hit-test handles only.
@@ -577,6 +578,7 @@ The current M3 implementation work treats UI stages as adapters over the shared 
 - Foundry left pane may expose compact action state such as target, blocker, and fabrication stack; detailed sensemaking is collapsed by default and inspector controls stay in the right pane.
 - Blueprint center renders the cut sheet / mechanism canvas only. The printable assembly guide iframe and selected recipe details live in the right inspector.
 - These UI corrections are still a transitional adapter layer. The remaining M3/M4 goal is to make Foundry, Design, Blueprint, physics overlays, and exporters consume one `MechanismSnapshot` / fabrication-plan facade instead of stage-local mechanism semantics.
+- Current risk: `components/stages/foundry/ThreeFoundryPreview.tsx` and `components/stages/foundry/foundryPreviewStacks.ts` still contain mechanism-type branches for renderer glue, pin points, z planes, and gear/planetary presentation. Those branches are temporary debt unless they only project already-derived shared contracts into DOM/Three objects.
 - Current M3 slice 3 correction: Foundry fitted preview/sweep sampling is centralized in `utils/mechanismPreview.ts`, and physics overlay derivation is centralized in `PhysicsSession` via `buildFoundryPhysicsOverlay`; stage code may project/display those vectors but must not reimplement fitting, velocity, force, friction, or constraint math.
 - Current M3 slice 3 correction: shared WebGL preview surfaces use `WEBGL_PIXEL_RATIO_CAP` from `utils/viewport.ts` so high-DPI displays do not multiply renderer cost independently per component.
 

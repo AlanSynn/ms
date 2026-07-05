@@ -28,14 +28,14 @@ Key notes translated into product constraints:
 
 | Area | Supported now | Gap to close |
 | --- | --- | --- |
-| Web deployment | GitHub Pages workflow, `/ms/` base path, tag-gated release, local ONNX asset checks. | No classroom-safe release checklist in product docs/About: no account, no upload, no server, local-first. |
-| Guided entry | Splash + compact result-first Getting Started dialog. | Classroom lessons must be a secondary lesson/library path, not extra cards in the first-run modal. |
-| Templates | Humanoid, Girl/Boy tiny-thumbnail starters, image/package import, and serializable lesson baselines. | Classroom templates need teacher-ready motion objectives with starter path and compatible mechanism option. |
-| Sensemaking | Foundry has collapsed sensemaking and status/warnings. | Too hidden. Need one visible next-action chip and one mechanism meaning cue at each step. |
-| Stable reset | View reset, playback reset, some stage reset buttons. | No explicit per-template/per-mechanism stable reset contract. `No rotation possible` must recover to known-good range. |
-| Blueprint | Printable cut sheet and export package. | Classroom language and teacher checklist need clearer web-first route; paper should be backup. |
-| Assembly | Dedicated Assembly tab and animated stepper exist. | Needs full end-to-end figure + mechanism build: body parts, spacers, board mounting, output binding, final test. |
-| Classroom workflow | Local snapshot/project import/export exists. | Need teacher pack story: share package → students edit locally → export snapshot/blueprint/assembly. |
+| Web deployment | GitHub Pages workflow, `/ms/` base path, tag-gated release, local ONNX asset checks, and release facts in `docs/deployment.md`. | Add automated test gates before deploy, or keep a mandatory manual release gate. |
+| Guided entry | Splash + compact result-first Getting Started dialog; `Guide` opens the guided project library. | Keep guided projects prominent without crowding the first modal. |
+| Templates | Humanoid, Girl/Boy tiny-thumbnail starters, image/package import, and serializable lesson baselines. | Keep expanding teacher-ready motion objectives with starter path and compatible mechanism option. |
+| Sensemaking | Foundry/Design/Assembly show sensemaking, assessment prompts, generated-loop examples, and short warnings. | Keep the right pane compact so explanation does not displace direct controls. |
+| Stable reset | `Reset Lesson` restores lesson baseline while preserving app settings; Foundry reset returns to finite preview state. | Keep every new template/mechanism resettable to a known-good range. |
+| Blueprint | Printable cut sheet, export package, board preview, metadata, and local downloads. | Keep Blueprint file-focused; route build teaching to Assembly. |
+| Assembly | Three-backed Assembly scenes, stepper, mechanism/character lanes, board markers, z frames, and final checks exist. | Continue improving full classroom clarity: body parts, spacers, board mounting, output binding, final test. |
+| Classroom workflow | Local snapshot/project import/export, autosave, assessment key setting, and teacher-facing docs exist. | Define teacher-pack distribution details only as local files unless server scope is reopened. |
 
 ## Implementation checkpoint — 2026-06-29
 

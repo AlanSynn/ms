@@ -5,6 +5,8 @@ Last refreshed: 2026-07-05
 
 Use this file before adding new docs. If a doc does not fit below, update an existing doc first.
 
+For current tab, pane, button, and tooltip UX, use `workbench-flow-ux-contract.md`. Do not create new per-tab UX contract docs; update that file instead.
+
 ## Active source of truth
 
 - [`../AGENTS.md`](../AGENTS.md) — repo operating contract, architecture discipline, verification gates.
@@ -16,7 +18,7 @@ Use this file before adding new docs. If a doc does not fit below, update an exi
 - [`mechanism-blueprint-manual.md`](mechanism-blueprint-manual.md) — blueprint/export behavior.
 - [`deployment.md`](deployment.md), [`macos-distribution.md`](macos-distribution.md) — distribution notes.
 
-## Active implementation plans
+## Active product evidence / remaining-risk PRDs
 
 - [`prd/toon-25d-main-3d-unlock-plan.md`](prd/toon-25d-main-3d-unlock-plan.md)
 - [`prd/toon-25d-implementation-plan.md`](prd/toon-25d-implementation-plan.md)
