@@ -36,7 +36,7 @@ export const CONTEXT_HELP: Record<
   "character.loadObjectFile": {
     en: {
       title: "Object",
-      body: "Add a separate prop in Character. Other tabs can move it, not create it.",
+      body: "Load one prop image here. Other tabs can move it, not create it.",
     },
   },
   "character.createFromImage": {

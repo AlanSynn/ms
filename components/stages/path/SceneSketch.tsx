@@ -99,8 +99,6 @@ export const SceneSketch = ({
     const scale = object.transform.scale || 1;
     const width = object.bounds.width * scale;
     const height = object.bounds.height * scale;
-    const x = center.x - width / 2;
-    const y = center.y - height / 2;
     const selected = project.selectedSceneObjectId === object.id;
     const common = {
       fill: object.fillColor,
@@ -108,6 +106,41 @@ export const SceneSketch = ({
       stroke: selected ? "#7c3aed" : "#475569",
       strokeWidth: selected ? 3 : 1.5,
     };
+    const transform = `translate(${center.x} ${center.y}) rotate(${-object.transform.rotation})`;
+    const contourD = (object.contourPoints && object.contourPoints.length >= 3
+      ? object.contourPoints
+      : [
+          { x: -object.bounds.width / 2, y: -object.bounds.height / 2 },
+          { x: object.bounds.width / 2, y: -object.bounds.height / 2 },
+          { x: object.bounds.width / 2, y: object.bounds.height / 2 },
+          { x: -object.bounds.width / 2, y: object.bounds.height / 2 },
+        ])
+      .map((point, index) => `${index === 0 ? "M" : "L"} ${(point.x * scale).toFixed(2)} ${(-point.y * scale).toFixed(2)}`)
+      .join(" ") + " Z";
+    if (object.textureUrl) {
+      const clipId = `path-scene-object-clip-${object.id.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+      return (
+        <g transform={transform}>
+          <defs>
+            <clipPath id={clipId}>
+              <path d={contourD} />
+            </clipPath>
+          </defs>
+          <image
+            data-testid={`path-scene-object-art-${object.id}`}
+            href={object.textureUrl}
+            x={-width / 2}
+            y={-height / 2}
+            width={width}
+            height={height}
+            preserveAspectRatio="xMidYMid meet"
+            clipPath={`url(#${clipId})`}
+            opacity={object.opacity}
+          />
+          <path d={contourD} fill="none" stroke={common.stroke} strokeWidth={common.strokeWidth} opacity={selected ? 0.9 : 0.42} />
+        </g>
+      );
+    }
     if (object.shape === "star") {
       const points = Array.from({ length: 10 }, (_, index) => {
         const radius = (index % 2 === 0 ? Math.min(width, height) : Math.min(width, height) * 0.48) / 2;
@@ -119,6 +152,8 @@ export const SceneSketch = ({
     if (object.shape === "cloud") {
       return <ellipse cx={center.x} cy={center.y} rx={width / 2} ry={height / 2.8} {...common} />;
     }
+    const x = center.x - width / 2;
+    const y = center.y - height / 2;
     return <rect x={x} y={y} width={width} height={height} rx={object.shape === "piggy-bank" ? 22 : 10} {...common} />;
   };
   const sheetSvg = {
@@ -320,8 +355,10 @@ export const SceneSketch = ({
             data-canvas-interactive="true"
             className={drawMode ? undefined : "cursor-pointer"}
             onClick={(e) => {
-              e.stopPropagation();
-              dispatch({ type: "select_scene_object", objectId: object.id });
+              if (!drawMode) {
+                e.stopPropagation();
+                dispatch({ type: "select_scene_object", objectId: object.id });
+              }
             }}
           >
             {objectShape(object)}

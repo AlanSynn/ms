@@ -5,6 +5,7 @@ import { ContextHelp } from "../../ui/ContextHelp";
 
 export const CharacterImportControls = ({
   packageInputRef,
+  objectInputRef,
   onnxInputRef,
   importInputRef,
   onOpenGettingStarted,
@@ -15,10 +16,11 @@ export const CharacterImportControls = ({
   onImport,
 }: {
   packageInputRef: RefObject<HTMLInputElement | null>;
+  objectInputRef: RefObject<HTMLInputElement | null>;
   onnxInputRef: RefObject<HTMLInputElement | null>;
   importInputRef: RefObject<HTMLInputElement | null>;
   onOpenGettingStarted: () => void;
-  onAddSceneObject: () => void;
+  onAddSceneObject: (file: File) => void;
   sceneObjectDisabled?: boolean;
   onPackage: (files: File[]) => void;
   onProcess: (file: File) => void;
@@ -50,13 +52,26 @@ export const CharacterImportControls = ({
           className="btn-secondary flex-1 cursor-pointer"
           data-testid="character-add-scene-object"
           disabled={sceneObjectDisabled}
-          onClick={onAddSceneObject}
+          onClick={() => objectInputRef.current?.click()}
         >
           <PackagePlus size={16} /> Add object
         </button>
         <ContextHelp helpId="character.loadObjectFile" />
       </div>
     </div>
+    <input
+      ref={objectInputRef}
+      data-testid="scene-object-image-input"
+      hidden
+      type="file"
+      disabled={sceneObjectDisabled}
+      accept="image/png,image/jpeg,image/webp,image/svg+xml"
+      onChange={(e) => {
+        const file = e.currentTarget.files?.[0];
+        e.currentTarget.value = "";
+        if (file) onAddSceneObject(file);
+      }}
+    />
     <input
       ref={packageInputRef}
       data-testid="blank-package-input"

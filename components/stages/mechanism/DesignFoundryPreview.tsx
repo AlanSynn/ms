@@ -4,6 +4,7 @@ import { ThreeFoundryPreview } from "../foundry/ThreeFoundryPreview";
 import type {
   MechanismConfig,
   Point,
+  ProjectAction,
   ProjectMotionPath,
   ProjectState,
 } from "../../../types";
@@ -40,6 +41,7 @@ type DesignFoundryPreviewProps = {
   mechanism?: MechanismConfig;
   angle: number;
   showTrace: boolean;
+  dispatch: (action: ProjectAction) => void;
 };
 
 export const DesignFoundryPreview = ({
@@ -47,6 +49,7 @@ export const DesignFoundryPreview = ({
   mechanism,
   angle,
   showTrace,
+  dispatch,
 }: DesignFoundryPreviewProps) => {
   const [camera, setCamera] = useState<FoundryCamera>({
     ...FOUNDRY_VIEW_PRESETS.iso,
@@ -224,6 +227,7 @@ export const DesignFoundryPreview = ({
     designMechanism?.id,
     designMechanism?.targetAnchorJointId,
     designMechanism?.targetPartId,
+    designMechanism?.targetSceneObjectId,
   ]);
   const fittedTargetError =
     generatedTarget && designMotionPreview?.target
@@ -525,10 +529,19 @@ export const DesignFoundryPreview = ({
               paths={showUserPathPreview ? designContextPaths : []}
               selectedPathId={designContextPathId}
               angle={angle}
-              inputMode="none"
+              inputMode="select-only"
               testId="design-context-puppet"
               cameraPresets={["iso"]}
               showToolbar={false}
+              onSelectPart={(partId) => dispatch({ type: "select_part", partId })}
+              onSelectSceneObject={(objectId) =>
+                dispatch({ type: "select_scene_object", objectId })
+              }
+              onSelectOnlyPointerDown={handlePointerDown}
+              onSelectOnlyPointerMove={handlePointerMove}
+              onSelectOnlyPointerUp={finishPointerMove}
+              onSelectOnlyPointerCancel={finishPointerMove}
+              onSelectOnlyWheel={handleWheel}
               initialLayers={{
                 grid: false,
                 character: true,

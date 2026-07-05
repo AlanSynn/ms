@@ -1381,6 +1381,11 @@ const normalizeContourPoints = (value: unknown): Point[] | undefined => {
     return isUsableContourPoints(points) ? points : undefined;
 };
 
+const safeRasterTextureUrl = (value: unknown): string | undefined =>
+    typeof value === 'string' && /^data:image\/(?:png|jpe?g|webp);/i.test(value)
+        ? value
+        : undefined;
+
 const normalizePartSnapshot = (id: string, value: unknown, skeleton: StandardSkeleton | null): BodyPartLayer => {
     const raw = asRecord(value);
     const fallbackAnchor = skeleton?.rootJointIds[0] ?? Object.keys(skeleton?.joints ?? {})[0] ?? 'root';
@@ -1434,10 +1439,18 @@ const normalizeSceneObjectSnapshot = (id: string, value: unknown): SceneObject =
     const raw = asRecord(value);
     const shape = pickOne(raw.shape, ['piggy-bank', 'cloud', 'star', 'block'] as const, 'block');
     const rawBounds = asRecord(raw.bounds);
+    const textureUrl = safeRasterTextureUrl(raw.textureUrl);
+    const contourPoints = normalizeContourPoints(raw.contourPoints ?? raw.contour_points ?? raw.outlinePoints ?? raw.outline_points);
+    const rawContourSource = raw.contourSource ?? raw.contour_source;
+    const contourSource = rawContourSource === 'user' || rawContourSource === 'imported' ? rawContourSource : contourPoints ? 'imported' : undefined;
     return {
         id,
         name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.slice(0, 80) : id,
         shape,
+        textureUrl,
+        contourPoints,
+        contourSource,
+        sourceImageName: typeof raw.sourceImageName === 'string' ? raw.sourceImageName.slice(0, 120) : typeof raw.source_image_name === 'string' ? raw.source_image_name.slice(0, 120) : undefined,
         transform: normalizeTransformSnapshot(raw.transform),
         bounds: {
             width: clampNumber(rawBounds.width, 72, 8, 600),

@@ -78,6 +78,20 @@ type MechanismInventory = {
   endStops: number;
 };
 
+type ViewerPickKind = 'object' | 'part';
+type ViewerScreenTarget = {
+  kind: ViewerPickKind;
+  id: string;
+  x: number;
+  y: number;
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  radius: number;
+  visible: boolean;
+};
+
 const to3 = (point: Point, z = 0) => new THREE.Vector3(point.x / VIEW_SCALE, point.y / VIEW_SCALE, z);
 
 const cameraOrbitFromPreset = (preset: Viewer3DCameraPreset) => {
@@ -264,6 +278,7 @@ const shapeFromLocalOutline = (points: Point[]) => {
 };
 
 const sceneObjectShape = (object: SceneObject) => {
+  if (object.contourPoints && object.contourPoints.length >= 3) return shapeFromLocalOutline(object.contourPoints);
   const width = Math.max(8, object.bounds.width) / VIEW_SCALE;
   const height = Math.max(8, object.bounds.height) / VIEW_SCALE;
   if (object.shape === 'star') {
@@ -296,12 +311,55 @@ const createSceneObjectMaterial = (object: SceneObject, selected: boolean) => {
   return material;
 };
 
-const createSceneObjectVisual = (object: SceneObject, materials: MaterialKit, selected: boolean) => {
+const createSceneObjectArtMaterial = (object: SceneObject, onLoaded: () => void) => {
+  const material = new THREE.MeshBasicMaterial({
+    color: '#ffffff',
+    transparent: true,
+    opacity: Math.max(0, Math.min(1, object.opacity)),
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1
+  });
+  material.userData.ownedBySceneObject = true;
+  if (object.textureUrl) {
+    const texture = new THREE.TextureLoader().load(object.textureUrl, () => onLoaded());
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 4;
+    material.map = texture;
+    material.needsUpdate = true;
+  }
+  return material;
+};
+
+const createSceneObjectVisual = (object: SceneObject, materials: MaterialKit, selected: boolean, onLoaded: () => void) => {
   const group = new THREE.Group();
   const shape = sceneObjectShape(object);
   const fill = createSceneObjectMaterial(object, selected);
-  const key = `scene-object:${object.shape}:${geometryKeyNumber(object.bounds.width)}:${geometryKeyNumber(object.bounds.height)}`;
+  const contourKey = object.contourPoints?.map(point => `${geometryKeyNumber(point.x)}:${geometryKeyNumber(point.y)}`).join(';') ?? '';
+  const key = `scene-object:${object.shape}:${geometryKeyNumber(object.bounds.width)}:${geometryKeyNumber(object.bounds.height)}:${contourKey}`;
   group.add(createExtrudedMesh(shape, fill, materials.edge, 0.12, key));
+  group.userData.sceneObjectId = object.id;
+  group.traverse(child => {
+    child.userData.sceneObjectId = object.id;
+  });
+  if (object.textureUrl) {
+    const artGeometry = new THREE.ShapeGeometry(shape);
+    const positions = artGeometry.getAttribute('position');
+    const uvs: number[] = [];
+    const width = Math.max(1, object.bounds.width);
+    const height = Math.max(1, object.bounds.height);
+    for (let i = 0; i < positions.count; i += 1) {
+      const x = positions.getX(i) * VIEW_SCALE;
+      const y = positions.getY(i) * VIEW_SCALE;
+      uvs.push(x / width + 0.5, y / height + 0.5);
+    }
+    artGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    const art = new THREE.Mesh(artGeometry, createSceneObjectArtMaterial(object, onLoaded));
+    art.name = `scene-object-art-${object.id}`;
+    art.position.set(0, 0, 0.15);
+    art.userData.sceneObjectId = object.id;
+    group.add(art);
+  }
   if (object.shape === 'piggy-bank') {
     const slot = new THREE.Mesh(
       cachedGeometry('scene-object-piggy-slot:0.36:0.035', () => new THREE.PlaneGeometry(0.36, 0.035)),
@@ -632,7 +690,7 @@ const mechanismGeometrySignature = (mechanisms: MechanismConfig[]) => mechanisms
   mechanism.showOutputGear
 ].join(':')).join('|');
 
-export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneObjects = {}, skeleton, mechanisms, paths, selectedPathId, angle = 0, viewport, setViewport, inputMode = 'always', testId = 'three-puppet', cameraPresets = PUPPET_CAMERA_PRESETS, showToolbar = true, initialLayers, assemblyOverlay }: {
+export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneObjects = {}, skeleton, mechanisms, paths, selectedPathId, angle = 0, viewport, setViewport, inputMode = 'always', testId = 'three-puppet', cameraPresets = PUPPET_CAMERA_PRESETS, showToolbar = true, initialLayers, assemblyOverlay, onSelectPart, onSelectSceneObject, onSelectOnlyPointerDown, onSelectOnlyPointerMove, onSelectOnlyPointerUp, onSelectOnlyPointerCancel, onSelectOnlyWheel }: {
   project?: ProjectState;
   animatedParts?: Record<string, BodyPartLayer>;
   animatedSceneObjects?: Record<string, SceneObject>;
@@ -643,12 +701,19 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   angle?: number;
   viewport?: CanvasViewport;
   setViewport?: React.Dispatch<React.SetStateAction<CanvasViewport>>;
-  inputMode?: 'always' | '3d-only' | 'none';
+  inputMode?: 'always' | '3d-only' | 'select-only' | 'none';
   testId?: string;
   cameraPresets?: Viewer3DCameraPreset[];
   showToolbar?: boolean;
   initialLayers?: Partial<typeof DEFAULT_PUPPET_VIEWER_LAYERS>;
   assemblyOverlay?: PuppetAssemblyOverlay;
+  onSelectPart?: (partId: string) => void;
+  onSelectSceneObject?: (objectId: string) => void;
+  onSelectOnlyPointerDown?: React.PointerEventHandler<HTMLDivElement>;
+  onSelectOnlyPointerMove?: React.PointerEventHandler<HTMLDivElement>;
+  onSelectOnlyPointerUp?: React.PointerEventHandler<HTMLDivElement>;
+  onSelectOnlyPointerCancel?: React.PointerEventHandler<HTMLDivElement>;
+  onSelectOnlyWheel?: React.WheelEventHandler<HTMLDivElement>;
 }) => {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef<HTMLDivElement | null>(null);
@@ -669,7 +734,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   const [cameraPreset, setCameraPreset] = useState<Viewer3DCameraPreset>('iso');
   const [cameraOrbit, setCameraOrbit] = useState(() => cameraOrbitFromPreset('iso'));
   const [isViewerDragging, setIsViewerDragging] = useState(false);
-  const viewerDragRef = useRef<{ pointerId: number; x: number; y: number; yaw: number; pitch: number; offset: Point; mode: 'orbit' | 'pan' } | null>(null);
+  const viewerDragRef = useRef<{ pointerId: number; button: number; x: number; y: number; yaw: number; pitch: number; offset: Point; mode: 'orbit' | 'pan' | 'select' } | null>(null);
   const [visibleLayers, setVisibleLayers] = useState(() => ({ ...DEFAULT_PUPPET_VIEWER_LAYERS, ...(initialLayers ?? {}) }));
   useEffect(() => {
     if (!initialLayers) return;
@@ -782,6 +847,84 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   const partArtCount = geometryParts.length;
   const estimatedObjectCount = boardGridLines(kit).length + 1 + geometryParts.length * 4 + sceneObjects.length * 4 + holeCount + joints.length * 2 + bones.length + pathsToRender.length * 3 + pathsToRender.reduce((sum, path) => sum + path.points.length, 0) + mechanismLinkCount * 2 + mechanismsToRender.length * 8 + mechanismInventory.holes + mechanismInventory.gears * 2;
 
+  const collectViewerScreenTargets = () => {
+    const renderer = rendererRef.current;
+    const camera = cameraRef.current;
+    const roots = rootsRef.current;
+    if (!renderer || !camera || !roots) return [] as ViewerScreenTarget[];
+    const rect = renderer.domElement.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return [] as ViewerScreenTarget[];
+    roots.root.updateMatrixWorld(true);
+
+    const projectWorld = (point: THREE.Vector3) => {
+      const projected = point.clone().project(camera);
+      return {
+        x: rect.left + ((projected.x + 1) / 2) * rect.width,
+        y: rect.top + ((1 - projected.y) / 2) * rect.height,
+        z: projected.z
+      };
+    };
+
+    const targetForObject = (kind: ViewerPickKind, id: string, object: THREE.Object3D): ViewerScreenTarget | null => {
+      if (!object.visible) return null;
+      object.updateWorldMatrix(true, true);
+      const box = new THREE.Box3().setFromObject(object);
+      const center = new THREE.Vector3();
+      const worldPoints: THREE.Vector3[] = [];
+      if (box.isEmpty() || !Number.isFinite(box.min.x) || !Number.isFinite(box.max.x)) {
+        object.getWorldPosition(center);
+        worldPoints.push(center.clone());
+      } else {
+        box.getCenter(center);
+        for (const x of [box.min.x, box.max.x]) {
+          for (const y of [box.min.y, box.max.y]) {
+            for (const z of [box.min.z, box.max.z]) {
+              worldPoints.push(new THREE.Vector3(x, y, z));
+            }
+          }
+        }
+      }
+      const centerScreen = projectWorld(center);
+      let left = centerScreen.x;
+      let right = centerScreen.x;
+      let top = centerScreen.y;
+      let bottom = centerScreen.y;
+      let radius = 0;
+      worldPoints.forEach(point => {
+        const screen = projectWorld(point);
+        left = Math.min(left, screen.x);
+        right = Math.max(right, screen.x);
+        top = Math.min(top, screen.y);
+        bottom = Math.max(bottom, screen.y);
+        radius = Math.max(radius, Math.hypot(screen.x - centerScreen.x, screen.y - centerScreen.y));
+      });
+      const intersectsViewport = right >= rect.left && left <= rect.right && bottom >= rect.top && top <= rect.bottom;
+      const visible = centerScreen.z >= -1 && centerScreen.z <= 1 && intersectsViewport;
+      return { kind, id, x: centerScreen.x, y: centerScreen.y, left, top, right, bottom, radius, visible };
+    };
+
+    const objectTargets = Array.from(sceneObjectRefs.current.entries())
+      .map(([id, object]) => targetForObject('object', id, object))
+      .filter((target): target is ViewerScreenTarget => Boolean(target));
+    const partTargets = Array.from(partMeshesRef.current.entries())
+      .map(([id, object]) => targetForObject('part', id, object))
+      .filter((target): target is ViewerScreenTarget => Boolean(target));
+    return [...objectTargets, ...partTargets];
+  };
+
+  const roundedScreenTargets = (targets: ViewerScreenTarget[]) => targets.map(target => ({
+    kind: target.kind,
+    id: target.id,
+    x: Number(target.x.toFixed(1)),
+    y: Number(target.y.toFixed(1)),
+    left: Number(target.left.toFixed(1)),
+    top: Number(target.top.toFixed(1)),
+    right: Number(target.right.toFixed(1)),
+    bottom: Number(target.bottom.toFixed(1)),
+    radius: Number(target.radius.toFixed(1)),
+    visible: target.visible
+  }));
+
   const render = () => {
     const scene = sceneRef.current;
     const camera = cameraRef.current;
@@ -789,9 +932,12 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     if (scene && camera && renderer) {
       renderer.render(scene, camera);
       if (stateRef.current) {
+        const screenTargets = roundedScreenTargets(collectViewerScreenTargets());
         stateRef.current.dataset.threeSceneVisibleObjectCount = String(estimatedObjectCount);
         stateRef.current.dataset.threeSceneObjectCount = String(estimatedObjectCount);
         stateRef.current.dataset.threeRenderTriangles = String(renderer.info.render.triangles);
+        stateRef.current.dataset.threeSceneObjectScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'object'));
+        stateRef.current.dataset.threePartScreenTargets = JSON.stringify(screenTargets.filter(target => target.kind === 'part'));
       }
     }
   };
@@ -906,6 +1052,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       });
       const geometry = new THREE.ExtrudeGeometry(shape, { depth: THICKNESS, bevelEnabled: true, bevelSize: 0.018, bevelThickness: 0.012 });
       const mesh = new THREE.Mesh(geometry, materials.part);
+      mesh.userData.partId = part.id;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), materials.edge));
@@ -931,6 +1078,9 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
         ]);
         mesh.add(new THREE.Line(topOutline, materials.edge));
       }
+      mesh.traverse(child => {
+        child.userData.partId = part.id;
+      });
       localHoles.forEach(local => {
         const ring = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.014, 8, 28), materials.cutRing);
         ring.name = `cut-hole-ring-${part.id}`;
@@ -966,6 +1116,9 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   const sceneObjectSignature = useMemo(() => sceneObjects.map(object => [
     object.id,
     object.shape,
+    object.textureUrl ?? '',
+    object.contourSource ?? '',
+    object.contourPoints?.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(';') ?? '',
     object.fillColor,
     object.opacity.toFixed(3),
     object.locked ? 'locked' : 'free',
@@ -980,7 +1133,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     clearGroup(roots.objectsLayer);
     sceneObjectRefs.current.clear();
     sceneObjects.forEach(object => {
-      const group = createSceneObjectVisual(object, materials, object.id === project?.selectedSceneObjectId);
+      const group = createSceneObjectVisual(object, materials, object.id === project?.selectedSceneObjectId, render);
       roots.objectsLayer.add(group);
       sceneObjectRefs.current.set(object.id, group);
     });
@@ -1423,6 +1576,11 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   }, [estimatedObjectCount]);
 
   const handleViewerWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    if (inputMode === 'select-only') {
+      event.stopPropagation();
+      onSelectOnlyWheel?.(event);
+      return;
+    }
     if (!setViewport) return;
     event.stopPropagation();
     setViewport(prev => ({ ...prev, zoom: clampCanvasZoom(prev.zoom * (event.deltaY < 0 ? 1.12 : 1 / 1.12)) }));
@@ -1430,10 +1588,29 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
 
   const handleViewerPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 && event.button !== 1 && event.button !== 2) return;
+    if (inputMode === 'select-only') {
+      viewerDragRef.current = {
+        pointerId: event.pointerId,
+        button: event.button,
+        x: event.clientX,
+        y: event.clientY,
+        yaw: cameraOrbit.yaw,
+        pitch: cameraOrbit.pitch,
+        offset: viewport?.offset ?? { x: 0, y: 0 },
+        mode: 'select'
+      };
+      setIsViewerDragging(true);
+      event.stopPropagation();
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      onSelectOnlyPointerDown?.(event);
+      return;
+    }
     const mode = cameraPreset === 'front' || event.shiftKey || event.button === 1 || event.button === 2 ? 'pan' : 'orbit';
     if (mode === 'pan' && !setViewport) return;
     viewerDragRef.current = {
       pointerId: event.pointerId,
+      button: event.button,
       x: event.clientX,
       y: event.clientY,
       yaw: cameraOrbit.yaw,
@@ -1449,6 +1626,11 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   const handleViewerPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     const start = viewerDragRef.current;
     if (!start || start.pointerId !== event.pointerId) return;
+    if (start.mode === 'select') {
+      event.stopPropagation();
+      onSelectOnlyPointerMove?.(event);
+      return;
+    }
     event.preventDefault();
     const dx = event.clientX - start.x;
     const dy = event.clientY - start.y;
@@ -1459,11 +1641,85 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     setViewport?.(prev => ({ ...prev, offset: { x: start.offset.x + dx, y: start.offset.y + dy } }));
   };
 
+  const pickViewerTarget = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (inputMode === 'none' || (!onSelectPart && !onSelectSceneObject)) return;
+    const renderer = rendererRef.current;
+    const camera = cameraRef.current;
+    const roots = rootsRef.current;
+    if (!renderer || !camera || !roots) return;
+    const rect = renderer.domElement.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const pointer = new THREE.Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -(((event.clientY - rect.top) / rect.height) * 2 - 1),
+    );
+    const selectFromNode = (node: THREE.Object3D | null) => {
+      while (node) {
+        const sceneObjectId = typeof node.userData.sceneObjectId === 'string' ? node.userData.sceneObjectId : undefined;
+        if (sceneObjectId) {
+          onSelectSceneObject?.(sceneObjectId);
+          return true;
+        }
+        const partId = typeof node.userData.partId === 'string' ? node.userData.partId : undefined;
+        if (partId) {
+          onSelectPart?.(partId);
+          return true;
+        }
+        node = node.parent;
+      }
+      return false;
+    };
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(pointer, camera);
+    const objectHits = raycaster.intersectObjects([roots.objectsLayer], true);
+    for (const hit of objectHits) {
+      if (selectFromNode(hit.object)) return;
+    }
+    const partHits = raycaster.intersectObjects([roots.partsLayer], true);
+    for (const hit of partHits) {
+      if (selectFromNode(hit.object)) return;
+    }
+
+    const targets = collectViewerScreenTargets()
+      .filter(target => target.visible)
+      .map(target => ({
+        ...target,
+        distance: Math.hypot(event.clientX - target.x, event.clientY - target.y),
+        inside: event.clientX >= target.left - 18
+          && event.clientX <= target.right + 18
+          && event.clientY >= target.top - 18
+          && event.clientY <= target.bottom + 18
+      }));
+    const bestTarget = (kind: ViewerPickKind) => targets
+      .filter(target => target.kind === kind && (target.inside || target.distance <= Math.max(42, Math.min(120, target.radius + 18))))
+      .sort((a, b) => a.distance - b.distance)[0];
+    const projectedObject = bestTarget('object');
+    if (projectedObject) {
+      onSelectSceneObject?.(projectedObject.id);
+      return;
+    }
+    const projectedPart = bestTarget('part');
+    if (projectedPart) {
+      onSelectPart?.(projectedPart.id);
+    }
+  };
+
   const finishViewerDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (viewerDragRef.current?.pointerId !== event.pointerId) return;
+    const start = viewerDragRef.current;
+    if (start?.pointerId !== event.pointerId) return;
+    const moved = Math.hypot(event.clientX - start.x, event.clientY - start.y);
     viewerDragRef.current = null;
     setIsViewerDragging(false);
+    if (start.mode === 'select') {
+      event.stopPropagation();
+      if (moved < 4 && start.button === 0 && event.type === 'pointerup') pickViewerTarget(event);
+      if (event.type === 'pointercancel') onSelectOnlyPointerCancel?.(event);
+      else onSelectOnlyPointerUp?.(event);
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+      return;
+    }
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    if (moved < 4 && event.type === 'pointerup') pickViewerTarget(event);
   };
 
   const activeCamera = VIEWER3D_CAMERA_PRESETS[cameraPreset];
@@ -1672,6 +1928,8 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       data-three-part-count={parts.length}
       data-three-scene-prop-count={sceneObjects.length}
       data-three-scene-prop-ids={sceneObjects.map(object => object.id).join(',')}
+      data-three-scene-object-screen-targets="[]"
+      data-three-part-screen-targets="[]"
       data-three-joint-count={joints.length}
       data-three-bone-count={bones.length}
       data-three-part-hole-count={holeCount}

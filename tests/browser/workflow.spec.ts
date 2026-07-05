@@ -28,6 +28,84 @@ const expectCleanPage = (pageErrors: string[], consoleErrors: string[]) => {
   expect(consoleErrors, 'no browser console errors').toEqual([]);
 };
 
+const trophyObjectFile = (name = 'class-trophy.svg') => ({
+  name,
+  mimeType: 'image/svg+xml',
+  buffer: Buffer.from(`
+    <svg xmlns="http://www.w3.org/2000/svg" width="96" height="120" viewBox="0 0 96 120">
+      <rect width="96" height="120" fill="white"/>
+      <path d="M28 16h40v14c0 18-10 30-20 32-10-2-20-14-20-32V16z" fill="#f59e0b"/>
+      <path d="M20 24h8c0 16 6 24 16 28M76 24h-8c0 16-6 24-16 28" fill="none" stroke="#b45309" stroke-width="8" stroke-linecap="round"/>
+      <rect x="42" y="62" width="12" height="28" fill="#d97706"/>
+      <path d="M30 90h36l6 16H24z" fill="#92400e"/>
+    </svg>
+  `),
+});
+
+const addTrophyObject = async (page: Page, label = 'Class trophy') => {
+  await expect(page.getByTestId('character-add-scene-object')).toContainText('Add object');
+  await page.getByTestId('scene-object-image-input').setInputFiles(trophyObjectFile());
+  const inspector = page.getByTestId('scene-object-inspector');
+  await expect(inspector).toContainText('class-trophy');
+  await expect(inspector).toContainText('Size · use Scale');
+  await expect(inspector.getByLabel('Width number')).toHaveCount(0);
+  await expect(inspector.getByLabel('Height number')).toHaveCount(0);
+  await inspector.getByLabel('Object name').fill(label);
+  await inspector.getByLabel('X number').fill('-160');
+  await inspector.getByLabel('Y number').fill('0');
+  await expect(inspector).toContainText(label);
+};
+
+type ThreeScreenTarget = {
+  id: string;
+  x: number;
+  y: number;
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  radius: number;
+  visible: boolean;
+};
+
+const readThreeScreenTargets = async (locator: Locator, attribute: string) => {
+  const value = await locator.getAttribute(attribute);
+  return JSON.parse(value || '[]') as ThreeScreenTarget[];
+};
+
+const waitForThreeSceneObjectTarget = async (locator: Locator, objectId: string) => {
+  let target: ThreeScreenTarget | undefined;
+  await expect.poll(async () => {
+    const targets = await readThreeScreenTargets(locator, 'data-three-scene-object-screen-targets');
+    target = targets.find(item => item.id === objectId && item.visible);
+    return target?.id ?? '';
+  }, { message: `3D screen target is available for ${objectId}` }).toBe(objectId);
+  return target!;
+};
+
+const clickableThreeTargetPoint = async (page: Page, target: ThreeScreenTarget, hostTestId: string) =>
+  page.evaluate(({ target, hostTestId }) => {
+    const xs = [
+      target.x,
+      (target.left + target.right) / 2,
+      target.left + Math.min(22, Math.max(8, (target.right - target.left) * 0.22)),
+      target.right - Math.min(22, Math.max(8, (target.right - target.left) * 0.22)),
+    ];
+    const ys = [
+      target.y,
+      (target.top + target.bottom) / 2,
+      target.top + Math.min(22, Math.max(8, (target.bottom - target.top) * 0.22)),
+      target.bottom - Math.min(22, Math.max(8, (target.bottom - target.top) * 0.22)),
+    ];
+    for (const y of ys) {
+      for (const x of xs) {
+        const element = document.elementFromPoint(x, y);
+        if (element?.closest(`[data-testid="${hostTestId}"]`)) return { x, y };
+      }
+    }
+    return { x: target.x, y: target.y };
+  }, { target, hostTestId });
+
 const downloadMetadataJson = async (page: Page) => {
   await openBlueprintMoreFiles(page);
   const [metadataDownload] = await Promise.all([
@@ -228,9 +306,7 @@ test('Character tab owns separate scene objects and later tabs only render them'
   await openCharacterScreen(page, { loadStarter: false });
   await expect(page.getByTestId('character-scene-object-list')).toBeVisible();
   await expect(page.getByTestId('character-workflow-summary')).toContainText('0 objects');
-  await expect(page.getByTestId('character-add-scene-object')).toContainText('Add object');
-  await page.getByTestId('character-add-scene-object').click();
-  await expect(page.getByTestId('scene-object-inspector')).toContainText('Flying piggy bank');
+  await addTrophyObject(page, 'Class trophy');
   await expect(page.getByTestId('character-workflow-summary')).toContainText('1 objects');
   const characterPuppet = page.getByTestId('character-three-puppet-state');
   await expect(characterPuppet).toHaveAttribute('data-scene-object-count', '1');
@@ -252,14 +328,13 @@ test('Character tab owns separate scene objects and later tabs only render them'
   await expect(page.getByTestId('status-bar')).toContainText('New project');
 
   await openCharacterScreen(page);
-  await page.getByTestId('character-add-scene-object').click();
-  await expect(page.getByTestId('scene-object-inspector')).toContainText('Flying piggy bank');
+  await addTrophyObject(page, 'Class trophy');
 
   await page.getByRole('button', { name: 'Path Editor', exact: true }).click();
   await expect(page.getByTestId('character-add-scene-object')).toHaveCount(0);
   const pathTarget = page.getByLabel('Motion target');
-  await expect(pathTarget).toContainText('Flying piggy bank');
-  await pathTarget.selectOption({ label: 'Flying piggy bank' });
+  await expect(pathTarget).toContainText('Class trophy');
+  await pathTarget.selectOption({ label: 'Class trophy' });
   const sceneObjectId = await pathTarget.evaluate((select: HTMLSelectElement) => select.value);
   const sceneObjectPathId = `path-${sceneObjectId}`;
   await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
@@ -273,6 +348,7 @@ test('Character tab owns separate scene objects and later tabs only render them'
   await page.mouse.move(objectPathBox!.x + objectPathBox!.width * 0.58, objectPathBox!.y + objectPathBox!.height * 0.42, { steps: 4 });
   await page.mouse.up();
   await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
+  await expect(page.locator('[data-testid^="path-scene-object-art-"]')).toBeVisible();
   await page.getByTestId('path-view-3d').click();
   const pathPuppet = page.getByTestId('path-three-puppet-state');
   await expect(pathPuppet).toHaveAttribute('data-scene-object-count', '1');
@@ -290,6 +366,23 @@ test('Character tab owns separate scene objects and later tabs only render them'
   const designPuppet = page.getByTestId('design-context-puppet-state');
   await expect(designPuppet).toHaveAttribute('data-scene-object-count', '1');
   await expect(designPuppet).toHaveAttribute('data-three-scene-prop-count', '1');
+  await page.getByRole('button', { name: 'Character', exact: true }).click();
+  await page.getByTestId('character-part-item-head').click();
+  await page.getByRole('button', { name: 'Mechanism Design', exact: true }).click();
+  await expect(designPuppet).toHaveAttribute('data-selected-scene-object-id', '');
+  const designContextBox = await page.getByTestId('design-context-puppet').boundingBox();
+  expect(designContextBox, 'design context puppet hit box').toBeTruthy();
+  const objectTarget = await waitForThreeSceneObjectTarget(designPuppet, sceneObjectId);
+  const designClick = await clickableThreeTargetPoint(page, objectTarget, 'design-context-puppet');
+  await page.mouse.click(designClick.x, designClick.y);
+  await expect(designPuppet).toHaveAttribute('data-selected-scene-object-id', sceneObjectId);
+  const designRig = page.getByTestId('design-shared-foundry-preview').getByTestId('foundry-camera-rig');
+  const yawBefore = await designRig.getAttribute('data-camera-yaw');
+  await page.mouse.move(designClick.x, designClick.y);
+  await page.mouse.down();
+  await page.mouse.move(designClick.x + 70, designClick.y + 4, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(async () => await designRig.getAttribute('data-camera-yaw'), { message: 'Design object-selection overlay still proxies Foundry orbit drags' }).not.toBe(yawBefore);
   await expect(page.getByRole('button', { name: 'Add object', exact: true })).toHaveCount(0);
   await expect(page.getByTestId('scene-object-inspector')).toHaveCount(0);
   for (const stageName of ['Foundry', 'Blueprint', 'Assembly']) {

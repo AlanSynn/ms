@@ -123,6 +123,10 @@ export const PathCanvasPane = ({
         inputMode="always"
         testId="path-three-puppet"
         cameraPresets={["iso"]}
+        onSelectPart={(partId) => dispatch({ type: "select_part", partId })}
+        onSelectSceneObject={(objectId) =>
+          dispatch({ type: "select_scene_object", objectId })
+        }
       />
     )}
   </div>

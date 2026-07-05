@@ -339,6 +339,7 @@
       .three-puppet-host, .three-puppet-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
       .three-puppet-canvas { display: block; }
       .three-puppet-overlay[data-input-mode="always"] .three-puppet-host, .three-puppet-overlay[data-input-mode="always"] .three-puppet-canvas, .three-puppet-overlay[data-input-mode="3d-only"][data-view-mode="3d"] .three-puppet-host, .three-puppet-overlay[data-input-mode="3d-only"][data-view-mode="3d"] .three-puppet-canvas { pointer-events: auto; touch-action: none; cursor: grab; }
+      .three-puppet-overlay[data-input-mode="select-only"] .three-puppet-host, .three-puppet-overlay[data-input-mode="select-only"] .three-puppet-canvas { pointer-events: auto; cursor: pointer; }
       .three-puppet-overlay[data-is-dragging="true"] .three-puppet-host, .three-puppet-overlay[data-is-dragging="true"] .three-puppet-canvas { cursor: grabbing; }
       .three-puppet-view-toolbar { left: 50%; right: auto; top: 1rem; transform: translateX(-50%); z-index: 31; pointer-events: auto; }
       .three-puppet-view-toolbar { gap: .16rem; padding: .3rem; }
@@ -386,9 +387,9 @@
       .foundry-three-host, .foundry-three-canvas { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: inherit; }
       .foundry-three-canvas { display: block; }
       .foundry-preview-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-      .design-context-ghost { position: absolute; inset: 0; z-index: 2; pointer-events: none; opacity: .38; }
-      .design-context-ghost .three-puppet-overlay { z-index: 0; pointer-events: none; }
-      .design-context-ghost .three-puppet-host, .design-context-ghost .three-puppet-canvas { pointer-events: none !important; }
+      .design-context-ghost { position: absolute; inset: 0; z-index: 2; pointer-events: auto; opacity: .38; }
+      .design-context-ghost .three-puppet-overlay { z-index: 0; pointer-events: auto; }
+      .design-context-ghost .three-puppet-host, .design-context-ghost .three-puppet-canvas { pointer-events: auto; }
       .foundry-param-handle { pointer-events: auto; cursor: grab; filter: drop-shadow(0 2px 6px rgba(79,70,229,.22)); }
       .foundry-param-handle.is-draggable:hover { fill: #eef2ff; stroke-width: 4; }
       .foundry-param-handle.is-draggable:active { cursor: grabbing; }

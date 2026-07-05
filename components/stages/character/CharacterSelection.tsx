@@ -7,7 +7,8 @@ import type {
   ProjectState,
   SceneObject,
 } from "../../../types";
-import { createDefaultSceneObject, type ClassroomLessonTemplate } from "../../../utils/project";
+import { type ClassroomLessonTemplate, uid } from "../../../utils/project";
+import { sceneObjectFromImageFile } from "../../../utils/sceneObjectImage";
 import { CanvasZoomToolbar } from "../../AppShell";
 import { ThreePuppetPreview } from "../../ThreePuppetPreview";
 import {
@@ -64,6 +65,7 @@ export const CharacterSelection = ({
 }) => {
   const reviewedProject = pendingCharacter?.project ?? project;
   const packageInputRef = useRef<HTMLInputElement>(null);
+  const objectInputRef = useRef<HTMLInputElement>(null);
   const onnxInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const partPanelProject = pendingCharacter ? reviewedProject : project;
@@ -82,11 +84,20 @@ export const CharacterSelection = ({
       ? project.parts[project.selectedPartId]
       : undefined) ?? editableParts[0];
   const selectedPartId = selectedEditablePart?.id ?? "";
-  const addSceneObject = () =>
-    dispatch({
-      type: "upsert_scene_object",
-      object: createDefaultSceneObject("piggy-bank"),
-    });
+  const addSceneObject = (file: File) => {
+    sceneObjectFromImageFile(file, uid("object"))
+      .then((object) => dispatch({ type: "upsert_scene_object", object }))
+      .catch((error) =>
+        dispatch({
+          type: "set_processing",
+          processing: {
+            stage: "error",
+            message: error instanceof Error ? error.message : "Object image could not load.",
+            progress: 0,
+          },
+        }),
+      );
+  };
   return (
     <>
       <section
@@ -130,6 +141,7 @@ export const CharacterSelection = ({
                 />
                 <CharacterImportControls
                   packageInputRef={packageInputRef}
+                  objectInputRef={objectInputRef}
                   onnxInputRef={onnxInputRef}
                   importInputRef={importInputRef}
                   onOpenGettingStarted={onOpenGettingStarted}
@@ -273,6 +285,10 @@ export const CharacterSelection = ({
                   setViewport={setViewport}
                   inputMode="always"
                   testId="character-three-puppet"
+                  onSelectPart={(partId) => dispatch({ type: "select_part", partId })}
+                  onSelectSceneObject={(objectId) =>
+                    dispatch({ type: "select_scene_object", objectId })
+                  }
                 />
               </div>,
             ),

@@ -317,6 +317,10 @@ export interface SceneObject {
     id: string;
     name: string;
     shape: 'piggy-bank' | 'cloud' | 'star' | 'block';
+    textureUrl?: string;
+    contourPoints?: Point[];
+    contourSource?: 'imported' | 'user';
+    sourceImageName?: string;
     transform: Transform;
     bounds: { width: number; height: number };
     fillColor: string;

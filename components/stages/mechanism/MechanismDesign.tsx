@@ -57,6 +57,7 @@ export const MechanismDesign = ({
           mechanism={selectedMechanism}
           angle={angle}
           showTrace={showTrace}
+          dispatch={dispatch}
         />,
       ),
       inspector: inspectorPane(

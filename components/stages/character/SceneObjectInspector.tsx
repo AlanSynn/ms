@@ -15,6 +15,7 @@ export const SceneObjectInspector = ({
   object: SceneObject;
   dispatch: (action: ProjectAction) => void;
 }) => {
+  const isImageObject = Boolean(object.textureUrl);
   const update = (updates: Partial<SceneObject>) =>
     dispatch({ type: "update_scene_object", objectId: object.id, updates });
   const updateTransform = (updates: Partial<SceneObject["transform"]>) =>
@@ -37,24 +38,30 @@ export const SceneObjectInspector = ({
             onChange={(event) => update({ name: event.currentTarget.value })}
           />
         </label>
-        <label className="block text-xs font-black uppercase tracking-wider text-slate-500">
-          Type
-          <select
-            className="field mt-1"
-            aria-label="Object type"
-            disabled={object.locked}
-            value={object.shape}
-            onChange={(event) =>
-              update({ shape: event.currentTarget.value as SceneObject["shape"] })
-            }
-          >
-            {Object.entries(SHAPE_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
+        {isImageObject ? (
+          <div className="rounded-2xl bg-slate-100 p-3 text-sm font-bold text-slate-600">
+            Image object{object.sourceImageName ? ` · ${object.sourceImageName}` : ""}
+          </div>
+        ) : (
+          <label className="block text-xs font-black uppercase tracking-wider text-slate-500">
+            Type
+            <select
+              className="field mt-1"
+              aria-label="Object type"
+              disabled={object.locked}
+              value={object.shape}
+              onChange={(event) =>
+                update({ shape: event.currentTarget.value as SceneObject["shape"] })
+              }
+            >
+              {Object.entries(SHAPE_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <Toggle
           label="Visible"
           checked={object.visible}
@@ -100,22 +107,30 @@ export const SceneObjectInspector = ({
             disabled={object.locked}
             onChange={(rotation) => updateTransform({ rotation })}
           />
-          <MiniNumber
-            label="Width"
-            value={object.bounds.width}
-            min={8}
-            max={520}
-            disabled={object.locked}
-            onChange={(width) => updateBounds({ width })}
-          />
-          <MiniNumber
-            label="Height"
-            value={object.bounds.height}
-            min={8}
-            max={520}
-            disabled={object.locked}
-            onChange={(height) => updateBounds({ height })}
-          />
+          {isImageObject ? (
+            <div className="col-span-2 rounded-2xl bg-slate-100 p-3 text-sm font-bold text-slate-600">
+              Size · use Scale
+            </div>
+          ) : (
+            <>
+              <MiniNumber
+                label="Width"
+                value={object.bounds.width}
+                min={8}
+                max={520}
+                disabled={object.locked}
+                onChange={(width) => updateBounds({ width })}
+              />
+              <MiniNumber
+                label="Height"
+                value={object.bounds.height}
+                min={8}
+                max={520}
+                disabled={object.locked}
+                onChange={(height) => updateBounds({ height })}
+              />
+            </>
+          )}
         </div>
         <label className="block text-xs font-black uppercase tracking-wider text-slate-500">
           Color

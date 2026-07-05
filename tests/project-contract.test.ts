@@ -2635,6 +2635,7 @@ const characterSetupPanelText = readFileSync(join(process.cwd(), 'components', '
 const characterImportControlsText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CharacterImportControls.tsx'), 'utf8');
 const characterSelectionText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CharacterSelection.tsx'), 'utf8');
 const sceneObjectInspectorText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'SceneObjectInspector.tsx'), 'utf8');
+const sceneObjectImageText = readFileSync(join(process.cwd(), 'utils', 'sceneObjectImage.ts'), 'utf8');
 const pathEditorText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'PathEditor.tsx'), 'utf8');
 const mechanismRecommendationSheetText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'MechanismRecommendationSheet.tsx'), 'utf8');
 const mechanismParametricEditorText = readFileSync(join(process.cwd(), 'components', 'stages', 'mechanism', 'MechanismParametricEditor.tsx'), 'utf8');
@@ -3149,8 +3150,9 @@ assert(!indexText.includes('.onboarding-page'), 'CSS no longer keeps a full-scre
 assert(!indexText.includes('.welcome-simple'), 'CSS no longer keeps the old welcome video layout');
 assert(characterSetupPanelText.includes('character-setup-panel') && characterSelectionText.includes('<CharacterSetupPanel'), 'Character tab exposes direct part settings through the extracted setup panel instead of only getting-started cards');
 assert(characterImportControlsText.includes('character-import-controls') && characterImportControlsText.includes('blank-package-input') && characterImportControlsText.includes('onnx-input') && characterImportControlsText.includes('onboarding-import-input') && !characterImportControlsText.includes('Keep compatible mechanisms') && !characterImportControlsText.includes('Keep mechanisms') && characterSelectionText.includes('<CharacterImportControls'), 'Character import file controls live in the extracted import-controls seam with stable chooser ids and no keep-mechanisms toggle');
-assert(characterImportControlsText.includes('character-add-scene-object') && characterImportControlsText.includes('Add object') && characterSelectionText.includes('createDefaultSceneObject("piggy-bank")') && sceneObjectInspectorText.includes('data-testid="scene-object-inspector"') && sceneObjectInspectorText.includes('Delete object'), 'Character tab exclusively owns scene object creation and object-property editing');
-assert(threePreviewText.includes('SceneObject') && threePreviewText.includes('objectsLayer') && threePreviewText.includes('data-three-scene-prop-count'), 'Shared 3D viewer renders Character-created scene objects as ProjectState props without adding object-creation controls to later stages');
+assert(characterImportControlsText.includes('character-add-scene-object') && characterImportControlsText.includes('scene-object-image-input') && characterImportControlsText.includes('accept="image/png,image/jpeg,image/webp,image/svg+xml"') && characterSelectionText.includes('sceneObjectFromImageFile(file, uid("object"))') && sceneObjectImageText.includes('contourPoints: imageContour') && sceneObjectImageText.includes('Object SVG must be local artwork only.') && sceneObjectImageText.includes('Object image could not be saved locally.') && !sceneObjectImageText.includes('?? sourceUrl') && sceneObjectInspectorText.includes('data-testid="scene-object-inspector"') && sceneObjectInspectorText.includes('Object name') && sceneObjectInspectorText.includes('Size · use Scale') && sceneObjectInspectorText.includes('Delete object'), 'Character tab exclusively owns safe image-object import, contour creation, rename, and object-property editing');
+assert(threePreviewText.includes('SceneObject') && threePreviewText.includes('objectsLayer') && threePreviewText.includes('object.contourPoints') && threePreviewText.includes('createSceneObjectArtMaterial') && threePreviewText.includes('data-three-scene-prop-count'), 'Shared 3D viewer renders Character-created image-contour scene objects as ProjectState props without adding object-creation controls to later stages');
+assert(sceneSketchText.includes('path-scene-object-art-${object.id}') && pathCanvasPaneText.includes('onSelectSceneObject={(objectId)') && designFoundryPreviewText.includes('inputMode="select-only"') && designFoundryPreviewText.includes('onSelectOnlyPointerDown={handlePointerDown}') && threePreviewText.includes('pickViewerTarget(event)'), 'Path and Mechanism Design can select and animate Character-created objects without exposing object creation outside Character');
 const sceneObjectUiOwnerFiles = new Set([
   join(process.cwd(), 'components', 'stages', 'character', 'CharacterSelection.tsx'),
   join(process.cwd(), 'components', 'stages', 'character', 'CharacterImportControls.tsx'),
@@ -4076,7 +4078,14 @@ const addedPart = applyProjectAction(sample, { type: 'upsert_part', part: { ...s
 assert(addedPart.parts['head-copy'], 'path editor can add visual layers through state');
 const removedPartProject = applyProjectAction({ ...addedPart, paths: { ...addedPart.paths, 'path-head-copy': { ...addedPart.paths['path-right-arm'], id: 'path-head-copy', partId: 'head-copy' } } }, { type: 'delete_part', partId: 'head-copy' });
 assert(!removedPartProject.parts['head-copy'] && !removedPartProject.paths['path-head-copy'], 'deleting a visual layer removes its paths');
-const sceneObject = createDefaultSceneObject('piggy-bank', 'object-piggy');
+const sceneObject: SceneObject = {
+  ...createDefaultSceneObject('piggy-bank', 'object-piggy'),
+  name: 'Class trophy',
+  textureUrl: 'data:image/png;base64,trophy',
+  contourPoints: [{ x: -20, y: -30 }, { x: 22, y: -24 }, { x: 18, y: 28 }, { x: -24, y: 20 }],
+  contourSource: 'imported',
+  sourceImageName: 'trophy.png'
+};
 const addedSceneObject = applyProjectAction(sample, { type: 'upsert_scene_object', object: sceneObject });
 assert(addedSceneObject.sceneObjects['object-piggy'], 'Character tab can add a separate scene object through ProjectState');
 assert.equal(addedSceneObject.selectedSceneObjectId, 'object-piggy', 'adding a scene object selects the scene object inspector');
@@ -4085,6 +4094,21 @@ const movedSceneObject = applyProjectAction(addedSceneObject, { type: 'update_sc
 assert.equal(movedSceneObject.sceneObjects['object-piggy'].transform.x, 144, 'scene object transform edits stay serializable');
 const roundTripSceneObject = loadProjectSnapshot(JSON.parse(serializeProject(movedSceneObject)));
 assert.equal(roundTripSceneObject.sceneObjects['object-piggy'].shape, 'piggy-bank', 'scene object snapshots round-trip through persistence');
+assert.equal(roundTripSceneObject.sceneObjects['object-piggy'].textureUrl, 'data:image/png;base64,trophy', 'image scene object snapshots preserve browser-local texture data');
+assert.deepEqual(roundTripSceneObject.sceneObjects['object-piggy'].contourPoints, sceneObject.contourPoints, 'image scene object snapshots preserve imported contour points');
+assert.equal(roundTripSceneObject.sceneObjects['object-piggy'].sourceImageName, 'trophy.png', 'image scene object snapshots preserve source image name');
+const svgTextureSceneObject = loadProjectSnapshot({
+  ...JSON.parse(serializeProject(movedSceneObject)),
+  sceneObjects: {
+    'object-piggy': {
+      ...sceneObject,
+      textureUrl: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=',
+      contourPoints: sceneObject.contourPoints
+    }
+  },
+  sceneObjectOrder: ['object-piggy']
+});
+assert.equal(svgTextureSceneObject.sceneObjects['object-piggy'].textureUrl, undefined, 'scene object snapshots reject raw SVG texture payloads and keep only safe raster data URLs');
 const objectOwnedPathProject = applyProjectAction(roundTripSceneObject, {
   type: 'upsert_path',
   path: {
@@ -4269,16 +4293,16 @@ assert.equal(recipeWithPath.targetPathId, 'path-right-arm', 'fabrication recipe 
 const objectRecipePackage = createFabricationPackage(objectPathMechanismProject);
 const objectRecipe = objectRecipePackage.recipes.find(recipe => recipe.mechanismId === 'object-path-driver')!;
 assert.equal(objectRecipe.targetSceneObjectId, 'object-piggy', 'fabrication recipe preserves target scene object id');
-assert.equal(objectRecipe.targetSceneObjectName, 'Flying piggy bank', 'fabrication recipe preserves target scene object name');
+assert.equal(objectRecipe.targetSceneObjectName, 'Class trophy', 'fabrication recipe preserves target scene object name');
 assert.equal(objectRecipe.targetPathId, 'path-object-piggy', 'fabrication recipe preserves object-owned target path id');
 assert.equal(objectRecipe.targetPathPointCount, 3, 'fabrication recipe counts object-owned path points');
 assert(objectRecipePackage.sceneSnapshot.sceneObjects['object-piggy'], 'fabrication package snapshot includes scene objects');
 assert.equal(objectRecipePackage.sceneSnapshot.paths['path-object-piggy'].sceneObjectId, 'object-piggy', 'fabrication package snapshot preserves object path ownership');
-assert(objectRecipePackage.assemblyGuideHtml.includes('<strong>Target:</strong> Flying piggy bank') && objectRecipePackage.assemblyGuideHtml.includes('path-object-piggy'), 'object-target assembly guide HTML keeps compact target/path details');
-assert(objectRecipePackage.assemblyGuidePdf.includes('Target: Flying piggy bank') && objectRecipePackage.assemblyGuidePdf.includes('path-object-piggy'), 'object-target assembly guide PDF keeps offline target/path details');
+assert(objectRecipePackage.assemblyGuideHtml.includes('<strong>Target:</strong> Class trophy') && objectRecipePackage.assemblyGuideHtml.includes('path-object-piggy'), 'object-target assembly guide HTML keeps compact target/path details');
+assert(objectRecipePackage.assemblyGuidePdf.includes('Target: Class trophy') && objectRecipePackage.assemblyGuidePdf.includes('path-object-piggy'), 'object-target assembly guide PDF keeps offline target/path details');
 const objectAssemblyGuideModel = buildAssemblyGuideModel({ project: objectPathMechanismProject, selectedRecipeId: 'object-path-driver', assemblyMode: 'mechanism', lane: 'kit', stepIndex: 0 });
 assert.equal(objectAssemblyGuideModel.selectedRecipe?.targetSceneObjectId, 'object-piggy', 'Assembly guide model keeps the selected object-target recipe id');
-assert.equal(objectAssemblyGuideModel.selectedRecipe?.targetSceneObjectName, 'Flying piggy bank', 'Assembly guide model keeps the selected object-target display name');
+assert.equal(objectAssemblyGuideModel.selectedRecipe?.targetSceneObjectName, 'Class trophy', 'Assembly guide model keeps the selected object-target display name');
 assert(recipeWithPath.sceneAnchor && 'x' in recipeWithPath.sceneAnchor, 'fabrication recipe includes explicit scene anchor');
 const sampleAssemblyGuideHtml = createFabricationPackage(sample).assemblyGuideHtml;
 assert(sampleAssemblyGuideHtml.includes('assembly guide'), 'fabrication package includes printable assembly guide');
