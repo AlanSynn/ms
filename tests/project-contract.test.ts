@@ -13,6 +13,7 @@ import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADI
 import { FABRICATION_GEAR_ROOT_WEB_MM, fabricationGearEngravingLabel, fabricationLinkageEngravingLabel, fabricationRingGearEngravingLabel, fabricationSpacerEngravingLabel } from '../utils/fabricationContract';
 import { fabricationGearPathD as profileFabricationGearPathD, fabricationGearProfileForPitchRadius as profileFabricationGearProfileForPitchRadius, fabricationRingGearPathD as profileFabricationRingGearPathD, fabricationRingGearProfileForPitchRadius as profileFabricationRingGearProfileForPitchRadius } from '../utils/fabricationProfiles';
 import { closePhysicalValue as readinessClosePhysicalValue, closeToBoardPitch as readinessCloseToBoardPitch, closeToFabricationLinkage as readinessCloseToFabricationLinkage, physicalTolerance as readinessPhysicalTolerance, sampleFeasibleRange as readinessSampleFeasibleRange } from '../utils/fabricationReadiness';
+import { FABRICATION_RENDER_LAYER_Z_STEP as renderPlanLayerZStep, FABRICATION_RENDER_MIN_CLEARANCE as renderPlanMinClearance, FABRICATION_RENDER_PART_DEPTH as renderPlanPartDepth, fabricationRenderPlanForMechanism as renderPlanForMechanism, validateFabricationStack as renderPlanValidateFabricationStack } from '../utils/fabricationRenderPlan';
 import { fabricationLinkageSpecForSceneLength as stackModelFabricationLinkageSpecForSceneLength, fabricationStackForMechanism as stackModelFabricationStackForMechanism, fabricationStackSummary as stackModelFabricationStackSummary, readableFabricationStackSummary as stackModelReadableFabricationStackSummary } from '../utils/fabricationStackModel';
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
@@ -304,8 +305,10 @@ assert(
   && normalizedCodebaseCleanupPlan.includes('`utils/fabricationStackModel.ts` | 99')
   && normalizedCodebaseCleanupPlan.includes('pure moving-stack layers, stack summaries, and linkage blank spec selection')
   && normalizedCodebaseCleanupPlan.includes('`utils/fabricationReadiness.ts` | 60')
-  && normalizedCodebaseCleanupPlan.includes('pure feasible-range sampling, physical tolerance, board-pitch, and linkage-snapping math'),
-  'cleanup plan records the extracted fabrication profile, number formatting, stack model, and readiness seams'
+  && normalizedCodebaseCleanupPlan.includes('pure feasible-range sampling, physical tolerance, board-pitch, and linkage-snapping math')
+  && normalizedCodebaseCleanupPlan.includes('`utils/fabricationRenderPlan.ts` | 105')
+  && normalizedCodebaseCleanupPlan.includes('pure moving-stack validation, render-layer z-order, base layer, and render-plan summaries'),
+  'cleanup plan records the extracted fabrication profile, number formatting, stack model, readiness, and render-plan seams'
 );
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintExport.tsx` | 88') && normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintControlPanel.tsx` | 258') && normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintDetailPanel.tsx` | 100') && normalizedCodebaseCleanupPlan.includes('Blueprint left workflow controls, package generation, download buttons, and recipe list live outside the stage wrapper') && normalizedCodebaseCleanupPlan.includes('Blueprint right inspector recipe title, board callout, sensemaking cue, required-part chips, stack summary, and export grid status live outside the stage wrapper'), 'cleanup plan records the extracted Blueprint control/detail panel seams');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
@@ -432,6 +435,7 @@ const visibleUiSource = [
   'utils/fabrication.ts',
   'utils/fabricationProfiles.ts',
   'utils/fabricationReadiness.ts',
+  'utils/fabricationRenderPlan.ts',
   'utils/fabricationStackModel.ts',
   'utils/assemblyPlayback.ts',
   'utils/mechanismTemplates.ts',
@@ -1319,6 +1323,7 @@ assert(fabricationGeneratorText.includes('SOURCE_SSOT = "fabrication/generate_fa
 const fabricationRuntimeText = readFileSync(join(process.cwd(), 'utils', 'fabrication.ts'), 'utf8');
 const fabricationProfilesText = readFileSync(join(process.cwd(), 'utils', 'fabricationProfiles.ts'), 'utf8');
 const fabricationReadinessText = readFileSync(join(process.cwd(), 'utils', 'fabricationReadiness.ts'), 'utf8');
+const fabricationRenderPlanText = readFileSync(join(process.cwd(), 'utils', 'fabricationRenderPlan.ts'), 'utf8');
 const fabricationStackModelText = readFileSync(join(process.cwd(), 'utils', 'fabricationStackModel.ts'), 'utf8');
 const fabricationContractText = readFileSync(join(process.cwd(), 'utils', 'fabricationContract.ts'), 'utf8');
 const numberFormatText = readFileSync(join(process.cwd(), 'utils', 'numberFormat.ts'), 'utf8');
@@ -1338,6 +1343,7 @@ assert(fabricationRuntimeText.includes("from './fabricationContract'"), 'fabrica
 assert(
   fabricationRuntimeText.includes("from './fabricationProfiles'")
   && fabricationRuntimeText.includes("from './fabricationReadiness'")
+  && fabricationRuntimeText.includes("from './fabricationRenderPlan'")
   && fabricationRuntimeText.includes("from './fabricationStackModel'")
   && fabricationRuntimeText.includes("from './numberFormat'")
   && fabricationProfilesText.includes("from './fabricationContract'")
@@ -1446,6 +1452,41 @@ assert(
   'createElement'
 ].forEach(forbiddenText => {
   assert(!fabricationStackModelText.includes(forbiddenText), `fabricationStackModel stays stack-only and must not reference ${forbiddenText}`);
+});
+assert(
+  fabricationRenderPlanText.includes("from './fabricationContract'")
+  && fabricationRenderPlanText.includes("from './fabricationStackModel'")
+  && fabricationRenderPlanText.includes("from './mechanismReference'")
+  && !fabricationRenderPlanText.includes("from './fabrication'"),
+  'fabricationRenderPlan owns stack validation and z-order plans without importing the broad fabrication facade'
+);
+[
+  './fabrication',
+  './project',
+  './exporter',
+  './physicsKernel',
+  './sanitize',
+  '../components',
+  'react',
+  'three',
+  '@dimforge/rapier3d-compat'
+].forEach(moduleName => {
+  assert(
+    !fabricationRenderPlanText.includes(`from '${moduleName}'`) && !fabricationRenderPlanText.includes(`from "${moduleName}"`),
+    `fabricationRenderPlan stays pure and must not import ${moduleName}`
+  );
+});
+[
+  'ProjectState',
+  'FabricationPackage',
+  'createFabricationPackage',
+  'validateForFabrication',
+  'document.',
+  'window.',
+  'localStorage',
+  'createElement'
+].forEach(forbiddenText => {
+  assert(!fabricationRenderPlanText.includes(forbiddenText), `fabricationRenderPlan stays render-plan-only and must not reference ${forbiddenText}`);
 });
 assert(numberFormatText.includes('export const finiteNumber') && numberFormatText.includes('export const svgNumber'), 'neutral numberFormat seam owns finite/svg number formatting without domain imports');
 assert(!fabricationRuntimeText.includes("rootRadiusMm: 28.438"), 'runtime gear constants are no longer duplicated outside the centralized contract');
@@ -2799,10 +2840,14 @@ assert(pkg.assemblyGuideHtml.includes('row') && pkg.assemblyGuideHtml.includes('
 assert(pkg.assemblyGuideHtml.includes('<strong>Target:</strong> Right lower arm') && pkg.assemblyGuideHtml.includes('path-right-arm') && pkg.assemblyGuideHtml.includes('right_hand'), 'assembly guide keeps compact target/path/anchor connection details');
 assert(pkg.assemblyGuidePdf.includes('Target: Right lower arm') && pkg.assemblyGuidePdf.includes('path-right-arm'), 'assembly guide PDF keeps offline target/path connection details');
 assert(FABRICATION_RENDER_LAYER_Z_STEP >= FABRICATION_RENDER_PART_DEPTH + FABRICATION_RENDER_MIN_CLEARANCE, 'fabrication render z step includes part thickness plus spacer clearance');
+assert.equal(renderPlanLayerZStep, FABRICATION_RENDER_LAYER_Z_STEP, 'fabricationRenderPlan preserves public layer z-step behind the fabrication facade');
+assert.equal(renderPlanPartDepth, FABRICATION_RENDER_PART_DEPTH, 'fabricationRenderPlan preserves public part depth behind the fabrication facade');
+assert.equal(renderPlanMinClearance, FABRICATION_RENDER_MIN_CLEARANCE, 'fabricationRenderPlan preserves public spacer clearance behind the fabrication facade');
 
 AUTHORABLE_MECHANISM_TYPES.forEach(type => {
   const stack = fabricationStackForMechanism({ type });
   assert.equal(validateFabricationStack(stack).join('; '), '', `${type} fabrication stack obeys clip/layer/spacer/layer/clip invariant`);
+  assert.deepEqual(renderPlanValidateFabricationStack(stack), validateFabricationStack(stack), `${type} fabricationRenderPlan preserves public stack validation behind the facade`);
   assert.equal(stack[0].role, 'clip', `${type} moving stack starts with a clip`);
   assert.equal(stack.at(-1)?.role, 'clip', `${type} moving stack ends with a clip`);
   assert(!stack.some(layer => layer.role === 'base'), `${type} moving stack excludes the base board`);
@@ -2813,6 +2858,7 @@ AUTHORABLE_MECHANISM_TYPES.forEach(type => {
     assert(!(moving(layer.role) && next && moving(next.role)), `${type} stack separates adjacent moving layers with spacers`);
   });
   const plan = fabricationRenderPlanForMechanism({ type });
+  assert.deepEqual(renderPlanForMechanism({ type }), plan, `${type} fabricationRenderPlan preserves public render plan behind the facade`);
   assert.equal(plan.validationErrors.join('; '), '', `${type} render plan is validated against fabrication stack`);
   assert.equal(plan.base.label, 'Base board', `${type} render plan keeps base board separate`);
   assert.deepEqual(plan.layers.map(layer => layer.label), stack.map(layer => layer.label), `${type} render plan labels mirror fabrication stack`);
