@@ -11,8 +11,8 @@ import { sampleFeasibleRange } from './fabricationReadiness';
 export const recipeBoardCallout = (recipe: Pick<FabricationRecipe, 'boardCoordinate' | 'board'>) =>
     fabricationBoardCoordinateCallout(recipe.boardCoordinate, recipe.board);
 
-export const recipeTargetCallout = (recipe: Pick<FabricationRecipe, 'targetPartName' | 'targetPartId' | 'targetPathId' | 'targetAnchorJointId'>) => [
-    recipe.targetPartName || recipe.targetPartId,
+export const recipeTargetCallout = (recipe: Pick<FabricationRecipe, 'targetPartName' | 'targetPartId' | 'targetSceneObjectName' | 'targetSceneObjectId' | 'targetPathId' | 'targetAnchorJointId'>) => [
+    recipe.targetPartName || recipe.targetPartId || recipe.targetSceneObjectName || recipe.targetSceneObjectId,
     recipe.targetPathId,
     recipe.targetAnchorJointId
 ].filter(Boolean).join(' · ');
@@ -69,23 +69,27 @@ export const createFabricationRecipe = (project: ProjectState, mechanism: Mechan
     const board = sceneToBoardRaw({ x: mechanism.anchorX!, y: mechanism.anchorY! }, project.settings.physicalKit);
     const boardScene = board.valid ? boardToScene(board.col, board.row, project.settings.physicalKit) : { x: mechanism.anchorX!, y: mechanism.anchorY! };
     const targetPart = mechanism.targetPartId ? project.parts[mechanism.targetPartId] : undefined;
+    const targetSceneObject = mechanism.targetSceneObjectId ? project.sceneObjects[mechanism.targetSceneObjectId] : undefined;
     const targetPath = mechanism.targetPathId ? project.paths[mechanism.targetPathId] : undefined;
-    const targetAnchorJointId = preferredMotionJointId(project, mechanism.targetPartId, mechanism.targetAnchorJointId);
+    const targetAnchorJointId = targetPart ? preferredMotionJointId(project, mechanism.targetPartId, mechanism.targetAnchorJointId) : undefined;
     const range = sampleFeasibleRange(mechanism);
     const assemblySteps = prefabAssemblySteps(mechanism, board.label);
     const warnings = [...new Set([
         ...(mechanism.warnings ?? []),
         ...((mechanism.fabricationMetadata as { warnings?: string[] } | undefined)?.warnings ?? []),
         ...(range.warning ? [range.warning] : []),
-        ...((targetPart && !targetPart.visible) ? ['Target part hidden'] : [])
+        ...((targetPart && !targetPart.visible) ? ['Target part hidden'] : []),
+        ...((targetSceneObject && !targetSceneObject.visible) ? ['Target object hidden'] : [])
     ])];
     return {
         mechanismId: mechanism.id,
         type: mechanism.type,
         targetPartId: mechanism.targetPartId,
+        targetSceneObjectId: mechanism.targetSceneObjectId,
         targetPathId: mechanism.targetPathId,
         targetAnchorJointId,
         targetPartName: targetPart?.name,
+        targetSceneObjectName: targetSceneObject?.name,
         targetPathPointCount: targetPath?.points.length,
         boardCoordinate: board.label,
         board,
@@ -103,7 +107,11 @@ export const createFabricationRecipe = (project: ProjectState, mechanism: Mechan
                     : mechanism.type === 'gear' || mechanism.type === 'gear_linkage' || mechanism.type === 'planetary_gear'
                         ? `Gears: ratio ${mechanism.type === 'planetary_gear' ? planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength).toFixed(2) : gearTrainOutputRatio(mechanism).toFixed(2)}.`
                         : `${mechanismTypeLabel(mechanism.type)}: crank ${mechanism.crankLength.toFixed(0)} · coupler ${mechanism.couplerLength.toFixed(0)}.`,
-            targetPart ? `Output: ${targetPart.name} · ${targetPath?.id ?? 'no path'}.` : 'Output: standalone.',
+            targetPart
+                ? `Output: ${targetPart.name} · ${targetPath?.id ?? 'no path'}.`
+                : targetSceneObject
+                    ? `Output: ${targetSceneObject.name} · ${targetPath?.id ?? 'no path'}.`
+                    : 'Output: standalone.',
             warnings.length ? `Fix: ${warnings.join('; ')}` : 'Ready.'
         ],
         assemblySteps,

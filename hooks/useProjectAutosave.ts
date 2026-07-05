@@ -7,6 +7,7 @@ export const useProjectAutosave = (project: ProjectState) => {
 
   useEffect(() => {
     latestProjectRef.current = project;
+    if (project.settings.autosave) writeAutosaveSnapshot(project);
   }, [project]);
 
   useEffect(() => {

@@ -4,6 +4,7 @@ import type {
   GlobalConfig,
   MechanismConfig,
   ProjectMotionPath,
+  SceneObject,
   ProjectState,
 } from "../types";
 
@@ -13,6 +14,7 @@ const isBodyPart = (part: BodyPartLayer | undefined): part is BodyPartLayer =>
 export interface AppDerivedState {
   sortedParts: BodyPartLayer[];
   selectedPart?: BodyPartLayer;
+  selectedSceneObject?: SceneObject;
   selectedPath?: ProjectMotionPath;
   selectedMechanism?: MechanismConfig;
   playbackDurationMs: number;
@@ -24,20 +26,35 @@ export const useAppDerivedState = (project: ProjectState): AppDerivedState => {
     () => project.partOrder.map((id) => project.parts[id]).filter(isBodyPart),
     [project.parts, project.partOrder],
   );
+  const selectedSceneObject = project.selectedSceneObjectId
+    ? project.sceneObjects[project.selectedSceneObjectId]
+    : undefined;
   const selectedPart = project.selectedPartId
     ? project.parts[project.selectedPartId]
-    : sortedParts[0];
+    : selectedSceneObject
+      ? undefined
+      : sortedParts[0];
   const selectedPath = useMemo(() => {
+    if (selectedSceneObject) {
+      const current = project.selectedPathId
+        ? project.paths[project.selectedPathId]
+        : undefined;
+      return current?.sceneObjectId === selectedSceneObject.id
+        ? current
+        : (Object.values(project.paths) as ProjectMotionPath[]).find(
+            (path) => path.sceneObjectId === selectedSceneObject.id,
+          );
+    }
     if (!selectedPart) return undefined;
     const current = project.selectedPathId
       ? project.paths[project.selectedPathId]
       : undefined;
-    return current?.partId === selectedPart.id
+    return !current?.sceneObjectId && current?.partId === selectedPart.id
       ? current
       : (Object.values(project.paths) as ProjectMotionPath[]).find(
-          (path) => path.partId === selectedPart.id,
+          (path) => !path.sceneObjectId && path.partId === selectedPart.id,
         );
-  }, [project.paths, project.selectedPathId, selectedPart]);
+  }, [project.paths, project.selectedPathId, selectedPart, selectedSceneObject]);
   const selectedMechanism =
     project.mechanisms.find((m) => m.id === project.selectedMechanismId) ??
     project.mechanisms[0];
@@ -57,6 +74,7 @@ export const useAppDerivedState = (project: ProjectState): AppDerivedState => {
   return {
     sortedParts,
     selectedPart,
+    selectedSceneObject,
     selectedPath,
     selectedMechanism,
     playbackDurationMs,

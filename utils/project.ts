@@ -382,24 +382,68 @@ export const mechanismWithGeneratedPath = (mechanism: MechanismConfig, options: 
     generatedPath: options.preserveGeneratedPath && mechanism.generatedPath?.length ? mechanism.generatedPath : generateCurvePoints(mechanism, 96).points
 });
 
+const preserveGeneratedPathFor = (mechanism: MechanismConfig) =>
+    Boolean(mechanism.foundryExport || mechanism.generatedPath?.length);
+
+const samePoint = (a: Point | undefined, b: Point | undefined) =>
+    (!a && !b) || Boolean(a && b && a.x === b.x && a.y === b.y);
+
+const samePoints = (a: Point[] = [], b: Point[] = []) =>
+    a.length === b.length && a.every((point, index) => samePoint(point, b[index]));
+
+const sameTimedPoints = (a: ProjectMotionPath['timedPoints'] = [], b: ProjectMotionPath['timedPoints'] = []) =>
+    a.length === b.length && a.every((point, index) =>
+        samePoint(point, b[index]) && point.time === b[index]?.time
+    );
+
+const pathGeneratedGeometryUnchanged = (previous: ProjectMotionPath | undefined, next: ProjectMotionPath) => {
+    if (!previous) return false;
+    return previous.partId === next.partId &&
+        previous.sceneObjectId === next.sceneObjectId &&
+        previous.targetAnchorJointId === next.targetAnchorJointId &&
+        previous.chainRootJointId === next.chainRootJointId &&
+        previous.smoothness === next.smoothness &&
+        previous.duration === next.duration &&
+        previous.closed === next.closed &&
+        samePoints(previous.points, next.points) &&
+        sameTimedPoints(previous.timedPoints, next.timedPoints);
+};
+
 const reconcileMechanismTargets = (
     mechanism: MechanismConfig,
     parts: Record<string, BodyPartLayer>,
     paths: Record<string, ProjectMotionPath>,
+    sceneObjects: Record<string, SceneObject> = {},
     options: { preserveGeneratedPath?: boolean } = {}
 ) => {
-    let targetPartId = mechanism.targetPartId && parts[mechanism.targetPartId] ? mechanism.targetPartId : undefined;
+    let targetSceneObjectId = mechanism.targetSceneObjectId && sceneObjects[mechanism.targetSceneObjectId] ? mechanism.targetSceneObjectId : undefined;
+    let targetPartId = !targetSceneObjectId && mechanism.targetPartId && parts[mechanism.targetPartId] ? mechanism.targetPartId : undefined;
     let targetPathId = mechanism.targetPathId && paths[mechanism.targetPathId] ? mechanism.targetPathId : undefined;
     if (targetPathId) {
-        const pathPartId = paths[targetPathId].partId;
-        if (parts[pathPartId]) targetPartId = pathPartId;
-        else targetPathId = undefined;
+        const path = paths[targetPathId];
+        if (path.sceneObjectId) {
+            if (sceneObjects[path.sceneObjectId]) {
+                targetSceneObjectId = path.sceneObjectId;
+                targetPartId = undefined;
+            } else {
+                targetPathId = undefined;
+            }
+        } else {
+            const pathPartId = path.partId;
+            if (parts[pathPartId]) {
+                targetPartId = pathPartId;
+                targetSceneObjectId = undefined;
+            } else {
+                targetPathId = undefined;
+            }
+        }
     }
     const pathAnchorJointId = targetPathId ? paths[targetPathId]?.targetAnchorJointId : undefined;
     const targetAnchorJointId = targetPartId ? (mechanism.targetAnchorJointId ?? pathAnchorJointId ?? parts[targetPartId]?.anchorJointId) : undefined;
     const normalized = normalizeMechanismToFabricationSet({
         ...mechanism,
         targetPartId,
+        targetSceneObjectId,
         targetPathId,
         targetAnchorJointId,
         activeVisualPartIds: targetPartId ? [targetPartId] : []
@@ -853,6 +897,7 @@ export const replaceCharacterProject = (next: ProjectState, previous: ProjectSta
     const fallbackFrom = previousBox?.center ?? { x: 0, y: 0 };
     const fallbackTo = nextBox?.center ?? { x: 0, y: 0 };
     const remappedPaths: Record<string, ProjectMotionPath> = Object.fromEntries(Object.entries(previous.paths).flatMap(([id, path]): Array<[string, ProjectMotionPath]> => {
+        if (path.sceneObjectId) return previous.sceneObjects[path.sceneObjectId] ? [[id, { ...path, warnings: [] }]] : [];
         const referencingMechanismTarget = previous.mechanisms.find(mechanism => mechanism.targetPathId === id && mechanism.targetAnchorJointId && next.skeleton?.joints[mechanism.targetAnchorJointId])?.targetAnchorJointId;
         const previousPartRoot = previous.parts[path.partId]?.anchorJointId;
         const targetJointId = path.targetAnchorJointId && next.skeleton?.joints[path.targetAnchorJointId]
@@ -877,6 +922,14 @@ export const replaceCharacterProject = (next: ProjectState, previous: ProjectSta
     const firstPathByPart = (partId?: string) => partId ? Object.values(remappedPaths).find(path => path.partId === partId) : undefined;
     const remappedMechanisms = previous.mechanisms.map(mechanism => {
         const priorPath = mechanism.targetPathId ? remappedPaths[mechanism.targetPathId] : undefined;
+        if (mechanism.targetSceneObjectId) return mechanismWithGeneratedPath({
+            ...mechanism,
+            targetPartId: undefined,
+            targetSceneObjectId: next.sceneObjects[mechanism.targetSceneObjectId] ? mechanism.targetSceneObjectId : undefined,
+            targetPathId: priorPath?.id,
+            targetAnchorJointId: undefined,
+            activeVisualPartIds: []
+        }, { preserveGeneratedPath: Boolean(mechanism.foundryExport || mechanism.generatedPath?.length) });
         const targetAnchorJointId = mechanism.targetAnchorJointId && next.skeleton?.joints[mechanism.targetAnchorJointId]
             ? mechanism.targetAnchorJointId
             : priorPath?.targetAnchorJointId;
@@ -1061,7 +1114,7 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
         case 'set_processing':
             return { ...project, processing: action.processing };
         case 'select_part': {
-            const nextPath = Object.values(project.paths).find(path => path.partId === action.partId);
+            const nextPath = Object.values(project.paths).find(path => !path.sceneObjectId && path.partId === action.partId);
             return { ...project, selectedPartId: action.partId, selectedSceneObjectId: undefined, selectedPathId: nextPath?.id };
         }
         case 'upsert_part': {
@@ -1073,8 +1126,13 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
         case 'delete_part': {
             if (project.parts[action.partId]?.locked) return project;
             const { [action.partId]: _part, ...parts } = project.parts;
-            const paths = Object.fromEntries(Object.entries(project.paths).filter(([, path]) => path.partId !== action.partId));
-            const mechanisms = project.mechanisms.map(m => m.targetPartId === action.partId ? mechanismWithGeneratedPath({ ...m, targetPartId: undefined, targetPathId: undefined, activeVisualPartIds: [] }) : m);
+            const paths = Object.fromEntries(Object.entries(project.paths).filter(([, path]) => path.sceneObjectId || path.partId !== action.partId));
+            const mechanisms = project.mechanisms.map(m => m.targetPartId === action.partId
+                ? mechanismWithGeneratedPath(
+                    { ...m, targetPartId: undefined, targetPathId: undefined, activeVisualPartIds: [] },
+                    { preserveGeneratedPath: preserveGeneratedPathFor(m) }
+                )
+                : m);
             const nextPartId = project.partOrder.find(id => id !== action.partId);
             return touch({
                 ...project,
@@ -1100,13 +1158,16 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
             [order[i], order[j]] = [order[j], order[i]];
             return touch({ ...project, partOrder: order });
         }
-        case 'select_scene_object':
-            return { ...project, selectedSceneObjectId: action.objectId, selectedPartId: action.objectId ? undefined : project.selectedPartId };
+        case 'select_scene_object': {
+            const nextPath = Object.values(project.paths).find(path => path.sceneObjectId === action.objectId);
+            return { ...project, selectedSceneObjectId: action.objectId, selectedPartId: action.objectId ? undefined : project.selectedPartId, selectedPathId: nextPath?.id };
+        }
         case 'upsert_scene_object': {
             const exists = Boolean(project.sceneObjects[action.object.id]);
             const sceneObjects = { ...project.sceneObjects, [action.object.id]: action.object };
             const sceneObjectOrder = exists ? project.sceneObjectOrder : [...project.sceneObjectOrder, action.object.id];
-            return touch({ ...project, sceneObjects, sceneObjectOrder, selectedSceneObjectId: action.object.id, selectedPartId: undefined });
+            const nextPath = Object.values(project.paths).find(path => path.sceneObjectId === action.object.id);
+            return touch({ ...project, sceneObjects, sceneObjectOrder, selectedSceneObjectId: action.object.id, selectedPartId: undefined, selectedPathId: nextPath?.id });
         }
         case 'update_scene_object':
             if (!project.sceneObjects[action.objectId]) return project;
@@ -1115,11 +1176,21 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
         case 'delete_scene_object': {
             if (project.sceneObjects[action.objectId]?.locked) return project;
             const { [action.objectId]: _object, ...sceneObjects } = project.sceneObjects;
+            const paths = Object.fromEntries(Object.entries(project.paths).filter(([, path]) => path.sceneObjectId !== action.objectId));
+            const mechanisms = project.mechanisms.map(m => m.targetSceneObjectId === action.objectId
+                ? mechanismWithGeneratedPath(
+                    { ...m, targetSceneObjectId: undefined, targetPathId: undefined },
+                    { preserveGeneratedPath: preserveGeneratedPathFor(m) }
+                )
+                : m);
             return touch({
                 ...project,
                 sceneObjects,
+                paths,
+                mechanisms,
                 sceneObjectOrder: project.sceneObjectOrder.filter(id => id !== action.objectId),
-                selectedSceneObjectId: project.selectedSceneObjectId === action.objectId ? undefined : project.selectedSceneObjectId
+                selectedSceneObjectId: project.selectedSceneObjectId === action.objectId ? undefined : project.selectedSceneObjectId,
+                selectedPathId: project.paths[project.selectedPathId ?? '']?.sceneObjectId === action.objectId ? undefined : project.selectedPathId
             });
         }
         case 'set_skeleton':
@@ -1165,22 +1236,39 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
         }
         case 'upsert_path': {
             const path = validatePath(action.path);
-            if (project.parts[path.partId]?.locked) return project;
+            if (path.sceneObjectId ? project.sceneObjects[path.sceneObjectId]?.locked : project.parts[path.partId]?.locked) return project;
+            const previousPath = project.paths[path.id] ? validatePath(project.paths[path.id]) : undefined;
             const paths = { ...project.paths, [path.id]: path };
-            const mechanisms = project.mechanisms.map(m => m.targetPathId === path.id ? reconcileMechanismTargets({ ...m, targetPartId: path.partId }, project.parts, paths) : m);
+            const mechanisms = project.mechanisms.map(m => m.targetPathId === path.id
+                ? reconcileMechanismTargets(
+                    { ...m, targetPartId: path.sceneObjectId ? undefined : path.partId, targetSceneObjectId: path.sceneObjectId },
+                    project.parts,
+                    paths,
+                    project.sceneObjects,
+                    { preserveGeneratedPath: preserveGeneratedPathFor(m) && pathGeneratedGeometryUnchanged(previousPath, path) }
+                )
+                : m);
             return touch({ ...project, paths, mechanisms, selectedPathId: path.id });
         }
         case 'delete_path': {
             const current = project.paths[action.pathId];
-            if (current && project.parts[current.partId]?.locked) return project;
+            if (current && (current.sceneObjectId ? project.sceneObjects[current.sceneObjectId]?.locked : project.parts[current.partId]?.locked)) return project;
             const { [action.pathId]: _removed, ...paths } = project.paths;
-            const mechanisms = project.mechanisms.map(m => m.targetPathId === action.pathId ? reconcileMechanismTargets({ ...m, targetPathId: undefined }, project.parts, paths) : m);
+            const mechanisms = project.mechanisms.map(m => m.targetPathId === action.pathId
+                ? reconcileMechanismTargets(
+                    { ...m, targetPathId: undefined },
+                    project.parts,
+                    paths,
+                    project.sceneObjects,
+                    { preserveGeneratedPath: preserveGeneratedPathFor(m) }
+                )
+                : m);
             return touch({ ...project, paths, mechanisms, selectedPathId: project.selectedPathId === action.pathId ? undefined : project.selectedPathId });
         }
         case 'set_mechanisms':
-            return touch({ ...project, mechanisms: action.mechanisms.map(m => reconcileMechanismTargets(m, project.parts, project.paths, { preserveGeneratedPath: Boolean(m.foundryExport) })), selectedMechanismId: action.selectedMechanismId ?? project.selectedMechanismId });
+            return touch({ ...project, mechanisms: action.mechanisms.map(m => reconcileMechanismTargets(m, project.parts, project.paths, project.sceneObjects, { preserveGeneratedPath: preserveGeneratedPathFor(m) })), selectedMechanismId: action.selectedMechanismId ?? project.selectedMechanismId });
         case 'upsert_mechanism': {
-            const mechanism = reconcileMechanismTargets(action.mechanism, project.parts, project.paths, { preserveGeneratedPath: Boolean(action.mechanism.foundryExport) });
+            const mechanism = reconcileMechanismTargets(action.mechanism, project.parts, project.paths, project.sceneObjects, { preserveGeneratedPath: preserveGeneratedPathFor(action.mechanism) });
             const exists = project.mechanisms.some(m => m.id === mechanism.id);
             const mechanisms = exists ? project.mechanisms.map(m => m.id === mechanism.id ? mechanism : m) : [...project.mechanisms, mechanism];
             return touch({ ...project, mechanisms, selectedMechanismId: mechanism.id });
@@ -1209,11 +1297,13 @@ export const validatePath = (path: ProjectMotionPath): ProjectMotionPath => {
     const raw = asRecord(path);
     const points = Array.isArray(raw.points) ? raw.points.map(p => sanitizePoint(p)).slice(0, 2000) : [];
     const source = ['drawn', 'tracked', 'generated', 'imported'].includes(String(raw.source)) ? raw.source as ProjectMotionPath['source'] : 'imported';
+    const sceneObjectId = typeof raw.sceneObjectId === 'string' && raw.sceneObjectId.trim() ? raw.sceneObjectId.slice(0, 80) : undefined;
     const normalized: ProjectMotionPath = {
         id: typeof raw.id === 'string' && raw.id.trim() ? raw.id.slice(0, 80) : uid('path'),
-        partId: typeof raw.partId === 'string' ? raw.partId : '',
-        targetAnchorJointId: typeof raw.targetAnchorJointId === 'string' && raw.targetAnchorJointId.trim() ? raw.targetAnchorJointId.slice(0, 80) : undefined,
-        chainRootJointId: typeof raw.chainRootJointId === 'string' && raw.chainRootJointId.trim() ? raw.chainRootJointId.slice(0, 80) : undefined,
+        partId: sceneObjectId ? '' : (typeof raw.partId === 'string' ? raw.partId : ''),
+        sceneObjectId,
+        targetAnchorJointId: !sceneObjectId && typeof raw.targetAnchorJointId === 'string' && raw.targetAnchorJointId.trim() ? raw.targetAnchorJointId.slice(0, 80) : undefined,
+        chainRootJointId: !sceneObjectId && typeof raw.chainRootJointId === 'string' && raw.chainRootJointId.trim() ? raw.chainRootJointId.slice(0, 80) : undefined,
         smoothness: clampNumber(raw.smoothness, 0, 0, 100),
         points,
         timedPoints: Array.isArray(raw.timedPoints) ? raw.timedPoints.map(p => ({ ...sanitizePoint(p), time: finiteNumber(asRecord(p).time, 0) })).slice(0, 2000) : undefined,
@@ -1419,6 +1509,7 @@ const normalizeMechanismSnapshot = (value: unknown): MechanismConfig => {
         showOutputGear: typeof raw.showOutputGear === 'boolean' ? raw.showOutputGear : base.showOutputGear,
         outputGearRadius: raw.outputGearRadius === undefined ? base.outputGearRadius : finiteNumber(raw.outputGearRadius, base.outputGearRadius ?? 0),
         targetPartId: typeof raw.targetPartId === 'string' ? raw.targetPartId : undefined,
+        targetSceneObjectId: typeof raw.targetSceneObjectId === 'string' ? raw.targetSceneObjectId : undefined,
         targetPathId: typeof raw.targetPathId === 'string' ? raw.targetPathId : undefined,
         targetAnchorJointId: typeof raw.targetAnchorJointId === 'string' ? raw.targetAnchorJointId : undefined,
         presetId: typeof raw.presetId === 'string' ? raw.presetId : base.presetId,
@@ -1452,12 +1543,12 @@ export const migrateProjectSnapshot = (raw: unknown): ProjectState => {
     const skeleton = normalizeSkeletonSnapshot(data.skeleton);
     const parts = Object.fromEntries(Object.entries(data.parts ?? {}).map(([id, value]) => [id, normalizePartSnapshot(id, value, skeleton)]));
     const partOrder = (data.partOrder ?? Object.keys(parts)).filter(id => Boolean(parts[id]));
-    const paths = Object.fromEntries(Object.entries(data.paths ?? {}).flatMap(([id, path]) => {
-        const next = validatePath({ ...asRecord(path), id } as ProjectMotionPath);
-        return parts[next.partId] ? [[id, next] as const] : [];
-    }));
     const sceneObjects = Object.fromEntries(Object.entries(data.sceneObjects ?? {}).map(([id, value]) => [id, normalizeSceneObjectSnapshot(id, value)]));
     const sceneObjectOrder = (data.sceneObjectOrder ?? Object.keys(sceneObjects)).filter(id => Boolean(sceneObjects[id]));
+    const paths = Object.fromEntries(Object.entries(data.paths ?? {}).flatMap(([id, path]) => {
+        const next = validatePath({ ...asRecord(path), id } as ProjectMotionPath);
+        return next.sceneObjectId ? (sceneObjects[next.sceneObjectId] ? [[id, next] as const] : []) : (parts[next.partId] ? [[id, next] as const] : []);
+    }));
     return {
         ...fallback,
         ...data,
@@ -1470,7 +1561,7 @@ export const migrateProjectSnapshot = (raw: unknown): ProjectState => {
         selectedSceneObjectId: data.selectedSceneObjectId && sceneObjects[data.selectedSceneObjectId] ? data.selectedSceneObjectId : undefined,
         skeleton,
         paths,
-        mechanisms: (Array.isArray(data.mechanisms) ? data.mechanisms : fallback.mechanisms).map(m => reconcileMechanismTargets(normalizeMechanismSnapshot(m), parts, paths, { preserveGeneratedPath: true })),
+        mechanisms: (Array.isArray(data.mechanisms) ? data.mechanisms : fallback.mechanisms).map(m => reconcileMechanismTargets(normalizeMechanismSnapshot(m), parts, paths, sceneObjects, { preserveGeneratedPath: true })),
         settings: normalizeAppSettings(data.settings, fallback.settings),
         processing: data.processing ?? idleProcessing(),
         lastExport: undefined

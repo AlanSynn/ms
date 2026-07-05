@@ -8,6 +8,7 @@ export interface MechanismSnapshotSourceIds {
     projectId: string;
     mechanismId: string;
     targetPartId?: string;
+    targetSceneObjectId?: string;
     targetPathId?: string;
     targetAnchorJointId?: string;
     physicalKitProfileKey: string;
@@ -21,6 +22,7 @@ export interface MechanismSnapshotMechanism {
     enabled: boolean;
     color: string;
     targetPartId?: string;
+    targetSceneObjectId?: string;
     targetPathId?: string;
     targetAnchorJointId?: string;
     transform?: MechanismConfig['transform'];
@@ -60,6 +62,7 @@ export interface MechanismSnapshotMechanism {
 export interface MechanismSnapshotPath {
     id: string;
     partId: string;
+    sceneObjectId?: string;
     targetAnchorJointId?: string;
     smoothness: number;
     duration: number;
@@ -139,6 +142,7 @@ const snapshotMechanism = (mechanism: MechanismConfig): MechanismSnapshotMechani
     enabled: mechanism.enabled !== false,
     color: mechanism.color,
     targetPartId: mechanism.targetPartId,
+    targetSceneObjectId: mechanism.targetSceneObjectId,
     targetPathId: mechanism.targetPathId,
     targetAnchorJointId: mechanism.targetAnchorJointId,
     transform: mechanism.transform ? { ...mechanism.transform } : undefined,
@@ -178,6 +182,7 @@ const snapshotMechanism = (mechanism: MechanismConfig): MechanismSnapshotMechani
 const snapshotPath = (path?: ProjectMotionPath): MechanismSnapshotPath | undefined => path ? ({
     id: path.id,
     partId: path.partId,
+    sceneObjectId: path.sceneObjectId,
     targetAnchorJointId: path.targetAnchorJointId,
     smoothness: finite(path.smoothness),
     duration: finite(path.duration),
@@ -224,6 +229,7 @@ export const buildMechanismSnapshot = (project: ProjectState, mechanismId: strin
         projectId: project.metadata.id,
         mechanismId: mechanism.id,
         targetPartId: mechanism.targetPartId,
+        targetSceneObjectId: mechanism.targetSceneObjectId,
         targetPathId: mechanism.targetPathId,
         targetAnchorJointId: mechanism.targetAnchorJointId,
         physicalKitProfileKey: project.settings.physicalKit.profileKey,

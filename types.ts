@@ -82,6 +82,7 @@ export interface MechanismConfig {
     showOutputGear?: boolean;
     outputGearRadius?: number;
     targetPartId?: string;
+    targetSceneObjectId?: string;
     targetPathId?: string;
     targetAnchorJointId?: string;
     presetId?: string;
@@ -105,6 +106,7 @@ export interface FoundryExportPackage {
     animation: { duration: number; steps: number; loop: boolean };
     metadata: { sourceTab: string; selectedPreset?: string; recommendation?: string; simulationFriction?: number; simulationMassKg?: number };
     targetPartId?: string;
+    targetSceneObjectId?: string;
     targetPathId?: string;
     targetAnchorJointId?: string;
     warnings: string[];
@@ -178,6 +180,7 @@ export interface BodyPartLayer {
 export interface ProjectMotionPath {
     id: string;
     partId: string;
+    sceneObjectId?: string;
     targetAnchorJointId?: string;
     chainRootJointId?: string;
     smoothness?: number;
@@ -252,9 +255,11 @@ export interface FabricationRecipe {
     mechanismId: string;
     type: MechanismType;
     targetPartId?: string;
+    targetSceneObjectId?: string;
     targetPathId?: string;
     targetAnchorJointId?: string;
     targetPartName?: string;
+    targetSceneObjectName?: string;
     targetPathPointCount?: number;
     boardCoordinate: string;
     board: { col: number; row: number; xMm: number; yMm: number; valid?: boolean };
@@ -283,7 +288,7 @@ export interface FabricationPackage {
     id: string;
     createdAt: string;
     projectName: string;
-    sceneSnapshot: Pick<ProjectState, 'metadata' | 'parts' | 'partOrder' | 'skeleton' | 'paths' | 'mechanisms' | 'settings'>;
+    sceneSnapshot: Pick<ProjectState, 'metadata' | 'parts' | 'partOrder' | 'sceneObjects' | 'sceneObjectOrder' | 'skeleton' | 'paths' | 'mechanisms' | 'settings'>;
     recipes: FabricationRecipe[];
     cutList: Array<{ name: string; quantity: number }>;
     warnings: string[];

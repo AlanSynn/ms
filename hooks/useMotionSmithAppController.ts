@@ -126,6 +126,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   const {
     sortedParts,
     selectedPart,
+    selectedSceneObject,
     selectedPath,
     selectedMechanism,
     playbackDurationMs,
@@ -142,6 +143,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   } = useAppPathActions({
     project,
     selectedPart,
+    selectedSceneObject,
     dispatch,
     setStage,
   });
@@ -183,6 +185,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     project,
     dispatch,
     selectedPart,
+    selectedSceneObject,
     selectedPath,
     selectedMechanism,
     foundry,
@@ -296,6 +299,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     selection: {
       sortedParts,
       selectedPart,
+      selectedSceneObject,
       selectedPath,
       selectedMechanism,
     },

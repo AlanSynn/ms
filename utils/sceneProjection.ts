@@ -180,6 +180,7 @@ export const buildToonSceneProjection = (project: ProjectState): ToonSceneProjec
     const labels: ToonLabelNode[] = [];
     const warnings: ProjectionWarning[] = [];
     const partDepth = new Map<string, number>();
+    const sceneObjectDepth = new Map<string, number>();
     const kit = project.settings.physicalKit;
     const sheet = sceneBoundsForSheet(kit);
 
@@ -255,6 +256,8 @@ export const buildToonSceneProjection = (project: ProjectState): ToonSceneProjec
         const object = project.sceneObjects[objectId];
         if (!object || object.visible === false) return;
         const scale = finite(object.transform.scale, 1) || 1;
+        const depth = nodeDepth('scene-object', object.zIndex * 2 + index * 0.01);
+        sceneObjectDepth.set(object.id, depth);
         nodes.push(baseNode({
             id: `/scene-objects/${pathSegment(object.id)}`,
             sourceType: 'scene-object',
@@ -275,7 +278,7 @@ export const buildToonSceneProjection = (project: ProjectState): ToonSceneProjec
                 rotationRad: rotationRad(object.transform.rotation),
                 scale
             },
-            depthMm: nodeDepth('scene-object', object.zIndex * 2 + index * 0.01),
+            depthMm: depth,
             thicknessMm: 2,
             material: 'paper',
             interactive: false,
@@ -329,7 +332,7 @@ export const buildToonSceneProjection = (project: ProjectState): ToonSceneProjec
     Object.keys(project.paths).sort().forEach(pathId => {
         const path = project.paths[pathId];
         if (!path.visible || !path.points.length) return;
-        const depth = nodeDepth('path', partDepth.get(path.partId) ?? 10);
+        const depth = nodeDepth('path', path.sceneObjectId ? (sceneObjectDepth.get(path.sceneObjectId) ?? 12) : (partDepth.get(path.partId) ?? 10));
         nodes.push(baseNode({
             id: `/paths/${pathSegment(path.id)}`,
             sourceType: 'path',
@@ -396,10 +399,10 @@ export const buildToonSceneProjection = (project: ProjectState): ToonSceneProjec
         const anchorPoint = clonePoint(state.effector);
         labels.push({
             id: `/labels/mechanisms/${pathSegment(mechanism.id)}`,
-            text: mechanism.targetPartId ? `drives ${mechanism.targetPartId}` : `${templateLabel} preview`,
+            text: mechanism.targetPartId ? `drives ${mechanism.targetPartId}` : mechanism.targetSceneObjectId ? `drives ${mechanism.targetSceneObjectId}` : `${templateLabel} preview`,
             anchorNodeId: `${baseId}/output`,
             anchorPoint,
-            severity: mechanism.targetPartId ? 'info' : 'warning',
+            severity: mechanism.targetPartId || mechanism.targetSceneObjectId ? 'info' : 'warning',
             collapsible: true
         });
 

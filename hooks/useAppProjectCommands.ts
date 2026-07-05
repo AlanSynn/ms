@@ -191,7 +191,10 @@ export const useAppProjectCommands = ({
   const recoverAutosave = () => {
     try {
       const recoveredProject = readAutosaveProject();
-      if (!recoveredProject) {
+      if (
+        !recoveredProject ||
+        (!projectHasUserWork(recoveredProject) && projectHasUserWork(project))
+      ) {
         setCommandStatus("No autosave found");
         return;
       }

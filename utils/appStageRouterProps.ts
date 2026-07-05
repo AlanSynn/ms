@@ -22,7 +22,11 @@ type CharacterRouterProps = Pick<
 
 type SelectionRouterProps = Pick<
   AppStageRouterProps,
-  "sortedParts" | "selectedPart" | "selectedPath" | "selectedMechanism"
+  | "sortedParts"
+  | "selectedPart"
+  | "selectedSceneObject"
+  | "selectedPath"
+  | "selectedMechanism"
 >;
 
 type PathRouterProps = Pick<

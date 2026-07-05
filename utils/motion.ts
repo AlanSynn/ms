@@ -1,9 +1,11 @@
-import { BodyPartLayer, MechanismConfig, Point, ProjectMotionPath, ProjectState, StandardJoint, StandardSkeleton } from '../types';
+import { BodyPartLayer, MechanismConfig, Point, ProjectMotionPath, ProjectState, SceneObject, StandardJoint, StandardSkeleton } from '../types';
 import { calculateLinkage } from './kinematics';
 import { placeBodyPartPivotAt } from './coordinates';
+import { mechanismMatchesPathOwner } from './pathTargets';
 
 export interface MotionPreview {
     parts: Record<string, BodyPartLayer>;
+    sceneObjects?: Record<string, SceneObject>;
     skeleton: StandardSkeleton | null;
     target?: Point;
     targetJointId?: string;
@@ -458,7 +460,7 @@ export const motionPreviewForTarget = (
     targetPartId: string | undefined,
     targetJointId: string | undefined,
     target: Point,
-    existing: MotionPreview = { parts: {}, skeleton: project.skeleton },
+    existing: MotionPreview = { parts: {}, sceneObjects: {}, skeleton: project.skeleton },
     options: { pinTarget?: boolean; rootJointId?: string } = {}
 ): MotionPreview => {
     const targetPart = targetPartId ? project.parts[targetPartId] : undefined;
@@ -488,7 +490,7 @@ export const motionPreviewForTarget = (
             const anchor = nextSkeleton?.joints[part.anchorJointId]?.position;
             parts[partId] = anchor ? placeBodyPartPivotAt(part, anchor, nextSkeleton) : part;
         });
-        return { parts, skeleton: nextSkeleton, target, targetJointId: resolvedTargetJointId, rootJointId };
+        return { ...existing, parts, skeleton: nextSkeleton, target, targetJointId: resolvedTargetJointId, rootJointId };
     }
 
     const jointUpdates = solveChainTargets(skeleton, rootJointId, resolvedTargetJointId, target, options.pinTarget === true);
@@ -507,7 +509,32 @@ export const motionPreviewForTarget = (
         const part = project.parts[partId];
         parts[partId] = partWithAnimatedSegment(part, skeleton, nextSkeleton);
     });
-    return { parts, skeleton: nextSkeleton, target: solvedTarget, targetJointId: resolvedTargetJointId, rootJointId };
+    return { ...existing, parts, skeleton: nextSkeleton, target: solvedTarget, targetJointId: resolvedTargetJointId, rootJointId };
+};
+
+export const motionPreviewForSceneObject = (
+    project: ProjectState,
+    sceneObjectId: string | undefined,
+    target: Point,
+    existing: MotionPreview = { parts: {}, sceneObjects: {}, skeleton: project.skeleton }
+): MotionPreview => {
+    const object = sceneObjectId ? project.sceneObjects[sceneObjectId] : undefined;
+    if (!object) return existing;
+    return {
+        ...existing,
+        sceneObjects: {
+            ...(existing.sceneObjects ?? {}),
+            [object.id]: {
+                ...object,
+                transform: {
+                    ...object.transform,
+                    x: target.x,
+                    y: target.y
+                }
+            }
+        },
+        target
+    };
 };
 
 export const motionPreviewForPath = (
@@ -515,7 +542,9 @@ export const motionPreviewForPath = (
     path: ProjectMotionPath,
     angle: number,
     targetJointId = preferredMotionJointId(project, path.partId, path.targetAnchorJointId, { preferDistalWhenRoot: !path.targetAnchorJointId })
-): MotionPreview => motionPreviewForTarget(project, path.partId, targetJointId, pointOnProjectPath(path, angle), { parts: {}, skeleton: project.skeleton }, { rootJointId: path.chainRootJointId });
+): MotionPreview => path.sceneObjectId
+    ? motionPreviewForSceneObject(project, path.sceneObjectId, pointOnProjectPath(path, angle), { parts: {}, sceneObjects: {}, skeleton: project.skeleton })
+    : motionPreviewForTarget(project, path.partId, targetJointId, pointOnProjectPath(path, angle), { parts: {}, sceneObjects: {}, skeleton: project.skeleton }, { rootJointId: path.chainRootJointId });
 
 export const mechanismBindingWarnings = (project: ProjectState, mechanisms: MechanismConfig[] = project.mechanisms) => {
     const warnings: Record<string, string[]> = {};
@@ -524,6 +553,27 @@ export const mechanismBindingWarnings = (project: ProjectState, mechanisms: Mech
     };
     const drivenTargets = new Map<string, string>();
     mechanisms.filter(m => m.visible && m.enabled !== false).forEach(m => {
+        if (m.targetSceneObjectId) {
+            const object = project.sceneObjects[m.targetSceneObjectId];
+            if (!object) {
+                add(m.id, `Target object ${m.targetSceneObjectId} is missing.`);
+                return;
+            }
+            if (m.targetPathId) {
+                const path = project.paths[m.targetPathId];
+                if (!path) add(m.id, `Target path ${m.targetPathId} is missing.`);
+                else if (path.sceneObjectId !== m.targetSceneObjectId) add(m.id, `Target path ${m.targetPathId} belongs to ${path.sceneObjectId ?? path.partId}, not ${m.targetSceneObjectId}.`);
+            }
+            const key = `object:${m.targetSceneObjectId}`;
+            const owner = drivenTargets.get(key);
+            if (owner) {
+                add(owner, `${m.id} also drives ${key}; only one mechanism can own a target.`);
+                add(m.id, `${owner} also drives ${key}; only one mechanism can own a target.`);
+            } else {
+                drivenTargets.set(key, m.id);
+            }
+            return;
+        }
         if (!m.targetPartId) return;
         const part = project.parts[m.targetPartId];
         if (!part) {
@@ -533,7 +583,7 @@ export const mechanismBindingWarnings = (project: ProjectState, mechanisms: Mech
         if (m.targetPathId) {
             const path = project.paths[m.targetPathId];
             if (!path) add(m.id, `Target path ${m.targetPathId} is missing.`);
-            else if (path.partId !== m.targetPartId) add(m.id, `Target path ${m.targetPathId} belongs to ${path.partId}, not ${m.targetPartId}.`);
+            else if (!mechanismMatchesPathOwner(m, path)) add(m.id, `Target path ${m.targetPathId} belongs to ${path.sceneObjectId ?? path.partId}, not ${m.targetPartId}.`);
         }
         if (m.targetAnchorJointId && !motionAnchorJointIds(project, m.targetPartId).includes(m.targetAnchorJointId)) {
             add(m.id, `Target anchor ${m.targetAnchorJointId} is outside ${m.targetPartId}'s skeleton chain.`);
@@ -558,8 +608,24 @@ export const mechanismBindingWarnings = (project: ProjectState, mechanisms: Mech
 export const motionPreviewForProject = (project: ProjectState, mechanisms: MechanismConfig[], angle: number): MotionPreview => {
     const warnings = mechanismBindingWarnings(project, mechanisms);
     const drivenTargets = new Set<string>();
-    let preview: MotionPreview = { parts: {}, skeleton: project.skeleton, warnings };
+    let preview: MotionPreview = { parts: {}, sceneObjects: {}, skeleton: project.skeleton, warnings };
     mechanisms.filter(m => m.visible && m.enabled !== false).forEach(m => {
+        if (m.targetSceneObjectId) {
+            const object = project.sceneObjects[m.targetSceneObjectId];
+            if (!object) return;
+            const state = calculateLinkage(m, angle);
+            const generatedTarget = pointOnGeneratedMechanismPath(m.generatedPath ?? [], angle);
+            if (!state.isValid && !generatedTarget) {
+                warnings[m.id] = [...(warnings[m.id] ?? []), 'Current mechanism angle is outside the valid motion range.'];
+                return;
+            }
+            if (!state.isValid) warnings[m.id] = [...(warnings[m.id] ?? []), 'Current mechanism angle is outside the valid motion range.'];
+            const key = `object:${m.targetSceneObjectId}`;
+            if (drivenTargets.has(key)) return;
+            drivenTargets.add(key);
+            preview = motionPreviewForSceneObject(project, m.targetSceneObjectId, generatedTarget ?? state.effector, preview);
+            return;
+        }
         if (!m.targetPartId || !project.parts[m.targetPartId]) return;
         const state = calculateLinkage(m, angle);
         const generatedTarget = pointOnGeneratedMechanismPath(m.generatedPath ?? [], angle);
@@ -582,4 +648,8 @@ export const motionPreviewForProject = (project: ProjectState, mechanisms: Mecha
 
 export const animatedPartsForProject = (project: ProjectState, mechanisms: MechanismConfig[], angle: number): Record<string, BodyPartLayer> => {
     return motionPreviewForProject(project, mechanisms, angle).parts;
+};
+
+export const animatedSceneObjectsForProject = (project: ProjectState, mechanisms: MechanismConfig[], angle: number): Record<string, SceneObject> => {
+    return motionPreviewForProject(project, mechanisms, angle).sceneObjects ?? {};
 };

@@ -270,7 +270,7 @@ const recommendationTargetAnchor = (
 
 const createRecommendedMechanism = (
   project: ProjectState,
-  selectedPart: BodyPartLayer,
+  selectedPart: BodyPartLayer | undefined,
   selectedPath: ProjectMotionPath,
   type: MechanismType,
   reason: string,
@@ -367,14 +367,13 @@ const createRecommendedMechanism = (
         : (smart.rodLength ?? base.rodLength),
     assemblyMode: type === "6bar" ? "open" : base.assemblyMode,
     phase: 0,
-    targetPartId: selectedPart.id,
+    targetPartId: selectedPart?.id,
+    targetSceneObjectId: selectedPath.sceneObjectId,
     targetPathId: selectedPath.id,
-    targetAnchorJointId: recommendationTargetAnchor(
-      project,
-      selectedPart,
-      selectedPath,
-    ),
-    activeVisualPartIds: [selectedPart.id],
+    targetAnchorJointId: selectedPart
+      ? recommendationTargetAnchor(project, selectedPart, selectedPath)
+      : undefined,
+    activeVisualPartIds: selectedPart ? [selectedPart.id] : [],
     source: "optimized",
     presetId: `recommendation-${type}`,
     recommendation: reason,
@@ -439,12 +438,13 @@ const readyMechanismFallbackForPath = (
       anchorX: anchor.x,
       anchorY: anchor.y,
       sceneAnchor: anchor,
-      targetPartId: path?.partId ?? mechanism.targetPartId,
+      targetPartId: path?.sceneObjectId ? undefined : (path?.partId ?? mechanism.targetPartId),
+      targetSceneObjectId: path?.sceneObjectId ?? mechanism.targetSceneObjectId,
       targetPathId: path?.id ?? mechanism.targetPathId,
       targetAnchorJointId:
-        mechanism.targetAnchorJointId ?? path?.targetAnchorJointId,
+        path?.sceneObjectId ? undefined : (mechanism.targetAnchorJointId ?? path?.targetAnchorJointId),
       activeVisualPartIds:
-        path?.partId || mechanism.targetPartId
+        !path?.sceneObjectId && (path?.partId || mechanism.targetPartId)
           ? [path?.partId ?? mechanism.targetPartId!]
           : (mechanism.activeVisualPartIds ?? []),
     }),
@@ -458,8 +458,9 @@ export const fitMechanismToTargetPath = (
   targetPathId?: string,
 ): MechanismConfig => {
   const path = targetPathId ? project.paths[targetPathId] : undefined;
-  const part = path ? project.parts[path.partId] : undefined;
-  if (!path || !part || path.points.length < 3)
+  const part = path && !path.sceneObjectId ? project.parts[path.partId] : undefined;
+  const object = path?.sceneObjectId ? project.sceneObjects[path.sceneObjectId] : undefined;
+  if (!path || (!part && !object) || path.points.length < 3)
     return snapMechanismAnchor(normalizeGearMeshMechanism(mechanism), project);
   const fitted = createRecommendedMechanism(
     project,
@@ -481,13 +482,16 @@ export const fitMechanismToTargetPath = (
       presetId: mechanism.presetId ?? fitted.presetId,
       recommendation: mechanism.recommendation ?? fitted.recommendation,
       warnings: mechanism.warnings ?? fitted.warnings,
-      targetPartId: path.partId,
+      targetPartId: path.sceneObjectId ? undefined : path.partId,
+      targetSceneObjectId: path.sceneObjectId,
       targetPathId: path.id,
       targetAnchorJointId:
-        mechanism.targetAnchorJointId ??
-        path.targetAnchorJointId ??
-        fitted.targetAnchorJointId,
-      activeVisualPartIds: [path.partId],
+        path.sceneObjectId
+          ? undefined
+          : (mechanism.targetAnchorJointId ??
+            path.targetAnchorJointId ??
+            fitted.targetAnchorJointId),
+      activeVisualPartIds: path.sceneObjectId ? [] : [path.partId],
     }),
     Number.isFinite(mechanism.anchorX) && Number.isFinite(mechanism.anchorY)
       ? { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 }
@@ -529,7 +533,7 @@ export const buildMechanismRecommendations = (
   selectedPart?: BodyPartLayer,
   selectedPath?: ProjectMotionPath,
 ): MechanismRecommendation[] => {
-  if (!selectedPart || !selectedPath || selectedPath.points.length < 3)
+  if (!selectedPath || (!selectedPart && !selectedPath.sceneObjectId) || selectedPath.points.length < 3)
     return [];
   const metrics = pathMetrics(selectedPath);
   const compact = Math.max(metrics.width, metrics.height) < 120;

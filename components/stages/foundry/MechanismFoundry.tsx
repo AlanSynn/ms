@@ -25,6 +25,7 @@ import type {
   Point,
   ProjectMotionPath,
   ProjectState,
+  SceneObject,
 } from "../../../types";
 import {
   calculateLinkage,
@@ -75,6 +76,7 @@ export const MechanismFoundry = ({
   foundry,
   setFoundry,
   selectedPart,
+  selectedSceneObject,
   selectedPath,
   goStage,
   onExport,
@@ -83,6 +85,7 @@ export const MechanismFoundry = ({
   foundry: MechanismConfig;
   setFoundry: (m: MechanismConfig) => void;
   selectedPart?: BodyPartLayer;
+  selectedSceneObject?: SceneObject;
   selectedPath?: ProjectMotionPath;
   goStage: (stage: AppStage) => void;
   onExport: (pkg: FoundryExportPackage) => void;
@@ -125,7 +128,7 @@ export const MechanismFoundry = ({
     handle: "B" | "C" | "D";
   } | null>(null);
   const targetReady = Boolean(
-    selectedPart &&
+    (selectedPart || selectedSceneObject) &&
     selectedPath &&
     selectedPath.enabled &&
     selectedPath.points.length >= 3,
@@ -133,6 +136,9 @@ export const MechanismFoundry = ({
   const rawLanding =
     manualAnchor ??
     selectedPath?.points[0] ??
+    (selectedSceneObject
+      ? selectedSceneObject.transform
+      : undefined) ??
     (selectedPart
       ? bodyPartPivotScene(selectedPart, project.skeleton)
       : { x: foundry.anchorX ?? 0, y: foundry.anchorY ?? 0 });
@@ -755,6 +761,7 @@ export const MechanismFoundry = ({
         loop: true,
       },
       targetPartId: selectedPart?.id,
+      targetSceneObjectId: selectedSceneObject?.id,
       targetPathId: selectedPath?.id,
       targetAnchorJointId: targetIkJointId,
       metadata: {

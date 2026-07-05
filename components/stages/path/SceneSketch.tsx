@@ -6,6 +6,7 @@ import type {
   ProjectAction,
   ProjectMotionPath,
   ProjectState,
+  SceneObject,
 } from "../../../types";
 import {
   boardGridLines,
@@ -64,12 +65,14 @@ export const SceneSketch = ({
     ? project.mechanisms.find(
         (m) =>
           m.targetPathId === selectedPath.id &&
-          m.targetPartId === selectedPath.partId,
+          (selectedPath.sceneObjectId
+            ? m.targetSceneObjectId === selectedPath.sceneObjectId
+            : m.targetPartId === selectedPath.partId),
       )
     : undefined;
   const requestedTargetJointId =
     pathMechanism?.targetAnchorJointId ?? selectedPath?.targetAnchorJointId;
-  const targetJointId = selectedPath
+  const targetJointId = selectedPath && !selectedPath.sceneObjectId
     ? preferredMotionJointId(
         project,
         selectedPath.partId,
@@ -86,6 +89,34 @@ export const SceneSketch = ({
       : undefined;
   const previewSkeleton = pathPreview?.skeleton ?? project.skeleton;
   const previewParts = pathPreview?.parts ?? {};
+  const previewSceneObjects = pathPreview?.sceneObjects ?? {};
+  const objectShape = (object: SceneObject) => {
+    const center = sceneToSvg(object.transform);
+    const scale = object.transform.scale || 1;
+    const width = object.bounds.width * scale;
+    const height = object.bounds.height * scale;
+    const x = center.x - width / 2;
+    const y = center.y - height / 2;
+    const selected = project.selectedSceneObjectId === object.id;
+    const common = {
+      fill: object.fillColor,
+      opacity: object.opacity,
+      stroke: selected ? "#7c3aed" : "#475569",
+      strokeWidth: selected ? 3 : 1.5,
+    };
+    if (object.shape === "star") {
+      const points = Array.from({ length: 10 }, (_, index) => {
+        const radius = (index % 2 === 0 ? Math.min(width, height) : Math.min(width, height) * 0.48) / 2;
+        const a = -Math.PI / 2 + (index * Math.PI) / 5;
+        return `${center.x + Math.cos(a) * radius},${center.y + Math.sin(a) * radius}`;
+      }).join(" ");
+      return <polygon points={points} {...common} />;
+    }
+    if (object.shape === "cloud") {
+      return <ellipse cx={center.x} cy={center.y} rx={width / 2} ry={height / 2.8} {...common} />;
+    }
+    return <rect x={x} y={y} width={width} height={height} rx={object.shape === "piggy-bank" ? 22 : 10} {...common} />;
+  };
   const sheetSvg = {
     x: SCENE_VIEW.width / 2 + sheet.x,
     y: SCENE_VIEW.height / 2 - sheet.y - sheet.height,
@@ -297,10 +328,26 @@ export const SceneSketch = ({
             />
           </React.Fragment>
         ))}
+      {project.sceneObjectOrder
+        .map((id) => previewSceneObjects[id] ?? project.sceneObjects[id])
+        .filter((object): object is SceneObject => Boolean(object?.visible))
+        .map((object) => (
+          <g
+            key={object.id}
+            data-canvas-interactive="true"
+            className={drawMode ? undefined : "cursor-pointer"}
+            onClick={(e) => {
+              e.stopPropagation();
+              dispatch({ type: "select_scene_object", objectId: object.id });
+            }}
+          >
+            {objectShape(object)}
+          </g>
+        ))}
       {previewSkeleton &&
         Object.values(previewSkeleton.joints).map((j) => {
           const p = sceneToSvg(j.position);
-          const pickable = Boolean(selectedPath && !pathLocked && !drawMode);
+          const pickable = Boolean(selectedPath && !selectedPath.sceneObjectId && !pathLocked && !drawMode);
           return (
             <g
               key={j.id}

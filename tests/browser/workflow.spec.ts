@@ -232,16 +232,36 @@ test('Character tab owns separate scene objects and later tabs only render them'
 
   await page.getByRole('button', { name: 'Path Editor', exact: true }).click();
   await expect(page.getByTestId('character-add-scene-object')).toHaveCount(0);
+  const pathTarget = page.getByLabel('Selected body part');
+  await expect(pathTarget).toContainText('Flying piggy bank');
+  await pathTarget.selectOption({ label: 'Flying piggy bank' });
+  const sceneObjectId = await pathTarget.evaluate((select: HTMLSelectElement) => select.value);
+  const sceneObjectPathId = `path-${sceneObjectId}`;
+  await page.getByRole('button', { name: 'Draw free path', exact: true }).click();
+  await expect(page.getByTestId('path-view-2d')).toHaveAttribute('aria-pressed', 'true');
+  const objectPathCanvas = page.getByTestId('path-canvas');
+  const objectPathBox = await objectPathCanvas.boundingBox();
+  expect(objectPathBox, 'object path canvas box').toBeTruthy();
+  await page.mouse.move(objectPathBox!.x + objectPathBox!.width * 0.42, objectPathBox!.y + objectPathBox!.height * 0.42);
+  await page.mouse.down();
+  await page.mouse.move(objectPathBox!.x + objectPathBox!.width * 0.5, objectPathBox!.y + objectPathBox!.height * 0.37, { steps: 4 });
+  await page.mouse.move(objectPathBox!.x + objectPathBox!.width * 0.58, objectPathBox!.y + objectPathBox!.height * 0.42, { steps: 4 });
+  await page.mouse.up();
+  await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
   await page.getByTestId('path-view-3d').click();
   const pathPuppet = page.getByTestId('path-three-puppet-state');
   await expect(pathPuppet).toHaveAttribute('data-scene-object-count', '1');
   await expect(pathPuppet).toHaveAttribute('data-three-scene-prop-count', '1');
+  await expect(pathPuppet).toHaveAttribute('data-three-selected-path-id', sceneObjectPathId);
   await expect(page.getByRole('button', { name: 'Add object', exact: true })).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Mechanism Design', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
   await page.getByRole('button', { name: 'Four-bar linkage', exact: true }).click();
   await expect(page.getByTestId('design-shared-foundry-preview')).toBeVisible();
+  await expect(page.getByLabel('Mechanism moving part')).toHaveValue(`object:${sceneObjectId}`);
+  await expect(page.getByLabel('Mechanism motion path')).toHaveValue(sceneObjectPathId);
+  await expect(page.getByTestId('design-shared-foundry-preview')).toHaveAttribute('data-design-animated-object-count', /[1-9]/);
   const designPuppet = page.getByTestId('design-context-puppet-state');
   await expect(designPuppet).toHaveAttribute('data-scene-object-count', '1');
   await expect(designPuppet).toHaveAttribute('data-three-scene-prop-count', '1');

@@ -10,7 +10,10 @@ import {
   FOUNDRY_MECHANISM_TYPES,
   MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY,
 } from "../../../utils/mechanismTemplates";
-import { fitMechanismSimulation } from "../../../utils/mechanismPreview";
+import {
+  createMechanismFitContext,
+  fitMechanismSimulationWithContext,
+} from "../../../utils/mechanismPreview";
 import { createDefaultMechanism } from "../../../utils/project";
 import { StageLeftSummary } from "../stageLayout";
 import { MechanismLinkagePreview } from "./MechanismLinkagePreview";
@@ -87,15 +90,22 @@ export const FoundryWorkflowPanel = ({
         {FOUNDRY_MECHANISM_TYPES.map((type) => {
           const item = MECHANISM_LIBRARY[type];
           const cardMechanism = {
-            ...createDefaultMechanism(type, `foundry-card-${type}`),
+            ...(foundry.type === type
+              ? foundry
+              : createDefaultMechanism(type, `foundry-card-${type}`)),
+            id: `foundry-card-${type}`,
             color: foundry.color,
           };
-          const cardSimulation = fitMechanismSimulation(
+          const cardContext = createMechanismFitContext(
             cardMechanism,
-            foundryPhase,
             180,
             96,
-            48,
+            96,
+          );
+          const cardSimulation = fitMechanismSimulationWithContext(
+            cardMechanism,
+            foundryPhase,
+            cardContext,
           );
           return (
             <button
@@ -124,6 +134,14 @@ export const FoundryWorkflowPanel = ({
                   kit={project.settings.physicalKit}
                   testId={`foundry-mini-linkage-${type}`}
                   compact
+                />
+                <circle
+                  cx={cardSimulation.state.effector.x}
+                  cy={cardSimulation.state.effector.y}
+                  r="4"
+                  fill="#7c3aed"
+                  stroke="white"
+                  strokeWidth="1.5"
                 />
               </svg>
               <div className="font-bold text-slate-800">{item.label}</div>

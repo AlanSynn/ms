@@ -195,16 +195,31 @@ export const validateForFabrication = (project: ProjectState) => {
         ];
         if (corners.some(p => !insideSheet(p))) add('warning', `${part.id}: visible part extends outside sheet bounds.`, { partId, recoveryStage: 'path', recoveryAction: 'Move part inside sheet' });
     });
+    project.sceneObjectOrder.forEach(objectId => {
+        const object = project.sceneObjects[objectId];
+        if (!object?.visible) return;
+        const halfWidth = (object.bounds.width * object.transform.scale) / 2;
+        const halfHeight = (object.bounds.height * object.transform.scale) / 2;
+        const corners = [
+            { x: object.transform.x - halfWidth, y: object.transform.y - halfHeight },
+            { x: object.transform.x + halfWidth, y: object.transform.y - halfHeight },
+            { x: object.transform.x - halfWidth, y: object.transform.y + halfHeight },
+            { x: object.transform.x + halfWidth, y: object.transform.y + halfHeight }
+        ];
+        if (corners.some(p => !insideSheet(p))) add('warning', `${object.id}: visible object extends outside sheet bounds.`, { recoveryStage: 'character', recoveryAction: 'Move object inside sheet' });
+    });
     activeMechanisms.forEach(m => {
         validateMechanismPreviewReadiness(m).forEach(message => add('error', `${m.id}: ${message}`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Choose ready template' }));
         (bindingWarnings[m.id] ?? []).forEach(message => add('error', `${m.id}: ${message}`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Rebind mechanism target' }));
         if (!m.id) add('error', 'Mechanism missing per-instance id.', { recoveryStage: 'design', recoveryAction: 'Select or recreate mechanism' });
-        if (!m.targetPartId || !m.targetPathId) add('error', `${m.id}: choose target + path.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Choose target + path' });
+        if ((!m.targetPartId && !m.targetSceneObjectId) || !m.targetPathId) add('error', `${m.id}: choose target + path.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Choose target + path' });
         if (m.targetPartId && !project.parts[m.targetPartId]) add('error', `${m.id}: missing target part ${m.targetPartId}.`, { mechanismId: m.id, partId: m.targetPartId, recoveryStage: 'design', recoveryAction: 'Choose existing part' });
+        if (m.targetSceneObjectId && !project.sceneObjects[m.targetSceneObjectId]) add('error', `${m.id}: missing target object ${m.targetSceneObjectId}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Choose existing object' });
         if (m.targetPathId) {
             const path = project.paths[m.targetPathId];
             if (!path) add('error', `${m.id}: missing path ${m.targetPathId}.`, { mechanismId: m.id, pathId: m.targetPathId, recoveryStage: 'path', recoveryAction: 'Choose valid path' });
-            else if (m.targetPartId && path.partId !== m.targetPartId) add('error', `${m.id}: path belongs to ${path.partId}.`, { mechanismId: m.id, pathId: m.targetPathId, partId: m.targetPartId, recoveryStage: 'design', recoveryAction: 'Rebind target path' });
+            else if (m.targetSceneObjectId && path.sceneObjectId !== m.targetSceneObjectId) add('error', `${m.id}: path belongs to ${path.sceneObjectId ?? path.partId}.`, { mechanismId: m.id, pathId: m.targetPathId, recoveryStage: 'design', recoveryAction: 'Rebind target path' });
+            else if (m.targetPartId && (path.sceneObjectId || path.partId !== m.targetPartId)) add('error', `${m.id}: path belongs to ${path.sceneObjectId ?? path.partId}.`, { mechanismId: m.id, pathId: m.targetPathId, partId: m.targetPartId, recoveryStage: 'design', recoveryAction: 'Rebind target path' });
         }
         const physicalNumbers = [m.crankLength, m.couplerLength, m.groundLength, m.rockerLength, m.sliderOffset, m.couplerPointDist, m.couplerPointAngle];
         if (m.type === '5bar' || m.type === '6bar' || m.type === 'piston') physicalNumbers.push(m.rodLength ?? Number.NaN);
@@ -260,14 +275,22 @@ export const createFabricationPackage = (project: ProjectState): FabricationPack
         createdAt: new Date().toISOString(),
         profile: project.settings.physicalKit,
         validationIssues: validation.issues,
-        sceneSnapshot: { metadata: project.metadata, paths: project.paths, mechanisms: project.mechanisms },
+        sceneSnapshot: {
+            metadata: project.metadata,
+            paths: project.paths,
+            mechanisms: project.mechanisms,
+            sceneObjects: project.sceneObjects,
+            sceneObjectOrder: project.sceneObjectOrder
+        },
         recipes: recipes.map(r => ({
             mechanismId: r.mechanismId,
             type: r.type,
             targetPartId: r.targetPartId,
+            targetSceneObjectId: r.targetSceneObjectId,
             targetPathId: r.targetPathId,
             targetAnchorJointId: r.targetAnchorJointId,
             targetPartName: r.targetPartName,
+            targetSceneObjectName: r.targetSceneObjectName,
             targetPathPointCount: r.targetPathPointCount,
             boardCoordinate: r.boardCoordinate,
             board: r.board,
@@ -288,6 +311,8 @@ export const createFabricationPackage = (project: ProjectState): FabricationPack
             metadata: project.metadata,
             parts: project.parts,
             partOrder: project.partOrder,
+            sceneObjects: project.sceneObjects,
+            sceneObjectOrder: project.sceneObjectOrder,
             skeleton: project.skeleton,
             paths: project.paths,
             mechanisms: project.mechanisms,

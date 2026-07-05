@@ -4,6 +4,7 @@ import { motionChainOptionLabel, type MotionChainDescriptor } from "../../../uti
 interface PathInspectorPanelProps {
   project: ProjectState;
   selectedPartId?: string;
+  selectedSceneObjectId?: string;
   selectedPartName?: string;
   selectedPath?: ProjectMotionPath;
   pointCount: number;
@@ -24,6 +25,7 @@ interface PathInspectorPanelProps {
 export const PathInspectorPanel = ({
   project,
   selectedPartId,
+  selectedSceneObjectId,
   selectedPartName,
   selectedPath,
   selectedPoint,
@@ -42,7 +44,7 @@ export const PathInspectorPanel = ({
   <div className="path-inspector stage-pane-stack">
     <div>
       <div className="section-title">Selection</div>
-      <h3>{selectedPartName ?? "No body part selected"}</h3>
+      <h3>{selectedPartName ?? "No target selected"}</h3>
     </div>
     {selectedPath && (
       <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
@@ -57,7 +59,16 @@ export const PathInspectorPanel = ({
     )}
     <div className="rig-helper" data-testid="quick-rig-helper">
       <h4 className="section-title">Motion</h4>
-      <h3>Move part</h3>
+      <h3>{selectedSceneObjectId ? "Move object" : "Move part"}</h3>
+      {selectedSceneObjectId && (
+        <div
+          className="rounded-2xl border border-violet-100 bg-violet-50/70 p-3 text-sm text-slate-600"
+          data-testid="object-path-summary"
+        >
+          <div className="font-bold text-slate-800">Object path</div>
+          <div>Drag the curve.</div>
+        </div>
+      )}
       {selectedPartId && (
         <label
           className={`block text-xs font-black uppercase tracking-wider text-slate-500 ${pathLocked || !selectedPath ? "opacity-50" : ""}`}
@@ -124,6 +135,7 @@ export const PathInspectorPanel = ({
           </div>
         </div>
       )}
+      {!selectedSceneObjectId && (
       <div className="fold-picker" data-testid="fold-direction-control">
         <div>
           <div className="text-xs font-black uppercase tracking-wider text-slate-500">
@@ -156,6 +168,7 @@ export const PathInspectorPanel = ({
           </button>
         </div>
       </div>
+      )}
     </div>
   </div>
 );

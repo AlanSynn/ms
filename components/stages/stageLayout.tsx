@@ -33,7 +33,7 @@ const EDITOR_PANE_CONTRACT = {
 const classroomChecklistFor = (project: ProjectState) => {
     const hasCharacter = project.partOrder.length > 0;
     const hasPath = Object.values(project.paths).some(path => path.enabled && path.points.length >= 3);
-    const eligibleMechanisms = project.mechanisms.filter(mechanism => mechanism.visible && mechanism.enabled !== false && mechanism.targetPartId && mechanism.targetPathId);
+    const eligibleMechanisms = project.mechanisms.filter(mechanism => mechanism.visible && mechanism.enabled !== false && (mechanism.targetPartId || mechanism.targetSceneObjectId) && mechanism.targetPathId);
     const hasMechanism = eligibleMechanisms.length > 0;
     const hasTestableFit = eligibleMechanisms.some(mechanism => (mechanism.generatedPath?.length ?? 0) >= 3);
     const hasBlueprint = Boolean(project.lastExport);

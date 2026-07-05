@@ -179,12 +179,17 @@ export const DesignFoundryPreview = ({
     [angle, designMechanism, project],
   );
   const designContextAnimatedParts = designMotionPreview?.parts ?? {};
+  const designContextAnimatedSceneObjects =
+    designMotionPreview?.sceneObjects ?? {};
   const designContextPathId = designContextPaths[0]?.id;
   const generatedTarget = useMemo(() => {
     if (!designMechanism?.generatedPath?.length) return undefined;
     const generatedPath: ProjectMotionPath = {
       id: `${designMechanism.id}-generated-path`,
-      partId: designMechanism.targetPartId ?? "",
+      partId: designMechanism.targetSceneObjectId
+        ? ""
+        : (designMechanism.targetPartId ?? ""),
+      sceneObjectId: designMechanism.targetSceneObjectId,
       targetAnchorJointId: designMechanism.targetAnchorJointId,
       points: designMechanism.generatedPath,
       duration: 1,
@@ -365,6 +370,9 @@ export const DesignFoundryPreview = ({
       data-design-animated-part-count={
         Object.keys(designContextAnimatedParts).length
       }
+      data-design-animated-object-count={
+        Object.keys(designContextAnimatedSceneObjects).length
+      }
       data-design-raw-effector-distance={
         rawEffectorDistance === undefined ? "" : rawEffectorDistance.toFixed(3)
       }
@@ -493,6 +501,7 @@ export const DesignFoundryPreview = ({
             <ThreePuppetPreview
               project={project}
               animatedParts={designContextAnimatedParts}
+              animatedSceneObjects={designContextAnimatedSceneObjects}
               skeleton={project.skeleton}
               mechanisms={[]}
               paths={showUserPathPreview ? designContextPaths : []}

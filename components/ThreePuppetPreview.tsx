@@ -632,9 +632,10 @@ const mechanismGeometrySignature = (mechanisms: MechanismConfig[]) => mechanisms
   mechanism.showOutputGear
 ].join(':')).join('|');
 
-export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mechanisms, paths, selectedPathId, angle = 0, viewport, setViewport, inputMode = 'always', testId = 'three-puppet', cameraPresets = PUPPET_CAMERA_PRESETS, showToolbar = true, initialLayers, assemblyOverlay }: {
+export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneObjects = {}, skeleton, mechanisms, paths, selectedPathId, angle = 0, viewport, setViewport, inputMode = 'always', testId = 'three-puppet', cameraPresets = PUPPET_CAMERA_PRESETS, showToolbar = true, initialLayers, assemblyOverlay }: {
   project?: ProjectState;
   animatedParts?: Record<string, BodyPartLayer>;
+  animatedSceneObjects?: Record<string, SceneObject>;
   skeleton?: StandardSkeleton | null;
   mechanisms?: MechanismConfig[];
   paths?: ProjectMotionPath[];
@@ -705,8 +706,8 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, skeleton, mech
     .filter((part): part is BodyPartLayer => Boolean(part?.visible)), [project?.partOrder, project?.parts]);
   const geometryParts = topologyParts.length ? topologyParts : parts;
   const sceneObjects = useMemo(() => (project?.sceneObjectOrder ?? [])
-    .map(id => project?.sceneObjects[id])
-    .filter((object): object is SceneObject => Boolean(object?.visible)), [project?.sceneObjectOrder, project?.sceneObjects]);
+    .map(id => animatedSceneObjects[id] ?? project?.sceneObjects[id])
+    .filter((object): object is SceneObject => Boolean(object?.visible)), [animatedSceneObjects, project?.sceneObjectOrder, project?.sceneObjects]);
   const joints = useMemo(() => Object.values(activeSkeleton?.joints ?? {}), [activeSkeleton]);
   const bones = useMemo(() => activeSkeleton?.bones ?? [], [activeSkeleton]);
   const mechanismsToRender = useMemo(() => (mechanisms ?? project?.mechanisms ?? [])

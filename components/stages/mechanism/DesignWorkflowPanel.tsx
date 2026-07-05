@@ -71,7 +71,12 @@ export const DesignWorkflowPanel = ({
       path && path.points.length >= 3
         ? fitMechanismToTargetPath(
             project,
-            { ...base, targetPathId: path.id, targetPartId: path.partId },
+            {
+              ...base,
+              targetPathId: path.id,
+              targetPartId: path.sceneObjectId ? undefined : path.partId,
+              targetSceneObjectId: path.sceneObjectId,
+            },
             path.id,
           )
         : mechanismWithGeneratedPath(base);

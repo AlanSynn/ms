@@ -33,6 +33,7 @@ import { fabricablePartOutlinePoints, partLandmarkJointIds, partLandmarkLocalPoi
 import { MECHANISM_FEATURE_REGISTRY, mechanismFeature, validateMechanismFeatureRegistry, type MechanismDragHandle } from '../utils/mechanismFeatureRegistry';
 import { buildMechanismSnapshot, buildMechanismSnapshots } from '../utils/mechanismSnapshot';
 import { createMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext } from '../utils/mechanismPreview';
+import { buildMechanismRecommendations } from '../utils/mechanismRecommendations';
 import { WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
 import { cachedThreeResource, clearThreeGroup, disposeThreeObjectGraph, setRendererPixelRatioCap } from '../utils/threeResourceKit';
 import { APP_COMMANDS, APP_MENU_GROUPS, commandById, commandIdForKeyboardEvent, validateAppCommandRegistry } from '../utils/appCommands';
@@ -49,7 +50,7 @@ import { CLASSROOM_ASSESSMENT_KEYS, CLASSROOM_COPY, classroomAssessmentFor, clas
 import { MECHANISM_TYPES as SANITIZE_MECHANISM_TYPES, sanitizeMechanismRuntime } from '../utils/sanitize';
 import { generateSmartConfig, mutateConfig, OPTIMIZER_MECHANISM_TYPES } from '../utils/optimizer';
 import { isBoardFixedCoordRole, normalizeGearLinkageToReference, normalizeGearTrainToFabrication, normalizeMechanismToFabricationSet, normalizeMechanismToReference, REFERENCE_DEFAULTS, REFERENCE_EXPORT_READY_TYPES, REFERENCE_FOUNDRY_TYPES, REFERENCE_MECHANISM_RECIPES, referenceRecipeForType } from '../utils/mechanismReference';
-import type { AppStage, BodyPartLayer, FoundryExportPackage, MechanismConfig, MechanismType, Point, ProjectAction, ProjectState } from '../types';
+import type { AppStage, BodyPartLayer, FoundryExportPackage, MechanismConfig, MechanismType, Point, ProjectAction, ProjectState, SceneObject } from '../types';
 
 projectSelfCheck();
 
@@ -117,6 +118,7 @@ type MechanismActionHarness = ReturnType<typeof useAppMechanismActions>;
 const renderMechanismActionHarness = (overrides: {
   project?: ProjectState;
   selectedPart?: BodyPartLayer;
+  selectedSceneObject?: SceneObject;
   selectedPath?: ProjectState['paths'][string];
   selectedMechanism?: MechanismConfig;
   foundry?: MechanismConfig;
@@ -140,6 +142,7 @@ const renderMechanismActionHarness = (overrides: {
       project,
       dispatch: (action) => dispatches.push(action),
       selectedPart,
+      selectedSceneObject: overrides.selectedSceneObject,
       selectedPath,
       selectedMechanism,
       foundry: overrides.foundry ?? createDefaultMechanism('4bar', 'foundry-preview-contract'),
@@ -1222,6 +1225,42 @@ const snapshotTargetChanged = buildMechanismSnapshot({
   mechanisms: sample.mechanisms.map(mechanism => mechanism.id === sampleMechanismId ? { ...mechanism, targetAnchorJointId: 'right_elbow' } : mechanism)
 }, sampleMechanismId);
 assert(snapshotTargetChanged && snapshotTargetChanged.fingerprint !== snapshotA.fingerprint, 'snapshot fingerprint changes when target ids change');
+const snapshotObjectProjectBase = applyProjectAction(sample, {
+  type: 'upsert_scene_object',
+  object: createDefaultSceneObject('piggy-bank', 'snapshot-object')
+});
+const snapshotObjectProjectWithPath = applyProjectAction(snapshotObjectProjectBase, {
+  type: 'upsert_path',
+  path: {
+    id: 'path-snapshot-object',
+    partId: '',
+    sceneObjectId: 'snapshot-object',
+    points: [{ x: 40, y: 50 }, { x: 70, y: 75 }, { x: 100, y: 50 }],
+    duration: 1000,
+    closed: true,
+    enabled: true,
+    visible: true,
+    source: 'drawn',
+    warnings: []
+  }
+});
+const snapshotObjectProject = applyProjectAction(snapshotObjectProjectWithPath, {
+  type: 'upsert_mechanism',
+  mechanism: {
+    ...createDefaultMechanism('4bar', 'snapshot-object-mechanism'),
+    targetSceneObjectId: 'snapshot-object',
+    targetPathId: 'path-snapshot-object',
+    anchorX: 0,
+    anchorY: 0,
+    transform: { x: 0, y: 0, rotation: 0, scale: 1 },
+    sceneAnchor: { x: 0, y: 0 }
+  }
+});
+const objectSnapshot = buildMechanismSnapshot(snapshotObjectProject, 'snapshot-object-mechanism');
+assert.equal(objectSnapshot?.sourceIds.targetSceneObjectId, 'snapshot-object', 'snapshot source ids preserve target scene object');
+assert.equal(objectSnapshot?.mechanism.targetSceneObjectId, 'snapshot-object', 'snapshot mechanism preserves target scene object');
+assert.equal(objectSnapshot?.mechanism.targetPartId, undefined, 'snapshot mechanism does not invent a body-part target for object motion');
+assert.equal(objectSnapshot?.targetPath?.sceneObjectId, 'snapshot-object', 'snapshot target path preserves scene object ownership');
 if (snapshotA.sourceIds.targetPathId) {
   const pathId = snapshotA.sourceIds.targetPathId;
   const snapshotPathChanged = buildMechanismSnapshot({
@@ -2915,6 +2954,11 @@ assert(mechanismPreviewText.includes('sweepBounds') && foundry3dText.includes('d
 assert(foundry3dText.includes('data-three-static-grid-mode=\"persistent-scene-layer\"'), 'Foundry grid and plane live in a persistent scene layer, not the per-frame dynamic group');
 assert(mechanismPreviewText.includes('export const fitMechanismSimulation'), 'Foundry fitting/sweep simulation lives in the mechanism preview utility, not as stage-local UI code');
 assert(mechanismPreviewText.includes('createMechanismFitContext') && foundry3dText.includes('createMechanismFitContext(landedFoundry, 360, 240, 96)'), 'Foundry caches phase-invariant fit bounds instead of resampling the sweep every animation tick');
+const foundryCardFitContextContract =
+  foundryWorkflowPanelText.includes('const cardContext = createMechanismFitContext(') &&
+  foundryWorkflowPanelText.includes('fitMechanismSimulationWithContext(') &&
+  !foundryWorkflowPanelText.includes('fitMechanismSimulation(cardMechanism');
+assert.equal(foundryCardFitContextContract, true, 'Foundry card previews use the shared fit context path instead of direct per-card resampling');
 assert(foundry3dText.includes('buildFoundryPhysicsOverlay') && physicsSessionText.includes('export const buildFoundryPhysicsOverlay'), 'Foundry force/velocity/constraint overlay math lives in PhysicsSession, not the React stage');
 assert(foundry3dText.includes('const range = useMemo(') && foundry3dText.includes('() => sampleFeasibleRange(landedFoundry)') && foundry3dText.includes('[landedFoundry]'), 'Foundry feasible-range sampling is memoized by mechanism, not re-run on every animation render');
 assert(viewportText.includes('WEBGL_PIXEL_RATIO_CAP') && foundry3dText.includes('WEBGL_PIXEL_RATIO_CAP') && threePreviewText.includes('WEBGL_PIXEL_RATIO_CAP'), 'WebGL renderer pixel ratio cap is shared across Foundry and puppet previews');
@@ -3952,11 +3996,91 @@ const movedSceneObject = applyProjectAction(addedSceneObject, { type: 'update_sc
 assert.equal(movedSceneObject.sceneObjects['object-piggy'].transform.x, 144, 'scene object transform edits stay serializable');
 const roundTripSceneObject = loadProjectSnapshot(JSON.parse(serializeProject(movedSceneObject)));
 assert.equal(roundTripSceneObject.sceneObjects['object-piggy'].shape, 'piggy-bank', 'scene object snapshots round-trip through persistence');
+const objectOwnedPathProject = applyProjectAction(roundTripSceneObject, {
+  type: 'upsert_path',
+  path: {
+    id: 'path-object-piggy',
+    partId: '',
+    sceneObjectId: 'object-piggy',
+    points: [{ x: 80, y: 90 }, { x: 120, y: 110 }, { x: 160, y: 90 }],
+    duration: 1000,
+    closed: true,
+    enabled: true,
+    visible: true,
+    source: 'drawn',
+    warnings: []
+  }
+});
+assert.equal(objectOwnedPathProject.paths['path-object-piggy'].sceneObjectId, 'object-piggy', 'scene objects can own editable motion paths');
+assert.equal(objectOwnedPathProject.paths['path-object-piggy'].partId, '', 'scene-object paths do not pretend to belong to a body part');
+assert.equal(objectOwnedPathProject.selectedPathId, 'path-object-piggy', 'upserting an object path selects that path');
+const objectPathPreview = motionPreviewForPath(objectOwnedPathProject, objectOwnedPathProject.paths['path-object-piggy'], 0);
+assert.equal(objectPathPreview.sceneObjects?.['object-piggy'].transform.x, 80, 'object-owned path preview moves the scene object to the path target');
+assert.equal(objectPathPreview.sceneObjects?.['object-piggy'].transform.y, 90, 'object-owned path preview moves the scene object y position');
+const objectPathMechanismProject = applyProjectAction(objectOwnedPathProject, {
+  type: 'upsert_mechanism',
+  mechanism: {
+    ...createDefaultMechanism('4bar', 'object-path-driver'),
+    targetPartId: 'right_arm_lower',
+    targetSceneObjectId: 'object-piggy',
+    targetPathId: 'path-object-piggy',
+    targetAnchorJointId: 'right_hand',
+    anchorX: 0,
+    anchorY: 0,
+    transform: { x: 0, y: 0, rotation: 0, scale: 1 },
+    sceneAnchor: { x: 0, y: 0 }
+  }
+});
+const objectPathMechanism = objectPathMechanismProject.mechanisms.find(m => m.id === 'object-path-driver')!;
+assert.equal(objectPathMechanism.targetSceneObjectId, 'object-piggy', 'mechanism target resolves to the scene object when its path is object-owned');
+assert.equal(objectPathMechanism.targetPartId, undefined, 'object-target mechanisms clear stale body-part targets');
+assert.equal(objectPathMechanism.targetAnchorJointId, undefined, 'object-target mechanisms do not keep stale skeleton handles');
+assert.deepEqual(mechanismBindingWarnings(objectPathMechanismProject, [objectPathMechanism]), {}, 'object-target mechanism accepts a matching object-owned path');
+assert(buildMechanismRecommendations(objectOwnedPathProject, undefined, objectOwnedPathProject.paths['path-object-piggy']).length > 0, 'mechanism recommendations support object-owned paths without a selected body part');
+const objectGeneratedPathSentinel = [{ x: 777, y: 888 }, { x: 779, y: 886 }, { x: 775, y: 884 }];
+const objectPathSentinelProject: ProjectState = {
+  ...objectPathMechanismProject,
+  mechanisms: objectPathMechanismProject.mechanisms.map(m =>
+    m.id === 'object-path-driver'
+      ? { ...m, foundryExport: undefined, generatedPath: objectGeneratedPathSentinel }
+      : m
+  )
+};
+const deletedObjectPathProject = applyProjectAction(objectPathMechanismProject, { type: 'delete_scene_object', objectId: 'object-piggy' });
+assert(!deletedObjectPathProject.paths['path-object-piggy'], 'deleting a scene object removes its owned paths');
+assert.equal(deletedObjectPathProject.mechanisms.find(m => m.id === 'object-path-driver')?.targetSceneObjectId, undefined, 'deleting a scene object detaches object-target mechanisms');
+const deletedObjectPathSentinelProject = applyProjectAction(objectPathSentinelProject, { type: 'delete_scene_object', objectId: 'object-piggy' });
+assert.deepEqual(deletedObjectPathSentinelProject.mechanisms.find(m => m.id === 'object-path-driver')?.generatedPath, objectGeneratedPathSentinel, 'detaching an object target preserves fitted generatedPath samples for Design recovery');
+const objectPathMetadataProject = applyProjectAction(objectPathSentinelProject, {
+  type: 'upsert_path',
+  path: { ...objectPathSentinelProject.paths['path-object-piggy'], visible: false }
+});
+assert.deepEqual(objectPathMetadataProject.mechanisms.find(m => m.id === 'object-path-driver')?.generatedPath, objectGeneratedPathSentinel, 'metadata-only object-path edits preserve fitted generatedPath samples');
+const objectPathGeometryProject = applyProjectAction(objectPathSentinelProject, {
+  type: 'upsert_path',
+  path: {
+    ...objectPathSentinelProject.paths['path-object-piggy'],
+    points: objectPathSentinelProject.paths['path-object-piggy'].points.map(point => ({ x: point.x + 500, y: point.y })),
+  }
+});
+assert.notDeepEqual(objectPathGeometryProject.mechanisms.find(m => m.id === 'object-path-driver')?.generatedPath, objectGeneratedPathSentinel, 'object-path geometry edits invalidate stale fitted generatedPath samples');
 const deletedSceneObject = applyProjectAction(roundTripSceneObject, { type: 'delete_scene_object', objectId: 'object-piggy' });
 assert(!deletedSceneObject.sceneObjects['object-piggy'], 'scene object delete removes the prop without touching character parts');
 const deletedPathProject = applyProjectAction(sample, { type: 'delete_path', pathId: 'path-right-arm' });
 assert(!deletedPathProject.paths['path-right-arm'], 'path editor delete removes path data instead of leaving an empty path');
 assert.equal(deletedPathProject.mechanisms[0].targetPathId, undefined, 'deleting a path detaches mechanisms from stale targetPathId');
+const partPathSentinelProject = { ...sample, mechanisms: [{ ...sample.mechanisms[0], generatedPath: objectGeneratedPathSentinel }] };
+assert.deepEqual(applyProjectAction(partPathSentinelProject, { type: 'delete_path', pathId: 'path-right-arm' }).mechanisms[0].generatedPath, objectGeneratedPathSentinel, 'detaching a part path preserves fitted generatedPath samples');
+assert.deepEqual(
+  applyProjectAction(partPathSentinelProject, { type: 'upsert_path', path: { ...partPathSentinelProject.paths['path-right-arm'], visible: false } }).mechanisms[0].generatedPath,
+  objectGeneratedPathSentinel,
+  'metadata-only part-path edits preserve fitted generatedPath samples'
+);
+assert.notDeepEqual(
+  applyProjectAction(partPathSentinelProject, { type: 'upsert_path', path: { ...partPathSentinelProject.paths['path-right-arm'], points: partPathSentinelProject.paths['path-right-arm'].points.map(point => ({ x: point.x + 500, y: point.y })) } }).mechanisms[0].generatedPath,
+  objectGeneratedPathSentinel,
+  'part-path geometry edits invalidate stale fitted generatedPath samples'
+);
 assert.equal(sample.settings.timingProfile, 'linear', 'options include a persisted timing profile');
 assert.equal(sample.settings.theme, 'light', 'settings default to the light novice UI theme');
 assert.equal(sample.settings.performancePreset, 'balanced', 'settings default includes performance preset');
@@ -4044,6 +4168,14 @@ const simulationOnlyOffGridProject = { ...offGridProject, settings: { ...sample.
 assert(validateForFabrication(simulationOnlyOffGridProject).warnings.some(e => e.includes('off grid')), 'simulation-only mode downgrades board snap issues to warnings');
 const recipeWithPath = createFabricationPackage(sample).recipes[0];
 assert.equal(recipeWithPath.targetPathId, 'path-right-arm', 'fabrication recipe preserves target path metadata');
+const objectRecipePackage = createFabricationPackage(objectPathMechanismProject);
+const objectRecipe = objectRecipePackage.recipes.find(recipe => recipe.mechanismId === 'object-path-driver')!;
+assert.equal(objectRecipe.targetSceneObjectId, 'object-piggy', 'fabrication recipe preserves target scene object id');
+assert.equal(objectRecipe.targetSceneObjectName, 'Flying piggy bank', 'fabrication recipe preserves target scene object name');
+assert.equal(objectRecipe.targetPathId, 'path-object-piggy', 'fabrication recipe preserves object-owned target path id');
+assert.equal(objectRecipe.targetPathPointCount, 3, 'fabrication recipe counts object-owned path points');
+assert(objectRecipePackage.sceneSnapshot.sceneObjects['object-piggy'], 'fabrication package snapshot includes scene objects');
+assert.equal(objectRecipePackage.sceneSnapshot.paths['path-object-piggy'].sceneObjectId, 'object-piggy', 'fabrication package snapshot preserves object path ownership');
 assert(recipeWithPath.sceneAnchor && 'x' in recipeWithPath.sceneAnchor, 'fabrication recipe includes explicit scene anchor');
 const sampleAssemblyGuideHtml = createFabricationPackage(sample).assemblyGuideHtml;
 assert(sampleAssemblyGuideHtml.includes('assembly guide'), 'fabrication package includes printable assembly guide');
@@ -4213,6 +4345,13 @@ const foundryUpsert = applyProjectAction(sample, {
 });
 assert.equal(foundryUpsert.mechanisms.find(m => m.id === 'foundry-upsert')?.generatedPath?.length, foundryPath.length, 'upserting foundry export preserves package path');
 assert.equal(foundryUpsert.mechanisms.find(m => m.id === 'foundry-upsert')?.foundryExport?.metadata.selectedPreset, 'balanced', 'foundry export preserves preset metadata');
+const generatedPathSentinel = [{ x: 12345, y: 67890 }, { x: 12365, y: 67880 }, { x: 12330, y: 67875 }];
+const generatedPathSelectionProject = applyProjectAction(sample, {
+  type: 'set_mechanisms',
+  mechanisms: [{ ...sample.mechanisms[0], id: 'selection-generated-path', foundryExport: undefined, generatedPath: generatedPathSentinel }],
+  selectedMechanismId: 'selection-generated-path'
+});
+assert.deepEqual(generatedPathSelectionProject.mechanisms[0].generatedPath, generatedPathSentinel, 'selecting a mechanism preserves stored fitted generated paths even without Foundry export metadata');
 const anchorOverride = applyProjectAction(sample, { type: 'upsert_mechanism', mechanism: { ...sample.mechanisms[0], targetAnchorJointId: 'right_elbow' } });
 assert.equal(anchorOverride.mechanisms[0].targetAnchorJointId, 'right_elbow', 'mechanism target anchor override survives reducer reconciliation');
 const lockedPartProject = { ...sample, parts: { ...sample.parts, right_arm_lower: { ...sample.parts.right_arm_lower, locked: true } } };
@@ -4388,6 +4527,50 @@ assert(Math.hypot((generatedPathDrivenPreview.skeleton?.joints.right_hand.positi
 assert.notEqual(animated.right_arm_upper.transform.rotation, drivenProject.parts.right_arm_upper.transform.rotation, 'IK preview rotates the upper arm instead of leaving the parent component static');
 assert.notEqual(animated.right_arm_lower.transform.rotation, drivenProject.parts.right_arm_lower.transform.rotation, 'IK preview rotates the limb instead of only offsetting it');
 assert(Math.hypot(bodyPartPivotScene(animated.right_hand_part, mechanismPreview.skeleton).x - (mechanismPreview.skeleton?.joints.right_hand.position.x ?? 0), bodyPartPivotScene(animated.right_hand_part, mechanismPreview.skeleton).y - (mechanismPreview.skeleton?.joints.right_hand.position.y ?? 0)) < 1e-9, 'descendant part anchor follows animated skeleton');
+const objectDrivenStart = motionPreviewForProject(objectPathMechanismProject, [objectPathMechanism], 0);
+const objectDrivenQuarter = motionPreviewForProject(objectPathMechanismProject, [objectPathMechanism], Math.PI / 2);
+assert(objectDrivenStart.sceneObjects?.['object-piggy'], 'mechanism preview returns animated scene-object state');
+assert.equal(Object.keys(objectDrivenStart.parts).length, 0, 'object-target mechanism preview does not animate unrelated body parts');
+assert.notDeepEqual(
+  objectDrivenStart.sceneObjects?.['object-piggy'].transform,
+  objectDrivenQuarter.sceneObjects?.['object-piggy'].transform,
+  'scrubbing mechanism preview animates the target scene object'
+);
+const mixedObjectFirst = motionPreviewForProject(
+  { ...objectPathMechanismProject, mechanisms: [objectPathMechanism, generatedPathDrivenMechanism] },
+  [objectPathMechanism, generatedPathDrivenMechanism],
+  0,
+);
+assert(mixedObjectFirst.sceneObjects?.['object-piggy'], 'mixed object + character preview keeps object motion when a part mechanism runs after it');
+assert(mixedObjectFirst.parts.right_arm_lower, 'mixed object + character preview also keeps the character mechanism when object motion runs first');
+const mixedPartFirst = motionPreviewForProject(
+  { ...objectPathMechanismProject, mechanisms: [generatedPathDrivenMechanism, objectPathMechanism] },
+  [generatedPathDrivenMechanism, objectPathMechanism],
+  0,
+);
+assert(mixedPartFirst.parts.right_arm_lower, 'mixed part + object preview keeps character motion when an object mechanism runs after it');
+assert(mixedPartFirst.sceneObjects?.['object-piggy'], 'mixed part + object preview also keeps object motion when the part mechanism runs first');
+const objectToggleSentinelMechanism = { ...objectPathMechanism, foundryExport: undefined, generatedPath: objectGeneratedPathSentinel };
+const objectToggleHarness = renderMechanismActionHarness({
+  project: { ...objectPathMechanismProject, mechanisms: [objectToggleSentinelMechanism] },
+  selectedMechanism: objectToggleSentinelMechanism,
+  selectedSceneObject: objectPathMechanismProject.sceneObjects['object-piggy']
+});
+objectToggleHarness.actions.updateMechanism('object-path-driver', { enabled: false });
+const objectToggleDispatch = objectToggleHarness.dispatches.at(-1) as { type: string; mechanism: MechanismConfig };
+assert.deepEqual(objectToggleDispatch.mechanism.generatedPath, objectGeneratedPathSentinel, 'metadata-only Design edits preserve fitted generatedPath samples');
+const objectOptimizeHarness = renderMechanismActionHarness({
+  project: { ...objectPathMechanismProject, settings: { ...objectPathMechanismProject.settings, performancePreset: 'fast' } },
+  selectedPart: objectPathMechanismProject.parts.head,
+  selectedPath: objectPathMechanismProject.paths['path-right-arm'],
+  selectedMechanism: objectPathMechanism,
+  selectedSceneObject: objectPathMechanismProject.sceneObjects['object-piggy']
+});
+await objectOptimizeHarness.actions.optimizeSelectedMechanism();
+const optimizedObjectDispatch = objectOptimizeHarness.dispatches.at(-1) as { type: string; mechanism: MechanismConfig };
+assert.equal(optimizedObjectDispatch.mechanism.targetSceneObjectId, 'object-piggy', 'Design Fit optimizes against the selected mechanism object target instead of the ambient selected part');
+assert.equal(optimizedObjectDispatch.mechanism.targetPartId, undefined, 'Design Fit keeps object-target mechanisms free of body-part retargeting');
+assert.equal(optimizedObjectDispatch.mechanism.targetPathId, 'path-object-piggy', 'Design Fit keeps the selected mechanism target path');
 const sampleMechanism = sample.mechanisms[0];
 assert(sampleMechanism, 'sample has a mechanism for driven-target checks');
 for (const phase of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {

@@ -162,16 +162,19 @@ export const pendingRecipeForMechanism = (project: ProjectState, mechanism: Mech
     const board = sceneToBoardRaw({ x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 }, project.settings.physicalKit);
     const boardScene = board.valid ? boardToScene(board.col, board.row, project.settings.physicalKit) : { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 };
     const targetPart = mechanism.targetPartId ? project.parts[mechanism.targetPartId] : undefined;
+    const targetSceneObject = mechanism.targetSceneObjectId ? project.sceneObjects[mechanism.targetSceneObjectId] : undefined;
     const targetPath = mechanism.targetPathId ? project.paths[mechanism.targetPathId] : undefined;
-    const targetAnchorJointId = preferredMotionJointId(project, mechanism.targetPartId, mechanism.targetAnchorJointId);
+    const targetAnchorJointId = targetPart ? preferredMotionJointId(project, mechanism.targetPartId, mechanism.targetAnchorJointId) : undefined;
     const range = sampleFeasibleRange(mechanism);
     return {
         mechanismId: mechanism.id,
         type: mechanism.type,
         targetPartId: mechanism.targetPartId,
+        targetSceneObjectId: mechanism.targetSceneObjectId,
         targetPathId: mechanism.targetPathId,
         targetAnchorJointId,
         targetPartName: targetPart?.name,
+        targetSceneObjectName: targetSceneObject?.name,
         targetPathPointCount: targetPath?.points.length,
         boardCoordinate: board.label,
         board,

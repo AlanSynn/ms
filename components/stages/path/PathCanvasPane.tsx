@@ -112,6 +112,7 @@ export const PathCanvasPane = ({
       <ThreePuppetPreview
         project={project}
         animatedParts={pathPreview?.parts ?? {}}
+        animatedSceneObjects={pathPreview?.sceneObjects ?? {}}
         skeleton={pathPreview?.skeleton ?? project.skeleton}
         mechanisms={[]}
         paths={selectedPath ? [selectedPath] : []}

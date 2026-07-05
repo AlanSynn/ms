@@ -18,6 +18,7 @@ import type {
   ProjectAction,
   ProjectMotionPath,
   ProjectState,
+  SceneObject,
 } from "../types";
 import type { ClassroomLessonTemplate } from "../utils/project";
 
@@ -42,6 +43,7 @@ export type AppStageRouterProps = {
 
   sortedParts: BodyPartLayer[];
   selectedPart?: BodyPartLayer;
+  selectedSceneObject?: SceneObject;
   selectedPath?: ProjectMotionPath;
   drawMode: boolean;
   setDrawMode: (v: boolean) => void;
@@ -99,6 +101,7 @@ export const AppStageRouter = ({
   resetLesson,
   sortedParts,
   selectedPart,
+  selectedSceneObject,
   selectedPath,
   drawMode,
   setDrawMode,
@@ -159,6 +162,7 @@ export const AppStageRouter = ({
         project={project}
         sortedParts={sortedParts}
         selectedPart={selectedPart}
+        selectedSceneObject={selectedSceneObject}
         selectedPath={selectedPath}
         drawMode={drawMode}
         setDrawMode={setDrawMode}
@@ -180,6 +184,7 @@ export const AppStageRouter = ({
         foundry={foundry}
         setFoundry={setFoundry}
         selectedPart={selectedPart}
+        selectedSceneObject={selectedSceneObject}
         selectedPath={selectedPath}
         goStage={goStage}
         onExport={onFoundryExport}

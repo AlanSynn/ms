@@ -2,7 +2,12 @@ import React from "react";
 import { Loader2, Sparkles, Trash2 } from "lucide-react";
 import { MechanismParametricEditor } from "./MechanismParametricEditor";
 import { MiniNumber, Toggle } from "../../ui/InspectorControls";
-import type { MechanismConfig, ProjectAction, ProjectState } from "../../../types";
+import type {
+  MechanismConfig,
+  ProjectAction,
+  ProjectMotionPath,
+  ProjectState,
+} from "../../../types";
 import { sampleFeasibleRange } from "../../../utils/fabrication";
 import {
   mechanismBindingWarnings,
@@ -61,14 +66,34 @@ export const DesignInspectorPanel = ({
         selectedMechanism.targetAnchorJointId,
       )
     : undefined;
-  const updateTargetPart = (partId: string) => {
+  const targetSelectValue = selectedMechanism?.targetSceneObjectId
+    ? `object:${selectedMechanism.targetSceneObjectId}`
+    : selectedMechanism?.targetPartId
+      ? selectedMechanism.targetPartId
+      : "";
+  const pathBelongsToSelection = (path: ProjectMotionPath) =>
+    selectedMechanism?.targetSceneObjectId
+      ? path.sceneObjectId === selectedMechanism.targetSceneObjectId
+      : !selectedMechanism?.targetPartId ||
+        (!path.sceneObjectId && path.partId === selectedMechanism.targetPartId);
+  const updateTarget = (value: string) => {
     if (!selectedMechanism) return;
-    const targetPartId = partId || undefined;
-    const targetPath = targetPartId
-      ? Object.values(project.paths).find((path) => path.partId === targetPartId)
+    const targetSceneObjectId = value.startsWith("object:")
+      ? value.slice("object:".length)
       : undefined;
+    const targetPartId = value && !targetSceneObjectId ? value : undefined;
+    const targetPath = targetPartId
+      ? Object.values(project.paths).find(
+          (path) => !path.sceneObjectId && path.partId === targetPartId,
+        )
+      : targetSceneObjectId
+        ? Object.values(project.paths).find(
+            (path) => path.sceneObjectId === targetSceneObjectId,
+          )
+        : undefined;
     updateMechanism(selectedMechanism.id, {
       targetPartId,
+      targetSceneObjectId,
       targetPathId: targetPath?.id,
       targetAnchorJointId:
         targetPath?.targetAnchorJointId ??
@@ -113,15 +138,23 @@ export const DesignInspectorPanel = ({
           <select
             aria-label="Mechanism moving part"
             className="field"
-            value={selectedMechanism.targetPartId ?? ""}
-            onChange={(e) => updateTargetPart(e.target.value)}
+            value={targetSelectValue}
+            onChange={(e) => updateTarget(e.target.value)}
           >
-            <option value="">No part</option>
+            <option value="">No target</option>
             {project.partOrder.map((id) => (
               <option key={id} value={id}>
                 {project.parts[id].name}
               </option>
             ))}
+            {project.sceneObjectOrder.map((id) => {
+              const object = project.sceneObjects[id];
+              return object ? (
+                <option key={id} value={`object:${id}`}>
+                  {object.name}
+                </option>
+              ) : null;
+            })}
           </select>
           <select
             aria-label="Mechanism motion path"
@@ -135,16 +168,14 @@ export const DesignInspectorPanel = ({
           >
             <option value="">No path</option>
             {Object.values(project.paths)
-              .filter(
-                (p) =>
-                  !selectedMechanism.targetPartId ||
-                  p.partId === selectedMechanism.targetPartId,
-              )
+              .filter(pathBelongsToSelection)
               .map((p) => (
                 <option key={p.id} value={p.id}>
-                  {project.parts[p.partId]?.name
-                    ? `${project.parts[p.partId].name} path`
-                    : "Motion path"}
+                  {p.sceneObjectId
+                    ? `${project.sceneObjects[p.sceneObjectId]?.name ?? "Object"} path`
+                    : project.parts[p.partId]?.name
+                      ? `${project.parts[p.partId].name} path`
+                      : "Motion path"}
                 </option>
               ))}
           </select>

@@ -11,7 +11,10 @@ import type {
 import {
   buildFoundryPhysicsOverlay,
 } from "../../../utils/physicsSession";
-import { animatedPartsForProject } from "../../../utils/motion";
+import {
+  animatedPartsForProject,
+  animatedSceneObjectsForProject,
+} from "../../../utils/motion";
 import {
   generateCurvePoints,
   generateMechanismPointTraces,
@@ -145,6 +148,10 @@ export const AssemblyCharacterThreePreview = ({
     () => animatedPartsForProject(project, project.mechanisms, angle),
     [angle, project],
   );
+  const animatedSceneObjects = useMemo(
+    () => animatedSceneObjectsForProject(project, project.mechanisms, angle),
+    [angle, project],
+  );
   const activePins = step.pinIds.length
     ? [...plan.fixedPins, ...plan.freePivots].filter((pin) =>
         step.pinIds.includes(pin.id),
@@ -168,6 +175,7 @@ export const AssemblyCharacterThreePreview = ({
       <ThreePuppetPreview
         project={project}
         animatedParts={animatedParts}
+        animatedSceneObjects={animatedSceneObjects}
         skeleton={project.skeleton}
         mechanisms={project.mechanisms}
         paths={[]}
@@ -247,6 +255,10 @@ export const AssemblyMechanismThreePreview = ({
   );
   const animatedParts = useMemo(
     () => animatedPartsForProject(project, [mechanism], angle),
+    [angle, mechanism, project],
+  );
+  const animatedSceneObjects = useMemo(
+    () => animatedSceneObjectsForProject(project, [mechanism], angle),
     [angle, mechanism, project],
   );
 
@@ -399,6 +411,7 @@ export const AssemblyMechanismThreePreview = ({
           <ThreePuppetPreview
             project={project}
             animatedParts={animatedParts}
+            animatedSceneObjects={animatedSceneObjects}
             skeleton={project.skeleton}
             mechanisms={activeProjectMechanisms}
             paths={[]}

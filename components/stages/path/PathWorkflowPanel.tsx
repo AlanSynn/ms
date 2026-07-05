@@ -11,12 +11,14 @@ import type {
   ProjectAction,
   ProjectMotionPath,
   ProjectState,
+  SceneObject,
 } from "../../../types";
 
 interface PathWorkflowPanelProps {
   project: ProjectState;
   sortedParts: BodyPartLayer[];
   selectedPart?: BodyPartLayer;
+  selectedSceneObject?: SceneObject;
   selectedPath?: ProjectMotionPath;
   drawMode: boolean;
   pathLocked: boolean;
@@ -40,6 +42,7 @@ export const PathWorkflowPanel = ({
   project,
   sortedParts,
   selectedPart,
+  selectedSceneObject,
   selectedPath,
   drawMode,
   pathLocked,
@@ -66,15 +69,29 @@ export const PathWorkflowPanel = ({
       </div>
       <select
         aria-label="Selected body part"
+        data-testid="selected-motion-target"
         className="field mt-2"
-        value={selectedPart?.id ?? ""}
-        onChange={(e) => dispatch({ type: "select_part", partId: e.target.value })}
+        value={selectedSceneObject?.id ?? selectedPart?.id ?? ""}
+        onChange={(e) => {
+          const id = e.target.value;
+          if (project.sceneObjects[id])
+            dispatch({ type: "select_scene_object", objectId: id });
+          else dispatch({ type: "select_part", partId: id });
+        }}
       >
         {sortedParts.map((p) => (
           <option value={p.id} key={p.id}>
             {p.name}
           </option>
         ))}
+        {project.sceneObjectOrder.map((id) => {
+          const object = project.sceneObjects[id];
+          return object ? (
+            <option value={object.id} key={object.id}>
+              {object.name}
+            </option>
+          ) : null;
+        })}
       </select>
       <div className="mt-3 flex flex-col gap-2">
         <button
@@ -141,7 +158,7 @@ export const PathWorkflowPanel = ({
       {selectedPath && selectedPath.points.length < 3 && (
         <div className="warning">Keep drawing.</div>
       )}
-      {pathLocked && <div className="warning">Unlock part.</div>}
+      {pathLocked && <div className="warning">Unlock target.</div>}
       {selectedPath?.warnings.map((w, i) => (
         <div key={`${w}-${i}`} className="warning">
           {w}
@@ -222,7 +239,7 @@ export const PathWorkflowPanel = ({
               )}
               <button
                 className="btn-secondary"
-                disabled={!selectedPart || pathLocked}
+                disabled={!selectedPart || Boolean(selectedSceneObject) || pathLocked}
                 onClick={addJointAtIkHandle}
               >
                 <Plus size={16} /> New handle

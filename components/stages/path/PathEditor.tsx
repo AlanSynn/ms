@@ -13,6 +13,7 @@ import type {
   ProjectAction,
   ProjectMotionPath,
   ProjectState,
+  SceneObject,
 } from "../../../types";
 import { svgPointerToScene } from "../../../utils/coordinates";
 import {
@@ -32,6 +33,7 @@ export const PathEditor = ({
   project,
   sortedParts,
   selectedPart,
+  selectedSceneObject,
   selectedPath,
   drawMode,
   setDrawMode,
@@ -49,6 +51,7 @@ export const PathEditor = ({
   project: ProjectState;
   sortedParts: BodyPartLayer[];
   selectedPart?: BodyPartLayer;
+  selectedSceneObject?: SceneObject;
   selectedPath?: ProjectMotionPath;
   drawMode: boolean;
   setDrawMode: (v: boolean) => void;
@@ -72,7 +75,7 @@ export const PathEditor = ({
   const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
   const [isFreeDrawing, setIsFreeDrawing] = useState(false);
   const [pathViewMode, setPathViewMode] = useState<"2d" | "3d">("3d");
-  const pathLocked = Boolean(selectedPart?.locked);
+  const pathLocked = Boolean(selectedSceneObject?.locked ?? selectedPart?.locked);
   const pointCount = selectedPath?.points.length ?? 0;
   const jointOptions = selectedPart
     ? motionAnchorJointIds(project, selectedPart.id)
@@ -107,7 +110,7 @@ export const PathEditor = ({
     setIsFreeDrawing(false);
     setDragPoint(null);
     setSelectedPoint(null);
-  }, [selectedPart?.id]);
+  }, [selectedPart?.id, selectedSceneObject?.id]);
   const appendFreePoint = (point: Point, seed = false) => {
     const base =
       seed || !freeDraftRef.current
@@ -268,10 +271,13 @@ export const PathEditor = ({
     ? project.mechanisms.find(
         (m) =>
           m.targetPathId === selectedPath.id &&
-          m.targetPartId === selectedPath.partId,
+          (selectedPath.sceneObjectId
+            ? m.targetSceneObjectId === selectedPath.sceneObjectId
+            : m.targetPartId === selectedPath.partId),
       )
     : undefined;
   const previewTargetJointId = selectedPath
+    && !selectedPath.sceneObjectId
     ? preferredMotionJointId(
         project,
         selectedPath.partId,
@@ -301,6 +307,7 @@ export const PathEditor = ({
             project={project}
             sortedParts={sortedParts}
             selectedPart={selectedPart}
+            selectedSceneObject={selectedSceneObject}
             selectedPath={selectedPath}
             drawMode={drawMode}
             pathLocked={pathLocked}
@@ -349,7 +356,8 @@ export const PathEditor = ({
           <PathInspectorPanel
             project={project}
             selectedPartId={selectedPart?.id}
-            selectedPartName={selectedPart?.name}
+            selectedPartName={selectedSceneObject?.name ?? selectedPart?.name}
+            selectedSceneObjectId={selectedSceneObject?.id}
             selectedPath={selectedPath}
             pointCount={pointCount}
             selectedPoint={selectedPoint}

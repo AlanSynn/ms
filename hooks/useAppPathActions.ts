@@ -5,13 +5,16 @@ import type {
   Point,
   ProjectAction,
   ProjectMotionPath,
+  SceneObject,
   ProjectState,
 } from "../types";
 import { validatePath } from "../utils/project";
+import { pathBelongsToTarget } from "../utils/pathTargets";
 
 type UseAppPathActionsParams = {
   project: ProjectState;
   selectedPart?: BodyPartLayer;
+  selectedSceneObject?: SceneObject;
   dispatch: (action: ProjectAction) => void;
   setStage: (stage: AppStage) => void;
 };
@@ -19,6 +22,7 @@ type UseAppPathActionsParams = {
 export const useAppPathActions = ({
   project,
   selectedPart,
+  selectedSceneObject,
   dispatch,
   setStage,
 }: UseAppPathActionsParams) => {
@@ -27,24 +31,37 @@ export const useAppPathActions = ({
 
   const setPathPoints = useCallback(
     (points: Point[], source: ProjectMotionPath["source"] = "drawn") => {
-      const partId = selectedPart?.id;
-      if (!partId || project.parts[partId]?.locked) return;
+      const targetKind = selectedSceneObject ? "scene-object" : "part";
+      const targetId = selectedSceneObject?.id ?? selectedPart?.id;
+      if (!targetId) return;
+      if (
+        targetKind === "scene-object"
+          ? project.sceneObjects[targetId]?.locked
+          : project.parts[targetId]?.locked
+      )
+        return;
       const existing = (
         Object.values(project.paths) as ProjectMotionPath[]
-      ).find((path) => path.partId === partId);
+      ).find((path) => pathBelongsToTarget(path, targetKind, targetId));
       const id =
         project.selectedPathId &&
-        project.paths[project.selectedPathId]?.partId === partId
+        project.paths[project.selectedPathId] &&
+        pathBelongsToTarget(
+          project.paths[project.selectedPathId],
+          targetKind,
+          targetId,
+        )
           ? project.selectedPathId
-          : (existing?.id ?? `path-${partId}`);
+          : (existing?.id ?? `path-${targetId}`);
       const current = project.paths[id];
       dispatch({
         type: "upsert_path",
         path: validatePath({
           id,
-          partId,
-          targetAnchorJointId: current?.targetAnchorJointId,
-          chainRootJointId: current?.chainRootJointId,
+          partId: selectedPart?.id ?? "",
+          sceneObjectId: selectedSceneObject?.id,
+          targetAnchorJointId: selectedSceneObject ? undefined : current?.targetAnchorJointId,
+          chainRootJointId: selectedSceneObject ? undefined : current?.chainRootJointId,
           smoothness: current?.smoothness ?? 0,
           points,
           timedPoints: points.map((p, i) => ({
@@ -64,7 +81,7 @@ export const useAppPathActions = ({
         }),
       });
     },
-    [dispatch, project, selectedPart?.id],
+    [dispatch, project, selectedPart?.id, selectedSceneObject?.id],
   );
 
   const transferTrackedPath = useCallback(
