@@ -328,14 +328,14 @@ export const DesignFoundryPreview = ({
           className={showForces ? "active" : ""}
           onClick={() => setShowForces((value) => !value)}
         >
-          Force
+          Push
         </button>
         <button
           type="button"
           className={showVelocity ? "active" : ""}
           onClick={() => setShowVelocity((value) => !value)}
         >
-          v
+          Speed
         </button>
       </div>
       <div
@@ -427,4 +427,3 @@ export const DesignFoundryPreview = ({
     </section>
   );
 };
-

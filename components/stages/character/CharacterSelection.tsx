@@ -5,12 +5,9 @@ import type {
   CanvasViewport,
   ProjectAction,
   ProjectState,
+  SceneObject,
 } from "../../../types";
-import type { ClassroomLessonTemplate } from "../../../utils/project";
-import {
-  fabricablePartOutlinePoints,
-  partLandmarkLocalPoints,
-} from "../../../utils/partGeometry";
+import { createDefaultSceneObject, type ClassroomLessonTemplate } from "../../../utils/project";
 import { CanvasZoomToolbar } from "../../AppShell";
 import { ThreePuppetPreview } from "../../ThreePuppetPreview";
 import {
@@ -28,13 +25,12 @@ import {
 } from "./CharacterImportOverlays";
 import { CharacterLessonOwnership } from "./CharacterLessonOwnership";
 import { CharacterSetupPanel } from "./CharacterSetupPanel";
+import { SceneObjectInspector } from "./SceneObjectInspector";
 
 export const CharacterSelection = ({
   project,
   dispatch,
   pendingCharacter,
-  replaceCharacter,
-  setReplaceCharacter,
   onOpenGettingStarted,
   onAccept,
   onDiscard,
@@ -52,8 +48,6 @@ export const CharacterSelection = ({
   project: ProjectState;
   dispatch: (action: ProjectAction) => void;
   pendingCharacter: PendingCharacterReview | null;
-  replaceCharacter: boolean;
-  setReplaceCharacter: (v: boolean) => void;
   onOpenGettingStarted: () => void;
   onAccept: () => void;
   onDiscard: () => void;
@@ -77,11 +71,22 @@ export const CharacterSelection = ({
   const editableParts = partPanelProject.partOrder
     .map((id) => partPanelProject.parts[id])
     .filter((part): part is BodyPartLayer => Boolean(part));
+  const sceneObjects = project.sceneObjectOrder
+    .map((id) => project.sceneObjects[id])
+    .filter((object): object is SceneObject => Boolean(object));
+  const selectedSceneObject = project.selectedSceneObjectId
+    ? project.sceneObjects[project.selectedSceneObjectId]
+    : undefined;
   const selectedEditablePart =
     (!partPanelDisabled && project.selectedPartId
       ? project.parts[project.selectedPartId]
       : undefined) ?? editableParts[0];
   const selectedPartId = selectedEditablePart?.id ?? "";
+  const addSceneObject = () =>
+    dispatch({
+      type: "upsert_scene_object",
+      object: createDefaultSceneObject("piggy-bank"),
+    });
   return (
     <>
       <section
@@ -115,6 +120,7 @@ export const CharacterSelection = ({
                       ? "art on plates"
                       : "gray plates"}
                   </span>
+                  <span>{sceneObjects.length} objects</span>
                 </div>
                 <CharacterLessonOwnership
                   activeClassroomLesson={activeClassroomLesson}
@@ -127,11 +133,11 @@ export const CharacterSelection = ({
                   onnxInputRef={onnxInputRef}
                   importInputRef={importInputRef}
                   onOpenGettingStarted={onOpenGettingStarted}
+                  onAddSceneObject={addSceneObject}
+                  sceneObjectDisabled={partPanelDisabled}
                   onPackage={onPackage}
                   onProcess={onProcess}
                   onImport={onImport}
-                  replaceCharacter={replaceCharacter}
-                  setReplaceCharacter={setReplaceCharacter}
                 />
                 <details
                   className="advanced-panel mt-4"
@@ -170,11 +176,6 @@ export const CharacterSelection = ({
                   <div className="mt-2 grid gap-2">
                     {editableParts.map((part) => {
                       const isActive = part.id === selectedPartId;
-                      const joints = partLandmarkLocalPoints(
-                        part,
-                        partPanelProject.skeleton,
-                      );
-                      const outline = fabricablePartOutlinePoints(part, joints);
                       return (
                         <button
                           key={part.id}
@@ -194,14 +195,58 @@ export const CharacterSelection = ({
                           />
                           <span className="min-w-0">
                             <strong>{part.name}</strong>
-                            <small>
-                              {part.anchorJointId} · {outline.length} outline
-                              pts
-                            </small>
+                            <small>{part.locked ? "Locked part" : "Editable part"}</small>
                           </span>
                           <span className="part-list-badges">
                             {part.textureUrl ? <b>art</b> : <b>plate</b>}
                             {part.locked && <b>lock</b>}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+                <section
+                  className="character-part-list mt-4"
+                  data-testid="character-scene-object-list"
+                  aria-label="Scene object list"
+                >
+                  <div className="section-title">Scene objects</div>
+                  <div className="mt-2 grid gap-2">
+                    {sceneObjects.length === 0 && (
+                      <div className="rounded-2xl bg-slate-100 p-3 text-sm font-bold text-slate-500">
+                        Props start here.
+                      </div>
+                    )}
+                    {sceneObjects.map((object) => {
+                      const isActive = object.id === project.selectedSceneObjectId;
+                      return (
+                        <button
+                          key={object.id}
+                          type="button"
+                          data-testid={`scene-object-item-${object.id}`}
+                          className={`character-part-list-item ${isActive ? "active" : ""}`}
+                          disabled={partPanelDisabled}
+                          aria-pressed={isActive}
+                          onClick={() =>
+                            dispatch({
+                              type: "select_scene_object",
+                              objectId: object.id,
+                            })
+                          }
+                        >
+                          <span
+                            className="part-list-dot"
+                            aria-hidden="true"
+                            style={{ background: object.fillColor }}
+                          />
+                          <span className="min-w-0">
+                            <strong>{object.name}</strong>
+                            <small>{object.shape} · scene prop</small>
+                          </span>
+                          <span className="part-list-badges">
+                            {!object.visible && <b>hide</b>}
+                            {object.locked && <b>lock</b>}
                           </span>
                         </button>
                       );
@@ -233,13 +278,20 @@ export const CharacterSelection = ({
             ),
             inspector: inspectorPane(
               <div className="stage-pane-stack character-inspector">
-                <CharacterSetupPanel
-                  selectedEditablePart={selectedEditablePart}
-                  partPanelProject={partPanelProject}
-                  partPanelDisabled={partPanelDisabled}
-                  project={project}
-                  dispatch={dispatch}
-                />
+                {selectedSceneObject && !partPanelDisabled ? (
+                  <SceneObjectInspector
+                    object={selectedSceneObject}
+                    dispatch={dispatch}
+                  />
+                ) : (
+                  <CharacterSetupPanel
+                    selectedEditablePart={selectedEditablePart}
+                    partPanelProject={partPanelProject}
+                    partPanelDisabled={partPanelDisabled}
+                    project={project}
+                    dispatch={dispatch}
+                  />
+                )}
               </div>,
             ),
           }}

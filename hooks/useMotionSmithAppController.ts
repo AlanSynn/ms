@@ -13,6 +13,7 @@ import {
 } from "../utils/project";
 import { DEFAULT_CANVAS_VIEWPORT } from "../utils/viewport";
 import { classroomAssessmentKeyFromSearch } from "../utils/classroomContent";
+import { readAutosaveProject } from "../utils/projectPersistence";
 import { workflowStatusFor } from "../utils/workflowStatus";
 import { createStageNavigator } from "../utils/appStageNavigation";
 import { buildAppStageRouterProps } from "../utils/appStageRouterProps";
@@ -31,6 +32,37 @@ import { useWorkspacePlayerDock } from "./useWorkspacePlayerDock";
 
 type FoundryState = MechanismConfig;
 
+const GETTING_STARTED_SESSION_KEY =
+  "motionsmith.gettingStarted.hiddenSession";
+
+const readGettingStartedHiddenForSession = () => {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.sessionStorage.getItem(GETTING_STARTED_SESSION_KEY) === "true";
+  } catch {
+    return false;
+  }
+};
+
+const writeGettingStartedHiddenForSession = (hidden: boolean) => {
+  if (typeof window === "undefined") return;
+  try {
+    if (hidden) window.sessionStorage.setItem(GETTING_STARTED_SESSION_KEY, "true");
+    else window.sessionStorage.removeItem(GETTING_STARTED_SESSION_KEY);
+  } catch {
+    // Session-only onboarding preference is best-effort.
+  }
+};
+
+const createInitialProject = () => {
+  if (typeof window === "undefined") return createEmptyProject();
+  try {
+    return readAutosaveProject() ?? createEmptyProject();
+  } catch {
+    return createEmptyProject();
+  }
+};
+
 export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   const {
     project,
@@ -38,9 +70,13 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     dispatch,
     undoProject: undoProjectHistory,
     redoProject: redoProjectHistory,
-  } = useProjectHistory(createEmptyProject);
+  } = useProjectHistory(createInitialProject);
   const [stage, setStage] = useState<AppStage>("character");
-  const [showGettingStarted, setShowGettingStarted] = useState(false);
+  const [showGettingStarted, setShowGettingStarted] = useState(
+    () => !readGettingStartedHiddenForSession(),
+  );
+  const [hideGettingStartedThisSession, setHideGettingStartedThisSession] =
+    useState(readGettingStartedHiddenForSession);
   const [angle, setAngle] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [showTrace, setShowTrace] = useState(true);
@@ -112,8 +148,6 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   const {
     pendingCharacter,
     setPendingCharacter,
-    replaceCharacter,
-    setReplaceCharacter,
     runWebOnnx,
     importCharacterPackage,
     importProject,
@@ -200,6 +234,10 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
       ? "bg-slate-950 text-slate-100"
       : "bg-slate-50 text-slate-950";
   const editorStage: AppStage = stage;
+  const updateGettingStartedSessionPreference = (hidden: boolean) => {
+    setHideGettingStartedThisSession(hidden);
+    writeGettingStartedHiddenForSession(hidden);
+  };
   const closeGettingStarted = () => {
     setShowGettingStarted(false);
     setStage("character");
@@ -244,8 +282,6 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     playerDock,
     character: {
       pendingCharacter,
-      replaceCharacter,
-      setReplaceCharacter,
       onOpenGettingStarted: () => setShowGettingStarted(true),
       onAcceptPendingCharacter: acceptPendingCharacter,
       onDiscardPendingCharacter: () => setPendingCharacter(null),
@@ -318,6 +354,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     onnxCacheStatus,
     cacheOnnxModel,
     showGettingStarted,
+    hideGettingStartedThisSession,
     starterTemplates: STARTER_IMAGE_TEMPLATES,
     guidedLessons: CLASSROOM_LESSONS,
     onLesson: openClassroomLesson,
@@ -326,6 +363,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     onPackage: startFromPackage,
     onProcess: startFromImage,
     onImport: startFromProject,
+    onHideGettingStartedThisSessionChange: updateGettingStartedSessionPreference,
     onCloseGettingStarted: closeGettingStarted,
     showShortcuts,
     onCloseShortcuts: () => setShowShortcuts(false),

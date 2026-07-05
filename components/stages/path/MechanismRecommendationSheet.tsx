@@ -70,7 +70,7 @@ export const MechanismRecommendationSheet = ({
             className="recommendation-empty"
             data-testid="recommendation-empty"
           >
-            Need 3+ points.
+            Draw more path.
           </div>
         ) : (
           <div className="recommendation-grid mt-5">
@@ -86,7 +86,7 @@ export const MechanismRecommendationSheet = ({
                       {option.label}
                     </div>
                     <div className="text-xs font-black uppercase tracking-wider text-slate-500">
-                      {option.type} · score {option.score}/100
+                      Fit score {option.score}/100
                     </div>
                   </div>
                   <span className="recommendation-score">{option.score}</span>

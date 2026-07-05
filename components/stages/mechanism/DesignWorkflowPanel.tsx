@@ -8,7 +8,6 @@ import type {
   ProjectAction,
   ProjectState,
 } from "../../../types";
-import { sampleFeasibleRange } from "../../../utils/fabrication";
 import { mechanismBindingWarnings } from "../../../utils/motion";
 import { fitMechanismToTargetPath } from "../../../utils/mechanismRecommendations";
 import {
@@ -62,9 +61,6 @@ export const DesignWorkflowPanel = ({
   const selectedUseExample = selectedMechanism
     ? classroomUseExampleFor(selectedMechanism.type)
     : undefined;
-  const selectedRange = selectedMechanism
-    ? sampleFeasibleRange(selectedMechanism)
-    : undefined;
   const bindingWarnings = mechanismBindingWarnings(project);
   const addLibraryMechanism = (type: MechanismType) => {
     const base = createDefaultMechanism(type, uid("mech"));
@@ -116,7 +112,7 @@ export const DesignWorkflowPanel = ({
         >
           {project.mechanisms.map((m) => (
             <option key={m.id} value={m.id}>
-              {m.id} · {m.type}
+              {mechanismTemplateLabel(m.type)}
             </option>
           ))}
         </select>
@@ -128,7 +124,7 @@ export const DesignWorkflowPanel = ({
               title={mechanismTemplateLabel(type)}
               onClick={() => addLibraryMechanism(type)}
             >
-              {type}
+              {mechanismTemplateLabel(type)}
             </button>
           ))}
         </div>
@@ -139,9 +135,6 @@ export const DesignWorkflowPanel = ({
           >
             <div className="font-bold text-slate-800">Template</div>
             <div>{selectedLibrary.label}</div>
-            <div data-testid="design-feasibility">
-              {selectedRange?.warning ?? "360°"}
-            </div>
           </div>
         )}
         {selectedLibrary && (
@@ -179,7 +172,7 @@ export const DesignWorkflowPanel = ({
         {Object.entries(bindingWarnings).map(([id, warnings]) =>
           warnings.length ? (
             <div className="warning" key={id}>
-              {id}: {warnings.join("; ")}
+              {warnings.join("; ")}
             </div>
           ) : null,
         )}

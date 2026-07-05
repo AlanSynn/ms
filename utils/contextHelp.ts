@@ -1,8 +1,9 @@
 export type HelpLocale = "en";
 
 export type ContextHelpId =
+  | "character.loadCharacterFile"
+  | "character.loadObjectFile"
   | "character.createFromImage"
-  | "character.keepMechanisms"
   | "path.draw"
   | "path.smoothness"
   | "path.trace"
@@ -26,16 +27,22 @@ export const CONTEXT_HELP: Record<
   ContextHelpId,
   Record<HelpLocale, ContextHelpEntry>
 > = {
+  "character.loadCharacterFile": {
+    en: {
+      title: "Character file",
+      body: "Load a rigged character. It can replace the editable body parts.",
+    },
+  },
+  "character.loadObjectFile": {
+    en: {
+      title: "Object",
+      body: "Add a separate prop in Character. Other tabs can move it, not create it.",
+    },
+  },
   "character.createFromImage": {
     en: {
       title: "Image",
       body: "Turn one picture into editable parts and joints on this device.",
-    },
-  },
-  "character.keepMechanisms": {
-    en: {
-      title: "Keep mechanisms",
-      body: "Keep buildable mechanisms when the new character still fits them.",
     },
   },
   "path.draw": {

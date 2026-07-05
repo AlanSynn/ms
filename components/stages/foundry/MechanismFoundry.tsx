@@ -141,10 +141,6 @@ export const MechanismFoundry = ({
     landingBoard.row,
     project.settings.physicalKit,
   );
-  const snapDistance = Math.hypot(
-    rawLanding.x - landing.x,
-    rawLanding.y - landing.y,
-  );
   const landedFoundry = useMemo(
     () => ({
       ...foundry,
@@ -183,8 +179,6 @@ export const MechanismFoundry = ({
         { preferDistalWhenRoot: !selectedPath?.targetAnchorJointId },
       )
     : undefined;
-  const targetChainRootJointId =
-    selectedPath?.chainRootJointId ?? selectedPart?.anchorJointId;
   const feasibilityText = range.warning ?? "360°";
   const foundryFitContext = useMemo(
     () => createMechanismFitContext(landedFoundry, 360, 240, 96),
@@ -800,26 +794,13 @@ export const MechanismFoundry = ({
         workflow: workflowPane(
           <FoundryWorkflowPanel
             project={project}
-            selectedPart={selectedPart}
-            selectedPath={selectedPath}
             goStage={goStage}
             foundry={foundry}
             foundryPhase={foundryPhase}
-            landingBoardLabel={landingBoard.label}
-            targetChainRootJointId={targetChainRootJointId}
-            targetIkJointId={targetIkJointId}
-            snapDistance={snapDistance}
-            rangePercentValid={range.percentValid}
             rangeWarning={range.warning}
-            feasibilityText={feasibilityText}
             targetReady={targetReady}
             isPickingAnchor={isPickingAnchor}
-            hasManualAnchor={Boolean(manualAnchor)}
             hardBlocked={hardBlocked}
-            showSensemaking={showSensemaking}
-            classroomSensemaking={classroomSensemaking}
-            physicsRule={physicsRule}
-            libraryLabel={library.label}
             onToggleAnchorPick={() => setIsPickingAnchor((value) => !value)}
             onUseMechanism={useFoundryMechanism}
             onSelectMechanismType={selectFoundryMechanismType}
@@ -898,18 +879,10 @@ export const MechanismFoundry = ({
           <FoundryInspectorPanel
             foundry={foundry}
             libraryLabel={library.label}
-            physicsRule={physicsRule}
-            velocityMagnitude={velocityMagnitude}
-            forceMagnitude={forceMagnitude}
-            simulationFriction={project.settings.simulationFriction}
-            constraintError={constraintError}
-            simulationMassKg={project.settings.simulationMassKg}
+            classroomAssessmentKey={project.settings.classroomAssessmentKey}
+            classroomSensemaking={classroomSensemaking}
             foundryRigOpacity={foundryRigOpacity}
             foundryExplode={foundryExplode}
-            showForces={showForces}
-            showVelocity={showVelocity}
-            showTrail={showTrail}
-            showPathPreview={showPathPreview}
             showSensemaking={showSensemaking}
             onRigOpacityChange={setFoundryRigOpacity}
             onExplodeChange={setFoundryExplode}
@@ -917,12 +890,7 @@ export const MechanismFoundry = ({
             onChangeParam={updateFoundryParam}
             onSetMechanismType={selectFoundryMechanismType}
             onSetPreset={selectFoundryPreset}
-            onToggleForces={() => setShowForces((value) => !value)}
-            onToggleVelocity={() => setShowVelocity((value) => !value)}
-            onToggleTrail={() => setShowTrail((value) => !value)}
-            onTogglePathPreview={() => setShowPathPreview((value) => !value)}
             onToggleSensemaking={() => setShowSensemaking((value) => !value)}
-            onHideSensemaking={() => setShowSensemaking(false)}
           />,
         ),
       }}

@@ -245,7 +245,7 @@ export const BlueprintControlPanel = ({
                 onClick={() => onSelectRecipe(recipe.mechanismId)}
               >
                 <div className="font-bold text-slate-800">
-                  {recipe.mechanismId} · {recipeTitle(recipe)}
+                  {recipeTitle(recipe)}
                 </div>
                 <div className="text-sm text-slate-600">
                   Anchor {fabricationBoardCoordinateCallout(recipe.boardCoordinate, recipe.board)}

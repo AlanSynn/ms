@@ -42,6 +42,8 @@ const isAppStage = (value: unknown): value is AppStage =>
 
 const projectHasUserWork = (project: ProjectState) =>
   project.partOrder.length > 0 ||
+  project.sceneObjectOrder.length > 0 ||
+  Object.keys(project.sceneObjects).length > 0 ||
   Object.keys(project.paths).length > 0 ||
   project.mechanisms.length > 0;
 

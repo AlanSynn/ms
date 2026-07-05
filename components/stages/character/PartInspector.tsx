@@ -134,7 +134,7 @@ export const PartInspector = ({
           className="mt-2 text-xs font-black uppercase tracking-wider text-slate-500"
           data-testid="part-cut-summary"
         >
-          {cutSource} · {editableCutPoints.length} pts
+          {cutSource}
         </div>
         <button
           type="button"

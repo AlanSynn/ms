@@ -1,5 +1,5 @@
 import type { RefObject } from "react";
-import { BrainCircuit, FileJson, Sparkles, Upload } from "lucide-react";
+import { BrainCircuit, FileJson, PackagePlus, Sparkles, Upload } from "lucide-react";
 
 import { ContextHelp } from "../../ui/ContextHelp";
 
@@ -8,38 +8,55 @@ export const CharacterImportControls = ({
   onnxInputRef,
   importInputRef,
   onOpenGettingStarted,
+  onAddSceneObject,
+  sceneObjectDisabled,
   onPackage,
   onProcess,
   onImport,
-  replaceCharacter,
-  setReplaceCharacter,
 }: {
   packageInputRef: RefObject<HTMLInputElement | null>;
   onnxInputRef: RefObject<HTMLInputElement | null>;
   importInputRef: RefObject<HTMLInputElement | null>;
   onOpenGettingStarted: () => void;
+  onAddSceneObject: () => void;
+  sceneObjectDisabled?: boolean;
   onPackage: (files: File[]) => void;
   onProcess: (file: File) => void;
   onImport: (file: File) => void;
-  replaceCharacter: boolean;
-  setReplaceCharacter: (value: boolean) => void;
 }) => (
   <div className="mt-4 grid gap-2" data-testid="character-import-controls">
     <button
       className="btn-primary"
-      aria-label="Open Guide"
+      aria-label="Open Getting Started"
       onClick={onOpenGettingStarted}
     >
-      <Sparkles size={16} /> Guide
+      <Sparkles size={16} /> Getting Started
     </button>
-    <button
-      type="button"
-      className="btn-secondary cursor-pointer"
-      aria-label="Load character file"
-      onClick={() => packageInputRef.current?.click()}
-    >
-      <FileJson size={16} /> Load character file
-    </button>
+    <div className="grid gap-2" role="group" aria-label="Character files">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="btn-secondary flex-1 cursor-pointer"
+          aria-label="Load character file"
+          onClick={() => packageInputRef.current?.click()}
+        >
+          <FileJson size={16} /> Load character file
+        </button>
+        <ContextHelp helpId="character.loadCharacterFile" />
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="btn-secondary flex-1 cursor-pointer"
+          data-testid="character-add-scene-object"
+          disabled={sceneObjectDisabled}
+          onClick={onAddSceneObject}
+        >
+          <PackagePlus size={16} /> Load object file
+        </button>
+        <ContextHelp helpId="character.loadObjectFile" />
+      </div>
+    </div>
     <input
       ref={packageInputRef}
       data-testid="blank-package-input"
@@ -95,17 +112,5 @@ export const CharacterImportControls = ({
         if (file) onImport(file);
       }}
     />
-    <label className="replace-toggle">
-      <input
-        aria-label="Keep compatible mechanisms"
-        type="checkbox"
-        checked={replaceCharacter}
-        onChange={(e) => setReplaceCharacter(e.target.checked)}
-      />{" "}
-      <span className="inline-flex items-center gap-1">
-        Keep mechanisms
-        <ContextHelp helpId="character.keepMechanisms" />
-      </span>
-    </label>
   </div>
 );

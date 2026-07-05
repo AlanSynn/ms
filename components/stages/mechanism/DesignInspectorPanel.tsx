@@ -5,7 +5,6 @@ import { MiniNumber, Toggle } from "../../ui/InspectorControls";
 import type { MechanismConfig, ProjectAction, ProjectState } from "../../../types";
 import { sampleFeasibleRange } from "../../../utils/fabrication";
 import {
-  describeMotionChain,
   mechanismBindingWarnings,
   motionAnchorJointIds,
   motionChainOptionLabel,
@@ -43,6 +42,11 @@ export const DesignInspectorPanel = ({
   const selectedRange = selectedMechanism
     ? sampleFeasibleRange(selectedMechanism)
     : undefined;
+  const motionWarning = selectedRange?.warning
+    ? selectedRange.warning.startsWith("No motion")
+      ? "No full motion. Try reset or smaller links."
+      : "Motion may jam. Try a smaller move."
+    : null;
   const bindingWarnings = mechanismBindingWarnings(project);
   const selectedBindingWarnings = selectedMechanism
     ? (bindingWarnings[selectedMechanism.id] ?? [])
@@ -55,17 +59,6 @@ export const DesignInspectorPanel = ({
         project,
         selectedMechanism.targetPartId,
         selectedMechanism.targetAnchorJointId,
-      )
-    : undefined;
-  const selectedTargetPath = selectedMechanism?.targetPathId
-    ? project.paths[selectedMechanism.targetPathId]
-    : undefined;
-  const selectedTargetChain = selectedMechanism?.targetPartId
-    ? describeMotionChain(
-        project,
-        selectedMechanism.targetPartId,
-        selectedTargetAnchor,
-        { rootJointId: selectedTargetPath?.chainRootJointId },
       )
     : undefined;
   const updateTargetPart = (partId: string) => {
@@ -96,7 +89,7 @@ export const DesignInspectorPanel = ({
         <div className="section-title">Mechanism</div>
         <h3>
           {selectedMechanism
-            ? `${selectedMechanism.id} · ${mechanismTemplateLabel(selectedMechanism.type)}`
+            ? mechanismTemplateLabel(selectedMechanism.type)
             : "No mechanism"}
         </h3>
       </div>
@@ -116,14 +109,14 @@ export const DesignInspectorPanel = ({
               updateMechanism(selectedMechanism.id, { enabled })
             }
           />
-          <div className="section-title">Target</div>
+          <div className="section-title">Move</div>
           <select
-            aria-label="Mechanism target part"
+            aria-label="Mechanism moving part"
             className="field"
             value={selectedMechanism.targetPartId ?? ""}
             onChange={(e) => updateTargetPart(e.target.value)}
           >
-            <option value="">No target</option>
+            <option value="">No part</option>
             {project.partOrder.map((id) => (
               <option key={id} value={id}>
                 {project.parts[id].name}
@@ -131,7 +124,7 @@ export const DesignInspectorPanel = ({
             ))}
           </select>
           <select
-            aria-label="Mechanism target path"
+            aria-label="Mechanism motion path"
             className="field"
             value={selectedMechanism.targetPathId ?? ""}
             onChange={(e) =>
@@ -149,13 +142,15 @@ export const DesignInspectorPanel = ({
               )
               .map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.id} · {p.points.length} pts
+                  {project.parts[p.partId]?.name
+                    ? `${project.parts[p.partId].name} path`
+                    : "Motion path"}
                 </option>
               ))}
           </select>
           {selectedMechanism.targetPartId && project.skeleton && (
             <select
-              aria-label="Mechanism target anchor"
+              aria-label="Motion handle"
               className="field"
               value={selectedTargetAnchor ?? ""}
               onChange={(e) =>
@@ -164,7 +159,7 @@ export const DesignInspectorPanel = ({
                 })
               }
             >
-              <option value="">Default anchor</option>
+              <option value="">Default handle</option>
               {targetAnchorOptions.map((id) => (
                 <option key={id} value={id}>
                   {motionChainOptionLabel(
@@ -175,17 +170,6 @@ export const DesignInspectorPanel = ({
                 </option>
               ))}
             </select>
-          )}
-          {selectedTargetChain && (
-            <div
-              className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3 text-sm text-slate-600"
-              data-testid="mechanism-ik-chain-summary"
-              title={selectedTargetChain.helper}
-            >
-              <div className="font-bold text-slate-800">
-                {selectedTargetChain.label}
-              </div>
-            </div>
           )}
           <MechanismParametricEditor
             mechanism={selectedMechanism}
@@ -218,9 +202,7 @@ export const DesignInspectorPanel = ({
               {w}
             </div>
           ))}
-          {selectedRange?.warning && (
-            <div className="warning">{selectedRange.warning}</div>
-          )}
+          {motionWarning && <div className="warning">{motionWarning}</div>}
           {selectedMechanism.warnings?.map((w, i) => (
             <div className="warning" key={`${w}-${i}`}>
               {w}

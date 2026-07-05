@@ -9,6 +9,7 @@ import {
     ProcessingStatus,
     ProjectAction,
     ProjectMotionPath,
+    SceneObject,
     ProjectState,
     StandardJoint,
     StandardSkeleton,
@@ -43,7 +44,7 @@ export const defaultSettings = (): AppSettings => ({
     theme: 'light',
     toolbarVisible: false,
     partPanelVisible: true,
-    autosave: false,
+    autosave: true,
     autosaveIntervalSeconds: 60,
     performancePreset: 'balanced',
     physicsSnapMode: 'balanced',
@@ -319,6 +320,19 @@ const part = (
     };
 };
 
+export const createDefaultSceneObject = (shape: SceneObject['shape'] = 'piggy-bank', id = uid('object')): SceneObject => ({
+    id,
+    name: shape === 'piggy-bank' ? 'Flying piggy bank' : shape === 'cloud' ? 'Cloud' : shape === 'star' ? 'Star' : 'Block',
+    shape,
+    transform: { x: 112, y: 142, rotation: shape === 'piggy-bank' ? -8 : 0, scale: 1 },
+    bounds: { width: shape === 'star' ? 68 : 96, height: shape === 'piggy-bank' ? 62 : 68 },
+    fillColor: shape === 'piggy-bank' ? '#f9a8d4' : shape === 'cloud' ? '#bfdbfe' : shape === 'star' ? '#fde68a' : '#c4b5fd',
+    opacity: 0.92,
+    visible: true,
+    locked: false,
+    zIndex: 20
+});
+
 export const createDefaultMechanism = (type: MechanismConfig['type'] = '4bar', id = uid('mech')): MechanismConfig => ({
     id,
     type,
@@ -405,6 +419,8 @@ export const createEmptyProject = (): ProjectState => ({
     },
     parts: {},
     partOrder: [],
+    sceneObjects: {},
+    sceneObjectOrder: [],
     skeleton: null,
     paths: {},
     mechanisms: [],
@@ -1046,13 +1062,13 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
             return { ...project, processing: action.processing };
         case 'select_part': {
             const nextPath = Object.values(project.paths).find(path => path.partId === action.partId);
-            return { ...project, selectedPartId: action.partId, selectedPathId: nextPath?.id };
+            return { ...project, selectedPartId: action.partId, selectedSceneObjectId: undefined, selectedPathId: nextPath?.id };
         }
         case 'upsert_part': {
             const exists = Boolean(project.parts[action.part.id]);
             const parts = { ...project.parts, [action.part.id]: action.part };
             const partOrder = exists ? project.partOrder : [...project.partOrder, action.part.id];
-            return touch({ ...project, parts, partOrder, selectedPartId: action.part.id });
+            return touch({ ...project, parts, partOrder, selectedPartId: action.part.id, selectedSceneObjectId: undefined });
         }
         case 'delete_part': {
             if (project.parts[action.partId]?.locked) return project;
@@ -1083,6 +1099,28 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
             if (i < 0 || j < 0 || j >= order.length) return project;
             [order[i], order[j]] = [order[j], order[i]];
             return touch({ ...project, partOrder: order });
+        }
+        case 'select_scene_object':
+            return { ...project, selectedSceneObjectId: action.objectId, selectedPartId: action.objectId ? undefined : project.selectedPartId };
+        case 'upsert_scene_object': {
+            const exists = Boolean(project.sceneObjects[action.object.id]);
+            const sceneObjects = { ...project.sceneObjects, [action.object.id]: action.object };
+            const sceneObjectOrder = exists ? project.sceneObjectOrder : [...project.sceneObjectOrder, action.object.id];
+            return touch({ ...project, sceneObjects, sceneObjectOrder, selectedSceneObjectId: action.object.id, selectedPartId: undefined });
+        }
+        case 'update_scene_object':
+            if (!project.sceneObjects[action.objectId]) return project;
+            if (project.sceneObjects[action.objectId].locked && Object.keys(action.updates).some(key => key !== 'locked')) return project;
+            return touch({ ...project, sceneObjects: { ...project.sceneObjects, [action.objectId]: { ...project.sceneObjects[action.objectId], ...action.updates } } });
+        case 'delete_scene_object': {
+            if (project.sceneObjects[action.objectId]?.locked) return project;
+            const { [action.objectId]: _object, ...sceneObjects } = project.sceneObjects;
+            return touch({
+                ...project,
+                sceneObjects,
+                sceneObjectOrder: project.sceneObjectOrder.filter(id => id !== action.objectId),
+                selectedSceneObjectId: project.selectedSceneObjectId === action.objectId ? undefined : project.selectedSceneObjectId
+            });
         }
         case 'set_skeleton':
             return touch({ ...project, skeleton: action.skeleton });
@@ -1302,6 +1340,27 @@ const normalizePartSnapshot = (id: string, value: unknown, skeleton: StandardSke
     };
 };
 
+const normalizeSceneObjectSnapshot = (id: string, value: unknown): SceneObject => {
+    const raw = asRecord(value);
+    const shape = pickOne(raw.shape, ['piggy-bank', 'cloud', 'star', 'block'] as const, 'block');
+    const rawBounds = asRecord(raw.bounds);
+    return {
+        id,
+        name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.slice(0, 80) : id,
+        shape,
+        transform: normalizeTransformSnapshot(raw.transform),
+        bounds: {
+            width: clampNumber(rawBounds.width, 72, 8, 600),
+            height: clampNumber(rawBounds.height, 56, 8, 600)
+        },
+        fillColor: sanitizeHexColor(raw.fillColor, '#c4b5fd'),
+        opacity: clampNumber(raw.opacity, 0.92, 0, 1),
+        visible: typeof raw.visible === 'boolean' ? raw.visible : true,
+        locked: Boolean(raw.locked),
+        zIndex: Math.round(clampNumber(raw.zIndex, 20, -100, 100))
+    };
+};
+
 const normalizeMechanismSnapshot = (value: unknown): MechanismConfig => {
     const raw = asRecord(value);
     const type = sanitizeMechanismType(raw.type);
@@ -1397,6 +1456,8 @@ export const migrateProjectSnapshot = (raw: unknown): ProjectState => {
         const next = validatePath({ ...asRecord(path), id } as ProjectMotionPath);
         return parts[next.partId] ? [[id, next] as const] : [];
     }));
+    const sceneObjects = Object.fromEntries(Object.entries(data.sceneObjects ?? {}).map(([id, value]) => [id, normalizeSceneObjectSnapshot(id, value)]));
+    const sceneObjectOrder = (data.sceneObjectOrder ?? Object.keys(sceneObjects)).filter(id => Boolean(sceneObjects[id]));
     return {
         ...fallback,
         ...data,
@@ -1404,6 +1465,9 @@ export const migrateProjectSnapshot = (raw: unknown): ProjectState => {
         metadata: { ...fallback.metadata, ...(data.metadata ?? {}), updatedAt: nowIso() },
         parts,
         partOrder,
+        sceneObjects,
+        sceneObjectOrder,
+        selectedSceneObjectId: data.selectedSceneObjectId && sceneObjects[data.selectedSceneObjectId] ? data.selectedSceneObjectId : undefined,
         skeleton,
         paths,
         mechanisms: (Array.isArray(data.mechanisms) ? data.mechanisms : fallback.mechanisms).map(m => reconcileMechanismTargets(normalizeMechanismSnapshot(m), parts, paths, { preserveGeneratedPath: true })),
@@ -1436,6 +1500,8 @@ export const projectSelfCheck = () => {
     if (new Set([duplicateA.id, duplicateB.id]).size !== 2) throw new Error('selfcheck: mechanism ids collide');
     const migrated = loadProjectSnapshot({ skeleton: { joints: { root: { id: 'root', name: 'root', position: { x: 0, y: 0 } } } } });
     if (migrated.skeleton?.joints.root.bendDirection !== 1) throw new Error('selfcheck: skeleton migration missing bendDirection default');
+    const objectAdded = applyProjectAction(sample, { type: 'upsert_scene_object', object: createDefaultSceneObject('piggy-bank', 'object-selfcheck') });
+    if (!objectAdded.sceneObjects['object-selfcheck'] || objectAdded.selectedPartId) throw new Error('selfcheck: scene object add/select failed');
     const removed = applyProjectAction(sample, { type: 'remove_joint', jointId: 'right_elbow' });
     if (removed.parts.right_arm_lower?.anchorJointId === 'right_elbow') throw new Error('selfcheck: part anchor not repaired after joint delete');
     return true;

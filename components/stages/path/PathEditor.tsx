@@ -176,7 +176,7 @@ export const PathEditor = ({
       type: "add_joint",
       joint: {
         id,
-        name: "IK handle",
+        name: "Motion handle",
         position: { x: parent.position.x + 34, y: parent.position.y - 34 },
         parentId: parent.id,
         locked: false,
@@ -373,4 +373,3 @@ export const PathEditor = ({
     />
   );
 };
-

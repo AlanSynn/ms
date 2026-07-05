@@ -18,6 +18,12 @@ export const useProjectAutosave = (project: ProjectState) => {
       project.settings.autosaveIntervalSeconds * 1000,
     );
     const interval = window.setInterval(writeAutosave, intervalMs);
-    return () => window.clearInterval(interval);
+    window.addEventListener("pagehide", writeAutosave);
+    window.addEventListener("beforeunload", writeAutosave);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("pagehide", writeAutosave);
+      window.removeEventListener("beforeunload", writeAutosave);
+    };
   }, [project.settings.autosave, project.settings.autosaveIntervalSeconds]);
 };

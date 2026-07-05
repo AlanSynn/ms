@@ -69,10 +69,9 @@ export const AssemblyInspectorPanel = ({
         >
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="font-bold text-slate-800">Character pins</div>
+              <div className="font-bold text-slate-800">Character fasteners</div>
               <div className="text-sm text-slate-600">
-                {characterAssemblyPlan.fixedPins.length} fixed ·{" "}
-                {characterAssemblyPlan.freePivots.length} free
+                Board pins and moving joints
               </div>
             </div>
             <button className="chip" onClick={() => goStage("character")}>
@@ -108,7 +107,7 @@ export const AssemblyInspectorPanel = ({
           >
             {characterAssemblyPlan.freePivots.slice(0, 8).map((pin) => (
               <span className="blueprint-pill" key={pin.id}>
-                {pin.label} free
+                {pin.label}
               </span>
             ))}
           </div>
@@ -120,10 +119,7 @@ export const AssemblyInspectorPanel = ({
               <div className="section-title">Current step</div>
               <div className="mt-2 flex flex-wrap gap-2">
                 <span className="blueprint-pill">
-                  {currentCharacterStep.phase}
-                </span>
-                <span className="blueprint-pill">
-                  {currentCharacterStep.action}
+                  Step {currentCharacterStep.index}
                 </span>
               </div>
               <div className="mt-3 text-sm font-bold text-slate-700">
@@ -143,7 +139,6 @@ export const AssemblyInspectorPanel = ({
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="font-bold text-slate-800">
-                {selectedRecipe.mechanismId} ·{" "}
                 {referenceRecipeForType(selectedRecipe.type).title}
               </div>
               <div className="text-sm text-slate-600">
@@ -215,15 +210,15 @@ export const AssemblyInspectorPanel = ({
             >
               <div className="section-title">Current step</div>
               <div className="mt-2 flex flex-wrap gap-2">
-                <span className="blueprint-pill">{currentStep.phase}</span>
+                <span className="blueprint-pill">Step {currentStep.index}</span>
+                <span className="blueprint-pill">Board</span>
                 {currentStep.coords.map((coord, index) => (
                   <span className="blueprint-pill" key={`${coord}-${index}`}>
-                    {fabricationBoardCoordinateCallout(coord)} ·{" "}
-                    {currentStep.coordRoles[index] ?? "ref"}
+                    {fabricationBoardCoordinateCallout(coord)}
                   </span>
                 ))}
                 <span className="blueprint-pill">
-                  Z {currentStep.zMm.toFixed(1)}mm
+                  Layer {Math.max(1, Math.round(currentStep.zMm / 2) + 1)}
                 </span>
               </div>
               <div className="mt-3 text-sm font-bold text-slate-700">

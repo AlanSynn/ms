@@ -55,7 +55,7 @@ const openCharacterScreen = async (page: Page, options: { loadStarter?: boolean 
   await waitForBootLoader(page);
   let dialog = page.getByTestId('getting-started-dialog');
   if (!(await dialog.count()) && options.loadStarter !== false) {
-    await page.getByRole('button', { name: /Open Guide/i }).click();
+    await page.getByRole('button', { name: /Open Getting Started/i }).click();
     dialog = page.getByTestId('getting-started-dialog');
     await expect(dialog).toBeVisible();
   }
@@ -101,6 +101,11 @@ test('Context help opens compact registry popovers', async ({ page }) => {
 
   await page.goto('/');
   await openCharacterScreen(page, { loadStarter: false });
+  const controls = page.getByTestId('character-import-controls');
+  await expect(controls).not.toContainText('Keep mechanisms');
+  await expect(controls).toContainText('Getting Started');
+  await expect(controls).toContainText('Load object file');
+  const controlsBefore = await controls.boundingBox();
   const imageHelp = page.locator('[data-help-id="character.createFromImage"]').getByTestId('context-help-trigger');
   await expect(imageHelp).toBeVisible();
   await imageHelp.click();
@@ -108,8 +113,35 @@ test('Context help opens compact registry popovers', async ({ page }) => {
   await expect(popover).toBeVisible();
   await expect(popover).toContainText('Turn one picture');
   await expect(imageHelp).toHaveAttribute('aria-expanded', 'true');
+  const controlsAfter = await controls.boundingBox();
+  expect(Math.abs((controlsAfter?.height ?? 0) - (controlsBefore?.height ?? 0)), 'tooltip overlay does not change import control height').toBeLessThan(1);
+  expect(Math.abs((controlsAfter?.y ?? 0) - (controlsBefore?.y ?? 0)), 'tooltip overlay does not move import controls').toBeLessThan(1);
+  expect(await popover.evaluate(node => Boolean(node.parentElement?.matches('body'))), 'tooltip popover is portaled to body').toBe(true);
   await page.keyboard.press('Escape');
   await expect(popover).toHaveCount(0);
+
+  await page.setViewportSize({ width: 980, height: 360 });
+  await page.getByRole('button', { name: /^Options$/i }).click();
+  const inspector = page.getByTestId('stage-right-inspector');
+  await expect(inspector).toBeVisible();
+  await inspector.evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
+  });
+  const lowerHelp = page
+    .locator('[data-help-id="options.strictChecks"]')
+    .getByTestId('context-help-trigger');
+  await lowerHelp.scrollIntoViewIfNeeded();
+  await lowerHelp.click();
+  await expect(popover).toBeVisible();
+  const lowerBox = await popover.boundingBox();
+  expect(lowerBox?.y ?? -1, 'lower tooltip stays inside the top viewport edge').toBeGreaterThanOrEqual(0);
+  expect(
+    (lowerBox?.y ?? 0) + (lowerBox?.height ?? 0),
+    'lower tooltip flips or clamps inside the bottom viewport edge',
+  ).toBeLessThanOrEqual(360);
+  await page.keyboard.press('Escape');
+  await expect(popover).toHaveCount(0);
+
   expectCleanPage(pageErrors, consoleErrors);
 });
 
@@ -125,7 +157,8 @@ test('Character part cut outline editor bakes and edits contour points', async (
   await openCharacterScreen(page);
   await page.getByTestId('character-part-item-head').click();
   await expect(page.getByTestId('part-cut-controls')).toBeVisible();
-  await expect(page.getByTestId('part-cut-summary')).toContainText(/cut .* pts/i);
+  await expect(page.getByTestId('part-cut-summary')).toContainText(/cut/i);
+  await expect(page.getByTestId('part-cut-summary')).not.toContainText(/pts/i);
 
   await page.getByTestId('part-cut-bake').click();
   const cutDialog = page.getByTestId('cut-outline-dialog');
@@ -158,6 +191,66 @@ test('Character part cut outline editor bakes and edits contour points', async (
   expectCleanPage(pageErrors, consoleErrors);
 });
 
+test('Character tab owns separate scene objects and later tabs only render them', async ({ page }) => {
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  await page.goto('/');
+  await openCharacterScreen(page, { loadStarter: false });
+  await expect(page.getByTestId('character-scene-object-list')).toBeVisible();
+  await expect(page.getByTestId('character-workflow-summary')).toContainText('0 objects');
+  await expect(page.getByTestId('character-add-scene-object')).toContainText('Load object file');
+  await page.getByTestId('character-add-scene-object').click();
+  await expect(page.getByTestId('scene-object-inspector')).toContainText('Flying piggy bank');
+  await expect(page.getByTestId('character-workflow-summary')).toContainText('1 objects');
+  const characterPuppet = page.getByTestId('character-three-puppet-state');
+  await expect(characterPuppet).toHaveAttribute('data-scene-object-count', '1');
+  await expect(characterPuppet).toHaveAttribute('data-three-scene-prop-count', '1');
+
+  let discardMessage = '';
+  page.once('dialog', async dialog => {
+    discardMessage = dialog.message();
+    await dialog.dismiss();
+  });
+  await page.getByTestId('top-command-bar').getByText('File', { exact: true }).click();
+  await page.getByRole('button', { name: 'New Project', exact: true }).click();
+  expect(discardMessage).toContain('Discard current project');
+  await expect(page.getByTestId('status-bar')).toContainText('Cancelled');
+
+  page.once('dialog', async dialog => dialog.accept());
+  await page.getByTestId('top-command-bar').getByText('File', { exact: true }).click();
+  await page.getByRole('button', { name: 'New Project', exact: true }).click();
+  await expect(page.getByTestId('status-bar')).toContainText('New project');
+
+  await openCharacterScreen(page);
+  await page.getByTestId('character-add-scene-object').click();
+  await expect(page.getByTestId('scene-object-inspector')).toContainText('Flying piggy bank');
+
+  await page.getByRole('button', { name: 'Path Editor', exact: true }).click();
+  await expect(page.getByTestId('character-add-scene-object')).toHaveCount(0);
+  await page.getByTestId('path-view-3d').click();
+  const pathPuppet = page.getByTestId('path-three-puppet-state');
+  await expect(pathPuppet).toHaveAttribute('data-scene-object-count', '1');
+  await expect(pathPuppet).toHaveAttribute('data-three-scene-prop-count', '1');
+  await expect(page.getByRole('button', { name: 'Add object', exact: true })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Mechanism Design', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+  await page.getByRole('button', { name: 'Four-bar linkage', exact: true }).click();
+  await expect(page.getByTestId('design-shared-foundry-preview')).toBeVisible();
+  const designPuppet = page.getByTestId('design-context-puppet-state');
+  await expect(designPuppet).toHaveAttribute('data-scene-object-count', '1');
+  await expect(designPuppet).toHaveAttribute('data-three-scene-prop-count', '1');
+  await expect(page.getByRole('button', { name: 'Add object', exact: true })).toHaveCount(0);
+  await expect(page.getByTestId('scene-object-inspector')).toHaveCount(0);
+
+  expectCleanPage(pageErrors, consoleErrors);
+});
+
 test('Getting Started guided project opens a real editable lesson', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
@@ -168,10 +261,9 @@ test('Getting Started guided project opens a real editable lesson', async ({ pag
 
   await page.goto('/');
   await waitForBootLoader(page);
-  await expect(page.getByTestId('getting-started-dialog')).toHaveCount(0);
-  await page.getByRole('button', { name: /Open Guide/i }).click();
   const gettingStarted = page.getByTestId('getting-started-dialog');
   await expect(gettingStarted).toBeVisible();
+  await expect(gettingStarted.getByTestId('getting-started-hide-session')).toContainText("Don't show again this session");
   await expect(gettingStarted).toContainText('Start.');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).toBeVisible();
   await gettingStarted.getByTestId('getting-started-card-guided').click();
@@ -205,9 +297,10 @@ test('Getting Started guided project opens a real editable lesson', async ({ pag
   await expect(page.getByTestId('character-three-puppet-toggle-mechanisms')).toHaveCount(0);
   await expect(page.getByTestId('status-bar')).toContainText('Make an arm wave ready');
   await page.getByRole('button', { name: /Foundry/i }).click();
-  await expect(page.getByTestId('foundry-visible-sensemaking')).toContainText('Crank turns');
-  await expect(page.getByTestId('foundry-visible-sensemaking')).toHaveAttribute('data-sensemaking-evidence', 'driver crank turns and rocker swings');
-  await expect(page.getByTestId('foundry-visible-sensemaking')).toHaveAttribute('data-sensemaking-answer', 'The board pivots stay fixed');
+  const foundryInspector = page.getByTestId('stage-right-inspector');
+  await expect(foundryInspector.getByTestId('foundry-visible-sensemaking')).toContainText('Crank turns');
+  await expect(foundryInspector.getByTestId('foundry-visible-sensemaking')).toHaveAttribute('data-sensemaking-evidence', 'driver crank turns and rocker swings');
+  await expect(foundryInspector.getByTestId('foundry-visible-sensemaking')).toHaveAttribute('data-sensemaking-answer', 'The board pivots stay fixed');
 
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   const designPreview = page.getByTestId('design-shared-foundry-preview');
@@ -246,8 +339,8 @@ test('classroom assessment slug and mechanism example video work end-to-end', as
 
   await page.goto('/?assessment=motion-journal');
   await waitForBootLoader(page);
-  await page.getByRole('button', { name: /Open Guide/i }).click();
   const gettingStarted = page.getByTestId('getting-started-dialog');
+  await expect(gettingStarted).toBeVisible();
   await gettingStarted.getByTestId('getting-started-card-guided').click();
   await gettingStarted.getByTestId('guided-project-card-waving-arm').click();
 
@@ -413,14 +506,12 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('shared-workbench')).toBeVisible();
   await expect(page.locator('#boot-loader')).toHaveCount(0, { timeout: 180_000 });
   await expect(page.getByTestId('character-screen')).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.classList.contains('welcome-modal-open'))).toBe(false);
+  expect(await page.evaluate(() => document.documentElement.classList.contains('welcome-modal-open'))).toBe(true);
   await expect(page.getByTestId('onnx-cache-status')).toBeVisible();
   await expect(page.getByTestId('onnx-cache-status')).toContainText(/AI ready|Get AI|AI \d+%|Try again/);
   await expect(page.getByTestId('status-bar')).not.toContainText(/parts:|paths:|mechs:|zoom/);
 
   const gettingStarted = page.getByTestId('getting-started-dialog');
-  await expect(gettingStarted).toHaveCount(0);
-  await page.getByRole('button', { name: /Open Guide/i }).click();
   await expect(gettingStarted).toBeVisible();
   await expect(gettingStarted).toContainText('Start.');
   const starterGallery = gettingStarted.getByTestId('getting-started-gallery');
@@ -479,6 +570,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('rigging');
   await expect(gettingStarted.getByTestId('getting-started-gallery')).not.toContainText('Waving arm');
   await page.getByRole('button', { name: 'Close' }).click();
+  expect(await page.evaluate(() => document.documentElement.classList.contains('welcome-modal-open'))).toBe(false);
 
   await expect(page.getByTestId('character-screen')).toBeVisible();
   await expect(page.getByTestId('workspace-steps')).toBeVisible();
@@ -510,7 +602,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('workspace-player-dock')).toBeVisible();
   await expect(page.getByTestId('novice-path-panel')).toContainText('Draw path');
   await expect(page.getByRole('heading', { name: 'Draw path' })).toBeVisible();
-  await expect(page.getByTestId('free-draw-status')).toContainText(/5 points .*path-right-arm/);
+  await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
   await expect(page.getByTestId('path-canvas')).toHaveCount(0);
   await expect(page.getByTestId('path-three-puppet-canvas')).toBeVisible();
   const pathPuppet = page.getByTestId('path-three-puppet-state');
@@ -606,7 +698,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(pathCanvas).toBeVisible();
   await pathCanvas.click({ position: { x: 260, y: 220 } });
   await pathCanvas.click({ position: { x: 320, y: 250 } });
-  await expect(page.getByTestId('free-draw-status')).toContainText(/7 points .*path-right-arm/);
+  await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
 
   await page.getByRole('button', { name: /Foundry/i }).click();
   await expect(page.getByRole('heading', { name: 'Foundry' })).toBeVisible();
@@ -639,28 +731,28 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('foundry-z-layer-labels')).toHaveCount(0);
   await page.getByText('Mechanism options').click();
   await expect(page.getByLabel('Foundry preset')).toHaveValue('balanced');
-  const foundryTargetSummary = page.getByTestId('foundry-target-summary');
-  await expect(foundryTargetSummary).toBeVisible();
-  await expect(foundryTargetSummary).toContainText(/chain|anchor/);
-  await expect(page.getByTestId('foundry-visible-sensemaking')).toContainText('Crank turns');
-  await expect(page.getByTestId('foundry-visible-sensemaking')).toContainText('rocker swings');
+  await expect(page.getByTestId('foundry-target-summary')).toHaveCount(0);
+  await expect(page.getByTestId('stage-left-pane')).not.toContainText(/Board hole|chain|Target .*pts|Range 360|Status 360|balanced default/i);
+  const foundryInspector = page.getByTestId('stage-right-inspector');
+  await expect(foundryInspector.getByTestId('foundry-visible-sensemaking')).toContainText('Crank turns');
+  await expect(foundryInspector.getByTestId('foundry-visible-sensemaking')).toContainText('rocker swings');
+  await expect(foundryInspector).not.toContainText('Preview overlays');
   await expect(page.getByTestId('foundry-mechanism-library')).toHaveCount(0);
   await expect(page.getByTestId('foundry-fabrication-stack')).toContainText(/^Stack\s*Back Clip.*S10 spacer.*Front Clip/);
   await expect(page.getByTestId('foundry-fabrication-stack')).not.toContainText(/Base board/);
   await page.getByRole('button', { name: 'Show details' }).click();
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Four-bar linkage');
-  await expect(page.getByTestId('foundry-mechanism-library')).toContainText('pin reactions');
+  await expect(page.getByTestId('foundry-mechanism-library')).not.toContainText('pin reactions');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('driver crank turns and rocker swings');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Answer: The board pivots stay fixed');
   await page.getByRole('button', { name: 'Hide details' }).click();
-  await expect(foundryTargetSummary).toContainText(/Board hole [A-Z]\d+/);
   await expect(page.getByTestId('foundry-anchor-marker'), 'Default sandbox shows only path and mechanism').toHaveCount(0);
   await page.getByTestId('foundry-pick-anchor').click();
-  await expect(page.getByTestId('foundry-anchor-status')).toContainText('Pick board hole');
+  await expect(page.getByTestId('foundry-pick-anchor')).toContainText('Cancel pick');
   const previewBox = await page.getByTestId('foundry-preview').boundingBox();
   expect(previewBox, 'foundry preview supports direct anchor picking').toBeTruthy();
   await page.mouse.click(previewBox!.x + previewBox!.width * 0.52, previewBox!.y + previewBox!.height * 0.52);
-  await expect(page.getByTestId('foundry-anchor-status')).toContainText('Anchor picked');
+  await expect(page.getByTestId('foundry-pick-anchor')).toContainText('Pick anchor');
   await expect(page.getByTestId('foundry-anchor-marker')).toBeVisible();
   await expect(page.getByTestId('foundry-anchor-marker')).toHaveAttribute('transform', /translate\(/);
   const pickedAnchorX = await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').inputValue();
@@ -761,6 +853,18 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('stage-right-inspector').getByTestId('assembly-guide-web-preview')).toHaveCount(0);
   await expect(page.getByTestId('assembly-stepper-workbench')).toHaveAttribute('data-visual-level', 'guided-animation');
   await expect(page.getByTestId('assembly-stepper-workbench')).toHaveAttribute('data-interaction-mode', 'visual-first');
+  await expect(page.getByTestId('assembly-mechanism-three-preview')).toBeVisible();
+  await expect(page.getByTestId('assembly-three-puppet-canvas')).toBeVisible();
+  const assemblyThree = page.getByTestId('assembly-three-puppet-state');
+  await expect(assemblyThree).toHaveAttribute('data-puppet-mode', 'thick-flat-assembly');
+  await expect(assemblyThree).toHaveAttribute('data-three-part-art', 'top-texture-decal');
+  await expect(assemblyThree).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
+  expect(Number(await assemblyThree.getAttribute('data-three-part-count')), 'Assembly 3D includes character parts').toBeGreaterThan(0);
+  expect(Number(await assemblyThree.getAttribute('data-three-part-art-count')), 'Assembly 3D preserves part art decals').toBeGreaterThan(0);
+  expect(Number(await assemblyThree.getAttribute('data-three-mechanism-count')), 'Assembly 3D includes the mechanism').toBeGreaterThan(0);
+  expect(Number(await assemblyThree.getAttribute('data-three-mechanism-link-count')), 'Assembly 3D renders physical mechanism links').toBeGreaterThan(0);
+  await expect(page.getByTestId('foundry-camera-rig')).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
+  await expect(page.getByTestId('foundry-camera-rig')).toHaveAttribute('data-three-exploded', 'true');
   await expect(page.getByTestId('assembly-workbench-sensemaking')).toContainText('Crank turns');
   await expect(page.getByTestId('assembly-workbench-sensemaking')).toHaveAttribute('data-sensemaking-evidence', 'driver crank turns and rocker swings');
   await expect(page.getByTestId('assembly-sensemaking-label')).toContainText('Crank turns');
@@ -791,9 +895,9 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('assembly-stack-summary')).toContainText(/^Back Clip.*Spacer 10mm OD \/ 4mm hole.*Front Clip/);
   await expect(page.getByTestId('stage-right-inspector')).toContainText(/row \d+, column \d+/);
   await expect(page.getByTestId('assembly-stack-summary')).not.toContainText(/Base board/);
-  await expect(page.getByTestId('prefab-assembly-steps')).toContainText('mount-to-board');
-  await expect(page.getByTestId('prefab-assembly-steps')).toContainText(/board/);
-  await expect(page.getByTestId('prefab-assembly-steps')).toContainText(/Z \d+\.\dmm/);
+  await expect(page.getByTestId('prefab-assembly-steps')).toContainText(/Step \d+/);
+  await expect(page.getByTestId('prefab-assembly-steps')).toContainText(/board/i);
+  await expect(page.getByTestId('prefab-assembly-steps')).toContainText(/Layer \d+/);
   await expect(assemblyWorkbench).toHaveAttribute('data-step-phase', 'mount-to-board');
   await expect(assemblyWorkbench).toHaveAttribute('data-board-mode', 'active');
   await expect(page.getByTestId('assembly-board')).toHaveAttribute('data-board-mode', 'active');
@@ -958,6 +1062,13 @@ test('Assembly shows character pins as a separate board build stage', async ({ p
 
   const workbench = page.getByTestId('character-assembly-workbench');
   await expect(workbench).toBeVisible();
+  await expect(page.getByTestId('assembly-character-three-preview')).toBeVisible();
+  await expect(page.getByTestId('assembly-three-puppet-canvas')).toBeVisible();
+  const characterAssemblyThree = page.getByTestId('assembly-three-puppet-state');
+  await expect(characterAssemblyThree).toHaveAttribute('data-assembly-mode', 'character');
+  await expect(characterAssemblyThree).toHaveAttribute('data-three-part-art', 'top-texture-decal');
+  expect(Number(await characterAssemblyThree.getAttribute('data-three-part-count')), 'Character assembly 3D includes body parts').toBeGreaterThan(0);
+  expect(Number(await characterAssemblyThree.getAttribute('data-three-part-art-count')), 'Character assembly preserves part artwork').toBeGreaterThan(0);
   await expect(workbench).toHaveAttribute('data-assembly-kind', 'character');
   await expect(workbench).toHaveAttribute('data-fixed-pin-count', /^[1-9]\d*$/);
   await expect(workbench).toHaveAttribute('data-free-pivot-count', /^[1-9]\d*$/);
@@ -967,7 +1078,7 @@ test('Assembly shows character pins as a separate board build stage', async ({ p
   await expect(page.getByTestId('character-free-pivots')).toBeVisible();
   await expect(page.getByTestId('character-fixed-pins').locator('[data-board-coordinate]')).not.toHaveCount(0);
   await expect(page.getByTestId('character-fixed-pins')).toContainText(/row \d+, column \d+/);
-  await expect(page.getByTestId('character-free-pivots')).toContainText(/free pivot/i);
+  await expect(page.getByTestId('character-free-pivots')).toContainText(/moving joint/i);
   await expect(page.getByTestId('character-free-pivots').locator('[data-board-coordinate]')).toHaveCount(0);
   const stack = page.getByTestId('character-assembly-stack');
   await page.getByTestId('assembly-step-list').getByRole('button', { name: /Fixed pins/i }).click();
@@ -982,8 +1093,7 @@ test('Assembly shows character pins as a separate board build stage', async ({ p
   await page.getByTestId('assembly-step-list').getByRole('button', { name: /Test character/i }).click();
   await expect(page.getByTestId('character-board-layer')).toHaveAttribute('data-layer-state', 'mounted');
   await expect(page.getByTestId('character-board-layer')).toHaveAttribute('data-board-coordinate', /^[A-O]([1-9]|1[0-5])$/);
-  await expect(page.getByTestId('character-assembly-inspector')).toContainText(/fixed/i);
-  await expect(page.getByTestId('character-assembly-inspector')).toContainText(/free/i);
+  await expect(page.getByTestId('character-assembly-inspector')).toContainText(/Board pins and moving joints/i);
   await expect(page.getByTestId('assembly-guide-preview')).not.toContainText('Add a mechanism first.');
   await expect(page.getByTestId('stage-canvas-pane').getByTestId('assembly-stepper-workbench')).toHaveCount(0);
   expectCleanPage(pageErrors, consoleErrors);
@@ -1014,7 +1124,7 @@ test('Character tab processing controls route to real browser workflows', async 
   expect(imageChooser.isMultiple()).toBe(false);
   await imageChooser.setFiles([]);
 
-  await page.getByRole('button', { name: /Open Guide/i }).click();
+  await page.getByRole('button', { name: /Open Getting Started/i }).click();
   await expect(page.getByTestId('getting-started-dialog')).toBeVisible();
   await switchGettingStartedToStarters(page);
   const starterPackageChooserPromise = page.waitForEvent('filechooser');
@@ -1212,7 +1322,7 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
   expectCleanPage(pageErrors, consoleErrors);
 });
 
-test('Replacement package preserves compatible mechanisms and rebound paths', async ({ page }) => {
+test('Character replacement package starts clean without keep-mechanisms toggle', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
@@ -1225,7 +1335,7 @@ test('Replacement package preserves compatible mechanisms and rebound paths', as
   await applyFourBarFromFoundry(page);
   await expectProjectCounts(page, 14, 1, 1);
   await page.getByRole('button', { name: /^Character$/i }).click();
-  await page.getByLabel('Keep compatible mechanisms').check();
+  await expect(page.getByTestId('character-import-controls')).not.toContainText('Keep mechanisms');
   await page.getByTestId('blank-package-input').setInputFiles([
     'tests/fixtures/package-compatible/parts_info.json',
     'tests/fixtures/package-compatible/char_cfg.yaml',
@@ -1238,12 +1348,7 @@ test('Replacement package preserves compatible mechanisms and rebound paths', as
 
   await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toHaveCount(0);
-  await clickStage(page, 'Mechanism Design');
-  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
-  await expectProjectCounts(page, 1, 1, 1);
-  await expect(page.getByRole('heading', { name: 'Mechanisms' })).toBeVisible();
-  await expect(page.locator('select.field').filter({ hasText: 'Right arm replacement' })).toHaveValue('right_arm');
-  await expect(page.locator('select.field').filter({ hasText: 'path-right-arm' })).toHaveValue('path-right-arm');
+  await expectProjectCounts(page, 1, 0, 0);
 
   expectCleanPage(pageErrors, consoleErrors);
 });
@@ -1371,12 +1476,12 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await page.getByLabel('Duration number').fill('6');
   await page.getByLabel('Duration number').press('Enter');
   await page.getByLabel('Timing profile').selectOption('ease-in-out');
-  await page.getByLabel('Friction μ number').fill('0.42');
-  await page.getByLabel('Friction μ number').press('Enter');
-  await page.getByLabel('Mass kg number').fill('1.75');
-  await page.getByLabel('Mass kg number').press('Enter');
+  await page.getByLabel('Friction number').fill('0.42');
+  await page.getByLabel('Friction number').press('Enter');
+  await page.getByLabel('Mass number').fill('1.75');
+  await page.getByLabel('Mass number').press('Enter');
   await page.getByLabel('Performance preset').selectOption('high');
-  await page.getByLabel('Physics snap mode').selectOption('high');
+  await page.getByLabel('Snap quality').selectOption('high');
   await page.getByLabel('Import details').check();
   await page.getByLabel('Download file').selectOption('svg');
   await page.getByLabel('Grid units').selectOption('inch');
@@ -1501,11 +1606,11 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await page.goto('/');
   await openWavingArmTemplate(page);
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
-  await expect(page.getByTestId('free-draw-status')).toContainText(/5 points .*path-right-arm/);
+  await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
 
   await page.getByLabel('Selected body part').selectOption('head');
   await expect(page.getByLabel('Selected body part')).toHaveValue('head');
-  await expect(page.getByTestId('free-draw-status')).toContainText('0 points · none');
+  await expect(page.getByTestId('free-draw-status')).toContainText('No path yet');
   await expect(page.getByText('No path.')).toBeVisible();
 
   await page.getByTestId('path-view-3d').click();
@@ -1523,24 +1628,24 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await page.mouse.move(canvasBox!.x + 330, canvasBox!.y + 250);
   await page.mouse.move(canvasBox!.x + 365, canvasBox!.y + 230);
   await page.mouse.up();
-  await expect(page.getByTestId('free-draw-status')).toContainText(/[3-9]\d* points · path-head/);
+  await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
   await expect(page.getByTestId('novice-path-panel').getByRole('button', { name: 'Choose mechanism' })).toBeEnabled();
 
   await page.getByLabel('Selected body part').selectOption('right_arm_lower');
-  await expect(page.getByTestId('free-draw-status')).toContainText(/5 points .*path-right-arm/);
+  await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
   await expect(page.getByText('No path.')).toHaveCount(0);
-  await expect(page.getByTestId('quick-rig-helper')).toContainText('IK');
-  await expect(page.getByLabel('IK chain root')).toHaveValue('right_shoulder');
-  await expect(page.getByLabel('IK handle')).toHaveValue('right_hand');
-  await expect(page.getByTestId('ik-chain-summary')).toContainText('3 joints');
+  await expect(page.getByTestId('quick-rig-helper')).toContainText('Move part');
+  await expect(page.getByLabel('Motion start')).toHaveValue('right_shoulder');
+  await expect(page.getByLabel('Motion handle')).toHaveValue('right_hand');
+  await expect(page.getByTestId('ik-chain-summary')).toContainText('Motion ready');
   await page.getByRole('button', { name: 'Fold left', exact: true }).click();
   await expect(page.getByTestId('fold-direction-control')).toContainText('left');
   await page.getByTestId('ik-chain-root-options').getByRole('button', { name: 'right elbow' }).click();
-  await expect(page.getByLabel('IK chain root')).toHaveValue('right_elbow');
-  await page.getByLabel('IK handle').selectOption('right_elbow');
-  await expect(page.getByLabel('IK handle')).toHaveValue('right_elbow');
-  await expect(page.getByLabel('IK chain root')).toHaveValue('right_elbow');
-  await expect(page.getByTestId('ik-chain-summary')).toContainText('Whole part');
+  await expect(page.getByLabel('Motion start')).toHaveValue('right_elbow');
+  await page.getByLabel('Motion handle').selectOption('right_elbow');
+  await expect(page.getByLabel('Motion handle')).toHaveValue('right_elbow');
+  await expect(page.getByLabel('Motion start')).toHaveValue('right_elbow');
+  await expect(page.getByTestId('ik-chain-summary')).toContainText('Motion ready');
   await expect(page.getByTestId('fold-direction-control')).toContainText('Pick elbow/knee');
   await expect(page.getByTestId('path-shape-controls')).toBeVisible();
   const selectedMotionPath = pathCanvas.locator('path[stroke="#5a6cff"][stroke-width="4"]').first();
@@ -1561,25 +1666,25 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await page.mouse.move(firstArmPointBox!.x + firstArmPointBox!.width / 2 + 34, firstArmPointBox!.y + firstArmPointBox!.height / 2 + 18);
   await page.mouse.up();
   await expect(firstArmPoint).not.toHaveAttribute('cx', firstArmPointCx ?? '');
-  await expect(page.getByTestId('free-draw-status')).toContainText(/5 points .*path-right-arm/);
+  await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
 
   await page.getByTestId('novice-path-panel').getByText('More', { exact: true }).click();
   const stopButtonBeforePreview = page.getByTestId('novice-path-panel').getByRole('button', { name: /Stop/i });
   if (await stopButtonBeforePreview.count()) await stopButtonBeforePreview.click();
-  await page.getByLabel('IK handle').selectOption('right_hand');
+  await page.getByLabel('Motion handle').selectOption('right_hand');
   await page.getByTestId('ik-chain-root-options').getByRole('button', { name: 'right shoulder' }).click();
-  await expect(page.getByLabel('IK chain root')).toHaveValue('right_shoulder');
-  await expect(page.getByLabel('IK handle')).toHaveValue('right_hand');
-  await expect(page.getByTestId('ik-chain-summary')).toContainText('3 joints');
+  await expect(page.getByLabel('Motion start')).toHaveValue('right_shoulder');
+  await expect(page.getByLabel('Motion handle')).toHaveValue('right_hand');
+  await expect(page.getByTestId('ik-chain-summary')).toContainText('Motion ready');
   const upperArmTransformBeforePlay = await page.getByTestId('path-part-right_arm_upper').getAttribute('transform');
   const armTransformBeforePlay = await page.getByTestId('path-part-right_arm_lower').getAttribute('transform');
   await page.getByTestId('novice-path-panel').getByRole('button', { name: /Play/i }).click();
-  await expect(page.getByText('IK target')).toBeVisible();
+  await expect(page.getByText('Motion target')).toBeVisible();
   await expect(page.getByTestId('path-part-right_arm_upper')).not.toHaveAttribute('transform', upperArmTransformBeforePlay ?? '');
   await expect(page.getByTestId('path-part-right_arm_lower')).not.toHaveAttribute('transform', armTransformBeforePlay ?? '');
   await page.getByTestId('novice-path-panel').getByRole('button', { name: /Stop/i }).click();
   await page.getByTestId('ik-chain-root-options').getByRole('button', { name: 'right elbow' }).click();
-  await page.getByLabel('IK handle').selectOption('right_elbow');
+  await page.getByLabel('Motion handle').selectOption('right_elbow');
   await page.getByText('Rig setup').click();
   const artXBefore = await page.getByTestId('path-part-art-right_arm_lower').getAttribute('x');
   await page.getByLabel('Art offset X number').fill('-12');
@@ -1594,13 +1699,14 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await expect(page.getByRole('button', { name: 'Clear path', exact: true })).toBeDisabled();
   await expect(page.getByLabel('X number').first()).toBeDisabled();
   await page.getByTestId('path-canvas').click({ position: { x: 260, y: 220 } });
-  await expect(page.getByTestId('free-draw-status')).toContainText(/5 points .*path-right-arm.*locked part/);
+  await expect(page.getByTestId('free-draw-status')).toContainText(/Path ready.*locked/);
 
   await partLocked.uncheck();
   await page.locator('label').filter({ hasText: 'Selected part anchor' }).locator('select').selectOption('right_elbow');
   await expect(page.locator('label').filter({ hasText: 'Selected part anchor' }).locator('select')).toHaveValue('right_elbow');
   await page.getByRole('button', { name: /Foundry/i }).click();
-  await expect(page.getByTestId('foundry-target-summary')).toContainText('chain right_elbow → right_elbow');
+  await expect(page.getByTestId('foundry-target-summary')).toHaveCount(0);
+  await expect(page.getByTestId('stage-left-pane')).not.toContainText(/chain|Board hole|Target .*pts/i);
 
   expectCleanPage(pageErrors, consoleErrors);
 });
@@ -1617,8 +1723,8 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await openWavingArmTemplate(page);
   await page.getByRole('button', { name: /Foundry/i }).click();
   await expect(page.getByRole('heading', { name: 'Foundry' })).toBeVisible();
-  await expect(page.getByTestId('foundry-visible-sensemaking')).toContainText('Crank turns');
-  await expect(page.getByTestId('foundry-mechanism-gallery')).toContainText('Crank turns');
+  await expect(page.getByTestId('stage-right-inspector').getByTestId('foundry-visible-sensemaking')).toContainText('Crank turns');
+  await expect(page.getByTestId('foundry-mechanism-gallery')).not.toContainText('Crank turns -> rocker swings');
   await expect(page.locator('[data-testid^="foundry-mini-simulation-"]')).toHaveCount(5);
   await expect(page.getByTestId('foundry-three-canvas')).toBeVisible();
   const threeScene = page.getByTestId('foundry-camera-rig');
@@ -1689,9 +1795,8 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(threeScene, 'Four-bar hardware pins are only A/B/C/D reference joints; the generated trace point must not get floating clips/spacers').toHaveAttribute('data-three-physical-pin-contract', 'reference-A-B-C-D-only');
   await expect(threeScene).toHaveAttribute('data-three-physical-pin-count', '4');
   await expect(threeScene, 'Generated trace/path is hidden until explicitly requested so it does not read as a floating mechanism part').toHaveAttribute('data-path-preview', 'hidden');
-  await expect(page.getByTestId('foundry-physics-readout')).toContainText('Motion');
-  await expect(page.getByTestId('foundry-physics-readout')).toContainText('μ');
-  await expect(page.getByTestId('foundry-physics-readout')).toContainText('constraint err');
+  await expect(page.getByTestId('foundry-physics-readout')).toHaveCount(0);
+  await expect(page.getByTestId('stage-right-inspector')).not.toContainText('Preview overlays');
   await expect(threeScene).toHaveAttribute('data-friction-coefficient', /0\.\d+/);
   await expect(threeScene).toHaveAttribute('data-constraint-error', /[0-9]+\.[0-9]+/);
   const defaultPhysics = await page.getByTestId('foundry-preview').evaluate(() => {
@@ -1726,12 +1831,11 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(page.getByTestId('foundry-mechanism-library')).toHaveCount(0);
   await page.getByRole('button', { name: 'Show details' }).click();
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Four-bar linkage');
-  await expect(page.getByTestId('foundry-mechanism-library')).toContainText('pin reactions');
+  await expect(page.getByTestId('foundry-mechanism-library')).not.toContainText('pin reactions');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('driver crank turns and rocker swings');
   await expect(page.getByTestId('foundry-mechanism-library')).toContainText('Answer: The board pivots stay fixed');
-  await expect(page.getByTestId('foundry-feasibility')).toContainText('360°');
   await page.getByRole('button', { name: 'Hide details' }).click();
-  await expect(page.getByTestId('foundry-target-summary')).toContainText('Range 360°');
+  await expect(page.getByTestId('foundry-target-summary')).toHaveCount(0);
   await expect(page.getByTestId('foundry-anchor-marker'), 'Default sandbox keeps non-mechanism markers hidden').toHaveCount(0);
   await expect(page.getByLabel('Foundry mechanism type')).toBeHidden();
   await page.getByText('Mechanism options').click();
@@ -1940,10 +2044,8 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   expect(Number(await threeScene.getAttribute('data-three-follower-count')), 'Cam follower shows its follower block').toBeGreaterThanOrEqual(1);
   await page.getByLabel('Foundry mechanism type').selectOption('4bar');
   await page.getByLabel('Foundry preset').selectOption('compact');
-  await expect(page.getByTestId('foundry-target-summary')).toContainText('Compact');
   await expect(page.getByLabel('ground number')).toHaveValue('120');
   await page.getByLabel('Foundry preset').selectOption('balanced');
-  await expect(page.getByTestId('foundry-target-summary')).toContainText('Balanced');
   await expect(page.getByLabel('ground number')).toHaveValue('160');
   await page.getByLabel('Foundry preset').selectOption('compact');
 
@@ -1951,11 +2053,12 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await page.getByLabel('Input link length').selectOption('2');
   await page.getByLabel('Coupler link length').selectOption('4');
   await page.getByLabel('Output link length').selectOption('2');
-  await expect(page.getByTestId('foundry-feasibility')).toContainText(/Motion \d+%/);
+  await expect(page.getByTestId('stage-left-pane')).not.toContainText(/Motion [0-9]+%/);
+  await expect(page.getByTestId('stage-left-pane')).not.toContainText(/Range|Status/i);
   await page.getByRole('button', { name: /Use mechanism/i }).click();
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
   await expect(page.getByTestId('design-mechanism-library')).toContainText('Four-bar linkage');
-  await expect(page.getByTestId('design-feasibility')).toContainText('360°');
+  await expect(page.getByTestId('design-mechanism-library')).not.toContainText('360°');
 
   await clickStage(page, 'Blueprint');
   await expect(page.getByRole('button', { name: /Generate package/i })).toBeEnabled();
@@ -1994,8 +2097,8 @@ test('Character edit drawer mutates body layers and skeleton joints into design 
   expect(copiedPartText).toContain('copy');
 
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
-  await page.getByRole('button', { name: '4bar', exact: true }).click();
-  const designPartOptions = await page.getByLabel('Mechanism target part').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
+  await page.getByRole('button', { name: 'Four-bar linkage', exact: true }).click();
+  const designPartOptions = await page.getByLabel('Mechanism moving part').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
   expect(designPartOptions.join(' ')).toContain('copy');
 
   await page.getByRole('button', { name: /Path Editor/i }).click();
@@ -2003,7 +2106,7 @@ test('Character edit drawer mutates body layers and skeleton joints into design 
   await page.getByRole('button', { name: /Remove layer/i }).click();
   await expect(selectedPart).not.toHaveValue(copiedPartId);
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
-  const designPartOptionsAfterRemove = await page.getByLabel('Mechanism target part').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
+  const designPartOptionsAfterRemove = await page.getByLabel('Mechanism moving part').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
   expect(designPartOptionsAfterRemove.join(' ')).not.toContain(copiedPartText);
 
   await page.getByRole('button', { name: /Path Editor/i }).click();
@@ -2023,8 +2126,8 @@ test('Character edit drawer mutates body layers and skeleton joints into design 
   await jointLocked.uncheck();
 
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
-  await page.getByLabel('Mechanism target part').selectOption('right_arm_lower');
-  const anchorOptionsWithJoint = await page.getByLabel('Mechanism target anchor').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));
+  await page.getByLabel('Mechanism moving part').selectOption('right_arm_lower');
+  const anchorOptionsWithJoint = await page.getByLabel('Motion handle').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));
   expect(anchorOptionsWithJoint).toContain(newJointId);
 
   await page.getByRole('button', { name: /Path Editor/i }).click();
@@ -2034,7 +2137,7 @@ test('Character edit drawer mutates body layers and skeleton joints into design 
   const anchorOptionsAfterJointRemove = await editJoint.evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));
   expect(anchorOptionsAfterJointRemove).not.toContain(newJointId);
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
-  const designAnchorOptionsAfterRemove = await page.getByLabel('Mechanism target anchor').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));
+  const designAnchorOptionsAfterRemove = await page.getByLabel('Motion handle').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));
   expect(designAnchorOptionsAfterRemove).not.toContain(newJointId);
 
   expectCleanPage(pageErrors, consoleErrors);
@@ -2100,29 +2203,39 @@ test('Foundry toolbar toggles preview, forces, velocity, trail, and sensemaking'
   await expect(page.getByTestId('foundry-toolbar')).toBeVisible();
   const threeScene = page.getByTestId('foundry-camera-rig');
   await expect(threeScene).toHaveAttribute('data-path-preview', 'hidden');
-  await expect(page.getByTestId('foundry-visible-sensemaking')).toContainText('Crank turns');
-  await page.getByRole('button', { name: 'Path', exact: true }).click();
+  const inspector = page.getByTestId('stage-right-inspector');
+  await expect(inspector.getByTestId('foundry-visible-sensemaking')).toContainText('Crank turns');
+  await expect(inspector).not.toContainText('Preview overlays');
+  await expect(inspector.getByTestId('foundry-view-controls')).toBeVisible();
+  await expect(inspector.getByTestId('foundry-parametric-editor')).toContainText('Link sizes');
+  expect(await inspector.evaluate((root) => {
+    const topOf = (testId: string) =>
+      root.querySelector(`[data-testid="${testId}"]`)?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY;
+    return topOf('foundry-visible-sensemaking') < topOf('foundry-view-controls')
+      && topOf('foundry-view-controls') < topOf('foundry-parametric-editor');
+  }), 'Foundry right pane orders sensemaking before compact view controls and editable link sizes').toBe(true);
+  await page.getByTestId('foundry-toggle-paths').click();
   await expect(threeScene).toHaveAttribute('data-path-preview', 'shown');
   await expect(threeScene).toHaveAttribute('data-three-path-source', 'moving-joints');
   await expect(threeScene).toHaveAttribute('data-three-path-trace-ids', 'B,C');
   await expect(threeScene).toHaveAttribute('data-three-primary-path-id', 'C');
-  await page.getByRole('button', { name: 'Path', exact: true }).click();
+  await page.getByTestId('foundry-toggle-paths').click();
   await expect(threeScene).toHaveAttribute('data-path-preview', 'hidden');
-  await page.getByRole('button', { name: 'Trail' }).click();
+  await page.getByTestId('foundry-toggle-trail').click();
   await expect(threeScene).toHaveAttribute('data-trail', 'shown');
   await expect(page.getByTestId('foundry-forces-overlay')).toBeVisible();
-  await page.getByRole('button', { name: 'Forces' }).click();
+  await page.getByTestId('foundry-toggle-forces').click();
   await expect(page.getByTestId('foundry-forces-overlay')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Forces' }).click();
+  await page.getByTestId('foundry-toggle-forces').click();
   await expect(page.getByTestId('foundry-forces-overlay')).toBeVisible();
   await expect(page.getByTestId('foundry-velocity-overlay')).toBeVisible();
-  await page.getByRole('button', { name: 'Velocity' }).click();
+  await page.getByTestId('foundry-toggle-velocity').click();
   await expect(page.getByTestId('foundry-velocity-overlay')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Velocity' }).click();
+  await page.getByTestId('foundry-toggle-velocity').click();
   await expect(page.getByTestId('foundry-velocity-overlay')).toBeVisible();
   await expect(page.getByTestId('foundry-mechanism-library')).toHaveCount(0);
   await page.getByRole('button', { name: 'Show details' }).click();
-  await expect(page.getByTestId('foundry-mechanism-library')).toContainText('pin reactions');
+  await expect(page.getByTestId('foundry-mechanism-library')).not.toContainText('pin reactions');
   await page.getByRole('button', { name: 'Hide details' }).click();
   await expect(page.getByTestId('foundry-mechanism-library')).toHaveCount(0);
   const velocityBeforePlay = await page.getByTestId('foundry-velocity-vector').evaluate((line: SVGLineElement) => [line.getAttribute('x1'), line.getAttribute('y1'), line.getAttribute('x2'), line.getAttribute('y2')].join(','));
@@ -2336,7 +2449,7 @@ test('Character import surface omits browser camera capture', async ({ page }) =
   await expect(page.getByRole('button', { name: /Capture Camera/i })).toHaveCount(0);
   await expect(page.getByTestId('camera-dialog')).toHaveCount(0);
 
-  await page.getByRole('button', { name: /Open Guide/i }).click();
+  await page.getByRole('button', { name: /Open Getting Started/i }).click();
   const dialog = page.getByTestId('getting-started-dialog');
   await expect(dialog).toBeVisible();
   await expect(dialog).not.toContainText('Capture frame');
@@ -2361,7 +2474,7 @@ test('Mobile path editor keeps Draw free path action above the canvas', async ({
 });
 
 
-test('Startup uses one boot loader and releases directly to Character', async ({ page }) => {
+test('Startup uses one boot loader and opens Getting Started over Character', async ({ page }) => {
   let releaseModelDownload!: () => void;
   const heldDownload = new Promise<void>(resolve => { releaseModelDownload = resolve; });
   await page.route(ONNX_MODEL_ROUTE, async route => {
@@ -2378,17 +2491,20 @@ test('Startup uses one boot loader and releases directly to Character', async ({
   await expect(page.locator('#boot-loader')).toContainText(/AI model/i);
   releaseModelDownload();
   await expect(page.locator('#boot-loader')).toHaveCount(0, { timeout: 180_000 });
-  await expect(page.getByTestId('getting-started-dialog')).toHaveCount(0);
   await expect(page.getByTestId('character-screen')).toBeVisible();
-  await page.getByRole('button', { name: /Open Guide/i }).click();
   await expect(page.getByTestId('getting-started-dialog')).toBeVisible();
+  await page.getByTestId('getting-started-hide-session').locator('input').check();
+  await page.getByRole('button', { name: 'Close' }).click();
+  await page.reload();
+  await expect(page.locator('#boot-loader')).toHaveCount(0, { timeout: 180_000 });
+  await expect(page.getByTestId('getting-started-dialog')).toHaveCount(0);
 });
 
-test('Mobile startup has no blocking modal and keeps Guide explicit', async ({ page }) => {
+test('Mobile startup shows compact Getting Started with a session opt-out', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await expect(page.locator('#boot-loader')).toHaveCount(0, { timeout: 180_000 });
-  await expect(page.getByTestId('getting-started-dialog')).toHaveCount(0);
+  await expect(page.getByTestId('getting-started-dialog')).toBeVisible();
   await expect(page.getByTestId('character-screen')).toBeVisible();
   const modalState = await page.evaluate(() => ({
     htmlOverflow: getComputedStyle(document.documentElement).overflow,
@@ -2397,13 +2513,12 @@ test('Mobile startup has no blocking modal and keeps Guide explicit', async ({ p
     modalClass: document.documentElement.classList.contains('welcome-modal-open'),
   }));
   expect(modalState).toEqual({
-    htmlOverflow: 'visible',
-    shellInert: false,
-    shellHidden: false,
-    modalClass: false,
+    htmlOverflow: 'hidden',
+    shellInert: true,
+    shellHidden: true,
+    modalClass: true,
   });
-  await page.getByRole('button', { name: /Open Guide/i }).click();
-  await expect(page.getByTestId('getting-started-dialog')).toBeVisible();
+  await expect(page.getByTestId('getting-started-hide-session')).toBeVisible();
 });
 
 test('Shared player dock overlays the canvas, does not take layout space, and can be dragged', async ({ page }) => {
@@ -2574,7 +2689,7 @@ test('Workflow tabs keep left workflow, center canvas, and right inspector roles
   await expect(page.getByTestId('stage-right-inspector')).not.toContainText(/Add body part|Add layer|Remove layer|Add joint|New IK handle|Parts \+ skeleton/);
 
   await page.getByRole('button', { name: /Foundry/i }).click();
-  await assertPaneContract('Templates', '3D Isometric', 'Mechanism options', '.canvas-zoom-toolbar, .foundry-camera-hud, .foundry-playback-hud');
+  await assertPaneContract('Templates', '3D Isometric', 'Why it moves', '.canvas-zoom-toolbar, .foundry-camera-hud, .foundry-playback-hud');
   await expect(page.getByTestId('stage-left-pane')).toContainText('Use mechanism');
 
   await page.getByRole('button', { name: /Use mechanism/i }).click();
@@ -2941,9 +3056,9 @@ test('Detached visible mechanisms block browser blueprint generation', async ({ 
   await page.goto('/');
   await openWavingArmTemplate(page);
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
-  await page.getByRole('button', { name: 'piston', exact: true }).click();
-  await page.getByLabel('Mechanism target part').selectOption('head');
-  await expect(page.getByLabel('Mechanism target path')).toHaveValue('');
+  await page.getByRole('button', { name: 'Slider piston', exact: true }).click();
+  await page.getByLabel('Mechanism moving part').selectOption('head');
+  await expect(page.getByLabel('Mechanism motion path')).toHaveValue('');
 
   await clickStage(page, 'Blueprint');
   await expect(page.getByTestId('blueprint-control-panel').getByText(/choose target \+ path/)).toBeVisible();
@@ -2965,7 +3080,7 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   await expect(page.getByTestId('design-mechanism-library')).toContainText('Four-bar linkage');
   await expect(page.getByTestId('design-visible-sensemaking')).toContainText('Crank turns');
 
-  await page.getByRole('button', { name: 'piston', exact: true }).click();
+  await page.getByRole('button', { name: 'Slider piston', exact: true }).click();
   await expectProjectCounts(page, 14, 1, 2);
   const selectedMechanismText = await page.getByLabel('Mechanism instance').evaluate((select: HTMLSelectElement) => select.selectedOptions[0]?.textContent ?? '');
   expect(selectedMechanismText).toContain('piston');
@@ -2973,24 +3088,25 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   await expect(page.getByTestId('design-visible-sensemaking')).toContainText('Crank turns');
   await expect(page.getByLabel('slider offset number')).toBeVisible();
   await expect(page.getByLabel('rod length number')).toBeVisible();
-  await expect(page.getByLabel('Mechanism target part')).toHaveValue('right_arm_lower');
-  await expect(page.getByLabel('Mechanism target path')).toHaveValue('path-right-arm');
+  await expect(page.getByLabel('Mechanism moving part')).toHaveValue('right_arm_lower');
+  await expect(page.getByLabel('Mechanism motion path')).toHaveValue('path-right-arm');
 
-  await page.getByLabel('Mechanism target part').selectOption('head');
-  await expect(page.getByLabel('Mechanism target path')).toHaveValue('');
-  const headPathOptions = await page.getByLabel('Mechanism target path').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
+  await page.getByLabel('Mechanism moving part').selectOption('head');
+  await expect(page.getByLabel('Mechanism motion path')).toHaveValue('');
+  const headPathOptions = await page.getByLabel('Mechanism motion path').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
   expect(headPathOptions).toEqual(['No path']);
-  await page.getByLabel('Mechanism target part').selectOption('right_arm_lower');
-  const armPathOptions = await page.getByLabel('Mechanism target path').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
-  expect(armPathOptions.join(' ')).toContain('path-right-arm · 5 pts');
-  const anchorOptionValues = await page.getByLabel('Mechanism target anchor').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));
+  await page.getByLabel('Mechanism moving part').selectOption('right_arm_lower');
+  const armPathOptions = await page.getByLabel('Mechanism motion path').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
+  expect(armPathOptions.join(' ')).toContain('Right lower arm path');
+  expect(armPathOptions.join(' ')).not.toContain('pts');
+  const anchorOptionValues = await page.getByLabel('Motion handle').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));
   expect(anchorOptionValues).toEqual(['', 'right_elbow', 'right_hand']);
-  const anchorOptions = await page.getByLabel('Mechanism target anchor').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
+  const anchorOptions = await page.getByLabel('Motion handle').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
   expect(anchorOptions.join(' ')).toContain('2 joints');
   expect(anchorOptions.join(' ')).not.toContain('left hand');
-  await expect(page.getByLabel('Mechanism target anchor')).toHaveValue('right_hand');
-  await expect(page.getByTestId('mechanism-ik-chain-summary')).toContainText('3 joints');
-  await page.getByLabel('Mechanism target path').selectOption('path-right-arm');
+  await expect(page.getByLabel('Motion handle')).toHaveValue('right_hand');
+  await expect(page.getByTestId('mechanism-ik-chain-summary')).toHaveCount(0);
+  await page.getByLabel('Mechanism motion path').selectOption('path-right-arm');
 
   await page.getByRole('button', { name: 'Delete', exact: true }).click();
   await expectProjectCounts(page, 14, 1, 1);
@@ -3004,9 +3120,9 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
 
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   await page.locator('label').filter({ hasText: 'Enabled' }).locator('input[type="checkbox"]').check();
-  await page.getByLabel('Mechanism target part').selectOption('right_arm_lower');
-  await page.getByLabel('Mechanism target path').selectOption('path-right-arm');
-  await page.getByLabel('Mechanism target anchor').selectOption('right_hand');
+  await page.getByLabel('Mechanism moving part').selectOption('right_arm_lower');
+  await page.getByLabel('Mechanism motion path').selectOption('path-right-arm');
+  await page.getByLabel('Motion handle').selectOption('right_hand');
   await page.getByRole('button', { name: 'Export Blueprint', exact: true }).click();
   await expect(page.getByRole('button', { name: /Generate package/i })).toBeEnabled();
   await page.getByRole('button', { name: /Generate package/i }).click();

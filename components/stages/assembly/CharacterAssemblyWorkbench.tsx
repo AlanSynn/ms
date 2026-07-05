@@ -53,8 +53,8 @@ export const CharacterAssemblyWorkbench = ({ plan, step, kit, progress = 0 }: { 
                 <h3>{step.label}</h3>
             </div>
             <div className="flex flex-wrap gap-2">
-                <span className="blueprint-pill">fixed pins {plan.fixedPins.length}</span>
-                <span className="blueprint-pill">free pivots {plan.freePivots.length}</span>
+                <span className="blueprint-pill">board pins</span>
+                <span className="blueprint-pill">moving joints</span>
             </div>
         </div>
         <svg className="assembly-workbench-svg" viewBox="0 0 900 560" role="img" aria-label={`Character assembly step ${step.index}`}>
@@ -120,7 +120,7 @@ export const CharacterAssemblyWorkbench = ({ plan, step, kit, progress = 0 }: { 
                     return <g key={pin.id} transform={`translate(${point.x.toFixed(1)} ${point.y.toFixed(1)})`} opacity={active ? 1 : 0.34}>
                         <circle r="15" fill="rgba(14,165,233,.1)" stroke="#0ea5e9" strokeWidth="3" strokeDasharray="6 4"/>
                         <circle r="6" fill="#ffffff" stroke="#0ea5e9" strokeWidth="2"/>
-                        <text x="16" y="5" className="assembly-svg-tiny">free pivot</text>
+                        <text x="16" y="5" className="assembly-svg-tiny">moving joint</text>
                     </g>;
                 })}
             </g>
@@ -159,7 +159,7 @@ export const CharacterAssemblyWorkbench = ({ plan, step, kit, progress = 0 }: { 
                     data-stack-parts={pin.stack.join('>')}
                     transform={`translate(0 ${pinIndex * 52})`}
                 >
-                    <text x="0" y="-8" className="assembly-svg-tiny">{pin.role === 'fixed_pin' ? 'fixed' : 'free'} · {pin.label}</text>
+                    <text x="0" y="-8" className="assembly-svg-tiny">{pin.label}</text>
                     {pin.stack.map((label, index) => <g key={`${pin.id}-${label}-${index}`} transform={`translate(${index * 60} 0)`}>
                         <rect x="0" y={index % 2 ? 8 : 0} width="48" height="18" rx="9" fill={pin.role === 'fixed_pin' ? ['#e2e8f0', '#334155', '#fbbf24', '#bfdbfe', '#334155'][index] : ['#bfdbfe', '#fef3c7', '#334155'][index]} stroke="#64748b"/>
                         <text x="24" y="38" className="assembly-svg-tiny" textAnchor="middle">{fabricationPartDisplayLabel(label)}</text>

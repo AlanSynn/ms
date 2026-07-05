@@ -146,6 +146,7 @@ export const AssemblyGuide = ({
         ),
         canvas: canvasPane(
           <AssemblyCanvasPane
+            project={project}
             activeAssemblyMode={activeAssemblyMode}
             characterAssemblyPlan={characterAssemblyPlan}
             currentCharacterStep={currentCharacterStep}

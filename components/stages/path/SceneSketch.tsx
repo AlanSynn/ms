@@ -387,7 +387,7 @@ export const SceneSketch = ({
                 y={p.y - 10}
                 className="body-preview-label text-[12px] font-black"
               >
-                IK target
+                Motion target
               </text>
             </g>
           );
@@ -395,4 +395,3 @@ export const SceneSketch = ({
     </svg>
   );
 };
-

@@ -140,7 +140,7 @@ export const AssemblyControlPanel = ({
               onClick={() => setSelectedRecipeId(recipe.mechanismId)}
             >
               <div className="font-bold text-slate-800">
-                {recipe.mechanismId} · {referenceRecipeForType(recipe.type).title}
+                {referenceRecipeForType(recipe.type).title}
               </div>
               <div className="text-sm text-slate-600">
                 Board {fabricationBoardCoordinateCallout(recipe.boardCoordinate, recipe.board)}

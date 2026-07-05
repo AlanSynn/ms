@@ -105,8 +105,12 @@ export const PathWorkflowPanel = ({
         </button>
       </div>
       <div className="free-draw-status" data-testid="free-draw-status">
-        {selectedPath ? `${pointCount} points · ${selectedPath.id}` : "0 points · none"}
-        {pathLocked ? " · locked part" : ""}
+        {selectedPath
+          ? pointCount >= 3
+            ? "Path ready"
+            : "Keep drawing"
+          : "No path yet"}
+        {pathLocked ? " · locked" : ""}
       </div>
       {selectedPath && (
         <div className="mt-3 space-y-3" data-testid="path-shape-controls">
@@ -140,7 +144,7 @@ export const PathWorkflowPanel = ({
       )}
       {!selectedPath && <div className="warning">No path.</div>}
       {selectedPath && selectedPath.points.length < 3 && (
-        <div className="warning">Need 3 points.</div>
+        <div className="warning">Keep drawing.</div>
       )}
       {pathLocked && <div className="warning">Unlock part.</div>}
       {selectedPath?.warnings.map((w, i) => (
@@ -193,9 +197,7 @@ export const PathWorkflowPanel = ({
           )}
         </div>
         <div className="mt-3 text-sm text-slate-600">
-          {selectedPath
-            ? `${selectedPath.source} · ${selectedPath.duration} ms · ${selectedPath.timedPoints?.length ?? 0} timed samples`
-            : "No timing"}
+          {selectedPath ? "Motion timing ready" : "No timing"}
         </div>
       </details>
       {project.settings.partPanelVisible ? (
@@ -228,7 +230,7 @@ export const PathWorkflowPanel = ({
                 disabled={!selectedPart || pathLocked}
                 onClick={addJointAtIkHandle}
               >
-                <Plus size={16} /> New IK handle
+                <Plus size={16} /> New handle
               </button>
             </div>
             {selectedPart && (

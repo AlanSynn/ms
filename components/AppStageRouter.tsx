@@ -29,8 +29,6 @@ export type AppStageRouterProps = {
   playerDock: ReactNode;
 
   pendingCharacter: PendingCharacterReview | null;
-  replaceCharacter: boolean;
-  setReplaceCharacter: (v: boolean) => void;
   onOpenGettingStarted: () => void;
   onAcceptPendingCharacter: () => void;
   onDiscardPendingCharacter: () => void;
@@ -89,8 +87,6 @@ export const AppStageRouter = ({
   goStage,
   playerDock,
   pendingCharacter,
-  replaceCharacter,
-  setReplaceCharacter,
   onOpenGettingStarted,
   onAcceptPendingCharacter,
   onDiscardPendingCharacter,
@@ -143,8 +139,6 @@ export const AppStageRouter = ({
         project={project}
         dispatch={dispatch}
         pendingCharacter={pendingCharacter}
-        replaceCharacter={replaceCharacter}
-        setReplaceCharacter={setReplaceCharacter}
         onOpenGettingStarted={onOpenGettingStarted}
         onAccept={onAcceptPendingCharacter}
         onDiscard={onDiscardPendingCharacter}

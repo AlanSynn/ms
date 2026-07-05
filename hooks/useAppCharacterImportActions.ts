@@ -7,7 +7,6 @@ import {
   createProjectFromProcessed,
   downloadText,
   loadProjectSnapshot,
-  replaceCharacterProject,
 } from "../utils/project";
 import {
   processImageWithWebOnnx,
@@ -43,14 +42,10 @@ export const useAppCharacterImportActions = ({
 }: UseAppCharacterImportActionsParams) => {
   const [pendingCharacter, setPendingCharacter] =
     useState<PendingCharacterReview | null>(null);
-  const [replaceCharacter, setReplaceCharacter] = useState(false);
 
   const queueCharacterReview = (next: ProjectState, summary: string) => {
-    const reviewed = replaceCharacter
-      ? replaceCharacterProject(next, project, stage)
-      : next;
     setPendingCharacter({
-      project: reviewed,
+      project: next,
       summary,
       returnStage: "character",
     });
@@ -110,11 +105,9 @@ export const useAppCharacterImportActions = ({
         maskUrl: result.maskUrl,
         keypoints: result.keypoints,
         replacementContext: {
-          mode: replaceCharacter ? "replace-character" : "plain-load",
+          mode: "plain-load",
           previousStage: stage,
-          rebindingSummary: replaceCharacter
-            ? "Check before preserving mechanisms."
-            : "Clean start.",
+          rebindingSummary: "Clean start.",
         },
       });
       queueCharacterReview(
@@ -267,8 +260,6 @@ export const useAppCharacterImportActions = ({
   return {
     pendingCharacter,
     setPendingCharacter,
-    replaceCharacter,
-    setReplaceCharacter,
     runWebOnnx,
     loadStarterImage,
     importCharacterPackage,

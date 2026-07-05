@@ -308,6 +308,19 @@ export interface FabricationIssue {
     recoveryAction: string;
 }
 
+export interface SceneObject {
+    id: string;
+    name: string;
+    shape: 'piggy-bank' | 'cloud' | 'star' | 'block';
+    transform: Transform;
+    bounds: { width: number; height: number };
+    fillColor: string;
+    opacity: number;
+    visible: boolean;
+    locked: boolean;
+    zIndex: number;
+}
+
 export interface CharacterPackageArtifact {
     id: string;
     createdAt: string;
@@ -340,6 +353,8 @@ export interface ProjectState {
     };
     parts: Record<string, BodyPartLayer>;
     partOrder: string[];
+    sceneObjects: Record<string, SceneObject>;
+    sceneObjectOrder: string[];
     skeleton: StandardSkeleton | null;
     paths: Record<string, ProjectMotionPath>;
     mechanisms: MechanismConfig[];
@@ -347,6 +362,7 @@ export interface ProjectState {
     selectedPartId?: string;
     selectedPathId?: string;
     selectedMechanismId?: string;
+    selectedSceneObjectId?: string;
     processing: ProcessingStatus;
     lastExport?: FabricationPackage;
     characterPackage?: CharacterPackageArtifact;
@@ -357,10 +373,14 @@ export type ProjectAction =
     | { type: 'load_project'; project: ProjectState }
     | { type: 'set_processing'; processing: ProcessingStatus }
     | { type: 'select_part'; partId?: string }
+    | { type: 'select_scene_object'; objectId?: string }
     | { type: 'upsert_part'; part: BodyPartLayer }
     | { type: 'delete_part'; partId: string }
     | { type: 'update_part'; partId: string; updates: Partial<BodyPartLayer> }
     | { type: 'reorder_part'; partId: string; direction: -1 | 1 }
+    | { type: 'upsert_scene_object'; object: SceneObject }
+    | { type: 'update_scene_object'; objectId: string; updates: Partial<SceneObject> }
+    | { type: 'delete_scene_object'; objectId: string }
     | { type: 'set_skeleton'; skeleton: StandardSkeleton | null }
     | { type: 'update_joint'; jointId: string; updates: Partial<StandardJoint> }
     | { type: 'add_joint'; joint: StandardJoint }

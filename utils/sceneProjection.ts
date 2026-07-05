@@ -6,6 +6,7 @@ import { mechanismTemplateLabel } from './mechanismTemplates';
 export type ProjectionSourceType =
     | 'board'
     | 'part'
+    | 'scene-object'
     | 'joint'
     | 'bone'
     | 'path'
@@ -100,6 +101,7 @@ export interface ToonSceneProjection {
 const CATEGORY_ORDER: Record<ProjectionSourceType, number> = {
     board: 0,
     part: 10,
+    'scene-object': 15,
     bone: 20,
     joint: 21,
     path: 30,
@@ -128,6 +130,7 @@ const transformPoint = (local: Point, transform: { x: number; y: number; rotatio
 
 const nodeDepth = (sourceType: ProjectionSourceType, baseDepth = 0) => {
     if (sourceType === 'board') return -4;
+    if (sourceType === 'scene-object') return baseDepth + 0.5;
     if (sourceType === 'bone' || sourceType === 'joint') return baseDepth + 1;
     if (sourceType === 'path') return baseDepth + 3;
     if (sourceType === 'mechanism' || sourceType === 'hardware') return baseDepth + 5;
@@ -244,6 +247,38 @@ export const buildToonSceneProjection = (project: ProjectState): ToonSceneProjec
             thicknessMm: 2.4,
             material: 'paper',
             interactive: part.selectable !== false,
+            exportRole: 'project-reference'
+        }));
+    });
+
+    project.sceneObjectOrder.forEach((objectId, index) => {
+        const object = project.sceneObjects[objectId];
+        if (!object || object.visible === false) return;
+        const scale = finite(object.transform.scale, 1) || 1;
+        nodes.push(baseNode({
+            id: `/scene-objects/${pathSegment(object.id)}`,
+            sourceType: 'scene-object',
+            sourceId: object.id,
+            label: object.name || object.id,
+            geometry: {
+                kind: 'rect',
+                center: { x: finite(object.transform.x), y: finite(object.transform.y) },
+                size: {
+                    width: finite(object.bounds.width * scale),
+                    height: finite(object.bounds.height * scale)
+                },
+                rotationRad: rotationRad(object.transform.rotation)
+            },
+            transform2d: {
+                x: finite(object.transform.x),
+                y: finite(object.transform.y),
+                rotationRad: rotationRad(object.transform.rotation),
+                scale
+            },
+            depthMm: nodeDepth('scene-object', object.zIndex * 2 + index * 0.01),
+            thicknessMm: 2,
+            material: 'paper',
+            interactive: false,
             exportRole: 'project-reference'
         }));
     });

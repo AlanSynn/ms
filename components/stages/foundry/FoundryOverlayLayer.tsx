@@ -154,10 +154,10 @@ export const FoundryOverlayLayer = ({
             />
           )}
           <text x={projectedForceTip.x + 5} y={projectedForceTip.y - 3}>
-            F / a
+            Push
           </text>
           <text x={projectedDriveTip.x + 5} y={projectedDriveTip.y + 9}>
-            drive τ
+            Turn
           </text>
           {projectedFrictionTip && (
             <text
@@ -165,7 +165,7 @@ export const FoundryOverlayLayer = ({
               y={projectedFrictionTip.y + 9}
               fill="#92400e"
             >
-              μ
+              Rub
             </text>
           )}
         </g>
@@ -205,7 +205,7 @@ export const FoundryOverlayLayer = ({
           markerEnd="url(#foundry-arrow-velocity-overlay)"
         />
         <text x={projectedVelocityTip.x + 5} y={projectedVelocityTip.y - 3}>
-          v
+          Speed
         </text>
       </g>
     )}

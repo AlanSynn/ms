@@ -10,7 +10,7 @@ import { ContextHelp } from "../../ui/ContextHelp";
 export const FoundrySimBadge = ({ foundryPlaying }: { foundryPlaying: boolean }) => (
   <div className="foundry-sim-badge" data-testid="foundry-sim-badge">
     <span className={foundryPlaying ? "status-pulse" : ""} />
-    {foundryPlaying ? "Active Sim" : "Paused"}
+    {foundryPlaying ? "Playing" : "Paused"}
   </div>
 );
 
@@ -99,21 +99,21 @@ export const FoundryCameraControls = ({
       type="button"
       data-testid="foundry-toggle-forces"
       className={showForces ? "active" : ""}
-      aria-label="Force vector layer"
+      aria-label="Motion push layer"
       aria-pressed={showForces}
       onClick={onToggleForces}
     >
-      Force
+      Push
     </button>
     <button
       type="button"
       data-testid="foundry-toggle-velocity"
       className={showVelocity ? "active" : ""}
-      aria-label="Speed vector layer"
+      aria-label="Motion speed layer"
       aria-pressed={showVelocity}
       onClick={onToggleVelocity}
     >
-      v
+      Speed
     </button>
     <button
       type="button"
@@ -165,6 +165,6 @@ export const FoundryPlaybackPanel = ({
       value={foundryPhaseDegrees}
       onChange={(event) => onPhaseChange(Number(event.target.value))}
     />
-    <span>{foundryPhaseDegrees}°</span>
+    <span>{Math.round((foundryPhaseDegrees / 360) * 100)}%</span>
   </div>
 );

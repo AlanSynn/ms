@@ -71,7 +71,7 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
     // Clear selections when switching (Simplified: just clear on open if needed, or keep logic simple)
     // removed auto mode switching effect
 
-    // Force canvas redraw when modal opens (to show existing manual points)
+    // Force canvas redraw when modal opens (to show existing trace marks)
     useEffect(() => {
         if (isOpen) {
             // Increment redrawKey to force canvas redraw immediately
@@ -743,11 +743,11 @@ export const TrackingModal: React.FC<TrackingModalProps> = ({ isOpen, onClose, o
 
 
 
-                        {/* Path Info - show tracked or manual points count */}
+                        {/* Path Info - show simple trace readiness */}
 
                         {manualPoints.length > 0 && (
                             <span className="text-cyan-400 text-sm px-3">
-                                ✓ {manualPoints.length} manual points
+                                ✓ Path ready
                             </span>
                         )}
                     </div>

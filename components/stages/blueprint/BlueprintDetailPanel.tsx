@@ -37,7 +37,7 @@ export const BlueprintDetailPanel = ({
           data-testid={`blueprint-recipe-${selectedRecipe.mechanismId}`}
         >
           <div className="font-bold text-slate-800">
-            {selectedRecipe.mechanismId} · {recipeTitle(selectedRecipe)}
+            {recipeTitle(selectedRecipe)}
           </div>
           <div className="mt-1 text-sm text-slate-600">
             Board{" "}
@@ -89,9 +89,7 @@ export const BlueprintDetailPanel = ({
       )}
       {project.lastExport && (
         <div className="rounded-2xl bg-white p-3 text-sm text-slate-600 shadow-sm">
-          Grid {project.settings.physicalKit.gridPitchMm}mm · holes{" "}
-          {project.settings.physicalKit.holeDiameterMm}mm · {recipes.length}{" "}
-          recipe
+          Build sheet ready · {recipes.length} recipe
           {recipes.length === 1 ? "" : "s"}
         </div>
       )}

@@ -37,6 +37,7 @@ export type AppWorkspaceShellProps = {
   onnxCacheStatus: WebOnnxCacheStatus;
   cacheOnnxModel: () => void | Promise<void>;
   showGettingStarted: boolean;
+  hideGettingStartedThisSession: boolean;
   starterTemplates: StarterImageTemplate[];
   guidedLessons: readonly GuidedLessonTile[];
   onLesson: (lessonId: string) => void;
@@ -45,6 +46,7 @@ export type AppWorkspaceShellProps = {
   onPackage: (files: FileList | File[]) => void | Promise<void>;
   onProcess: (file: File) => void | Promise<void>;
   onImport: (file: File) => void | Promise<void>;
+  onHideGettingStartedThisSessionChange: (hidden: boolean) => void;
   onCloseGettingStarted: () => void;
   showShortcuts: boolean;
   onCloseShortcuts: () => void;
@@ -81,6 +83,7 @@ export const AppWorkspaceShell = ({
   onnxCacheStatus,
   cacheOnnxModel,
   showGettingStarted,
+  hideGettingStartedThisSession,
   starterTemplates,
   guidedLessons,
   onLesson,
@@ -89,6 +92,7 @@ export const AppWorkspaceShell = ({
   onPackage,
   onProcess,
   onImport,
+  onHideGettingStartedThisSessionChange,
   onCloseGettingStarted,
   showShortcuts,
   onCloseShortcuts,
@@ -192,12 +196,14 @@ export const AppWorkspaceShell = ({
         <GettingStartedDialog
           starterTemplates={starterTemplates}
           guidedLessons={guidedLessons}
+          hideForSession={hideGettingStartedThisSession}
           onLesson={onLesson}
           onStarterImage={onStarterImage}
           onSample={onSample}
           onPackage={onPackage}
           onProcess={onProcess}
           onImport={onImport}
+          onHideForSessionChange={onHideGettingStartedThisSessionChange}
           onClose={onCloseGettingStarted}
         />
       )}

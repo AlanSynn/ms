@@ -321,7 +321,7 @@ export const CutOutlineEditorDialog = ({
             className="cut-outline-point-readout"
             data-testid="part-cut-point-readout"
           >
-            Point {points.length ? selectedIndex + 1 : 0}/{points.length}
+            Handle {points.length ? selectedIndex + 1 : 0}/{points.length}
           </div>
           <div className="cut-outline-actions">
             <button

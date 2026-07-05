@@ -2,7 +2,15 @@ import {
   AssemblyWorkbench,
   CharacterAssemblyWorkbench,
 } from "./AssemblyWorkbench";
-import type { FabricationRecipe, PhysicalKitSettings } from "../../../types";
+import {
+  AssemblyCharacterThreePreview,
+  AssemblyMechanismThreePreview,
+} from "./AssemblyThreePreview";
+import type {
+  FabricationRecipe,
+  PhysicalKitSettings,
+  ProjectState,
+} from "../../../types";
 import type {
   AssemblyLane,
   AssemblyPlaybackStep,
@@ -13,6 +21,7 @@ import type {
 type AssemblyMode = "mechanism" | "character";
 
 export const AssemblyCanvasPane = ({
+  project,
   activeAssemblyMode,
   characterAssemblyPlan,
   currentCharacterStep,
@@ -23,6 +32,7 @@ export const AssemblyCanvasPane = ({
   progress,
   hasCharacterAssembly,
 }: {
+  project: ProjectState;
   activeAssemblyMode: AssemblyMode;
   characterAssemblyPlan: CharacterAssemblyPlan;
   currentCharacterStep?: CharacterAssemblyStep;
@@ -38,20 +48,44 @@ export const AssemblyCanvasPane = ({
     data-testid="assembly-canvas-preview"
   >
     {activeAssemblyMode === "character" && currentCharacterStep ? (
-      <CharacterAssemblyWorkbench
-        plan={characterAssemblyPlan}
-        step={currentCharacterStep}
-        kit={kit}
-        progress={progress}
-      />
+      <div className="assembly-simulation-stack" data-testid="assembly-character-simulation-stack">
+        <AssemblyCharacterThreePreview
+          project={project}
+          plan={characterAssemblyPlan}
+          step={currentCharacterStep}
+          progress={progress}
+        />
+        <CharacterAssemblyWorkbench
+          plan={characterAssemblyPlan}
+          step={currentCharacterStep}
+          kit={kit}
+          progress={progress}
+        />
+      </div>
     ) : selectedRecipe && currentStep ? (
-      <AssemblyWorkbench
-        recipe={selectedRecipe}
-        lane={lane}
-        step={currentStep}
-        kit={kit}
-        progress={progress}
-      />
+      <div className="assembly-simulation-stack" data-testid="assembly-mechanism-simulation-stack">
+        {project.mechanisms.find(
+          (mechanism) => mechanism.id === selectedRecipe.mechanismId,
+        ) && (
+          <AssemblyMechanismThreePreview
+            project={project}
+            mechanism={
+              project.mechanisms.find(
+                (mechanism) => mechanism.id === selectedRecipe.mechanismId,
+              )!
+            }
+            step={currentStep}
+            progress={progress}
+          />
+        )}
+        <AssemblyWorkbench
+          recipe={selectedRecipe}
+          lane={lane}
+          step={currentStep}
+          kit={kit}
+          progress={progress}
+        />
+      </div>
     ) : (
       <div className="blueprint-empty-state">
         {hasCharacterAssembly ? "Choose Character." : "Add a character first."}

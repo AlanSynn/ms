@@ -8,8 +8,6 @@ type BaseRouterProps = Pick<
 type CharacterRouterProps = Pick<
   AppStageRouterProps,
   | "pendingCharacter"
-  | "replaceCharacter"
-  | "setReplaceCharacter"
   | "onOpenGettingStarted"
   | "onAcceptPendingCharacter"
   | "onDiscardPendingCharacter"

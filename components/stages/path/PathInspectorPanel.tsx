@@ -26,7 +26,6 @@ export const PathInspectorPanel = ({
   selectedPartId,
   selectedPartName,
   selectedPath,
-  pointCount,
   selectedPoint,
   pathLocked,
   selectedChainRootId,
@@ -48,26 +47,24 @@ export const PathInspectorPanel = ({
     {selectedPath && (
       <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
         <div className="font-bold text-slate-800">Path</div>
-        <div>
-          {selectedPath.id} · {pointCount} points · {selectedPath.closed ? "closed" : "open"}
-        </div>
+        <div>{selectedPath.closed ? "Loop ready" : "Curve ready"}</div>
         <div>
           {selectedPoint !== null && selectedPath.points[selectedPoint]
-            ? `Point ${selectedPoint + 1}: ${selectedPath.points[selectedPoint].x.toFixed(0)}, ${selectedPath.points[selectedPoint].y.toFixed(0)}`
-            : "Select point."}
+            ? "Point selected."
+            : "Drag the curve."}
         </div>
       </div>
     )}
     <div className="rig-helper" data-testid="quick-rig-helper">
-      <h4 className="section-title">Bones</h4>
-      <h3>IK</h3>
+      <h4 className="section-title">Motion</h4>
+      <h3>Move part</h3>
       {selectedPartId && (
         <label
           className={`block text-xs font-black uppercase tracking-wider text-slate-500 ${pathLocked || !selectedPath ? "opacity-50" : ""}`}
         >
           Start
           <select
-            aria-label="IK chain root"
+            aria-label="Motion start"
             className="field mt-1"
             disabled={pathLocked || !selectedPath}
             value={selectedChainRootId ?? ""}
@@ -102,7 +99,7 @@ export const PathInspectorPanel = ({
         >
           Handle
           <select
-            aria-label="IK handle"
+            aria-label="Motion handle"
             className="field mt-1"
             disabled={pathLocked || !selectedPath}
             value={selectedIkJointId ?? ""}
@@ -120,10 +117,10 @@ export const PathInspectorPanel = ({
         <div
           className="rounded-2xl border border-violet-100 bg-violet-50/70 p-3 text-sm text-slate-600"
           data-testid="ik-chain-summary"
-          title={ikDescriptor?.helper ?? "Pick handle."}
+          title={ikDescriptor ? "Motion target." : "Pick handle."}
         >
           <div className="font-bold text-slate-800">
-            {ikDescriptor?.label ?? "No limb"}
+            {ikDescriptor ? "Motion ready" : "Pick a handle"}
           </div>
         </div>
       )}
@@ -134,7 +131,7 @@ export const PathInspectorPanel = ({
           </div>
           <div className="text-sm text-slate-600">
             {bendJoint
-              ? `${jointLabel(bendJoint.id)} → ${bendJoint.bendDirection < 0 ? "left" : "right"}`
+              ? `Bend ${bendJoint.bendDirection < 0 ? "left" : "right"}`
               : ikDescriptor?.kind === "two-joint-direct"
                 ? "No bend"
                 : "Pick elbow/knee"}

@@ -161,7 +161,7 @@ export const Options = ({
                   <option value="presentation">Presentation</option>
                 </SelectField>
                 <MiniNumber
-                  label="Friction μ"
+                  label="Friction"
                   value={project.settings.simulationFriction}
                   min={0}
                   max={2}
@@ -171,7 +171,7 @@ export const Options = ({
                   }
                 />
                 <MiniNumber
-                  label="Mass kg"
+                  label="Mass"
                   value={project.settings.simulationMassKg}
                   min={0.05}
                   max={10}
@@ -199,7 +199,7 @@ export const Options = ({
                   <option value="high">High</option>
                 </SelectField>
                 <SelectField
-                  label="Physics snap mode"
+                  label="Snap quality"
                   value={project.settings.physicsSnapMode}
                   onChange={(physicsSnapMode) =>
                     updateSettings({
@@ -366,7 +366,7 @@ export const Options = ({
                   <div className="font-bold text-slate-800">Grid</div>
                   <div>{unitSummary}</div>
                   <div>
-                    {kit.boardCells}×{kit.boardCells} board holes ·{" "}
+                    {kit.boardCells}×{kit.boardCells} board grid ·{" "}
                     {kit.sheetWidthMm.toFixed(1)}×{kit.sheetHeightMm.toFixed(1)}
                     mm sheet
                   </div>

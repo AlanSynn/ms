@@ -13,6 +13,7 @@ import {
 
 export const AssemblyWorkbench = ({ recipe, lane, step, kit, progress = 0 }: { recipe: FabricationRecipe; lane: AssemblyLane; step: AssemblyPlaybackStep; kit: PhysicalKitSettings; progress?: number }) => {
     const eased = smoothAssemblyProgress(progress);
+    const recipeTitle = MECHANISM_TEMPLATE_LIBRARY[recipe.type].label;
     const sensemaking = MECHANISM_TEMPLATE_LIBRARY[recipe.type].classroomSensemaking;
     const boardActive = lane === 'kit' && ['mount-to-board', 'connect-character', 'test-motion'].includes(step.phase);
     const stack = step.stack.length ? step.stack : recipe.assemblySteps.flatMap(item => item.stack ?? []).slice(0, 5);
@@ -25,7 +26,7 @@ export const AssemblyWorkbench = ({ recipe, lane, step, kit, progress = 0 }: { r
     const floatingCoordEntries = coordEntries.filter(entry => !isBoardFixedCoordRole(entry.role));
     const activeCoords = boardCoordEntries.map(entry => entry.point);
     const currentLayer = Math.max(0, Math.min(stack.length - 1, step.phase === 'assemble-module' ? step.index - 2 : stack.length - 1));
-    const activeLayerLabel = stack[currentLayer]?.label ? fabricationPartDisplayLabel(stack[currentLayer].label) : `${recipe.type.replace(/[-_]/g, ' ')} module`;
+    const activeLayerLabel = stack[currentLayer]?.label ? fabricationPartDisplayLabel(stack[currentLayer].label) : `${recipeTitle} module`;
     const primaryBoardPoint = activeCoords[0] ?? assemblyCoordToSvg(recipe.boardCoordinate) ?? { x: 620, y: 260 };
     const home = { x: 76, y: 176 };
     const mounted = { x: primaryBoardPoint.x - 92, y: primaryBoardPoint.y - 102 };
@@ -65,7 +66,7 @@ export const AssemblyWorkbench = ({ recipe, lane, step, kit, progress = 0 }: { r
                 <span className="blueprint-pill">{lane === 'kit' ? `${kit.boardCells}×${kit.boardCells} board` : 'custom parts'}</span>
             </div>
         </div>
-        <svg className="assembly-workbench-svg" viewBox="0 0 900 560" role="img" aria-label={`${recipe.type} assembly step ${step.index}`}>
+        <svg className="assembly-workbench-svg" viewBox="0 0 900 560" role="img" aria-label={`${recipeTitle} assembly step ${step.index}`}>
             <title>{`${step.label} · ${lane === 'kit' ? 'board assembly' : 'custom parts assembly'}`}</title>
             <defs>
                 <linearGradient id="assembly-layer-fill" x1="0" x2="1"><stop offset="0" stopColor="#dbeafe"/><stop offset="1" stopColor="#a78bfa"/></linearGradient>
@@ -112,7 +113,7 @@ export const AssemblyWorkbench = ({ recipe, lane, step, kit, progress = 0 }: { r
                 })}
                 {!stack.length && <g className="assembly-active-layer">
                     <rect x="36" y="94" width="178" height="44" rx="22" fill="url(#assembly-layer-fill)" stroke="#7c3aed" strokeWidth="2"/>
-                    <text x="72" y="121" className="assembly-svg-tiny">{recipe.type.replace(/[-_]/g, ' ')} module</text>
+                    <text x="72" y="121" className="assembly-svg-tiny">{recipeTitle} module</text>
                 </g>}
             </g>
             <g

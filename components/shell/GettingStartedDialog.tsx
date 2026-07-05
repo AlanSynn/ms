@@ -18,15 +18,17 @@ export type GuidedLessonTile = {
     };
 };
 
-export const GettingStartedDialog = ({ starterTemplates, guidedLessons, onLesson, onSample, onStarterImage, onPackage, onProcess, onImport, onClose }: {
+export const GettingStartedDialog = ({ starterTemplates, guidedLessons, hideForSession, onLesson, onSample, onStarterImage, onPackage, onProcess, onImport, onHideForSessionChange, onClose }: {
     starterTemplates: StarterImageTemplate[];
     guidedLessons: readonly GuidedLessonTile[];
+    hideForSession: boolean;
     onLesson: (lessonId: string) => void;
     onSample: () => void;
     onStarterImage: (template: StarterImageTemplate) => void;
     onPackage: (files: FileList | File[]) => void;
     onProcess: (file: File) => void;
     onImport: (file: File) => void;
+    onHideForSessionChange: (hidden: boolean) => void;
     onClose: () => void;
 }) => {
     const dialogRef = useRef<HTMLElement>(null);
@@ -121,6 +123,10 @@ export const GettingStartedDialog = ({ starterTemplates, guidedLessons, onLesson
                     }}/>
                 </div>
                 <div className="getting-started-foot">
+                    <label className="flex items-center gap-2 text-sm font-bold text-slate-600" data-testid="getting-started-hide-session">
+                        <input type="checkbox" checked={hideForSession} onChange={event => onHideForSessionChange(event.currentTarget.checked)}/>
+                        Don&apos;t show again this session
+                    </label>
                     <button type="button" className="btn-secondary cursor-pointer" onClick={() => importInputRef.current?.click()}><Upload size={16}/> Open full project</button><input ref={importInputRef} data-testid="getting-started-import-input" hidden type="file" accept="application/json,.json" onChange={e => {
                     const file = e.currentTarget.files?.[0];
                     e.currentTarget.value = '';

@@ -1,8 +1,17 @@
 import React from "react";
 import type { MechanismConfig, MechanismType } from "../../../types";
+import { ClassroomExampleVideo } from "../../ui/ClassroomExampleVideo";
+import { fabricationStackSummary } from "../../../utils/fabrication";
+import {
+  classroomAssessmentFor,
+  classroomCueTitleFor,
+  classroomUseExampleFor,
+  formatClassroomAssessmentPrompt,
+} from "../../../utils/classroomContent";
 import {
   FOUNDRY_MECHANISM_TYPES,
   FOUNDRY_PRESETS,
+  MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY,
   mechanismTemplateLabel,
 } from "../../../utils/mechanismTemplates";
 import { MiniNumber } from "../../ui/InspectorControls";
@@ -12,21 +21,16 @@ import {
   shouldShowMechanismParam,
 } from "../mechanism/mechanismParamPolicy";
 
+type FoundrySensemaking =
+  (typeof MECHANISM_LIBRARY)[MechanismType]["classroomSensemaking"];
+
 export const FoundryInspectorPanel = ({
   foundry,
   libraryLabel,
-  physicsRule,
-  velocityMagnitude,
-  forceMagnitude,
-  simulationFriction,
-  constraintError,
-  simulationMassKg,
+  classroomAssessmentKey,
+  classroomSensemaking,
   foundryRigOpacity,
   foundryExplode,
-  showForces,
-  showVelocity,
-  showTrail,
-  showPathPreview,
   showSensemaking,
   onRigOpacityChange,
   onExplodeChange,
@@ -34,27 +38,14 @@ export const FoundryInspectorPanel = ({
   onChangeParam,
   onSetMechanismType,
   onSetPreset,
-  onToggleForces,
-  onToggleVelocity,
-  onToggleTrail,
-  onTogglePathPreview,
   onToggleSensemaking,
-  onHideSensemaking,
 }: {
   foundry: MechanismConfig;
   libraryLabel: string;
-  physicsRule: string;
-  velocityMagnitude: number;
-  forceMagnitude: number;
-  simulationFriction: number;
-  constraintError: number;
-  simulationMassKg: number;
+  classroomAssessmentKey: string;
+  classroomSensemaking: FoundrySensemaking;
   foundryRigOpacity: number;
   foundryExplode: number;
-  showForces: boolean;
-  showVelocity: boolean;
-  showTrail: boolean;
-  showPathPreview: boolean;
   showSensemaking: boolean;
   onRigOpacityChange: (value: number) => void;
   onExplodeChange: (value: number) => void;
@@ -62,66 +53,112 @@ export const FoundryInspectorPanel = ({
   onChangeParam: (key: keyof MechanismConfig, value: number) => void;
   onSetMechanismType: (type: MechanismType) => void;
   onSetPreset: (presetId: string) => void;
-  onToggleForces: () => void;
-  onToggleVelocity: () => void;
-  onToggleTrail: () => void;
-  onTogglePathPreview: () => void;
   onToggleSensemaking: () => void;
-  onHideSensemaking: () => void;
-}) => (
+}) => {
+  const assessment = classroomAssessmentFor(
+    foundry.type,
+    classroomAssessmentKey,
+    "foundry",
+  );
+  const useExample = classroomUseExampleFor(foundry.type);
+
+  return (
   <div className="stage-pane-stack">
-    <div>
-      <div className="section-title">Selected mechanism</div>
-      <h3>{libraryLabel}</h3>
-      <div
-        className="physics-readout mt-3"
-        data-testid="foundry-physics-readout"
+    <div className="stage-pane-stack" data-testid="foundry-sensemaking-panel">
+      <button
+        type="button"
+        className={`sensemaking-cue sensemaking-cue-button ${showSensemaking ? "active" : ""}`}
+        data-testid="foundry-visible-sensemaking"
+        data-sensemaking-check={classroomSensemaking.studentCheck}
+        data-sensemaking-answer={classroomSensemaking.expectedAnswer}
+        data-sensemaking-evidence={classroomSensemaking.evidenceCue}
+        data-sensemaking-clip={classroomSensemaking.clipSlot}
+        aria-expanded={showSensemaking}
+        aria-label={showSensemaking ? "Hide details" : "Show details"}
+        onClick={onToggleSensemaking}
       >
-        <strong>Motion</strong>
-        <span>{physicsRule}</span>
-        <span>
-          v {velocityMagnitude.toFixed(1)} · F {forceMagnitude.toFixed(1)} · μ{" "}
-          {simulationFriction.toFixed(2)}
+        <span className="cue-title">{classroomCueTitleFor("foundry")}</span>
+        <strong>{classroomSensemaking.directTranslation}</strong>
+        <small>{classroomSensemaking.tryThis}</small>
+        <small
+          data-testid="classroom-assessment-prompt"
+          data-assessment-key={classroomAssessmentKey}
+          data-assessment-kind={assessment.kind}
+        >
+          {formatClassroomAssessmentPrompt(assessment)}
+        </small>
+        <span className="blueprint-pill sensemaking-action-pill">
+          {showSensemaking ? "Hide details" : "Show details"}
         </span>
-        <span>
-          constraint err {constraintError.toFixed(2)} · mass{" "}
-          {simulationMassKg.toFixed(1)}kg
-        </span>
-      </div>
+      </button>
+      {showSensemaking && (
+        <div
+          className="recommendation-card"
+          data-testid="foundry-mechanism-library"
+        >
+          <div className="font-bold text-slate-800">{libraryLabel}</div>
+          <div className="flex flex-wrap gap-2">
+            <span className="blueprint-pill">
+              {fabricationStackSummary(foundry)}
+            </span>
+            <span className="blueprint-pill">
+              {classroomSensemaking.studentCheck}
+            </span>
+            <span className="blueprint-pill">
+              {classroomSensemaking.evidenceCue}
+            </span>
+          </div>
+          <p className="mt-2 text-sm text-slate-600">
+            {classroomSensemaking.teacherTakeaway}
+          </p>
+          <p className="mt-1 text-sm text-slate-600">
+            {classroomSensemaking.commonHint}
+          </p>
+          <p className="mt-1 text-sm text-slate-600">
+            Answer: {classroomSensemaking.expectedAnswer}
+          </p>
+        </div>
+      )}
+      <ClassroomExampleVideo example={useExample} />
     </div>
-    <div
-      className="foundry-opacity-panel inspector-control-card"
-      data-testid="foundry-opacity-panel"
-    >
-      <div>
-        <span>Rig Opacity</span>
-        <strong>{foundryRigOpacity}%</strong>
+    <div className="foundry-view-controls" data-testid="foundry-view-controls">
+      <div className="section-title">View</div>
+      <div className="foundry-view-controls-grid">
+        <div
+          className="foundry-opacity-panel inspector-control-card"
+          data-testid="foundry-opacity-panel"
+        >
+          <div>
+            <span>Rig opacity</span>
+            <strong>{foundryRigOpacity}%</strong>
+          </div>
+          <input
+            aria-label="Rig opacity"
+            type="range"
+            min="35"
+            max="100"
+            value={foundryRigOpacity}
+            onChange={(event) => onRigOpacityChange(Number(event.target.value))}
+          />
+        </div>
+        <div
+          className="foundry-opacity-panel inspector-control-card"
+          data-testid="foundry-explode-panel"
+        >
+          <div>
+            <span>Explode</span>
+            <strong>{foundryExplode}%</strong>
+          </div>
+          <input
+            aria-label="Exploded view"
+            type="range"
+            min="0"
+            max="100"
+            value={foundryExplode}
+            onChange={(event) => onExplodeChange(Number(event.target.value))}
+          />
+        </div>
       </div>
-      <input
-        aria-label="Rig opacity"
-        type="range"
-        min="35"
-        max="100"
-        value={foundryRigOpacity}
-        onChange={(event) => onRigOpacityChange(Number(event.target.value))}
-      />
-    </div>
-    <div
-      className="foundry-opacity-panel inspector-control-card"
-      data-testid="foundry-explode-panel"
-    >
-      <div>
-        <span>Exploded view</span>
-        <strong>{foundryExplode}%</strong>
-      </div>
-      <input
-        aria-label="Exploded view"
-        type="range"
-        min="0"
-        max="100"
-        value={foundryExplode}
-        onChange={(event) => onExplodeChange(Number(event.target.value))}
-      />
     </div>
     <MechanismParametricEditor
       mechanism={foundry}
@@ -173,59 +210,6 @@ export const FoundryInspectorPanel = ({
         ))}
       </div>
     </details>
-    <div className="rounded-2xl bg-slate-100 p-3 text-sm text-slate-600">
-      <div className="font-bold text-slate-800">Preview overlays</div>
-      <div className="foundry-toolbar mt-2">
-        <button
-          type="button"
-          className={`btn-secondary ${showForces ? "active" : ""}`}
-          aria-pressed={showForces}
-          onClick={onToggleForces}
-        >
-          Forces
-        </button>
-        <button
-          type="button"
-          className={`btn-secondary ${showVelocity ? "active" : ""}`}
-          aria-pressed={showVelocity}
-          onClick={onToggleVelocity}
-        >
-          Velocity
-        </button>
-        <button
-          type="button"
-          className={`btn-secondary ${showTrail ? "active" : ""}`}
-          aria-pressed={showTrail}
-          onClick={onToggleTrail}
-        >
-          Trail
-        </button>
-        <button
-          type="button"
-          className={`btn-secondary ${showPathPreview ? "active" : ""}`}
-          aria-pressed={showPathPreview}
-          onClick={onTogglePathPreview}
-        >
-          Path
-        </button>
-        <button
-          type="button"
-          className={`btn-secondary ${showSensemaking ? "active" : ""}`}
-          aria-label="Show details"
-          aria-pressed={showSensemaking}
-          onClick={onToggleSensemaking}
-        >
-          Details
-        </button>
-        <button
-          type="button"
-          className="btn-secondary"
-          aria-label="Hide details"
-          onClick={onHideSensemaking}
-        >
-          Hide details
-        </button>
-      </div>
-    </div>
   </div>
-);
+  );
+};
