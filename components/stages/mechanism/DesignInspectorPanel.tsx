@@ -136,25 +136,31 @@ export const DesignInspectorPanel = ({
           />
           <div className="section-title">Move</div>
           <select
-            aria-label="Mechanism moving part"
+            aria-label="Mechanism target"
             className="field"
             value={targetSelectValue}
             onChange={(e) => updateTarget(e.target.value)}
           >
             <option value="">No target</option>
-            {project.partOrder.map((id) => (
-              <option key={id} value={id}>
-                {project.parts[id].name}
-              </option>
-            ))}
-            {project.sceneObjectOrder.map((id) => {
-              const object = project.sceneObjects[id];
-              return object ? (
-                <option key={id} value={`object:${id}`}>
-                  {object.name}
+            <optgroup label="Body parts">
+              {project.partOrder.map((id) => (
+                <option key={id} value={id}>
+                  {project.parts[id].name}
                 </option>
-              ) : null;
-            })}
+              ))}
+            </optgroup>
+            {project.sceneObjectOrder.length > 0 && (
+              <optgroup label="Scene objects">
+                {project.sceneObjectOrder.map((id) => {
+                  const object = project.sceneObjects[id];
+                  return object ? (
+                    <option key={id} value={`object:${id}`}>
+                      {object.name}
+                    </option>
+                  ) : null;
+                })}
+              </optgroup>
+            )}
           </select>
           <select
             aria-label="Mechanism motion path"

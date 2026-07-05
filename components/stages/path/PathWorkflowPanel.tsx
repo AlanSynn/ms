@@ -68,7 +68,7 @@ export const PathWorkflowPanel = ({
         <ContextHelp helpId="path.draw" />
       </div>
       <select
-        aria-label="Selected body part"
+        aria-label="Motion target"
         data-testid="selected-motion-target"
         className="field mt-2"
         value={selectedSceneObject?.id ?? selectedPart?.id ?? ""}
@@ -79,19 +79,25 @@ export const PathWorkflowPanel = ({
           else dispatch({ type: "select_part", partId: id });
         }}
       >
-        {sortedParts.map((p) => (
-          <option value={p.id} key={p.id}>
-            {p.name}
-          </option>
-        ))}
-        {project.sceneObjectOrder.map((id) => {
-          const object = project.sceneObjects[id];
-          return object ? (
-            <option value={object.id} key={object.id}>
-              {object.name}
+        <optgroup label="Body parts">
+          {sortedParts.map((p) => (
+            <option value={p.id} key={p.id}>
+              {p.name}
             </option>
-          ) : null;
-        })}
+          ))}
+        </optgroup>
+        {project.sceneObjectOrder.length > 0 && (
+          <optgroup label="Scene objects">
+            {project.sceneObjectOrder.map((id) => {
+              const object = project.sceneObjects[id];
+              return object ? (
+                <option value={object.id} key={object.id}>
+                  {object.name}
+                </option>
+              ) : null;
+            })}
+          </optgroup>
+        )}
       </select>
       <div className="mt-3 flex flex-col gap-2">
         <button

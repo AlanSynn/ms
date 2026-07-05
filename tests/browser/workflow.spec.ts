@@ -104,7 +104,7 @@ test('Context help opens compact registry popovers', async ({ page }) => {
   const controls = page.getByTestId('character-import-controls');
   await expect(controls).not.toContainText('Keep mechanisms');
   await expect(controls).toContainText('Getting Started');
-  await expect(controls).toContainText('Load object file');
+  await expect(controls).toContainText('Add object');
   const controlsBefore = await controls.boundingBox();
   const imageHelp = page.locator('[data-help-id="character.createFromImage"]').getByTestId('context-help-trigger');
   await expect(imageHelp).toBeVisible();
@@ -203,7 +203,7 @@ test('Character tab owns separate scene objects and later tabs only render them'
   await openCharacterScreen(page, { loadStarter: false });
   await expect(page.getByTestId('character-scene-object-list')).toBeVisible();
   await expect(page.getByTestId('character-workflow-summary')).toContainText('0 objects');
-  await expect(page.getByTestId('character-add-scene-object')).toContainText('Load object file');
+  await expect(page.getByTestId('character-add-scene-object')).toContainText('Add object');
   await page.getByTestId('character-add-scene-object').click();
   await expect(page.getByTestId('scene-object-inspector')).toContainText('Flying piggy bank');
   await expect(page.getByTestId('character-workflow-summary')).toContainText('1 objects');
@@ -232,7 +232,7 @@ test('Character tab owns separate scene objects and later tabs only render them'
 
   await page.getByRole('button', { name: 'Path Editor', exact: true }).click();
   await expect(page.getByTestId('character-add-scene-object')).toHaveCount(0);
-  const pathTarget = page.getByLabel('Selected body part');
+  const pathTarget = page.getByLabel('Motion target');
   await expect(pathTarget).toContainText('Flying piggy bank');
   await pathTarget.selectOption({ label: 'Flying piggy bank' });
   const sceneObjectId = await pathTarget.evaluate((select: HTMLSelectElement) => select.value);
@@ -259,7 +259,7 @@ test('Character tab owns separate scene objects and later tabs only render them'
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
   await page.getByRole('button', { name: 'Four-bar linkage', exact: true }).click();
   await expect(page.getByTestId('design-shared-foundry-preview')).toBeVisible();
-  await expect(page.getByLabel('Mechanism moving part')).toHaveValue(`object:${sceneObjectId}`);
+  await expect(page.getByLabel('Mechanism target')).toHaveValue(`object:${sceneObjectId}`);
   await expect(page.getByLabel('Mechanism motion path')).toHaveValue(sceneObjectPathId);
   await expect(page.getByTestId('design-shared-foundry-preview')).toHaveAttribute('data-design-animated-object-count', /[1-9]/);
   const designPuppet = page.getByTestId('design-context-puppet-state');
@@ -267,6 +267,12 @@ test('Character tab owns separate scene objects and later tabs only render them'
   await expect(designPuppet).toHaveAttribute('data-three-scene-prop-count', '1');
   await expect(page.getByRole('button', { name: 'Add object', exact: true })).toHaveCount(0);
   await expect(page.getByTestId('scene-object-inspector')).toHaveCount(0);
+  for (const stageName of ['Foundry', 'Blueprint', 'Assembly']) {
+    await clickStage(page, stageName);
+    await expect(page.getByTestId('character-add-scene-object')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Add object', exact: true })).toHaveCount(0);
+    await expect(page.getByTestId('scene-object-inspector')).toHaveCount(0);
+  }
 
   expectCleanPage(pageErrors, consoleErrors);
 });
@@ -1628,8 +1634,8 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
   await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
 
-  await page.getByLabel('Selected body part').selectOption('head');
-  await expect(page.getByLabel('Selected body part')).toHaveValue('head');
+  await page.getByLabel('Motion target').selectOption('head');
+  await expect(page.getByLabel('Motion target')).toHaveValue('head');
   await expect(page.getByTestId('free-draw-status')).toContainText('No path yet');
   await expect(page.getByText('No path.')).toBeVisible();
 
@@ -1651,7 +1657,7 @@ test('Path Editor sensemaking follows selected part, lock state, and anchor hand
   await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
   await expect(page.getByTestId('novice-path-panel').getByRole('button', { name: 'Choose mechanism' })).toHaveCount(0);
 
-  await page.getByLabel('Selected body part').selectOption('right_arm_lower');
+  await page.getByLabel('Motion target').selectOption('right_arm_lower');
   await expect(page.getByTestId('free-draw-status')).toContainText('Path ready');
   await expect(page.getByText('No path.')).toHaveCount(0);
   await expect(page.getByTestId('quick-rig-helper')).toContainText('Move part');
@@ -2110,7 +2116,7 @@ test('Character edit drawer mutates body layers and skeleton joints into design 
   await expect(rigDrawer.getByRole('button', { name: /^Add layer$/ })).toHaveCount(1);
   await expect(rigDrawer.getByRole('button', { name: /Add body part/i })).toHaveCount(0);
 
-  const selectedPart = page.getByLabel('Selected body part');
+  const selectedPart = page.getByLabel('Motion target');
   await selectedPart.selectOption('right_arm_lower');
   await page.getByRole('button', { name: /Add layer/i }).click();
   const copiedPartId = await selectedPart.evaluate((select: HTMLSelectElement) => select.value);
@@ -2120,7 +2126,7 @@ test('Character edit drawer mutates body layers and skeleton joints into design 
 
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   await page.getByRole('button', { name: 'Four-bar linkage', exact: true }).click();
-  const designPartOptions = await page.getByLabel('Mechanism moving part').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
+  const designPartOptions = await page.getByLabel('Mechanism target').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
   expect(designPartOptions.join(' ')).toContain('copy');
 
   await page.getByRole('button', { name: /Path Editor/i }).click();
@@ -2128,11 +2134,11 @@ test('Character edit drawer mutates body layers and skeleton joints into design 
   await page.getByRole('button', { name: /Remove layer/i }).click();
   await expect(selectedPart).not.toHaveValue(copiedPartId);
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
-  const designPartOptionsAfterRemove = await page.getByLabel('Mechanism moving part').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
+  const designPartOptionsAfterRemove = await page.getByLabel('Mechanism target').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
   expect(designPartOptionsAfterRemove.join(' ')).not.toContain(copiedPartText);
 
   await page.getByRole('button', { name: /Path Editor/i }).click();
-  await page.getByLabel('Selected body part').selectOption('right_arm_lower');
+  await page.getByLabel('Motion target').selectOption('right_arm_lower');
   await page.getByText('Rig setup').click();
   const editJoint = page.getByLabel('Edit joint');
   await editJoint.selectOption('right_hand');
@@ -2148,7 +2154,7 @@ test('Character edit drawer mutates body layers and skeleton joints into design 
   await jointLocked.uncheck();
 
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
-  await page.getByLabel('Mechanism moving part').selectOption('right_arm_lower');
+  await page.getByLabel('Mechanism target').selectOption('right_arm_lower');
   const anchorOptionsWithJoint = await page.getByLabel('Motion handle').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));
   expect(anchorOptionsWithJoint).toContain(newJointId);
 
@@ -3136,7 +3142,7 @@ test('Detached visible mechanisms block browser blueprint generation', async ({ 
   await openWavingArmTemplate(page);
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   await page.getByRole('button', { name: 'Slider piston', exact: true }).click();
-  await page.getByLabel('Mechanism moving part').selectOption('head');
+  await page.getByLabel('Mechanism target').selectOption('head');
   await expect(page.getByLabel('Mechanism motion path')).toHaveValue('');
 
   await clickStage(page, 'Blueprint');
@@ -3167,14 +3173,14 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   await expect(page.getByTestId('design-visible-sensemaking')).toContainText('Crank turns');
   await expect(page.getByLabel('slider offset number')).toBeVisible();
   await expect(page.getByLabel('rod length number')).toBeVisible();
-  await expect(page.getByLabel('Mechanism moving part')).toHaveValue('right_arm_lower');
+  await expect(page.getByLabel('Mechanism target')).toHaveValue('right_arm_lower');
   await expect(page.getByLabel('Mechanism motion path')).toHaveValue('path-right-arm');
 
-  await page.getByLabel('Mechanism moving part').selectOption('head');
+  await page.getByLabel('Mechanism target').selectOption('head');
   await expect(page.getByLabel('Mechanism motion path')).toHaveValue('');
   const headPathOptions = await page.getByLabel('Mechanism motion path').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
   expect(headPathOptions).toEqual(['No path']);
-  await page.getByLabel('Mechanism moving part').selectOption('right_arm_lower');
+  await page.getByLabel('Mechanism target').selectOption('right_arm_lower');
   const armPathOptions = await page.getByLabel('Mechanism motion path').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
   expect(armPathOptions.join(' ')).toContain('Right lower arm path');
   expect(armPathOptions.join(' ')).not.toContain('pts');
@@ -3199,7 +3205,7 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
 
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   await page.locator('label').filter({ hasText: 'Enabled' }).locator('input[type="checkbox"]').check();
-  await page.getByLabel('Mechanism moving part').selectOption('right_arm_lower');
+  await page.getByLabel('Mechanism target').selectOption('right_arm_lower');
   await page.getByLabel('Mechanism motion path').selectOption('path-right-arm');
   await page.getByLabel('Motion handle').selectOption('right_hand');
   await page.getByRole('button', { name: 'Export Blueprint', exact: true }).click();

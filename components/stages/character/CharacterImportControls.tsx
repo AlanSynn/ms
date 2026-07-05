@@ -52,7 +52,7 @@ export const CharacterImportControls = ({
           disabled={sceneObjectDisabled}
           onClick={onAddSceneObject}
         >
-          <PackagePlus size={16} /> Load object file
+          <PackagePlus size={16} /> Add object
         </button>
         <ContextHelp helpId="character.loadObjectFile" />
       </div>
