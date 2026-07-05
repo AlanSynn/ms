@@ -1,7 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { BodyPartLayer, Point } from "../../../types";
-import { partOutlineBounds } from "../../../utils/partGeometry";
+import {
+  buildCutBaseViewport,
+  clientPointToCutPoint,
+  panCutViewport,
+  zoomCutViewport,
+  type CutViewport,
+} from "../../../utils/cutEditorViewport";
 
 const contourCentroid = (points: Point[]): Point => {
   if (!points.length) return { x: 0, y: 0 };
@@ -26,15 +32,6 @@ const contourPathD = (points: Point[], flipY = false) =>
   points.length
     ? `M ${points.map((point) => `${point.x.toFixed(2)} ${(flipY ? -point.y : point.y).toFixed(2)}`).join(" L ")} Z`
     : "";
-
-const cutPointToCanvas = (point: Point): Point => ({ x: point.x, y: -point.y });
-
-type CutViewport = {
-  minX: number;
-  minY: number;
-  width: number;
-  height: number;
-};
 
 export const CutOutlineEditorDialog = ({
   part,
@@ -88,170 +85,76 @@ export const CutOutlineEditorDialog = ({
       : undefined;
   const imageFrame = sourceImageFrame ?? fallbackImageFrame;
   const imageHref = sourceImageFrame ? sourceTextureUrl : part.textureUrl;
-  const baseViewport = useMemo(() => {
-    const displayPoints = [...autoPoints, ...points]
-      .map(cutPointToCanvas)
-      .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
-    const fallbackPoints = [
-      { x: fallbackImageFrame.x, y: fallbackImageFrame.y },
-      {
-        x: fallbackImageFrame.x + fallbackImageFrame.width,
-        y: fallbackImageFrame.y + fallbackImageFrame.height,
-      },
-    ];
-    const editBounds = partOutlineBounds(
-      displayPoints.length ? displayPoints : fallbackPoints,
-    );
-    const sourceFrame = sourceImageFrame ?? fallbackImageFrame;
-    const centerX = (editBounds.minX + editBounds.maxX) / 2;
-    const centerY = (editBounds.minY + editBounds.maxY) / 2;
-    const desiredWidth = Math.max(
-      140,
-      editBounds.width * (sourceImageFrame ? 3.2 : 1.7),
-    );
-    const desiredHeight = Math.max(
-      140,
-      editBounds.height * (sourceImageFrame ? 3.2 : 1.7),
-    );
-    const width = Math.min(
-      Math.max(
-        desiredWidth,
-        sourceFrame.width * (sourceImageFrame ? 0.28 : 0.75),
-      ),
-      sourceFrame.width,
-    );
-    const height = Math.min(
-      Math.max(
-        desiredHeight,
-        sourceFrame.height * (sourceImageFrame ? 0.28 : 0.75),
-      ),
-      sourceFrame.height,
-    );
-    const clampStart = (
-      value: number,
-      min: number,
-      max: number,
-      size: number,
-    ) => {
-      const upper = max - size;
-      if (upper <= min) return min;
-      return Math.max(min, Math.min(upper, value));
-    };
-    return {
-      minX: clampStart(
-        centerX - width / 2,
-        sourceFrame.x,
-        sourceFrame.x + sourceFrame.width,
-        width,
-      ),
-      minY: clampStart(
-        centerY - height / 2,
-        sourceFrame.y,
-        sourceFrame.y + sourceFrame.height,
-        height,
-      ),
-      width,
-      height,
-    };
-  }, [
-    autoPoints,
-    fallbackImageFrame.height,
-    fallbackImageFrame.width,
-    fallbackImageFrame.x,
-    fallbackImageFrame.y,
-    points,
-    sourceImageFrame,
-  ]);
+  const baseViewport = useMemo(
+    () =>
+      buildCutBaseViewport({
+        autoPoints,
+        points,
+        fallbackFrame: fallbackImageFrame,
+        sourceFrame: sourceImageFrame,
+      }),
+    [
+      autoPoints,
+      fallbackImageFrame.height,
+      fallbackImageFrame.width,
+      fallbackImageFrame.x,
+      fallbackImageFrame.y,
+      points,
+      sourceImageFrame,
+    ],
+  );
   const viewBounds = sourceImageFrame ?? fallbackImageFrame;
-  const clampViewport = (next: CutViewport): CutViewport => {
-    const padX = Math.max(24, baseViewport.width * 0.08);
-    const padY = Math.max(24, baseViewport.height * 0.08);
-    const minX = viewBounds.x - padX;
-    const minY = viewBounds.y - padY;
-    const maxX = viewBounds.x + viewBounds.width + padX;
-    const maxY = viewBounds.y + viewBounds.height + padY;
-    const clampStart = (value: number, min: number, max: number, size: number) => {
-      const upper = max - size;
-      if (upper <= min) return (min + max - size) / 2;
-      return Math.max(min, Math.min(upper, value));
-    };
-    return {
-      minX: clampStart(next.minX, minX, maxX, next.width),
-      minY: clampStart(next.minY, minY, maxY, next.height),
-      width: next.width,
-      height: next.height,
-    };
-  };
   const viewport = viewOverride ?? baseViewport;
   const zoomPercent = Math.round((baseViewport.width / viewport.width) * 100);
   useEffect(() => {
     setViewOverride(null);
   }, [part.id]);
-  const zoomViewAt = (clientX: number | undefined, clientY: number | undefined, factor: number) => {
+  const zoomViewAt = (
+    clientX: number | undefined,
+    clientY: number | undefined,
+    factor: number,
+  ) => {
     const rect = svgRef.current?.getBoundingClientRect();
-    const anchor = rect
-      ? {
-          x:
-            viewport.minX +
-            (((clientX ?? rect.left + rect.width / 2) - rect.left) / rect.width) *
-              viewport.width,
-          y:
-            viewport.minY +
-            (((clientY ?? rect.top + rect.height / 2) - rect.top) / rect.height) *
-              viewport.height,
-        }
-      : {
-          x: viewport.minX + viewport.width / 2,
-          y: viewport.minY + viewport.height / 2,
-        };
-    const minWidth = Math.max(24, baseViewport.width * 0.16);
-    const minHeight = Math.max(24, baseViewport.height * 0.16);
-    const maxWidth = Math.max(baseViewport.width * 1.6, viewBounds.width);
-    const maxHeight = Math.max(baseViewport.height * 1.6, viewBounds.height);
-    const width = Math.max(minWidth, Math.min(maxWidth, viewport.width * factor));
-    const height = Math.max(minHeight, Math.min(maxHeight, viewport.height * factor));
-    const anchorRatioX = viewport.width ? (anchor.x - viewport.minX) / viewport.width : 0.5;
-    const anchorRatioY = viewport.height ? (anchor.y - viewport.minY) / viewport.height : 0.5;
     setViewOverride(
-      clampViewport({
-        minX: anchor.x - anchorRatioX * width,
-        minY: anchor.y - anchorRatioY * height,
-        width,
-        height,
+      zoomCutViewport({
+        viewport,
+        baseViewport,
+        viewBounds,
+        svgRect: rect ?? undefined,
+        clientX,
+        clientY,
+        factor,
       }),
     );
   };
-  const panViewBy = (deltaClientX: number, deltaClientY: number, startViewport: CutViewport) => {
+  const panViewBy = (
+    deltaClientX: number,
+    deltaClientY: number,
+    startViewport: CutViewport,
+  ) => {
     const rect = svgRef.current?.getBoundingClientRect();
     if (!rect || rect.width <= 0 || rect.height <= 0) return;
-    setViewOverride(
-      clampViewport({
-        ...startViewport,
-        minX: startViewport.minX - (deltaClientX / rect.width) * startViewport.width,
-        minY: startViewport.minY - (deltaClientY / rect.height) * startViewport.height,
-      }),
-    );
+    const next = panCutViewport({
+      startViewport,
+      baseViewport,
+      viewBounds,
+      svgRect: rect,
+      deltaClientX,
+      deltaClientY,
+    });
+    if (next) setViewOverride(next);
   };
   const pointFromPointer = (
     event: React.PointerEvent<SVGSVGElement>,
   ): Point | undefined => {
     const rect = svgRef.current?.getBoundingClientRect();
     if (!rect || rect.width <= 0 || rect.height <= 0) return undefined;
-    const canvasPoint = {
-      x: Number(
-        (
-          viewport.minX +
-          ((event.clientX - rect.left) / rect.width) * viewport.width
-        ).toFixed(1),
-      ),
-      y: Number(
-        (
-          viewport.minY +
-          ((event.clientY - rect.top) / rect.height) * viewport.height
-        ).toFixed(1),
-      ),
-    };
-    return { x: canvasPoint.x, y: -canvasPoint.y };
+    return clientPointToCutPoint({
+      viewport,
+      svgRect: rect,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    });
   };
   const movePointFromPointer = (
     event: React.PointerEvent<SVGSVGElement>,

@@ -27,6 +27,7 @@ import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
 import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainMeshPhaseDegAt, gearTrainMeshPhaseRadAt, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, gearTrainResolvedCenterDistance, gearTrainRotationRatioAt, generateCurvePoints, generateMechanismPointTraces, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius, sampledCamProfileScale } from '../utils/kinematics';
 import { animatedPartsForProject, describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainRootJointIds, motionPreviewForPath, motionPreviewForProject, motionPreviewForTarget, pointOnProjectPath, preferredMotionJointId } from '../utils/motion';
+import { buildCutBaseViewport, clientPointToCutPoint, panCutViewport, zoomCutViewport, type CutFrame } from '../utils/cutEditorViewport';
 import { addDrawSamplePoint, normalizeDrawTimedPoints } from '../utils/pathDrawing';
 import { buildToonSceneProjection } from '../utils/sceneProjection';
 import { buildFoundryPhysicsOverlay, buildKinematicPhysicsSession, mechanismPhysicsRule } from '../utils/physicsSession';
@@ -54,6 +55,52 @@ import { isBoardFixedCoordRole, normalizeGearLinkageToReference, normalizeGearTr
 import type { AppStage, BodyPartLayer, FoundryExportPackage, MechanismConfig, MechanismType, Point, ProjectAction, ProjectState, SceneObject } from '../types';
 
 projectSelfCheck();
+
+const cutSourceFrame: CutFrame = { x: 0, y: -300, width: 500, height: 300 };
+const cutFallbackFrame: CutFrame = { x: 150, y: -210, width: 140, height: 160 };
+const cutViewport = buildCutBaseViewport({
+  autoPoints: [],
+  points: [
+    { x: 200, y: 80 },
+    { x: 260, y: 80 },
+    { x: 260, y: 130 },
+    { x: 200, y: 130 }
+  ],
+  fallbackFrame: cutFallbackFrame,
+  sourceFrame: cutSourceFrame
+});
+assert.equal(Number(cutViewport.width.toFixed(1)), 192, 'cut viewport source-frame zoom preserves the 3.2 edit-bounds multiplier');
+assert.equal(Number(cutViewport.height.toFixed(1)), 160, 'cut viewport source-frame zoom preserves the 140px minimum and edit bounds');
+assert(cutViewport.minX >= cutSourceFrame.x && cutViewport.minY >= cutSourceFrame.y, 'cut viewport clamps inside the source frame');
+const fallbackCutViewport = buildCutBaseViewport({
+  autoPoints: [{ x: Number.NaN, y: 1 }, { x: Number.POSITIVE_INFINITY, y: 2 }],
+  points: [],
+  fallbackFrame: { x: 10, y: -90, width: 100, height: 90 }
+});
+assert.deepEqual(fallbackCutViewport, { minX: 10, minY: -90, width: 100, height: 90 }, 'cut viewport ignores non-finite points and falls back to part frame corners');
+const cutSvgRect = { left: 0, top: 0, width: 400, height: 300 };
+const zoomedCutViewport = zoomCutViewport({
+  viewport: cutViewport,
+  baseViewport: cutViewport,
+  viewBounds: cutSourceFrame,
+  svgRect: cutSvgRect,
+  clientX: 200,
+  clientY: 150,
+  factor: 0.5
+});
+assert.equal(Number(zoomedCutViewport.width.toFixed(1)), 96, 'cut viewport zoom applies the requested factor above the minimum');
+assert.equal(Number((zoomedCutViewport.minX + zoomedCutViewport.width / 2).toFixed(1)), Number((cutViewport.minX + cutViewport.width / 2).toFixed(1)), 'cut viewport zoom preserves the client anchor X');
+assert.equal(Number((zoomedCutViewport.minY + zoomedCutViewport.height / 2).toFixed(1)), Number((cutViewport.minY + cutViewport.height / 2).toFixed(1)), 'cut viewport zoom preserves the client anchor Y');
+const pannedCutViewport = panCutViewport({
+  startViewport: zoomedCutViewport,
+  baseViewport: cutViewport,
+  viewBounds: cutSourceFrame,
+  svgRect: cutSvgRect,
+  deltaClientX: 40,
+  deltaClientY: 30
+});
+assert(pannedCutViewport && pannedCutViewport.minX < zoomedCutViewport.minX && pannedCutViewport.minY < zoomedCutViewport.minY, 'cut viewport drag-pan moves the view opposite the pointer delta');
+assert.deepEqual(clientPointToCutPoint({ viewport: cutViewport, svgRect: cutSvgRect, clientX: 200, clientY: 150 }), { x: 230, y: 105 }, 'cut pointer mapping rounds to 0.1 and flips Y back to cut space');
 
 const stableGoldenMasterJson = (value: unknown): string => JSON.stringify(value, (_key, item) => {
   if (typeof item === 'number') return Number.isFinite(item) ? Number(item.toFixed(6)) : null;
