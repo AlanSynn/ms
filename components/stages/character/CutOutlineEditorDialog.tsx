@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { BodyPartLayer, Point } from "../../../types";
 import { partOutlineBounds } from "../../../utils/partGeometry";
@@ -28,6 +28,13 @@ const contourPathD = (points: Point[], flipY = false) =>
     : "";
 
 const cutPointToCanvas = (point: Point): Point => ({ x: point.x, y: -point.y });
+
+type CutViewport = {
+  minX: number;
+  minY: number;
+  width: number;
+  height: number;
+};
 
 export const CutOutlineEditorDialog = ({
   part,
@@ -60,7 +67,15 @@ export const CutOutlineEditorDialog = ({
 }) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragIndexRef = useRef<number | null>(null);
+  const panRef = useRef<{
+    pointerId: number;
+    startClientX: number;
+    startClientY: number;
+    startViewport: CutViewport;
+    moved: boolean;
+  } | null>(null);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const [viewOverride, setViewOverride] = useState<CutViewport | null>(null);
   const fallbackImageFrame = {
     x: part.bounds.x,
     y: -(part.bounds.y + part.bounds.height),
@@ -73,7 +88,7 @@ export const CutOutlineEditorDialog = ({
       : undefined;
   const imageFrame = sourceImageFrame ?? fallbackImageFrame;
   const imageHref = sourceImageFrame ? sourceTextureUrl : part.textureUrl;
-  const viewport = useMemo(() => {
+  const baseViewport = useMemo(() => {
     const displayPoints = [...autoPoints, ...points]
       .map(cutPointToCanvas)
       .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
@@ -147,6 +162,76 @@ export const CutOutlineEditorDialog = ({
     points,
     sourceImageFrame,
   ]);
+  const viewBounds = sourceImageFrame ?? fallbackImageFrame;
+  const clampViewport = (next: CutViewport): CutViewport => {
+    const padX = Math.max(24, baseViewport.width * 0.08);
+    const padY = Math.max(24, baseViewport.height * 0.08);
+    const minX = viewBounds.x - padX;
+    const minY = viewBounds.y - padY;
+    const maxX = viewBounds.x + viewBounds.width + padX;
+    const maxY = viewBounds.y + viewBounds.height + padY;
+    const clampStart = (value: number, min: number, max: number, size: number) => {
+      const upper = max - size;
+      if (upper <= min) return (min + max - size) / 2;
+      return Math.max(min, Math.min(upper, value));
+    };
+    return {
+      minX: clampStart(next.minX, minX, maxX, next.width),
+      minY: clampStart(next.minY, minY, maxY, next.height),
+      width: next.width,
+      height: next.height,
+    };
+  };
+  const viewport = viewOverride ?? baseViewport;
+  const zoomPercent = Math.round((baseViewport.width / viewport.width) * 100);
+  useEffect(() => {
+    setViewOverride(null);
+  }, [part.id]);
+  const zoomViewAt = (clientX: number | undefined, clientY: number | undefined, factor: number) => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    const anchor = rect
+      ? {
+          x:
+            viewport.minX +
+            (((clientX ?? rect.left + rect.width / 2) - rect.left) / rect.width) *
+              viewport.width,
+          y:
+            viewport.minY +
+            (((clientY ?? rect.top + rect.height / 2) - rect.top) / rect.height) *
+              viewport.height,
+        }
+      : {
+          x: viewport.minX + viewport.width / 2,
+          y: viewport.minY + viewport.height / 2,
+        };
+    const minWidth = Math.max(24, baseViewport.width * 0.16);
+    const minHeight = Math.max(24, baseViewport.height * 0.16);
+    const maxWidth = Math.max(baseViewport.width * 1.6, viewBounds.width);
+    const maxHeight = Math.max(baseViewport.height * 1.6, viewBounds.height);
+    const width = Math.max(minWidth, Math.min(maxWidth, viewport.width * factor));
+    const height = Math.max(minHeight, Math.min(maxHeight, viewport.height * factor));
+    const anchorRatioX = viewport.width ? (anchor.x - viewport.minX) / viewport.width : 0.5;
+    const anchorRatioY = viewport.height ? (anchor.y - viewport.minY) / viewport.height : 0.5;
+    setViewOverride(
+      clampViewport({
+        minX: anchor.x - anchorRatioX * width,
+        minY: anchor.y - anchorRatioY * height,
+        width,
+        height,
+      }),
+    );
+  };
+  const panViewBy = (deltaClientX: number, deltaClientY: number, startViewport: CutViewport) => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return;
+    setViewOverride(
+      clampViewport({
+        ...startViewport,
+        minX: startViewport.minX - (deltaClientX / rect.width) * startViewport.width,
+        minY: startViewport.minY - (deltaClientY / rect.height) * startViewport.height,
+      }),
+    );
+  };
   const pointFromPointer = (
     event: React.PointerEvent<SVGSVGElement>,
   ): Point | undefined => {
@@ -181,6 +266,7 @@ export const CutOutlineEditorDialog = ({
     if (event && svgRef.current?.hasPointerCapture(event.pointerId))
       svgRef.current.releasePointerCapture(event.pointerId);
     dragIndexRef.current = null;
+    panRef.current = null;
     setDraggingIndex(null);
   };
   const dialog = (
@@ -202,7 +288,7 @@ export const CutOutlineEditorDialog = ({
           <div>
             <div className="section-title">Cut</div>
             <h3 id="cut-outline-title">Edit {part.name}</h3>
-            <p>Move points.</p>
+            <p>Drag points. Drag canvas. Scroll zoom.</p>
           </div>
           <button
             type="button"
@@ -213,27 +299,54 @@ export const CutOutlineEditorDialog = ({
             Done
           </button>
         </div>
-        <svg
-          ref={svgRef}
-          className="cut-outline-canvas"
-          data-testid="cut-outline-canvas"
-          viewBox={`${viewport.minX} ${viewport.minY} ${viewport.width} ${viewport.height}`}
-          role="img"
-          aria-label="Cut outline editing canvas"
-          onPointerDown={(event) => {
-            const target = event.target as Element;
-            if (target.closest("[data-cut-point]")) return;
-            movePointFromPointer(event);
-          }}
-          onPointerMove={(event) => {
-            const index = dragIndexRef.current;
-            if (index === null) return;
-            movePointFromPointer(event, index);
-          }}
-          onPointerUp={stopDrag}
-          onPointerCancel={stopDrag}
-          onPointerLeave={stopDrag}
-        >
+        <div className="cut-outline-canvas-wrap">
+          <svg
+            ref={svgRef}
+            className={`cut-outline-canvas ${panRef.current?.moved ? "panning" : ""}`}
+            data-testid="cut-outline-canvas"
+            viewBox={`${viewport.minX} ${viewport.minY} ${viewport.width} ${viewport.height}`}
+            role="img"
+            aria-label="Cut outline editing canvas"
+            onWheel={(event) => {
+              event.preventDefault();
+              zoomViewAt(event.clientX, event.clientY, event.deltaY > 0 ? 1.12 : 0.88);
+            }}
+            onPointerDown={(event) => {
+              const target = event.target as Element;
+              if (target.closest("[data-cut-point]")) return;
+              panRef.current = {
+                pointerId: event.pointerId,
+                startClientX: event.clientX,
+                startClientY: event.clientY,
+                startViewport: viewport,
+                moved: false,
+              };
+              svgRef.current?.setPointerCapture(event.pointerId);
+            }}
+            onPointerMove={(event) => {
+              const index = dragIndexRef.current;
+              if (index !== null) {
+                movePointFromPointer(event, index);
+                return;
+              }
+              const pan = panRef.current;
+              if (!pan || pan.pointerId !== event.pointerId) return;
+              const deltaX = event.clientX - pan.startClientX;
+              const deltaY = event.clientY - pan.startClientY;
+              if (!pan.moved && Math.hypot(deltaX, deltaY) < 5) return;
+              pan.moved = true;
+              panViewBy(deltaX, deltaY, pan.startViewport);
+            }}
+            onPointerUp={(event) => {
+              const pan = panRef.current;
+              if (pan && pan.pointerId === event.pointerId && !pan.moved) {
+                movePointFromPointer(event);
+              }
+              stopDrag(event);
+            }}
+            onPointerCancel={stopDrag}
+            onPointerLeave={stopDrag}
+          >
           <defs>
             <pattern
               id={`cut-grid-${part.id}`}
@@ -297,25 +410,70 @@ export const CutOutlineEditorDialog = ({
           {points.length >= 3 && (
             <path className="cut-outline-user" d={contourPathD(points, true)} />
           )}
-          {points.map((point, index) => (
-            <circle
-              key={`${index}-${point.x}-${point.y}`}
-              data-cut-point="true"
-              data-testid={`cut-outline-point-${index}`}
-              className={`cut-outline-point ${index === selectedIndex ? "active" : ""} ${draggingIndex === index ? "dragging" : ""}`}
-              cx={point.x}
-              cy={-point.y}
-              r={index === selectedIndex ? 5.8 : 4.8}
-              onPointerDown={(event) => {
-                event.stopPropagation();
-                setSelectedIndex(index);
-                dragIndexRef.current = index;
-                setDraggingIndex(index);
-                svgRef.current?.setPointerCapture(event.pointerId);
-              }}
-            />
-          ))}
-        </svg>
+            {points.map((point, index) => {
+              const isActive = index === selectedIndex;
+              const isNeighbor =
+                points.length > 2 &&
+                (index === (selectedIndex + 1) % points.length ||
+                  index === (selectedIndex - 1 + points.length) % points.length);
+              return (
+                <g
+                  key={`${index}-${point.x}-${point.y}`}
+                  data-cut-point="true"
+                  className={`cut-outline-point-group ${isActive ? "active" : ""} ${isNeighbor ? "neighbor" : ""} ${draggingIndex === index ? "dragging" : ""}`}
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    setSelectedIndex(index);
+                    dragIndexRef.current = index;
+                    setDraggingIndex(index);
+                    svgRef.current?.setPointerCapture(event.pointerId);
+                  }}
+                >
+                  <circle
+                    className="cut-outline-hit-target"
+                    cx={point.x}
+                    cy={-point.y}
+                    r={16}
+                  />
+                  <circle
+                    data-testid={`cut-outline-point-${index}`}
+                    className={`cut-outline-point ${isActive ? "active" : ""} ${isNeighbor ? "neighbor" : ""} ${draggingIndex === index ? "dragging" : ""}`}
+                    cx={point.x}
+                    cy={-point.y}
+                    r={isActive ? 7 : isNeighbor ? 5.4 : 3.8}
+                  />
+                </g>
+              );
+            })}
+          </svg>
+          <div className="cut-outline-view-tools" aria-label="Cut view controls">
+            <button
+              type="button"
+              className="btn-secondary"
+              data-testid="cut-outline-zoom-out"
+              onClick={() => zoomViewAt(undefined, undefined, 1.18)}
+            >
+              −
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              data-testid="cut-outline-fit"
+              onClick={() => setViewOverride(null)}
+            >
+              Fit
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              data-testid="cut-outline-zoom-in"
+              onClick={() => zoomViewAt(undefined, undefined, 0.84)}
+            >
+              +
+            </button>
+            <span className="cut-outline-zoom-chip">{zoomPercent}%</span>
+          </div>
+        </div>
         <div className="cut-outline-tools">
           <div
             className="cut-outline-point-readout"

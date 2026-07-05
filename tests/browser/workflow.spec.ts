@@ -178,6 +178,31 @@ test('Character part cut outline editor bakes and edits contour points', async (
   await cutDialog.getByTestId('part-cut-add-point').click();
   await expect(page.getByTestId('part-cut-summary')).toContainText('user cut');
   const canvas = page.getByTestId('cut-outline-canvas');
+  const parseViewBox = async () => {
+    const viewBox = await canvas.getAttribute('viewBox');
+    if (!viewBox) throw new Error('Missing cut editor viewBox');
+    const [minX, minY, width, height] = viewBox.split(/\s+/).map(Number);
+    return { minX, minY, width, height };
+  };
+  const initialView = await parseViewBox();
+  await cutDialog.getByTestId('cut-outline-zoom-in').click();
+  await expect.poll(async () => (await parseViewBox()).width, {
+    message: 'cut editor zoom-in tightens the editable view',
+  }).toBeLessThan(initialView.width);
+  const zoomedView = await parseViewBox();
+  const canvasBox = await canvas.boundingBox();
+  if (!canvasBox) throw new Error('Missing cut editor canvas metrics');
+  await page.mouse.move(canvasBox.x + canvasBox.width * 0.45, canvasBox.y + canvasBox.height * 0.45);
+  await page.mouse.down();
+  await page.mouse.move(canvasBox.x + canvasBox.width * 0.58, canvasBox.y + canvasBox.height * 0.52);
+  await page.mouse.up();
+  await expect.poll(async () => (await parseViewBox()).minX, {
+    message: 'blank-canvas drag pans instead of moving a cut point',
+  }).not.toBe(zoomedView.minX);
+  await cutDialog.getByTestId('cut-outline-fit').click();
+  await expect.poll(async () => (await parseViewBox()).width, {
+    message: 'fit restores the classroom-friendly part view',
+  }).toBeGreaterThan(zoomedView.width);
   const editedPoint = cutDialog.getByTestId('cut-outline-point-1');
   const beforeClickX = Number(await editedPoint.getAttribute('cx'));
   await canvas.click({ position: { x: 260, y: 140 } });

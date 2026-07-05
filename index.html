@@ -187,14 +187,22 @@
       .cut-outline-dialog h3 { margin-top: .2rem; font-size: clamp(1.45rem, 3vw, 2.15rem); }
       .cut-outline-dialog p { margin: .35rem 0 0; color: var(--ms-muted); font-size: .82rem; line-height: 1.35; font-weight: 600; }
       .cut-outline-head { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; }
-      .cut-outline-canvas { width: 100%; height: min(62vh, 38rem); min-height: 20rem; border: 1px solid var(--ms-line); border-radius: 1.1rem; background: #fff; box-shadow: inset 0 0 0 1px rgba(139,92,246,.08); touch-action: none; cursor: crosshair; user-select: none; }
+      .cut-outline-canvas-wrap { position: relative; min-height: 20rem; }
+      .cut-outline-canvas { width: 100%; height: min(62vh, 38rem); min-height: 20rem; border: 1px solid var(--ms-line); border-radius: 1.1rem; background: #fff; box-shadow: inset 0 0 0 1px rgba(139,92,246,.08); touch-action: none; cursor: grab; user-select: none; }
+      .cut-outline-canvas.panning { cursor: grabbing; }
       .cut-outline-art { opacity: .86; pointer-events: none; }
       .cut-outline-part-window { fill: rgba(255,255,255,.08); stroke: rgba(15,23,42,.35); stroke-width: 1.5; stroke-dasharray: 7 6; pointer-events: none; }
       .cut-outline-auto { fill: none; stroke: #94a3b8; stroke-width: 2; stroke-dasharray: 7 6; opacity: .72; }
       .cut-outline-user { fill: rgba(139,92,246,.08); stroke: var(--ms-accent); stroke-width: 2.5; }
-      .cut-outline-point { fill: white; stroke: var(--ms-accent); stroke-width: 2.2; cursor: grab; filter: drop-shadow(0 4px 10px rgba(139,92,246,.18)); }
-      .cut-outline-point.active { fill: var(--ms-accent); stroke: white; stroke-width: 2.6; }
-      .cut-outline-point.dragging { cursor: grabbing; }
+      .cut-outline-point-group { cursor: grab; }
+      .cut-outline-point-group.dragging { cursor: grabbing; }
+      .cut-outline-hit-target { fill: transparent; stroke: transparent; pointer-events: all; }
+      .cut-outline-point { fill: rgba(255,255,255,.82); stroke: rgba(139,92,246,.72); stroke-width: 1.7; pointer-events: none; opacity: .56; filter: drop-shadow(0 4px 10px rgba(139,92,246,.12)); }
+      .cut-outline-point.neighbor { fill: white; stroke: var(--ms-accent); stroke-width: 2; opacity: .86; }
+      .cut-outline-point.active { fill: var(--ms-accent); stroke: white; stroke-width: 2.7; opacity: 1; }
+      .cut-outline-view-tools { position: absolute; top: .72rem; right: .72rem; display: flex; align-items: center; gap: .35rem; padding: .35rem; border: 1px solid rgba(203,213,225,.84); border-radius: 999px; background: rgba(255,255,255,.9); box-shadow: var(--ms-shadow); backdrop-filter: blur(12px); }
+      .cut-outline-view-tools .btn-secondary { min-height: 2rem; padding: .35rem .62rem; border-radius: 999px; font-size: .8rem; }
+      .cut-outline-zoom-chip { min-width: 3.1rem; color: var(--ms-muted); font-size: .72rem; font-weight: 900; text-align: center; }
       .cut-outline-tools { display: flex; align-items: center; justify-content: space-between; gap: .72rem; border: 1px solid var(--ms-line); border-radius: 1.1rem; background: var(--ms-bg-soft); padding: .75rem; }
       .cut-outline-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .45rem; }
       .cut-outline-point-readout { color: var(--ms-muted); font-size: .75rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; white-space: nowrap; }
