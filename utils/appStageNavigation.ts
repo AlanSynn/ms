@@ -1,6 +1,21 @@
 import type { AppStage, ProjectAction, ProjectState } from "../types";
 import { handoffGate } from "./project";
 
+type NavigateAppStageOptions = {
+  project: ProjectState;
+  target: AppStage;
+  dispatch: (action: ProjectAction) => void;
+  setStage: (stage: AppStage) => void;
+  setCommandStatus: (status: string) => void;
+  stageLabel: (stage: AppStage) => string;
+};
+
+type StageNavigatorOptions = Omit<NavigateAppStageOptions, "target">;
+
+export const createStageNavigator =
+  (options: StageNavigatorOptions) => (target: AppStage) =>
+    navigateAppStage({ ...options, target });
+
 export const navigateAppStage = ({
   project,
   target,
@@ -8,14 +23,7 @@ export const navigateAppStage = ({
   setStage,
   setCommandStatus,
   stageLabel,
-}: {
-  project: ProjectState;
-  target: AppStage;
-  dispatch: (action: ProjectAction) => void;
-  setStage: (stage: AppStage) => void;
-  setCommandStatus: (status: string) => void;
-  stageLabel: (stage: AppStage) => string;
-}) => {
+}: NavigateAppStageOptions) => {
   const gate = handoffGate(project, target);
   if (!gate.ok && "recoveryStage" in gate) {
     dispatch({

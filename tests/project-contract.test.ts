@@ -38,7 +38,7 @@ import { formatGridLabel, formatGridPitch, formatGridReadout } from '../utils/un
 import { buildCharacterAssemblyPlan, type CharacterAssemblyPlan } from '../utils/assemblyPlayback';
 import { buildAssemblyGuideModel } from '../components/stages/assembly/assemblyGuideModel';
 import { useAppMechanismActions } from '../hooks/useAppMechanismActions';
-import { navigateAppStage } from '../utils/appStageNavigation';
+import { createStageNavigator, navigateAppStage } from '../utils/appStageNavigation';
 import { assemblyCoordToSvg, characterBoardProjector, characterCanvasProjector, smoothAssemblyProgress, svgPathFromPoints } from '../components/stages/assembly/assemblyGeometry';
 import { smoothTrackingPoints, trackingPointsToWorldPath } from '../utils/trackingPath';
 import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES, FOUNDRY_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY, mechanismTemplateLabel } from '../utils/mechanismTemplates';
@@ -254,7 +254,7 @@ assert(viteConfigText.includes('chunkSizeWarningLimit: 2400'), 'Vite chunk warni
 assert(normalizedCodebaseCleanupPlan.includes('Button and command audit lock') && normalizedCodebaseCleanupPlan.includes('utils/appCommands.ts'), 'cleanup plan records the executable button/menu audit lock');
 assert(normalizedCodebaseCleanupPlan.includes('Warning fixes locked') && normalizedCodebaseCleanupPlan.includes('Rapier warning boundary'), 'cleanup plan records scoped warning fixes instead of broad suppression');
 assert(normalizedCodebaseCleanupPlan.includes('`App.tsx` is now a tiny composition entry') && normalizedCodebaseCleanupPlan.includes('`hooks/useMotionSmithAppController.ts`') && normalizedCodebaseCleanupPlan.includes('top-level state/action orchestration') && normalizedCodebaseCleanupPlan.includes('`components/AppWorkspaceShell.tsx`') && normalizedCodebaseCleanupPlan.includes('workspace shell chrome lives outside App.tsx') && normalizedCodebaseCleanupPlan.includes('no ProjectState mutation or fabrication validation') && normalizedCodebaseCleanupPlan.includes('`utils/workflowStatus.ts`') && normalizedCodebaseCleanupPlan.includes('fabrication-aware status derivation') && normalizedCodebaseCleanupPlan.includes('`components/AppStageRouter.tsx`') && normalizedCodebaseCleanupPlan.includes('shared stage-to-component routing and player-dock placement') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppDerivedState.ts`') && normalizedCodebaseCleanupPlan.includes('selected part/path/mechanism, playback duration, sorted parts, and global mechanism config') && normalizedCodebaseCleanupPlan.includes('`hooks/useWorkspacePlayerDock.tsx`') && normalizedCodebaseCleanupPlan.includes('workspace player dock visibility') && normalizedCodebaseCleanupPlan.includes('Assembly step dock state') && normalizedCodebaseCleanupPlan.includes('`hooks/useWorkspacePlaybackLoop.ts`') && normalizedCodebaseCleanupPlan.includes('shared playback rAF loop and Path draw reset') && normalizedCodebaseCleanupPlan.includes('`hooks/useModalInertEffect.ts`') && normalizedCodebaseCleanupPlan.includes('modal inert') && normalizedCodebaseCleanupPlan.includes('`resources/starterImageTemplates.ts`') && normalizedCodebaseCleanupPlan.includes('starter image template assets') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppPathActions.ts`') && normalizedCodebaseCleanupPlan.includes('Path draw mode, tracking modal state, path point upsert/validation, and tracked-path transfer') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppCharacterImportActions.ts`') && normalizedCodebaseCleanupPlan.includes('character ONNX image import, starter image/package/project import, pending review, replacement review, skeleton export') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppMechanismActions.ts`') && normalizedCodebaseCleanupPlan.includes('mechanism update, Foundry export, recommendation apply, optimizer loop, and SVG/DXF export actions') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppOnnxBootstrap.ts`') && normalizedCodebaseCleanupPlan.includes('`hooks/useProjectHistory.ts`') && normalizedCodebaseCleanupPlan.includes('`hooks/useProjectAutosave.ts`') && normalizedCodebaseCleanupPlan.includes('`utils/projectPersistence.ts`') && normalizedCodebaseCleanupPlan.includes('`hooks/useAppProjectCommands.ts`'), 'cleanup plan records the current App/controller hotspot and completed command/persistence/derived-state/stage-router/shell/status/player seams without brittle line-count locking');
-assert(normalizedCodebaseCleanupPlan.includes('`utils/appStageNavigation.ts`') && normalizedCodebaseCleanupPlan.includes('stage handoff gate, recovery dispatch, and stage-open status'), 'cleanup plan records the extracted stage navigation seam');
+assert(normalizedCodebaseCleanupPlan.includes('`utils/appStageNavigation.ts`') && normalizedCodebaseCleanupPlan.includes('stage handoff gate, recovery dispatch, stage-open status, and `goStage` wiring'), 'cleanup plan records the extracted stage navigation seam');
 assert(normalizedCodebaseCleanupPlan.includes('`utils/appStageRouterProps.ts`') && normalizedCodebaseCleanupPlan.includes('stage-router prop grouping'), 'cleanup plan records the extracted App stage-router prop grouping seam');
 assert(normalizedCodebaseCleanupPlan.includes('`hooks/useAppCommandBindings.ts` | 36') && normalizedCodebaseCleanupPlan.includes('application keyboard shortcut binding owns latest-handler ref'), 'cleanup plan records the extracted keyboard command binding hook seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/character/ProgressBlock.tsx` | 84') && normalizedCodebaseCleanupPlan.includes('character import progress UI lives outside the app shell'), 'cleanup plan records the extracted character progress seam');
@@ -2473,7 +2473,7 @@ assert(optionsText.includes('from "./OptionsSettingsControls"') && !optionsText.
 ].forEach(forbiddenOptionsControlsBoundary => {
   assert(!optionsSettingsControlsText.includes(forbiddenOptionsControlsBoundary), `OptionsSettingsControls stays UI-only and excludes ${forbiddenOptionsControlsBoundary}`);
 });
-assert(appText.includes('navigateAppStage({') && appStageNavigationText.includes('handoffGate(project, target)') && appStageNavigationText.includes('set_processing') && !appText.includes('handoffGate(project'), 'App delegates stage handoff side effects to navigateAppStage while preserving recovery processing dispatch');
+assert(appText.includes('createStageNavigator({') && !appText.includes('navigateAppStage({') && appStageNavigationText.includes('handoffGate(project, target)') && appStageNavigationText.includes('set_processing') && !appText.includes('handoffGate(project'), 'App delegates stage handoff side effects and goStage wiring to appStageNavigation while preserving recovery processing dispatch');
 assert(
   appStageRouterText.includes('onFoundryExport') &&
     !appStageRouterText.includes('fitMechanismToTargetPath') &&
@@ -3995,6 +3995,20 @@ assert.equal(handoffGate(sample, 'assembly').ok, true, 'stage handoff permits as
   assert.deepEqual(stageDispatches, [], 'stage navigation does not dispatch processing on valid navigation');
   assert.equal(navigatedStage, 'blueprint', 'stage navigation keeps valid target transition');
   assert.equal(status, 'Opened Blueprint', 'stage navigation keeps valid status copy');
+}
+{
+  let navigatedStage: AppStage = 'character';
+  let status = '';
+  const goStage = createStageNavigator({
+    project: sample,
+    dispatch: () => { throw new Error('valid navigation should not dispatch'); },
+    setStage: next => { navigatedStage = next; },
+    setCommandStatus: next => { status = next; },
+    stageLabel: target => target === 'blueprint' ? 'Blueprint' : target,
+  });
+  assert.equal(goStage('blueprint').ok, true, 'stage navigator helper returns the handoff gate result');
+  assert.equal(navigatedStage, 'blueprint', 'stage navigator helper preserves target transition');
+  assert.equal(status, 'Opened Blueprint', 'stage navigator helper preserves status copy');
 }
 {
   const blockedProject = { ...sample, parts: {}, partOrder: [], skeleton: null, paths: {}, mechanisms: [] };

@@ -13,7 +13,7 @@ import {
 } from "../utils/project";
 import { DEFAULT_CANVAS_VIEWPORT } from "../utils/viewport";
 import { workflowStatusFor } from "../utils/workflowStatus";
-import { navigateAppStage } from "../utils/appStageNavigation";
+import { createStageNavigator } from "../utils/appStageNavigation";
 import { buildAppStageRouterProps } from "../utils/appStageRouterProps";
 import { useAppCharacterImportActions } from "./useAppCharacterImportActions";
 import { useAppCommandBindings } from "./useAppCommandBindings";
@@ -60,16 +60,14 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   const appShellRef = useRef<HTMLDivElement>(null);
   useProjectAutosave(project);
 
-  const goStage = (target: AppStage) =>
-    navigateAppStage({
-      project,
-      target,
-      dispatch,
-      setStage,
-      setCommandStatus,
-      stageLabel: (item) =>
-        STAGES.find((stageItem) => stageItem.id === item)?.label ?? item,
-    });
+  const goStage = createStageNavigator({
+    project,
+    dispatch,
+    setStage,
+    setCommandStatus,
+    stageLabel: (item) =>
+      STAGES.find((stageItem) => stageItem.id === item)?.label ?? item,
+  });
   const {
     sortedParts,
     selectedPart,
