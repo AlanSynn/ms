@@ -1,11 +1,18 @@
 import { BodyPartLayer, FabricationIssue, FabricationPackage, FabricationRecipe, MechanismConfig, Point, ProjectState } from '../types';
-import { calculateLinkage, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainResolvedCenterDistance, gearTrainPitchRadii, generateCurvePoints, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius as kinematicPlanetaryRingPitchRadius } from './kinematics';
+import { gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainResolvedCenterDistance, gearTrainPitchRadii, generateCurvePoints, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius as kinematicPlanetaryRingPitchRadius } from './kinematics';
 import { boardToScene, SCENE_PX_PER_MM, sceneToBoardRaw, sceneToSvg, sceneBoundsForSheet } from './coordinates';
 import { mechanismRequiredParts } from './project';
-import { REFERENCE_DEFAULTS, isReferenceExportReady, referenceRecipeForType, referenceStepCoordinateCallout, referenceSupportWarning } from './mechanismReference';
+import { isReferenceExportReady, referenceRecipeForType, referenceStepCoordinateCallout, referenceSupportWarning } from './mechanismReference';
 import { mechanismBindingWarnings, preferredMotionJointId } from './motion';
 import { svgNumber } from './numberFormat';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlineBounds, pointInsideOutline } from './partGeometry';
+import {
+    closePhysicalValue,
+    closeToBoardPitch,
+    closeToFabricationLinkage,
+    physicalTolerance,
+    sampleFeasibleRange
+} from './fabricationReadiness';
 import {
     STACK_COLORS,
     fabricationBaseLayer,
@@ -67,6 +74,8 @@ export {
     fabricationStackSummary,
     readableFabricationStackSummary
 } from './fabricationStackModel';
+export type { FabricationFeasibleRange } from './fabricationReadiness';
+export { sampleFeasibleRange } from './fabricationReadiness';
 
 export const fabricationGearSpecForPitchRadius = sharedFabricationGearSpecForPitchRadius;
 export const fabricationLinkageSpecForCells = sharedFabricationLinkageSpecForCells;
@@ -341,55 +350,6 @@ export const prefabAssemblySteps = (mechanism: MechanismConfig, boardCoordinate:
     ];
 };
 
-export const sampleFeasibleRange = (mechanism: MechanismConfig, samples = 96) => {
-    let valid = 0;
-    const validSamples: boolean[] = [];
-    const loops = mechanism.type === '5bar' || mechanism.type === '6bar' || mechanism.type === 'planetary_gear' ? 8 : 1;
-    const baseSamples = Math.max(1, Math.round(samples));
-    const totalSamples = baseSamples * loops;
-    for (let i = 0; i <= totalSamples; i++) {
-        const angle = (i / totalSamples) * Math.PI * 2;
-        validSamples[i] = calculateLinkage(mechanism, angle).isValid;
-        if (validSamples[i]) valid++;
-    }
-    const intervals: Array<{ startDeg: number; endDeg: number }> = [];
-    let start: number | null = null;
-    validSamples.forEach((ok, i) => {
-        if (ok && start === null) start = i;
-        if ((!ok || i === totalSamples) && start !== null) {
-            const end = ok && i === totalSamples ? i : i - 1;
-            intervals.push({ startDeg: Math.round(start * 360 / totalSamples), endDeg: Math.round(end * 360 / totalSamples) });
-            start = null;
-        }
-    });
-    const intervalText = intervals.map(i => `${i.startDeg}°–${i.endDeg}°`).join(', ');
-    return {
-        percentValid: valid / (totalSamples + 1),
-        startDeg: intervals[0]?.startDeg ?? 0,
-        endDeg: intervals.at(-1)?.endDeg ?? 0,
-        intervals,
-        warning: valid === totalSamples + 1 ? null : valid === 0 ? 'No motion' : `Motion ${Math.round((valid / (totalSamples + 1)) * 100)}% · ${intervalText}`
-    };
-};
-
-const physicalTolerance = (value: number) => Math.max(1, Math.abs(value) * 0.03);
-
-const closePhysicalValue = (actual: number, expected: number) =>
-    Math.abs(actual - expected) <= physicalTolerance(expected || actual || 1);
-
-const closeToBoardPitch = (sceneLength: number) => {
-    const pitch = REFERENCE_DEFAULTS.pitchMm * SCENE_PX_PER_MM;
-    const cells = Math.max(1, Math.round(Math.abs(sceneLength) / Math.max(1, pitch)));
-    return closePhysicalValue(Math.abs(sceneLength), cells * pitch);
-};
-
-const closeToFabricationLinkage = (sceneLength: number, minHoleCount = 2) => {
-    const spec = fabricationLinkageSpecForSceneLength(sceneLength, REFERENCE_DEFAULTS.pitchMm, minHoleCount);
-    return closePhysicalValue(Math.abs(sceneLength), spec.lengthMm * SCENE_PX_PER_MM);
-};
-
-const uniqueMessages = (items: string[]) => [...new Set(items.filter(Boolean))];
-
 export const validateMechanismPreviewReadiness = (mechanism: MechanismConfig): string[] => {
     const errors = [...validateFabricationStack(mechanism)];
     const recipe = referenceRecipeForType(mechanism.type);
@@ -448,7 +408,7 @@ export const validateMechanismPreviewReadiness = (mechanism: MechanismConfig): s
 
     const range = sampleFeasibleRange(mechanism);
     if (range.warning?.startsWith('No motion')) errors.push('No motion.');
-    return uniqueMessages(errors);
+    return [...new Set(errors.filter(Boolean))];
 };
 
 export const validateForFabrication = (project: ProjectState) => {
