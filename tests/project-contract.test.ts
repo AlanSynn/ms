@@ -2819,6 +2819,7 @@ assert(exporterText.includes('fabricationGearPathD'), 'SVG export gear rendering
 assert(foundry3dText.includes('fabricationGearProfileForPitchRadius'), 'Foundry gear helper uses shared fabrication gear holes/profile');
 assert(foundry3dText.includes('validateMechanismPreviewReadiness'), 'Foundry and Design gate 3D previews through shared physical/fabrication readiness validation');
 assert(foundry3dText.includes('data-three-physical-validation-errors'), 'Foundry and Design expose physical readiness errors for browser verification');
+assert(designFoundryPreviewText.includes('design-toggle-user-path') && designFoundryPreviewText.includes('design-toggle-mechanism-path') && designFoundryPreviewText.includes('data-user-path-preview') && designFoundryPreviewText.includes('data-mechanism-path-preview'), 'Mechanism Design separates original user path and fitted mechanism path visibility in the top viewer controls');
 assert(mechanismRecommendationsText.includes('.filter((option) => option.fabricationErrors.length === 0)'), 'Foundry recommendations filter impossible mechanism candidates before they can be offered');
 assert(mechanismRecommendationsText.includes('const initialMechanism = createRecommendedMechanism(') && mechanismRecommendationsText.includes('fitRecommendedMechanismToSheet(') && mechanismRecommendationsText.includes('readyMechanismFallbackForPath('), 'mechanism recommendations retry with a sheet-fitted fabrication-ready fallback before hiding a candidate');
 assert(!mechanismRecommendationsText.includes('fitMechanismGeneratedPathToPath') && !designFoundryPreviewText.includes('fitMechanismGeneratedPathToPath') && !appText.includes('fitMechanismGeneratedPathToPath'), 'mechanism recommendations must not center-shift physical templates away from hole-snapped anchors');
@@ -4321,6 +4322,11 @@ const movedLowerArmPivot = bodyPartPivotScene(animated.right_arm_lower, mechanis
 assert(distance(movedLowerArmPivot, mechanismPreview.skeleton!.joints.right_elbow.position) < 1e-9, 'mechanism IK keeps the lower arm attached to the solved elbow instead of snapping it to the shoulder');
 assert(Math.hypot((mechanismPreview.skeleton?.joints.right_hand.position.x ?? 0) - mechanismState.effector.x, (mechanismPreview.skeleton?.joints.right_hand.position.y ?? 0) - mechanismState.effector.y) < 1e-9, 'mechanism design IK target follows the actual linkage effector');
 assert(Math.hypot((mechanismPreview.skeleton?.joints.right_hand.position.x ?? 0) - drivenProject.paths['path-right-arm'].points[0].x, (mechanismPreview.skeleton?.joints.right_hand.position.y ?? 0) - drivenProject.paths['path-right-arm'].points[0].y) > 20, 'mechanism design does not fake success by directly following the target path');
+const generatedPathPoint = { x: mechanismState.effector.x + 123, y: mechanismState.effector.y - 57 };
+const generatedPathDrivenMechanism = { ...drivenMechanism, generatedPath: [generatedPathPoint, { x: generatedPathPoint.x + 18, y: generatedPathPoint.y + 12 }, { x: generatedPathPoint.x - 14, y: generatedPathPoint.y + 24 }] };
+const generatedPathDrivenPreview = motionPreviewForProject({ ...drivenProject, mechanisms: [generatedPathDrivenMechanism] }, [generatedPathDrivenMechanism], 0);
+assert(Math.hypot((generatedPathDrivenPreview.skeleton?.joints.right_hand.position.x ?? 0) - generatedPathPoint.x, (generatedPathDrivenPreview.skeleton?.joints.right_hand.position.y ?? 0) - generatedPathPoint.y) < 1e-9, 'mechanism design IK target follows the fitted generated mechanism path when present');
+assert(Math.hypot((generatedPathDrivenPreview.skeleton?.joints.right_hand.position.x ?? 0) - mechanismState.effector.x, (generatedPathDrivenPreview.skeleton?.joints.right_hand.position.y ?? 0) - mechanismState.effector.y) > 20, 'stored fitted mechanism paths override the raw linkage effector for character preview');
 assert.notEqual(animated.right_arm_upper.transform.rotation, drivenProject.parts.right_arm_upper.transform.rotation, 'IK preview rotates the upper arm instead of leaving the parent component static');
 assert.notEqual(animated.right_arm_lower.transform.rotation, drivenProject.parts.right_arm_lower.transform.rotation, 'IK preview rotates the limb instead of only offsetting it');
 assert(Math.hypot(bodyPartPivotScene(animated.right_hand_part, mechanismPreview.skeleton).x - (mechanismPreview.skeleton?.joints.right_hand.position.x ?? 0), bodyPartPivotScene(animated.right_hand_part, mechanismPreview.skeleton).y - (mechanismPreview.skeleton?.joints.right_hand.position.y ?? 0)) < 1e-9, 'descendant part anchor follows animated skeleton');
@@ -4331,8 +4337,11 @@ for (const phase of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
   const preview = motionPreviewForProject(sample, sample.mechanisms, phase);
   const targetJointId: string = preferredMotionJointId(sample, sampleMechanism.targetPartId, sampleMechanism.targetAnchorJointId)!;
   const targetJoint = preview.skeleton?.joints[targetJointId]?.position;
+  const generatedTarget = sampleMechanism.generatedPath?.length
+    ? pointOnProjectPath({ ...sample.paths['path-right-arm'], timedPoints: undefined, points: sampleMechanism.generatedPath, closed: true }, phase)
+    : state.effector;
   assert(state.isValid && targetJoint, 'sample mechanism has a valid driven target joint');
-  assert(Math.hypot(targetJoint!.x - state.effector.x, targetJoint!.y - state.effector.y) < 1e-9, 'sample mechanism keeps its driven joint pinned to the linkage effector through the whole scrub range');
+  assert(Math.hypot(targetJoint!.x - generatedTarget.x, targetJoint!.y - generatedTarget.y) < 1e-9, 'sample mechanism keeps its driven joint pinned to the fitted generated path through the whole scrub range');
 }
 const conflictProject: ProjectState = { ...drivenProject, mechanisms: [drivenMechanism, { ...drivenMechanism, id: 'second-driver', anchorX: drivenMechanism.anchorX + 8 }] };
 const conflicts = mechanismBindingWarnings(conflictProject);

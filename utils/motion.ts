@@ -49,6 +49,18 @@ const projectPathSegments = (points: Point[], closed: boolean) => {
     return segments;
 };
 
+const pointOnGeneratedMechanismPath = (points: Point[], angle: number): Point | undefined => {
+    if (points.length < 2) return points[0];
+    const segments = projectPathSegments(points, true);
+    const total = segments.reduce((sum, seg) => sum + seg.length, 0) || 1;
+    let target = cyclePhase(angle) * total;
+    for (const seg of segments) {
+        if (target <= seg.length) return pointBetween(seg.a, seg.b, target / (seg.length || 1));
+        target -= seg.length;
+    }
+    return points[0];
+};
+
 export const pointOnProjectPath = (path: ProjectMotionPath, angle: number): Point => {
     const phase = cyclePhase(angle);
     if (path.timedPoints?.length) {
@@ -550,10 +562,12 @@ export const motionPreviewForProject = (project: ProjectState, mechanisms: Mecha
     mechanisms.filter(m => m.visible && m.enabled !== false).forEach(m => {
         if (!m.targetPartId || !project.parts[m.targetPartId]) return;
         const state = calculateLinkage(m, angle);
-        if (!state.isValid) {
+        const generatedTarget = pointOnGeneratedMechanismPath(m.generatedPath ?? [], angle);
+        if (!state.isValid && !generatedTarget) {
             warnings[m.id] = [...(warnings[m.id] ?? []), 'Current mechanism angle is outside the valid motion range.'];
             return;
         }
+        if (!state.isValid) warnings[m.id] = [...(warnings[m.id] ?? []), 'Current mechanism angle is outside the valid motion range.'];
         const path = m.targetPathId ? project.paths[m.targetPathId] : undefined;
         const targetJointId = preferredMotionJointId(project, m.targetPartId, m.targetAnchorJointId ?? path?.targetAnchorJointId);
         const rootOptions = motionChainRootJointIds(project, m.targetPartId, targetJointId);
@@ -561,7 +575,7 @@ export const motionPreviewForProject = (project: ProjectState, mechanisms: Mecha
         const key = `${m.targetPartId}:${rootJointId ?? project.parts[m.targetPartId].anchorJointId}:${targetJointId ?? project.parts[m.targetPartId].anchorJointId}`;
         if (drivenTargets.has(key)) return;
         drivenTargets.add(key);
-        preview = motionPreviewForTarget(project, m.targetPartId, targetJointId, state.effector, preview, { pinTarget: true, rootJointId });
+        preview = motionPreviewForTarget(project, m.targetPartId, targetJointId, generatedTarget ?? state.effector, preview, { pinTarget: true, rootJointId });
     });
     return { ...preview, warnings };
 };

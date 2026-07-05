@@ -3177,6 +3177,17 @@ test('Mechanism Design center workspace renders the same shared Foundry mechanis
   await expect(designPreview).toHaveAttribute('data-renderer-source', 'ThreeFoundryPreview');
   await expect(designPreview).toHaveAttribute('data-shared-with', 'foundry-preview');
   const designRig = designPreview.getByTestId('foundry-camera-rig');
+  const designPuppet = page.getByTestId('design-context-puppet-state');
+  await expect(designPreview).toHaveAttribute('data-user-path-preview', 'shown');
+  await expect(designPreview).toHaveAttribute('data-mechanism-path-preview', 'shown');
+  await expect(designPuppet).toHaveAttribute('data-layer-paths', 'shown');
+  await expect(designRig).toHaveAttribute('data-path-preview', 'shown');
+  await page.getByTestId('design-toggle-user-path').click();
+  await expect(designPreview).toHaveAttribute('data-user-path-preview', 'hidden');
+  await expect(designPuppet).toHaveAttribute('data-layer-paths', 'hidden');
+  await page.getByTestId('design-toggle-mechanism-path').click();
+  await expect(designPreview).toHaveAttribute('data-mechanism-path-preview', 'hidden');
+  await expect(designRig).toHaveAttribute('data-path-preview', 'hidden');
   await expect(designRig).toHaveAttribute('data-three-renderer', 'webgl');
   await expect(designRig).toHaveAttribute('data-three-engine-stack', 'three-webgl2-imperative');
   await expect(designRig).toHaveAttribute('data-physics-kernel', 'rapier3d-compat');
@@ -3201,8 +3212,17 @@ test('Mechanism Design center workspace renders the same shared Foundry mechanis
     planetary_gear: [['data-three-gear-count', 3], ['data-three-planet-count', 1]]
   };
 
-  for (const type of ['4bar', 'piston', 'cam', 'gear', 'gear_linkage', 'planetary_gear']) {
-    await page.getByRole('button', { name: type, exact: true }).click();
+  const mechanismTemplateButtons = [
+    { type: '4bar', label: 'Four-bar linkage' },
+    { type: 'piston', label: 'Slider piston' },
+    { type: 'cam', label: 'Cam follower' },
+    { type: 'gear', label: 'Gear train' },
+    { type: 'gear_linkage', label: 'Gear linkage' },
+    { type: 'planetary_gear', label: 'Planetary gear' }
+  ] as const;
+
+  for (const { type, label } of mechanismTemplateButtons) {
+    await page.getByRole('button', { name: label, exact: true }).click();
     await expect(designRig, `${type} design preview uses the Foundry renderer state`).toHaveAttribute('data-mechanism-type', type);
     await expect(designRig, `${type} design renderer uses the shared fabrication stack`).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
     await expect(designRig, `${type} design stack stays assembled until explicitly exploded`).toHaveAttribute('data-three-exploded', 'false');
@@ -3236,7 +3256,7 @@ test('Mechanism Design center workspace renders the same shared Foundry mechanis
   }
 
   const readRotation = async () => Number(await designRig.getAttribute('data-pinion-rotation-deg'));
-  await page.getByRole('button', { name: 'gear', exact: true }).click();
+  await page.getByRole('button', { name: 'Gear train', exact: true }).click();
   const scrubber = page.getByLabel('Workspace scrubber');
   await scrubber.fill('10');
   const startRotation = await readRotation();

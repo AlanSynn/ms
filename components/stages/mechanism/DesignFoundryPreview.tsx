@@ -47,7 +47,8 @@ export const DesignFoundryPreview = ({
   const [projectionSize, setProjectionSize] =
     useState<FoundryOverlaySize>(FOUNDRY_OVERLAY_SIZE);
   const [showGrid, setShowGrid] = useState(true);
-  const [showPathPreview, setShowPathPreview] = useState(true);
+  const [showUserPathPreview, setShowUserPathPreview] = useState(true);
+  const [showMechanismPathPreview, setShowMechanismPathPreview] = useState(true);
   const [showForces, setShowForces] = useState(true);
   const [showVelocity, setShowVelocity] = useState(true);
   const [explode, setExplode] = useState(0);
@@ -284,6 +285,8 @@ export const DesignFoundryPreview = ({
       data-guided-context-part-count={project.partOrder.length}
       data-guided-context-path-count={designContextPaths.length}
       data-guided-context-path-id={designContextPathId ?? ""}
+      data-user-path-preview={showUserPathPreview ? "shown" : "hidden"}
+      data-mechanism-path-preview={showMechanismPathPreview ? "shown" : "hidden"}
     >
       <div
         className="foundry-camera-hud design-foundry-camera-hud"
@@ -318,10 +321,21 @@ export const DesignFoundryPreview = ({
         </button>
         <button
           type="button"
-          className={showPathPreview ? "active" : ""}
-          onClick={() => setShowPathPreview((value) => !value)}
+          data-testid="design-toggle-user-path"
+          className={showUserPathPreview ? "active" : ""}
+          aria-pressed={showUserPathPreview}
+          onClick={() => setShowUserPathPreview((value) => !value)}
         >
-          Path
+          User path
+        </button>
+        <button
+          type="button"
+          data-testid="design-toggle-mechanism-path"
+          className={showMechanismPathPreview ? "active" : ""}
+          aria-pressed={showMechanismPathPreview}
+          onClick={() => setShowMechanismPathPreview((value) => !value)}
+        >
+          Mech path
         </button>
         <button
           type="button"
@@ -365,7 +379,7 @@ export const DesignFoundryPreview = ({
         pathPoints={previewPoints}
         pathTraces={pointTraces}
         showGrid={showGrid}
-        showPathPreview={showPathPreview}
+        showPathPreview={showMechanismPathPreview}
         showTrail={showTrace}
         showForces={showForces}
         showVelocity={showVelocity}
@@ -400,7 +414,7 @@ export const DesignFoundryPreview = ({
               animatedParts={designContextAnimatedParts}
               skeleton={project.skeleton}
               mechanisms={[]}
-              paths={designContextPaths}
+              paths={showUserPathPreview ? designContextPaths : []}
               selectedPathId={designContextPathId}
               angle={angle}
               inputMode="none"
