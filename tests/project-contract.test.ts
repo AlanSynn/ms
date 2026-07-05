@@ -14,6 +14,7 @@ import { FABRICATION_GEAR_ROOT_WEB_MM, fabricationGearEngravingLabel, fabricatio
 import { makeBlueprintPreviewSvg as directMakeBlueprintPreviewSvg, makeBlueprintSvg as directMakeBlueprintSvg } from '../utils/fabricationBlueprintSvg';
 import { buildCharacterPrintLayout as directBuildCharacterPrintLayout } from '../utils/fabricationCharacterPrintLayout';
 import { fabricationGearPathD as profileFabricationGearPathD, fabricationGearProfileForPitchRadius as profileFabricationGearProfileForPitchRadius, fabricationRingGearPathD as profileFabricationRingGearPathD, fabricationRingGearProfileForPitchRadius as profileFabricationRingGearProfileForPitchRadius } from '../utils/fabricationProfiles';
+import { createFabricationRecipe as directCreateFabricationRecipe } from '../utils/fabricationRecipes';
 import { closePhysicalValue as readinessClosePhysicalValue, closeToBoardPitch as readinessCloseToBoardPitch, closeToFabricationLinkage as readinessCloseToFabricationLinkage, physicalTolerance as readinessPhysicalTolerance, sampleFeasibleRange as readinessSampleFeasibleRange } from '../utils/fabricationReadiness';
 import { FABRICATION_RENDER_LAYER_Z_STEP as renderPlanLayerZStep, FABRICATION_RENDER_MIN_CLEARANCE as renderPlanMinClearance, FABRICATION_RENDER_PART_DEPTH as renderPlanPartDepth, fabricationRenderPlanForMechanism as renderPlanForMechanism, validateFabricationStack as renderPlanValidateFabricationStack } from '../utils/fabricationRenderPlan';
 import { FABRICATION_LINKAGE_ROLE_MIN_HOLES as sizingRoleMinHoles, PLANETARY_GEAR_PLANET_COUNT as sizingPlanetCount, fabricationLinkageHoleCountsForMechanism as sizingFabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism as sizingFabricationLinkageSceneLengthsForMechanism, planetaryGearConventionForMechanism as sizingPlanetaryGearConventionForMechanism, planetaryPlanetCenters as sizingPlanetaryPlanetCenters } from '../utils/fabricationSizing';
@@ -312,6 +313,8 @@ assert(
   && normalizedCodebaseCleanupPlan.includes('pure feasible-range sampling, physical tolerance, board-pitch, and linkage-snapping math')
   && normalizedCodebaseCleanupPlan.includes('`utils/fabricationRenderPlan.ts` | 105')
   && normalizedCodebaseCleanupPlan.includes('pure moving-stack validation, render-layer z-order, base layer, and render-plan summaries')
+  && normalizedCodebaseCleanupPlan.includes('`utils/fabricationRecipes.ts` | 112')
+  && normalizedCodebaseCleanupPlan.includes('package recipe, board callout, target callout, mechanism label, and prefab assembly-step derivation')
   && normalizedCodebaseCleanupPlan.includes('`utils/fabricationBlueprintSvg.ts` | 142')
   && normalizedCodebaseCleanupPlan.includes('deterministic printable/readable Blueprint SVG rendering')
   && normalizedCodebaseCleanupPlan.includes('`utils/fabricationSizing.ts` | 121')
@@ -320,7 +323,7 @@ assert(
   && normalizedCodebaseCleanupPlan.includes('import-free PDF document primitives')
   && normalizedCodebaseCleanupPlan.includes('`utils/fabricationCharacterPrintLayout.ts`')
   && normalizedCodebaseCleanupPlan.includes('pure character cut-sheet layout model'),
-  'cleanup plan records the extracted fabrication profile, number formatting, stack model, readiness, render-plan, Blueprint SVG, sizing, PDF primitive, and character print layout seams'
+  'cleanup plan records the extracted fabrication profile, number formatting, stack model, readiness, render-plan, recipe, Blueprint SVG, sizing, PDF primitive, and character print layout seams'
 );
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintExport.tsx` | 88') && normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintControlPanel.tsx` | 258') && normalizedCodebaseCleanupPlan.includes('`components/stages/blueprint/BlueprintDetailPanel.tsx` | 100') && normalizedCodebaseCleanupPlan.includes('Blueprint left workflow controls, package generation, download buttons, and recipe list live outside the stage wrapper') && normalizedCodebaseCleanupPlan.includes('Blueprint right inspector recipe title, board callout, sensemaking cue, required-part chips, stack summary, and export grid status live outside the stage wrapper'), 'cleanup plan records the extracted Blueprint control/detail panel seams');
 assert.equal(JSON.parse(readFileSync(join(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8')).productName, 'MotionSmith', 'Tauri product name uses MotionSmith');
@@ -449,6 +452,7 @@ const visibleUiSource = [
   'utils/fabricationProfiles.ts',
   'utils/fabricationReadiness.ts',
   'utils/fabricationRenderPlan.ts',
+  'utils/fabricationRecipes.ts',
   'utils/fabricationSizing.ts',
   'utils/fabricationStackModel.ts',
   'utils/simplePdf.ts',
@@ -1230,6 +1234,7 @@ const goldenMaster = {
   sceneProjection: buildToonSceneProjection(goldenSample),
   svg: generateSVG(goldenExportConfig, Math.PI / 4),
   dxf: generateDXF(goldenExportConfig, Math.PI / 4),
+  fabricationRecipes: createFabricationPackage(goldenSample).recipes,
   foundryRenderPlans: ALL_MECHANISM_TYPES.map(type => fabricationRenderPlanForMechanism(createDefaultMechanism(type, `${type}-golden`))),
   stacks: goldenSample.mechanisms.map(fabricationStackForMechanism)
 };
@@ -1243,11 +1248,13 @@ assert.deepEqual(
     sceneProjection: '64b01ae59502ee6a8f04bdad651418565e1fb1e9593d7a6178cea04425dd1605',
     svg: '943626770ae697a566ce73edfcf282215c4e55f82e77575d7df7393eeb1eb5d3',
     dxf: 'dc52ca1acfa24ad70ae9028c58ad48a6c64fb5a8dcebf9fe4db2562d2d8aa336',
+    fabricationRecipes: '4aeb03314bfcb4989cd11fd5ca8566ed40fd8098743c8461e01264be7f82eb77',
     foundryRenderPlans: '90002ef13c808509243cb551dc777ceb84f980e7279e83eeb840c90821b103ea',
     stacks: 'e55cc135c765896c41713823fdc9f831249073038e52bbdf9cc2a70f9690976f'
   },
   'golden master locks ProjectState, mechanism snapshot, scene projection, export, and fabrication stack behavior before App.tsx refactors'
 );
+assert.deepEqual(directCreateFabricationRecipe(goldenSample, goldenSample.mechanisms[0]), createFabricationPackage(goldenSample).recipes[0], 'fabricationRecipes preserves package recipe output behind the fabrication facade');
 const gearMetadataMechanism = {
   ...createDefaultMechanism('gear', 'snapshot-gear-metadata'),
   crankLength: 50,
@@ -1341,6 +1348,7 @@ assert(fabricationGeneratorText.includes('SOURCE_SSOT = "fabrication/generate_fa
 const fabricationRuntimeText = readFileSync(join(process.cwd(), 'utils', 'fabrication.ts'), 'utf8');
 const fabricationBlueprintSvgText = readFileSync(join(process.cwd(), 'utils', 'fabricationBlueprintSvg.ts'), 'utf8');
 const fabricationProfilesText = readFileSync(join(process.cwd(), 'utils', 'fabricationProfiles.ts'), 'utf8');
+const fabricationRecipesText = readFileSync(join(process.cwd(), 'utils', 'fabricationRecipes.ts'), 'utf8');
 const fabricationReadinessText = readFileSync(join(process.cwd(), 'utils', 'fabricationReadiness.ts'), 'utf8');
 const fabricationRenderPlanText = readFileSync(join(process.cwd(), 'utils', 'fabricationRenderPlan.ts'), 'utf8');
 const fabricationSizingText = readFileSync(join(process.cwd(), 'utils', 'fabricationSizing.ts'), 'utf8');
@@ -1372,13 +1380,14 @@ assert(
   && fabricationRuntimeText.includes("from './fabricationProfiles'")
   && fabricationRuntimeText.includes("from './fabricationReadiness'")
   && fabricationRuntimeText.includes("from './fabricationRenderPlan'")
+  && fabricationRuntimeText.includes("from './fabricationRecipes'")
   && fabricationRuntimeText.includes("from './fabricationStackModel'")
   && fabricationRuntimeText.includes("from './numberFormat'")
   && fabricationRuntimeText.includes("from './simplePdf'")
   && fabricationRuntimeText.includes("from './fabricationCharacterPrintLayout'")
   && fabricationProfilesText.includes("from './fabricationContract'")
   && fabricationProfilesText.includes("from './numberFormat'"),
-  'fabrication runtime consumes extracted profile/stack/render helpers, character print layout, PDF primitives, and Blueprint SVG renderers from focused seams'
+  'fabrication runtime consumes extracted profile/stack/render/recipe helpers, character print layout, PDF primitives, and Blueprint SVG renderers from focused seams'
 );
 [
   './fabrication',
@@ -1517,6 +1526,41 @@ assert(
   'createElement'
 ].forEach(forbiddenText => {
   assert(!fabricationRenderPlanText.includes(forbiddenText), `fabricationRenderPlan stays render-plan-only and must not reference ${forbiddenText}`);
+});
+assert.deepEqual(
+  staticImportModules(fabricationRecipesText),
+  ['../types', './coordinates', './fabricationContract', './fabricationReadiness', './fabricationRenderPlan', './fabricationStackModel', './kinematics', './mechanismReference', './motion'].sort(),
+  'fabricationRecipes owns package recipe derivation with an exact focused import set'
+);
+[
+  './fabrication',
+  './project',
+  './exporter',
+  './physicsKernel',
+  './sanitize',
+  '../components',
+  'react',
+  'three',
+  '@dimforge/rapier3d-compat'
+].forEach(moduleName => {
+  assert(
+    !fabricationRecipesText.includes(`from '${moduleName}'`) && !fabricationRecipesText.includes(`from "${moduleName}"`),
+    `fabricationRecipes stays recipe-only and must not import ${moduleName}`
+  );
+});
+[
+  'FabricationPackage',
+  'createFabricationPackage',
+  'validateForFabrication',
+  'makeCutSheetPdf',
+  'makeAssemblyGuideHtml',
+  'makeCustomPartsSvg',
+  'document.',
+  'window.',
+  'localStorage',
+  'createElement'
+].forEach(forbiddenText => {
+  assert(!fabricationRecipesText.includes(forbiddenText), `fabricationRecipes stays recipe-only and must not reference ${forbiddenText}`);
 });
 assert.deepEqual(
   staticImportModules(fabricationSizingText),
