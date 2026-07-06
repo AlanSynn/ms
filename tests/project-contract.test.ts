@@ -33,6 +33,7 @@ import { buildToonSceneProjection } from '../utils/sceneProjection';
 import { buildFoundryPhysicsOverlay, buildKinematicPhysicsSession, mechanismPhysicsRule } from '../utils/physicsSession';
 import { contourPathD, fabricablePartOutlinePoints, partLandmarkJointIds, partLandmarkLocalPoints, partOutlineBounds, partWorldPointToLocal, pointInsideOutline, scaleContour } from '../utils/partGeometry';
 import { MECHANISM_FEATURE_REGISTRY, mechanismFeature, validateMechanismFeatureRegistry, type MechanismDragHandle } from '../utils/mechanismFeatureRegistry';
+import { constrainMechanismUpdate, mechanismEditIsSafe, mechanismMotionCompletes, motionSafeParamRange, safeMechanismUpdate } from '../utils/mechanismEditAuthority';
 import { buildMechanismSnapshot, buildMechanismSnapshots, mechanismSnapshotFingerprint } from '../utils/mechanismSnapshot';
 import { createFoundryPlaybackFrame, foundryPlaybackPhaseToInputAngle, generateFoundryPlaybackPointTraces } from '../utils/foundryPlayback';
 import { createMechanismFitContext, createSceneMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext, pointsToSvgPath } from '../utils/mechanismPreview';
@@ -1427,6 +1428,33 @@ assert.equal(readinessPhysicalTolerance(100), 3, 'fabricationReadiness preserves
 assert(readinessClosePhysicalValue(103, 100), 'fabricationReadiness preserves close physical value checks at tolerance boundary');
 assert(readinessCloseToBoardPitch(roleMinimumFourBar.groundLength), 'fabricationReadiness preserves board-pitch snapping checks');
 assert(readinessCloseToFabricationLinkage(roleMinimumFourBar.couplerLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.coupler), 'fabricationReadiness preserves fabrication linkage snapping checks');
+
+ALL_MECHANISM_TYPES.forEach(type => {
+  const mechanism = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism(type, `safe-edit-authority-${type}`)));
+  assert(mechanismMotionCompletes(mechanism), `${type} starts from a complete motion before feasible-only editing`);
+  assert(mechanismEditIsSafe(mechanism), `${type} runtime authority accepts the default editable mechanism`);
+  const absurdUpdate = constrainMechanismUpdate(mechanism, {
+    crankLength: 9999,
+    couplerLength: 9999,
+    rockerLength: 1,
+    gearTrainRadii: [9999, 1],
+    camProfileSamples: [0.35, 1.65, 0.35, 1.65]
+  });
+  assert(safeMechanismUpdate(mechanism, absurdUpdate), `${type} runtime authority strips or clamps unsafe geometry edits`);
+});
+{
+  const fourbar = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism('4bar', 'safe-range-fourbar')));
+  const range = motionSafeParamRange(fourbar, 'groundLength');
+  assert(range?.currentSafe, 'four-bar ground length has a runtime safe range');
+  assert.equal(constrainMechanismUpdate(fourbar, { groundLength: 9999 }).groundLength, undefined, 'central runtime authority rejects impossible four-bar ground length writes');
+}
+{
+  const cam = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism('cam', 'safe-cam-profile')));
+  const unsafeProfile = [0.35, 1.65, 0.35, 1.65];
+  assert(!safeMechanismUpdate(cam, { camProfileSamples: unsafeProfile }), 'runtime authority detects steep cam profiles before they enter preview state');
+  assert.equal(constrainMechanismUpdate(cam, { camProfileSamples: unsafeProfile }).camProfileSamples, undefined, 'central runtime authority drops unsafe cam profile edits');
+}
+
 ALL_MECHANISM_TYPES.forEach(type => {
   assert(MECHANISM_TEMPLATE_LIBRARY[type].label && MECHANISM_TEMPLATE_LIBRARY[type].sense, `${type} has shared template metadata`);
 });
@@ -2906,7 +2934,8 @@ const sceneObjectImageText = readFileSync(join(process.cwd(), 'utils', 'sceneObj
 const pathEditorText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'PathEditor.tsx'), 'utf8');
 const mechanismRecommendationSheetText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'MechanismRecommendationSheet.tsx'), 'utf8');
 const mechanismParametricEditorText = readFileSync(join(process.cwd(), 'components', 'stages', 'mechanism', 'MechanismParametricEditor.tsx'), 'utf8');
-const mechanismParamPolicyText = readFileSync(join(process.cwd(), 'components', 'stages', 'mechanism', 'mechanismParamPolicy.ts'), 'utf8');
+const mechanismEditAuthorityText = readFileSync(join(process.cwd(), 'utils', 'mechanismEditAuthority.ts'), 'utf8');
+const mechanismParamPolicyText = `${readFileSync(join(process.cwd(), 'components', 'stages', 'mechanism', 'mechanismParamPolicy.ts'), 'utf8')}\n${mechanismEditAuthorityText}`;
 const pathCanvasPaneText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'PathCanvasPane.tsx'), 'utf8');
 const sceneSketchText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'SceneSketch.tsx'), 'utf8');
 const partShapeText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'PartShape.tsx'), 'utf8');
@@ -3209,7 +3238,7 @@ assert(foundry3dText.includes('data-three-pin-stack-clearance-contract="local-sp
 assert(foundryStageText.includes('foundry-parametric-editor') && mechanismDesignStageText.includes('design-parametric-editor'), 'Foundry and Design both mount the same compact parametric mechanism editor');
 assert(mechanismFoundryText.includes('refreshEditedFoundryMechanism') && mechanismFoundryText.includes('bcTraces.length === 0') && mechanismFoundryText.includes('mechanismWithGeneratedPath(normalized)') && !mechanismFoundryText.includes('createPathFittedFoundry({ ...foundry, ...updates }'), 'Foundry parametric edits recompute the mechanism path from the edited mechanism instead of re-optimizing away user-selected link sizes or crashing when no B/C trace is valid');
 assert(mechanismParametricEditorText.includes('Drive gear size') && mechanismParametricEditorText.includes('Output gear size') && mechanismParametricEditorText.includes('Paired link length'), 'parametric editor exposes gear and linkage fabrication selectors instead of hidden generic numbers');
-assert(mechanismParametricEditorText.includes('sampleFeasibleRange') && mechanismParametricEditorText.includes('data-motion-safe-options') && mechanismParametricEditorText.includes('data-locked-motion-options') && mechanismParametricEditorText.includes('Locked choices may jam'), 'parametric editor simulates candidate fabrication choices and visibly locks options that would jam');
+assert(mechanismEditAuthorityText.includes('sampleFeasibleRange') && mechanismParametricEditorText.includes('data-motion-safe-options') && mechanismParametricEditorText.includes('data-locked-motion-options') && mechanismParametricEditorText.includes('Locked choices may jam'), 'parametric editor delegates candidate simulation to runtime edit authority and visibly locks options that would jam');
 assert(foundryInspectorPanelText.includes('<MechanismParametricEditor') && mechanismDesignStageText.includes('<MechanismParametricEditor') && mechanismParametricEditorText.includes('gearTrainPitchRadii') && mechanismParametricEditorText.includes('defaultCamProfileSamples'), 'Foundry and Design delegate compact parametric gear/link/cam controls to a mechanism stage seam');
 assert(foundryStageText.includes('MECHANISM_PARAM_META') && mechanismDesignStageText.includes('MECHANISM_PARAM_META') && mechanismParamPolicyText.includes('shouldShowMechanismParam') && mechanismParamPolicyText.includes('clampMechanismParam'), 'Foundry and Design delegate legacy numeric mechanism parameter policy to a pure mechanism stage helper');
 assert(mechanismParamPolicyText.includes('motionSafeParamRange') && mechanismParamPolicyText.includes('clampMechanismParamForMotion') && foundryInspectorPanelText.includes('Safe range only') && designInspectorPanelText.includes('Safe range only'), 'Foundry and Design numeric sliders derive visible safe ranges from mechanism simulation instead of letting students dial into known jams');
@@ -3484,10 +3513,10 @@ assert(foundry3dText.includes('data-three-pixel-ratio-cap') && threePreviewText.
 assert.equal(WEBGL_PIXEL_RATIO_CAP, 1.5, 'WebGL pixel-ratio cap avoids high-DPI overdraw while preserving sharp CAD-style previews');
 assert(!foundry3dText.includes('starShape'), 'Foundry sandbox no longer carries saw-tooth star gears');
 assert(!foundry3dText.includes('teeth * 2'), 'Foundry sandbox no longer carries sparse saw-tooth gear implementation');
-assert(mechanismParamPolicyText.includes('if (key === "gearRatio") return false'), 'Foundry hides stale gear-ratio controls when physical pitch radii define rotation');
-assert(mechanismParamPolicyText.includes('if (type === "cam") return false'), 'Foundry/Design hide generic cam dimensions because the cam module is fixed except for profile shape');
-assert(mechanismParamPolicyText.includes('if (type === "piston") return false'), 'Foundry/Design hide generic piston dimensions because the slider-crank module is fixed');
-assert(mechanismParamPolicyText.includes('if (type === "planetary_gear") return key === "phase"'), 'Foundry/Design hide non-effective planetary dimensions while keeping phase');
+assert(mechanismParamPolicyText.includes("if (key === 'gearRatio') return false"), 'Foundry hides stale gear-ratio controls when physical pitch radii define rotation');
+assert(mechanismParamPolicyText.includes("if (type === 'cam') return false"), 'Foundry/Design hide generic cam dimensions because the cam module is fixed except for profile shape');
+assert(mechanismParamPolicyText.includes("if (type === 'piston') return false"), 'Foundry/Design hide generic piston dimensions because the slider-crank module is fixed');
+assert(mechanismParamPolicyText.includes("if (type === 'planetary_gear') return key === 'phase'"), 'Foundry/Design hide non-effective planetary dimensions while keeping phase');
 const fitContext = createMechanismFitContext(sample.mechanisms[0], 360, 240, 96);
 const directFit = fitMechanismSimulation(sample.mechanisms[0], 1.234, 360, 240, 96);
 const cachedFit = fitMechanismSimulationWithContext(sample.mechanisms[0], 1.234, fitContext);

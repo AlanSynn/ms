@@ -7,13 +7,16 @@ import {
   FABRICATION_LINKAGE_SPECS,
   fabricationGearSpecForPitchRadius,
   fabricationLinkageSpecForSceneLength,
-  sampleFeasibleRange,
 } from "../../../utils/fabrication";
 import {
   defaultCamProfileSamples,
   gearTrainPitchRadii,
   normalizeCamProfileSamples,
 } from "../../../utils/kinematics";
+import {
+  mechanismMotionCompletes,
+  safeMechanismUpdate,
+} from "./mechanismParamPolicy";
 
 const gearSpecForSceneRadius = (radius: number) =>
   fabricationGearSpecForPitchRadius(Math.abs(radius) / SCENE_PX_PER_MM);
@@ -31,13 +34,6 @@ const linkageCellsForSceneLength = (length: number) =>
   fabricationLinkageSpecForSceneLength(length).cells;
 const gearOptionLabel = (teeth: number) => `${teeth} teeth`;
 const linkageOptionLabel = (holeCount: number) => `${holeCount}-hole`;
-const WORKING_OPTION_SAMPLES = 48;
-const motionCompletes = (mechanism: MechanismConfig) =>
-  sampleFeasibleRange(mechanism, WORKING_OPTION_SAMPLES).warning === null;
-const safeMechanismUpdate = (
-  mechanism: MechanismConfig,
-  updates: Partial<MechanismConfig>,
-) => motionCompletes({ ...mechanism, ...updates });
 type SafeOption<T> = { item: T; working: boolean; current: boolean };
 const unsafeOptionLabel = (label: string, current: boolean) =>
   current ? `${label} · current` : `${label} · locked`;
@@ -123,7 +119,7 @@ export const MechanismParametricEditor = ({
         item: spec,
         current,
         working: current
-          ? motionCompletes(mechanism)
+          ? mechanismMotionCompletes(mechanism)
           : safeMechanismUpdate(mechanism, updates),
       };
     });
@@ -139,7 +135,7 @@ export const MechanismParametricEditor = ({
         item: spec,
         current,
         working: current
-          ? motionCompletes(mechanism)
+          ? mechanismMotionCompletes(mechanism)
           : safeMechanismUpdate(mechanism, gearRadiusUpdates(index, spec.key)),
       };
     });
@@ -154,7 +150,7 @@ export const MechanismParametricEditor = ({
         item: spec,
         current,
         working: current
-          ? motionCompletes(mechanism)
+          ? mechanismMotionCompletes(mechanism)
           : safeMechanismUpdate(mechanism, updates),
       };
     });
@@ -396,6 +392,7 @@ export const MechanismParametricEditor = ({
       {mechanism.type === "cam" && (
         <div className="mt-3">
           <CamProfileEditor
+            mechanism={mechanism}
             samples={mechanism.camProfileSamples}
             onChange={(camProfileSamples) => onChange({ camProfileSamples })}
           />
@@ -410,9 +407,11 @@ const CAM_PROFILE_MAX = 1.65;
 const clampCamProfileSample = (value: number) =>
   Math.max(CAM_PROFILE_MIN, Math.min(CAM_PROFILE_MAX, value));
 const CamProfileEditor = ({
+  mechanism,
   samples,
   onChange,
 }: {
+  mechanism: MechanismConfig;
   samples?: number[];
   onChange: (samples: number[]) => void;
 }) => {
@@ -451,8 +450,12 @@ const CamProfileEditor = ({
       CAM_PROFILE_MAX - t * (CAM_PROFILE_MAX - CAM_PROFILE_MIN),
     );
   };
+  const commitProfile = (nextProfile: number[]) => {
+    if (!safeMechanismUpdate(mechanism, { camProfileSamples: nextProfile })) return;
+    onChange(nextProfile);
+  };
   const updatePoint = (index: number, value: number) =>
-    onChange(
+    commitProfile(
       profile.map((sample, sampleIndex) =>
         sampleIndex === index ? clampCamProfileSample(value) : sample,
       ),
@@ -474,7 +477,7 @@ const CamProfileEditor = ({
           type="button"
           className="btn-secondary compact"
           data-testid="cam-profile-reset"
-          onClick={() => onChange(defaultCamProfileSamples(profile.length))}
+          onClick={() => commitProfile(defaultCamProfileSamples(profile.length))}
         >
           Reset
         </button>
@@ -538,6 +541,7 @@ const CamProfileEditor = ({
           />
         ))}
       </svg>
+      <div className="motion-option-lock-note mt-2">Safe profile only.</div>
     </div>
   );
 };

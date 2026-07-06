@@ -10,7 +10,11 @@ import {
   foundryRenderedLayerZForMechanism,
   isMovingRenderKind,
 } from "./foundryPreviewStacks";
-import { clampMechanismParam } from "../mechanism/mechanismParamPolicy";
+import {
+  clampMechanismParam,
+  motionSafeParamRange,
+} from "../mechanism/mechanismParamPolicy";
+import { constrainMechanismUpdate } from "../../../utils/mechanismEditAuthority";
 import {
   EditorStageFrame,
   canvasPane,
@@ -430,6 +434,10 @@ export const MechanismFoundry = ({
     foundryProjectionSize,
     0,
   );
+  const paramHasSafeTravel = (key: keyof MechanismConfig) => {
+    const range = motionSafeParamRange(landedFoundry, key);
+    return Boolean(range?.currentSafe && Math.abs(range.max - range.min) > 0.001);
+  };
   const rawFoundryParamHandles: Array<Omit<FoundryParamHandle, "z" | "screen">> = [
     {
       id: "M",
@@ -449,19 +457,21 @@ export const MechanismFoundry = ({
             id: "B" as const,
             label: "B crank",
             point: selectedSimulation.state.j1,
-            draggable: true,
+            draggable: paramHasSafeTravel("crankLength"),
           },
           {
             id: "C" as const,
             label: "C output",
             point: selectedSimulation.state.j2,
-            draggable: true,
+            draggable:
+              paramHasSafeTravel("couplerLength") ||
+              paramHasSafeTravel("rockerLength"),
           },
           {
             id: "D" as const,
             label: "D ground",
             point: selectedSimulation.state.p2,
-            draggable: true,
+            draggable: paramHasSafeTravel("groundLength"),
           },
         ]
       : []),
@@ -652,6 +662,13 @@ export const MechanismFoundry = ({
       { preserveGeneratedPath: true },
     );
   };
+  const applySafeFoundryUpdates = (updates: Partial<MechanismConfig>) => {
+    const constrainedUpdates = constrainMechanismUpdate(foundry, updates);
+    if (!Object.keys(constrainedUpdates).length) return;
+    setFoundry(
+      refreshEditedFoundryMechanism({ ...foundry, ...constrainedUpdates }),
+    );
+  };
   const updateFoundryParam = (key: keyof MechanismConfig, value: number) => {
     if (key === "anchorX" || key === "anchorY") {
       const anchor = {
@@ -659,29 +676,26 @@ export const MechanismFoundry = ({
         y: key === "anchorY" ? value : (foundry.anchorY ?? landing.y),
       };
       setManualAnchor(anchor);
-      setFoundry(
-        refreshEditedFoundryMechanism({
-          ...foundry,
-          [key]: value,
-          sceneAnchor: anchor,
-          transform: {
-            ...(foundry.transform ?? {
-              x: anchor.x,
-              y: anchor.y,
-              rotation: foundry.groundAngle ?? 0,
-              scale: 1,
-            }),
+      applySafeFoundryUpdates({
+        [key]: value,
+        sceneAnchor: anchor,
+        transform: {
+          ...(foundry.transform ?? {
             x: anchor.x,
             y: anchor.y,
-          },
-        }),
-      );
+            rotation: foundry.groundAngle ?? 0,
+            scale: 1,
+          }),
+          x: anchor.x,
+          y: anchor.y,
+        },
+      } as Partial<MechanismConfig>);
       return;
     }
-    setFoundry(refreshEditedFoundryMechanism({ ...foundry, [key]: value }));
+    applySafeFoundryUpdates({ [key]: value } as Partial<MechanismConfig>);
   };
   const updateFoundryParams = (updates: Partial<MechanismConfig>) => {
-    setFoundry(refreshEditedFoundryMechanism({ ...foundry, ...updates }));
+    applySafeFoundryUpdates(updates);
   };
   const foundryPointFromOverlayEvent = (
     event: React.PointerEvent<SVGCircleElement>,

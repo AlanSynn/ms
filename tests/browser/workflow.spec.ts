@@ -2137,15 +2137,9 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   expect(handleZ.A, 'A handle is projected on its short board-pivot stack, not the global top layer').toBeLessThan(handleZ.B);
   expect(handleZ.D, 'D handle is projected from its own board-pivot stack and may share the top z when output is the top layer').toBeLessThanOrEqual(handleZ.C);
   await expect(page.getByTestId('foundry-param-handle-A')).toHaveAttribute('data-draggable', 'false');
-  await expect(page.getByTestId('foundry-param-handle-D')).toHaveAttribute('data-draggable', 'true');
-  const groundBeforeHandleDrag = Number(await page.getByLabel('ground number', { exact: true }).inputValue());
+  await expect(page.getByTestId('foundry-param-handle-D'), 'D ground handle stays visible but locked when every other ground span would jam').toHaveAttribute('data-draggable', 'false');
   const groundHandleBox = await page.getByTestId('foundry-param-handle-D').boundingBox();
-  expect(groundHandleBox, 'ground handle is visible for direct parametric editing').toBeTruthy();
-  await page.mouse.move(groundHandleBox!.x + groundHandleBox!.width / 2, groundHandleBox!.y + groundHandleBox!.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(groundHandleBox!.x + groundHandleBox!.width / 2 + 72, groundHandleBox!.y + groundHandleBox!.height / 2 + 18);
-  await page.mouse.up();
-  await expect.poll(async () => Number(await page.getByLabel('ground number', { exact: true }).inputValue()), { message: 'dragging the D handle updates the physical ground length parameter' }).not.toBe(groundBeforeHandleDrag);
+  expect(groundHandleBox, 'locked ground handle is still visible as a physical constraint').toBeTruthy();
 
   await page.getByLabel('Foundry mechanism type').selectOption('gear');
   await expect(page.getByTestId('foundry-parametric-editor'), 'Foundry exposes fabrication-backed gear selectors').toBeVisible();

@@ -23,6 +23,7 @@ import {
   fitRecommendedMechanismToSheet,
   normalizeGearMeshMechanism,
 } from "../utils/mechanismRecommendations";
+import { constrainMechanismUpdate } from "../utils/mechanismEditAuthority";
 
 const GENERATED_PATH_GEOMETRY_KEYS = new Set<keyof MechanismConfig>([
   "anchorX",
@@ -139,19 +140,20 @@ export const useAppMechanismActions = ({
         nextUpdates.targetPartId = undefined;
         nextUpdates.targetAnchorJointId = undefined;
       }
-      const next = { ...mechanism, ...nextUpdates };
+      const constrainedUpdates = constrainMechanismUpdate(mechanism, nextUpdates);
+      const next = { ...mechanism, ...constrainedUpdates };
       const normalized = normalizeGearMeshMechanism(next);
       const preserveGeneratedPath =
-        hasStoredGeneratedPath(mechanism) && !changesGeneratedPathGeometry(updates);
+        hasStoredGeneratedPath(mechanism) && !changesGeneratedPathGeometry(constrainedUpdates);
       const fitted =
-        nextUpdates.targetPathId &&
-        (updates.targetPathId !== undefined ||
-          updates.targetPartId !== undefined ||
-          updates.targetSceneObjectId !== undefined)
+        constrainedUpdates.targetPathId &&
+        (constrainedUpdates.targetPathId !== undefined ||
+          constrainedUpdates.targetPartId !== undefined ||
+          constrainedUpdates.targetSceneObjectId !== undefined)
           ? fitMechanismToTargetPath(
               project,
               normalized,
-              nextUpdates.targetPathId,
+              constrainedUpdates.targetPathId,
             )
           : mechanismWithGeneratedPath({
               ...normalized,
