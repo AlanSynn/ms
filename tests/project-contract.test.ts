@@ -47,7 +47,7 @@ import { formatGridLabel, formatGridPitch, formatGridReadout } from '../utils/un
 import { buildAssemblyPlaybackSteps, buildCharacterAssemblyPlan, pendingRecipeForMechanism, type CharacterAssemblyPlan } from '../utils/assemblyPlayback';
 import { buildCharacterAssemblySceneFrame, buildMechanismAssemblySceneFrame } from '../utils/assemblySceneFrame';
 import { buildMechanismSceneContract } from '../utils/mechanismSceneContract';
-import { compileMechanismGraphSidecar, mechanismGraphForMechanism, sampleMechanismGraphMotion } from '../utils/mechanismGraph';
+import { MECHANISM_GRAPH_LIVE_SOLVE_BUDGET_MS, compileMechanismGraphSidecar, mechanismGraphForMechanism, sampleMechanismGraphMotion } from '../utils/mechanismGraph';
 import { buildAssemblyGuideModel } from '../components/stages/assembly/assemblyGuideModel';
 import { selectBlueprintRecipe } from '../components/stages/blueprint/BlueprintExport';
 import { MechanismLinkagePreview } from '../components/stages/foundry/MechanismLinkagePreview';
@@ -1271,26 +1271,51 @@ previewReadyTypes.forEach(type => {
   const mechanism = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism(type, `preview-ready-${type}`)));
   assert.deepEqual(validateMechanismPreviewReadiness(mechanism), [], `${type} default mechanism is preview-ready before Foundry/Design can render it`);
 });
-(['4bar', 'gear'] as const).forEach(type => {
+assert.equal(MECHANISM_GRAPH_LIVE_SOLVE_BUDGET_MS, 16, 'mechanism graph live-solve budget stays at one 60fps frame');
+ALL_MECHANISM_TYPES.forEach(type => {
+  const graph = mechanismGraphForMechanism(createDefaultMechanism(type, `graph-adapter-${type}`));
+  assert.equal(graph.version, 1, `${type} graph adapter emits the current IR version`);
+  assert.equal(graph.legacyType, type, `${type} graph adapter preserves the legacy mechanism type`);
+  assert.equal(graph.source, 'derived-legacy-adapter', `${type} graph adapter starts from legacy ProjectState`);
+  assert.equal(graph.persisted, false, `${type} graph adapter is never persisted into ProjectState`);
+  assert.equal(graph.solver, 'legacy-closed-form', `${type} graph adapter keeps the closed-form fast path`);
+  assert(graph.nodes.length > 0, `${type} graph adapter emits at least a diagnostic node`);
+});
+(['crank', 'yoke', 'quick-return', '5bar', '6bar', 'rack-pinion'] as const).forEach(type => {
+  assert(mechanismGraphForMechanism(createDefaultMechanism(type, `graph-diagnostic-${type}`)).diagnostics.length > 0, `${type} graph adapter reports diagnostic-only compiler coverage`);
+});
+previewReadyTypes.forEach(type => {
   const mechanism = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism(type, `graph-${type}`)));
   const graph = mechanismGraphForMechanism(mechanism);
   const compiled = compileMechanismGraphSidecar(mechanism);
   const renderPlan = fabricationRenderPlanForMechanism(mechanism);
+  const assemblyBoardCoordinate = mechanism.fabricationMetadata?.boardCoordinate ?? 'H8';
+  const assemblySteps = prefabAssemblySteps(mechanism, assemblyBoardCoordinate);
   assert.equal(graph.source, 'derived-legacy-adapter', `${type} graph starts as a derived sidecar adapter`);
   assert.equal(graph.persisted, false, `${type} graph is not a ProjectState persistence field`);
-  assert.equal(graph.family.firstCompilerTarget, true, `${type} is an initial graph compiler target`);
   assert.equal(graph.solver, 'legacy-closed-form', `${type} graph keeps the closed-form fast path while compiler migration starts`);
   assert(graph.constraints.some(constraint => constraint.role === 'board-snap'), `${type} graph records pegboard snap constraints`);
   assert.deepEqual(compiled.readinessErrors, validateMechanismPreviewReadiness(mechanism), `${type} graph sidecar preserves preview-readiness validation`);
   assert.equal(compiled.fabrication.renderPlanSource, 'fabricationRenderPlanForMechanism', `${type} graph sidecar consumes the canonical fabrication render plan`);
+  assert.equal(compiled.fabrication.assemblyPlanSource, 'prefabAssemblySteps', `${type} graph sidecar consumes canonical assembly steps`);
+  assert.equal(compiled.fabrication.assemblyBoardCoordinate, assemblyBoardCoordinate, `${type} graph sidecar preserves assembly board coordinate`);
+  assert.equal(compiled.fabrication.assemblyStepCount, assemblySteps.length, `${type} graph sidecar preserves assembly step count`);
+  assert.deepEqual(compiled.fabrication.assemblyStepLabels, assemblySteps.map(step => step.label), `${type} graph sidecar preserves assembly step labels`);
   assert.equal(compiled.fabrication.layerCount, renderPlan.layers.length, `${type} graph sidecar preserves render-plan layer count`);
   assert.equal(compiled.fabrication.stackSummary, renderPlan.stackSummary, `${type} graph sidecar preserves stack summary`);
   assert.equal(compiled.fabrication.roleSummary, renderPlan.roleSummary, `${type} graph sidecar preserves role summary`);
   assert.deepEqual(compiled.fabrication.validationErrors, renderPlan.validationErrors, `${type} graph sidecar preserves fabrication validation errors`);
 });
+(['4bar', 'gear'] as const).forEach(type => {
+  assert.equal(mechanismGraphForMechanism(createDefaultMechanism(type, `graph-first-target-${type}`)).family.firstCompilerTarget, true, `${type} remains an initial graph compiler target`);
+});
 assert(mechanismGraphForMechanism(createDefaultMechanism('4bar', 'graph-fourbar-roles')).constraints.some(constraint => constraint.role === 'distance'), '4bar graph adapter exposes fixed link-length distance constraints');
 assert(mechanismGraphForMechanism(createDefaultMechanism('4bar', 'graph-fourbar-target')).constraints.some(constraint => constraint.role === 'output-offset'), '4bar graph adapter exposes the coupler target point as an output offset');
 assert(mechanismGraphForMechanism(createDefaultMechanism('gear', 'graph-gear-mesh')).constraints.some(constraint => constraint.role === 'gear-mesh'), 'gear graph adapter exposes gear mesh constraints');
+assert(mechanismGraphForMechanism(createDefaultMechanism('piston', 'graph-piston-guide')).constraints.some(constraint => constraint.role === 'prismatic'), 'piston graph adapter exposes the slider guide as a prismatic constraint');
+assert(mechanismGraphForMechanism(createDefaultMechanism('cam', 'graph-cam-contact')).constraints.some(constraint => constraint.role === 'contact'), 'cam graph adapter exposes cam/follower contact');
+assert(mechanismGraphForMechanism(createDefaultMechanism('gear_linkage', 'graph-gear-linkage-target')).constraints.some(constraint => constraint.id === 'connector-output'), 'gear-linkage graph adapter exposes the shared moving connector target');
+assert(mechanismGraphForMechanism(createDefaultMechanism('planetary_gear', 'graph-planetary-mesh')).constraints.filter(constraint => constraint.role === 'gear-mesh').length >= 2, 'planetary gear graph adapter exposes sun/planet and planet/ring mesh constraints');
 const impossibleFourBar = mechanismWithGeneratedPath({
   ...normalizeMechanismToReference(createDefaultMechanism('4bar', 'preview-blocked-4bar')),
   groundLength: 300,
@@ -4201,13 +4226,17 @@ const graphParityGearG1 = gearSceneRadiusByKey('g8');
 [
   normalizeMechanismToReference(createDefaultMechanism('4bar', 'graph-parity-fourbar')),
   { ...normalizeMechanismToReference(createDefaultMechanism('4bar', 'graph-parity-fourbar-crossed')), assemblyMode: 'crossed' as const },
+  normalizeMechanismToReference(createDefaultMechanism('piston', 'graph-parity-piston')),
+  normalizeMechanismToReference(createDefaultMechanism('cam', 'graph-parity-cam')),
   normalizeMechanismToReference(createDefaultMechanism('gear', 'graph-parity-gear')),
   normalizeGearTrainToFabrication({
     ...createDefaultMechanism('gear', 'graph-parity-gear-idler'),
     crankLength: graphParityGearG3,
     rockerLength: graphParityGearG3,
     gearTrainRadii: [graphParityGearG3, graphParityGearG1, graphParityGearG3]
-  })
+  }),
+  normalizeMechanismToReference(createDefaultMechanism('gear_linkage', 'graph-parity-gear-linkage')),
+  normalizeMechanismToReference(createDefaultMechanism('planetary_gear', 'graph-parity-planetary'))
 ].forEach(mechanism => {
   graphParityAngles.forEach(angle => {
     const legacy = calculateLinkage(mechanism, angle);

@@ -297,6 +297,13 @@ Copy:
 
 ## Implementation phases
 
+Current implementation checkpoint:
+
+- `utils/mechanismGraph.ts` provides derived, non-persisted graph sidecars for every current `MechanismType`.
+- `4bar` and `gear` remain the first compiler targets; the buildable classroom set also has graph adapters for parity and diagnostics.
+- `CompiledMechanism` currently records legacy closed-form motion samples, feasibility, canonical fabrication render-plan data, and canonical assembly-step labels without switching runtime stage consumers.
+- Hidden/not-yet-buildable families compile as diagnostic graphs only.
+
 ### Phase 0 — compiler IR behind adapters
 
 Deliver:
