@@ -47,6 +47,7 @@ import { formatGridLabel, formatGridPitch, formatGridReadout } from '../utils/un
 import { buildAssemblyPlaybackSteps, buildCharacterAssemblyPlan, pendingRecipeForMechanism, type CharacterAssemblyPlan } from '../utils/assemblyPlayback';
 import { buildCharacterAssemblySceneFrame, buildMechanismAssemblySceneFrame } from '../utils/assemblySceneFrame';
 import { buildMechanismSceneContract } from '../utils/mechanismSceneContract';
+import { compileMechanismGraphSidecar, mechanismGraphForMechanism, sampleMechanismGraphMotion } from '../utils/mechanismGraph';
 import { buildAssemblyGuideModel } from '../components/stages/assembly/assemblyGuideModel';
 import { selectBlueprintRecipe } from '../components/stages/blueprint/BlueprintExport';
 import { MechanismLinkagePreview } from '../components/stages/foundry/MechanismLinkagePreview';
@@ -112,6 +113,19 @@ assert.deepEqual(clientPointToCutPoint({ viewport: cutViewport, svgRect: cutSvgR
 assert.deepEqual(scaleContour([{ x: 0, y: 0 }, { x: 10, y: 0 }], 1.2), [{ x: -1, y: 0 }, { x: 11, y: 0 }], 'cut contour scaling stays centered on the contour centroid');
 assert.equal(contourPathD([{ x: 1, y: 2 }, { x: 3, y: -4 }], true), 'M 1.00 -2.00 L 3.00 4.00 Z', 'cut contour SVG path helper preserves two-decimal formatting and optional Y flip');
 const closeEnough = (actual: number, expected: number) => Math.abs(actual - expected) < 1e-9;
+const assertPointClose = (actual: Point | undefined, expected: Point | undefined, label: string, epsilon = 1e-9) => {
+  assert(actual && expected, `${label} exists`);
+  assert(Math.abs(actual.x - expected.x) <= epsilon && Math.abs(actual.y - expected.y) <= epsilon, `${label} matches within ${epsilon}`);
+};
+const assertJointStateClose = (actual: ReturnType<typeof calculateLinkage>, expected: ReturnType<typeof calculateLinkage>, label: string, epsilon = 1e-9) => {
+  assert.equal(actual.isValid, expected.isValid, `${label} validity matches`);
+  assertPointClose(actual.p1, expected.p1, `${label} p1`, epsilon);
+  assertPointClose(actual.p2, expected.p2, `${label} p2`, epsilon);
+  assertPointClose(actual.j1, expected.j1, `${label} j1`, epsilon);
+  assertPointClose(actual.j2, expected.j2, `${label} j2`, epsilon);
+  assertPointClose(actual.effector, expected.effector, `${label} effector`, epsilon);
+  if (actual.aux || expected.aux) assertPointClose(actual.aux, expected.aux, `${label} aux`, epsilon);
+};
 const pathCanvasViewBox = canvasViewBoxForViewport({ offset: { x: 90, y: -68 }, zoom: 1.5 }, SCENE_VIEW);
 assert(closeEnough(pathCanvasViewBox.x, 90) && closeEnough(pathCanvasViewBox.y, 158.66666666666669), 'path canvas viewBox preserves shared offset and zoom math');
 assert.deepEqual(canvasPanOffset({
@@ -1257,6 +1271,26 @@ previewReadyTypes.forEach(type => {
   const mechanism = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism(type, `preview-ready-${type}`)));
   assert.deepEqual(validateMechanismPreviewReadiness(mechanism), [], `${type} default mechanism is preview-ready before Foundry/Design can render it`);
 });
+(['4bar', 'gear'] as const).forEach(type => {
+  const mechanism = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism(type, `graph-${type}`)));
+  const graph = mechanismGraphForMechanism(mechanism);
+  const compiled = compileMechanismGraphSidecar(mechanism);
+  const renderPlan = fabricationRenderPlanForMechanism(mechanism);
+  assert.equal(graph.source, 'derived-legacy-adapter', `${type} graph starts as a derived sidecar adapter`);
+  assert.equal(graph.persisted, false, `${type} graph is not a ProjectState persistence field`);
+  assert.equal(graph.family.firstCompilerTarget, true, `${type} is an initial graph compiler target`);
+  assert.equal(graph.solver, 'legacy-closed-form', `${type} graph keeps the closed-form fast path while compiler migration starts`);
+  assert(graph.constraints.some(constraint => constraint.role === 'board-snap'), `${type} graph records pegboard snap constraints`);
+  assert.deepEqual(compiled.readinessErrors, validateMechanismPreviewReadiness(mechanism), `${type} graph sidecar preserves preview-readiness validation`);
+  assert.equal(compiled.fabrication.renderPlanSource, 'fabricationRenderPlanForMechanism', `${type} graph sidecar consumes the canonical fabrication render plan`);
+  assert.equal(compiled.fabrication.layerCount, renderPlan.layers.length, `${type} graph sidecar preserves render-plan layer count`);
+  assert.equal(compiled.fabrication.stackSummary, renderPlan.stackSummary, `${type} graph sidecar preserves stack summary`);
+  assert.equal(compiled.fabrication.roleSummary, renderPlan.roleSummary, `${type} graph sidecar preserves role summary`);
+  assert.deepEqual(compiled.fabrication.validationErrors, renderPlan.validationErrors, `${type} graph sidecar preserves fabrication validation errors`);
+});
+assert(mechanismGraphForMechanism(createDefaultMechanism('4bar', 'graph-fourbar-roles')).constraints.some(constraint => constraint.role === 'distance'), '4bar graph adapter exposes fixed link-length distance constraints');
+assert(mechanismGraphForMechanism(createDefaultMechanism('4bar', 'graph-fourbar-target')).constraints.some(constraint => constraint.role === 'output-offset'), '4bar graph adapter exposes the coupler target point as an output offset');
+assert(mechanismGraphForMechanism(createDefaultMechanism('gear', 'graph-gear-mesh')).constraints.some(constraint => constraint.role === 'gear-mesh'), 'gear graph adapter exposes gear mesh constraints');
 const impossibleFourBar = mechanismWithGeneratedPath({
   ...normalizeMechanismToReference(createDefaultMechanism('4bar', 'preview-blocked-4bar')),
   groundLength: 300,
@@ -1359,6 +1393,11 @@ const snapshotB = buildMechanismSnapshot(sample, sampleMechanismId);
 assert(snapshotA && snapshotB, 'mechanism snapshot builder returns a snapshot for an existing mechanism id');
 assert.deepEqual(snapshotA, snapshotB, 'mechanism snapshot builder is deterministic for the same project and mechanism');
 assert.equal(serializeProject(sample), snapshotBeforeProject, 'mechanism snapshot builder does not mutate ProjectState');
+const graphSidecarBeforeProject = serializeProject(sample);
+const graphSidecar = compileMechanismGraphSidecar(sample.mechanisms[0]);
+assert.equal(graphSidecar.graph.persisted, false, 'mechanism graph sidecar declares that it is derived rather than persisted');
+assert.equal(serializeProject(sample), graphSidecarBeforeProject, 'mechanism graph sidecar compilation does not mutate ProjectState');
+assert(!serializeProject(sample).includes('mechanismGraph') && !serializeProject(sample).includes('graphIr'), 'project snapshots do not persist derived graph compiler sidecars');
 assert(Object.isFrozen(snapshotA) && Object.isFrozen(snapshotA.fabricationPlan.layers), 'mechanism snapshot is recursively frozen for adapter safety');
 assert.equal(snapshotA.sourceIds.mechanismId, sampleMechanismId, 'mechanism snapshot records mechanism source id');
 assert(snapshotA.feasibleRange.percentValid >= 0 && snapshotA.feasibleRange.percentValid <= 1, 'mechanism snapshot includes feasible range');
@@ -3694,6 +3733,8 @@ assert.equal(roundTrip.partOrder.length, sample.partOrder.length, 'project JSON 
 assert.equal(roundTrip.mechanisms.length, sample.mechanisms.length, 'project JSON round-trip keeps mechanisms');
 assert.equal(roundTrip.mechanisms[0].assemblyMode, sample.mechanisms[0].assemblyMode, 'project JSON round-trip keeps explicit 4bar assembly branch');
 assert.equal(loadProjectSnapshot({ mechanisms: [{ ...createDefaultMechanism('4bar', 'crossed-load'), assemblyMode: 'crossed' }] }).mechanisms[0].assemblyMode, 'crossed', 'project import preserves crossed 4bar assembly branch');
+const graphInjectedLoad = loadProjectSnapshot({ mechanisms: [{ ...createDefaultMechanism('4bar', 'graph-injected-load'), mechanismGraph: { bogus: true }, graphIr: { bogus: true } }] });
+assert(!('mechanismGraph' in graphInjectedLoad.mechanisms[0]) && !('graphIr' in graphInjectedLoad.mechanisms[0]), 'project import strips derived graph compiler sidecars instead of persisting them');
 
 const originBoard = sceneToBoard({ x: 0, y: 0 }, sample.settings.physicalKit);
 assert.equal(originBoard.label, 'H8', 'scene origin maps to centered 15x15 board H8');
@@ -4154,6 +4195,28 @@ ALL_MECHANISM_TYPES.forEach(type => {
 
 const distance = (a: { x: number; y: number }, b: { x: number; y: number }) =>
   Math.hypot(a.x - b.x, a.y - b.y);
+const graphParityAngles = [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2];
+const graphParityGearG3 = gearSceneRadiusByKey('g24');
+const graphParityGearG1 = gearSceneRadiusByKey('g8');
+[
+  normalizeMechanismToReference(createDefaultMechanism('4bar', 'graph-parity-fourbar')),
+  { ...normalizeMechanismToReference(createDefaultMechanism('4bar', 'graph-parity-fourbar-crossed')), assemblyMode: 'crossed' as const },
+  normalizeMechanismToReference(createDefaultMechanism('gear', 'graph-parity-gear')),
+  normalizeGearTrainToFabrication({
+    ...createDefaultMechanism('gear', 'graph-parity-gear-idler'),
+    crankLength: graphParityGearG3,
+    rockerLength: graphParityGearG3,
+    gearTrainRadii: [graphParityGearG3, graphParityGearG1, graphParityGearG3]
+  })
+].forEach(mechanism => {
+  graphParityAngles.forEach(angle => {
+    const legacy = calculateLinkage(mechanism, angle);
+    const sidecar = sampleMechanismGraphMotion(mechanism, angle);
+    assert.equal(sidecar.source, 'calculateLinkage', `${mechanism.id} graph sidecar motion uses the legacy closed-form solver during migration`);
+    assertJointStateClose(sidecar.state, legacy, `${mechanism.id} graph sidecar motion at ${angle}`);
+  });
+});
+
 const assertDistance = (a: { x: number; y: number }, b: { x: number; y: number }, expected: number, label: string, epsilon = 1e-6) => {
   assert(Math.abs(distance(a, b) - expected) < epsilon, label);
 };
