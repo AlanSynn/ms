@@ -1,4 +1,5 @@
 import type { MechanismConfig, MechanismType } from "../../../types";
+import { sampleFeasibleRange } from "../../../utils/fabrication";
 
 export type MechanismParamMeta = {
   key: keyof MechanismConfig;
@@ -88,4 +89,71 @@ export const clampMechanismParam = (
   const param = MECHANISM_PARAM_META.find((item) => item.key === key);
   if (!param) return value;
   return Math.max(param.min, Math.min(param.max, value));
+};
+
+const MOTION_SAFE_PARAM_SAMPLES = 28;
+const MOTION_SAFE_RANGE_STEPS = 24;
+
+export const mechanismMotionCompletes = (mechanism: MechanismConfig) =>
+  sampleFeasibleRange(mechanism, MOTION_SAFE_PARAM_SAMPLES).warning === null;
+
+export const motionSafeParamRange = (
+  mechanism: MechanismConfig,
+  key: keyof MechanismConfig,
+) => {
+  const param = MECHANISM_PARAM_META.find((item) => item.key === key);
+  if (!param) return undefined;
+  const current = Number(mechanism[key] ?? 0);
+  if (!Number.isFinite(current))
+    return { min: param.min, max: param.max, locked: false, currentSafe: true };
+  const values = Array.from(
+    { length: MOTION_SAFE_RANGE_STEPS + 1 },
+    (_, index) =>
+      param.min + ((param.max - param.min) * index) / MOTION_SAFE_RANGE_STEPS,
+  );
+  values.push(current);
+  const sorted = [
+    ...new Set(values.map((value) => Number(value.toFixed(4)))),
+  ].sort((a, b) => a - b);
+  const safeAt = (value: number) =>
+    mechanismMotionCompletes({ ...mechanism, [key]: value });
+  const currentSafe = safeAt(current);
+  if (!currentSafe)
+    return { min: param.min, max: param.max, locked: true, currentSafe: false };
+  const currentIndex = sorted.findIndex((value) => value >= current);
+  let min = current;
+  for (let index = Math.max(0, currentIndex - 1); index >= 0; index -= 1) {
+    if (!safeAt(sorted[index])) break;
+    min = sorted[index];
+  }
+  let max = current;
+  for (
+    let index = Math.max(0, currentIndex);
+    index < sorted.length;
+    index += 1
+  ) {
+    if (!safeAt(sorted[index])) break;
+    max = sorted[index];
+  }
+  return {
+    min,
+    max,
+    locked: min > param.min || max < param.max,
+    currentSafe,
+  };
+};
+
+export const clampMechanismParamForMotion = (
+  mechanism: MechanismConfig,
+  key: keyof MechanismConfig,
+  value: number,
+) => {
+  const range = motionSafeParamRange(mechanism, key);
+  const clamped = clampMechanismParam(key, value);
+  const bounded = range?.currentSafe
+    ? Math.max(range.min, Math.min(range.max, clamped))
+    : clamped;
+  return mechanismMotionCompletes({ ...mechanism, [key]: bounded })
+    ? bounded
+    : Number(mechanism[key] ?? 0);
 };

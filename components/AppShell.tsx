@@ -3,6 +3,7 @@ export { OnnxCacheStatusPill } from './shell/OnnxCacheStatusPill';
 export { WorkflowRail } from './shell/WorkflowRail';
 export { TopCommandBar } from './shell/TopCommandBar';
 export { ShortcutHelpDialog, AboutDialog } from './shell/ShellDialogs';
+export { BugReportOverlay } from './shell/BugReportOverlay';
 export { CanvasZoomToolbar } from './shell/CanvasZoomToolbar';
 export { WorkspacePlayerDock, type WorkspaceStepPlayback } from './shell/WorkspacePlayerDock';
 export { WorkflowStatusStrip } from './shell/WorkflowStatusStrip';

@@ -7,6 +7,7 @@ import {
   FABRICATION_LINKAGE_SPECS,
   fabricationGearSpecForPitchRadius,
   fabricationLinkageSpecForSceneLength,
+  sampleFeasibleRange,
 } from "../../../utils/fabrication";
 import {
   defaultCamProfileSamples,
@@ -30,6 +31,16 @@ const linkageCellsForSceneLength = (length: number) =>
   fabricationLinkageSpecForSceneLength(length).cells;
 const gearOptionLabel = (teeth: number) => `${teeth} teeth`;
 const linkageOptionLabel = (holeCount: number) => `${holeCount}-hole`;
+const WORKING_OPTION_SAMPLES = 48;
+const motionCompletes = (mechanism: MechanismConfig) =>
+  sampleFeasibleRange(mechanism, WORKING_OPTION_SAMPLES).warning === null;
+const safeMechanismUpdate = (
+  mechanism: MechanismConfig,
+  updates: Partial<MechanismConfig>,
+) => motionCompletes({ ...mechanism, ...updates });
+type SafeOption<T> = { item: T; working: boolean; current: boolean };
+const unsafeOptionLabel = (label: string, current: boolean) =>
+  current ? `${label} · current` : `${label} · locked`;
 
 export const MechanismParametricEditor = ({
   mechanism,
@@ -44,29 +55,39 @@ export const MechanismParametricEditor = ({
     mechanism.type === "gear" || mechanism.type === "gear_linkage"
       ? gearTrainPitchRadii(mechanism)
       : [];
-  const updateGearRadius = (index: number, key: string) => {
+  const gearRadiusUpdates = (index: number, key: string) => {
     const next =
       radii.length >= 2
         ? [...radii]
         : [mechanism.crankLength, mechanism.rockerLength];
     next[index] = gearSceneRadiusForKey(key);
-    onChange({
+    return {
       crankLength: next[0],
       rockerLength: next.at(-1) ?? next[0],
       gearTrainRadii: next,
-    });
+    } satisfies Partial<MechanismConfig>;
   };
-  const addIdlerGear = () => {
+  const updateGearRadius = (index: number, key: string) => {
+    const updates = gearRadiusUpdates(index, key);
+    if (!safeMechanismUpdate(mechanism, updates)) return;
+    onChange(updates);
+  };
+  const idlerGearUpdates = () => {
     const next =
       radii.length >= 2
         ? [...radii]
         : [mechanism.crankLength, mechanism.rockerLength];
     next.splice(Math.max(1, next.length - 1), 0, gearSceneRadiusForKey("g24"));
-    onChange({
+    return {
       crankLength: next[0],
       rockerLength: next.at(-1) ?? next[0],
       gearTrainRadii: next,
-    });
+    } satisfies Partial<MechanismConfig>;
+  };
+  const addIdlerGear = () => {
+    const updates = idlerGearUpdates();
+    if (!safeMechanismUpdate(mechanism, updates)) return;
+    onChange(updates);
   };
   const removeIdlerGear = () => {
     if (radii.length <= 2) return;
@@ -89,6 +110,80 @@ export const MechanismParametricEditor = ({
           (spec) => spec.attachmentHoleCentersMm.length > 0,
         )
       : FABRICATION_GEAR_SPECS;
+  const safeLinkageOptions = (
+    key: "crankLength" | "couplerLength" | "rockerLength",
+  ): SafeOption<(typeof FABRICATION_LINKAGE_SPECS)[number]>[] => {
+    const currentCells = linkageCellsForSceneLength(Number(mechanism[key] ?? 0));
+    return FABRICATION_LINKAGE_SPECS.map((spec) => {
+      const updates = {
+        [key]: linkageSceneLengthForCells(spec.cells),
+      } as Partial<MechanismConfig>;
+      const current = spec.cells === currentCells;
+      return {
+        item: spec,
+        current,
+        working: current
+          ? motionCompletes(mechanism)
+          : safeMechanismUpdate(mechanism, updates),
+      };
+    });
+  };
+  const safeGearOptions = (
+    index: number,
+    options: typeof FABRICATION_GEAR_SPECS,
+    selected: string,
+  ): SafeOption<(typeof FABRICATION_GEAR_SPECS)[number]>[] =>
+    options.map((spec) => {
+      const current = spec.key === selected;
+      return {
+        item: spec,
+        current,
+        working: current
+          ? motionCompletes(mechanism)
+          : safeMechanismUpdate(mechanism, gearRadiusUpdates(index, spec.key)),
+      };
+    });
+  const pairedLinkOptions = (): SafeOption<
+    (typeof FABRICATION_LINKAGE_SPECS)[number]
+  >[] => {
+    const currentCells = linkageCellsForSceneLength(mechanism.couplerLength);
+    return FABRICATION_LINKAGE_SPECS.map((spec) => {
+      const updates = { couplerLength: linkageSceneLengthForCells(spec.cells) };
+      const current = spec.cells === currentCells;
+      return {
+        item: spec,
+        current,
+        working: current
+          ? motionCompletes(mechanism)
+          : safeMechanismUpdate(mechanism, updates),
+      };
+    });
+  };
+  const linkageLockCount =
+    mechanism.type === "4bar"
+      ? (["crankLength", "couplerLength", "rockerLength"] as const)
+          .flatMap((key) => safeLinkageOptions(key))
+          .filter((option) => !option.working).length
+      : mechanism.type === "gear_linkage"
+        ? pairedLinkOptions().filter((option) => !option.working).length
+        : 0;
+  const gearLockCount = renderGearControls
+    ? radii.reduce((count, radius, index) => {
+        const isOutput = index === radii.length - 1;
+        const options =
+          mechanism.type === "gear_linkage" && (index === 0 || isOutput)
+            ? endpointGearOptions
+            : FABRICATION_GEAR_SPECS;
+        return (
+          count +
+          safeGearOptions(index, options, gearSpecForSceneRadius(radius).key).filter(
+            (option) => !option.working,
+          ).length
+        );
+      }, 0)
+    : 0;
+  const hasLockedMotionOptions = linkageLockCount + gearLockCount > 0;
+  const canAddIdlerGear = safeMechanismUpdate(mechanism, idlerGearUpdates());
   if (!renderGearControls && !renderLinkageControls && mechanism.type !== "cam")
     return null;
   return (
@@ -112,27 +207,47 @@ export const MechanismParametricEditor = ({
                 ? endpointGearOptions
                 : FABRICATION_GEAR_SPECS;
             const selected = gearSpecForSceneRadius(radius).key;
+            const safeOptions = safeGearOptions(index, options, selected);
+            const activeValue = safeOptions.some(
+              (option) => option.item.key === selected,
+            )
+              ? selected
+              : safeOptions[0]?.item.key;
+            const lockedCount = safeOptions.filter(
+              (option) => !option.working,
+            ).length;
             return (
               <label
                 key={`${label}-${index}`}
                 className="block text-xs font-black uppercase tracking-wider text-slate-500"
+                data-locked-motion-options={lockedCount}
               >
                 <span>{label.replace(" size", "")}</span>
                 <select
                   aria-label={label}
                   className="field mt-1"
-                  value={
-                    options.some((spec) => spec.key === selected)
-                      ? selected
-                      : options[0].key
+                  value={activeValue}
+                  data-motion-safe-options={
+                    safeOptions.filter((option) => option.working).length
                   }
+                  data-locked-motion-options={lockedCount}
                   onChange={(event) =>
                     updateGearRadius(index, event.target.value)
                   }
                 >
-                  {options.map((spec) => (
-                    <option key={spec.key} value={spec.key}>
-                      {gearOptionLabel(spec.teeth)}
+                  {safeOptions.map(({ item: spec, working, current }) => (
+                    <option
+                      key={spec.key}
+                      value={spec.key}
+                      disabled={!working && !current}
+                      data-motion-safe={working ? "true" : "false"}
+                    >
+                      {working
+                        ? gearOptionLabel(spec.teeth)
+                        : unsafeOptionLabel(
+                            gearOptionLabel(spec.teeth),
+                            current,
+                          )}
                     </option>
                   ))}
                 </select>
@@ -144,6 +259,7 @@ export const MechanismParametricEditor = ({
               type="button"
               className="btn-secondary"
               aria-label="Add idler gear"
+              disabled={!canAddIdlerGear}
               onClick={addIdlerGear}
             >
               + idler
@@ -170,34 +286,60 @@ export const MechanismParametricEditor = ({
                 ["Coupler link length", "couplerLength"],
                 ["Output link length", "rockerLength"],
               ] as const
-            ).map(([label, key]) => (
-              <label
-                key={key}
-                className="block text-xs font-black uppercase tracking-wider text-slate-500"
-              >
-                <span>{label.replace(" length", "")}</span>
-                <select
-                  aria-label={label}
-                  className="field mt-1"
-                  value={linkageCellsForSceneLength(
-                    Number(mechanism[key] ?? 0),
-                  )}
-                  onChange={(event) =>
-                    onChange({
-                      [key]: linkageSceneLengthForCells(
-                        Number(event.target.value),
-                      ),
-                    } as Partial<MechanismConfig>)
-                  }
+            ).map(([label, key]) => {
+              const safeOptions = safeLinkageOptions(key);
+              const currentValue = linkageCellsForSceneLength(
+                Number(mechanism[key] ?? 0),
+              );
+              const lockedCount = safeOptions.filter(
+                (option) => !option.working,
+              ).length;
+              return (
+                <label
+                  key={key}
+                  className="block text-xs font-black uppercase tracking-wider text-slate-500"
+                  data-locked-motion-options={lockedCount}
                 >
-                  {FABRICATION_LINKAGE_SPECS.map((spec) => (
-                    <option key={spec.key} value={spec.cells}>
-                      {linkageOptionLabel(spec.holeCentersMm.length)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ))}
+                  <span>{label.replace(" length", "")}</span>
+                  <select
+                    aria-label={label}
+                    className="field mt-1"
+                    value={currentValue}
+                    data-motion-safe-options={
+                      safeOptions.filter((option) => option.working).length
+                    }
+                    data-locked-motion-options={lockedCount}
+                    onChange={(event) => {
+                      const updates = {
+                        [key]: linkageSceneLengthForCells(
+                          Number(event.target.value),
+                        ),
+                      } as Partial<MechanismConfig>;
+                      if (!safeMechanismUpdate(mechanism, updates)) return;
+                      onChange(updates);
+                    }}
+                  >
+                    {safeOptions.map(({ item: spec, working, current }) => {
+                      const labelText = linkageOptionLabel(
+                        spec.holeCentersMm.length,
+                      );
+                      return (
+                        <option
+                          key={spec.key}
+                          value={spec.cells}
+                          disabled={!working && !current}
+                          data-motion-safe={working ? "true" : "false"}
+                        >
+                          {working
+                            ? labelText
+                            : unsafeOptionLabel(labelText, current)}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
+              );
+            })}
           {mechanism.type === "gear_linkage" && (
             <label className="block text-xs font-black uppercase tracking-wider text-slate-500">
               <span>Paired links</span>
@@ -205,21 +347,49 @@ export const MechanismParametricEditor = ({
                 aria-label="Paired link length"
                 className="field mt-1"
                 value={linkageCellsForSceneLength(mechanism.couplerLength)}
-                onChange={(event) =>
-                  onChange({
+                data-motion-safe-options={
+                  pairedLinkOptions().filter((option) => option.working).length
+                }
+                data-locked-motion-options={
+                  pairedLinkOptions().filter((option) => !option.working).length
+                }
+                onChange={(event) => {
+                  const updates = {
                     couplerLength: linkageSceneLengthForCells(
                       Number(event.target.value),
                     ),
-                  })
-                }
+                  };
+                  if (!safeMechanismUpdate(mechanism, updates)) return;
+                  onChange(updates);
+                }}
               >
-                {FABRICATION_LINKAGE_SPECS.map((spec) => (
-                  <option key={spec.key} value={spec.cells}>
-                    {linkageOptionLabel(spec.holeCentersMm.length)}
-                  </option>
-                ))}
+                {pairedLinkOptions().map(({ item: spec, working, current }) => {
+                  const labelText = linkageOptionLabel(
+                    spec.holeCentersMm.length,
+                  );
+                  return (
+                    <option
+                      key={spec.key}
+                      value={spec.cells}
+                      disabled={!working && !current}
+                      data-motion-safe={working ? "true" : "false"}
+                    >
+                      {working
+                        ? labelText
+                        : unsafeOptionLabel(labelText, current)}
+                    </option>
+                  );
+                })}
               </select>
             </label>
+          )}
+          {hasLockedMotionOptions && (
+            <div
+              className="motion-option-lock-note"
+              data-testid="mechanism-motion-option-locks"
+            >
+              Locked choices may jam.
+            </div>
           )}
         </div>
       )}

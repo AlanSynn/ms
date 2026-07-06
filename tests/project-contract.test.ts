@@ -1501,8 +1501,8 @@ const goldenMaster = {
 assert.deepEqual(
   Object.fromEntries(Object.entries(goldenMaster).map(([key, value]) => [key, goldenMasterHash(value)])),
   {
-    project: 'c0a40356edfa044d9f24b6f20488fa9cc61bc2a15b2b9dc9cae3171fcfc30969',
-    lesson: '218c51f1485796632234dc0f9b6381291362b7f9dafd16e55bfb2f95ec70aca5',
+    project: 'c4318bde0f86a2b08dabcea7351b605eb307eaf583319ac140145dc1a90e4bfa',
+    lesson: '93beeb83933e1622f6ab29c765c88360adf1271f7f5fbd9c38f1e88d2f05e7fc',
     mechanismSnapshot: 'eeca40de978ca6d22327e60e6b82dd5f67bfe2905c207cadd4031b26c98d90d0',
     allMechanismSnapshots: 'dc2bfd1e6294d5be54dde8487cbb1b7a52b52275ee52a3689d7a30ef63114127',
     sceneProjection: '64b01ae59502ee6a8f04bdad651418565e1fb1e9593d7a6178cea04425dd1605',
@@ -2775,6 +2775,7 @@ const sceneSketchText = readFileSync(join(process.cwd(), 'components', 'stages',
 const partShapeText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'PartShape.tsx'), 'utf8');
 const appText = appCommandSource;
 const appWorkspaceShellText = readFileSync(join(process.cwd(), 'components', 'AppWorkspaceShell.tsx'), 'utf8');
+const bugReportOverlayText = readFileSync(join(process.cwd(), 'components', 'shell', 'BugReportOverlay.tsx'), 'utf8');
 const appStageRouterText = readFileSync(join(process.cwd(), 'components', 'AppStageRouter.tsx'), 'utf8');
 const appDerivedStateHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppDerivedState.ts'), 'utf8');
 const workspacePlayerDockHookText = readFileSync(join(process.cwd(), 'hooks', 'useWorkspacePlayerDock.tsx'), 'utf8');
@@ -3071,8 +3072,10 @@ assert(foundry3dText.includes('data-three-pin-stack-clearance-contract="local-sp
 assert(foundryStageText.includes('foundry-parametric-editor') && mechanismDesignStageText.includes('design-parametric-editor'), 'Foundry and Design both mount the same compact parametric mechanism editor');
 assert(mechanismFoundryText.includes('refreshEditedFoundryMechanism') && mechanismFoundryText.includes('bcTraces.length === 0') && mechanismFoundryText.includes('mechanismWithGeneratedPath(normalized)') && !mechanismFoundryText.includes('createPathFittedFoundry({ ...foundry, ...updates }'), 'Foundry parametric edits recompute the mechanism path from the edited mechanism instead of re-optimizing away user-selected link sizes or crashing when no B/C trace is valid');
 assert(mechanismParametricEditorText.includes('Drive gear size') && mechanismParametricEditorText.includes('Output gear size') && mechanismParametricEditorText.includes('Paired link length'), 'parametric editor exposes gear and linkage fabrication selectors instead of hidden generic numbers');
+assert(mechanismParametricEditorText.includes('sampleFeasibleRange') && mechanismParametricEditorText.includes('data-motion-safe-options') && mechanismParametricEditorText.includes('data-locked-motion-options') && mechanismParametricEditorText.includes('Locked choices may jam'), 'parametric editor simulates candidate fabrication choices and visibly locks options that would jam');
 assert(foundryInspectorPanelText.includes('<MechanismParametricEditor') && mechanismDesignStageText.includes('<MechanismParametricEditor') && mechanismParametricEditorText.includes('gearTrainPitchRadii') && mechanismParametricEditorText.includes('defaultCamProfileSamples'), 'Foundry and Design delegate compact parametric gear/link/cam controls to a mechanism stage seam');
 assert(foundryStageText.includes('MECHANISM_PARAM_META') && mechanismDesignStageText.includes('MECHANISM_PARAM_META') && mechanismParamPolicyText.includes('shouldShowMechanismParam') && mechanismParamPolicyText.includes('clampMechanismParam'), 'Foundry and Design delegate legacy numeric mechanism parameter policy to a pure mechanism stage helper');
+assert(mechanismParamPolicyText.includes('motionSafeParamRange') && mechanismParamPolicyText.includes('clampMechanismParamForMotion') && foundryInspectorPanelText.includes('Safe range only') && designInspectorPanelText.includes('Safe range only'), 'Foundry and Design numeric sliders derive visible safe ranges from mechanism simulation instead of letting students dial into known jams');
 assert(foundryPreviewGeometryText.includes('export const fittedGearTrainCenters') && foundry3dText.includes('pin-stacks-use-rendered-gear-centers'), 'Foundry 3D gear plates, axles, and spacer stacks share fitted preview gear centers instead of raw mechanism coordinates');
 assert(foundry3dText.includes('gearTrainMeshPhaseDegAt') && foundry3dText.includes('alternating-three-quarter-tooth-gap-phase'), 'Foundry 3D gear rendering still exposes mesh phase helpers for inserted idler chains');
 assert(physicsSessionText.includes('velocityBetween') && physicsSessionText.includes('forceFromAcceleration'), 'Foundry force/velocity overlays are kinematic estimates, not hidden dynamic rigid-body claims');
@@ -3201,7 +3204,7 @@ assert(designAutomataProjectionText.includes('buildAutomataSceneModel') && !desi
   assert.equal(noFallback.userPath, undefined, 'Canonical automata model does not fall back to an unrelated visible path when Foundry would have no active path');
 }
 assert(threePreviewText.includes('normalizeCamProfileSamples') && threePreviewText.includes('data-cam-profile={selectedCamProfile}') && workflowSpecText.includes('Mechanism Design cam profile edits update the integrated automata preview'), 'Mechanism Design exposes shared cam profile telemetry and browser coverage proves Design-side edits reach the integrated automata preview');
-assert(designFoundryPreviewText.includes('design-toggle-user-path') && designFoundryPreviewText.includes('design-toggle-mechanism-path') && designFoundryPreviewText.includes('data-user-path-preview') && designFoundryPreviewText.includes('data-mechanism-path-preview'), 'Mechanism Design separates original user path and fitted mechanism path visibility in the top viewer controls');
+assert(designFoundryPreviewText.includes('data-testid="design-editor-toolbar"') && designFoundryPreviewText.includes('data-testid={`design-tool-${tool}`}') && designFoundryPreviewText.includes('data-design-viewer-tool={viewerTool}') && designFoundryPreviewText.includes('className="design-view-controls"') && designFoundryPreviewText.includes('design-toggle-user-path') && designFoundryPreviewText.includes('design-toggle-mechanism-path') && indexText.includes('.design-editor-toolbar') && indexText.includes('.design-view-controls'), 'Mechanism Design separates compact Move/Rotate/Zoom editor tools from right-side view/path controls');
 assert(mechanismRecommendationsText.includes('.filter((option) => option.fabricationErrors.length === 0)'), 'Foundry recommendations filter impossible mechanism candidates before they can be offered');
 assert(mechanismRecommendationsText.includes('const initialMechanism = createRecommendedMechanism(') && mechanismRecommendationsText.includes('fitRecommendedMechanismToSheet(') && mechanismRecommendationsText.includes('readyMechanismFallbackForPath('), 'mechanism recommendations retry with a sheet-fitted fabrication-ready fallback before hiding a candidate');
 assert(!mechanismRecommendationsText.includes('fitMechanismGeneratedPathToPath') && !designFoundryPreviewText.includes('fitMechanismGeneratedPathToPath') && !appText.includes('fitMechanismGeneratedPathToPath'), 'mechanism recommendations must not center-shift physical templates away from hole-snapped anchors');
@@ -3394,6 +3397,7 @@ assert(appText.includes('useAppOnnxBootstrap') && appOnnxBootstrapText.includes(
 assert(shellUiText.includes('const APP_VERSION = __APP_VERSION__') && shellUiText.includes('workflow-rail-version') && indexText.includes('v%APP_VERSION%'), 'startup boot loader and editor rail show the package version subtly');
 assert(indexText.includes('.boot-version') && indexText.includes('.workflow-rail-version'), 'version labels use low-emphasis styling');
 assert(appWorkspaceShellText.includes('../resources/icons/AppIcon.png?url') && indexText.includes('.app-header-icon'), 'top bar renders the canonical MotionSmith app icon with dedicated sizing');
+assert(appWorkspaceShellText.includes('data-testid="app-header-home"') && appWorkspaceShellText.includes('onClick={() => goStage("character")}') && indexText.includes('.app-header-home'), 'top MotionSmith wordmark works as a compact home control that returns to Character');
 assert(indexText.includes("font-family: 'Manrope'") && indexText.includes('fonts/manrope-800-latin.woff2'), 'startup boot loader uses self-hosted Manrope wordmark styling');
 assert(!appShellText.includes('welcome-dialog') && !appShellText.includes('Skip forever') && !appShellText.includes('>Start<'), 'startup has no second React welcome modal or persistence/start controls');
 assert(indexText.includes('--ms-font-sans') && indexText.includes('font-family: var(--ms-font-sans)') && indexText.includes('.brand-title'), 'global typography uses the shared modern MotionSmith font stack');
@@ -3459,8 +3463,9 @@ assert(designFoundryPreviewText.includes('data-testid="design-shared-foundry-pre
 assert(characterSelectionText.includes('Choose new character.'), 'Character tab disables active-project artwork edits while a package review is pending');
 assert(characterSelectionText.includes('disabled={partPanelDisabled}') && characterSelectionText.includes('onClick={onEditCharacter}'), 'Pending package review disables active-character edit buttons');
 assert(characterSelectionText.includes('disabled={partPanelDisabled}') && characterSelectionText.includes('onClick={onSaveSkeleton}'), 'Pending package review disables active skeleton save controls');
+assert(appWorkspaceShellText.includes('data-testid="bug-report-button"') && appWorkspaceShellText.includes('<BugReportOverlay') && bugReportOverlayText.includes('https://github.com/AlanSynn/ms/issues/new') && bugReportOverlayText.includes('getDisplayMedia') && bugReportOverlayText.includes('Email optional') && bugReportOverlayText.includes('Attach downloaded screenshots here if needed.') && bugReportOverlayText.includes('ClipboardItem') && bugReportOverlayText.includes('Copy image') && !bugReportOverlayText.includes('Your name') && indexText.includes('.bug-report-overlay'), 'header bug button opens a local-first GitHub issue overlay with optional email and screenshot capture');
 assert(appStageRouterText.includes('stage-body editor-workbench relative min-h-0 flex-1 overflow-hidden'), 'shared workbench prevents right-pane scroll from moving the center canvas');
-assert(indexText.includes('.stage-left-pane, .stage-right-inspector { min-height: 0; height: 100%; max-height: 100%; overflow-x: hidden; overflow-y: auto;') && indexText.includes('.character-setup-panel { min-height: 0; overflow: visible;') && indexText.includes('.character-inspector { min-height: 0; overflow: visible; }'), 'right inspector owns the single vertical scroll container for all stages, including Character');
+assert(indexText.includes('.stage-left-pane, .stage-right-inspector { min-width: 0; min-height: 0; height: 100%; max-height: 100%; overflow-x: hidden; overflow-y: auto; overflow-wrap: anywhere;') && indexText.includes('.stage-left-pane-content > *, .stage-pane-stack > *, .workspace { min-width: 0; max-width: 100%; }') && indexText.includes('.character-setup-panel { min-height: 0; overflow: visible;') && indexText.includes('.character-inspector { min-height: 0; overflow: visible; }'), 'right inspector owns the single vertical scroll container for all stages, including Character, while shared panes wrap instead of clipping');
 const paneWheelCaptureCount = stageLayoutText.match(/onWheelCapture={keepPaneWheelOnPane}/g)?.length ?? 0;
 assert(stageLayoutText.includes('keepPaneWheelOnPane') && paneWheelCaptureCount >= 2, 'workflow and inspector panes keep wheel scrolling on their panes even when the pointer is over sliders or number fields');
 assert(mechanismFoundryText.includes('const [showSensemaking, setShowSensemaking] = useState(false)'), 'Foundry starts in compact tinkerable mode with sensemaking collapsed');
@@ -4689,6 +4694,7 @@ assert.notDeepEqual(
 );
 assert.equal(sample.settings.timingProfile, 'linear', 'options include a persisted timing profile');
 assert.equal(sample.settings.theme, 'light', 'settings default to the light novice UI theme');
+assert.equal(sample.settings.uiTextScale, 'normal', 'settings default to normal UI text size');
 assert.equal(sample.settings.performancePreset, 'balanced', 'settings default includes performance preset');
 assert.equal(sample.settings.physicsSnapMode, 'balanced', 'settings default includes physics snap mode');
 assert.equal(sample.settings.simulationFriction, 0.18, 'settings default includes physical friction coefficient');
@@ -4729,6 +4735,7 @@ const legacySettingsProject = loadProjectSnapshot({
 assert.equal(legacySettingsProject.settings.performancePreset, 'balanced', 'legacy snapshots receive M3 performance default');
 assert.equal(legacySettingsProject.settings.simulationFriction, 0.18, 'legacy snapshots receive simulation friction default');
 assert.equal(legacySettingsProject.settings.simulationMassKg, 1, 'legacy snapshots receive simulation mass default');
+assert.equal(legacySettingsProject.settings.uiTextScale, 'normal', 'legacy snapshots receive normal UI text size default');
 assert.equal(legacySettingsProject.settings.autosaveIntervalSeconds, 60, 'legacy snapshots receive M3 autosave interval default');
 assert.equal(legacySettingsProject.settings.physicalKit.exportMode, 'both', 'legacy physical kit receives both-workflows default');
 assert.equal(legacySettingsProject.settings.physicalKit.cutSheetFileType, 'pdf', 'legacy physical kit receives cut-sheet default');
@@ -4742,6 +4749,7 @@ const optionsRoundTrip = loadProjectSnapshot(JSON.parse(serializeProject({
     simulationMassKg: 1.75,
     debugVisuals: true,
     detailedProcessingSteps: true,
+    uiTextScale: 'large',
     autosave: true,
     autosaveIntervalSeconds: 3,
     gridUnit: 'inch',
@@ -4755,6 +4763,7 @@ assert.equal(optionsRoundTrip.settings.simulationFriction, 0.42, 'simulation fri
 assert.equal(optionsRoundTrip.settings.simulationMassKg, 1.75, 'simulation mass round-trips');
 assert.equal(optionsRoundTrip.settings.debugVisuals, true, 'debug visuals round-trip');
 assert.equal(optionsRoundTrip.settings.detailedProcessingSteps, true, 'detailed processing setting round-trips');
+assert.equal(optionsRoundTrip.settings.uiTextScale, 'large', 'UI text scale setting round-trips');
 assert.equal(optionsRoundTrip.settings.autosaveIntervalSeconds, 3, 'autosave interval round-trips');
 assert.equal(optionsRoundTrip.settings.gridUnit, 'inch', 'grid unit setting round-trips');
 assert.equal(optionsRoundTrip.settings.fabricationReadyMode, false, 'fabrication-ready mode round-trips');

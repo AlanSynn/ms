@@ -19,6 +19,8 @@ import { MiniNumber } from "../../ui/InspectorControls";
 import { MechanismParametricEditor } from "../mechanism/MechanismParametricEditor";
 import {
   MECHANISM_PARAM_META,
+  clampMechanismParamForMotion,
+  motionSafeParamRange,
   shouldShowMechanismParam,
 } from "../mechanism/mechanismParamPolicy";
 
@@ -221,18 +223,30 @@ export const FoundryInspectorPanel = ({
         </select>
         {MECHANISM_PARAM_META.filter((param) =>
           shouldShowMechanismParam(foundry.type, param.key),
-        ).map((param) => (
-          <React.Fragment key={String(param.key)}>
-            <MiniNumber
-              label={param.label}
-              value={Number(foundry[param.key] ?? 0)}
-              min={param.min}
-              max={param.max}
-              step={param.step}
-              onChange={(value) => onChangeParam(param.key, value)}
-            />
-          </React.Fragment>
-        ))}
+        ).map((param) => {
+          const safeRange = motionSafeParamRange(foundry, param.key);
+          return (
+            <React.Fragment key={String(param.key)}>
+              <MiniNumber
+                label={param.label}
+                value={Number(foundry[param.key] ?? 0)}
+                min={safeRange?.min ?? param.min}
+                max={safeRange?.max ?? param.max}
+                step={param.step}
+                disabled={safeRange?.currentSafe === false}
+                onChange={(value) =>
+                  onChangeParam(
+                    param.key,
+                    clampMechanismParamForMotion(foundry, param.key, value),
+                  )
+                }
+              />
+              {safeRange?.locked && (
+                <div className="motion-option-lock-note">Safe range only.</div>
+              )}
+            </React.Fragment>
+          );
+        })}
       </div>
     </details>
   </div>

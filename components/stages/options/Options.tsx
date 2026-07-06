@@ -104,6 +104,20 @@ export const Options = ({
                   <option value="dark">Dark</option>
                   <option value="blueprint">Blueprint tint</option>
                 </SelectField>
+                <SelectField
+                  label="Text size"
+                  value={project.settings.uiTextScale}
+                  onChange={(uiTextScale) =>
+                    updateSettings({
+                      uiTextScale:
+                        uiTextScale as ProjectState["settings"]["uiTextScale"],
+                    })
+                  }
+                >
+                  <option value="compact">Compact</option>
+                  <option value="normal">Normal</option>
+                  <option value="large">Large</option>
+                </SelectField>
                 <Toggle
                   label="Show toolbar"
                   checked={project.settings.toolbarVisible}

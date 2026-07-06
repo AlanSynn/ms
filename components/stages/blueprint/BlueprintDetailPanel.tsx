@@ -20,12 +20,16 @@ export const BlueprintDetailPanel = ({
     : undefined;
   const recipeTitle = (recipe: FabricationRecipe) =>
     referenceRecipeForType(recipe.type).title;
-  const boardLabel = selectedRecipe
+  const boardCallout = selectedRecipe
     ? fabricationBoardCoordinateCallout(
         selectedRecipe.boardCoordinate,
         selectedRecipe.board,
-      ).split(" · ")[0]
+      )
     : "";
+  const [boardLabel, ...boardDetails] = boardCallout.split(" · ");
+  const boardPosition = boardDetails.length
+    ? `${boardLabel} · ${boardDetails.join(" · ")}`
+    : boardLabel;
   const requiredPartCount = selectedRecipe
     ? selectedRecipe.requiredParts.reduce((sum, part) => sum + part.quantity, 0)
     : 0;
@@ -44,8 +48,15 @@ export const BlueprintDetailPanel = ({
           className="assembly-recipe-card"
           data-testid={`blueprint-recipe-${selectedRecipe.mechanismId}`}
         >
-          <div className="font-bold text-slate-800">Board {boardLabel}</div>
-          <div className="mt-1 text-sm text-slate-600">Place this mechanism here.</div>
+          <div className="font-bold text-slate-800">Build at {boardLabel}</div>
+          <ol
+            aria-label="Build spot steps"
+            className="mt-2 grid gap-2 text-sm text-slate-600"
+          >
+            <li>1. Find {boardPosition} on the board.</li>
+            <li>2. Cut the parts below.</li>
+            <li>3. Build, then test.</li>
+          </ol>
           {selectedSensemaking && (
             <div
               className="sensemaking-cue mt-3"
@@ -59,7 +70,10 @@ export const BlueprintDetailPanel = ({
               <strong>{selectedSensemaking.directTranslation}</strong>
             </div>
           )}
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+            Parts to cut
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
             {selectedRecipe.requiredParts.slice(0, 4).map((part) => (
               <span
                 className="blueprint-pill"
@@ -76,14 +90,14 @@ export const BlueprintDetailPanel = ({
             className="mt-3 rounded-2xl bg-slate-100 p-3 text-sm font-bold text-slate-700"
             data-testid="blueprint-stack-summary"
           >
-            {requiredPartCount} parts · Board {boardLabel}
+            {requiredPartCount} parts total · Board {boardLabel}
           </div>
           {selectedRecipe.warnings.length ? (
             <div className="warning mt-3">
               Fix: {selectedRecipe.warnings.join("; ")}
             </div>
           ) : (
-            <div className="ok mt-3">OK</div>
+            <div className="ok mt-3">Ready</div>
           )}
         </article>
       ) : (

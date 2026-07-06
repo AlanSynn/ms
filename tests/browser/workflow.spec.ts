@@ -723,6 +723,42 @@ const expectProjectCounts = async (page: Page, parts: number, paths: number, mec
   await expect(page.getByTestId('stage-project-card')).not.toBeVisible();
 };
 
+test('MotionSmith header logo returns to Character home', async ({ page }) => {
+  await page.goto('/');
+  await importWavingArmLessonProject(page, 'path');
+  await expect(page.locator('h2.current-stage-title', { hasText: 'Path Editor' })).toBeVisible();
+
+  await page.getByTestId('app-header-home').click();
+
+  await expect(page.locator('h2.current-stage-title', { hasText: 'Character' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
+});
+
+test('Medium-width desktop keeps editor panes from cutting off the canvas', async ({ page }) => {
+  await page.setViewportSize({ width: 948, height: 1398 });
+  await page.goto('/');
+  await importWavingArmLessonProject(page, 'path');
+  await applyFourBarFromFoundry(page);
+  await clickStage(page, 'Options');
+  await page.getByLabel('Text size').selectOption('large');
+  await expect.poll(
+    () => page.evaluate(() => getComputedStyle(document.documentElement).fontSize),
+    { message: 'large text size applies at the document root' },
+  ).toBe('18px');
+  await clickStage(page, 'Design');
+
+  const canvasBox = await page.getByTestId('stage-canvas-pane').boundingBox();
+  const rightBox = await page.getByTestId('stage-right-inspector').boundingBox();
+  const viewport = page.viewportSize();
+
+  expect(canvasBox, 'center canvas has a layout box').toBeTruthy();
+  expect(rightBox, 'right inspector has a layout box').toBeTruthy();
+  expect(viewport, 'viewport is available').toBeTruthy();
+  expect(canvasBox!.width, 'center canvas stays usable at medium desktop width').toBeGreaterThanOrEqual(280);
+  expect(rightBox!.x + rightBox!.width, 'right inspector stays inside the viewport').toBeLessThanOrEqual(viewport!.width + 1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 4)).toBe(true);
+});
+
 test('character → path → foundry → design → blueprint runs end-to-end in browser', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
@@ -1080,8 +1116,10 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   expect(liveBlueprintSvg).toContain('data-blueprint-board-summary');
   expect(liveBlueprintSvg).not.toContain('opacity="0.22"');
   await expect(page.getByTestId('blueprint-detail-preview')).toContainText('Build spot');
+  await expect(page.getByTestId('blueprint-detail-preview')).toContainText(/Find [A-Z]\d+ · row \d+, column \d+ on the board/);
+  await expect(page.getByTestId('blueprint-detail-preview')).toContainText('Parts to cut');
   await expect(page.getByTestId('blueprint-control-panel')).toContainText('Board preview');
-  await expect(page.getByTestId('blueprint-detail-preview')).toContainText(/OK|Fix:/);
+  await expect(page.getByTestId('blueprint-detail-preview')).toContainText(/Ready|Fix:/);
   await expect(page.getByTestId('blueprint-sensemaking-label')).toContainText('Crank turns');
   await expect(page.getByTestId('blueprint-sensemaking-label')).toHaveAttribute('data-sensemaking-evidence', 'driver crank turns and rocker swings');
   await expect(page.getByTestId('stage-canvas-pane').getByTestId('assembly-guide-web-preview')).toHaveCount(0);
@@ -2111,9 +2149,10 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await page.getByLabel('Foundry mechanism type').selectOption('gear_linkage');
   await expect(page.getByTestId('foundry-parametric-editor'), 'Gear linkage exposes the shared parametric editor').toBeVisible();
   await page.getByLabel('Drive gear size').selectOption('g40');
-  await page.getByLabel('Output gear size').selectOption('g56');
+  await expect(page.getByLabel('Output gear size').locator('option[value="g56"]'), 'gear-linkage locks gear ratios that cannot close the paired links').toHaveAttribute('disabled', '');
+  await page.getByLabel('Output gear size').selectOption('g40');
   await page.getByLabel('Paired link length').selectOption('6');
-  await expect(threeScene, 'Gear linkage param editor keeps output gear and linkage in the fabrication stack').toHaveAttribute('data-three-stack-order', /Drive G5 \/ 5-space gear.*Output G7 \/ 7-space gear.*Drive L6 linkage.*Output L6 linkage/);
+  await expect(threeScene, 'Gear linkage param editor keeps only full-motion output gear and linkage choices in the fabrication stack').toHaveAttribute('data-three-stack-order', /Drive G5 \/ 5-space gear.*Output G5 \/ 5-space gear.*Drive L6 linkage.*Output L6 linkage/);
   await expect(threeScene, 'Gear linkage crank pin snaps to a real attachment hole on the selected output gear').toHaveAttribute('data-three-linkage-pin-radius', /\d+\.\d+/);
   await expect(page.getByTestId('foundry-param-handles'), 'Gear linkage keeps the shared move handle even without 4bar-only shape handles').toHaveAttribute('data-handle-ids', 'M');
   await page.getByTestId('foundry-toggle-paths').click();
@@ -2216,7 +2255,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
     } else {
       expect(foundrySpacerGap, `${type} foundry preview has spacer clearance along z`).toBeGreaterThanOrEqual(FABRICATION_RENDER_LAYER_Z_STEP - 0.01);
     }
-    await expect(page.getByTestId('foundry-forces-overlay'), `${type} keeps live force vectors visible`).toHaveAttribute('data-physics-rule', /force|torque|velocity|acceleration|reaction/);
+    await expect(page.getByTestId('foundry-forces-overlay'), `${type} keeps live force vectors visible`).toHaveAttribute('data-physics-rule', /force|torque|velocity|acceleration|reaction|contact|gravity|prismatic/);
     await expect(page.getByTestId('foundry-velocity-overlay'), `${type} keeps live velocity vectors visible`).toHaveAttribute('data-speed', /[0-9]+\.[0-9]+/);
     for (const [attr, minimumCount] of foundryPhysicalMarkers[type]) {
       expect(Number(await threeScene.getAttribute(attr)), `${type} preview includes ${attr}`).toBeGreaterThanOrEqual(minimumCount);
@@ -2307,22 +2346,20 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(page.getByLabel('ground number')).toHaveValue('160');
   await page.getByLabel('Foundry preset').selectOption('compact');
 
-  await page.getByLabel('ground number', { exact: true }).fill('120');
   const linkOptionLabels = await page.getByLabel('Input link length').locator('option').allTextContents();
   expect(linkOptionLabels.join(' '), 'visible 4bar link-size labels name holes, not cells').toMatch(/3-hole/);
   expect(linkOptionLabels.join(' '), 'visible 4bar link-size labels avoid cell wording').not.toMatch(/\bcell\b/i);
   const stackBeforeResize = await threeScene.getAttribute('data-three-stack-order');
-  await page.getByLabel('Input link length').selectOption('4');
-  await page.getByLabel('Coupler link length').selectOption('6');
   await page.getByLabel('Output link length').selectOption('4');
-  await expect(threeScene, '4bar link-size selectors override the active Foundry instance with changed fabrication link blanks').toHaveAttribute('data-three-stack-order', /Input L4 linkage.*Coupler L6 linkage.*Output L4 linkage/);
+  await page.getByLabel('Input link length').selectOption('4');
+  await page.getByLabel('Coupler link length').selectOption('4');
+  await expect(threeScene, '4bar link-size selectors override the active Foundry instance only with full-motion fabrication blanks').toHaveAttribute('data-three-stack-order', /Input L4 linkage.*Coupler L4 linkage.*Output L4 linkage/);
   expect(await threeScene.getAttribute('data-three-stack-order')).not.toBe(stackBeforeResize);
   expect(await threeScene.getAttribute('data-three-rendered-layer-labels')).toBe(await threeScene.getAttribute('data-three-stack-order'));
-  await page.getByLabel('Input link length').selectOption('2');
-  await page.getByLabel('Coupler link length').selectOption('4');
-  await page.getByLabel('Output link length').selectOption('2');
-  await expect(threeScene, '4bar link-size selectors override the active Foundry instance with exact fabrication link blanks').toHaveAttribute('data-three-stack-order', /Input L2 linkage.*Coupler L4 linkage.*Output L2 linkage/);
-  await expect(page.getByTestId('foundry-motion-warning')).toContainText(/Motion may jam|No full motion/);
+  await expect(page.getByLabel('Output link length').locator('option[value="2"]'), 'unsafe 4bar output sizes stay visible but locked instead of breaking the preview').toHaveAttribute('disabled', '');
+  await expect(page.getByLabel('Output link length').locator('option[value="2"]')).toContainText(/locked/i);
+  await expect(page.getByTestId('mechanism-motion-option-locks')).toContainText(/Locked choices may jam/);
+  await expect(page.getByTestId('foundry-motion-warning')).toHaveCount(0);
   await expect(page.getByTestId('stage-left-pane')).not.toContainText(/Motion may jam|No full motion/);
   await expect(page.getByTestId('stage-left-pane')).not.toContainText(/Motion [0-9]+%/);
   await expect(page.getByTestId('stage-left-pane')).not.toContainText(/Range|Status/i);
@@ -2339,7 +2376,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   expect(foundryMechanism.presetId).toBe('compact');
   expect(foundryMechanism.targetAnchorJointId).toBe('right_hand');
   expect(foundryMechanism.recommendation).toContain('Compact');
-  expect(foundryMechanism.foundryExport.simulationSummary).toContain('Motion');
+  expect(foundryMechanism.foundryExport.simulationSummary).toMatch(/Motion|360°/);
 
   expectCleanPage(pageErrors, consoleErrors);
 });
@@ -2858,6 +2895,33 @@ test('Startup uses one boot loader and opens Getting Started over Character', as
   await expect(page.getByTestId('getting-started-dialog')).toHaveCount(0);
 });
 
+test('Bug report opens a GitHub issue draft from any stage', async ({ page }) => {
+  await page.goto('/');
+  await importWavingArmLessonProject(page, 'character');
+
+  await page.getByTestId('bug-report-button').click();
+  const report = page.getByTestId('bug-report-overlay');
+  await expect(report).toBeVisible();
+  await report.getByLabel('What broke?').fill('Design canvas froze');
+  await report.getByLabel('What did you do?').fill('Opened Mechanism Design and scrubbed playback.');
+  await report.getByLabel('What should happen?').fill('The character should keep moving.');
+  await expect(report.getByLabel(/Email optional/)).toBeVisible();
+  await expect(report.getByLabel(/name/i)).toHaveCount(0);
+
+  let href = await report.getByRole('link', { name: /Open issue/ }).getAttribute('href');
+  expect(href).toContain('https://github.com/AlanSynn/ms/issues/new');
+  let issue = new URL(href!);
+  expect(issue.searchParams.get('title')).toBe('Bug: Design canvas froze');
+  expect(issue.searchParams.get('body')).toContain('- Stage: Character');
+  expect(issue.searchParams.get('body')).toContain('Attach downloaded screenshots here if needed.');
+
+  await clickStage(page, 'Path');
+  await expect(report).toBeVisible();
+  href = await report.getByRole('link', { name: /Open issue/ }).getAttribute('href');
+  issue = new URL(href!);
+  expect(issue.searchParams.get('body')).toContain('- Stage: Path Editor');
+});
+
 test('Mobile startup shows compact Getting Started with a session opt-out', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
@@ -3047,12 +3111,12 @@ test('Workflow tabs keep left workflow, center canvas, and right inspector roles
   await expect(page.getByTestId('stage-left-pane')).not.toContainText(/Add layer|Remove layer|New handle/);
 
   await page.getByRole('button', { name: /Foundry/i }).click();
-  await assertPaneContract('Templates', '3D Isometric', 'Why it moves', '.canvas-zoom-toolbar, .foundry-camera-hud, .foundry-playback-hud');
+  await assertPaneContract('Templates', '3D Isometric', 'Question', '.canvas-zoom-toolbar, .foundry-camera-hud, .foundry-playback-hud');
   await expect(page.getByTestId('stage-left-pane')).toContainText('Use mechanism');
 
   await page.getByRole('button', { name: /Use mechanism/i }).click();
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
-  await assertPaneContract('Mechanisms', '3D', 'Parameters', '.canvas-zoom-toolbar, .foundry-camera-hud, .foundry-opacity-panel, [data-testid="foundry-explode-panel"]');
+  await assertPaneContract('Mechanisms', '3D', 'Parameters', '.canvas-zoom-toolbar, .foundry-camera-hud, .foundry-opacity-panel, [data-testid="foundry-explode-panel"], .design-editor-toolbar, .design-view-controls');
   await expect(page.getByTestId('design-shared-foundry-preview')).toBeVisible();
 
   await clickStage(page, 'Blueprint');
@@ -3540,6 +3604,27 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
   await expect(designPreview).toHaveAttribute('data-mechanism-path-preview', 'shown');
   await expect(designPuppet).toHaveAttribute('data-layer-paths', 'shown');
   await expect(designRig).toHaveAttribute('data-path-preview', 'shown');
+  await expect(page.getByTestId('design-editor-toolbar').getByRole('button', { name: 'Move', exact: true })).toBeVisible();
+  await expect(page.getByTestId('design-editor-toolbar').getByRole('button', { name: 'Rotate', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('design-editor-toolbar').getByRole('button', { name: 'Zoom', exact: true })).toBeVisible();
+  await expect(page.getByTestId('design-foundry-camera-controls').getByRole('button', { name: 'User path', exact: true })).toBeVisible();
+  const editorToolbarBox = await page.getByTestId('design-editor-toolbar').boundingBox();
+  const viewControlsBox = await page.getByTestId('design-foundry-camera-controls').boundingBox();
+  expect(editorToolbarBox, 'Design editor toolbar has a layout box').toBeTruthy();
+  expect(viewControlsBox, 'Design view controls have a layout box').toBeTruthy();
+  expect(viewControlsBox!.x, 'Design view/path controls sit to the right of the compact editor toolbar').toBeGreaterThan(editorToolbarBox!.x);
+  await page.getByTestId('design-tool-move').click();
+  await expect(designPreview).toHaveAttribute('data-design-viewer-tool', 'move');
+  const designCanvasBox = await designPreview.locator('canvas.foundry-three-canvas').boundingBox();
+  expect(designCanvasBox, 'Design Foundry canvas has a layout box').toBeTruthy();
+  const panBefore = await designRig.getAttribute('data-camera-pan-x');
+  await page.mouse.move(designCanvasBox!.x + designCanvasBox!.width * 0.5, designCanvasBox!.y + designCanvasBox!.height * 0.55);
+  await page.mouse.down();
+  await page.mouse.move(designCanvasBox!.x + designCanvasBox!.width * 0.56, designCanvasBox!.y + designCanvasBox!.height * 0.55, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(async () => await designRig.getAttribute('data-camera-pan-x'), { message: 'Design Move tool routes drags to camera pan' }).not.toBe(panBefore);
+  await page.getByTestId('design-tool-rotate').click();
+  await expect(designPreview).toHaveAttribute('data-design-viewer-tool', 'rotate');
   await page.getByTestId('design-toggle-trace').click();
   await expect(designPreview).toHaveAttribute('data-design-trace-layer', 'hidden');
   await expect(designPuppet).toHaveAttribute('data-layer-paths', 'hidden');
@@ -3736,6 +3821,7 @@ test('Simplified shared canvas stays non-destructive and exports blueprint', asy
   await expect(page.getByTestId('blueprint-canvas-preview')).toBeVisible();
   await page.getByRole('button', { name: /Generate package/i }).click();
   await expect(page.getByTestId('blueprint-detail-preview')).toContainText('Build spot');
+  await expect(page.getByTestId('blueprint-detail-preview')).toContainText('Build, then test.');
   await expect(page.getByTestId('blueprint-svg-preview')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Metadata', exact: true })).toHaveCount(0);
   await expect(page.getByText('Teacher files')).toHaveCount(0);

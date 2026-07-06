@@ -1,9 +1,10 @@
 import type { ReactNode, RefObject } from "react";
-import { Download, Upload } from "lucide-react";
+import { Bug, Download, Upload } from "lucide-react";
 
 import { AppStageRouter, type AppStageRouterProps } from "./AppStageRouter";
 import {
   AboutDialog,
+  BugReportOverlay,
   GettingStartedDialog,
   OnnxCacheStatusPill,
   STAGES,
@@ -52,6 +53,9 @@ export type AppWorkspaceShellProps = {
   onCloseShortcuts: () => void;
   showAbout: boolean;
   onCloseAbout: () => void;
+  showBugReport: boolean;
+  onOpenBugReport: () => void;
+  onCloseBugReport: () => void;
   showRecommendations: boolean;
   onCloseRecommendations: () => void;
   onApplyRecommendation: (mechanism: MechanismConfig) => void;
@@ -98,6 +102,9 @@ export const AppWorkspaceShell = ({
   onCloseShortcuts,
   showAbout,
   onCloseAbout,
+  showBugReport,
+  onOpenBugReport,
+  onCloseBugReport,
   showRecommendations,
   onCloseRecommendations,
   onApplyRecommendation,
@@ -112,6 +119,7 @@ export const AppWorkspaceShell = ({
     <main
       className={`min-h-screen overflow-hidden ${themeClass}`}
       data-theme={project.settings.theme}
+      data-ui-text-scale={project.settings.uiTextScale}
     >
       <div
         className="pointer-events-none fixed inset-0 opacity-70"
@@ -125,15 +133,24 @@ export const AppWorkspaceShell = ({
         <section className="relative flex min-w-0 flex-col">
           <header className="app-header border-b border-slate-300/70 bg-white/50 backdrop-blur-xl">
             <div className="app-header-brand">
-              <img
-                className="brand-kicker app-header-icon"
-                src={motionSmithIconUrl}
-                alt=""
-                aria-hidden="true"
-                decoding="async"
-                draggable={false}
-              />
-              <h1 className="brand-title">MotionSmith</h1>
+              <button
+                className="app-header-home"
+                type="button"
+                aria-label="Go home"
+                title="Go home"
+                data-testid="app-header-home"
+                onClick={() => goStage("character")}
+              >
+                <img
+                  className="brand-kicker app-header-icon"
+                  src={motionSmithIconUrl}
+                  alt=""
+                  aria-hidden="true"
+                  decoding="async"
+                  draggable={false}
+                />
+                <span className="brand-title">MotionSmith</span>
+              </button>
               <h2 className="current-stage-title">{stageMeta?.label}</h2>
             </div>
             <div className="app-header-actions">
@@ -168,6 +185,16 @@ export const AppWorkspaceShell = ({
                   </button>
                 </div>
               )}
+              <button
+                className="btn-secondary bug-report-button"
+                type="button"
+                aria-label="Report bug"
+                title="Report bug"
+                data-testid="bug-report-button"
+                onClick={onOpenBugReport}
+              >
+                <Bug size={16} />
+              </button>
             </div>
           </header>
           <input
@@ -208,6 +235,12 @@ export const AppWorkspaceShell = ({
       )}
       {showShortcuts && <ShortcutHelpDialog onClose={onCloseShortcuts} />}
       {showAbout && <AboutDialog onClose={onCloseAbout} />}
+      {showBugReport && (
+        <BugReportOverlay
+          stageLabel={stageMeta?.label ?? stage}
+          onClose={onCloseBugReport}
+        />
+      )}
       <MechanismRecommendationSheet
         isOpen={showRecommendations}
         project={project}

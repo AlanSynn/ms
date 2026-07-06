@@ -10,6 +10,7 @@ Use [`../README.md`](../README.md) as the repository-wide docs index. This file 
 - [Classroom Sensemaking Discoverability Plan](classroom-sensemaking-discoverability-plan.md) — mechanism meaning, direct hints, optional clips, and local checks.
 - [Assembly Step Player Redesign Plan](assembly-step-player-redesign-plan.md) — assembly player, board mount, and character attach flow.
 - [Mechanism Workbench Instance + Board Plan](mechanism-workbench-instance-board-plan.md) — multi-instance mechanisms, scene-object targets, and 15 x 15 board-fit rules.
+- [Mechanism Graph Compiler + Feasible-only Editing Plan](feasible-only-mechanism-editing-plan.md) — graph/solver/fabrication compiler migration plus safe student editing gate.
 - [Foundry / Design / Assembly SSOT Plan](foundry-assembly-ssot-plan.md) — mechanism visual/physical source of truth, `MechanismSceneContract`, `AssemblySceneFrame`, and z-only explode.
 - [Toon 2.5D Main Workbench + 3D Camera Unlock Plan](toon-25d-main-3d-unlock-plan.md)
 - [Toon 2.5D / 3D Unlock Implementation Plan](toon-25d-implementation-plan.md)

@@ -18,6 +18,8 @@ import {
 import { mechanismTemplateLabel } from "../../../utils/mechanismTemplates";
 import {
   MECHANISM_PARAM_META,
+  clampMechanismParamForMotion,
+  motionSafeParamRange,
   shouldShowMechanismParam,
 } from "./mechanismParamPolicy";
 
@@ -218,22 +220,33 @@ export const DesignInspectorPanel = ({
           <div className="section-title">Parameters</div>
           {MECHANISM_PARAM_META.filter((p) =>
             shouldShowMechanismParam(selectedMechanism.type, p.key),
-          ).map((p) => (
-            <React.Fragment key={String(p.key)}>
-              <MiniNumber
-                label={p.label}
-                value={Number(selectedMechanism[p.key] ?? 0)}
-                min={p.min}
-                max={p.max}
-                step={p.step}
-                onChange={(value) =>
-                  updateMechanism(selectedMechanism.id, {
-                    [p.key]: value,
-                  } as Partial<MechanismConfig>)
-                }
-              />
-            </React.Fragment>
-          ))}
+          ).map((p) => {
+            const safeRange = motionSafeParamRange(selectedMechanism, p.key);
+            return (
+              <React.Fragment key={String(p.key)}>
+                <MiniNumber
+                  label={p.label}
+                  value={Number(selectedMechanism[p.key] ?? 0)}
+                  min={safeRange?.min ?? p.min}
+                  max={safeRange?.max ?? p.max}
+                  step={p.step}
+                  disabled={safeRange?.currentSafe === false}
+                  onChange={(value) =>
+                    updateMechanism(selectedMechanism.id, {
+                      [p.key]: clampMechanismParamForMotion(
+                        selectedMechanism,
+                        p.key,
+                        value,
+                      ),
+                    } as Partial<MechanismConfig>)
+                  }
+                />
+                {safeRange?.locked && (
+                  <div className="motion-option-lock-note">Safe range only.</div>
+                )}
+              </React.Fragment>
+            );
+          })}
           {selectedBindingWarnings.map((w, i) => (
             <div className="warning" key={`binding-${w}-${i}`}>
               {w}

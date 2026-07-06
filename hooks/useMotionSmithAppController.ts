@@ -35,6 +35,12 @@ type FoundryState = MechanismConfig;
 const GETTING_STARTED_SESSION_KEY =
   "motionsmith.gettingStarted.hiddenSession";
 
+const UI_TEXT_SCALE_ROOT_FONT_SIZE = {
+  compact: "15px",
+  normal: "",
+  large: "18px",
+} as const;
+
 const readGettingStartedHiddenForSession = () => {
   if (typeof window === "undefined") return false;
   try {
@@ -83,6 +89,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   const [showRecommendations, setShowRecommendations] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  const [showBugReport, setShowBugReport] = useState(false);
   const modalOpen = showGettingStarted || showShortcuts || showAbout;
   const [foundry, setFoundry] = useState<FoundryState>(() =>
     createDefaultMechanism("4bar", "foundry-preview"),
@@ -97,6 +104,19 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   const appShellRef = useRef<HTMLDivElement>(null);
   const assessmentQueryApplied = useRef(false);
   useProjectAutosave(project);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const root = document.documentElement;
+    const previousFontSize = root.style.fontSize;
+    const nextFontSize = UI_TEXT_SCALE_ROOT_FONT_SIZE[project.settings.uiTextScale] ?? "";
+    if (nextFontSize) root.style.fontSize = nextFontSize;
+    else root.style.removeProperty("font-size");
+    return () => {
+      if (previousFontSize) root.style.fontSize = previousFontSize;
+      else root.style.removeProperty("font-size");
+    };
+  }, [project.settings.uiTextScale]);
 
   useEffect(() => {
     if (assessmentQueryApplied.current || typeof window === "undefined") return;
@@ -373,6 +393,9 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     onCloseShortcuts: () => setShowShortcuts(false),
     showAbout,
     onCloseAbout: () => setShowAbout(false),
+    showBugReport,
+    onOpenBugReport: () => setShowBugReport(true),
+    onCloseBugReport: () => setShowBugReport(false),
     showRecommendations,
     onCloseRecommendations: () => setShowRecommendations(false),
     onApplyRecommendation: applyRecommendedMechanism,

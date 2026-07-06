@@ -23,6 +23,7 @@ type DesignFoundryPreviewProps = {
 };
 
 const noPoint = { x: 0, y: 0 };
+type ViewerTool = "move" | "rotate" | "zoom";
 
 const cameraLabel = (camera: FoundryCamera) =>
   camera.preset === "custom"
@@ -39,6 +40,7 @@ export const DesignFoundryPreview = ({
   const [showGrid, setShowGrid] = useState(true);
   const [showUserPathPreview, setShowUserPathPreview] = useState(true);
   const [showMechanismPathPreview, setShowMechanismPathPreview] = useState(true);
+  const [viewerTool, setViewerTool] = useState<ViewerTool>("rotate");
   const [camera, setCamera] = useState<FoundryCamera>({
     ...FOUNDRY_VIEW_PRESETS.iso,
     preset: "iso",
@@ -100,6 +102,8 @@ export const DesignFoundryPreview = ({
   const setCameraPreset = (preset: Exclude<FoundryViewPreset, "custom">) =>
     setCamera({ ...FOUNDRY_VIEW_PRESETS[preset], preset, pan: { x: 0, y: 0 } });
 
+  const resetCamera = () => setCameraPreset("iso");
+
   const handlePointerDown: React.PointerEventHandler<HTMLDivElement> = (event) => {
     if (event.button !== 0 && event.button !== 1 && event.button !== 2) return;
     const mode: "orbit" | "zoom" | "pan" =
@@ -107,7 +111,11 @@ export const DesignFoundryPreview = ({
         ? "pan"
         : event.altKey || event.button === 2
           ? "zoom"
-          : "orbit";
+          : viewerTool === "move"
+            ? "pan"
+            : viewerTool === "zoom"
+              ? "zoom"
+              : "orbit";
     orbitStartRef.current = {
       pointerId: event.pointerId,
       x: event.clientX,
@@ -216,55 +224,86 @@ export const DesignFoundryPreview = ({
       data-design-trace-layer={showTrace ? "shown" : "hidden"}
       data-design-foundry-contract-source="buildAutomataSceneModel"
       data-design-mechanism-contract-id={sceneModel.mechanismContract?.mechanismId ?? ""}
+      data-design-viewer-tool={viewerTool}
     >
       <div
-        className="foundry-camera-hud design-foundry-camera-hud"
-        data-testid="design-foundry-camera-controls"
-        aria-label="Automata viewer controls"
+        className="design-editor-toolbar"
+        data-testid="design-editor-toolbar"
+        aria-label="Editor tools"
       >
         <span className="foundry-camera-readout" data-testid="design-foundry-camera-readout">
           3D {cameraLabel(camera)} · {Math.round(camera.zoom * 100)}%
         </span>
-        {(["front", "iso", "side", "top"] as const).map((preset) => (
+        {([
+          ["move", "Move"],
+          ["rotate", "Rotate"],
+          ["zoom", "Zoom"],
+        ] as const).map(([tool, label]) => (
           <button
-            key={preset}
+            key={tool}
             type="button"
-            className={camera.preset === preset ? "active" : ""}
-            aria-pressed={camera.preset === preset}
-            onClick={() => setCameraPreset(preset)}
+            data-testid={`design-tool-${tool}`}
+            className={viewerTool === tool ? "active" : ""}
+            aria-pressed={viewerTool === tool}
+            onClick={() => setViewerTool(tool)}
           >
-            {FOUNDRY_VIEW_PRESETS[preset].label}
+            {label}
           </button>
         ))}
         <span className="viewer-toolbar-divider" aria-hidden="true" />
-        <button
-          type="button"
-          className={showGrid ? "active" : ""}
-          aria-pressed={showGrid}
-          onClick={() => setShowGrid((value) => !value)}
-        >
-          Grid
+        <button type="button" data-testid="design-reset-view" onClick={resetCamera}>
+          Reset
         </button>
-        <button
-          type="button"
-          data-testid="design-toggle-user-path"
-          className={showUserPath ? "active" : ""}
-          aria-pressed={showUserPath}
-          disabled={!showTrace}
-          onClick={() => setShowUserPathPreview((value) => !value)}
-        >
-          User path
-        </button>
-        <button
-          type="button"
-          data-testid="design-toggle-mechanism-path"
-          className={showMechanismPath ? "active" : ""}
-          aria-pressed={showMechanismPath}
-          disabled={!showTrace}
-          onClick={() => setShowMechanismPathPreview((value) => !value)}
-        >
-          Mech path
-        </button>
+      </div>
+      <div
+        className="design-view-controls"
+        data-testid="design-foundry-camera-controls"
+        aria-label="View layers"
+      >
+        <div className="design-view-control-group" aria-label="View">
+          {(["front", "iso", "side", "top"] as const).map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              className={camera.preset === preset ? "active" : ""}
+              aria-pressed={camera.preset === preset}
+              onClick={() => setCameraPreset(preset)}
+            >
+              {FOUNDRY_VIEW_PRESETS[preset].label}
+            </button>
+          ))}
+        </div>
+        <div className="design-view-control-group" aria-label="Layers">
+          <button
+            type="button"
+            data-testid="design-toggle-grid"
+            className={showGrid ? "active" : ""}
+            aria-pressed={showGrid}
+            onClick={() => setShowGrid((value) => !value)}
+          >
+            Grid
+          </button>
+          <button
+            type="button"
+            data-testid="design-toggle-user-path"
+            className={showUserPath ? "active" : ""}
+            aria-pressed={showUserPath}
+            disabled={!showTrace}
+            onClick={() => setShowUserPathPreview((value) => !value)}
+          >
+            User path
+          </button>
+          <button
+            type="button"
+            data-testid="design-toggle-mechanism-path"
+            className={showMechanismPath ? "active" : ""}
+            aria-pressed={showMechanismPath}
+            disabled={!showTrace}
+            onClick={() => setShowMechanismPathPreview((value) => !value)}
+          >
+            Mech path
+          </button>
+        </div>
       </div>
       <ThreeFoundryPreview
         mechanism={sceneModel.foundryPreview.mechanism}

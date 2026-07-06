@@ -211,6 +211,7 @@ export interface AppSettings {
     animationDurationMs: number;
     timingProfile: 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'realtime' | 'slow' | 'presentation';
     theme: 'light' | 'dark' | 'blueprint';
+    uiTextScale: 'compact' | 'normal' | 'large';
     toolbarVisible: boolean;
     partPanelVisible: boolean;
     autosave: boolean;
