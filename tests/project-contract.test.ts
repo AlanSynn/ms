@@ -25,8 +25,8 @@ import { fabricationLinkageSpecForSceneLength as stackModelFabricationLinkageSpe
 import { circlePath as simplePdfCirclePath, hexRgb as simplePdfHexRgb, makePdfDocument as simplePdfDocument, makeSimplePdf as simplePdfMakeSimplePdf, num as simplePdfNum, pdfText as simplePdfEscapeText } from '../utils/simplePdf';
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
-import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainMeshPhaseDegAt, gearTrainMeshPhaseRadAt, gearTrainOutputRatio, gearTrainPitchCenterDistance, gearTrainPitchRadii, gearTrainResolvedCenterDistance, gearTrainRotationRatioAt, generateCurvePoints, generateMechanismPointTraces, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius, sampledCamProfileScale } from '../utils/kinematics';
-import { animatedPartsForProject, describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainRootJointIds, motionPreviewForPath, motionPreviewForProject, motionPreviewForTarget, pointOnProjectPath, preferredMotionJointId } from '../utils/motion';
+import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainMeshPhaseDegAt, gearTrainMeshPhaseRadAt, gearTrainOutputRatio, gearTrainCenters, gearTrainPitchCenterDistance, gearTrainPitchRadii, gearTrainResolvedCenterDistance, gearTrainRotationRatioAt, generateCurvePoints, generateMechanismPointTraces, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius, sampledCamProfileScale } from '../utils/kinematics';
+import { animatedPartsForProject, describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainRootJointIds, motionPreviewForPath, motionPreviewForProject, motionPreviewForTarget, pointOnGeneratedMechanismPath, pointOnProjectPath, preferredMotionJointId } from '../utils/motion';
 import { buildCutBaseViewport, clientPointToCutPoint, panCutViewport, zoomCutViewport, type CutFrame } from '../utils/cutEditorViewport';
 import { addDrawSamplePoint, normalizeDrawTimedPoints } from '../utils/pathDrawing';
 import { buildToonSceneProjection } from '../utils/sceneProjection';
@@ -35,7 +35,7 @@ import { contourPathD, fabricablePartOutlinePoints, partLandmarkJointIds, partLa
 import { MECHANISM_FEATURE_REGISTRY, mechanismFeature, validateMechanismFeatureRegistry, type MechanismDragHandle } from '../utils/mechanismFeatureRegistry';
 import { buildMechanismSnapshot, buildMechanismSnapshots } from '../utils/mechanismSnapshot';
 import { createFoundryPlaybackFrame, foundryPlaybackPhaseToInputAngle, generateFoundryPlaybackPointTraces } from '../utils/foundryPlayback';
-import { createMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext, pointsToSvgPath } from '../utils/mechanismPreview';
+import { createMechanismFitContext, createSceneMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext, pointsToSvgPath } from '../utils/mechanismPreview';
 import { buildMechanismRecommendations, fitMechanismToTargetPath } from '../utils/mechanismRecommendations';
 import { buildAutomataSceneModel } from '../utils/automataSceneModel';
 import { buildDesignAutomataProjection } from '../utils/designAutomataProjection';
@@ -48,6 +48,7 @@ import { buildAssemblyPlaybackSteps, buildCharacterAssemblyPlan, pendingRecipeFo
 import { buildCharacterAssemblySceneFrame, buildMechanismAssemblySceneFrame } from '../utils/assemblySceneFrame';
 import { buildMechanismSceneContract } from '../utils/mechanismSceneContract';
 import { buildAssemblyGuideModel } from '../components/stages/assembly/assemblyGuideModel';
+import { selectBlueprintRecipe } from '../components/stages/blueprint/BlueprintExport';
 import { MechanismLinkagePreview } from '../components/stages/foundry/MechanismLinkagePreview';
 import { FoundryWorkflowPanel } from '../components/stages/foundry/FoundryWorkflowPanel';
 import { useAppMechanismActions } from '../hooks/useAppMechanismActions';
@@ -735,7 +736,7 @@ assert(playwrightConfigText.includes('MAX_BROWSER_WORKERS'), 'browser worker def
 assert(playwrightConfigText.includes('Number.isInteger'), 'browser worker override validates positive integer input');
 assert(playwrightConfigText.includes('PLAYWRIGHT_SERVER') && playwrightConfigText.includes('preview'), 'browser tests can run against production preview without Vite HMR noise');
 assert(playwrightConfigText.includes('delete process.env.NO_COLOR') && playwrightConfigText.includes('env -u NO_COLOR'), 'Playwright normalizes conflicting FORCE_COLOR/NO_COLOR env to avoid worker/webserver warning spam');
-assert.equal(packageJson.version, '0.0.7', 'release version is bumped for the GitHub Pages redeploy');
+assert.equal(packageJson.version, '0.0.8', 'release version is bumped for the GitHub Pages redeploy');
 assert.equal(tauriConfig.version, packageJson.version, 'Tauri config version stays aligned with package.json');
 assert(viteConfigText.includes('__APP_VERSION__') && viteConfigText.includes('packageVersion'), 'Vite exposes package.json version to the browser UI');
 assert.deepEqual(tauriConfig.bundle.icon, ['icons/icon.png', 'icons/icon.ico', 'icons/icon.icns'], 'Tauri bundle references the tracked MotionSmith png, ico, and icns icons');
@@ -851,7 +852,7 @@ assert(docsMap.includes('prd/classroom-guided-entry-plan.md'), 'docs map registe
 assert(classroomGuidedEntryPlan.includes('# Classroom Guided Entry Plan'), 'classroom guided entry PRD exists');
 assert(classroomGuidedEntryPlan.includes('Guided theme entry is primary') && classroomGuidedEntryPlan.includes('open exploration is secondary'), 'guided entry plan records the field-driven guided-first decision');
 assert(classroomGuidedEntryPlan.includes('No required upload') && classroomGuidedEntryPlan.includes('starter humanoid'), 'guided entry plan requires a built-in humanoid workflow without upload');
-assert(classroomGuidedEntryPlan.includes('Digital action -> physical artifact') && classroomGuidedEntryPlan.includes('Make an arm wave'), 'guided entry plan requires direct digital-to-physical theme cards');
+assert(classroomGuidedEntryPlan.includes('Digital action -> physical artifact') && classroomGuidedEntryPlan.includes('Make a hand wave'), 'guided entry plan requires direct digital-to-physical theme cards');
 assert(classroomGuidedEntryPlan.includes('No full-screen tutorial') && classroomGuidedEntryPlan.includes('No backend, auth, roster, analytics, cloud DB, teacher dashboard'), 'guided entry plan keeps tutorial and server scope excluded');
 assert(classroomGuidedEntryPlan.includes('GuidedEntryDescriptor') && classroomGuidedEntryPlan.includes('Persist ids in `ProjectState.metadata`'), 'guided entry plan defines a shared descriptor seam instead of duplicated UI state');
 assert(docsMap.includes('prd/classroom-sensemaking-discoverability-plan.md'), 'docs map registers the classroom sensemaking discoverability plan');
@@ -913,17 +914,18 @@ assert(!serializedLessonForContentCheck.includes('What changed in the') && !seri
 for (const type of ALL_MECHANISM_TYPES) {
   const example = classroomUseExampleFor(type);
   assert.equal(example.mechanismType, type, `${type} classroom use example matches its mechanism type`);
-  assert(example.useCase && example.generatedSummary, `${type} has a generated/local mechanism-use explanation`);
+  assert(example.useCase && example.generatedSummary && example.watchFor && example.studentQuestion, `${type} has a generated/local mechanism-use explanation, observation cue, and student question`);
   assert(formatClassroomUseExampleLabel(example).startsWith(`${CLASSROOM_COPY.useExamplePrefix}:`), `${type} use-example label formatting is centralized`);
   assert.equal(example.clipSlot, 'generated-loop', `${type} keeps generated/local loops as the primary classroom video path`);
-  if (example.youtubeId) {
-    const embedUrl = youtubeNoCookieEmbedUrl(example.youtubeId);
-    assert(embedUrl?.startsWith('https://www.youtube-nocookie.com/embed/'), `${type} optional browser video uses the privacy-enhanced embed host`);
-    assert(!embedUrl?.includes('autoplay'), `${type} optional browser video does not autoplay`);
-  }
+  assert.equal(example.optionalVideoSource, 'youtube-nocookie', `${type} carries a required classroom YouTube source`);
+  assert(example.youtubeId && example.reviewed, `${type} has a reviewed YouTube video id for classroom usage examples`);
+  const embedUrl = youtubeNoCookieEmbedUrl(example.youtubeId);
+  assert(embedUrl?.startsWith('https://www.youtube-nocookie.com/embed/'), `${type} optional browser video uses the privacy-enhanced embed host`);
+  assert(!embedUrl?.includes('autoplay'), `${type} optional browser video does not autoplay`);
 }
 assert(classroomExampleVideoSource.includes('data-testid="classroom-generated-loop"') && classroomExampleVideoSource.includes('fitMechanismSimulation(mechanism, phase') && classroomExampleVideoSource.includes('<MechanismLinkagePreview'), 'classroom example video component shows a local generated loop from the shared mechanism simulation/preview path before any optional external iframe');
 assert(classroomExampleVideoSource.includes('prefers-reduced-motion: reduce') && classroomExampleVideoSource.includes('if (reducedMotion) return;') && classroomExampleVideoSource.includes('data-reduced-motion'), 'classroom generated loops respect reduced-motion by not starting the animation loop');
+assert(classroomExampleVideoSource.includes('Watch for:') && classroomExampleVideoSource.includes('Think:') && classroomExampleVideoSource.includes('data-youtube-id'), 'classroom example video exposes a compact observation cue, student question, and explicit YouTube source id');
 assert.equal(CLASSROOM_COPY.videoUnavailable, 'Video unavailable. Use the generated loop.', 'video fallback copy is owned by the classroom content seam');
 assert(classroomExampleVideoSource.includes('data-testid="classroom-video-fallback"') && classroomExampleVideoSource.includes('CLASSROOM_COPY.videoUnavailable'), 'classroom example video component keeps a local fallback if an optional external video is blocked');
 assert(classroomExampleVideoSource.includes('sandbox="allow-scripts allow-same-origin allow-presentation"') && classroomExampleVideoSource.includes('referrerPolicy="strict-origin-when-cross-origin"') && !classroomExampleVideoSource.includes('clipboard-write') && !classroomExampleVideoSource.includes('gyroscope') && !classroomExampleVideoSource.includes('web-share'), 'optional classroom video embeds use restricted iframe permissions');
@@ -962,11 +964,27 @@ assert.equal(classroomLesson.metadata.classroomLessonLabel, 'Waving arm', 'lesso
 assert.equal(classroomLesson.mechanisms.length, 1, 'waving-arm lesson includes one real fitted mechanism instead of a mock recommendation card');
 assert.equal(classroomLesson.selectedPathId, 'path-right-arm', 'waving-arm lesson selects the editable hand path');
 assert.equal(classroomLesson.selectedMechanismId, 'mech-1', 'waving-arm lesson selects the fitted four-bar mechanism');
+assert.equal(classroomLesson.paths['path-right-arm'].partId, 'right_hand_part', 'waving-arm lesson targets the hand part instead of the lower arm plate');
+assert.equal(classroomLesson.mechanisms[0].targetPartId, 'right_hand_part', 'waving-arm mechanism binds to the hand part instead of the lower arm plate');
 assert.equal(classroomLesson.mechanisms[0].targetAnchorJointId, 'right_hand', 'waving-arm lesson drives the hand end-effector');
+assert.equal(classroomLesson.mechanisms[0].anchorX, 200, 'waving-arm keeps the driver outside the arm path instead of over the character');
+assert.equal(classroomLesson.mechanisms[0].groundAngle, 180, 'waving-arm points the mechanism back toward the character from the outside');
 assert((classroomLesson.mechanisms[0].generatedPath?.length ?? 0) >= 3, 'waving-arm lesson mechanism has generated motion samples for simulation and fit checks');
 const classroomLessonRoundTrip = loadProjectSnapshot(JSON.parse(serializeProject(classroomLesson)));
 assert.equal(classroomLessonRoundTrip.mechanisms[0].groundLength, classroomLesson.mechanisms[0].groundLength, 'lesson load preserves fitted mechanism geometry');
 assert(!validateForFabrication(classroomLessonRoundTrip).errors.some(error => error.includes('path outside sheet')), 'lesson load stays blueprint-ready');
+const recommendationAuditProject: ProjectState = { ...classroomLesson, mechanisms: [], selectedMechanismId: undefined };
+const wavingPathForRecommendations = recommendationAuditProject.paths['path-right-arm'];
+const wavingRecommendations = buildMechanismRecommendations(recommendationAuditProject, recommendationAuditProject.parts[wavingPathForRecommendations.partId], wavingPathForRecommendations);
+const wavingFourBarRecommendation = wavingRecommendations.find(option => option.type === '4bar');
+assert(wavingFourBarRecommendation, 'recommendation audit keeps a valid four-bar card for the classroom hand-wave path');
+assert.deepEqual(wavingFourBarRecommendation!.fabricationErrors, [], 'four-bar recommendation card is fabrication-ready instead of hidden by path-outside validation');
+assert.deepEqual(validateForFabrication({ ...recommendationAuditProject, mechanisms: [wavingFourBarRecommendation!.mechanism] }).errors, [], 'four-bar recommendation board fit validates against physical generated motion, not only the stored preview trace');
+const occupiedAnchorRecommendations = buildMechanismRecommendations(classroomLesson, classroomLesson.parts[classroomLesson.selectedPartId!], classroomLesson.paths['path-right-arm']);
+const occupiedFourBarRecommendation = occupiedAnchorRecommendations.find(option => option.type === '4bar');
+assert.equal(occupiedFourBarRecommendation?.mechanism.targetPartId, 'right_arm_lower', 'recommendations retarget to the closest parent part when the hand anchor already has a driver');
+assert.equal(occupiedFourBarRecommendation?.mechanism.targetAnchorJointId, 'right_hand', 'recommendation retarget keeps the hand end-effector for IK motion');
+assert.deepEqual(validateForFabrication({ ...classroomLesson, mechanisms: [...classroomLesson.mechanisms, { ...occupiedFourBarRecommendation!.mechanism, id: 'recommendation-contract-4bar' }] }).errors, [], 'retargeted recommendation can be added as a second Blueprint-ready mechanism without duplicate-anchor blockers');
 const guidedChainReach = (project: ProjectState, jointIds: string[]) => {
   const skeleton = project.skeleton;
   assert(skeleton, 'guided project has skeleton');
@@ -995,20 +1013,32 @@ const assertGuidedPathUsesReach = (project: ProjectState, pathId: string, chainJ
 };
 assertGuidedPathUsesReach(classroomLesson, 'path-right-arm', ['right_shoulder', 'right_elbow', 'right_hand'], 0.78);
 const headBobLesson = createLessonProject('head-bob');
-assert.equal(headBobLesson.mechanisms[0]?.type, 'cam', 'head-bob guided theme creates a real cam mechanism baseline');
+const headBobMechanism = headBobLesson.mechanisms[0];
+assert(headBobMechanism, 'head-bob has a mechanism');
+assert.equal(headBobMechanism.type, 'cam', 'head-bob guided theme creates a real cam mechanism baseline');
 assert.equal(headBobLesson.selectedPathId, 'path-head-bob', 'head-bob guided theme creates an editable head lift path');
 assert.equal(headBobLesson.paths['path-head-bob'].targetAnchorJointId, 'head_top', 'head-bob drives the top head joint instead of collapsing to the neck');
+assert((headBobMechanism.anchorX ?? -Infinity) > Math.max(...headBobLesson.paths['path-head-bob'].points.map(point => point.x)), 'head-bob keeps the cam driver to the outside of the head path');
 assertGuidedPathUsesReach(headBobLesson, 'path-head-bob', ['neck', 'head_top'], 0.45);
 const walkingLegLesson = createLessonProject('walking-leg');
-assert.equal(walkingLegLesson.mechanisms[0]?.type, '4bar', 'walking-leg guided theme creates a real four-bar mechanism baseline');
+const walkingLegMechanism = walkingLegLesson.mechanisms[0];
+assert(walkingLegMechanism, 'walking-leg has a mechanism');
+assert.equal(walkingLegMechanism.type, '4bar', 'walking-leg guided theme creates a real four-bar mechanism baseline');
 assert.equal(walkingLegLesson.selectedPathId, 'path-right-foot-step', 'walking-leg guided theme creates an editable foot path');
-assert.equal(walkingLegLesson.paths['path-right-foot-step'].partId, 'right_leg_lower', 'walking-leg drives the lower leg so the IK chain can reach the foot target');
+assert.equal(walkingLegLesson.paths['path-right-foot-step'].partId, 'right_foot_part', 'walking-leg drives the foot part instead of the lower leg plate');
+assert.equal(walkingLegMechanism.targetPartId, 'right_foot_part', 'walking-leg mechanism binds to the foot part instead of the lower leg plate');
+assert((walkingLegMechanism.anchorX ?? -Infinity) > Math.max(...walkingLegLesson.paths['path-right-foot-step'].points.map(point => point.x)), 'walking-leg keeps the linkage driver to the outside of the foot path');
+assert.equal(walkingLegMechanism.groundAngle, 180, 'walking-leg points the mechanism back toward the character from the outside');
 assertGuidedPathUsesReach(walkingLegLesson, 'path-right-foot-step', ['right_hip', 'right_knee', 'right_foot'], 0.7);
 const spinGearsLesson = createLessonProject('spin-gears');
 assert.equal(spinGearsLesson.mechanisms[0]?.type, 'gear', 'spin-gears guided theme creates a real gear mechanism baseline');
 assert.equal(spinGearsLesson.selectedPathId, 'path-gear-spin', 'spin-gears guided theme includes a visible hand path for Design/Assembly validation');
-assert.equal(spinGearsLesson.mechanisms[0]?.targetPartId, 'right_arm_lower', 'spin-gears lesson binds the gear motion to an editable character part');
-assert.equal(spinGearsLesson.mechanisms[0]?.anchorX, -40, 'spin-gears lesson keeps the gear pair outside the character centerline');
+assert.equal(spinGearsLesson.mechanisms[0]?.targetPartId, 'right_hand_part', 'spin-gears lesson binds the gear motion to the hand part');
+const spinGearCenters = gearTrainCenters(spinGearsLesson.mechanisms[0]);
+const spinGearRightHandX = spinGearsLesson.skeleton?.joints.right_hand.position.x ?? 0;
+assert.equal(spinGearsLesson.mechanisms[0]?.groundAngle, 180, 'spin-gears drives inward from the outside gear');
+assert.deepEqual(spinGearsLesson.mechanisms[0]?.gearTrainRadii, [60, 20], 'spin-gears uses a large outside drive gear and a smaller moving gear near the hand');
+assert(spinGearCenters[0].x > spinGearRightHandX && (spinGearCenters.at(-1)?.x ?? Infinity) <= spinGearRightHandX, 'spin-gears orders character, moving gear, then outside drive gear');
 assert.throws(() => createLessonProject('missing' as never), /Unknown classroom lesson/, 'invalid classroom lesson IDs fail loudly instead of silently creating blank projects');
 const resetLessonState = resetProjectToLessonBaseline({
   ...classroomLesson,
@@ -1019,7 +1049,7 @@ const resetLessonState = resetProjectToLessonBaseline({
 assert(resetLessonState, 'classroom lesson can reset to a durable baseline');
 assert.equal(resetLessonState?.settings.animationSpeed, 1.7, 'lesson reset preserves app settings while restoring lesson content');
 assert.equal(resetLessonState?.mechanisms.length, 1, 'lesson reset restores the fitted mechanism');
-assert.equal(resetLessonState?.selectedPartId, 'right_arm_lower', 'lesson reset restores the lesson selection baseline');
+assert.equal(resetLessonState?.selectedPartId, 'right_hand_part', 'lesson reset restores the lesson selection baseline');
 assert.equal(emptyProject.partOrder.length, 0, 'empty project starts with no preloaded character parts');
 assert.equal(emptyProject.mechanisms.length, 0, 'empty project starts with no hidden mechanism');
 assert.equal(emptyProject.selectedMechanismId, undefined, 'empty project starts with no selected mechanism');
@@ -1049,6 +1079,8 @@ assert(sample.partOrder.every(id => ['#cbd5e1', '#e2e8f0', '#b6c2d2', '#d1d5db',
 assert.equal(sample.mechanisms[0].targetAnchorJointId, 'right_hand', 'sample waving arm drives the hand, not the shoulder root');
 assert.deepEqual(motionAnchorJointIds(sample, 'right_arm_lower'), ['right_elbow', 'right_hand'], 'IK handle choices stay inside the selected lower-limb part');
 assert.deepEqual(motionChainRootJointIds(sample, 'right_arm_lower', 'right_hand'), ['right_shoulder', 'right_elbow', 'right_hand'], 'IK chain root choices expose every ancestor from part root to handle');
+assert.deepEqual(motionChainRootJointIds(sample, 'right_hand_part', 'right_hand'), ['right_shoulder', 'right_elbow', 'right_hand'], 'hand targets can still drive the whole arm IK chain');
+assert.deepEqual(motionChainRootJointIds(sample, 'right_foot_part', 'right_foot'), ['right_hip', 'right_knee', 'right_foot'], 'foot targets can still drive the whole leg IK chain');
 assert.equal(preferredMotionJointId(sample, 'right_arm_lower', 'left_hand'), 'right_elbow', 'invalid IK anchor falls back to the target part root');
 
 const replacementBase = createSampleProject({ includeMechanism: true });
@@ -1136,19 +1168,65 @@ REFERENCE_EXPORT_READY_TYPES.forEach(type => {
     const firstBoardIndex = step.coordRoles.findIndex(isBoardFixedCoordRole);
     const expectedBoardCoordinate = step.coords[firstBoardIndex >= 0 ? firstBoardIndex : 0] ?? '';
     assert.equal(step.boardCoordinate, expectedBoardCoordinate, `${type} step ${step.index} boardCoordinate follows the first board role, not a moving reference`);
-    assert(step.stack.some(layer => layer.role === 'paper-fastener'), `${type} step ${step.index} stack includes a paper fastener`);
     const orders = step.stack.map(layer => layer.order);
     assert.deepEqual(orders, [...new Set(orders)].sort((a, b) => a - b), `${type} step ${step.index} stack orders are strictly increasing`);
-    step.stack
-      .filter(layer => layer.role === 'spacer' || layer.role === 'top-spacer')
-      .forEach(layer => assert.equal(layer.part, 'spacers:s10', `${type} step ${step.index} spacer layer uses S10`));
+    if (type === 'cam') {
+      assert(step.coords.every(coord => /^[A-O](?:[1-9]|1[0-5])$/.test(coord)), `cam step ${step.index} stays on the 15x15 pegboard coordinate frame`);
+      assert(!JSON.stringify(step.stack).match(/S10 spacer|Eccentric cam|Round follower|2-hole bracket/i), `cam step ${step.index} does not use the old generic cam stack`);
+    } else {
+      assert(step.stack.some(layer => layer.role === 'paper-fastener'), `${type} step ${step.index} stack includes a paper fastener`);
+      step.stack
+        .filter(layer => layer.role === 'spacer' || layer.role === 'top-spacer')
+        .forEach(layer => assert.equal(layer.part, 'spacers:s10', `${type} step ${step.index} spacer layer uses S10`));
+    }
   });
   assert.deepEqual(
-    prefabAssemblySteps(createDefaultMechanism(type, `prefab-${type}-contract`), 'H8').map(step => step.boardCoordinate),
+    prefabAssemblySteps(createDefaultMechanism(type, `prefab-${type}-contract`), recipe.assemblySteps[0].boardCoordinate).map(step => step.boardCoordinate),
     recipe.assemblySteps.map(step => step.boardCoordinate),
     `${type} prefab assembly keeps mechanism-reference board/moving coordinate semantics`
   );
 });
+const shiftedPlanetarySteps = prefabAssemblySteps(createDefaultMechanism('planetary_gear', 'prefab-planetary-shifted'), 'J9');
+assert.deepEqual(
+  shiftedPlanetarySteps[1].coords,
+  ['F9', 'J5', 'J13', 'N9'],
+  'planetary assembly ring holes translate with the placed sun axle so Blueprint and Assembly share board coordinates'
+);
+const shiftedFourBarSteps = prefabAssemblySteps({
+  ...createDefaultMechanism('4bar', 'prefab-fourbar-resized'),
+  crankLength: linkageSceneLengthByCells(4),
+  couplerLength: linkageSceneLengthByCells(6),
+  rockerLength: linkageSceneLengthByCells(4)
+}, 'H8');
+assert(shiftedFourBarSteps.some(step => step.stack?.some(item => item.label === 'Input L4 linkage')), '4bar assembly stack labels follow edited input link size');
+assert(shiftedFourBarSteps.some(step => step.stack?.some(item => item.label === 'Coupler L6 linkage')), '4bar assembly stack labels follow edited coupler link size');
+const twoCellGroundFourBarSteps = prefabAssemblySteps({
+  ...createDefaultMechanism('4bar', 'prefab-fourbar-ground-2'),
+  groundLength: linkageSceneLengthByCells(2)
+}, 'H8');
+const sixCellGroundFourBarSteps = prefabAssemblySteps({
+  ...createDefaultMechanism('4bar', 'prefab-fourbar-ground-6'),
+  groundLength: linkageSceneLengthByCells(6)
+}, 'H8');
+assert.deepEqual(twoCellGroundFourBarSteps[0].coords, ['H8', 'H10'], '4bar Assembly places the second board pivot from the edited two-hole ground span');
+assert.deepEqual(sixCellGroundFourBarSteps[0].coords, ['H8', 'H14'], '4bar Assembly places the second board pivot from the edited six-hole ground span');
+assert.notDeepEqual(twoCellGroundFourBarSteps[0].coords, sixCellGroundFourBarSteps[0].coords, '4bar Assembly coordinates are derived from edited geometry instead of frozen recipe defaults');
+const edgeFourBarSteps = prefabAssemblySteps({
+  ...createDefaultMechanism('4bar', 'prefab-fourbar-edge'),
+  groundLength: linkageSceneLengthByCells(6),
+  crankLength: linkageSceneLengthByCells(4),
+  couplerLength: linkageSceneLengthByCells(6),
+  rockerLength: linkageSceneLengthByCells(4)
+}, 'M15');
+assert(edgeFourBarSteps.flatMap(step => (step.coords ?? []).filter((_, index) => !isBoardFixedCoordRole(step.coordRoles?.[index] ?? ''))).every(coord => !coord.startsWith('off-board')), '4bar Assembly keeps floating link references readable even when board pivots would exceed the 15x15 kit');
+const idlerGearAssemblySteps = prefabAssemblySteps({
+  ...createDefaultMechanism('gear', 'prefab-gear-idler'),
+  crankLength: gearSceneRadiusByKey('g40'),
+  rockerLength: gearSceneRadiusByKey('g24'),
+  gearTrainRadii: [gearSceneRadiusByKey('g40'), gearSceneRadiusByKey('g8'), gearSceneRadiusByKey('g24')]
+}, 'H8');
+assert(idlerGearAssemblySteps.some(step => /idler/i.test(step.label) && step.coords?.length === 1 && step.coordRoles?.[0] === 'board'), 'gear train Assembly adds board-snapped idler gear steps when the gear train has middle gears');
+assert(idlerGearAssemblySteps.filter(step => step.coordRoles?.some(isBoardFixedCoordRole)).length >= 3, 'gear train Assembly exposes drive, idler, and output build spots to Blueprint');
 assert(isBoardFixedCoordRole('board'), 'mechanism-reference board role is board-fixed');
 assert(isBoardFixedCoordRole('board_axle'), 'mechanism-reference compatibility board_axle role is board-fixed');
 assert(!isBoardFixedCoordRole('link_joint_reference'), 'mechanism-reference floating link joints are not board-fixed');
@@ -1269,7 +1347,11 @@ assert(!mechanismFeature('gear').interactionPolicy(createDefaultMechanism('gear'
 assert(mechanismFeature('gear_linkage').interactionPolicy(createDefaultMechanism('gear_linkage')).editableParameters.includes('couplerLength'), 'gear-linkage Foundry/Design editing exposes the paired linkage length');
 assert(!mechanismFeature('gear_linkage').interactionPolicy(createDefaultMechanism('gear_linkage')).editableParameters.includes('groundLength'), 'gear-linkage Foundry/Design editing derives endpoint span from selected gears and idlers');
 assert(!mechanismFeature('planetary_gear').interactionPolicy(createDefaultMechanism('planetary_gear')).editableParameters.includes('groundLength'), 'planetary gear editing keeps the fixed G1/G3/R56 kit geometry');
+assert.deepEqual(mechanismFeature('planetary_gear').interactionPolicy(createDefaultMechanism('planetary_gear')).editableParameters, ['phase'], 'planetary gear exposes only visual phase once G1/G3/R56 kit geometry is fixed');
 assert(mechanismFeature('cam').interactionPolicy(createDefaultMechanism('cam')).editableParameters.includes('camProfileSamples'), 'cam Foundry/Design editing exposes the editable lift profile');
+assert(!mechanismFeature('cam').interactionPolicy(createDefaultMechanism('cam')).editableParameters.includes('crankLength'), 'cam hides fixed module radii from generic numeric editing');
+assert(!mechanismFeature('cam').interactionPolicy(createDefaultMechanism('cam')).editableParameters.includes('rockerLength'), 'cam hides fixed guide travel from generic numeric editing');
+assert(!mechanismFeature('piston').interactionPolicy(createDefaultMechanism('piston')).editableParameters.includes('rodLength'), 'slider-crank piston hides fixed kit rod dimensions from generic numeric editing');
 const sampleMechanismId = sample.mechanisms[0].id;
 const snapshotBeforeProject = serializeProject(sample);
 const snapshotA = buildMechanismSnapshot(sample, sampleMechanismId);
@@ -1420,14 +1502,14 @@ assert.deepEqual(
   Object.fromEntries(Object.entries(goldenMaster).map(([key, value]) => [key, goldenMasterHash(value)])),
   {
     project: 'c0a40356edfa044d9f24b6f20488fa9cc61bc2a15b2b9dc9cae3171fcfc30969',
-    lesson: '3d7cb3b1d75a14980ae2e141ac75a1fb8a88f682327491eef60e5065e00dbbaf',
-    mechanismSnapshot: 'a46c8933565b5ed3b0481588514f347c5a4542ff4262916c3eeacb2ed89b73dc',
-    allMechanismSnapshots: 'e3a5c2be05c51e131ee9d4aba3ff2a05ae4dbf2e62a35631ec317fa8c6032e9b',
+    lesson: '218c51f1485796632234dc0f9b6381291362b7f9dafd16e55bfb2f95ec70aca5',
+    mechanismSnapshot: 'eeca40de978ca6d22327e60e6b82dd5f67bfe2905c207cadd4031b26c98d90d0',
+    allMechanismSnapshots: 'dc2bfd1e6294d5be54dde8487cbb1b7a52b52275ee52a3689d7a30ef63114127',
     sceneProjection: '64b01ae59502ee6a8f04bdad651418565e1fb1e9593d7a6178cea04425dd1605',
     svg: '943626770ae697a566ce73edfcf282215c4e55f82e77575d7df7393eeb1eb5d3',
     dxf: 'dc52ca1acfa24ad70ae9028c58ad48a6c64fb5a8dcebf9fe4db2562d2d8aa336',
-    fabricationRecipes: 'bf988544dd88e9f60547e67f913323c6c51e7eabe85c9d46437192b846eff005',
-    foundryRenderPlans: '90002ef13c808509243cb551dc777ceb84f980e7279e83eeb840c90821b103ea',
+    fabricationRecipes: '1cf4bd06d0016d0c02df2c3fc3afaa599797b2cbf7732a9d17c2abaae8722870',
+    foundryRenderPlans: '089b7d2e9163cc070923923f9e1e56382ab7c1d14aa8157a8c85eebc801d72c6',
     stacks: '56b797c659cdb568281fca6034cd9f4360766302039f325b0c9d73ced144987f'
   },
   'golden master locks ProjectState, mechanism snapshot, scene projection, export, and fabrication stack behavior before App.tsx refactors'
@@ -1469,6 +1551,36 @@ assert(linkageSceneLengthIsFabricationPreset(offSetFourBar.crankLength), 'four-b
 assert(linkageSceneLengthIsFabricationPreset(offSetFourBar.couplerLength), 'four-bar coupler snaps to one of the four fabricated linkage sizes');
 assert(linkageSceneLengthIsFabricationPreset(offSetFourBar.rockerLength), 'four-bar output link snaps to one of the four fabricated linkage sizes');
 assert.equal(offSetFourBar.groundLength, 120, 'four-bar ground span snaps to a board-hole pitch distance instead of preserving arbitrary path-fit offsets');
+const fabricationSetCam = normalizeMechanismToFabricationSet({
+  ...createDefaultMechanism('cam', 'fabrication-set-cam'),
+  crankLength: 99,
+  rockerLength: 222,
+  sliderOffset: 44,
+  groundAngle: -15,
+  couplerLength: 77
+});
+assert.equal(fabricationSetCam.groundAngle, 90, 'cam fabrication set keeps the vertical guide contract');
+assert.equal(fabricationSetCam.groundLength, 0, 'cam fabrication set keeps the pegboard module ground span fixed');
+assert.equal(fabricationSetCam.crankLength, REFERENCE_DEFAULTS.cam.radius, 'cam fabrication set restores the swappable cam disk reference radius');
+assert.equal(fabricationSetCam.sliderOffset, REFERENCE_DEFAULTS.cam.followerRadius, 'cam fabrication set restores the follower head radius');
+assert.equal(fabricationSetCam.rockerLength, REFERENCE_DEFAULTS.cam.followerTravel, 'cam fabrication set restores the guide travel');
+assert.equal(fabricationSetCam.couplerLength, 0, 'cam fabrication set drops stale linkage coupler dimensions');
+const fabricationSetPiston = normalizeMechanismToFabricationSet({
+  ...createDefaultMechanism('piston', 'fabrication-set-piston'),
+  crankLength: 99,
+  couplerLength: 47,
+  rodLength: 61,
+  rockerLength: 30,
+  sliderOffset: 22,
+  groundAngle: 40
+});
+assert.equal(fabricationSetPiston.groundAngle, 0, 'piston fabrication set keeps the horizontal guide contract');
+assert.equal(fabricationSetPiston.groundLength, 0, 'piston fabrication set keeps the slider module ground span fixed');
+assert.equal(fabricationSetPiston.crankLength, REFERENCE_DEFAULTS.sliderCrank.crank, 'piston fabrication set restores the crank radius');
+assert.equal(fabricationSetPiston.couplerLength, REFERENCE_DEFAULTS.sliderCrank.rod, 'piston fabrication set restores the connecting rod');
+assert.equal(fabricationSetPiston.rodLength, REFERENCE_DEFAULTS.sliderCrank.rod, 'piston fabrication set keeps rodLength and couplerLength aligned');
+assert.equal(fabricationSetPiston.rockerLength, 0, 'piston fabrication set removes stale rocker dimensions');
+assert.equal(fabricationSetPiston.sliderOffset, REFERENCE_DEFAULTS.sliderCrank.guideOffset, 'piston fabrication set restores the guide offset');
 const loadedSetOnlyGear = loadProjectSnapshot({
   ...createEmptyProject(),
   mechanisms: [{
@@ -1509,6 +1621,7 @@ type FabricationManifest = {
   followers: Array<{ key: string; label: string; engraving_label: string; path: string }>;
   brackets: Array<{ key: string; label: string; engraving_label: string; path: string }>;
   handles: Array<{ key: string; label: string; engraving_label: string; path: string }>;
+  cam_modules: Array<{ key: string; label: string; engraving_label: string; path: string; module_kind: string; hole_diameter_mm: number; hole_count: number; hole_centers_mm: number[][]; contract: string }>;
   spacers: Array<{ key: string; label: string; engraving_label: string; path: string; outer_diameter_mm: number; inner_diameter_mm: number; hole_diameter_mm: number; hole_centers_mm: number[][]; stackable: boolean }>;
   };
 };
@@ -1554,6 +1667,11 @@ assert(
 const mechanismReferenceText = readFileSync('docs/mechanism-reference/03-mechanism-unit-specs.md', 'utf-8');
 assert(mechanismReferenceText.includes('external gear train are coplanar on fixed board axles'), 'gear train mechanism reference requires inserted idler gears to share one pitch plane');
 assert(mechanismReferenceText.includes('must pass through the gear centre and the adjacent board-side `S10` spacer'), 'gear train mechanism reference requires visible axles to pass through gears and local board-side spacers');
+assert(mechanismReferenceText.includes('Pegboard-mounted gravity cam follower module'), 'cam mechanism reference names the pegboard-mounted gravity module contract');
+assert(mechanismReferenceText.includes('15×15 pegboard remains the only standardized base'), 'cam mechanism reference keeps the pegboard as the only base');
+assert(mechanismReferenceText.includes('integrates guide side rails, front cover, top stop, bottom stop, and peg connector tabs'), 'cam guide cartridge integrates side rails and stops instead of loose rails');
+assert(mechanismReferenceText.includes('Preassembled gravity follower module'), 'cam mechanism reference requires a preassembled gravity follower module');
+assert(mechanismReferenceText.includes('No rubber bands, springs, metal bearings, plastic spacers'), 'cam mechanism reference excludes non-classroom gravity preload hardware');
 assert(fabricationRuntimeText.includes("from './fabricationContract'"), 'fabrication runtime consumes centralized fabricationContract instead of hardcoded primitive tables');
 assert(
   fabricationRuntimeText.includes("from './fabricationBlueprintSvg'")
@@ -1675,7 +1793,7 @@ assert(
 });
 assert.deepEqual(
   staticImportModules(fabricationAssemblyGuideText),
-  ['../types', './fabricationContract', './fabricationRecipes', './fabricationStackModel', './simplePdf'].sort(),
+  ['../types', './fabricationContract', './fabricationRecipes', './fabricationStackModel', './kinematics', './simplePdf'].sort(),
   'fabricationAssemblyGuide owns assembly guide artifacts with an exact focused import set'
 );
 [
@@ -1815,7 +1933,7 @@ assert.deepEqual(
 });
 assert.deepEqual(
   staticImportModules(fabricationBlueprintSvgText),
-  ['../types', './coordinates', './fabricationContract', './mechanismReference', './numberFormat', './partGeometry'].sort(),
+  ['../types', './coordinates', './fabricationCharacterPrintLayout', './fabricationContract', './kinematics', './mechanismReference', './numberFormat', './partGeometry'].sort(),
   'fabricationBlueprintSvg owns deterministic Blueprint SVG rendering with an exact focused import set'
 );
 [
@@ -2062,7 +2180,7 @@ try {
   assert.equal(generatedManifest.hole_diameter_mm, fabricationManifest.hole_diameter_mm, 'generator reproduces the committed hole diameter');
   assert.equal(generatedManifest.generated_by, 'fabrication/generate_fabrication_templates.py', 'regenerated manifest keeps the checked-in generator path');
   assert.equal(generatedManifest.source_ssot, 'fabrication/generate_fabrication_templates.py', 'regenerated manifest keeps the checked-in source-of-truth path');
-  (['gears', 'linkages', 'ring_gears', 'cams', 'followers', 'brackets', 'handles', 'spacers'] as const).forEach(category => {
+  (['gears', 'linkages', 'ring_gears', 'cams', 'followers', 'brackets', 'handles', 'spacers', 'cam_modules'] as const).forEach(category => {
     assert.deepEqual(generatedManifest.parts[category], fabricationManifest.parts[category], `regenerated ${category} primitives match the committed fabrication contract`);
   });
   assert.deepEqual(generatedManifest.managed_files, fabricationManifest.managed_files, 'regenerated fabrication package contains the committed managed-file set');
@@ -2422,7 +2540,7 @@ const completeKitPartGroups = [...completeKitCutSheet.matchAll(/<g class="comple
 assert.deepEqual(fabricationManifest.complete_cut_sheet.part_quantities, completeKitExpectedQuantities, 'complete kit quantities are two gear sets, two linkage sets, and 24 spacers');
 assert.equal(fabricationManifest.complete_cut_sheet.part_count, 40, 'complete kit has 40 physical parts');
 assert.deepEqual(fabricationManifest.complete_cut_sheet.included_part_categories, ['gears', 'linkages', 'spacers'], 'complete kit schema declares included part categories');
-assert.deepEqual(fabricationManifest.complete_cut_sheet.excluded_part_categories, ['ring_gears', 'cams', 'followers', 'brackets', 'handles'], 'complete kit schema declares excluded part categories');
+assert.deepEqual(fabricationManifest.complete_cut_sheet.excluded_part_categories, ['ring_gears', 'cams', 'followers', 'brackets', 'handles', 'cam_modules'], 'complete kit schema declares excluded part categories');
 assert.deepEqual(
   Object.fromEntries([...completeKitPartGroups].map(([partId, groups]) => [partId, groups.length])),
   completeKitExpectedQuantities,
@@ -2881,9 +2999,56 @@ assert(
     ),
   '4bar path fitting exposes the closest physical B/C joint trace as the generated mechanism path',
 );
+const nearestGeneratedPathError = (generated: Point[], target: Point[]) => {
+  if (!generated.length || !target.length) return Number.POSITIVE_INFINITY;
+  return generated.reduce((sum, point) => {
+    const nearest = target.reduce(
+      (best, targetPoint) => Math.min(best, Math.hypot(point.x - targetPoint.x, point.y - targetPoint.y)),
+      Number.POSITIVE_INFINITY,
+    );
+    return sum + nearest;
+  }, 0) / generated.length;
+};
+const gearLinkageFitSeed = createDefaultMechanism('gear_linkage', 'foundry-gear-linkage-fit-contract');
+const gearLinkageFitContract = fitMechanismToTargetPath(sample, gearLinkageFitSeed, 'path-right-arm');
+const gearLinkageTargetPath = sample.paths['path-right-arm'];
+const defaultGearLinkageTarget = mechanismWithGeneratedPath({
+  ...gearLinkageFitSeed,
+  targetPartId: gearLinkageTargetPath.partId,
+  targetPathId: gearLinkageTargetPath.id,
+  targetAnchorJointId: gearLinkageTargetPath.targetAnchorJointId,
+  activeVisualPartIds: [gearLinkageTargetPath.partId],
+});
+const gearLinkageGenerated = gearLinkageFitContract.generatedPath ?? [];
+const gearLinkageTraces = generateMechanismPointTraces(gearLinkageFitContract, gearLinkageGenerated.length).traces;
+const gearLinkageSharedTrace = gearLinkageTraces.find(trace => trace.id === 'R');
+const gearLinkageGearPinTrace = gearLinkageTraces.find(trace => trace.id === 'B');
+assert.equal(gearLinkageFitContract.targetPathId, 'path-right-arm', 'gear linkage Fit writes the selected drawn path');
+assert.equal(gearLinkageFitContract.targetPartId, gearLinkageTargetPath.partId, 'gear linkage Fit keeps the selected motion target part');
+assert(!gearLinkageFitContract.warnings?.some(warning => /No motion|choose target/i.test(warning)), 'gear linkage Fit does not fall back to a no-target/no-motion candidate');
+assert.equal(validateMechanismPreviewReadiness(gearLinkageFitContract).length, 0, 'gear linkage Fit returns a preview-ready mechanism');
+assert.equal(validateForFabrication({ ...sample, mechanisms: [gearLinkageFitContract] }).errors.length, 0, 'gear linkage Fit returns a fabrication-valid mechanism without duplicate-driver noise');
+assert(
+  gearLinkageGenerated.length > 1 &&
+    gearLinkageSharedTrace?.points.length === gearLinkageGenerated.length &&
+    Math.hypot(gearLinkageGenerated[0].x - gearLinkageSharedTrace.points[0].x, gearLinkageGenerated[0].y - gearLinkageSharedTrace.points[0].y) < 1e-6,
+  'gear linkage Fit uses the shared linkage meeting point R as the motion target trace',
+);
+assert(
+  gearLinkageGearPinTrace &&
+    Math.hypot(gearLinkageGenerated[0].x - gearLinkageGearPinTrace.points[0].x, gearLinkageGenerated[0].y - gearLinkageGearPinTrace.points[0].y) > 10,
+  'gear linkage Fit does not use the output gear pin B as the motion target trace',
+);
+const gearLinkageFitError = nearestGeneratedPathError(gearLinkageGenerated, gearLinkageTargetPath.points);
+const gearLinkageDefaultError = nearestGeneratedPathError(defaultGearLinkageTarget.generatedPath ?? [], gearLinkageTargetPath.points);
+assert(
+  gearLinkageFitError < 45 && gearLinkageFitError < gearLinkageDefaultError * 0.6,
+  'gear linkage Fit moves the shared linkage trace near the user path instead of leaving the default pose',
+);
 assert(mechanismFoundryText.includes('<FoundryInspectorPanel') && foundryInspectorPanelText.includes('testId="foundry-parametric-editor"') && foundryInspectorPanelText.includes('Mechanism options') && foundryInspectorPanelText.includes('data-testid="foundry-view-controls"'), 'MechanismFoundry delegates the right Foundry inspector without changing parametric editor, compact view controls, or advanced options');
 assert(foundryInspectorPanelText.includes('data-testid="foundry-visible-sensemaking"') && foundryInspectorPanelText.includes('<ClassroomExampleVideo') && !foundryWorkflowPanelText.includes('data-testid="foundry-visible-sensemaking"') && !foundryInspectorPanelText.includes('Preview overlays') && !foundryInspectorPanelText.includes('foundry-physics-readout'), 'Foundry right inspector owns sensemaking first while removing stale preview-overlay and Motion readout cards');
 assert(mechanismFoundryText.includes('<FoundryCanvasPane') && foundryCanvasPaneText.includes('<ThreeFoundryPreview') && foundryCanvasPaneText.includes('<FoundryOverlayLayer') && foundryCanvasChromeText.includes('data-testid="foundry-toolbar"') && foundryCanvasChromeText.includes('data-testid="foundry-camera-controls"') && foundryOverlayLayerText.includes('data-testid="foundry-preview-overlay"') && foundryOverlayLayerText.includes('data-testid="foundry-param-handles"') && foundryCanvasPaneText.includes('data-testid="foundry-toolbar-state"') && foundryCanvasPaneText.includes('data-testid="foundry-motion-warning"'), 'MechanismFoundry delegates the center Foundry canvas while warning overlays live above playback controls');
+assert(foundryOverlayLayerText.includes('data-handle-contract="move-anchor-plus-shape-handles"') && foundryOverlayLayerText.includes('data-handle-ids=') && mechanismFoundryText.includes('id: "M"') && mechanismFoundryText.includes('applyAnchor({') && mechanismFoundryText.includes('setSelectedOutputTraceId') && foundryCanvasChromeText.includes('data-testid="foundry-cycle-output-trace"'), 'Foundry exposes a shared move handle and a selectable Mech Path target instead of limiting direct manipulation to 4bar B/C/D handles');
 assert(foundryWorkflowPanelText.includes('<MechanismLinkagePreview') && mechanismLinkagePreviewText.includes('export const MechanismLinkagePreview') && mechanismLinkagePreviewText.includes('mechanismLinkagePreviewHelpers') && mechanismLinkagePreviewHelpersText.includes('mechanismReferenceTopologySummary') && mechanismLinkagePreviewHelpersText.includes('camProfilePathD') && foundryPreviewGeometryText.includes('export const fittedGearTrainCenters'), 'Foundry workflow delegates 2D Foundry SVG preview to extracted foundry renderer/helper seams');
 assert(foundryWorkflowPanelText.includes('ghostSimulations') && foundryWorkflowPanelText.includes('foundry-mini-ghost'), 'Foundry gallery cards show moving front-view mechanism poses instead of a single static icon');
 assert(threeFoundryPreviewText.includes('foundryRenderedInventory(mechanism.type)') && foundryRenderInventoryText.includes('export const foundryRenderedInventory') && foundryRenderInventoryText.includes('referenceRequiredPartsHoleCount'), 'Foundry Three renderer delegates rendered inventory counts to a pure helper');
@@ -2991,6 +3156,8 @@ assert(mechanismDesignText.includes('<DesignFoundryPreview') && designFoundryPre
 assert(designFoundryPreviewText.includes('<ThreeFoundryPreview') && !designFoundryPreviewText.includes('<ThreePuppetPreview') && !designFoundryPreviewText.includes('design-foundry-context-layer') && designFoundryPreviewText.includes('automataContext={automataContext}') && foundryCanvasPaneText.includes('<ThreeFoundryPreview'), 'Design renders mechanism plus character/object context inside the same Foundry Three scene instead of a parallel puppet overlay');
 assert(designFoundryPreviewText.includes('data-renderer-source="ThreeFoundryPreview"') && designFoundryPreviewText.includes('data-shared-with="foundry-renderer"') && designFoundryPreviewText.includes('data-design-scene-mode="single-foundry-automata-scene"') && designFoundryPreviewText.includes('data-automata-model-source="buildAutomataSceneModel"'), 'Mechanism Design advertises single-scene Foundry-renderer mechanism truth with automata telemetry');
 assert(automataSceneModelText.includes('mechanismFeature(normalizedMechanism.type)') && automataSceneModelText.includes('const mechanisms = normalizedMechanisms.length ? normalizedMechanisms : [normalizedMechanism]') && automataSceneModelText.includes('motionPreviewForProject(project, mechanisms, angle)') && automataSceneModelText.includes('motionPreviewForProject(project, [normalizedMechanism], angle)'), 'Automata scene model reuses Foundry registry semantics, drives the full automata scene, and reads the selected IK/object target for inspector feedback');
+assert(foundry3dText.includes('const placeFoundryLocalGroup') && foundry3dText.includes('group.rotation.z = (-transform.rotation * Math.PI) / 180') && foundry3dText.includes('const placeSceneLocalGroup') && foundry3dText.includes('group.rotation.z = (transform.rotation * Math.PI) / 180'), 'Foundry keeps y-down fit-space rotations separate from scene-preserving automata rotations');
+assert(foundryPreviewModelText.includes("frame: 'fit' | 'scene' = 'fit'") && automataSceneModelText.includes("'scene'"), 'Design/Assembly automata previews request the scene-preserving Foundry preview frame instead of re-fitting the character scene');
 assert(foundry3dText.includes('data-three-stack-source') && designFoundryPreviewText.includes('data-foundry-feature-label') && designFoundryPreviewText.includes('data-foundry-feature-issue-count'), 'Mechanism Design exposes Foundry feature provenance for browser verification');
 assert(!appText.includes('<Canvas project={project} config={mechanismConfig}'), 'Mechanism Design no longer mounts the legacy 2D design canvas mechanism renderer');
 assert(exporterText.includes('fabricationGearPathD'), 'SVG export gear rendering uses shared fabrication gear geometry');
@@ -3003,13 +3170,28 @@ assert(assemblyThreePreviewText.includes('viewerTab="assembly"') && assemblyThre
 assert(!automataSceneModelText.includes('firstVisiblePath'), 'Automata scene model does not silently pick a different first-visible path than Foundry when no explicit/selected path exists');
 assert(designAutomataProjectionText.includes('buildAutomataSceneModel') && !designAutomataProjectionText.includes('motionPreviewForProject') && !designAutomataProjectionText.includes('mechanismFeature('), 'Legacy Design projection file is a thin compatibility wrapper around the canonical automata scene model');
 {
-  const fixture = createSampleProject({ includeMechanism: true });
+  const fixture = createLessonProject('waving-arm');
   const mechanism = fixture.mechanisms[0]!;
   const canonical = buildAutomataSceneModel(fixture, mechanism, Math.PI * 0.42, 'design-live');
   const compat = buildDesignAutomataProjection(fixture, mechanism, Math.PI * 0.42);
   assert.equal(compat.foundryPreview?.mechanism.id, canonical.foundryPreview?.mechanism.id, 'Design compatibility wrapper returns the same Foundry mechanism instance as the canonical automata model');
   assert.equal(compat.foundryPreview?.previewPoints.length, canonical.foundryPreview?.previewPoints.length, 'Design compatibility wrapper returns the same Foundry preview trace as the canonical automata model');
   assert.equal(canonical.userPath?.id, 'path-right-arm', 'Canonical automata model uses the explicit/selected path for fitted previews');
+  assert.equal(canonical.motionSource, 'generatedPath', 'Canonical automata model drives the scene from the generated mechanism path when a fitted path exists');
+  assert(canonical.generatedTarget && canonical.target, 'Canonical automata model exposes both generated mechanism output and selected IK target');
+  assert((canonical.targetError ?? Number.POSITIVE_INFINITY) < 1e-9, 'Canonical automata model keeps the selected IK target attached to the generated mechanism output');
+  const drivenHand = canonical.animatedParts.right_hand_part;
+  assert(drivenHand && canonical.generatedTarget && canonical.skeleton, 'Canonical automata model animates the hand target part through IK');
+  const handPivot = bodyPartPivotScene(drivenHand, canonical.skeleton);
+  assert(Math.hypot(handPivot.x - canonical.generatedTarget!.x, handPivot.y - canonical.generatedTarget!.y) < 1e-6, 'Driven hand part pivot stays on the fitted mechanism output in scene coordinates');
+  const sceneFit = createSceneMechanismFitContext(mechanism, 360, 240, 96);
+  const sceneOrigin = sceneFit.map({ x: 0, y: 0 });
+  const sceneUp = sceneFit.map({ x: 0, y: 100 });
+  assert(sceneUp.y < sceneOrigin.y, 'Scene-preserving Foundry preview keeps positive scene Y visually upward instead of flipping Character/Path composition');
+  const firstUserPoint = fixture.paths['path-right-arm'].points[0]!;
+  const firstPreviewPoint = canonical.foundryPreview!.userPathPoints[0]!;
+  const firstScenePoint = sceneFit.map(firstUserPoint);
+  assert(Math.hypot(firstPreviewPoint.x - firstScenePoint.x, firstPreviewPoint.y - firstScenePoint.y) < 1e-9, 'Design Foundry preview maps the user path through the fixed scene frame instead of centering it independently');
   const noSelectedPathProject = {
     ...fixture,
     selectedPathId: undefined,
@@ -3024,7 +3206,14 @@ assert(mechanismRecommendationsText.includes('.filter((option) => option.fabrica
 assert(mechanismRecommendationsText.includes('const initialMechanism = createRecommendedMechanism(') && mechanismRecommendationsText.includes('fitRecommendedMechanismToSheet(') && mechanismRecommendationsText.includes('readyMechanismFallbackForPath('), 'mechanism recommendations retry with a sheet-fitted fabrication-ready fallback before hiding a candidate');
 assert(!mechanismRecommendationsText.includes('fitMechanismGeneratedPathToPath') && !designFoundryPreviewText.includes('fitMechanismGeneratedPathToPath') && !appText.includes('fitMechanismGeneratedPathToPath'), 'mechanism recommendations must not center-shift physical templates away from hole-snapped anchors');
 assert(mechanismRecommendationsText.includes('normalizeGearMeshMechanism(') && mechanismRecommendationsText.includes('normalizeMechanismToReference(tuned)'), 'mechanism recommendations pass through fabrication-set normalization before fitting to the sheet');
-assert(mechanismRecommendationsText.includes('project.mechanisms.filter(') && mechanismRecommendationsText.includes('m.id !== mechanism.id') && mechanismRecommendationsText.includes('mechanisms: [...siblingMechanisms, mechanism]'), 'fabrication candidate validation replaces matching mechanisms instead of appending duplicate target drivers during refit');
+assert(
+  mechanismRecommendationsText.includes('project.mechanisms.filter((m) => {') &&
+    mechanismRecommendationsText.includes('if (m.id === mechanism.id) return false') &&
+    mechanismRecommendationsText.includes('m.targetPathId === mechanism.targetPathId') &&
+    mechanismRecommendationsText.includes('preferredMotionJointId(project, mechanism.targetPartId, m.targetAnchorJointId) === targetAnchor') &&
+    mechanismRecommendationsText.includes('mechanisms: [...siblingMechanisms, mechanism]'),
+  'fabrication candidate validation replaces the matching target/path/anchor driver instead of appending duplicate target drivers during refit',
+);
 assert(mechanismRecommendationsText.includes('const fittedErrors = fabricationErrorsForCandidate(project, fittedCandidate)') && mechanismRecommendationsText.includes('const fallbackErrors = fabricationErrorsForCandidate(project, fallback)'), 'path fitting gates fitted mechanisms through full fabrication validation, not preview-only geometry');
 assert(mechanismRecommendationsText.includes('const unchanged = mechanismWithGeneratedPath(') && mechanismRecommendationsText.includes('const unchangedErrors = fabricationErrorsForCandidate(project, unchanged)'), 'path fitting falls back to the previous/snapped mechanism instead of returning an invalid fit candidate');
 assert(mechanismRecommendationsText.includes('previousAnchor') && mechanismRecommendationsText.includes('gridPitchMm * SCENE_PX_PER_MM'), 'recommendation sheet fitting nudges by whole board holes when a sub-hole correction snaps back to the same invalid anchor');
@@ -3154,6 +3343,9 @@ assert.equal(WEBGL_PIXEL_RATIO_CAP, 1.5, 'WebGL pixel-ratio cap avoids high-DPI 
 assert(!foundry3dText.includes('starShape'), 'Foundry sandbox no longer carries saw-tooth star gears');
 assert(!foundry3dText.includes('teeth * 2'), 'Foundry sandbox no longer carries sparse saw-tooth gear implementation');
 assert(mechanismParamPolicyText.includes('if (key === "gearRatio") return false'), 'Foundry hides stale gear-ratio controls when physical pitch radii define rotation');
+assert(mechanismParamPolicyText.includes('if (type === "cam") return false'), 'Foundry/Design hide generic cam dimensions because the cam module is fixed except for profile shape');
+assert(mechanismParamPolicyText.includes('if (type === "piston") return false'), 'Foundry/Design hide generic piston dimensions because the slider-crank module is fixed');
+assert(mechanismParamPolicyText.includes('if (type === "planetary_gear") return key === "phase"'), 'Foundry/Design hide non-effective planetary dimensions while keeping phase');
 const fitContext = createMechanismFitContext(sample.mechanisms[0], 360, 240, 96);
 const directFit = fitMechanismSimulation(sample.mechanisms[0], 1.234, 360, 240, 96);
 const cachedFit = fitMechanismSimulationWithContext(sample.mechanisms[0], 1.234, fitContext);
@@ -3212,16 +3404,16 @@ assert(appText.includes('useProjectAutosave(project)') && appText.includes('read
 assert(!appUiText.includes('MOTIONSMITH_VIDEO_URL'), 'welcome splash does not embed the old preview video');
 assert(appUiText.includes('getting-started-dialog') && appUiText.includes('getting-started-gallery'), 'Getting Started is an explicit compact starter dialog');
 assert(appUiText.includes('const [showGuided, setShowGuided] = useState(false)') && appUiText.includes('Start.') && appUiText.includes('Pick a project.'), 'Getting Started opens as starter choices and moves guided projects behind the explicit Guide tile');
-assert(appUiText.includes('Starter rig') && appUiText.includes('Character file') && appUiText.includes('Open full project') && !appUiText.includes('>Humanoid<') && !appUiText.includes('>Package<') && !appUiText.includes('Import project'), 'Getting Started separates starter rig, character file, and full project entry points');
+assert(gettingStartedDialogCommandSource.includes('Starter rig') && gettingStartedDialogCommandSource.includes('Open full project') && !gettingStartedDialogCommandSource.includes('Character file') && !gettingStartedDialogCommandSource.includes('>Humanoid<') && !gettingStartedDialogCommandSource.includes('>Package<') && !gettingStartedDialogCommandSource.includes('Import project'), 'Getting Started keeps starter choices compact and leaves character file loading to the Character tab');
 assert(appUiText.includes('getting-started-card-guided') && appUiText.includes('Open Guide') && appUiText.includes('guided-project-library') && appUiText.includes('guided-project-card-${lesson.id}') && appUiText.includes('Don&apos;t show again this session'), 'Getting Started exposes guided projects through a Guide tile with a session-only opt-out while keeping open exploration visible');
-assert(appUiText.includes('GuidedLessonMotionPreview') && appUiText.includes('guided-project-preview-${lessonId}') && appUiText.includes('data-preview-mode="rendered-character-motion"') && appUiText.includes('data-motion-preview="character-path"') && indexText.includes('repeat(auto-fit, minmax(13rem, 1fr))') && indexText.includes('.guided-project-preview'), 'Guide project cards render larger character-motion thumbnails instead of text-only lesson choices');
-assert(appUiText.includes('Change') && appUiText.includes('Build') && appUiText.includes('data-change-cue') && appUiText.includes('data-direct-translation') && appUiText.includes('data-evidence-cue') && appUiText.includes('data-expected-answer') && appUiText.includes('data-clip-slot'), 'Guided project cards show change/build cues while carrying local classroom check/evidence metadata without visible sensemaking text load');
+assert(appUiText.includes('GuidedLessonMotionPreview') && appUiText.includes('guided-project-preview-${lessonId}') && appUiText.includes('data-preview-mode="rendered-character-motion"') && appUiText.includes('data-motion-preview="character-path"') && appUiText.includes('gearTrainCenters(mechanism)') && indexText.includes('repeat(auto-fit, minmax(13rem, 1fr))') && indexText.includes('.guided-project-preview') && indexText.includes('min-height: min(82vh, 43rem)') && indexText.includes('min-height: 11.25rem'), 'Guide project cards render larger character-motion thumbnails and the Start dialog uses taller starter cards');
+assert(appUiText.includes('Change') && appUiText.includes('Build') && appUiText.includes('data-change-cue') && appUiText.includes('data-direct-translation') && appUiText.includes('data-evidence-cue') && appUiText.includes('data-expected-answer') && appUiText.includes('data-clip-slot') && gettingStartedDialogCommandSource.includes('starter-card-cues') && gettingStartedDialogCommandSource.includes('Edit one move') && gettingStartedDialogCommandSource.includes('Ready to build'), 'Guided and starter cards show compact action cues while carrying local classroom check/evidence metadata without visible sensemaking text load');
 assert(characterLessonOwnershipText.includes('character-make-it-yours') && characterLessonOwnershipText.includes('Make it yours') && characterLessonOwnershipText.includes('data-change-cue={activeClassroomLesson.changeCue}') && characterLessonOwnershipText.includes('data-build-cue={activeClassroomLesson.buildCue}') && characterLessonOwnershipText.includes('Select a part') && characterLessonOwnershipText.includes('Place joints') && characterSelectionText.includes('<CharacterLessonOwnership') && !appText.includes('Change {activeClassroomLesson.changeCue}') && !appText.includes('Build {activeClassroomLesson.buildCue}'), 'Guided lessons land on Character with character-only rigging controls while keeping lesson metadata for later stages');
-assert(appUiText.includes('getting-started-card-humanoid') && appUiText.includes('getting-started-card-image') && appUiText.includes('getting-started-card-package') && appUiText.includes('getting-started-card-${template.id}') && starterImageTemplatesText.includes('id: "girl"') && starterImageTemplatesText.includes('id: "boy"'), 'Getting Started exposes compact starter/result choices including Girl and Boy');
+assert(gettingStartedDialogCommandSource.includes('getting-started-card-humanoid') && gettingStartedDialogCommandSource.includes('getting-started-card-image') && !gettingStartedDialogCommandSource.includes('getting-started-card-package') && gettingStartedDialogCommandSource.includes('getting-started-card-${template.id}') && starterImageTemplatesText.includes('id: "girl"') && starterImageTemplatesText.includes('id: "boy"'), 'Getting Started exposes compact starter/result choices including Girl and Boy without a duplicate character-file card');
 assert(!appUiText.includes('Local browser processing') && !appUiText.includes('Load art + skeleton') && !appUiText.includes('Full body rig') && !appUiText.includes('Browser ONNX rigging'), 'Getting Started avoids process/explanation copy');
 assert(!appUiText.includes('Crank turns -> rocker swings') && !appUiText.includes('Cam shape -> follower lifts') && !appUiText.includes('Two cranks -> one trace point') && !appUiText.includes('Touching teeth -> spin transfers') && !appUiText.includes('Parts + joints -> motion rig'), 'Getting Started keeps direct-translation sensemaking out of visible first-run copy');
 assert(!appUiText.includes('lesson-template-'), 'Getting Started does not use legacy lesson-template cards');
-assert(indexText.includes('.starter-thumb { width: 2.25rem; height: 2.25rem;'), 'Girl/Boy starter thumbnails stay compact');
+assert(indexText.includes('.starter-thumb { width: 2.25rem; height: 2.25rem;') && indexText.includes('.getting-started-dialog .template-gallery .starter-thumb { width: 6rem; height: 6rem;') && indexText.includes('transform: scale(1.22)'), 'Girl/Boy starter thumbnails stay compact globally but larger inside Start cards');
 assert(appText.includes('useProjectHistory(createInitialProject)') && appProjectHistoryHookText.includes('return { present: createInitialProject(), past: [], future: [] }'), 'App initializes through the ProjectState history hook and can restore a browser autosave instead of preloading a character');
 assert(appProjectCommandsHookText.includes('setProject(createEmptyProject(), { resetHistory: true })'), 'New Project resets to an empty project instead of a starter character');
 assert(appProjectCommandsHookText.includes('project.sceneObjectOrder.length > 0') && appProjectCommandsHookText.includes('Object.keys(project.sceneObjects).length > 0'), 'New Project discard confirmation treats Character-created scene objects as user work');
@@ -3250,7 +3442,7 @@ const sceneObjectUiLeaks = collectComponentSourceFiles(join(process.cwd(), 'comp
   .map(path => relative(process.cwd(), path));
 assert.deepEqual(sceneObjectUiLeaks, [], 'scene object creation/edit controls stay out of non-Character component surfaces');
 assert(characterSelectionText.includes('character-part-list') && characterSelectionText.includes('character-part-item-${part.id}'), 'Character tab owns body-part selection in the left workflow pane');
-assert(stageLayoutText.includes('showClassroomChecklist = true') && characterSelectionText.includes('showClassroomChecklist={false}'), 'Character tab hides cross-stage classroom checklist chips while other stages can still opt into lesson progress');
+assert(!stageLayoutText.includes('classroomChecklistFor') && !stageLayoutText.includes('classroom-checklist') && !characterSelectionText.includes('showClassroomChecklist'), 'Left workflow panes do not render cross-stage classroom checklist chips');
 assert(characterSelectionText.includes('viewport={viewport}') && characterSelectionText.includes('setViewport={setViewport}') && characterSelectionText.includes('mechanisms={[]}') && characterSelectionText.includes('inputMode="always"') && characterSelectionText.includes('testId="character-three-puppet"'), 'Character preview uses the shared canvas viewport with character-only layers instead of rendering path/mechanism content');
 assert(threePreviewText.includes(".filter(layer => layer !== 'mechanisms' || mechanismsToRender.length > 0)"), 'Shared 3D viewer hides the mechanism layer toggle when a tab passes no mechanisms to render');
 assert(appText.includes('setStage("character")'), 'Character edit controls stay in the functional Character tab');
@@ -3287,10 +3479,11 @@ const blueprintCanvasBlock = blueprintExportText.slice(blueprintCanvasStart, blu
 const blueprintInspectorBlock = blueprintDetailPanelText;
 assert(blueprintCanvasBlock.includes('blueprint-svg-preview') && blueprintCanvasBlock.includes('dangerouslySetInnerHTML'), 'Blueprint center canvas previews the readable SVG as inline web UI instead of a broken document image');
 assert(!blueprintCanvasBlock.includes('<img') && !blueprintCanvasBlock.includes('alt="Cut sheet"'), 'Blueprint center preview does not expose a broken cut-sheet image placeholder');
-assert(blueprintCanvasBlock.includes('data-visual-level="board-hero"') && blueprintControlPanelText.includes('blueprint-more-exports'), 'Blueprint keeps the board preview central and collapses secondary downloads out of the primary workflow');
+assert(blueprintCanvasBlock.includes('data-visual-level="print-sheet-hero"') && !blueprintControlPanelText.includes('blueprint-more-exports') && !blueprintControlPanelText.includes('Assembly guide') && !blueprintControlPanelText.includes('Teacher files'), 'Blueprint keeps the printable character/mechanism sheet central and removes secondary teacher/assembly buttons from the primary workflow');
 assert(blueprintExportText.includes('<BlueprintControlPanel') && blueprintControlPanelText.includes('data-testid="blueprint-control-panel"') && blueprintControlPanelText.includes('aria-label="Generate package"') && blueprintExportText.includes('<BlueprintDetailPanel') && blueprintDetailPanelText.includes('data-testid="blueprint-stack-summary"'), 'Blueprint left workflow controls/downloads and right recipe detail live outside the stage wrapper behind tested panel seams');
 assert(blueprintExportText.includes('const liveRecipes = activeMechanisms.map') && blueprintExportText.includes('const recipes = liveRecipes.length ? liveRecipes : (pkg?.recipes ?? [])') && blueprintExportText.includes('const previewSvg = makeBlueprintPreviewSvg(project, recipes)'), 'Blueprint center preview always renders the readable live view from live fabrication recipe data; export downloads keep the physical artifact SVG');
-assert(blueprintExportText.includes('<BlueprintDetailPanel') && blueprintDetailPanelText.includes('data-testid="blueprint-sensemaking-label"') && blueprintDetailPanelText.includes('readableFabricationStackSummary') && assemblySceneFrameComponentText.includes('data-testid="assembly-scene-sensemaking"') && assemblyInspectorPanelText.includes('data-testid="assembly-sensemaking-label"'), 'Blueprint delegates detail inspector rendering while Blueprint and Assembly reuse mechanism sensemaking metadata for compact visual cues');
+assert(blueprintExportText.includes('selectBlueprintRecipe(recipes, selectedRecipeId, project.selectedMechanismId)') && blueprintExportText.includes('recipes.find((recipe) => recipe.mechanismId === selectedMechanismId)'), 'Blueprint defaults the detail recipe to the selected live mechanism so fitted mechanisms carry into print/build views');
+assert(blueprintExportText.includes('<BlueprintDetailPanel') && blueprintDetailPanelText.includes('data-testid="blueprint-sensemaking-label"') && blueprintDetailPanelText.includes('requiredPartCount') && assemblySceneFrameComponentText.includes('data-testid="assembly-scene-sensemaking"') && assemblyInspectorPanelText.includes('data-testid="assembly-sensemaking-label"'), 'Blueprint delegates detail inspector rendering while Blueprint and Assembly reuse mechanism sensemaking metadata for compact visual cues');
 assert(!blueprintCanvasBlock.includes('<Canvas project={project}'), 'Blueprint center canvas is a static output sheet, not the animated 3D/2.5D workbench');
 assert(!blueprintCanvasBlock.includes('assembly-guide-web-preview') && !blueprintInspectorBlock.includes('assembly-guide-web-preview'), 'Blueprint no longer embeds the assembly guide document');
 assert(fabricationRuntimeText.includes('svg: makeBlueprintSvg(project, recipes)'), 'export package uses the physical printable blueprint SVG, not the screen preview');
@@ -3304,17 +3497,20 @@ const blueprintSvgStart = fabricationBlueprintSvgText.indexOf('export const make
 const blueprintSvgEnd = fabricationBlueprintSvgText.length;
 assert(blueprintSvgStart >= 0 && blueprintSvgEnd > blueprintSvgStart, 'fabricationBlueprintSvg exposes a dedicated readable blueprint preview renderer');
 const blueprintSvgBlock = fabricationBlueprintSvgText.slice(blueprintSvgStart, blueprintSvgEnd);
-assert(blueprintSvgBlock.includes('data-cut-part') && blueprintSvgBlock.includes('data-recipe-anchor'), 'Blueprint preview SVG shows cut parts and board anchors as first-class elements');
-assert(blueprintSvgBlock.includes('data-blueprint-visual-mode="board-hero"') && blueprintSvgBlock.includes('data-blueprint-board-hero') && blueprintSvgBlock.includes('CUT · PLACE · BUILD'), 'Blueprint preview SVG is a visual board-first layout, not a dense report');
+assert(blueprintSvgBlock.includes('data-print-character-part') && blueprintSvgBlock.includes('data-print-mechanism-part'), 'Blueprint preview SVG shows printable character and mechanism parts as first-class elements');
+assert(blueprintSvgBlock.includes('data-blueprint-icon="cam-module"') && blueprintSvgBlock.includes('data-blueprint-icon="guide-cartridge"') && blueprintSvgBlock.includes('data-blueprint-icon="gravity-follower"'), 'Blueprint preview SVG has distinct student-readable icons for cam, guide, and follower modules');
+assert(blueprintSvgBlock.includes('data-blueprint-visual-mode="print-sheet-hero"') && blueprintSvgBlock.includes('data-blueprint-visual-density="student-simple"') && blueprintSvgBlock.includes('data-blueprint-print-hero') && blueprintSvgBlock.includes('data-blueprint-board-summary') && blueprintSvgBlock.includes('CHARACTER SHEET') && blueprintSvgBlock.includes('MECHANISM PARTS') && blueprintSvgBlock.includes('PRINT · CUT · BUILD') && !blueprintSvgBlock.includes('fabricationBoardColumnLabel(c)') && !blueprintSvgBlock.includes('fabricationBoardRowLabel(r)'), 'Blueprint preview SVG is a student-simple print-sheet-first layout, not a dense board report');
 assert(!blueprintSvgBlock.includes('generateCurvePoints') && !blueprintSvgBlock.includes('opacity="0.22"'), 'Blueprint preview SVG avoids foundry path overlays and translucent character ghosts');
-assert(blueprintSvgBlock.includes('const ox = (width - bounds.width * scale)') && !blueprintSvgBlock.includes('const ox = x +'), 'Blueprint part cut previews use local SVG coordinates inside the translated tile, not double-translated paths');
+assert(blueprintSvgBlock.includes('buildCharacterPrintLayout(project)') && blueprintSvgBlock.includes('layout.pageCount'), 'Blueprint part cut previews reuse the printable character sheet layout instead of a separate screen-only packer');
 assert(appStageRouterText.includes('<AssemblyGuide') && !appText.includes('<AssemblyGuide') && !appStageRouterText.includes('const AssemblyGuide = ({') && assemblyGuideText.includes('export const AssemblyGuide'), 'AppStageRouter delegates Assembly Guide stage to an extracted stage seam');
 const assemblyBlock = assemblyGuideText;
 assert(assemblyBlock.includes('<AssemblyControlPanel') && assemblyBlock.includes('<AssemblyCanvasPane') && assemblyBlock.includes('<AssemblyInspectorPanel') && !assemblyBlock.includes('data-testid="assembly-control-panel"') && !assemblyBlock.includes('data-testid="assembly-guide-preview"'), 'Assembly Guide stage wrapper delegates workflow, canvas, and inspector panes to extracted leaf seams');
 assert(assemblyCanvasPaneText.includes('data-testid="assembly-canvas-preview"') && assemblyCanvasPaneText.includes('<AssemblySceneFrame') && !assemblyCanvasPaneText.includes('<AssemblyWorkbench') && !assemblyCanvasPaneText.includes('<CharacterAssemblyWorkbench'), 'Assembly tab renders one Three-backed scene frame instead of a lower SVG workbench');
 assert(assemblyCanvasPaneText.includes('<AssemblyCharacterThreePreview') && assemblyCanvasPaneText.includes('<AssemblyMechanismThreePreview') && !assemblyThreePreviewText.includes('ThreePuppetPreview') && assemblyThreePreviewText.includes('ThreeFoundryPreview'), 'Assembly canvas routes character and mechanism build previews through the shared Foundry Three renderer');
 assert(assemblyThreePreviewText.includes('data-testid="assembly-character-three-preview"') && assemblyThreePreviewText.includes('data-testid="assembly-mechanism-three-preview"') && assemblyThreePreviewText.includes('assemblySceneFrame={sceneFrame}') && foundryPreviewStateProbeText.includes('data-three-assembly-phase'), 'Assembly Three preview exposes shared Foundry step phase/progress telemetry for both character and mechanism branches');
-assert(assemblySceneFrameText.includes('activeScenePoints') && assemblySceneFrameText.includes('floatingReferencePoints') && foundryAssemblySceneOverlayText.includes('frame.kind === "character"') && threeFoundryPreviewText.includes('assemblyLift'), 'Character assembly feeds art pins into the Foundry renderer as plain scene-frame data and keeps explode_z on z only');
+assert(assemblyThreePreviewText.includes('const stepLift') && assemblyThreePreviewText.includes('playing || progress > 0') && assemblyThreePreviewText.includes('Build animation') && !assemblyThreePreviewText.includes('return 0.72') && assemblyCanvasPaneText.includes('playing={playing}'), 'Assembly Three preview stays assembled by default and only lifts z-stack during animated assembly playback');
+assert(assemblySceneFrameText.includes('activeScenePoints') && assemblySceneFrameText.includes('floatingReferencePoints') && foundryAssemblySceneOverlayText.includes('frame.kind === "character"') && foundryAssemblySceneOverlayText.includes('(frame.activeScenePoints ?? []).map(scenePointToPreviewPoint)') && threeFoundryPreviewText.includes('assemblyLift'), 'Character assembly feeds art pins into the Foundry renderer through the scene-to-Foundry coordinate seam and keeps explode_z on z only');
+assert(foundryAssemblySceneOverlayText.includes('assembly-15x15-board-surface') && foundryAssemblySceneOverlayText.includes('board.userData.assemblyBoardZ = z') && foundryAssemblySceneOverlayText.includes('kit.boardCells * kit.boardCells') && threeFoundryPreviewText.includes('threeAssemblyBoardSurface'), 'Assembly overlays render a testable 15x15 board surface at z=0 instead of floating pins without a base board');
 assert(assemblyThreePreviewText.includes('buildAutomataSceneModel') && assemblyThreePreviewText.includes('automataContext={automataContext}') && automataSceneModelText.includes('buildFoundryMechanismPreviewModel') && !assemblyThreePreviewText.includes('mechanisms={[]}'), 'Assembly character context consumes the shared automata/Foundry preview seam instead of private puppet mechanism fallbacks');
 assert(assemblyBlock.includes('buildAssemblyGuideModel') && !assemblyBlock.includes('const liveRecipes = activeMechanisms.map') && assemblyGuideModelText.includes('const liveRecipes = activeMechanisms.map') && assemblyGuideModelText.includes('liveRecipes.length ? liveRecipes : (pkg?.recipes ?? [])'), 'Assembly Guide delegates live recipe fallback to the DOM-free model seam');
 assert(assemblyGuideModelText.includes('activeAssemblyMode === "character"') && assemblyCanvasPaneText.includes('buildCharacterAssemblySceneFrame') && assemblyCanvasPaneText.includes('buildMechanismAssemblySceneFrame') && !assemblyCanvasPaneText.includes('{pkg && selectedRecipe && currentStep ?'), 'Assembly animation supports character and mechanism stages through DOM-free scene frames before generating PDF/HTML output');
@@ -3323,7 +3519,7 @@ assert(assemblySceneFrameComponentText.includes('data-testid="assembly-readonly-
 assert(assemblySceneFrameText.includes('export const buildMechanismAssemblySceneFrame') && assemblySceneFrameText.includes('export const buildCharacterAssemblySceneFrame') && !assemblySceneFrameText.includes('document.') && !assemblySceneFrameText.includes('window.'), 'AssemblySceneFrame builders are DOM-free deterministic helpers');
 assert(mechanismSceneContractText.includes('export const buildMechanismSceneContract') && mechanismSceneContractText.includes('fabricationRenderPlanForMechanism') && mechanismSceneContractText.includes("stackSource: 'fabricationStackForMechanism'"), 'MechanismSceneContract derives mechanism layers from the same fabrication render plan as Foundry');
 assert(assemblyGeometryText.includes('export const assemblyCoordToSvg') && assemblyGeometryText.includes('export const characterBoardProjector') && !assemblyGeometryText.includes('<') && !assemblyGeometryText.includes('document.'), 'assemblyGeometry is a DOM-free deterministic helper seam');
-assert(assemblyPlaybackText.includes('export const pendingRecipeForMechanism') && assemblyPlaybackText.includes('buildAssemblyPlaybackSteps'), 'Assembly recipe/playback derivation lives outside App.tsx');
+assert(assemblyPlaybackText.includes('export const pendingRecipeForMechanism') && assemblyPlaybackText.includes('createFabricationRecipe(project, mechanism)') && assemblyPlaybackText.includes('buildAssemblyPlaybackSteps'), 'Assembly recipe/playback derivation lives outside App.tsx and reuses the export fabrication recipe seam');
 assert(assemblyGuideModelText.includes('export const buildAssemblyGuideModel') && assemblyGuideModelText.includes('pendingRecipeForMechanism') && assemblyGuideModelText.includes('buildCharacterAssemblyPlan') && assemblyGuideModelText.includes('resetKey: `${activeAssemblyMode}:${selectedRecipe?.mechanismId ?? "none"}:${lane}`') && !assemblyGuideModelText.includes('useState') && !assemblyGuideModelText.includes('window.') && !assemblyGuideModelText.includes('document.') && !assemblyGuideModelText.includes('dispatch('), 'Assembly guide model helper is a pure derivation seam for recipes, mode, steps, and reset key');
 assert(assemblyBlock.includes('const {') && assemblyBlock.includes('resetKey,') && assemblyBlock.includes('buildAssemblyGuideModel({') && assemblyBlock.includes('createFabricationPackage(project)') && assemblyBlock.includes('window.open') && assemblyBlock.includes('downloadText'), 'Assembly Guide keeps IO and pane wiring while delegating pure model derivation');
 assert(assemblyPlaybackText.includes("motion: 'explode_z'") && assemblyPlaybackText.includes("motion: 'mount_travel_xy'") && assemblyPlaybackText.includes("motion: 'connect_travel_xy'") && assemblyPlaybackText.includes("motion: 'scrub_time'"), 'Assembly playback declares canonical visual motion modes for every build phase');
@@ -3508,6 +3704,69 @@ const twoFourBars = {
 const pkg = createFabricationPackage(twoFourBars);
 assert.equal(directMakeBlueprintSvg(twoFourBars, pkg.recipes), makeBlueprintSvg(twoFourBars, pkg.recipes), 'fabrication facade preserves the direct printable Blueprint SVG renderer');
 assert.equal(directMakeBlueprintPreviewSvg(twoFourBars, pkg.recipes), makeBlueprintPreviewSvg(twoFourBars, pkg.recipes), 'fabrication facade preserves the direct readable Blueprint preview renderer');
+assert.equal(selectBlueprintRecipe(pkg.recipes, null, 'b')?.mechanismId, 'b', 'Blueprint detail recipe selection follows the selected live mechanism when no recipe tile was clicked');
+assert.equal(selectBlueprintRecipe(pkg.recipes, 'a', 'b')?.mechanismId, 'a', 'Blueprint detail recipe selection lets an explicit recipe tile override the selected live mechanism');
+const editedAssemblyMechanism = {
+  ...boundMechanism('4bar', 'assembly-stack-edited'),
+  crankLength: linkageSceneLengthByCells(4),
+  couplerLength: linkageSceneLengthByCells(6),
+  rockerLength: linkageSceneLengthByCells(4)
+};
+const editedAssemblyProject = { ...sample, mechanisms: [editedAssemblyMechanism] };
+const editedAssemblyRecipe = directCreateFabricationRecipe(editedAssemblyProject, editedAssemblyMechanism);
+const editedAssemblyHtml = directMakeAssemblyGuideHtml(editedAssemblyProject, [editedAssemblyRecipe], []);
+assert(editedAssemblyHtml.includes('Input 5-hole link') && editedAssemblyHtml.includes('Coupler 7-hole link') && !editedAssemblyHtml.includes('Input 3-hole link'), 'Assembly exploded guide reads edited recipe stack labels instead of recomputing default four-bar sizes');
+const camBlueprintProject = { ...sample, mechanisms: [boundMechanism('cam', 'blueprint-cam-module')] };
+const camBlueprintRecipe = directCreateFabricationRecipe(camBlueprintProject, camBlueprintProject.mechanisms[0]);
+const camBlueprintPreview = directMakeBlueprintPreviewSvg(camBlueprintProject, [camBlueprintRecipe]);
+assert(camBlueprintPreview.includes('data-blueprint-icon="cam-module"'), 'Blueprint preview draws cam module parts with a distinct cam icon');
+assert(camBlueprintPreview.includes('data-blueprint-icon="guide-cartridge"'), 'Blueprint preview draws the U-channel guide cartridge with a distinct guide icon');
+assert(camBlueprintPreview.includes('data-blueprint-icon="gravity-follower"'), 'Blueprint preview draws the gravity follower with a distinct follower icon');
+const editedCamBlueprintProject = { ...sample, mechanisms: [{ ...boundMechanism('cam', 'blueprint-cam-edited'), camProfileSamples: [0.72, 1.48, 0.7, 0.56, 0.82, 1.08, 0.74, 0.62] }] };
+const editedCamBlueprintRecipe = directCreateFabricationRecipe(editedCamBlueprintProject, editedCamBlueprintProject.mechanisms[0]);
+const defaultCamPhysicalBlueprint = directMakeBlueprintSvg(camBlueprintProject, [camBlueprintRecipe]);
+const editedCamPhysicalBlueprint = directMakeBlueprintSvg(editedCamBlueprintProject, [editedCamBlueprintRecipe]);
+const editedCamPreviewBlueprint = directMakeBlueprintPreviewSvg(editedCamBlueprintProject, [editedCamBlueprintRecipe]);
+const editedCamAssemblyHtml = directMakeAssemblyGuideHtml(editedCamBlueprintProject, [editedCamBlueprintRecipe], []);
+assert.deepEqual(editedCamBlueprintRecipe.camProfileSamples, editedCamBlueprintProject.mechanisms[0].camProfileSamples, 'fabrication recipe carries edited cam profile samples into Blueprint and Assembly');
+assert.notEqual(defaultCamPhysicalBlueprint, editedCamPhysicalBlueprint, 'physical Blueprint SVG changes when the cam disk profile is edited');
+assert(editedCamPreviewBlueprint.includes('data-cam-profile=') && editedCamPreviewBlueprint.includes(editedCamBlueprintProject.mechanisms[0].camProfileSamples!.join(',')), 'readable Blueprint preview labels the edited cam disk profile');
+assert(editedCamAssemblyHtml.includes('data-assembly-cam-profile') && editedCamAssemblyHtml.includes(editedCamBlueprintProject.mechanisms[0].camProfileSamples!.join(',')), 'Assembly guide exploded cam disk uses the edited cam profile');
+const secondCamProfile = [0.88, 1.36, 1.05, 0.68, 0.74, 1.22, 1.1, 0.82];
+const multiCamBlueprintProject = {
+  ...sample,
+  mechanisms: [
+    boundMechanism('4bar', 'blueprint-fourbar-first'),
+    { ...boundMechanism('cam', 'blueprint-cam-second'), camProfileSamples: secondCamProfile }
+  ]
+};
+const multiCamBlueprintRecipes = multiCamBlueprintProject.mechanisms.map(mechanism => directCreateFabricationRecipe(multiCamBlueprintProject, mechanism));
+const multiCamAssemblyHtml = directMakeAssemblyGuideHtml(multiCamBlueprintProject, multiCamBlueprintRecipes, []);
+assert(multiCamAssemblyHtml.includes(secondCamProfile.join(',')), 'Assembly guide includes the edited cam profile even when the cam recipe is not the first recipe');
+const twoCamProfiles = [[0.82, 1.4, 0.74, 0.66, 0.92, 1.18, 0.9, 0.72], [1.08, 0.8, 1.34, 0.7, 0.86, 1.26, 0.76, 0.94]];
+const twoCamBlueprintProject = {
+  ...sample,
+  mechanisms: twoCamProfiles.map((profile, index) => ({ ...boundMechanism('cam', `blueprint-cam-${index + 1}`), camProfileSamples: profile }))
+};
+const twoCamBlueprintRecipes = twoCamBlueprintProject.mechanisms.map(mechanism => directCreateFabricationRecipe(twoCamBlueprintProject, mechanism));
+const twoCamPhysicalBlueprint = directMakeBlueprintSvg(twoCamBlueprintProject, twoCamBlueprintRecipes);
+const twoCamPreviewBlueprint = directMakeBlueprintPreviewSvg(twoCamBlueprintProject, twoCamBlueprintRecipes);
+assert(twoCamProfiles.every(profile => twoCamPhysicalBlueprint.includes(profile.join(','))), 'physical Blueprint SVG keeps every edited cam profile instead of using first-cam-wins');
+assert(twoCamProfiles.every(profile => twoCamPreviewBlueprint.includes(profile.join(','))), 'readable Blueprint preview keeps every edited cam profile instead of using first-cam-wins');
+const idlerGearBlueprintProject = {
+  ...sample,
+  mechanisms: [{
+    ...boundMechanism('gear', 'blueprint-gear-idler'),
+    crankLength: gearSceneRadiusByKey('g40'),
+    rockerLength: gearSceneRadiusByKey('g24'),
+    gearTrainRadii: [gearSceneRadiusByKey('g40'), gearSceneRadiusByKey('g8'), gearSceneRadiusByKey('g24')]
+  }]
+};
+const idlerGearBlueprintRecipe = directCreateFabricationRecipe(idlerGearBlueprintProject, idlerGearBlueprintProject.mechanisms[0]);
+const idlerGearBlueprintPreview = directMakeBlueprintPreviewSvg(idlerGearBlueprintProject, [idlerGearBlueprintRecipe]);
+assert((idlerGearBlueprintPreview.match(/data-blueprint-board-coordinate=/g)?.length ?? 0) >= 3, 'Blueprint preview marks every board build spot from inserted gear train idlers, not just the main axle');
+const idlerGearPhysicalBlueprint = directMakeBlueprintSvg(idlerGearBlueprintProject, [idlerGearBlueprintRecipe]);
+assert((idlerGearPhysicalBlueprint.match(/data-blueprint-board-coordinate=/g)?.length ?? 0) >= 3, 'physical Blueprint SVG marks every gear train board build spot for print alignment');
 const visibleCharacterPartIds = twoFourBars.partOrder.filter(partId => twoFourBars.parts[partId]?.visible);
 const characterPrintLayout = directBuildCharacterPrintLayout(twoFourBars);
 assert.equal(characterPrintLayout.parts.length, visibleCharacterPartIds.length, 'character print layout includes every visible character part exactly once');
@@ -3591,17 +3850,25 @@ assert.equal(renderPlanMinClearance, FABRICATION_RENDER_MIN_CLEARANCE, 'fabricat
 
 AUTHORABLE_MECHANISM_TYPES.forEach(type => {
   const stack = fabricationStackForMechanism({ type });
-  assert.equal(validateFabricationStack(stack).join('; '), '', `${type} fabrication stack obeys clip/layer/spacer/layer/clip invariant`);
+  assert.equal(validateFabricationStack(stack).join('; '), '', `${type} fabrication stack validates against its mechanism-reference module contract`);
   assert.deepEqual(renderPlanValidateFabricationStack(stack), validateFabricationStack(stack), `${type} fabricationRenderPlan preserves public stack validation behind the facade`);
-  assert.equal(stack[0].role, 'clip', `${type} moving stack starts with a clip`);
-  assert.equal(stack.at(-1)?.role, 'clip', `${type} moving stack ends with a clip`);
   assert(!stack.some(layer => layer.role === 'base'), `${type} moving stack excludes the base board`);
-  assert(stack.filter(layer => layer.role === 'spacer').every(layer => layer.label === FABRICATION_SPACER_SPEC.label), `${type} stack uses the S10 spacer convention`);
-  const moving = (role: string) => !['clip', 'spacer', 'base'].includes(role);
-  stack.slice(1, -1).forEach((layer, index, middle) => {
-    const next = index < middle.length - 1 ? middle[index + 1] : stack.at(-1);
-    assert(!(moving(layer.role) && next && moving(next.role)), `${type} stack separates adjacent moving layers with spacers`);
-  });
+  if (type === 'cam') {
+    const labels = stack.map(layer => layer.label);
+    ['Crank handle', 'Axle peg', 'Paper washer', 'Cam spacer', 'Swappable cam disk', 'Cam lock disk', 'U-channel guide cartridge', 'Preassembled gravity follower module'].forEach(label => {
+      assert(labels.includes(label), `cam module stack includes ${label}`);
+    });
+    assert(!labels.some(label => /Back Clip|Front Clip|S10 spacer|Eccentric cam|Round follower|2-hole bracket/i.test(label)), 'cam stack rejects the old generic clip/S10/eccentric/round-follower recipe');
+  } else {
+    assert.equal(stack[0].role, 'clip', `${type} moving stack starts with a clip`);
+    assert.equal(stack.at(-1)?.role, 'clip', `${type} moving stack ends with a clip`);
+    assert(stack.filter(layer => layer.role === 'spacer').every(layer => layer.label === FABRICATION_SPACER_SPEC.label), `${type} stack uses the S10 spacer convention`);
+    const moving = (role: string) => !['clip', 'spacer', 'base'].includes(role);
+    stack.slice(1, -1).forEach((layer, index, middle) => {
+      const next = index < middle.length - 1 ? middle[index + 1] : stack.at(-1);
+      assert(!(moving(layer.role) && next && moving(next.role)), `${type} stack separates adjacent moving layers with spacers`);
+    });
+  }
   const plan = fabricationRenderPlanForMechanism({ type });
   assert.deepEqual(renderPlanForMechanism({ type }), plan, `${type} fabricationRenderPlan preserves public render plan behind the facade`);
   assert.equal(plan.validationErrors.join('; '), '', `${type} render plan is validated against fabrication stack`);
@@ -3611,9 +3878,18 @@ AUTHORABLE_MECHANISM_TYPES.forEach(type => {
   assert.deepEqual(plan.layers.map(layer => layer.color), stack.map(layer => layer.color), `${type} render plan colors mirror fabrication stack`);
   assert(plan.layers.every(layer => layer.source === 'fabrication-stack'), `${type} render layers declare fabrication stack source`);
   const zValues = plan.layers.map(layer => layer.z);
-  assert.deepEqual(zValues, [...zValues].sort((a, b) => a - b), `${type} render plan z order follows stack order`);
-  const zGaps = zValues.slice(1).map((z, index) => Number((z - zValues[index]).toFixed(2)));
-  assert(zGaps.every(gap => gap >= FABRICATION_RENDER_LAYER_Z_STEP), `${type} render plan leaves spacer clearance between every z layer`);
+  if (type === 'cam') {
+    const zForLabel = (label: string) => plan.layers.find(layer => layer.label === label)?.z;
+    const camDiskZ = zForLabel('Swappable cam disk');
+    const camGuideZ = zForLabel('U-channel guide cartridge');
+    const camFollowerZ = zForLabel('Preassembled gravity follower module');
+    assert(typeof camDiskZ === 'number' && typeof camGuideZ === 'number' && typeof camFollowerZ === 'number', 'cam render plan exposes disk, guide, and follower z layers');
+    assert(Math.max(Math.abs(camGuideZ - camDiskZ), Math.abs(camFollowerZ - camDiskZ)) < FABRICATION_RENDER_LAYER_Z_STEP, 'cam module render plan keeps guide/follower near the cam disk instead of serially floating out from the board');
+  } else {
+    assert.deepEqual(zValues, [...zValues].sort((a, b) => a - b), `${type} render plan z order follows stack order`);
+    const zGaps = zValues.slice(1).map((z, index) => Number((z - zValues[index]).toFixed(2)));
+    assert(zGaps.every(gap => gap >= FABRICATION_RENDER_LAYER_Z_STEP), `${type} render plan leaves spacer clearance between every z layer`);
+  }
   const movingZValues = plan.layers.filter(layer => !['clip', 'spacer', 'base'].includes(layer.role)).map(layer => layer.z.toFixed(2));
   assert.equal(new Set(movingZValues).size, movingZValues.length, `${type} moving mechanism layers occupy distinct z planes`);
 });
@@ -3810,6 +4086,19 @@ ALL_MECHANISM_TYPES.forEach(type => {
   const pointTraces = generateMechanismPointTraces(mechanism, 24).traces;
   assert(pointTraces.length > 0, `${type} exposes physical moving-joint traces for Foundry`);
   assert(pointTraces.some(trace => trace.primary && trace.points.length > 1), `${type} marks one physical trace as the primary output path`);
+  const foundryPlaybackTraces = generateFoundryPlaybackPointTraces(mechanism, 24).traces;
+  assert(foundryPlaybackTraces.length > 0, `${type} exposes Foundry playback traces for Mech Path`);
+  assert(foundryPlaybackTraces.some(trace => trace.primary && trace.points.length > 1), `${type} marks one Foundry playback trace as the selectable Mech Path target`);
+  if (REFERENCE_FOUNDRY_TYPES.includes(type)) {
+    const generatedMechanism = mechanismWithGeneratedPath(mechanism);
+    const generatedPath = generatedMechanism.generatedPath ?? [];
+    const primaryPlaybackTrace = generateFoundryPlaybackPointTraces(mechanism, 96).traces.find(trace => trace.primary);
+    assert(primaryPlaybackTrace, `${type} has a primary Foundry-visible playback trace`);
+    assert.equal(generatedPath.length, primaryPlaybackTrace.points.length, `${type} generated Mech Path stores the Foundry-visible trace length`);
+    const midpoint = Math.floor(primaryPlaybackTrace.points.length / 2);
+    assert(Math.hypot(generatedPath[0].x - primaryPlaybackTrace.points[0].x, generatedPath[0].y - primaryPlaybackTrace.points[0].y) < 1e-6, `${type} generated Mech Path starts on the Foundry-visible output point`);
+    assert(Math.hypot(generatedPath[midpoint].x - primaryPlaybackTrace.points[midpoint].x, generatedPath[midpoint].y - primaryPlaybackTrace.points[midpoint].y) < 1e-6, `${type} generated Mech Path follows the Foundry-visible output point`);
+  }
   if (type === '4bar') {
     assert(pointTraces.some(trace => trace.id === 'B' && trace.points.length > 1), '4bar exposes the B crank-joint path');
     assert(pointTraces.some(trace => trace.id === 'C' && trace.primary && trace.points.length > 1), '4bar exposes C as the primary output-joint path');
@@ -3995,6 +4284,8 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
   assert(camProfileScale(Math.PI) > camProfileScale(0), 'rendered cam profile has the same high-lift lobe used by kinematics');
   const customProfile = [0.7, 1.45, 0.7, 0.55, 0.7, 0.95, 0.7, 0.65];
   const custom = { ...mechanism, camProfileSamples: customProfile };
+  const sharpProfile = { ...mechanism, camProfileSamples: [1, 1.65, 0.35, 1.65, 1, 0.65, 1.2, 1] };
+  assert.equal(sampleFeasibleRange(sharpProfile).warning, 'Cam edge too steep. Smooth the profile.', 'steep cam profiles warn before students fabricate a follower drop that can jam');
   assert.equal(sampledCamProfileScale(Math.PI / 4, customProfile), 1.45, 'editable cam profile samples are angle-indexed and round-trip into shared geometry');
   assert(localTrack(custom, calculateLinkage(custom, Math.PI / 4).j2).x > localTrack(mechanism, calculateLinkage(mechanism, Math.PI / 4).j2).x, 'edited cam lobe changes the follower lift used by simulation');
   const defaultCamExportPath = generateSVG({ speed: 1, rotation: 0, mechanisms: [mechanism] }, 0).match(/data-export-kind="cam-profile" d="([^"]+)"/)?.[1];
@@ -4003,12 +4294,33 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
   assert(generateDXF({ speed: 1, rotation: 0, mechanisms: [custom] }, 0).includes('CONTRACT-CAM-PHYSICAL_CAM'), 'cam DXF export includes an explicit sampled cam profile layer');
   assert(localTrack(mechanism, high.j2).x > localTrack(mechanism, low.j2).x, 'cam follower lift increases along the guide');
   assert(Math.abs(localTrack(mechanism, low.j1).y) < 1e-6, 'cam contact point sits on the follower guide axis');
-  assert(Math.abs(localTrack(mechanism, low.j2).y) < 1e-6, 'round follower center stays on the guide axis');
-  assertDistance(low.j1, low.j2, mechanism.sliderOffset, 'round follower center remains one follower radius from the sampled cam surface');
+  assert(Math.abs(localTrack(mechanism, low.j2).y) < 1e-6, 'gravity follower center stays on the guide axis');
+  assertDistance(low.j1, low.j2, mechanism.sliderOffset, 'capsule follower head remains one follower radius from the sampled cam surface');
   const contactProfileAngle = ((mechanism.groundAngle ?? 90) * Math.PI) / 180 - (Math.PI / 2);
   assertDistance(low.p1, low.j1, mechanism.crankLength * sampledCamProfileScale(contactProfileAngle, mechanism.camProfileSamples), 'cam contact radius samples the rendered profile at the guide direction');
   assert(low.aux && distance(low.p1, low.aux) > 0, 'cam kinematics preserves a separate drive-angle reference instead of reusing the follower contact as rotation');
-  assert.deepEqual(requiredPartQuantities('cam'), { 'Eccentric cam': 1, 'Round follower': 1, '2-hole bracket': 1, [FABRICATION_SPACER_SPEC.label]: 8 }, 'cam recipe uses eccentric cam, round follower, bracket, and S10 from mechanism-reference');
+  const camRecipe = referenceRecipeForType('cam');
+  assert.equal(camRecipe.title, 'Pegboard-mounted gravity cam follower module', 'cam recipe exposes the pegboard-mounted gravity module name');
+  assert.equal(camRecipe.physicsRule, 'rotating cam contact + vertical prismatic follower + gravity preload', 'cam physics rule maps to rotating cam, prismatic follower, contact, and gravity');
+  assert.deepEqual(requiredPartQuantities('cam'), {
+    'Axle peg': 1,
+    'Crank handle': 1,
+    'Cam lock disk': 1,
+    'Paper washer': 3,
+    'Cam spacer': 1,
+    'Swappable cam disk': 1,
+    'U-channel guide cartridge': 1,
+    'Preassembled gravity follower module': 1
+  }, 'cam recipe uses pegboard axle, swappable disk, guide cartridge, and gravity follower modules');
+  const camRenderPlan = fabricationRenderPlanForMechanism(mechanism);
+  const camDiskZ = camRenderPlan.layers.find(layer => layer.label === 'Swappable cam disk')?.z;
+  const camGuideZ = camRenderPlan.layers.find(layer => layer.label === 'U-channel guide cartridge')?.z;
+  const camFollowerZ = camRenderPlan.layers.find(layer => layer.label === 'Preassembled gravity follower module')?.z;
+  assert(typeof camDiskZ === 'number' && typeof camGuideZ === 'number' && typeof camFollowerZ === 'number', 'cam render plan exposes disk, guide, and follower module layers');
+  assert(Math.max(Math.abs(camGuideZ - camDiskZ), Math.abs(camFollowerZ - camDiskZ)) < FABRICATION_RENDER_LAYER_Z_STEP, 'cam guide and gravity follower stay in the compact board-mounted cam plane instead of floating as a full serial z-stack');
+  assert.deepEqual(camRecipe.stackLabels, ['15x15 pegboard base', 'Axle peg', 'Crank handle', 'Paper washer', 'Cam spacer', 'Swappable cam disk', 'Paper washer', 'Cam lock disk', 'U-channel guide cartridge', 'Preassembled gravity follower module'], 'cam stack labels document the pegboard base plus plug-in modules');
+  const camRecipeText = JSON.stringify(camRecipe);
+  assert(!/S10 spacer|Eccentric cam|Round follower|2-hole bracket|rubber band|spring|metal bearing|plastic spacer|backplate|free-floating loose rail/i.test(camRecipeText), 'cam recipe data blocks the old stack and excluded hardware');
 }
 
 {
@@ -4151,6 +4463,16 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
     assertDistance(state.p1, state.effector, mechanism.couplerPointDist, 'planetary carrier output radius is preserved');
   });
   assert.equal(mechanism.gearRatio, planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength), 'planetary gear ratio is ring-fixed sun-input carrier-output');
+  const normalizedPlanetary = normalizeMechanismToReference({
+    ...mechanism,
+    id: 'contract-planetary-stale-ratio',
+    crankLength: 999,
+    rockerLength: 777,
+    gearRatio: 9,
+    speed2: 9
+  });
+  assert.equal(normalizedPlanetary.gearRatio, planetaryCarrierOutputRatio(normalizedPlanetary.crankLength, normalizedPlanetary.rockerLength), 'planetary reference normalization recomputes carrier output ratio after restoring fixed kit radii');
+  assert.equal(normalizedPlanetary.speed2, planetaryPlanetSpinRatio(normalizedPlanetary.crankLength, normalizedPlanetary.rockerLength), 'planetary reference normalization recomputes planet spin ratio instead of preserving stale snapshot values');
   assert.equal(planetaryRingPitchRadius(mechanism.crankLength, mechanism.rockerLength), mechanism.crankLength + 2 * mechanism.rockerLength, 'planetary ring pitch radius follows sun plus two planets');
   assert.equal(planetaryPlanetSpinRatio(mechanism.crankLength, mechanism.rockerLength), planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength) - (mechanism.crankLength / mechanism.rockerLength) * (1 - planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength)), 'planet spin is derived from ring-fixed carrier motion');
   const fullCarrierInput = foundryPlaybackPhaseToInputAngle(mechanism, Math.PI * 2);
@@ -4176,9 +4498,13 @@ const requiredPartQuantities = (type: Parameters<typeof createDefaultMechanism>[
   assert(/rotate\(-239\.999|rotate\(-240/.test(offsetCarrierPreview), 'offset planetary SVG preview renders planet spin from the driven sun angle');
   const offsetPlaybackCarrierTrace = generateFoundryPlaybackPointTraces(offsetMechanism, 96).traces.find(trace => trace.id === 'C');
   assert(offsetPlaybackCarrierTrace, 'Foundry planetary playback traces include the visible carrier path');
+  const offsetGeneratedPathMechanism = mechanismWithGeneratedPath(offsetMechanism);
+  const offsetGeneratedPath = offsetGeneratedPathMechanism.generatedPath ?? [];
+  assert.equal(offsetGeneratedPath.length, offsetPlaybackCarrierTrace.points.length, 'planetary generatedPath stores the visible Foundry carrier trace length');
   const offsetTraceHalfIndex = Math.floor(offsetPlaybackCarrierTrace.points.length / 2);
   const offsetTraceHalfPoint = offsetPlaybackCarrierTrace.points[offsetTraceHalfIndex];
   assert(Math.hypot(offsetTraceHalfPoint.x - offsetCarrierState.p2.x, offsetTraceHalfPoint.y - offsetCarrierState.p2.y) < 1e-6, 'Foundry planetary traces sample the same playback-mapped carrier frame used by the renderer');
+  assert(Math.hypot(offsetGeneratedPath[offsetTraceHalfIndex].x - offsetTraceHalfPoint.x, offsetGeneratedPath[offsetTraceHalfIndex].y - offsetTraceHalfPoint.y) < 1e-6, 'planetary generatedPath is sourced from the Foundry carrier path, not raw sun-input sampling');
   const mappedOffsetCarrierTrace = offsetPlaybackCarrierTrace.points.map(offsetFitContext.map);
   const offsetOverlay = buildFoundryPhysicsOverlay(offsetMechanism, { ...offsetCarrierFrame.simulation, pathPoints: mappedOffsetCarrierTrace }, offsetCarrierFrame.playbackPhaseRad, sample.settings, mappedOffsetCarrierTrace);
   const wrappedOffsetTracePoint = (index: number) => mappedOffsetCarrierTrace[((index % mappedOffsetCarrierTrace.length) + mappedOffsetCarrierTrace.length) % mappedOffsetCarrierTrace.length];
@@ -4444,11 +4770,29 @@ const impossibleMechanismProject = { ...sample, mechanisms: [{ ...boundMechanism
 assert(validateForFabrication(impossibleMechanismProject).errors.some(e => e.includes('No motion')), 'fabrication blocks mechanisms with no motion');
 const offGridProject = { ...sample, mechanisms: [{ ...boundMechanism('4bar', 'off-grid'), anchorX: -70, anchorY: -80 }] };
 assert(validateForFabrication(offGridProject).errors.some(e => e.includes('off grid')), 'fabrication blocks off-grid anchors instead of rounding silently');
+assert(!validateForFabrication(offGridProject).errors.some(e => e.includes('path outside sheet')), 'fabrication reports the snap-to-hole problem before derived path footprint problems for off-grid anchors');
 const simulationOnlyOffGridProject = { ...offGridProject, settings: { ...sample.settings, fabricationReadyMode: false } };
 assert(validateForFabrication(simulationOnlyOffGridProject).warnings.some(e => e.includes('off grid')), 'simulation-only mode downgrades board snap issues to warnings');
+const camWrongBoardProject = {
+  ...sample,
+  settings: { ...sample.settings, physicalKit: physicalKitPreset('letter-12x12-2cm', sample.settings.physicalKit) },
+  mechanisms: [boundMechanism('cam', 'cam-wrong-board')]
+};
+assert(validateForFabrication(camWrongBoardProject).errors.some(e => e.includes('cam module needs 15x15 board')), 'fabrication rejects cam modules outside the fixed 15x15 pegboard contract');
+const edgeCamAnchor = boardToScene(14, 14, sample.settings.physicalKit);
+const edgeCamProject = { ...sample, mechanisms: [{ ...boundMechanism('cam', 'cam-edge'), anchorX: edgeCamAnchor.x, anchorY: edgeCamAnchor.y }] };
+assert(validateForFabrication(edgeCamProject).errors.some(e => e.includes('assembly holes off board')), 'fabrication blocks cam modules whose translated guide/axle holes leave the 15x15 board');
+assert.throws(() => createFabricationPackage(edgeCamProject), /assembly holes off board/, 'fabrication package refuses cam modules with off-board translated assembly holes');
 const recipeWithPath = createFabricationPackage(sample).recipes[0];
 assert.equal(recipeWithPath.targetPathId, 'path-right-arm', 'fabrication recipe preserves target path metadata');
 const objectRecipePackage = createFabricationPackage(objectPathMechanismProject);
+const objectPathMechanismWithOffsheetStoredTrace = {
+  ...objectPathMechanismProject,
+  mechanisms: objectPathMechanismProject.mechanisms.map(mechanism => mechanism.id === 'object-path-driver'
+    ? { ...mechanism, generatedPath: [{ x: 9999, y: 9999 }, { x: 10020, y: 9980 }] }
+    : mechanism)
+};
+assert.doesNotThrow(() => createFabricationPackage(objectPathMechanismWithOffsheetStoredTrace), 'fabrication validation ignores stored visual generatedPath when checking the physical mechanism sheet footprint');
 const objectRecipe = objectRecipePackage.recipes.find(recipe => recipe.mechanismId === 'object-path-driver')!;
 assert.equal(objectRecipe.targetSceneObjectId, 'object-piggy', 'fabrication recipe preserves target scene object id');
 assert.equal(objectRecipe.targetSceneObjectName, 'Class trophy', 'fabrication recipe preserves target scene object name');
@@ -4664,7 +5008,7 @@ const wrongTarget = {
   ...sample,
   paths: {
     ...sample.paths,
-    'path-left': { ...sample.paths['path-right-arm'], id: 'path-left', partId: 'left_arm_lower' }
+    'path-left': { ...sample.paths['path-right-arm'], id: 'path-left', partId: 'left_arm_lower', targetAnchorJointId: 'left_hand' }
   },
   mechanisms: [{ ...sample.mechanisms[0], targetPartId: 'right_arm_lower', targetPathId: 'path-left' }]
 };
@@ -4902,8 +5246,9 @@ for (const phase of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
   const targetJointId: string = preferredMotionJointId(sample, sampleMechanism.targetPartId, sampleMechanism.targetAnchorJointId)!;
   const targetJoint = preview.skeleton?.joints[targetJointId]?.position;
   const generatedTarget = sampleMechanism.generatedPath?.length
-    ? pointOnProjectPath({ ...sample.paths['path-right-arm'], timedPoints: undefined, points: sampleMechanism.generatedPath, closed: true }, phase)
+    ? pointOnGeneratedMechanismPath(sampleMechanism.generatedPath, phase)
     : state.effector;
+  assert(generatedTarget, 'sample mechanism has a generated target sample');
   assert(state.isValid && targetJoint, 'sample mechanism has a valid driven target joint');
   assert(Math.hypot(targetJoint!.x - generatedTarget.x, targetJoint!.y - generatedTarget.y) < 1e-9, 'sample mechanism keeps its driven joint pinned to the fitted generated path through the whole scrub range');
 }

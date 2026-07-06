@@ -378,83 +378,154 @@
       "app_mapping": {
         "component_role": "recipe",
         "highlight_ids": [
-          "cams:eccentric",
-          "followers:f3-round"
+          "cam_modules:swappable-cam-disk",
+          "cam_modules:u-channel-guide-cartridge",
+          "cam_modules:gravity-follower-module"
         ],
         "mechanism_type": "cam_follower"
       },
-      "compatibility": [],
+      "compatibility": [
+        "15x15 pegboard base",
+        "gravity preload",
+        "vertical prismatic follower"
+      ],
       "guide_svg": "assembly/02-cam-follower-basic.svg",
-      "key": "cam-follower-basic",
+      "key": "pegboard-gravity-cam-follower",
       "mechanism_type": "cam_follower",
       "parts": [
         {
-          "category": "cams",
+          "category": "cam_modules",
           "count": 1,
-          "key": "eccentric",
-          "label": "Eccentric cam",
-          "part": "cams:eccentric"
+          "key": "axle-peg",
+          "label": "Axle peg",
+          "part": "cam_modules:axle-peg"
         },
         {
-          "category": "followers",
+          "category": "cam_modules",
           "count": 1,
-          "key": "f3-round",
-          "label": "Round follower",
-          "part": "followers:f3-round"
+          "key": "crank-handle",
+          "label": "Crank handle",
+          "part": "cam_modules:crank-handle"
         },
         {
-          "category": "brackets",
+          "category": "cam_modules",
           "count": 1,
-          "key": "2-hole-straight",
-          "label": "2-hole bracket",
-          "part": "brackets:2-hole-straight"
+          "key": "cam-lock-disk",
+          "label": "Cam lock disk",
+          "part": "cam_modules:cam-lock-disk"
         },
         {
-          "category": "spacers",
-          "count": 8,
-          "key": "s10",
-          "label": "S10 spacer",
-          "part": "spacers:s10"
+          "category": "cam_modules",
+          "count": 3,
+          "key": "paper-washer",
+          "label": "Paper washer",
+          "part": "cam_modules:paper-washer"
+        },
+        {
+          "category": "cam_modules",
+          "count": 1,
+          "key": "cam-spacer",
+          "label": "Cam spacer",
+          "part": "cam_modules:cam-spacer"
+        },
+        {
+          "category": "cam_modules",
+          "count": 1,
+          "key": "swappable-cam-disk",
+          "label": "Swappable cam disk",
+          "part": "cam_modules:swappable-cam-disk"
+        },
+        {
+          "category": "cam_modules",
+          "count": 1,
+          "key": "u-channel-guide-cartridge",
+          "label": "U-channel guide cartridge",
+          "part": "cam_modules:u-channel-guide-cartridge"
+        },
+        {
+          "category": "cam_modules",
+          "count": 1,
+          "key": "gravity-follower-module",
+          "label": "Preassembled gravity follower module",
+          "part": "cam_modules:gravity-follower-module"
         }
       ],
       "steps": [
         {
-          "action": "place-fastener",
+          "action": "mount-axle-module",
           "app_mapping": {
-            "component_role": "cam-axle",
-            "highlight_ids": [],
+            "component_role": "cam-axle-module",
+            "highlight_ids": [
+              "cam_modules:axle-peg",
+              "cam_modules:crank-handle",
+              "cam_modules:paper-washer"
+            ],
             "mechanism_type": "cam_follower"
           },
-          "check": "The axle is loose enough to rotate.",
+          "check": "The axle turns freely but does not wobble.",
           "coord_roles": [
             "board"
           ],
           "coords": [
             "J7"
           ],
-          "instruction": "Place a paper fastener at J7.",
+          "instruction": "Put the axle peg through board hole J7, then add the crank handle on the back side.",
           "n": 1,
-          "parts": [],
+          "parts": [
+            {
+              "category": "cam_modules",
+              "count": 1,
+              "key": "axle-peg",
+              "label": "Axle peg",
+              "part": "cam_modules:axle-peg"
+            },
+            {
+              "category": "cam_modules",
+              "count": 1,
+              "key": "crank-handle",
+              "label": "Crank handle",
+              "part": "cam_modules:crank-handle"
+            },
+            {
+              "category": "cam_modules",
+              "count": 3,
+              "key": "paper-washer",
+              "label": "Paper washer",
+              "part": "cam_modules:paper-washer"
+            }
+          ],
           "stack": [
             {
-              "label": "Board hole J7",
+              "label": "15x15 pegboard hole J7",
               "order": 1,
               "role": "board"
             },
             {
-              "label": "Paper fastener",
+              "label": "Crank handle",
               "order": 2,
-              "role": "paper-fastener"
+              "part": "cam_modules:crank-handle",
+              "role": "handle"
             },
             {
-              "label": "Open tabs behind board",
+              "label": "Axle peg",
               "order": 3,
-              "role": "fastener-tabs"
+              "part": "cam_modules:axle-peg",
+              "role": "axle"
+            },
+            {
+              "label": "Paper washer",
+              "order": 4,
+              "part": "cam_modules:paper-washer",
+              "role": "washer"
             }
           ],
-          "title": "Mount cam axle",
+          "title": "Mount axle module",
           "visual_state": {
-            "active_parts": [],
+            "active_parts": [
+              "cam_modules:axle-peg",
+              "cam_modules:crank-handle",
+              "cam_modules:paper-washer"
+            ],
             "ghost_parts": [],
             "highlight_coords": [
               "J7"
@@ -462,77 +533,103 @@
           }
         },
         {
-          "action": "add-part",
+          "action": "add-cam-disk",
           "app_mapping": {
-            "component_role": "cam",
+            "component_role": "swappable-cam-disk",
             "highlight_ids": [
-              "spacers:s10",
-              "cams:eccentric"
+              "cam_modules:paper-washer",
+              "cam_modules:cam-spacer",
+              "cam_modules:swappable-cam-disk",
+              "cam_modules:cam-lock-disk"
             ],
             "mechanism_type": "cam_follower"
           },
-          "check": "The cam turns cleanly.",
+          "check": "The cam disk spins without scraping the board.",
           "coord_roles": [
             "board"
           ],
           "coords": [
             "J7"
           ],
-          "instruction": "Add S10 spacer, then place the eccentric cam at J7.",
+          "instruction": "Slide on a paper washer, cam spacer, cam disk, another paper washer, and cam lock disk.",
           "n": 2,
           "parts": [
             {
-              "category": "spacers",
-              "count": 8,
-              "key": "s10",
-              "label": "S10 spacer",
-              "part": "spacers:s10"
+              "category": "cam_modules",
+              "count": 3,
+              "key": "paper-washer",
+              "label": "Paper washer",
+              "part": "cam_modules:paper-washer"
             },
             {
-              "category": "cams",
+              "category": "cam_modules",
               "count": 1,
-              "key": "eccentric",
-              "label": "Eccentric cam",
-              "part": "cams:eccentric"
+              "key": "cam-spacer",
+              "label": "Cam spacer",
+              "part": "cam_modules:cam-spacer"
+            },
+            {
+              "category": "cam_modules",
+              "count": 1,
+              "key": "swappable-cam-disk",
+              "label": "Swappable cam disk",
+              "part": "cam_modules:swappable-cam-disk"
+            },
+            {
+              "category": "cam_modules",
+              "count": 1,
+              "key": "cam-lock-disk",
+              "label": "Cam lock disk",
+              "part": "cam_modules:cam-lock-disk"
             }
           ],
           "stack": [
             {
-              "label": "Board hole J7",
+              "label": "15x15 pegboard hole J7",
               "order": 1,
               "role": "board"
             },
             {
-              "label": "S10 spacer",
+              "label": "Paper washer",
               "order": 2,
-              "part": "spacers:s10",
+              "part": "cam_modules:paper-washer",
+              "role": "washer"
+            },
+            {
+              "label": "Cam spacer",
+              "order": 3,
+              "part": "cam_modules:cam-spacer",
               "role": "spacer"
             },
             {
-              "label": "Eccentric cam",
-              "order": 3,
-              "part": "cams:eccentric",
-              "role": "moving-part"
-            },
-            {
-              "label": "Paper fastener head",
+              "label": "Swappable cam disk",
               "order": 4,
-              "role": "paper-fastener"
+              "part": "cam_modules:swappable-cam-disk",
+              "role": "cam"
             },
             {
-              "label": "Open tabs behind board",
+              "label": "Paper washer",
               "order": 5,
-              "role": "fastener-tabs"
+              "part": "cam_modules:paper-washer",
+              "role": "washer"
+            },
+            {
+              "label": "Cam lock disk",
+              "order": 6,
+              "part": "cam_modules:cam-lock-disk",
+              "role": "lock"
             }
           ],
-          "title": "Add eccentric cam",
+          "title": "Add swappable cam disk",
           "visual_state": {
             "active_parts": [
-              "spacers:s10",
-              "cams:eccentric"
+              "cam_modules:paper-washer",
+              "cam_modules:cam-spacer",
+              "cam_modules:swappable-cam-disk",
+              "cam_modules:cam-lock-disk"
             ],
             "ghost_parts": [
-              "cams:eccentric"
+              "cam_modules:swappable-cam-disk"
             ],
             "highlight_coords": [
               "J7"
@@ -540,167 +637,199 @@
           }
         },
         {
-          "action": "add-guide",
+          "action": "add-guide-cartridge",
           "app_mapping": {
-            "component_role": "follower-guide",
+            "component_role": "u-channel-guide-cartridge",
             "highlight_ids": [
-              "spacers:s10",
-              "followers:f3-round"
+              "cam_modules:u-channel-guide-cartridge"
             ],
             "mechanism_type": "cam_follower"
           },
-          "check": "The follower can slide up and down.",
+          "check": "The guide stands straight and does not twist.",
           "coord_roles": [
+            "board",
             "board"
           ],
           "coords": [
-            "G7"
+            "J11",
+            "J9"
           ],
-          "instruction": "Pin the follower guide slot at G7 with a loose spacer stack.",
+          "instruction": "Plug the U-channel guide cartridge into board holes J11 and J9 above the cam.",
           "n": 3,
           "parts": [
             {
-              "category": "spacers",
-              "count": 8,
-              "key": "s10",
-              "label": "S10 spacer",
-              "part": "spacers:s10"
-            },
-            {
-              "category": "followers",
+              "category": "cam_modules",
               "count": 1,
-              "key": "f3-round",
-              "label": "Round follower",
-              "part": "followers:f3-round"
+              "key": "u-channel-guide-cartridge",
+              "label": "U-channel guide cartridge",
+              "part": "cam_modules:u-channel-guide-cartridge"
             }
           ],
           "stack": [
             {
-              "label": "Board hole G7",
+              "label": "15x15 pegboard holes J11 and J9",
               "order": 1,
               "role": "board"
             },
             {
-              "label": "S10 spacer",
+              "label": "U-channel guide cartridge",
               "order": 2,
-              "part": "spacers:s10",
-              "role": "spacer"
-            },
-            {
-              "label": "Round follower",
-              "order": 3,
-              "part": "followers:f3-round",
-              "role": "moving-part"
-            },
-            {
-              "label": "Paper fastener head",
-              "order": 4,
-              "role": "paper-fastener"
-            },
-            {
-              "label": "Open tabs behind board",
-              "order": 5,
-              "role": "fastener-tabs"
+              "part": "cam_modules:u-channel-guide-cartridge",
+              "role": "guide"
             }
           ],
-          "title": "Add follower guide",
+          "title": "Plug in guide cartridge",
           "visual_state": {
             "active_parts": [
-              "spacers:s10",
-              "followers:f3-round"
+              "cam_modules:u-channel-guide-cartridge"
             ],
             "ghost_parts": [
-              "cams:eccentric"
+              "cam_modules:u-channel-guide-cartridge"
             ],
             "highlight_coords": [
-              "G7"
+              "J11",
+              "J9"
+            ]
+          }
+        },
+        {
+          "action": "insert-follower",
+          "app_mapping": {
+            "component_role": "gravity-follower-module",
+            "highlight_ids": [
+              "cam_modules:gravity-follower-module"
+            ],
+            "mechanism_type": "cam_follower"
+          },
+          "check": "The follower falls down by gravity when lifted.",
+          "coord_roles": [
+            "guide_reference",
+            "board"
+          ],
+          "coords": [
+            "J9",
+            "J7"
+          ],
+          "instruction": "Drop the preassembled follower into the guide with its rounded head touching the cam.",
+          "n": 4,
+          "parts": [
+            {
+              "category": "cam_modules",
+              "count": 1,
+              "key": "gravity-follower-module",
+              "label": "Preassembled gravity follower module",
+              "part": "cam_modules:gravity-follower-module"
+            }
+          ],
+          "stack": [
+            {
+              "label": "Guide channel J9",
+              "order": 1,
+              "part": "cam_modules:u-channel-guide-cartridge",
+              "role": "guide"
+            },
+            {
+              "label": "Preassembled gravity follower module",
+              "order": 2,
+              "part": "cam_modules:gravity-follower-module",
+              "role": "follower"
+            },
+            {
+              "label": "Rounded head touches cam disk",
+              "order": 3,
+              "part": "cam_modules:swappable-cam-disk",
+              "role": "contact"
+            }
+          ],
+          "title": "Insert gravity follower",
+          "visual_state": {
+            "active_parts": [
+              "cam_modules:gravity-follower-module"
+            ],
+            "ghost_parts": [
+              "cam_modules:gravity-follower-module"
+            ],
+            "highlight_coords": [
+              "J9",
+              "J7"
             ]
           }
         },
         {
           "action": "test-motion",
           "app_mapping": {
-            "component_role": "lift-check",
+            "component_role": "contact-check",
             "highlight_ids": [
-              "cams:eccentric",
-              "followers:f3-round"
+              "cam_modules:swappable-cam-disk",
+              "cam_modules:gravity-follower-module"
             ],
             "mechanism_type": "cam_follower"
           },
-          "check": "Loosen the guide if it sticks.",
+          "check": "If it sticks, loosen washers or check that the guide is vertical.",
           "coord_roles": [
             "board",
-            "board"
+            "guide_reference"
           ],
           "coords": [
             "J7",
-            "G7"
+            "J9"
           ],
-          "instruction": "Turn the cam and watch the follower rise.",
-          "n": 4,
+          "instruction": "Turn the crank slowly and watch the follower move up and down inside the guide.",
+          "n": 5,
           "parts": [
             {
-              "category": "cams",
+              "category": "cam_modules",
               "count": 1,
-              "key": "eccentric",
-              "label": "Eccentric cam",
-              "part": "cams:eccentric"
+              "key": "swappable-cam-disk",
+              "label": "Swappable cam disk",
+              "part": "cam_modules:swappable-cam-disk"
             },
             {
-              "category": "followers",
+              "category": "cam_modules",
               "count": 1,
-              "key": "f3-round",
-              "label": "Round follower",
-              "part": "followers:f3-round"
+              "key": "gravity-follower-module",
+              "label": "Preassembled gravity follower module",
+              "part": "cam_modules:gravity-follower-module"
             }
           ],
           "stack": [
             {
-              "label": "Board hole G7",
+              "label": "Swappable cam disk",
               "order": 1,
-              "role": "board"
+              "part": "cam_modules:swappable-cam-disk",
+              "role": "cam"
             },
             {
-              "label": "S10 spacer",
+              "label": "Rounded follower head",
               "order": 2,
-              "part": "spacers:s10",
-              "role": "spacer"
+              "part": "cam_modules:gravity-follower-module",
+              "role": "contact"
             },
             {
-              "label": "Round follower",
+              "label": "Vertical guide cartridge",
               "order": 3,
-              "part": "followers:f3-round",
-              "role": "moving-part"
-            },
-            {
-              "label": "Paper fastener head",
-              "order": 4,
-              "role": "paper-fastener"
-            },
-            {
-              "label": "Open tabs behind board",
-              "order": 5,
-              "role": "fastener-tabs"
+              "part": "cam_modules:u-channel-guide-cartridge",
+              "role": "guide"
             }
           ],
-          "title": "Check lift",
+          "title": "Test cam contact",
           "visual_state": {
             "active_parts": [
-              "cams:eccentric",
-              "followers:f3-round"
+              "cam_modules:swappable-cam-disk",
+              "cam_modules:gravity-follower-module"
             ],
             "ghost_parts": [
-              "cams:eccentric",
-              "followers:f3-round"
+              "cam_modules:swappable-cam-disk",
+              "cam_modules:gravity-follower-module"
             ],
             "highlight_coords": [
               "J7",
-              "G7"
+              "J9"
             ]
           }
         }
       ],
-      "title": "Cam and follower lift"
+      "title": "Pegboard-mounted gravity cam follower module"
     },
     {
       "app_mapping": {

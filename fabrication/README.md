@@ -65,7 +65,7 @@ These files are nominal geometry, not material-specific kerf compensation. Befor
   hot-glue. No thin neck is used.
 - `sheets/` — 11 workshop sheets for pre-fabricated sets.
 
-Managed files in this generated package: 48.
+Managed files in this generated package: 56.
 
 ## Regeneration
 

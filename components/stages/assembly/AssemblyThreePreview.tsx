@@ -27,13 +27,10 @@ const assemblyMechanismForProject = (project: ProjectState) =>
     (item) => item.visible !== false && item.enabled !== false,
   );
 
-const mechanismExplodeForStep = (step: AssemblyPlaybackStep, progress: number) => {
-  if (step.phase === "test-motion") return 0.22;
-  if (step.phase === "connect-character") return 0.42;
-  if (step.phase === "mount-to-board") return 0.64 - progress * 0.22;
-  if (step.phase === "assemble-module") return 0.92;
-  return 0.72;
-};
+const stepLift = (motion: string, progress: number, playing: boolean) =>
+  motion === "explode_z" && (playing || progress > 0)
+    ? Math.max(0, 0.38 * (1 - progress))
+    : 0;
 
 const cameraLabel = (camera: FoundryCamera) =>
   camera.preset === "custom"
@@ -174,11 +171,13 @@ export const AssemblyCharacterThreePreview = ({
   project,
   step,
   progress,
+  playing,
   sceneFrame,
 }: {
   project: ProjectState;
   step: CharacterAssemblyStep;
   progress: number;
+  playing: boolean;
   sceneFrame: AssemblySceneFrame;
 }) => {
   const angle = step.phase === "test-character" ? progress * Math.PI * 2 : 0;
@@ -277,7 +276,7 @@ export const AssemblyCharacterThreePreview = ({
         showTrail={step.phase === "test-character"}
         showForces={false}
         showVelocity={false}
-        explode={sceneFrame.explodeAxis === "z" ? 0.72 : 0.18}
+        explode={stepLift(sceneFrame.motion, progress, playing)}
         physicsRule={physicsOverlay.rule}
         velocityMagnitude={physicsOverlay.velocityMagnitude}
         forceMagnitude={physicsOverlay.forceMagnitude}
@@ -317,16 +316,18 @@ export const AssemblyMechanismThreePreview = ({
   mechanism,
   step,
   progress,
+  playing,
   sceneFrame,
 }: {
   project: ProjectState;
   mechanism: MechanismConfig;
   step: AssemblyPlaybackStep;
   progress: number;
+  playing: boolean;
   sceneFrame: AssemblySceneFrame;
 }) => {
   const angle = progress * Math.PI * 2;
-  const explode = mechanismExplodeForStep(step, progress);
+  const explode = stepLift(step.motion, progress, playing);
   const {
     camera,
     projectionSize,
@@ -448,7 +449,7 @@ export const AssemblyMechanismThreePreview = ({
         viewerTab="assembly"
         automataContext={automataContext}
       >
-        <div className="assembly-three-hud">Exploded build</div>
+        <div className="assembly-three-hud">Build animation</div>
         <svg
           data-testid="assembly-foundry-preview-overlay"
           viewBox={`0 0 ${projectionSize.width} ${projectionSize.height}`}

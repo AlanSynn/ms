@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FoundryCanvasPane } from "./FoundryCanvasPane";
 import { FoundryInspectorPanel } from "./FoundryInspectorPanel";
 import { FoundryWorkflowPanel } from "./FoundryWorkflowPanel";
+import type { FoundryParamHandle, FoundryParamHandleId } from "./FoundryOverlayLayer";
 import {
   foundryAssemblyPinPoints,
   foundryPinStackPoints,
@@ -31,6 +32,7 @@ import {
   calculateLinkage,
   generateCurvePoints,
   generateMechanismPointTraces,
+  mechanismTraceDefinitionsForState,
 } from "../../../utils/kinematics";
 import {
   createFoundryPlaybackFrame,
@@ -124,6 +126,7 @@ export const MechanismFoundry = ({
   const [showTrail, setShowTrail] = useState(false);
   const [showUserPathPreview, setShowUserPathPreview] = useState(true);
   const [showPathPreview, setShowPathPreview] = useState(false);
+  const [selectedOutputTraceId, setSelectedOutputTraceId] = useState<string | null>(null);
   const [showFoundryGrid, setShowFoundryGrid] = useState(true);
   const [showSensemaking, setShowSensemaking] = useState(false);
   const [foundryExplode, setFoundryExplode] = useState(0);
@@ -150,7 +153,7 @@ export const MechanismFoundry = ({
   } | null>(null);
   const foundryParamDragRef = useRef<{
     pointerId: number;
-    handle: "B" | "C" | "D";
+    handle: FoundryParamHandleId;
   } | null>(null);
   const targetReady = Boolean(
     (selectedPart || selectedSceneObject) &&
@@ -207,6 +210,14 @@ export const MechanismFoundry = ({
   };
   const rawFoundryPointTraces = useMemo(() => {
     const traces = generateFoundryPlaybackPointTraces(landedFoundry, 96).traces;
+    const selectedTrace = selectedOutputTraceId
+      ? traces.find((trace) => trace.id === selectedOutputTraceId)
+      : undefined;
+    if (selectedTrace)
+      return traces.map((trace) => ({
+        ...trace,
+        primary: trace.id === selectedTrace.id,
+      }));
     const generatedPath = landedFoundry.generatedPath ?? [];
     if (!generatedPath.length || traces.length < 2) return traces;
     const fittedTrace = traces.reduce((best, trace) =>
@@ -219,7 +230,7 @@ export const MechanismFoundry = ({
       ...trace,
       primary: trace.id === fittedTrace.id,
     }));
-  }, [landedFoundry]);
+  }, [landedFoundry, selectedOutputTraceId]);
   const preview = useMemo(
     () =>
       rawFoundryPointTraces.find((trace) => trace.primary)?.points ??
@@ -395,7 +406,7 @@ export const MechanismFoundry = ({
       : 0) +
     0.18;
   const foundryOverlayZForHandle = (handleId?: string) => {
-    const pin = foundryOverlayPinStackById.get(handleId ?? "");
+    const pin = foundryOverlayPinStackById.get(handleId === "M" ? "A" : (handleId ?? ""));
     if (landedFoundry.type === "4bar" && (handleId === "A" || handleId === "D"))
       return pin?.bottomZ ?? foundryOverlayZ;
     return pin?.topZ ?? foundryOverlayZ;
@@ -419,54 +430,67 @@ export const MechanismFoundry = ({
     foundryProjectionSize,
     0,
   );
-  const foundryParamHandles =
-    landedFoundry.type === "4bar"
-      ? (
-          [
-            {
-              id: "A",
-              label: "A fixed",
-              point: selectedSimulation.state.p1,
-              draggable: false,
-            },
-            {
-              id: "B",
-              label: "B crank",
-              point: selectedSimulation.state.j1,
-              draggable: true,
-            },
-            {
-              id: "C",
-              label: "C output",
-              point: selectedSimulation.state.j2,
-              draggable: true,
-            },
-            {
-              id: "D",
-              label: "D ground",
-              point: selectedSimulation.state.p2,
-              draggable: true,
-            },
-          ] as const
-        )
-          .map((handle) => {
-            const z = foundryOverlayZForHandle(handle.id);
-            return {
-              ...handle,
-              z,
-              screen: projectFoundryOverlayPoint(
-                handle.point,
-                foundryCamera,
-                foundryProjectionSize,
-                z,
-              ),
-            };
-          })
-          .filter((handle) => handle.screen)
-      : [];
+  const rawFoundryParamHandles: Array<Omit<FoundryParamHandle, "z" | "screen">> = [
+    {
+      id: "M",
+      label: "Move",
+      point: selectedSimulation.state.p1,
+      draggable: true,
+    },
+    ...(landedFoundry.type === "4bar"
+      ? [
+          {
+            id: "A" as const,
+            label: "A fixed",
+            point: selectedSimulation.state.p1,
+            draggable: false,
+          },
+          {
+            id: "B" as const,
+            label: "B crank",
+            point: selectedSimulation.state.j1,
+            draggable: true,
+          },
+          {
+            id: "C" as const,
+            label: "C output",
+            point: selectedSimulation.state.j2,
+            draggable: true,
+          },
+          {
+            id: "D" as const,
+            label: "D ground",
+            point: selectedSimulation.state.p2,
+            draggable: true,
+          },
+        ]
+      : []),
+  ];
+  const foundryParamHandles: FoundryParamHandle[] = rawFoundryParamHandles.flatMap((handle) => {
+    const z = foundryOverlayZForHandle(handle.id);
+    const screen = projectFoundryOverlayPoint(
+      handle.point,
+      foundryCamera,
+      foundryProjectionSize,
+      z,
+    );
+    return screen ? [{ ...handle, z, screen }] : [];
+  });
   const foundryParamHandleZSummary = foundryParamHandles
     .map((handle) => `${handle.id}:${handle.z.toFixed(2)}`)
     .join(",");
+  const primaryOutputTrace = rawFoundryPointTraces.find((trace) => trace.primary) ?? rawFoundryPointTraces[0];
+  const outputTraceLabel = primaryOutputTrace?.id ?? "—";
+  const cycleOutputTrace = () => {
+    if (rawFoundryPointTraces.length < 2) return;
+    const currentIndex = Math.max(
+      0,
+      rawFoundryPointTraces.findIndex((trace) => trace.id === primaryOutputTrace?.id),
+    );
+    const next = rawFoundryPointTraces[(currentIndex + 1) % rawFoundryPointTraces.length];
+    setSelectedOutputTraceId(next?.id ?? null);
+    setShowPathPreview(true);
+  };
   const hardBlocked =
     !targetReady ||
     range.percentValid === 0 ||
@@ -682,13 +706,20 @@ export const MechanismFoundry = ({
     );
   };
   const applyFoundryParamHandleDrag = (
-    handle: "B" | "C" | "D",
+    handle: FoundryParamHandleId,
     point: Point,
   ) => {
     const s = selectedSimulation.state;
     const scale = Math.max(0.001, selectedSimulation.scale);
     const sceneDistance = (a: Point, b: Point) =>
       Math.hypot(a.x - b.x, a.y - b.y) / scale;
+    if (handle === "M") {
+      applyAnchor({
+        x: landing.x + (point.x - s.p1.x) / scale,
+        y: landing.y - (point.y - s.p1.y) / scale,
+      });
+      return;
+    }
     if (handle === "B") {
       updateFoundryParam(
         "crankLength",
@@ -719,7 +750,7 @@ export const MechanismFoundry = ({
     });
   };
   const handleFoundryParamPointerDown =
-    (handle: "B" | "C" | "D") =>
+    (handle: FoundryParamHandleId) =>
     (event: React.PointerEvent<SVGCircleElement>) => {
       event.preventDefault();
       event.stopPropagation();
@@ -786,6 +817,7 @@ export const MechanismFoundry = ({
     setFoundryPlaying(false);
     setFoundryPhase(0);
     setManualAnchor(null);
+    setSelectedOutputTraceId(null);
     setShowUserPathPreview(true);
     setShowPathPreview(true);
     setFoundry(createPathFittedFoundry(mechanism));
@@ -794,6 +826,7 @@ export const MechanismFoundry = ({
     setFoundryPlaying(false);
     setFoundryPhase(0);
     setManualAnchor(null);
+    setSelectedOutputTraceId(null);
     setIsPickingAnchor(false);
     setShowForces(true);
     setShowVelocity(true);
@@ -839,11 +872,14 @@ export const MechanismFoundry = ({
     const mechanismId = uid("mech");
     const state = calculateLinkage(landedFoundry, 0);
     const physicalOutputPoint =
-      landedFoundry.type === "4bar" ||
+      mechanismTraceDefinitionsForState(landedFoundry.type, state).find(
+        (trace) => trace.id === primaryOutputTrace?.id,
+      )?.point ??
+      (landedFoundry.type === "4bar" ||
       landedFoundry.type === "5bar" ||
       landedFoundry.type === "6bar"
         ? state.j2
-        : (state.effector ?? state.j2);
+        : (state.effector ?? state.j2));
     const preset = foundry.presetId ?? "balanced";
     return {
       id: `foundry-${Date.now().toString(36)}`,
@@ -883,6 +919,7 @@ export const MechanismFoundry = ({
   };
   const useFoundryMechanism = () => onExport(makePackage());
   const selectFoundryMechanismType = (type: MechanismType) => {
+    setSelectedOutputTraceId(null);
     const next = {
       ...createDefaultMechanism(type, "foundry-preview"),
       color: foundry.color,
@@ -892,6 +929,7 @@ export const MechanismFoundry = ({
     setAnchoredFoundry(next);
   };
   const selectFoundryPreset = (presetId: string) => {
+    setSelectedOutputTraceId(null);
     const preset = FOUNDRY_PRESETS[presetId];
     const { label: _label, ...updates } = preset;
     const base =
@@ -951,6 +989,8 @@ export const MechanismFoundry = ({
             showTrail={showTrail}
             showForces={showForces}
             showVelocity={showVelocity}
+            outputTraceLabel={outputTraceLabel}
+            canCycleOutputTrace={rawFoundryPointTraces.length > 1}
             isPickingAnchor={isPickingAnchor}
             isOrbitingFoundry={isOrbitingFoundry}
             isZoomingFoundry={isZoomingFoundry}
@@ -984,6 +1024,7 @@ export const MechanismFoundry = ({
             onTogglePathPreview={() => setShowPathPreview((value) => !value)}
             onToggleForces={() => setShowForces((value) => !value)}
             onToggleVelocity={() => setShowVelocity((value) => !value)}
+            onCycleOutputTrace={cycleOutputTrace}
             onToggleTrail={() => setShowTrail((value) => !value)}
             onTogglePlaying={() => setFoundryPlaying((value) => !value)}
             onResetPreview={resetFoundryPreview}

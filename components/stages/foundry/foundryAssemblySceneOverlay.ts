@@ -5,7 +5,7 @@ import type {
   PhysicalKitSettings,
   Point,
 } from "../../../types";
-import { boardToScene } from "../../../utils/coordinates";
+import { boardToScene, SCENE_VIEW } from "../../../utils/coordinates";
 import type { FabricationRenderPlan } from "../../../utils/fabrication";
 import type { MechanismPreviewSimulation } from "../../../utils/mechanismPreview";
 import type { AssemblySceneFrame } from "../../../utils/assemblySceneFrame";
@@ -34,7 +34,14 @@ type FoundryAssemblySceneOverlayOptions = {
 
 const ACTIVE_COLOR = "#8b5cf6";
 const BOARD_COLOR = "#7c3aed";
+const BOARD_SURFACE_COLOR = "#eef2ff";
 const FLOATING_COLOR = "#c4b5fd";
+const FOUNDRY_PREVIEW_WIDTH = 360;
+const FOUNDRY_PREVIEW_HEIGHT = 240;
+const SCENE_TO_FOUNDRY_SCALE = Math.min(
+  FOUNDRY_PREVIEW_WIDTH / SCENE_VIEW.width,
+  FOUNDRY_PREVIEW_HEIGHT / SCENE_VIEW.height,
+);
 
 const normalize = (value: string) =>
   value
@@ -142,6 +149,11 @@ const boardCoordToPreviewPoint = (
   };
 };
 
+const scenePointToPreviewPoint = (point: Point): Point => ({
+  x: FOUNDRY_PREVIEW_WIDTH / 2 + point.x * SCENE_TO_FOUNDRY_SCALE,
+  y: FOUNDRY_PREVIEW_HEIGHT / 2 - point.y * SCENE_TO_FOUNDRY_SCALE,
+});
+
 const previewPointToThree = (point: Point, z = 0) =>
   new THREE.Vector3((point.x - 180) / 18, (120 - point.y) / 18, z);
 
@@ -154,6 +166,65 @@ const makeMaterial = (color: string, opacity = 0.92) =>
     opacity,
     depthWrite: opacity > 0.5,
   });
+
+
+const boardPreviewPoints = (kit: PhysicalKitSettings) => {
+  const points: Point[] = [];
+  for (let row = 0; row < kit.boardCells; row += 1) {
+    for (let col = 0; col < kit.boardCells; col += 1) {
+      points.push(scenePointToPreviewPoint(boardToScene(col, row, kit)));
+    }
+  }
+  return points;
+};
+
+const addAssemblyBoardSurface = (
+  group: THREE.Group,
+  kit: PhysicalKitSettings,
+  z: number,
+) => {
+  const points = boardPreviewPoints(kit);
+  if (!points.length) return;
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  const pitch =
+    kit.boardCells > 1
+      ? Math.abs(
+          scenePointToPreviewPoint(boardToScene(1, 0, kit)).x -
+            scenePointToPreviewPoint(boardToScene(0, 0, kit)).x,
+        )
+      : 0;
+  const minX = Math.min(...xs) - pitch / 2;
+  const maxX = Math.max(...xs) + pitch / 2;
+  const minY = Math.min(...ys) - pitch / 2;
+  const maxY = Math.max(...ys) + pitch / 2;
+  const center = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+  const board = new THREE.Group();
+  board.name = "assembly-15x15-board-surface";
+  board.userData.assemblyBoardSurface = "15x15-hole-board";
+  board.userData.assemblyBoardHoleCount = kit.boardCells * kit.boardCells;
+  board.userData.assemblyBoardZ = z;
+
+  const plate = new THREE.Mesh(
+    new THREE.BoxGeometry((maxX - minX) / 18, (maxY - minY) / 18, 0.04),
+    makeMaterial(BOARD_SURFACE_COLOR, 0.36),
+  );
+  plate.name = "assembly-board-z0-plate";
+  plate.position.copy(previewPointToThree(center, z - 0.03));
+  board.add(plate);
+
+  const holeMaterial = makeMaterial(BOARD_COLOR, 0.54);
+  points.forEach((point) => {
+    const hole = new THREE.Mesh(
+      new THREE.TorusGeometry(0.08, 0.012, 6, 18),
+      holeMaterial,
+    );
+    hole.name = "assembly-board-z0-hole";
+    hole.position.copy(previewPointToThree(point, z + 0.02));
+    board.add(hole);
+  });
+  group.add(board);
+};
 
 const addMarkerRing = (
   group: THREE.Group,
@@ -234,15 +305,19 @@ export const renderFoundryAssemblySceneOverlay = ({
 
   const zTop = Math.max(pinTopZ + 0.2, pathLayerZ + 0.1);
   const zBottom = Math.min(pinBottomZ - 0.08, 0);
+  const boardSurfaceZ = 0;
+  if (frame.boardMode !== "hidden") {
+    addAssemblyBoardSurface(overlay, kit, boardSurfaceZ);
+  }
   const activePoints =
     frame.kind === "character"
-      ? (frame.activeScenePoints ?? [])
+      ? (frame.activeScenePoints ?? []).map(scenePointToPreviewPoint)
       : frame.activeBoardCoords
           .map((coord) => boardCoordToPreviewPoint(coord, kit, mechanism, simulation))
           .filter((point): point is Point => Boolean(point));
   const floatingPoints =
     frame.kind === "character"
-      ? (frame.floatingReferencePoints ?? [])
+      ? (frame.floatingReferencePoints ?? []).map(scenePointToPreviewPoint)
       : frame.floatingReferenceCoords
           .map((coord) => boardCoordToPreviewPoint(coord, kit, mechanism, simulation))
           .filter((point): point is Point => Boolean(point));

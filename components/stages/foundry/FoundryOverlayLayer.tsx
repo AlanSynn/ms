@@ -2,13 +2,15 @@ import React from "react";
 import type { Point } from "../../../types";
 import type { FoundryOverlaySize } from "../../../utils/foundryCamera";
 
+export type FoundryParamHandleId = "M" | "A" | "B" | "C" | "D";
+
 export type FoundryParamHandle = {
-  id: string;
+  id: FoundryParamHandleId;
   label: string;
   point: Point;
   draggable: boolean;
   z: number;
-  screen?: Point;
+  screen: Point;
 };
 
 type FoundryOverlayLayerProps = {
@@ -36,7 +38,7 @@ type FoundryOverlayLayerProps = {
   hasManualAnchor: boolean;
   landingBoardLabel: string;
   onParamPointerDown: (
-    handle: "B" | "C" | "D",
+    handle: FoundryParamHandleId,
   ) => React.PointerEventHandler<SVGCircleElement>;
   onParamPointerMove: React.PointerEventHandler<SVGCircleElement>;
   onParamPointerUp: React.PointerEventHandler<SVGCircleElement>;
@@ -225,7 +227,8 @@ export const FoundryOverlayLayer = ({
     {foundryParamHandles.length > 0 && (
       <g
         data-testid="foundry-param-handles"
-        data-handle-contract="4bar-A-B-C-D"
+        data-handle-contract="move-anchor-plus-shape-handles"
+        data-handle-ids={foundryParamHandles.map((handle) => handle.id).join(",")}
         data-projection="three-camera"
         data-handle-z-contract="board-pivots-bottom-floating-top"
         data-handle-z-map={foundryParamHandleZSummary}
@@ -249,7 +252,7 @@ export const FoundryOverlayLayer = ({
               strokeWidth="3"
               onPointerDown={
                 handle.draggable
-                  ? onParamPointerDown(handle.id as "B" | "C" | "D")
+                  ? onParamPointerDown(handle.id)
                   : undefined
               }
               onPointerMove={handle.draggable ? onParamPointerMove : undefined}

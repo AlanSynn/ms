@@ -27,7 +27,7 @@ export const AssemblySceneFrame = ({ frame }: { frame: AssemblySceneFrameModel }
         <p className="section-title">Step {frame.stepIndex}</p>
         <h3>{frame.label}</h3>
       </div>
-      <span className="badge">{frame.motion === "scrub_time" ? "Test" : frame.explodeAxis === "z" ? "Explode" : "Place"}</span>
+      <span className="badge">{frame.motion === "scrub_time" ? "Test" : frame.explodeAxis === "z" ? "Add" : "Place"}</span>
     </div>
     <p className="assembly-scene-instruction">{frame.instruction}</p>
     {frame.check && <p className="assembly-scene-check">Check: {frame.check}</p>}

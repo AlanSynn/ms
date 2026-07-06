@@ -1,9 +1,8 @@
 import type { BodyPartLayer, FabricationRecipe, MechanismConfig, PhysicalKitSettings, Point, ProjectState } from '../types';
-import { boardToScene, bodyPartPivotScene, sceneToBoardRaw, SCENE_PX_PER_MM } from './coordinates';
-import { fabricationBoardCoordinateCallout, fabricationPartDisplayLabel, readableFabricationStackSummary, prefabAssemblySteps, sampleFeasibleRange } from './fabrication';
-import { preferredMotionJointId } from './motion';
+import { bodyPartPivotScene, sceneToBoardRaw } from './coordinates';
+import { fabricationBoardCoordinateCallout, fabricationPartDisplayLabel } from './fabrication';
+import { createFabricationRecipe } from './fabricationRecipes';
 import { fabricablePartOutlinePoints, partLandmarkJointIds, partLandmarkLocalPoints } from './partGeometry';
-import { mechanismRequiredParts } from './project';
 
 export type AssemblyLane = 'kit' | 'custom';
 export type AssemblyMotionKind = 'none' | 'explode_z' | 'mount_travel_xy' | 'connect_travel_xy' | 'scrub_time';
@@ -158,34 +157,8 @@ export const buildCharacterAssemblyPlan = (project: ProjectState): CharacterAsse
     return { kind: 'character', parts, fixedPins, freePivots, steps, mechanismAssemblySteps: [], boardCells: project.settings.physicalKit.boardCells };
 };
 
-export const pendingRecipeForMechanism = (project: ProjectState, mechanism: MechanismConfig): FabricationRecipe => {
-    const board = sceneToBoardRaw({ x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 }, project.settings.physicalKit);
-    const boardScene = board.valid ? boardToScene(board.col, board.row, project.settings.physicalKit) : { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 };
-    const targetPart = mechanism.targetPartId ? project.parts[mechanism.targetPartId] : undefined;
-    const targetSceneObject = mechanism.targetSceneObjectId ? project.sceneObjects[mechanism.targetSceneObjectId] : undefined;
-    const targetPath = mechanism.targetPathId ? project.paths[mechanism.targetPathId] : undefined;
-    const targetAnchorJointId = targetPart ? preferredMotionJointId(project, mechanism.targetPartId, mechanism.targetAnchorJointId) : undefined;
-    const range = sampleFeasibleRange(mechanism);
-    return {
-        mechanismId: mechanism.id,
-        type: mechanism.type,
-        targetPartId: mechanism.targetPartId,
-        targetSceneObjectId: mechanism.targetSceneObjectId,
-        targetPathId: mechanism.targetPathId,
-        targetAnchorJointId,
-        targetPartName: targetPart?.name,
-        targetSceneObjectName: targetSceneObject?.name,
-        targetPathPointCount: targetPath?.points.length,
-        boardCoordinate: board.label,
-        board,
-        sceneAnchor: { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 },
-        offsetFromBoardMm: { x: ((mechanism.anchorX ?? 0) - boardScene.x) / SCENE_PX_PER_MM, y: ((mechanism.anchorY ?? 0) - boardScene.y) / SCENE_PX_PER_MM },
-        requiredParts: mechanismRequiredParts(mechanism),
-        steps: [`Stack: ${readableFabricationStackSummary(mechanism)}`, 'Cut sheet + assembly.'],
-        assemblySteps: prefabAssemblySteps(mechanism, board.label),
-        warnings: [...(mechanism.warnings ?? []), ...(range.warning ? [range.warning] : [])]
-    };
-};
+export const pendingRecipeForMechanism = (project: ProjectState, mechanism: MechanismConfig): FabricationRecipe =>
+    createFabricationRecipe(project, mechanism);
 
 export const assemblyLaneForExportMode = (mode: PhysicalKitSettings['exportMode']): AssemblyLane => mode === 'custom-parts' ? 'custom' : 'kit';
 

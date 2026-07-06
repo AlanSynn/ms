@@ -128,9 +128,6 @@
       .canvas-workspace { position: relative; background: transparent; border: 0; border-radius: 0; box-shadow: none; overflow: hidden; }
       .canvas-workspace > .canvas-surface { border-radius: 0; border-color: transparent; background: transparent; box-shadow: none; }
       .stage-workflow-block, .stage-nav-compact { display: grid; gap: .75rem; }
-      .classroom-checklist { display: flex; flex-wrap: wrap; gap: .35rem; padding: .55rem; border: 1px solid var(--ms-line); border-radius: 1rem; background: rgba(255,255,255,.72); }
-      .classroom-checklist span { display: inline-flex; align-items: center; min-height: 1.55rem; border: 1px solid var(--ms-line); border-radius: 999px; color: var(--ms-muted); background: #fff; padding: .28rem .52rem; font-size: .68rem; font-weight: 720; }
-      .classroom-checklist span.done { border-color: rgba(16,185,129,.32); color: #047857; background: rgba(16,185,129,.10); }
       .stage-player-row { position: absolute; left: calc(var(--ms-left-pane-width) + var(--ms-stage-gap)); right: calc(var(--ms-right-pane-width) + var(--ms-stage-gap)); bottom: .85rem; z-index: 45; display: flex; justify-content: center; pointer-events: none; }
       .stage-nav-compact { display: none; border-top: 1px solid var(--ms-line); border-bottom: 1px solid var(--ms-line); padding: .9rem 0; }
       .stage-option-list { display: grid; gap: .4rem; margin-top: 1rem; }
@@ -141,7 +138,7 @@
       .settings-section { scroll-margin-top: 1rem; }
       .app-shell .path-canvas-shell { height: 100%; min-height: 0; }
       .app-shell .path-canvas-shell > svg[data-testid="path-canvas"] { height: 100%; min-height: 0; }
-      .template-gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .55rem; align-content: end; }
+      .template-gallery { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .75rem; align-content: stretch; }
       .guided-project-library { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .9rem; align-items: stretch; }
       .template-tile.guided-project-card { min-height: 19rem; gap: .7rem; padding: .82rem; overflow: hidden; }
       .guided-project-preview { width: 100%; aspect-ratio: 4 / 3; min-height: 9.8rem; display: block; border: 1px solid rgba(139,92,246,.18); border-radius: 1rem; overflow: hidden; background: linear-gradient(135deg, #fff, #f6f1ff); box-shadow: inset 0 1px 0 rgba(255,255,255,.86); }
@@ -163,11 +160,17 @@
       .template-tile.starter { position: relative; overflow: hidden; }
       .template-tile .template-icon-slot { width: 2.25rem; height: 2.25rem; display: inline-grid; place-items: center; border-radius: .85rem; background: #f5f6fa; color: var(--ms-accent); }
       .starter-thumb { width: 2.25rem; height: 2.25rem; object-fit: contain; border-radius: .85rem; filter: grayscale(1); opacity: .78; }
-      .getting-started-dialog .template-gallery .template-tile { display: grid; grid-template-columns: 2.25rem minmax(0, 1fr) auto; grid-template-rows: auto auto; column-gap: .75rem; row-gap: .12rem; align-items: center; min-height: 6.45rem; }
-      .getting-started-dialog .template-gallery .template-icon-slot { grid-row: 1 / 3; }
-      .getting-started-dialog .template-gallery .template-tile strong { grid-column: 2; margin-top: 0; }
-      .getting-started-dialog .template-gallery .template-tile small { grid-column: 2; margin-top: 0; max-width: 17rem; line-height: 1.25; }
-      .getting-started-dialog .template-gallery .template-tile b { grid-column: 3; grid-row: 1 / 3; align-self: center; margin-top: 0; }
+      .getting-started-dialog .template-gallery .template-tile { grid-column: span 2; display: grid; grid-template-columns: 6rem minmax(0, 1fr); grid-template-rows: auto auto 1fr auto; column-gap: .9rem; row-gap: .65rem; align-items: start; min-height: 11.25rem; padding: 1.05rem; }
+      .getting-started-dialog .template-gallery .template-tile.primary { grid-column: span 3; }
+      .getting-started-dialog .template-gallery .template-icon-slot { grid-column: 1; grid-row: 1; width: 6rem; height: 6rem; border-radius: 1.35rem; }
+      .getting-started-dialog .template-gallery .template-icon-slot svg { width: 3.15rem; height: 3.15rem; }
+      .getting-started-dialog .template-gallery .starter .template-icon-slot { overflow: hidden; }
+      .getting-started-dialog .template-gallery .starter-thumb { width: 6rem; height: 6rem; border-radius: 1.35rem; filter: grayscale(.35); opacity: .92; transform: scale(1.22); }
+      .getting-started-dialog .template-gallery .template-tile strong { grid-column: 2; margin-top: 0; align-self: center; font-size: clamp(1.15rem, 1.7vw, 1.6rem); }
+      .getting-started-dialog .template-gallery .template-tile small { grid-column: 1 / -1; margin-top: 0; max-width: none; line-height: 1.3; font-size: .9rem; }
+      .starter-card-cues { grid-column: 1 / -1; align-self: end; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .42rem; }
+      .starter-card-cues span { border: 1px solid var(--ms-line); border-radius: .85rem; background: rgba(255,255,255,.82); color: var(--ms-text-soft); padding: .46rem .56rem; font-size: .8rem; font-weight: 760; line-height: 1.08; }
+      .getting-started-dialog .template-gallery .template-tile b { grid-column: 1 / -1; grid-row: 4; align-self: end; margin-top: 0; font-size: .78rem; padding: .52rem .7rem; }
       .replace-toggle { display: inline-flex; align-items: center; gap: .45rem; color: var(--ms-muted); font-size: .82rem; font-weight: 650; }
       .import-status { width: min(100%, 34rem); min-width: 0; border: 1px solid var(--ms-line); border-radius: 1.5rem; background: rgba(255,255,255,.86); padding: 1rem; }
       .path-canvas-shell { position: relative; }
@@ -251,10 +254,10 @@
       .motionsmith-logo-mark { width: 2.55rem; height: 2.55rem; flex: none; border-radius: .9rem; object-fit: cover; filter: drop-shadow(0 8px 16px rgba(47,86,214,.14)); }
       .workflow-rail-app-icon { width: 2.35rem; height: 2.35rem; border-radius: .82rem; }
       .starter-backdrop { background: rgba(248,250,252,.62); backdrop-filter: blur(10px) saturate(1.08); }
-      .getting-started-dialog { width: min(94vw, 64rem); max-height: min(88vh, 48rem); display: grid; gap: .95rem; padding: 1rem; overflow: auto; }
+      .getting-started-dialog { width: min(94vw, 70rem); min-height: min(82vh, 43rem); max-height: min(92vh, 64rem); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 1.15rem; padding: 1.25rem; overflow: auto; }
       .getting-started-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; border-bottom: 1px solid var(--ms-line); padding-bottom: .75rem; }
       .getting-started-head h2 { max-width: 24rem; margin: .2rem 0 0; color: var(--ms-text); font-size: clamp(1.35rem, 2.4vw, 2rem); line-height: .98; letter-spacing: -.045em; font-weight: 720; }
-      .getting-started-dialog .template-gallery { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .getting-started-dialog .template-gallery { grid-template-columns: repeat(6, minmax(0, 1fr)); align-content: stretch; }
       .getting-started-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .75rem; align-items: center; border-top: 1px solid var(--ms-line); padding-top: .85rem; }
       .character-editor-frame { min-height: 0; }
       .character-preview-pane { position: relative; height: 100%; min-height: 24rem; overflow: hidden; border: 1px solid var(--ms-line); border-radius: 1.75rem; background: linear-gradient(90deg, rgba(148,163,184,.08) 1px, transparent 1px), linear-gradient(0deg, rgba(148,163,184,.08) 1px, transparent 1px), #fff; background-size: 40px 40px; }
@@ -525,6 +528,7 @@
         .player-dock { width: min(100%, 24rem); }
         .template-gallery { grid-template-columns: 1fr; }
         .getting-started-dialog .template-gallery, .guided-project-library { grid-template-columns: 1fr; }
+        .getting-started-dialog .template-gallery .template-tile, .getting-started-dialog .template-gallery .template-tile.primary { grid-column: auto; }
         .template-tile.primary { min-height: 0; }
         .template-tile.guided-project-card { min-height: 16rem; }
         .import-status { margin-top: 1rem; }

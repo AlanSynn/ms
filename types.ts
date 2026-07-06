@@ -265,6 +265,7 @@ export interface FabricationRecipe {
     board: { col: number; row: number; xMm: number; yMm: number; valid?: boolean };
     sceneAnchor: Point;
     offsetFromBoardMm: Point;
+    camProfileSamples?: number[];
     requiredParts: FabricationPartRequirement[];
     steps: string[];
     assemblySteps: Array<{

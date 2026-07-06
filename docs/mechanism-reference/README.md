@@ -26,7 +26,7 @@ This folder is the portable mechanism-unit rulebook for rebuilding Automataii's 
 | Mechanism key | Current status | Foundry-visible | Transfer/export | Fabrication recipe | Notes |
 |---|---:|---:|---:|---:|---|
 | `four_bar` | production physical mechanism | yes | yes | yes | Canonical 4-bar recipe; uses L2-L4-L2 plus board ground link. |
-| `cam_follower` | production physical mechanism | yes | yes | yes | Eccentric cam + round follower recipe; other cam/follower presets are parts. |
+| `cam_follower` | production physical mechanism | yes | yes | yes | Pegboard-mounted gravity cam follower module; only the cam disk is swapped often. |
 | `gear_train` | production physical mechanism | yes | yes | yes | Separated G3 endpoint gears by default; inserted idlers create the mesh/coupling. |
 | `gear_linkage` | production physical mechanism | yes | yes | yes | Separated endpoint gear crank pins plus paired links meeting at R; inserted idlers provide gear coupling. |
 | `planetary_gear` | production physical mechanism | yes | yes | yes | G1 sun, G3 planet, R56 fixed ring, L2 carrier; ring/sun/planet teeth share one mesh plane while the carrier rides on a separate spacer plane. |

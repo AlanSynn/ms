@@ -130,3 +130,11 @@ export const generateFoundryPlaybackPointTraces = (
     allTraces[allTraces.length - 1].primary = true;
   return { traces: allTraces, percentValid: validCount / totalSamples };
 };
+
+export const primaryFoundryPlaybackPath = (
+  mechanism: MechanismConfig,
+  resolution = 36,
+) =>
+  generateFoundryPlaybackPointTraces(mechanism, resolution).traces.find(
+    (trace) => trace.primary,
+  )?.points ?? [];

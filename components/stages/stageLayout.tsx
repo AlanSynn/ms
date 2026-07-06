@@ -30,24 +30,6 @@ const EDITOR_PANE_CONTRACT = {
     right: { testId: 'stage-right-inspector', ariaLabel: 'Selected item inspector' }
 } as const;
 
-const classroomChecklistFor = (project: ProjectState) => {
-    const hasCharacter = project.partOrder.length > 0;
-    const hasPath = Object.values(project.paths).some(path => path.enabled && path.points.length >= 3);
-    const eligibleMechanisms = project.mechanisms.filter(mechanism => mechanism.visible && mechanism.enabled !== false && (mechanism.targetPartId || mechanism.targetSceneObjectId) && mechanism.targetPathId);
-    const hasMechanism = eligibleMechanisms.length > 0;
-    const hasTestableFit = eligibleMechanisms.some(mechanism => (mechanism.generatedPath?.length ?? 0) >= 3);
-    const hasBlueprint = Boolean(project.lastExport);
-    const hasAssembly = Boolean(project.lastExport?.recipes.length);
-    return [
-        ['Character', hasCharacter],
-        ['Path', hasPath],
-        ['Mechanism', hasMechanism],
-        ['Test', hasTestableFit],
-        ['Blueprint', hasBlueprint],
-        ['Assembly', hasAssembly]
-    ] as const;
-};
-
 type PaneSlot<Kind extends 'workflow' | 'canvas' | 'inspector'> = Readonly<{
     kind: Kind;
     content: React.ReactNode;
@@ -83,12 +65,11 @@ export const EditorStageFrame = ({ stage, layout, className = '' }: { stage: App
     </div>
 );
 
-export const StageLeftSummary = ({ project, title, stage, goStage, showClassroomChecklist = true, children }: {
+export const StageLeftSummary = ({ project, title, stage, goStage, children }: {
     project: ProjectState;
     title: string;
     stage: AppStage;
     goStage?: (stage: AppStage) => void;
-    showClassroomChecklist?: boolean;
     children: React.ReactNode;
 }) => {
     const linkClass = (targets: AppStage[]) => `workspace-side-link ${targets.includes(stage) ? 'active' : ''}`;
@@ -100,9 +81,6 @@ export const StageLeftSummary = ({ project, title, stage, goStage, showClassroom
             <div className="section-title">Flow</div>
             {STAGE_PANE_NAV_ITEMS.map(item => <button key={item.ariaLabel} aria-label={item.ariaLabel} aria-current={item.activeStages.includes(stage) ? 'step' : undefined} className={linkClass(item.activeStages)} onClick={() => goStage(item.target)}><StagePaneNavIcon icon={item.icon}/> {item.label}</button>)}
         </nav>}
-        {showClassroomChecklist && project.metadata.classroomLessonId && <div className="classroom-checklist" data-testid="classroom-checklist" aria-label="Classroom lesson checklist">
-            {classroomChecklistFor(project).map(([label, done]) => <span key={label} className={done ? 'done' : ''} aria-checked={done} role="checkbox">{label}</span>)}
-        </div>}
         <div className="stage-workflow-block">
             <div className="section-title">{title}</div>
             {children}

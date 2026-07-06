@@ -5,8 +5,8 @@
      data-profile-key="motionsmith-ms4n"
      data-grid-pitch-mm="20"
      data-hole-diameter-mm="4">
-  <title>Automataii assembly guide cam-follower-basic</title>
-  <desc>Printable source SVG preview for Cam and follower lift; the app export composes full PDF step cards.</desc>
+  <title>Automataii assembly guide pegboard-gravity-cam-follower</title>
+  <desc>Printable source SVG preview for Pegboard-mounted gravity cam follower module; the app export composes full PDF step cards.</desc>
   <defs>
     <style>
       .cut { fill: none; stroke: #ed1c24; stroke-width: 0.25; stroke-miterlimit: 10; }
@@ -23,7 +23,7 @@
     </style>
   </defs>
   <rect x="8" y="8" width="263.4" height="199.9" class="score step-card"/>
-  <text x="14" y="17" class="label" text-anchor="start">Cam and follower lift</text>
+  <text x="14" y="17" class="label" text-anchor="start">Pegboard-mounted gravity cam follower module</text>
   <text x="14" y="25" class="tiny" text-anchor="start">Source SVG preview. Export Blueprint Package for the full PDF step cards.</text>
   <text x="14" y="35" class="small" text-anchor="start">Parts to add now</text>
   <text x="103" y="35" class="small" text-anchor="start">Board/ref</text>
@@ -48,39 +48,52 @@
   <rect x="233" y="109" width="28" height="17" class="layout-box" style="fill:none;stroke:none" data-layout-box="4,board,233,109,28,17" data-step="4" data-zone="board"/>
   <rect x="151" y="126" width="103" height="9" class="layout-box" style="fill:none;stroke:none" data-layout-box="4,stack,151,126,103,9" data-step="4" data-zone="stack"/>
   <rect x="151" y="136" width="103" height="8" class="layout-box" style="fill:none;stroke:none" data-layout-box="4,check,151,136,103,8" data-step="4" data-zone="check"/>
+  <rect x="14" y="158" width="122" height="49" class="score step-card"/>
+  <rect x="19" y="173" width="46" height="10" class="layout-box" style="fill:none;stroke:none" data-layout-box="5,parts,19,173,46,10" data-step="5" data-zone="parts"/>
+  <rect x="101" y="167" width="28" height="17" class="layout-box" style="fill:none;stroke:none" data-layout-box="5,board,101,167,28,17" data-step="5" data-zone="board"/>
+  <rect x="19" y="184" width="103" height="9" class="layout-box" style="fill:none;stroke:none" data-layout-box="5,stack,19,184,103,9" data-step="5" data-zone="stack"/>
+  <rect x="19" y="194" width="103" height="8" class="layout-box" style="fill:none;stroke:none" data-layout-box="5,check,19,194,103,8" data-step="5" data-zone="check"/>
   <g id="layer-board-grid">
   <circle cx="106" cy="64" r="1.15" class="drill board-hole active-board-hole" data-step="1" data-board-coord="J7"/>
   <circle cx="238" cy="64" r="1.15" class="drill board-hole active-board-hole" data-step="2" data-board-coord="J7"/>
-  <circle cx="106" cy="122" r="1.15" class="drill board-hole active-board-hole" data-step="3" data-board-coord="G7"/>
+  <circle cx="106" cy="122" r="1.15" class="drill board-hole active-board-hole" data-step="3" data-board-coord="J11"/>
+  <circle cx="111" cy="122" r="1.15" class="drill board-hole active-board-hole" data-step="3" data-board-coord="J9"/>
   <circle cx="238" cy="122" r="1.15" class="drill board-hole active-board-hole" data-step="4" data-board-coord="J7"/>
-  <circle cx="243" cy="122" r="1.15" class="drill board-hole active-board-hole" data-step="4" data-board-coord="G7"/>
+  <circle cx="243" cy="122" r="1.15" class="drill board-hole reference-coordinate" data-step="4" data-board-coord="J9"/>
+  <circle cx="106" cy="180" r="1.15" class="drill board-hole active-board-hole" data-step="5" data-board-coord="J7"/>
+  <circle cx="111" cy="180" r="1.15" class="drill board-hole reference-coordinate" data-step="5" data-board-coord="J9"/>
   </g>
   <g id="layer-previous-step-ghost">
   </g>
   <g id="layer-existing-parts">
-  <rect x="153" y="58" width="22" height="7.5" class="score part-card" style="fill:#94a3b8;fill-opacity:0.22;stroke:#94a3b8;stroke-width:0.5" data-step="2" data-part-key="spacers:s10" data-part-index="1"/>
-  <text x="164" y="63" class="tiny" text-anchor="middle">S10</text>
-  <rect x="178" y="58" width="22" height="7.5" class="score part-card" style="fill:#f472b6;fill-opacity:0.22;stroke:#f472b6;stroke-width:0.5" data-step="2" data-part-key="cams:eccentric" data-part-index="2"/>
-  <text x="189" y="63" class="tiny" text-anchor="middle">Eccentric</text>
-  <rect x="21" y="116" width="22" height="7.5" class="score part-card" style="fill:#94a3b8;fill-opacity:0.22;stroke:#94a3b8;stroke-width:0.5" data-step="3" data-part-key="spacers:s10" data-part-index="1"/>
-  <text x="32" y="121" class="tiny" text-anchor="middle">S10</text>
-  <rect x="46" y="116" width="22" height="7.5" class="score part-card" style="fill:#34d399;fill-opacity:0.22;stroke:#34d399;stroke-width:0.5" data-step="3" data-part-key="followers:f3-round" data-part-index="2"/>
-  <text x="57" y="121" class="tiny" text-anchor="middle">F3 Round</text>
-  <rect x="153" y="116" width="22" height="7.5" class="score part-card" style="fill:#f472b6;fill-opacity:0.22;stroke:#f472b6;stroke-width:0.5" data-step="4" data-part-key="cams:eccentric" data-part-index="1"/>
-  <text x="164" y="121" class="tiny" text-anchor="middle">Eccentric</text>
-  <rect x="178" y="116" width="22" height="7.5" class="score part-card" style="fill:#34d399;fill-opacity:0.22;stroke:#34d399;stroke-width:0.5" data-step="4" data-part-key="followers:f3-round" data-part-index="2"/>
-  <text x="189" y="121" class="tiny" text-anchor="middle">F3 Round</text>
+  <rect x="21" y="58" width="22" height="7.5" class="score part-card" style="fill:#f472b6;fill-opacity:0.22;stroke:#f472b6;stroke-width:0.5" data-step="1" data-part-key="cam_modules:axle-peg" data-part-index="1"/>
+  <text x="32" y="63" class="tiny" text-anchor="middle">Axle peg</text>
+  <rect x="46" y="58" width="22" height="7.5" class="score part-card" style="fill:#f472b6;fill-opacity:0.22;stroke:#f472b6;stroke-width:0.5" data-step="1" data-part-key="cam_modules:crank-handle" data-part-index="2"/>
+  <text x="57" y="63" class="tiny" text-anchor="middle">Crank handle</text>
+  <rect x="153" y="58" width="22" height="7.5" class="score part-card" style="fill:#f472b6;fill-opacity:0.22;stroke:#f472b6;stroke-width:0.5" data-step="2" data-part-key="cam_modules:paper-washer" data-part-index="1"/>
+  <text x="164" y="63" class="tiny" text-anchor="middle">Paper washer</text>
+  <rect x="178" y="58" width="22" height="7.5" class="score part-card" style="fill:#f472b6;fill-opacity:0.22;stroke:#f472b6;stroke-width:0.5" data-step="2" data-part-key="cam_modules:cam-spacer" data-part-index="2"/>
+  <text x="189" y="63" class="tiny" text-anchor="middle">Cam spacer</text>
+  <rect x="21" y="116" width="22" height="7.5" class="score part-card" style="fill:#f472b6;fill-opacity:0.22;stroke:#f472b6;stroke-width:0.5" data-step="3" data-part-key="cam_modules:u-channel-guide-cartridge" data-part-index="1"/>
+  <text x="32" y="121" class="tiny" text-anchor="middle">Guide cartrid…</text>
+  <rect x="153" y="116" width="22" height="7.5" class="score part-card" style="fill:#f472b6;fill-opacity:0.22;stroke:#f472b6;stroke-width:0.5" data-step="4" data-part-key="cam_modules:gravity-follower-module" data-part-index="1"/>
+  <text x="164" y="121" class="tiny" text-anchor="middle">Gravity follo…</text>
+  <rect x="21" y="174" width="22" height="7.5" class="score part-card" style="fill:#f472b6;fill-opacity:0.22;stroke:#f472b6;stroke-width:0.5" data-step="5" data-part-key="cam_modules:swappable-cam-disk" data-part-index="1"/>
+  <text x="32" y="179" class="tiny" text-anchor="middle">Cam disk</text>
+  <rect x="46" y="174" width="22" height="7.5" class="score part-card" style="fill:#f472b6;fill-opacity:0.22;stroke:#f472b6;stroke-width:0.5" data-step="5" data-part-key="cam_modules:gravity-follower-module" data-part-index="2"/>
+  <text x="57" y="179" class="tiny" text-anchor="middle">Gravity follo…</text>
   </g>
   <g id="layer-new-part-highlight">
   <circle cx="106" cy="64" r="1.8" class="score new-part-highlight" data-step="1" data-board-coord="J7" data-app-mechanism="cam_follower"/>
   <circle cx="238" cy="64" r="1.8" class="score new-part-highlight" data-step="2" data-board-coord="J7" data-app-mechanism="cam_follower"/>
-  <circle cx="106" cy="122" r="1.8" class="score new-part-highlight" data-step="3" data-board-coord="G7" data-app-mechanism="cam_follower"/>
+  <circle cx="106" cy="122" r="1.8" class="score new-part-highlight" data-step="3" data-board-coord="J11" data-app-mechanism="cam_follower"/>
+  <circle cx="111" cy="122" r="1.8" class="score new-part-highlight" data-step="3" data-board-coord="J9" data-app-mechanism="cam_follower"/>
   <circle cx="238" cy="122" r="1.8" class="score new-part-highlight" data-step="4" data-board-coord="J7" data-app-mechanism="cam_follower"/>
-  <circle cx="243" cy="122" r="1.8" class="score new-part-highlight" data-step="4" data-board-coord="G7" data-app-mechanism="cam_follower"/>
+  <circle cx="243" cy="122" r="1.8" class="score reference-marker" data-step="4" data-reference-coord="J9" data-app-mechanism="cam_follower"/>
+  <circle cx="106" cy="180" r="1.8" class="score new-part-highlight" data-step="5" data-board-coord="J7" data-app-mechanism="cam_follower"/>
+  <circle cx="111" cy="180" r="1.8" class="score reference-marker" data-step="5" data-reference-coord="J9" data-app-mechanism="cam_follower"/>
   </g>
   <g id="layer-fasteners">
-  <rect x="21" y="58" width="34" height="7.5" class="score part-card" style="fill:#f97316;fill-opacity:0.18;stroke:#f97316;stroke-width:0.5" data-step="1" data-part-key="hardware:paper-fastener" data-part-index="1"/>
-  <text x="38" y="63" class="tiny" text-anchor="middle">Paper fastener</text>
   </g>
   <g id="layer-spacers">
   </g>
@@ -88,28 +101,33 @@
   </g>
   <g id="layer-callouts">
   <text x="19" y="50" class="coord-label" text-anchor="start">1</text>
-  <text x="30" y="49.6" class="part-card-label" text-anchor="start">Mount cam axle</text>
+  <text x="30" y="49.6" class="part-card-label" text-anchor="start">Mount axle module</text>
   <text x="151" y="50" class="coord-label" text-anchor="start">2</text>
-  <text x="162" y="49.6" class="part-card-label" text-anchor="start">Add eccentric cam</text>
+  <text x="162" y="49.6" class="part-card-label" text-anchor="start">Add swappable cam disk</text>
   <text x="19" y="108" class="coord-label" text-anchor="start">3</text>
-  <text x="30" y="107.6" class="part-card-label" text-anchor="start">Add follower guide</text>
+  <text x="30" y="107.6" class="part-card-label" text-anchor="start">Plug in guide cartridge</text>
   <text x="151" y="108" class="coord-label" text-anchor="start">4</text>
-  <text x="162" y="107.6" class="part-card-label" text-anchor="start">Check lift</text>
+  <text x="162" y="107.6" class="part-card-label" text-anchor="start">Insert gravity follower</text>
+  <text x="19" y="166" class="coord-label" text-anchor="start">5</text>
+  <text x="30" y="165.6" class="part-card-label" text-anchor="start">Test cam contact</text>
   </g>
   <g id="layer-labels">
   <text x="72" y="57" class="tiny" text-anchor="start">Board holes: J7</text>
   <text x="204" y="57" class="tiny" text-anchor="start">Board holes: J7</text>
-  <text x="72" y="115" class="tiny" text-anchor="start">Board holes: G7</text>
-  <text x="204" y="115" class="tiny" text-anchor="start">Board holes: J7, G7</text>
+  <text x="72" y="115" class="tiny" text-anchor="start">Board holes: J11, J9</text>
+  <text x="204" y="115" class="tiny" text-anchor="start">Board/ref: J9, J7</text>
+  <text x="72" y="173" class="tiny" text-anchor="start">Board/ref: J7, J9</text>
   </g>
   <g id="layer-stack-diagram">
   <rect x="21" y="69" width="9" height="4.6" class="score stack-layer" data-step="1" data-stack-layer="1" data-stack-role="board" data-part-key=""/>
-  <text x="33" y="73" class="tiny" text-anchor="start">Board hole J7</text>
+  <text x="33" y="73" class="tiny" text-anchor="start">15x15 pegboard hole J7</text>
   <rect x="153" y="69" width="9" height="4.6" class="score stack-layer" data-step="2" data-stack-layer="1" data-stack-role="board" data-part-key=""/>
-  <text x="165" y="73" class="tiny" text-anchor="start">Board hole J7</text>
+  <text x="165" y="73" class="tiny" text-anchor="start">15x15 pegboard hole J7</text>
   <rect x="21" y="127" width="9" height="4.6" class="score stack-layer" data-step="3" data-stack-layer="1" data-stack-role="board" data-part-key=""/>
-  <text x="33" y="131" class="tiny" text-anchor="start">Board hole G7</text>
-  <rect x="153" y="127" width="9" height="4.6" class="score stack-layer" data-step="4" data-stack-layer="1" data-stack-role="board" data-part-key=""/>
-  <text x="165" y="131" class="tiny" text-anchor="start">Board hole G7</text>
+  <text x="33" y="131" class="tiny" text-anchor="start">15x15 pegboard holes J1…</text>
+  <rect x="153" y="127" width="9" height="4.6" class="score stack-layer" data-step="4" data-stack-layer="1" data-stack-role="guide" data-part-key="cam_modules:u-channel-guide-cartridge"/>
+  <text x="165" y="131" class="tiny" text-anchor="start">Guide channel J9</text>
+  <rect x="21" y="185" width="9" height="4.6" class="score stack-layer" data-step="5" data-stack-layer="1" data-stack-role="cam" data-part-key="cam_modules:swappable-cam-disk"/>
+  <text x="33" y="189" class="tiny" text-anchor="start">Swappable cam disk</text>
   </g>
 </svg>

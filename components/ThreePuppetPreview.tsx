@@ -1373,12 +1373,18 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       };
       const zBackClip = zLayer(['Back Clip'], 0.22);
       const zDriver = zRole('linkage', 0, zLayer(['Input L2 linkage', 'L2 linkage', 'Drive linkage', 'Input linkage', 'Crank linkage', 'Left crank linkage'], 0.76));
-      const zFirstGear = zRole('gear', 0, zLayer(['Drive G3 / 3-space gear', 'G1 / 1-space gear', 'Eccentric cam', 'R56 internal ring gear', 'Drive gear', 'Left timing gear', 'Pinion gear', 'Cam disk', 'Ring gear'], 0.4));
+      const zFirstGear = mechanism.type === 'cam'
+        ? zRole('cam', 0, zLayer(['Swappable cam disk', 'Cam disk'], 0.4))
+        : zRole('gear', 0, zLayer(['Drive G3 / 3-space gear', 'G1 / 1-space gear', 'R56 internal ring gear', 'Drive gear', 'Left timing gear', 'Pinion gear', 'Ring gear'], 0.4));
       const zSecondGear = zRole('gear', 1, zFirstGear + FABRICATION_RENDER_LAYER_Z_STEP);
       const zDriverGear = mechanism.type === 'planetary_gear' ? zSecondGear : zFirstGear;
       const zRingGear = mechanism.type === 'planetary_gear' ? zFirstGear : zDriverGear;
-      const zCoupler = zRole('linkage', 1, zLayer(['Coupler L4 linkage', 'L4 linkage', 'L6 linkage', 'Round follower', '2-hole bracket', '3-hole bracket', 'Coupler linkage', 'Center coupler', 'Carrier linkage', 'Slider guide', 'Rack guide', 'Follower guide'], zDriver + FABRICATION_RENDER_LAYER_Z_STEP));
-      const zOutput = zRole('linkage', 2, zLayer(['Output L2 linkage', 'L4 linkage', '2-hole bracket', 'Output linkage', 'Right crank linkage', 'Follower linkage'], zCoupler + FABRICATION_RENDER_LAYER_Z_STEP));
+      const zCoupler = mechanism.type === 'cam'
+        ? zRole('guide', 0, zLayer(['U-channel guide cartridge', 'Follower guide'], zDriver + FABRICATION_RENDER_LAYER_Z_STEP))
+        : zRole('linkage', 1, zLayer(['Coupler L4 linkage', 'L4 linkage', 'L6 linkage', '2-hole bracket', '3-hole bracket', 'Coupler linkage', 'Center coupler', 'Carrier linkage', 'Slider guide', 'Rack guide', 'Follower guide'], zDriver + FABRICATION_RENDER_LAYER_Z_STEP));
+      const zOutput = mechanism.type === 'cam'
+        ? zRole('follower', 0, zLayer(['Preassembled gravity follower module', 'Follower linkage'], zCoupler + FABRICATION_RENDER_LAYER_Z_STEP))
+        : zRole('linkage', 2, zLayer(['Output L2 linkage', 'L4 linkage', '2-hole bracket', 'Output linkage', 'Right crank linkage', 'Follower linkage'], zCoupler + FABRICATION_RENDER_LAYER_Z_STEP));
       const zDyad = zRole('linkage', 3, zLayer(['Dyad link'], zOutput + FABRICATION_RENDER_LAYER_Z_STEP));
       const zFollower = zRole('linkage', 4, zLayer(['Follower link'], zDyad + FABRICATION_RENDER_LAYER_Z_STEP));
       const zOutputMoving = isGearTrain ? zDriverGear : zLastRole('gear', zLayer(['Toothed rack', 'G3 / 3-space gear', 'Output G3 / 3-space gear', 'Planet gear', 'Sun gear', 'Output gear', 'Right timing gear'], zOutput));

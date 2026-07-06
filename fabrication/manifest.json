@@ -35,7 +35,8 @@
       "cams",
       "followers",
       "brackets",
-      "handles"
+      "handles",
+      "cam_modules"
     ],
     "height_mm": 420.0,
     "included_part_categories": [
@@ -95,6 +96,14 @@
     "brackets/bracket-3-hole-straight.svg",
     "brackets/bracket-l-3-hole.svg",
     "brackets/bracket-triangle-3-hole.svg",
+    "cam_modules/axle-peg.svg",
+    "cam_modules/cam-lock-disk.svg",
+    "cam_modules/cam-spacer.svg",
+    "cam_modules/crank-handle.svg",
+    "cam_modules/gravity-follower-module.svg",
+    "cam_modules/paper-washer.svg",
+    "cam_modules/swappable-cam-disk.svg",
+    "cam_modules/u-channel-guide-cartridge.svg",
     "cams/cam-circle.svg",
     "cams/cam-eccentric.svg",
     "cams/cam-oval.svg",
@@ -217,6 +226,139 @@
         "label": "Triangle 3-hole bracket",
         "path": "brackets/bracket-triangle-3-hole.svg",
         "pitch_mm": 20.0
+      }
+    ],
+    "cam_modules": [
+      {
+        "contract": "pegboard-mounted-gravity-cam-follower-module",
+        "engraving_label": "Axle Peg",
+        "hole_centers_mm": [],
+        "hole_count": 0,
+        "hole_diameter_mm": 4.0,
+        "key": "axle-peg",
+        "label": "Axle peg",
+        "module_kind": "axle",
+        "path": "cam_modules/axle-peg.svg"
+      },
+      {
+        "contract": "pegboard-mounted-gravity-cam-follower-module",
+        "engraving_label": "Crank Handle",
+        "hole_centers_mm": [
+          [
+            14.0,
+            14.0
+          ],
+          [
+            50.0,
+            14.0
+          ]
+        ],
+        "hole_count": 2,
+        "hole_diameter_mm": 4.0,
+        "key": "crank-handle",
+        "label": "Crank handle",
+        "module_kind": "handle",
+        "path": "cam_modules/crank-handle.svg"
+      },
+      {
+        "contract": "pegboard-mounted-gravity-cam-follower-module",
+        "engraving_label": "Cam Lock",
+        "hole_centers_mm": [
+          [
+            14.0,
+            14.0
+          ]
+        ],
+        "hole_count": 1,
+        "hole_diameter_mm": 4.0,
+        "key": "cam-lock-disk",
+        "label": "Cam lock disk",
+        "module_kind": "lock",
+        "path": "cam_modules/cam-lock-disk.svg"
+      },
+      {
+        "contract": "pegboard-mounted-gravity-cam-follower-module",
+        "engraving_label": "Paper Washer",
+        "hole_centers_mm": [
+          [
+            11.0,
+            11.0
+          ]
+        ],
+        "hole_count": 1,
+        "hole_diameter_mm": 4.0,
+        "key": "paper-washer",
+        "label": "Paper washer",
+        "module_kind": "washer",
+        "path": "cam_modules/paper-washer.svg"
+      },
+      {
+        "contract": "pegboard-mounted-gravity-cam-follower-module",
+        "engraving_label": "Cam Spacer",
+        "hole_centers_mm": [
+          [
+            14.0,
+            14.0
+          ]
+        ],
+        "hole_count": 1,
+        "hole_diameter_mm": 4.0,
+        "key": "cam-spacer",
+        "label": "Cam spacer",
+        "module_kind": "spacer",
+        "path": "cam_modules/cam-spacer.svg"
+      },
+      {
+        "contract": "pegboard-mounted-gravity-cam-follower-module",
+        "engraving_label": "Cam Disk",
+        "hole_centers_mm": [
+          [
+            29.0,
+            29.0
+          ]
+        ],
+        "hole_count": 1,
+        "hole_diameter_mm": 4.0,
+        "key": "swappable-cam-disk",
+        "label": "Swappable cam disk",
+        "module_kind": "cam",
+        "path": "cam_modules/swappable-cam-disk.svg"
+      },
+      {
+        "contract": "pegboard-mounted-gravity-cam-follower-module",
+        "engraving_label": "Guide Cartridge",
+        "hole_centers_mm": [
+          [
+            27.0,
+            20.0
+          ],
+          [
+            27.0,
+            80.0
+          ]
+        ],
+        "hole_count": 2,
+        "hole_diameter_mm": 4.0,
+        "key": "u-channel-guide-cartridge",
+        "label": "U-channel guide cartridge",
+        "module_kind": "guide",
+        "path": "cam_modules/u-channel-guide-cartridge.svg"
+      },
+      {
+        "contract": "pegboard-mounted-gravity-cam-follower-module",
+        "engraving_label": "Gravity Follower",
+        "hole_centers_mm": [
+          [
+            19.0,
+            16.0
+          ]
+        ],
+        "hole_count": 1,
+        "hole_diameter_mm": 4.0,
+        "key": "gravity-follower-module",
+        "label": "Preassembled gravity follower module",
+        "module_kind": "follower",
+        "path": "cam_modules/gravity-follower-module.svg"
       }
     ],
     "cams": [

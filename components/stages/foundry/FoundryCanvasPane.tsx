@@ -20,6 +20,7 @@ import {
 import {
   FoundryOverlayLayer,
   type FoundryParamHandle,
+  type FoundryParamHandleId,
 } from "./FoundryOverlayLayer";
 import { ThreeFoundryPreview } from "./ThreeFoundryPreview";
 
@@ -51,6 +52,8 @@ type FoundryCanvasPaneProps = {
   showTrail: boolean;
   showForces: boolean;
   showVelocity: boolean;
+  outputTraceLabel: string;
+  canCycleOutputTrace: boolean;
   isPickingAnchor: boolean;
   isOrbitingFoundry: boolean;
   isZoomingFoundry: boolean;
@@ -82,6 +85,7 @@ type FoundryCanvasPaneProps = {
   onTogglePathPreview: () => void;
   onToggleForces: () => void;
   onToggleVelocity: () => void;
+  onCycleOutputTrace: () => void;
   onToggleTrail: () => void;
   onTogglePlaying: () => void;
   onResetPreview: () => void;
@@ -94,7 +98,7 @@ type FoundryCanvasPaneProps = {
   onWheel: React.WheelEventHandler<HTMLDivElement>;
   onProjectionSizeChange: (size: FoundryOverlaySize) => void;
   onParamPointerDown: (
-    handle: "B" | "C" | "D",
+    handle: FoundryParamHandleId,
   ) => React.PointerEventHandler<SVGCircleElement>;
   onParamPointerMove: React.PointerEventHandler<SVGCircleElement>;
   onParamPointerUp: React.PointerEventHandler<SVGCircleElement>;
@@ -123,6 +127,8 @@ export const FoundryCanvasPane = ({
   showTrail,
   showForces,
   showVelocity,
+  outputTraceLabel,
+  canCycleOutputTrace,
   isPickingAnchor,
   isOrbitingFoundry,
   isZoomingFoundry,
@@ -154,6 +160,7 @@ export const FoundryCanvasPane = ({
   onTogglePathPreview,
   onToggleForces,
   onToggleVelocity,
+  onCycleOutputTrace,
   onToggleTrail,
   onTogglePlaying,
   onResetPreview,
@@ -256,7 +263,10 @@ export const FoundryCanvasPane = ({
       onToggleUserPathPreview={onToggleUserPathPreview}
       onTogglePathPreview={onTogglePathPreview}
       onToggleForces={onToggleForces}
+      outputTraceLabel={outputTraceLabel}
+      canCycleOutputTrace={canCycleOutputTrace}
       onToggleVelocity={onToggleVelocity}
+      onCycleOutputTrace={onCycleOutputTrace}
       onToggleTrail={onToggleTrail}
     />
     {motionWarning && (

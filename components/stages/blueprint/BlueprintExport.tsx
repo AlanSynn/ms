@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import type { AppStage, ProjectAction, ProjectState } from "../../../types";
+import type { AppStage, FabricationRecipe, ProjectAction, ProjectState } from "../../../types";
 import { pendingRecipeForMechanism } from "../../../utils/assemblyPlayback";
 import {
   createFabricationPackage,
@@ -14,6 +14,15 @@ import {
 } from "../stageLayout";
 import { BlueprintControlPanel } from "./BlueprintControlPanel";
 import { BlueprintDetailPanel } from "./BlueprintDetailPanel";
+
+export const selectBlueprintRecipe = (
+  recipes: FabricationRecipe[],
+  selectedRecipeId: string | null,
+  selectedMechanismId: string | null | undefined,
+) =>
+  recipes.find((recipe) => recipe.mechanismId === selectedRecipeId) ??
+  recipes.find((recipe) => recipe.mechanismId === selectedMechanismId) ??
+  recipes[0];
 
 export const BlueprintExport = ({
   project,
@@ -39,9 +48,7 @@ export const BlueprintExport = ({
   );
   const recipes = liveRecipes.length ? liveRecipes : (pkg?.recipes ?? []);
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
-  const selectedRecipe =
-    recipes.find((recipe) => recipe.mechanismId === selectedRecipeId) ??
-    recipes[0];
+  const selectedRecipe = selectBlueprintRecipe(recipes, selectedRecipeId, project.selectedMechanismId);
   const previewSvg = makeBlueprintPreviewSvg(project, recipes);
   return (
     <EditorStageFrame
@@ -64,15 +71,20 @@ export const BlueprintExport = ({
           <div
             className="blueprint-document-preview canvas-workspace"
             data-testid="blueprint-canvas-preview"
-            data-visual-level="board-hero"
+            data-visual-level="print-sheet-hero"
           >
             <div
               data-testid="blueprint-svg-preview"
               className="blueprint-svg-preview"
               role="img"
-              aria-label="Blueprint board preview"
+              aria-label="Printable character and mechanism sheets"
               dangerouslySetInnerHTML={{ __html: previewSvg }}
             />
+            {pkg && (
+              <pre hidden data-testid="blueprint-export-package-json">
+                {JSON.stringify(pkg)}
+              </pre>
+            )}
           </div>,
         ),
         inspector: inspectorPane(

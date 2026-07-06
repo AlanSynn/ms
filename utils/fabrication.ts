@@ -1,13 +1,15 @@
 import { FabricationIssue, FabricationPackage, FabricationRecipe, MechanismConfig, ProjectState } from '../types';
 import { gearTrainPitchCenterDistance, gearTrainResolvedCenterDistance, gearTrainPitchRadii, generateCurvePoints } from './kinematics';
 import { boardToScene, sceneToBoardRaw, sceneBoundsForSheet } from './coordinates';
-import { referenceRecipeForType } from './mechanismReference';
+import { isBoardFixedCoordRole, referenceRecipeForType } from './mechanismReference';
 import { mechanismBindingWarnings } from './motion';
+import { mechanismMatchesPathOwner } from './pathTargets';
 import { makeAssemblyGuideHtml, makeAssemblyGuidePdf } from './fabricationAssemblyGuide';
 import { makeBlueprintPreviewSvg, makeBlueprintSvg } from './fabricationBlueprintSvg';
 import { makeCutSheetPdf } from './fabricationCutSheetPdf';
 import { makeCustomPartsPdf, makeCustomPartsStl, makeCustomPartsSvg } from './fabricationCustomParts';
-import { createFabricationRecipe } from './fabricationRecipes';
+import { createFabricationRecipe, prefabAssemblySteps } from './fabricationRecipes';
+import { primaryFoundryPlaybackPath } from './foundryPlayback';
 import { FABRICATION_LINKAGE_ROLE_MIN_HOLES, planetaryRingPitchRadius } from './fabricationSizing';
 import {
     closePhysicalValue,
@@ -180,6 +182,7 @@ export const validateForFabrication = (project: ProjectState) => {
     const snapTolerance = project.settings.physicsSnapMode === 'fast' ? 4 : project.settings.physicsSnapMode === 'high' ? 0.25 : 0.5;
     const fabricationSeverity: FabricationIssue['severity'] = project.settings.fabricationReadyMode ? 'error' : 'warning';
     const insideSheet = (p: { x: number; y: number }) => p.x >= sheet.x && p.x <= sheet.x + sheet.width && p.y >= sheet.y && p.y <= sheet.y + sheet.height;
+    const isValidBoardCoordinate = (coord: string | undefined) => /^[A-O](?:[1-9]|1[0-5])$/.test(coord ?? '');
     if (!project.partOrder.length) add('error', 'No character in scene.', { recoveryStage: 'character', recoveryAction: 'Load a character package' });
     const activeMechanisms = project.mechanisms.filter(m => m.visible && m.enabled !== false);
     if (!activeMechanisms.length) add('error', 'No enabled mechanism to export.', { recoveryStage: 'design', recoveryAction: 'Enable or add a mechanism' });
@@ -218,8 +221,7 @@ export const validateForFabrication = (project: ProjectState) => {
         if (m.targetPathId) {
             const path = project.paths[m.targetPathId];
             if (!path) add('error', `${m.id}: missing path ${m.targetPathId}.`, { mechanismId: m.id, pathId: m.targetPathId, recoveryStage: 'path', recoveryAction: 'Choose valid path' });
-            else if (m.targetSceneObjectId && path.sceneObjectId !== m.targetSceneObjectId) add('error', `${m.id}: path belongs to ${path.sceneObjectId ?? path.partId}.`, { mechanismId: m.id, pathId: m.targetPathId, recoveryStage: 'design', recoveryAction: 'Rebind target path' });
-            else if (m.targetPartId && (path.sceneObjectId || path.partId !== m.targetPartId)) add('error', `${m.id}: path belongs to ${path.sceneObjectId ?? path.partId}.`, { mechanismId: m.id, pathId: m.targetPathId, partId: m.targetPartId, recoveryStage: 'design', recoveryAction: 'Rebind target path' });
+            else if (!mechanismMatchesPathOwner(m, path, project)) add('error', `${m.id}: path belongs to ${path.sceneObjectId ?? path.partId}.`, { mechanismId: m.id, pathId: m.targetPathId, partId: m.targetPartId, recoveryStage: 'design', recoveryAction: 'Rebind target path' });
         }
         const physicalNumbers = [m.crankLength, m.couplerLength, m.groundLength, m.rockerLength, m.sliderOffset, m.couplerPointDist, m.couplerPointAngle];
         if (m.type === '5bar' || m.type === '6bar' || m.type === 'piston') physicalNumbers.push(m.rodLength ?? Number.NaN);
@@ -241,19 +243,40 @@ export const validateForFabrication = (project: ProjectState) => {
         const range = sampleFeasibleRange(m);
         if (range.warning?.startsWith('No motion')) add('error', `${m.id}: ${range.warning}.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Adjust' });
         else if (range.warning) add('warning', `${m.id}: ${range.warning}`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Review partial motion' });
+        if (m.type === 'cam' && project.settings.physicalKit.boardCells !== 15) {
+            add('error', `${m.id}: cam module needs 15x15 board.`, { mechanismId: m.id, recoveryStage: 'blueprint', recoveryAction: 'Use 15x15 kit' });
+        }
         if (!Number.isFinite(m.anchorX) || !Number.isFinite(m.anchorY)) {
             add('error', `${m.id}: missing board anchor.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Drag to board' });
             return;
         }
         const board = sceneToBoardRaw({ x: m.anchorX!, y: m.anchorY! }, project.settings.physicalKit);
         const boardScene = board.valid ? boardToScene(board.col, board.row, project.settings.physicalKit) : null;
-        if (!board.valid) add(fabricationSeverity, `${m.id}: off board at ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move onto board' });
-        else if (boardScene && Math.hypot(boardScene.x - m.anchorX!, boardScene.y - m.anchorY!) > snapTolerance) add(fabricationSeverity, `${m.id}: anchor off grid at ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Snap to hole' });
+        let placementHasIssue = false;
+        if (!board.valid) {
+            add(fabricationSeverity, `${m.id}: off board at ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move onto board' });
+            placementHasIssue = true;
+        }
+        else if (boardScene && Math.hypot(boardScene.x - m.anchorX!, boardScene.y - m.anchorY!) > snapTolerance) {
+            add(fabricationSeverity, `${m.id}: anchor off grid at ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Snap to hole' });
+            placementHasIssue = true;
+        }
         else if (board.col <= 0 || board.row <= 0 || board.col >= project.settings.physicalKit.boardCells - 1 || board.row >= project.settings.physicalKit.boardCells - 1) {
             add('warning', `${m.id}: near board edge ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move inward' });
         }
-        const path = generateCurvePoints(m, 72).points;
-        if (path.some(p => !insideSheet(p))) add('error', `${m.id}: path outside sheet.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Resize or move' });
+        if (board.valid) {
+            const offBoardStep = prefabAssemblySteps(m, board.label).find(step => (step.coords ?? []).some((coord, index) =>
+                isBoardFixedCoordRole(step.coordRoles?.[index] ?? '') && !isValidBoardCoordinate(coord)
+            ));
+            if (offBoardStep) {
+                add('error', `${m.id}: assembly holes off board near ${offBoardStep.boardCoordinate}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move inward' });
+                placementHasIssue = true;
+            }
+        }
+        const path = m.type === 'planetary_gear'
+            ? primaryFoundryPlaybackPath(m, 72)
+            : generateCurvePoints(m, 72).points;
+        if (!placementHasIssue && path.some(p => !insideSheet(p))) add('error', `${m.id}: path outside sheet.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Resize or move' });
     });
     return { warnings, errors, issues };
 };

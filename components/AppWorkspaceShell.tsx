@@ -200,7 +200,6 @@ export const AppWorkspaceShell = ({
           onLesson={onLesson}
           onStarterImage={onStarterImage}
           onSample={onSample}
-          onPackage={onPackage}
           onProcess={onProcess}
           onImport={onImport}
           onHideForSessionChange={onHideGettingStartedThisSessionChange}

@@ -163,6 +163,7 @@ export const AssemblyGuide = ({
             lane={lane}
             kit={project.settings.physicalKit}
             progress={stepProgress}
+            playing={playing}
             hasCharacterAssembly={hasCharacterAssembly}
           />,
         ),

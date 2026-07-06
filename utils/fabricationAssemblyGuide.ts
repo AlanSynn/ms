@@ -5,19 +5,62 @@ import { mechanismTypeLabel, readableStepCoordinateCallout, recipeBoardCallout, 
 import {
     STACK_COLORS,
     fabricationBaseLayer,
-    fabricationStackForMechanism,
-    readableFabricationStackSummary,
     type FabricationStackLayer
 } from './fabricationStackModel';
+import { sampledCamProfileScale } from './kinematics';
+
+const recipeStackRole = (role: string, label: string): FabricationStackLayer['role'] | null => {
+    const text = `${role} ${label}`;
+    if (/board-hole|link-joint-hole|gear-handle-hole|link-end-hole|carrier-hole/i.test(role)) return null;
+    if (/board|base/i.test(role)) return null;
+    if (/clip|lock|paper-fastener/i.test(text)) return 'clip';
+    if (/spacer|washer|axle/i.test(text)) return 'spacer';
+    if (/gear|ring|sun|planet/i.test(text)) return 'gear';
+    if (/cam/i.test(text)) return 'cam';
+    if (/guide|bracket|cartridge/i.test(text)) return 'guide';
+    if (/follower|slider/i.test(text)) return 'follower';
+    if (/rack/i.test(text)) return 'rack';
+    return 'linkage';
+};
+
+const stackRowsForRecipe = (recipe: FabricationRecipe | undefined): FabricationStackLayer[] => {
+    if (!recipe) return [];
+    const seen = new Set<string>();
+    return recipe.assemblySteps
+        .flatMap(step => step.stack ?? [])
+        .sort((a, b) => a.order - b.order)
+        .flatMap(item => {
+            const role = recipeStackRole(item.role, item.label);
+            if (!role) return [];
+            const key = `${item.order}:${item.label}:${role}`;
+            if (seen.has(key)) return [];
+            seen.add(key);
+            return [{ label: item.label, role, color: STACK_COLORS[role] }];
+        });
+};
+
+const readableRecipeStackSummary = (recipe: FabricationRecipe | undefined) =>
+    recipe ? stackRowsForRecipe(recipe).map(item => fabricationPartDisplayLabel(item.label)).join(' → ') : 'pending recipe';
+
+const camProfilePathD = (samples: number[] | undefined, x: number, y: number, radius: number) => {
+    if (!samples?.length) return '';
+    const points = Array.from({ length: 48 }, (_, index) => {
+        const angle = (index / 48) * Math.PI * 2;
+        const rr = radius * sampledCamProfileScale(angle, samples);
+        return `${(x + Math.cos(angle) * rr).toFixed(2)} ${(y + Math.sin(angle) * rr).toFixed(2)}`;
+    });
+    return `M ${points.join(' L ')} Z`;
+};
 
 export const makeExplodedStackSvg = (recipe: FabricationRecipe | undefined, esc: (value: unknown) => string) => {
-    const stack = recipe ? fabricationStackForMechanism(recipe) : [];
+    const stack = stackRowsForRecipe(recipe);
     const base = fabricationBaseLayer();
     const fallbackLayer = (label: string, role: FabricationStackLayer['role']): FabricationStackLayer => ({ label, role, color: STACK_COLORS[role] });
     const rows = stack.length ? stack : [fallbackLayer('Back Clip', 'clip'), fallbackLayer('Input linkage', 'linkage'), fallbackLayer(FABRICATION_SPACER_SPEC.label, 'spacer'), fallbackLayer('Output linkage', 'linkage'), fallbackLayer('Front Clip', 'clip')];
     const shapeFor = (item: FabricationStackLayer, x: number, y: number) => {
         const fill = item.color;
         const stroke = item.role === 'clip' ? '#0f172a' : '#334155';
+        if (item.role === 'cam' && recipe?.camProfileSamples?.length) return `<path data-assembly-cam-profile="${esc(recipe.camProfileSamples.join(','))}" d="${camProfilePathD(recipe.camProfileSamples, x + 72, y + 18, 30)}" fill="${fill}" stroke="${stroke}" stroke-width="4"/><circle cx="${x + 72}" cy="${y + 18}" r="8" fill="#fff" stroke="#334155" stroke-width="3"/>`;
         if (item.role === 'gear' || item.role === 'cam') return `<circle cx="${x + 72}" cy="${y + 18}" r="30" fill="${fill}" stroke="${stroke}" stroke-width="4"/><circle cx="${x + 72}" cy="${y + 18}" r="8" fill="#fff" stroke="#334155" stroke-width="3"/>`;
         if (item.role === 'spacer') return `<circle cx="${x + 72}" cy="${y + 18}" r="20" fill="${fill}" stroke="${stroke}" stroke-width="4"/><circle cx="${x + 72}" cy="${y + 18}" r="8" fill="#fff"/>`;
         if (item.role === 'base' || item.role === 'guide') return `<rect x="${x}" y="${y}" width="180" height="36" rx="8" fill="${fill}" stroke="${stroke}" stroke-width="3"/>`;
@@ -48,7 +91,7 @@ ${shapeFor(item, x, y)}
 <g transform="translate(38 36)">
 <rect width="330" height="74" rx="20" fill="#ffffff" stroke="#c7d2fe" stroke-width="2"/>
 <text x="22" y="25" class="guide-title">Exploded view</text>
-	<text x="22" y="47" class="guide-muted">Stack: listed low-Z board side to high-Z fastener side</text>
+	<text x="22" y="47" class="guide-muted">Stack: listed low-Z board side to high-Z outer side</text>
 	<text x="22" y="64" class="guide-muted">Z=0 board · ${recipe ? esc(recipe.mechanismId) : 'pending recipe'}</text>
 	</g>
 	<g transform="translate(86 426)">
@@ -57,7 +100,7 @@ ${shapeFor(item, x, y)}
 	</g>
 	<g filter="url(#guide-shadow)">${items}</g>
 <line x1="92" y1="458" x2="438" y2="130" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 10"/>
-<text x="70" y="486" class="guide-muted">Board-side S10 spacers lift moving parts before the fastener head.</text>
+<text x="70" y="486" class="guide-muted">Board-side washers/spacers keep moving parts clear of the board.</text>
 ${recipe ? `<text x="40" y="505" class="guide-muted">Recipe: ${esc(recipe.mechanismId)} · ${esc(mechanismTypeLabel(recipe.type))} · anchor ${esc(recipeBoardCallout(recipe))}</text>` : ''}
 </svg>`;
 };
@@ -66,6 +109,7 @@ export const makeAssemblyGuideHtml = (project: ProjectState, recipes: Fabricatio
     const esc = (value: unknown) => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] ?? ch));
     const firstRecipe = recipes[0];
     const explodedSvg = makeExplodedStackSvg(firstRecipe, esc);
+    const showRecipeExplodedViews = recipes.length > 1;
     const recipeSections = recipes.map(recipe => {
         const target = recipeTargetCallout(recipe);
         return `<section>
@@ -73,6 +117,7 @@ export const makeAssemblyGuideHtml = (project: ProjectState, recipes: Fabricatio
 <p><strong>Board:</strong> ${esc(recipeBoardCallout(recipe))}</p>
 ${target ? `<p class="target-chip"><strong>Target:</strong> ${esc(target)}</p>` : ''}
 ${recipe.warnings.length ? `<p><strong>Fix:</strong> ${recipe.warnings.map(esc).join('; ')}</p>` : '<p><strong>OK</strong></p>'}
+${showRecipeExplodedViews ? makeExplodedStackSvg(recipe, esc) : ''}
 <h3>Required parts</h3><ul>${recipe.requiredParts.map(part => `<li>${esc(fabricationPartDisplayLabel(part.name))} × ${part.quantity}</li>`).join('')}</ul>
 <h3>15×15 board kit assembly</h3><ol class="stepper" data-testid="prefab-assembly-steps">${recipe.assemblySteps.map(step => `<li class="assembly-step" style="--i:${step.index}"><strong>${step.index}. ${esc(fabricationPartDisplayLabel(step.label))}</strong><span>${esc(fabricationPartDisplayLabel(step.instruction))}</span><em>${esc(step.role)} · ${esc(readableStepCoordinateCallout(step))} · Z ${step.zMm.toFixed(1)}mm</em></li>`).join('')}</ol>
 </section>`;
@@ -98,10 +143,10 @@ li{margin:.32rem 0;line-height:1.42;}
 export const makeAssemblyGuidePdf = (project: ProjectState, recipes: FabricationRecipe[], warnings: string[]) => makeSimplePdf(
     `${project.metadata.name} Printable assembly guide`,
     [
-        'Exploded view / Base board below / Clip -> Linkage or Gear -> Spacer -> Linkage -> Clip',
+        'Exploded view / Base board below / Module stack low-Z to high-Z',
         'Character sheet: print the 1-2 letter pages from Blueprint before pinning.',
-        `Stack: ${recipes[0] ? readableFabricationStackSummary(recipes[0]) : 'pending recipe'}`,
-        'Path projection / Z=0 Base / spacer-separated moving layers',
+        ...recipes.map(recipe => `Stack ${recipe.mechanismId}: ${readableRecipeStackSummary(recipe)}`),
+        'Path projection / Z=0 Base / washer- or spacer-separated moving layers',
         `Profile ${project.settings.physicalKit.profileKey} / ${project.settings.physicalKit.gridPitchMm}mm grid`,
         ...warnings.map(warning => `Warning: ${warning}`),
         ...recipes.flatMap(recipe => [

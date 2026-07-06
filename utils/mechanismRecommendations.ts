@@ -6,9 +6,10 @@ import { sampleFeasibleRange, validateMechanismPreviewReadiness, validateForFabr
 import { boardToScene, sceneBoundsForSheet, sceneToBoard, SCENE_PX_PER_MM } from "./coordinates";
 import { motionAnchorJointIds, preferredMotionJointId } from "./motion";
 import { MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY } from "./mechanismTemplates";
-import { normalizeMechanismToFabricationSet, normalizeMechanismToReference } from "./mechanismReference";
+import { isReferenceFoundryVisible, normalizeMechanismToFabricationSet, normalizeMechanismToReference } from "./mechanismReference";
 import { fitPathToBox } from "./mechanismPreview";
 import { fitFourBarKitMechanismToPath } from "./fourBarPathFit";
+import { generateFoundryPlaybackPointTraces, primaryFoundryPlaybackPath } from "./foundryPlayback";
 
 export type MechanismRecommendation = {
   type: MechanismType;
@@ -59,8 +60,62 @@ const pathMetrics = (path: ProjectMotionPath) => {
   };
 };
 
-const generatedBounds = (mechanism: MechanismConfig) => {
-  const points = generateCurvePoints(mechanism, 72).points;
+const traceDistanceToGeneratedPath = (
+  trace: { points: Point[] },
+  generatedPath: Point[],
+) => {
+  if (!trace.points.length || !generatedPath.length)
+    return Number.POSITIVE_INFINITY;
+  const count = Math.min(12, trace.points.length, generatedPath.length);
+  return Array.from({ length: count }, (_, index) => {
+    const generatedIndex = Math.round(
+      (index * (generatedPath.length - 1)) / Math.max(1, count - 1),
+    );
+    const traceIndex = Math.round(
+      (index * (trace.points.length - 1)) / Math.max(1, count - 1),
+    );
+    const a = generatedPath[generatedIndex];
+    const b = trace.points[traceIndex];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }).reduce((sum, distance) => sum + distance, 0);
+};
+
+const selectedFoundryTraceId = (mechanism: MechanismConfig) => {
+  if (!mechanism.generatedPath?.length || !isReferenceFoundryVisible(mechanism.type))
+    return null;
+  const traces = generateFoundryPlaybackPointTraces(mechanism, 96).traces;
+  if (!traces.length) return null;
+  return traces.reduce((best, trace) =>
+    traceDistanceToGeneratedPath(trace, mechanism.generatedPath ?? []) <
+    traceDistanceToGeneratedPath(best, mechanism.generatedPath ?? [])
+      ? trace
+      : best,
+  ).id;
+};
+
+const foundryVisiblePath = (mechanism: MechanismConfig, resolution = 72) => {
+  if (mechanism.generatedPath?.length) return mechanism.generatedPath;
+  if (isReferenceFoundryVisible(mechanism.type)) {
+    const path = primaryFoundryPlaybackPath(mechanism, resolution);
+    if (path.length) return path;
+  }
+  return generateCurvePoints(mechanism, resolution).points;
+};
+
+const mechanismWithPreservedFoundryTrace = (
+  previous: MechanismConfig,
+  next: MechanismConfig,
+) => {
+  const traceId = selectedFoundryTraceId(previous);
+  const generated = mechanismWithGeneratedPath(next);
+  if (!traceId) return generated;
+  const trace = generateFoundryPlaybackPointTraces(generated, 96).traces.find(
+    (candidate) => candidate.id === traceId,
+  );
+  return trace?.points.length ? { ...generated, generatedPath: trace.points } : generated;
+};
+
+const boundsForPoints = (points: Point[]) => {
   if (!points.length) return null;
   const xs = points.map((p) => p.x);
   const ys = points.map((p) => p.y);
@@ -72,7 +127,17 @@ const generatedBounds = (mechanism: MechanismConfig) => {
   };
 };
 
-const snapMechanismAnchor = (
+const generatedBounds = (mechanism: MechanismConfig) =>
+  boundsForPoints(foundryVisiblePath(mechanism, 72));
+
+const physicalSheetFitBounds = (mechanism: MechanismConfig) => {
+  const points = mechanism.type === "planetary_gear"
+    ? primaryFoundryPlaybackPath(mechanism, 96)
+    : generateCurvePoints(mechanism, 96).points;
+  return boundsForPoints(points);
+};
+
+export const snapMechanismAnchor = (
   mechanism: MechanismConfig,
   project: ProjectState,
 ) => {
@@ -85,7 +150,7 @@ const snapMechanismAnchor = (
     board.row,
     project.settings.physicalKit,
   );
-  return mechanismWithGeneratedPath({
+  return mechanismWithPreservedFoundryTrace(mechanism, {
     ...mechanism,
     anchorX: anchor.x,
     anchorY: anchor.y,
@@ -112,10 +177,49 @@ export const fitRecommendedMechanismToSheet = (
     10,
     project.settings.physicalKit.gridPitchMm * 0.35 * SCENE_PX_PER_MM,
   );
+  const boundsForSheet = (candidate: MechanismConfig) =>
+    physicalSheetFitBounds(candidate) ?? generatedBounds(candidate);
+  const sheetOverflow = (candidate: MechanismConfig) => {
+    const bounds = boundsForSheet(candidate);
+    if (!bounds) return 0;
+    return (
+      Math.max(0, sheet.x + margin - bounds.minX) +
+      Math.max(0, bounds.maxX - (sheet.x + sheet.width - margin)) +
+      Math.max(0, sheet.y + margin - bounds.minY) +
+      Math.max(0, bounds.maxY - (sheet.y + sheet.height - margin))
+    );
+  };
+  const searchBoardFit = (seed: MechanismConfig) => {
+    let best = seed;
+    let bestOverflow = sheetOverflow(seed);
+    if (bestOverflow <= 0.01) return best;
+    const cells = project.settings.physicalKit.boardCells;
+    for (let col = 0; col < cells; col += 1) {
+      for (let row = 0; row < cells; row += 1) {
+        const anchor = boardToScene(col, row, project.settings.physicalKit);
+        const candidate = snapMechanismAnchor(
+          {
+            ...seed,
+            anchorX: anchor.x,
+            anchorY: anchor.y,
+            sceneAnchor: anchor,
+          },
+          project,
+        );
+        const overflow = sheetOverflow(candidate);
+        if (overflow < bestOverflow) {
+          best = candidate;
+          bestOverflow = overflow;
+          if (bestOverflow <= 0.01) return best;
+        }
+      }
+    }
+    return best;
+  };
   let fitted = snapMechanismAnchor(mechanism, project);
   let moved = false;
   for (let i = 0; i < 4; i++) {
-    const bounds = generatedBounds(fitted);
+    const bounds = boundsForSheet(fitted);
     if (!bounds) return fitted;
     let dx = 0;
     let dy = 0;
@@ -161,15 +265,21 @@ export const fitRecommendedMechanismToSheet = (
       fitted = adjusted;
     }
   }
-  return moved
+  const searched = searchBoardFit(fitted);
+  const searchedMoved =
+    Math.hypot(
+      (searched.anchorX ?? 0) - (fitted.anchorX ?? 0),
+      (searched.anchorY ?? 0) - (fitted.anchorY ?? 0),
+    ) > 0.01;
+  return moved || searchedMoved
     ? {
-        ...fitted,
+        ...searched,
         warnings: [
-          ...(fitted.warnings ?? []),
+          ...(searched.warnings ?? []),
           "Moved onto sheet. Check anchor.",
         ],
       }
-    : fitted;
+    : searched;
 };
 
 const fabricationErrorsForCandidate = (
@@ -179,9 +289,22 @@ const fabricationErrorsForCandidate = (
   const readinessErrors = validateMechanismPreviewReadiness(mechanism).map(
     (error) => `${mechanism.id}: ${error}`,
   );
-  const siblingMechanisms = project.mechanisms.filter(
-    (m) => m.id !== mechanism.id,
-  );
+  const targetAnchor = mechanism.targetPartId
+    ? preferredMotionJointId(project, mechanism.targetPartId, mechanism.targetAnchorJointId)
+    : undefined;
+  const siblingMechanisms = project.mechanisms.filter((m) => {
+    if (m.id === mechanism.id) return false;
+    if (
+      mechanism.targetPathId &&
+      m.targetPathId === mechanism.targetPathId &&
+      m.targetPartId === mechanism.targetPartId &&
+      m.targetSceneObjectId === mechanism.targetSceneObjectId &&
+      (!mechanism.targetPartId ||
+        preferredMotionJointId(project, mechanism.targetPartId, m.targetAnchorJointId) === targetAnchor)
+    )
+      return false;
+    return true;
+  });
   const baseline = new Set(
     validateForFabrication({ ...project, mechanisms: siblingMechanisms }).errors,
   );
@@ -228,6 +351,43 @@ const availableMotionAnchorForRecommendation = (
   );
 };
 
+const anchorOccupiedByPart = (
+  project: ProjectState,
+  partId: string,
+  anchorId: string | undefined,
+) => {
+  if (!anchorId) return false;
+  return project.mechanisms.some((mechanism) =>
+    mechanism.visible &&
+    mechanism.enabled !== false &&
+    mechanism.targetPartId === partId &&
+    preferredMotionJointId(project, partId, mechanism.targetAnchorJointId) === anchorId,
+  );
+};
+
+const recommendationTargetPart = (
+  project: ProjectState,
+  selectedPart: BodyPartLayer | undefined,
+  selectedPath: ProjectMotionPath,
+) => {
+  if (!selectedPart) return undefined;
+  const pathAnchor = selectedPath.targetAnchorJointId;
+  if (!pathAnchor || !anchorOccupiedByPart(project, selectedPart.id, pathAnchor)) {
+    return selectedPart;
+  }
+  const candidates = Object.values(project.parts)
+    .filter((part) =>
+      part.id !== selectedPart.id &&
+      motionAnchorJointIds(project, part.id).includes(pathAnchor) &&
+      !anchorOccupiedByPart(project, part.id, pathAnchor),
+    )
+    .sort((a, b) =>
+      motionAnchorJointIds(project, a.id).length -
+      motionAnchorJointIds(project, b.id).length,
+    );
+  return candidates[0] ?? selectedPart;
+};
+
 const recommendationTargetAnchor = (
   project: ProjectState,
   selectedPart: BodyPartLayer,
@@ -269,6 +429,44 @@ const recommendationTargetAnchor = (
   );
 };
 
+const retargetDuplicateRecommendationOwner = (
+  project: ProjectState,
+  mechanism: MechanismConfig,
+) => {
+  const anchorId = mechanism.targetAnchorJointId;
+  if (!mechanism.targetPartId || !anchorId) return mechanism;
+  const directErrors = validateForFabrication({
+    ...project,
+    mechanisms: [...project.mechanisms, mechanism],
+  }).errors;
+  if (!directErrors.some((error) => error.includes('also drives'))) return mechanism;
+  const candidates = Object.values(project.parts)
+    .filter((part) =>
+      part.id !== mechanism.targetPartId &&
+      motionAnchorJointIds(project, part.id).includes(anchorId),
+    )
+    .sort((a, b) =>
+      motionAnchorJointIds(project, a.id).length -
+      motionAnchorJointIds(project, b.id).length,
+    );
+  for (const part of candidates) {
+    const candidate: MechanismConfig = {
+      ...mechanism,
+      targetPartId: part.id,
+      targetAnchorJointId: anchorId,
+      activeVisualPartIds: [part.id],
+    };
+    const candidateErrors = validateForFabrication({
+      ...project,
+      mechanisms: [...project.mechanisms, candidate],
+    }).errors;
+    if (!candidateErrors.some((error) => error.includes('also drives'))) {
+      return candidate;
+    }
+  }
+  return mechanism;
+};
+
 const createRecommendedMechanism = (
   project: ProjectState,
   selectedPart: BodyPartLayer | undefined,
@@ -278,6 +476,7 @@ const createRecommendedMechanism = (
   score: number,
 ): MechanismConfig => {
   const metrics = pathMetrics(selectedPath);
+  const targetPart = recommendationTargetPart(project, selectedPart, selectedPath);
   const landingBoard = sceneToBoard(
     selectedPath.points[0],
     project.settings.physicalKit,
@@ -368,13 +567,13 @@ const createRecommendedMechanism = (
         : (smart.rodLength ?? base.rodLength),
     assemblyMode: type === "6bar" ? "open" : base.assemblyMode,
     phase: 0,
-    targetPartId: selectedPart?.id,
+    targetPartId: targetPart?.id,
     targetSceneObjectId: selectedPath.sceneObjectId,
     targetPathId: selectedPath.id,
-    targetAnchorJointId: selectedPart
-      ? recommendationTargetAnchor(project, selectedPart, selectedPath)
+    targetAnchorJointId: targetPart
+      ? recommendationTargetAnchor(project, targetPart, selectedPath)
       : undefined,
-    activeVisualPartIds: selectedPart ? [selectedPart.id] : [],
+    activeVisualPartIds: targetPart ? [targetPart.id] : [],
     source: "optimized",
     presetId: `recommendation-${type}`,
     recommendation: reason,
@@ -383,7 +582,10 @@ const createRecommendedMechanism = (
   const normalized = mechanismWithGeneratedPath(
     normalizeGearMeshMechanism(normalizeMechanismToReference(tuned)),
   );
-  return fitRecommendedMechanismToSheet(project, normalized);
+  return retargetDuplicateRecommendationOwner(
+    project,
+    fitRecommendedMechanismToSheet(project, normalized),
+  );
 };
 
 const localizeFittedMechanismAnchor = (
@@ -416,6 +618,100 @@ const localizeFittedMechanismAnchor = (
     },
     project,
   );
+};
+
+const nearestPathError = (a: Point[], b: Point[]) => {
+  if (!a.length || !b.length) return Infinity;
+  const oneWay = (from: Point[], to: Point[]) =>
+    from.reduce((sum, point) => {
+      let best = Infinity;
+      to.forEach((other) => {
+        best = Math.min(best, Math.hypot(point.x - other.x, point.y - other.y));
+      });
+      return sum + best;
+    }, 0) / from.length;
+  return (oneWay(a, b) + oneWay(b, a)) / 2;
+};
+
+const centerOf = (points: Point[]) => {
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  return {
+    x: (Math.min(...xs) + Math.max(...xs)) / 2,
+    y: (Math.min(...ys) + Math.max(...ys)) / 2,
+  };
+};
+
+const anchorMechanismAt = (mechanism: MechanismConfig, anchor: Point) =>
+  mechanismWithGeneratedPath({
+    ...mechanism,
+    anchorX: anchor.x,
+    anchorY: anchor.y,
+    sceneAnchor: anchor,
+    transform: {
+      ...(mechanism.transform ?? {
+        x: anchor.x,
+        y: anchor.y,
+        rotation: mechanism.groundAngle ?? 0,
+        scale: 1,
+      }),
+      x: anchor.x,
+      y: anchor.y,
+    },
+  });
+
+const fitGearLinkageOutputToPath = (
+  project: ProjectState,
+  mechanism: MechanismConfig,
+  path: ProjectMotionPath,
+) => {
+  if (mechanism.type !== "gear_linkage" || path.points.length < 3)
+    return mechanism;
+  const generated = foundryVisiblePath(mechanism, 72);
+  if (!generated.length) return mechanism;
+  const currentAnchor = { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 };
+  const generatedCenter = centerOf(generated);
+  const targetCenter = centerOf(path.points);
+  const targetBoard = sceneToBoard(
+    {
+      x: currentAnchor.x + targetCenter.x - generatedCenter.x,
+      y: currentAnchor.y + targetCenter.y - generatedCenter.y,
+    },
+    project.settings.physicalKit,
+  );
+  const radius = 4;
+  let best = anchorMechanismAt(
+    mechanism,
+    boardToScene(targetBoard.col, targetBoard.row, project.settings.physicalKit),
+  );
+  let bestScore = Infinity;
+  const scoreCandidate = (candidate: MechanismConfig) => {
+    const score = nearestPathError(candidate.generatedPath ?? [], path.points);
+    if (!Number.isFinite(score) || score >= bestScore) return;
+    best = candidate;
+    bestScore = score;
+  };
+  scoreCandidate(mechanism);
+  scoreCandidate(best);
+  for (
+    let col = Math.max(0, targetBoard.col - radius);
+    col <= Math.min(project.settings.physicalKit.boardCells - 1, targetBoard.col + radius);
+    col += 1
+  ) {
+    for (
+      let row = Math.max(0, targetBoard.row - radius);
+      row <= Math.min(project.settings.physicalKit.boardCells - 1, targetBoard.row + radius);
+      row += 1
+    ) {
+      scoreCandidate(
+        anchorMechanismAt(
+          mechanism,
+          boardToScene(col, row, project.settings.physicalKit),
+        ),
+      );
+    }
+  }
+  return best;
 };
 
 const readyMechanismFallbackForPath = (
@@ -467,41 +763,49 @@ export const fitMechanismToTargetPath = (
     const fittedFourBar = fitFourBarKitMechanismToPath(project, mechanism, path);
     if (fittedFourBar) return fittedFourBar;
   }
-  const fitted = createRecommendedMechanism(
-    project,
-    part,
-    path,
-    mechanism.type,
-    mechanism.recommendation ?? "Fit",
-    80,
-  );
-  const fittedCandidate = localizeFittedMechanismAnchor(
-    project,
-    mechanismWithGeneratedPath({
-      ...fitted,
-      id: mechanism.id,
-      color: mechanism.color ?? fitted.color,
-      visible: mechanism.visible,
-      enabled: mechanism.enabled,
-      source: mechanism.source ?? fitted.source,
-      presetId: mechanism.presetId ?? fitted.presetId,
-      recommendation: mechanism.recommendation ?? fitted.recommendation,
-      warnings: mechanism.warnings ?? fitted.warnings,
-      targetPartId: path.sceneObjectId ? undefined : path.partId,
-      targetSceneObjectId: path.sceneObjectId,
-      targetPathId: path.id,
-      targetAnchorJointId:
-        path.sceneObjectId
-          ? undefined
-          : (mechanism.targetAnchorJointId ??
-            path.targetAnchorJointId ??
-            fitted.targetAnchorJointId),
-      activeVisualPartIds: path.sceneObjectId ? [] : [path.partId],
-    }),
-    Number.isFinite(mechanism.anchorX) && Number.isFinite(mechanism.anchorY)
-      ? { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 }
-      : undefined,
-  );
+  const fittedCandidate = mechanism.type === "gear_linkage"
+    ? fitGearLinkageOutputToPath(
+        project,
+        readyMechanismFallbackForPath(project, mechanism, path),
+        path,
+      )
+    : (() => {
+        const fitted = createRecommendedMechanism(
+          project,
+          part,
+          path,
+          mechanism.type,
+          mechanism.recommendation ?? "Fit",
+          80,
+        );
+        return localizeFittedMechanismAnchor(
+          project,
+          mechanismWithGeneratedPath({
+            ...fitted,
+            id: mechanism.id,
+            color: mechanism.color ?? fitted.color,
+            visible: mechanism.visible,
+            enabled: mechanism.enabled,
+            source: mechanism.source ?? fitted.source,
+            presetId: mechanism.presetId ?? fitted.presetId,
+            recommendation: mechanism.recommendation ?? fitted.recommendation,
+            warnings: mechanism.warnings ?? fitted.warnings,
+            targetPartId: path.sceneObjectId ? undefined : path.partId,
+            targetSceneObjectId: path.sceneObjectId,
+            targetPathId: path.id,
+            targetAnchorJointId:
+              path.sceneObjectId
+                ? undefined
+                : (mechanism.targetAnchorJointId ??
+                  path.targetAnchorJointId ??
+                  fitted.targetAnchorJointId),
+            activeVisualPartIds: path.sceneObjectId ? [] : [path.partId],
+          }),
+          Number.isFinite(mechanism.anchorX) && Number.isFinite(mechanism.anchorY)
+            ? { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 }
+            : undefined,
+        );
+      })();
   const fittedErrors = fabricationErrorsForCandidate(project, fittedCandidate);
   if (!fittedErrors.length) {
     return fittedCandidate;

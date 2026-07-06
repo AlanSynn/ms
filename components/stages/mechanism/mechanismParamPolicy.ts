@@ -56,6 +56,9 @@ export const shouldShowMechanismParam = (
   type: MechanismType,
   key: keyof MechanismConfig,
 ) => {
+  if (type === "cam") return false;
+  if (type === "piston") return false;
+  if (type === "planetary_gear") return key === "phase";
   if (compactParametricKeys[type]?.includes(key)) return false;
   if (key === "speed2") return type === "5bar";
   if (key === "phase")

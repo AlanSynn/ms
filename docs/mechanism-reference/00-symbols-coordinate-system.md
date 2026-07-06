@@ -103,7 +103,7 @@ Every physical part uses this id grammar:
 
 ```ebnf
 PartId   ::= Category ":" Key
-Category ::= "gears" | "ring_gears" | "linkages" | "cams" | "followers" | "brackets" | "spacers" | "handles"
+Category ::= "gears" | "ring_gears" | "linkages" | "cam_modules" | "cams" | "followers" | "brackets" | "spacers" | "handles"
 Key      ::= non-empty lowercase/digit/hyphen token
 ```
 
@@ -112,8 +112,9 @@ Examples:
 - `gears:g24`
 - `ring_gears:ring-g8-g24`
 - `linkages:linkage-4-cell`
-- `cams:eccentric`
-- `followers:f3-round`
+- `cam_modules:swappable-cam-disk`
+- `cam_modules:u-channel-guide-cartridge`
+- `cam_modules:gravity-follower-module`
 - `brackets:2-hole-straight`
 - `spacers:s10`
 - `handles:folding-fork-tripod`

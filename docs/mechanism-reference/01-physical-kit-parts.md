@@ -117,33 +117,38 @@ Mounted at centre `H8`, those offsets map to board coordinates:
 
 Ring gear is fixed to the board; it is not a rotating gear in the current recipe.
 
-## 1.6 Cam presets
+## 1.6 Cam module parts
 
-All cams have:
+The classroom cam recipe uses a pegboard-mounted gravity cam follower module. The 15×15 pegboard is the only standardized base; do not add a separate backplate.
 
-- one centre axle hole of diameter `h`,
-- four attachment holes for linkage/bracket/crank/handle connection,
-- profile generated from `build_pear_cam_profile_from_params`, 144 samples.
+Fixed module parts:
 
-| PartId | Label | Base radius | Eccentricity | Lobes | Harmonic | Rise | High dwell | Return | Attachment offsets |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---|
-| `cams:circle` | Circle / steady | `15.0` | `0.0` | 1 | `0.0` | `45°` | `270°` | `45°` | `(12,0)`, `(0,12)`, `(-12,0)`, `(0,-12)` mm |
-| `cams:eccentric` | Eccentric / bounce | `15.0` | `5.0` | 1 | `0.0` | `90°` | `60°` | `90°` | `(12,0)`, `(-11.087,-4.592)`, `(0,-12)`, `(8.485,-8.485)` mm |
-| `cams:oval` | Oval / smooth rise | `16.0` | `6.0` | 2 | `0.2` | `120°` | `30°` | `120°` | `(6.582,15.891)`, `(-6.582,15.891)`, `(-6.582,-15.891)`, `(6.582,-15.891)` mm |
-| `cams:pear` | Pear / slow-fast | `18.0` | `9.0` | 1 | `0.35` | `150°` | `45°` | `75°` | `(-14.782,-6.123)`, `(-6.123,-14.782)`, `(6.123,-14.782)`, `(14.782,-6.123)` mm |
+| PartId | Label | Count | Use |
+|---|---|---:|---|
+| `cam_modules:axle-peg` | Axle peg | 1 | rotating axle through the pegboard hole |
+| `cam_modules:crank-handle` | Crank handle | 1 | hand input behind the board |
+| `cam_modules:cam-lock-disk` | Cam lock disk | 1 | friction-fit lock that keeps the cam disk on the axle |
+| `cam_modules:paper-washer` | Paper washer | 3 | low-friction washer at crank/board, board/cam, and cam/lock faces |
+| `cam_modules:cam-spacer` | Cam spacer | 1 | keeps the cam disk from rubbing the pegboard |
+| `cam_modules:u-channel-guide-cartridge` | U-channel guide cartridge | 1 | integrated guide side rails, front cover, top/bottom stops, and peg tabs |
+| `cam_modules:gravity-follower-module` | Preassembled gravity follower module | 1 | square rod, rounded/capsule contact head, weight block, and output tab |
 
-Physical snap rule: free-form cam parameters should snap to one of these presets via nearest `(cam_radius, cam_offset, cam_lobes, profile_harmonic)`.
+Swappable module part:
 
-## 1.7 Follower presets
+| PartId | Label | Starter profiles | Rule |
+|---|---|---|---|
+| `cam_modules:swappable-cam-disk` | Swappable cam disk | eccentric circle, oval | centre hole is shared; edge must be smooth with no sharp drop |
 
-| PartId | Label | Body height | Body width | Contact | Guide slots | Guide travel | Output holes | Output hole centres | Roller axle |
-|---|---|---:|---:|---|---:|---:|---:|---|---:|
-| `followers:f3-round` | 3-cell round-nose follower | `60.0 mm` | `14.0 mm` | `round_nose` | 1 | `20.0 mm` | 1 | `(0,20)` | no |
-| `followers:f4-roller` | 4-cell roller-pin follower | `80.0 mm` | `14.0 mm` | `roller_pin` | 1 | `20.0 mm` | 1 | `(0,20)` | yes |
-| `followers:f5-flat` | 5-cell flat-shoe follower | `100.0 mm` | `14.0 mm` | `flat_shoe` | 1 | `25.0 mm` | 2 | `(0,20)`, `(0,40)` | no |
-| `followers:f6-linkage-output` | 6-cell linkage-output follower | `120.0 mm` | `14.0 mm` | `linkage_output` | 1 | `30.0 mm` | 3 | `(0,20)`, `(0,40)`, `(0,60)` | no |
+The old `cams:*` and `followers:*` primitives may remain in historical source snapshots, but the default fabrication-ready cam recipe must use the `cam_modules:*` parts above.
 
-Default cam-follower recipe uses `followers:f3-round`.
+## 1.7 Gravity follower / guide cartridge contract
+
+- The guide cartridge is one student-facing part. Students should not align loose guide rails by hand.
+- The guide side rails are integrated side walls that set channel width and board clearance.
+- The front cover prevents the follower from falling away from the pegboard.
+- The top and bottom stops keep the follower inside the travel range.
+- The follower is preassembled or cut/folded as one module; students should not separately glue rod, head, weight, and output tab.
+- Gravity preload comes from the follower weight block. Do not use rubber bands, springs, metal bearings, or plastic spacers for the default classroom cam module.
 
 ## 1.8 Brackets
 

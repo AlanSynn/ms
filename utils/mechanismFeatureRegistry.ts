@@ -90,7 +90,10 @@ const projectionRoleForType = (type: MechanismType): MechanismProjectionRole => 
 const editableParametersForType = (type: MechanismType): Array<keyof MechanismConfig> => {
     const base: Array<keyof MechanismConfig> = ['crankLength', 'groundLength', 'couplerLength', 'rockerLength', 'phase'];
     switch (type) {
+        case '4bar':
+            return ['crankLength', 'groundLength', 'couplerLength', 'rockerLength', 'couplerPointDist', 'couplerPointAngle', 'driverPhaseOffset'];
         case 'piston':
+            return [];
         case 'yoke':
         case 'rack-pinion':
             return ['crankLength', 'sliderOffset', 'rodLength', 'rockerLength', 'phase'];
@@ -99,9 +102,9 @@ const editableParametersForType = (type: MechanismType): Array<keyof MechanismCo
         case 'gear_linkage':
             return ['gearTrainRadii', 'couplerPointDist', 'couplerLength', 'driverGroupId', 'driverPhaseOffset', 'phase'];
         case 'planetary_gear':
-            return ['driverGroupId', 'driverPhaseOffset', 'phase'];
+            return ['phase'];
         case 'cam':
-            return ['crankLength', 'rockerLength', 'sliderOffset', 'camProfileSamples', 'phase'];
+            return ['camProfileSamples'];
         case '5bar':
             return [...base, 'rodLength', 'speed1', 'speed2'];
         case '6bar':

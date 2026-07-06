@@ -71,7 +71,7 @@ Classroom lessons should answer “what classroom project are we making?” thro
 
 Minimum classroom templates:
 
-1. `Waving arm` — humanoid, wrist path, four-bar or crank-rocker recommendation.
+1. `Waving arm` — humanoid, hand path, four-bar or crank-rocker recommendation.
 2. `Walking legs` — humanoid lower-limb paths, paired mechanism recommendation.
 3. `Bobbing head` — head path, cam follower recommendation.
 4. `Spinning sign` — gear train recommendation.
@@ -192,7 +192,7 @@ Done when:
 
 Done when:
 
-- Template opens real humanoid, wrist path, editable parts, and compatible Foundry recommendation.
+- Template opens real humanoid, hand path, editable parts, and compatible Foundry recommendation.
 - No hidden mechanism appears unless the user chose an explicit lesson template.
 
 ### Phase 3 — First-run classroom checklist

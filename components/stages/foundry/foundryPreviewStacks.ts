@@ -313,6 +313,23 @@ export const foundryPinStackPoints = (
     });
   }
 
+  if (type === "cam") {
+    return points.map((point, index) => {
+      const pinMovingLayerIndexes =
+        index === 0
+          ? [cleanIndexes[0], cleanIndexes[1]]
+          : [cleanIndexes[2], cleanIndexes[3]];
+      return {
+        id: index === 0 ? "A" : "B",
+        point,
+        movingLayerIndexes: pinMovingLayerIndexes.filter(
+          (item): item is number => typeof item === "number",
+        ),
+        spacerLayerIndexes: spacerIndexesFrom(index === 0 ? 0 : 2),
+      };
+    });
+  }
+
   if (
     (type === "4bar" || type === "5bar" || type === "6bar") &&
     points.length === cleanIndexes.length + 1

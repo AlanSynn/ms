@@ -138,6 +138,7 @@ export const ClassroomExampleVideo = ({
             type="button"
             className="chip"
             data-testid="classroom-example-video-toggle"
+            data-youtube-id={example.youtubeId}
             aria-expanded={open}
             onClick={toggleVideo}
           >
@@ -146,6 +147,12 @@ export const ClassroomExampleVideo = ({
         )}
       </div>
       <p className="mt-2 text-sm text-slate-600">{example.generatedSummary}</p>
+      <div className="mt-2 rounded-2xl bg-violet-50 p-3 text-sm font-bold text-slate-700">
+        Watch for: {example.watchFor}
+      </div>
+      <p className="mt-2 text-sm font-bold text-violet-700">
+        Think: {example.studentQuestion}
+      </p>
       <ClassroomGeneratedLoop example={example} />
       {open && embedUrl && (
         <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-slate-950">

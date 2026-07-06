@@ -117,8 +117,14 @@ export const REFERENCE_PART_HOLE_COUNTS: Record<string, number> = {
     'linkages:linkage-6-cell': 7,
     'brackets:2-hole-straight': 2,
     'brackets:3-hole-straight': 3,
-    'cams:eccentric': 5,
-    'followers:f3-round': 1,
+    'cam_modules:axle-peg': 0,
+    'cam_modules:crank-handle': 2,
+    'cam_modules:cam-lock-disk': 1,
+    'cam_modules:paper-washer': 1,
+    'cam_modules:cam-spacer': 1,
+    'cam_modules:swappable-cam-disk': 1,
+    'cam_modules:u-channel-guide-cartridge': 2,
+    'cam_modules:gravity-follower-module': 1,
     'spacers:s10': 0
 };
 
@@ -142,6 +148,7 @@ const COORD_ROLE_LABELS: Record<string, string> = {
     gear_handle_reference: 'gear handle reference',
     carrier_reference: 'carrier reference',
     slider_reference: 'slider reference',
+    guide_reference: 'guide reference',
     moving_reference: 'moving reference'
 };
 
@@ -342,8 +349,14 @@ const L4 = (quantity = 1) => part('linkages:linkage-4-cell', 'linkages', 'linkag
 const L6 = () => part('linkages:linkage-6-cell', 'linkages', 'linkage-6-cell', 'L6 linkage', 1);
 const BR2 = () => part('brackets:2-hole-straight', 'brackets', '2-hole-straight', '2-hole bracket', 1);
 const BR3 = () => part('brackets:3-hole-straight', 'brackets', '3-hole-straight', '3-hole bracket', 1);
-const CAM = () => part('cams:eccentric', 'cams', 'eccentric', 'Eccentric cam', 1);
-const F3 = () => part('followers:f3-round', 'followers', 'f3-round', 'Round follower', 1);
+const CAM_AXLE = () => part('cam_modules:axle-peg', 'cam_modules', 'axle-peg', 'Axle peg', 1);
+const CAM_HANDLE = () => part('cam_modules:crank-handle', 'cam_modules', 'crank-handle', 'Crank handle', 1);
+const CAM_LOCK = () => part('cam_modules:cam-lock-disk', 'cam_modules', 'cam-lock-disk', 'Cam lock disk', 1);
+const PAPER_WASHER = () => part('cam_modules:paper-washer', 'cam_modules', 'paper-washer', 'Paper washer', 3);
+const CAM_SPACER = () => part('cam_modules:cam-spacer', 'cam_modules', 'cam-spacer', 'Cam spacer', 1);
+const CAM_DISK = () => part('cam_modules:swappable-cam-disk', 'cam_modules', 'swappable-cam-disk', 'Swappable cam disk', 1);
+const CAM_GUIDE_CARTRIDGE = () => part('cam_modules:u-channel-guide-cartridge', 'cam_modules', 'u-channel-guide-cartridge', 'U-channel guide cartridge', 1);
+const GRAVITY_FOLLOWER = () => part('cam_modules:gravity-follower-module', 'cam_modules', 'gravity-follower-module', 'Preassembled gravity follower module', 1);
 
 const stack = (items: Array<Omit<ReferenceAssemblyStackItem, 'order'>>): ReferenceAssemblyStackItem[] =>
     items.map((item, index) => ({ ...item, order: index + 1 }));
@@ -456,10 +469,34 @@ const gearTrainSteps: ReferenceAssemblyStep[] = [
 ];
 
 const camSteps: ReferenceAssemblyStep[] = [
-    step(1, 'Mount cam axle', 'place-fastener', ['J7'], ['board'], 'Place a paper fastener at J7.', 'The axle is loose enough to rotate.', bareFastener('J7')),
-    step(2, 'Add eccentric cam', 'add-part', ['J7'], ['board'], 'Add S10 spacer, then place the eccentric cam at J7.', 'The cam turns cleanly.', movingPartStack('Board hole J7', 'Eccentric cam', 'cams:eccentric')),
-    step(3, 'Add follower guide', 'add-guide', ['G7'], ['board'], 'Pin the follower guide slot at G7 with a loose spacer stack.', 'The follower can slide up and down.', movingPartStack('Board hole G7', 'Round follower', 'followers:f3-round')),
-    step(4, 'Check lift', 'test-motion', ['J7', 'G7'], ['board', 'board'], 'Turn the cam and watch the follower rise.', 'Loosen the guide if it sticks.', movingPartStack('Board hole G7', 'Round follower', 'followers:f3-round'))
+    step(1, 'Mount axle module', 'mount-axle-module', ['J7'], ['board'], 'Push the axle peg through J7, add the crank handle behind the board, and place one paper washer at the board face.', 'The axle turns freely without wobble.', stack([
+        { label: '15x15 pegboard hole J7', role: 'board' },
+        { label: 'Crank handle', role: 'handle', part: 'cam_modules:crank-handle' },
+        { label: 'Axle peg', role: 'axle-peg', part: 'cam_modules:axle-peg' },
+        { label: 'Paper washer', role: 'washer', part: 'cam_modules:paper-washer' }
+    ])),
+    step(2, 'Add swappable cam disk', 'add-cam-disk', ['J7'], ['board'], 'Slide on the paper washer, cam spacer, swappable cam disk, another paper washer, then lock it with the cam lock disk.', 'The cam clears the pegboard and stays on the axle.', stack([
+        { label: '15x15 pegboard hole J7', role: 'board' },
+        { label: 'Paper washer', role: 'washer', part: 'cam_modules:paper-washer' },
+        { label: 'Cam spacer', role: 'cam-spacer', part: 'cam_modules:cam-spacer' },
+        { label: 'Swappable cam disk', role: 'cam-disk', part: 'cam_modules:swappable-cam-disk' },
+        { label: 'Paper washer', role: 'washer', part: 'cam_modules:paper-washer' },
+        { label: 'Cam lock disk', role: 'cam-lock', part: 'cam_modules:cam-lock-disk' }
+    ])),
+    step(3, 'Plug in guide cartridge', 'mount-guide-cartridge', ['J11', 'J9'], ['board', 'board'], 'Plug the U-channel guide cartridge into the board above the cam. Its side walls, front cover, stops, and peg tabs are already one module.', 'The guide is vertical and fixed to the board.', stack([
+        { label: '15x15 pegboard holes J11 and J9', role: 'board' },
+        { label: 'U-channel guide cartridge', role: 'guide-cartridge', part: 'cam_modules:u-channel-guide-cartridge' }
+    ])),
+    step(4, 'Insert gravity follower', 'insert-follower', ['J9', 'J7'], ['guide_reference', 'board'], 'Drop the preassembled gravity follower module into the cartridge so the rounded head rests on the cam.', 'The follower falls under gravity and does not bind.', stack([
+        { label: 'U-channel guide cartridge', role: 'guide-cartridge', part: 'cam_modules:u-channel-guide-cartridge' },
+        { label: 'Preassembled gravity follower module', role: 'gravity-follower', part: 'cam_modules:gravity-follower-module' },
+        { label: 'Swappable cam disk', role: 'cam-disk', part: 'cam_modules:swappable-cam-disk' }
+    ])),
+    step(5, 'Test cam contact', 'test-motion', ['J7', 'J9'], ['board', 'guide_reference'], 'Turn the crank slowly and watch the follower move up and down along the cartridge.', 'The rounded follower head stays on the cam edge through one full turn.', stack([
+        { label: 'Crank handle', role: 'handle', part: 'cam_modules:crank-handle' },
+        { label: 'Swappable cam disk', role: 'cam-disk', part: 'cam_modules:swappable-cam-disk' },
+        { label: 'Preassembled gravity follower module', role: 'gravity-follower', part: 'cam_modules:gravity-follower-module' }
+    ]))
 ];
 
 const fourBarSteps: ReferenceAssemblyStep[] = [
@@ -539,15 +576,15 @@ export const REFERENCE_MECHANISM_RECIPES: Record<MechanismType, ReferenceMechani
     cam: {
         appType: 'cam',
         canonicalKey: 'cam_follower',
-        title: 'Cam and follower lift',
-        physicsRule: 'cam normal force + follower lift velocity',
+        title: 'Pegboard-mounted gravity cam follower module',
+        physicsRule: 'rotating cam contact + vertical prismatic follower + gravity preload',
         foundryVisible: true,
         exportReady: true,
         support: 'fabrication-ready',
-        recipeId: 'cam-follower-basic',
+        recipeId: 'pegboard-gravity-cam-follower',
         guideSvg: 'fabrication/assembly/02-cam-follower-basic.svg',
-        requiredParts: [CAM(), F3(), BR2(), S10],
-        stackLabels: ['Eccentric cam', 'Round follower', '2-hole bracket'],
+        requiredParts: [CAM_AXLE(), CAM_HANDLE(), CAM_LOCK(), PAPER_WASHER(), CAM_SPACER(), CAM_DISK(), CAM_GUIDE_CARTRIDGE(), GRAVITY_FOLLOWER()],
+        stackLabels: ['15x15 pegboard base', 'Axle peg', 'Crank handle', 'Paper washer', 'Cam spacer', 'Swappable cam disk', 'Paper washer', 'Cam lock disk', 'U-channel guide cartridge', 'Preassembled gravity follower module'],
         assemblySteps: camSteps
     },
     'rack-pinion': unsupportedRecipe('rack-pinion', 'unsupported', 'Rack-pinion has no mechanism-reference recipe or kit part contract yet.'),
@@ -654,12 +691,19 @@ export const normalizeMechanismToReference = <T extends Partial<MechanismConfig>
         return normalizeGearLinkageToReference(mechanism);
     }
     if (mechanism.type === 'planetary_gear') {
+        const sun = REFERENCE_DEFAULTS.planetary.sunRadius;
+        const planet = REFERENCE_DEFAULTS.planetary.planetRadius;
+        const ring = sun + 2 * planet;
+        const carrierRatio = sun / (sun + ring);
+        const planetSpinRatio = carrierRatio - (sun / planet) * (1 - carrierRatio);
         return {
             ...mechanism,
-            crankLength: REFERENCE_DEFAULTS.planetary.sunRadius,
-            rockerLength: REFERENCE_DEFAULTS.planetary.planetRadius,
+            crankLength: sun,
+            rockerLength: planet,
             groundLength: REFERENCE_DEFAULTS.planetary.carrierRadius,
-            couplerPointDist: REFERENCE_DEFAULTS.planetary.carrierRadius
+            couplerPointDist: REFERENCE_DEFAULTS.planetary.carrierRadius,
+            gearRatio: carrierRatio,
+            speed2: planetSpinRatio
         };
     }
     if (mechanism.type === 'cam') {
@@ -693,5 +737,7 @@ export const normalizeMechanismToFabricationSet = <T extends Partial<MechanismCo
     if (mechanism.type === 'gear') return normalizeGearTrainToFabrication(mechanism);
     if (mechanism.type === 'gear_linkage') return normalizeGearLinkageToReference(mechanism);
     if (mechanism.type === 'planetary_gear') return normalizeMechanismToReference(mechanism);
+    if (mechanism.type === 'cam') return normalizeMechanismToReference(mechanism);
+    if (mechanism.type === 'piston') return normalizeMechanismToReference(mechanism);
     return mechanism;
 };

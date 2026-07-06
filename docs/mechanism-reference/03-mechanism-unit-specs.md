@@ -27,7 +27,7 @@ Snapping by family:
 | `gear_train` | `gear1_teeth`, `gear2_teeth` → nearest `{8,24,40,56}`; radii aliases filled. |
 | `gear_linkage` | gear train as above; drive/output endpoint gears must have attachment holes; `linkage_pin_radius` → shared fabricated attachment radius on both endpoint gears; `linkage_arm_length` → paired linkage length. |
 | `planetary_gear` | forced to `sun=g8/8T`, `planet=g24/24T`, `ring=ring-g8-g24`; `planet_count` fixed at `1` until the multi-planet carrier recipe exists; carrier length snapped; ring/sun/planet gear teeth stay coplanar. |
-| `cam_follower` | snap to nearest physical cam preset; fill `base_radius`, `eccentricity`, `cam_lobes`, `profile_harmonic`, `rise_deg`, `high_dwell_deg`, `return_deg`, `physical_cam_preset`. |
+| `cam_follower` | keep the 15×15 pegboard as the only base; snap the axis, guide cartridge, and follower module to board holes; only the swappable cam disk/profile changes. |
 
 ### Foundry ↔ Design parametric editing contract
 
@@ -38,7 +38,7 @@ Mechanism Foundry and Mechanism Design edit the same `MechanismConfig` fields. A
 | `4bar` | input link, coupler link, output link, ground angle/position | link lengths snap to L2/L4/L6/L8; ground remains a board reference between A and D. |
 | `gear` | drive gear size, output gear size, zero or more idler gear sizes, ground angle/position | every gear snaps to G1/G3/G5/G7 (`8/24/40/56` teeth); centre distances, gear ratio, and speed ratio derive from the ordered gear list. |
 | `gear_linkage` | drive/output/idler gear sizes, paired linkage size, crank-pin radius, ground angle/position | drive and output gears must be G3/G5/G7 because G1 has no attachment holes; both crank pins snap to a shared real endpoint-gear attachment radius; paired linkages snap to L2/L4/L6/L8. |
-| `cam` | cam profile samples, follower travel/radius, phase | visible cam profile edits update `camProfileSamples`; sampled profile drives follower contact and physics overlays. |
+| `cam` | swappable cam profile samples, phase | visible cam edits update `camProfileSamples`; fabrication keeps the axle module, U-channel guide cartridge, and preassembled gravity follower module fixed while swapping only the cam disk. |
 | `planetary_gear` | phase and driver grouping only until alternate ring/carrier recipes exist | physical recipe remains fixed to R56 + G1 + G3 + L2 so the assembly stack stays buildable. |
 
 Parametric edits are portable only if the changed parts still appear in `referenceRequiredPartsForMechanism`, `fabricationStackForMechanism`, the 3D render plan, Blueprint, and Assembly. Do not add a UI-only field that bypasses those helpers.
@@ -285,56 +285,105 @@ Rules:
 | Aliases | `cam`, `cam_profile` |
 | Foundry-visible | yes |
 | Transfer/export | yes |
-| Fabrication recipe | `cam-follower-basic` |
+| Fabrication recipe | `pegboard-gravity-cam-follower` |
 | Guide SVG | `fabrication/assembly/02-cam-follower-basic.svg` |
+| Final structure name | Pegboard-mounted gravity cam follower module |
+
+### Module contract
+
+15×15 pegboard remains the only standardized base and coordinate system. Do not generate a separate backplate for the cam. The cam recipe is a set of pegboard-mounted plug-in modules:
+
+```text
+15x15 pegboard
++ cam axle module
++ swappable cam disk
++ U-channel guide cartridge
++ preassembled gravity follower module
++ paper/wood washer and spacer modules
+```
+
+Fixed modules:
+
+- 15×15 pegboard base: already present, not exported as a new part.
+- Cam axle module: `axle peg + crank handle + paper washer + cam spacer + cam lock disk`.
+- U-channel guide cartridge: one cartridge that integrates guide side rails, front cover, top stop, bottom stop, and peg connector tabs.
+- Preassembled gravity follower module: square vertical rod, rounded follower head, weight block, and output tab.
+
+Swappable module:
+
+- Cam disk only. Initial classroom kit supports eccentric circle and oval; pear and custom drawn cams are valid follow-up disk profiles if the edge has no sharp drop.
+
+Forbidden for this recipe:
+
+- No rubber bands, springs, metal bearings, plastic spacers, or free-floating loose rail assembly.
+- No new backplate.
+- No old `S10`/round-follower/bracket stack for the default cam recipe.
 
 ### Symbols
 
 ```text
-C = cam centre / axle
-F_y = follower vertical position
-r(θ) = cam profile radius at input angle θ
-R_b = base radius
-ε = eccentricity / cam offset
-n_l = lobe count
-H = profile_harmonic
+C = cam centre / axle peg at J7
+G = vertical guide cartridge mounted above the cam
+F = gravity follower module constrained to vertical translation
+r(θ) = sampled cam disk radius at input angle θ
+h(θ) = follower lift from cam contact
+```
+
+Simulator mapping:
+
+```text
+cam = rotating rigid body
+follower = vertical prismatic body
+guide = x-position and theta constraint
+contact = cam boundary vs rounded/capsule follower head
+gravity = downward preload
 ```
 
 ### Defaults and snapping
 
 | Param | Default | Snap |
 |---|---:|---|
-| `cam_radius` | `15 mm` for default eccentric preset | nearest physical cam base radius `{15,16,18}` |
-| `cam_offset` | `5 mm` for eccentric | nearest physical cam eccentricity `{0,5,6,9}` |
-| `follower_length` | `160 mm` | linkage-length family for UI range; physical follower preset is separate |
-| `cam_lobes` | `1` | nearest preset lobe count |
-| `profile_harmonic` | `0.0` for eccentric | nearest preset harmonic |
+| `cam_radius` | `15 mm` nominal profile radius | nearest swappable cam disk profile family |
+| `camProfileSamples` | smooth one-lobe lift profile | sampled disk outline; no sharp drop |
+| `follower_length` | module travel range, not a loose link | fixed by guide cartridge and preassembled follower module |
 | `input_angle` | `30°` | angle only |
+| board location | cam axle near `J7`, guide near `J11/J9` | 15×15 pegboard holes |
 
 ### Physical recipe parts
 
 | Part | Count | Role |
 |---|---:|---|
-| `cams:eccentric` | 1 | rotating cam |
-| `followers:f3-round` | 1 | sliding follower |
-| `brackets:2-hole-straight` | 1 | available/output bracket in part list |
-| `spacers:s10` | 8 | clearance stacks |
+| `cam_modules:axle-peg` | 1 | rotating axle through the pegboard |
+| `cam_modules:crank-handle` | 1 | hand crank behind the board |
+| `cam_modules:cam-lock-disk` | 1 | friction-fit disk that keeps the cam on the axle |
+| `cam_modules:paper-washer` | 3 | low-friction washer at crank/board, board/cam, and cam/lock faces |
+| `cam_modules:cam-spacer` | 1 | spacing tube/ring that keeps the cam disk off the pegboard |
+| `cam_modules:swappable-cam-disk` | 1 | replaceable cam profile disk |
+| `cam_modules:u-channel-guide-cartridge` | 1 | integrated guide side rails, cover, stops, and peg tabs |
+| `cam_modules:gravity-follower-module` | 1 | preassembled weighted vertical follower with rounded head and output tab |
 
 ### Exact recipe
 
 | Step | Coords / roles | Stack |
 |---:|---|---|
-| 1 | `J7(board)` | `B@J7 > F > tabs-behind-board` |
-| 2 | `J7(board)` | `B@J7 > F > S10 > cam:eccentric > S10 > tabs-loose` |
-| 3 | `G7(board)` | `B@G7 > F > S10 > follower:f3-round > S10 > tabs-loose` |
-| 4 | `J7(board)`, `G7(board)` | follower moving stack for motion check |
+| 1 | `J7(board)` | `pegboard@J7 > crank handle behind board > axle peg > paper washer` |
+| 2 | `J7(board)` | `paper washer > cam spacer > swappable cam disk > paper washer > cam lock disk` |
+| 3 | `J11(board)`, `J9(board)` | `U-channel guide cartridge plugged into pegboard` |
+| 4 | `J9(guide_reference)`, `J7(board)` | `preassembled gravity follower module inside guide; rounded head rests on cam disk` |
+| 5 | `J7(board)`, `J9(guide_reference)` | `turn crank; cam edge lifts follower; follower returns by gravity` |
 
 Rules:
 
-1. Cam axle is board-fixed; cam body rotates freely on `S10` spacers.
-2. The follower is guided loosely; it must slide, not bind.
-3. Physical cam profiles are presets. Free-form profile editing should snap to the nearest preset when fabricating.
-4. Attachment holes in cams may accept handles/linkages/brackets, but the default cam-follower recipe does not use them as the main follower contact.
+1. The 15×15 pegboard is the coordinate frame and structural base; do not fabricate another backplate.
+2. The axle peg must fit the board hole: loose enough to rotate, tight enough to avoid wobble.
+3. The crank handle lives behind the board; the cam disk and follower contact live in front of the board.
+4. Paper washers and the cam spacer prevent rubbing. They are local cam-module parts, not the generic S10 moving-stack contract.
+5. The guide cartridge is one student-facing module. Its guide side rails, front cover, stops, and peg tabs are not separate loose classroom parts.
+6. The follower is preassembled as a weighted gravity follower module. Students do not build the rod, head, weight block, and output tab separately.
+7. The follower rod is modeled as square/anti-rotation in fabrication; the simulator may render its contact as a capsule follower head.
+8. Only the cam disk is intended to be swapped often. Cam shape is the learning variable.
+9. Cam profiles must be smooth enough that the follower stays in contact; no sharp edges or sudden vertical drops.
+10. If the follower binds, the recovery path is cartridge alignment, washer/spacer clearance, or a smoother/smaller cam disk profile.
 
 ## 3.6 Planetary gear — `planetary_gear`
 

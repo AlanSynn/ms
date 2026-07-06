@@ -10,7 +10,7 @@ Recent teacher feedback changes the entry assumption. The earlier hypothesis was
 
 Teachers repeatedly asked for a clearer start because they wanted students to understand what the app enables before worrying about digital setup, physical build steps, or character import. The app still needs creative freedom, but freedom should arrive after a concrete, working project baseline.
 
-Second synthesis: the entry needs motion-editing scaffolds, not only starter characters. Students should start from a working theme, see what will move, then choose what to change: wrist path, head path, foot path, or gear size. Upload and blank-start routes remain available, but they are not the primary classroom posture.
+Second synthesis: the entry needs motion-editing scaffolds, not only starter characters. Students should start from a working theme, see what will move, then choose what to change: hand path, head path, foot path, or gear size. Upload and blank-start routes remain available, but they are not the primary classroom posture.
 
 ## Decision
 
@@ -20,7 +20,7 @@ MotionSmith should begin classroom use with a small set of project themes that c
 
 The answer should be a visible result, not a technical process. Examples:
 
-- `Make an arm wave`
+- `Make a hand wave`
 - `Make a foot step`
 - `Make a head bob`
 - `Make gears spin`
@@ -76,8 +76,8 @@ Minimum project cards:
 
 | Theme card | Digital action -> physical artifact | Starter data |
 | --- | --- | --- |
-| `Make an arm wave` | Draw/fit a wrist path -> four-bar swings an arm | starter humanoid, right hand path, four-bar baseline |
-| `Make a foot step` | Tune a foot path -> four-bar step motion | starter humanoid, lower-leg path, four-bar baseline |
+| `Make a hand wave` | Draw/fit a hand path -> four-bar waves a hand | starter humanoid, right hand path, four-bar baseline |
+| `Make a foot step` | Tune a foot path -> four-bar step motion | starter humanoid, foot path, four-bar baseline |
 | `Make a head bob` | Tune lift path -> cam follower lifts head | starter humanoid, head path, cam baseline |
 | `Make gears spin` | Pick gears -> gear train transfers rotation | prop/object starter, gear train baseline |
 
@@ -92,7 +92,7 @@ Card copy policy:
 
 Examples:
 
-- `Make an arm wave` / `Change wrist path` / `Build four-bar` / `Open`
+- `Make a hand wave` / `Change hand path` / `Build four-bar` / `Open`
 - `Make a head bob` / `Change head path` / `Build cam` / `Open`
 - `Make a foot step` / `Change foot path` / `Build four-bar` / `Open`
 

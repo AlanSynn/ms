@@ -136,8 +136,33 @@ type FoundryAutomataContext = {
   showSkeleton?: boolean;
 };
 
+const FOUNDRY_PREVIEW_WIDTH = 360;
+const FOUNDRY_PREVIEW_HEIGHT = 240;
+const SCENE_TO_FOUNDRY_SCALE = Math.min(
+  FOUNDRY_PREVIEW_WIDTH / SCENE_VIEW.width,
+  FOUNDRY_PREVIEW_HEIGHT / SCENE_VIEW.height,
+);
+
 const foundryTo3 = (point: Point, z = 0) =>
   new THREE.Vector3((point.x - 180) / 18, (120 - point.y) / 18, z);
+
+const sceneToFoundryPreview = (point: Point): Point => ({
+  x: FOUNDRY_PREVIEW_WIDTH / 2 + point.x * SCENE_TO_FOUNDRY_SCALE,
+  y: FOUNDRY_PREVIEW_HEIGHT / 2 - point.y * SCENE_TO_FOUNDRY_SCALE,
+});
+
+const sceneTo3 = (point: Point, z = 0) =>
+  foundryTo3(sceneToFoundryPreview(point), z);
+
+const sceneLocalToFoundryLocal = (point: Point): Point => ({
+  x: point.x * SCENE_TO_FOUNDRY_SCALE,
+  y: -point.y * SCENE_TO_FOUNDRY_SCALE,
+});
+
+const sceneLocalFromFoundryGeometry = (x: number, y: number): Point => ({
+  x: (x * 18) / SCENE_TO_FOUNDRY_SCALE,
+  y: (y * 18) / SCENE_TO_FOUNDRY_SCALE,
+});
 
 const foundryLocalHole = (x: number, y: number, r: number) => {
   const hole = new THREE.Path();
@@ -153,27 +178,26 @@ const foundryLocalShape = (points: Point[]) => {
   return shape;
 };
 
-const foundryRoundedRect = (width: number, height: number) => {
-  const w = Math.max(0.1, width / 18);
-  const h = Math.max(0.1, height / 18);
-  const r = Math.min(w, h) * 0.2;
-  const shape = new THREE.Shape();
-  shape.moveTo(-w / 2 + r, -h / 2);
-  shape.lineTo(w / 2 - r, -h / 2);
-  shape.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + r);
-  shape.lineTo(w / 2, h / 2 - r);
-  shape.quadraticCurveTo(w / 2, h / 2, w / 2 - r, h / 2);
-  shape.lineTo(-w / 2 + r, h / 2);
-  shape.quadraticCurveTo(-w / 2, h / 2, -w / 2, h / 2 - r);
-  shape.lineTo(-w / 2, -h / 2 + r);
-  shape.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2);
-  return shape;
-};
+const foundrySceneLocalShape = (points: Point[]) =>
+  foundryLocalShape(points.map(sceneLocalToFoundryLocal));
+
+const foundrySceneLocalHole = (point: Point, radius: number) =>
+  foundryLocalHole(
+    (point.x * SCENE_TO_FOUNDRY_SCALE) / 18,
+    (point.y * SCENE_TO_FOUNDRY_SCALE) / 18,
+    (radius * SCENE_TO_FOUNDRY_SCALE) / 18,
+  );
 
 const foundrySceneObjectShape = (object: SceneObject) => {
-  if (object.contourPoints && object.contourPoints.length >= 3)
-    return foundryLocalShape(object.contourPoints);
-  return foundryRoundedRect(object.bounds.width, object.bounds.height);
+  const points = object.contourPoints && object.contourPoints.length >= 3
+    ? object.contourPoints
+    : [
+        { x: -object.bounds.width / 2, y: -object.bounds.height / 2 },
+        { x: object.bounds.width / 2, y: -object.bounds.height / 2 },
+        { x: object.bounds.width / 2, y: object.bounds.height / 2 },
+        { x: -object.bounds.width / 2, y: object.bounds.height / 2 },
+      ];
+  return foundrySceneLocalShape(points);
 };
 
 type FoundryScreenTarget = {
@@ -257,6 +281,17 @@ const placeFoundryLocalGroup = (
   group.scale.set(transform.scale, transform.scale, 1);
 };
 
+const placeSceneLocalGroup = (
+  group: THREE.Group,
+  transform: { x: number; y: number; rotation: number; scale: number },
+  z: number,
+) => {
+  const p = sceneTo3(transform, z);
+  group.position.copy(p);
+  group.rotation.z = (transform.rotation * Math.PI) / 180;
+  group.scale.set(transform.scale, transform.scale, 1);
+};
+
 const renderFoundryAutomataContext = ({
   root,
   context,
@@ -295,8 +330,8 @@ const renderFoundryAutomataContext = ({
       ? 0.3 + assemblySceneFrame.progress * 0.8
       : 0;
   const holeRadius = Math.max(
-    0.06,
-    (FABRICATION_HOLE_RADIUS_MM * SCENE_PX_PER_MM) / 18,
+    1,
+    FABRICATION_HOLE_RADIUS_MM * SCENE_PX_PER_MM,
   );
   const automataRoot = new THREE.Group();
   automataRoot.name = "foundry-automata-context";
@@ -307,11 +342,11 @@ const renderFoundryAutomataContext = ({
     const landmarks = partLandmarkLocalPoints(base, skeleton);
     const outline = fabricablePartOutlinePoints(base, landmarks);
     if (outline.length < 3) return;
-    const shape = foundryLocalShape(outline);
+    const shape = foundrySceneLocalShape(outline);
     landmarks
       .filter((local) => pointInsideOutline(local, outline, 0.5))
       .forEach((local) =>
-        shape.holes.push(foundryLocalHole(local.x / 18, -local.y / 18, holeRadius)),
+        shape.holes.push(foundrySceneLocalHole(local, holeRadius)),
       );
     const geometry = new THREE.ExtrudeGeometry(shape, {
       depth: 0.16,
@@ -344,9 +379,8 @@ const renderFoundryAutomataContext = ({
       const width = Math.max(1, base.bounds.width);
       const height = Math.max(1, base.bounds.height);
       for (let i = 0; i < positions.count; i += 1) {
-        const x = positions.getX(i) * 18;
-        const y = -positions.getY(i) * 18;
-        uvs.push((x - base.bounds.x) / width, (y - base.bounds.y) / height);
+        const local = sceneLocalFromFoundryGeometry(positions.getX(i), positions.getY(i));
+        uvs.push((local.x - base.bounds.x) / width, (local.y - base.bounds.y) / height);
       }
       artGeometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
       const art = new THREE.Mesh(
@@ -358,7 +392,7 @@ const renderFoundryAutomataContext = ({
       art.userData.partId = part.id;
       group.add(art);
     }
-    placeFoundryLocalGroup(
+    placeSceneLocalGroup(
       group,
       part.transform,
       baseZ +
@@ -395,7 +429,8 @@ const renderFoundryAutomataContext = ({
       const width = Math.max(1, object.bounds.width);
       const height = Math.max(1, object.bounds.height);
       for (let i = 0; i < positions.count; i += 1) {
-        uvs.push(positions.getX(i) * 18 / width + 0.5, -positions.getY(i) * 18 / height + 0.5);
+        const local = sceneLocalFromFoundryGeometry(positions.getX(i), positions.getY(i));
+        uvs.push(local.x / width + 0.5, 0.5 - local.y / height);
       }
       artGeometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
       const art = new THREE.Mesh(
@@ -406,7 +441,7 @@ const renderFoundryAutomataContext = ({
       art.userData.sceneObjectId = object.id;
       group.add(art);
     }
-    placeFoundryLocalGroup(group, object.transform, baseZ + 0.12 + object.zIndex * 0.045);
+    placeSceneLocalGroup(group, object.transform, baseZ + 0.12 + object.zIndex * 0.045);
     automataRoot.add(group);
   });
 
@@ -418,7 +453,7 @@ const renderFoundryAutomataContext = ({
         path.id === context.selectedPathId ? 0.94 : 0.62,
         materialCache,
       );
-      const points = path.points.map((point) => foundryTo3(point, baseZ + 0.36));
+      const points = path.points.map((point) => sceneTo3(point, baseZ + 0.36));
       const linePoints = path.closed && points.length > 2 ? [...points, points[0].clone()] : points;
       const line = new THREE.Line(
         new THREE.BufferGeometry().setFromPoints(linePoints),
@@ -1050,6 +1085,16 @@ export const ThreeFoundryPreview = ({
       roundedFoundryScreenTargets([...partTargets.values()]),
     );
     stateRef.current.dataset.threeMechanismScreenTargets = "[]";
+    const assemblyBoard = scene.getObjectByName("assembly-15x15-board-surface");
+    stateRef.current.dataset.threeAssemblyBoardSurface = assemblyBoard
+      ? String(assemblyBoard.userData.assemblyBoardSurface ?? "15x15-hole-board")
+      : "hidden";
+    stateRef.current.dataset.threeAssemblyBoardHoleCount = String(
+      assemblyBoard?.userData.assemblyBoardHoleCount ?? 0,
+    );
+    stateRef.current.dataset.threeAssemblyBoardZ = assemblyBoard
+      ? Number(assemblyBoard.userData.assemblyBoardZ ?? 0).toFixed(2)
+      : "";
   };
   const pickAutomataTarget = (event: React.MouseEvent<HTMLDivElement>) => {
     if (
@@ -1400,7 +1445,7 @@ export const ThreeFoundryPreview = ({
         const cam = cameraRef.current;
         if (!renderer || !cam) return null;
         const rect = renderer.domElement.getBoundingClientRect();
-        const projected = foundryTo3(point, pinTopZ + 0.16).project(cam);
+        const projected = sceneTo3(point, pinTopZ + 0.16).project(cam);
         const x = rect.left + ((projected.x + 1) / 2) * rect.width;
         const y = rect.top + ((1 - projected.y) / 2) * rect.height;
         const radius = 24;
@@ -1446,6 +1491,16 @@ export const ThreeFoundryPreview = ({
         ),
       );
       stateRef.current.dataset.threeMechanismScreenTargets = "[]";
+      const assemblyBoard = scene.getObjectByName("assembly-15x15-board-surface");
+      stateRef.current.dataset.threeAssemblyBoardSurface = assemblyBoard
+        ? String(assemblyBoard.userData.assemblyBoardSurface ?? "15x15-hole-board")
+        : "hidden";
+      stateRef.current.dataset.threeAssemblyBoardHoleCount = String(
+        assemblyBoard?.userData.assemblyBoardHoleCount ?? 0,
+      );
+      stateRef.current.dataset.threeAssemblyBoardZ = assemblyBoard
+        ? Number(assemblyBoard.userData.assemblyBoardZ ?? 0).toFixed(2)
+        : "";
     }
     renderCamera(cameraStateRef.current);
   }, [

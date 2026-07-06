@@ -1,4 +1,5 @@
 import type { JointState, MechanismConfig, Point } from '../types';
+import { SCENE_VIEW } from './coordinates';
 import { calculateLinkage, generateCurvePoints, planetaryRingPitchRadius } from './kinematics';
 
 export const pointsToSvgPath = (points: Point[]) => points.length ? `M ${points.map(p => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' L ')}` : '';
@@ -48,7 +49,7 @@ export const createMechanismFitContext = (mechanism: MechanismConfig, width: num
     const sampleState = calculateLinkage(mechanism, (i / Math.max(12, resolution)) * Math.PI * 2);
     sweepBounds.push(...[sampleState.p1, sampleState.p2, sampleState.j1, sampleState.j2, sampleState.aux, sampleState.effector].filter((point): point is Point => Boolean(point)));
     if (mechanism.type === 'cam') addRadiusBounds(sampleState.p1, mechanism.crankLength * 1.35);
-    if (mechanism.type === 'gear' || mechanism.type === '5bar' || mechanism.type === 'rack-pinion') {
+    if (mechanism.type === 'gear' || mechanism.type === 'gear_linkage' || mechanism.type === '5bar' || mechanism.type === 'rack-pinion') {
       addRadiusBounds(sampleState.p1, mechanism.crankLength);
       addRadiusBounds(sampleState.p2, mechanism.rockerLength);
     }
@@ -70,6 +71,17 @@ export const createMechanismFitContext = (mechanism: MechanismConfig, width: num
   const map = (point: Point): Point => ({ x: point.x * scale + tx, y: ty - point.y * scale });
   const fittedPath = pathPoints.map(map);
   return { pathPoints: fittedPath, pathD: pointsToSvgPath(fittedPath), scale, map };
+};
+
+
+export const createSceneMechanismFitContext = (mechanism: MechanismConfig, width: number, height: number, resolution = 72): MechanismFitContext => {
+  const scale = Math.min(width / SCENE_VIEW.width, height / SCENE_VIEW.height);
+  const map = (point: Point): Point => ({
+    x: width / 2 + point.x * scale,
+    y: height / 2 - point.y * scale
+  });
+  const pathPoints = generateCurvePoints(mechanism, resolution).points.map(map);
+  return { pathPoints, pathD: pointsToSvgPath(pathPoints), scale, map };
 };
 
 export const fitMechanismSimulationWithContext = (mechanism: MechanismConfig, angle: number, context: MechanismFitContext): MechanismPreviewSimulation => {

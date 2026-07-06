@@ -51,16 +51,11 @@ const projectPathSegments = (points: Point[], closed: boolean) => {
     return segments;
 };
 
-const pointOnGeneratedMechanismPath = (points: Point[], angle: number): Point | undefined => {
+export const pointOnGeneratedMechanismPath = (points: Point[], angle: number): Point | undefined => {
     if (points.length < 2) return points[0];
-    const segments = projectPathSegments(points, true);
-    const total = segments.reduce((sum, seg) => sum + seg.length, 0) || 1;
-    let target = cyclePhase(angle) * total;
-    for (const seg of segments) {
-        if (target <= seg.length) return pointBetween(seg.a, seg.b, target / (seg.length || 1));
-        target -= seg.length;
-    }
-    return points[0];
+    const scaled = cyclePhase(angle) * points.length;
+    const index = Math.floor(scaled) % points.length;
+    return pointBetween(points[index], points[(index + 1) % points.length], scaled - Math.floor(scaled));
 };
 
 export const pointOnProjectPath = (path: ProjectMotionPath, angle: number): Point => {
@@ -221,11 +216,12 @@ const uniqueIds = (ids: string[]) => [...new Set(ids)];
 function motionRootOptionsFor(skeleton: StandardSkeleton, partRootJointId: string, targetJointId: string) {
     if (!skeleton.joints[partRootJointId] || !skeleton.joints[targetJointId]) return [];
     const directChain = motionJointChain(skeleton, partRootJointId, targetJointId);
-    const parentJointId = skeleton.joints[partRootJointId]?.parentId ?? undefined;
-    const parentChain = parentJointId && !coreBodyRootIds.has(parentJointId)
-        ? motionJointChain(skeleton, parentJointId, targetJointId)
-        : [];
-    const chain = parentChain.length ? parentChain : directChain;
+    let rootJointId = partRootJointId;
+    for (let parentJointId = skeleton.joints[rootJointId]?.parentId; parentJointId && !coreBodyRootIds.has(parentJointId); parentJointId = skeleton.joints[rootJointId]?.parentId) {
+        rootJointId = parentJointId;
+    }
+    const ancestorChain = rootJointId !== partRootJointId ? motionJointChain(skeleton, rootJointId, targetJointId) : [];
+    const chain = ancestorChain.length ? ancestorChain : directChain;
     return uniqueIds(chain.length ? chain : [partRootJointId]);
 }
 
@@ -583,7 +579,7 @@ export const mechanismBindingWarnings = (project: ProjectState, mechanisms: Mech
         if (m.targetPathId) {
             const path = project.paths[m.targetPathId];
             if (!path) add(m.id, `Target path ${m.targetPathId} is missing.`);
-            else if (!mechanismMatchesPathOwner(m, path)) add(m.id, `Target path ${m.targetPathId} belongs to ${path.sceneObjectId ?? path.partId}, not ${m.targetPartId}.`);
+            else if (!mechanismMatchesPathOwner(m, path, project)) add(m.id, `Target path ${m.targetPathId} belongs to ${path.sceneObjectId ?? path.partId}, not ${m.targetPartId}.`);
         }
         if (m.targetAnchorJointId && !motionAnchorJointIds(project, m.targetPartId).includes(m.targetAnchorJointId)) {
             add(m.id, `Target anchor ${m.targetAnchorJointId} is outside ${m.targetPartId}'s skeleton chain.`);

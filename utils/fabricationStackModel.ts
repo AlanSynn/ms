@@ -91,6 +91,19 @@ export const fabricationStackForMechanism = (mechanism: FabricationStackMechanis
             layer(`Output L${outputSpec.cells} linkage`, 'linkage')
         );
     }
+    if (mechanism.type === 'cam') {
+        return [
+            layer('Crank handle', 'linkage'),
+            layer('Axle peg', 'spacer'),
+            layer('Paper washer', 'spacer'),
+            layer('Cam spacer', 'spacer'),
+            layer('Swappable cam disk', 'cam'),
+            layer('Paper washer', 'spacer'),
+            layer('Cam lock disk', 'clip'),
+            layer('U-channel guide cartridge', 'guide'),
+            layer('Preassembled gravity follower module', 'follower')
+        ];
+    }
     const roleForLabel = (labelText: string): FabricationStackLayer['role'] => {
         if (/gear|ring|sun|planet/i.test(labelText)) return 'gear';
         if (/cam/i.test(labelText)) return 'cam';

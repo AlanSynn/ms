@@ -19,6 +19,16 @@ export const normalizeCamProfileSamples = (samples?: number[]) => {
     return clean.length >= 4 ? clean : defaultCamProfileSamples();
 };
 
+export const camProfileSmoothnessWarning = (samples?: number[]) => {
+    const profile = normalizeCamProfileSamples(samples);
+    const steepDropLimit = 0.55;
+    const steepEdge = profile.some((value, index) => {
+        const next = profile[(index + 1) % profile.length];
+        return Math.abs(next - value) > steepDropLimit;
+    });
+    return steepEdge ? 'Cam edge too steep. Smooth the profile.' : null;
+};
+
 export const sampledCamProfileScale = (angleRad: number, samples?: number[]) => {
     if (!samples || samples.length < 4) return camProfileScale(angleRad);
     const profile = normalizeCamProfileSamples(samples);
@@ -463,6 +473,7 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
     else if (config.type === 'piston') {
         const trackAngle = toRad(config.groundAngle ?? 0);
         const offset = config.sliderOffset || 0;
+        const rodLength = Math.max(1, Number.isFinite(config.rodLength) ? (config.rodLength ?? config.couplerLength) : config.couplerLength);
 
         // Transform J1 to local space where P1 is 0,0 and track is horizontal y = offset
         const dx = j1.x - p1.x;
@@ -474,13 +485,13 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
         const localTrackY = offset;
         const dy_link = localTrackY - localJ1y;
         
-        if (Math.abs(dy_link) > config.couplerLength) {
+        if (Math.abs(dy_link) > rodLength) {
              const p2x = p1.x + (localJ1x) * Math.cos(trackAngle) - localTrackY * Math.sin(trackAngle);
              const p2y = p1.y + (localJ1x) * Math.sin(trackAngle) + localTrackY * Math.cos(trackAngle);
              return { p1, p2: {x: p2x, y: p2y}, j1, j2: p1, effector: p1, isValid: false };
         }
 
-        const dx_link = Math.sqrt(config.couplerLength * config.couplerLength - dy_link * dy_link);
+        const dx_link = Math.sqrt(rodLength * rodLength - dy_link * dy_link);
         const localJ2x = localJ1x + dx_link;
         const localJ2y = localTrackY;
         

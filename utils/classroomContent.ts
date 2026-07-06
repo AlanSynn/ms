@@ -33,6 +33,8 @@ export interface ClassroomMechanismUseExample {
     mechanismType: MechanismType;
     label: string;
     useCase: string;
+    watchFor: string;
+    studentQuestion: string;
     generatedSummary: string;
     clipSlot: 'generated-loop';
     optionalVideoSource?: 'youtube-nocookie';
@@ -48,8 +50,8 @@ export const CLASSROOM_COPY = {
         assembly: 'Motion'
     },
     useExampleTitle: 'Use example',
-    useExamplePrefix: 'Used for',
-    watchExample: 'Watch example',
+    useExamplePrefix: 'Where',
+    watchExample: 'Watch video',
     generatedLoopLabel: 'Generated loop',
     videoUnavailable: 'Video unavailable. Use the generated loop.',
     videoOptional: 'Optional video. Use the generated loop if it does not load.',
@@ -154,8 +156,10 @@ export const MECHANISM_USE_EXAMPLES: Record<MechanismType, ClassroomMechanismUse
     crank: {
         mechanismType: 'crank',
         label: 'Crank',
-        useCase: 'automata handles and toy drivers',
-        generatedSummary: 'A crank turns a round input into a repeating push or pull for a character part.',
+        useCase: 'hand-crank toy',
+        watchFor: 'one pin stays fixed while the handle turns around it',
+        studentQuestion: 'What would the character do if the crank were longer?',
+        generatedSummary: 'A crank is the simple handle that starts a repeating motion.',
         clipSlot: 'generated-loop',
         optionalVideoSource: 'youtube-nocookie',
         youtubeId: 'i4nA_jRqb8c',
@@ -164,8 +168,10 @@ export const MECHANISM_USE_EXAMPLES: Record<MechanismType, ClassroomMechanismUse
     '4bar': {
         mechanismType: '4bar',
         label: 'Four-bar linkage',
-        useCase: 'waving arms, folding doors, and walking linkages',
-        generatedSummary: 'Two fixed board pivots let a coupler guide the output through a smooth arc.',
+        useCase: 'waving hand',
+        watchFor: 'two board pivots stay still while the end swings',
+        studentQuestion: 'Which two pivots are the anchors?',
+        generatedSummary: 'Two fixed pivots guide a moving link through a smooth swing.',
         clipSlot: 'generated-loop',
         optionalVideoSource: 'youtube-nocookie',
         youtubeId: '1Ty_1LF3Qv0',
@@ -174,8 +180,10 @@ export const MECHANISM_USE_EXAMPLES: Record<MechanismType, ClassroomMechanismUse
     piston: {
         mechanismType: 'piston',
         label: 'Slider crank',
-        useCase: 'engines, pumps, and straight push motions',
-        generatedSummary: 'A rotating crank pushes a slider back and forth in one straight guide.',
+        useCase: 'bicycle pump',
+        watchFor: 'the slider cannot wander; it stays on one line',
+        studentQuestion: 'Where does the circular motion become straight motion?',
+        generatedSummary: 'A rotating crank pushes a slider back and forth in a guide.',
         clipSlot: 'generated-loop',
         optionalVideoSource: 'youtube-nocookie',
         youtubeId: 'kfLg2EmP6mM',
@@ -184,8 +192,10 @@ export const MECHANISM_USE_EXAMPLES: Record<MechanismType, ClassroomMechanismUse
     yoke: {
         mechanismType: 'yoke',
         label: 'Scotch yoke',
-        useCase: 'compact side-to-side motion',
-        generatedSummary: 'A pin rides inside a slot so rotation becomes a simple left-right stroke.',
+        useCase: 'side-to-side shaker',
+        watchFor: 'the pin slides inside the slot instead of pulling a link',
+        studentQuestion: 'Which part forces the motion to stay side-to-side?',
+        generatedSummary: 'A pin in a slot turns rotation into a short back-and-forth slide.',
         clipSlot: 'generated-loop',
         optionalVideoSource: 'youtube-nocookie',
         youtubeId: 'QZ2XFTblrC8',
@@ -194,8 +204,10 @@ export const MECHANISM_USE_EXAMPLES: Record<MechanismType, ClassroomMechanismUse
     'quick-return': {
         mechanismType: 'quick-return',
         label: 'Quick return',
-        useCase: 'tools that cut slowly and return quickly',
-        generatedSummary: 'The linkage makes one stroke slower and the return stroke faster.',
+        useCase: 'shaping tool',
+        watchFor: 'one direction takes more time than the return direction',
+        studentQuestion: 'Which stroke is the slow working stroke?',
+        generatedSummary: 'The link placement makes one stroke slow and the return stroke fast.',
         clipSlot: 'generated-loop',
         optionalVideoSource: 'youtube-nocookie',
         youtubeId: 'yfmUSm4y43k',
@@ -204,8 +216,10 @@ export const MECHANISM_USE_EXAMPLES: Record<MechanismType, ClassroomMechanismUse
     '5bar': {
         mechanismType: '5bar',
         label: 'Five-bar linkage',
-        useCase: 'drawing machines and two-arm walkers',
-        generatedSummary: 'Two driver arms meet at one point to make a wider guided motion.',
+        useCase: 'drawing robot',
+        watchFor: 'two driver arms meet at one moving point',
+        studentQuestion: 'What happens if only one driver moves?',
+        generatedSummary: 'Two arms cooperate to place one point on a larger path.',
         clipSlot: 'generated-loop',
         optionalVideoSource: 'youtube-nocookie',
         youtubeId: 'T5bNC5dvRuU',
@@ -214,8 +228,10 @@ export const MECHANISM_USE_EXAMPLES: Record<MechanismType, ClassroomMechanismUse
     '6bar': {
         mechanismType: '6bar',
         label: 'Six-bar linkage',
-        useCase: 'folding lifts and complex character motions',
-        generatedSummary: 'An added rocker changes a simple swing into a more shaped output path.',
+        useCase: 'folding lift',
+        watchFor: 'the extra link changes the shape of the final path',
+        studentQuestion: 'Which added link changes the motion most?',
+        generatedSummary: 'A second linkage layer reshapes a simple swing into a richer path.',
         clipSlot: 'generated-loop',
         optionalVideoSource: 'youtube-nocookie',
         youtubeId: 'AQrbUvOpwCY',
@@ -224,8 +240,10 @@ export const MECHANISM_USE_EXAMPLES: Record<MechanismType, ClassroomMechanismUse
     cam: {
         mechanismType: 'cam',
         label: 'Cam follower',
-        useCase: 'bobbing heads, pop-up motions, and automata timing',
-        generatedSummary: 'The follower rides on the cam edge, so the edge shape controls the lift.',
+        useCase: 'bobbing head',
+        watchFor: 'the follower rises where the cam edge bulges out',
+        studentQuestion: 'How would a taller cam bump change the motion?',
+        generatedSummary: 'The shape of the cam edge decides when the follower lifts.',
         clipSlot: 'generated-loop',
         optionalVideoSource: 'youtube-nocookie',
         youtubeId: 'HsXWewecMLE',
@@ -234,8 +252,10 @@ export const MECHANISM_USE_EXAMPLES: Record<MechanismType, ClassroomMechanismUse
     'rack-pinion': {
         mechanismType: 'rack-pinion',
         label: 'Rack and pinion',
-        useCase: 'steering, gates, and straight slides',
-        generatedSummary: 'A round gear pushes a straight toothed rack forward and backward.',
+        useCase: 'sliding door',
+        watchFor: 'gear teeth push a straight rack instead of another wheel',
+        studentQuestion: 'Which part moves straight?',
+        generatedSummary: 'A gear turns, and its teeth push a straight rail forward or back.',
         clipSlot: 'generated-loop',
         optionalVideoSource: 'youtube-nocookie',
         youtubeId: 'SwUqCod40jI',
@@ -244,8 +264,10 @@ export const MECHANISM_USE_EXAMPLES: Record<MechanismType, ClassroomMechanismUse
     gear: {
         mechanismType: 'gear',
         label: 'Gear train',
-        useCase: 'speed changes, direction changes, and clocks',
-        generatedSummary: 'Meshed gear teeth pass rotation from one wheel to another.',
+        useCase: 'toy gearbox',
+        watchFor: 'touching gears spin in opposite directions',
+        studentQuestion: 'What changes when the output gear is bigger?',
+        generatedSummary: 'Meshed teeth pass rotation from one gear to the next.',
         clipSlot: 'generated-loop',
         optionalVideoSource: 'youtube-nocookie',
         youtubeId: '4ROtKKuSaBI',
@@ -254,8 +276,10 @@ export const MECHANISM_USE_EXAMPLES: Record<MechanismType, ClassroomMechanismUse
     gear_linkage: {
         mechanismType: 'gear_linkage',
         label: 'Gear linkage',
-        useCase: 'timed linkages and coordinated automata',
-        generatedSummary: 'The gears set the timing before the linkage turns that timing into motion.',
+        useCase: 'timed waving pair',
+        watchFor: 'gear timing moves the linkage point at the right moment',
+        studentQuestion: 'Which moving point is controlled by both gears?',
+        generatedSummary: 'Gears keep timing while links turn that timing into a path.',
         clipSlot: 'generated-loop',
         optionalVideoSource: 'youtube-nocookie',
         youtubeId: 'G8_vpKH0Wx0',
@@ -264,8 +288,10 @@ export const MECHANISM_USE_EXAMPLES: Record<MechanismType, ClassroomMechanismUse
     planetary_gear: {
         mechanismType: 'planetary_gear',
         label: 'Planetary gear',
-        useCase: 'compact gearboxes and rotating displays',
-        generatedSummary: 'Planet gears orbit a center gear to make compact speed changes.',
+        useCase: 'drill gearbox',
+        watchFor: 'planet gears orbit around the center while they spin',
+        studentQuestion: 'Which gear is fixed in this model?',
+        generatedSummary: 'Several gears share one small space to change speed or direction.',
         clipSlot: 'generated-loop',
         optionalVideoSource: 'youtube-nocookie',
         youtubeId: 'ARd-Om2VyiE',

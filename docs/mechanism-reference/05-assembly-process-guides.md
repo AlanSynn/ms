@@ -298,40 +298,46 @@ Gear train final check:
 
 ## 5.6.3 Cam-follower build flow
 
-Recipe: `cam-follower-basic`.
+Recipe: `pegboard-gravity-cam-follower`.
 
 Parts:
 
 ```text
-eccentric cam × 1
-round follower × 1
-2-hole bracket × 1
-S10 × 8
-paper fasteners
+axle peg × 1
+crank handle × 1
+paper washer × 3
+cam spacer × 1
+swappable cam disk × 1
+cam lock disk × 1
+U-channel guide cartridge × 1
+preassembled gravity follower module × 1
 ```
 
 Build sequence:
 
-1. **Mount cam axle**
-   - Coordinate: `J7(board)`.
-   - Stack: `B@J7 > F > tabs-behind-board`.
-   - Check: axle is loose enough to rotate.
-2. **Add eccentric cam**
-   - Stack: `B@J7 > F > S10 > cam:eccentric > S10 > tabs-loose`.
-   - Check: cam turns cleanly.
-3. **Add follower guide**
-   - Coordinate: `G7(board)`.
-   - Stack: `B@G7 > F > S10 > follower:f3-round > S10 > tabs-loose`.
-   - Check: follower can slide up/down.
-4. **Check lift**
-   - Turn cam slowly.
-   - Check: loosen guide if follower sticks.
+1. **Mount axle module at J7**
+   - Push the axle peg through the pegboard.
+   - Add the crank handle behind the board.
+   - Add one paper washer at the board face.
+   - Check: axle turns freely without wobble.
+2. **Add swappable cam disk**
+   - Stack: paper washer → cam spacer → swappable cam disk → paper washer → cam lock disk.
+   - Check: cam clears the pegboard and stays on the axle.
+3. **Plug in guide cartridge**
+   - Mount the U-channel guide cartridge above the cam on board holes such as G11/G7.
+   - Check: cartridge is vertical and fixed; side walls, front cover, stops, and peg tabs are already integrated.
+4. **Insert gravity follower module**
+   - Drop the preassembled follower into the guide so the rounded head rests on the cam disk.
+   - Check: follower falls under gravity and does not bind.
+5. **Test cam contact**
+   - Turn the crank slowly for a full rotation.
+   - Check: follower stays on the cam edge and moves only up/down.
 
-Cam-follower final check:
+Cam final check:
 
-- Cam rotates around fixed `J7`.
-- Follower moves vertically, not rotationally locked.
-- Guide slot permits travel.
+- The 15×15 pegboard is the base; there is no separate backplate.
+- Only the cam disk is meant to be swapped often.
+- If the follower sticks, check guide cartridge alignment, washer/spacer clearance, and whether the cam edge is too steep.
 
 ## 5.6.4 Gear-linkage crank build flow
 

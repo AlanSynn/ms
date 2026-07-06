@@ -2,7 +2,6 @@ import type { FabricationRecipe, ProjectState } from "../../../types";
 import {
   fabricationBoardCoordinateCallout,
   fabricationPartDisplayLabel,
-  readableFabricationStackSummary,
 } from "../../../utils/fabrication";
 import { referenceRecipeForType } from "../../../utils/mechanismReference";
 import { MECHANISM_TEMPLATE_LIBRARY } from "../../../utils/mechanismTemplates";
@@ -21,6 +20,15 @@ export const BlueprintDetailPanel = ({
     : undefined;
   const recipeTitle = (recipe: FabricationRecipe) =>
     referenceRecipeForType(recipe.type).title;
+  const boardLabel = selectedRecipe
+    ? fabricationBoardCoordinateCallout(
+        selectedRecipe.boardCoordinate,
+        selectedRecipe.board,
+      ).split(" · ")[0]
+    : "";
+  const requiredPartCount = selectedRecipe
+    ? selectedRecipe.requiredParts.reduce((sum, part) => sum + part.quantity, 0)
+    : 0;
 
   return (
     <section
@@ -28,24 +36,16 @@ export const BlueprintDetailPanel = ({
       data-testid="blueprint-detail-preview"
     >
       <div>
-        <div className="section-title">Detail</div>
-        <h3>Board preview</h3>
+        <div className="section-title">Build spot</div>
+        <h3>{selectedRecipe ? recipeTitle(selectedRecipe) : "Board"}</h3>
       </div>
       {selectedRecipe ? (
         <article
           className="assembly-recipe-card"
           data-testid={`blueprint-recipe-${selectedRecipe.mechanismId}`}
         >
-          <div className="font-bold text-slate-800">
-            {recipeTitle(selectedRecipe)}
-          </div>
-          <div className="mt-1 text-sm text-slate-600">
-            Board{" "}
-            {fabricationBoardCoordinateCallout(
-              selectedRecipe.boardCoordinate,
-              selectedRecipe.board,
-            )}
-          </div>
+          <div className="font-bold text-slate-800">Board {boardLabel}</div>
+          <div className="mt-1 text-sm text-slate-600">Place this mechanism here.</div>
           {selectedSensemaking && (
             <div
               className="sensemaking-cue mt-3"
@@ -55,13 +55,12 @@ export const BlueprintDetailPanel = ({
               data-sensemaking-evidence={selectedSensemaking.evidenceCue}
               data-sensemaking-clip={selectedSensemaking.clipSlot}
             >
-              <span className="cue-title">Motion</span>
+              <span className="cue-title">Check</span>
               <strong>{selectedSensemaking.directTranslation}</strong>
-              <small>{selectedSensemaking.studentCheck}</small>
             </div>
           )}
           <div className="mt-3 flex flex-wrap gap-2">
-            {selectedRecipe.requiredParts.map((part) => (
+            {selectedRecipe.requiredParts.slice(0, 4).map((part) => (
               <span
                 className="blueprint-pill"
                 key={`${selectedRecipe.mechanismId}-${part.name}`}
@@ -69,12 +68,15 @@ export const BlueprintDetailPanel = ({
                 {fabricationPartDisplayLabel(part.name)} × {part.quantity}
               </span>
             ))}
+            {selectedRecipe.requiredParts.length > 4 && (
+              <span className="blueprint-pill">+{selectedRecipe.requiredParts.length - 4}</span>
+            )}
           </div>
           <div
             className="mt-3 rounded-2xl bg-slate-100 p-3 text-sm font-bold text-slate-700"
             data-testid="blueprint-stack-summary"
           >
-            {readableFabricationStackSummary(selectedRecipe)}
+            {requiredPartCount} parts · Board {boardLabel}
           </div>
           {selectedRecipe.warnings.length ? (
             <div className="warning mt-3">

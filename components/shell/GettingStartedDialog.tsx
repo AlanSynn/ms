@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { BrainCircuit, FileJson, Sparkles, Upload } from 'lucide-react';
+import { BrainCircuit, Sparkles, Upload } from 'lucide-react';
 import type { BodyPartLayer, MechanismConfig, Point, ProjectState } from '../../types';
 import { pathFromPoints, sceneToSvg } from '../../utils/coordinates';
+import { gearTrainCenters, gearTrainPitchRadii } from '../../utils/kinematics';
 import { type ClassroomLessonId, createLessonProject } from '../../utils/project';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlinePathD } from '../../utils/partGeometry';
 
@@ -63,15 +64,17 @@ const mechanismSceneAnchor = (mechanism: MechanismConfig): Point =>
 const lessonGearGlyphs = (project: ProjectState | null) => (project?.mechanisms ?? [])
     .filter(mechanism => mechanism.type === 'gear' || mechanism.type === 'planetary_gear')
     .map(mechanism => {
-        const anchor = mechanismSceneAnchor(mechanism);
-        const radii = mechanism.gearTrainRadii ?? [38, mechanism.outputGearRadius ?? 38];
+        const centers = mechanism.type === 'gear' ? gearTrainCenters(mechanism) : [mechanismSceneAnchor(mechanism)];
+        const radii = mechanism.type === 'gear' ? gearTrainPitchRadii(mechanism) : (mechanism.gearTrainRadii ?? [38, mechanism.outputGearRadius ?? 38]);
         const r1 = Math.max(24, Math.min(62, radii[0] ?? 38));
         const r2 = Math.max(24, Math.min(62, radii[1] ?? r1));
+        const c1 = sceneToSvg(centers[0] ?? mechanismSceneAnchor(mechanism));
+        const c2 = sceneToSvg(centers.at(-1) ?? { x: (centers[0]?.x ?? 0) + r1 + r2 + 8, y: centers[0]?.y ?? 0 });
         return {
             id: mechanism.id,
             color: mechanism.color || '#7c3aed',
-            c1: sceneToSvg(anchor),
-            c2: sceneToSvg({ x: anchor.x + r1 + r2 + 8, y: anchor.y }),
+            c1,
+            c2,
             r1,
             r2
         };
@@ -160,28 +163,38 @@ const GuidedLessonMotionPreview = ({ lessonId, project }: { lessonId: string; pr
 };
 
 const starterCopy = {
-    guide: 'Four ready motion projects with build steps.',
-    humanoid: 'Editable parts and joints, no mechanism yet.',
-    image: 'Cut one picture into movable parts.',
-    package: 'Open a saved character file.',
-    sample: 'Built-in artwork with editable parts.'
+    guide: 'Pick a working motion project.',
+    humanoid: 'Start with a simple body.',
+    image: 'Turn one picture into parts.',
+    sample: 'Ready character art.'
 } as const;
 
-export const GettingStartedDialog = ({ starterTemplates, guidedLessons, hideForSession, onLesson, onSample, onStarterImage, onPackage, onProcess, onImport, onHideForSessionChange, onClose }: {
+const starterCues = {
+    guide: ['Edit one move', 'Ready to build'],
+    humanoid: ['Move arms or legs', 'Add a path next'],
+    image: ['Upload image', 'Cut moving parts'],
+    sample: ['Edit the parts', 'Draw a path']
+} as const;
+
+const StarterCues = ({ items }: { items: readonly string[] }) => (
+    <span className="starter-card-cues" aria-hidden="true">
+        {items.map(item => <span key={item}>{item}</span>)}
+    </span>
+);
+
+export const GettingStartedDialog = ({ starterTemplates, guidedLessons, hideForSession, onLesson, onSample, onStarterImage, onProcess, onImport, onHideForSessionChange, onClose }: {
     starterTemplates: StarterImageTemplate[];
     guidedLessons: readonly GuidedLessonTile[];
     hideForSession: boolean;
     onLesson: (lessonId: string) => void;
     onSample: () => void;
     onStarterImage: (template: StarterImageTemplate) => void;
-    onPackage: (files: FileList | File[]) => void;
     onProcess: (file: File) => void;
     onImport: (file: File) => void;
     onHideForSessionChange: (hidden: boolean) => void;
     onClose: () => void;
 }) => {
     const dialogRef = useRef<HTMLElement>(null);
-    const packageInputRef = useRef<HTMLInputElement>(null);
     const onnxInputRef = useRef<HTMLInputElement>(null);
     const importInputRef = useRef<HTMLInputElement>(null);
     const [showGuided, setShowGuided] = useState(false);
@@ -238,12 +251,14 @@ export const GettingStartedDialog = ({ starterTemplates, guidedLessons, hideForS
                         <span className="template-icon-slot"><Sparkles size={18}/></span>
                         <strong>Guide</strong>
                         <small>{starterCopy.guide}</small>
+                        <StarterCues items={starterCues.guide} />
                         <b><Sparkles size={16}/> Open</b>
                     </button>
                     <button type="button" className="template-tile primary" data-testid="getting-started-card-humanoid" aria-label="Open starter rig" onClick={onSample}>
                         <span className="template-icon-slot"><Sparkles size={18}/></span>
                         <strong>Starter rig</strong>
                         <small>{starterCopy.humanoid}</small>
+                        <StarterCues items={starterCues.humanoid} />
                         <b><Sparkles size={16}/> Start</b>
                     </button>
                     {starterTemplates.map(template => (
@@ -251,6 +266,7 @@ export const GettingStartedDialog = ({ starterTemplates, guidedLessons, hideForS
                             <span className="template-icon-slot"><img className="starter-thumb" src={template.thumbUrl} alt="" /></span>
                             <strong>{template.label}</strong>
                             <small>{starterCopy.sample}</small>
+                            <StarterCues items={starterCues.sample} />
                             <b><Sparkles size={16}/> Start</b>
                         </button>
                     ))}
@@ -258,23 +274,13 @@ export const GettingStartedDialog = ({ starterTemplates, guidedLessons, hideForS
                         <span className="template-icon-slot"><BrainCircuit size={18}/></span>
                         <strong>Image</strong>
                         <small>{starterCopy.image}</small>
+                        <StarterCues items={starterCues.image} />
                         <b><BrainCircuit size={16}/> Choose</b>
                     </button>
                     <input ref={onnxInputRef} data-testid="getting-started-onnx-input" hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={e => {
                         const file = e.currentTarget.files?.[0];
                         e.currentTarget.value = '';
                         if (file) onProcess(file);
-                    }}/>
-                    <button type="button" className="template-tile cursor-pointer" data-testid="getting-started-card-package" aria-label="Load character file" onClick={() => packageInputRef.current?.click()}>
-                        <span className="template-icon-slot"><FileJson size={18}/></span>
-                        <strong>Character file</strong>
-                        <small>{starterCopy.package}</small>
-                        <b><FileJson size={16}/> Load</b>
-                    </button>
-                    <input ref={packageInputRef} data-testid="getting-started-package-input" hidden type="file" multiple accept=".json,.yaml,.yml,image/png,image/jpeg,image/webp,image/svg+xml" onChange={e => {
-                        const files = e.currentTarget.files ? Array.from(e.currentTarget.files) as File[] : [];
-                        e.currentTarget.value = '';
-                        if (files.length) onPackage(files);
                     }}/>
                 </div>
                 <div className="getting-started-foot">

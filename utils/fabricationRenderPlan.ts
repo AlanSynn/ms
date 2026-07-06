@@ -34,12 +34,45 @@ export const FABRICATION_RENDER_PART_DEPTH = 0.40;
 export const FABRICATION_RENDER_MIN_CLEARANCE = Number((FABRICATION_RENDER_LAYER_Z_STEP - FABRICATION_RENDER_PART_DEPTH).toFixed(2));
 
 const isMovingStackLayer = (item: FabricationStackLayer) => !['clip', 'spacer', 'base'].includes(item.role);
+const CAM_MODULE_STACK_REQUIRED_LABELS = [
+    'Crank handle',
+    'Axle peg',
+    'Paper washer',
+    'Cam spacer',
+    'Swappable cam disk',
+    'Cam lock disk',
+    'U-channel guide cartridge',
+    'Preassembled gravity follower module'
+] as const;
+const isCamModuleStack = (stack: FabricationStackLayer[]) =>
+    stack.some(item => item.label === 'Swappable cam disk')
+    && stack.some(item => item.label === 'U-channel guide cartridge')
+    && stack.some(item => item.label === 'Preassembled gravity follower module');
+
+const validateCamModuleStack = (stack: FabricationStackLayer[], mechanism?: FabricationStackMechanism) => {
+    const errors: string[] = [];
+    const labels = stack.map(item => item.label);
+    if (stack.some(item => item.role === 'base' || /base board|backplate/i.test(item.label))) errors.push('cam module stack must reuse the 15x15 pegboard, not include a separate base');
+    CAM_MODULE_STACK_REQUIRED_LABELS.forEach(label => {
+        if (!labels.includes(label)) errors.push(`cam module stack is missing ${label}`);
+    });
+    if (labels.some(label => /Back Clip|Front Clip|S10 spacer|Eccentric cam|Round follower|2-hole bracket/i.test(label))) {
+        errors.push('cam module stack must use pegboard gravity cam modules, not the old generic cam stack');
+    }
+    if (mechanism && labels.join(' → ') !== fabricationStackForMechanism(mechanism).map(item => item.label).join(' → ')) {
+        errors.push(`${mechanism.type} stack must match mechanism-reference order: ${fabricationStackForMechanism(mechanism).map(item => item.label).join(' → ')}`);
+    }
+    return errors;
+};
 
 export const validateFabricationStack = (mechanism: FabricationStackMechanism | FabricationStackLayer[]) => {
     const stack = Array.isArray(mechanism) ? mechanism : fabricationStackForMechanism(mechanism);
     const errors: string[] = [];
     if (!Array.isArray(mechanism) && !isReferenceExportReady(mechanism.type)) errors.push(referenceSupportWarning(mechanism.type) ?? `${mechanism.type}: not fabrication-ready`);
     if (!stack.length) return errors;
+    if ((!Array.isArray(mechanism) && mechanism.type === 'cam') || isCamModuleStack(stack)) {
+        return [...errors, ...validateCamModuleStack(stack, Array.isArray(mechanism) ? undefined : mechanism)];
+    }
     if (stack.some(item => item.role === 'base')) errors.push('moving stack must not include Base board');
     if (stack[0]?.role !== 'clip') errors.push('moving stack must start with a back clip');
     if (stack.at(-1)?.role !== 'clip') errors.push('moving stack must end with a front clip');
@@ -92,6 +125,23 @@ export const fabricationRenderPlanForMechanism = (mechanism: FabricationStackMec
         renderKind: 'base'
     };
     const layers = stack.map(makeRenderLayer);
+    if (mechanism.type === 'cam') {
+        const compactCamZ = [
+            Number((-FABRICATION_RENDER_LAYER_Z_STEP * 0.45).toFixed(2)),
+            FABRICATION_RENDER_BASE_Z,
+            Number((FABRICATION_RENDER_BASE_Z + FABRICATION_RENDER_LAYER_Z_STEP * 0.32).toFixed(2)),
+            Number((FABRICATION_RENDER_BASE_Z + FABRICATION_RENDER_LAYER_Z_STEP * 0.58).toFixed(2)),
+            Number((FABRICATION_RENDER_BASE_Z + FABRICATION_RENDER_LAYER_Z_STEP * 0.92).toFixed(2)),
+            Number((FABRICATION_RENDER_BASE_Z + FABRICATION_RENDER_LAYER_Z_STEP * 1.08).toFixed(2)),
+            Number((FABRICATION_RENDER_BASE_Z + FABRICATION_RENDER_LAYER_Z_STEP * 1.22).toFixed(2)),
+            Number((FABRICATION_RENDER_BASE_Z + FABRICATION_RENDER_LAYER_Z_STEP * 0.98).toFixed(2)),
+            Number((FABRICATION_RENDER_BASE_Z + FABRICATION_RENDER_LAYER_Z_STEP * 1.04).toFixed(2))
+        ];
+        layers.forEach((item, index) => {
+            const compactZ = compactCamZ[index];
+            if (typeof compactZ === 'number') item.z = compactZ;
+        });
+    }
     return {
         base,
         layers,

@@ -124,10 +124,6 @@ export const FoundryInspectorPanel = ({
               <dt>Watch</dt>
               <dd>{classroomSensemaking.evidenceCue}</dd>
             </div>
-            <div>
-              <dt>Build</dt>
-              <dd>{readableStack}</dd>
-            </div>
           </dl>
           <p className="foundry-answer-line">
             Answer: {classroomSensemaking.expectedAnswer}

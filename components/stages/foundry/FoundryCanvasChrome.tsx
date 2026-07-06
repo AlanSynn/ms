@@ -29,6 +29,9 @@ type FoundryCameraControlsProps = {
   onTogglePathPreview: () => void;
   onToggleForces: () => void;
   onToggleVelocity: () => void;
+  outputTraceLabel: string;
+  canCycleOutputTrace: boolean;
+  onCycleOutputTrace: () => void;
   onToggleTrail: () => void;
 };
 
@@ -46,7 +49,10 @@ export const FoundryCameraControls = ({
   onToggleUserPathPreview,
   onTogglePathPreview,
   onToggleForces,
+  outputTraceLabel,
+  canCycleOutputTrace,
   onToggleVelocity,
+  onCycleOutputTrace,
   onToggleTrail,
 }: FoundryCameraControlsProps) => (
   <div
@@ -108,6 +114,15 @@ export const FoundryCameraControls = ({
       onClick={onTogglePathPreview}
     >
       Mech path
+    </button>
+    <button
+      type="button"
+      data-testid="foundry-cycle-output-trace"
+      aria-label="Motion target point"
+      disabled={!canCycleOutputTrace}
+      onClick={onCycleOutputTrace}
+    >
+      Target {outputTraceLabel}
     </button>
     <button
       type="button"

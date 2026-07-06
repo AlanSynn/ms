@@ -1,7 +1,7 @@
 import type { MechanismConfig } from '../types';
 import { SCENE_PX_PER_MM } from './coordinates';
 import { fabricationLinkageSpecForSceneLength } from './fabricationStackModel';
-import { calculateLinkage } from './kinematics';
+import { calculateLinkage, camProfileSmoothnessWarning } from './kinematics';
 import { REFERENCE_DEFAULTS } from './mechanismReference';
 
 export type FabricationFeasibleRange = {
@@ -13,6 +13,9 @@ export type FabricationFeasibleRange = {
 };
 
 export const sampleFeasibleRange = (mechanism: MechanismConfig, samples = 96): FabricationFeasibleRange => {
+    const profileWarning = mechanism.type === 'cam'
+        ? camProfileSmoothnessWarning(mechanism.camProfileSamples)
+        : null;
     let valid = 0;
     const validSamples: boolean[] = [];
     const loops = mechanism.type === '5bar' || mechanism.type === '6bar' || mechanism.type === 'planetary_gear' ? 8 : 1;
@@ -39,7 +42,7 @@ export const sampleFeasibleRange = (mechanism: MechanismConfig, samples = 96): F
         startDeg: intervals[0]?.startDeg ?? 0,
         endDeg: intervals.at(-1)?.endDeg ?? 0,
         intervals,
-        warning: valid === totalSamples + 1 ? null : valid === 0 ? 'No motion' : `Motion ${Math.round((valid / (totalSamples + 1)) * 100)}% · ${intervalText}`
+        warning: profileWarning ?? (valid === totalSamples + 1 ? null : valid === 0 ? 'No motion' : `Motion ${Math.round((valid / (totalSamples + 1)) * 100)}% · ${intervalText}`)
     };
 };
 

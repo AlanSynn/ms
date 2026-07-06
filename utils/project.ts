@@ -17,8 +17,9 @@ import {
 } from '../types';
 import { defaultPhysicalKit, localPivotOffsetForScene, SCENE_PX_PER_MM, sceneBoundsForSheet } from './coordinates';
 import { FABRICATION_GEAR_SPECS, FABRICATION_RING_GEAR_SPEC } from './fabricationContract';
-import { REFERENCE_DEFAULTS, normalizeMechanismToFabricationSet, normalizeMechanismToReference, referenceRequiredPartsForMechanism } from './mechanismReference';
+import { REFERENCE_DEFAULTS, isReferenceFoundryVisible, normalizeMechanismToFabricationSet, normalizeMechanismToReference, referenceRequiredPartsForMechanism } from './mechanismReference';
 import { defaultCamProfileSamples, gearTrainOutputRatio, generateCurvePoints, normalizeCamProfileSamples, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from './kinematics';
+import { primaryFoundryPlaybackPath } from './foundryPlayback';
 import { clampNumber, finiteNumber, sanitizeHexColor, sanitizeMechanismType, sanitizePoint } from './sanitize';
 import { isUsableContourPoints } from './partGeometry';
 import { DEFAULT_CLASSROOM_ASSESSMENT_KEY, normalizeClassroomAssessmentKey } from './classroomContent';
@@ -368,6 +369,14 @@ export const createDefaultMechanism = (type: MechanismConfig['type'] = '4bar', i
     warnings: []
 });
 
+const generatedMechanismPath = (mechanism: MechanismConfig) => {
+    if (isReferenceFoundryVisible(mechanism.type)) {
+        const foundryPath = primaryFoundryPlaybackPath(mechanism, 96);
+        if (foundryPath.length) return foundryPath;
+    }
+    return generateCurvePoints(mechanism, 96).points;
+};
+
 export const mechanismWithGeneratedPath = (mechanism: MechanismConfig, options: { preserveGeneratedPath?: boolean } = {}): MechanismConfig => ({
     ...mechanism,
     transform: mechanism.transform ?? { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0, rotation: mechanism.groundAngle ?? 0, scale: 1 },
@@ -379,7 +388,9 @@ export const mechanismWithGeneratedPath = (mechanism: MechanismConfig, options: 
         targetPathId: mechanism.targetPathId,
         requiredParts: mechanismRequiredParts(mechanism)
     },
-    generatedPath: options.preserveGeneratedPath && mechanism.generatedPath?.length ? mechanism.generatedPath : generateCurvePoints(mechanism, 96).points
+    generatedPath: options.preserveGeneratedPath && mechanism.generatedPath?.length
+        ? mechanism.generatedPath
+        : generatedMechanismPath(mechanism)
 });
 
 const preserveGeneratedPathFor = (mechanism: MechanismConfig) =>
@@ -409,12 +420,33 @@ const pathGeneratedGeometryUnchanged = (previous: ProjectMotionPath | undefined,
         sameTimedPoints(previous.timedPoints, next.timedPoints);
 };
 
+const partCanReachJoint = (
+    part: BodyPartLayer | undefined,
+    jointId: string | undefined,
+    skeleton: StandardSkeleton | null | undefined
+) => {
+    if (!part || !jointId) return false;
+    if (part.anchorJointId === jointId) return true;
+    const descendants = new Set<string>();
+    const visit = (id: string) => {
+        (skeleton?.hierarchy[id] ?? []).forEach(childId => {
+            if (!descendants.has(childId)) {
+                descendants.add(childId);
+                visit(childId);
+            }
+        });
+    };
+    visit(part.anchorJointId);
+    return descendants.has(jointId);
+};
+
 const reconcileMechanismTargets = (
     mechanism: MechanismConfig,
     parts: Record<string, BodyPartLayer>,
     paths: Record<string, ProjectMotionPath>,
     sceneObjects: Record<string, SceneObject> = {},
-    options: { preserveGeneratedPath?: boolean } = {}
+    options: { preserveGeneratedPath?: boolean } = {},
+    skeleton?: StandardSkeleton | null
 ) => {
     let targetSceneObjectId = mechanism.targetSceneObjectId && sceneObjects[mechanism.targetSceneObjectId] ? mechanism.targetSceneObjectId : undefined;
     let targetPartId = !targetSceneObjectId && mechanism.targetPartId && parts[mechanism.targetPartId] ? mechanism.targetPartId : undefined;
@@ -430,7 +462,12 @@ const reconcileMechanismTargets = (
             }
         } else {
             const pathPartId = path.partId;
-            if (parts[pathPartId]) {
+            const requestedPart = targetPartId ? parts[targetPartId] : undefined;
+            const pathTargetJointId = path.targetAnchorJointId ?? parts[pathPartId]?.anchorJointId;
+            if (requestedPart && partCanReachJoint(requestedPart, pathTargetJointId, skeleton)) {
+                targetPartId = requestedPart.id;
+                targetSceneObjectId = undefined;
+            } else if (parts[pathPartId]) {
                 targetPartId = pathPartId;
                 targetSceneObjectId = undefined;
             } else {
@@ -571,18 +608,18 @@ export const CLASSROOM_LESSONS = [
         shortLabel: 'Waving arm',
         description: 'Right hand path + fitted four-bar mechanism.',
         actionLabel: 'Open lesson',
-        outcome: 'Make an arm wave',
-        changeCue: 'wrist path',
+        outcome: 'Make a hand wave',
+        changeCue: 'hand path',
         buildCue: 'four-bar',
         startStage: 'character' as AppStage,
         mechanismType: '4bar' as MechanismConfig['type'],
         sensemaking: {
             directTranslation: 'Crank turns -> rocker swings',
-            tryThis: 'Move the wrist path',
+            tryThis: 'Move the hand path',
             teacherTakeaway: 'Rotary motion can become swinging motion.',
             studentCheck: 'Which pivot stays fixed?',
             expectedAnswer: 'The board pivots stay fixed',
-            evidenceCue: 'right wrist follows the rocker arc',
+            evidenceCue: 'right hand follows the rocker arc',
             clipSlot: 'generated-loop' as const
         }
     },
@@ -669,7 +706,39 @@ export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState =
     let selectedPathId = project.selectedPathId;
     let selectedMechanismId = project.selectedMechanismId;
 
-    if (lesson.id === 'head-bob') {
+    if (lesson.id === 'waving-arm') {
+        const armPath = paths['path-right-arm'];
+        if (armPath) {
+            paths = {
+                ...paths,
+                [armPath.id]: {
+                    ...armPath,
+                    partId: 'right_hand_part',
+                    targetAnchorJointId: 'right_hand',
+                    chainRootJointId: 'right_shoulder'
+                }
+            };
+            selectedPartId = 'right_hand_part';
+            selectedPathId = armPath.id;
+        }
+        const armFourBar = mechanisms[0];
+        if (armFourBar) {
+            Object.assign(armFourBar, {
+                anchorX: 200,
+                anchorY: 80,
+                groundAngle: 180,
+                transform: { x: 200, y: 80, rotation: 180, scale: 1 },
+                sceneAnchor: { x: 200, y: 80 },
+                targetPartId: 'right_hand_part',
+                targetPathId: 'path-right-arm',
+                targetAnchorJointId: 'right_hand',
+                activeVisualPartIds: ['right_hand_part'],
+                recommendation: lesson.description
+            } satisfies Partial<MechanismConfig>);
+            mechanisms = [mechanismWithGeneratedPath(armFourBar)];
+            selectedMechanismId = armFourBar.id;
+        }
+    } else if (lesson.id === 'head-bob') {
         const pathId = 'path-head-bob';
         paths = {
             [pathId]: {
@@ -688,10 +757,11 @@ export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState =
         };
         const cam = createDefaultMechanism('cam', 'mech-head-bob');
         Object.assign(cam, {
-            anchorX: 120,
+            anchorX: 200,
             anchorY: 80,
-            transform: { x: 120, y: 80, rotation: 0, scale: 1 },
-            sceneAnchor: { x: 120, y: 80 },
+            groundAngle: 90,
+            transform: { x: 200, y: 80, rotation: 90, scale: 1 },
+            sceneAnchor: { x: 200, y: 80 },
             targetPartId: 'head',
             targetPathId: pathId,
             targetAnchorJointId: 'head_top',
@@ -709,7 +779,7 @@ export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState =
         paths = {
             [pathId]: {
                 id: pathId,
-                partId: 'right_leg_lower',
+                partId: 'right_foot_part',
                 targetAnchorJointId: 'right_foot',
                 chainRootJointId: 'right_hip',
                 points: guidedFootStepPath(lessonSkeleton),
@@ -723,20 +793,21 @@ export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState =
         };
         const legFourBar = createDefaultMechanism('4bar', 'mech-walking-leg');
         Object.assign(legFourBar, {
-            anchorX: -80,
-            anchorY: -80,
-            transform: { x: -80, y: -80, rotation: 0, scale: 1 },
-            sceneAnchor: { x: -80, y: -80 },
-            targetPartId: 'right_leg_lower',
+            anchorX: 160,
+            anchorY: -120,
+            groundAngle: 180,
+            transform: { x: 160, y: -120, rotation: 180, scale: 1 },
+            sceneAnchor: { x: 160, y: -120 },
+            targetPartId: 'right_foot_part',
             targetPathId: pathId,
             targetAnchorJointId: 'right_foot',
-            activeVisualPartIds: ['right_leg_lower'],
+            activeVisualPartIds: ['right_foot_part'],
             source: 'manual',
             presetId: 'lesson-walking-leg',
             recommendation: lesson.description
         } satisfies Partial<MechanismConfig>);
         mechanisms = [mechanismWithGeneratedPath(legFourBar)];
-        selectedPartId = 'right_leg_lower';
+        selectedPartId = 'right_foot_part';
         selectedPathId = pathId;
         selectedMechanismId = legFourBar.id;
     } else if (lesson.id === 'spin-gears') {
@@ -744,7 +815,7 @@ export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState =
         paths = {
             [pathId]: {
                 id: pathId,
-                partId: 'right_arm_lower',
+                partId: 'right_hand_part',
                 targetAnchorJointId: 'right_hand',
                 chainRootJointId: 'right_shoulder',
                 points: [
@@ -762,21 +833,29 @@ export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState =
             }
         };
         const gear = createDefaultMechanism('gear', 'mech-spin-gears');
+        const gearRadii: [number, number] = [60, 20];
         Object.assign(gear, {
-            anchorX: -40,
+            anchorX: 200,
             anchorY: 80,
-            transform: { x: -40, y: 80, rotation: 0, scale: 1 },
-            sceneAnchor: { x: -40, y: 80 },
-            targetPartId: 'right_arm_lower',
+            groundAngle: 180,
+            groundLength: 80,
+            crankLength: gearRadii[0],
+            rockerLength: gearRadii[1],
+            gearTrainRadii: gearRadii,
+            gearRatio: gearTrainOutputRatio(gearRadii),
+            speed2: gearTrainOutputRatio(gearRadii),
+            transform: { x: 200, y: 80, rotation: 0, scale: 1 },
+            sceneAnchor: { x: 200, y: 80 },
+            targetPartId: 'right_hand_part',
             targetPathId: pathId,
             targetAnchorJointId: 'right_hand',
-            activeVisualPartIds: ['right_arm_lower'],
+            activeVisualPartIds: ['right_hand_part'],
             source: 'manual',
             presetId: 'lesson-spin-gears',
             recommendation: lesson.description
         } satisfies Partial<MechanismConfig>);
         mechanisms = [mechanismWithGeneratedPath(gear)];
-        selectedPartId = 'right_arm_lower';
+        selectedPartId = 'right_hand_part';
         selectedPathId = pathId;
         selectedMechanismId = gear.id;
     } else {
@@ -1239,11 +1318,12 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
             const paths = { ...project.paths, [path.id]: path };
             const mechanisms = project.mechanisms.map(m => m.targetPathId === path.id
                 ? reconcileMechanismTargets(
-                    { ...m, targetPartId: path.sceneObjectId ? undefined : path.partId, targetSceneObjectId: path.sceneObjectId },
+                    { ...m, targetPartId: path.sceneObjectId ? undefined : m.targetPartId, targetSceneObjectId: path.sceneObjectId },
                     project.parts,
                     paths,
                     project.sceneObjects,
-                    { preserveGeneratedPath: preserveGeneratedPathFor(m) && pathGeneratedGeometryUnchanged(previousPath, path) }
+                    { preserveGeneratedPath: preserveGeneratedPathFor(m) && pathGeneratedGeometryUnchanged(previousPath, path) },
+                    project.skeleton
                 )
                 : m);
             return touch({ ...project, paths, mechanisms, selectedPathId: path.id });
@@ -1258,15 +1338,16 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
                     project.parts,
                     paths,
                     project.sceneObjects,
-                    { preserveGeneratedPath: preserveGeneratedPathFor(m) }
+                    { preserveGeneratedPath: preserveGeneratedPathFor(m) },
+                    project.skeleton
                 )
                 : m);
             return touch({ ...project, paths, mechanisms, selectedPathId: project.selectedPathId === action.pathId ? undefined : project.selectedPathId });
         }
         case 'set_mechanisms':
-            return touch({ ...project, mechanisms: action.mechanisms.map(m => reconcileMechanismTargets(m, project.parts, project.paths, project.sceneObjects, { preserveGeneratedPath: preserveGeneratedPathFor(m) })), selectedMechanismId: action.selectedMechanismId ?? project.selectedMechanismId });
+            return touch({ ...project, mechanisms: action.mechanisms.map(m => reconcileMechanismTargets(m, project.parts, project.paths, project.sceneObjects, { preserveGeneratedPath: preserveGeneratedPathFor(m) }, project.skeleton)), selectedMechanismId: action.selectedMechanismId ?? project.selectedMechanismId });
         case 'upsert_mechanism': {
-            const mechanism = reconcileMechanismTargets(action.mechanism, project.parts, project.paths, project.sceneObjects, { preserveGeneratedPath: preserveGeneratedPathFor(action.mechanism) });
+            const mechanism = reconcileMechanismTargets(action.mechanism, project.parts, project.paths, project.sceneObjects, { preserveGeneratedPath: preserveGeneratedPathFor(action.mechanism) }, project.skeleton);
             const exists = project.mechanisms.some(m => m.id === mechanism.id);
             const mechanisms = exists ? project.mechanisms.map(m => m.id === mechanism.id ? mechanism : m) : [...project.mechanisms, mechanism];
             return touch({ ...project, mechanisms, selectedMechanismId: mechanism.id });
@@ -1572,7 +1653,7 @@ export const migrateProjectSnapshot = (raw: unknown): ProjectState => {
         selectedSceneObjectId: data.selectedSceneObjectId && sceneObjects[data.selectedSceneObjectId] ? data.selectedSceneObjectId : undefined,
         skeleton,
         paths,
-        mechanisms: (Array.isArray(data.mechanisms) ? data.mechanisms : fallback.mechanisms).map(m => reconcileMechanismTargets(normalizeMechanismSnapshot(m), parts, paths, sceneObjects, { preserveGeneratedPath: true })),
+        mechanisms: (Array.isArray(data.mechanisms) ? data.mechanisms : fallback.mechanisms).map(m => reconcileMechanismTargets(normalizeMechanismSnapshot(m), parts, paths, sceneObjects, { preserveGeneratedPath: true }, skeleton)),
         settings: normalizeAppSettings(data.settings, fallback.settings),
         processing: data.processing ?? idleProcessing(),
         lastExport: undefined

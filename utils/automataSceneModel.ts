@@ -11,7 +11,7 @@ import { mechanismFeature, type MechanismFeatureIssue } from './mechanismFeature
 import { normalizeGearMeshMechanism } from './mechanismRecommendations';
 import { buildMechanismSceneContract, type MechanismSceneContract } from './mechanismSceneContract';
 import { buildFoundryMechanismPreviewModel, type FoundryMechanismPreviewModel } from './foundryPreviewModel';
-import { mechanismBindingWarnings, motionPreviewForProject, pointOnProjectPath } from './motion';
+import { mechanismBindingWarnings, motionPreviewForProject, pointOnGeneratedMechanismPath } from './motion';
 
 export type AutomataSceneMode = 'design-live' | 'assembly-live';
 
@@ -88,12 +88,16 @@ export const buildAutomataSceneModel = (
         normalizedMechanism,
         angle,
         project.settings,
-        userPath?.points ?? []
+        userPath?.points ?? [],
+        360,
+        240,
+        96,
+        'scene'
     );
     const fullMotionPreview = motionPreviewForProject(project, mechanisms, angle);
     const selectedMotionPreview = motionPreviewForProject(project, [normalizedMechanism], angle);
     const mechanismPath = generatedPathForMechanism(normalizedMechanism);
-    const generatedTarget = mechanismPath ? pointOnProjectPath(mechanismPath, angle) : undefined;
+    const generatedTarget = mechanismPath ? pointOnGeneratedMechanismPath(mechanismPath.points, angle) : undefined;
     const targetError = generatedTarget && selectedMotionPreview.target
         ? Math.hypot(selectedMotionPreview.target.x - generatedTarget.x, selectedMotionPreview.target.y - generatedTarget.y)
         : undefined;

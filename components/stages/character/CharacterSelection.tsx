@@ -114,7 +114,6 @@ export const CharacterSelection = ({
                 title="Character"
                 stage="character"
                 goStage={goStage}
-                showClassroomChecklist={false}
               >
                 <div
                   className="compact-workflow-row"

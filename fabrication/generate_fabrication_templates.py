@@ -309,7 +309,7 @@ COMPLETE_KIT_GEAR_COPIES = 2
 COMPLETE_KIT_LINKAGE_COPIES = 2
 COMPLETE_KIT_SPACER_COPIES = 24
 COMPLETE_KIT_INCLUDED_CATEGORIES = ("gears", "linkages", "spacers")
-COMPLETE_KIT_EXCLUDED_CATEGORIES = ("ring_gears", "cams", "followers", "brackets", "handles")
+COMPLETE_KIT_EXCLUDED_CATEGORIES = ("ring_gears", "cams", "followers", "brackets", "handles", "cam_modules")
 
 
 @dataclass(frozen=True, slots=True)
@@ -384,6 +384,14 @@ class HandlePreset:
     kind: str
 
 
+@dataclass(frozen=True, slots=True)
+class CamModulePreset:
+    key: str
+    label: str
+    path: str
+    kind: str
+
+
 BRACKET_PRESETS: tuple[BracketPreset, ...] = (
     BracketPreset(
         "2-hole-straight",
@@ -424,6 +432,17 @@ HANDLE_PRESETS: tuple[HandlePreset, ...] = (
         "handles/handle-folding-fork-tripod.svg",
         "folding_fork_tripod",
     ),
+)
+
+CAM_MODULE_PRESETS: tuple[CamModulePreset, ...] = (
+    CamModulePreset("axle-peg", "Axle peg", "cam_modules/axle-peg.svg", "axle"),
+    CamModulePreset("crank-handle", "Crank handle", "cam_modules/crank-handle.svg", "handle"),
+    CamModulePreset("cam-lock-disk", "Cam lock disk", "cam_modules/cam-lock-disk.svg", "lock"),
+    CamModulePreset("paper-washer", "Paper washer", "cam_modules/paper-washer.svg", "washer"),
+    CamModulePreset("cam-spacer", "Cam spacer", "cam_modules/cam-spacer.svg", "spacer"),
+    CamModulePreset("swappable-cam-disk", "Swappable cam disk", "cam_modules/swappable-cam-disk.svg", "cam"),
+    CamModulePreset("u-channel-guide-cartridge", "U-channel guide cartridge", "cam_modules/u-channel-guide-cartridge.svg", "guide"),
+    CamModulePreset("gravity-follower-module", "Preassembled gravity follower module", "cam_modules/gravity-follower-module.svg", "follower"),
 )
 
 
@@ -1749,6 +1768,134 @@ def _handle_template(preset: HandlePreset, spec: FabricationSpec) -> SvgTemplate
         metadata=metadata,
     )
 
+
+def _cam_module_engraving_label(preset: CamModulePreset) -> str:
+    return {
+        "axle-peg": "Axle Peg",
+        "crank-handle": "Crank Handle",
+        "cam-lock-disk": "Cam Lock",
+        "paper-washer": "Paper Washer",
+        "cam-spacer": "Cam Spacer",
+        "swappable-cam-disk": "Cam Disk",
+        "u-channel-guide-cartridge": "Guide Cartridge",
+        "gravity-follower-module": "Gravity Follower",
+    }[preset.key]
+
+
+def _cam_module_elements(
+    preset: CamModulePreset,
+    spec: FabricationSpec,
+    *,
+    label: bool = True,
+) -> tuple[list[str], dict[str, object], float, float]:
+    scale = spec.pitch_mm / DEFAULT_GRID_PITCH_MM
+    hole_centers: list[list[float]] = []
+    elements: list[str] = []
+
+    def add_hole(x: float, y: float, role: str) -> None:
+        hole_centers.append([round(x, 3), round(y, 3)])
+        elements.append(
+            _circle(
+                x,
+                y,
+                spec.hole_radius_mm,
+                "drill cam-module-hole axle-hole linkage-hole",
+                extra={
+                    "hole_role": role,
+                    "hole_diameter_mm": spec.hole_diameter_attr,
+                    "hole_index": len(hole_centers) - 1,
+                },
+            )
+        )
+
+    key = preset.key
+    if key == "axle-peg":
+        width, height = 70.0 * scale, 18.0 * scale
+        elements.append(_path(_rounded_capsule_path(8.0 * scale, height / 2.0, width - 8.0 * scale, 5.0 * scale), "cut cam-module-outline"))
+        elements.append(_text(width / 2.0, height / 2.0 + 1.2 * scale, "dowel / rolled paper axle", class_name="tiny"))
+    elif key == "crank-handle":
+        width, height = 64.0 * scale, 28.0 * scale
+        elements.append(_path(_rounded_capsule_path(12.0 * scale, height / 2.0, 52.0 * scale, 7.0 * scale), "cut cam-module-outline"))
+        add_hole(14.0 * scale, height / 2.0, "axle")
+        add_hole(50.0 * scale, height / 2.0, "hand-grip")
+    elif key == "cam-lock-disk":
+        width = height = 28.0 * scale
+        c = width / 2.0
+        elements.append(_circle(c, c, 11.0 * scale, "cut cam-module-outline"))
+        elements.append(_path(f"M {_fmt(c - 5.5 * scale)} {_fmt(c)} L {_fmt(c + 5.5 * scale)} {_fmt(c)}", "score lock-slit"))
+        elements.append(_path(f"M {_fmt(c)} {_fmt(c - 5.5 * scale)} L {_fmt(c)} {_fmt(c + 5.5 * scale)}", "score lock-slit"))
+        add_hole(c, c, "axle-lock")
+    elif key == "paper-washer":
+        width = height = 22.0 * scale
+        c = width / 2.0
+        elements.append(_circle(c, c, 8.0 * scale, "cut cam-module-outline washer-outline"))
+        add_hole(c, c, "axle-clearance")
+    elif key == "cam-spacer":
+        width = height = 28.0 * scale
+        c = width / 2.0
+        elements.append(_circle(c, c, 11.0 * scale, "cut cam-module-outline spacer-outline"))
+        add_hole(c, c, "axle-clearance")
+    elif key == "swappable-cam-disk":
+        width = height = 58.0 * scale
+        c = width / 2.0
+        points = []
+        for index in range(72):
+            theta = 2.0 * math.pi * index / 72
+            radius_x = 20.0 * scale
+            radius_y = 14.0 * scale
+            points.append((c + radius_x * math.cos(theta), c + radius_y * math.sin(theta)))
+        elements.append(_path(_polygon_path(tuple(points)), "cut cam-module-outline cam-outline"))
+        add_hole(c, c, "axle")
+        elements.append(_circle(c, c, 20.0 * scale, "score cam-sweep"))
+    elif key == "u-channel-guide-cartridge":
+        width, height = 54.0 * scale, 104.0 * scale
+        elements.append(_path(_rounded_rect_path(4.0 * scale, 4.0 * scale, 46.0 * scale, 94.0 * scale, 6.0 * scale), "cut cam-module-outline guide-cartridge-outline"))
+        elements.append(_path(_rounded_rect_path(19.0 * scale, 14.0 * scale, 16.0 * scale, 70.0 * scale, 4.0 * scale), "cut guide-channel"))
+        elements.append(_path(f"M {_fmt(14.0 * scale)} {_fmt(14.0 * scale)} L {_fmt(14.0 * scale)} {_fmt(84.0 * scale)}", "score guide-side-rail"))
+        elements.append(_path(f"M {_fmt(40.0 * scale)} {_fmt(14.0 * scale)} L {_fmt(40.0 * scale)} {_fmt(84.0 * scale)}", "score guide-side-rail"))
+        add_hole(27.0 * scale, 20.0 * scale, "peg-tab")
+        add_hole(27.0 * scale, 80.0 * scale, "peg-tab")
+    elif key == "gravity-follower-module":
+        width, height = 38.0 * scale, 112.0 * scale
+        elements.append(_path(_rounded_rect_path(13.0 * scale, 10.0 * scale, 12.0 * scale, 82.0 * scale, 3.0 * scale), "cut follower-rod"))
+        elements.append(_path(_rounded_rect_path(8.0 * scale, 10.0 * scale, 22.0 * scale, 24.0 * scale, 3.0 * scale), "score weight-block"))
+        elements.append(_path(_rounded_rect_path(6.0 * scale, 88.0 * scale, 26.0 * scale, 16.0 * scale, 8.0 * scale), "cut rounded-follower-head"))
+        add_hole(width / 2.0, 16.0 * scale, "output-tab")
+    else:
+        raise ValueError(f"Unsupported cam module: {preset.kind!r}")
+
+    if label:
+        elements.append(_engrave_text(width / 2.0, height - 6.0 * scale, _cam_module_engraving_label(preset), font_size=3.0 * scale))
+
+    metadata: dict[str, object] = {
+        "key": preset.key,
+        "label": preset.label,
+        "engraving_label": _cam_module_engraving_label(preset),
+        "path": preset.path,
+        "module_kind": preset.kind,
+        "hole_diameter_mm": spec.hole_diameter_mm,
+        "hole_count": len(hole_centers),
+        "hole_centers_mm": hole_centers,
+        "contract": "pegboard-mounted-gravity-cam-follower-module",
+    }
+    return elements, metadata, width, height
+
+
+def _cam_module_template(preset: CamModulePreset, spec: FabricationSpec) -> SvgTemplate:
+    elements, metadata, width, height = _cam_module_elements(preset, spec)
+    return SvgTemplate(
+        path=preset.path,
+        title=f"Automataii fabrication cam module {preset.key}",
+        desc=(
+            f"{preset.label} for the pegboard-mounted gravity cam follower module. "
+            "The 15x15 pegboard remains the structural base."
+        ),
+        width_mm=width,
+        height_mm=height,
+        elements=tuple(elements),
+        metadata=metadata,
+    )
+
 def _cam_params_for_preset(preset: CamPreset, spec: FabricationSpec) -> dict[str, float]:
     return dict(preset.params_mm(spec.pitch_mm / 10.0))
 
@@ -2419,6 +2566,17 @@ def _build_sheets(spec: FabricationSpec) -> list[SvgTemplate]:
 
 def _part_label(part_id: str) -> str:
     category, _, key = part_id.partition(":")
+    if category == "cam_modules":
+        return {
+            "axle-peg": "Axle peg",
+            "crank-handle": "Crank handle",
+            "cam-lock-disk": "Cam lock",
+            "paper-washer": "Paper washer",
+            "cam-spacer": "Cam spacer",
+            "swappable-cam-disk": "Cam disk",
+            "u-channel-guide-cartridge": "Guide cartridge",
+            "gravity-follower-module": "Gravity follower",
+        }.get(key, key.replace("-", " ").title())
     if category == "ring_gears":
         return key.removeprefix("ring-").replace("-", "/").upper() + " Ring"
     if key.startswith("g") and key[1:].isdigit():
@@ -2446,6 +2604,7 @@ def _part_color(part_id: str) -> str:
         "brackets": "#a78bfa",
         "spacers": "#94a3b8",
         "handles": "#fb7185",
+        "cam_modules": "#f472b6",
     }.get(category, "#e5e7eb")
 
 
@@ -3821,6 +3980,7 @@ def write_fabrication_templates(
     bracket_templates = [_bracket_template(preset, spec) for preset in BRACKET_PRESETS]
     spacer_templates = [_spacer_template(preset, spec) for preset in SPACER_PRESETS]
     handle_templates = [_handle_template(preset, spec) for preset in HANDLE_PRESETS]
+    cam_module_templates = [_cam_module_template(preset, spec) for preset in CAM_MODULE_PRESETS]
     complete_cut_sheet_template = _complete_kit_cut_sheet(spec)
     sheet_templates = _build_sheets(spec)
 
@@ -3834,6 +3994,7 @@ def write_fabrication_templates(
         *bracket_templates,
         *spacer_templates,
         *handle_templates,
+        *cam_module_templates,
         *sheet_templates,
     ]
     base_manifest: dict[str, object] = {
@@ -3856,6 +4017,7 @@ def write_fabrication_templates(
             "brackets": [template.metadata for template in bracket_templates],
             "spacers": [template.metadata for template in spacer_templates],
             "handles": [template.metadata for template in handle_templates],
+            "cam_modules": [template.metadata for template in cam_module_templates],
         },
         "complete_cut_sheet": complete_cut_sheet_template.metadata,
         "sheets": [template.metadata for template in sheet_templates],
