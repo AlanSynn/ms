@@ -19,6 +19,9 @@ export const AssemblySceneFrame = ({ frame }: { frame: AssemblySceneFrameModel }
     data-mechanism-scene-contract-version={frame.mechanismContract?.version ?? ""}
     data-mechanism-scene-contract-mechanism-id={frame.mechanismContract?.mechanismId ?? ""}
     data-mechanism-scene-contract-stack-source={frame.mechanismContract?.stackSource ?? ""}
+    data-mechanism-graph-ir-version={frame.mechanismContract?.graphCompiler.irVersion ?? ""}
+    data-mechanism-graph-id={frame.mechanismContract?.graphCompiler.graphId ?? ""}
+    data-mechanism-graph-diagnostics={frame.mechanismContract?.graphCompiler.diagnosticCount ?? 0}
     data-mechanism-scene-contract-layer-count={frame.mechanismContract?.layers.length ?? 0}
     aria-label="Assembly scene step"
   >

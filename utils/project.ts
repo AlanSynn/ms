@@ -1634,6 +1634,7 @@ export const migrateProjectSnapshot = (raw: unknown): ProjectState => {
     const fallback = createEmptyProject();
     if (!raw || typeof raw !== 'object') return fallback;
     const data = raw as Partial<ProjectState>;
+    const { graph: _graph, graphCompiler: _graphCompiler, mechanismGraph: _mechanismGraph, graphIr: _graphIr, ...snapshotData } = data as Partial<ProjectState> & Record<string, unknown>;
     const skeleton = normalizeSkeletonSnapshot(data.skeleton);
     const parts = Object.fromEntries(Object.entries(data.parts ?? {}).map(([id, value]) => [id, normalizePartSnapshot(id, value, skeleton)]));
     const partOrder = (data.partOrder ?? Object.keys(parts)).filter(id => Boolean(parts[id]));
@@ -1645,7 +1646,7 @@ export const migrateProjectSnapshot = (raw: unknown): ProjectState => {
     }));
     return {
         ...fallback,
-        ...data,
+        ...snapshotData,
         version: APP_STATE_VERSION,
         metadata: { ...fallback.metadata, ...(data.metadata ?? {}), updatedAt: nowIso() },
         parts,

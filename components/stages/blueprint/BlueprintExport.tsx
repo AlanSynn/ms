@@ -13,6 +13,7 @@ import {
   workflowPane,
 } from "../stageLayout";
 import { BlueprintControlPanel } from "./BlueprintControlPanel";
+import { buildMechanismSceneContract } from "../../../utils/mechanismSceneContract";
 import { BlueprintDetailPanel } from "./BlueprintDetailPanel";
 
 export const selectBlueprintRecipe = (
@@ -49,6 +50,12 @@ export const BlueprintExport = ({
   const recipes = liveRecipes.length ? liveRecipes : (pkg?.recipes ?? []);
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const selectedRecipe = selectBlueprintRecipe(recipes, selectedRecipeId, project.selectedMechanismId);
+  const selectedMechanism = selectedRecipe
+    ? project.mechanisms.find((mechanism) => mechanism.id === selectedRecipe.mechanismId)
+    : undefined;
+  const selectedMechanismContract = selectedMechanism && selectedRecipe
+    ? buildMechanismSceneContract(selectedMechanism, selectedRecipe)
+    : undefined;
   const previewSvg = makeBlueprintPreviewSvg(project, recipes);
   return (
     <EditorStageFrame
@@ -92,6 +99,7 @@ export const BlueprintExport = ({
             project={project}
             recipes={recipes}
             selectedRecipe={selectedRecipe}
+            selectedMechanismContract={selectedMechanismContract}
           />,
         ),
       }}

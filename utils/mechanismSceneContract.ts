@@ -1,5 +1,6 @@
 import type { FabricationRecipe, MechanismConfig, MechanismType } from '../types';
 import type { FabricationRenderKind } from './fabrication';
+import { compileMechanismGraphSidecar, summarizeCompiledMechanism, type MechanismGraphCompilerSummary } from './mechanismGraph';
 import {
     fabricationRenderPlanForMechanism,
     readableFabricationStackSummary,
@@ -24,6 +25,8 @@ export type MechanismSceneContract = {
     mechanismId: string;
     mechanismType: MechanismType;
     renderPlanSource: 'fabricationRenderPlanForMechanism';
+    compilerSource: 'compileMechanismGraphSidecar';
+    graphCompiler: MechanismGraphCompilerSummary;
     stackSource: 'fabricationStackForMechanism';
     stackSummary: string;
     roleSummary: string;
@@ -44,6 +47,7 @@ export const buildMechanismSceneContract = (
     recipe?: FabricationRecipe,
 ): MechanismSceneContract => {
     const renderPlan = fabricationRenderPlanForMechanism(mechanism);
+    const compiledMechanism = compileMechanismGraphSidecar(mechanism);
     const validationErrors = [
         ...renderPlan.validationErrors,
         ...validateMechanismPreviewReadiness(mechanism),
@@ -66,6 +70,8 @@ export const buildMechanismSceneContract = (
         mechanismId: mechanism.id,
         mechanismType: mechanism.type,
         renderPlanSource: 'fabricationRenderPlanForMechanism',
+        compilerSource: 'compileMechanismGraphSidecar',
+        graphCompiler: summarizeCompiledMechanism(compiledMechanism),
         stackSource: 'fabricationStackForMechanism',
         stackSummary: renderPlan.stackSummary || readableFabricationStackSummary(mechanism),
         roleSummary: renderPlan.roleSummary,

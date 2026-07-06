@@ -1,4 +1,5 @@
 import type { FabricationRecipe, ProjectState } from "../../../types";
+import type { MechanismSceneContract } from "../../../utils/mechanismSceneContract";
 import {
   fabricationBoardCoordinateCallout,
   fabricationPartDisplayLabel,
@@ -10,10 +11,12 @@ export const BlueprintDetailPanel = ({
   project,
   recipes,
   selectedRecipe,
+  selectedMechanismContract,
 }: {
   project: ProjectState;
   recipes: FabricationRecipe[];
   selectedRecipe: FabricationRecipe | undefined;
+  selectedMechanismContract?: MechanismSceneContract;
 }) => {
   const selectedSensemaking = selectedRecipe
     ? MECHANISM_TEMPLATE_LIBRARY[selectedRecipe.type].classroomSensemaking
@@ -47,6 +50,10 @@ export const BlueprintDetailPanel = ({
         <article
           className="assembly-recipe-card"
           data-testid={`blueprint-recipe-${selectedRecipe.mechanismId}`}
+          data-mechanism-scene-contract-version={selectedMechanismContract?.version ?? ""}
+          data-mechanism-graph-ir-version={selectedMechanismContract?.graphCompiler.irVersion ?? ""}
+          data-mechanism-graph-id={selectedMechanismContract?.graphCompiler.graphId ?? ""}
+          data-mechanism-graph-diagnostics={selectedMechanismContract?.graphCompiler.diagnosticCount ?? 0}
         >
           <div className="font-bold text-slate-800">Build at {boardLabel}</div>
           <ol

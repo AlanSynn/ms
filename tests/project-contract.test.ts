@@ -33,7 +33,7 @@ import { buildToonSceneProjection } from '../utils/sceneProjection';
 import { buildFoundryPhysicsOverlay, buildKinematicPhysicsSession, mechanismPhysicsRule } from '../utils/physicsSession';
 import { contourPathD, fabricablePartOutlinePoints, partLandmarkJointIds, partLandmarkLocalPoints, partOutlineBounds, partWorldPointToLocal, pointInsideOutline, scaleContour } from '../utils/partGeometry';
 import { MECHANISM_FEATURE_REGISTRY, mechanismFeature, validateMechanismFeatureRegistry, type MechanismDragHandle } from '../utils/mechanismFeatureRegistry';
-import { buildMechanismSnapshot, buildMechanismSnapshots } from '../utils/mechanismSnapshot';
+import { buildMechanismSnapshot, buildMechanismSnapshots, mechanismSnapshotFingerprint } from '../utils/mechanismSnapshot';
 import { createFoundryPlaybackFrame, foundryPlaybackPhaseToInputAngle, generateFoundryPlaybackPointTraces } from '../utils/foundryPlayback';
 import { createMechanismFitContext, createSceneMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext, pointsToSvgPath } from '../utils/mechanismPreview';
 import { buildMechanismRecommendations, fitMechanismToTargetPath } from '../utils/mechanismRecommendations';
@@ -1288,6 +1288,7 @@ previewReadyTypes.forEach(type => {
   const mechanism = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism(type, `graph-${type}`)));
   const graph = mechanismGraphForMechanism(mechanism);
   const compiled = compileMechanismGraphSidecar(mechanism);
+  const sceneContract = buildMechanismSceneContract(mechanism);
   const renderPlan = fabricationRenderPlanForMechanism(mechanism);
   const assemblyBoardCoordinate = mechanism.fabricationMetadata?.boardCoordinate ?? 'H8';
   const assemblySteps = prefabAssemblySteps(mechanism, assemblyBoardCoordinate);
@@ -1301,10 +1302,26 @@ previewReadyTypes.forEach(type => {
   assert.equal(compiled.fabrication.assemblyBoardCoordinate, assemblyBoardCoordinate, `${type} graph sidecar preserves assembly board coordinate`);
   assert.equal(compiled.fabrication.assemblyStepCount, assemblySteps.length, `${type} graph sidecar preserves assembly step count`);
   assert.deepEqual(compiled.fabrication.assemblyStepLabels, assemblySteps.map(step => step.label), `${type} graph sidecar preserves assembly step labels`);
+  assert.deepEqual(
+    compiled.fabrication.assemblyStepFingerprints,
+    assemblySteps.map(step => ({
+      index: step.index,
+      label: step.label,
+      role: step.role,
+      boardCoordinate: step.boardCoordinate,
+      zMm: step.zMm,
+      coords: step.coords ?? [],
+      coordRoles: step.coordRoles ?? [],
+      stack: (step.stack ?? []).map(item => ({ order: item.order, label: item.label, role: item.role, part: item.part }))
+    })),
+    `${type} graph sidecar preserves assembly step coordinates, roles, z order, and stack parts`
+  );
   assert.equal(compiled.fabrication.layerCount, renderPlan.layers.length, `${type} graph sidecar preserves render-plan layer count`);
   assert.equal(compiled.fabrication.stackSummary, renderPlan.stackSummary, `${type} graph sidecar preserves stack summary`);
   assert.equal(compiled.fabrication.roleSummary, renderPlan.roleSummary, `${type} graph sidecar preserves role summary`);
   assert.deepEqual(compiled.fabrication.validationErrors, renderPlan.validationErrors, `${type} graph sidecar preserves fabrication validation errors`);
+  assert.equal(sceneContract.compilerSource, 'compileMechanismGraphSidecar', `${type} scene contract records the graph sidecar compiler source`);
+  assert.equal(sceneContract.graphCompiler.graphId, compiled.graph.id, `${type} scene contract exposes graph metadata without replacing fabrication layers`);
 });
 (['4bar', 'gear'] as const).forEach(type => {
   assert.equal(mechanismGraphForMechanism(createDefaultMechanism(type, `graph-first-target-${type}`)).family.firstCompilerTarget, true, `${type} remains an initial graph compiler target`);
@@ -1316,6 +1333,37 @@ assert(mechanismGraphForMechanism(createDefaultMechanism('piston', 'graph-piston
 assert(mechanismGraphForMechanism(createDefaultMechanism('cam', 'graph-cam-contact')).constraints.some(constraint => constraint.role === 'contact'), 'cam graph adapter exposes cam/follower contact');
 assert(mechanismGraphForMechanism(createDefaultMechanism('gear_linkage', 'graph-gear-linkage-target')).constraints.some(constraint => constraint.id === 'connector-output'), 'gear-linkage graph adapter exposes the shared moving connector target');
 assert(mechanismGraphForMechanism(createDefaultMechanism('planetary_gear', 'graph-planetary-mesh')).constraints.filter(constraint => constraint.role === 'gear-mesh').length >= 2, 'planetary gear graph adapter exposes sun/planet and planet/ring mesh constraints');
+{
+  const mechanism = normalizeMechanismToReference(createDefaultMechanism('4bar', 'graph-offset-vector'));
+  const graph = mechanismGraphForMechanism(mechanism);
+  const offset = graph.constraints.find(constraint => constraint.id === 'effector-offset');
+  const angle = (mechanism.couplerPointAngle * Math.PI) / 180;
+  assert.equal(offset?.angle, angle, '4bar graph output-offset preserves the coupler target angle');
+  assertPointClose(offset?.vector, {
+    x: mechanism.couplerPointDist * Math.cos(angle),
+    y: mechanism.couplerPointDist * Math.sin(angle)
+  }, '4bar graph output-offset vector reconstructs the local effector point');
+}
+{
+  const mechanism = normalizeGearLinkageToReference(createDefaultMechanism('gear_linkage', 'graph-gear-linkage-center'));
+  const graph = mechanismGraphForMechanism(mechanism);
+  const gearCenters = gearTrainCenters(mechanism);
+  const outputGear = graph.nodes.find(node => node.id === `gear-${gearCenters.length - 1}`);
+  assertPointClose(outputGear?.position, gearCenters[gearCenters.length - 1], 'gear-linkage graph preserves the normalized output gear center');
+  assertPointClose(outputGear?.position, calculateLinkage(mechanism, 0).p2, 'gear-linkage graph output gear center matches the closed-form output pivot');
+}
+{
+  const camProfileSamples = [1, 1.25, 0.85, 1.1];
+  const graph = mechanismGraphForMechanism({ ...createDefaultMechanism('cam', 'graph-cam-profile'), camProfileSamples });
+  assert.deepEqual(graph.nodes.find(node => node.id === 'cam-disk')?.samples, camProfileSamples, 'cam graph carries edited profile samples for downstream fabrication/compiler checks');
+  assert.deepEqual(graph.constraints.find(constraint => constraint.id === 'effector-offset')?.samples, camProfileSamples, 'cam output-offset carries edited profile samples');
+}
+{
+  const graph = mechanismGraphForMechanism(createDefaultMechanism('planetary_gear', 'graph-planetary-physical-nodes'));
+  assert.equal(graph.nodes.find(node => node.id === 'sun-gear')?.role, 'gear', 'planetary graph emits the sun as a physical gear node');
+  assert.equal(graph.nodes.find(node => node.id === 'ring-gear')?.role, 'ring-gear', 'planetary graph emits the fixed ring as a physical ring gear node');
+  assert(Number.isFinite(graph.nodes.find(node => node.id === 'ring-gear')?.value), 'planetary graph carries the ring pitch radius');
+}
 const impossibleFourBar = mechanismWithGeneratedPath({
   ...normalizeMechanismToReference(createDefaultMechanism('4bar', 'preview-blocked-4bar')),
   groundLength: 300,
@@ -1423,6 +1471,8 @@ const graphSidecar = compileMechanismGraphSidecar(sample.mechanisms[0]);
 assert.equal(graphSidecar.graph.persisted, false, 'mechanism graph sidecar declares that it is derived rather than persisted');
 assert.equal(serializeProject(sample), graphSidecarBeforeProject, 'mechanism graph sidecar compilation does not mutate ProjectState');
 assert(!serializeProject(sample).includes('mechanismGraph') && !serializeProject(sample).includes('graphIr'), 'project snapshots do not persist derived graph compiler sidecars');
+const projectImportSource = readFileSync(join(process.cwd(), 'utils', 'project.ts'), 'utf8');
+assert(projectImportSource.includes('graphCompiler: _graphCompiler') && projectImportSource.includes('graphIr: _graphIr') && projectImportSource.includes('...snapshotData'), 'project import strips top-level graph sidecars before ProjectState spreading');
 assert(Object.isFrozen(snapshotA) && Object.isFrozen(snapshotA.fabricationPlan.layers), 'mechanism snapshot is recursively frozen for adapter safety');
 assert.equal(snapshotA.sourceIds.mechanismId, sampleMechanismId, 'mechanism snapshot records mechanism source id');
 assert(snapshotA.feasibleRange.percentValid >= 0 && snapshotA.feasibleRange.percentValid <= 1, 'mechanism snapshot includes feasible range');
@@ -1430,6 +1480,27 @@ assert(snapshotA.interactionPolicy.writesProjectState, 'mechanism snapshot inclu
 assert(snapshotA.projectionHints.every(hint => hint.zStackUsesFabricationPlan), 'mechanism snapshot includes fabrication-backed projection hints');
 assert(snapshotA.physicsHints.every(hint => hint.preservesProjectState), 'mechanism snapshot includes derived physics hints');
 assert(Array.isArray(snapshotA.fabricationPlan.validationErrors), 'mechanism snapshot includes fabrication plan validation result');
+assert.equal(snapshotA.graph.source, 'derived-legacy-adapter', 'mechanism snapshot carries the full derived graph sidecar at the adapter boundary');
+assert.equal(snapshotA.graph.persisted, false, 'mechanism snapshot graph remains a non-persisted sidecar');
+assert.equal(snapshotA.graphCompiler.graphId, snapshotA.graph.id, 'mechanism snapshot graph summary points at the attached graph');
+assert.equal(snapshotA.graphCompiler.nodeCount, snapshotA.graph.nodes.length, 'mechanism snapshot graph summary records node count for downstream tabs');
+const snapshotGraphFingerprintInput = {
+  sourceIds: snapshotA.sourceIds,
+  mechanism: snapshotA.mechanism,
+  physicalKit: snapshotA.physicalKit,
+  targetPath: snapshotA.targetPath,
+  graph: snapshotA.graph,
+  graphCompiler: snapshotA.graphCompiler
+};
+assert.equal(mechanismSnapshotFingerprint(snapshotGraphFingerprintInput), snapshotA.fingerprint, 'mechanism snapshot fingerprint includes derived graph content');
+const graphContentDriftFingerprint = mechanismSnapshotFingerprint({
+  ...snapshotGraphFingerprintInput,
+  graph: {
+    ...snapshotA.graph,
+    constraints: snapshotA.graph.constraints.map((constraint, index) => index === 0 ? { ...constraint, label: `${constraint.label} drift` } : constraint)
+  }
+});
+assert.notEqual(graphContentDriftFingerprint, snapshotA.fingerprint, 'mechanism snapshot fingerprint changes when graph content drifts without changing graph counts');
 const snapshotOffPresetLinkNoop = buildMechanismSnapshot({
   ...sample,
   mechanisms: sample.mechanisms.map(mechanism => mechanism.id === sampleMechanismId ? { ...mechanism, crankLength: mechanism.crankLength + 1 } : mechanism)
@@ -1529,6 +1600,8 @@ allMechanismSnapshots.forEach(snapshot => {
   assert.equal(snapshot.version, 1, `${snapshot.mechanism.type} snapshot carries schema version`);
   assert(snapshot.fingerprint.startsWith('ms-'), `${snapshot.mechanism.type} snapshot carries a stable fingerprint`);
   assert(Array.isArray(snapshot.fabricationPlan.validationErrors), `${snapshot.mechanism.type} snapshot carries fabrication validation results`);
+  assert.equal(snapshot.graph.legacyType, snapshot.mechanism.type, `${snapshot.mechanism.type} snapshot graph preserves the mechanism type`);
+  assert.equal(snapshot.graphCompiler.persisted, false, `${snapshot.mechanism.type} snapshot graph summary stays non-persisted`);
   assert(snapshot.projectionHints.length > 0 && snapshot.physicsHints.length > 0, `${snapshot.mechanism.type} snapshot carries adapter hints`);
 });
 const goldenSample = createSampleProject({ includeMechanism: true });
@@ -1567,8 +1640,8 @@ assert.deepEqual(
   {
     project: 'c4318bde0f86a2b08dabcea7351b605eb307eaf583319ac140145dc1a90e4bfa',
     lesson: '93beeb83933e1622f6ab29c765c88360adf1271f7f5fbd9c38f1e88d2f05e7fc',
-    mechanismSnapshot: 'eeca40de978ca6d22327e60e6b82dd5f67bfe2905c207cadd4031b26c98d90d0',
-    allMechanismSnapshots: 'dc2bfd1e6294d5be54dde8487cbb1b7a52b52275ee52a3689d7a30ef63114127',
+    mechanismSnapshot: 'b22d0c70ee62c4f17dc7d54f4a43de89c031ffeaacc420b9b8404314c7942303',
+    allMechanismSnapshots: '0efaa9aea31df333ebe03a30b107337422f8b30cf9691f8d064b501a91c59e95',
     sceneProjection: '64b01ae59502ee6a8f04bdad651418565e1fb1e9593d7a6178cea04425dd1605',
     svg: '943626770ae697a566ce73edfcf282215c4e55f82e77575d7df7393eeb1eb5d3',
     dxf: 'dc52ca1acfa24ad70ae9028c58ad48a6c64fb5a8dcebf9fe4db2562d2d8aa336',
@@ -3245,6 +3318,8 @@ assert(designAutomataProjectionText.includes('buildAutomataSceneModel') && !desi
   assert.equal(compat.foundryPreview?.previewPoints.length, canonical.foundryPreview?.previewPoints.length, 'Design compatibility wrapper returns the same Foundry preview trace as the canonical automata model');
   assert.equal(canonical.userPath?.id, 'path-right-arm', 'Canonical automata model uses the explicit/selected path for fitted previews');
   assert.equal(canonical.motionSource, 'generatedPath', 'Canonical automata model drives the scene from the generated mechanism path when a fitted path exists');
+  assert.equal(canonical.mechanismContract?.compilerSource, 'compileMechanismGraphSidecar', 'Canonical automata model exposes graph compiler telemetry through the scene contract');
+  assert.equal(canonical.mechanismContract?.graphCompiler.graphId, `${mechanism.id}:graph`, 'Canonical automata model keeps graph identity aligned with the mechanism instance');
   assert(canonical.generatedTarget && canonical.target, 'Canonical automata model exposes both generated mechanism output and selected IK target');
   assert((canonical.targetError ?? Number.POSITIVE_INFINITY) < 1e-9, 'Canonical automata model keeps the selected IK target attached to the generated mechanism output');
   const drivenHand = canonical.animatedParts.right_hand_part;
@@ -3553,6 +3628,8 @@ assert(blueprintExportText.includes('<BlueprintControlPanel') && blueprintContro
 assert(blueprintExportText.includes('const liveRecipes = activeMechanisms.map') && blueprintExportText.includes('const recipes = liveRecipes.length ? liveRecipes : (pkg?.recipes ?? [])') && blueprintExportText.includes('const previewSvg = makeBlueprintPreviewSvg(project, recipes)'), 'Blueprint center preview always renders the readable live view from live fabrication recipe data; export downloads keep the physical artifact SVG');
 assert(blueprintExportText.includes('selectBlueprintRecipe(recipes, selectedRecipeId, project.selectedMechanismId)') && blueprintExportText.includes('recipes.find((recipe) => recipe.mechanismId === selectedMechanismId)'), 'Blueprint defaults the detail recipe to the selected live mechanism so fitted mechanisms carry into print/build views');
 assert(blueprintExportText.includes('<BlueprintDetailPanel') && blueprintDetailPanelText.includes('data-testid="blueprint-sensemaking-label"') && blueprintDetailPanelText.includes('requiredPartCount') && assemblySceneFrameComponentText.includes('data-testid="assembly-scene-sensemaking"') && assemblyInspectorPanelText.includes('data-testid="assembly-sensemaking-label"'), 'Blueprint delegates detail inspector rendering while Blueprint and Assembly reuse mechanism sensemaking metadata for compact visual cues');
+assert(blueprintExportText.includes('buildMechanismSceneContract') && blueprintExportText.includes('selectedMechanismContract') && blueprintDetailPanelText.includes('data-mechanism-graph-ir-version'), 'Blueprint inspector exposes derived graph metadata while keeping recipe/SVG output as the visual source');
+assert(blueprintExportText.includes('selectedMechanism && selectedRecipe') && blueprintDetailPanelText.includes('selectedMechanismContract?.graphCompiler'), 'Blueprint graph telemetry is live-mechanism-only and does not invent compiler metadata for stale package-only recipes');
 assert(!blueprintCanvasBlock.includes('<Canvas project={project}'), 'Blueprint center canvas is a static output sheet, not the animated 3D/2.5D workbench');
 assert(!blueprintCanvasBlock.includes('assembly-guide-web-preview') && !blueprintInspectorBlock.includes('assembly-guide-web-preview'), 'Blueprint no longer embeds the assembly guide document');
 assert(fabricationRuntimeText.includes('svg: makeBlueprintSvg(project, recipes)'), 'export package uses the physical printable blueprint SVG, not the screen preview');
@@ -3584,9 +3661,9 @@ assert(assemblyThreePreviewText.includes('buildAutomataSceneModel') && assemblyT
 assert(assemblyBlock.includes('buildAssemblyGuideModel') && !assemblyBlock.includes('const liveRecipes = activeMechanisms.map') && assemblyGuideModelText.includes('const liveRecipes = activeMechanisms.map') && assemblyGuideModelText.includes('liveRecipes.length ? liveRecipes : (pkg?.recipes ?? [])'), 'Assembly Guide delegates live recipe fallback to the DOM-free model seam');
 assert(assemblyGuideModelText.includes('activeAssemblyMode === "character"') && assemblyCanvasPaneText.includes('buildCharacterAssemblySceneFrame') && assemblyCanvasPaneText.includes('buildMechanismAssemblySceneFrame') && !assemblyCanvasPaneText.includes('{pkg && selectedRecipe && currentStep ?'), 'Assembly animation supports character and mechanism stages through DOM-free scene frames before generating PDF/HTML output');
 assert(!existsSync(join(process.cwd(), 'components', 'stages', 'assembly', 'AssemblyWorkbench.tsx')) && !existsSync(join(process.cwd(), 'components', 'stages', 'assembly', 'MechanismAssemblyWorkbench.tsx')) && !existsSync(join(process.cwd(), 'components', 'stages', 'assembly', 'CharacterAssemblyWorkbench.tsx')), 'legacy Assembly SVG workbench files are deleted rather than preserved as a second scene authority');
-assert(assemblySceneFrameComponentText.includes('data-testid="assembly-readonly-step-strip"') && assemblySceneFrameComponentText.includes('data-assembly-motion-kind') && assemblySceneFrameComponentText.includes('data-mechanism-scene-contract-version'), 'AssemblySceneFrame exposes a testable read-only scene contract strip');
+assert(assemblySceneFrameComponentText.includes('data-testid="assembly-readonly-step-strip"') && assemblySceneFrameComponentText.includes('data-assembly-motion-kind') && assemblySceneFrameComponentText.includes('data-mechanism-scene-contract-version') && assemblySceneFrameComponentText.includes('data-mechanism-graph-ir-version'), 'AssemblySceneFrame exposes a testable read-only scene contract strip');
 assert(assemblySceneFrameText.includes('export const buildMechanismAssemblySceneFrame') && assemblySceneFrameText.includes('export const buildCharacterAssemblySceneFrame') && !assemblySceneFrameText.includes('document.') && !assemblySceneFrameText.includes('window.'), 'AssemblySceneFrame builders are DOM-free deterministic helpers');
-assert(mechanismSceneContractText.includes('export const buildMechanismSceneContract') && mechanismSceneContractText.includes('fabricationRenderPlanForMechanism') && mechanismSceneContractText.includes("stackSource: 'fabricationStackForMechanism'"), 'MechanismSceneContract derives mechanism layers from the same fabrication render plan as Foundry');
+assert(mechanismSceneContractText.includes('export const buildMechanismSceneContract') && mechanismSceneContractText.includes('fabricationRenderPlanForMechanism') && mechanismSceneContractText.includes("stackSource: 'fabricationStackForMechanism'") && mechanismSceneContractText.includes('compileMechanismGraphSidecar'), 'MechanismSceneContract derives mechanism layers from the same fabrication render plan as Foundry');
 assert(assemblyGeometryText.includes('export const assemblyCoordToSvg') && assemblyGeometryText.includes('export const characterBoardProjector') && !assemblyGeometryText.includes('<') && !assemblyGeometryText.includes('document.'), 'assemblyGeometry is a DOM-free deterministic helper seam');
 assert(assemblyPlaybackText.includes('export const pendingRecipeForMechanism') && assemblyPlaybackText.includes('createFabricationRecipe(project, mechanism)') && assemblyPlaybackText.includes('buildAssemblyPlaybackSteps'), 'Assembly recipe/playback derivation lives outside App.tsx and reuses the export fabrication recipe seam');
 assert(assemblyGuideModelText.includes('export const buildAssemblyGuideModel') && assemblyGuideModelText.includes('pendingRecipeForMechanism') && assemblyGuideModelText.includes('buildCharacterAssemblyPlan') && assemblyGuideModelText.includes('resetKey: `${activeAssemblyMode}:${selectedRecipe?.mechanismId ?? "none"}:${lane}`') && !assemblyGuideModelText.includes('useState') && !assemblyGuideModelText.includes('window.') && !assemblyGuideModelText.includes('document.') && !assemblyGuideModelText.includes('dispatch('), 'Assembly guide model helper is a pure derivation seam for recipes, mode, steps, and reset key');
@@ -3760,6 +3837,10 @@ assert.equal(roundTrip.mechanisms[0].assemblyMode, sample.mechanisms[0].assembly
 assert.equal(loadProjectSnapshot({ mechanisms: [{ ...createDefaultMechanism('4bar', 'crossed-load'), assemblyMode: 'crossed' }] }).mechanisms[0].assemblyMode, 'crossed', 'project import preserves crossed 4bar assembly branch');
 const graphInjectedLoad = loadProjectSnapshot({ mechanisms: [{ ...createDefaultMechanism('4bar', 'graph-injected-load'), mechanismGraph: { bogus: true }, graphIr: { bogus: true } }] });
 assert(!('mechanismGraph' in graphInjectedLoad.mechanisms[0]) && !('graphIr' in graphInjectedLoad.mechanisms[0]), 'project import strips derived graph compiler sidecars instead of persisting them');
+const topLevelGraphInjectedLoad = loadProjectSnapshot({ ...JSON.parse(serializeProject(createEmptyProject())), graph: { bogus: true }, graphCompiler: { bogus: true }, mechanismGraph: { bogus: true }, graphIr: { bogus: true } });
+const topLevelGraphInjectedSerialized = serializeProject(topLevelGraphInjectedLoad);
+assert(!('graph' in topLevelGraphInjectedLoad) && !('graphCompiler' in topLevelGraphInjectedLoad) && !('mechanismGraph' in topLevelGraphInjectedLoad) && !('graphIr' in topLevelGraphInjectedLoad), 'project import strips top-level graph compiler sidecars before they enter ProjectState');
+assert(!topLevelGraphInjectedSerialized.includes('"graph"') && !topLevelGraphInjectedSerialized.includes('"graphCompiler"') && !topLevelGraphInjectedSerialized.includes('"mechanismGraph"') && !topLevelGraphInjectedSerialized.includes('"graphIr"'), 'serialized ProjectState cannot re-emit injected top-level graph sidecars');
 
 const originBoard = sceneToBoard({ x: 0, y: 0 }, sample.settings.physicalKit);
 assert.equal(originBoard.label, 'H8', 'scene origin maps to centered 15x15 board H8');

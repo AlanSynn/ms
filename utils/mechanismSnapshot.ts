@@ -1,5 +1,6 @@
 import type { JointState, MechanismConfig, MechanismType, PhysicalKitSettings, Point, ProjectMotionPath, ProjectState } from '../types';
 import type { FabricationRenderPlan } from './fabrication';
+import { compileMechanismGraphSidecar, summarizeCompiledMechanism, type MechanismGraph, type MechanismGraphCompilerSummary } from './mechanismGraph';
 import type { MechanismFeatureIssue, MechanismInteractionPolicy, MechanismPhysicsHint, MechanismProjectionHint, MechanismFeasibleRange } from './mechanismFeatureRegistry';
 import { normalizeMechanismToFabricationSet } from './mechanismReference';
 import { mechanismFeature } from './mechanismFeatureRegistry';
@@ -93,6 +94,8 @@ export interface MechanismSnapshot {
     projectionHints: MechanismProjectionHint[];
     physicsHints: MechanismPhysicsHint[];
     fabricationPlan: FabricationRenderPlan;
+    graph: MechanismGraph;
+    graphCompiler: MechanismGraphCompilerSummary;
     issues: MechanismFeatureIssue[];
 }
 
@@ -199,7 +202,9 @@ const snapshotFingerprintInput = (snapshot: Omit<MechanismSnapshot, 'fingerprint
     sourceIds: snapshot.sourceIds,
     mechanism: snapshot.mechanism,
     physicalKit: snapshot.physicalKit,
-    targetPath: snapshot.targetPath
+    targetPath: snapshot.targetPath,
+    graph: snapshot.graph,
+    graphCompiler: snapshot.graphCompiler
 });
 
 export const buildMechanismSnapshot = (project: ProjectState, mechanismId: string, angleRad = 0): MechanismSnapshot | null => {
@@ -225,6 +230,7 @@ export const buildMechanismSnapshot = (project: ProjectState, mechanismId: strin
         rodLength: normalizedMechanism.rodLength,
         phase: normalizedMechanism.phase
     };
+    const compiledMechanism = compileMechanismGraphSidecar(resolvedMechanism);
     const sourceIds: MechanismSnapshotSourceIds = {
         projectId: project.metadata.id,
         mechanismId: mechanism.id,
@@ -253,6 +259,8 @@ export const buildMechanismSnapshot = (project: ProjectState, mechanismId: strin
         projectionHints: cloneData(feature.projectionHints(resolvedMechanism)),
         physicsHints: cloneData(feature.physicsHints(resolvedMechanism)),
         fabricationPlan: cloneData(feature.fabricationPlan(resolvedMechanism)),
+        graph: cloneData(compiledMechanism.graph),
+        graphCompiler: cloneData(summarizeCompiledMechanism(compiledMechanism)),
         issues: cloneData(feature.validate(resolvedMechanism))
     };
 
