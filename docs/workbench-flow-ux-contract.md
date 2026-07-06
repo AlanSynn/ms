@@ -241,13 +241,13 @@ Severity means product risk, not current breakage. Facts cite current code/docs;
 
 ### P0 / release blockers
 
-None known from this audit. This pass is documentation-only; full browser QA was not re-run for this docs update.
+None known from this audit. This pass ran contract tests and production build; full browser QA remains reserved for UI-behavior changes.
 
 ### P1 / high production risks
 
 | Area | Risk | Evidence | Required direction |
 |---|---|---|---|
-| Foundry renderer debt | Foundry still has stage-local mechanism-type branches for render glue, pin points, z/plane choices, and gear/planetary behavior. | `ThreeFoundryPreview.tsx`, `foundryPreviewStacks.ts`, `docs/prd/foundry-assembly-ssot-plan.md` | Move semantics into shared helpers/contracts; allow only presentation glue in stage code. |
+| Foundry renderer debt | Pin/z semantics are now shared, but `ThreeFoundryPreview` still has renderer branches and `mechanismPreviewStacks` still has type branches until compiler contracts emit those facts. | `ThreeFoundryPreview.tsx`, `utils/mechanismPreviewStacks.ts`, `docs/prd/foundry-assembly-ssot-plan.md` | Keep stage code as presentation glue; move remaining primitive semantics behind compiler/shared contracts only when touched. |
 | ProjectState boundary | `ProjectState` currently stores durable authoring data plus selected ids, processing, and last-result/export-adjacent fields. | `types.ts`, `utils/projectPersistence.ts`, `hooks/useMotionSmithAppController.ts` | Classify canonical vs recovery/session fields before moving more state into snapshots. |
 | Design camera/context integration | Design now uses one Foundry scene, but this contract must stay locked so future work does not reintroduce a split renderer or private mechanism primitive path. | `DesignFoundryPreview.tsx`, `utils/automataSceneModel.ts`, `components/stages/foundry/ThreeFoundryPreview.tsx` | Keep Design/Assembly consuming `buildAutomataSceneModel` + Foundry primitive layers; do not add private mechanism primitives. |
 | Design mental model | Direct mechanism chips in Design can bypass Foundry-first selection/fit. | `DesignWorkflowPanel.tsx` creates mechanisms from chips. | Prefer Foundry for new mechanism choice; keep Design as instance tuning, or explicitly redesign/document the bypass. |
@@ -259,7 +259,7 @@ None known from this audit. This pass is documentation-only; full browser QA was
 | Assembly realism | Assembly is now Three-first for mechanism steps, but full Lego-like clarity for character art, fasteners, spacers, board holes, and final motion remains a polish/coverage risk. | `AssemblyCanvasPane.tsx`, `AssemblyInspectorPanel.tsx`, `AssemblySceneFrame.tsx` | Keep enriching `AssemblySceneFrame`; do not reintroduce lower SVG/ghost truth. |
 | Blueprint/Assembly labels | Labels mostly share fabrication helpers, but all mechanism-family label parity is not exhaustively tested. | `fabricationPartDisplayLabel`, `readableFabricationStackSummary`, browser tests. | Add all-mechanism contract parity for recipe labels, cut labels, and assembly labels. |
 | Multi-object workflows | Scene-object path and mechanism support exists, but multi-object/multi-mechanism classroom reload flow is weakly covered. | `ProjectMotionPath.sceneObjectId`, `DesignInspectorPanel`, tests cover limited cases. | Add two-object, two-path, two-mechanism browser flow with autosave reload. |
-| CI/release gate | Release deploy builds only; tests are not enforced there. | `.github/workflows/deploy.yml`, test-engineer audit. | Add release smoke gate before tag deploy or document manual release gate as mandatory. |
+| CI/release gate | Tag deploy now runs contracts before build; browser smoke remains manual because it is expensive for release tags. | `.github/workflows/deploy.yml`, `package.json` | Keep contract/build gate required; add browser smoke only if deploy regressions recur. |
 
 ### P2 / medium UX and maintainability risks
 
@@ -289,6 +289,17 @@ None known from this audit. This pass is documentation-only; full browser QA was
 - Options anchor links may be fragile inside a scroll-contained inspector; fix only if user behavior or tests show a real issue.
 - Raw `title` on the player drag handle is acceptable as a non-essential browser affordance unless it becomes the only visible help.
 - Guided-first prominence is acceptable for now because `Guide` opens the guided library and open/import paths remain secondary.
+
+### P4 / deferred advanced scope
+
+- Free graph authoring stays out of classroom mode until the graph compiler emits solver, fabrication, labels, board holes, and assembly steps.
+- Remote/multilingual assessment content stays out of runtime until local slug bundles get a versioned import boundary.
+- New renderer/package split remains rejected without profiling or a real second app package consumer.
+
+### P5 / intentionally skipped
+
+- Do not build server sync, user accounts, cloud export jobs, or hosted assessment authoring. They are outside local-first scope.
+- Do not persist graph V2 yet. Keep it derived until parity and export golden masters pass.
 
 ## Verification gates
 

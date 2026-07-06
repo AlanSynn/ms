@@ -33,7 +33,7 @@ import { buildToonSceneProjection } from '../utils/sceneProjection';
 import { buildFoundryPhysicsOverlay, buildKinematicPhysicsSession, mechanismPhysicsRule } from '../utils/physicsSession';
 import { contourPathD, fabricablePartOutlinePoints, partLandmarkJointIds, partLandmarkLocalPoints, partOutlineBounds, partWorldPointToLocal, pointInsideOutline, scaleContour } from '../utils/partGeometry';
 import { MECHANISM_FEATURE_REGISTRY, mechanismFeature, validateMechanismFeatureRegistry, type MechanismDragHandle } from '../utils/mechanismFeatureRegistry';
-import { constrainMechanismUpdate, mechanismEditIsSafe, mechanismMotionCompletes, motionSafeParamRange, safeMechanismUpdate } from '../utils/mechanismEditAuthority';
+import { MECHANISM_FEASIBILITY_AUTHORITY_KEYS, MECHANISM_NON_FEASIBILITY_EDIT_KEYS, MECHANISM_REPLACEMENT_ONLY_KEYS, constrainMechanismCommit, constrainMechanismUpdate, mechanismEditIsSafe, mechanismMotionCompletes, mechanismUpdateRequiresReplacement, motionSafeParamRange, safeMechanismUpdate } from '../utils/mechanismEditAuthority';
 import { buildMechanismSnapshot, buildMechanismSnapshots, mechanismSnapshotFingerprint } from '../utils/mechanismSnapshot';
 import { createFoundryPlaybackFrame, foundryPlaybackPhaseToInputAngle, generateFoundryPlaybackPointTraces } from '../utils/foundryPlayback';
 import { createMechanismFitContext, createSceneMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext, pointsToSvgPath } from '../utils/mechanismPreview';
@@ -48,11 +48,12 @@ import { formatGridLabel, formatGridPitch, formatGridReadout } from '../utils/un
 import { buildAssemblyPlaybackSteps, buildCharacterAssemblyPlan, pendingRecipeForMechanism, type CharacterAssemblyPlan } from '../utils/assemblyPlayback';
 import { buildCharacterAssemblySceneFrame, buildMechanismAssemblySceneFrame } from '../utils/assemblySceneFrame';
 import { buildMechanismSceneContract } from '../utils/mechanismSceneContract';
-import { MECHANISM_GRAPH_LIVE_SOLVE_BUDGET_MS, compileMechanismGraphSidecar, mechanismGraphForMechanism, sampleMechanismGraphMotion } from '../utils/mechanismGraph';
+import { MECHANISM_GRAPH_ADAPTER_TYPES, MECHANISM_GRAPH_LIVE_SOLVE_BUDGET_MS, compileMechanismGraphSidecar, mechanismGraphForMechanism, sampleMechanismGraphMotion, summarizeCompiledMechanism } from '../utils/mechanismGraph';
 import { buildAssemblyGuideModel } from '../components/stages/assembly/assemblyGuideModel';
 import { selectBlueprintRecipe } from '../components/stages/blueprint/BlueprintExport';
 import { MechanismLinkagePreview } from '../components/stages/foundry/MechanismLinkagePreview';
 import { FoundryWorkflowPanel } from '../components/stages/foundry/FoundryWorkflowPanel';
+import { MechanismParametricEditor } from '../components/stages/mechanism/MechanismParametricEditor';
 import { useAppMechanismActions } from '../hooks/useAppMechanismActions';
 import { createStageNavigator, navigateAppStage } from '../utils/appStageNavigation';
 import { assemblyCoordToSvg, characterBoardProjector, characterCanvasProjector, smoothAssemblyProgress, svgPathFromPoints } from '../components/stages/assembly/assemblyGeometry';
@@ -386,7 +387,8 @@ assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/Foundr
 assert(normalizedCodebaseCleanupPlan.includes('`utils/threeResourceKit.ts` | 86') && normalizedCodebaseCleanupPlan.includes('shared Three cache/disposal/pixel-ratio helpers'), 'cleanup plan records the extracted shared Three resource helper seam');
 assert(normalizedCodebaseCleanupPlan.includes('`utils/foundryPreviewModel.ts`') && normalizedCodebaseCleanupPlan.includes('shared Foundry-style live preview model derives playback frame'), 'cleanup plan records the shared Foundry preview model seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/foundryRenderInventory.ts` | 152') && normalizedCodebaseCleanupPlan.includes('rendered inventory counts live outside the WebGL renderer'), 'cleanup plan records the extracted Foundry render inventory helper seam');
-assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/foundryPreviewStacks.ts` | 475') && normalizedCodebaseCleanupPlan.includes('Foundry pin-stack/z-order helper seam lives outside the app shell'), 'cleanup plan records the extracted Foundry pin-stack helper seam');
+assert(normalizedCodebaseCleanupPlan.includes('`utils/mechanismPreviewStacks.ts` | 543') && normalizedCodebaseCleanupPlan.includes('Shared mechanism pin-stack/z-order helper lives outside stage folders'), 'cleanup plan records the extracted Foundry pin-stack helper seam');
+assert(existsSync(join(process.cwd(), 'utils', 'mechanismPreviewStacks.ts')) && !existsSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryPreviewStacks.ts')), 'Foundry pin-stack helper is shared outside stage-local code');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/MechanismFoundry.tsx` | 931') && normalizedCodebaseCleanupPlan.includes('Mechanism Foundry stage wrapper lives outside the app shell'), 'cleanup plan records the extracted MechanismFoundry stage seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/FoundryCanvasPane.tsx` | 246') && normalizedCodebaseCleanupPlan.includes('Foundry center canvas host owns Three preview wiring and delegates chrome/overlay leaves'), 'cleanup plan records the extracted Foundry canvas pane seam');
 assert(normalizedCodebaseCleanupPlan.includes('`components/stages/foundry/FoundryCanvasChrome.tsx` | 168') && normalizedCodebaseCleanupPlan.includes('Foundry center canvas badge, camera controls, and playback chrome live outside the preview host'), 'cleanup plan records the extracted Foundry canvas chrome seam');
@@ -785,6 +787,7 @@ assert(physicsKernelSource.includes('RAPIER_INIT_DEPRECATION_WARNING'), 'Rapier 
 assert(physicsKernelSource.includes('args.length === 1 && args[0] === RAPIER_INIT_DEPRECATION_WARNING'), 'Rapier init filters only the exact upstream deprecation warning');
 assert(physicsKernelSource.includes('finally') && physicsKernelSource.includes('console.warn = warn'), 'Rapier init restores console.warn after the scoped compatibility filter');
 assert(deployWorkflowText.includes('oven-sh/setup-bun@v2') && deployWorkflowText.includes('bun install --frozen-lockfile') && deployWorkflowText.includes('bun run build'), 'GitHub Pages workflow uses Bun install and build');
+assert(deployWorkflowText.indexOf('bun run test') > -1 && deployWorkflowText.indexOf('bun run test') < deployWorkflowText.indexOf('bun run build'), 'GitHub Pages workflow runs contract tests before build and deploy');
 assert(deployWorkflowText.includes('lfs: true') && deployWorkflowText.includes('git lfs pull --include="public/onnx/pose_model.onnx"'), 'GitHub Pages workflow fetches real ONNX bytes from Git LFS before build');
 assert(deployWorkflowText.includes('Check ONNX LFS asset') && deployWorkflowText.includes('Check built ONNX asset') && deployWorkflowText.includes('version https://git-lfs'), 'GitHub Pages workflow rejects Git LFS pointer files before upload');
 assert(deployWorkflowText.includes('tags:') && deployWorkflowText.includes('v*.*.*') && !deployWorkflowText.includes('branches:'), 'GitHub Pages workflow deploys only from version tags');
@@ -1282,6 +1285,7 @@ ALL_MECHANISM_TYPES.forEach(type => {
   assert.equal(graph.solver, 'legacy-closed-form', `${type} graph adapter keeps the closed-form fast path`);
   assert(graph.nodes.length > 0, `${type} graph adapter emits at least a diagnostic node`);
 });
+assert.deepEqual([...MECHANISM_GRAPH_ADAPTER_TYPES].sort(), [...previewReadyTypes].sort(), 'graph adapter registry covers the current preview-ready mechanism set without a stage-local switch');
 (['crank', 'yoke', 'quick-return', '5bar', '6bar', 'rack-pinion'] as const).forEach(type => {
   assert(mechanismGraphForMechanism(createDefaultMechanism(type, `graph-diagnostic-${type}`)).diagnostics.length > 0, `${type} graph adapter reports diagnostic-only compiler coverage`);
 });
@@ -1324,6 +1328,26 @@ previewReadyTypes.forEach(type => {
   assert.equal(sceneContract.compilerSource, 'compileMechanismGraphSidecar', `${type} scene contract records the graph sidecar compiler source`);
   assert.equal(sceneContract.graphCompiler.graphId, compiled.graph.id, `${type} scene contract exposes graph metadata without replacing fabrication layers`);
 });
+previewReadyTypes.forEach(type => {
+  const graph = mechanismGraphForMechanism(mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism(type, `graph-node-integrity-${type}`))));
+  const nodeIds = new Set(graph.nodes.map(node => node.id));
+  graph.constraints.forEach(constraint => {
+    constraint.nodes.forEach(nodeId => assert(nodeIds.has(nodeId), `${type} graph constraint ${constraint.id} references existing node ${nodeId}`));
+  });
+  graph.drivers.forEach(driver => assert(nodeIds.has(driver.nodeId), `${type} graph driver ${driver.id} references existing node ${driver.nodeId}`));
+});
+{
+  const mechanism = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism('4bar', 'custom-compile-inputs')));
+  const angles = [0, 0.25, 1.5];
+  const compiled = compileMechanismGraphSidecar(mechanism, angles, 12);
+  const summary = summarizeCompiledMechanism(compiled);
+  assert.deepEqual(compiled.motionSamples.map(sample => sample.angle), angles, 'graph sidecar preserves requested sample angles');
+  assert.deepEqual(compiled.feasibleRange, sampleFeasibleRange(mechanism, 12), 'graph sidecar honors requested feasible sample count');
+  assert.equal(summary.nodeCount, compiled.graph.nodes.length, 'compiler summary reports node count');
+  assert.equal(summary.constraintCount, compiled.graph.constraints.length, 'compiler summary reports constraint count');
+  assert.equal(summary.motionSampleCount, compiled.motionSamples.length, 'compiler summary reports motion sample count');
+  assert.equal(summary.feasiblePercentValid, compiled.feasibleRange.percentValid, 'compiler summary reports feasible percentage');
+}
 (['4bar', 'gear'] as const).forEach(type => {
   assert.equal(mechanismGraphForMechanism(createDefaultMechanism(type, `graph-first-target-${type}`)).family.firstCompilerTarget, true, `${type} remains an initial graph compiler target`);
 });
@@ -1352,7 +1376,25 @@ assert(mechanismGraphForMechanism(createDefaultMechanism('planetary_gear', 'grap
   const outputGear = graph.nodes.find(node => node.id === `gear-${gearCenters.length - 1}`);
   assertPointClose(outputGear?.position, gearCenters[gearCenters.length - 1], 'gear-linkage graph preserves the normalized output gear center');
   assertPointClose(outputGear?.position, calculateLinkage(mechanism, 0).p2, 'gear-linkage graph output gear center matches the closed-form output pivot');
+  assert.equal(graph.constraints.filter(constraint => constraint.role === 'gear-mesh').length, 0, 'separated gear-linkage endpoint gears do not claim physical mesh without inserted idlers');
 }
+[
+  normalizeMechanismToReference(createDefaultMechanism('gear', 'graph-mesh-physical-gear')),
+  normalizeGearLinkageToReference({
+    ...createDefaultMechanism('gear_linkage', 'graph-mesh-physical-gear-linkage-idler'),
+    crankLength: gearSceneRadiusByKey('g24'),
+    rockerLength: gearSceneRadiusByKey('g24'),
+    gearTrainRadii: [gearSceneRadiusByKey('g24'), gearSceneRadiusByKey('g8'), gearSceneRadiusByKey('g24')]
+  })
+].forEach(mechanism => {
+  const graph = mechanismGraphForMechanism(mechanism);
+  graph.constraints.filter(constraint => constraint.role === 'gear-mesh').forEach(mesh => {
+    const [a, b] = mesh.nodes.map(id => graph.nodes.find(node => node.id === id));
+    assert(a?.position && b?.position, `${mechanism.id} mesh nodes have positions`);
+    assert.equal(mesh.value, (a.value ?? 0) + (b.value ?? 0), `${mechanism.id} mesh value equals summed pitch radii`);
+    assert(closeEnough(Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y), mesh.value ?? 0), `${mechanism.id} mesh center distance equals pitch contact`);
+  });
+});
 {
   const camProfileSamples = [1, 1.25, 0.85, 1.1];
   const graph = mechanismGraphForMechanism({ ...createDefaultMechanism('cam', 'graph-cam-profile'), camProfileSamples });
@@ -1453,6 +1495,61 @@ ALL_MECHANISM_TYPES.forEach(type => {
   const unsafeProfile = [0.35, 1.65, 0.35, 1.65];
   assert(!safeMechanismUpdate(cam, { camProfileSamples: unsafeProfile }), 'runtime authority detects steep cam profiles before they enter preview state');
   assert.equal(constrainMechanismUpdate(cam, { camProfileSamples: unsafeProfile }).camProfileSamples, undefined, 'central runtime authority drops unsafe cam profile edits');
+}
+
+{
+  const fourbar = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism('4bar', 'safe-type-replacement')));
+  const unsafeTypeReplacement = { ...fourbar, type: 'rack-pinion' as const };
+  assert(mechanismUpdateRequiresReplacement({ type: 'rack-pinion' }), 'mechanism type changes are replacement-only, not metadata edits');
+  assert.equal(safeMechanismUpdate(fourbar, { type: 'rack-pinion' }), false, 'type-only partial updates cannot bypass feasible-edit authority');
+  assert.deepEqual(constrainMechanismUpdate(fourbar, { type: 'rack-pinion' }), {}, 'central runtime authority drops partial type edits');
+  assert.equal(constrainMechanismCommit(fourbar, unsafeTypeReplacement).type, '4bar', 'existing mechanism commits reject unsafe structural type replacement');
+}
+{
+  const fourbar = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism('4bar', 'mixed-safe-metadata')));
+  const constrained = constrainMechanismUpdate(fourbar, {
+    groundLength: 9999,
+    color: '#ff00aa',
+    visible: false,
+  });
+  assert.equal(constrained.groundLength, undefined, 'unsafe geometry is rejected while constraining mixed updates');
+  assert.equal(constrained.color, '#ff00aa', 'safe color metadata survives rejected geometry');
+  assert.equal(constrained.visible, false, 'safe visibility metadata survives rejected geometry');
+}
+{
+  const gear = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism('gear', 'safe-structured-gear')));
+  const safeStructured = { gearTrainRadii: gear.gearTrainRadii };
+  assert.deepEqual(constrainMechanismUpdate(gear, safeStructured).gearTrainRadii, gear.gearTrainRadii, 'safe structured gear-train edits are preserved explicitly');
+  assert.equal(constrainMechanismUpdate(gear, { gearTrainRadii: [9999, 1] }).gearTrainRadii, undefined, 'unsafe structured gear-train edits are dropped explicitly');
+}
+
+{
+  const mechanismTypeSource = readFileSync(join(process.cwd(), 'types.ts'), 'utf8');
+  const mechanismConfigBody = /export interface MechanismConfig \{([\s\S]*?)\n\}/.exec(mechanismTypeSource)?.[1] ?? '';
+  const mechanismConfigKeys = [...mechanismConfigBody.matchAll(/^    ([A-Za-z]\w*)\??:/gm)].map(match => match[1]).sort();
+  const feasibilityKeys = [...MECHANISM_FEASIBILITY_AUTHORITY_KEYS].map(String).sort();
+  const nonFeasibilityKeys = [...MECHANISM_NON_FEASIBILITY_EDIT_KEYS].map(String).sort();
+  const replacementKeys = [...MECHANISM_REPLACEMENT_ONLY_KEYS].map(String).sort();
+  assert.deepEqual(feasibilityKeys.filter(key => nonFeasibilityKeys.includes(key) || replacementKeys.includes(key)), [], 'mechanism edit authority does not double-classify feasibility fields');
+  assert.deepEqual(nonFeasibilityKeys.filter(key => replacementKeys.includes(key)), [], 'mechanism edit authority keeps replacement-only fields out of metadata');
+  assert.deepEqual([...new Set([...feasibilityKeys, ...nonFeasibilityKeys, ...replacementKeys])].sort(), mechanismConfigKeys, 'every MechanismConfig field is classified as feasibility-gated, metadata/binding-only, or replacement-only');
+}
+
+{
+  const jammyFourbar = mechanismWithGeneratedPath({
+    ...normalizeMechanismToReference(createDefaultMechanism('4bar', 'render-locked-options')),
+    groundLength: 300,
+    crankLength: 10,
+    couplerLength: 10,
+    rockerLength: 10,
+  });
+  const html = renderToString(createElement(MechanismParametricEditor, {
+    mechanism: jammyFourbar,
+    onChange: () => undefined,
+  }));
+  assert(html.includes('data-testid="mechanism-motion-option-locks"'), 'parametric editor renders locked-option warning for jam-prone choices');
+  assert(html.includes('data-motion-safe="false"'), 'parametric editor marks unsafe choices in rendered options');
+  assert(html.includes('disabled=""'), 'parametric editor disables unsafe non-current choices');
 }
 
 ALL_MECHANISM_TYPES.forEach(type => {
@@ -1669,7 +1766,7 @@ assert.deepEqual(
     project: 'c4318bde0f86a2b08dabcea7351b605eb307eaf583319ac140145dc1a90e4bfa',
     lesson: '93beeb83933e1622f6ab29c765c88360adf1271f7f5fbd9c38f1e88d2f05e7fc',
     mechanismSnapshot: 'b22d0c70ee62c4f17dc7d54f4a43de89c031ffeaacc420b9b8404314c7942303',
-    allMechanismSnapshots: '0efaa9aea31df333ebe03a30b107337422f8b30cf9691f8d064b501a91c59e95',
+    allMechanismSnapshots: '73a8316cb878cfff9cfc039ba85e4932bfa751b819528d816b7ec07d059c717a',
     sceneProjection: '64b01ae59502ee6a8f04bdad651418565e1fb1e9593d7a6178cea04425dd1605',
     svg: '943626770ae697a566ce73edfcf282215c4e55f82e77575d7df7393eeb1eb5d3',
     dxf: 'dc52ca1acfa24ad70ae9028c58ad48a6c64fb5a8dcebf9fe4db2562d2d8aa336',
@@ -2980,7 +3077,7 @@ const foundryThreeRenderLayersText = readFileSync(join(process.cwd(), 'component
 const foundryAssemblySceneOverlayText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryAssemblySceneOverlay.ts'), 'utf8');
 const threeResourceKitText = readFileSync(join(process.cwd(), 'utils', 'threeResourceKit.ts'), 'utf8');
 const foundryRenderInventoryText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryRenderInventory.ts'), 'utf8');
-const foundryPreviewStacksText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'foundryPreviewStacks.ts'), 'utf8');
+const foundryPreviewStacksText = readFileSync(join(process.cwd(), 'utils', 'mechanismPreviewStacks.ts'), 'utf8');
 const mechanismFoundryText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'MechanismFoundry.tsx'), 'utf8');
 const foundryCanvasPaneText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'FoundryCanvasPane.tsx'), 'utf8');
 const foundryCanvasChromeText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'FoundryCanvasChrome.tsx'), 'utf8');

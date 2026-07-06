@@ -23,6 +23,7 @@ import { primaryFoundryPlaybackPath } from './foundryPlayback';
 import { clampNumber, finiteNumber, sanitizeHexColor, sanitizeMechanismType, sanitizePoint } from './sanitize';
 import { isUsableContourPoints } from './partGeometry';
 import { DEFAULT_CLASSROOM_ASSESSMENT_KEY, normalizeClassroomAssessmentKey } from './classroomContent';
+import { constrainMechanismCommit } from './mechanismEditAuthority';
 
 export const APP_STATE_VERSION = 1;
 
@@ -1350,9 +1351,10 @@ export const applyProjectAction = (project: ProjectState, action: ProjectAction)
             return touch({ ...project, mechanisms: action.mechanisms.map(m => reconcileMechanismTargets(m, project.parts, project.paths, project.sceneObjects, { preserveGeneratedPath: preserveGeneratedPathFor(m) }, project.skeleton)), selectedMechanismId: action.selectedMechanismId ?? project.selectedMechanismId });
         case 'upsert_mechanism': {
             const mechanism = reconcileMechanismTargets(action.mechanism, project.parts, project.paths, project.sceneObjects, { preserveGeneratedPath: preserveGeneratedPathFor(action.mechanism) }, project.skeleton);
-            const exists = project.mechanisms.some(m => m.id === mechanism.id);
-            const mechanisms = exists ? project.mechanisms.map(m => m.id === mechanism.id ? mechanism : m) : [...project.mechanisms, mechanism];
-            return touch({ ...project, mechanisms, selectedMechanismId: mechanism.id });
+            const previous = project.mechanisms.find(m => m.id === mechanism.id);
+            const accepted = constrainMechanismCommit(previous, mechanism);
+            const mechanisms = previous ? project.mechanisms.map(m => m.id === accepted.id ? accepted : m) : [...project.mechanisms, accepted];
+            return touch({ ...project, mechanisms, selectedMechanismId: accepted.id });
         }
         case 'delete_mechanism':
             return touch({ ...project, mechanisms: project.mechanisms.filter(m => m.id !== action.mechanismId), selectedMechanismId: project.selectedMechanismId === action.mechanismId ? undefined : project.selectedMechanismId });

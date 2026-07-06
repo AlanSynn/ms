@@ -116,7 +116,7 @@ As of the 2026-07-05 Foundry-primitive pass:
 - Assembly mechanism steps consume the same automata scene model and pass character/object context into the Foundry renderer for connect/test phases.
 - Character art/pin assembly now also enters through `ThreeFoundryPreview` when an active mechanism exists; no character Assembly path may render private Puppet mechanism geometry.
 
-Foundry itself still has temporary stage-local renderer branches for mechanism-type presentation glue in `ThreeFoundryPreview` and `foundryPreviewStacks`; those branches must migrate toward shared helpers/contracts when they encode pin, z, stack, or primitive semantics. No new Design or Assembly code may invent private mechanism stack, z, pin, or fabrication rules.
+Foundry still has temporary renderer branches in `ThreeFoundryPreview`; pin/z stack semantics now live in shared `utils/mechanismPreviewStacks.ts`, and remaining type branches must migrate toward compiler-emitted contracts when they encode primitive semantics. No new Design or Assembly code may invent private mechanism stack, z, pin, or fabrication rules.
 
 ## Remaining Assembly shared-preview risks
 

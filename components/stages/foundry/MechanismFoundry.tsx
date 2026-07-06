@@ -9,7 +9,7 @@ import {
   foundryPinStacks,
   foundryRenderedLayerZForMechanism,
   isMovingRenderKind,
-} from "./foundryPreviewStacks";
+} from "../../../utils/mechanismPreviewStacks";
 import {
   clampMechanismParam,
   motionSafeParamRange,

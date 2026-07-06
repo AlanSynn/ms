@@ -46,6 +46,9 @@ jobs:
           VERSION="$(bun -p "require('./package.json').version")"
           test "v${VERSION}" = "${GITHUB_REF_NAME}"
 
+      - name: Test contracts
+        run: bun run test
+
       - name: Build
         env:
           VITE_BASE_PATH: /ms/

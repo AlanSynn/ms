@@ -1,5 +1,13 @@
 import type { MechanismConfig, MechanismType } from '../types';
-import { sampleFeasibleRange } from './fabrication';
+import {
+  closePhysicalValue,
+  closeToBoardPitch,
+  closeToFabricationLinkage,
+  physicalTolerance,
+  sampleFeasibleRange,
+} from './fabricationReadiness';
+import { FABRICATION_LINKAGE_ROLE_MIN_HOLES, planetaryRingPitchRadius } from './fabricationSizing';
+import { gearTrainPitchCenterDistance, gearTrainPitchRadii, gearTrainResolvedCenterDistance } from './kinematics';
 
 export type MechanismParamMeta = {
   key: keyof MechanismConfig;
@@ -78,8 +86,74 @@ const MOTION_AUTHORITY_SAMPLES = 48;
 export const mechanismMotionCompletes = (mechanism: MechanismConfig) =>
   sampleFeasibleRange(mechanism, MOTION_SAFE_PARAM_SAMPLES).warning === null;
 
+const gearTrainRadiiShapeIsBuildable = (mechanism: MechanismConfig) => {
+  if (mechanism.type !== 'gear' && mechanism.type !== 'gear_linkage') return true;
+  if (!Array.isArray(mechanism.gearTrainRadii)) return false;
+  if (mechanism.gearTrainRadii.length < 2 || mechanism.gearTrainRadii.length > 8) return false;
+  if (!mechanism.gearTrainRadii.every(value => Number.isFinite(value) && Math.abs(value) >= 1)) return false;
+  const first = Math.abs(mechanism.gearTrainRadii[0]);
+  const last = Math.abs(mechanism.gearTrainRadii.at(-1) ?? first);
+  return closePhysicalValue(first, Math.abs(mechanism.crankLength)) && closePhysicalValue(last, Math.abs(mechanism.rockerLength));
+};
+
+const mechanismDimensionsAreBuildable = (mechanism: MechanismConfig) => {
+  const physicalNumbers = [
+    mechanism.crankLength,
+    mechanism.couplerLength,
+    mechanism.groundLength,
+    mechanism.rockerLength,
+    mechanism.sliderOffset,
+    mechanism.couplerPointDist,
+    mechanism.couplerPointAngle,
+  ];
+  if (mechanism.type === '5bar' || mechanism.type === '6bar' || mechanism.type === 'piston') {
+    physicalNumbers.push(mechanism.rodLength ?? Number.NaN);
+  }
+  if (mechanism.type === 'gear' || mechanism.type === 'gear_linkage' || mechanism.type === 'planetary_gear') {
+    physicalNumbers.push(mechanism.gearRatio ?? Number.NaN, mechanism.speed2 ?? Number.NaN);
+  }
+  if (!physicalNumbers.every(Number.isFinite)) return false;
+  if ((mechanism.type === 'gear' || mechanism.type === 'gear_linkage' || mechanism.type === 'planetary_gear') && (mechanism.gearRatio ?? 0) === 0) {
+    return false;
+  }
+  if (mechanism.type === '4bar') {
+    return (
+      closeToBoardPitch(mechanism.groundLength) &&
+      closeToFabricationLinkage(mechanism.crankLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.driver) &&
+      closeToFabricationLinkage(mechanism.couplerLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.coupler) &&
+      closeToFabricationLinkage(mechanism.rockerLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.output)
+    );
+  }
+  if (mechanism.type === 'gear') {
+    if (!gearTrainRadiiShapeIsBuildable(mechanism)) return false;
+    const pitchSpan = gearTrainPitchCenterDistance(mechanism);
+    const resolvedSpan = gearTrainResolvedCenterDistance(mechanism);
+    return closePhysicalValue(Math.abs(mechanism.groundLength), pitchSpan) && closePhysicalValue(resolvedSpan, pitchSpan);
+  }
+  if (mechanism.type === 'gear_linkage') {
+    if (!gearTrainRadiiShapeIsBuildable(mechanism)) return false;
+    const radii = gearTrainPitchRadii(mechanism);
+    const pitchSpan = gearTrainPitchCenterDistance(mechanism);
+    const resolvedSpan = gearTrainResolvedCenterDistance(mechanism);
+    const actualGround = Math.abs(mechanism.groundLength);
+    if (radii.length > 2) {
+      return closePhysicalValue(actualGround, pitchSpan) && closePhysicalValue(resolvedSpan, pitchSpan);
+    }
+    return actualGround > pitchSpan + physicalTolerance(pitchSpan) && closePhysicalValue(actualGround, resolvedSpan);
+  }
+  if (mechanism.type === 'planetary_gear') {
+    const expectedCarrier = Math.abs(mechanism.crankLength) + Math.abs(mechanism.rockerLength);
+    const expectedRing = Math.abs(mechanism.crankLength) + Math.abs(mechanism.rockerLength) * 2;
+    return (
+      closePhysicalValue(Math.abs(mechanism.groundLength), expectedCarrier) &&
+      closePhysicalValue(planetaryRingPitchRadius(mechanism), expectedRing)
+    );
+  }
+  return true;
+};
+
 export const mechanismEditIsSafe = (mechanism: MechanismConfig) =>
-  sampleFeasibleRange(mechanism, MOTION_AUTHORITY_SAMPLES).warning === null;
+  sampleFeasibleRange(mechanism, MOTION_AUTHORITY_SAMPLES).warning === null && mechanismDimensionsAreBuildable(mechanism);
 
 export const motionSafeParamRange = (mechanism: MechanismConfig, key: keyof MechanismConfig) => {
   const param = MECHANISM_PARAM_META.find(item => item.key === key);
@@ -120,7 +194,10 @@ export const clampMechanismParamForMotion = (
   return mechanismEditIsSafe({ ...mechanism, [key]: bounded }) ? bounded : Number(mechanism[key] ?? 0);
 };
 
-const motionAuthorityKeys = new Set<keyof MechanismConfig>([
+export const MECHANISM_FEASIBILITY_AUTHORITY_KEYS = [
+  'anchorX',
+  'anchorY',
+  'groundAngle',
   'crankLength',
   'groundLength',
   'couplerLength',
@@ -139,27 +216,65 @@ const motionAuthorityKeys = new Set<keyof MechanismConfig>([
   'phase',
   'outputGearRadius',
   'showOutputGear',
-]);
+] as const satisfies readonly (keyof MechanismConfig)[];
+
+export const MECHANISM_REPLACEMENT_ONLY_KEYS = [
+  'type',
+] as const satisfies readonly (keyof MechanismConfig)[];
+
+export const MECHANISM_NON_FEASIBILITY_EDIT_KEYS = [
+  'id',
+  'visible',
+  'enabled',
+  'color',
+  'driverGroupId',
+  'transform',
+  'sceneAnchor',
+  'activeVisualPartIds',
+  'fabricationMetadata',
+  'foundryExport',
+  'targetPartId',
+  'targetSceneObjectId',
+  'targetPathId',
+  'targetAnchorJointId',
+  'presetId',
+  'recommendation',
+  'source',
+  'generatedPath',
+  'warnings',
+] as const satisfies readonly (keyof MechanismConfig)[];
+
+const motionAuthorityKeys = new Set<keyof MechanismConfig>(MECHANISM_FEASIBILITY_AUTHORITY_KEYS);
+const replacementOnlyKeys = new Set<keyof MechanismConfig>(MECHANISM_REPLACEMENT_ONLY_KEYS);
 
 export const mechanismUpdateChangesMotion = (updates: Partial<MechanismConfig>) =>
   Object.keys(updates).some(key => motionAuthorityKeys.has(key as keyof MechanismConfig));
+
+export const mechanismUpdateRequiresReplacement = (updates: Partial<MechanismConfig>) =>
+  Object.keys(updates).some(key => replacementOnlyKeys.has(key as keyof MechanismConfig));
 
 const isFiniteScalarParam = (key: keyof MechanismConfig, value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && MECHANISM_PARAM_META.some(param => param.key === key);
 
 export const safeMechanismUpdate = (mechanism: MechanismConfig, updates: Partial<MechanismConfig>) =>
-  !mechanismUpdateChangesMotion(updates) || mechanismEditIsSafe({ ...mechanism, ...updates });
+  !mechanismUpdateRequiresReplacement(updates) &&
+  (!mechanismUpdateChangesMotion(updates) || mechanismEditIsSafe({ ...mechanism, ...updates }));
 
 export const constrainMechanismUpdate = (
   mechanism: MechanismConfig,
   updates: Partial<MechanismConfig>,
 ): Partial<MechanismConfig> => {
-  if (!mechanismUpdateChangesMotion(updates)) return updates;
+  if (!mechanismUpdateRequiresReplacement(updates) && !mechanismUpdateChangesMotion(updates)) return updates;
   if (safeMechanismUpdate(mechanism, updates)) return updates;
 
   const constrained: Partial<MechanismConfig> = {};
   (Object.entries(updates) as Array<[keyof MechanismConfig, unknown]>).forEach(([key, value]) => {
+    if (replacementOnlyKeys.has(key)) return;
     if (!motionAuthorityKeys.has(key)) {
+      (constrained as Record<keyof MechanismConfig, unknown>)[key] = value;
+      return;
+    }
+    if (mechanismEditIsSafe({ ...mechanism, ...constrained, [key]: value })) {
       (constrained as Record<keyof MechanismConfig, unknown>)[key] = value;
       return;
     }
@@ -170,4 +285,14 @@ export const constrainMechanismUpdate = (
     }
   });
   return constrained;
+};
+
+export const constrainMechanismCommit = (
+  previous: MechanismConfig | undefined,
+  next: MechanismConfig,
+): MechanismConfig => {
+  if (!previous || previous.id !== next.id) return next;
+  if (previous.type !== next.type) return mechanismEditIsSafe(next) ? next : previous;
+  const { id: _id, type: _type, ...updates } = next;
+  return { ...previous, ...constrainMechanismUpdate(previous, updates) };
 };

@@ -15,7 +15,7 @@ import {
   foundrySpacerTouchesPin,
   type FoundryPinStack,
   type FoundryPinStackPoint,
-} from "./foundryPreviewStacks";
+} from "../../../utils/mechanismPreviewStacks";
 import type { FoundryThreePrimitiveFactory } from "./foundryThreePrimitives";
 import {
   foundryAssemblyLayerState,

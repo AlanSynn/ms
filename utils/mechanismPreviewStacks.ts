@@ -1,45 +1,136 @@
-import type { MechanismType, Point } from "../../../types";
-import type { calculateLinkage } from "../../../utils/kinematics";
+import type { MechanismType, Point } from "../types";
+import type { calculateLinkage } from "./kinematics";
 import {
   FABRICATION_RENDER_LAYER_Z_STEP,
   FABRICATION_RENDER_MIN_CLEARANCE,
   FABRICATION_RENDER_PART_DEPTH,
-} from "../../../utils/fabrication";
+} from "./fabricationRenderPlan";
+
+type LinkageState = ReturnType<typeof calculateLinkage>;
+
+type MechanismPreviewStackPolicy = {
+  pinContract: string;
+  assemblyPins: (state: LinkageState) => Point[];
+  layerGeometryContract?: (
+    label: string,
+    renderKind: string,
+  ) => string | undefined;
+};
+
+const compactPoints = (points: Array<Point | undefined>) =>
+  points.filter(Boolean) as Point[];
+
+const defaultAssemblyPins = (state: LinkageState) =>
+  compactPoints([
+    state.p1,
+    state.p2,
+    state.j1,
+    state.j2,
+    state.aux,
+    state.effector,
+  ]);
+
+const guidedOutputPins = (state: LinkageState) =>
+  compactPoints([state.p1, state.j1, state.j2]);
+
+const MECHANISM_PREVIEW_STACK_POLICIES: Record<
+  MechanismType,
+  MechanismPreviewStackPolicy
+> = {
+  crank: {
+    pinContract: "template-specific-output",
+    assemblyPins: defaultAssemblyPins,
+  },
+  "4bar": {
+    pinContract: "reference-A-B-C-D-only",
+    assemblyPins: (state) =>
+      compactPoints([state.p1, state.j1, state.j2, state.p2]),
+    layerGeometryContract: (label, renderKind) => {
+      if (renderKind !== "linkage") return undefined;
+      if (/input|crank/i.test(label)) return `${label}:A-B`;
+      if (/coupler/i.test(label)) return `${label}:B-C`;
+      if (/output|rocker/i.test(label)) return `${label}:C-D`;
+      return undefined;
+    },
+  },
+  piston: {
+    pinContract: "guided-output-only",
+    assemblyPins: guidedOutputPins,
+  },
+  yoke: {
+    pinContract: "guided-output-only",
+    assemblyPins: guidedOutputPins,
+  },
+  "quick-return": {
+    pinContract: "guided-output-only",
+    assemblyPins: guidedOutputPins,
+  },
+  "5bar": {
+    pinContract: "reference-ground-chain-only",
+    assemblyPins: (state) =>
+      compactPoints([state.p1, state.j1, state.j2, state.aux, state.p2]),
+  },
+  "6bar": {
+    pinContract: "reference-ground-chain-only",
+    assemblyPins: (state) =>
+      compactPoints([state.p1, state.j1, state.j2, state.aux, state.p2]),
+  },
+  cam: {
+    pinContract: "cam-axle-and-follower-center-only",
+    assemblyPins: (state) => compactPoints([state.p1, state.j2]),
+    layerGeometryContract: (label, renderKind) => {
+      if (renderKind === "cam") return `${label}:rotating-cam`;
+      if (renderKind === "follower") return `${label}:guided-follower`;
+      if (renderKind === "guide") return `${label}:fixed-guide`;
+      return undefined;
+    },
+  },
+  "rack-pinion": {
+    pinContract: "guided-output-only",
+    assemblyPins: guidedOutputPins,
+  },
+  gear: {
+    pinContract: "fixed-gear-axles-only",
+    assemblyPins: defaultAssemblyPins,
+    layerGeometryContract: (label, renderKind) =>
+      renderKind === "gear" ? `${label}:fixed-board-gear` : undefined,
+  },
+  gear_linkage: {
+    pinContract: "fixed-gear-axles-plus-two-crank-links",
+    assemblyPins: defaultAssemblyPins,
+    layerGeometryContract: (label, renderKind) => {
+      if (renderKind === "gear") return `${label}:fixed-board-gear`;
+      if (/drive.*L|Drive L|drive.*linkage/i.test(label))
+        return `${label}:B-pin-to-R`;
+      if (/output.*L|Output L|output.*linkage/i.test(label))
+        return `${label}:C-pin-to-R`;
+      if (/L4|linkage/i.test(label)) return `${label}:gear-pin-to-R`;
+      if (/2-hole|bracket/i.test(label)) return `${label}:R-connector`;
+      return undefined;
+    },
+  },
+  planetary_gear: {
+    pinContract: "sun-and-carrier-planet-axles",
+    assemblyPins: (state) => compactPoints([state.p1, state.p2]),
+    layerGeometryContract: (label) => {
+      if (/ring/i.test(label)) return `${label}:fixed-ring`;
+      if (/sun|G1|1-space/i.test(label)) return `${label}:sun-input`;
+      if (/planet|G3|3-space/i.test(label)) return `${label}:planet-on-carrier`;
+      if (/carrier/i.test(label)) return `${label}:sun-planet-carrier`;
+      return undefined;
+    },
+  },
+};
 
 export const foundryLayerGeometryContract = (
   type: MechanismType,
   label: string,
   renderKind: string,
-) => {
-  if (type === "4bar" && renderKind === "linkage") {
-    if (/input|crank/i.test(label)) return `${label}:A-B`;
-    if (/coupler/i.test(label)) return `${label}:B-C`;
-    if (/output|rocker/i.test(label)) return `${label}:C-D`;
-  }
-  if (type === "gear" && renderKind === "gear")
-    return `${label}:fixed-board-gear`;
-  if (type === "gear_linkage") {
-    if (renderKind === "gear") return `${label}:fixed-board-gear`;
-    if (/drive.*L|Drive L|drive.*linkage/i.test(label))
-      return `${label}:B-pin-to-R`;
-    if (/output.*L|Output L|output.*linkage/i.test(label))
-      return `${label}:C-pin-to-R`;
-    if (/L4|linkage/i.test(label)) return `${label}:gear-pin-to-R`;
-    if (/2-hole|bracket/i.test(label)) return `${label}:R-connector`;
-  }
-  if (type === "planetary_gear") {
-    if (/ring/i.test(label)) return `${label}:fixed-ring`;
-    if (/sun|G1|1-space/i.test(label)) return `${label}:sun-input`;
-    if (/planet|G3|3-space/i.test(label)) return `${label}:planet-on-carrier`;
-    if (/carrier/i.test(label)) return `${label}:sun-planet-carrier`;
-  }
-  if (type === "cam") {
-    if (renderKind === "cam") return `${label}:rotating-cam`;
-    if (renderKind === "follower") return `${label}:guided-follower`;
-    if (renderKind === "guide") return `${label}:fixed-guide`;
-  }
-  return `${label}:${renderKind}`;
-};
+) =>
+  MECHANISM_PREVIEW_STACK_POLICIES[type].layerGeometryContract?.(
+    label,
+    renderKind,
+  ) ?? `${label}:${renderKind}`;
 
 export type FoundryRenderLayerLike = { label: string; renderKind: string };
 
@@ -91,48 +182,11 @@ export const foundryRenderedLayerZForMechanism = (
 
 export const foundryAssemblyPinPoints = (
   type: MechanismType,
-  state: ReturnType<typeof calculateLinkage>,
-): Point[] => {
-  const compact = (points: Array<Point | undefined>) =>
-    points.filter(Boolean) as Point[];
-  if (type === "4bar") return compact([state.p1, state.j1, state.j2, state.p2]);
-  if (type === "5bar" || type === "6bar")
-    return compact([state.p1, state.j1, state.j2, state.aux, state.p2]);
-  if (type === "cam") return compact([state.p1, state.j2]);
-  if (
-    type === "piston" ||
-    type === "rack-pinion" ||
-    type === "yoke" ||
-    type === "quick-return"
-  )
-    return compact([state.p1, state.j1, state.j2]);
-  if (type === "planetary_gear") return compact([state.p1, state.p2]);
-  return compact([
-    state.p1,
-    state.p2,
-    state.j1,
-    state.j2,
-    state.aux,
-    state.effector,
-  ]);
-};
+  state: LinkageState,
+): Point[] => MECHANISM_PREVIEW_STACK_POLICIES[type].assemblyPins(state);
 
-export const foundryAssemblyPinContract = (type: MechanismType) => {
-  if (type === "4bar") return "reference-A-B-C-D-only";
-  if (type === "5bar" || type === "6bar") return "reference-ground-chain-only";
-  if (type === "cam") return "cam-axle-and-follower-center-only";
-  if (
-    type === "piston" ||
-    type === "rack-pinion" ||
-    type === "yoke" ||
-    type === "quick-return"
-  )
-    return "guided-output-only";
-  if (type === "gear") return "fixed-gear-axles-only";
-  if (type === "gear_linkage") return "fixed-gear-axles-plus-two-crank-links";
-  if (type === "planetary_gear") return "sun-and-carrier-planet-axles";
-  return "template-specific-output";
-};
+export const foundryAssemblyPinContract = (type: MechanismType) =>
+  MECHANISM_PREVIEW_STACK_POLICIES[type].pinContract;
 
 export type FoundryPinStackPoint = {
   id: string;

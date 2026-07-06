@@ -390,6 +390,7 @@ export const legacyGearLinkageToMechanismGraph = (mechanism: MechanismConfig): M
     const referencePair = normalizeGearLinkageToReference(mechanism);
     const { radii, gearNodes, boardConstraints, meshConstraints } = gearTrainGraphParts(referencePair);
     const linkLength = Math.max(1, Math.abs(referencePair.couplerLength));
+    const physicalMeshConstraints = radii.length > 2 ? meshConstraints : [];
     return {
         version: MECHANISM_GRAPH_IR_VERSION,
         id: `${mechanism.id}:graph`,
@@ -411,8 +412,8 @@ export const legacyGearLinkageToMechanismGraph = (mechanism: MechanismConfig): M
         ],
         constraints: [
             ...boardConstraints,
-            ...meshConstraints,
-            { id: 'gear-phase', label: 'Meshed gears keep opposite phase', role: 'phase', nodes: gearNodes.map(node => node.id), value: gearTrainOutputRatio(radii) },
+            ...physicalMeshConstraints,
+            { id: 'gear-phase', label: radii.length > 2 ? 'Meshed gears keep opposite phase' : 'Endpoint cranks keep selected timing', role: 'phase', nodes: gearNodes.map(node => node.id), value: gearTrainOutputRatio(radii) },
             outputOffset('drive-crank-offset', 'Drive link rides on drive gear', ['gear-0', 'drive-pin'], referencePair.couplerPointDist, referencePair.couplerPointAngle),
             outputOffset('output-crank-offset', 'Output link rides on output gear', ['gear-' + Math.max(0, radii.length - 1), 'output-pin'], referencePair.couplerPointDist, referencePair.couplerPointAngle),
             { id: 'drive-connector-length', label: 'Drive linkage length', role: 'distance', nodes: ['drive-pin', 'effector'], value: linkLength },
@@ -485,14 +486,22 @@ const unsupportedLegacyMechanismGraph = (mechanism: MechanismConfig): MechanismG
     }]
 });
 
+type MechanismGraphAdapter = (mechanism: MechanismConfig) => MechanismGraph;
+
+export const MECHANISM_GRAPH_ADAPTERS = Object.freeze({
+    '4bar': legacyFourBarToMechanismGraph,
+    piston: legacyPistonToMechanismGraph,
+    cam: legacyCamToMechanismGraph,
+    gear: legacyGearToMechanismGraph,
+    gear_linkage: legacyGearLinkageToMechanismGraph,
+    planetary_gear: legacyPlanetaryGearToMechanismGraph
+} satisfies Partial<Record<MechanismType, MechanismGraphAdapter>>);
+
+export const MECHANISM_GRAPH_ADAPTER_TYPES = Object.freeze(Object.keys(MECHANISM_GRAPH_ADAPTERS) as MechanismType[]);
+
 export const mechanismGraphForMechanism = (mechanism: MechanismConfig): MechanismGraph => {
-    if (mechanism.type === '4bar') return legacyFourBarToMechanismGraph(mechanism);
-    if (mechanism.type === 'piston') return legacyPistonToMechanismGraph(mechanism);
-    if (mechanism.type === 'cam') return legacyCamToMechanismGraph(mechanism);
-    if (mechanism.type === 'gear') return legacyGearToMechanismGraph(mechanism);
-    if (mechanism.type === 'gear_linkage') return legacyGearLinkageToMechanismGraph(mechanism);
-    if (mechanism.type === 'planetary_gear') return legacyPlanetaryGearToMechanismGraph(mechanism);
-    return unsupportedLegacyMechanismGraph(mechanism);
+    const adapter = (MECHANISM_GRAPH_ADAPTERS as Partial<Record<MechanismType, MechanismGraphAdapter>>)[mechanism.type];
+    return (adapter ?? unsupportedLegacyMechanismGraph)(mechanism);
 };
 
 export const sampleMechanismGraphMotion = (mechanism: MechanismConfig, angle: number): MechanismGraphMotionSample => ({

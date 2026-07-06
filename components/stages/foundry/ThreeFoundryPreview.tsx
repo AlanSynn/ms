@@ -77,7 +77,7 @@ import {
   foundrySpacerTouchesPin,
   isMovingRenderKind,
   type FoundryPinStackPoint,
-} from "./foundryPreviewStacks";
+} from "../../../utils/mechanismPreviewStacks";
 
 type ThreeFoundryPreviewProps = {
   mechanism: MechanismConfig;

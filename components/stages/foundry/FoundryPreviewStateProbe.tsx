@@ -30,7 +30,7 @@ import {
 import {
   foundryLayerGeometryContract,
   type FoundryPinStackPoint,
-} from "./foundryPreviewStacks";
+} from "../../../utils/mechanismPreviewStacks";
 import type { FoundryAssemblySceneFrame } from "./foundryAssemblySceneOverlay";
 
 type FoundryRenderedInventory = {
