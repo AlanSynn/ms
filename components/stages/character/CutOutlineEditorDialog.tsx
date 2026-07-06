@@ -10,6 +10,22 @@ import {
 } from "../../../utils/cutEditorViewport";
 import { contourPathD } from "../../../utils/partGeometry";
 
+type CutTool = "edit" | "draw" | "pan";
+
+const CUT_DRAW_MIN_DISTANCE = 8;
+const CUT_DRAW_MAX_POINTS = 96;
+
+const cutStrokePathD = (points: Point[]) =>
+  points.length
+    ? `M ${points.map((point) => `${point.x.toFixed(2)} ${(-point.y).toFixed(2)}`).join(" L ")}`
+    : "";
+
+const cutToolHints: Record<CutTool, string> = {
+  edit: "Drag a point, or click where the selected point should go.",
+  draw: "Drag one clean loop around the part.",
+  pan: "Drag canvas. Scroll zoom.",
+};
+
 export const CutOutlineEditorDialog = ({
   part,
   sourceTextureUrl,
@@ -18,6 +34,7 @@ export const CutOutlineEditorDialog = ({
   selectedIndex,
   setSelectedIndex,
   updatePointAt,
+  replacePoints,
   addPoint,
   removePoint,
   onUseAuto,
@@ -32,6 +49,7 @@ export const CutOutlineEditorDialog = ({
   selectedIndex: number;
   setSelectedIndex: (index: number) => void;
   updatePointAt: (index: number, updates: Partial<Point>) => void;
+  replacePoints: (nextPoints: Point[], nextSelectedIndex?: number) => void;
   addPoint: () => void;
   removePoint: () => void;
   onUseAuto: () => void;
@@ -48,7 +66,14 @@ export const CutOutlineEditorDialog = ({
     startViewport: CutViewport;
     moved: boolean;
   } | null>(null);
+  const drawRef = useRef<{
+    pointerId: number;
+    points: Point[];
+    lastPoint: Point;
+  } | null>(null);
+  const [tool, setTool] = useState<CutTool>("edit");
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const [draftPoints, setDraftPoints] = useState<Point[]>([]);
   const [isPanning, setIsPanning] = useState(false);
   const [viewOverride, setViewOverride] = useState<CutViewport | null>(null);
   const fallbackImageFrame = {
@@ -143,11 +168,57 @@ export const CutOutlineEditorDialog = ({
     if (!point) return;
     updatePointAt(index, point);
   };
+  const startPan = (event: React.PointerEvent<SVGSVGElement>) => {
+    panRef.current = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startViewport: viewport,
+      moved: false,
+    };
+    setIsPanning(true);
+    svgRef.current?.setPointerCapture(event.pointerId);
+  };
+  const startDraw = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (part.locked) return;
+    const point = pointFromPointer(event);
+    if (!point) return;
+    drawRef.current = {
+      pointerId: event.pointerId,
+      points: [point],
+      lastPoint: point,
+    };
+    setDraftPoints([point]);
+    setSelectedIndex(0);
+    svgRef.current?.setPointerCapture(event.pointerId);
+  };
+  const appendDrawPoint = (event: React.PointerEvent<SVGSVGElement>) => {
+    const draw = drawRef.current;
+    if (!draw || draw.pointerId !== event.pointerId) return;
+    const point = pointFromPointer(event);
+    if (!point) return;
+    if (draw.points.length >= CUT_DRAW_MAX_POINTS) return;
+    const distance = Math.hypot(point.x - draw.lastPoint.x, point.y - draw.lastPoint.y);
+    if (distance < CUT_DRAW_MIN_DISTANCE) return;
+    draw.points = [...draw.points, point];
+    draw.lastPoint = point;
+    setDraftPoints(draw.points);
+  };
+  const finishDraw = (event: React.PointerEvent<SVGSVGElement>) => {
+    const draw = drawRef.current;
+    if (!draw || draw.pointerId !== event.pointerId) return false;
+    if (draw.points.length >= 3) replacePoints(draw.points, 0);
+    drawRef.current = null;
+    setDraftPoints([]);
+    return true;
+  };
   const stopDrag = (event?: React.PointerEvent<SVGSVGElement>) => {
     if (event && svgRef.current?.hasPointerCapture(event.pointerId))
       svgRef.current.releasePointerCapture(event.pointerId);
     dragIndexRef.current = null;
     panRef.current = null;
+    drawRef.current = null;
+    setDraftPoints([]);
     setIsPanning(false);
     setDraggingIndex(null);
   };
@@ -172,7 +243,7 @@ export const CutOutlineEditorDialog = ({
           <div>
             <div className="section-title">Cut</div>
             <h3 id="cut-outline-title">Edit {part.name}</h3>
-            <p>Drag points. Drag canvas. Scroll zoom.</p>
+            <p>{cutToolHints[tool]}</p>
           </div>
           <button
             type="button"
@@ -186,8 +257,9 @@ export const CutOutlineEditorDialog = ({
         <div className="cut-outline-canvas-wrap">
           <svg
             ref={svgRef}
-            className={`cut-outline-canvas ${isPanning ? "panning" : ""}`}
+            className={`cut-outline-canvas tool-${tool} ${isPanning ? "panning" : ""}`}
             data-testid="cut-outline-canvas"
+            data-cut-tool={tool}
             viewBox={`${viewport.minX} ${viewport.minY} ${viewport.width} ${viewport.height}`}
             role="img"
             aria-label="Cut outline editing canvas"
@@ -197,19 +269,23 @@ export const CutOutlineEditorDialog = ({
               zoomViewAt(event.clientX, event.clientY, wheelFactor(event.deltaY));
             }}
             onPointerDown={(event) => {
+              if (tool === "draw") {
+                startDraw(event);
+                return;
+              }
+              if (tool === "pan") {
+                startPan(event);
+                return;
+              }
               const target = event.target as Element;
-              if (target.closest("[data-cut-point]")) return;
-              panRef.current = {
-                pointerId: event.pointerId,
-                startClientX: event.clientX,
-                startClientY: event.clientY,
-                startViewport: viewport,
-                moved: false,
-              };
-              setIsPanning(true);
+              if (target.closest("[data-cut-point]") || part.locked || !points.length) return;
+              dragIndexRef.current = selectedIndex;
+              setDraggingIndex(selectedIndex);
+              movePointFromPointer(event, selectedIndex);
               svgRef.current?.setPointerCapture(event.pointerId);
             }}
             onPointerMove={(event) => {
+              appendDrawPoint(event);
               const index = dragIndexRef.current;
               if (index !== null) {
                 movePointFromPointer(event, index);
@@ -224,10 +300,7 @@ export const CutOutlineEditorDialog = ({
               panViewBy(deltaX, deltaY, pan.startViewport);
             }}
             onPointerUp={(event) => {
-              const pan = panRef.current;
-              if (pan && pan.pointerId === event.pointerId && !pan.moved) {
-                movePointFromPointer(event);
-              }
+              finishDraw(event);
               stopDrag(event);
             }}
             onPointerCancel={stopDrag}
@@ -295,6 +368,9 @@ export const CutOutlineEditorDialog = ({
           {points.length >= 3 && (
             <path className="cut-outline-user" d={contourPathD(points, true)} />
           )}
+          {draftPoints.length >= 2 && (
+            <path className="cut-outline-draft" d={cutStrokePathD(draftPoints)} />
+          )}
             {points.map((point, index) => {
               const isActive = index === selectedIndex;
               const isNeighbor =
@@ -307,6 +383,7 @@ export const CutOutlineEditorDialog = ({
                   data-cut-point="true"
                   className={`cut-outline-point-group ${isActive ? "active" : ""} ${isNeighbor ? "neighbor" : ""} ${draggingIndex === index ? "dragging" : ""}`}
                   onPointerDown={(event) => {
+                    if (tool !== "edit") return;
                     event.stopPropagation();
                     setSelectedIndex(index);
                     dragIndexRef.current = index;
@@ -360,11 +437,36 @@ export const CutOutlineEditorDialog = ({
           </div>
         </div>
         <div className="cut-outline-tools">
-          <div
-            className="cut-outline-point-readout"
-            data-testid="part-cut-point-readout"
-          >
-            Handle {points.length ? selectedIndex + 1 : 0}/{points.length}
+          <div className="cut-outline-mode-panel">
+            <div className="cut-outline-mode-buttons" aria-label="Cut tools">
+              {([
+                ["edit", "Edit points"],
+                ["draw", "Draw cut"],
+                ["pan", "Pan"],
+              ] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  data-testid={`cut-tool-${id}`}
+                  className={`btn-secondary ${tool === id ? "active" : ""}`}
+                  aria-pressed={tool === id}
+                  onClick={() => setTool(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="cut-outline-tool-meta">
+              <span
+                className="cut-outline-point-readout"
+                data-testid="part-cut-point-readout"
+              >
+                Handle {points.length ? selectedIndex + 1 : 0}/{points.length}
+              </span>
+              <span className="cut-outline-tool-hint" data-testid="cut-tool-hint">
+                {cutToolHints[tool]}
+              </span>
+            </div>
           </div>
           <div className="cut-outline-actions">
             <button

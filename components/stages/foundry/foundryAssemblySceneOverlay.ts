@@ -216,7 +216,7 @@ export const renderFoundryAssemblySceneOverlay = ({
   pathLayerZ,
   pathPoints,
 }: FoundryAssemblySceneOverlayOptions) => {
-  if (!frame || frame.kind !== "mechanism") return;
+  if (!frame) return;
 
   const overlay = new THREE.Group();
   overlay.name = "assembly-scene-contract-overlay";
@@ -234,12 +234,18 @@ export const renderFoundryAssemblySceneOverlay = ({
 
   const zTop = Math.max(pinTopZ + 0.2, pathLayerZ + 0.1);
   const zBottom = Math.min(pinBottomZ - 0.08, 0);
-  const activePoints = frame.activeBoardCoords
-    .map((coord) => boardCoordToPreviewPoint(coord, kit, mechanism, simulation))
-    .filter((point): point is Point => Boolean(point));
-  const floatingPoints = frame.floatingReferenceCoords
-    .map((coord) => boardCoordToPreviewPoint(coord, kit, mechanism, simulation))
-    .filter((point): point is Point => Boolean(point));
+  const activePoints =
+    frame.kind === "character"
+      ? (frame.activeScenePoints ?? [])
+      : frame.activeBoardCoords
+          .map((coord) => boardCoordToPreviewPoint(coord, kit, mechanism, simulation))
+          .filter((point): point is Point => Boolean(point));
+  const floatingPoints =
+    frame.kind === "character"
+      ? (frame.floatingReferencePoints ?? [])
+      : frame.floatingReferenceCoords
+          .map((coord) => boardCoordToPreviewPoint(coord, kit, mechanism, simulation))
+          .filter((point): point is Point => Boolean(point));
 
   activePoints.forEach((point) => {
     addMarkerRing(overlay, point, zTop, boardMaterial, 0.34);

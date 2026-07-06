@@ -1,5 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BrainCircuit, FileJson, Sparkles, Upload } from 'lucide-react';
+import type { BodyPartLayer, MechanismConfig, Point, ProjectState } from '../../types';
+import { pathFromPoints, sceneToSvg } from '../../utils/coordinates';
+import { type ClassroomLessonId, createLessonProject } from '../../utils/project';
+import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlinePathD } from '../../utils/partGeometry';
 
 export type StarterImageTemplate = { id: string; label: string; fileName: string; url: string; thumbUrl: string };
 export type GuidedLessonTile = {
@@ -17,6 +21,151 @@ export type GuidedLessonTile = {
         clipSlot?: 'generated-loop' | 'local-asset' | 'optional-url';
     };
 };
+
+
+const sceneDistance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
+
+const transformPartLocalToScene = (part: BodyPartLayer, point: Point): Point => {
+    const angle = (part.transform.rotation * Math.PI) / 180;
+    const scale = part.transform.scale || 1;
+    const x = point.x * scale;
+    const y = point.y * scale;
+    return {
+        x: part.transform.x + x * Math.cos(angle) - y * Math.sin(angle),
+        y: part.transform.y + x * Math.sin(angle) + y * Math.cos(angle)
+    };
+};
+
+const previewViewBox = (points: Point[]) => {
+    const fallback = { x: 210, y: 80, width: 480, height: 520 };
+    if (!points.length) return fallback;
+    const xs = points.map(point => point.x);
+    const ys = points.map(point => point.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const width = Math.max(180, maxX - minX);
+    const height = Math.max(180, maxY - minY);
+    const pad = Math.max(34, Math.min(82, Math.max(width, height) * 0.12));
+    return {
+        x: minX - pad,
+        y: minY - pad,
+        width: width + pad * 2,
+        height: height + pad * 2
+    };
+};
+
+
+const mechanismSceneAnchor = (mechanism: MechanismConfig): Point =>
+    mechanism.sceneAnchor ?? mechanism.transform ?? { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 };
+
+const lessonGearGlyphs = (project: ProjectState | null) => (project?.mechanisms ?? [])
+    .filter(mechanism => mechanism.type === 'gear' || mechanism.type === 'planetary_gear')
+    .map(mechanism => {
+        const anchor = mechanismSceneAnchor(mechanism);
+        const radii = mechanism.gearTrainRadii ?? [38, mechanism.outputGearRadius ?? 38];
+        const r1 = Math.max(24, Math.min(62, radii[0] ?? 38));
+        const r2 = Math.max(24, Math.min(62, radii[1] ?? r1));
+        return {
+            id: mechanism.id,
+            color: mechanism.color || '#7c3aed',
+            c1: sceneToSvg(anchor),
+            c2: sceneToSvg({ x: anchor.x + r1 + r2 + 8, y: anchor.y }),
+            r1,
+            r2
+        };
+    });
+
+const lessonPreviewProject = (lessonId: string): ProjectState | null => {
+    try {
+        return createLessonProject(lessonId as ClassroomLessonId);
+    } catch {
+        return null;
+    }
+};
+
+const GuidedLessonMotionPreview = ({ lessonId, project }: { lessonId: string; project: ProjectState | null }) => {
+    const visibleParts = project?.partOrder
+        .map(id => project.parts[id])
+        .filter((part): part is BodyPartLayer => Boolean(part) && part.visible !== false) ?? [];
+    const selectedPath = project?.selectedPathId ? project.paths[project.selectedPathId] : Object.values(project?.paths ?? {})[0];
+    const generatedPath = !selectedPath ? project?.mechanisms.find(mechanism => mechanism.generatedPath?.length)?.generatedPath : undefined;
+    const tracePoints = selectedPath?.points?.length ? selectedPath.points : generatedPath;
+    const svgPoints: Point[] = [];
+    const focusPoints: Point[] = [];
+    const highlightedPartIds = new Set([selectedPath?.partId, project?.selectedPartId].filter(Boolean));
+    const parts = visibleParts.map(part => {
+        const landmarks = partLandmarkLocalPoints(part, project?.skeleton);
+        const outline = fabricablePartOutlinePoints(part, landmarks);
+        const outlineSvgPoints = outline.map(point => sceneToSvg(transformPartLocalToScene(part, point)));
+        svgPoints.push(...outlineSvgPoints);
+        if (highlightedPartIds.has(part.id)) focusPoints.push(...outlineSvgPoints);
+        return { part, landmarks, outlineD: partOutlinePathD(part, landmarks, { scale: part.transform.scale, flipY: true }) };
+    });
+    const traceSvgPoints = tracePoints?.map(sceneToSvg) ?? [];
+    svgPoints.push(...traceSvgPoints);
+    focusPoints.push(...traceSvgPoints);
+    const gearGlyphs = lessonGearGlyphs(project);
+    for (const glyph of gearGlyphs) {
+        const gearPoints = [
+            { x: glyph.c1.x - glyph.r1, y: glyph.c1.y - glyph.r1 },
+            { x: glyph.c1.x + glyph.r1, y: glyph.c1.y + glyph.r1 },
+            { x: glyph.c2.x - glyph.r2, y: glyph.c2.y - glyph.r2 },
+            { x: glyph.c2.x + glyph.r2, y: glyph.c2.y + glyph.r2 }
+        ];
+        svgPoints.push(...gearPoints);
+        focusPoints.push(...gearPoints);
+    }
+    const box = previewViewBox(focusPoints.length >= 2 ? focusPoints : svgPoints);
+    const traceD = tracePoints?.length ? pathFromPoints(tracePoints, Boolean(selectedPath?.closed), selectedPath?.smoothness ?? 42) : '';
+    const traceLength = tracePoints?.slice(1).reduce((sum, point, index) => sum + sceneDistance(tracePoints[index] ?? point, point), 0) ?? 0;
+    const previewBgId = `guidedPreviewBg-${lessonId}`;
+
+    return <span className="guided-project-preview" data-testid={`guided-project-preview-${lessonId}`} data-preview-mode="rendered-character-motion" aria-hidden="true">
+        <svg viewBox={`${box.x} ${box.y} ${box.width} ${box.height}`} role="img" focusable="false" data-motion-preview="character-path">
+            <defs>
+                <linearGradient id={previewBgId} x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stopColor="#ffffff" />
+                    <stop offset="1" stopColor="#f3efff" />
+                </linearGradient>
+                <filter id={`guidedPreviewSoft-${lessonId}`}>
+                    <feDropShadow dx="0" dy="10" stdDeviation="8" floodOpacity="0.14" />
+                </filter>
+            </defs>
+            <rect x={box.x} y={box.y} width={box.width} height={box.height} rx="30" fill={`url(#${previewBgId})`} />
+            <g filter={`url(#guidedPreviewSoft-${lessonId})`}>
+                {parts.map(({ part, landmarks, outlineD }) => {
+                    const origin = sceneToSvg(part.transform);
+                    const highlighted = highlightedPartIds.has(part.id);
+                    return <g key={part.id} transform={`translate(${origin.x} ${origin.y}) rotate(${-part.transform.rotation})`} opacity={highlighted ? 0.98 : 0.58}>
+                        <path d={outlineD} fill={part.fillColor} stroke={highlighted ? '#7c3aed' : '#475569'} strokeWidth={highlighted ? 3.6 : 1.35} />
+                        {highlighted && landmarks.slice(0, 3).map((point, index) => <circle key={`${part.id}-pin-${index}`} cx={point.x * part.transform.scale} cy={-point.y * part.transform.scale} r={5.2} fill="#ffffff" stroke="#8b5cf6" strokeWidth="2" />)}
+                    </g>;
+                })}
+            </g>
+            {gearGlyphs.map(glyph => <g key={glyph.id} opacity="0.92">
+                <circle cx={glyph.c1.x} cy={glyph.c1.y} r={glyph.r1} fill="#eef2ff" stroke={glyph.color} strokeWidth="5" strokeDasharray="4 6" />
+                <circle cx={glyph.c2.x} cy={glyph.c2.y} r={glyph.r2} fill="#f5f3ff" stroke="#8b5cf6" strokeWidth="5" strokeDasharray="4 6" />
+                <path d={`M ${glyph.c1.x - glyph.r1 * 0.48} ${glyph.c1.y} A ${glyph.r1 * 0.48} ${glyph.r1 * 0.48} 0 1 0 ${glyph.c1.x + glyph.r1 * 0.48} ${glyph.c1.y}`} fill="none" stroke="#475569" strokeWidth="3" strokeLinecap="round" />
+                <path d={`M ${glyph.c2.x + glyph.r2 * 0.48} ${glyph.c2.y} A ${glyph.r2 * 0.48} ${glyph.r2 * 0.48} 0 1 1 ${glyph.c2.x - glyph.r2 * 0.48} ${glyph.c2.y}`} fill="none" stroke="#475569" strokeWidth="3" strokeLinecap="round" />
+            </g>)}
+            {traceD && <g>
+                <path d={traceD} fill="none" stroke="#7c3aed" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" opacity="0.16" />
+                <path d={traceD} fill="none" stroke="#7c3aed" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray={traceLength > 60 ? '10 9' : undefined} />
+                {tracePoints && <circle cx={sceneToSvg(tracePoints[0]).x} cy={sceneToSvg(tracePoints[0]).y} r="6" fill="#7c3aed" />}
+            </g>}
+        </svg>
+    </span>;
+};
+
+const starterCopy = {
+    guide: 'Four ready motion projects with build steps.',
+    humanoid: 'Editable parts and joints, no mechanism yet.',
+    image: 'Cut one picture into movable parts.',
+    package: 'Open a saved character file.',
+    sample: 'Built-in artwork with editable parts.'
+} as const;
 
 export const GettingStartedDialog = ({ starterTemplates, guidedLessons, hideForSession, onLesson, onSample, onStarterImage, onPackage, onProcess, onImport, onHideForSessionChange, onClose }: {
     starterTemplates: StarterImageTemplate[];
@@ -36,6 +185,7 @@ export const GettingStartedDialog = ({ starterTemplates, guidedLessons, hideForS
     const onnxInputRef = useRef<HTMLInputElement>(null);
     const importInputRef = useRef<HTMLInputElement>(null);
     const [showGuided, setShowGuided] = useState(false);
+    const previewProjects = useMemo(() => Object.fromEntries(guidedLessons.map(lesson => [lesson.id, lessonPreviewProject(lesson.id)])), [guidedLessons]);
     useEffect(() => { dialogRef.current?.focus(); }, []);
     const trapDialogFocus = (event: React.KeyboardEvent) => {
         if (event.key === 'Escape') {
@@ -74,7 +224,7 @@ export const GettingStartedDialog = ({ starterTemplates, guidedLessons, hideForS
             </div>
             {showGuided ? <div className="guided-project-library" data-testid="guided-project-library">
                 {guidedLessons.map(lesson => <button key={lesson.id} type="button" className="template-tile primary guided-project-card" data-testid={`guided-project-card-${lesson.id}`} aria-label={`${lesson.actionLabel}: ${lesson.outcome}`} data-change-cue={lesson.changeCue} data-build-cue={lesson.buildCue} data-direct-translation={lesson.sensemaking?.directTranslation ?? ''} data-evidence-cue={lesson.sensemaking?.evidenceCue ?? ''} data-expected-answer={lesson.sensemaking?.expectedAnswer ?? ''} data-clip-slot={lesson.sensemaking?.clipSlot ?? ''} onClick={() => onLesson(lesson.id)}>
-                    <span className="blueprint-pill">{lesson.buildCue}</span>
+                    <GuidedLessonMotionPreview lessonId={lesson.id} project={previewProjects[lesson.id]} />
                     <strong>{lesson.outcome}</strong>
                     <span className="guided-card-cues" aria-hidden="true">
                         <span><em>Change</em> {lesson.changeCue}</span>
@@ -87,23 +237,27 @@ export const GettingStartedDialog = ({ starterTemplates, guidedLessons, hideForS
                     <button type="button" className="template-tile primary" data-testid="getting-started-card-guided" aria-label="Open Guide" onClick={() => setShowGuided(true)}>
                         <span className="template-icon-slot"><Sparkles size={18}/></span>
                         <strong>Guide</strong>
+                        <small>{starterCopy.guide}</small>
                         <b><Sparkles size={16}/> Open</b>
                     </button>
                     <button type="button" className="template-tile primary" data-testid="getting-started-card-humanoid" aria-label="Open starter rig" onClick={onSample}>
                         <span className="template-icon-slot"><Sparkles size={18}/></span>
                         <strong>Starter rig</strong>
+                        <small>{starterCopy.humanoid}</small>
                         <b><Sparkles size={16}/> Start</b>
                     </button>
                     {starterTemplates.map(template => (
                         <button key={template.id} type="button" className="template-tile starter cursor-pointer" data-testid={`getting-started-card-${template.id}`} aria-label={`Start ${template.label} starter`} onClick={() => onStarterImage(template)}>
                             <span className="template-icon-slot"><img className="starter-thumb" src={template.thumbUrl} alt="" /></span>
                             <strong>{template.label}</strong>
+                            <small>{starterCopy.sample}</small>
                             <b><Sparkles size={16}/> Start</b>
                         </button>
                     ))}
                     <button type="button" className="template-tile cursor-pointer" data-testid="getting-started-card-image" aria-label="Choose image" onClick={() => onnxInputRef.current?.click()}>
                         <span className="template-icon-slot"><BrainCircuit size={18}/></span>
                         <strong>Image</strong>
+                        <small>{starterCopy.image}</small>
                         <b><BrainCircuit size={16}/> Choose</b>
                     </button>
                     <input ref={onnxInputRef} data-testid="getting-started-onnx-input" hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={e => {
@@ -114,6 +268,7 @@ export const GettingStartedDialog = ({ starterTemplates, guidedLessons, hideForS
                     <button type="button" className="template-tile cursor-pointer" data-testid="getting-started-card-package" aria-label="Load character file" onClick={() => packageInputRef.current?.click()}>
                         <span className="template-icon-slot"><FileJson size={18}/></span>
                         <strong>Character file</strong>
+                        <small>{starterCopy.package}</small>
                         <b><FileJson size={16}/> Load</b>
                     </button>
                     <input ref={packageInputRef} data-testid="getting-started-package-input" hidden type="file" multiple accept=".json,.yaml,.yml,image/png,image/jpeg,image/webp,image/svg+xml" onChange={e => {

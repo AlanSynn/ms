@@ -234,6 +234,14 @@ export const fabricationRingGearSpecForPitchRadius = (pitchRadiusMm = 70, pitchM
 export const FABRICATION_RING_GEAR_SPEC = fabricationRingGearSpecForPitchRadius();
 
 export const fabricationPartDisplayLabel = (label: string) => {
+    const holeLinkLabel = (_match: string, cellsText: string) => `${Number(cellsText) + 1}-hole link`;
+    const roleHoleLinkLabel = (_match: string, role: string, cellsText: string) => `${role} ${Number(cellsText) + 1}-hole link`;
+    const carrierHoleLinkLabel = (_match: string, cellsText: string) => `Carrier ${Number(cellsText) + 1}-hole link`;
+    const withoutLinkageCodes = label
+        .replace(/\b(Input|Coupler|Output|Drive) L(\d+) linkage\b/g, roleHoleLinkLabel)
+        .replace(/\bL(\d+) carrier linkage\b/g, carrierHoleLinkLabel)
+        .replace(/\bL(\d+) linkage\b/g, holeLinkLabel)
+        .replace(/\bL(\d+)\b/g, holeLinkLabel);
     const replacements: Array<[RegExp, string]> = [
         [/Drive G1 \/ 1-space gear/g, 'Drive gear with 8 teeth'],
         [/Drive G3 \/ 3-space gear/g, 'Drive gear with 24 teeth'],
@@ -257,13 +265,6 @@ export const fabricationPartDisplayLabel = (label: string) => {
         [/\bG3 gear\b/g, '24-tooth gear'],
         [/\bG5 gear\b/g, '40-tooth gear'],
         [/\bG7 gear\b/g, '56-tooth gear'],
-        [/Input L2 linkage/g, 'Input 2-cell linkage (3 holes)'],
-        [/Coupler L4 linkage/g, 'Coupler 4-cell linkage (5 holes)'],
-        [/Output L2 linkage/g, 'Output 2-cell linkage (3 holes)'],
-        [/L2 carrier linkage/g, 'Carrier 2-cell linkage (3 holes)'],
-        [/\bL2 linkage\b/g, '2-cell linkage (3 holes)'],
-        [/\bL4 linkage\b/g, '4-cell linkage (5 holes)'],
-        [/\bL6 linkage\b/g, '6-cell linkage (7 holes)'],
         [/\bone S10 spacer\b/g, 'one 10mm spacer washer'],
         [/\bS10 spacers\b/g, '10mm spacer washers'],
         [/\bS10 spacer\b/g, 'Spacer 10mm OD / 4mm hole'],
@@ -272,12 +273,9 @@ export const fabricationPartDisplayLabel = (label: string) => {
         [/\bG5\b/g, '40-tooth gear'],
         [/\bG7\b/g, '56-tooth gear'],
         [/\bR56\b/g, '56-tooth ring gear'],
-        [/\bL2\b/g, '2-cell link'],
-        [/\bL4\b/g, '4-cell link'],
-        [/\bL6\b/g, '6-cell link'],
         [/\bS10\b/g, '10mm spacer']
     ];
-    return replacements.reduce((text, [pattern, replacement]) => text.replace(pattern, replacement), label);
+    return replacements.reduce((text, [pattern, replacement]) => text.replace(pattern, replacement), withoutLinkageCodes);
 };
 
 export const fabricationBoardCoordinateCallout = (

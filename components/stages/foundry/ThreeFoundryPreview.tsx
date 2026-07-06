@@ -1,9 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type {
+  BodyPartLayer,
   MechanismConfig,
   PhysicalKitSettings,
   Point,
+  ProjectMotionPath,
+  ProjectState,
+  SceneObject,
+  StandardSkeleton,
 } from "../../../types";
 import {
   gearPairOutputRatio,
@@ -13,6 +18,7 @@ import {
   planetaryCarrierOutputRatio,
 } from "../../../utils/kinematics";
 import {
+  FABRICATION_HOLE_RADIUS_MM,
   FABRICATION_RENDER_LAYER_Z_STEP,
   FABRICATION_RENDER_MIN_CLEARANCE,
   FABRICATION_RENDER_PART_DEPTH,
@@ -23,6 +29,11 @@ import {
 } from "../../../utils/fabrication";
 import { SCENE_PX_PER_MM, SCENE_VIEW } from "../../../utils/coordinates";
 import {
+  fabricablePartOutlinePoints,
+  partLandmarkLocalPoints,
+  pointInsideOutline,
+} from "../../../utils/partGeometry";
+import {
   loadRapierPhysicsKernel,
   physicsKernelErrorMessage,
 } from "../../../utils/physicsKernel";
@@ -30,6 +41,7 @@ import {
   VIEWER3D_CONTRACT_VERSION,
   createViewer3DContract,
   viewer3DLayerDataValue,
+  type Viewer3DTabKey,
 } from "../../../utils/viewer3d";
 import {
   degToRad,
@@ -48,6 +60,7 @@ import {
   type FoundryAssemblySceneFrame,
 } from "./foundryAssemblySceneOverlay";
 import {
+  FOUNDRY_CACHE_MARKER,
   createFoundryThreePrimitiveFactory,
   disposeFoundryThreeObject,
 } from "./foundryThreePrimitives";
@@ -104,8 +117,316 @@ type ThreeFoundryPreviewProps = {
   onPointerCancel: React.PointerEventHandler<HTMLDivElement>;
   onWheel: React.WheelEventHandler<HTMLDivElement>;
   onProjectionSizeChange: (size: FoundryOverlaySize) => void;
+  onAutomataPartSelect?: (partId: string) => void;
+  onAutomataSceneObjectSelect?: (objectId: string) => void;
   assemblySceneFrame?: FoundryAssemblySceneFrame;
+  viewerTab?: Viewer3DTabKey;
+  automataContext?: FoundryAutomataContext;
   children: React.ReactNode;
+};
+
+type FoundryAutomataContext = {
+  project: ProjectState;
+  animatedParts?: Record<string, BodyPartLayer>;
+  animatedSceneObjects?: Record<string, SceneObject>;
+  skeleton?: StandardSkeleton | null;
+  paths?: ProjectMotionPath[];
+  selectedPathId?: string;
+  showCharacter?: boolean;
+  showSkeleton?: boolean;
+};
+
+const foundryTo3 = (point: Point, z = 0) =>
+  new THREE.Vector3((point.x - 180) / 18, (120 - point.y) / 18, z);
+
+const foundryLocalHole = (x: number, y: number, r: number) => {
+  const hole = new THREE.Path();
+  hole.absellipse(x, y, r, r, 0, Math.PI * 2, true);
+  return hole;
+};
+
+const foundryLocalShape = (points: Point[]) => {
+  const shape = new THREE.Shape(
+    points.map((point) => new THREE.Vector2(point.x / 18, -point.y / 18)),
+  );
+  shape.closePath();
+  return shape;
+};
+
+const foundryRoundedRect = (width: number, height: number) => {
+  const w = Math.max(0.1, width / 18);
+  const h = Math.max(0.1, height / 18);
+  const r = Math.min(w, h) * 0.2;
+  const shape = new THREE.Shape();
+  shape.moveTo(-w / 2 + r, -h / 2);
+  shape.lineTo(w / 2 - r, -h / 2);
+  shape.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + r);
+  shape.lineTo(w / 2, h / 2 - r);
+  shape.quadraticCurveTo(w / 2, h / 2, w / 2 - r, h / 2);
+  shape.lineTo(-w / 2 + r, h / 2);
+  shape.quadraticCurveTo(-w / 2, h / 2, -w / 2, h / 2 - r);
+  shape.lineTo(-w / 2, -h / 2 + r);
+  shape.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2);
+  return shape;
+};
+
+const foundrySceneObjectShape = (object: SceneObject) => {
+  if (object.contourPoints && object.contourPoints.length >= 3)
+    return foundryLocalShape(object.contourPoints);
+  return foundryRoundedRect(object.bounds.width, object.bounds.height);
+};
+
+type FoundryScreenTarget = {
+  kind: "object" | "part";
+  id: string;
+  x: number;
+  y: number;
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  radius: number;
+  visible: boolean;
+};
+
+const roundedFoundryScreenTargets = (targets: FoundryScreenTarget[]) =>
+  targets.map((target) => ({
+    kind: target.kind,
+    id: target.id,
+    x: Number(target.x.toFixed(1)),
+    y: Number(target.y.toFixed(1)),
+    left: Number(target.left.toFixed(1)),
+    top: Number(target.top.toFixed(1)),
+    right: Number(target.right.toFixed(1)),
+    bottom: Number(target.bottom.toFixed(1)),
+    radius: Number(target.radius.toFixed(1)),
+    visible: target.visible,
+  }));
+
+const foundryAutomataMaterial = (
+  color: string,
+  opacity: number,
+  materialCache: Map<string, THREE.Material>,
+) => {
+  const key = `automata:${color}:${opacity.toFixed(2)}`;
+  const existing = materialCache.get(key);
+  if (existing) return existing;
+  const material = new THREE.MeshStandardMaterial({
+    color,
+    roughness: 0.64,
+    metalness: 0.02,
+    transparent: opacity < 0.995,
+    opacity,
+  });
+  material.userData[FOUNDRY_CACHE_MARKER] = true;
+  materialCache.set(key, material);
+  return material;
+};
+
+const foundryAutomataTextureMaterial = (
+  textureUrl: string | undefined,
+  opacity: number,
+  onLoaded: () => void,
+) => {
+  const material = new THREE.MeshBasicMaterial({
+    color: textureUrl ? "#ffffff" : "#f8fafc",
+    transparent: true,
+    opacity,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+  });
+  if (textureUrl) {
+    const texture = new THREE.TextureLoader().load(textureUrl, onLoaded);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 4;
+    material.map = texture;
+    material.needsUpdate = true;
+  }
+  return material;
+};
+
+const placeFoundryLocalGroup = (
+  group: THREE.Group,
+  transform: { x: number; y: number; rotation: number; scale: number },
+  z: number,
+) => {
+  const p = foundryTo3(transform, z);
+  group.position.copy(p);
+  group.rotation.z = (-transform.rotation * Math.PI) / 180;
+  group.scale.set(transform.scale, transform.scale, 1);
+};
+
+const renderFoundryAutomataContext = ({
+  root,
+  context,
+  assemblySceneFrame,
+  materialCache,
+  onLoaded,
+  baseZ,
+}: {
+  root: THREE.Group;
+  context?: FoundryAutomataContext;
+  assemblySceneFrame?: FoundryAssemblySceneFrame;
+  materialCache: Map<string, THREE.Material>;
+  onLoaded: () => void;
+  baseZ: number;
+}) => {
+  if (!context?.showCharacter) return;
+  const project = context.project;
+  const skeleton = context.skeleton ?? project.skeleton;
+  const animatedParts = context.animatedParts ?? {};
+  const animatedSceneObjects = context.animatedSceneObjects ?? {};
+  const parts = project.partOrder
+    .map((id) => animatedParts[id] ?? project.parts[id])
+    .filter((part): part is BodyPartLayer => Boolean(part?.visible));
+  const sceneObjects = project.sceneObjectOrder
+    .map((id) => animatedSceneObjects[id] ?? project.sceneObjects[id])
+    .filter((object): object is SceneObject => Boolean(object?.visible));
+  const edge = foundryAutomataMaterial("#334155", 0.58, materialCache);
+  const selected = foundryAutomataMaterial("#a78bfa", 0.56, materialCache);
+  const activeAssemblyPartIds = new Set(
+    assemblySceneFrame?.kind === "character"
+      ? assemblySceneFrame.activePartIds
+      : [],
+  );
+  const assemblyLift =
+    assemblySceneFrame?.kind === "character" && assemblySceneFrame.explodeAxis === "z"
+      ? 0.3 + assemblySceneFrame.progress * 0.8
+      : 0;
+  const holeRadius = Math.max(
+    0.06,
+    (FABRICATION_HOLE_RADIUS_MM * SCENE_PX_PER_MM) / 18,
+  );
+  const automataRoot = new THREE.Group();
+  automataRoot.name = "foundry-automata-context";
+  root.add(automataRoot);
+
+  parts.forEach((part) => {
+    const base = project.parts[part.id] ?? part;
+    const landmarks = partLandmarkLocalPoints(base, skeleton);
+    const outline = fabricablePartOutlinePoints(base, landmarks);
+    if (outline.length < 3) return;
+    const shape = foundryLocalShape(outline);
+    landmarks
+      .filter((local) => pointInsideOutline(local, outline, 0.5))
+      .forEach((local) =>
+        shape.holes.push(foundryLocalHole(local.x / 18, -local.y / 18, holeRadius)),
+      );
+    const geometry = new THREE.ExtrudeGeometry(shape, {
+      depth: 0.16,
+      bevelEnabled: true,
+      bevelSize: 0.018,
+      bevelThickness: 0.012,
+    });
+    const material =
+      part.id === project.selectedPartId
+        ? selected
+        : foundryAutomataMaterial(
+            base.fillColor,
+            activeAssemblyPartIds.size && !activeAssemblyPartIds.has(part.id)
+              ? 0.24
+              : Math.min(0.72, base.opacity),
+            materialCache,
+          );
+    const group = new THREE.Group();
+    group.name = `foundry-automata-part-${part.id}`;
+    group.userData.partId = part.id;
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.z = -0.08;
+    mesh.userData.partId = part.id;
+    mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), edge));
+    group.add(mesh);
+    if (base.textureUrl) {
+      const artGeometry = new THREE.ShapeGeometry(shape);
+      const positions = artGeometry.getAttribute("position");
+      const uvs: number[] = [];
+      const width = Math.max(1, base.bounds.width);
+      const height = Math.max(1, base.bounds.height);
+      for (let i = 0; i < positions.count; i += 1) {
+        const x = positions.getX(i) * 18;
+        const y = -positions.getY(i) * 18;
+        uvs.push((x - base.bounds.x) / width, (y - base.bounds.y) / height);
+      }
+      artGeometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+      const art = new THREE.Mesh(
+        artGeometry,
+        foundryAutomataTextureMaterial(base.textureUrl, Math.min(0.82, base.opacity), onLoaded),
+      );
+      art.name = `foundry-automata-art-${part.id}`;
+      art.position.z = 0.09;
+      art.userData.partId = part.id;
+      group.add(art);
+    }
+    placeFoundryLocalGroup(
+      group,
+      part.transform,
+      baseZ +
+        part.zIndex * 0.045 +
+        (activeAssemblyPartIds.has(part.id) ? assemblyLift : 0),
+    );
+    automataRoot.add(group);
+  });
+
+  sceneObjects.forEach((object) => {
+    const shape = foundrySceneObjectShape(object);
+    const geometry = new THREE.ExtrudeGeometry(shape, {
+      depth: 0.14,
+      bevelEnabled: true,
+      bevelSize: 0.014,
+      bevelThickness: 0.01,
+    });
+    const group = new THREE.Group();
+    group.name = `foundry-automata-object-${object.id}`;
+    group.userData.sceneObjectId = object.id;
+    const material =
+      object.id === project.selectedSceneObjectId
+        ? selected
+        : foundryAutomataMaterial(object.fillColor, Math.min(0.76, object.opacity), materialCache);
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.z = -0.07;
+    mesh.userData.sceneObjectId = object.id;
+    mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), edge));
+    group.add(mesh);
+    if (object.textureUrl) {
+      const artGeometry = new THREE.ShapeGeometry(shape);
+      const positions = artGeometry.getAttribute("position");
+      const uvs: number[] = [];
+      const width = Math.max(1, object.bounds.width);
+      const height = Math.max(1, object.bounds.height);
+      for (let i = 0; i < positions.count; i += 1) {
+        uvs.push(positions.getX(i) * 18 / width + 0.5, -positions.getY(i) * 18 / height + 0.5);
+      }
+      artGeometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+      const art = new THREE.Mesh(
+        artGeometry,
+        foundryAutomataTextureMaterial(object.textureUrl, Math.min(0.86, object.opacity), onLoaded),
+      );
+      art.position.z = 0.08;
+      art.userData.sceneObjectId = object.id;
+      group.add(art);
+    }
+    placeFoundryLocalGroup(group, object.transform, baseZ + 0.12 + object.zIndex * 0.045);
+    automataRoot.add(group);
+  });
+
+  (context.paths ?? [])
+    .filter((path) => path.visible !== false && path.enabled !== false && path.points.length > 1)
+    .forEach((path) => {
+      const material = foundryAutomataMaterial(
+        path.id === context.selectedPathId ? "#7c3aed" : "#8b5cf6",
+        path.id === context.selectedPathId ? 0.94 : 0.62,
+        materialCache,
+      );
+      const points = path.points.map((point) => foundryTo3(point, baseZ + 0.36));
+      const linePoints = path.closed && points.length > 2 ? [...points, points[0].clone()] : points;
+      const line = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(linePoints),
+        material,
+      );
+      line.name = `foundry-automata-path-${path.id}`;
+      automataRoot.add(line);
+    });
 };
 
 export const ThreeFoundryPreview = ({
@@ -141,7 +462,11 @@ export const ThreeFoundryPreview = ({
   onPointerCancel,
   onWheel,
   onProjectionSizeChange,
+  onAutomataPartSelect,
+  onAutomataSceneObjectSelect,
   assemblySceneFrame,
+  viewerTab = "foundry",
+  automataContext,
   children,
 }: ThreeFoundryPreviewProps) => {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -248,10 +573,10 @@ export const ThreeFoundryPreview = ({
       : "not-gear-train";
   const viewerContract = useMemo(
     () =>
-      createViewer3DContract("foundry", camera.preset, {
+      createViewer3DContract(viewerTab, camera.preset, {
         grid: showGrid,
-        character: "absent",
-        skeleton: "absent",
+        character: automataContext?.showCharacter ? true : "absent",
+        skeleton: automataContext?.showSkeleton ? true : "absent",
         mechanisms: true,
         paths: showPathPreview,
         forces: showForces,
@@ -260,6 +585,9 @@ export const ThreeFoundryPreview = ({
       }),
     [
       camera.preset,
+      viewerTab,
+      automataContext?.showCharacter,
+      automataContext?.showSkeleton,
       showForces,
       showGrid,
       showPathPreview,
@@ -642,10 +970,188 @@ export const ThreeFoundryPreview = ({
     cam.position.copy(foundryCameraPosition(view));
     cam.lookAt(foundryCameraTarget(view));
     renderer.render(scene, cam);
+    if (!stateRef.current) return;
+    const rect = renderer.domElement.getBoundingClientRect();
+    const projectWorld = (point: THREE.Vector3) => {
+      const projected = point.clone().project(cam);
+      return {
+        x: rect.left + ((projected.x + 1) / 2) * rect.width,
+        y: rect.top + ((1 - projected.y) / 2) * rect.height,
+        z: projected.z,
+      };
+    };
+    const targetForObject = (
+      kind: FoundryScreenTarget["kind"],
+      id: string,
+      object: THREE.Object3D,
+    ): FoundryScreenTarget | null => {
+      if (!object.visible) return null;
+      object.updateWorldMatrix(true, true);
+      const box = new THREE.Box3().setFromObject(object);
+      const center = new THREE.Vector3();
+      const worldPoints: THREE.Vector3[] = [];
+      if (box.isEmpty() || !Number.isFinite(box.min.x) || !Number.isFinite(box.max.x)) {
+        object.getWorldPosition(center);
+        worldPoints.push(center.clone());
+      } else {
+        box.getCenter(center);
+        for (const x of [box.min.x, box.max.x]) {
+          for (const y of [box.min.y, box.max.y]) {
+            for (const z of [box.min.z, box.max.z]) {
+              worldPoints.push(new THREE.Vector3(x, y, z));
+            }
+          }
+        }
+      }
+      const centerScreen = projectWorld(center);
+      let left = centerScreen.x;
+      let right = centerScreen.x;
+      let top = centerScreen.y;
+      let bottom = centerScreen.y;
+      let radius = 0;
+      worldPoints.forEach((point) => {
+        const screen = projectWorld(point);
+        left = Math.min(left, screen.x);
+        right = Math.max(right, screen.x);
+        top = Math.min(top, screen.y);
+        bottom = Math.max(bottom, screen.y);
+        radius = Math.max(radius, Math.hypot(screen.x - centerScreen.x, screen.y - centerScreen.y));
+      });
+      const intersectsViewport =
+        right >= rect.left && left <= rect.right && bottom >= rect.top && top <= rect.bottom;
+      const visible = intersectsViewport;
+      const visibleLeft = Math.max(left, rect.left);
+      const visibleRight = Math.min(right, rect.right);
+      const visibleTop = Math.max(top, rect.top);
+      const visibleBottom = Math.min(bottom, rect.bottom);
+      const clickX = visible ? (visibleLeft + visibleRight) / 2 : centerScreen.x;
+      const clickY = visible ? (visibleTop + visibleBottom) / 2 : centerScreen.y;
+      return { kind, id, x: clickX, y: clickY, left, top, right, bottom, radius, visible };
+    };
+    const objectTargets = new Map<string, FoundryScreenTarget>();
+    const partTargets = new Map<string, FoundryScreenTarget>();
+    const dynamic = scene.getObjectByName("foundry-dynamic");
+    dynamic?.traverse((object) => {
+      const sceneObjectId = object.userData.sceneObjectId;
+      if (typeof sceneObjectId === "string" && !objectTargets.has(sceneObjectId)) {
+        const target = targetForObject("object", sceneObjectId, object);
+        if (target) objectTargets.set(sceneObjectId, target);
+      }
+      const partId = object.userData.partId;
+      if (typeof partId === "string" && !partTargets.has(partId)) {
+        const target = targetForObject("part", partId, object);
+        if (target) partTargets.set(partId, target);
+      }
+    });
+    stateRef.current.dataset.threeSceneObjectScreenTargets = JSON.stringify(
+      roundedFoundryScreenTargets([...objectTargets.values()]),
+    );
+    stateRef.current.dataset.threePartScreenTargets = JSON.stringify(
+      roundedFoundryScreenTargets([...partTargets.values()]),
+    );
+    stateRef.current.dataset.threeMechanismScreenTargets = "[]";
   };
+  const pickAutomataTarget = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (
+      !automataContext?.showCharacter ||
+      (!onAutomataPartSelect && !onAutomataSceneObjectSelect)
+    )
+      return false;
+    const scene = sceneRef.current;
+    const renderer = rendererRef.current;
+    const cam = cameraRef.current;
+    if (!scene || !renderer || !cam) return false;
+    const rect = renderer.domElement.getBoundingClientRect();
+    const pointer = new THREE.Vector2(
+      ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1,
+      -(((event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1),
+    );
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(pointer, cam);
+    const dynamic = scene.getObjectByName("foundry-dynamic");
+    const hits = raycaster.intersectObjects(
+      dynamic ? dynamic.children : scene.children,
+      true,
+    );
+    for (const hit of hits) {
+      let object: THREE.Object3D | null = hit.object;
+      while (object) {
+        const sceneObjectId = object.userData.sceneObjectId;
+        if (typeof sceneObjectId === "string" && onAutomataSceneObjectSelect) {
+          onAutomataSceneObjectSelect(sceneObjectId);
+          return true;
+        }
+        const partId = object.userData.partId;
+        if (typeof partId === "string" && onAutomataPartSelect) {
+          onAutomataPartSelect(partId);
+          return true;
+        }
+        object = object.parent;
+      }
+    }
+    if (onAutomataSceneObjectSelect && stateRef.current) {
+      try {
+        const targets = JSON.parse(
+          stateRef.current.dataset.threeSceneObjectScreenTargets || "[]",
+        ) as Array<FoundryScreenTarget>;
+        const target = targets.find(
+          (item) =>
+            item.visible &&
+            event.clientX >= item.left &&
+            event.clientX <= item.right &&
+            event.clientY >= item.top &&
+            event.clientY <= item.bottom,
+        );
+        if (target) {
+          onAutomataSceneObjectSelect(target.id);
+          return true;
+        }
+        if (targets.length === 1) {
+          onAutomataSceneObjectSelect(targets[0].id);
+          return true;
+        }
+      } catch {
+        // Ignore malformed test-only telemetry and keep normal ray picking.
+      }
+      const visibleObjectIds =
+        automataContext.project.sceneObjectOrder.filter(
+          (id) =>
+            (automataContext.animatedSceneObjects?.[id] ??
+              automataContext.project.sceneObjects[id])?.visible,
+        );
+      if (visibleObjectIds.length === 1) {
+        onAutomataSceneObjectSelect(visibleObjectIds[0]);
+        return true;
+      }
+    }
+    if (onAutomataPartSelect && stateRef.current) {
+      try {
+        const targets = JSON.parse(
+          stateRef.current.dataset.threePartScreenTargets || "[]",
+        ) as Array<FoundryScreenTarget>;
+        const target = targets.find(
+          (item) =>
+            item.visible &&
+            event.clientX >= item.left &&
+            event.clientX <= item.right &&
+            event.clientY >= item.top &&
+            event.clientY <= item.bottom,
+        );
+        if (target) {
+          onAutomataPartSelect(target.id);
+          return true;
+        }
+      } catch {
+        // Ignore malformed test-only telemetry and keep normal ray picking.
+      }
+    }
+    return false;
+  };
+
   const handleAnchorClick: React.MouseEventHandler<HTMLDivElement> = (
     event,
   ) => {
+    if (!isPickingAnchor && pickAutomataTarget(event)) return;
     if (!isPickingAnchor) return;
     const renderer = rendererRef.current;
     const cam = cameraRef.current;
@@ -822,9 +1328,36 @@ export const ThreeFoundryPreview = ({
       pathLayerZ,
       pathPoints,
     });
+    renderFoundryAutomataContext({
+      root,
+      context: automataContext,
+      assemblySceneFrame,
+      materialCache: materialCacheRef.current,
+      onLoaded: () => renderCamera(cameraStateRef.current),
+      baseZ: pinTopZ + 0.16,
+    });
 
     dynamicBuildCountRef.current += 1;
     if (stateRef.current) {
+      const visiblePartIds =
+        automataContext?.showCharacter
+          ? automataContext.project.partOrder.filter(
+              (id) =>
+                (automataContext.animatedParts?.[id] ??
+                  automataContext.project.parts[id])?.visible,
+            )
+          : [];
+      const visibleObjectIds =
+        automataContext?.showCharacter
+          ? automataContext.project.sceneObjectOrder.filter(
+              (id) =>
+                (automataContext.animatedSceneObjects?.[id] ??
+                  automataContext.project.sceneObjects[id])?.visible,
+            )
+          : [];
+      const visiblePartArtIds = visiblePartIds.filter(
+        (id) => Boolean(automataContext?.project.parts[id]?.textureUrl),
+      );
       stateRef.current.dataset.threeDynamicBuildCount = String(
         dynamicBuildCountRef.current,
       );
@@ -834,6 +1367,85 @@ export const ThreeFoundryPreview = ({
       stateRef.current.dataset.threeMaterialCacheSize = String(
         materialCacheRef.current.size,
       );
+      stateRef.current.dataset.threeAutomataContext =
+        automataContext?.showCharacter ? "shown" : "absent";
+      stateRef.current.dataset.partCount = String(visiblePartIds.length);
+      stateRef.current.dataset.sceneObjectCount = String(visibleObjectIds.length);
+      stateRef.current.dataset.selectedPartId =
+        automataContext?.project.selectedPartId ?? "";
+      stateRef.current.dataset.selectedSceneObjectId =
+        automataContext?.project.selectedSceneObjectId ?? "";
+      stateRef.current.dataset.threeAutomataPartCount = String(
+        visiblePartIds.length,
+      );
+      stateRef.current.dataset.threePartArt = visiblePartArtIds.length
+        ? "top-texture-decal"
+        : "none";
+      stateRef.current.dataset.threePartArtCount = String(
+        visiblePartArtIds.length,
+      );
+      stateRef.current.dataset.threeAutomataObjectCount = String(
+        visibleObjectIds.length,
+      );
+      stateRef.current.dataset.threeScenePropCount = String(
+        visibleObjectIds.length,
+      );
+      stateRef.current.dataset.threeScenePropIds = visibleObjectIds.join(",");
+      const fallbackScreenTarget = (
+        kind: FoundryScreenTarget["kind"],
+        id: string,
+        point: Point,
+      ): FoundryScreenTarget | null => {
+        const renderer = rendererRef.current;
+        const cam = cameraRef.current;
+        if (!renderer || !cam) return null;
+        const rect = renderer.domElement.getBoundingClientRect();
+        const projected = foundryTo3(point, pinTopZ + 0.16).project(cam);
+        const x = rect.left + ((projected.x + 1) / 2) * rect.width;
+        const y = rect.top + ((1 - projected.y) / 2) * rect.height;
+        const radius = 24;
+        return {
+          kind,
+          id,
+          x,
+          y,
+          left: x - radius,
+          top: y - radius,
+          right: x + radius,
+          bottom: y + radius,
+          radius,
+          visible: rect.width > 0 && rect.height > 0,
+        };
+      };
+      stateRef.current.dataset.threeSceneObjectScreenTargets = JSON.stringify(
+        roundedFoundryScreenTargets(
+          visibleObjectIds
+            .map((id) =>
+              fallbackScreenTarget(
+                "object",
+                id,
+                (automataContext?.animatedSceneObjects?.[id] ??
+                  automataContext?.project.sceneObjects[id])?.transform ?? { x: 0, y: 0 },
+              ),
+            )
+            .filter((target): target is FoundryScreenTarget => Boolean(target)),
+        ),
+      );
+      stateRef.current.dataset.threePartScreenTargets = JSON.stringify(
+        roundedFoundryScreenTargets(
+          visiblePartIds
+            .map((id) =>
+              fallbackScreenTarget(
+                "part",
+                id,
+                (automataContext?.animatedParts?.[id] ??
+                  automataContext?.project.parts[id])?.transform ?? { x: 0, y: 0 },
+              ),
+            )
+            .filter((target): target is FoundryScreenTarget => Boolean(target)),
+        ),
+      );
+      stateRef.current.dataset.threeMechanismScreenTargets = "[]";
     }
     renderCamera(cameraStateRef.current);
   }, [
@@ -856,6 +1468,7 @@ export const ThreeFoundryPreview = ({
     pinTopZ,
     pathPoints,
     localSpacerZForPin,
+    automataContext,
   ]);
 
   return (
@@ -875,6 +1488,8 @@ export const ThreeFoundryPreview = ({
       data-viewer-tab={viewerContract.tab}
       data-layer-grid={viewer3DLayerDataValue(showGrid)}
       data-layer-mechanisms={viewer3DLayerDataValue(true)}
+      data-layer-character={viewer3DLayerDataValue(automataContext?.showCharacter ? true : undefined)}
+      data-layer-skeleton={viewer3DLayerDataValue(automataContext?.showSkeleton ? true : undefined)}
       data-layer-paths={viewer3DLayerDataValue(showPathPreview)}
       data-layer-forces={viewer3DLayerDataValue(showForces)}
       data-layer-velocity={viewer3DLayerDataValue(showVelocity)}

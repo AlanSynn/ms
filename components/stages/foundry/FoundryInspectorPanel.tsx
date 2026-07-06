@@ -1,12 +1,13 @@
 import React from "react";
 import type { MechanismConfig, MechanismType } from "../../../types";
 import { ClassroomExampleVideo } from "../../ui/ClassroomExampleVideo";
-import { fabricationStackSummary } from "../../../utils/fabrication";
+import {
+  fabricationStackSummary,
+  readableFabricationStackSummary,
+} from "../../../utils/fabrication";
 import {
   classroomAssessmentFor,
-  classroomCueTitleFor,
   classroomUseExampleFor,
-  formatClassroomAssessmentPrompt,
 } from "../../../utils/classroomContent";
 import {
   FOUNDRY_MECHANISM_TYPES,
@@ -61,72 +62,93 @@ export const FoundryInspectorPanel = ({
     "foundry",
   );
   const useExample = classroomUseExampleFor(foundry.type);
+  const readableStack = readableFabricationStackSummary(foundry);
 
   return (
   <div className="stage-pane-stack">
-    <div className="stage-pane-stack" data-testid="foundry-sensemaking-panel">
+    <div
+      className="stage-pane-stack foundry-sensemaking-panel"
+      data-testid="foundry-sensemaking-panel"
+    >
       <button
         type="button"
-        className={`sensemaking-cue sensemaking-cue-button ${showSensemaking ? "active" : ""}`}
+        className={`foundry-question-card ${showSensemaking ? "active" : ""}`}
         data-testid="foundry-visible-sensemaking"
         data-sensemaking-check={classroomSensemaking.studentCheck}
         data-sensemaking-answer={classroomSensemaking.expectedAnswer}
         data-sensemaking-evidence={classroomSensemaking.evidenceCue}
         data-sensemaking-clip={classroomSensemaking.clipSlot}
         aria-expanded={showSensemaking}
-        aria-label={showSensemaking ? "Hide details" : "Show details"}
+        aria-label={showSensemaking ? "Hide hint" : "Hint"}
         onClick={onToggleSensemaking}
       >
-        <span className="cue-title">{classroomCueTitleFor("foundry")}</span>
-        <strong>{classroomSensemaking.directTranslation}</strong>
-        <small>{classroomSensemaking.tryThis}</small>
-        <small
+        <span className="foundry-question-label">Question</span>
+        <strong
+          className="foundry-question-text"
           data-testid="classroom-assessment-prompt"
           data-assessment-key={classroomAssessmentKey}
           data-assessment-kind={assessment.kind}
         >
-          {formatClassroomAssessmentPrompt(assessment)}
+          {assessment.prompt}
+        </strong>
+        <small className="foundry-motion-line">
+          Motion: {classroomSensemaking.directTranslation}
         </small>
-        <span className="blueprint-pill sensemaking-action-pill">
-          {showSensemaking ? "Hide details" : "Show details"}
+        <span className="foundry-question-chips" aria-hidden="true">
+          <span>Try: {classroomSensemaking.tryThis}</span>
+          <span>Look: {classroomSensemaking.evidenceCue}</span>
+        </span>
+        <span className="blueprint-pill sensemaking-action-pill foundry-hint-pill">
+          {showSensemaking ? "Hide hint" : "Hint"}
         </span>
       </button>
       {showSensemaking && (
         <div
-          className="recommendation-card"
+          className="recommendation-card foundry-hint-card"
           data-testid="foundry-mechanism-library"
         >
-          <div className="font-bold text-slate-800">{libraryLabel}</div>
-          <div className="flex flex-wrap gap-2">
-            <span className="blueprint-pill">
-              {fabricationStackSummary(foundry)}
-            </span>
-            <span className="blueprint-pill">
-              {classroomSensemaking.studentCheck}
-            </span>
-            <span className="blueprint-pill">
-              {classroomSensemaking.evidenceCue}
-            </span>
+          <div>
+            <span className="foundry-question-label">Mechanism</span>
+            <strong>{libraryLabel}</strong>
           </div>
-          <p className="mt-2 text-sm text-slate-600">
-            {classroomSensemaking.teacherTakeaway}
-          </p>
-          <p className="mt-1 text-sm text-slate-600">
-            {classroomSensemaking.commonHint}
-          </p>
-          <p className="mt-1 text-sm text-slate-600">
+          <dl>
+            <div>
+              <dt>Hint</dt>
+              <dd>{classroomSensemaking.commonHint}</dd>
+            </div>
+            <div>
+              <dt>Check</dt>
+              <dd>{classroomSensemaking.studentCheck}</dd>
+            </div>
+            <div>
+              <dt>Watch</dt>
+              <dd>{classroomSensemaking.evidenceCue}</dd>
+            </div>
+            <div>
+              <dt>Build</dt>
+              <dd>{readableStack}</dd>
+            </div>
+          </dl>
+          <p className="foundry-answer-line">
             Answer: {classroomSensemaking.expectedAnswer}
           </p>
         </div>
       )}
-      <ClassroomExampleVideo example={useExample} />
+      <div className="foundry-use-example">
+        <ClassroomExampleVideo example={useExample} />
+      </div>
     </div>
     <div
       className="compact-fabrication-stack"
       data-testid="foundry-fabrication-stack"
     >
       <strong>Stack</strong>
-      <span>{fabricationStackSummary(foundry)}</span>
+      <span
+        title={fabricationStackSummary(foundry)}
+        data-stack-raw={fabricationStackSummary(foundry)}
+      >
+        {readableStack}
+      </span>
     </div>
     <div className="foundry-view-controls" data-testid="foundry-view-controls">
       <div className="section-title">View</div>

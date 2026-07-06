@@ -2,6 +2,13 @@ import { useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import type { ProjectAction, ProjectState } from "../../../types";
 import { localPivotOffsetForScene } from "../../../utils/coordinates";
+import {
+  describeMotionChain,
+  motionAnchorJointIds,
+  motionChainOptionLabel,
+  motionChainRootJointIds,
+  preferredMotionJointId,
+} from "../../../utils/motion";
 import { uid } from "../../../utils/project";
 import { MiniNumber, Toggle } from "../../ui/InspectorControls";
 
@@ -28,44 +35,95 @@ export const SkeletonInspector = ({
     : undefined;
   const joint =
     project.skeleton?.joints[selectedJointId] ?? anchorJoint ?? joints[0];
+  const selectedHandleIds = selected ? motionAnchorJointIds(project, selected.id) : [];
+  const defaultHandleId = selected
+    ? preferredMotionJointId(project, selected.id, undefined, {
+        preferDistalWhenRoot: true,
+      })
+    : undefined;
+  const defaultRootIds =
+    selected && defaultHandleId
+      ? motionChainRootJointIds(project, selected.id, defaultHandleId)
+      : [];
+  const defaultRootId = defaultRootIds[0] ?? selected?.anchorJointId;
+  const defaultDescriptor = selected
+    ? describeMotionChain(project, selected.id, defaultHandleId, {
+        rootJointId: defaultRootId,
+      })
+    : undefined;
+  const jointName = (id?: string) =>
+    id ? (project.skeleton?.joints[id]?.name || id).replaceAll("_", " ") : "";
+
   return (
     <div>
-      <h4 className="section-title">Skeleton joints</h4>
+      <h4 className="section-title">Motion setup</h4>
+      {selected && (
+        <div
+          className="mt-3 rounded-2xl border border-violet-100 bg-violet-50/70 p-3 text-sm text-slate-600"
+          data-testid="character-motion-preset-summary"
+          data-default-handle={defaultHandleId ?? ""}
+          data-default-root={defaultRootId ?? ""}
+          data-chain-kind={defaultDescriptor?.kind ?? "invalid"}
+          data-handle-count={selectedHandleIds.length}
+          data-root-count={defaultRootIds.length}
+        >
+          <div className="font-bold text-slate-800">
+            {defaultDescriptor ? defaultDescriptor.label : "No motion"}
+          </div>
+          <div>{defaultDescriptor?.helper ?? "Pick a part with joints."}</div>
+          <div className="mt-2 text-xs font-black uppercase tracking-wider text-slate-500">
+            Handle {jointName(defaultHandleId)} · Start {jointName(defaultRootId)}
+          </div>
+        </div>
+      )}
       {joint && (
         <div className="mt-3 space-y-3">
           {selected && (
-            <label
-              className={`block text-xs font-black uppercase tracking-wider text-slate-500 ${selected.locked ? "opacity-50" : ""}`}
-            >
-              Selected part anchor
-              <select
-                className="field mt-1"
-                disabled={selected.locked}
-                value={selected.anchorJointId}
-                onChange={(e) => {
-                  const anchor =
-                    project.skeleton?.joints[e.target.value]?.position;
-                  dispatch({
-                    type: "update_part",
-                    partId: selected.id,
-                    updates: {
-                      anchorJointId: e.target.value,
-                      localPivotOffset: anchor
-                        ? localPivotOffsetForScene(selected, anchor)
-                        : selected.localPivotOffset,
-                      localPivotJointId: e.target.value,
-                    },
-                  });
-                }}
+            <>
+              <label
+                className={`block text-xs font-black uppercase tracking-wider text-slate-500 ${selected.locked ? "opacity-50" : ""}`}
               >
-                {joints.map((j) => (
-                  <option key={j.id} value={j.id}>
-                    {j.id}
-                  </option>
+                Part pivot
+                <select
+                  aria-label="Part pivot"
+                  className="field mt-1"
+                  disabled={selected.locked}
+                  value={selected.anchorJointId}
+                  onChange={(e) => {
+                    const anchor =
+                      project.skeleton?.joints[e.target.value]?.position;
+                    dispatch({
+                      type: "update_part",
+                      partId: selected.id,
+                      updates: {
+                        anchorJointId: e.target.value,
+                        localPivotOffset: anchor
+                          ? localPivotOffsetForScene(selected, anchor)
+                          : selected.localPivotOffset,
+                        localPivotJointId: e.target.value,
+                      },
+                    });
+                  }}
+                >
+                  {joints.map((j) => (
+                    <option key={j.id} value={j.id}>
+                      {j.name || j.id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex flex-wrap gap-2" data-testid="character-motion-handles">
+                {selectedHandleIds.map((id) => (
+                  <span key={id} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
+                    {motionChainOptionLabel(project, selected.id, id)}
+                  </span>
                 ))}
-              </select>
-            </label>
+              </div>
+            </>
           )}
+          <details className="advanced-panel">
+            <summary>Edit skeleton</summary>
+            <div className="mt-3 space-y-3">
           <label className="block text-xs font-black uppercase tracking-wider text-slate-500">
             Edit joint
             <select
@@ -197,28 +255,30 @@ export const SkeletonInspector = ({
               dispatch({ type: "remove_joint", jointId: joint.id })
             }
           >
-            <Trash2 size={16} /> Remove joint
-          </button>
+              <Trash2 size={16} /> Remove joint
+            </button>
+            <button
+              className="btn-secondary"
+              onClick={() =>
+                dispatch({
+                  type: "add_joint",
+                  joint: {
+                    id: uid("joint"),
+                    name: "new joint",
+                    position: { x: 0, y: 0 },
+                    parentId: joint?.id ?? null,
+                    locked: false,
+                    bendDirection: 1,
+                  },
+                })
+              }
+            >
+              <Plus size={16} /> Add joint
+            </button>
+            </div>
+          </details>
         </div>
       )}
-      <button
-        className="btn-secondary mt-4"
-        onClick={() =>
-          dispatch({
-            type: "add_joint",
-            joint: {
-              id: uid("joint"),
-              name: "new joint",
-              position: { x: 0, y: 0 },
-              parentId: joint?.id ?? null,
-              locked: false,
-              bendDirection: 1,
-            },
-          })
-        }
-      >
-        <Plus size={16} /> Add joint
-      </button>
     </div>
   );
 };

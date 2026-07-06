@@ -12,9 +12,9 @@ Mechanism Foundry is the visual and physical source of truth for mechanisms. Des
 
 1. `ProjectState` stores mechanism instances, targets, paths, body parts, scene objects, and settings.
 2. Mechanism registry/fabrication helpers derive kinematics, render plans, stack roles, pin spans, and validation.
-3. Foundry computes the shared mechanism scene contract.
-4. Design consumes that contract for integrated automata motion.
-5. Assembly consumes that contract inside an assembly scene frame.
+3. Foundry computes the shared mechanism scene contract and preview model.
+4. Design consumes the shared automata/mechanism scene model; its live mechanism geometry must come from the Foundry primitive/layer path, not a private Puppet mechanism layer.
+5. Assembly consumes that contract inside an assembly scene frame and renders mechanism steps through the same Foundry renderer.
 6. Blueprint/export derive printable artifacts from the same recipes; they do not run a separate live mechanism scene.
 
 ## `MechanismSceneContract`
@@ -36,8 +36,10 @@ Authority rule:
 Implementation status:
 
 - `utils/mechanismSceneContract.ts` is the pure owner for baseline mechanism identity, render-plan source, fabrication-stack source, readiness, target metadata, and layer roles/z/colors.
+- `utils/foundryPreviewModel.ts` is the shared live-preview seam for Foundry-style playback state, point traces, physical simulation, and path overlays consumed outside Foundry.
 - Assembly consumes the contract through `utils/assemblySceneFrame.ts` and passes the frame into the shared Foundry Three renderer.
-- Stage components may import the utility contract; Design and Assembly must not invent alternate stack/z/pin semantics. Moving additional pure Foundry pin helpers out of `components/stages/foundry/` remains the next hardening slice before broader Design reuse.
+- Design consumes `utils/automataSceneModel.ts` for mechanism geometry, target motion, and character/object context, then renders that context inside `ThreeFoundryPreview` with the same Foundry primitive/layer path used by Foundry.
+- Stage components may import the utility contracts; Design and Assembly must not invent alternate stack/z/pin semantics. Moving additional pure Foundry pin helpers out of `components/stages/foundry/` remains the next hardening slice before broader reuse.
 
 ## `AssemblySceneFrame`
 
@@ -86,8 +88,10 @@ No x/y movement is valid under `explode_z`.
 
 - Shows one integrated automata scene: mechanism drives character/body-part or scene-object target.
 - Right inspector edits the selected mechanism instance.
-- It may render character/object context through `ThreePuppetPreview`, but mechanism geometry/z/stack telemetry must come from `MechanismSceneContract`.
-- New private mechanism primitives in `ThreePuppetPreview` are forbidden after the contract lands.
+- Live mechanism geometry, path traces, physics/readiness telemetry, z/stack rendering, and fabrication colors must come from the shared Foundry model/primitive path.
+- Character/object context must share the same Three scene/camera as the Foundry mechanism geometry.
+- Private mechanism primitives in `ThreePuppetPreview` are forbidden for Design/Assembly live automata.
+- Legacy `utils/designAutomataProjection.ts` is only a thin compatibility wrapper around `buildAutomataSceneModel`; new work should import the canonical model directly.
 
 ### Assembly
 
@@ -106,15 +110,34 @@ No x/y movement is valid under `explode_z`.
 
 ## Current state caveat
 
-Assembly consumes `MechanismSceneContract` through `AssemblySceneFrame` and the shared Foundry Three renderer. Design exposes generated-path and feature telemetry through the current integrated automata preview, but full Design cutoff to contract-backed layer/z/pin parity remains incomplete. Foundry itself still has temporary stage-local renderer branches for mechanism-type presentation glue in `ThreeFoundryPreview` and `foundryPreviewStacks`; those branches must migrate toward shared helpers/contracts when they encode pin, z, stack, or primitive semantics. Until those cutoffs land, no new Design or Assembly code may invent private mechanism stack, z, pin, or fabrication rules.
+As of the 2026-07-05 Foundry-primitive pass:
+
+- Design has one Foundry scene/camera for mechanism + driven character/object context.
+- Assembly mechanism steps consume the same automata scene model and pass character/object context into the Foundry renderer for connect/test phases.
+- Character art/pin assembly now also enters through `ThreeFoundryPreview` when an active mechanism exists; no character Assembly path may render private Puppet mechanism geometry.
+
+Foundry itself still has temporary stage-local renderer branches for mechanism-type presentation glue in `ThreeFoundryPreview` and `foundryPreviewStacks`; those branches must migrate toward shared helpers/contracts when they encode pin, z, stack, or primitive semantics. No new Design or Assembly code may invent private mechanism stack, z, pin, or fabrication rules.
+
+## Remaining Assembly shared-preview risks
+
+| Risk | Why it matters | Minimal next fix |
+|---|---|---|
+| No-mechanism character fallback | A blank starter with no mechanism cannot use the mechanism-backed Foundry preview. | Keep the visible blocker honest (`Add a mechanism.`); do not invent a fake mechanism just to fill the view. |
+| Semantics copy risk | Copying Foundry primitive or z/pin logic back into stage branches would recreate the original drift problem. | Keep character assembly data in `AssemblySceneFrame` / automata context; do not duplicate primitive rules in stage code. |
+| Pin visibility gap | Fixed board pins and free pivots are computed, but not locked to the Foundry assembly marker contract. | Browser check: character fixed-pin step renders board markers; free-pivot step renders floating/reference markers in the Foundry rig. |
+| Art preservation gap | Future renderer changes can drop texture/art decals or hole cutouts. | Keep the browser check: character Assembly Foundry rig reports visible automata parts/art targets and no puppet canvas. |
+| Wrapper-only test gap | Assembly wrapper attrs can pass even if the child Foundry rig stops rendering markers/layer focus. | Assert child `foundry-camera-rig` has `data-three-assembly-scene`, phase, marker counts, and layer focus. |
+
+Root rule: the missing seam is a character-art/pin adapter into the shared Foundry scene, not new mechanism math.
 
 ## Implementation slices
 
 1. Done baseline: `utils/mechanismSceneContract.ts` + contract/probe telemetry. Remaining hardening: migrate more pure Foundry pin helpers out of stage files before broader reuse.
-2. Remaining: Design cutoff should consume more contract-backed mechanism telemetry and block new private `ThreePuppetPreview` mechanism primitive/z/stack helpers.
+2. Done baseline: `utils/automataSceneModel.ts` drives Design and Assembly mechanism scenes through Foundry preview primitives plus driven character/object context.
 3. Done baseline: pure `AssemblySceneFrame`, canonical motion taxonomy, z-only explode data, read-only lower step strip.
 4. Done baseline: Assembly removed nested ghost/dual SVG interpretation and renders build/module/mount/connect/test cues in one Three scene.
-5. Ongoing: Blueprint/export labels and recipes must continue to derive from the same live mechanisms.
+5. Done baseline: character art/pin Assembly routes through the Foundry preview path with plain scene-frame pin points and automata context.
+6. Ongoing: Blueprint/export labels and recipes must continue to derive from the same live mechanisms.
 
 ## Verification
 

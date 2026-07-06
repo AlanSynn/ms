@@ -611,20 +611,20 @@ export const CLASSROOM_LESSONS = [
         id: 'walking-leg',
         label: 'Walking leg',
         shortLabel: 'Walking leg',
-        description: 'Foot path + five-bar baseline.',
+        description: 'Foot path + board-ready four-bar baseline.',
         actionLabel: 'Open lesson',
         outcome: 'Make a foot step',
         changeCue: 'foot path',
-        buildCue: 'five-bar',
+        buildCue: 'four-bar',
         startStage: 'character' as AppStage,
-        mechanismType: '5bar' as MechanismConfig['type'],
+        mechanismType: '4bar' as MechanismConfig['type'],
         sensemaking: {
-            directTranslation: 'Two cranks -> one trace point',
+            directTranslation: 'Crank turns -> leg steps',
             tryThis: 'Move the foot loop',
-            teacherTakeaway: 'Two inputs can combine to trace a walking-like path.',
-            studentCheck: 'Which two pivots drive it?',
-            expectedAnswer: 'The two fixed cranks drive the foot path',
-            evidenceCue: 'foot trace comes from two drivers',
+            teacherTakeaway: 'A four-bar can turn rotation into a stepping swing.',
+            studentCheck: 'Which pivot stays fixed?',
+            expectedAnswer: 'The board pivots stay fixed',
+            evidenceCue: 'lower leg follows the foot loop',
             clipSlot: 'generated-loop' as const
         }
     },
@@ -648,26 +648,6 @@ export const CLASSROOM_LESSONS = [
             evidenceCue: 'touching teeth transfer spin',
             clipSlot: 'generated-loop' as const
         }
-    },
-    {
-        id: 'my-character',
-        label: 'My character',
-        shortLabel: 'My character',
-        description: 'Blank starter rig with editable parts and joints.',
-        actionLabel: 'Start',
-        outcome: 'Start with my character',
-        changeCue: 'joints',
-        buildCue: 'rig first',
-        startStage: 'character' as AppStage,
-        sensemaking: {
-            directTranslation: 'Parts + joints -> motion rig',
-            tryThis: 'Move a joint',
-            teacherTakeaway: 'A clean rig lets students personalize before choosing a mechanism.',
-            studentCheck: 'What makes a part bend?',
-            expectedAnswer: 'The joint controls where the part bends',
-            evidenceCue: 'parts keep visible joint holes',
-            clipSlot: 'generated-loop' as const
-        }
     }
 ] as const;
 
@@ -689,13 +669,7 @@ export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState =
     let selectedPathId = project.selectedPathId;
     let selectedMechanismId = project.selectedMechanismId;
 
-    if (lesson.id === 'my-character') {
-        paths = {};
-        mechanisms = [];
-        selectedPartId = 'torso';
-        selectedPathId = undefined;
-        selectedMechanismId = undefined;
-    } else if (lesson.id === 'head-bob') {
+    if (lesson.id === 'head-bob') {
         const pathId = 'path-head-bob';
         paths = {
             [pathId]: {
@@ -714,10 +688,10 @@ export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState =
         };
         const cam = createDefaultMechanism('cam', 'mech-head-bob');
         Object.assign(cam, {
-            anchorX: 130,
-            anchorY: 96,
-            transform: { x: 130, y: 96, rotation: 0, scale: 1 },
-            sceneAnchor: { x: 130, y: 96 },
+            anchorX: 120,
+            anchorY: 80,
+            transform: { x: 120, y: 80, rotation: 0, scale: 1 },
+            sceneAnchor: { x: 120, y: 80 },
             targetPartId: 'head',
             targetPathId: pathId,
             targetAnchorJointId: 'head_top',
@@ -735,7 +709,7 @@ export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState =
         paths = {
             [pathId]: {
                 id: pathId,
-                partId: 'right_foot_part',
+                partId: 'right_leg_lower',
                 targetAnchorJointId: 'right_foot',
                 chainRootJointId: 'right_hip',
                 points: guidedFootStepPath(lessonSkeleton),
@@ -747,39 +721,63 @@ export const createLessonProject = (lessonId: ClassroomLessonId): ProjectState =
                 warnings: []
             }
         };
-        const fiveBar = createDefaultMechanism('5bar', 'mech-walking-leg');
-        Object.assign(fiveBar, {
-            anchorX: 120,
-            anchorY: -130,
-            transform: { x: 120, y: -130, rotation: 0, scale: 1 },
-            sceneAnchor: { x: 120, y: -130 },
-            targetPartId: 'right_foot_part',
+        const legFourBar = createDefaultMechanism('4bar', 'mech-walking-leg');
+        Object.assign(legFourBar, {
+            anchorX: -80,
+            anchorY: -80,
+            transform: { x: -80, y: -80, rotation: 0, scale: 1 },
+            sceneAnchor: { x: -80, y: -80 },
+            targetPartId: 'right_leg_lower',
             targetPathId: pathId,
             targetAnchorJointId: 'right_foot',
-            activeVisualPartIds: ['right_foot_part'],
+            activeVisualPartIds: ['right_leg_lower'],
             source: 'manual',
             presetId: 'lesson-walking-leg',
             recommendation: lesson.description
         } satisfies Partial<MechanismConfig>);
-        mechanisms = [mechanismWithGeneratedPath(fiveBar)];
-        selectedPartId = 'right_foot_part';
+        mechanisms = [mechanismWithGeneratedPath(legFourBar)];
+        selectedPartId = 'right_leg_lower';
         selectedPathId = pathId;
-        selectedMechanismId = fiveBar.id;
+        selectedMechanismId = legFourBar.id;
     } else if (lesson.id === 'spin-gears') {
-        paths = {};
+        const pathId = 'path-gear-spin';
+        paths = {
+            [pathId]: {
+                id: pathId,
+                partId: 'right_arm_lower',
+                targetAnchorJointId: 'right_hand',
+                chainRootJointId: 'right_shoulder',
+                points: [
+                    { x: 118, y: 40 },
+                    { x: 150, y: 72 },
+                    { x: 118, y: 104 },
+                    { x: 86, y: 72 }
+                ],
+                duration: 1600,
+                closed: true,
+                enabled: true,
+                visible: true,
+                source: 'drawn',
+                warnings: []
+            }
+        };
         const gear = createDefaultMechanism('gear', 'mech-spin-gears');
         Object.assign(gear, {
-            anchorX: 0,
-            anchorY: 0,
-            transform: { x: 0, y: 0, rotation: 0, scale: 1 },
-            sceneAnchor: { x: 0, y: 0 },
+            anchorX: -40,
+            anchorY: 80,
+            transform: { x: -40, y: 80, rotation: 0, scale: 1 },
+            sceneAnchor: { x: -40, y: 80 },
+            targetPartId: 'right_arm_lower',
+            targetPathId: pathId,
+            targetAnchorJointId: 'right_hand',
+            activeVisualPartIds: ['right_arm_lower'],
             source: 'manual',
             presetId: 'lesson-spin-gears',
             recommendation: lesson.description
         } satisfies Partial<MechanismConfig>);
         mechanisms = [mechanismWithGeneratedPath(gear)];
-        selectedPartId = undefined;
-        selectedPathId = undefined;
+        selectedPartId = 'right_arm_lower';
+        selectedPathId = pathId;
         selectedMechanismId = gear.id;
     } else {
         mechanisms = project.mechanisms.map(mechanism => mechanismWithGeneratedPath(mechanism));

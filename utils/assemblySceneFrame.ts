@@ -1,4 +1,4 @@
-import type { FabricationRecipe, MechanismConfig, PhysicalKitSettings } from '../types';
+import type { FabricationRecipe, MechanismConfig, PhysicalKitSettings, Point } from '../types';
 import type {
     AssemblyLane,
     AssemblyMotionKind,
@@ -37,6 +37,8 @@ export type AssemblySceneFrame = {
     activePartIds: string[];
     activeBoardCoords: string[];
     floatingReferenceCoords: string[];
+    activeScenePoints?: Point[];
+    floatingReferencePoints?: Point[];
     visibleParts: AssemblySceneVisiblePart[];
     kitProfileKey?: PhysicalKitSettings['profileKey'];
     lane?: AssemblyLane;
@@ -128,6 +130,8 @@ export const buildCharacterAssemblySceneFrame = ({
 }): AssemblySceneFrame => {
     const activePins = [...plan.fixedPins, ...plan.freePivots].filter((pin) => step.pinIds.includes(pin.id));
     const activeBoardCoords = unique(activePins.map((pin) => pin.boardCoordinate ?? ''));
+    const activeScenePoints = activePins.filter(pin => pin.role === 'fixed_pin').map(pin => pin.scene);
+    const floatingReferencePoints = activePins.filter(pin => pin.role !== 'fixed_pin').map(pin => pin.scene);
     const activePartIds = step.phase === 'character-parts'
         ? plan.parts.map((part) => part.id)
         : unique(activePins.flatMap((pin) => pin.partIds));
@@ -153,6 +157,8 @@ export const buildCharacterAssemblySceneFrame = ({
         activePartIds,
         activeBoardCoords,
         floatingReferenceCoords: [],
+        activeScenePoints,
+        floatingReferencePoints,
         visibleParts,
         kitProfileKey: kit.profileKey
     };

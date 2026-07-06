@@ -129,7 +129,9 @@ export const ClassroomExampleVideo = ({
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="font-bold text-slate-800">{CLASSROOM_COPY.useExampleTitle}</div>
-          <span className="blueprint-pill">{formatClassroomUseExampleLabel(example)}</span>
+          <span className="classroom-use-label">
+            {formatClassroomUseExampleLabel(example)}
+          </span>
         </div>
         {embedUrl && (
           <button

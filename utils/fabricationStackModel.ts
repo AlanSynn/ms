@@ -79,6 +79,18 @@ export const fabricationStackForMechanism = (mechanism: FabricationStackMechanis
             layer(`Output L${linkageSpec.cells} linkage`, 'linkage')
         );
     }
+    if (mechanism.type === '4bar') {
+        const inputSpec = fabricationLinkageSpecForSceneLength(mechanism.crankLength ?? REFERENCE_DEFAULTS.fourBar.input, REFERENCE_DEFAULTS.pitchMm, 3);
+        const couplerSpec = fabricationLinkageSpecForSceneLength(mechanism.couplerLength ?? REFERENCE_DEFAULTS.fourBar.coupler, REFERENCE_DEFAULTS.pitchMm, 4);
+        const outputSpec = fabricationLinkageSpecForSceneLength(mechanism.rockerLength ?? REFERENCE_DEFAULTS.fourBar.output, REFERENCE_DEFAULTS.pitchMm, 3);
+        return linked(
+            layer(`Input L${inputSpec.cells} linkage`, 'linkage'),
+            spacer(),
+            layer(`Coupler L${couplerSpec.cells} linkage`, 'linkage'),
+            spacer(),
+            layer(`Output L${outputSpec.cells} linkage`, 'linkage')
+        );
+    }
     const roleForLabel = (labelText: string): FabricationStackLayer['role'] => {
         if (/gear|ring|sun|planet/i.test(labelText)) return 'gear';
         if (/cam/i.test(labelText)) return 'cam';

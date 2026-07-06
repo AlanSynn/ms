@@ -52,6 +52,12 @@ type FoundryDynamicLayerRenderOptions = {
   assemblySceneFrame?: FoundryAssemblySceneFrame;
 };
 
+const linkageHoleCountFromLabel = (label: string, fallback: number) => {
+  const match = /\bL(\d+)\b/i.exec(label);
+  const cells = match ? Number(match[1]) : NaN;
+  return Number.isFinite(cells) ? Math.max(2, cells + 1) : fallback;
+};
+
 export const renderFoundryDynamicLayers = ({
   mechanism,
   simulation,
@@ -161,29 +167,31 @@ export const renderFoundryDynamicLayers = ({
       mechanism.type === "gear_linkage" &&
       /drive.*L|Drive L|drive.*linkage/i.test(label)
     )
-      addBar(s.j1, s.effector, z, mat, 4);
+      addBar(s.j1, s.effector, z, mat, linkageHoleCountFromLabel(label, 4));
     else if (
       mechanism.type === "gear_linkage" &&
       /output.*L|Output L|output.*linkage|L4|linkage/i.test(label)
     )
-      addBar(s.j2, s.effector, z, mat, 4);
+      addBar(s.j2, s.effector, z, mat, linkageHoleCountFromLabel(label, 4));
     else if (mechanism.type === "6bar" && /output rocker/i.test(label))
-      addBar(s.p2, s.j2, z, mat, 3);
+      addBar(s.p2, s.j2, z, mat, linkageHoleCountFromLabel(label, 3));
     else if (mechanism.type === "6bar" && /dyad/i.test(label))
-      addBar(s.j2, s.aux, z, mat, 2);
+      addBar(s.j2, s.aux, z, mat, linkageHoleCountFromLabel(label, 2));
     else if (mechanism.type === "6bar" && /follower/i.test(label))
-      addBar(s.p2, s.aux, z, mat, 2);
+      addBar(s.p2, s.aux, z, mat, linkageHoleCountFromLabel(label, 2));
     else if (mechanism.type === "planetary_gear" && /carrier/i.test(label))
-      addBar(s.p1, s.p2, z, mat, 3);
+      addBar(s.p1, s.p2, z, mat, linkageHoleCountFromLabel(label, 3));
     else if (mechanism.type === "4bar" && /output|rocker/i.test(label))
-      addBar(s.p2, s.j2, z, mat, 3);
-    else if (/input|crank|left/i.test(label)) addBar(s.p1, s.j1, z, mat, 3);
-    else if (/right/i.test(label)) addBar(s.p2, s.j2, z, mat, 3);
+      addBar(s.p2, s.j2, z, mat, linkageHoleCountFromLabel(label, 3));
+    else if (/input|crank|left/i.test(label))
+      addBar(s.p1, s.j1, z, mat, linkageHoleCountFromLabel(label, 3));
+    else if (/right/i.test(label))
+      addBar(s.p2, s.j2, z, mat, linkageHoleCountFromLabel(label, 3));
     else if (/coupler|center|carrier/i.test(label))
-      addBar(s.j1, s.j2, z, mat, 4);
+      addBar(s.j1, s.j2, z, mat, linkageHoleCountFromLabel(label, 4));
     else if (/output|follower/i.test(label))
-      addBar(s.j2, s.effector, z, mat, 2);
-    else addBar(s.j1, s.j2, z, mat, 3);
+      addBar(s.j2, s.effector, z, mat, linkageHoleCountFromLabel(label, 2));
+    else addBar(s.j1, s.j2, z, mat, linkageHoleCountFromLabel(label, 3));
   };
   const renderGearLayer = (
     label: string,

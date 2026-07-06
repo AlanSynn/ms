@@ -29,6 +29,7 @@ const linkageSceneLengthForCells = (cells: number) =>
 const linkageCellsForSceneLength = (length: number) =>
   fabricationLinkageSpecForSceneLength(length).cells;
 const gearOptionLabel = (teeth: number) => `${teeth} teeth`;
+const linkageOptionLabel = (holeCount: number) => `${holeCount}-hole`;
 
 export const MechanismParametricEditor = ({
   mechanism,
@@ -161,7 +162,7 @@ export const MechanismParametricEditor = ({
       )}
       {renderLinkageControls && (
         <div className="mt-3 space-y-2">
-          <div className="section-title">Link sizes</div>
+          <div className="section-title">Link holes</div>
           {mechanism.type === "4bar" &&
             (
               [
@@ -191,7 +192,7 @@ export const MechanismParametricEditor = ({
                 >
                   {FABRICATION_LINKAGE_SPECS.map((spec) => (
                     <option key={spec.key} value={spec.cells}>
-                      {spec.cells}-cell
+                      {linkageOptionLabel(spec.holeCentersMm.length)}
                     </option>
                   ))}
                 </select>
@@ -214,7 +215,7 @@ export const MechanismParametricEditor = ({
               >
                 {FABRICATION_LINKAGE_SPECS.map((spec) => (
                   <option key={spec.key} value={spec.cells}>
-                    {spec.cells}-cell
+                    {linkageOptionLabel(spec.holeCentersMm.length)}
                   </option>
                 ))}
               </select>
@@ -370,4 +371,3 @@ const CamProfileEditor = ({
     </div>
   );
 };
-

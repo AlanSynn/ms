@@ -217,15 +217,25 @@ export const createFoundryThreePrimitiveFactory = ({
       len = Math.hypot(dx, dy);
     if (len < 0.05) return;
     const sceneLength = Math.hypot(b.x - a.x, b.y - a.y);
+    const sourceSceneLength =
+      sceneLength / Math.max(0.001, Math.abs(simulationScale));
     const linkageSpec = fabricationLinkageSpecForSceneLength(
-      sceneLength,
+      sourceSceneLength,
       kit.gridPitchMm,
       holeCount,
     );
-    const templateLen = linkageSpec.lengthMm * mmToThree;
+    const sourceTemplateSceneLength = Math.max(
+      1,
+      linkageSpec.lengthMm * SCENE_PX_PER_MM,
+    );
+    const previewScale = sceneLength / sourceTemplateSceneLength;
+    const templateLen = linkageSpec.lengthMm * mmToThree * previewScale;
     const firstHoleX = linkageSpec.holeCentersMm[0]?.x ?? 0;
     const holeXs = linkageSpec.holeCentersMm.map(
-      (point) => (point.x - firstHoleX - linkageSpec.lengthMm / 2) * mmToThree,
+      (point) =>
+        (point.x - firstHoleX - linkageSpec.lengthMm / 2) *
+        mmToThree *
+        previewScale,
     );
     const outlineLen = templateLen + barW;
     const group = new THREE.Group();

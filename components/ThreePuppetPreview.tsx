@@ -190,10 +190,9 @@ const assemblyExplodeAmountForPhase = (phase?: PuppetAssemblyOverlay['phase'], p
 
 const assemblyOffsetForPart = (index: number, count: number, amount: number) => {
   if (amount <= 0) return { x: 0, y: 0, z: 0 };
-  const spreadAngle = (index / Math.max(1, count)) * Math.PI * 2 - Math.PI / 2;
   return {
-    x: Math.cos(spreadAngle) * 88 * amount,
-    y: Math.sin(spreadAngle) * 60 * amount - 26 * amount,
+    x: 0,
+    y: 0,
     z: (0.26 + index * 0.055) * amount
   };
 };
@@ -1195,9 +1194,11 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
 
   useEffect(() => {
     if (rendererStatus !== 'webgl') return;
+    const assemblyActiveJoints = new Set(assemblyOverlay?.activeJointIds ?? []);
     bones.forEach(([a, b]) => {
       const mesh = boneRefs.current.get(`${a}-${b}`);
       if (!mesh) return;
+      mesh.visible = !assemblyOverlay;
       const ja = activeSkeleton?.joints[a];
       const jb = activeSkeleton?.joints[b];
       updateUnitBar(mesh, ja?.position, jb?.position, 0.18);
@@ -1205,12 +1206,17 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     joints.forEach(joint => {
       const visual = jointRefs.current.get(joint.id);
       if (!visual) return;
+      const showAssemblyPin = !assemblyOverlay || (
+        assemblyPhase !== 'character-parts' && assemblyActiveJoints.has(joint.id)
+      );
+      visual.pin.visible = showAssemblyPin;
+      visual.washer.visible = showAssemblyPin;
       const p = to3(joint.position, 0.35);
       visual.pin.position.copy(p);
       visual.washer.position.set(p.x, p.y, 0.55);
     });
     render();
-  }, [activeSkeleton, bones, joints, rendererStatus]);
+  }, [activeSkeleton, assemblyOverlay, assemblyPhase, bones, joints, rendererStatus]);
 
   const pathSignature = useMemo(() => pathsToRender.map(path => [
     path.id,
@@ -1917,6 +1923,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       data-assembly-mode={assemblyPhase ? 'character' : ''}
       data-assembly-phase={assemblyPhase ?? ''}
       data-assembly-progress={Math.round(assemblyProgress * 100)}
+      data-assembly-skeleton-mode={assemblyPhase ? 'pin-hardware-only' : ''}
       data-assembly-active-part-ids={assemblyOverlay?.activePartIds?.join(',') ?? ''}
       data-assembly-active-joint-ids={assemblyOverlay?.activeJointIds?.join(',') ?? ''}
       data-three-exploded={assemblyExplodeAmount > 0.01 ? 'true' : 'false'}

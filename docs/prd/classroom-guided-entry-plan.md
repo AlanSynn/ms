@@ -10,7 +10,7 @@ Recent teacher feedback changes the entry assumption. The earlier hypothesis was
 
 Teachers repeatedly asked for a clearer start because they wanted students to understand what the app enables before worrying about digital setup, physical build steps, or character import. The app still needs creative freedom, but freedom should arrive after a concrete, working project baseline.
 
-Second synthesis: the entry needs motion-editing scaffolds, not only starter characters. Students should start from a working theme, see what will move, then choose what to change: wrist path, head path, foot path, gear size, or joints. Upload and blank-start routes remain available, but they are not the primary classroom posture.
+Second synthesis: the entry needs motion-editing scaffolds, not only starter characters. Students should start from a working theme, see what will move, then choose what to change: wrist path, head path, foot path, or gear size. Upload and blank-start routes remain available, but they are not the primary classroom posture.
 
 ## Decision
 
@@ -24,7 +24,6 @@ The answer should be a visible result, not a technical process. Examples:
 - `Make a foot step`
 - `Make a head bob`
 - `Make gears spin`
-- `Start with my character`
 
 Each guided option must create real `ProjectState` data: character parts, joints, paths, anchors, optional mechanism, fabrication metadata, and reset baseline. No guided entry may be a screenshot, mock tutorial, fake recommendation, or canned animation.
 
@@ -78,10 +77,9 @@ Minimum project cards:
 | Theme card | Digital action -> physical artifact | Starter data |
 | --- | --- | --- |
 | `Make an arm wave` | Draw/fit a wrist path -> four-bar swings an arm | starter humanoid, right hand path, four-bar baseline |
-| `Make a foot step` | Tune a foot path -> linked step motion | starter humanoid, foot path, paired mechanism metadata |
+| `Make a foot step` | Tune a foot path -> four-bar step motion | starter humanoid, lower-leg path, four-bar baseline |
 | `Make a head bob` | Tune lift path -> cam follower lifts head | starter humanoid, head path, cam baseline |
 | `Make gears spin` | Pick gears -> gear train transfers rotation | prop/object starter, gear train baseline |
-| `Start with my character` | Import or blank rig -> editable parts and joints | blank starter or user package, no hidden mechanism |
 
 Card copy policy:
 
@@ -96,7 +94,7 @@ Examples:
 
 - `Make an arm wave` / `Change wrist path` / `Build four-bar` / `Open`
 - `Make a head bob` / `Change head path` / `Build cam` / `Open`
-- `Start with my character` / `Change joints` / `Build rig first` / `Start`
+- `Make a foot step` / `Change foot path` / `Build four-bar` / `Open`
 
 ## Ownership model
 
@@ -244,8 +242,8 @@ Completed first production slice:
 - Guided cards show result, `Change`, and `Build` cues only. Direct-translation sensemaking remains metadata for later stage context and teacher-pack use.
 - Character now gets a `Make it yours` ownership cluster after a guided lesson opens so students can move from baseline to personal edits immediately.
 - `Waving arm` creates real editable lesson state through `createLessonProject`, lands on Character, preserves reset baseline behavior, and carries outcome/build-cue/sensemaking metadata.
-- Minimum guided cards now create real editable state: arm wave/four-bar, head bob/cam, foot step/five-bar, gear spin/gear pair, and my-character/blank humanoid starter.
-- `Start with my character` creates a real blank humanoid starter from the guided library with editable parts and joints, no hidden mechanism, and no upload requirement.
+- Minimum guided cards now create real editable, export-ready motion state: arm wave/four-bar, head bob/cam, foot step/four-bar, and gear spin/gear pair.
+- Blank humanoid starts stay available through the secondary `Starter rig`, built-in character, image, and character-file routes instead of the visible Guide project set.
 - Starter/import routes remain available as secondary entry points: starter rig, Girl, Boy, Image, Character file, and full project import.
 - Browser coverage verifies guided project open -> Character -> Foundry sensemaking without fake project data.
 

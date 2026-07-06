@@ -46,7 +46,7 @@ export const VIEWER3D_CAMERA_PRESETS: Record<Viewer3DCameraPreset, Viewer3DCamer
 export type Viewer3DLayerKey = 'grid' | 'character' | 'skeleton' | 'mechanisms' | 'paths' | 'forces' | 'velocity' | 'trail';
 export type Viewer3DLayerVisibility = Partial<Record<Viewer3DLayerKey, boolean>>;
 export type Viewer3DLayerState = boolean | 'external' | 'absent';
-export type Viewer3DTabKey = 'character' | 'path' | 'foundry' | 'design' | 'blueprint';
+export type Viewer3DTabKey = 'character' | 'path' | 'foundry' | 'design' | 'blueprint' | 'assembly';
 
 export type Viewer3DContract = {
   version: typeof VIEWER3D_CONTRACT_VERSION;
@@ -65,8 +65,11 @@ export const DEFAULT_PUPPET_VIEWER_LAYERS: Required<Pick<Viewer3DLayerVisibility
   mechanisms: true
 };
 
-export const viewer3DLayerDataValue = (value: boolean | undefined, unsupported: 'absent' | 'external' = 'absent') => (
-  typeof value === 'boolean' ? (value ? 'shown' : 'hidden') : unsupported
+export const viewer3DLayerDataValue = (
+  value: Viewer3DLayerState | undefined,
+  unsupported: 'absent' | 'external' = 'absent',
+) => (
+  typeof value === 'boolean' ? (value ? 'shown' : 'hidden') : value ?? unsupported
 );
 
 export const createViewer3DContract = (

@@ -196,6 +196,14 @@ export const FoundryPreviewStateProbe = ({
   assemblySceneFrame,
   assemblyLayerFocusSummary,
 }: FoundryPreviewStateProbeProps) => {
+  const assemblyBoardMarkerCount =
+    assemblySceneFrame?.kind === "character"
+      ? (assemblySceneFrame.activeScenePoints?.length ?? 0)
+      : (assemblySceneFrame?.activeBoardCoords.length ?? 0);
+  const assemblyFloatingMarkerCount =
+    assemblySceneFrame?.kind === "character"
+      ? (assemblySceneFrame.floatingReferencePoints?.length ?? 0)
+      : (assemblySceneFrame?.floatingReferenceCoords.length ?? 0);
   const isGearTrain =
     mechanism.type === "gear" || mechanism.type === "gear_linkage";
   const isPlanetaryGear = mechanism.type === "planetary_gear";
@@ -225,8 +233,8 @@ export const FoundryPreviewStateProbe = ({
       data-camera-preset={camera.preset}
       data-layer-grid={viewer3DLayerDataValue(showGrid)}
       data-layer-mechanisms={viewer3DLayerDataValue(true)}
-      data-layer-character={viewer3DLayerDataValue(undefined)}
-      data-layer-skeleton={viewer3DLayerDataValue(undefined)}
+      data-layer-character={viewer3DLayerDataValue(viewerContract.layers.character)}
+      data-layer-skeleton={viewer3DLayerDataValue(viewerContract.layers.skeleton)}
       data-layer-paths={viewer3DLayerDataValue(showPathPreview)}
       data-layer-forces={viewer3DLayerDataValue(showForces)}
       data-layer-velocity={viewer3DLayerDataValue(showVelocity)}
@@ -508,10 +516,10 @@ export const FoundryPreviewStateProbe = ({
       }
       data-three-assembly-rendered-layer-focus={assemblyLayerFocusSummary}
       data-three-assembly-rendered-board-marker-count={
-        assemblySceneFrame?.activeBoardCoords.length ?? 0
+        assemblyBoardMarkerCount
       }
       data-three-assembly-rendered-floating-marker-count={
-        assemblySceneFrame?.floatingReferenceCoords.length ?? 0
+        assemblyFloatingMarkerCount
       }
       className="foundry-three-scene-state"
     />

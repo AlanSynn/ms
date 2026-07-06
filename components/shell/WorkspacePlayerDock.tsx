@@ -26,32 +26,48 @@ export const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, 
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const dragStart = useRef<{ x: number; y: number; offset: { x: number; y: number } } | null>(null);
-  useEffect(() => {
-    if (!dragging) return;
-    const onMove = (event: PointerEvent) => {
-      const start = dragStart.current;
-      if (!start) return;
-      setOffset({
-        x: Math.max(-260, Math.min(260, start.offset.x + event.clientX - start.x)),
-        y: Math.max(-220, Math.min(120, start.offset.y + event.clientY - start.y)),
-      });
-    };
-    const onUp = () => {
-      dragStart.current = null;
-      setDragging(false);
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp, { once: true });
-    return () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-    };
-  }, [dragging]);
-  const startDrag = (event: React.PointerEvent) => {
+  const stopDragListeners = useRef<(() => void) | null>(null);
+
+  const moveDockToPointer = (clientX: number, clientY: number) => {
+    const start = dragStart.current;
+    if (!start) return;
+    setOffset({
+      x: Math.max(-260, Math.min(260, start.offset.x + clientX - start.x)),
+      y: Math.max(-220, Math.min(120, start.offset.y + clientY - start.y)),
+    });
+  };
+
+  const stopDrag = () => {
+    dragStart.current = null;
+    setDragging(false);
+    stopDragListeners.current?.();
+    stopDragListeners.current = null;
+  };
+
+  useEffect(() => () => stopDragListeners.current?.(), []);
+
+  const startDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return;
     event.preventDefault();
+    event.stopPropagation();
+    stopDragListeners.current?.();
     dragStart.current = { x: event.clientX, y: event.clientY, offset };
     setDragging(true);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Window listeners below are the durable drag source.
+    }
+    const onMove = (moveEvent: PointerEvent) => moveDockToPointer(moveEvent.clientX, moveEvent.clientY);
+    const onUp = () => stopDrag();
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp, { once: true });
+    window.addEventListener('pointercancel', onUp, { once: true });
+    stopDragListeners.current = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
   };
   return <aside
     className={`player-dock ${drawMode ? 'is-drawing' : ''} ${dragging ? 'is-moving' : ''}`}

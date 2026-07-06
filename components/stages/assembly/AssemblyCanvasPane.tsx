@@ -78,7 +78,6 @@ export const AssemblyCanvasPane = ({
         <div className="assembly-simulation-stack" data-testid="assembly-character-simulation-stack">
           <AssemblyCharacterThreePreview
             project={project}
-            plan={characterAssemblyPlan}
             step={currentCharacterStep}
             progress={progress}
             sceneFrame={characterFrame}

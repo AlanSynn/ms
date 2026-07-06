@@ -162,6 +162,15 @@ export const referenceRequiredPartsForMechanism = (mechanism: Pick<MechanismConf
     const recipe = referenceRecipeForType(mechanism.type);
     if (!recipe.exportReady) return [];
     const parts = recipe.requiredParts.map(partRequirement => ({ ...partRequirement }));
+    if (mechanism.type === '4bar') {
+        const normalized = normalizeFourBarToFabrication(mechanism);
+        return aggregatePartRequirements([
+            linkageRequirementForSceneLength(normalized.crankLength ?? REFERENCE_DEFAULTS.fourBar.input),
+            linkageRequirementForSceneLength(normalized.couplerLength ?? REFERENCE_DEFAULTS.fourBar.coupler),
+            linkageRequirementForSceneLength(normalized.rockerLength ?? REFERENCE_DEFAULTS.fourBar.output),
+            ...parts.filter(partRequirement => partRequirement.category !== 'linkages')
+        ]);
+    }
     if (mechanism.type === 'gear') {
         return aggregatePartRequirements([
             ...gearRequirementsForMechanism(normalizeGearTrainToFabrication(mechanism)),

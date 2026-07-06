@@ -9,6 +9,38 @@ import {
 import { MiniNumber, Toggle } from "../../ui/InspectorControls";
 import { CutOutlineEditorDialog } from "./CutOutlineEditorDialog";
 
+const CompactNumber = ({
+  label,
+  value,
+  min,
+  max,
+  step = 1,
+  disabled = false,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  disabled?: boolean;
+  onChange: (v: number) => void;
+}) => (
+  <label className={`compact-number ${disabled ? "opacity-50" : ""}`}>
+    <span>{label}</span>
+    <input
+      aria-label={`${label} number`}
+      type="number"
+      min={min}
+      max={max}
+      step={step}
+      disabled={disabled}
+      value={Number.isFinite(value) ? value : 0}
+      onChange={(event) => onChange(Number(event.target.value))}
+    />
+  </label>
+);
+
 export const PartInspector = ({
   part,
   skeleton,
@@ -74,6 +106,13 @@ export const PartInspector = ({
         index === targetIndex ? { ...point, ...updates } : point,
       ),
     );
+  const replaceCutPoints = (points: Point[], nextSelectedIndex = 0) => {
+    if (!isUsableContourPoints(points)) return;
+    commitCut(points);
+    setSelectedCutPointIndex(
+      Math.max(0, Math.min(nextSelectedIndex, points.length - 1)),
+    );
+  };
   const openCutEditor = () => {
     commitCut(editableCutPoints);
     setCutEditorOpen(true);
@@ -106,46 +145,52 @@ export const PartInspector = ({
           : "auto joint cut";
   return (
     <div className={`${compact ? "mt-3" : "mt-4"} space-y-3`}>
-      <Toggle
-        label="Visible"
-        checked={part.visible}
-        disabled={part.locked}
-        onChange={(visible) =>
-          dispatch({
-            type: "update_part",
-            partId: part.id,
-            updates: { visible },
-          })
-        }
-      />
-      <Toggle
-        label="Locked"
-        checked={part.locked}
-        onChange={(locked) =>
-          dispatch({
-            type: "update_part",
-            partId: part.id,
-            updates: { locked },
-          })
-        }
-      />
-      <div className="part-art-controls" data-testid="part-cut-controls">
-        <div className="section-title">Cut</div>
-        <div
-          className="mt-2 text-xs font-black uppercase tracking-wider text-slate-500"
-          data-testid="part-cut-summary"
-        >
-          {cutSource}
-        </div>
-        <button
-          type="button"
-          data-testid="part-cut-bake"
-          className="btn-secondary mt-3"
+      <div className="grid grid-cols-2 gap-2">
+        <Toggle
+          label="Visible"
+          checked={part.visible}
           disabled={part.locked}
-          onClick={openCutEditor}
-        >
-          Edit cut
-        </button>
+          onChange={(visible) =>
+            dispatch({
+              type: "update_part",
+              partId: part.id,
+              updates: { visible },
+            })
+          }
+        />
+        <Toggle
+          label="Locked"
+          checked={part.locked}
+          onChange={(locked) =>
+            dispatch({
+              type: "update_part",
+              partId: part.id,
+              updates: { locked },
+            })
+          }
+        />
+      </div>
+      <div className="part-art-controls" data-testid="part-cut-controls">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <div className="section-title">Cut</div>
+            <div
+              className="mt-1 text-xs font-black uppercase tracking-wider text-slate-500"
+              data-testid="part-cut-summary"
+            >
+              {cutSource}
+            </div>
+          </div>
+          <button
+            type="button"
+            data-testid="part-cut-bake"
+            className="btn-secondary"
+            disabled={part.locked}
+            onClick={openCutEditor}
+          >
+            Edit cut
+          </button>
+        </div>
       </div>
       {cutEditorOpen && (
         <CutOutlineEditorDialog
@@ -156,6 +201,7 @@ export const PartInspector = ({
           selectedIndex={selectedIndex}
           setSelectedIndex={setSelectedCutPointIndex}
           updatePointAt={updateCutPointAt}
+          replacePoints={replaceCutPoints}
           addPoint={addCutPoint}
           removePoint={removeCutPoint}
           onUseAuto={() => commitCut(autoCutPoints)}
@@ -164,8 +210,34 @@ export const PartInspector = ({
           onClose={() => setCutEditorOpen(false)}
         />
       )}
-      <div className="part-art-controls" data-testid="part-art-controls">
-        <div className="section-title">Artwork surface</div>
+      <div className="grid grid-cols-3 gap-2">
+        <CompactNumber
+          label="X"
+          value={part.transform.x}
+          min={-320}
+          max={320}
+          disabled={part.locked}
+          onChange={(x) => updateTransform({ x })}
+        />
+        <CompactNumber
+          label="Y"
+          value={part.transform.y}
+          min={-320}
+          max={320}
+          disabled={part.locked}
+          onChange={(y) => updateTransform({ y })}
+        />
+        <CompactNumber
+          label="Rotation"
+          value={part.transform.rotation}
+          min={-180}
+          max={180}
+          disabled={part.locked}
+          onChange={(rotation) => updateTransform({ rotation })}
+        />
+      </div>
+      <details className="advanced-panel" data-testid="part-art-controls">
+        <summary>Artwork</summary>
         <div className="mt-3 grid grid-cols-2 gap-3">
           <MiniNumber
             label="Art opacity"
@@ -224,33 +296,7 @@ export const PartInspector = ({
             onChange={(y) => updateBounds({ y })}
           />
         </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <MiniNumber
-          label="X"
-          value={part.transform.x}
-          min={-320}
-          max={320}
-          disabled={part.locked}
-          onChange={(x) => updateTransform({ x })}
-        />
-        <MiniNumber
-          label="Y"
-          value={part.transform.y}
-          min={-320}
-          max={320}
-          disabled={part.locked}
-          onChange={(y) => updateTransform({ y })}
-        />
-        <MiniNumber
-          label="Rotation"
-          value={part.transform.rotation}
-          min={-180}
-          max={180}
-          disabled={part.locked}
-          onChange={(rotation) => updateTransform({ rotation })}
-        />
-      </div>
+      </details>
       <div className="flex gap-2">
         <button
           className="btn-secondary"
