@@ -26,7 +26,7 @@ If a control does not meet one of those conditions, remove it instead of adding 
 | Mechanism Foundry | Mechanism type selection, anchor picking, layer toggles, play/reset, parameters, and “Use mechanism” export a real mechanism package. | Implemented and covered by existing browser tests. Keep future mechanism buttons backed by `mechanismFeatureRegistry`/fabrication recipes. |
 | Mechanism Design | Playback/trace, library insertion, fit-path optimization, recommendation generation, delete, and blueprint navigation. | Implemented. Fit/recommendation controls run optimizer/recommendation code and are not static cards. |
 | Blueprint | Generate fabrication package; download JSON/SVG/PDF/STL/HTML/metadata; preview 2D cut sheet; navigate to assembly. | Implemented. Blueprint stays a 2D document preview; step-by-step assembly lives in Assembly. |
-| Assembly | Kit/custom lane choice, recipe cards, step controls, Three build preview, read-only step strip, PDF/HTML guide download. | Implemented. Stepper uses `prefabAssemblySteps`, `AssemblySceneFrame`, and the Three preview rather than a static guide, lower SVG workbench, or nested ghost. |
+| Assembly | Kit/custom lane choice, recipe cards, step controls, Three build preview, read-only step strip, PDF/HTML guide download. | Implemented. Stepper uses graph-compiled recipes, `AssemblySceneFrame`, and the Three preview rather than a static guide, lower SVG workbench, or nested ghost. |
 | Options | Theme, toolbar/panel visibility, physics/fabrication/export settings, and reset all update real settings. | Implemented. Keep settings compact and avoid “studio/debug” explanatory panels unless tied to real settings. |
 
 ## Retired / unnecessary in current browser build

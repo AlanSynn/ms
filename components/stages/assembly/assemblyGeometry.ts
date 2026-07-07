@@ -1,14 +1,15 @@
 import type { CharacterAssemblyPlan } from '../../../utils/assemblyPlayback';
+import { parseBoardCoordinateLabel } from '../../../utils/coordinates';
 
 export type AssemblyPoint = { x: number; y: number };
 
 export const ASSEMBLY_REFERENCE_OPACITY = 0.86;
 export const ASSEMBLY_QUIET_OPACITY = 0.72;
 
-export const assemblyCoordToSvg = (coord: string): AssemblyPoint | null => {
-    const match = /^([A-O])([1-9]|1[0-5])$/i.exec(coord.trim());
-    if (!match) return null;
-    return { x: 494 + (match[1].toUpperCase().charCodeAt(0) - 65) * 18, y: 142 + (Number(match[2]) - 1) * 18 };
+export const assemblyCoordToSvg = (coord: string, boardCells = 15): AssemblyPoint | null => {
+    const parsed = parseBoardCoordinateLabel(coord);
+    if (!parsed || parsed.col >= boardCells || parsed.row >= boardCells) return null;
+    return { x: 494 + parsed.col * 18, y: 142 + parsed.row * 18 };
 };
 
 export const smoothAssemblyProgress = (value: number) => {
@@ -45,7 +46,7 @@ export const characterBoardProjector = (plan: CharacterAssemblyPlan) => {
     const bounds = allPoints.length ? pointBounds(allPoints) : { minX: -120, maxX: 120, minY: -160, maxY: 160, width: 240, height: 320 };
     const fitScale = Math.min(220 / Math.max(1, bounds.width), 248 / Math.max(1, bounds.height));
     const anchoredPins = plan.fixedPins
-        .map(pin => ({ pin, board: pin.boardCoordinate ? assemblyCoordToSvg(pin.boardCoordinate) : null }))
+        .map(pin => ({ pin, board: pin.boardCoordinate ? assemblyCoordToSvg(pin.boardCoordinate, plan.boardCells) : null }))
         .filter((entry): entry is { pin: CharacterAssemblyPlan['fixedPins'][number]; board: AssemblyPoint } => Boolean(entry.board));
     const pair = anchoredPins.flatMap((first, firstIndex) =>
         anchoredPins.slice(firstIndex + 1).map(second => ({ first, second }))

@@ -278,7 +278,7 @@ export const foundryPinStackPoints = (
   if (type === "gear_linkage") {
     const gearCount = Math.max(
       2,
-      Math.min(points.length, cleanIndexes.length - 3),
+      Math.min(points.length, Math.max(2, cleanIndexes.length - 4)),
     );
     const gearIndexes = cleanIndexes.slice(0, gearCount);
     const linkageIndexes = cleanIndexes.slice(gearCount);
@@ -307,10 +307,12 @@ export const foundryPinStackPoints = (
         return {
           id: pinId(index),
           point,
-          movingLayerIndexes: [gearIndexes[0], linkageIndexes[0]].filter(
-            (item): item is number => typeof item === "number",
-          ),
-          spacerLayerIndexes: spacerIndexesFrom(Math.max(0, gearCount - 1)),
+          movingLayerIndexes: [
+            gearIndexes[0],
+            linkageIndexes[0],
+            linkageIndexes[2],
+          ].filter((item): item is number => typeof item === "number"),
+          spacerLayerIndexes: spacerIndexesFrom(Math.max(0, gearCount - 1), 2),
         };
       }
       if (index === gearCount + 1) {
@@ -320,14 +322,14 @@ export const foundryPinStackPoints = (
           movingLayerIndexes: [
             gearIndexes.at(-1),
             linkageIndexes[1] ?? linkageIndexes[0],
+            linkageIndexes[3] ?? linkageIndexes[2] ?? linkageIndexes[1] ?? linkageIndexes[0],
           ].filter((item): item is number => typeof item === "number"),
-          spacerLayerIndexes: spacerIndexesFrom(Math.max(0, gearCount - 1), 2),
+          spacerLayerIndexes: spacerIndexesFrom(Math.max(0, gearCount), 2),
         };
       }
       const moving = [
-        linkageIndexes[0],
-        linkageIndexes[1],
-        linkageIndexes[2],
+        linkageIndexes[2] ?? linkageIndexes[0],
+        linkageIndexes[3] ?? linkageIndexes[1],
       ].filter((item): item is number => typeof item === "number");
       return {
         id: pinId(index),

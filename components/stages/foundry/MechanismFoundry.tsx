@@ -2,7 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FoundryCanvasPane } from "./FoundryCanvasPane";
 import { FoundryInspectorPanel } from "./FoundryInspectorPanel";
 import { FoundryWorkflowPanel } from "./FoundryWorkflowPanel";
-import type { FoundryParamHandle, FoundryParamHandleId } from "./FoundryOverlayLayer";
+import type {
+  FoundryParamHandle,
+  FoundryParamHandleId,
+} from "./FoundryOverlayLayer";
 import {
   foundryAssemblyPinPoints,
   foundryPinStackPoints,
@@ -80,14 +83,19 @@ import {
   fitMechanismToTargetPath,
   normalizeGearMeshMechanism,
 } from "../../../utils/mechanismRecommendations";
-import { createDefaultMechanism, mechanismWithGeneratedPath, uid } from "../../../utils/project";
+import {
+  createDefaultMechanism,
+  mechanismWithGeneratedPath,
+  uid,
+} from "../../../utils/project";
 import { preferredMotionJointId } from "../../../utils/motion";
 
 const traceDistanceToGeneratedPath = (
   trace: { points: Point[] },
   generatedPath: Point[],
 ) => {
-  if (!trace.points.length || !generatedPath.length) return Number.POSITIVE_INFINITY;
+  if (!trace.points.length || !generatedPath.length)
+    return Number.POSITIVE_INFINITY;
   const count = Math.min(12, trace.points.length, generatedPath.length);
   return Array.from({ length: count }, (_, index) => {
     const generatedIndex = Math.round(
@@ -130,7 +138,9 @@ export const MechanismFoundry = ({
   const [showTrail, setShowTrail] = useState(false);
   const [showUserPathPreview, setShowUserPathPreview] = useState(true);
   const [showPathPreview, setShowPathPreview] = useState(false);
-  const [selectedOutputTraceId, setSelectedOutputTraceId] = useState<string | null>(null);
+  const [selectedOutputTraceId, setSelectedOutputTraceId] = useState<
+    string | null
+  >(null);
   const [showFoundryGrid, setShowFoundryGrid] = useState(true);
   const [showSensemaking, setShowSensemaking] = useState(false);
   const [foundryExplode, setFoundryExplode] = useState(0);
@@ -187,9 +197,7 @@ export const MechanismFoundry = ({
       ? { x: foundry.anchorX ?? 0, y: foundry.anchorY ?? 0 }
       : undefined) ??
     selectedPath?.points[0] ??
-    (selectedSceneObject
-      ? selectedSceneObject.transform
-      : undefined) ??
+    (selectedSceneObject ? selectedSceneObject.transform : undefined) ??
     (selectedPart
       ? bodyPartPivotScene(selectedPart, project.skeleton)
       : { x: foundry.anchorX ?? 0, y: foundry.anchorY ?? 0 });
@@ -335,8 +343,9 @@ export const MechanismFoundry = ({
     rule: physicsRule,
   } = physicsOverlay;
   const foundryRenderPlan = useMemo(
-    () => compileMechanismRenderPlan(landedFoundry),
-    [landedFoundry],
+    () =>
+      compileMechanismRenderPlan(landedFoundry, project.settings.physicalKit),
+    [landedFoundry, project.settings.physicalKit],
   );
   const foundryTopLayer = foundryRenderPlan.layers.at(-1);
   const foundryStackLayerZ = useMemo(
@@ -410,7 +419,9 @@ export const MechanismFoundry = ({
       : 0) +
     0.18;
   const foundryOverlayZForHandle = (handleId?: string) => {
-    const pin = foundryOverlayPinStackById.get(handleId === "M" ? "A" : (handleId ?? ""));
+    const pin = foundryOverlayPinStackById.get(
+      handleId === "M" ? "A" : (handleId ?? ""),
+    );
     if (landedFoundry.type === "4bar" && (handleId === "A" || handleId === "D"))
       return pin?.bottomZ ?? foundryOverlayZ;
     return pin?.topZ ?? foundryOverlayZ;
@@ -435,10 +446,18 @@ export const MechanismFoundry = ({
     0,
   );
   const paramHasSafeTravel = (key: keyof MechanismConfig) => {
-    const range = motionSafeParamRange(landedFoundry, key);
-    return Boolean(range?.currentSafe && Math.abs(range.max - range.min) > 0.001);
+    const range = motionSafeParamRange(
+      landedFoundry,
+      key,
+      project.settings.physicalKit,
+    );
+    return Boolean(
+      range?.currentSafe && Math.abs(range.max - range.min) > 0.001,
+    );
   };
-  const rawFoundryParamHandles: Array<Omit<FoundryParamHandle, "z" | "screen">> = [
+  const rawFoundryParamHandles: Array<
+    Omit<FoundryParamHandle, "z" | "screen">
+  > = [
     {
       id: "M",
       label: "Move",
@@ -476,28 +495,34 @@ export const MechanismFoundry = ({
         ]
       : []),
   ];
-  const foundryParamHandles: FoundryParamHandle[] = rawFoundryParamHandles.flatMap((handle) => {
-    const z = foundryOverlayZForHandle(handle.id);
-    const screen = projectFoundryOverlayPoint(
-      handle.point,
-      foundryCamera,
-      foundryProjectionSize,
-      z,
-    );
-    return screen ? [{ ...handle, z, screen }] : [];
-  });
+  const foundryParamHandles: FoundryParamHandle[] =
+    rawFoundryParamHandles.flatMap((handle) => {
+      const z = foundryOverlayZForHandle(handle.id);
+      const screen = projectFoundryOverlayPoint(
+        handle.point,
+        foundryCamera,
+        foundryProjectionSize,
+        z,
+      );
+      return screen ? [{ ...handle, z, screen }] : [];
+    });
   const foundryParamHandleZSummary = foundryParamHandles
     .map((handle) => `${handle.id}:${handle.z.toFixed(2)}`)
     .join(",");
-  const primaryOutputTrace = rawFoundryPointTraces.find((trace) => trace.primary) ?? rawFoundryPointTraces[0];
+  const primaryOutputTrace =
+    rawFoundryPointTraces.find((trace) => trace.primary) ??
+    rawFoundryPointTraces[0];
   const outputTraceLabel = primaryOutputTrace?.id ?? "—";
   const cycleOutputTrace = () => {
     if (rawFoundryPointTraces.length < 2) return;
     const currentIndex = Math.max(
       0,
-      rawFoundryPointTraces.findIndex((trace) => trace.id === primaryOutputTrace?.id),
+      rawFoundryPointTraces.findIndex(
+        (trace) => trace.id === primaryOutputTrace?.id,
+      ),
     );
-    const next = rawFoundryPointTraces[(currentIndex + 1) % rawFoundryPointTraces.length];
+    const next =
+      rawFoundryPointTraces[(currentIndex + 1) % rawFoundryPointTraces.length];
     setSelectedOutputTraceId(next?.id ?? null);
     setShowPathPreview(true);
   };
@@ -663,7 +688,11 @@ export const MechanismFoundry = ({
     );
   };
   const applySafeFoundryUpdates = (updates: Partial<MechanismConfig>) => {
-    const constrainedUpdates = constrainMechanismUpdate(foundry, updates);
+    const constrainedUpdates = constrainMechanismUpdate(
+      foundry,
+      updates,
+      project.settings.physicalKit,
+    );
     if (!Object.keys(constrainedUpdates).length) return;
     setFoundry(
       refreshEditedFoundryMechanism({ ...foundry, ...constrainedUpdates }),
@@ -811,16 +840,23 @@ export const MechanismFoundry = ({
     setFoundry(normalizeGearMeshMechanism(keepCurrentAnchor(mechanism)));
   const createPathFittedFoundry = (mechanism: MechanismConfig) => {
     const anchored = keepCurrentAnchor(mechanism);
-    if (!targetReady || !selectedPath) return normalizeGearMeshMechanism(anchored);
+    if (!targetReady || !selectedPath)
+      return normalizeGearMeshMechanism(anchored);
     return fitMechanismToTargetPath(
       project,
       {
         ...anchored,
-        targetPartId: selectedPath.sceneObjectId ? undefined : selectedPath.partId,
+        targetPartId: selectedPath.sceneObjectId
+          ? undefined
+          : selectedPath.partId,
         targetSceneObjectId: selectedPath.sceneObjectId,
         targetPathId: selectedPath.id,
-        targetAnchorJointId: selectedPath.sceneObjectId ? undefined : targetIkJointId,
-        activeVisualPartIds: selectedPath.sceneObjectId ? [] : [selectedPath.partId],
+        targetAnchorJointId: selectedPath.sceneObjectId
+          ? undefined
+          : targetIkJointId,
+        activeVisualPartIds: selectedPath.sceneObjectId
+          ? []
+          : [selectedPath.partId],
         source: "optimized",
         recommendation: mechanism.recommendation ?? "Fit path",
       },
@@ -1061,6 +1097,7 @@ export const MechanismFoundry = ({
         inspector: inspectorPane(
           <FoundryInspectorPanel
             foundry={foundry}
+            kit={project.settings.physicalKit}
             libraryLabel={library.label}
             classroomAssessmentKey={project.settings.classroomAssessmentKey}
             classroomSensemaking={classroomSensemaking}

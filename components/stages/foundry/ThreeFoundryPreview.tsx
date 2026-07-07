@@ -27,6 +27,7 @@ import {
   validateMechanismPreviewReadiness,
 } from "../../../utils/fabrication";
 import { compileMechanismRenderPlan } from "../../../utils/mechanismCompiler";
+import { mechanismInventoryForMechanism } from "../../../utils/mechanismInventory";
 import { SCENE_PX_PER_MM, SCENE_VIEW } from "../../../utils/coordinates";
 import {
   fabricablePartOutlinePoints,
@@ -65,7 +66,6 @@ import {
   disposeFoundryThreeObject,
 } from "./foundryThreePrimitives";
 import { renderFoundryDynamicLayers } from "./foundryThreeRenderLayers";
-import { foundryRenderedInventory } from "./foundryRenderInventory";
 import {
   foundryAssemblyPinContract,
   foundryAssemblyPinPoints,
@@ -541,28 +541,15 @@ export const ThreeFoundryPreview = ({
     mechanism.type === "planetary_gear"
       ? planetaryGearConventionForMechanism(mechanism)
       : null;
-  const baseInv = foundryRenderedInventory(mechanism.type);
-  const inv = isGearTrain
-    ? {
-        ...baseInv,
-        gears: gearRadii.length,
-        parts: Math.max(baseInv.parts, gearRadii.length + 4),
-      }
-    : mechanism.type === "planetary_gear"
-      ? {
-          ...baseInv,
-          gears: gearRadii.length,
-          parts: Math.max(baseInv.parts, gearRadii.length + 4),
-        }
-      : baseInv;
+  const inv = mechanismInventoryForMechanism(mechanism, kit);
   const pinionRotation = simulation.driveAngleDeg;
   const renderPlan = useMemo(
-    () => compileMechanismRenderPlan(mechanism),
-    [mechanism],
+    () => compileMechanismRenderPlan(mechanism, kit),
+    [kit, mechanism],
   );
   const physicalValidationErrors = useMemo(
-    () => validateMechanismPreviewReadiness(mechanism),
-    [mechanism],
+    () => validateMechanismPreviewReadiness(mechanism, kit),
+    [kit, mechanism],
   );
   const physicalValidationSummary = physicalValidationErrors.join(" | ");
   const stackLayerZ = useMemo(

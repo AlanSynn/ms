@@ -1,16 +1,18 @@
 import React, { useMemo, useRef } from "react";
 
-import type { MechanismConfig } from "../../../types";
+import type { MechanismConfig, PhysicalKitSettings } from "../../../types";
 import { SCENE_PX_PER_MM } from "../../../utils/coordinates";
 import {
   FABRICATION_GEAR_SPECS,
   FABRICATION_LINKAGE_SPECS,
   fabricationGearSpecForPitchRadius,
+  fabricationLinkageSpecForCells,
   fabricationLinkageSpecForSceneLength,
 } from "../../../utils/fabrication";
 import {
   defaultCamProfileSamples,
   gearTrainPitchRadii,
+  gearTrainResolvedCenterDistance,
   normalizeCamProfileSamples,
 } from "../../../utils/kinematics";
 import {
@@ -18,20 +20,50 @@ import {
   safeMechanismUpdate,
 } from "./mechanismParamPolicy";
 
-const gearSpecForSceneRadius = (radius: number) =>
-  fabricationGearSpecForPitchRadius(Math.abs(radius) / SCENE_PX_PER_MM);
-const gearSceneRadiusForKey = (key: string) =>
+type FabricationGearOption = (typeof FABRICATION_GEAR_SPECS)[number];
+type FabricationLinkageOption = (typeof FABRICATION_LINKAGE_SPECS)[number];
+
+const defaultKitPitchMm = () => FABRICATION_LINKAGE_SPECS[0]?.pitchMm ?? 20;
+const kitGridPitchMm = (kit?: PhysicalKitSettings) =>
+  Math.max(1, kit?.gridPitchMm ?? defaultKitPitchMm());
+const gearSpecsForPitch = (kitPitchMm: number): FabricationGearOption[] => {
+  const gearPitchScale = kitPitchMm / defaultKitPitchMm();
+  return FABRICATION_GEAR_SPECS.map((spec) =>
+    fabricationGearSpecForPitchRadius(
+      spec.pitchRadiusMm * gearPitchScale,
+      kitPitchMm,
+    ),
+  );
+};
+const linkageSpecsForPitch = (
+  kitPitchMm: number,
+): FabricationLinkageOption[] =>
+  FABRICATION_LINKAGE_SPECS.map((spec) =>
+    fabricationLinkageSpecForCells(spec.cells, kitPitchMm),
+  );
+const gearSpecForSceneRadius = (radius: number, kitPitchMm = defaultKitPitchMm()) =>
+  fabricationGearSpecForPitchRadius(
+    Math.abs(radius) / SCENE_PX_PER_MM,
+    kitPitchMm,
+  );
+const gearSceneRadiusForKey = (
+  key: string,
+  specs: readonly FabricationGearOption[] = FABRICATION_GEAR_SPECS,
+) =>
   (
-    FABRICATION_GEAR_SPECS.find((spec) => spec.key === key) ??
-    FABRICATION_GEAR_SPECS[1]
+    specs.find((spec) => spec.key === key) ??
+    specs[1] ??
+    specs[0] ??
+    FABRICATION_GEAR_SPECS[0]
   ).pitchRadiusMm * SCENE_PX_PER_MM;
-const linkageSceneLengthForCells = (cells: number) =>
-  (
-    FABRICATION_LINKAGE_SPECS.find((spec) => spec.cells === cells) ??
-    FABRICATION_LINKAGE_SPECS[1]
-  ).lengthMm * SCENE_PX_PER_MM;
-const linkageCellsForSceneLength = (length: number) =>
-  fabricationLinkageSpecForSceneLength(length).cells;
+const linkageSceneLengthForCells = (
+  cells: number,
+  kitPitchMm = defaultKitPitchMm(),
+) => fabricationLinkageSpecForCells(cells, kitPitchMm).lengthMm * SCENE_PX_PER_MM;
+const linkageCellsForSceneLength = (
+  length: number,
+  kitPitchMm = defaultKitPitchMm(),
+) => fabricationLinkageSpecForSceneLength(length, kitPitchMm).cells;
 const gearOptionLabel = (teeth: number) => `${teeth} teeth`;
 const linkageOptionLabel = (holeCount: number) => `${holeCount}-hole`;
 type SafeOption<T> = { item: T; working: boolean; current: boolean };
@@ -40,60 +72,91 @@ const unsafeOptionLabel = (label: string, current: boolean) =>
 
 export const MechanismParametricEditor = ({
   mechanism,
+  kit,
   onChange,
   testId,
 }: {
   mechanism: MechanismConfig;
+  kit?: PhysicalKitSettings;
   onChange: (updates: Partial<MechanismConfig>) => void;
   testId?: string;
 }) => {
+  const kitPitchMm = kitGridPitchMm(kit);
+  const gearSpecs = useMemo(() => gearSpecsForPitch(kitPitchMm), [kitPitchMm]);
+  const linkageSpecs = useMemo(
+    () => linkageSpecsForPitch(kitPitchMm),
+    [kitPitchMm],
+  );
   const radii =
     mechanism.type === "gear" || mechanism.type === "gear_linkage"
       ? gearTrainPitchRadii(mechanism)
       : [];
+  const withResolvedGearGround = (updates: Partial<MechanismConfig>) => {
+    if (mechanism.type !== "gear" && mechanism.type !== "gear_linkage")
+      return updates;
+    const nextMechanism = { ...mechanism, ...updates };
+    return {
+      ...updates,
+      groundLength: gearTrainResolvedCenterDistance(nextMechanism),
+    } satisfies Partial<MechanismConfig>;
+  };
   const gearRadiusUpdates = (index: number, key: string) => {
     const next =
       radii.length >= 2
         ? [...radii]
         : [mechanism.crankLength, mechanism.rockerLength];
-    next[index] = gearSceneRadiusForKey(key);
-    return {
+    next[index] = gearSceneRadiusForKey(key, gearSpecs);
+    return withResolvedGearGround({
       crankLength: next[0],
       rockerLength: next.at(-1) ?? next[0],
       gearTrainRadii: next,
-    } satisfies Partial<MechanismConfig>;
+    });
   };
   const updateGearRadius = (index: number, key: string) => {
     const updates = gearRadiusUpdates(index, key);
-    if (!safeMechanismUpdate(mechanism, updates)) return;
+    if (!safeMechanismUpdate(mechanism, updates, kit)) return;
     onChange(updates);
   };
-  const idlerGearUpdates = () => {
+  const idlerGearUpdatesForKey = (key: string) => {
     const next =
       radii.length >= 2
         ? [...radii]
         : [mechanism.crankLength, mechanism.rockerLength];
-    next.splice(Math.max(1, next.length - 1), 0, gearSceneRadiusForKey("g24"));
-    return {
+    next.splice(
+      Math.max(1, next.length - 1),
+      0,
+      gearSceneRadiusForKey(key, gearSpecs),
+    );
+    return withResolvedGearGround({
       crankLength: next[0],
       rockerLength: next.at(-1) ?? next[0],
       gearTrainRadii: next,
-    } satisfies Partial<MechanismConfig>;
+    });
   };
+  const idlerGearOptions = gearSpecs.map((spec) => ({
+    key: spec.key,
+    updates: idlerGearUpdatesForKey(spec.key),
+  })).filter(({ updates }) => safeMechanismUpdate(mechanism, updates, kit));
+  const idlerGearUpdates = () =>
+    idlerGearOptions.find((option) => option.key === "g24")?.updates ??
+    idlerGearOptions[0]?.updates ??
+    idlerGearUpdatesForKey("g24");
   const addIdlerGear = () => {
     const updates = idlerGearUpdates();
-    if (!safeMechanismUpdate(mechanism, updates)) return;
+    if (!safeMechanismUpdate(mechanism, updates, kit)) return;
     onChange(updates);
   };
   const removeIdlerGear = () => {
     if (radii.length <= 2) return;
     const next = [...radii];
     next.splice(next.length - 2, 1);
-    onChange({
-      crankLength: next[0],
-      rockerLength: next.at(-1) ?? next[0],
-      gearTrainRadii: next,
-    });
+    onChange(
+      withResolvedGearGround({
+        crankLength: next[0],
+        rockerLength: next.at(-1) ?? next[0],
+        gearTrainRadii: next,
+      }),
+    );
   };
   const renderGearControls =
     radii.length >= 2 &&
@@ -102,17 +165,20 @@ export const MechanismParametricEditor = ({
     mechanism.type === "4bar" || mechanism.type === "gear_linkage";
   const endpointGearOptions =
     mechanism.type === "gear_linkage"
-      ? FABRICATION_GEAR_SPECS.filter(
+      ? gearSpecs.filter(
           (spec) => spec.attachmentHoleCentersMm.length > 0,
         )
-      : FABRICATION_GEAR_SPECS;
+      : gearSpecs;
   const safeLinkageOptions = (
     key: "crankLength" | "couplerLength" | "rockerLength",
-  ): SafeOption<(typeof FABRICATION_LINKAGE_SPECS)[number]>[] => {
-    const currentCells = linkageCellsForSceneLength(Number(mechanism[key] ?? 0));
-    return FABRICATION_LINKAGE_SPECS.map((spec) => {
+  ): SafeOption<FabricationLinkageOption>[] => {
+    const currentCells = linkageCellsForSceneLength(
+      Number(mechanism[key] ?? 0),
+      kitPitchMm,
+    );
+    return linkageSpecs.map((spec) => {
       const updates = {
-        [key]: linkageSceneLengthForCells(spec.cells),
+        [key]: linkageSceneLengthForCells(spec.cells, kitPitchMm),
       } as Partial<MechanismConfig>;
       const current = spec.cells === currentCells;
       return {
@@ -120,15 +186,15 @@ export const MechanismParametricEditor = ({
         current,
         working: current
           ? mechanismMotionCompletes(mechanism)
-          : safeMechanismUpdate(mechanism, updates),
+          : safeMechanismUpdate(mechanism, updates, kit),
       };
     });
   };
   const safeGearOptions = (
     index: number,
-    options: typeof FABRICATION_GEAR_SPECS,
+    options: readonly FabricationGearOption[],
     selected: string,
-  ): SafeOption<(typeof FABRICATION_GEAR_SPECS)[number]>[] =>
+  ): SafeOption<FabricationGearOption>[] =>
     options.map((spec) => {
       const current = spec.key === selected;
       return {
@@ -136,22 +202,31 @@ export const MechanismParametricEditor = ({
         current,
         working: current
           ? mechanismMotionCompletes(mechanism)
-          : safeMechanismUpdate(mechanism, gearRadiusUpdates(index, spec.key)),
+          : safeMechanismUpdate(
+              mechanism,
+              gearRadiusUpdates(index, spec.key),
+              kit,
+            ),
       };
     });
   const pairedLinkOptions = (): SafeOption<
-    (typeof FABRICATION_LINKAGE_SPECS)[number]
+    FabricationLinkageOption
   >[] => {
-    const currentCells = linkageCellsForSceneLength(mechanism.couplerLength);
-    return FABRICATION_LINKAGE_SPECS.map((spec) => {
-      const updates = { couplerLength: linkageSceneLengthForCells(spec.cells) };
+    const currentCells = linkageCellsForSceneLength(
+      mechanism.couplerLength,
+      kitPitchMm,
+    );
+    return linkageSpecs.map((spec) => {
+      const updates = {
+        couplerLength: linkageSceneLengthForCells(spec.cells, kitPitchMm),
+      };
       const current = spec.cells === currentCells;
       return {
         item: spec,
         current,
         working: current
           ? mechanismMotionCompletes(mechanism)
-          : safeMechanismUpdate(mechanism, updates),
+          : safeMechanismUpdate(mechanism, updates, kit),
       };
     });
   };
@@ -169,23 +244,32 @@ export const MechanismParametricEditor = ({
         const options =
           mechanism.type === "gear_linkage" && (index === 0 || isOutput)
             ? endpointGearOptions
-            : FABRICATION_GEAR_SPECS;
+            : gearSpecs;
         return (
           count +
-          safeGearOptions(index, options, gearSpecForSceneRadius(radius).key).filter(
-            (option) => !option.working,
-          ).length
+          safeGearOptions(
+            index,
+            options,
+            gearSpecForSceneRadius(radius, kitPitchMm).key,
+          ).filter((option) => !option.working).length
         );
       }, 0)
     : 0;
   const hasLockedMotionOptions = linkageLockCount + gearLockCount > 0;
-  const canAddIdlerGear = safeMechanismUpdate(mechanism, idlerGearUpdates());
+  const canAddIdlerGear = idlerGearOptions.length > 0;
   if (!renderGearControls && !renderLinkageControls && mechanism.type !== "cam")
     return null;
   return (
     <div
       className="inspector-control-card compact-parametric-editor"
       data-testid={testId ?? "mechanism-parametric-editor"}
+      data-kit-grid-pitch-mm={kitPitchMm}
+      data-link-option-scene-lengths={linkageSpecs
+        .map((spec) => spec.lengthMm * SCENE_PX_PER_MM)
+        .join(",")}
+      data-gear-option-scene-radii={gearSpecs
+        .map((spec) => spec.pitchRadiusMm * SCENE_PX_PER_MM)
+        .join(",")}
     >
       {renderGearControls && (
         <div className="space-y-2">
@@ -201,8 +285,8 @@ export const MechanismParametricEditor = ({
             const options =
               mechanism.type === "gear_linkage" && (index === 0 || isOutput)
                 ? endpointGearOptions
-                : FABRICATION_GEAR_SPECS;
-            const selected = gearSpecForSceneRadius(radius).key;
+                : gearSpecs;
+            const selected = gearSpecForSceneRadius(radius, kitPitchMm).key;
             const safeOptions = safeGearOptions(index, options, selected);
             const activeValue = safeOptions.some(
               (option) => option.item.key === selected,
@@ -286,6 +370,7 @@ export const MechanismParametricEditor = ({
               const safeOptions = safeLinkageOptions(key);
               const currentValue = linkageCellsForSceneLength(
                 Number(mechanism[key] ?? 0),
+                kitPitchMm,
               );
               const lockedCount = safeOptions.filter(
                 (option) => !option.working,
@@ -309,9 +394,10 @@ export const MechanismParametricEditor = ({
                       const updates = {
                         [key]: linkageSceneLengthForCells(
                           Number(event.target.value),
+                          kitPitchMm,
                         ),
                       } as Partial<MechanismConfig>;
-                      if (!safeMechanismUpdate(mechanism, updates)) return;
+                      if (!safeMechanismUpdate(mechanism, updates, kit)) return;
                       onChange(updates);
                     }}
                   >
@@ -342,7 +428,10 @@ export const MechanismParametricEditor = ({
               <select
                 aria-label="Paired link length"
                 className="field mt-1"
-                value={linkageCellsForSceneLength(mechanism.couplerLength)}
+                value={linkageCellsForSceneLength(
+                  mechanism.couplerLength,
+                  kitPitchMm,
+                )}
                 data-motion-safe-options={
                   pairedLinkOptions().filter((option) => option.working).length
                 }
@@ -353,9 +442,10 @@ export const MechanismParametricEditor = ({
                   const updates = {
                     couplerLength: linkageSceneLengthForCells(
                       Number(event.target.value),
+                      kitPitchMm,
                     ),
                   };
-                  if (!safeMechanismUpdate(mechanism, updates)) return;
+                  if (!safeMechanismUpdate(mechanism, updates, kit)) return;
                   onChange(updates);
                 }}
               >
@@ -393,6 +483,7 @@ export const MechanismParametricEditor = ({
         <div className="mt-3">
           <CamProfileEditor
             mechanism={mechanism}
+            kit={kit}
             samples={mechanism.camProfileSamples}
             onChange={(camProfileSamples) => onChange({ camProfileSamples })}
           />
@@ -408,10 +499,12 @@ const clampCamProfileSample = (value: number) =>
   Math.max(CAM_PROFILE_MIN, Math.min(CAM_PROFILE_MAX, value));
 const CamProfileEditor = ({
   mechanism,
+  kit,
   samples,
   onChange,
 }: {
   mechanism: MechanismConfig;
+  kit?: PhysicalKitSettings;
   samples?: number[];
   onChange: (samples: number[]) => void;
 }) => {
@@ -451,7 +544,10 @@ const CamProfileEditor = ({
     );
   };
   const commitProfile = (nextProfile: number[]) => {
-    if (!safeMechanismUpdate(mechanism, { camProfileSamples: nextProfile })) return;
+    if (
+      !safeMechanismUpdate(mechanism, { camProfileSamples: nextProfile }, kit)
+    )
+      return;
     onChange(nextProfile);
   };
   const updatePoint = (index: number, value: number) =>
@@ -477,7 +573,9 @@ const CamProfileEditor = ({
           type="button"
           className="btn-secondary compact"
           data-testid="cam-profile-reset"
-          onClick={() => commitProfile(defaultCamProfileSamples(profile.length))}
+          onClick={() =>
+            commitProfile(defaultCamProfileSamples(profile.length))
+          }
         >
           Reset
         </button>

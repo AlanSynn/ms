@@ -1,5 +1,5 @@
 import type { MechanismConfig, MechanismType } from '../types';
-import { REFERENCE_AUTHORABLE_TYPES, REFERENCE_FOUNDRY_TYPES, referenceRecipeForType } from './mechanismReference';
+import { REFERENCE_FOUNDRY_TYPES } from './mechanismReference';
 
 export interface MechanismTemplateMetadata {
     label: string;
@@ -35,7 +35,7 @@ export const ALL_MECHANISM_TYPES: readonly MechanismType[] = [
     'planetary_gear'
 ] as const;
 
-export const AUTHORABLE_MECHANISM_TYPES: readonly MechanismType[] = REFERENCE_AUTHORABLE_TYPES;
+export const AUTHORABLE_MECHANISM_TYPES: readonly MechanismType[] = ALL_MECHANISM_TYPES.filter(type => type !== 'crank');
 export const FOUNDRY_MECHANISM_TYPES: readonly MechanismType[] = REFERENCE_FOUNDRY_TYPES;
 
 export const MECHANISM_TEMPLATE_LIBRARY: Record<MechanismType, MechanismTemplateMetadata> = {
@@ -279,6 +279,5 @@ export const mechanismTemplateLabel = (type: MechanismType): string =>
     MECHANISM_TEMPLATE_LIBRARY[type]?.label ?? type;
 
 export const mechanismTemplateOptionLabel = (type: MechanismType): string => {
-    const recipe = referenceRecipeForType(type);
-    return recipe.exportReady ? `${mechanismTemplateLabel(type)} · ${recipe.canonicalKey}` : `${mechanismTemplateLabel(type)} · ${recipe.support}`;
+    return type === 'crank' ? `${mechanismTemplateLabel(type)} · driver` : `${mechanismTemplateLabel(type)} · graph`;
 };

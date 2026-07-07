@@ -212,6 +212,7 @@ export const DesignInspectorPanel = ({
           )}
           <MechanismParametricEditor
             mechanism={selectedMechanism}
+            kit={project.settings.physicalKit}
             onChange={(updates) =>
               updateMechanism(selectedMechanism.id, updates)
             }
@@ -221,7 +222,11 @@ export const DesignInspectorPanel = ({
           {MECHANISM_PARAM_META.filter((p) =>
             shouldShowMechanismParam(selectedMechanism.type, p.key),
           ).map((p) => {
-            const safeRange = motionSafeParamRange(selectedMechanism, p.key);
+            const safeRange = motionSafeParamRange(
+              selectedMechanism,
+              p.key,
+              project.settings.physicalKit,
+            );
             return (
               <React.Fragment key={String(p.key)}>
                 <MiniNumber
@@ -237,12 +242,15 @@ export const DesignInspectorPanel = ({
                         selectedMechanism,
                         p.key,
                         value,
+                        project.settings.physicalKit,
                       ),
                     } as Partial<MechanismConfig>)
                   }
                 />
                 {safeRange?.locked && (
-                  <div className="motion-option-lock-note">Safe range only.</div>
+                  <div className="motion-option-lock-note">
+                    Safe range only.
+                  </div>
                 )}
               </React.Fragment>
             );

@@ -17,16 +17,16 @@ import {
   gearTrainPitchRadii,
 } from "../../../utils/kinematics";
 import { foundryPlanetaryPlanetRotationDeg } from "../../../utils/foundryPlayback";
-import { referenceRecipeForType } from "../../../utils/mechanismReference";
+import { compileMechanismGraphFabrication } from "../../../utils/mechanismCompiler";
 import type { MechanismPreviewSimulation } from "../../../utils/mechanismPreview";
 import { SCENE_PX_PER_MM } from "../../../utils/coordinates";
 import { fittedGearTrainCenters } from "./foundryPreviewGeometry";
 import {
+  assemblyCoordRoles,
   axisForAngle,
   camProfilePathD,
-  mechanismReferenceTopologySummary,
+  mechanismTopologySummary,
   rackTeethPath,
-  referenceCoordRoles,
   vectorAxis,
 } from "./mechanismLinkagePreviewHelpers";
 
@@ -755,8 +755,9 @@ export const MechanismLinkagePreview = ({
       link(s.j1, s.effector, "output", "mechanism-output", "output"),
     ];
   })();
-  const referenceRecipe = referenceRecipeForType(mechanism.type);
-  const coordRoles = referenceCoordRoles(referenceRecipe);
+  const graphFabrication = compileMechanismGraphFabrication(mechanism, kit);
+  const graphRecipe = graphFabrication.recipe;
+  const coordRoles = assemblyCoordRoles(graphRecipe?.assemblySteps ?? []);
   return (
     <g
       data-testid={testId}
@@ -764,15 +765,14 @@ export const MechanismLinkagePreview = ({
       strokeLinejoin="round"
       fill="none"
       data-mechanism-type={mechanism.type}
-      data-reference-canonical-key={referenceRecipe.canonicalKey}
-      data-reference-topology={mechanismReferenceTopologySummary(
+      data-compiler-family={graphRecipe?.graphFamilyId ?? mechanism.type}
+      data-compiler-topology={mechanismTopologySummary(
         mechanism.type,
       )}
-      data-reference-stack-labels={referenceRecipe.stackLabels.join(" → ")}
-      data-reference-coord-roles={coordRoles}
-      data-reference-export-ready={
-        referenceRecipe.exportReady ? "true" : "false"
-      }
+      data-compiler-stack-labels={graphFabrication.renderPlan.stackSummary}
+      data-compiler-coord-roles={coordRoles}
+      data-compiler-buildable={graphFabrication.buildable ? "true" : "false"}
+      data-compiler-blocker={graphFabrication.blocker ?? ""}
     >
       <g data-testid={templateTest}>
         {gearPreview}

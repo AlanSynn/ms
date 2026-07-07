@@ -994,7 +994,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('foundry-three-canvas')).toBeVisible();
   const foundryRig = page.getByTestId('foundry-camera-rig');
   await expect(foundryRig).toHaveAttribute('data-three-renderer', 'webgl');
-  await expect(foundryRig).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
+  await expect(foundryRig).toHaveAttribute('data-three-stack-source', 'compileMechanismRenderPlan');
   await expect(foundryRig).toHaveAttribute('data-three-stack-mode', 'assembled-spacer-separated');
   await expect(foundryRig).toHaveAttribute('data-three-exploded', 'false');
   await expect(foundryRig).toHaveAttribute('data-three-stack-order', /^Back Clip → .*S10 spacer.*Front Clip$/);
@@ -1072,11 +1072,11 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(designRig).toHaveAttribute('data-three-renderer', 'webgl');
   await expect(designRig).toHaveAttribute('data-mechanism-type', '4bar');
   await expect(designRig).toHaveAttribute('data-viewer-tab', 'design');
-  await expect(designRig).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
+  await expect(designRig).toHaveAttribute('data-three-stack-source', 'compileMechanismRenderPlan');
   await expect(designRig).toHaveAttribute('data-three-stack-validation-errors', '0');
   await expect(designRig).toHaveAttribute('data-three-physical-validation-errors', '0');
   await expect(designRig).toHaveAttribute('data-three-preview-renderable', 'ready');
-  await expect(designRig).toHaveAttribute('data-three-stack-order', /Input L2 linkage.*Coupler L4 linkage.*Output L[246] linkage/);
+  await expect(designRig).toHaveAttribute('data-three-stack-order', /Input 3-hole link.*Coupler 5-hole link.*Output (3|5|7)-hole link/);
   await expect(designRig).toHaveAttribute('data-three-fourbar-ground-link-plane', 'fabrication-stack-separated');
   await expectFoundryRenderContract(designRig, foundryRenderContract, 'Design consumes the fitted Foundry mechanism contract');
   const designHasWebgl = await designPreview.locator('canvas.foundry-three-canvas').evaluate((canvas: HTMLCanvasElement) => Boolean(canvas.getContext('webgl2') || canvas.getContext('webgl')));
@@ -1162,7 +1162,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   const assemblyRig = page.getByTestId('assembly-mechanism-three-preview').getByTestId('foundry-camera-rig');
   await expect(assemblyRig).toHaveAttribute('data-viewer-tab', 'assembly');
   await expect(assemblyRig).toHaveAttribute('data-viewer-contract-state', /"tab":"assembly"/);
-  await expect(assemblyRig).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
+  await expect(assemblyRig).toHaveAttribute('data-three-stack-source', 'compileMechanismRenderPlan');
   await expect(assemblyRig).toHaveAttribute('data-three-exploded', 'false');
   await expect(assemblyRig).toHaveAttribute('data-three-assembly-scene', 'contract-driven');
   await expect(assemblyRig).toHaveAttribute('data-three-assembly-motion-kind', 'none');
@@ -1177,13 +1177,18 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(assemblyWorkbench).toHaveAttribute('data-step-phase', 'assemble-module');
   await expect(assemblyWorkbench).toHaveAttribute('data-board-mode', 'hidden');
   await expect(assemblyWorkbench).toHaveAttribute('data-active-board-coords', '');
-  await expect(assemblyWorkbench).toHaveAttribute('data-floating-reference-coords', /G6.*G10/);
+  const floatingReferenceCoords = await assemblyWorkbench.getAttribute('data-floating-reference-coords');
+  expect(floatingReferenceCoords).toMatch(/^[A-O][1-9]\d?,[A-O][1-9]\d?$/);
+  const floatingReferenceList = floatingReferenceCoords!.split(',');
+  expect(new Set(floatingReferenceList).size).toBe(2);
   await expect(assemblyRig).toHaveAttribute('data-three-assembly-motion-kind', 'explode_z');
-  await expect(assemblyRig).toHaveAttribute('data-three-assembly-floating-reference-coords', /G6.*G10/);
-  await expect(assemblyRig).toHaveAttribute('data-three-assembly-rendered-floating-marker-count', '2');
+  await expect(assemblyRig).toHaveAttribute('data-three-assembly-floating-reference-coords', floatingReferenceCoords!);
+  await expect(assemblyRig).toHaveAttribute('data-three-assembly-rendered-floating-marker-count', `${floatingReferenceList.length}`);
   await expect(assemblyRig).toHaveAttribute('data-three-assembly-rendered-layer-focus', /[0-9]/);
   await expect(assemblyRig).toHaveAttribute('data-three-assembly-board-surface', 'hidden');
-  await expect(page.getByTestId('assembly-floating-references')).toContainText('G6');
+  for (const coord of floatingReferenceList) {
+    await expect(page.getByTestId('assembly-floating-references')).toContainText(coord);
+  }
   await page.getByTestId('assembly-step-list').getByRole('button', { name: /Mount module to board/i }).click();
   await expect(page.getByTestId('assembly-guide-preview')).toContainText('Mount module to board');
   const sharedAssemblyPlayer = page.getByTestId('workspace-player-dock');
@@ -1253,8 +1258,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
     recipe.targetPathId === 'path-right-arm' &&
     recipe.targetAnchorJointId === 'right_hand' &&
     recipe.targetPartName === 'Right hand' &&
-    recipe.steps?.some(step => /Stack:|Connect output/.test(step)) &&
-    recipe.assemblySteps?.some((step: { instruction?: string }) => /Set ground pivots|L2|L4/.test(step.instruction ?? '')) &&
+    recipe.steps?.some(step => /Place graph module|Graph family|Parts:|Ready/.test(step)) &&
+    recipe.assemblySteps?.some((step: { instruction?: string }) => /Place .* at|Connect .*hole link/.test(step.instruction ?? '')) &&
     Array.isArray(recipe.warnings)
   )).toBe(true);
 
@@ -2017,7 +2022,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(threeScene).toHaveAttribute('data-three-hole-mode', 'extruded-cut-through');
   await expect(threeScene).toHaveAttribute('data-three-render-loop', 'camera-only-orbit');
   await expect(threeScene).toHaveAttribute('data-three-inventory-source', 'rendered-template');
-  await expect(threeScene).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
+  await expect(threeScene).toHaveAttribute('data-three-stack-source', 'compileMechanismRenderPlan');
   await expect(threeScene).toHaveAttribute('data-three-stack-mode', 'assembled-spacer-separated');
   await expect(threeScene).toHaveAttribute('data-three-exploded', 'false');
   await expect(threeScene).toHaveAttribute('data-three-base-layer', 'Base board');
@@ -2164,7 +2169,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(page.getByLabel('Output gear size').locator('option[value="g56"]'), 'gear-linkage locks gear ratios that cannot close the paired links').toHaveAttribute('disabled', '');
   await page.getByLabel('Output gear size').selectOption('g40');
   await page.getByLabel('Paired link length').selectOption('6');
-  await expect(threeScene, 'Gear linkage param editor keeps only full-motion output gear and linkage choices in the fabrication stack').toHaveAttribute('data-three-stack-order', /Drive G5 \/ 5-space gear.*Output G5 \/ 5-space gear.*Drive L6 linkage.*Output L6 linkage/);
+  await expect(threeScene, 'Gear linkage param editor keeps only full-motion output gear and linkage choices in the fabrication stack').toHaveAttribute('data-three-stack-order', /(?=.*Drive G5 \/ 5-space gear)(?=.*Output G5 \/ 5-space gear)(?=.*Drive connector 7-hole link)(?=.*Output connector 7-hole link)/);
   await expect(threeScene, 'Gear linkage crank pin snaps to a real attachment hole on the selected output gear').toHaveAttribute('data-three-linkage-pin-radius', /\d+\.\d+/);
   await expect(page.getByTestId('foundry-param-handles'), 'Gear linkage keeps the shared move handle even without 4bar-only shape handles').toHaveAttribute('data-handle-ids', 'M');
   await page.getByTestId('foundry-toggle-paths').click();
@@ -2186,8 +2191,8 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
 
   const foundryPhysicalMarkers: Record<string, Array<[string, number]>> = {
     '4bar': [['data-three-part-count', 5], ['data-three-hole-count', 11]],
-    cam: [['data-three-cam-count', 1], ['data-three-follower-count', 1], ['data-three-hole-count', 11]],
-    gear: [['data-three-gear-count', 2], ['data-three-hole-count', 10]],
+    cam: [['data-three-cam-count', 1], ['data-three-follower-count', 1], ['data-three-hole-count', 10]],
+    gear: [['data-three-gear-count', 2], ['data-three-hole-count', 8]],
     gear_linkage: [['data-three-gear-count', 2], ['data-three-hole-count', 20]],
     planetary_gear: [['data-three-gear-count', 3], ['data-three-hole-count', 13]]
   };
@@ -2195,7 +2200,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   for (const type of ['4bar', 'cam', 'gear', 'gear_linkage', 'planetary_gear']) {
     await page.getByLabel('Foundry mechanism type').selectOption(type);
     await expect(threeScene, `${type} has its own physical 3D preview template`).toHaveAttribute('data-mechanism-type', type);
-    await expect(threeScene, `${type} uses the fabrication stack as the 3D render source`).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
+    await expect(threeScene, `${type} uses the fabrication stack as the 3D render source`).toHaveAttribute('data-three-stack-source', 'compileMechanismRenderPlan');
     await expect(threeScene, `${type} stack has no validation errors`).toHaveAttribute('data-three-stack-validation-errors', '0');
     await expect(threeScene, `${type} physical readiness gate is clean`).toHaveAttribute('data-three-physical-validation-errors', '0');
     await expect(threeScene, `${type} preview is renderable only after shared physical validation passes`).toHaveAttribute('data-three-preview-renderable', 'ready');
@@ -2232,7 +2237,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
       expect(renderedLayerZ, `${type} rendered z order matches fabrication stack z order`).toBe(stackLayerZ);
     }
     if (type === '4bar') {
-      await expect(threeScene, '4bar foundry geometry keeps A-B/B-C/C-D topology from mechanism-reference instead of drawing a floating output rod').toHaveAttribute('data-three-geometry-contract', /Input L2 linkage:A-B.*Coupler L4 linkage:B-C.*Output L2 linkage:C-D/);
+      await expect(threeScene, '4bar foundry geometry keeps A-B/B-C/C-D topology from mechanism-reference instead of drawing a floating output rod').toHaveAttribute('data-three-geometry-contract', /Input 3-hole link:A-B.*Coupler 5-hole link:B-C.*Output 3-hole link:C-D/);
       await expect(threeScene, '4bar keeps only physical A/B/C/D pin hardware in the 3D scene').toHaveAttribute('data-three-physical-pin-contract', 'reference-A-B-C-D-only');
       await expect(threeScene).toHaveAttribute('data-three-physical-pin-count', '4');
       await expect(threeScene, '4bar renders recipe spacer sites at A/B/C/D without z-layer collisions').toHaveAttribute('data-three-spacer-render-count', '4');
@@ -2273,7 +2278,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
       expect(Number(await threeScene.getAttribute(attr)), `${type} preview includes ${attr}`).toBeGreaterThanOrEqual(minimumCount);
     }
     if (type === 'planetary_gear') {
-      await expect(threeScene, 'Planetary geometry maps R56/G1/L2/G3 recipe labels to ring/sun/carrier/planet roles').toHaveAttribute('data-three-geometry-contract', /R56 internal ring gear:fixed-ring.*G1 \/ 1-space gear:sun-input.*L2 carrier linkage:sun-planet-carrier.*G3 \/ 3-space gear:planet-on-carrier/);
+      await expect(threeScene, 'Planetary geometry maps R56/G1/L2/G3 recipe labels to ring/sun/carrier/planet roles').toHaveAttribute('data-three-geometry-contract', /Sun G1 \/ 1-space gear:sun-input.*R56 internal ring gear:fixed-ring.*Carrier arm 3-hole link:sun-planet-carrier.*Moving planet G3 \/ 3-space gear:planet-on-carrier/);
       await expect(threeScene, 'Planetary foundry syntax uses a fixed ring, sun input, carrier output set').toHaveAttribute('data-three-planetary-syntax', 'ring-fixed-sun-input-carrier-output');
       await expect(threeScene).toHaveAttribute('data-three-planetary-fixed', 'ring');
       await expect(threeScene).toHaveAttribute('data-three-planetary-input', 'sun');
@@ -2335,8 +2340,8 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(threeScene, 'Gear-linkage gear axles include local board-side spacer z in their fastener spans').toHaveAttribute('data-three-pin-stack-z-sources', 'gear-axles-include-board-side-spacer');
   await expect(threeScene, 'Gear-linkage pins are the two fixed gear axles plus two gear crank pins and one shared R connector').toHaveAttribute('data-three-physical-pin-contract', 'fixed-gear-axles-plus-two-crank-links');
   await expect(threeScene, 'Gear-linkage has no orphan hardware tower beyond its five real pin sites').toHaveAttribute('data-three-physical-pin-count', '5');
-  await expect(threeScene, 'Gear-linkage geometry maps each layer to its reference role').toHaveAttribute('data-three-geometry-contract', /Drive G3 \/ 3-space gear:fixed-board-gear.*Output G3 \/ 3-space gear:fixed-board-gear.*Drive L4 linkage:B-pin-to-R.*Output L4 linkage:C-pin-to-R/);
-  await expect(threeScene, 'Gear-linkage stack exposes G3/G3/L4/L4 in reference order').toHaveAttribute('data-three-stack-order', /Drive G3 \/ 3-space gear.*Output G3 \/ 3-space gear.*Drive L4 linkage.*Output L4 linkage/);
+  await expect(threeScene, 'Gear-linkage geometry maps each layer to its reference role').toHaveAttribute('data-three-geometry-contract', /Drive G3 \/ 3-space gear:fixed-board-gear.*Output G3 \/ 3-space gear:fixed-board-gear.*Drive 5-hole link:B-pin-to-R.*Output 5-hole link:C-pin-to-R/);
+  await expect(threeScene, 'Gear-linkage stack exposes G3/G3/L4/L4 in reference order').toHaveAttribute('data-three-stack-order', /Drive G3 \/ 3-space gear.*Output G3 \/ 3-space gear.*Drive 5-hole link.*Output 5-hole link/);
   await expect(threeScene).toHaveAttribute('data-three-gear-radii', '60.00,60.00');
   await expect(threeScene).toHaveAttribute('data-three-linkage-pin-radius', '40.00');
   await expect(threeScene, 'Gear-linkage endpoint gear centers stay separated until idlers close the pitch chain').toHaveAttribute('data-three-gear-linkage-spacing-contract', 'separated-endpoints-await-idlers');
@@ -2365,7 +2370,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await page.getByLabel('Output link length').selectOption('4');
   await page.getByLabel('Input link length').selectOption('4');
   await page.getByLabel('Coupler link length').selectOption('4');
-  await expect(threeScene, '4bar link-size selectors override the active Foundry instance only with full-motion fabrication blanks').toHaveAttribute('data-three-stack-order', /Input L4 linkage.*Coupler L4 linkage.*Output L4 linkage/);
+  await expect(threeScene, '4bar link-size selectors override the active Foundry instance only with full-motion fabrication blanks').toHaveAttribute('data-three-stack-order', /Input 5-hole link.*Coupler 5-hole link.*Output 5-hole link/);
   expect(await threeScene.getAttribute('data-three-stack-order')).not.toBe(stackBeforeResize);
   expect(await threeScene.getAttribute('data-three-rendered-layer-labels')).toBe(await threeScene.getAttribute('data-three-stack-order'));
   await expect(page.getByLabel('Output link length').locator('option[value="2"]'), 'unsafe 4bar output sizes stay visible but locked instead of breaking the preview').toHaveAttribute('disabled', '');
@@ -3582,7 +3587,7 @@ test('Mechanism Design integrated automata preview keeps placed anchors on the f
   await expect(designPreview).toBeVisible();
   const designRig = designPreview.getByTestId('foundry-camera-rig');
   await expect(designRig).toHaveAttribute('data-three-renderer', 'webgl');
-  await expect(designRig).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
+  await expect(designRig).toHaveAttribute('data-three-stack-source', 'compileMechanismRenderPlan');
 
   await expect(page.getByLabel('anchor X number')).toBeVisible();
   const anchorPoint = {
@@ -3660,7 +3665,7 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
   await expect(designRig).toHaveAttribute('data-physics-update-policy', 'kinematic-authority-rapier-contact-validation');
   await expect(designRig).toHaveAttribute('data-high-throughput-scene-policy', 'viser-style-transform-tree-batched-updates-instancing');
   await expect(designRig).toHaveAttribute('data-physics-authority', 'motionsmith-kinematics');
-  await expect(designRig).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
+  await expect(designRig).toHaveAttribute('data-three-stack-source', 'compileMechanismRenderPlan');
   await expect(designRig).toHaveAttribute('data-three-stack-mode', 'assembled-spacer-separated');
   await expect(designRig).toHaveAttribute('data-three-exploded', 'false');
   const automataSurfaceClearance = Number(await designRig.getAttribute('data-three-automata-surface-clearance'));
@@ -3710,7 +3715,7 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
   for (const { type, label } of mechanismTemplateButtons) {
     await page.getByRole('button', { name: label, exact: true }).click();
     await expect(designRig, `${type} design automata preview uses the Foundry mechanism state`).toHaveAttribute('data-mechanism-type', type);
-    await expect(designRig, `${type} design renderer uses the shared fabrication stack`).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
+    await expect(designRig, `${type} design renderer uses the shared fabrication stack`).toHaveAttribute('data-three-stack-source', 'compileMechanismRenderPlan');
     await expect(designRig, `${type} design stack stays assembled until explicitly exploded`).toHaveAttribute('data-three-exploded', 'false');
     await expect(designRig, `${type} design stack has no validation errors`).toHaveAttribute('data-three-stack-validation-errors', '0');
     await expect(designRig, `${type} design physical readiness gate is clean`).toHaveAttribute('data-three-physical-validation-errors', '0');

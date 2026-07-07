@@ -211,7 +211,7 @@ type MechanismFeatureContract = {
 
 Rules:
 
-- This registry may call existing helpers (`calculateLinkage`, `fabricationStackForMechanism`, `fabricationRenderPlanForMechanism`) instead of duplicating math.
+- This registry may call existing helpers (`calculateLinkage`, `compileMechanismRenderPlan`, `compileMechanismGraphFabrication`) instead of duplicating math; active stages must not call legacy fabrication stack helpers directly.
 - This registry must not import React, DOM, Three, or UI components.
 - The registry returns plain serializable data or stable math outputs.
 - A mechanism type is incomplete until it passes contract coverage for 2D, 3D, physics, fabrication, and export.

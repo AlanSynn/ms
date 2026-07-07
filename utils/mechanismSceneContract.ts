@@ -1,4 +1,4 @@
-import type { FabricationRecipe, MechanismConfig, MechanismType } from '../types';
+import type { FabricationRecipe, MechanismConfig, MechanismType, PhysicalKitSettings } from '../types';
 import type { FabricationRenderKind } from './fabricationRenderPlan';
 import { compileMechanism, summarizeCompiledMechanism, type MechanismGraphCompilerSummary } from './mechanismCompiler';
 
@@ -40,8 +40,9 @@ export type MechanismSceneContract = {
 export const buildMechanismSceneContract = (
     mechanism: MechanismConfig,
     recipe?: FabricationRecipe,
+    kit?: PhysicalKitSettings,
 ): MechanismSceneContract => {
-    const compiledMechanism = compileMechanism(mechanism);
+    const compiledMechanism = compileMechanism(mechanism, undefined, undefined, kit);
     const renderPlan = compiledMechanism.fabrication.renderPlan;
     const validationErrors = [
         ...compiledMechanism.fabrication.validationErrors,

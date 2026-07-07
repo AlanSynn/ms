@@ -1,6 +1,6 @@
 import type { JointState, MechanismConfig, MechanismType } from '../types';
-import type { FabricationRenderPlan, FabricationStackLayer } from './fabrication';
-import { fabricationStackForMechanism, sampleFeasibleRange } from './fabrication';
+import type { FabricationRenderPlan } from './fabrication';
+import { sampleFeasibleRange } from './fabrication';
 import { calculateLinkage } from './kinematics';
 import { compileMechanismRenderPlan } from './mechanismCompiler';
 import { ALL_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY } from './mechanismTemplates';
@@ -47,7 +47,6 @@ export interface MechanismFeatureContract {
     requiredParts: (mechanism: MechanismConfig) => Array<{ name: string; quantity: number }>;
     sampleKinematics: (mechanism: MechanismConfig, angleRad: number) => JointState;
     sampleFeasibleRange: (mechanism: MechanismConfig, samples?: number) => MechanismFeasibleRange;
-    fabricationStack: (mechanism: MechanismConfig) => FabricationStackLayer[];
     fabricationPlan: (mechanism: MechanismConfig) => FabricationRenderPlan;
     interactionPolicy: (mechanism: MechanismConfig) => MechanismInteractionPolicy;
     projectionHints: (mechanism: MechanismConfig) => MechanismProjectionHint[];
@@ -166,7 +165,6 @@ const buildFeature = (type: MechanismType): MechanismFeatureContract => {
         requiredParts: mechanismRequiredParts,
         sampleKinematics: calculateLinkage,
         sampleFeasibleRange,
-        fabricationStack: fabricationStackForMechanism,
         fabricationPlan: compileMechanismRenderPlan,
         interactionPolicy: () => ({
             role: roleForType(type),

@@ -21,9 +21,11 @@ A mechanism can appear in Foundry only if:
 4. force/velocity overlays originate from current solved joints,
 5. browser tests cover render attributes and pan/zoom input.
 
-## Hidden until ready
+## Classroom visibility gate
 
-- 5bar and 6bar remain design/simulation-only until fabrication recipe PRDs are implemented and tested.
+- Mechanism graph compilation can produce buildable fabrication recipes for the current mechanism families.
+- Foundry may still hide advanced families such as 5bar and 6bar from novice cards until classroom copy, safe editing ranges, and guided QA are ready.
+- Hidden Foundry visibility must not mean a Design/Blueprint/Assembly fabrication fallback; those stages still consume graph compiler output.
 
 ## Verification commands
 

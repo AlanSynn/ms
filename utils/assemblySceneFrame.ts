@@ -70,7 +70,7 @@ export const buildMechanismAssemblySceneFrame = ({
 }): AssemblySceneFrame => {
     const activeBoardCoords = unique(step.coords.filter((_, index) => isBoardFixedCoordRole(step.coordRoles[index] ?? '')));
     const floatingReferenceCoords = unique(step.coords.filter((_, index) => !isBoardFixedCoordRole(step.coordRoles[index] ?? '')));
-    const mechanismContract = buildMechanismSceneContract(mechanism, recipe);
+    const mechanismContract = buildMechanismSceneContract(mechanism, recipe, kit);
     const stackParts = step.stack.map((item) => ({
         id: `${step.index}:${item.order}:${item.label}`,
         label: item.label,

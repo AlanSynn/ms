@@ -128,14 +128,24 @@ export const REFERENCE_PART_HOLE_COUNTS: Record<string, number> = {
     'spacers:s10': 0
 };
 
-export const referencePartHoleCount = (partRequirement: Pick<ReferencePartRequirement, 'part' | 'key' | 'label' | 'name'>) =>
-    REFERENCE_PART_HOLE_COUNTS[partRequirement.part]
-    ?? REFERENCE_PART_HOLE_COUNTS[partRequirement.key]
-    ?? REFERENCE_PART_HOLE_COUNTS[partRequirement.label]
-    ?? REFERENCE_PART_HOLE_COUNTS[partRequirement.name]
+type HoleCountPartLike = {
+    part?: string;
+    key?: string;
+    label?: string;
+    name?: string;
+    quantity: number;
+};
+
+const holeCountForKey = (key?: string) => key ? REFERENCE_PART_HOLE_COUNTS[key] : undefined;
+
+export const referencePartHoleCount = (partRequirement: Omit<HoleCountPartLike, 'quantity'>) =>
+    holeCountForKey(partRequirement.part)
+    ?? holeCountForKey(partRequirement.key)
+    ?? holeCountForKey(partRequirement.label)
+    ?? holeCountForKey(partRequirement.name)
     ?? 0;
 
-export const referenceRequiredPartsHoleCount = (parts: Array<Pick<ReferencePartRequirement, 'part' | 'key' | 'label' | 'name' | 'quantity'>>) =>
+export const referenceRequiredPartsHoleCount = (parts: HoleCountPartLike[]) =>
     parts.reduce((sum, partRequirement) => sum + referencePartHoleCount(partRequirement) * Math.max(0, partRequirement.quantity), 0);
 
 export const isBoardFixedCoordRole = (role: string) => role === 'board' || role === 'board_axle';

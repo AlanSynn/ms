@@ -5,7 +5,7 @@ import type {
   PhysicalKitSettings,
   Point,
 } from "../../../types";
-import { boardToScene, SCENE_VIEW } from "../../../utils/coordinates";
+import { boardToScene, parseBoardCoordinateLabel, SCENE_VIEW } from "../../../utils/coordinates";
 import type { FabricationRenderPlan } from "../../../utils/fabrication";
 import type { MechanismPreviewSimulation } from "../../../utils/mechanismPreview";
 import type { AssemblySceneFrame } from "../../../utils/assemblySceneFrame";
@@ -122,10 +122,9 @@ const boardCoordToScenePoint = (
   coord: string,
   kit: PhysicalKitSettings,
 ): Point | null => {
-  const match = /^([A-Z])([1-9]|1[0-5])$/i.exec(coord.trim());
-  if (!match) return null;
-  const col = match[1].toUpperCase().charCodeAt(0) - 65;
-  const row = Number(match[2]) - 1;
+  const parsed = parseBoardCoordinateLabel(coord);
+  if (!parsed) return null;
+  const { col, row } = parsed;
   if (col < 0 || row < 0 || col >= kit.boardCells || row >= kit.boardCells)
     return null;
   return boardToScene(col, row, kit);

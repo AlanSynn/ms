@@ -54,7 +54,7 @@ export const BlueprintExport = ({
     ? project.mechanisms.find((mechanism) => mechanism.id === selectedRecipe.mechanismId)
     : undefined;
   const selectedMechanismContract = selectedMechanism && selectedRecipe
-    ? buildMechanismSceneContract(selectedMechanism, selectedRecipe)
+    ? buildMechanismSceneContract(selectedMechanism, selectedRecipe, project.settings.physicalKit)
     : undefined;
   const previewSvg = makeBlueprintPreviewSvg(project, recipes);
   return (

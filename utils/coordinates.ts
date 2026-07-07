@@ -18,6 +18,42 @@ export const defaultPhysicalKit = (): PhysicalKitSettings => ({
     cutSheetFileType: 'pdf'
 });
 
+export const boardColumnLabel = (col: number) => {
+    const safeCol = Math.floor(col);
+    if (!Number.isFinite(safeCol) || safeCol < 0) return '?';
+    let index = safeCol;
+    let label = '';
+    do {
+        label = String.fromCharCode(65 + (index % 26)) + label;
+        index = Math.floor(index / 26) - 1;
+    } while (index >= 0);
+    return label;
+};
+
+export const boardColumnIndex = (label: string) => {
+    const cleaned = label.trim().toUpperCase();
+    if (!/^[A-Z]+$/.test(cleaned)) return null;
+    let index = 0;
+    for (const ch of cleaned) index = index * 26 + (ch.charCodeAt(0) - 64);
+    return index - 1;
+};
+
+export const boardCoordinateLabel = (col: number, row: number) => `${boardColumnLabel(col)}${row + 1}`;
+
+export const parseBoardCoordinateLabel = (coordinate: string | undefined) => {
+    const match = /^([A-Z]+)([1-9]\d*)$/i.exec((coordinate ?? '').trim());
+    if (!match) return null;
+    const col = boardColumnIndex(match[1]);
+    const row = Number(match[2]) - 1;
+    if (col === null || !Number.isFinite(row) || row < 0) return null;
+    return { col, row, label: `${boardColumnLabel(col)}${row + 1}` };
+};
+
+export const isBoardCoordinateInKit = (coordinate: string | undefined, kit: PhysicalKitSettings) => {
+    const parsed = parseBoardCoordinateLabel(coordinate);
+    return Boolean(parsed && parsed.col >= 0 && parsed.row >= 0 && parsed.col < kit.boardCells && parsed.row < kit.boardCells);
+};
+
 export const physicalKitPreset = (profileKey: string, current = defaultPhysicalKit()): PhysicalKitSettings => {
     const base = { ...current, profileKey };
     if (profileKey === 'letter-12x12-2cm') return { ...base, gridPitchMm: 20, sheetWidthMm: LETTER_SHEET.widthMm, sheetHeightMm: LETTER_SHEET.heightMm, boardCells: 12, holeDiameterMm: 4 };
@@ -42,7 +78,7 @@ export const sceneToBoardRaw = (p: Point, kit: PhysicalKitSettings) => {
     const col = Math.round(xMm / kit.gridPitchMm) + center;
     const row = center - Math.round(yMm / kit.gridPitchMm);
     const valid = col >= 0 && row >= 0 && col < kit.boardCells && row < kit.boardCells;
-    const label = valid ? `${String.fromCharCode(65 + col)}${row + 1}` : `off-board(${col},${row})`;
+    const label = valid ? boardCoordinateLabel(col, row) : `off-board(${col},${row})`;
     return { col, row, label, xMm, yMm, valid };
 };
 
@@ -50,7 +86,7 @@ export const sceneToBoard = (p: Point, kit: PhysicalKitSettings) => {
     const raw = sceneToBoardRaw(p, kit);
     const col = Math.max(0, Math.min(kit.boardCells - 1, raw.col));
     const row = Math.max(0, Math.min(kit.boardCells - 1, raw.row));
-    const label = `${String.fromCharCode(65 + col)}${row + 1}`;
+    const label = boardCoordinateLabel(col, row);
     return { ...raw, col, row, label };
 };
 

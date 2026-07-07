@@ -1,5 +1,4 @@
-import type { MechanismConfig } from '../types';
-import { validateFabricationStack } from './fabricationRenderPlan';
+import type { MechanismConfig, PhysicalKitSettings } from '../types';
 import { FABRICATION_LINKAGE_ROLE_MIN_HOLES, planetaryRingPitchRadius } from './fabricationSizing';
 import {
     closePhysicalValue,
@@ -9,12 +8,17 @@ import {
     sampleFeasibleRange
 } from './fabricationReadiness';
 import { gearTrainPitchCenterDistance, gearTrainPitchRadii, gearTrainResolvedCenterDistance } from './kinematics';
-import { referenceRecipeForType } from './mechanismReference';
+import { compileGraphFabricationRecipe } from './mechanismGraphFabricationCompiler';
+import { mechanismGraphForMechanism } from './mechanismGraph';
 
-export const validateMechanismPreviewReadiness = (mechanism: MechanismConfig): string[] => {
-    const errors = [...validateFabricationStack(mechanism)];
-    const recipe = referenceRecipeForType(mechanism.type);
-    if (!recipe.exportReady) errors.push(recipe.reason ?? 'not fabrication-ready.');
+export const validateMechanismPreviewReadiness = (mechanism: MechanismConfig, kit?: PhysicalKitSettings): string[] => {
+    const pitchMm = kit?.gridPitchMm;
+    const graphFabrication = compileGraphFabricationRecipe(mechanismGraphForMechanism(mechanism), kit);
+    const renderPlanErrors = graphFabrication.renderPlan.validationErrors;
+    const errors = [
+        ...renderPlanErrors,
+        ...(graphFabrication.buildable || renderPlanErrors.length ? [] : [graphFabrication.blocker ?? 'Graph fabrication blocked'])
+    ];
 
     const physicalNumbers = [
         mechanism.crankLength,
@@ -32,10 +36,10 @@ export const validateMechanismPreviewReadiness = (mechanism: MechanismConfig): s
 
     if (mechanism.type === '4bar') {
         const lengthsAreFabricationSnapped =
-            closeToBoardPitch(mechanism.groundLength) &&
-            closeToFabricationLinkage(mechanism.crankLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.driver) &&
-            closeToFabricationLinkage(mechanism.couplerLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.coupler) &&
-            closeToFabricationLinkage(mechanism.rockerLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.output);
+            closeToBoardPitch(mechanism.groundLength, pitchMm) &&
+            closeToFabricationLinkage(mechanism.crankLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.driver, pitchMm) &&
+            closeToFabricationLinkage(mechanism.couplerLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.coupler, pitchMm) &&
+            closeToFabricationLinkage(mechanism.rockerLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.output, pitchMm);
         if (!lengthsAreFabricationSnapped) errors.push('snap four-bar linkage lengths.');
     }
 

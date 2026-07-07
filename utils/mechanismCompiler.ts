@@ -1,8 +1,8 @@
-import type { FabricationRecipe, MechanismConfig, PhysicalKitSettings, ProjectState } from '../types';
-import { sampleFeasibleRange, type FabricationFeasibleRange } from './fabricationReadiness';
-import { createFabricationRecipe, prefabAssemblySteps } from './fabricationRecipes';
-import { fabricationRenderPlanForMechanism, type FabricationRenderPlan } from './fabricationRenderPlan';
+import type { FabricationPartRequirement, FabricationRecipe, MechanismConfig, PhysicalKitSettings, ProjectState } from '../types';
+import { boardToScene, defaultPhysicalKit, sceneToBoardRaw } from './coordinates';
 import { assemblyStepFingerprint, type AssemblyStepFingerprint } from './fabricationAssemblyFingerprint';
+import { sampleFeasibleRange, type FabricationFeasibleRange } from './fabricationReadiness';
+import type { FabricationRenderPlan } from './fabricationRenderPlan';
 import { compileGraphFabricationRecipe, type AuthoredGraphFabricationResult } from './mechanismGraphFabricationCompiler';
 import {
     MECHANISM_GRAPH_IR_VERSION,
@@ -14,11 +14,12 @@ import {
     type MechanismGraphMotionSample
 } from './mechanismGraph';
 import { validateMechanismPreviewReadiness } from './mechanismPreviewReadiness';
+import { preferredMotionJointId } from './motion';
 
 export type CompiledAssemblyStepFingerprint = AssemblyStepFingerprint;
 
 export type MechanismCompilerSource = 'mechanismCompiler';
-export type MechanismRecipeCompilerSource = 'compileFabricationRecipe' | 'compileGraphFabricationRecipe';
+export type MechanismRecipeCompilerSource = 'compileGraphFabricationRecipe';
 
 export type CompiledMechanism = {
     compilerSource: MechanismCompilerSource;
@@ -29,8 +30,8 @@ export type CompiledMechanism = {
     readinessErrors: string[];
     fabrication: {
         renderPlan: FabricationRenderPlan;
-        renderPlanSource: 'compileMechanismRenderPlan';
-        assemblyPlanSource: 'prefabAssemblySteps';
+        renderPlanSource: 'compileGraphFabricationRecipe';
+        assemblyPlanSource: 'compileGraphFabricationRecipe';
         recipeCompilerSource: MechanismRecipeCompilerSource;
         assemblyBoardCoordinate: string;
         assemblyStepCount: number;
@@ -72,16 +73,112 @@ export type AuthoredGraphCompilation = {
     blockers: string[];
 };
 
-export const compileFabricationRecipe = (project: ProjectState, mechanism: MechanismConfig): FabricationRecipe =>
-    createFabricationRecipe(project, mechanism);
+const graphRecipeWithProjectContext = (
+    project: ProjectState,
+    mechanism: MechanismConfig,
+    recipe: FabricationRecipe
+): FabricationRecipe => {
+    const targetPart = mechanism.targetPartId ? project.parts[mechanism.targetPartId] : undefined;
+    const targetSceneObject = mechanism.targetSceneObjectId ? project.sceneObjects[mechanism.targetSceneObjectId] : undefined;
+    const targetPath = mechanism.targetPathId ? project.paths[mechanism.targetPathId] : undefined;
+    const targetAnchorJointId = targetPart
+        ? preferredMotionJointId(project, mechanism.targetPartId, mechanism.targetAnchorJointId ?? targetPath?.targetAnchorJointId)
+        : undefined;
+    return {
+        ...recipe,
+        targetPartId: targetPart?.id,
+        targetPartName: targetPart?.name,
+        targetSceneObjectId: targetSceneObject?.id,
+        targetSceneObjectName: targetSceneObject?.name,
+        targetPathId: targetPath?.id,
+        targetPathPointCount: targetPath?.points.length,
+        targetAnchorJointId,
+        camProfileSamples: mechanism.type === 'cam' ? [...(mechanism.camProfileSamples ?? [])] : recipe.camProfileSamples,
+        warnings: [...recipe.warnings, ...(mechanism.fabricationMetadata?.warnings ?? []), ...(mechanism.warnings ?? [])]
+    };
+};
 
-export const compileMechanismRenderPlan = (mechanism: MechanismConfig): FabricationRenderPlan =>
-    fabricationRenderPlanForMechanism(mechanism);
+const graphCompilerBlockerPart = (blocker: string): FabricationPartRequirement => ({
+    name: `Fix: ${blocker}`,
+    label: blocker,
+    key: 'compiler-blocker',
+    category: 'blocker',
+    quantity: 1
+});
+
+const graphCompilerBlockerStep = (
+    mechanism: MechanismConfig,
+    blocker: string,
+    boardCoordinate: string
+): FabricationRecipe['assemblySteps'][number] => ({
+    index: 1,
+    label: `Fix ${mechanism.type} module`,
+    role: 'blocker',
+    boardCoordinate,
+    zMm: 0,
+    coords: [boardCoordinate],
+    coordRoles: ['board'],
+    action: 'fix-before-build',
+    instruction: `Fix: ${blocker}`,
+    check: 'Build files are ready after the issue is fixed.',
+    stack: [{ order: 1, label: `Fix: ${blocker}`, role: 'blocker', part: 'blockers:compiler-blocker' }]
+});
+
+const graphRecipeBlocker = (
+    project: ProjectState,
+    mechanism: MechanismConfig,
+    blocker: string
+): FabricationRecipe => {
+    const kit = project.settings.physicalKit;
+    const board = mechanism.fabricationMetadata?.sceneAnchor
+        ? sceneToBoardRaw(mechanism.fabricationMetadata.sceneAnchor, kit)
+        : sceneToBoardRaw({ x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 }, kit);
+    const boardCoordinate = board.label;
+    const [col, row] = [board.col, board.row];
+    const sceneAnchor = board.valid ? boardToScene(col, row, kit) : { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 };
+    return graphRecipeWithProjectContext(project, mechanism, {
+        mechanismId: mechanism.id,
+        type: 'graph',
+        graphFamilyId: mechanism.type,
+        graphSource: 'family-definition',
+        compilerSource: 'mechanismCompiler',
+        boardCoordinate,
+        board: board.valid ? board : { col, row, xMm: 0, yMm: 0, valid: false },
+        sceneAnchor,
+        offsetFromBoardMm: { x: 0, y: 0 },
+        requiredParts: [graphCompilerBlockerPart(blocker)],
+        steps: [`Fix: ${blocker}`],
+        assemblySteps: [graphCompilerBlockerStep(mechanism, blocker, boardCoordinate)],
+        warnings: [`Fix: ${blocker}`]
+    });
+};
+
+export const compileFabricationRecipe = (project: ProjectState, mechanism: MechanismConfig): FabricationRecipe =>
+    {
+        const graph = mechanismGraphForMechanism(mechanism);
+    const compiled = compileGraphFabricationRecipe(graph, project.settings.physicalKit);
+    return compiled.recipe
+        ? graphRecipeWithProjectContext(project, mechanism, compiled.recipe)
+        : graphRecipeBlocker(project, mechanism, compiled.blocker ?? 'Graph fabrication blocked');
+    };
+
+export const compileMechanismGraphFabrication = (
+    mechanism: MechanismConfig,
+    kit?: PhysicalKitSettings
+): AuthoredGraphFabricationResult =>
+    compileGraphFabricationRecipe(mechanismGraphForMechanism(mechanism), kit);
+
+export const compileMechanismRenderPlan = (
+    mechanism: MechanismConfig,
+    kit?: PhysicalKitSettings
+): FabricationRenderPlan => {
+    return compileMechanismGraphFabrication(mechanism, kit).renderPlan;
+};
 
 export const compileAuthoredMechanismGraph = (graph: MechanismGraph, kit?: PhysicalKitSettings): AuthoredGraphCompilation => {
     const validation = validateMechanismGraph(graph);
     const fabrication = compileGraphFabricationRecipe(graph, kit);
-    const fabricationBlockers = fabrication.buildable ? [] : [fabrication.blocker ?? 'Recipe missing'];
+    const fabricationBlockers = fabrication.buildable ? [] : [fabrication.blocker ?? 'Graph fabrication blocked'];
     return {
         compilerSource: 'mechanismCompiler',
         graph,
@@ -94,28 +191,37 @@ export const compileAuthoredMechanismGraph = (graph: MechanismGraph, kit?: Physi
     };
 };
 
+
 export const compileMechanism = (
     mechanism: MechanismConfig,
     angles: number[] = [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2],
-    feasibleSamples = 24
+    feasibleSamples = 24,
+    kit?: PhysicalKitSettings
 ): CompiledMechanism => {
     const graph = mechanismGraphForMechanism(mechanism);
     const graphValidation = validateMechanismGraph(graph);
-    const renderPlan = compileMechanismRenderPlan(mechanism);
-    const assemblyBoardCoordinate = mechanism.fabricationMetadata?.boardCoordinate ?? 'H8';
-    const assemblySteps = prefabAssemblySteps(mechanism, assemblyBoardCoordinate);
+    const graphFabrication = compileGraphFabricationRecipe(graph, kit);
+    const renderPlan = graphFabrication.renderPlan;
+    const fallbackKit = kit ?? defaultPhysicalKit();
+    const fallbackBoard = sceneToBoardRaw({ x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 }, fallbackKit);
+    const assemblyBoardCoordinate = graphFabrication.recipe?.boardCoordinate ?? mechanism.fabricationMetadata?.boardCoordinate ?? fallbackBoard.label;
+    const graphBlocker = graphFabrication.blocker ?? renderPlan.validationErrors[0] ?? 'Graph fabrication blocked';
+    const assemblySteps = graphFabrication.recipe?.assemblySteps ?? [graphCompilerBlockerStep(mechanism, graphBlocker, assemblyBoardCoordinate)];
+    const fabricationValidationErrors = graphFabrication.recipe
+        ? renderPlan.validationErrors
+        : [...new Set([...renderPlan.validationErrors, graphBlocker])];
     return {
         compilerSource: 'mechanismCompiler',
         graph,
         graphValidationDiagnostics: graphValidation.diagnostics,
         motionSamples: angles.map(angle => sampleMechanismGraphMotion(mechanism, angle)),
         feasibleRange: sampleFeasibleRange(mechanism, feasibleSamples),
-        readinessErrors: validateMechanismPreviewReadiness(mechanism),
+        readinessErrors: validateMechanismPreviewReadiness(mechanism, kit),
         fabrication: {
             renderPlan,
-            renderPlanSource: 'compileMechanismRenderPlan',
-            assemblyPlanSource: 'prefabAssemblySteps',
-            recipeCompilerSource: 'compileFabricationRecipe',
+            renderPlanSource: 'compileGraphFabricationRecipe',
+            assemblyPlanSource: 'compileGraphFabricationRecipe',
+            recipeCompilerSource: 'compileGraphFabricationRecipe',
             assemblyBoardCoordinate,
             assemblyStepCount: assemblySteps.length,
             assemblyStepLabels: assemblySteps.map(step => step.label),
@@ -123,7 +229,7 @@ export const compileMechanism = (
             layerCount: renderPlan.layers.length,
             stackSummary: renderPlan.stackSummary,
             roleSummary: renderPlan.roleSummary,
-            validationErrors: renderPlan.validationErrors
+            validationErrors: fabricationValidationErrors
         }
     };
 };

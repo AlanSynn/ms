@@ -1,6 +1,6 @@
 import { FabricationIssue, FabricationPackage, FabricationRecipe, MechanismConfig, ProjectState } from '../types';
 import { gearTrainPitchCenterDistance, gearTrainResolvedCenterDistance, gearTrainPitchRadii, generateCurvePoints } from './kinematics';
-import { boardToScene, sceneToBoardRaw, sceneBoundsForSheet } from './coordinates';
+import { boardToScene, isBoardCoordinateInKit, sceneToBoardRaw, sceneBoundsForSheet } from './coordinates';
 import { isBoardFixedCoordRole } from './mechanismReference';
 import { mechanismBindingWarnings } from './motion';
 import { mechanismMatchesPathOwner } from './pathTargets';
@@ -8,8 +8,7 @@ import { makeAssemblyGuideHtml, makeAssemblyGuidePdf } from './fabricationAssemb
 import { makeBlueprintPreviewSvg, makeBlueprintSvg } from './fabricationBlueprintSvg';
 import { makeCutSheetPdf } from './fabricationCutSheetPdf';
 import { makeCustomPartsPdf, makeCustomPartsStl, makeCustomPartsSvg } from './fabricationCustomParts';
-import { createFabricationRecipe, prefabAssemblySteps } from './fabricationRecipes';
-import { compileFabricationRecipe } from './mechanismCompiler';
+import { compileFabricationRecipe, compileMechanismGraphFabrication } from './mechanismCompiler';
 import { primaryFoundryPlaybackPath } from './foundryPlayback';
 import {
     sampleFeasibleRange,
@@ -86,13 +85,11 @@ export {
 
 export { makeBlueprintPreviewSvg, makeBlueprintSvg } from './fabricationBlueprintSvg';
 export {
-    createFabricationRecipe,
     fabricationRecipeClassroomCue,
     fabricationRecipeSensemakingType,
     fabricationRecipeStackSummary,
     fabricationRecipeTitle,
-    mechanismTypeLabel,
-    prefabAssemblySteps
+    mechanismTypeLabel
 } from './fabricationRecipes';
 
 export type { FabricationLinkageRoleLengths } from './fabricationSizing';
@@ -127,7 +124,7 @@ export const validateForFabrication = (project: ProjectState) => {
     const snapTolerance = project.settings.physicsSnapMode === 'fast' ? 4 : project.settings.physicsSnapMode === 'high' ? 0.25 : 0.5;
     const fabricationSeverity: FabricationIssue['severity'] = project.settings.fabricationReadyMode ? 'error' : 'warning';
     const insideSheet = (p: { x: number; y: number }) => p.x >= sheet.x && p.x <= sheet.x + sheet.width && p.y >= sheet.y && p.y <= sheet.y + sheet.height;
-    const isValidBoardCoordinate = (coord: string | undefined) => /^[A-O](?:[1-9]|1[0-5])$/.test(coord ?? '');
+    const isValidBoardCoordinate = (coord: string | undefined) => isBoardCoordinateInKit(coord, project.settings.physicalKit);
     if (!project.partOrder.length) add('error', 'No character in scene.', { recoveryStage: 'character', recoveryAction: 'Load a character package' });
     const activeMechanisms = project.mechanisms.filter(m => m.visible && m.enabled !== false);
     if (!activeMechanisms.length) add('error', 'No enabled mechanism to export.', { recoveryStage: 'design', recoveryAction: 'Enable or add a mechanism' });
@@ -157,7 +154,7 @@ export const validateForFabrication = (project: ProjectState) => {
         if (corners.some(p => !insideSheet(p))) add('warning', `${object.id}: visible object extends outside sheet bounds.`, { recoveryStage: 'character', recoveryAction: 'Move object inside sheet' });
     });
     activeMechanisms.forEach(m => {
-        validateMechanismPreviewReadiness(m).forEach(message => add('error', `${m.id}: ${message}`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Choose ready template' }));
+        validateMechanismPreviewReadiness(m, project.settings.physicalKit).forEach(message => add('error', `${m.id}: ${message}`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Choose ready template' }));
         (bindingWarnings[m.id] ?? []).forEach(message => add('error', `${m.id}: ${message}`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Rebind mechanism target' }));
         if (!m.id) add('error', 'Mechanism missing per-instance id.', { recoveryStage: 'design', recoveryAction: 'Select or recreate mechanism' });
         if ((!m.targetPartId && !m.targetSceneObjectId) || !m.targetPathId) add('error', `${m.id}: choose target + path.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Choose target + path' });
@@ -188,9 +185,6 @@ export const validateForFabrication = (project: ProjectState) => {
         const range = sampleFeasibleRange(m);
         if (range.warning?.startsWith('No motion')) add('error', `${m.id}: ${range.warning}.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Adjust' });
         else if (range.warning) add('warning', `${m.id}: ${range.warning}`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Review partial motion' });
-        if (m.type === 'cam' && project.settings.physicalKit.boardCells !== 15) {
-            add('error', `${m.id}: cam module needs 15x15 board.`, { mechanismId: m.id, recoveryStage: 'blueprint', recoveryAction: 'Use 15x15 kit' });
-        }
         if (!Number.isFinite(m.anchorX) || !Number.isFinite(m.anchorY)) {
             add('error', `${m.id}: missing board anchor.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Drag to board' });
             return;
@@ -210,7 +204,21 @@ export const validateForFabrication = (project: ProjectState) => {
             add('warning', `${m.id}: near board edge ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move inward' });
         }
         if (board.valid) {
-            const offBoardStep = prefabAssemblySteps(m, board.label).find(step => (step.coords ?? []).some((coord, index) =>
+            const graphFabrication = compileMechanismGraphFabrication(m, project.settings.physicalKit);
+            if (!graphFabrication.recipe) {
+                const graphBlocker = graphFabrication.blocker;
+                if (!graphBlocker) {
+                    add('error', `${m.id}: graph compiler did not explain why this cannot build.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Report bug' });
+                }
+                else {
+                    const message = graphBlocker === 'Placement off board'
+                        ? `${m.id}: assembly holes off board near ${board.label}.`
+                        : `${m.id}: ${graphBlocker}.`;
+                    add(fabricationSeverity, message, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: graphBlocker === 'Placement off board' ? 'Move inward' : 'Choose ready template' });
+                }
+                placementHasIssue = true;
+            }
+            const offBoardStep = graphFabrication.recipe?.assemblySteps.find(step => (step.coords ?? []).some((coord, index) =>
                 isBoardFixedCoordRole(step.coordRoles?.[index] ?? '') && !isValidBoardCoordinate(coord)
             ));
             if (offBoardStep) {

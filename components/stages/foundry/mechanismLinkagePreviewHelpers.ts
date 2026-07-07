@@ -2,7 +2,7 @@ import type { MechanismConfig, MechanismType, Point } from "../../../types";
 import { degToRad } from "../../../utils/foundryCamera";
 import { sampledCamProfileScale } from "../../../utils/kinematics";
 
-export const mechanismReferenceTopologySummary = (type: MechanismType) => {
+export const mechanismTopologySummary = (type: MechanismType) => {
   if (type === "4bar")
     return "A-B input; B-C coupler; C-D output; D-A board-ground";
   if (type === "gear")
@@ -14,9 +14,9 @@ export const mechanismReferenceTopologySummary = (type: MechanismType) => {
   if (type === "planetary_gear")
     return "fixed ring; sun input; planet on carrier; carrier output";
   if (type === "5bar")
-    return "A-B-C-D-E closed chain; A-E board-ground; simulation-only";
+    return "A-B-C-D-E closed chain; A-E board-ground; graph-compiled";
   if (type === "6bar")
-    return "A-B-C-D four-bar plus C-E-D dyad; simulation-only";
+    return "A-B-C-D four-bar plus C-E-D dyad; graph-compiled";
   if (type === "piston")
     return "crank-slider guide; slider-crank fabrication recipe";
   return `${type} simulation topology`;
@@ -63,14 +63,14 @@ export const camProfilePathD = (
   return `M ${points.join(" L ")} Z`;
 };
 
-export const referenceCoordRoles = (recipe: {
-  assemblySteps: Array<{ coords: string[]; coordRoles: string[] }>;
-}) =>
-  recipe.assemblySteps
+export const assemblyCoordRoles = (
+  assemblySteps: Array<{ coords?: string[]; coordRoles?: string[] }>,
+) =>
+  assemblySteps
     .flatMap((step) =>
-      step.coords.map(
+      (step.coords ?? []).map(
         (coord, index) =>
-          `${coord}:${step.coordRoles[index] ?? "moving_reference"}`,
+          `${coord}:${step.coordRoles?.[index] ?? "graph_reference"}`,
       ),
     )
     .join("|");

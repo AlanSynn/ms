@@ -169,7 +169,7 @@ export const buildAutomataSceneModel = (
         mechanism: normalizedMechanism,
         mechanisms,
         foundryPreview,
-        mechanismContract: buildMechanismSceneContract(normalizedMechanism),
+        mechanismContract: buildMechanismSceneContract(normalizedMechanism, undefined, project.settings.physicalKit),
         animatedParts: fullMotionPreview.parts,
         animatedSceneObjects: fullMotionPreview.sceneObjects ?? {},
         skeleton: fullMotionPreview.skeleton ?? project.skeleton,

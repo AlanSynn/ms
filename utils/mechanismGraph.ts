@@ -1,5 +1,5 @@
 import type { JointState, MechanismConfig, MechanismType, Point } from '../types';
-import { normalizeGearLinkageToReference } from './mechanismReference';
+import { mmToScene, normalizeGearLinkageToReference, REFERENCE_DEFAULTS } from './mechanismReference';
 import {
     calculateLinkage,
     gearTrainCenters,
@@ -66,9 +66,9 @@ export type MechanismConstraint = {
     samples?: number[];
 };
 
-export type MechanismGraphSource = 'derived-legacy-adapter' | 'family-definition' | 'free-graph-authoring' | 'imported-graph';
+export type MechanismGraphSource = 'family-definition' | 'free-graph-authoring' | 'imported-graph';
 
-export type MechanismGraphSolver = 'legacy-closed-form' | 'constraint-graph' | 'diagnostic-only';
+export type MechanismGraphSolver = 'closed-form-kinematics' | 'constraint-graph';
 
 export type MechanismDriver = {
     id: string;
@@ -81,7 +81,7 @@ export type MechanismDriver = {
 
 export type MechanismFamilyDefinition = {
     id: string;
-    legacyType?: MechanismType;
+    mechanismType?: MechanismType;
     firstCompilerTarget: boolean;
     authoringMode: 'classroom-preset' | 'advanced-diagnostic';
 };
@@ -90,7 +90,7 @@ export type MechanismGraph = {
     version: typeof MECHANISM_GRAPH_IR_VERSION;
     id: string;
     mechanismId: string;
-    legacyType?: MechanismType;
+    mechanismType?: MechanismType;
     source: MechanismGraphSource;
     family: MechanismFamilyDefinition;
     solver: MechanismGraphSolver;
@@ -110,6 +110,15 @@ export type MechanismGraphMotionSample = {
 const FIRST_COMPILER_TARGETS = new Set<MechanismType>(['4bar', 'gear']);
 const CLASSROOM_PRESET_TARGETS = new Set<MechanismType>(['4bar', 'piston', 'cam', 'gear', 'gear_linkage', 'planetary_gear']);
 const toRad = (degrees = 0) => (degrees * Math.PI) / 180;
+const REFERENCE_BOARD_PITCH_SCENE = mmToScene(REFERENCE_DEFAULTS.pitchMm);
+const nearestReferenceBoardDistance = (distance: number, minCells = 0) => {
+    const cells = Math.max(minCells, Math.round(Math.abs(distance) / REFERENCE_BOARD_PITCH_SCENE));
+    return cells * REFERENCE_BOARD_PITCH_SCENE;
+};
+const nearestReferenceBoardOffset = (offset: number, minCells = 0) => {
+    const direction = offset < 0 ? -1 : 1;
+    return direction * nearestReferenceBoardDistance(offset, minCells);
+};
 const finiteNumber = (value: number | undefined, fallback = 0) => Number.isFinite(value) ? value as number : fallback;
 const offsetVector = (distance: number | undefined, angleDegrees: number | undefined): Point => {
     const length = finiteNumber(distance);
@@ -147,6 +156,15 @@ const fixedBoardConstraints = (nodeId: string, label: string): MechanismConstrai
     { id: `${nodeId}-board-snap`, label: `${label} snaps to pegboard`, role: 'board-snap', nodes: [nodeId] }
 ];
 
+const midpoint = (a: Point, b: Point): Point => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+
+const graphState = (mechanism: MechanismConfig) => calculateLinkage(mechanism, 0);
+
+const fromLocal = (origin: Point, angleRad: number, x: number, y: number): Point => ({
+    x: origin.x + x * Math.cos(angleRad) - y * Math.sin(angleRad),
+    y: origin.y + x * Math.sin(angleRad) + y * Math.cos(angleRad)
+});
+
 const gearTrainGraphParts = (mechanism: MechanismConfig) => {
     const radii = gearTrainPitchRadii(mechanism);
     const centers = gearTrainCenters(mechanism);
@@ -170,7 +188,7 @@ const gearTrainGraphParts = (mechanism: MechanismConfig) => {
 
 const mechanismFamily = (type: MechanismType): MechanismFamilyDefinition => ({
     id: type,
-    legacyType: type,
+    mechanismType: type,
     firstCompilerTarget: FIRST_COMPILER_TARGETS.has(type),
     authoringMode: CLASSROOM_PRESET_TARGETS.has(type) ? 'classroom-preset' : 'advanced-diagnostic'
 });
@@ -203,32 +221,33 @@ export const mechanismGraphFromDraft = (draft: FreeMechanismGraphDraft): Mechani
     diagnostics: [...(draft.diagnostics ?? [])]
 });
 
-export const legacyFourBarToMechanismGraph = (mechanism: MechanismConfig): MechanismGraph => {
+export const fourBarMechanismGraph = (mechanism: MechanismConfig): MechanismGraph => {
     const p1 = { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 };
     const groundAngle = toRad(mechanism.groundAngle ?? 0);
     const p2 = {
         x: p1.x + mechanism.groundLength * Math.cos(groundAngle),
         y: p1.y + mechanism.groundLength * Math.sin(groundAngle)
     };
+    const state = graphState(mechanism);
 
     return {
         version: MECHANISM_GRAPH_IR_VERSION,
         id: `${mechanism.id}:graph`,
         mechanismId: mechanism.id,
-        legacyType: mechanism.type,
-        source: 'derived-legacy-adapter',
+        mechanismType: mechanism.type,
+        source: 'family-definition',
         family: mechanismFamily('4bar'),
-        solver: 'legacy-closed-form',
+        solver: 'closed-form-kinematics',
         persisted: false,
         nodes: [
             fixedBoard('p1', 'Input board pivot', p1),
             fixedBoard('p2', 'Output board pivot', p2),
-            { id: 'input-link', label: 'Input link', role: 'link', value: mechanism.crankLength },
-            { id: 'coupler-link', label: 'Coupler link', role: 'link', value: mechanism.couplerLength },
-            { id: 'output-link', label: 'Output link', role: 'link', value: mechanism.rockerLength },
-            { id: 'j1', label: 'Input moving joint', role: 'moving-joint' },
-            { id: 'j2', label: 'Output moving joint', role: 'moving-joint' },
-            { id: 'effector', label: 'Motion target point', role: 'output-point' }
+            { id: 'input-link', label: 'Input link', role: 'link', position: midpoint(p1, state.j1), value: mechanism.crankLength },
+            { id: 'coupler-link', label: 'Coupler link', role: 'link', position: midpoint(state.j1, state.j2), value: mechanism.couplerLength },
+            { id: 'output-link', label: 'Output link', role: 'link', position: midpoint(p2, state.j2), value: mechanism.rockerLength },
+            { id: 'j1', label: 'Input moving joint', role: 'moving-joint', position: state.j1 },
+            { id: 'j2', label: 'Output moving joint', role: 'moving-joint', position: state.j2 },
+            { id: 'effector', label: 'Motion target point', role: 'output-point', position: state.effector }
         ],
         constraints: [
             ...fixedBoardConstraints('p1', 'Input pivot'),
@@ -238,28 +257,29 @@ export const legacyFourBarToMechanismGraph = (mechanism: MechanismConfig): Mecha
             { id: 'output-length', label: 'Output link length', role: 'distance', nodes: ['p2', 'j2'], value: mechanism.rockerLength },
             outputOffset('effector-offset', 'Target point rides on coupler', ['j1', 'j2', 'effector'], mechanism.couplerPointDist, mechanism.couplerPointAngle)
         ],
-        drivers: [{ id: 'input-rotation', label: 'Turn input pivot', role: 'rotary-input', nodeId: 'p1', solver: 'legacy-closed-form', ratio: mechanism.speed1 ?? 1 }],
+        drivers: [{ id: 'input-rotation', label: 'Turn input pivot', role: 'rotary-input', nodeId: 'p1', solver: 'closed-form-kinematics', ratio: mechanism.speed1 ?? 1 }],
         diagnostics: []
     };
 };
 
-export const legacyGearToMechanismGraph = (mechanism: MechanismConfig): MechanismGraph => {
+export const gearMechanismGraph = (mechanism: MechanismConfig): MechanismGraph => {
     const { radii, gearNodes, boardConstraints, meshConstraints } = gearTrainGraphParts(mechanism);
+    const state = graphState(mechanism);
 
     return {
         version: MECHANISM_GRAPH_IR_VERSION,
         id: `${mechanism.id}:graph`,
         mechanismId: mechanism.id,
-        legacyType: mechanism.type,
-        source: 'derived-legacy-adapter',
+        mechanismType: mechanism.type,
+        source: 'family-definition',
         family: mechanismFamily('gear'),
-        solver: 'legacy-closed-form',
+        solver: 'closed-form-kinematics',
         persisted: false,
         nodes: [
             ...gearNodes,
-            { id: 'drive-pin', label: 'Drive handle point', role: 'moving-joint' },
-            { id: 'output-pin', label: 'Output handle point', role: 'moving-joint' },
-            { id: 'effector', label: 'Motion target point', role: 'output-point' }
+            { id: 'drive-pin', label: 'Drive handle point', role: 'moving-joint', position: state.j1 },
+            { id: 'output-pin', label: 'Output handle point', role: 'moving-joint', position: state.j2 },
+            { id: 'effector', label: 'Motion target point', role: 'output-point', position: state.effector }
         ],
         constraints: [
             ...boardConstraints,
@@ -268,38 +288,39 @@ export const legacyGearToMechanismGraph = (mechanism: MechanismConfig): Mechanis
             outputOffset('output-offset', 'Target point rides on output gear', ['output-pin', 'effector'], mechanism.couplerPointDist, mechanism.couplerPointAngle)
         ],
         drivers: [
-            { id: 'drive-gear-rotation', label: 'Turn drive gear', role: 'rotary-input', nodeId: 'gear-0', solver: 'legacy-closed-form', ratio: mechanism.speed1 ?? 1 },
-            { id: 'output-gear-rotation', label: 'Output follows gear ratio', role: 'derived-output', nodeId: `gear-${Math.max(0, radii.length - 1)}`, solver: 'legacy-closed-form', ratio: gearTrainOutputRatio(radii) }
+            { id: 'drive-gear-rotation', label: 'Turn drive gear', role: 'rotary-input', nodeId: 'gear-0', solver: 'closed-form-kinematics', ratio: mechanism.speed1 ?? 1 },
+            { id: 'output-gear-rotation', label: 'Output follows gear ratio', role: 'derived-output', nodeId: `gear-${Math.max(0, radii.length - 1)}`, solver: 'closed-form-kinematics', ratio: gearTrainOutputRatio(radii) }
         ],
         diagnostics: []
     };
 };
 
-export const legacyPistonToMechanismGraph = (mechanism: MechanismConfig): MechanismGraph => {
+export const pistonMechanismGraph = (mechanism: MechanismConfig): MechanismGraph => {
     const p1 = { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 };
     const trackAngle = toRad(mechanism.groundAngle ?? 0);
     const guideAnchor = {
         x: p1.x + (mechanism.crankLength + mechanism.couplerLength) * Math.cos(trackAngle),
         y: p1.y + (mechanism.crankLength + mechanism.couplerLength) * Math.sin(trackAngle)
     };
+    const state = graphState(mechanism);
     return {
         version: MECHANISM_GRAPH_IR_VERSION,
         id: `${mechanism.id}:graph`,
         mechanismId: mechanism.id,
-        legacyType: mechanism.type,
-        source: 'derived-legacy-adapter',
+        mechanismType: mechanism.type,
+        source: 'family-definition',
         family: mechanismFamily('piston'),
-        solver: 'legacy-closed-form',
+        solver: 'closed-form-kinematics',
         persisted: false,
         nodes: [
             fixedBoard('p1', 'Crank board pivot', p1),
             fixedBoard('guide-anchor', 'Slider guide mount', guideAnchor),
-            { id: 'crank-link', label: 'Crank link', role: 'link', value: mechanism.crankLength },
-            { id: 'connecting-rod', label: 'Connecting rod', role: 'link', value: mechanism.rodLength ?? mechanism.couplerLength },
-            { id: 'j1', label: 'Crank pin', role: 'moving-joint' },
-            { id: 'slider', label: 'Slider block', role: 'slider' },
-            { id: 'guide', label: 'Straight guide', role: 'guide' },
-            { id: 'effector', label: 'Motion target point', role: 'output-point' }
+            { id: 'crank-link', label: 'Crank link', role: 'link', position: midpoint(p1, state.j1), value: mechanism.crankLength },
+            { id: 'connecting-rod', label: 'Connecting rod', role: 'link', position: midpoint(state.j1, state.j2), value: mechanism.rodLength ?? mechanism.couplerLength },
+            { id: 'j1', label: 'Crank pin', role: 'moving-joint', position: state.j1 },
+            { id: 'slider', label: 'Slider block', role: 'slider', position: state.j2 },
+            { id: 'guide', label: 'Straight guide', role: 'guide', position: guideAnchor },
+            { id: 'effector', label: 'Motion target point', role: 'output-point', position: state.effector }
         ],
         constraints: [
             ...fixedBoardConstraints('p1', 'Crank pivot'),
@@ -309,34 +330,35 @@ export const legacyPistonToMechanismGraph = (mechanism: MechanismConfig): Mechan
             { id: 'slider-guide', label: 'Slider stays inside the guide', role: 'prismatic', nodes: ['slider', 'guide'], value: mechanism.sliderOffset },
             outputOffset('effector-offset', 'Target point rides on slider rod', ['j1', 'slider', 'effector'], mechanism.couplerPointDist, mechanism.couplerPointAngle)
         ],
-        drivers: [{ id: 'crank-rotation', label: 'Turn crank', role: 'rotary-input', nodeId: 'p1', solver: 'legacy-closed-form', ratio: mechanism.speed1 ?? 1 }],
+        drivers: [{ id: 'crank-rotation', label: 'Turn crank', role: 'rotary-input', nodeId: 'p1', solver: 'closed-form-kinematics', ratio: mechanism.speed1 ?? 1 }],
         diagnostics: []
     };
 };
 
-export const legacyCamToMechanismGraph = (mechanism: MechanismConfig): MechanismGraph => {
+export const camMechanismGraph = (mechanism: MechanismConfig): MechanismGraph => {
     const p1 = { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 };
     const trackAngle = toRad(mechanism.groundAngle ?? 90);
     const guideAnchor = {
-        x: p1.x + Math.max(1, mechanism.crankLength) * 2 * Math.cos(trackAngle),
-        y: p1.y + Math.max(1, mechanism.crankLength) * 2 * Math.sin(trackAngle)
+        x: p1.x + nearestReferenceBoardDistance(Math.max(1, mechanism.crankLength) * 2, 2) * Math.cos(trackAngle),
+        y: p1.y + nearestReferenceBoardDistance(Math.max(1, mechanism.crankLength) * 2, 2) * Math.sin(trackAngle)
     };
+    const state = graphState(mechanism);
     return {
         version: MECHANISM_GRAPH_IR_VERSION,
         id: `${mechanism.id}:graph`,
         mechanismId: mechanism.id,
-        legacyType: mechanism.type,
-        source: 'derived-legacy-adapter',
+        mechanismType: mechanism.type,
+        source: 'family-definition',
         family: mechanismFamily('cam'),
-        solver: 'legacy-closed-form',
+        solver: 'closed-form-kinematics',
         persisted: false,
         nodes: [
             fixedBoard('cam-axle', 'Cam axle', p1),
             fixedBoard('guide-anchor', 'Follower guide mount', guideAnchor),
-            { id: 'cam-disk', label: 'Cam disk', role: 'cam', value: mechanism.crankLength, samples: mechanism.camProfileSamples?.map(sample => finiteNumber(sample, 1)) },
-            { id: 'follower-head', label: 'Rounded follower head', role: 'follower', value: mechanism.sliderOffset },
-            { id: 'follower-guide', label: 'Vertical guide cartridge', role: 'guide' },
-            { id: 'effector', label: 'Motion target point', role: 'output-point' }
+            { id: 'cam-disk', label: 'Swappable cam disk', role: 'cam', position: p1, value: mechanism.crankLength, samples: mechanism.camProfileSamples?.map(sample => finiteNumber(sample, 1)) },
+            { id: 'follower-head', label: 'Preassembled gravity follower module', role: 'follower', position: state.j2, value: mechanism.sliderOffset },
+            { id: 'follower-guide', label: 'U-channel guide cartridge', role: 'guide', position: guideAnchor },
+            { id: 'effector', label: 'Motion target point', role: 'output-point', position: state.effector }
         ],
         constraints: [
             ...fixedBoardConstraints('cam-axle', 'Cam axle'),
@@ -345,34 +367,35 @@ export const legacyCamToMechanismGraph = (mechanism: MechanismConfig): Mechanism
             { id: 'follower-guide-slide', label: 'Follower moves only along the guide', role: 'prismatic', nodes: ['follower-head', 'follower-guide'] },
             outputOffset('effector-offset', 'Target point rides on follower', ['follower-head', 'effector'], mechanism.couplerPointDist, mechanism.couplerPointAngle, mechanism.camProfileSamples?.map(sample => finiteNumber(sample, 1)))
         ],
-        drivers: [{ id: 'cam-rotation', label: 'Turn cam axle', role: 'rotary-input', nodeId: 'cam-axle', solver: 'legacy-closed-form', ratio: mechanism.speed1 ?? 1 }],
+        drivers: [{ id: 'cam-rotation', label: 'Turn cam axle', role: 'rotary-input', nodeId: 'cam-axle', solver: 'closed-form-kinematics', ratio: mechanism.speed1 ?? 1 }],
         diagnostics: []
     };
 };
 
-export const legacyGearLinkageToMechanismGraph = (mechanism: MechanismConfig): MechanismGraph => {
+export const gearLinkageMechanismGraph = (mechanism: MechanismConfig): MechanismGraph => {
     const referencePair = normalizeGearLinkageToReference(mechanism);
     const { radii, gearNodes, boardConstraints, meshConstraints } = gearTrainGraphParts(referencePair);
     const linkLength = Math.max(1, Math.abs(referencePair.couplerLength));
     const physicalMeshConstraints = radii.length > 2 ? meshConstraints : [];
+    const state = graphState(referencePair);
     return {
         version: MECHANISM_GRAPH_IR_VERSION,
         id: `${mechanism.id}:graph`,
         mechanismId: mechanism.id,
-        legacyType: mechanism.type,
-        source: 'derived-legacy-adapter',
+        mechanismType: mechanism.type,
+        source: 'family-definition',
         family: mechanismFamily('gear_linkage'),
-        solver: 'legacy-closed-form',
+        solver: 'closed-form-kinematics',
         persisted: false,
         nodes: [
             ...gearNodes,
-            { id: 'drive-pin', label: 'Drive linkage handle point', role: 'moving-joint' },
-            { id: 'output-pin', label: 'Output linkage handle point', role: 'moving-joint' },
-            { id: 'effector', label: 'Shared linkage target point', role: 'output-point' },
-            { id: 'drive-crank-link', label: 'Drive crank link', role: 'link', value: referencePair.couplerPointDist },
-            { id: 'output-crank-link', label: 'Output crank link', role: 'link', value: referencePair.couplerPointDist },
-            { id: 'connector-link-a', label: 'Drive connector link', role: 'link', value: linkLength },
-            { id: 'connector-link-b', label: 'Output connector link', role: 'link', value: linkLength }
+            { id: 'drive-pin', label: 'Drive linkage handle point', role: 'moving-joint', position: state.j1 },
+            { id: 'output-pin', label: 'Output linkage handle point', role: 'moving-joint', position: state.j2 },
+            { id: 'effector', label: 'Shared linkage target point', role: 'output-point', position: state.effector },
+            { id: 'drive-crank-link', label: 'Drive crank link', role: 'link', position: midpoint(gearNodes[0]?.position ?? state.p1, state.j1), value: referencePair.couplerPointDist },
+            { id: 'output-crank-link', label: 'Output crank link', role: 'link', position: midpoint(gearNodes.at(-1)?.position ?? state.p2, state.j2), value: referencePair.couplerPointDist },
+            { id: 'connector-link-a', label: 'Drive connector link', role: 'link', position: midpoint(state.j1, state.effector), value: linkLength },
+            { id: 'connector-link-b', label: 'Output connector link', role: 'link', position: midpoint(state.j2, state.effector), value: linkLength }
         ],
         constraints: [
             ...boardConstraints,
@@ -385,34 +408,35 @@ export const legacyGearLinkageToMechanismGraph = (mechanism: MechanismConfig): M
             outputOffset('connector-output', 'Target point is the shared linkage connector', ['drive-pin', 'output-pin', 'effector'], linkLength, referencePair.couplerPointAngle)
         ],
         drivers: [
-            { id: 'drive-gear-rotation', label: 'Turn drive gear', role: 'rotary-input', nodeId: 'gear-0', solver: 'legacy-closed-form', ratio: referencePair.speed1 ?? 1 },
-            { id: 'output-gear-rotation', label: 'Output follows gear ratio', role: 'derived-output', nodeId: `gear-${Math.max(0, radii.length - 1)}`, solver: 'legacy-closed-form', ratio: gearTrainOutputRatio(radii) }
+            { id: 'drive-gear-rotation', label: 'Turn drive gear', role: 'rotary-input', nodeId: 'gear-0', solver: 'closed-form-kinematics', ratio: referencePair.speed1 ?? 1 },
+            { id: 'output-gear-rotation', label: 'Output follows gear ratio', role: 'derived-output', nodeId: `gear-${Math.max(0, radii.length - 1)}`, solver: 'closed-form-kinematics', ratio: gearTrainOutputRatio(radii) }
         ],
         diagnostics: []
     };
 };
 
-export const legacyPlanetaryGearToMechanismGraph = (mechanism: MechanismConfig): MechanismGraph => {
+export const planetaryGearMechanismGraph = (mechanism: MechanismConfig): MechanismGraph => {
     const p1 = { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 };
     const sunRadius = Math.max(1, mechanism.crankLength);
     const planetRadius = Math.max(1, mechanism.rockerLength || 36);
     const ringRadius = planetaryRingPitchRadius(sunRadius, planetRadius);
     const carrierRadius = Math.max(1, mechanism.groundLength || sunRadius + planetRadius);
+    const state = graphState(mechanism);
     return {
         version: MECHANISM_GRAPH_IR_VERSION,
         id: `${mechanism.id}:graph`,
         mechanismId: mechanism.id,
-        legacyType: mechanism.type,
-        source: 'derived-legacy-adapter',
+        mechanismType: mechanism.type,
+        source: 'family-definition',
         family: mechanismFamily('planetary_gear'),
-        solver: 'legacy-closed-form',
+        solver: 'closed-form-kinematics',
         persisted: false,
         nodes: [
             { id: 'sun-gear', label: 'Sun gear axle', role: 'gear', position: p1, value: sunRadius },
             { id: 'ring-gear', label: 'Fixed ring gear', role: 'ring-gear', position: p1, value: ringRadius },
-            { id: 'carrier', label: 'Carrier arm', role: 'link', value: carrierRadius },
-            { id: 'planet-gear', label: 'Moving planet gear', role: 'gear', value: planetRadius },
-            { id: 'output-point', label: 'Carrier output point', role: 'output-point', value: mechanism.couplerPointDist }
+            { id: 'carrier', label: 'Carrier arm', role: 'link', position: midpoint(p1, state.p2), value: carrierRadius },
+            { id: 'planet-gear', label: 'Moving planet gear', role: 'gear', position: state.p2, value: planetRadius },
+            { id: 'output-point', label: 'Carrier output point', role: 'output-point', position: state.effector, value: mechanism.couplerPointDist }
         ],
         constraints: [
             ...fixedBoardConstraints('sun-gear', 'Sun gear axle'),
@@ -425,47 +449,254 @@ export const legacyPlanetaryGearToMechanismGraph = (mechanism: MechanismConfig):
             outputOffset('carrier-output', 'Target point rides on carrier', ['carrier', 'output-point'], mechanism.couplerPointDist, mechanism.couplerPointAngle)
         ],
         drivers: [
-            { id: 'sun-driver', label: 'Turn sun gear', role: 'rotary-input', nodeId: 'sun-gear', solver: 'legacy-closed-form', ratio: mechanism.speed1 ?? 1 },
-            { id: 'carrier-output', label: 'Carrier follows gear set', role: 'derived-output', nodeId: 'carrier', solver: 'legacy-closed-form', ratio: planetaryCarrierOutputRatio(sunRadius, planetRadius) }
+            { id: 'sun-driver', label: 'Turn sun gear', role: 'rotary-input', nodeId: 'sun-gear', solver: 'closed-form-kinematics', ratio: mechanism.speed1 ?? 1 },
+            { id: 'carrier-output', label: 'Carrier follows gear set', role: 'derived-output', nodeId: 'carrier', solver: 'closed-form-kinematics', ratio: planetaryCarrierOutputRatio(sunRadius, planetRadius) }
         ],
         diagnostics: []
     };
 };
 
-const unsupportedLegacyMechanismGraph = (mechanism: MechanismConfig): MechanismGraph => ({
-    version: MECHANISM_GRAPH_IR_VERSION,
-    id: `${mechanism.id}:graph`,
-    mechanismId: mechanism.id,
-    legacyType: mechanism.type,
-    source: 'derived-legacy-adapter',
-    family: mechanismFamily(mechanism.type),
-    solver: 'diagnostic-only',
-    persisted: false,
-    nodes: [{ id: 'legacy-mechanism', label: `${mechanism.type} legacy mechanism`, role: 'generated-point' }],
-    constraints: [],
-    drivers: [],
-    diagnostics: [{
-        severity: 'info',
-        message: `${mechanism.type} compiles as a diagnostic graph until a fabrication recipe compiler owns this family.`
-    }]
-});
+export const crankMechanismGraph = (mechanism: MechanismConfig): MechanismGraph => {
+    const p1 = { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 };
+    const state = graphState(mechanism);
+    return {
+        version: MECHANISM_GRAPH_IR_VERSION,
+        id: `${mechanism.id}:graph`,
+        mechanismId: mechanism.id,
+        mechanismType: mechanism.type,
+        source: 'family-definition',
+        family: mechanismFamily('crank'),
+        solver: 'closed-form-kinematics',
+        persisted: false,
+        nodes: [
+            fixedBoard('p1', 'Crank board pivot', p1),
+            { id: 'crank-link', label: 'Crank link', role: 'link', position: midpoint(p1, state.j1), value: mechanism.crankLength },
+            { id: 'j1', label: 'Crank pin', role: 'moving-joint', position: state.j1 },
+            { id: 'effector', label: 'Motion target point', role: 'output-point', position: state.effector }
+        ],
+        constraints: [
+            ...fixedBoardConstraints('p1', 'Crank pivot'),
+            { id: 'crank-length', label: 'Crank link length', role: 'distance', nodes: ['p1', 'j1'], value: mechanism.crankLength },
+            outputOffset('effector-offset', 'Target rides on crank pin', ['j1', 'effector'], mechanism.couplerPointDist || mechanism.crankLength, mechanism.couplerPointAngle)
+        ],
+        drivers: [{ id: 'crank-rotation', label: 'Turn crank', role: 'rotary-input', nodeId: 'p1', solver: 'closed-form-kinematics', ratio: mechanism.speed1 ?? 1 }],
+        diagnostics: []
+    };
+};
+
+export const yokeMechanismGraph = (mechanism: MechanismConfig): MechanismGraph => {
+    const p1 = { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 };
+    const trackAngle = toRad(mechanism.groundAngle ?? 0);
+    const guideAnchor = fromLocal(p1, trackAngle, 0, nearestReferenceBoardOffset(mechanism.sliderOffset || 0));
+    const state = graphState(mechanism);
+    return {
+        version: MECHANISM_GRAPH_IR_VERSION,
+        id: `${mechanism.id}:graph`,
+        mechanismId: mechanism.id,
+        mechanismType: mechanism.type,
+        source: 'family-definition',
+        family: mechanismFamily('yoke'),
+        solver: 'closed-form-kinematics',
+        persisted: false,
+        nodes: [
+            fixedBoard('p1', 'Crank board pivot', p1),
+            fixedBoard('guide-anchor', 'Yoke guide mount', guideAnchor),
+            { id: 'crank-link', label: 'Crank link', role: 'link', position: midpoint(p1, state.j1), value: mechanism.crankLength },
+            { id: 'yoke-slider', label: 'Yoke slider', role: 'slider', position: state.j2 },
+            { id: 'guide', label: 'Straight guide', role: 'guide', position: guideAnchor },
+            { id: 'j1', label: 'Crank pin', role: 'moving-joint', position: state.j1 },
+            { id: 'effector', label: 'Motion target point', role: 'output-point', position: state.effector }
+        ],
+        constraints: [
+            ...fixedBoardConstraints('p1', 'Crank pivot'),
+            ...fixedBoardConstraints('guide-anchor', 'Yoke guide mount'),
+            { id: 'crank-length', label: 'Crank link length', role: 'distance', nodes: ['p1', 'j1'], value: mechanism.crankLength },
+            { id: 'yoke-slide', label: 'Yoke moves in guide', role: 'prismatic', nodes: ['yoke-slider', 'guide'], value: mechanism.sliderOffset },
+            outputOffset('effector-offset', 'Target point rides on yoke', ['yoke-slider', 'effector'], mechanism.couplerPointDist, mechanism.couplerPointAngle)
+        ],
+        drivers: [{ id: 'crank-rotation', label: 'Turn crank', role: 'rotary-input', nodeId: 'p1', solver: 'closed-form-kinematics', ratio: mechanism.speed1 ?? 1 }],
+        diagnostics: []
+    };
+};
+
+export const quickReturnMechanismGraph = (mechanism: MechanismConfig): MechanismGraph => {
+    const p1 = { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 };
+    const groundAngle = toRad(mechanism.groundAngle ?? 0);
+    const p2 = fromLocal(p1, groundAngle, mechanism.groundLength, mechanism.sliderOffset);
+    const state = graphState(mechanism);
+    return {
+        version: MECHANISM_GRAPH_IR_VERSION,
+        id: `${mechanism.id}:graph`,
+        mechanismId: mechanism.id,
+        mechanismType: mechanism.type,
+        source: 'family-definition',
+        family: mechanismFamily('quick-return'),
+        solver: 'closed-form-kinematics',
+        persisted: false,
+        nodes: [
+            fixedBoard('p1', 'Crank board pivot', p1),
+            fixedBoard('p2', 'Slotted arm pivot', p2),
+            { id: 'crank-link', label: 'Crank link', role: 'link', position: midpoint(p1, state.j1), value: mechanism.crankLength },
+            { id: 'slotted-arm', label: 'Slotted arm', role: 'link', position: midpoint(state.p2, state.j2), value: mechanism.rockerLength },
+            { id: 'j1', label: 'Crank pin in slot', role: 'moving-joint', position: state.j1 },
+            { id: 'j2', label: 'Output point on slotted arm', role: 'moving-joint', position: state.j2 },
+            { id: 'effector', label: 'Motion target point', role: 'output-point', position: state.effector }
+        ],
+        constraints: [
+            ...fixedBoardConstraints('p1', 'Crank pivot'),
+            ...fixedBoardConstraints('p2', 'Slotted arm pivot'),
+            { id: 'crank-length', label: 'Crank link length', role: 'distance', nodes: ['p1', 'j1'], value: mechanism.crankLength },
+            { id: 'arm-length', label: 'Slotted arm length', role: 'distance', nodes: ['p2', 'j2'], value: mechanism.rockerLength },
+            { id: 'slot-contact', label: 'Crank pin slides in slot', role: 'prismatic', nodes: ['j1', 'slotted-arm'] },
+            outputOffset('effector-offset', 'Target point rides on slotted arm', ['j2', 'effector'], mechanism.couplerPointDist, mechanism.couplerPointAngle)
+        ],
+        drivers: [{ id: 'crank-rotation', label: 'Turn crank', role: 'rotary-input', nodeId: 'p1', solver: 'closed-form-kinematics', ratio: mechanism.speed1 ?? 1 }],
+        diagnostics: []
+    };
+};
+
+export const fiveBarMechanismGraph = (mechanism: MechanismConfig): MechanismGraph => {
+    const p1 = { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 };
+    const groundAngle = toRad(mechanism.groundAngle ?? 0);
+    const p2 = { x: p1.x + mechanism.groundLength * Math.cos(groundAngle), y: p1.y + mechanism.groundLength * Math.sin(groundAngle) };
+    const state = graphState(mechanism);
+    const rightRodLength = mechanism.rodLength || 100;
+    return {
+        version: MECHANISM_GRAPH_IR_VERSION,
+        id: `${mechanism.id}:graph`,
+        mechanismId: mechanism.id,
+        mechanismType: mechanism.type,
+        source: 'family-definition',
+        family: mechanismFamily('5bar'),
+        solver: 'closed-form-kinematics',
+        persisted: false,
+        nodes: [
+            fixedBoard('p1', 'Left board pivot', p1),
+            fixedBoard('p2', 'Right board pivot', p2),
+            { id: 'left-crank', label: 'Left crank link', role: 'link', position: midpoint(p1, state.j1), value: mechanism.crankLength },
+            { id: 'right-crank', label: 'Right crank link', role: 'link', position: midpoint(p2, state.aux ?? p2), value: mechanism.rockerLength },
+            { id: 'left-coupler', label: 'Left coupler link', role: 'link', position: midpoint(state.j1, state.j2), value: mechanism.couplerLength },
+            { id: 'right-coupler', label: 'Right coupler link', role: 'link', position: midpoint(state.aux ?? p2, state.j2), value: rightRodLength },
+            { id: 'j1', label: 'Left moving joint', role: 'moving-joint', position: state.j1 },
+            { id: 'j2', label: 'Shared moving joint', role: 'moving-joint', position: state.j2 },
+            { id: 'aux', label: 'Right moving joint', role: 'moving-joint', position: state.aux },
+            { id: 'effector', label: 'Motion target point', role: 'output-point', position: state.effector }
+        ],
+        constraints: [
+            ...fixedBoardConstraints('p1', 'Left pivot'),
+            ...fixedBoardConstraints('p2', 'Right pivot'),
+            { id: 'left-crank-length', label: 'Left crank length', role: 'distance', nodes: ['p1', 'j1'], value: mechanism.crankLength },
+            { id: 'right-crank-length', label: 'Right crank length', role: 'distance', nodes: ['p2', 'aux'], value: mechanism.rockerLength },
+            { id: 'left-coupler-length', label: 'Left coupler length', role: 'distance', nodes: ['j1', 'j2'], value: mechanism.couplerLength },
+            { id: 'right-coupler-length', label: 'Right coupler length', role: 'distance', nodes: ['aux', 'j2'], value: rightRodLength },
+            outputOffset('effector-offset', 'Target point rides on shared joint', ['j2', 'effector'], mechanism.couplerPointDist, mechanism.couplerPointAngle)
+        ],
+        drivers: [
+            { id: 'left-crank-rotation', label: 'Turn left crank', role: 'rotary-input', nodeId: 'p1', solver: 'closed-form-kinematics', ratio: mechanism.speed1 ?? 1 },
+            { id: 'right-crank-rotation', label: 'Turn right crank', role: 'derived-output', nodeId: 'p2', solver: 'closed-form-kinematics', ratio: mechanism.speed2 ?? mechanism.gearRatio ?? 1 }
+        ],
+        diagnostics: []
+    };
+};
+
+export const sixBarMechanismGraph = (mechanism: MechanismConfig): MechanismGraph => {
+    const p1 = { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 };
+    const groundAngle = toRad(mechanism.groundAngle ?? 0);
+    const p2 = { x: p1.x + mechanism.groundLength * Math.cos(groundAngle), y: p1.y + mechanism.groundLength * Math.sin(groundAngle) };
+    const state = graphState(mechanism);
+    const dyadLength = mechanism.rodLength || 95;
+    const followerLength = mechanism.couplerPointDist || 95;
+    return {
+        version: MECHANISM_GRAPH_IR_VERSION,
+        id: `${mechanism.id}:graph`,
+        mechanismId: mechanism.id,
+        mechanismType: mechanism.type,
+        source: 'family-definition',
+        family: mechanismFamily('6bar'),
+        solver: 'closed-form-kinematics',
+        persisted: false,
+        nodes: [
+            fixedBoard('p1', 'Input board pivot', p1),
+            fixedBoard('p2', 'Output board pivot', p2),
+            { id: 'input-link', label: 'Input link', role: 'link', position: midpoint(p1, state.j1), value: mechanism.crankLength },
+            { id: 'coupler-link', label: 'Coupler link', role: 'link', position: midpoint(state.j1, state.j2), value: mechanism.couplerLength },
+            { id: 'output-link', label: 'Output link', role: 'link', position: midpoint(p2, state.j2), value: mechanism.rockerLength },
+            { id: 'dyad-link', label: 'Dyad link', role: 'link', position: midpoint(state.j2, state.aux ?? state.j2), value: dyadLength },
+            { id: 'follower-link', label: 'Follower link', role: 'link', position: midpoint(p2, state.aux ?? p2), value: followerLength },
+            { id: 'j1', label: 'Input moving joint', role: 'moving-joint', position: state.j1 },
+            { id: 'j2', label: 'Output moving joint', role: 'moving-joint', position: state.j2 },
+            { id: 'aux', label: 'Follower moving joint', role: 'moving-joint', position: state.aux },
+            { id: 'effector', label: 'Motion target point', role: 'output-point', position: state.effector }
+        ],
+        constraints: [
+            ...fixedBoardConstraints('p1', 'Input pivot'),
+            ...fixedBoardConstraints('p2', 'Output pivot'),
+            { id: 'input-length', label: 'Input link length', role: 'distance', nodes: ['p1', 'j1'], value: mechanism.crankLength },
+            { id: 'coupler-length', label: 'Coupler link length', role: 'distance', nodes: ['j1', 'j2'], value: mechanism.couplerLength },
+            { id: 'output-length', label: 'Output link length', role: 'distance', nodes: ['p2', 'j2'], value: mechanism.rockerLength },
+            { id: 'dyad-length', label: 'Dyad link length', role: 'distance', nodes: ['j2', 'aux'], value: dyadLength },
+            { id: 'follower-length', label: 'Follower link length', role: 'distance', nodes: ['p2', 'aux'], value: followerLength }
+        ],
+        drivers: [{ id: 'input-rotation', label: 'Turn input pivot', role: 'rotary-input', nodeId: 'p1', solver: 'closed-form-kinematics', ratio: mechanism.speed1 ?? 1 }],
+        diagnostics: []
+    };
+};
+
+export const rackPinionMechanismGraph = (mechanism: MechanismConfig): MechanismGraph => {
+    const p1 = { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 };
+    const trackAngle = toRad(mechanism.groundAngle ?? 90);
+    const guideAnchor = fromLocal(p1, trackAngle, 0, nearestReferenceBoardDistance(mechanism.crankLength + Math.abs(mechanism.sliderOffset || 0), 1));
+    const state = graphState(mechanism);
+    return {
+        version: MECHANISM_GRAPH_IR_VERSION,
+        id: `${mechanism.id}:graph`,
+        mechanismId: mechanism.id,
+        mechanismType: mechanism.type,
+        source: 'family-definition',
+        family: mechanismFamily('rack-pinion'),
+        solver: 'closed-form-kinematics',
+        persisted: false,
+        nodes: [
+            fixedBoard('pinion', 'Pinion axle', p1),
+            fixedBoard('guide-anchor', 'Rack guide mount', guideAnchor),
+            { id: 'pinion-gear', label: 'Pinion gear', role: 'gear', position: p1, value: mechanism.crankLength },
+            { id: 'rack', label: 'Rack slider', role: 'slider', position: state.p2, value: mechanism.rockerLength },
+            { id: 'guide', label: 'Rack guide', role: 'guide', position: guideAnchor },
+            { id: 'effector', label: 'Motion target point', role: 'output-point', position: state.effector }
+        ],
+        constraints: [
+            ...fixedBoardConstraints('pinion', 'Pinion axle'),
+            ...fixedBoardConstraints('guide-anchor', 'Rack guide mount'),
+            { id: 'pinion-rack-contact', label: 'Pinion teeth push rack', role: 'contact', nodes: ['pinion-gear', 'rack'], value: mechanism.crankLength },
+            { id: 'rack-guide-slide', label: 'Rack slides in guide', role: 'prismatic', nodes: ['rack', 'guide'], value: mechanism.sliderOffset },
+            outputOffset('effector-offset', 'Target point rides on rack', ['rack', 'effector'], mechanism.couplerPointDist, mechanism.couplerPointAngle)
+        ],
+        drivers: [{ id: 'pinion-rotation', label: 'Turn pinion', role: 'rotary-input', nodeId: 'pinion', solver: 'closed-form-kinematics', ratio: mechanism.speed1 ?? 1 }],
+        diagnostics: []
+    };
+};
 
 type MechanismGraphAdapter = (mechanism: MechanismConfig) => MechanismGraph;
 
 export const MECHANISM_GRAPH_ADAPTERS = Object.freeze({
-    '4bar': legacyFourBarToMechanismGraph,
-    piston: legacyPistonToMechanismGraph,
-    cam: legacyCamToMechanismGraph,
-    gear: legacyGearToMechanismGraph,
-    gear_linkage: legacyGearLinkageToMechanismGraph,
-    planetary_gear: legacyPlanetaryGearToMechanismGraph
-} satisfies Partial<Record<MechanismType, MechanismGraphAdapter>>);
+    crank: crankMechanismGraph,
+    '4bar': fourBarMechanismGraph,
+    piston: pistonMechanismGraph,
+    yoke: yokeMechanismGraph,
+    'quick-return': quickReturnMechanismGraph,
+    '5bar': fiveBarMechanismGraph,
+    '6bar': sixBarMechanismGraph,
+    cam: camMechanismGraph,
+    'rack-pinion': rackPinionMechanismGraph,
+    gear: gearMechanismGraph,
+    gear_linkage: gearLinkageMechanismGraph,
+    planetary_gear: planetaryGearMechanismGraph
+} satisfies Record<MechanismType, MechanismGraphAdapter>);
 
 export const MECHANISM_GRAPH_ADAPTER_TYPES = Object.freeze(Object.keys(MECHANISM_GRAPH_ADAPTERS) as MechanismType[]);
 
 export const mechanismGraphForMechanism = (mechanism: MechanismConfig): MechanismGraph => {
-    const adapter = (MECHANISM_GRAPH_ADAPTERS as Partial<Record<MechanismType, MechanismGraphAdapter>>)[mechanism.type];
-    return (adapter ?? unsupportedLegacyMechanismGraph)(mechanism);
+    return MECHANISM_GRAPH_ADAPTERS[mechanism.type](mechanism);
 };
 
 export const sampleMechanismGraphMotion = (mechanism: MechanismConfig, angle: number): MechanismGraphMotionSample => ({
@@ -484,8 +715,8 @@ const duplicateIds = (ids: string[]) => {
     return [...duplicates];
 };
 
-const VALID_GRAPH_SOURCES: readonly MechanismGraphSource[] = ['derived-legacy-adapter', 'family-definition', 'free-graph-authoring', 'imported-graph'];
-const VALID_GRAPH_SOLVERS: readonly MechanismGraphSolver[] = ['legacy-closed-form', 'constraint-graph', 'diagnostic-only'];
+const VALID_GRAPH_SOURCES: readonly MechanismGraphSource[] = ['family-definition', 'free-graph-authoring', 'imported-graph'];
+const VALID_GRAPH_SOLVERS: readonly MechanismGraphSolver[] = ['closed-form-kinematics', 'constraint-graph'];
 
 const CONSTRAINT_NODE_COUNTS: Partial<Record<MechanismConstraintRole, number | [min: number, max?: number]>> = {
     'fixed-to-board': 1,
@@ -533,7 +764,7 @@ export const validateMechanismGraph = (graph: MechanismGraph): MechanismGraphVal
     if (!VALID_GRAPH_SOURCES.includes(graph.source)) diagnostics.push({ severity: 'error', message: `Graph source ${String(graph.source)} is not supported.` });
     if (!VALID_GRAPH_SOLVERS.includes(graph.solver)) diagnostics.push({ severity: 'error', message: `Graph solver ${String(graph.solver)} is not supported.` });
     if (!graph.id || !graph.mechanismId || !graph.family?.id) diagnostics.push({ severity: 'error', message: 'Graph id, mechanismId, and family id are required.' });
-    if (graph.source === 'derived-legacy-adapter' && !graph.legacyType) diagnostics.push({ severity: 'error', message: 'Derived legacy graph must preserve legacyType.' });
+    if (graph.source === 'family-definition' && !graph.mechanismType) diagnostics.push({ severity: 'error', message: 'Family graph imported from MechanismConfig must preserve mechanismType.' });
 
     const nodeIds = graph.nodes.map(node => node.id);
     duplicateIds(nodeIds).forEach(id => diagnostics.push({ severity: 'error', message: `Duplicate graph node id: ${id}.` }));

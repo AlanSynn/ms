@@ -233,7 +233,7 @@ export const buildMechanismSnapshot = (project: ProjectState, mechanismId: strin
     };
     const snapshotAngles = [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2];
     if (!snapshotAngles.some(angle => Math.abs(angle - angleRad) < 1e-9)) snapshotAngles.push(angleRad);
-    const compiledMechanism = compileMechanism(resolvedMechanism, snapshotAngles, 96);
+    const compiledMechanism = compileMechanism(resolvedMechanism, snapshotAngles, 96, project.settings.physicalKit);
     const kinematicSample = compiledMechanism.motionSamples.find(sample => Math.abs(sample.angle - angleRad) < 1e-9) ?? compiledMechanism.motionSamples[0];
     const sourceIds: MechanismSnapshotSourceIds = {
         projectId: project.metadata.id,

@@ -140,11 +140,16 @@ export const useAppMechanismActions = ({
         nextUpdates.targetPartId = undefined;
         nextUpdates.targetAnchorJointId = undefined;
       }
-      const constrainedUpdates = constrainMechanismUpdate(mechanism, nextUpdates);
+      const constrainedUpdates = constrainMechanismUpdate(
+        mechanism,
+        nextUpdates,
+        project.settings.physicalKit,
+      );
       const next = { ...mechanism, ...constrainedUpdates };
       const normalized = normalizeGearMeshMechanism(next);
       const preserveGeneratedPath =
-        hasStoredGeneratedPath(mechanism) && !changesGeneratedPathGeometry(constrainedUpdates);
+        hasStoredGeneratedPath(mechanism) &&
+        !changesGeneratedPathGeometry(constrainedUpdates);
       const fitted =
         constrainedUpdates.targetPathId &&
         (constrainedUpdates.targetPathId !== undefined ||
@@ -155,12 +160,15 @@ export const useAppMechanismActions = ({
               normalized,
               constrainedUpdates.targetPathId,
             )
-          : mechanismWithGeneratedPath({
-              ...normalized,
-              activeVisualPartIds: normalized.targetPartId
-                ? [normalized.targetPartId]
-                : [],
-            }, { preserveGeneratedPath });
+          : mechanismWithGeneratedPath(
+              {
+                ...normalized,
+                activeVisualPartIds: normalized.targetPartId
+                  ? [normalized.targetPartId]
+                  : [],
+              },
+              { preserveGeneratedPath },
+            );
       dispatch({ type: "upsert_mechanism", mechanism: fitted });
     },
     [dispatch, project],
@@ -199,9 +207,11 @@ export const useAppMechanismActions = ({
       visible: true,
       targetPartId: fitPath.sceneObjectId
         ? undefined
-        : (fitPath.partId || selectedMechanism.targetPartId || selectedPart?.id),
+        : fitPath.partId || selectedMechanism.targetPartId || selectedPart?.id,
       targetSceneObjectId:
-        fitPath.sceneObjectId ?? selectedMechanism.targetSceneObjectId ?? selectedSceneObject?.id,
+        fitPath.sceneObjectId ??
+        selectedMechanism.targetSceneObjectId ??
+        selectedSceneObject?.id,
       targetPathId: fitPath.id,
       source: "optimized",
       warnings:
@@ -250,7 +260,8 @@ export const useAppMechanismActions = ({
             ) === pkg.targetAnchorJointId),
       );
       const activeVisualPartIds = selectedPart ? [selectedPart.id] : [];
-      const fittedFoundryParameters = pkg.parameters as Partial<MechanismConfig>;
+      const fittedFoundryParameters =
+        pkg.parameters as Partial<MechanismConfig>;
       const rawMechanism = mechanismWithGeneratedPath(
         {
           ...foundry,

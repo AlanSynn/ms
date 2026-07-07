@@ -1,4 +1,5 @@
 import type { Point } from '../types';
+import { boardColumnLabel, parseBoardCoordinateLabel } from './coordinates';
 
 export const FABRICATION_SOURCE_SSOT = 'fabrication/generate_fabrication_templates.py' as const;
 export const FABRICATION_SCHEMA_VERSION = 'automataii.fabrication.v1' as const;
@@ -89,7 +90,6 @@ const GEAR_PRESETS: readonly GearPreset[] = [
 ] as const;
 
 export const FABRICATION_LINKAGE_LENGTH_CELLS = [2, 4, 6, 8] as const;
-const BOARD_COLUMNS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 export const fabricationGearEngravingLabel = (teeth: number) => `${Math.round(teeth)} Tooth Gear`;
 export const fabricationLinkageEngravingLabel = (cells: number) => `${Math.round(cells) + 1} Hole Linkage`;
@@ -150,9 +150,12 @@ const fabricationGearSpecFromPreset = (preset: GearPreset, pitchMm = FABRICATION
 
 export const FABRICATION_GEAR_SPECS: readonly FabricationGearSpec[] = GEAR_PRESETS.map(preset => fabricationGearSpecFromPreset(preset));
 
-export const fabricationGearSpecForPitchRadius = (pitchRadius: number): FabricationGearSpec => {
+export const fabricationGearSpecForPitchRadius = (pitchRadius: number, pitchMm = FABRICATION_DEFAULT_GRID_PITCH_MM): FabricationGearSpec => {
     const radius = Math.max(0, Math.abs(pitchRadius));
-    return FABRICATION_GEAR_SPECS.reduce((best, spec) =>
+    const specs = pitchMm === FABRICATION_DEFAULT_GRID_PITCH_MM
+        ? FABRICATION_GEAR_SPECS
+        : GEAR_PRESETS.map(preset => fabricationGearSpecFromPreset(preset, pitchMm));
+    return specs.reduce((best, spec) =>
         Math.abs(spec.pitchRadiusMm - radius) < Math.abs(best.pitchRadiusMm - radius) ? spec : best
     );
 };
@@ -241,7 +244,8 @@ export const fabricationPartDisplayLabel = (label: string) => {
         .replace(/\b(Input|Coupler|Output|Drive) L(\d+) linkage\b/g, roleHoleLinkLabel)
         .replace(/\bL(\d+) carrier linkage\b/g, carrierHoleLinkLabel)
         .replace(/\bL(\d+) linkage\b/g, holeLinkLabel)
-        .replace(/\bL(\d+)\b/g, holeLinkLabel);
+        .replace(/\bL(\d+)\b/g, holeLinkLabel)
+        .replace(/\b(\d+)-cell linkage\b/g, holeLinkLabel);
     const replacements: Array<[RegExp, string]> = [
         [/Drive G1 \/ 1-space gear/g, 'Drive gear with 8 teeth'],
         [/Drive G3 \/ 3-space gear/g, 'Drive gear with 24 teeth'],
@@ -283,13 +287,13 @@ export const fabricationBoardCoordinateCallout = (
     board?: Partial<{ col: number; row: number; valid: boolean }>
 ) => {
     if (board?.valid === false) return `${label} · off board`;
-    const parsed = /^([A-Z])([1-9]|[1-3][0-9]|40)$/i.exec(label.trim());
-    const col = Number.isFinite(board?.col) ? board!.col! : parsed ? parsed[1].toUpperCase().charCodeAt(0) - 65 : undefined;
-    const row = Number.isFinite(board?.row) ? board!.row! : parsed ? Number(parsed[2]) - 1 : undefined;
+    const parsed = parseBoardCoordinateLabel(label);
+    const col = Number.isFinite(board?.col) ? board!.col! : parsed?.col;
+    const row = Number.isFinite(board?.row) ? board!.row! : parsed?.row;
     if (!Number.isFinite(col) || !Number.isFinite(row)) return label;
     return `${label} · row ${row! + 1}, column ${col! + 1}`;
 };
 
-export const fabricationBoardColumnLabel = (col: number) => BOARD_COLUMNS[col] ?? '?';
+export const fabricationBoardColumnLabel = (col: number) => boardColumnLabel(col);
 export const fabricationBoardRowLabel = (row: number) => `${row + 1}`;
 export const fabricationBoardAlphaNumericLabel = (col: number, row: number) => `${fabricationBoardColumnLabel(col)}${fabricationBoardRowLabel(row)}`;

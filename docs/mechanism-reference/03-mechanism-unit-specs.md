@@ -41,7 +41,7 @@ Mechanism Foundry and Mechanism Design edit the same `MechanismConfig` fields. A
 | `cam` | swappable cam profile samples, phase | visible cam edits update `camProfileSamples`; fabrication keeps the axle module, U-channel guide cartridge, and preassembled gravity follower module fixed while swapping only the cam disk. |
 | `planetary_gear` | phase and driver grouping only until alternate ring/carrier recipes exist | physical recipe remains fixed to R56 + G1 + G3 + L2 so the assembly stack stays buildable. |
 
-Parametric edits are portable only if the changed parts still appear in `referenceRequiredPartsForMechanism`, `fabricationStackForMechanism`, the 3D render plan, Blueprint, and Assembly. Do not add a UI-only field that bypasses those helpers.
+Parametric edits are portable only if the changed parts compile through `compileMechanismGraphFabrication`, `compileMechanismRenderPlan`, Blueprint, and Assembly. Do not add a UI-only field that bypasses the graph compiler.
 
 ## 3.2 Four-bar linkage — `four_bar`
 
@@ -606,5 +606,5 @@ For another app that wants parity with the current production product, implement
 
 Then optionally add:
 
-7. `three_bar`, `five_bar`, `six_bar` as simulation-only linkages, clearly labelled non-fabrication-ready.
+7. `three_bar`, `five_bar`, `six_bar` through the graph compiler when fabrication recipes and safe-edit contracts are present; keep them out of novice galleries until classroom QA is complete.
 8. `geneva_drive` only after adding real implementation and fabrication data.

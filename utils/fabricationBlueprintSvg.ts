@@ -1,5 +1,5 @@
 import type { BodyPartLayer, FabricationRecipe, Point, ProjectState } from '../types';
-import { boardToScene, sceneBoundsForSheet, sceneToSvg } from './coordinates';
+import { boardCoordinateLabel, boardToScene, isBoardCoordinateInKit, sceneBoundsForSheet, sceneToSvg } from './coordinates';
 import {
     fabricationBoardColumnLabel,
     fabricationBoardCoordinateCallout,
@@ -22,9 +22,12 @@ const camProfilePathD = (samples: number[] | undefined, x: number, y: number, ra
     return `M ${points.join(' L ')} Z`;
 };
 
+const recipeHasCamProfile = (recipe: FabricationRecipe) =>
+    (recipe.type === 'cam' || recipe.graphFamilyId === 'cam') && Boolean(recipe.camProfileSamples?.length);
+
 const camProfileEntries = (recipes: FabricationRecipe[]) =>
-    recipes.flatMap(recipe => recipe.type === 'cam' && recipe.camProfileSamples?.length
-        ? [{ id: recipe.mechanismId, samples: recipe.camProfileSamples }]
+    recipes.flatMap(recipe => recipeHasCamProfile(recipe)
+        ? [{ id: recipe.mechanismId, samples: recipe.camProfileSamples ?? [] }]
         : []);
 
 const firstCamProfileSamples = (recipes: FabricationRecipe[]) =>
@@ -33,7 +36,8 @@ const firstCamProfileSamples = (recipes: FabricationRecipe[]) =>
 const isBoardBuildRole = (role: string | undefined) =>
     Boolean(role && (role === 'board' || role === 'board_axle' || role.includes('board')));
 
-const buildCoordinateEntries = (recipes: FabricationRecipe[]) => {
+const buildCoordinateEntries = (project: ProjectState, recipes: FabricationRecipe[]) => {
+    const kit = project.settings.physicalKit;
     const seen = new Set<string>();
     return recipes.flatMap(recipe => [
         { coord: recipe.boardCoordinate, recipe },
@@ -41,7 +45,7 @@ const buildCoordinateEntries = (recipes: FabricationRecipe[]) => {
             .map((coord, index) => ({ coord, role: step.coordRoles?.[index], recipe }))
             .filter(item => isBoardBuildRole(item.role)))
     ]).filter(item => {
-        if (!/^[A-O](?:[1-9]|1[0-5])$/.test(item.coord)) return false;
+        if (!isBoardCoordinateInKit(item.coord, kit)) return false;
         const key = `${item.recipe.mechanismId}:${item.coord}`;
         if (seen.has(key)) return false;
         seen.add(key);
@@ -62,9 +66,9 @@ export const makeBlueprintSvg = (project: ProjectState, recipes: FabricationReci
         return map;
     }, new Map<string, number>()).entries());
     const camProfiles = camProfileEntries(recipes);
-    const buildCoordinates = buildCoordinateEntries(recipes);
+    const buildCoordinates = buildCoordinateEntries(project, recipes);
     let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 680" width="900" height="680" data-blueprint-source="fabrication-contract">`;
-    svg += `<metadata>${esc(JSON.stringify({ project: project.metadata.name, profile: kit.profileKey, gridPitchMm: kit.gridPitchMm, mechanisms: recipes.map(r => r.mechanismId), camProfiles: recipes.filter(r => r.type === 'cam').map(r => ({ id: r.mechanismId, samples: r.camProfileSamples ?? [] })) }))}</metadata>`;
+    svg += `<metadata>${esc(JSON.stringify({ project: project.metadata.name, profile: kit.profileKey, gridPitchMm: kit.gridPitchMm, mechanisms: recipes.map(r => r.mechanismId), camProfiles: recipes.filter(recipeHasCamProfile).map(r => ({ id: r.mechanismId, samples: r.camProfileSamples ?? [] })) }))}</metadata>`;
     svg += `<rect width="900" height="680" fill="#f8fafc"/>`;
     svg += `<style><![CDATA[text{font-family:Manrope,Inter,Arial,sans-serif}.caps{font-size:11px;font-weight:900;letter-spacing:.14em;fill:#64748b}.body{font-size:11px;font-weight:800;fill:#1f2937}.muted{fill:#64748b}.chip{fill:#eef2ff;stroke:#c4b5fd;stroke-width:1}.sheet{fill:#fff;stroke:#0f172a;stroke-width:1.5}.hole{fill:#cbd5e1}.anchor{fill:#ef4444;stroke:#fff;stroke-width:2.5}.callout{fill:#fff7ed;stroke:#fed7aa;stroke-width:1.1}]]></style>`;
     const sheet = { x: 450 + bounds.x, y: 340 - bounds.y - bounds.height, width: bounds.width, height: bounds.height };
@@ -172,11 +176,11 @@ export const makeBlueprintPreviewSvg = (project: ProjectState, recipes: Fabricat
         const pitch = Math.min((width - 48) / Math.max(1, cells - 1), (height - 46) / Math.max(1, cells - 1));
         const gridX = x + 24;
         const gridY = y + 34;
-        const anchors = buildCoordinateEntries(recipes);
+        const anchors = buildCoordinateEntries(project, recipes);
         let grid = '';
         for (let c = 0; c < cells; c += 1) {
             for (let r = 0; r < cells; r += 1) {
-                const coord = `${String.fromCharCode(65 + c)}${r + 1}`;
+                const coord = boardCoordinateLabel(c, r);
                 const atCell = anchors.filter(item => item.coord === coord);
                 const cx = gridX + c * pitch;
                 const cy = gridY + r * pitch;

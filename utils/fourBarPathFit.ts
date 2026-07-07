@@ -22,7 +22,7 @@ const fabricationErrorsForCandidate = (
   project: ProjectState,
   mechanism: MechanismConfig,
 ) => {
-  const readinessErrors = validateMechanismPreviewReadiness(mechanism);
+  const readinessErrors = validateMechanismPreviewReadiness(mechanism, project.settings.physicalKit);
   const siblingMechanisms = project.mechanisms.filter(
     (candidate) => candidate.id !== mechanism.id,
   );
@@ -227,13 +227,13 @@ export const fitFourBarKitMechanismToPath = (
                   rockerLength,
                   groundAngle,
                   assemblyMode,
-                  targetPartId: path.sceneObjectId ? undefined : path.partId,
+                  targetPartId: path.sceneObjectId ? undefined : (mechanism.targetPartId ?? path.partId),
                   targetSceneObjectId: path.sceneObjectId,
                   targetPathId: path.id,
                   targetAnchorJointId: path.sceneObjectId
                     ? undefined
                     : (mechanism.targetAnchorJointId ?? path.targetAnchorJointId),
-                  activeVisualPartIds: path.sceneObjectId ? [] : [path.partId],
+                  activeVisualPartIds: path.sceneObjectId ? [] : [mechanism.targetPartId ?? path.partId],
                   source: 'optimized',
                   recommendation: 'Fit path',
                 });

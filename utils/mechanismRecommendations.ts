@@ -286,7 +286,7 @@ const fabricationErrorsForCandidate = (
   project: ProjectState,
   mechanism: MechanismConfig,
 ) => {
-  const readinessErrors = validateMechanismPreviewReadiness(mechanism).map(
+  const readinessErrors = validateMechanismPreviewReadiness(mechanism, project.settings.physicalKit).map(
     (error) => `${mechanism.id}: ${error}`,
   );
   const targetAnchor = mechanism.targetPartId
@@ -899,11 +899,14 @@ export const buildMechanismRecommendations = (
         candidate.reason,
         candidate.score,
       );
+      const kitFittedMechanism = candidate.type === "4bar"
+        ? fitFourBarKitMechanismToPath(project, initialMechanism, selectedPath)
+        : undefined;
       const initialErrors = fabricationErrorsForCandidate(
         project,
         initialMechanism,
       );
-      const mechanism = initialErrors.length
+      const mechanism = kitFittedMechanism ?? (initialErrors.length
         ? fitRecommendedMechanismToSheet(
             project,
             readyMechanismFallbackForPath(
@@ -912,7 +915,7 @@ export const buildMechanismRecommendations = (
               selectedPath,
             ),
           )
-        : initialMechanism;
+        : initialMechanism);
       const range = sampleFeasibleRange(mechanism);
       const fabricationErrors = fabricationErrorsForCandidate(
         project,

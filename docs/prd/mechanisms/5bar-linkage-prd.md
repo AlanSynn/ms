@@ -1,7 +1,7 @@
 # MotionSmith 5-bar linkage PRD
 
 ## Scope
-Simulation/editing mechanism. Not Foundry/export-ready until dual-driver assembly, collision, and fabrication recipe are verified.
+Graph-compiled simulation/editing mechanism. The graph compiler owns its fabrication recipe; classroom Foundry visibility remains a separate product/content gate.
 
 ## Topology contract
 
@@ -29,18 +29,19 @@ D-E right crank
 - Closure is circle intersection between B-centered `couplerLength` and D-centered `rodLength`.
 - Invalid phases stay invalid. No visual teleport.
 
-## Foundry gate
+## Foundry / classroom gate
 
-- Hidden from `FOUNDRY_MECHANISM_TYPES` until a verified physical recipe exists.
-- Design tab can still simulate and fit paths.
+- Graph compiler emits a buildable fabrication recipe for 5bar.
+- Keep it out of novice Foundry cards until classroom copy, safe-edit controls, and guided-template QA are ready.
+- Design and advanced flows can simulate, fit paths, and export through the graph compiler contract.
 
 ## Fabrication open issues
 
-- Needs explicit two-driver board coordinates.
-- Needs Z-stack collision plan for crossing/coupled bars.
-- Needs singularity warning near stretched/folded poses.
+- Needs classroom-facing two-driver placement copy.
+- Needs visual collision affordance for crossing/coupled bars.
+- Needs novice singularity warning near stretched/folded poses.
 
 ## Tests
 
 - Contract test samples a known valid geometry and asserts all five distances.
-- Foundry visibility test must prove 5bar is not export-ready until recipe exists.
+- Tests prove 5bar graph compilation is buildable while novice gallery visibility remains a product gate.
