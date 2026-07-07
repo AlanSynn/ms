@@ -11,7 +11,7 @@ import { mechanismFeature, type MechanismFeatureIssue } from './mechanismFeature
 import { normalizeGearMeshMechanism } from './mechanismRecommendations';
 import { buildMechanismSceneContract, type MechanismSceneContract } from './mechanismSceneContract';
 import { buildFoundryMechanismPreviewModel, type FoundryMechanismPreviewModel } from './foundryPreviewModel';
-import { mechanismBindingWarnings, motionPreviewForProject, pointOnGeneratedMechanismPath } from './motion';
+import { mechanismBindingWarnings, motionPreviewForProject, pointOnGeneratedMechanismPath, pointOnProjectPath } from './motion';
 
 export type AutomataSceneMode = 'design-live' | 'assembly-live';
 
@@ -30,7 +30,10 @@ export type AutomataSceneModel = {
     generatedTarget?: Point;
     targetJointId?: string;
     targetError?: number;
-    motionSource: 'generatedPath' | 'linkage-effector' | 'missing-target' | 'none';
+    pathFitError?: number;
+    pathFitThreshold?: number;
+    pathFitStatus: 'fit' | 'mismatch' | 'unmeasured';
+    motionSource: 'generatedPath' | 'userPath-fallback' | 'linkage-effector' | 'missing-target' | 'none';
     featureLabel?: string;
     featureIssues: MechanismFeatureIssue[];
     warnings: Record<string, string[]>;
@@ -59,6 +62,36 @@ const generatedPathForMechanism = (mechanism: MechanismConfig): ProjectMotionPat
     };
 };
 
+const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
+
+const pathBoundsDiagonal = (points: Point[]) => {
+    if (!points.length) return 0;
+    const xs = points.map(point => point.x);
+    const ys = points.map(point => point.y);
+    return Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+};
+
+const generatedPathFitThreshold = (path: ProjectMotionPath) =>
+    Math.max(80, Math.min(160, pathBoundsDiagonal(path.points) * 1.25));
+
+const generatedPathPhaseError = (generatedPath: Point[] | undefined, userPath: ProjectMotionPath | undefined) => {
+    if (!generatedPath?.length || !userPath?.points.length) return undefined;
+    const sampleCount = 24;
+    let total = 0;
+    for (let index = 0; index < sampleCount; index += 1) {
+        const angle = (index / sampleCount) * Math.PI * 2;
+        const generated = pointOnGeneratedMechanismPath(generatedPath, angle);
+        if (!generated) return undefined;
+        total += distance(generated, pointOnProjectPath(userPath, angle));
+    }
+    return total / sampleCount;
+};
+
+const sampledProjectPathForGeneratedMotion = (path: ProjectMotionPath, sampleCount = 96): Point[] =>
+    Array.from({ length: sampleCount }, (_, index) =>
+        pointOnProjectPath(path, (index / sampleCount) * Math.PI * 2)
+    );
+
 export const buildAutomataSceneModel = (
     project: ProjectState,
     mechanism: MechanismConfig | undefined,
@@ -73,6 +106,7 @@ export const buildAutomataSceneModel = (
             animatedSceneObjects: {},
             skeleton: project.skeleton,
             motionSource: 'none',
+            pathFitStatus: 'unmeasured',
             featureIssues: [],
             warnings: {}
         };
@@ -94,19 +128,41 @@ export const buildAutomataSceneModel = (
         96,
         'scene'
     );
-    const fullMotionPreview = motionPreviewForProject(project, mechanisms, angle);
-    const selectedMotionPreview = motionPreviewForProject(project, [normalizedMechanism], angle);
     const mechanismPath = generatedPathForMechanism(normalizedMechanism);
+    const pathFitError = generatedPathPhaseError(normalizedMechanism.generatedPath, userPath);
+    const pathFitThreshold = userPath ? generatedPathFitThreshold(userPath) : undefined;
+    const pathFitStatus = pathFitError === undefined || pathFitThreshold === undefined
+        ? 'unmeasured'
+        : pathFitError > pathFitThreshold
+            ? 'mismatch'
+            : 'fit';
+    const motionMechanism: MechanismConfig = pathFitStatus === 'mismatch' && userPath?.points.length
+        ? { ...normalizedMechanism, generatedPath: sampledProjectPathForGeneratedMotion(userPath) }
+        : normalizedMechanism;
+    const previewMechanisms = mechanisms.map(item => item.id === normalizedMechanism.id ? motionMechanism : item);
+    const fullMotionPreview = motionPreviewForProject(project, previewMechanisms, angle);
+    const selectedMotionPreview = motionPreviewForProject(project, [motionMechanism], angle);
     const generatedTarget = mechanismPath ? pointOnGeneratedMechanismPath(mechanismPath.points, angle) : undefined;
+    const fallbackTarget = pathFitStatus === 'mismatch' && userPath ? pointOnProjectPath(userPath, angle) : undefined;
+    const expectedTarget = fallbackTarget ?? generatedTarget;
     const targetError = generatedTarget && selectedMotionPreview.target
-        ? Math.hypot(selectedMotionPreview.target.x - generatedTarget.x, selectedMotionPreview.target.y - generatedTarget.y)
+        ? distance(selectedMotionPreview.target, expectedTarget ?? generatedTarget)
         : undefined;
-    const motionSource = generatedTarget && selectedMotionPreview.target
-        ? 'generatedPath'
-        : generatedTarget
-            ? 'missing-target'
-            : 'linkage-effector';
+    const motionSource = fallbackTarget && selectedMotionPreview.target
+        ? 'userPath-fallback'
+        : generatedTarget && selectedMotionPreview.target
+            ? 'generatedPath'
+            : generatedTarget
+                ? 'missing-target'
+                : 'linkage-effector';
     const feature = mechanismFeature(normalizedMechanism.type);
+    const warnings = mechanismBindingWarnings(project, mechanisms);
+    if (pathFitStatus === 'mismatch') {
+        warnings[normalizedMechanism.id] = [
+            ...(warnings[normalizedMechanism.id] ?? []),
+            'Fit path before attaching the character.'
+        ];
+    }
 
     return {
         mode,
@@ -123,9 +179,12 @@ export const buildAutomataSceneModel = (
         generatedTarget,
         targetJointId: selectedMotionPreview.targetJointId,
         targetError,
+        pathFitError,
+        pathFitThreshold,
+        pathFitStatus,
         motionSource,
         featureLabel: feature.label,
         featureIssues: feature.validate(normalizedMechanism),
-        warnings: mechanismBindingWarnings(project, mechanisms)
+        warnings
     };
 };

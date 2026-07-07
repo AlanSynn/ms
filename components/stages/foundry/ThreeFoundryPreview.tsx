@@ -164,6 +164,10 @@ const sceneLocalFromFoundryGeometry = (x: number, y: number): Point => ({
   y: (y * 18) / SCENE_TO_FOUNDRY_SCALE,
 });
 
+const AUTOMATA_PART_ART_SURFACE_Z = 0.09;
+const AUTOMATA_STACKED_BASE_LIFT_Z = 0.16;
+const AUTOMATA_DESIGN_SURFACE_CLEARANCE_Z = 0.03;
+
 const foundryLocalHole = (x: number, y: number, r: number) => {
   const hole = new THREE.Path();
   hole.absellipse(x, y, r, r, 0, Math.PI * 2, true);
@@ -949,6 +953,11 @@ export const ThreeFoundryPreview = ({
     visiblePathTraces[0]?.id ??
     "";
   const pathLayerZ = pinTopZ + 0.08;
+  const automataBaseZ =
+    viewerTab === "design" && !assemblySceneFrame
+      ? pinTopZ + AUTOMATA_DESIGN_SURFACE_CLEARANCE_Z - AUTOMATA_PART_ART_SURFACE_Z
+      : pinTopZ + AUTOMATA_STACKED_BASE_LIFT_Z;
+  const automataSurfaceZ = automataBaseZ + AUTOMATA_PART_ART_SURFACE_Z;
   const camContactErrorForData =
     mechanism.type === "cam"
       ? (() => {
@@ -1379,7 +1388,7 @@ export const ThreeFoundryPreview = ({
       assemblySceneFrame,
       materialCache: materialCacheRef.current,
       onLoaded: () => renderCamera(cameraStateRef.current),
-      baseZ: pinTopZ + 0.16,
+      baseZ: automataBaseZ,
     });
 
     dynamicBuildCountRef.current += 1;
@@ -1445,7 +1454,7 @@ export const ThreeFoundryPreview = ({
         const cam = cameraRef.current;
         if (!renderer || !cam) return null;
         const rect = renderer.domElement.getBoundingClientRect();
-        const projected = sceneTo3(point, pinTopZ + 0.16).project(cam);
+        const projected = sceneTo3(point, automataBaseZ).project(cam);
         const x = rect.left + ((projected.x + 1) / 2) * rect.width;
         const y = rect.top + ((1 - projected.y) / 2) * rect.height;
         const radius = 24;
@@ -1521,6 +1530,8 @@ export const ThreeFoundryPreview = ({
     assemblySceneFrame,
     pinBottomZ,
     pinTopZ,
+    automataBaseZ,
+    viewerTab,
     pathPoints,
     localSpacerZForPin,
     automataContext,
@@ -1613,6 +1624,8 @@ export const ThreeFoundryPreview = ({
         explode={explode}
         pinBottomZ={pinBottomZ}
         pinTopZ={pinTopZ}
+        automataBaseZ={automataBaseZ}
+        automataSurfaceZ={automataSurfaceZ}
         pinLengthZ={pinLengthZ}
         stackZGap={stackZGap}
         renderPlan={renderPlan}

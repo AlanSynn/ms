@@ -213,6 +213,15 @@ export const DesignFoundryPreview = ({
       data-mechanism-path-preview={showMechanismPath ? "shown" : "hidden"}
       data-design-motion-source={sceneModel.motionSource}
       data-design-generated-path-count={sceneModel.mechanism.generatedPath?.length ?? 0}
+      data-design-path-fit-status={sceneModel.pathFitStatus}
+      data-design-path-fit-error={
+        sceneModel.pathFitError === undefined ? "unmeasured" : sceneModel.pathFitError.toFixed(3)
+      }
+      data-design-path-fit-threshold={
+        sceneModel.pathFitThreshold === undefined
+          ? "unmeasured"
+          : sceneModel.pathFitThreshold.toFixed(3)
+      }
       data-design-visible-mechanism-count={sceneModel.mechanisms.length}
       data-design-target-joint-id={sceneModel.targetJointId ?? ""}
       data-design-target-error={targetError === undefined ? "missing" : targetError.toFixed(3)}

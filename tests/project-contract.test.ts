@@ -3686,7 +3686,7 @@ assert(threePreviewText.includes("const pinSites = mechanism.type === 'gear'") &
 assert(mechanismDesignText.includes('<DesignFoundryPreview') && designFoundryPreviewText.includes('export const DesignFoundryPreview') && designFoundryPreviewText.includes('data-testid="design-shared-foundry-preview"'), 'Mechanism Design owns a thin automata preview adapter instead of a separate legacy renderer');
 assert(designFoundryPreviewText.includes('<ThreeFoundryPreview') && !designFoundryPreviewText.includes('<ThreePuppetPreview') && !designFoundryPreviewText.includes('design-foundry-context-layer') && designFoundryPreviewText.includes('automataContext={automataContext}') && foundryCanvasPaneText.includes('<ThreeFoundryPreview'), 'Design renders mechanism plus character/object context inside the same Foundry Three scene instead of a parallel puppet overlay');
 assert(designFoundryPreviewText.includes('data-renderer-source="ThreeFoundryPreview"') && designFoundryPreviewText.includes('data-shared-with="foundry-renderer"') && designFoundryPreviewText.includes('data-design-scene-mode="single-foundry-automata-scene"') && designFoundryPreviewText.includes('data-automata-model-source="buildAutomataSceneModel"'), 'Mechanism Design advertises single-scene Foundry-renderer mechanism truth with automata telemetry');
-assert(automataSceneModelText.includes('mechanismFeature(normalizedMechanism.type)') && automataSceneModelText.includes('const mechanisms = normalizedMechanisms.length ? normalizedMechanisms : [normalizedMechanism]') && automataSceneModelText.includes('motionPreviewForProject(project, mechanisms, angle)') && automataSceneModelText.includes('motionPreviewForProject(project, [normalizedMechanism], angle)'), 'Automata scene model reuses Foundry registry semantics, drives the full automata scene, and reads the selected IK/object target for inspector feedback');
+assert(automataSceneModelText.includes('mechanismFeature(normalizedMechanism.type)') && automataSceneModelText.includes('const mechanisms = normalizedMechanisms.length ? normalizedMechanisms : [normalizedMechanism]') && automataSceneModelText.includes('motionPreviewForProject(project, previewMechanisms, angle)') && automataSceneModelText.includes('motionPreviewForProject(project, [motionMechanism], angle)'), 'Automata scene model reuses Foundry registry semantics, drives the full automata scene, and reads the selected IK/object target for inspector feedback');
 assert(foundry3dText.includes('const placeFoundryLocalGroup') && foundry3dText.includes('group.rotation.z = (-transform.rotation * Math.PI) / 180') && foundry3dText.includes('const placeSceneLocalGroup') && foundry3dText.includes('group.rotation.z = (transform.rotation * Math.PI) / 180'), 'Foundry keeps y-down fit-space rotations separate from scene-preserving automata rotations');
 assert(foundryPreviewModelText.includes("frame: 'fit' | 'scene' = 'fit'") && automataSceneModelText.includes("'scene'"), 'Design/Assembly automata previews request the scene-preserving Foundry preview frame instead of re-fitting the character scene');
 assert(foundry3dText.includes('data-three-stack-source') && designFoundryPreviewText.includes('data-foundry-feature-label') && designFoundryPreviewText.includes('data-foundry-feature-issue-count'), 'Mechanism Design exposes Foundry feature provenance for browser verification');
@@ -3696,28 +3696,43 @@ assert(foundry3dText.includes('fabricationGearProfileForPitchRadius'), 'Foundry 
 assert(foundry3dText.includes('validateMechanismPreviewReadiness'), 'Foundry gates standalone 3D previews through shared physical/fabrication readiness validation');
 assert(foundry3dText.includes('data-three-physical-validation-errors'), 'Foundry exposes physical readiness errors for browser verification');
 assert(foundry3dText.includes('validateMechanismPreviewReadiness') && automataSceneModelText.includes('buildFoundryMechanismPreviewModel') && designFoundryPreviewText.includes('data-design-foundry-contract-source="buildAutomataSceneModel"'), 'Mechanism Design readiness and preview state now route through the shared automata scene model and Foundry preview model/renderer seam');
+assert(foundry3dText.includes('const automataBaseZ =') && foundry3dText.includes('viewerTab === "design" && !assemblySceneFrame') && foundry3dText.includes('AUTOMATA_DESIGN_SURFACE_CLEARANCE_Z') && foundry3dText.includes('data-three-automata-surface-clearance') && !foundry3dText.includes('baseZ: pinTopZ + 0.16'), 'Mechanism Design places character art on a computed non-exploded automata plane instead of a hard-coded lifted layer');
 assert(automataSceneModelText.includes('buildFoundryMechanismPreviewModel') && designFoundryPreviewText.includes('buildAutomataSceneModel') && assemblyThreePreviewText.includes('buildAutomataSceneModel') && foundryPreviewModelText.includes('createFoundryPlaybackFrame') && foundryPreviewModelText.includes('generateFoundryPlaybackPointTraces') && !designFoundryPreviewText.includes('generateMechanismPointTraces') && !assemblyThreePreviewText.includes('generateMechanismPointTraces') && !assemblyThreePreviewText.includes('fitMechanismSimulationWithContext'), 'Mechanism Design and Assembly derive preview motion from the shared Foundry preview model instead of private legacy simulation paths');
 assert(assemblyThreePreviewText.includes('viewerTab="assembly"') && assemblyThreePreviewText.includes('automataContext={automataContext}') && assemblyThreePreviewText.includes('data-assembly-one-scene-automata'), 'Assembly labels the viewer as Assembly and can render character/object context inside the shared Foundry mechanism scene');
 assert(!automataSceneModelText.includes('firstVisiblePath'), 'Automata scene model does not silently pick a different first-visible path than Foundry when no explicit/selected path exists');
 assert(designAutomataProjectionText.includes('buildAutomataSceneModel') && !designAutomataProjectionText.includes('motionPreviewForProject') && !designAutomataProjectionText.includes('mechanismFeature('), 'Legacy Design projection file is a thin compatibility wrapper around the canonical automata scene model');
 {
   const fixture = createLessonProject('waving-arm');
-  const mechanism = fixture.mechanisms[0]!;
-  const canonical = buildAutomataSceneModel(fixture, mechanism, Math.PI * 0.42, 'design-live');
-  const compat = buildDesignAutomataProjection(fixture, mechanism, Math.PI * 0.42);
+  const staleLessonMechanism = fixture.mechanisms[0]!;
+  const fittedPath = fixture.paths['path-right-arm'];
+  const fittedMechanism = {
+    ...staleLessonMechanism,
+    generatedPath: Array.from({ length: 96 }, (_, index) => pointOnProjectPath(fittedPath, (index / 96) * Math.PI * 2))
+  };
+  const fittedFixture = { ...fixture, mechanisms: [fittedMechanism] };
+  const canonical = buildAutomataSceneModel(fittedFixture, fittedMechanism, Math.PI * 0.42, 'design-live');
+  const compat = buildDesignAutomataProjection(fittedFixture, fittedMechanism, Math.PI * 0.42);
   assert.equal(compat.foundryPreview?.mechanism.id, canonical.foundryPreview?.mechanism.id, 'Design compatibility wrapper returns the same Foundry mechanism instance as the canonical automata model');
   assert.equal(compat.foundryPreview?.previewPoints.length, canonical.foundryPreview?.previewPoints.length, 'Design compatibility wrapper returns the same Foundry preview trace as the canonical automata model');
   assert.equal(canonical.userPath?.id, 'path-right-arm', 'Canonical automata model uses the explicit/selected path for fitted previews');
   assert.equal(canonical.motionSource, 'generatedPath', 'Canonical automata model drives the scene from the generated mechanism path when a fitted path exists');
+  assert.equal(canonical.pathFitStatus, 'fit', 'Canonical automata model accepts generated paths only after they stay near the authored path');
   assert.equal(canonical.mechanismContract?.compilerSource, 'mechanismCompiler', 'Canonical automata model exposes graph compiler telemetry through the scene contract');
-  assert.equal(canonical.mechanismContract?.graphCompiler.graphId, `${mechanism.id}:graph`, 'Canonical automata model keeps graph identity aligned with the mechanism instance');
+  assert.equal(canonical.mechanismContract?.graphCompiler.graphId, `${fittedMechanism.id}:graph`, 'Canonical automata model keeps graph identity aligned with the mechanism instance');
   assert(canonical.generatedTarget && canonical.target, 'Canonical automata model exposes both generated mechanism output and selected IK target');
   assert((canonical.targetError ?? Number.POSITIVE_INFINITY) < 1e-9, 'Canonical automata model keeps the selected IK target attached to the generated mechanism output');
   const drivenHand = canonical.animatedParts.right_hand_part;
   assert(drivenHand && canonical.generatedTarget && canonical.skeleton, 'Canonical automata model animates the hand target part through IK');
   const handPivot = bodyPartPivotScene(drivenHand, canonical.skeleton);
   assert(Math.hypot(handPivot.x - canonical.generatedTarget!.x, handPivot.y - canonical.generatedTarget!.y) < 1e-6, 'Driven hand part pivot stays on the fitted mechanism output in scene coordinates');
-  const sceneFit = createSceneMechanismFitContext(mechanism, 360, 240, 96);
+  const mismatch = buildAutomataSceneModel(fixture, staleLessonMechanism, Math.PI * 0.42, 'design-live');
+  assert.equal(mismatch.motionSource, 'userPath-fallback', 'Design falls back to the authored path instead of tearing the character onto a stale unfitted generated path');
+  assert.equal(mismatch.pathFitStatus, 'mismatch', 'Design flags stale generatedPath samples that are far from the authored path');
+  assert((mismatch.pathFitError ?? 0) > (mismatch.pathFitThreshold ?? Number.POSITIVE_INFINITY), 'Design exposes the stale generatedPath fit error for harnesses and UI warnings');
+  const authoredTarget = pointOnProjectPath(fittedPath, Math.PI * 0.42);
+  assert(mismatch.target, 'Fallback preview keeps an authored motion target');
+  assert(Math.hypot(mismatch.target!.x - authoredTarget.x, mismatch.target!.y - authoredTarget.y) < 1e-6, 'Fallback preview keeps the driven target on the authored path rather than the remote stale mechanism trace');
+  const sceneFit = createSceneMechanismFitContext(fittedMechanism, 360, 240, 96);
   const sceneOrigin = sceneFit.map({ x: 0, y: 0 });
   const sceneUp = sceneFit.map({ x: 0, y: 100 });
   assert(sceneUp.y < sceneOrigin.y, 'Scene-preserving Foundry preview keeps positive scene Y visually upward instead of flipping Character/Path composition');
@@ -3726,9 +3741,9 @@ assert(designAutomataProjectionText.includes('buildAutomataSceneModel') && !desi
   const firstScenePoint = sceneFit.map(firstUserPoint);
   assert(Math.hypot(firstPreviewPoint.x - firstScenePoint.x, firstPreviewPoint.y - firstScenePoint.y) < 1e-9, 'Design Foundry preview maps the user path through the fixed scene frame instead of centering it independently');
   const noSelectedPathProject = {
-    ...fixture,
+    ...fittedFixture,
     selectedPathId: undefined,
-    mechanisms: [{ ...mechanism, targetPathId: undefined }],
+    mechanisms: [{ ...fittedMechanism, targetPathId: undefined }],
   };
   const noFallback = buildAutomataSceneModel(noSelectedPathProject, noSelectedPathProject.mechanisms[0], 0, 'design-live');
   assert.equal(noFallback.userPath, undefined, 'Canonical automata model does not fall back to an unrelated visible path when Foundry would have no active path');
@@ -3787,14 +3802,16 @@ const assertMotionFitSourceContracts = () => {
   assert.equal(foundrySplitPathControls, true, 'Foundry separates the drawn user path from the generated mechanism path in the same fit-context coordinate basis so students can compare fit before applying the mechanism');
 
   const designGeneratedPathMotion =
-    automataSceneModelText.includes('motionPreviewForProject(project, [normalizedMechanism], angle)') &&
+    automataSceneModelText.includes('motionPreviewForProject(project, [motionMechanism], angle)') &&
     automataSceneModelText.includes('generatedTarget && selectedMotionPreview.target') &&
     automataSceneModelText.includes("? 'generatedPath'") &&
+    automataSceneModelText.includes("'userPath-fallback'") &&
     designFoundryPreviewText.includes('data-design-motion-source={sceneModel.motionSource}') &&
+    designFoundryPreviewText.includes('data-design-path-fit-status={sceneModel.pathFitStatus}') &&
     designFoundryPreviewText.includes('data-design-target-error') &&
     designFoundryPreviewText.includes('data-design-target-x') &&
     designFoundryPreviewText.includes('data-design-animated-part-count');
-  assert.equal(designGeneratedPathMotion, true, 'Mechanism Design fails closed unless the selected fitted mechanism drives character motion from generatedPath through motionPreviewForProject');
+  assert.equal(designGeneratedPathMotion, true, 'Mechanism Design drives fitted mechanisms from generatedPath and falls back to the authored path when stale generatedPath samples would tear the character away');
 
   const puppetMechanismContinuity =
     threePreviewText.includes('data-three-selected-mechanism-generated-path-count') &&

@@ -3663,12 +3663,16 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
   await expect(designRig).toHaveAttribute('data-three-stack-source', 'fabricationStackForMechanism');
   await expect(designRig).toHaveAttribute('data-three-stack-mode', 'assembled-spacer-separated');
   await expect(designRig).toHaveAttribute('data-three-exploded', 'false');
+  const automataSurfaceClearance = Number(await designRig.getAttribute('data-three-automata-surface-clearance'));
+  expect(automataSurfaceClearance, 'Design character art surface stays just above the mechanism pin plane instead of floating as an exploded layer').toBeGreaterThan(0);
+  expect(automataSurfaceClearance, 'Design character art surface stays just above the mechanism pin plane instead of floating as an exploded layer').toBeLessThanOrEqual(0.06);
   await expect(designRig).toHaveAttribute('data-three-spacer-key', 's10');
   await expect(designRig).toHaveAttribute('data-three-spacer-mm', '10x4');
   await expect(designPreview.locator('canvas.foundry-three-canvas')).toBeVisible();
   await page.getByTestId('design-foundry-camera-controls').getByRole('button', { name: 'Front', exact: true }).click();
   await expect(designRig).toHaveAttribute('data-camera-preset', 'front');
-  await expect(designPreview).toHaveAttribute('data-design-motion-source', 'generatedPath');
+  await expect(designPreview).toHaveAttribute('data-design-motion-source', 'userPath-fallback');
+  await expect(designPreview).toHaveAttribute('data-design-path-fit-status', 'mismatch');
   expect(Number(await designPreview.getAttribute('data-design-target-error'))).toBeLessThan(0.01);
   const headTarget = await waitForThreePartTarget(designRig, 'head');
   const torsoTarget = await waitForThreePartTarget(designRig, 'torso');
@@ -3681,7 +3685,7 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
     const moved = (await readThreeScreenTargets(designRig, 'data-three-part-screen-targets'))
       .find(item => item.id === 'right_hand_part' && item.visible);
     return moved ? Math.hypot(moved.x - drivenHandBefore.x, moved.y - drivenHandBefore.y) : 0;
-  }, { message: 'visible Design hand part follows the fitted mechanism/IK output when scrubbed' }).toBeGreaterThan(2);
+  }, { message: 'visible Design hand part follows the authored path fallback when the mechanism has not been fitted' }).toBeGreaterThan(2);
   expect(Number(await designPreview.getAttribute('data-design-target-error'))).toBeLessThan(0.01);
 
   const expectedMarkers: Record<string, Array<[string, number]>> = {

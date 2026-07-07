@@ -115,6 +115,8 @@ type FoundryPreviewStateProbeProps = {
   explode: number;
   pinBottomZ: number;
   pinTopZ: number;
+  automataBaseZ: number;
+  automataSurfaceZ: number;
   pinLengthZ: number;
   stackZGap: number;
   renderPlan: FabricationRenderPlan;
@@ -187,6 +189,8 @@ export const FoundryPreviewStateProbe = ({
   explode,
   pinBottomZ,
   pinTopZ,
+  automataBaseZ,
+  automataSurfaceZ,
   pinLengthZ,
   stackZGap,
   renderPlan,
@@ -457,6 +461,9 @@ export const FoundryPreviewStateProbe = ({
       data-three-explode-percent={Math.round(explode * 100)}
       data-three-pin-z-min={pinBottomZ.toFixed(2)}
       data-three-pin-z-max={pinTopZ.toFixed(2)}
+      data-three-automata-base-z={automataBaseZ.toFixed(2)}
+      data-three-automata-surface-z={automataSurfaceZ.toFixed(2)}
+      data-three-automata-surface-clearance={(automataSurfaceZ - pinTopZ).toFixed(2)}
       data-three-pin-length={pinLengthZ.toFixed(2)}
       data-three-spacer-z-gap={stackZGap.toFixed(2)}
       data-three-base-layer={renderPlan.base.label}
