@@ -9,9 +9,9 @@ Baseline commit: `f295cdb Pin mechanism outputs to driven joints`
 
 ## 0. Decision in one paragraph
 
-Build full realistic platform as **2D-canonical authoring + derived 2.5D/3D/physics views**. Existing editor works around `ProjectState`, SVG path drawing, mechanism kinematics, IK preview, blueprint export. Don't replace with three.js editor. Add renderer/simulation boundary: 2D scene stays sole source of truth for editing + fabrication; 2.5D, 3D, physics faithful lenses + sidecars reading same state, emit warnings/samples, write back only through explicit user actions.
+Build full realistic platform as **2D-canonical authoring + derived 2.5D/3D/physics views**. Existing editor works around `ProjectState`, SVG path drawing, mechanism kinematics, IK preview, blueprint export. Don't replace with three.js editor. Add renderer/sim boundary: 2D scene stays sole source of truth for editing + fabrication; 2.5D/3D/physics = faithful lenses + sidecars reading same state, emit warnings/samples, write back only via explicit user actions.
 
-Shortest safe route to Viser-like robotics visualization impression without breaking novice drawing, mechanism attachment, or blueprint generation.
+Shortest safe route to Viser-like robotics viz impression without breaking novice drawing, mechanism attachment, or blueprint generation.
 
 ## 1. Goals
 
@@ -39,7 +39,7 @@ Shortest safe route to Viser-like robotics visualization impression without brea
    - action-first labels;
    - one central canvas;
    - right inspector scrolls own pane only;
-   - view modes lenses over same project, not separate apps.
+   - view modes = lenses over same project, not separate apps.
 
 ### Non-goals
 
@@ -51,15 +51,15 @@ Shortest safe route to Viser-like robotics visualization impression without brea
 
 ## 2. Current baseline we must protect
 
-Current app 2D-first, already has valuable invariants:
+App 2D-first, has valuable invariants:
 
 - `ProjectState` stores parts, skeleton, paths, mechanisms, settings, selected IDs, export state.
 - Path drawing uses scene-space points + SVG interaction.
-- Mechanism preview uses kinematic solvers, now pins driven joints to mechanism effectors during playback.
-- Blueprint/export uses canonical scene coordinates + physical kit settings.
+- Mechanism preview uses kinematic solvers; now pins driven joints to mechanism effectors during playback.
+- Blueprint/export uses canonical scene coords + physical kit settings.
 - Browser tests cover character → path → mechanism → blueprint workflow, viewport persistence, mechanism target pinning.
 
-Any 2.5D/3D/physics work must pass these existing checks before trusted:
+Any 2.5D/3D/physics work must pass these before trusted:
 
 ```bash
 bun run test:contracts
@@ -71,11 +71,11 @@ bun run test:browser
 
 | Reference | Relevant point for this product |
 | --- | --- |
-| Viser README: <https://github.com/viser-project/viser> | Viser presents robotics/CV visualization style: 3D primitives, GUI widgets, scene interaction, transform gizmos, camera control, web client. MotionSmith borrow visual/interaction impression, not Python/server architecture. |
-| three.js OrbitControls docs: <https://threejs.org/docs/pages/OrbitControls.html> | Orbit controls fit optional inspection — orbit around target + support zoom/pan. Not active while drawing paths. |
-| three.js OrthographicCamera docs: <https://threejs.org/docs/pages/OrthographicCamera.html> | Orthographic projection keeps object size constant with distance — fits authoring, blueprint inspection, fixed front/isometric views better than perspective distortion. |
+| Viser README: <https://github.com/viser-project/viser> | Viser = robotics/CV viz style: 3D primitives, GUI widgets, scene interaction, transform gizmos, camera control, web client. MotionSmith borrows visual/interaction impression, not Python/server arch. |
+| three.js OrbitControls docs: <https://threejs.org/docs/pages/OrbitControls.html> | Orbit controls fit optional inspection — orbit around target + zoom/pan. Not active while drawing paths. |
+| three.js OrthographicCamera docs: <https://threejs.org/docs/pages/OrthographicCamera.html> | Orthographic projection keeps object size constant w/ distance — fits authoring, blueprint inspection, fixed front/isometric views better than perspective distortion. |
 | Rapier JavaScript getting started: <https://rapier.rs/docs/user_guides/javascript/getting_started_js/> | Rapier provides browser JS rigid bodies, colliders, gravity, world stepping. Best candidate for real 3D physics. |
-| Rapier joints docs: <https://rapier.rs/docs/user_guides/javascript/joints/> | Rapier supports fixed, prismatic, revolute, spherical, other joints needed for mechanism constraints, motors, character-link constraints. |
+| Rapier joints docs: <https://rapier.rs/docs/user_guides/javascript/joints/> | Rapier supports fixed, prismatic, revolute, spherical + other joints needed for mechanism constraints, motors, character-link constraints. |
 | Matter.js constraints docs: <https://brm.io/matter-js/docs/classes/Constraint.html> | Matter useful evidence for 2D pin/revolute constraints, but 2D — not final engine for true 3D preview. |
 | React Three Fiber docs: <https://r3f.docs.pmnd.rs/getting-started/introduction> | R3F adoptable later if three.js scene complex + React-component-heavy; not first dependency. |
 
@@ -85,7 +85,7 @@ bun run test:browser
 
 - Keep `ProjectState` 2D canonical.
 - Add derived `SceneProjection` + `PhysicsSession` layers instead of expanding every domain type into 3D graph.
-- Export stays 2D/fabrication-first; 3D artifacts separate optional export family.
+- Export stays 2D/fabrication-first; 3D artifacts = separate optional export family.
 
 ### Dependency review
 
@@ -96,19 +96,19 @@ Recommended staged stack:
 3. **Rapier JS** for real 3D physics.
 4. **R3F + react-three-rapier only later** if scene too large for small imperative adapter.
 
-Avoid starting with cannon-es, Ammo/Bullet, Pixi, or Konva for this requirement.
+Avoid cannon-es, Ammo/Bullet, Pixi, Konva for this requirement.
 
 ### UX/design review
 
-- Use view lenses: `Studio`, `Depth`, `Physics`, `Blueprint`, `Inspect`.
+- View lenses: `Studio`, `Depth`, `Physics`, `Blueprint`, `Inspect`.
 - Keep `Studio` default.
-- Physics explained through overlays: safe arcs, velocity arrows, force hints, constraint labels, short "why" cards.
-- 3D orbit inspection mode with `Front`, `Iso`, `Orbit`, `Explode`, `Reset`, not authoring default.
+- Physics explained via overlays: safe arcs, velocity arrows, force hints, constraint labels, short "why" cards.
+- 3D orbit inspection mode: `Front`, `Iso`, `Orbit`, `Explode`, `Reset` — not authoring default.
 
 ### Test review
 
-- Add schema/geometry contracts before adding dependencies.
-- Add deterministic physics replay tests with fixed timestep.
+- Add schema/geometry contracts before dependencies.
+- Add deterministic physics replay tests w/ fixed timestep.
 - Add Playwright workflow tests for view mode persistence, physics playback, export after simulation.
 - Prefer geometry snapshots over fragile visual diffs; screenshots only for layout/visual impression gates.
 
@@ -144,7 +144,7 @@ ProjectState (2D canonical)
 
 ### 5.2 Canonical state rule
 
-Following remain authoritative in 2D:
+Authoritative in 2D:
 
 - body part position, rotation, scale, anchor joint, z-order;
 - skeleton joints + hierarchy;
@@ -205,8 +205,8 @@ Rules:
 
 - Use fixed timestep, not variable frame delta.
 - Keep replay buffer so scrubbing deterministic.
-- Run heavy simulation in worker once Rapier added.
-- Write back to `ProjectState` only through explicit commands: "Bake as path", "Use pose as rest position", "Apply fitted mechanism".
+- Run heavy sim in worker once Rapier added.
+- Write back to `ProjectState` only via explicit commands: "Bake as path", "Use pose as rest position", "Apply fitted mechanism".
 
 ## 6. View modes and UI behavior
 
@@ -242,7 +242,7 @@ Simulation explanation mode.
 
 Build inspection mode.
 
-- Board coordinates, holes, spacers, layer stack, exploded assembly.
+- Board coords, holes, spacers, layer stack, exploded assembly.
 - Every 3D/depth visual has mapped 2D fabrication coordinate or marked non-fabrication preview.
 
 ### Inspect
@@ -280,7 +280,7 @@ Advanced robotics/viser-like mode.
 ### What physics should not decide automatically
 
 - Should not replace path drawing.
-- Should not mutate exported board coordinates.
+- Should not mutate exported board coords.
 - Should not silently "fix" user mechanisms.
 - Should not decide character segmentation.
 
@@ -400,7 +400,7 @@ Deliverables:
 
 Acceptance:
 
-- scrubbing to same frame twice yields identical joint/effector coordinates;
+- scrubbing to same frame twice yields identical joint/effector coords;
 - warnings visible in Physics mode + summarized in right inspector;
 - no new dependency yet.
 
@@ -568,6 +568,6 @@ Full 2.5D/3D/physics platform complete only when:
 - Depth mode gives realistic layered assembly impression;
 - 3D preview can orbit/explode same scene without owning project state;
 - Rapier-backed physics can simulate joints/collisions with deterministic replay;
-- mechanism outputs, IK targets, physics samples, blueprint coordinates stay aligned;
+- mechanism outputs, IK targets, physics samples, blueprint coords stay aligned;
 - assembly guide explains both visual stack + physical construction;
 - tests cover contract, browser workflow, determinism, export invariants, + at least one stable visual smoke check.

@@ -70,7 +70,6 @@ Keep for provenance and rollback reasoning, but do not use as default context.
 - [`archive/plans/mechanism-driving-plan.md`](archive/plans/mechanism-driving-plan.md)
 - [`adr/2026-06-27-high-performance-3d-physics-stack.md`](adr/2026-06-27-high-performance-3d-physics-stack.md)
 - [`archive/ports/to-port-web-onnx/`](archive/ports/to-port-web-onnx/)
-- [`archive/ui/ui-to-web/`](archive/ui/ui-to-web/)
 - [`archive/misc/z_axis_layering.md`](archive/misc/z_axis_layering.md)
 - All `.omx/context/*.md` and `.omx/state/*` runtime notes (tooling state, not product docs)
 

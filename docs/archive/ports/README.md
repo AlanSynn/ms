@@ -2,12 +2,12 @@
 
 Last refreshed: 2026-07-07
 
-External porting refs + copied helper repos, kept for provenance.
+External porting refs + copied helper repos. Provenance only.
 
 ## Keep
 
-- `to-port-web-onnx/` (porting artifact, historical ONNX migration context)
+- `to-port-web-onnx/` (porting artifact, ONNX migration context)
 
 ## Retirement rule
 
-Keep external mirrors only while current feature need provenance. Artifact only raw cargo/asset copy + unreproducible from current source → compress to index, drop heavy files if repo size big.
+Keep external mirrors only while feature need provenance. Artifact = raw cargo/asset copy + unreproducible from source → compress to index, drop heavy files if repo size big.

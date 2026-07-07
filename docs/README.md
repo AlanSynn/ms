@@ -59,7 +59,7 @@ Keep these for provenance; do not treat them as current UI contract unless activ
 
 Use archive family maps first: [`archive/README.md`](archive/README.md), [`archive/plans/README.md`](archive/plans/README.md), [`archive/ui/README.md`](archive/ui/README.md), [`archive/analysis/README.md`](archive/analysis/README.md), [`archive/ports/README.md`](archive/ports/README.md), [`archive/execution/README.md`](archive/execution/README.md), [`archive/misc/README.md`](archive/misc/README.md)
 
-- [`archive/ui/ui-to-web/`](archive/ui/ui-to-web/) — Qt-to-web inventory, screenshots, porting evidence.
+- `archive/ui/` — legacy UI evidence and historical feature audits (no Qt-UI porting bundle kept in-tree).
 - [`archive/ui/ui-pane-tab-redesign-plan.md`](archive/ui/ui-pane-tab-redesign-plan.md) — historical pane redesign notes; current contract is `workbench-flow-ux-contract.md` plus `subsystem-governance-and-mechanism-contracts.md`.
 - [`archive/plans/platform-rebuild-porting-flow.md`](archive/plans/platform-rebuild-porting-flow.md) — historical rebuild provenance (Qt-to-web rebuild sequence and authority map).
 - [`archive/plans/canva-video-editor-workspace-plan.md`](archive/plans/canva-video-editor-workspace-plan.md) — superseded by current pane/workbench contract.

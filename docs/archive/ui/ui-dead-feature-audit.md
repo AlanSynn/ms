@@ -1,6 +1,6 @@
 # UI dead-feature audit
 
-Scope: visible MotionSmith UI/UX controls lacking real browser execution, duplicated controls adding no behavior, or legacy placeholder post compact editor rebuild.
+Scope: visible MotionSmith UI/UX controls lacking real browser execution, dup controls adding no behavior, or legacy placeholder post compact editor rebuild.
 
 ## Operating rule
 

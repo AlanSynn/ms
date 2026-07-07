@@ -7,7 +7,7 @@ Date: 2026-06-27
 
 Use **imperative Three.js/WebGL2** for MotionSmith viewports, **Rapier 3D WASM** via `@dimforge/rapier3d-compat` for contact/friction validation behind `utils/physicsKernel.ts`.
 
-MotionSmith mechanism equations, IK, fabrication stacks, z-order, spacers, kit constraints, export geometry stay authoritative. Rapier validates physical contact/friction behavior, gives future path for dynamic collision/solver probes; does not own `ProjectState`.
+MotionSmith mechanism equations, IK, fabrication stacks, z-order, spacers, kit constraints, export geometry stay authoritative. Rapier validates contact/friction behavior, future path for dynamic collision/solver probes; does not own `ProjectState`.
 
 ## Viser lesson applied
 
@@ -17,20 +17,20 @@ Viser useful as architecture reference, not runtime dependency. Transferable pat
 - batched state updates;
 - batched/instanced scene primitives;
 - one visual source mirrored into clients;
-- binary-efficient updates for large visualization payloads.
+- binary-efficient updates for large viz payloads.
 
 MotionSmith applies as `viser-style-transform-tree-batched-updates-instancing` in telemetry + tests.
 
 ## Rejected for now
 
 - React Three Fiber / `@react-three/rapier`: good future adapter, but duplicates current tested imperative Three scene owner.
-- Babylon.js: powerful, but introduces second rendering engine, doesn't solve current drift.
+- Babylon.js: powerful, but adds second rendering engine, doesn't solve current drift.
 - WebGPU rewrite: premature until profiling shows WebGL2 + instancing can't sustain target scenes.
 - Viser runtime: Python/server viz framework, not local browser sim kernel.
 
 ## Required implementation rules
 
-1. Keep one renderer per viewport.
+1. One renderer per viewport.
 2. Reuse geometries/materials; update transforms before rebuilding objects.
 3. Use object pools + `InstancedMesh` for repeated pins, spacers, holes, board marks, hardware.
 4. Keep Rapier lazy-loaded behind `utils/physicsKernel.ts`.

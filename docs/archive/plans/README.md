@@ -15,4 +15,4 @@ Superseded plans, abandoned attempts, historical context.
 
 ## Retirement rule
 
-Plan no longer used for reasoning, not referenced by active PRDs/docs: move to delete-only history after one release window. Record reason.
+Plan unused for reasoning, unreferenced by active PRDs/docs: move to delete-only history after one release window. Record reason.

@@ -6,7 +6,7 @@ Historical audits, migration analyses, research reports. Not active planning.
 
 ## Keep
 
-- No remaining item-level audit files after this cleanup cycle.
+- No item-level audit files remain after cleanup cycle.
 
 ## Retirement rule
 

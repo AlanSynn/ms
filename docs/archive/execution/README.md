@@ -10,5 +10,4 @@ Execution logs, governance journals, session traces.
 
 ## Retirement rule
 
-Move to delete-only history if new decisions summary exists in
-`docs/README.md`, `docs/index.md`, or PRD notes.
+Move to delete-only history if new decisions summary exists in `docs/README.md`, `docs/index.md`, or PRD notes.

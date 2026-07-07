@@ -657,7 +657,7 @@ This is not current implementation work. These names are distribution candidates
 - `AGENTS.md` — tinkerable workbench, 3D physics, fabrication, canonical state, test rules.
 - `README.md` — shared editor workbench, pane ownership, novice UI contract.
 - `docs/archive/plans/platform-rebuild-porting-flow.md` — historical porting flow, rebuild sequence, and legacy stage ownership mapping.
-- `docs/archive/ui/ui-to-web/CANVAS_LAYER_STRATEGY.md` — scene layers, canonical coordinates, viewport-only camera state.
+- `docs/workbench-flow-ux-contract.md` + `docs/analysis/codebase-cleanup-architecture-plan.md` — layer ownership, viewport, and scene-state contract references.
 - `docs/archive/ui/ui-pane-tab-redesign-plan.md` — left/center/right pane redesign.
 - `docs/archive/plans/realistic-25d-3d-physics-platform-plan.md` — 2.5D/3D/physics platform direction.
 - `types.ts`, `utils/project.ts`, `utils/sceneProjection.ts`, `utils/physicsSession.ts`, `utils/fabrication.ts`, `utils/kinematics.ts`, `utils/motion.ts`, `utils/mechanismTemplates.ts` — current source seams.

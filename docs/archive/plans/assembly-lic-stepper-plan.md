@@ -7,7 +7,7 @@ Principle: show build, not explain with paragraphs.
 ## Agent review summary
 
 - `explore`: current flow has `FabricationRecipe`, package gen, 15x15 board settings, Assembly tab, printable HTML/PDF guide, browser tests. Missing: interactive step player; no `.lic` artifact today.
-- `designer`: Assembly becomes .lic/LEGO-like build sim. Blueprint owns files; Assembly owns how to build. Assemble mechanism module first, then mount to board or custom base.
+- `designer`: Assembly becomes .lic/LEGO-like build sim. Blueprint owns files; Assembly owns how to build. Assemble mechanism module first, then mount to board/custom base.
 - `architect`: keep single-package. Build Assembly as derived read-only adapter over existing recipe/fabrication data. No second solver/exporter.
 
 ## Non-negotiable workflow
@@ -16,7 +16,7 @@ Every assembly recipe follow this order:
 
 1. **Prepare parts**
    - Kit mode: show required prefab parts + hardware.
-   - Custom mode: show SVG/PDF/STL cut or print outputs first.
+   - Custom mode: show SVG/PDF/STL cut/print outputs first.
 2. **Assemble mechanism module first**
    - Neutral bench view.
    - No 15x15 board yet unless step physically pins to board.
@@ -266,10 +266,10 @@ Installed + enough:
 - Three/Rapier for richer 3D/physics views if reused later,
 - existing fabrication/coordinate/physics utilities.
 
-Add library only if concrete implementation step prove existing renderer cannot animate exploded stack placement smoothly.
+Add library only if concrete implementation step proves existing renderer can't animate exploded stack placement smoothly.
 
 ## Deferred on purpose
 
 - New `.lic` export format. Current need is `.lic-like` behavior, not file format.
-- Separate workspace/package split. Only after Assembly playback have second real consumer.
+- Separate workspace/package split. Only after Assembly playback has second real consumer.
 - Full physics solver inside Assembly. Assembly reuse canonical mechanism simulation + physics sidecars, not another engine.

@@ -29,8 +29,8 @@ Active planning/impl stay in:
 ## Governance
 
 1. Keep archive-only docs out of default impl context.
-2. If doc active again, promote back to hot set (update all maps).
-3. If obsolete/unused, delete + record in session notes before cleanup.
+2. Doc active again → promote back to hot set (update all maps).
+3. Obsolete/unused → delete + record in session notes before cleanup.
 4. Don't add new product docs directly to `archive/`.
 
 ## Deletion candidates

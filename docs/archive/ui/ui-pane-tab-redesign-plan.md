@@ -10,10 +10,10 @@ Current editor: right intent — shared canvas, light MotionSmith style, real wo
 
 Observed from code/docs:
 
-- `README.md` says post-onboarding stages share one workbench shell, not separate apps.
-- `docs/archive/ui/ui-to-web/CANVAS_LAYER_STRATEGY.md`: tab switching changes panel composition + layer visibility, not reset/replace canvas mental model.
-- `App.tsx`: fixed `app-rail` with only broad links/stats; each stage renders own internal grid (canvas + controls).
-- Means: left pane underused, center becomes mixed content panel not pure work surface, right pane carries workflow nav + sensemaking + primary actions + fine param controls at once.
+- `README.md`: post-onboarding stages share one workbench shell, not separate apps.
+- Canonical split model now: tab switching changes layer visibility and tool context, not separate canvases.
+- `App.tsx`: fixed `app-rail`, only broad links/stats; each stage renders own internal grid (canvas + controls).
+- Means: left pane underused, center = mixed content panel not pure work surface, right pane carries workflow nav + sensemaking + primary actions + fine params at once.
 
 User correction to honor:
 
@@ -37,7 +37,7 @@ Should contain:
 - object lists: parts, paths, mechanism families, mechanisms, export recipes;
 - status/blockers + next action;
 - explanatory sensemaking cards;
-- primary workflow actions: “Draw free path”, “Choose mechanism”, “Generate package”.
+- primary workflow actions: "Draw free path", "Choose mechanism", "Generate package".
 
 Should not contain:
 
@@ -90,7 +90,7 @@ Should not contain:
 
 - Header: global app commands, stage tabs, save/import/export/options.
 - Bottom status: current blocker/next action + technical status.
-- Player dock: stay floating, but tied to center canvas, not obscure right inspector.
+- Player dock: stay floating, tied to center canvas, not obscure right inspector.
 
 ## 4. Stage-by-stage target composition
 
@@ -116,7 +116,7 @@ Change later:
 
 ### 4.2 Path Editor
 
-Primary novice question: “Which body part moves, what path should it follow?”
+Primary novice question: "Which body part moves, what path should it follow?"
 
 Left pane:
 
@@ -158,7 +158,7 @@ Keep on right:
 
 ### 4.3 Mechanism Foundry
 
-Primary novice question: “Which mechanism family makes this path?”
+Primary novice question: "Which mechanism family makes this path?"
 
 Left pane:
 
@@ -199,7 +199,7 @@ Important: Foundry should not hide shared player model by becoming separate mini
 
 ### 4.4 Mechanism Design
 
-Primary novice question: “How mechanism attached to character?”
+Primary novice question: "How mechanism attached to character?"
 
 Left pane:
 
@@ -238,7 +238,7 @@ Keep on right:
 
 ### 4.5 Blueprint Export
 
-Primary novice question: “Can I build it?”
+Primary novice question: "Can I build it?"
 
 Left pane:
 

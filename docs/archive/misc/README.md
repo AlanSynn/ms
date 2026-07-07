@@ -10,4 +10,4 @@ Single-purpose historical notes. No archive family fit.
 
 ## Retirement rule
 
-Behavior claim moved into active contracts? Delete, replace with short pointer to owning source of truth.
+Behavior claim moved into active contracts? Delete, replace with short pointer to source of truth.

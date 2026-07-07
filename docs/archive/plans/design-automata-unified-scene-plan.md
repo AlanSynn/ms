@@ -1,21 +1,21 @@
 # Design Automata Unified Scene Plan
 
-Status: historical provenance (baseline implemented); active hardening done in baseline
+Status: historical provenance (baseline implemented); active hardening in baseline
 Date: 2026-07-05
 Scope: Path -> Foundry -> Design -> Blueprint -> Assembly mechanism/character simulation.
 
 ## Problem
 
-Mechanism Design looked connected but not one automata scene. Mechanism via Foundry Three renderer, character via nested Puppet renderer — visual overlay, not physical system where mechanism end-effector drives character part/object through selected path target.
+Mechanism Design looked connected, not one automata scene. Mechanism via Foundry Three renderer, character via nested Puppet renderer — visual overlay, not physical system where end-effector drives character part/object through selected path target.
 
-Observed root cause:
+Root cause:
 
 - 2026-07-05 baseline: `DesignFoundryPreview.tsx` feeds `buildAutomataSceneModel` into one `ThreeFoundryPreview`; no nested Puppet context layer remains in Design.
 - `AssemblyThreePreview.tsx` splits character assembly + mechanism assembly into separate renderer branches.
 - `PathCanvasPane.tsx` previews path motion with `ThreePuppetPreview`, suppresses mechanisms.
-- Canonical domain motion seam now `utils/automataSceneModel.ts`; `utils/designAutomataProjection.ts` compatibility wrapper only.
+- Canonical domain motion seam now `utils/automataSceneModel.ts`; `utils/designAutomataProjection.ts` compat wrapper only.
 
-This why screenshot shows character/board + mechanism near each other instead of real mechanism-driven character.
+Why screenshot shows character/board + mechanism near each other, not real mechanism-driven character.
 
 ## Product rule
 
@@ -138,7 +138,7 @@ Decision:
 1. Do not solve Design by re-enabling `ThreePuppetPreview`'s private mechanism layer.
 2. Add one pure shared model seam composing existing Foundry/domain authorities.
 3. Move Design + Assembly to consume that seam.
-4. Make renderer one scene by reusing/extracting Foundry mechanism rendering, not redrawing mechanisms a second way.
+4. Make renderer one scene by reusing/extracting Foundry mechanism rendering, not redrawing mechanisms second way.
 
 Shortest safe path:
 
@@ -217,7 +217,7 @@ Non-responsibilities:
 
 ### Renderer plan
 
-Do **not** use `ThreePuppetPreview`'s private mechanism rendering as final Design solution. Fast-looking path but source of parity drift with Foundry.
+Do **not** use `ThreePuppetPreview`'s private mechanism rendering as final Design solution. Fast-looking path, but source of parity drift with Foundry.
 
 Required change:
 
@@ -233,7 +233,7 @@ Renderer implementation options, in order:
 2. If extraction too large for first patch, extend `ThreeFoundryPreview` with optional character/object context layer rendered inside same Three scene + camera.
 3. Only use `ThreePuppetPreview` for character-only tabs or temporary character geometry helpers; never let it own mechanism primitives in Design/Assembly.
 
-Single-scene acceptance means one WebGL scene/camera owns mechanism + driven character/object. DOM/SVG overlays allowed only for labels/toggles, not as physical automata.
+Single-scene acceptance: one WebGL scene/camera owns mechanism + driven character/object. DOM/SVG overlays allowed only for labels/toggles, not physical automata.
 
 ## Implementation slices
 
@@ -390,4 +390,4 @@ Non-critical:
 
 ## Decision
 
-Design baseline implemented first + remains gating reference for later Assembly hardening. Future work should deepen Assembly character/object build clarity without creating second mechanism authority outside Foundry primitives.
+Design baseline implemented first + stays gating reference for later Assembly hardening. Future work deepens Assembly character/object build clarity without second mechanism authority outside Foundry primitives.
