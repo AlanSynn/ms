@@ -1,7 +1,7 @@
 import type { BodyPartLayer, FabricationRecipe, MechanismConfig, PhysicalKitSettings, Point, ProjectState } from '../types';
 import { bodyPartPivotScene, sceneToBoardRaw } from './coordinates';
 import { fabricationBoardCoordinateCallout, fabricationPartDisplayLabel } from './fabrication';
-import { createFabricationRecipe } from './fabricationRecipes';
+import { compileFabricationRecipe } from './mechanismCompiler';
 import { fabricablePartOutlinePoints, partLandmarkJointIds, partLandmarkLocalPoints } from './partGeometry';
 
 export type AssemblyLane = 'kit' | 'custom';
@@ -158,7 +158,7 @@ export const buildCharacterAssemblyPlan = (project: ProjectState): CharacterAsse
 };
 
 export const pendingRecipeForMechanism = (project: ProjectState, mechanism: MechanismConfig): FabricationRecipe =>
-    createFabricationRecipe(project, mechanism);
+    compileFabricationRecipe(project, mechanism);
 
 export const assemblyLaneForExportMode = (mode: PhysicalKitSettings['exportMode']): AssemblyLane => mode === 'custom-parts' ? 'custom' : 'kit';
 

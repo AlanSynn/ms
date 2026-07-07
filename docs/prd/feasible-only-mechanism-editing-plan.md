@@ -39,7 +39,7 @@ Inference:
 
 - The near-term feasible gate is still useful, but it cannot be the final architecture.
 - The correct long-term boundary is a mechanism graph + solver + fabrication compiler.
-- The safe migration is not graph-first persistence. It is graph as a derived/sidecar IR first, with legacy closed-form solvers as the oracle until parity is proven.
+- The safe migration is not graph-first persistence. It is graph as a compiler-derived IR first, with legacy closed-form solvers as the oracle until parity is proven.
 
 ## Non-goals
 
@@ -60,7 +60,7 @@ Add a graph compiler layer:
 ```ts
 type MechanismGraph = {
   id: string;
-  source: 'legacy-type' | 'family' | 'free-graph' | 'imported';
+  source: 'derived-legacy-adapter' | 'family-definition' | 'free-graph-authoring' | 'imported-graph';
   nodes: MechanismGraphNode[];
   constraints: MechanismConstraint[];
   drivers: MechanismDriver[];
@@ -146,7 +146,7 @@ type CompiledMechanism = {
 Do not persist graph as the only source yet.
 
 - Persist existing `MechanismConfig` unchanged.
-- Add graph output as a derived sidecar only when needed for tests/debugging.
+- Add graph output as compiler-derived read-model data only when needed for tests/debugging.
 - Existing snapshots/imports keep loading.
 - Current closed-form code remains the reference oracle.
 
@@ -299,10 +299,11 @@ Copy:
 
 Current implementation checkpoint:
 
-- `utils/mechanismGraph.ts` provides derived, non-persisted graph sidecars for every current `MechanismType`.
+- `utils/mechanismGraph.ts` owns derived, non-persisted graph IR/adapters/validation for every current `MechanismType`.
 - `4bar` and `gear` remain the first compiler targets; the buildable classroom set also has graph adapters for parity and diagnostics.
-- `CompiledMechanism` currently records legacy closed-form motion samples, feasibility, canonical fabrication render-plan data, and canonical assembly-step labels without switching runtime stage consumers.
-- Hidden/not-yet-buildable families compile as diagnostic graphs only.
+- `utils/mechanismCompiler.ts` is the canonical compiler facade: it emits `CompiledMechanism`, `compileFabricationRecipe`, graph validation diagnostics, closed-form oracle samples, feasible ranges, render-plan data, and assembly-step fingerprints consumed by Snapshot, SceneContract, Assembly, and Blueprint parity tests.
+- Advanced/free graph drafts now enter the same non-persisted IR through `mechanismGraphFromDraft()` and stop at a compiler-owned `Recipe missing` blocker until a recipe compiler recognizes the graph.
+- Hidden/not-yet-buildable families compile as diagnostic graphs only and cannot be exported as buildable classroom mechanisms.
 
 ### Phase 0 — compiler IR behind adapters
 
@@ -338,8 +339,8 @@ Deliver:
 
 Gate:
 
-- no visual/export diff for `4bar` and `gear`.
-- legacy fallback remains.
+- no visual/export diff for `4bar` and `gear`;
+- compiler facade remains the only read-model entry point while closed-form solvers stay as parity oracles, not stage-owned fallbacks.
 
 ### Phase 3 — remaining current buildable families
 
@@ -433,7 +434,7 @@ Add targeted Playwright after Phase 1 and Phase 2 seams are wired.
 ## Risk controls
 
 - Keep closed-form fast path until graph parity passes.
-- Use graph as derived sidecar before persistence.
+- Use graph as compiler-derived IR before persistence.
 - First compile only `4bar` and `gear`.
 - Freeze golden-master exports before switching consumers.
 - Hide graph authoring from classroom mode.

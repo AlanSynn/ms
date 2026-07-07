@@ -18,6 +18,7 @@ import { makeCutSheetPdf as directMakeCutSheetPdf } from '../utils/fabricationCu
 import { makeCustomPartsPdf as directMakeCustomPartsPdf, makeCustomPartsStl as directMakeCustomPartsStl, makeCustomPartsSvg as directMakeCustomPartsSvg } from '../utils/fabricationCustomParts';
 import { fabricationGearPathD as profileFabricationGearPathD, fabricationGearProfileForPitchRadius as profileFabricationGearProfileForPitchRadius, fabricationRingGearPathD as profileFabricationRingGearPathD, fabricationRingGearProfileForPitchRadius as profileFabricationRingGearProfileForPitchRadius } from '../utils/fabricationProfiles';
 import { createFabricationRecipe as directCreateFabricationRecipe } from '../utils/fabricationRecipes';
+import { compileAuthoredMechanismGraph, compileFabricationRecipe, compileMechanism, summarizeCompiledMechanism } from '../utils/mechanismCompiler';
 import { closePhysicalValue as readinessClosePhysicalValue, closeToBoardPitch as readinessCloseToBoardPitch, closeToFabricationLinkage as readinessCloseToFabricationLinkage, physicalTolerance as readinessPhysicalTolerance, sampleFeasibleRange as readinessSampleFeasibleRange } from '../utils/fabricationReadiness';
 import { FABRICATION_RENDER_LAYER_Z_STEP as renderPlanLayerZStep, FABRICATION_RENDER_MIN_CLEARANCE as renderPlanMinClearance, FABRICATION_RENDER_PART_DEPTH as renderPlanPartDepth, fabricationRenderPlanForMechanism as renderPlanForMechanism, validateFabricationStack as renderPlanValidateFabricationStack } from '../utils/fabricationRenderPlan';
 import { FABRICATION_LINKAGE_ROLE_MIN_HOLES as sizingRoleMinHoles, PLANETARY_GEAR_PLANET_COUNT as sizingPlanetCount, fabricationLinkageHoleCountsForMechanism as sizingFabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism as sizingFabricationLinkageSceneLengthsForMechanism, planetaryGearConventionForMechanism as sizingPlanetaryGearConventionForMechanism, planetaryPlanetCenters as sizingPlanetaryPlanetCenters } from '../utils/fabricationSizing';
@@ -48,7 +49,7 @@ import { formatGridLabel, formatGridPitch, formatGridReadout } from '../utils/un
 import { buildAssemblyPlaybackSteps, buildCharacterAssemblyPlan, pendingRecipeForMechanism, type CharacterAssemblyPlan } from '../utils/assemblyPlayback';
 import { buildCharacterAssemblySceneFrame, buildMechanismAssemblySceneFrame } from '../utils/assemblySceneFrame';
 import { buildMechanismSceneContract } from '../utils/mechanismSceneContract';
-import { MECHANISM_GRAPH_ADAPTER_TYPES, MECHANISM_GRAPH_LIVE_SOLVE_BUDGET_MS, compileMechanismGraphSidecar, mechanismGraphForMechanism, sampleMechanismGraphMotion, summarizeCompiledMechanism } from '../utils/mechanismGraph';
+import { MECHANISM_GRAPH_ADAPTER_TYPES, MECHANISM_GRAPH_LIVE_SOLVE_BUDGET_MS, mechanismGraphForMechanism, mechanismGraphFromDraft, sampleMechanismGraphMotion, validateMechanismGraph } from '../utils/mechanismGraph';
 import { buildAssemblyGuideModel } from '../components/stages/assembly/assemblyGuideModel';
 import { selectBlueprintRecipe } from '../components/stages/blueprint/BlueprintExport';
 import { MechanismLinkagePreview } from '../components/stages/foundry/MechanismLinkagePreview';
@@ -1282,31 +1283,33 @@ ALL_MECHANISM_TYPES.forEach(type => {
   assert.equal(graph.legacyType, type, `${type} graph adapter preserves the legacy mechanism type`);
   assert.equal(graph.source, 'derived-legacy-adapter', `${type} graph adapter starts from legacy ProjectState`);
   assert.equal(graph.persisted, false, `${type} graph adapter is never persisted into ProjectState`);
-  assert.equal(graph.solver, 'legacy-closed-form', `${type} graph adapter keeps the closed-form fast path`);
   assert(graph.nodes.length > 0, `${type} graph adapter emits at least a diagnostic node`);
 });
 assert.deepEqual([...MECHANISM_GRAPH_ADAPTER_TYPES].sort(), [...previewReadyTypes].sort(), 'graph adapter registry covers the current preview-ready mechanism set without a stage-local switch');
 (['crank', 'yoke', 'quick-return', '5bar', '6bar', 'rack-pinion'] as const).forEach(type => {
-  assert(mechanismGraphForMechanism(createDefaultMechanism(type, `graph-diagnostic-${type}`)).diagnostics.length > 0, `${type} graph adapter reports diagnostic-only compiler coverage`);
+  const graph = mechanismGraphForMechanism(createDefaultMechanism(type, `graph-diagnostic-${type}`));
+  assert.equal(graph.solver, 'diagnostic-only', `${type} graph adapter does not claim closed-form compiler coverage`);
+  assert(graph.diagnostics.length > 0, `${type} graph adapter reports diagnostic-only compiler coverage`);
 });
 previewReadyTypes.forEach(type => {
   const mechanism = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism(type, `graph-${type}`)));
   const graph = mechanismGraphForMechanism(mechanism);
-  const compiled = compileMechanismGraphSidecar(mechanism);
+  const compiled = compileMechanism(mechanism);
   const sceneContract = buildMechanismSceneContract(mechanism);
   const renderPlan = fabricationRenderPlanForMechanism(mechanism);
   const assemblyBoardCoordinate = mechanism.fabricationMetadata?.boardCoordinate ?? 'H8';
   const assemblySteps = prefabAssemblySteps(mechanism, assemblyBoardCoordinate);
-  assert.equal(graph.source, 'derived-legacy-adapter', `${type} graph starts as a derived sidecar adapter`);
+  assert.equal(graph.source, 'derived-legacy-adapter', `${type} graph starts as a derived compiler adapter`);
   assert.equal(graph.persisted, false, `${type} graph is not a ProjectState persistence field`);
   assert.equal(graph.solver, 'legacy-closed-form', `${type} graph keeps the closed-form fast path while compiler migration starts`);
   assert(graph.constraints.some(constraint => constraint.role === 'board-snap'), `${type} graph records pegboard snap constraints`);
-  assert.deepEqual(compiled.readinessErrors, validateMechanismPreviewReadiness(mechanism), `${type} graph sidecar preserves preview-readiness validation`);
-  assert.equal(compiled.fabrication.renderPlanSource, 'fabricationRenderPlanForMechanism', `${type} graph sidecar consumes the canonical fabrication render plan`);
-  assert.equal(compiled.fabrication.assemblyPlanSource, 'prefabAssemblySteps', `${type} graph sidecar consumes canonical assembly steps`);
-  assert.equal(compiled.fabrication.assemblyBoardCoordinate, assemblyBoardCoordinate, `${type} graph sidecar preserves assembly board coordinate`);
-  assert.equal(compiled.fabrication.assemblyStepCount, assemblySteps.length, `${type} graph sidecar preserves assembly step count`);
-  assert.deepEqual(compiled.fabrication.assemblyStepLabels, assemblySteps.map(step => step.label), `${type} graph sidecar preserves assembly step labels`);
+  assert.deepEqual(compiled.readinessErrors, validateMechanismPreviewReadiness(mechanism), `${type} compiler output preserves preview-readiness validation`);
+  assert.deepEqual(compiled.fabrication.renderPlan, renderPlan, `${type} compiler output owns the full fabrication render plan for downstream scene consumers`);
+  assert.equal(compiled.fabrication.renderPlanSource, 'fabricationRenderPlanForMechanism', `${type} compiler output consumes the canonical fabrication render plan`);
+  assert.equal(compiled.fabrication.assemblyPlanSource, 'prefabAssemblySteps', `${type} compiler output consumes canonical assembly steps`);
+  assert.equal(compiled.fabrication.assemblyBoardCoordinate, assemblyBoardCoordinate, `${type} compiler output preserves assembly board coordinate`);
+  assert.equal(compiled.fabrication.assemblyStepCount, assemblySteps.length, `${type} compiler output preserves assembly step count`);
+  assert.deepEqual(compiled.fabrication.assemblyStepLabels, assemblySteps.map(step => step.label), `${type} compiler output preserves assembly step labels`);
   assert.deepEqual(
     compiled.fabrication.assemblyStepFingerprints,
     assemblySteps.map(step => ({
@@ -1319,35 +1322,106 @@ previewReadyTypes.forEach(type => {
       coordRoles: step.coordRoles ?? [],
       stack: (step.stack ?? []).map(item => ({ order: item.order, label: item.label, role: item.role, part: item.part }))
     })),
-    `${type} graph sidecar preserves assembly step coordinates, roles, z order, and stack parts`
+    `${type} compiler output preserves assembly step coordinates, roles, z order, and stack parts`
   );
-  assert.equal(compiled.fabrication.layerCount, renderPlan.layers.length, `${type} graph sidecar preserves render-plan layer count`);
-  assert.equal(compiled.fabrication.stackSummary, renderPlan.stackSummary, `${type} graph sidecar preserves stack summary`);
-  assert.equal(compiled.fabrication.roleSummary, renderPlan.roleSummary, `${type} graph sidecar preserves role summary`);
-  assert.deepEqual(compiled.fabrication.validationErrors, renderPlan.validationErrors, `${type} graph sidecar preserves fabrication validation errors`);
-  assert.equal(sceneContract.compilerSource, 'compileMechanismGraphSidecar', `${type} scene contract records the graph sidecar compiler source`);
+  assert.equal(compiled.fabrication.layerCount, renderPlan.layers.length, `${type} compiler output preserves render-plan layer count`);
+  assert.equal(compiled.fabrication.stackSummary, renderPlan.stackSummary, `${type} compiler output preserves stack summary`);
+  assert.equal(compiled.fabrication.roleSummary, renderPlan.roleSummary, `${type} compiler output preserves role summary`);
+  assert.deepEqual(compiled.fabrication.validationErrors, renderPlan.validationErrors, `${type} compiler output preserves fabrication validation errors`);
+  assert.equal(sceneContract.compilerSource, 'mechanismCompiler', `${type} scene contract records the compiler output compiler source`);
   assert.equal(sceneContract.graphCompiler.graphId, compiled.graph.id, `${type} scene contract exposes graph metadata without replacing fabrication layers`);
 });
 previewReadyTypes.forEach(type => {
-  const graph = mechanismGraphForMechanism(mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism(type, `graph-node-integrity-${type}`))));
-  const nodeIds = new Set(graph.nodes.map(node => node.id));
-  graph.constraints.forEach(constraint => {
-    constraint.nodes.forEach(nodeId => assert(nodeIds.has(nodeId), `${type} graph constraint ${constraint.id} references existing node ${nodeId}`));
-  });
-  graph.drivers.forEach(driver => assert(nodeIds.has(driver.nodeId), `${type} graph driver ${driver.id} references existing node ${driver.nodeId}`));
+  const graph = mechanismGraphForMechanism(mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism(type, `graph-unique-${type}`))));
+  const validation = validateMechanismGraph(graph);
+  assert.equal(validation.valid, true, `${type} graph validates as a compiler IR`);
+  assert.equal(new Set(graph.nodes.map(node => node.id)).size, graph.nodes.length, `${type} graph node ids are unique`);
+  assert.equal(new Set(graph.constraints.map(constraint => constraint.id)).size, graph.constraints.length, `${type} graph constraint ids are unique`);
+  assert.equal(new Set(graph.drivers.map(driver => driver.id)).size, graph.drivers.length, `${type} graph driver ids are unique`);
+  assert(graph.nodes.every(node => node.label && node.role), `${type} graph nodes carry readable labels and roles`);
+  assert(graph.constraints.every(constraint => constraint.label && constraint.role), `${type} graph constraints carry readable labels and roles`);
+  assert(graph.drivers.every(driver => driver.label && driver.nodeId), `${type} graph drivers carry labels and target nodes`);
 });
+{
+  const broken = mechanismGraphForMechanism(createDefaultMechanism('4bar', 'free-graph-validation-broken'));
+  const validation = validateMechanismGraph({
+    ...broken,
+    version: 999 as never,
+    persisted: true as false,
+    source: 'bad-source' as never,
+    solver: 'bad-solver' as never,
+    nodes: [...broken.nodes, { ...broken.nodes[0], position: { x: Number.NaN, y: 0 } }],
+    constraints: [
+      ...broken.constraints,
+      { id: 'bad-free-constraint', label: 'Bad free constraint', role: 'pin-joint', nodes: ['missing-node'] },
+      { id: 'bad-mesh', label: 'Bad mesh', role: 'gear-mesh', nodes: ['p1'], value: Number.POSITIVE_INFINITY }
+    ],
+    drivers: [...broken.drivers, { ...broken.drivers[0], id: 'bad-driver', solver: 'bad-solver' as never, ratio: Number.NaN }]
+  });
+  const messages = validation.diagnostics.map(diagnostic => diagnostic.message).join(' | ');
+  assert.equal(validation.valid, false, 'free graph authoring validation rejects malformed compiler IR before persistence');
+  assert(messages.includes('Graph version') && messages.includes('non-persisted') && messages.includes('bad-source') && messages.includes('bad-solver'), 'graph validation rejects bad version, persisted flag, source, and solver');
+  assert(messages.includes('Duplicate graph node id') && messages.includes('missing node') && messages.includes('invalid gear-mesh node count') && messages.includes('must be finite'), 'graph validation rejects duplicate ids, dangling references, bad arity, and non-finite values');
+}
+{
+  const authoredGraph = mechanismGraphFromDraft({
+    id: 'teacher-free-graph',
+    familyId: 'teacher-linkage-demo',
+    nodes: [
+      { id: 'board-a', label: 'Board pivot A', role: 'board-anchor', position: { x: 0, y: 0 } },
+      { id: 'board-b', label: 'Board pivot B', role: 'board-anchor', position: { x: 80, y: 0 } },
+      { id: 'link-a', label: 'Student link', role: 'link', value: 80 },
+      { id: 'output', label: 'Output point', role: 'output-point' }
+    ],
+    constraints: [
+      { id: 'board-a-fixed', label: 'Pivot A stays fixed', role: 'fixed-to-board', nodes: ['board-a'] },
+      { id: 'board-a-snap', label: 'Pivot A fits a hole', role: 'board-snap', nodes: ['board-a'] },
+      { id: 'link-length', label: 'Link length stays fixed', role: 'distance', nodes: ['board-a', 'output'], value: 80 },
+      { id: 'output-clearance', label: 'Output clears board pivot', role: 'clearance', nodes: ['output', 'board-b'], value: 20 }
+    ],
+    drivers: [{ id: 'teacher-turn', label: 'Turn pivot A', role: 'rotary-input', nodeId: 'board-a', solver: 'constraint-graph', ratio: 1 }]
+  });
+  const validation = validateMechanismGraph(authoredGraph);
+  const compilation = compileAuthoredMechanismGraph(authoredGraph);
+  assert.equal(authoredGraph.source, 'free-graph-authoring', 'free graph authoring enters the same non-persisted graph IR without a MechanismType switch');
+  assert.equal(authoredGraph.solver, 'constraint-graph', 'free graph authoring uses the graph solver boundary instead of pretending to be legacy closed-form');
+  assert.equal(authoredGraph.legacyType, undefined, 'free graph authoring is not forced through the closed MechanismType legacy alias');
+  assert.equal(validation.valid, true, 'valid free graph authoring drafts pass structural graph validation');
+  assert.equal(compilation.compilerSource, 'mechanismCompiler', 'free graph authoring compiles through the compiler facade');
+  assert.equal(compilation.fabrication.buildable, false, 'free graph authoring cannot export until a recipe compiler recognizes the graph');
+  assert(compilation.blockers.includes('Recipe missing'), 'free graph authoring receives a clear fabrication compiler blocker instead of a fake recipe');
+}
 {
   const mechanism = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism('4bar', 'custom-compile-inputs')));
   const angles = [0, 0.25, 1.5];
-  const compiled = compileMechanismGraphSidecar(mechanism, angles, 12);
+  const compiled = compileMechanism(mechanism, angles, 12);
   const summary = summarizeCompiledMechanism(compiled);
-  assert.deepEqual(compiled.motionSamples.map(sample => sample.angle), angles, 'graph sidecar preserves requested sample angles');
-  assert.deepEqual(compiled.feasibleRange, sampleFeasibleRange(mechanism, 12), 'graph sidecar honors requested feasible sample count');
+  assert.deepEqual(compiled.motionSamples.map(sample => sample.angle), angles, 'compiler output preserves requested sample angles');
+  assert.deepEqual(compiled.feasibleRange, sampleFeasibleRange(mechanism, 12), 'compiler output honors requested feasible sample count');
   assert.equal(summary.nodeCount, compiled.graph.nodes.length, 'compiler summary reports node count');
   assert.equal(summary.constraintCount, compiled.graph.constraints.length, 'compiler summary reports constraint count');
   assert.equal(summary.motionSampleCount, compiled.motionSamples.length, 'compiler summary reports motion sample count');
   assert.equal(summary.feasiblePercentValid, compiled.feasibleRange.percentValid, 'compiler summary reports feasible percentage');
+  assert.equal(summary.compilerSource, 'mechanismCompiler', 'compiler summary records the compiler facade source');
+  assert.equal(summary.recipeCompilerSource, 'compileFabricationRecipe', 'compiler summary records the fabrication recipe compiler facade');
 }
+{
+  const mechanism = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism('4bar', 'compiler-motion-parity')));
+  const angles = [0, 0.4, 1.7, Math.PI];
+  const compiled = compileMechanism(mechanism, angles, 8);
+  compiled.motionSamples.forEach(sample => {
+    assertJointStateClose(sample.state, calculateLinkage(mechanism, sample.angle), `compiler sample ${sample.angle} matches closed-form linkage`);
+    assert.equal(sample.source, 'calculateLinkage', 'compiler sample declares closed-form oracle source until graph solver parity ships');
+  });
+}
+previewReadyTypes.forEach(type => {
+  const mechanism = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism(type, `compiler-pure-${type}`)));
+  const before = stableGoldenMasterJson(mechanism);
+  const compiledA = compileMechanism(mechanism);
+  const compiledB = compileMechanism(mechanism);
+  assert.equal(stableGoldenMasterJson(mechanism), before, `${type} mechanism compiler output is a pure derivation and does not mutate MechanismConfig`);
+  assert.deepEqual(compiledA, compiledB, `${type} mechanism compiler output is deterministic for the same input`);
+});
 (['4bar', 'gear'] as const).forEach(type => {
   assert.equal(mechanismGraphForMechanism(createDefaultMechanism(type, `graph-first-target-${type}`)).family.firstCompilerTarget, true, `${type} remains an initial graph compiler target`);
 });
@@ -1591,13 +1665,20 @@ const snapshotB = buildMechanismSnapshot(sample, sampleMechanismId);
 assert(snapshotA && snapshotB, 'mechanism snapshot builder returns a snapshot for an existing mechanism id');
 assert.deepEqual(snapshotA, snapshotB, 'mechanism snapshot builder is deterministic for the same project and mechanism');
 assert.equal(serializeProject(sample), snapshotBeforeProject, 'mechanism snapshot builder does not mutate ProjectState');
-const graphSidecarBeforeProject = serializeProject(sample);
-const graphSidecar = compileMechanismGraphSidecar(sample.mechanisms[0]);
-assert.equal(graphSidecar.graph.persisted, false, 'mechanism graph sidecar declares that it is derived rather than persisted');
-assert.equal(serializeProject(sample), graphSidecarBeforeProject, 'mechanism graph sidecar compilation does not mutate ProjectState');
-assert(!serializeProject(sample).includes('mechanismGraph') && !serializeProject(sample).includes('graphIr'), 'project snapshots do not persist derived graph compiler sidecars');
+const compilerOutputBeforeProject = serializeProject(sample);
+const compiledOutput = compileMechanism(sample.mechanisms[0]);
+assert.equal(compiledOutput.graph.persisted, false, 'mechanism compiler output declares that it is derived rather than persisted');
+assert.equal(serializeProject(sample), compilerOutputBeforeProject, 'mechanism compiler output compilation does not mutate ProjectState');
+assert(!serializeProject(sample).includes('mechanismGraph') && !serializeProject(sample).includes('graphIr'), 'project snapshots do not persist derived mechanism compiler outputs');
 const projectImportSource = readFileSync(join(process.cwd(), 'utils', 'project.ts'), 'utf8');
-assert(projectImportSource.includes('graphCompiler: _graphCompiler') && projectImportSource.includes('graphIr: _graphIr') && projectImportSource.includes('...snapshotData'), 'project import strips top-level graph sidecars before ProjectState spreading');
+assert(
+  projectImportSource.includes('graphCompiler: _graphCompiler')
+  && projectImportSource.includes('graphIr: _graphIr')
+  && projectImportSource.includes('compilerSource: _compilerSource')
+  && projectImportSource.includes('fabrication: _fabrication')
+  && projectImportSource.includes('...snapshotData'),
+  'project import strips top-level compiler output fields before ProjectState spreading'
+);
 assert(Object.isFrozen(snapshotA) && Object.isFrozen(snapshotA.fabricationPlan.layers), 'mechanism snapshot is recursively frozen for adapter safety');
 assert.equal(snapshotA.sourceIds.mechanismId, sampleMechanismId, 'mechanism snapshot records mechanism source id');
 assert(snapshotA.feasibleRange.percentValid >= 0 && snapshotA.feasibleRange.percentValid <= 1, 'mechanism snapshot includes feasible range');
@@ -1605,8 +1686,8 @@ assert(snapshotA.interactionPolicy.writesProjectState, 'mechanism snapshot inclu
 assert(snapshotA.projectionHints.every(hint => hint.zStackUsesFabricationPlan), 'mechanism snapshot includes fabrication-backed projection hints');
 assert(snapshotA.physicsHints.every(hint => hint.preservesProjectState), 'mechanism snapshot includes derived physics hints');
 assert(Array.isArray(snapshotA.fabricationPlan.validationErrors), 'mechanism snapshot includes fabrication plan validation result');
-assert.equal(snapshotA.graph.source, 'derived-legacy-adapter', 'mechanism snapshot carries the full derived graph sidecar at the adapter boundary');
-assert.equal(snapshotA.graph.persisted, false, 'mechanism snapshot graph remains a non-persisted sidecar');
+assert.equal(snapshotA.graph.source, 'derived-legacy-adapter', 'mechanism snapshot carries the full derived compiler output at the adapter boundary');
+assert.equal(snapshotA.graph.persisted, false, 'mechanism snapshot graph remains a non-persisted compiler output');
 assert.equal(snapshotA.graphCompiler.graphId, snapshotA.graph.id, 'mechanism snapshot graph summary points at the attached graph');
 assert.equal(snapshotA.graphCompiler.nodeCount, snapshotA.graph.nodes.length, 'mechanism snapshot graph summary records node count for downstream tabs');
 const snapshotGraphFingerprintInput = {
@@ -1765,8 +1846,8 @@ assert.deepEqual(
   {
     project: 'c4318bde0f86a2b08dabcea7351b605eb307eaf583319ac140145dc1a90e4bfa',
     lesson: '93beeb83933e1622f6ab29c765c88360adf1271f7f5fbd9c38f1e88d2f05e7fc',
-    mechanismSnapshot: 'b22d0c70ee62c4f17dc7d54f4a43de89c031ffeaacc420b9b8404314c7942303',
-    allMechanismSnapshots: '73a8316cb878cfff9cfc039ba85e4932bfa751b819528d816b7ec07d059c717a',
+    mechanismSnapshot: 'f64b58d8995fded84b27439485ae07b95249378869ddb59fa6c58d2deb9607e1',
+    allMechanismSnapshots: '26734f5efb5c91565a231bed37e2d49a65a32b860fa462941362fe74534f2f85',
     sceneProjection: '64b01ae59502ee6a8f04bdad651418565e1fb1e9593d7a6178cea04425dd1605',
     svg: '943626770ae697a566ce73edfcf282215c4e55f82e77575d7df7393eeb1eb5d3',
     dxf: 'dc52ca1acfa24ad70ae9028c58ad48a6c64fb5a8dcebf9fe4db2562d2d8aa336',
@@ -1777,6 +1858,36 @@ assert.deepEqual(
   'golden master locks ProjectState, mechanism snapshot, scene projection, export, and fabrication stack behavior before App.tsx refactors'
 );
 assert.deepEqual(directCreateFabricationRecipe(goldenSample, goldenSample.mechanisms[0]), createFabricationPackage(goldenSample).recipes[0], 'fabricationRecipes preserves package recipe output behind the fabrication facade');
+previewReadyTypes.forEach(type => {
+  const mechanism = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism(type, `recipe-shape-${type}`)));
+  const project = { ...sample, mechanisms: [mechanism], selectedMechanismId: mechanism.id };
+  const recipe = compileFabricationRecipe(project, mechanism);
+  assert.deepEqual(recipe, directCreateFabricationRecipe(project, mechanism), `${type} compiler recipe facade preserves the current fabrication recipe output`);
+  assert(recipe.requiredParts.length > 0, `${type} recipe emits required fabrication parts`);
+  recipe.assemblySteps.forEach(step => {
+    assert(step.label && step.instruction, `${type} recipe step ${step.index} has compact visible copy`);
+    assert.equal((step.coords ?? []).length, (step.coordRoles ?? []).length, `${type} recipe step ${step.index} keeps coords and coordRoles aligned`);
+    assert(step.boardCoordinate, `${type} recipe step ${step.index} has a board coordinate fallback`);
+    assert.deepEqual((step.stack ?? []).map(item => item.order), (step.stack ?? []).map((_, index) => index + 1), `${type} recipe step ${step.index} stack order is contiguous`);
+  });
+});
+{
+  const mechanism = mechanismWithGeneratedPath(normalizeGearLinkageToReference({
+    ...createDefaultMechanism('gear_linkage', 'stage-parity-live-recipe'),
+    targetPartId: 'right_arm_lower',
+    targetPathId: 'path-right-arm',
+    targetAnchorJointId: 'right_hand',
+    activeVisualPartIds: ['right_arm_lower']
+  }));
+  const project = { ...sample, selectedMechanismId: mechanism.id, mechanisms: [mechanism] };
+  const directRecipe = compileFabricationRecipe(project, mechanism);
+  const pendingRecipe = pendingRecipeForMechanism(project, mechanism);
+  const assemblyModel = buildAssemblyGuideModel({ project, selectedRecipeId: null, assemblyMode: 'mechanism', lane: 'kit', stepIndex: 0 });
+  const pkg = createFabricationPackage(project);
+  assert.deepEqual(pendingRecipe.assemblySteps, directRecipe.assemblySteps, 'Assembly pending recipe uses the fabrication recipe compiler');
+  assert.deepEqual(assemblyModel.selectedRecipe?.assemblySteps, directRecipe.assemblySteps, 'Assembly model uses the same live recipe as export');
+  assert.deepEqual(selectBlueprintRecipe(pkg.recipes, null, mechanism.id)?.assemblySteps, directRecipe.assemblySteps, 'Blueprint selected recipe uses the same live fabrication recipe');
+}
 const gearMetadataMechanism = {
   ...createDefaultMechanism('gear', 'snapshot-gear-metadata'),
   crankLength: 50,
@@ -2995,6 +3106,7 @@ const projectText = readFileSync(join(process.cwd(), 'utils', 'project.ts'), 'ut
 const assemblySceneFrameComponentText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'AssemblySceneFrame.tsx'), 'utf8');
 const assemblySceneFrameText = readFileSync(join(process.cwd(), 'utils', 'assemblySceneFrame.ts'), 'utf8');
 const mechanismSceneContractText = readFileSync(join(process.cwd(), 'utils', 'mechanismSceneContract.ts'), 'utf8');
+const mechanismCompilerText = readFileSync(join(process.cwd(), 'utils', 'mechanismCompiler.ts'), 'utf8');
 const assemblyWorkbenchText = [assemblySceneFrameComponentText, assemblySceneFrameText, mechanismSceneContractText].join('\n');
 const assemblyGeometryText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'assemblyGeometry.ts'), 'utf8');
 const assemblyGuideText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'AssemblyGuide.tsx'), 'utf8');
@@ -3444,7 +3556,7 @@ assert(designAutomataProjectionText.includes('buildAutomataSceneModel') && !desi
   assert.equal(compat.foundryPreview?.previewPoints.length, canonical.foundryPreview?.previewPoints.length, 'Design compatibility wrapper returns the same Foundry preview trace as the canonical automata model');
   assert.equal(canonical.userPath?.id, 'path-right-arm', 'Canonical automata model uses the explicit/selected path for fitted previews');
   assert.equal(canonical.motionSource, 'generatedPath', 'Canonical automata model drives the scene from the generated mechanism path when a fitted path exists');
-  assert.equal(canonical.mechanismContract?.compilerSource, 'compileMechanismGraphSidecar', 'Canonical automata model exposes graph compiler telemetry through the scene contract');
+  assert.equal(canonical.mechanismContract?.compilerSource, 'mechanismCompiler', 'Canonical automata model exposes graph compiler telemetry through the scene contract');
   assert.equal(canonical.mechanismContract?.graphCompiler.graphId, `${mechanism.id}:graph`, 'Canonical automata model keeps graph identity aligned with the mechanism instance');
   assert(canonical.generatedTarget && canonical.target, 'Canonical automata model exposes both generated mechanism output and selected IK target');
   assert((canonical.targetError ?? Number.POSITIVE_INFINITY) < 1e-9, 'Canonical automata model keeps the selected IK target attached to the generated mechanism output');
@@ -3789,9 +3901,17 @@ assert(assemblyGuideModelText.includes('activeAssemblyMode === "character"') && 
 assert(!existsSync(join(process.cwd(), 'components', 'stages', 'assembly', 'AssemblyWorkbench.tsx')) && !existsSync(join(process.cwd(), 'components', 'stages', 'assembly', 'MechanismAssemblyWorkbench.tsx')) && !existsSync(join(process.cwd(), 'components', 'stages', 'assembly', 'CharacterAssemblyWorkbench.tsx')), 'legacy Assembly SVG workbench files are deleted rather than preserved as a second scene authority');
 assert(assemblySceneFrameComponentText.includes('data-testid="assembly-readonly-step-strip"') && assemblySceneFrameComponentText.includes('data-assembly-motion-kind') && assemblySceneFrameComponentText.includes('data-mechanism-scene-contract-version') && assemblySceneFrameComponentText.includes('data-mechanism-graph-ir-version'), 'AssemblySceneFrame exposes a testable read-only scene contract strip');
 assert(assemblySceneFrameText.includes('export const buildMechanismAssemblySceneFrame') && assemblySceneFrameText.includes('export const buildCharacterAssemblySceneFrame') && !assemblySceneFrameText.includes('document.') && !assemblySceneFrameText.includes('window.'), 'AssemblySceneFrame builders are DOM-free deterministic helpers');
-assert(mechanismSceneContractText.includes('export const buildMechanismSceneContract') && mechanismSceneContractText.includes('fabricationRenderPlanForMechanism') && mechanismSceneContractText.includes("stackSource: 'fabricationStackForMechanism'") && mechanismSceneContractText.includes('compileMechanismGraphSidecar'), 'MechanismSceneContract derives mechanism layers from the same fabrication render plan as Foundry');
+assert(
+  mechanismSceneContractText.includes('export const buildMechanismSceneContract')
+  && mechanismSceneContractText.includes('const compiledMechanism = compileMechanism(mechanism)')
+  && mechanismSceneContractText.includes('const renderPlan = compiledMechanism.fabrication.renderPlan')
+  && !mechanismSceneContractText.includes('fabricationRenderPlanForMechanism(mechanism)')
+  && mechanismCompilerText.includes('renderPlan: FabricationRenderPlan')
+  && mechanismSceneContractText.includes("stackSource: 'fabricationStackForMechanism'"),
+  'MechanismSceneContract consumes the compiler-owned fabrication render plan instead of recomputing stage-local geometry'
+);
 assert(assemblyGeometryText.includes('export const assemblyCoordToSvg') && assemblyGeometryText.includes('export const characterBoardProjector') && !assemblyGeometryText.includes('<') && !assemblyGeometryText.includes('document.'), 'assemblyGeometry is a DOM-free deterministic helper seam');
-assert(assemblyPlaybackText.includes('export const pendingRecipeForMechanism') && assemblyPlaybackText.includes('createFabricationRecipe(project, mechanism)') && assemblyPlaybackText.includes('buildAssemblyPlaybackSteps'), 'Assembly recipe/playback derivation lives outside App.tsx and reuses the export fabrication recipe seam');
+assert(assemblyPlaybackText.includes('export const pendingRecipeForMechanism') && assemblyPlaybackText.includes('compileFabricationRecipe(project, mechanism)') && assemblyPlaybackText.includes('buildAssemblyPlaybackSteps'), 'Assembly recipe/playback derivation lives outside App.tsx and reuses the compiler fabrication recipe seam');
 assert(assemblyGuideModelText.includes('export const buildAssemblyGuideModel') && assemblyGuideModelText.includes('pendingRecipeForMechanism') && assemblyGuideModelText.includes('buildCharacterAssemblyPlan') && assemblyGuideModelText.includes('resetKey: `${activeAssemblyMode}:${selectedRecipe?.mechanismId ?? "none"}:${lane}`') && !assemblyGuideModelText.includes('useState') && !assemblyGuideModelText.includes('window.') && !assemblyGuideModelText.includes('document.') && !assemblyGuideModelText.includes('dispatch('), 'Assembly guide model helper is a pure derivation seam for recipes, mode, steps, and reset key');
 assert(assemblyBlock.includes('const {') && assemblyBlock.includes('resetKey,') && assemblyBlock.includes('buildAssemblyGuideModel({') && assemblyBlock.includes('createFabricationPackage(project)') && assemblyBlock.includes('window.open') && assemblyBlock.includes('downloadText'), 'Assembly Guide keeps IO and pane wiring while delegating pure model derivation');
 assert(assemblyPlaybackText.includes("motion: 'explode_z'") && assemblyPlaybackText.includes("motion: 'mount_travel_xy'") && assemblyPlaybackText.includes("motion: 'connect_travel_xy'") && assemblyPlaybackText.includes("motion: 'scrub_time'"), 'Assembly playback declares canonical visual motion modes for every build phase');
@@ -3961,12 +4081,35 @@ assert.equal(roundTrip.partOrder.length, sample.partOrder.length, 'project JSON 
 assert.equal(roundTrip.mechanisms.length, sample.mechanisms.length, 'project JSON round-trip keeps mechanisms');
 assert.equal(roundTrip.mechanisms[0].assemblyMode, sample.mechanisms[0].assemblyMode, 'project JSON round-trip keeps explicit 4bar assembly branch');
 assert.equal(loadProjectSnapshot({ mechanisms: [{ ...createDefaultMechanism('4bar', 'crossed-load'), assemblyMode: 'crossed' }] }).mechanisms[0].assemblyMode, 'crossed', 'project import preserves crossed 4bar assembly branch');
-const graphInjectedLoad = loadProjectSnapshot({ mechanisms: [{ ...createDefaultMechanism('4bar', 'graph-injected-load'), mechanismGraph: { bogus: true }, graphIr: { bogus: true } }] });
-assert(!('mechanismGraph' in graphInjectedLoad.mechanisms[0]) && !('graphIr' in graphInjectedLoad.mechanisms[0]), 'project import strips derived graph compiler sidecars instead of persisting them');
-const topLevelGraphInjectedLoad = loadProjectSnapshot({ ...JSON.parse(serializeProject(createEmptyProject())), graph: { bogus: true }, graphCompiler: { bogus: true }, mechanismGraph: { bogus: true }, graphIr: { bogus: true } });
+const graphInjectedLoad = loadProjectSnapshot({ mechanisms: [{ ...createDefaultMechanism('4bar', 'graph-injected-load'), graph: { bogus: true }, graphCompiler: { bogus: true }, mechanismGraph: { bogus: true }, graphIr: { bogus: true }, compiledMechanism: { bogus: true }, compiledGraph: { bogus: true } }] });
+assert(!('graph' in graphInjectedLoad.mechanisms[0]) && !('graphCompiler' in graphInjectedLoad.mechanisms[0]) && !('mechanismGraph' in graphInjectedLoad.mechanisms[0]) && !('graphIr' in graphInjectedLoad.mechanisms[0]) && !('compiledMechanism' in graphInjectedLoad.mechanisms[0]) && !('compiledGraph' in graphInjectedLoad.mechanisms[0]), 'project import strips derived mechanism compiler outputs instead of persisting them');
+const topLevelGraphInjectedLoad = loadProjectSnapshot({
+  ...JSON.parse(serializeProject(createEmptyProject())),
+  graph: { bogus: true },
+  graphCompiler: { bogus: true },
+  mechanismGraph: { bogus: true },
+  graphIr: { bogus: true },
+  compiledMechanism: { bogus: true },
+  compiledGraph: { bogus: true },
+  compilerSource: 'mechanismCompiler',
+  graphValidationDiagnostics: [{ bogus: true }],
+  motionSamples: [{ bogus: true }],
+  feasibleRange: { bogus: true },
+  readinessErrors: ['bogus'],
+  fabrication: { bogus: true },
+  nodes: [{ bogus: true }],
+  constraints: [{ bogus: true }],
+  drivers: [{ bogus: true }],
+  diagnostics: [{ bogus: true }],
+  family: { bogus: true },
+  solver: 'constraint-graph',
+  persisted: false,
+  mechanismId: 'bogus',
+  legacyType: '4bar'
+});
 const topLevelGraphInjectedSerialized = serializeProject(topLevelGraphInjectedLoad);
-assert(!('graph' in topLevelGraphInjectedLoad) && !('graphCompiler' in topLevelGraphInjectedLoad) && !('mechanismGraph' in topLevelGraphInjectedLoad) && !('graphIr' in topLevelGraphInjectedLoad), 'project import strips top-level graph compiler sidecars before they enter ProjectState');
-assert(!topLevelGraphInjectedSerialized.includes('"graph"') && !topLevelGraphInjectedSerialized.includes('"graphCompiler"') && !topLevelGraphInjectedSerialized.includes('"mechanismGraph"') && !topLevelGraphInjectedSerialized.includes('"graphIr"'), 'serialized ProjectState cannot re-emit injected top-level graph sidecars');
+assert(!('graph' in topLevelGraphInjectedLoad) && !('graphCompiler' in topLevelGraphInjectedLoad) && !('mechanismGraph' in topLevelGraphInjectedLoad) && !('graphIr' in topLevelGraphInjectedLoad) && !('compiledMechanism' in topLevelGraphInjectedLoad) && !('compiledGraph' in topLevelGraphInjectedLoad) && !('compilerSource' in topLevelGraphInjectedLoad) && !('fabrication' in topLevelGraphInjectedLoad), 'project import strips top-level mechanism compiler outputs before they enter ProjectState');
+assert(!topLevelGraphInjectedSerialized.includes('"graph"') && !topLevelGraphInjectedSerialized.includes('"graphCompiler"') && !topLevelGraphInjectedSerialized.includes('"mechanismGraph"') && !topLevelGraphInjectedSerialized.includes('"graphIr"') && !topLevelGraphInjectedSerialized.includes('"compiledMechanism"') && !topLevelGraphInjectedSerialized.includes('"compiledGraph"') && !topLevelGraphInjectedSerialized.includes('"compilerSource"') && !topLevelGraphInjectedSerialized.includes('"motionSamples"') && !topLevelGraphInjectedSerialized.includes('"fabrication"'), 'serialized ProjectState cannot re-emit injected top-level compiler outputs');
 
 const originBoard = sceneToBoard({ x: 0, y: 0 }, sample.settings.physicalKit);
 assert.equal(originBoard.label, 'H8', 'scene origin maps to centered 15x15 board H8');
@@ -4447,9 +4590,9 @@ const graphParityGearG1 = gearSceneRadiusByKey('g8');
 ].forEach(mechanism => {
   graphParityAngles.forEach(angle => {
     const legacy = calculateLinkage(mechanism, angle);
-    const sidecar = sampleMechanismGraphMotion(mechanism, angle);
-    assert.equal(sidecar.source, 'calculateLinkage', `${mechanism.id} graph sidecar motion uses the legacy closed-form solver during migration`);
-    assertJointStateClose(sidecar.state, legacy, `${mechanism.id} graph sidecar motion at ${angle}`);
+    const compilerSample = sampleMechanismGraphMotion(mechanism, angle);
+    assert.equal(compilerSample.source, 'calculateLinkage', `${mechanism.id} compiler output motion uses the legacy closed-form solver during migration`);
+    assertJointStateClose(compilerSample.state, legacy, `${mechanism.id} compiler output motion at ${angle}`);
   });
 });
 

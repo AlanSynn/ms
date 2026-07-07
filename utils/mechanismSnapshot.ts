@@ -1,6 +1,7 @@
 import type { JointState, MechanismConfig, MechanismType, PhysicalKitSettings, Point, ProjectMotionPath, ProjectState } from '../types';
-import type { FabricationRenderPlan } from './fabrication';
-import { compileMechanismGraphSidecar, summarizeCompiledMechanism, type MechanismGraph, type MechanismGraphCompilerSummary } from './mechanismGraph';
+import type { FabricationRenderPlan } from './fabricationRenderPlan';
+import { type MechanismGraph } from './mechanismGraph';
+import { compileMechanism, summarizeCompiledMechanism, type MechanismGraphCompilerSummary } from './mechanismCompiler';
 import type { MechanismFeatureIssue, MechanismInteractionPolicy, MechanismPhysicsHint, MechanismProjectionHint, MechanismFeasibleRange } from './mechanismFeatureRegistry';
 import { normalizeMechanismToFabricationSet } from './mechanismReference';
 import { mechanismFeature } from './mechanismFeatureRegistry';
@@ -230,7 +231,10 @@ export const buildMechanismSnapshot = (project: ProjectState, mechanismId: strin
         rodLength: normalizedMechanism.rodLength,
         phase: normalizedMechanism.phase
     };
-    const compiledMechanism = compileMechanismGraphSidecar(resolvedMechanism);
+    const snapshotAngles = [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2];
+    if (!snapshotAngles.some(angle => Math.abs(angle - angleRad) < 1e-9)) snapshotAngles.push(angleRad);
+    const compiledMechanism = compileMechanism(resolvedMechanism, snapshotAngles, 96);
+    const kinematicSample = compiledMechanism.motionSamples.find(sample => Math.abs(sample.angle - angleRad) < 1e-9) ?? compiledMechanism.motionSamples[0];
     const sourceIds: MechanismSnapshotSourceIds = {
         projectId: project.metadata.id,
         mechanismId: mechanism.id,
@@ -253,12 +257,12 @@ export const buildMechanismSnapshot = (project: ProjectState, mechanismId: strin
         authorable: feature.authorable,
         physicalKit: cloneData(project.settings.physicalKit),
         targetPath,
-        kinematics: cloneData(feature.sampleKinematics(resolvedMechanism, angleRad)),
-        feasibleRange: cloneData(feature.sampleFeasibleRange(resolvedMechanism)),
+        kinematics: cloneData(kinematicSample.state),
+        feasibleRange: cloneData(compiledMechanism.feasibleRange),
         interactionPolicy: cloneData(feature.interactionPolicy(resolvedMechanism)),
         projectionHints: cloneData(feature.projectionHints(resolvedMechanism)),
         physicsHints: cloneData(feature.physicsHints(resolvedMechanism)),
-        fabricationPlan: cloneData(feature.fabricationPlan(resolvedMechanism)),
+        fabricationPlan: cloneData(compiledMechanism.fabrication.renderPlan),
         graph: cloneData(compiledMechanism.graph),
         graphCompiler: cloneData(summarizeCompiledMechanism(compiledMechanism)),
         issues: cloneData(feature.validate(resolvedMechanism))

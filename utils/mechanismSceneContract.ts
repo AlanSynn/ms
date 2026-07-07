@@ -1,11 +1,6 @@
 import type { FabricationRecipe, MechanismConfig, MechanismType } from '../types';
-import type { FabricationRenderKind } from './fabrication';
-import { compileMechanismGraphSidecar, summarizeCompiledMechanism, type MechanismGraphCompilerSummary } from './mechanismGraph';
-import {
-    fabricationRenderPlanForMechanism,
-    readableFabricationStackSummary,
-    validateMechanismPreviewReadiness
-} from './fabrication';
+import type { FabricationRenderKind } from './fabricationRenderPlan';
+import { compileMechanism, summarizeCompiledMechanism, type MechanismGraphCompilerSummary } from './mechanismCompiler';
 
 export const MECHANISM_SCENE_CONTRACT_VERSION = 1;
 
@@ -25,7 +20,7 @@ export type MechanismSceneContract = {
     mechanismId: string;
     mechanismType: MechanismType;
     renderPlanSource: 'fabricationRenderPlanForMechanism';
-    compilerSource: 'compileMechanismGraphSidecar';
+    compilerSource: 'mechanismCompiler';
     graphCompiler: MechanismGraphCompilerSummary;
     stackSource: 'fabricationStackForMechanism';
     stackSummary: string;
@@ -46,11 +41,11 @@ export const buildMechanismSceneContract = (
     mechanism: MechanismConfig,
     recipe?: FabricationRecipe,
 ): MechanismSceneContract => {
-    const renderPlan = fabricationRenderPlanForMechanism(mechanism);
-    const compiledMechanism = compileMechanismGraphSidecar(mechanism);
+    const compiledMechanism = compileMechanism(mechanism);
+    const renderPlan = compiledMechanism.fabrication.renderPlan;
     const validationErrors = [
-        ...renderPlan.validationErrors,
-        ...validateMechanismPreviewReadiness(mechanism),
+        ...compiledMechanism.fabrication.validationErrors,
+        ...compiledMechanism.readinessErrors,
         ...(recipe?.warnings ?? []),
         ...(mechanism.warnings ?? [])
     ].filter(Boolean);
@@ -70,10 +65,10 @@ export const buildMechanismSceneContract = (
         mechanismId: mechanism.id,
         mechanismType: mechanism.type,
         renderPlanSource: 'fabricationRenderPlanForMechanism',
-        compilerSource: 'compileMechanismGraphSidecar',
+        compilerSource: 'mechanismCompiler',
         graphCompiler: summarizeCompiledMechanism(compiledMechanism),
         stackSource: 'fabricationStackForMechanism',
-        stackSummary: renderPlan.stackSummary || readableFabricationStackSummary(mechanism),
+        stackSummary: compiledMechanism.fabrication.stackSummary,
         roleSummary: renderPlan.roleSummary,
         zSummary: renderPlan.zSummary,
         ready: validationErrors.length === 0,
