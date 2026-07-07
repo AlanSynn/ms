@@ -97,7 +97,7 @@ The app must always trend toward real buildable artifacts, not illustration-only
 ## 6. AI / ONNX contract
 
 - No mock AI panels, fake recommendations, or placeholder inference.
-- If AI is used, run browser-local Web ONNX and reference `docs/to-port-web-onnx` / Python behavior when porting model logic.
+- If AI is used, run browser-local Web ONNX and reference `docs/archive/ports/to-port-web-onnx` / Python behavior when porting model logic.
 - ONNX output must become editable `ProjectState` data: body parts, joints, paths, masks, anchors, or package metadata.
 - If inference is unavailable, fall back to explicit user-loaded packages or starter templates and say what is missing in the status dock.
 

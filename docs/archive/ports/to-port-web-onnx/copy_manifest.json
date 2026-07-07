@@ -1,0 +1,417 @@
+{
+  "bundle": "to-port-web-onnx",
+  "purpose": "AI/ONNX/image-processing source and model files for web ONNX porting",
+  "file_count": 68,
+  "total_size_bytes": 235263819,
+  "skipped_missing": [],
+  "entries": [
+    {
+      "source": ".gitattributes",
+      "bundle_path": "repo/.gitattributes",
+      "size_bytes": 43,
+      "sha256": "ae01838807d3e6d44f0fe7730d68b1b98acddb3b5dd3df640dc4ae7918629aae"
+    },
+    {
+      "source": "docs/observability/scenario_image_processing.md",
+      "bundle_path": "repo/docs/observability/scenario_image_processing.md",
+      "size_bytes": 1465,
+      "sha256": "5587df9c3a0b8e00b4c316f2b2f588c6d85509615cfd404779fa44328fe58976"
+    },
+    {
+      "source": "docs/observability/telemetry.md",
+      "bundle_path": "repo/docs/observability/telemetry.md",
+      "size_bytes": 2939,
+      "sha256": "4b71144e727be3bdd16efc7a9efd59d2620a481b4ca28fa9a5f98ef55b4ba484"
+    },
+    {
+      "source": "docs/platform-rebuild-porting-flow.md",
+      "bundle_path": "repo/docs/platform-rebuild-porting-flow.md",
+      "size_bytes": 36729,
+      "sha256": "579d7b12a7b4bef50c9b1aad7d07e5c16302fe522db972f8fed50544f7448efa"
+    },
+    {
+      "source": "models/Dockerfile",
+      "bundle_path": "repo/models/Dockerfile",
+      "size_bytes": 1159,
+      "sha256": "022e5f3a7f5965688020912f94b17fe13aa9136f60751ca195970248dd7b9947"
+    },
+    {
+      "source": "models/configs/detector_config.py",
+      "bundle_path": "repo/models/configs/detector_config.py",
+      "size_bytes": 9382,
+      "sha256": "252cc0df17407e7a4ecb3edc90452819bd308dc72e8efb8f79b04412cc9e656c"
+    },
+    {
+      "source": "models/configs/pose_config.py",
+      "bundle_path": "repo/models/configs/pose_config.py",
+      "size_bytes": 36756,
+      "sha256": "fa2d2ad1ae6fd94b7d46a75526848471a3728c382efcb36c5a9814d44bcc669e"
+    },
+    {
+      "source": "models/onnx/detector_backbone.onnx",
+      "bundle_path": "repo/models/onnx/detector_backbone.onnx",
+      "size_bytes": 93950027,
+      "sha256": "fc28cfc0410b8d1fa50d553194289f16a48293cb0ab6993e5fe466a1aad97d83"
+    },
+    {
+      "source": "models/onnx/pose_model.onnx",
+      "bundle_path": "repo/models/onnx/pose_model.onnx",
+      "size_bytes": 135929562,
+      "sha256": "9fd0dc927f41d1981c64d1ac7f5b22545f369c16b95944d60d93495c5a68eb74"
+    },
+    {
+      "source": "models/onnx/test_onnx_inference.py",
+      "bundle_path": "repo/models/onnx/test_onnx_inference.py",
+      "size_bytes": 20328,
+      "sha256": "7707f34d4f86f706ba05f7689678dddad068e6a5326e93e50c66ad7b4c208895"
+    },
+    {
+      "source": "models/pytorch/process_legacy_api.py",
+      "bundle_path": "repo/models/pytorch/process_legacy_api.py",
+      "size_bytes": 6940,
+      "sha256": "dd01634c5112ed53af2eba8b4b9eac005505bbcc8bacaea88eb52324a1c01eee"
+    },
+    {
+      "source": "models/test_complete_legacy.py",
+      "bundle_path": "repo/models/test_complete_legacy.py",
+      "size_bytes": 3321,
+      "sha256": "207804a3e5518799a454ee20b84a935e0ac272f9f3f939fd8bc5279ecc869676"
+    },
+    {
+      "source": "packaging/pyinstaller/automataii.spec",
+      "bundle_path": "repo/packaging/pyinstaller/automataii.spec",
+      "size_bytes": 6342,
+      "sha256": "7e09604fd0747be47d758d1b08118cf8af121464a5493bcd3878ce8c39dedf6b"
+    },
+    {
+      "source": "pyproject.toml",
+      "bundle_path": "repo/pyproject.toml",
+      "size_bytes": 2693,
+      "sha256": "9e5493c945f97ba284a0149b51db8c7cf682c3d153e872529f47707c54f78c43"
+    },
+    {
+      "source": "resources/examples/raw/placeholder.png",
+      "bundle_path": "repo/resources/examples/raw/placeholder.png",
+      "size_bytes": 2163161,
+      "sha256": "ede6b27d899180135fa90756a63f6ff49bff1b9e033e8577409cfed717469c8c"
+    },
+    {
+      "source": "scripts/build_macos.py",
+      "bundle_path": "repo/scripts/build_macos.py",
+      "size_bytes": 38547,
+      "sha256": "5bc0b95083f25ca0f969fb227c05f8e29a894a4c2a16bd97a823e6c6638e3e57"
+    },
+    {
+      "source": "scripts/build_windows.py",
+      "bundle_path": "repo/scripts/build_windows.py",
+      "size_bytes": 21852,
+      "sha256": "41f8b486d5564f09e8884bb99b251e37121d117f2a94a343cb40a62f89d51b06"
+    },
+    {
+      "source": "scripts/pyinstaller_datas.py",
+      "bundle_path": "repo/scripts/pyinstaller_datas.py",
+      "size_bytes": 1005,
+      "sha256": "03052241565f2a1224b470247319eda29fb6974e003d3a0a3583877f64ef3025"
+    },
+    {
+      "source": "scripts/semantic_analyzer.py",
+      "bundle_path": "repo/scripts/semantic_analyzer.py",
+      "size_bytes": 13968,
+      "sha256": "814c97f8a86672f015952221a1932843d07e551c5d56b4432ab4f77ca041fad0"
+    },
+    {
+      "source": "scripts/verify_onnx_models.py",
+      "bundle_path": "repo/scripts/verify_onnx_models.py",
+      "size_bytes": 1890,
+      "sha256": "4e690ee9a0bfb0a1ffb59c5c586fdeb3b290991d7043b9fe528b6223c842478e"
+    },
+    {
+      "source": "src/automataii/__main__.py",
+      "bundle_path": "repo/src/automataii/__main__.py",
+      "size_bytes": 11987,
+      "sha256": "1ffef9e89dbe9182ccbfbd462e0e303c9ef6aaea4f70988e987faf82bb25ea65"
+    },
+    {
+      "source": "src/automataii/application/project/adapters/image_processing.py",
+      "bundle_path": "repo/src/automataii/application/project/adapters/image_processing.py",
+      "size_bytes": 12506,
+      "sha256": "5de4e6dd059916164319544808bde893c57737bed2fe899b6355d26d0f497c14"
+    },
+    {
+      "source": "src/automataii/domain/animation/__init__.py",
+      "bundle_path": "repo/src/automataii/domain/animation/__init__.py",
+      "size_bytes": 374,
+      "sha256": "29a6a205f96219f6e8c2b9b8bc7398b0b59da2cdb33928a31cbc3f6e27fdfd55"
+    },
+    {
+      "source": "src/automataii/domain/animation/annotations_to_animation.py",
+      "bundle_path": "repo/src/automataii/domain/animation/annotations_to_animation.py",
+      "size_bytes": 3653,
+      "sha256": "7d0ffcff38e5c84e6ac9564f77630261422e03139704baf0136f785c646ceaea"
+    },
+    {
+      "source": "src/automataii/domain/animation/body_parts_extractor.py",
+      "bundle_path": "repo/src/automataii/domain/animation/body_parts_extractor.py",
+      "size_bytes": 34253,
+      "sha256": "9f95d42e47894b1ff8ffd8f5b1fbc418dbe5fd12ad3d83d11bdab7700db4d4df"
+    },
+    {
+      "source": "src/automataii/domain/animation/components/__init__.py",
+      "bundle_path": "repo/src/automataii/domain/animation/components/__init__.py",
+      "size_bytes": 401,
+      "sha256": "286810738d9ef54cf4e8709691b7ea659a777229dcb89cb3efcd2078361f3352"
+    },
+    {
+      "source": "src/automataii/domain/animation/components/influence_map_generator.py",
+      "bundle_path": "repo/src/automataii/domain/animation/components/influence_map_generator.py",
+      "size_bytes": 6625,
+      "sha256": "b2b996e0e1dff9af7cc26b0c1e13258d5f480a598fcdfdc199e73dcac08e06d9"
+    },
+    {
+      "source": "src/automataii/domain/animation/image_to_annotations.py",
+      "bundle_path": "repo/src/automataii/domain/animation/image_to_annotations.py",
+      "size_bytes": 32686,
+      "sha256": "8c872db0177bd0e3707c860d5b7b57a27b6e822dc0c65efdc10cb03f4b65c675"
+    },
+    {
+      "source": "src/automataii/domain/animation/part_definitions.py",
+      "bundle_path": "repo/src/automataii/domain/animation/part_definitions.py",
+      "size_bytes": 4701,
+      "sha256": "c0ac7b4cbfea8e183064261832e37e9e566ac6e9d39cd91b4021b149ef91008c"
+    },
+    {
+      "source": "src/automataii/domain/animation/skeleton_payload.py",
+      "bundle_path": "repo/src/automataii/domain/animation/skeleton_payload.py",
+      "size_bytes": 2864,
+      "sha256": "7b2c19d362c195630330243d0124730dda1d63f602d1f1e5fa75feb15513eafe"
+    },
+    {
+      "source": "src/automataii/domain/animation/templates.py",
+      "bundle_path": "repo/src/automataii/domain/animation/templates.py",
+      "size_bytes": 3979,
+      "sha256": "6ac41329ef2214ebf0a41cdb03d56081c0bc0f0d2312383bc537d9b48b4df30a"
+    },
+    {
+      "source": "src/automataii/domain/generation/contour/__init__.py",
+      "bundle_path": "repo/src/automataii/domain/generation/contour/__init__.py",
+      "size_bytes": 399,
+      "sha256": "fabc1c7fd73a7a311bff2190a9fb6a2c25230293096f121ad6abc9c212e72ae7"
+    },
+    {
+      "source": "src/automataii/domain/generation/contour/extractor.py",
+      "bundle_path": "repo/src/automataii/domain/generation/contour/extractor.py",
+      "size_bytes": 11812,
+      "sha256": "163862d59a67c24b7cfbb84ec0b93ddd63fa6103c9caaf8ee208807419d83617"
+    },
+    {
+      "source": "src/automataii/domain/generation/contour/models.py",
+      "bundle_path": "repo/src/automataii/domain/generation/contour/models.py",
+      "size_bytes": 2621,
+      "sha256": "4a9abb2c4da35ea21d30d0dd89e0da4bf3ea131972d4a405e8b5f162fe9a59f0"
+    },
+    {
+      "source": "src/automataii/infrastructure/telemetry/__init__.py",
+      "bundle_path": "repo/src/automataii/infrastructure/telemetry/__init__.py",
+      "size_bytes": 446,
+      "sha256": "a3b5f266ba748093770c42670a4864d8cef16243cf687f0f4f0c4a23650c085e"
+    },
+    {
+      "source": "src/automataii/infrastructure/telemetry/telemetry.py",
+      "bundle_path": "repo/src/automataii/infrastructure/telemetry/telemetry.py",
+      "size_bytes": 3015,
+      "sha256": "f1a736ffaeebc8232dc18e0437dfba7fab6a645f31a5c8bf1124af11b1bfcd60"
+    },
+    {
+      "source": "src/automataii/presentation/qt/dialogs/camera_dialog.py",
+      "bundle_path": "repo/src/automataii/presentation/qt/dialogs/camera_dialog.py",
+      "size_bytes": 9567,
+      "sha256": "a2e05301e8a18b725dc607b2205323375c85e4d3809a820b41f2811c8dd35373"
+    },
+    {
+      "source": "src/automataii/presentation/qt/image_view.py",
+      "bundle_path": "repo/src/automataii/presentation/qt/image_view.py",
+      "size_bytes": 53320,
+      "sha256": "df930ee2140675895188ff7eaf7e93c4a26f6a5897c89abd779dd31195945104"
+    },
+    {
+      "source": "src/automataii/presentation/qt/interactive_segmentation_editor.py",
+      "bundle_path": "repo/src/automataii/presentation/qt/interactive_segmentation_editor.py",
+      "size_bytes": 44939,
+      "sha256": "7343224bfba975b5a1eae58261821488f493ad7a2c7c7a376157e06b8f6d7dcc"
+    },
+    {
+      "source": "src/automataii/presentation/qt/shared/__init__.py",
+      "bundle_path": "repo/src/automataii/presentation/qt/shared/__init__.py",
+      "size_bytes": 894,
+      "sha256": "4174f1cb4b232ac631f71f156719dc326070aa6709ce12c39f8208b4437c4491"
+    },
+    {
+      "source": "src/automataii/presentation/qt/shared/layout_utils.py",
+      "bundle_path": "repo/src/automataii/presentation/qt/shared/layout_utils.py",
+      "size_bytes": 4158,
+      "sha256": "decaafe19fc75c67c55dbb0b8e584fc147b8b56dbd286eef7505ff7783b6c82e"
+    },
+    {
+      "source": "src/automataii/presentation/qt/shared/scene_update_batcher.py",
+      "bundle_path": "repo/src/automataii/presentation/qt/shared/scene_update_batcher.py",
+      "size_bytes": 7096,
+      "sha256": "096b642fab70cb1e201d862c529907ac76f0d9909854a92c630438fbd99772f7"
+    },
+    {
+      "source": "src/automataii/presentation/qt/shared/widget_utils.py",
+      "bundle_path": "repo/src/automataii/presentation/qt/shared/widget_utils.py",
+      "size_bytes": 7472,
+      "sha256": "762f8893c884dc36ed865ac2b2bc4d1e1c1921345a70ab3ed16f62f9bfd66d8d"
+    },
+    {
+      "source": "src/automataii/presentation/qt/tabs/image_processing/components/__init__.py",
+      "bundle_path": "repo/src/automataii/presentation/qt/tabs/image_processing/components/__init__.py",
+      "size_bytes": 664,
+      "sha256": "06d8a7f32d71a35d4b34c7d986a818273eee8b38662fa481e00b7415a5b18a7e"
+    },
+    {
+      "source": "src/automataii/presentation/qt/tabs/image_processing/components/manual_segmentation_handler.py",
+      "bundle_path": "repo/src/automataii/presentation/qt/tabs/image_processing/components/manual_segmentation_handler.py",
+      "size_bytes": 8117,
+      "sha256": "fe9472c54f270c8d1d742e41531dd546539a735d1083b5b541ed926ac038fd40"
+    },
+    {
+      "source": "src/automataii/presentation/qt/tabs/image_processing/components/skeleton_tools_handler.py",
+      "bundle_path": "repo/src/automataii/presentation/qt/tabs/image_processing/components/skeleton_tools_handler.py",
+      "size_bytes": 7162,
+      "sha256": "8975911b08f0c89ef41df8c1b545a692ab40438b2b8c90733e50263a439306fe"
+    },
+    {
+      "source": "src/automataii/presentation/qt/tabs/image_processing_tab.py",
+      "bundle_path": "repo/src/automataii/presentation/qt/tabs/image_processing_tab.py",
+      "size_bytes": 68489,
+      "sha256": "4280c1236a9db29373d9fdaba33d5af858f7252c5f342553b25a2db09a0772ae"
+    },
+    {
+      "source": "src/automataii/presentation/qt/widgets/common/styles.py",
+      "bundle_path": "repo/src/automataii/presentation/qt/widgets/common/styles.py",
+      "size_bytes": 9799,
+      "sha256": "4ed4a2cb5baf3ac8f5e8cd318b1faa90d1a2dc21482e9826c157a2d10cbe1678"
+    },
+    {
+      "source": "src/automataii/presentation/qt/widgets/processing_steps_group.py",
+      "bundle_path": "repo/src/automataii/presentation/qt/widgets/processing_steps_group.py",
+      "size_bytes": 4691,
+      "sha256": "9fb8dbf9f1bb8b31912efe55f337e92ed53e35a53cbd4703ef9f2274106a3d62"
+    },
+    {
+      "source": "src/automataii/scenarios/__init__.py",
+      "bundle_path": "repo/src/automataii/scenarios/__init__.py",
+      "size_bytes": 304,
+      "sha256": "5518ac602f66628adaca7c4a4d47cc7c616c57f788f7814090e11505b91eb388"
+    },
+    {
+      "source": "src/automataii/scenarios/image_processing.py",
+      "bundle_path": "repo/src/automataii/scenarios/image_processing.py",
+      "size_bytes": 7773,
+      "sha256": "6666e63412d3c7b7c6c283316f520cd710ee0b49da7b43b2daa8270c1a184428"
+    },
+    {
+      "source": "src/automataii/utils/model_downloader.py",
+      "bundle_path": "repo/src/automataii/utils/model_downloader.py",
+      "size_bytes": 6289,
+      "sha256": "b90681bc7a079f1e66e998e56846ffe5f57a010bd82f2de08621a7f4d29e1a42"
+    },
+    {
+      "source": "src/automataii/utils/paths.py",
+      "bundle_path": "repo/src/automataii/utils/paths.py",
+      "size_bytes": 12314,
+      "sha256": "a606eb3e15b64ccce530e586cfd5ea8355d5305ad936662a53ebf628d872b688"
+    },
+    {
+      "source": "src/examples/boy.png",
+      "bundle_path": "repo/src/examples/boy.png",
+      "size_bytes": 2280120,
+      "sha256": "9457577df68e0580d4160e09035993b43cc3184b3e2c743336a6af5d553175d5"
+    },
+    {
+      "source": "src/examples/girl.png",
+      "bundle_path": "repo/src/examples/girl.png",
+      "size_bytes": 94861,
+      "sha256": "b0eff8aa28ae2045ff733d7986db550541ae85ab3d35ab0685c7930b45557c4b"
+    },
+    {
+      "source": "tests/domain/animation/__init__.py",
+      "bundle_path": "repo/tests/domain/animation/__init__.py",
+      "size_bytes": 25,
+      "sha256": "742f0038171d2f4dd774dcf28e422996606e81e6454e458ba3a54b4684598d09"
+    },
+    {
+      "source": "tests/domain/animation/test_body_parts_extractor_fallback.py",
+      "bundle_path": "repo/tests/domain/animation/test_body_parts_extractor_fallback.py",
+      "size_bytes": 8595,
+      "sha256": "55b3da179690a99b1e458e10860f67700498abc6d98c28c9d9c795e4af725183"
+    },
+    {
+      "source": "tests/domain/animation/test_image_to_annotations_segment.py",
+      "bundle_path": "repo/tests/domain/animation/test_image_to_annotations_segment.py",
+      "size_bytes": 7936,
+      "sha256": "1b6f2908b302b2fab62bc5277ed0eff87b1c49bba82c370952fdbf23bf7e7d85"
+    },
+    {
+      "source": "tests/scenarios/__init__.py",
+      "bundle_path": "repo/tests/scenarios/__init__.py",
+      "size_bytes": 63,
+      "sha256": "a4b0daeef5bdb30f4d4f664c11dea0eadabe04220307bcfdbc6f508b768f2be9"
+    },
+    {
+      "source": "tests/scenarios/test_image_processing_scenario.py",
+      "bundle_path": "repo/tests/scenarios/test_image_processing_scenario.py",
+      "size_bytes": 2902,
+      "sha256": "fdd8d57f5a5ea986355b6ee04ccb26e03b4c4ba1e6e1b465fd073e63b2c57d03"
+    },
+    {
+      "source": "tests/test_build_windows.py",
+      "bundle_path": "repo/tests/test_build_windows.py",
+      "size_bytes": 19829,
+      "sha256": "3674a58b5033f7fb43c12acd8aafebfad4221f78e9cfe24c484c8678e25e555d"
+    },
+    {
+      "source": "tests/test_character_editing_regressions.py",
+      "bundle_path": "repo/tests/test_character_editing_regressions.py",
+      "size_bytes": 4609,
+      "sha256": "8ef263f1ea834baca2af2f4ce907588d45197d4fd675448bfed0c164a2ff99fc"
+    },
+    {
+      "source": "tests/test_character_scale_normalization.py",
+      "bundle_path": "repo/tests/test_character_scale_normalization.py",
+      "size_bytes": 10036,
+      "sha256": "144d5cdfe9c10c68a40d509814c812decfb143f73d4469498e25aacb3f3b1dbc"
+    },
+    {
+      "source": "tests/test_dummy_character_preset.py",
+      "bundle_path": "repo/tests/test_dummy_character_preset.py",
+      "size_bytes": 1935,
+      "sha256": "c6424f1668b1cb4dcd9e9ae612d3cfd8ea02a5eb821930e1192ed281f0a942db"
+    },
+    {
+      "source": "tests/test_interactive_segmentation_editor_runtime.py",
+      "bundle_path": "repo/tests/test_interactive_segmentation_editor_runtime.py",
+      "size_bytes": 5604,
+      "sha256": "701023bfdc9bab7210bb608e1b0258d4dcdec336223bcbb002eb8648f035f4bd"
+    },
+    {
+      "source": "tests/test_model_downloader.py",
+      "bundle_path": "repo/tests/test_model_downloader.py",
+      "size_bytes": 1312,
+      "sha256": "07bd01d8bac211785eddaf93a61431b90a0cb8a6169ca7973a23988477d4bb8f"
+    },
+    {
+      "source": "tests/test_tab_responsive_layouts.py",
+      "bundle_path": "repo/tests/test_tab_responsive_layouts.py",
+      "size_bytes": 18467,
+      "sha256": "e7c2cf7517a2d6dcb590a3c7e2dd63ab4c6fcbc3686c5997e3ded26ea1a0a8d5"
+    },
+    {
+      "source": "uv.lock",
+      "bundle_path": "repo/uv.lock",
+      "size_bytes": 174046,
+      "sha256": "78074ac28ac9ad21d915e6612dd6c7c2d8b641f85847b73964d23e3276fdcf05"
+    }
+  ]
+}

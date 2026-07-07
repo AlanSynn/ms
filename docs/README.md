@@ -1,11 +1,23 @@
 # MotionSmith Docs Map
 
 Status: active docs index
-Last refreshed: 2026-07-05
+Last refreshed: 2026-07-07
 
 Use this file before adding new docs. If a doc does not fit below, update an existing doc first.
 
 For current tab, pane, button, and tooltip UX, use `workbench-flow-ux-contract.md`. Do not create new per-tab UX contract docs; update that file instead.
+
+## Docs governance: hot / cold / index
+
+- **Hot**: active contracts + active plans.
+- **Cold**: historical/provenance docs kept only for evidence.
+- **Index**: where each family lives (`docs/index.md`).
+
+Start with:
+- [`index.md`](index.md)
+- [`../AGENTS.md`](../AGENTS.md)
+- [`../DESIGN.md`](../DESIGN.md)
+- [`../README.md`](../README.md)
 
 ## Active source of truth
 
@@ -47,15 +59,18 @@ For current tab, pane, button, and tooltip UX, use `workbench-flow-ux-contract.m
 
 Keep these for provenance; do not treat them as current UI contract unless `DESIGN.md` or active plans cite them.
 
-- [`ui-to-web/`](ui-to-web/) — Qt-to-web inventory, screenshots, porting evidence.
-- [`ui-pane-tab-redesign-plan.md`](ui-pane-tab-redesign-plan.md) — historical pane redesign notes; current contract is `workbench-flow-ux-contract.md` plus `subsystem-governance-and-mechanism-contracts.md`.
-- [`prd/canva-video-editor-workspace-plan.md`](prd/canva-video-editor-workspace-plan.md) — superseded by current pane/workbench contract.
-- [`prd/realistic-25d-3d-physics-platform-plan.md`](prd/realistic-25d-3d-physics-platform-plan.md) — superseded by toon 2.5D main + 3D unlock plan.
-- [`assembly-lic-stepper-plan.md`](assembly-lic-stepper-plan.md) — planning provenance; assembly behavior now belongs in `mechanism-reference/05-assembly-process-guides.md` plus implementation tests.
-- [`mechanism-driving-plan.md`](mechanism-driving-plan.md) — planning provenance; durable rules belong in `mechanism-reference/03-mechanism-unit-specs.md` and registry tests.
-- [`subsystem-governance-execution-log.md`](subsystem-governance-execution-log.md) — session log, not product spec.
+Use archive family maps first: [`archive/README.md`](archive/README.md), [`archive/plans/README.md`](archive/plans/README.md), [`archive/ui/README.md`](archive/ui/README.md), [`archive/analysis/README.md`](archive/analysis/README.md), [`archive/ports/README.md`](archive/ports/README.md), [`archive/execution/README.md`](archive/execution/README.md), [`archive/misc/README.md`](archive/misc/README.md)
+
+- [`archive/ui/ui-to-web/`](archive/ui/ui-to-web/) — Qt-to-web inventory, screenshots, porting evidence.
+- [`archive/ui/ui-pane-tab-redesign-plan.md`](archive/ui/ui-pane-tab-redesign-plan.md) — historical pane redesign notes; current contract is `workbench-flow-ux-contract.md` plus `subsystem-governance-and-mechanism-contracts.md`.
+- [`archive/plans/canva-video-editor-workspace-plan.md`](archive/plans/canva-video-editor-workspace-plan.md) — superseded by current pane/workbench contract.
+- [`archive/plans/realistic-25d-3d-physics-platform-plan.md`](archive/plans/realistic-25d-3d-physics-platform-plan.md) — superseded by toon 2.5D main + 3D unlock plan.
+- [`archive/plans/design-automata-unified-scene-plan.md`](archive/plans/design-automata-unified-scene-plan.md) — historical scene/unification prototype; current rule is SSOT + workbench contracts.
+- [`archive/plans/assembly-lic-stepper-plan.md`](archive/plans/assembly-lic-stepper-plan.md) — planning provenance; assembly behavior now belongs in `mechanism-reference/05-assembly-process-guides.md` plus implementation tests.
+- [`archive/plans/mechanism-driving-plan.md`](archive/plans/mechanism-driving-plan.md) — planning provenance; durable rules belong in `mechanism-reference/03-mechanism-unit-specs.md` and registry tests.
+- [`archive/execution/subsystem-governance-execution-log.md`](archive/execution/subsystem-governance-execution-log.md) — session log, not product spec.
 
 ## Local-only / ignored references
 
-- `docs/to-port-web-onnx/` is ignored. Keep only small summaries in docs. Large copied repos belong outside this repo under local archive.
+- `docs/archive/ports/to-port-web-onnx/` is ignored in the hot path. Keep only small summaries in docs. Large copied repos belong outside this repo under local archive.
 - `.omx/`, `.agents/`, `dist/`, `src-tauri/target/`, `node_modules/`, `test-results/` are local/runtime/build state, not documentation.

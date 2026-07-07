@@ -720,7 +720,7 @@ These documents remain part of the project record:
 
 Workspace note: this web-port workspace does not include the full historical Qt
 tree at `src/automataii/...`. The ONNX/AI subset that was copied for this port
-lives under `docs/to-port-web-onnx/repo/`; current web implementation evidence
+lives under `docs/archive/ports/to-port-web-onnx/`; current web implementation evidence
 lives in `App.tsx`, `components/`, `utils/`, `types.ts`, and `tests/`.
 
 - [`docs/mechanism-blueprint-manual.md`](mechanism-blueprint-manual.md) — user-facing
@@ -728,7 +728,7 @@ lives in `App.tsx`, `components/`, `utils/`, `types.ts`, and `tests/`.
 - [`docs/deployment.md`](deployment.md) and
   [`docs/macos-distribution.md`](macos-distribution.md) — release and packaging
   references.
-- [`docs/z_axis_layering.md`](z_axis_layering.md) — layer ordering behavior.
+- [`docs/archive/misc/z_axis_layering.md`](archive/misc/z_axis_layering.md) — layer ordering behavior.
 - [`docs/adr/`](adr/) — architecture decision records.
 - [`docs/prd/`](prd/) — product requirements and refactor plans.
 - [`docs/analysis/`](analysis/) — historical audits and migration analyses.

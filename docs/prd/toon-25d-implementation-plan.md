@@ -2,7 +2,7 @@
 
 Status: approved implementation plan candidate
 Created: 2026-06-25
-Parent docs: [`toon-25d-main-3d-unlock-plan.md`](toon-25d-main-3d-unlock-plan.md), [`realistic-25d-3d-physics-platform-plan.md`](realistic-25d-3d-physics-platform-plan.md), [`canva-video-editor-workspace-plan.md`](canva-video-editor-workspace-plan.md), [`novice-canva-style-ui-plan.md`](novice-canva-style-ui-plan.md)
+Parent docs: [`toon-25d-main-3d-unlock-plan.md`](toon-25d-main-3d-unlock-plan.md), [`realistic-25d-3d-physics-platform-plan.md`](../archive/plans/realistic-25d-3d-physics-platform-plan.md), [`canva-video-editor-workspace-plan.md`](../archive/plans/canva-video-editor-workspace-plan.md), [`novice-canva-style-ui-plan.md`](novice-canva-style-ui-plan.md)
 Scope: staged implementation of the compact in-browser MotionSmith editor, with toon 2.5D as the main workbench and 3D/physics as derived lenses.
 
 ## 1. Final product decision

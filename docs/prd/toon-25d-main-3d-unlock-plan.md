@@ -2,7 +2,7 @@
 
 Status: active direction addendum  
 Created: 2026-06-25  
-Supersedes part of: `docs/prd/realistic-25d-3d-physics-platform-plan.md`  
+Supersedes part of: `docs/archive/plans/realistic-25d-3d-physics-platform-plan.md`
 Mission: make **2.5D the main product view**, with **3D as a fixed-view unlock**, styled as a **cartoon/toon paper automata workbench**, while keeping 2D fabrication state canonical.
 
 ## 0. Updated decision
