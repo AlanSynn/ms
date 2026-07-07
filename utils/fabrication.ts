@@ -85,7 +85,15 @@ export {
 } from './fabricationRenderPlan';
 
 export { makeBlueprintPreviewSvg, makeBlueprintSvg } from './fabricationBlueprintSvg';
-export { createFabricationRecipe, prefabAssemblySteps } from './fabricationRecipes';
+export {
+    createFabricationRecipe,
+    fabricationRecipeClassroomCue,
+    fabricationRecipeSensemakingType,
+    fabricationRecipeStackSummary,
+    fabricationRecipeTitle,
+    mechanismTypeLabel,
+    prefabAssemblySteps
+} from './fabricationRecipes';
 
 export type { FabricationLinkageRoleLengths } from './fabricationSizing';
 export {

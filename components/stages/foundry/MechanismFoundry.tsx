@@ -45,9 +45,9 @@ import {
 import { buildFoundryPhysicsOverlay } from "../../../utils/physicsSession";
 import {
   FABRICATION_RENDER_LAYER_Z_STEP,
-  fabricationRenderPlanForMechanism,
   sampleFeasibleRange,
 } from "../../../utils/fabrication";
+import { compileMechanismRenderPlan } from "../../../utils/mechanismCompiler";
 import {
   boardToScene,
   bodyPartPivotScene,
@@ -335,7 +335,7 @@ export const MechanismFoundry = ({
     rule: physicsRule,
   } = physicsOverlay;
   const foundryRenderPlan = useMemo(
-    () => fabricationRenderPlanForMechanism(landedFoundry),
+    () => compileMechanismRenderPlan(landedFoundry),
     [landedFoundry],
   );
   const foundryTopLayer = foundryRenderPlan.layers.at(-1);

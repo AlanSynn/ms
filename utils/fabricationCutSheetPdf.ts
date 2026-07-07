@@ -4,7 +4,7 @@ import {
     fabricationBoardColumnLabel,
     fabricationBoardRowLabel
 } from './fabricationContract';
-import { mechanismTypeLabel, recipeBoardCallout } from './fabricationRecipes';
+import { fabricationRecipeTitle, recipeBoardCallout } from './fabricationRecipes';
 import { generateCurvePoints } from './kinematics';
 import { circlePath, hexRgb, makePdfDocument, num, pdfText } from './simplePdf';
 
@@ -42,7 +42,7 @@ export const makeCutSheetPdf = (project: ProjectState, recipes: FabricationRecip
         }
     });
     recipes.slice(0, 12).forEach((recipe, index) => {
-        commands.push(`0.10 0.16 0.28 rg BT /F1 8 Tf ${page.margin} ${118 - index * 10} Td (${pdfText(`${recipe.mechanismId}: ${mechanismTypeLabel(recipe.type)} anchor ${recipeBoardCallout(recipe)}`)}) Tj ET`);
+        commands.push(`0.10 0.16 0.28 rg BT /F1 8 Tf ${page.margin} ${118 - index * 10} Td (${pdfText(`${recipe.mechanismId}: ${fabricationRecipeTitle(recipe)} anchor ${recipeBoardCallout(recipe)}`)}) Tj ET`);
     });
     return makePdfDocument(commands.join('\n'));
 };

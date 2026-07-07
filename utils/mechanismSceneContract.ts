@@ -12,17 +12,17 @@ export type MechanismSceneLayer = {
     color: string;
     stackIndex: number;
     z: number;
-    source: 'fabrication-stack';
+    source: 'fabrication-stack' | 'mechanism-graph';
 };
 
 export type MechanismSceneContract = {
     version: typeof MECHANISM_SCENE_CONTRACT_VERSION;
     mechanismId: string;
     mechanismType: MechanismType;
-    renderPlanSource: 'fabricationRenderPlanForMechanism';
+    renderPlanSource: 'mechanismCompiler';
     compilerSource: 'mechanismCompiler';
     graphCompiler: MechanismGraphCompilerSummary;
-    stackSource: 'fabricationStackForMechanism';
+    stackSource: 'mechanismCompiler';
     stackSummary: string;
     roleSummary: string;
     zSummary: string;
@@ -64,10 +64,10 @@ export const buildMechanismSceneContract = (
         version: MECHANISM_SCENE_CONTRACT_VERSION,
         mechanismId: mechanism.id,
         mechanismType: mechanism.type,
-        renderPlanSource: 'fabricationRenderPlanForMechanism',
+        renderPlanSource: 'mechanismCompiler',
         compilerSource: 'mechanismCompiler',
         graphCompiler: summarizeCompiledMechanism(compiledMechanism),
-        stackSource: 'fabricationStackForMechanism',
+        stackSource: 'mechanismCompiler',
         stackSummary: compiledMechanism.fabrication.stackSummary,
         roleSummary: renderPlan.roleSummary,
         zSummary: renderPlan.zSummary,

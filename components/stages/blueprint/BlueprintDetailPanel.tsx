@@ -3,8 +3,9 @@ import type { MechanismSceneContract } from "../../../utils/mechanismSceneContra
 import {
   fabricationBoardCoordinateCallout,
   fabricationPartDisplayLabel,
+  fabricationRecipeSensemakingType,
+  fabricationRecipeTitle,
 } from "../../../utils/fabrication";
-import { referenceRecipeForType } from "../../../utils/mechanismReference";
 import { MECHANISM_TEMPLATE_LIBRARY } from "../../../utils/mechanismTemplates";
 
 export const BlueprintDetailPanel = ({
@@ -18,11 +19,13 @@ export const BlueprintDetailPanel = ({
   selectedRecipe: FabricationRecipe | undefined;
   selectedMechanismContract?: MechanismSceneContract;
 }) => {
-  const selectedSensemaking = selectedRecipe
-    ? MECHANISM_TEMPLATE_LIBRARY[selectedRecipe.type].classroomSensemaking
+  const selectedSensemakingType = selectedRecipe
+    ? fabricationRecipeSensemakingType(selectedRecipe)
     : undefined;
-  const recipeTitle = (recipe: FabricationRecipe) =>
-    referenceRecipeForType(recipe.type).title;
+  const selectedSensemaking = selectedSensemakingType
+    ? MECHANISM_TEMPLATE_LIBRARY[selectedSensemakingType].classroomSensemaking
+    : undefined;
+  const recipeTitle = (recipe: FabricationRecipe) => fabricationRecipeTitle(recipe);
   const boardCallout = selectedRecipe
     ? fabricationBoardCoordinateCallout(
         selectedRecipe.boardCoordinate,

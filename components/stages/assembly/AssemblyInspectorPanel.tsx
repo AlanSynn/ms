@@ -8,12 +8,13 @@ import type {
 import {
   fabricationBoardCoordinateCallout,
   fabricationPartDisplayLabel,
-  readableFabricationStackSummary,
+  fabricationRecipeSensemakingType,
+  fabricationRecipeStackSummary,
+  fabricationRecipeTitle,
 } from "../../../utils/fabrication";
 import {
   MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY,
 } from "../../../utils/mechanismTemplates";
-import { referenceRecipeForType } from "../../../utils/mechanismReference";
 import {
   classroomAssessmentFor,
   classroomCueTitleFor,
@@ -43,17 +44,21 @@ export const AssemblyInspectorPanel = ({
   assessmentKey: string;
   goStage: (stage: AppStage) => void;
 }) => {
-  const selectedSensemaking =
+  const selectedSensemakingType =
     activeAssemblyMode === "mechanism" && selectedRecipe
-      ? MECHANISM_LIBRARY[selectedRecipe.type].classroomSensemaking
+      ? fabricationRecipeSensemakingType(selectedRecipe)
+      : undefined;
+  const selectedSensemaking =
+    selectedSensemakingType
+      ? MECHANISM_LIBRARY[selectedSensemakingType].classroomSensemaking
       : undefined;
   const selectedAssessment =
-    activeAssemblyMode === "mechanism" && selectedRecipe
-      ? classroomAssessmentFor(selectedRecipe.type, assessmentKey, "assembly")
+    selectedSensemakingType
+      ? classroomAssessmentFor(selectedSensemakingType, assessmentKey, "assembly")
       : undefined;
   const selectedUseExample =
-    activeAssemblyMode === "mechanism" && selectedRecipe
-      ? classroomUseExampleFor(selectedRecipe.type)
+    selectedSensemakingType
+      ? classroomUseExampleFor(selectedSensemakingType)
       : undefined;
 
   return (
@@ -139,7 +144,7 @@ export const AssemblyInspectorPanel = ({
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="font-bold text-slate-800">
-                {referenceRecipeForType(selectedRecipe.type).title}
+                {fabricationRecipeTitle(selectedRecipe)}
               </div>
               <div className="text-sm text-slate-600">
                 Board{" "}
@@ -193,7 +198,7 @@ export const AssemblyInspectorPanel = ({
               className="mt-3 rounded-2xl bg-slate-100 p-3 text-sm font-bold text-slate-700"
               data-testid="assembly-stack-summary"
             >
-              {readableFabricationStackSummary(selectedRecipe)}
+              {fabricationRecipeStackSummary(selectedRecipe)}
             </div>
           </details>
           {selectedRecipe.warnings.length ? (

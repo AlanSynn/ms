@@ -7,7 +7,7 @@ import {
     fabricationPartDisplayLabel
 } from './fabricationContract';
 import { buildCharacterPrintLayout } from './fabricationCharacterPrintLayout';
-import { referenceRecipeForType } from './mechanismReference';
+import { fabricationRecipeTitle } from './fabricationRecipes';
 import { svgNumber } from './numberFormat';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlineBounds } from './partGeometry';
 import { sampledCamProfileScale } from './kinematics';
@@ -80,7 +80,7 @@ export const makeBlueprintSvg = (project: ProjectState, recipes: FabricationReci
             svg += `<circle cx="${svgNumber(x)}" cy="${svgNumber(y)}" r="${recipe || buildSpot ? 5 : 2}" class="${recipe || buildSpot ? 'anchor' : 'hole'}" ${buildSpot ? `data-blueprint-board-coordinate="${esc(coord)}"` : ''}/>`;
             if (recipe) {
                 const boardCallout = fabricationBoardCoordinateCallout(recipe.boardCoordinate, recipe.board);
-                const title = `${referenceRecipeForType(recipe.type).title} · ${boardCallout}`;
+                const title = `${fabricationRecipeTitle(recipe)} · ${boardCallout}`;
                 svg += `<g data-recipe-anchor="${esc(recipe.mechanismId)}" data-board-callout="${esc(boardCallout)}"><rect x="${svgNumber(Math.min(742, x + 9))}" y="${svgNumber(y - 19)}" width="132" height="24" rx="12" class="callout"/><text x="${svgNumber(Math.min(750, x + 17))}" y="${svgNumber(y - 3)}" class="body">${label(title, 22)}</text></g>`;
             }
         }

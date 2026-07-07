@@ -10,7 +10,7 @@ import {
 export type FabricationRenderKind = 'base' | 'clip' | 'linkage' | 'spacer' | 'gear' | 'guide' | 'cam' | 'rack' | 'follower';
 
 export type FabricationRenderLayer = FabricationStackLayer & {
-    source: 'fabrication-stack';
+    source: 'fabrication-stack' | 'mechanism-graph';
     stackIndex: number;
     occurrence: number;
     z: number;

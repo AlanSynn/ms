@@ -1156,7 +1156,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('stage-canvas-pane').getByTestId('assembly-guide-web-preview')).toHaveCount(0);
   await expect(page.getByTestId('stage-right-inspector').getByTestId('assembly-guide-web-preview')).toHaveCount(0);
   await expect(page.getByTestId('assembly-mechanism-three-preview')).toBeVisible();
-  await expect(page.getByTestId('assembly-mechanism-three-preview')).toHaveAttribute('data-mechanism-scene-contract-stack-source', 'fabricationStackForMechanism');
+  await expect(page.getByTestId('assembly-mechanism-three-preview')).toHaveAttribute('data-mechanism-scene-contract-stack-source', 'mechanismCompiler');
   await expect(page.getByTestId('assembly-mechanism-three-preview')).toHaveAttribute('data-mechanism-scene-contract-layer-count', /[1-9]/);
   await expect(page.getByTestId('assembly-character-context-ghost')).toHaveCount(0);
   const assemblyRig = page.getByTestId('assembly-mechanism-three-preview').getByTestId('foundry-camera-rig');
@@ -2531,7 +2531,7 @@ test('Recommendation sheet applies a distinct mechanism and blueprint recipe', a
   const assemblyScene = page.getByTestId('assembly-mechanism-three-preview');
   await expect(page.getByTestId('assembly-character-context-ghost')).toHaveCount(0);
   await expect(assemblyScene).toHaveAttribute('data-mechanism-scene-contract-mechanism-id', appliedRecommendation?.id ?? 'missing');
-  await expect(assemblyScene).toHaveAttribute('data-mechanism-scene-contract-stack-source', 'fabricationStackForMechanism');
+  await expect(assemblyScene).toHaveAttribute('data-mechanism-scene-contract-stack-source', 'mechanismCompiler');
   await expect(assemblyScene).toHaveAttribute('data-mechanism-scene-contract-layer-count', /[1-9]/);
 
   await page.goto('/');

@@ -1,8 +1,9 @@
-import type { FabricationRecipe, MechanismConfig, ProjectState } from '../types';
+import type { FabricationRecipe, MechanismConfig, PhysicalKitSettings, ProjectState } from '../types';
 import { sampleFeasibleRange, type FabricationFeasibleRange } from './fabricationReadiness';
 import { createFabricationRecipe, prefabAssemblySteps } from './fabricationRecipes';
 import { fabricationRenderPlanForMechanism, type FabricationRenderPlan } from './fabricationRenderPlan';
-import { validateMechanismPreviewReadiness } from './mechanismPreviewReadiness';
+import { assemblyStepFingerprint, type AssemblyStepFingerprint } from './fabricationAssemblyFingerprint';
+import { compileGraphFabricationRecipe, type AuthoredGraphFabricationResult } from './mechanismGraphFabricationCompiler';
 import {
     MECHANISM_GRAPH_IR_VERSION,
     mechanismGraphForMechanism,
@@ -12,20 +13,12 @@ import {
     type MechanismGraphDiagnostic,
     type MechanismGraphMotionSample
 } from './mechanismGraph';
+import { validateMechanismPreviewReadiness } from './mechanismPreviewReadiness';
 
-export type CompiledAssemblyStepFingerprint = {
-    index: number;
-    label: string;
-    role: string;
-    boardCoordinate: string;
-    zMm: number;
-    coords: string[];
-    coordRoles: string[];
-    stack: Array<{ order: number; label: string; role: string; part?: string }>;
-};
+export type CompiledAssemblyStepFingerprint = AssemblyStepFingerprint;
 
 export type MechanismCompilerSource = 'mechanismCompiler';
-export type MechanismRecipeCompilerSource = 'compileFabricationRecipe';
+export type MechanismRecipeCompilerSource = 'compileFabricationRecipe' | 'compileGraphFabricationRecipe';
 
 export type CompiledMechanism = {
     compilerSource: MechanismCompilerSource;
@@ -36,7 +29,7 @@ export type CompiledMechanism = {
     readinessErrors: string[];
     fabrication: {
         renderPlan: FabricationRenderPlan;
-        renderPlanSource: 'fabricationRenderPlanForMechanism';
+        renderPlanSource: 'compileMechanismRenderPlan';
         assemblyPlanSource: 'prefabAssemblySteps';
         recipeCompilerSource: MechanismRecipeCompilerSource;
         assemblyBoardCoordinate: string;
@@ -75,47 +68,28 @@ export type AuthoredGraphCompilation = {
     compilerSource: MechanismCompilerSource;
     graph: MechanismGraph;
     graphValidationDiagnostics: MechanismGraphDiagnostic[];
-    fabrication: {
-        recipeCompilerSource: MechanismRecipeCompilerSource;
-        buildable: false;
-        blocker: 'Recipe missing';
-    };
+    fabrication: AuthoredGraphFabricationResult;
     blockers: string[];
 };
-
-const assemblyStepFingerprint = (step: FabricationRecipe['assemblySteps'][number]): CompiledAssemblyStepFingerprint => ({
-    index: step.index,
-    label: step.label,
-    role: step.role,
-    boardCoordinate: step.boardCoordinate,
-    zMm: step.zMm,
-    coords: [...(step.coords ?? [])],
-    coordRoles: [...(step.coordRoles ?? [])],
-    stack: (step.stack ?? []).map(item => ({
-        order: item.order,
-        label: item.label,
-        role: item.role,
-        part: item.part
-    }))
-});
 
 export const compileFabricationRecipe = (project: ProjectState, mechanism: MechanismConfig): FabricationRecipe =>
     createFabricationRecipe(project, mechanism);
 
-export const compileAuthoredMechanismGraph = (graph: MechanismGraph): AuthoredGraphCompilation => {
+export const compileMechanismRenderPlan = (mechanism: MechanismConfig): FabricationRenderPlan =>
+    fabricationRenderPlanForMechanism(mechanism);
+
+export const compileAuthoredMechanismGraph = (graph: MechanismGraph, kit?: PhysicalKitSettings): AuthoredGraphCompilation => {
     const validation = validateMechanismGraph(graph);
+    const fabrication = compileGraphFabricationRecipe(graph, kit);
+    const fabricationBlockers = fabrication.buildable ? [] : [fabrication.blocker ?? 'Recipe missing'];
     return {
         compilerSource: 'mechanismCompiler',
         graph,
         graphValidationDiagnostics: validation.diagnostics,
-        fabrication: {
-            recipeCompilerSource: 'compileFabricationRecipe',
-            buildable: false,
-            blocker: 'Recipe missing'
-        },
+        fabrication,
         blockers: [
             ...validation.diagnostics.filter(diagnostic => diagnostic.severity === 'error').map(diagnostic => diagnostic.message),
-            'Recipe missing'
+            ...fabricationBlockers
         ]
     };
 };
@@ -127,7 +101,7 @@ export const compileMechanism = (
 ): CompiledMechanism => {
     const graph = mechanismGraphForMechanism(mechanism);
     const graphValidation = validateMechanismGraph(graph);
-    const renderPlan = fabricationRenderPlanForMechanism(mechanism);
+    const renderPlan = compileMechanismRenderPlan(mechanism);
     const assemblyBoardCoordinate = mechanism.fabricationMetadata?.boardCoordinate ?? 'H8';
     const assemblySteps = prefabAssemblySteps(mechanism, assemblyBoardCoordinate);
     return {
@@ -139,7 +113,7 @@ export const compileMechanism = (
         readinessErrors: validateMechanismPreviewReadiness(mechanism),
         fabrication: {
             renderPlan,
-            renderPlanSource: 'fabricationRenderPlanForMechanism',
+            renderPlanSource: 'compileMechanismRenderPlan',
             assemblyPlanSource: 'prefabAssemblySteps',
             recipeCompilerSource: 'compileFabricationRecipe',
             assemblyBoardCoordinate,

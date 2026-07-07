@@ -8,11 +8,11 @@ import {
   type CharacterAssemblyPlan,
   type CharacterAssemblyStep,
 } from "../../../utils/assemblyPlayback";
-import { fabricationBoardCoordinateCallout } from "../../../utils/fabrication";
 import {
-  MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY,
-} from "../../../utils/mechanismTemplates";
-import { referenceRecipeForType } from "../../../utils/mechanismReference";
+  fabricationBoardCoordinateCallout,
+  fabricationRecipeClassroomCue,
+  fabricationRecipeTitle,
+} from "../../../utils/fabrication";
 import { ContextHelp } from "../../ui/ContextHelp";
 
 type AssemblyMode = "mechanism" | "character";
@@ -147,17 +147,14 @@ export const AssemblyControlPanel = ({
               onClick={() => setSelectedRecipeId(recipe.mechanismId)}
             >
               <div className="font-bold text-slate-800">
-                {referenceRecipeForType(recipe.type).title}
+                {fabricationRecipeTitle(recipe)}
               </div>
               <div className="text-sm text-slate-600">
                 Board {fabricationBoardCoordinateCallout(recipe.boardCoordinate, recipe.board)}
               </div>
               <div className="mt-2">
                 <span className="blueprint-pill">
-                  {
-                    MECHANISM_LIBRARY[recipe.type].classroomSensemaking
-                      .directTranslation
-                  }
+                  {fabricationRecipeClassroomCue(recipe)}
                 </span>
               </div>
             </button>

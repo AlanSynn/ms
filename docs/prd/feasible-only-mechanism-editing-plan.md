@@ -47,7 +47,7 @@ Inference:
 - Do not replace current classroom templates before parity tests exist.
 - Do not add a new renderer or physics engine.
 - Do not break existing saved `ProjectState` files.
-- Do not make arbitrary graphs appear buildable before a compiler can emit parts, board holes, stacks, and assembly steps.
+- Do not make arbitrary graphs appear buildable unless the compiler emits parts, board holes, stacks, and assembly steps from graph data.
 
 ## Target architecture
 
@@ -202,7 +202,7 @@ Only after those pass should the compiler take on:
 5. `gear_linkage`
 6. `planetary_gear`
 7. `yoke`, `quick-return`, `rack-pinion`, `5bar`, `6bar`
-8. free graph authoring.
+8. free graph authoring beyond recognized graph parts.
 
 ## Feasible-only edit gate
 
@@ -302,7 +302,10 @@ Current implementation checkpoint:
 - `utils/mechanismGraph.ts` owns derived, non-persisted graph IR/adapters/validation for every current `MechanismType`.
 - `4bar` and `gear` remain the first compiler targets; the buildable classroom set also has graph adapters for parity and diagnostics.
 - `utils/mechanismCompiler.ts` is the canonical compiler facade: it emits `CompiledMechanism`, `compileFabricationRecipe`, graph validation diagnostics, closed-form oracle samples, feasible ranges, render-plan data, and assembly-step fingerprints consumed by Snapshot, SceneContract, Assembly, and Blueprint parity tests.
-- Advanced/free graph drafts now enter the same non-persisted IR through `mechanismGraphFromDraft()` and stop at a compiler-owned `Recipe missing` blocker until a recipe compiler recognizes the graph.
+- Advanced/free graph drafts now enter the same non-persisted IR through `mechanismGraphFromDraft()`.
+- Recognized graph-authored parts now lower through `compileGraphFabricationRecipe` into graph-owned `FabricationRecipe` data with `type: 'graph'`, `source: 'mechanism-graph'` render layers derived from the assembly stack, required parts, board holes, z-order stacks, assembly steps, and deterministic fingerprints.
+- Invalid graphs, drafts with no recognizable fabricated moving part, or fabricated graph nodes/constraint endpoints without finite board placements fail with compiler-owned blockers (`Graph invalid` or `Recipe missing`) instead of falling back to a default legacy `MechanismType`.
+- Authored graph compilation accepts the caller's physical kit settings so 15×15 classroom boards and smaller teacher/diagnostic boards produce the same board-placement blockers that Blueprint and Assembly will use.
 - Hidden/not-yet-buildable families compile as diagnostic graphs only and cannot be exported as buildable classroom mechanisms.
 
 ### Phase 0 — compiler IR behind adapters
@@ -382,6 +385,7 @@ Deliver:
 Gate:
 
 - free graph cannot enter classroom export unless compiled fabrication plan is complete.
+- graph-owned recipes must not call stage-local fabrication helpers or masquerade as `MechanismType`.
 
 ### Phase 6 — delete legacy authority
 
@@ -401,7 +405,9 @@ Contract tests:
 - graph compiler emits the same fabrication stack and assembly steps for `4bar` and `gear`.
 - unsafe edit is rejected by Foundry, Design, recommendation filtering, Blueprint, and Assembly.
 - partial motion is an error in fabrication-ready mode.
-- unsupported/free graphs remain non-exportable until recipe compile succeeds.
+- unsupported/free graphs remain non-exportable until graph-owned recipe compile succeeds.
+- recognized free graphs emit graph-owned required parts, render layers, assembly steps, and fingerprints without converting to a legacy default mechanism.
+- Foundry/Design/Assembly Three renderers consume compiler render plans and do not call `fabricationRenderPlanForMechanism` directly.
 - graph hash memoization changes only when graph/kit/path inputs change.
 
 Browser smoke:

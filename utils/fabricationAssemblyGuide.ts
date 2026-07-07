@@ -1,7 +1,7 @@
 import type { FabricationRecipe, ProjectState } from '../types';
 import { fabricationPartDisplayLabel, FABRICATION_SPACER_SPEC } from './fabricationContract';
 import { makeSimplePdf } from './simplePdf';
-import { mechanismTypeLabel, readableStepCoordinateCallout, recipeBoardCallout, recipeTargetCallout } from './fabricationRecipes';
+import { fabricationRecipeTitle, readableStepCoordinateCallout, recipeBoardCallout, recipeTargetCallout } from './fabricationRecipes';
 import {
     STACK_COLORS,
     fabricationBaseLayer,
@@ -101,7 +101,7 @@ ${shapeFor(item, x, y)}
 	<g filter="url(#guide-shadow)">${items}</g>
 <line x1="92" y1="458" x2="438" y2="130" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 10"/>
 <text x="70" y="486" class="guide-muted">Board-side washers/spacers keep moving parts clear of the board.</text>
-${recipe ? `<text x="40" y="505" class="guide-muted">Recipe: ${esc(recipe.mechanismId)} · ${esc(mechanismTypeLabel(recipe.type))} · anchor ${esc(recipeBoardCallout(recipe))}</text>` : ''}
+${recipe ? `<text x="40" y="505" class="guide-muted">Recipe: ${esc(recipe.mechanismId)} · ${esc(fabricationRecipeTitle(recipe))} · anchor ${esc(recipeBoardCallout(recipe))}</text>` : ''}
 </svg>`;
 };
 
@@ -113,7 +113,7 @@ export const makeAssemblyGuideHtml = (project: ProjectState, recipes: Fabricatio
     const recipeSections = recipes.map(recipe => {
         const target = recipeTargetCallout(recipe);
         return `<section>
-<h2>${esc(recipe.mechanismId)} · ${esc(mechanismTypeLabel(recipe.type))}</h2>
+<h2>${esc(recipe.mechanismId)} · ${esc(fabricationRecipeTitle(recipe))}</h2>
 <p><strong>Board:</strong> ${esc(recipeBoardCallout(recipe))}</p>
 ${target ? `<p class="target-chip"><strong>Target:</strong> ${esc(target)}</p>` : ''}
 ${recipe.warnings.length ? `<p><strong>Fix:</strong> ${recipe.warnings.map(esc).join('; ')}</p>` : '<p><strong>OK</strong></p>'}
@@ -150,7 +150,7 @@ export const makeAssemblyGuidePdf = (project: ProjectState, recipes: Fabrication
         `Profile ${project.settings.physicalKit.profileKey} / ${project.settings.physicalKit.gridPitchMm}mm grid`,
         ...warnings.map(warning => `Warning: ${warning}`),
         ...recipes.flatMap(recipe => [
-            `${recipe.mechanismId} / ${mechanismTypeLabel(recipe.type)} / anchor ${recipeBoardCallout(recipe)}`,
+            `${recipe.mechanismId} / ${fabricationRecipeTitle(recipe)} / anchor ${recipeBoardCallout(recipe)}`,
             `Target: ${recipeTargetCallout(recipe) || 'none'}`,
             `Required parts: ${recipe.requiredParts.map(part => `${fabricationPartDisplayLabel(part.name)} x ${part.quantity}`).join(', ')}`,
             ...recipe.assemblySteps.map(step => `Kit step ${step.index}: ${fabricationPartDisplayLabel(step.label)} / ${readableStepCoordinateCallout(step)} / Z ${step.zMm.toFixed(1)}mm`)

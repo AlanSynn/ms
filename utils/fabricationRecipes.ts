@@ -1,4 +1,4 @@
-import type { FabricationRecipe, MechanismConfig, ProjectState } from '../types';
+import type { FabricationRecipe, FabricationRecipeType, MechanismConfig, MechanismType, ProjectState } from '../types';
 import { boardToScene, sceneToBoardRaw, SCENE_PX_PER_MM } from './coordinates';
 import { FABRICATION_SPACER_SPEC, fabricationBoardCoordinateCallout, fabricationGearSpecForPitchRadius, fabricationPartDisplayLabel } from './fabricationContract';
 import { fabricationRenderPlanForMechanism } from './fabricationRenderPlan';
@@ -17,8 +17,52 @@ export const recipeTargetCallout = (recipe: Pick<FabricationRecipe, 'targetPartN
     recipe.targetAnchorJointId
 ].filter(Boolean).join(' · ');
 
-export const mechanismTypeLabel = (type: MechanismConfig['type']) =>
-    referenceRecipeForType(type).title || type.replace(/[-_]/g, ' ');
+const titleizeGraphFamily = (familyId: string | undefined) =>
+    (familyId ?? 'graph mechanism')
+        .replace(/[-_]+/g, ' ')
+        .replace(/\b\w/g, char => char.toUpperCase());
+
+export const mechanismTypeLabel = (type: FabricationRecipeType, graphFamilyId?: string) =>
+    type === 'graph'
+        ? titleizeGraphFamily(graphFamilyId)
+        : referenceRecipeForType(type).title || type.replace(/[-_]/g, ' ');
+
+export const fabricationRecipeTitle = (recipe: FabricationRecipe) =>
+    mechanismTypeLabel(recipe.type, recipe.graphFamilyId);
+
+const LEGACY_RECIPE_TYPES = new Set<MechanismType>([
+    'crank',
+    '4bar',
+    'piston',
+    'yoke',
+    'quick-return',
+    '5bar',
+    '6bar',
+    'cam',
+    'rack-pinion',
+    'gear',
+    'gear_linkage',
+    'planetary_gear'
+]);
+
+export const fabricationRecipeSensemakingType = (recipe: FabricationRecipe): MechanismType | undefined =>
+    LEGACY_RECIPE_TYPES.has(recipe.type as MechanismType) ? recipe.type as MechanismType : undefined;
+
+export const fabricationRecipeClassroomCue = (recipe: FabricationRecipe) =>
+    recipe.assemblySteps.find(step => step.check)?.check
+        ?? recipe.steps.find(step => !step.startsWith('Parts:') && !step.startsWith('Stack:'))
+        ?? `${fabricationRecipeTitle(recipe)} module`;
+
+export const fabricationRecipeStackSummary = (recipe: FabricationRecipe) => {
+    const labels = recipe.assemblySteps
+        .flatMap(step => step.stack ?? [])
+        .filter(item => item.part || ['moving-part', 'spacer', 'paper-fastener', 'clip'].includes(item.role))
+        .map(item => fabricationPartDisplayLabel(item.label));
+    const uniqueLabels = [...new Set(labels)];
+    return uniqueLabels.length
+        ? uniqueLabels.join(' → ')
+        : recipe.requiredParts.map(part => fabricationPartDisplayLabel(part.name)).join(' → ');
+};
 
 export const readableStepCoordinateCallout = (step: FabricationRecipe['assemblySteps'][number]) =>
     referenceStepCoordinateCallout(step).replace(/\b([A-O](?:[1-9]|1[0-5]))\b/g, coord => fabricationBoardCoordinateCallout(coord));

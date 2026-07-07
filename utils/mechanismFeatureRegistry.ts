@@ -1,7 +1,8 @@
 import type { JointState, MechanismConfig, MechanismType } from '../types';
 import type { FabricationRenderPlan, FabricationStackLayer } from './fabrication';
-import { fabricationRenderPlanForMechanism, fabricationStackForMechanism, sampleFeasibleRange } from './fabrication';
+import { fabricationStackForMechanism, sampleFeasibleRange } from './fabrication';
 import { calculateLinkage } from './kinematics';
+import { compileMechanismRenderPlan } from './mechanismCompiler';
 import { ALL_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY } from './mechanismTemplates';
 import { createDefaultMechanism, mechanismRequiredParts } from './project';
 
@@ -146,7 +147,7 @@ const validateFeature = (type: MechanismType, mechanism: MechanismConfig): Mecha
         return issues;
     }
 
-    fabricationRenderPlanForMechanism(mechanism).validationErrors.forEach(message => {
+    compileMechanismRenderPlan(mechanism).validationErrors.forEach(message => {
         issues.push({ severity: 'error', message });
     });
 
@@ -166,7 +167,7 @@ const buildFeature = (type: MechanismType): MechanismFeatureContract => {
         sampleKinematics: calculateLinkage,
         sampleFeasibleRange,
         fabricationStack: fabricationStackForMechanism,
-        fabricationPlan: fabricationRenderPlanForMechanism,
+        fabricationPlan: compileMechanismRenderPlan,
         interactionPolicy: () => ({
             role: roleForType(type),
             editableParameters: editableParametersForType(type),

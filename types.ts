@@ -1,4 +1,5 @@
 export type MechanismType = 'crank' | '4bar' | 'piston' | 'yoke' | 'quick-return' | '5bar' | '6bar' | 'cam' | 'rack-pinion' | 'gear' | 'gear_linkage' | 'planetary_gear';
+export type FabricationRecipeType = MechanismType | 'graph';
 export type AppStage = 'character' | 'path' | 'foundry' | 'design' | 'blueprint' | 'assembly' | 'options';
 
 export interface Point {
@@ -254,7 +255,10 @@ export interface AssemblyStepStackItem {
 
 export interface FabricationRecipe {
     mechanismId: string;
-    type: MechanismType;
+    type: FabricationRecipeType;
+    graphFamilyId?: string;
+    graphSource?: string;
+    compilerSource?: string;
     targetPartId?: string;
     targetSceneObjectId?: string;
     targetPathId?: string;

@@ -1305,7 +1305,7 @@ previewReadyTypes.forEach(type => {
   assert(graph.constraints.some(constraint => constraint.role === 'board-snap'), `${type} graph records pegboard snap constraints`);
   assert.deepEqual(compiled.readinessErrors, validateMechanismPreviewReadiness(mechanism), `${type} compiler output preserves preview-readiness validation`);
   assert.deepEqual(compiled.fabrication.renderPlan, renderPlan, `${type} compiler output owns the full fabrication render plan for downstream scene consumers`);
-  assert.equal(compiled.fabrication.renderPlanSource, 'fabricationRenderPlanForMechanism', `${type} compiler output consumes the canonical fabrication render plan`);
+  assert.equal(compiled.fabrication.renderPlanSource, 'compileMechanismRenderPlan', `${type} compiler output consumes the compiler render plan facade`);
   assert.equal(compiled.fabrication.assemblyPlanSource, 'prefabAssemblySteps', `${type} compiler output consumes canonical assembly steps`);
   assert.equal(compiled.fabrication.assemblyBoardCoordinate, assemblyBoardCoordinate, `${type} compiler output preserves assembly board coordinate`);
   assert.equal(compiled.fabrication.assemblyStepCount, assemblySteps.length, `${type} compiler output preserves assembly step count`);
@@ -1370,8 +1370,8 @@ previewReadyTypes.forEach(type => {
     nodes: [
       { id: 'board-a', label: 'Board pivot A', role: 'board-anchor', position: { x: 0, y: 0 } },
       { id: 'board-b', label: 'Board pivot B', role: 'board-anchor', position: { x: 80, y: 0 } },
-      { id: 'link-a', label: 'Student link', role: 'link', value: 80 },
-      { id: 'output', label: 'Output point', role: 'output-point' }
+      { id: 'link-a', label: 'Student link', role: 'link', position: { x: 40, y: 0 }, value: 80 },
+      { id: 'output', label: 'Output point', role: 'output-point', position: { x: 80, y: 0 } }
     ],
     constraints: [
       { id: 'board-a-fixed', label: 'Pivot A stays fixed', role: 'fixed-to-board', nodes: ['board-a'] },
@@ -1383,13 +1383,158 @@ previewReadyTypes.forEach(type => {
   });
   const validation = validateMechanismGraph(authoredGraph);
   const compilation = compileAuthoredMechanismGraph(authoredGraph);
+  const repeatCompilation = compileAuthoredMechanismGraph(authoredGraph);
   assert.equal(authoredGraph.source, 'free-graph-authoring', 'free graph authoring enters the same non-persisted graph IR without a MechanismType switch');
   assert.equal(authoredGraph.solver, 'constraint-graph', 'free graph authoring uses the graph solver boundary instead of pretending to be legacy closed-form');
   assert.equal(authoredGraph.legacyType, undefined, 'free graph authoring is not forced through the closed MechanismType legacy alias');
   assert.equal(validation.valid, true, 'valid free graph authoring drafts pass structural graph validation');
   assert.equal(compilation.compilerSource, 'mechanismCompiler', 'free graph authoring compiles through the compiler facade');
-  assert.equal(compilation.fabrication.buildable, false, 'free graph authoring cannot export until a recipe compiler recognizes the graph');
-  assert(compilation.blockers.includes('Recipe missing'), 'free graph authoring receives a clear fabrication compiler blocker instead of a fake recipe');
+  assert.equal(compilation.fabrication.buildable, true, 'fabrication-ready free graph authoring emits a buildable graph-owned recipe');
+  assert.deepEqual(compilation.blockers, [], 'fabrication-ready free graph authoring has no legacy recipe blocker');
+  assert.equal(compilation.fabrication.recipe?.mechanismId, authoredGraph.mechanismId, 'graph-owned recipe keeps the authored graph mechanism id');
+  assert.equal(compilation.fabrication.recipe?.type, 'graph', 'graph-owned recipe does not masquerade as a legacy MechanismType');
+  assert.equal(compilation.fabrication.recipe?.graphFamilyId, 'teacher-linkage-demo', 'graph-owned recipe preserves the authored graph family id');
+  assert.equal(compilation.fabrication.recipe?.compilerSource, 'mechanismCompiler', 'graph-owned recipe records compiler ownership');
+  assert.equal(compilation.fabrication.recipeCompilerSource, 'compileGraphFabricationRecipe', 'graph-owned recipe records the graph recipe compiler instead of the legacy recipe path');
+  assert((compilation.fabrication.recipe?.requiredParts.length ?? 0) > 0, 'graph-owned recipe emits required fabrication parts');
+  assert((compilation.fabrication.recipe?.assemblySteps.length ?? 0) > 0, 'graph-owned recipe emits assembly steps');
+  assert(compilation.fabrication.recipe?.requiredParts.some(part => part.category === 'linkage'), 'explicit graph link nodes become linkage part requirements');
+  assert(!compilation.fabrication.recipe?.assemblySteps.some(step => step.label === 'Add Link length stays fixed'), 'explicit graph link nodes suppress duplicate synthesized distance-link assembly steps');
+  const authoredStackPartCounts = new Map<string, number>();
+  compilation.fabrication.recipe?.assemblySteps.forEach(step => (step.stack ?? []).forEach(item => {
+    if (item.part) authoredStackPartCounts.set(item.part, (authoredStackPartCounts.get(item.part) ?? 0) + 1);
+  }));
+  assert(compilation.fabrication.recipe?.requiredParts.every(part => part.part), 'graph required parts are derived only from real fabrication stack part ids');
+  assert(!compilation.fabrication.recipe?.requiredParts.some(part => part.name === 'Open tabs behind board'), 'graph required parts do not leak assembly operations into cut lists');
+  compilation.fabrication.recipe?.requiredParts.filter(part => part.part).forEach(part => {
+    assert.equal(part.quantity, authoredStackPartCounts.get(part.part!) ?? 0, `graph required part ${part.part} matches emitted assembly stack count`);
+  });
+  compilation.fabrication.recipe?.assemblySteps.forEach(step => {
+    assert.equal((step.coords ?? []).length, (step.coordRoles ?? []).length, 'graph-owned assembly step keeps coordinate roles aligned');
+    assert.deepEqual((step.stack ?? []).map(item => item.order), Array.from({ length: step.stack?.length ?? 0 }, (_, index) => index + 1), 'graph-owned assembly step stack order is contiguous');
+  });
+  assert(compilation.fabrication.renderPlan?.layers.some(layer => layer.source === 'mechanism-graph'), 'graph-owned render plan layers are sourced from the graph compiler');
+  assert(compilation.fabrication.renderPlan?.layers.some(layer => layer.role === 'spacer'), 'graph-owned render plan derives spacer layers from the assembly stack');
+  assert(compilation.fabrication.renderPlan?.layers.some(layer => layer.role === 'clip'), 'graph-owned render plan derives fastener/clip layers from the assembly stack');
+  assert(compilation.fabrication.renderPlan?.layers.some(layer => layer.label === 'Student link' && layer.role === 'linkage'), 'explicit graph link nodes become render layers');
+  assert.deepEqual(compilation.fabrication.assemblyStepFingerprints, compilation.fabrication.recipe?.assemblySteps.map(step => ({
+    index: step.index,
+    label: step.label,
+    role: step.role,
+    boardCoordinate: step.boardCoordinate,
+    zMm: step.zMm,
+    coords: step.coords ?? [],
+    coordRoles: step.coordRoles ?? [],
+    stack: (step.stack ?? []).map(item => ({ order: item.order, label: item.label, role: item.role, part: item.part }))
+  })), 'graph-owned compiler fingerprints assembly labels, coordinates, z order, and stack parts');
+  assert.deepEqual(compilation, repeatCompilation, 'graph-owned authored compilation is deterministic and pure');
+}
+{
+  const graphWithMissingFabricatedNodePosition = mechanismGraphFromDraft({
+    id: 'teacher-missing-fabricated-position',
+    familyId: 'teacher-linkage-demo',
+    nodes: [
+      { id: 'board-a', label: 'Board pivot A', role: 'board-anchor', position: { x: 0, y: 0 } },
+      { id: 'student-link', label: 'Student link', role: 'link', value: 80 }
+    ],
+    constraints: [
+      { id: 'board-a-fixed', label: 'Pivot A stays fixed', role: 'fixed-to-board', nodes: ['board-a'] },
+      { id: 'board-a-snap', label: 'Pivot A fits a hole', role: 'board-snap', nodes: ['board-a'] }
+    ]
+  });
+  const compilation = compileAuthoredMechanismGraph(graphWithMissingFabricatedNodePosition);
+  assert.equal(compilation.fabrication.buildable, false, 'graph-owned compiler blocks fabricated graph nodes without positions');
+  assert(compilation.blockers.includes('Recipe missing'), 'missing fabricated graph node positions surface as recipe blockers');
+}
+{
+  const graphWithMissingDistanceEndpoint = mechanismGraphFromDraft({
+    id: 'teacher-missing-distance-endpoint',
+    familyId: 'teacher-linkage-demo',
+    nodes: [
+      { id: 'board-a', label: 'Board pivot A', role: 'board-anchor', position: { x: 0, y: 0 } },
+      { id: 'output', label: 'Output point', role: 'output-point' }
+    ],
+    constraints: [
+      { id: 'board-a-fixed', label: 'Pivot A stays fixed', role: 'fixed-to-board', nodes: ['board-a'] },
+      { id: 'board-a-snap', label: 'Pivot A fits a hole', role: 'board-snap', nodes: ['board-a'] },
+      { id: 'link-length', label: 'Link length stays fixed', role: 'distance', nodes: ['board-a', 'output'], value: 80 }
+    ]
+  });
+  const compilation = compileAuthoredMechanismGraph(graphWithMissingDistanceEndpoint);
+  assert.equal(compilation.fabrication.buildable, false, 'graph-owned compiler blocks fabricated constraints whose endpoints have no finite board placement');
+  assert(compilation.blockers.includes('Recipe missing'), 'missing fabricated constraint endpoint positions surface as recipe blockers');
+}
+{
+  const explicitPartsGraph = mechanismGraphFromDraft({
+    id: 'teacher-explicit-parts',
+    familyId: 'teacher-explicit-parts',
+    nodes: [
+      { id: 'board-a', label: 'Board pivot A', role: 'board-anchor', position: { x: 0, y: 0 } },
+      { id: 'student-link', label: 'Student link', role: 'link', position: { x: 40, y: 0 }, value: 80 },
+      { id: 'rigid-rocker', label: 'Rigid rocker', role: 'rigid-part', position: { x: 80, y: 0 }, value: 60 }
+    ],
+    constraints: [
+      { id: 'board-a-fixed', label: 'Pivot A stays fixed', role: 'fixed-to-board', nodes: ['board-a'] },
+      { id: 'board-a-snap', label: 'Pivot A fits a hole', role: 'board-snap', nodes: ['board-a'] }
+    ]
+  });
+  const compilation = compileAuthoredMechanismGraph(explicitPartsGraph);
+  assert.equal(compilation.fabrication.buildable, true, 'explicit link and rigid-part graph nodes produce a buildable graph recipe');
+  assert(compilation.fabrication.recipe?.requiredParts.some(part => part.category === 'linkage'), 'explicit link and rigid-part graph nodes become fabrication part requirements');
+  assert(compilation.fabrication.recipe?.assemblySteps.some(step => step.label === 'Add Student link'), 'explicit link graph node becomes an assembly part step');
+  assert(compilation.fabrication.recipe?.assemblySteps.some(step => step.label === 'Add Rigid rocker'), 'explicit rigid-part graph node becomes an assembly part step');
+  assert(compilation.fabrication.renderPlan?.layers.some(layer => layer.label === 'Student link' && layer.role === 'linkage'), 'explicit link graph node becomes a render layer');
+  assert(compilation.fabrication.renderPlan?.layers.some(layer => layer.label === 'Rigid rocker' && layer.role === 'linkage'), 'explicit rigid-part graph node becomes a render layer');
+  assert.equal(compilation.fabrication.recipe?.requiredParts.find(part => part.part === 'linkages:linkage-2-cell')?.quantity, 2, 'duplicate explicit graph link specs accumulate required part quantity');
+  assert.equal(compilation.fabrication.recipe?.requiredParts.find(part => part.part === 'spacers:s10')?.quantity, 2, 'explicit graph part stacks accumulate matching spacer quantity');
+}
+{
+  const offGridGraph = mechanismGraphFromDraft({
+    id: 'teacher-off-grid-graph',
+    familyId: 'teacher-off-grid-graph',
+    nodes: [
+      { id: 'board-a', label: 'Board pivot A', role: 'board-anchor', position: { x: 10, y: 0 } },
+      { id: 'student-link', label: 'Student link', role: 'link', position: { x: 40, y: 0 }, value: 80 }
+    ],
+    constraints: [
+      { id: 'board-a-fixed', label: 'Pivot A stays fixed', role: 'fixed-to-board', nodes: ['board-a'] },
+      { id: 'board-a-snap', label: 'Pivot A fits a hole', role: 'board-snap', nodes: ['board-a'] }
+    ]
+  });
+  const compilation = compileAuthoredMechanismGraph(offGridGraph);
+  assert.equal(compilation.fabrication.buildable, false, 'graph-owned compiler blocks in-board points that are not snapped to a physical board hole');
+  assert(compilation.blockers.includes('Recipe missing'), 'off-grid graph placement surfaces as a recipe blocker instead of silently rounding to a hole');
+}
+{
+  const edgeKitGraph = mechanismGraphFromDraft({
+    id: 'teacher-kit-settings',
+    familyId: 'teacher-kit-settings',
+    nodes: [
+      { id: 'board-edge', label: 'Board edge pivot', role: 'board-anchor', position: { x: 240, y: 0 } },
+      { id: 'student-link', label: 'Student link', role: 'link', position: { x: 200, y: 0 }, value: 80 }
+    ],
+    constraints: [
+      { id: 'board-edge-fixed', label: 'Edge pivot stays fixed', role: 'fixed-to-board', nodes: ['board-edge'] },
+      { id: 'board-edge-snap', label: 'Edge pivot fits a hole', role: 'board-snap', nodes: ['board-edge'] }
+    ]
+  });
+  assert.equal(compileAuthoredMechanismGraph(edgeKitGraph).fabrication.buildable, true, 'default 15x15 kit accepts the edge graph placement');
+  assert.equal(
+    compileAuthoredMechanismGraph(edgeKitGraph, physicalKitPreset('letter-12x12-2cm')).fabrication.buildable,
+    false,
+    'authored graph compiler honors caller-provided kit settings for board placement'
+  );
+}
+{
+  const recipeMissingGraph = mechanismGraphFromDraft({
+    id: 'teacher-empty-graph',
+    familyId: 'teacher-empty-graph',
+    nodes: [{ id: 'board-a', label: 'Board pivot A', role: 'board-anchor', position: { x: 0, y: 0 } }],
+    constraints: [{ id: 'board-a-fixed', label: 'Pivot A stays fixed', role: 'fixed-to-board', nodes: ['board-a'] }]
+  });
+  const compilation = compileAuthoredMechanismGraph(recipeMissingGraph);
+  assert.equal(compilation.fabrication.buildable, false, 'graph-owned compiler refuses authored graphs with no recognizable fabrication parts');
+  assert(compilation.blockers.includes('Recipe missing'), 'graph-owned compiler reports a recipe blocker instead of falling back to legacy defaults');
 }
 {
   const mechanism = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism('4bar', 'custom-compile-inputs')));
@@ -2306,7 +2451,7 @@ assert.deepEqual(
 });
 assert.deepEqual(
   staticImportModules(fabricationBlueprintSvgText),
-  ['../types', './coordinates', './fabricationCharacterPrintLayout', './fabricationContract', './kinematics', './mechanismReference', './numberFormat', './partGeometry'].sort(),
+  ['../types', './coordinates', './fabricationCharacterPrintLayout', './fabricationContract', './fabricationRecipes', './kinematics', './numberFormat', './partGeometry'].sort(),
   'fabricationBlueprintSvg owns deterministic Blueprint SVG rendering with an exact focused import set'
 );
 [
@@ -3107,6 +3252,7 @@ const assemblySceneFrameComponentText = readFileSync(join(process.cwd(), 'compon
 const assemblySceneFrameText = readFileSync(join(process.cwd(), 'utils', 'assemblySceneFrame.ts'), 'utf8');
 const mechanismSceneContractText = readFileSync(join(process.cwd(), 'utils', 'mechanismSceneContract.ts'), 'utf8');
 const mechanismCompilerText = readFileSync(join(process.cwd(), 'utils', 'mechanismCompiler.ts'), 'utf8');
+const mechanismGraphFabricationCompilerText = readFileSync(join(process.cwd(), 'utils', 'mechanismGraphFabricationCompiler.ts'), 'utf8');
 const assemblyWorkbenchText = [assemblySceneFrameComponentText, assemblySceneFrameText, mechanismSceneContractText].join('\n');
 const assemblyGeometryText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'assemblyGeometry.ts'), 'utf8');
 const assemblyGuideText = readFileSync(join(process.cwd(), 'components', 'stages', 'assembly', 'AssemblyGuide.tsx'), 'utf8');
@@ -3196,6 +3342,11 @@ const foundryCanvasChromeText = readFileSync(join(process.cwd(), 'components', '
 const foundryOverlayLayerText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'FoundryOverlayLayer.tsx'), 'utf8');
 const foundryWorkflowPanelText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'FoundryWorkflowPanel.tsx'), 'utf8');
 const foundryInspectorPanelText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'FoundryInspectorPanel.tsx'), 'utf8');
+assert.deepEqual(
+  staticImportModules(mechanismGraphFabricationCompilerText),
+  ['../types', './coordinates', './fabricationAssemblyFingerprint', './fabricationContract', './fabricationReadiness', './fabricationRenderPlan', './fabricationStackModel', './mechanismGraph'].sort(),
+  'mechanismGraphFabricationCompiler owns graph-to-fabrication lowering with a focused import set'
+);
 const foundryStageText = `${mechanismFoundryText}
 ${foundryCanvasPaneText}
 ${foundryCanvasChromeText}
@@ -3428,6 +3579,8 @@ assert(foundryOverlayLayerText.includes('data-handle-contract="move-anchor-plus-
 assert(foundryWorkflowPanelText.includes('<MechanismLinkagePreview') && mechanismLinkagePreviewText.includes('export const MechanismLinkagePreview') && mechanismLinkagePreviewText.includes('mechanismLinkagePreviewHelpers') && mechanismLinkagePreviewHelpersText.includes('mechanismReferenceTopologySummary') && mechanismLinkagePreviewHelpersText.includes('camProfilePathD') && foundryPreviewGeometryText.includes('export const fittedGearTrainCenters'), 'Foundry workflow delegates 2D Foundry SVG preview to extracted foundry renderer/helper seams');
 assert(foundryWorkflowPanelText.includes('ghostSimulations') && foundryWorkflowPanelText.includes('foundry-mini-ghost'), 'Foundry gallery cards show moving front-view mechanism poses instead of a single static icon');
 assert(threeFoundryPreviewText.includes('foundryRenderedInventory(mechanism.type)') && foundryRenderInventoryText.includes('export const foundryRenderedInventory') && foundryRenderInventoryText.includes('referenceRequiredPartsHoleCount'), 'Foundry Three renderer delegates rendered inventory counts to a pure helper');
+assert(foundry3dText.includes('compileMechanismRenderPlan') && !foundry3dText.includes('fabricationRenderPlanForMechanism'), 'Foundry/Design/Assembly Three renderers consume mechanism compiler render plans instead of calling fabrication render helpers directly');
+assert(threePreviewText.includes('compileMechanismRenderPlan') && !threePreviewText.includes('fabricationRenderPlanForMechanism'), 'integrated puppet preview consumes mechanism compiler render plans instead of a private fabrication render path');
 assert(threeFoundryPreviewText.includes('<FoundryPreviewStateProbe') && foundryPreviewStateProbeText.includes('data-testid="foundry-camera-rig"') && foundryPreviewStateProbeText.includes('data-three-animation-commit-ms'), 'Foundry Three renderer delegates browser telemetry to a probe seam without changing the camera-rig data contract');
 assert(threeFoundryPreviewText.includes('createFoundryThreePrimitiveFactory') && threeFoundryPreviewText.includes('disposeFoundryThreeObject') && foundryThreePrimitivesText.includes('export const createFoundryThreePrimitiveFactory') && foundryThreePrimitivesText.includes('addGear') && foundryThreePrimitivesText.includes('addBar') && foundryThreePrimitivesText.includes('export const disposeFoundryThreeObject'), 'Foundry Three renderer delegates primitive mesh/material builders and cached disposal to the primitive factory seam');
 assert(threeFoundryPreviewText.includes('renderFoundryDynamicLayers') && foundryThreeRenderLayersText.includes('export const renderFoundryDynamicLayers') && foundryThreeRenderLayersText.includes('renderLinkageLayer') && foundryThreeRenderLayersText.includes('renderGearLayer') && foundryThreeRenderLayersText.includes('foundrySpacerTouchesPin'), 'Foundry Three renderer delegates dynamic layer placement to a shared render-layer helper without changing fabrication z-stack dispatch');
@@ -3907,8 +4060,12 @@ assert(
   && mechanismSceneContractText.includes('const renderPlan = compiledMechanism.fabrication.renderPlan')
   && !mechanismSceneContractText.includes('fabricationRenderPlanForMechanism(mechanism)')
   && mechanismCompilerText.includes('renderPlan: FabricationRenderPlan')
-  && mechanismSceneContractText.includes("stackSource: 'fabricationStackForMechanism'"),
-  'MechanismSceneContract consumes the compiler-owned fabrication render plan instead of recomputing stage-local geometry'
+  && mechanismCompilerText.includes('export const compileMechanismRenderPlan')
+  && mechanismCompilerText.includes('compileGraphFabricationRecipe(graph, kit)')
+  && mechanismGraphFabricationCompilerText.includes("source: 'mechanism-graph'")
+  && mechanismGraphFabricationCompilerText.includes("recipeCompilerSource: 'compileGraphFabricationRecipe'")
+  && mechanismSceneContractText.includes("stackSource: 'mechanismCompiler'"),
+  'MechanismSceneContract and arbitrary graph recipes consume compiler-owned fabrication render plans instead of recomputing stage-local geometry'
 );
 assert(assemblyGeometryText.includes('export const assemblyCoordToSvg') && assemblyGeometryText.includes('export const characterBoardProjector') && !assemblyGeometryText.includes('<') && !assemblyGeometryText.includes('document.'), 'assemblyGeometry is a DOM-free deterministic helper seam');
 assert(assemblyPlaybackText.includes('export const pendingRecipeForMechanism') && assemblyPlaybackText.includes('compileFabricationRecipe(project, mechanism)') && assemblyPlaybackText.includes('buildAssemblyPlaybackSteps'), 'Assembly recipe/playback derivation lives outside App.tsx and reuses the compiler fabrication recipe seam');

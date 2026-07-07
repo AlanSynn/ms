@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import type { BodyPartLayer, CanvasViewport, MechanismConfig, MechanismType, Point, ProjectMotionPath, ProjectState, SceneObject, StandardSkeleton } from '../types';
 import { boardGridLines, defaultPhysicalKit, SCENE_PX_PER_MM, sceneBoundsForSheet } from '../utils/coordinates';
 import { calculateLinkage, normalizeCamProfileSamples, sampledCamProfileScale, gearPairOutputRatio, gearTrainCenters, gearTrainMeshPhaseRadAt, gearTrainOutputRatio, gearTrainPitchRadii, gearTrainRotationRatioAt, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from '../utils/kinematics';
-import { FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRenderPlanForMechanism, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, validateMechanismPreviewReadiness, type FabricationLinkageRoleLengths, type FabricationRenderLayer, type FabricationRenderPlan } from '../utils/fabrication';
+import { FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, validateMechanismPreviewReadiness, type FabricationLinkageRoleLengths, type FabricationRenderLayer, type FabricationRenderPlan } from '../utils/fabrication';
+import { compileMechanismRenderPlan } from '../utils/mechanismCompiler';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, pointInsideOutline } from '../utils/partGeometry';
 import { clampCanvasZoom, WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, loadRapierPhysicsKernel, physicsKernelErrorMessage } from '../utils/physicsKernel';
@@ -677,7 +678,7 @@ const gearPlaneModeForMechanism = (mechanism?: MechanismConfig, gearPlaneZ?: num
 const mechanismGeometrySignature = (mechanisms: MechanismConfig[]) => mechanisms.map(mechanism => [
   mechanism.id,
   mechanism.type,
-  fabricationRenderPlanForMechanism(mechanism).zSummary,
+  compileMechanismRenderPlan(mechanism).zSummary,
   mechanism.crankLength,
   mechanism.groundLength,
   mechanism.couplerLength,
@@ -789,7 +790,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   );
   const renderedMechanisms = mechanismsToRender;
   const selectedTelemetry = useMemo(() => selectedMechanism ? mechanismTelemetry(selectedMechanism, angle) : null, [selectedMechanism, angle]);
-  const selectedRenderPlan = useMemo(() => selectedMechanism ? fabricationRenderPlanForMechanism(selectedMechanism) : null, [selectedMechanism]);
+  const selectedRenderPlan = useMemo(() => selectedMechanism ? compileMechanismRenderPlan(selectedMechanism) : null, [selectedMechanism]);
   const selectedCamProfile = useMemo(() => selectedMechanism?.type === 'cam'
     ? normalizeCamProfileSamples(selectedMechanism.camProfileSamples).map(value => value.toFixed(2)).join(',')
     : '', [selectedMechanism]);
@@ -836,7 +837,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     return selectedRenderPlan.layers[1].z - selectedRenderPlan.layers[0].z;
   }, [selectedRenderPlan]);
   const stackValidationErrors = useMemo(
-    () => mechanismsToRender.reduce((sum, mechanism) => sum + fabricationRenderPlanForMechanism(mechanism).validationErrors.length, 0),
+    () => mechanismsToRender.reduce((sum, mechanism) => sum + compileMechanismRenderPlan(mechanism).validationErrors.length, 0),
     [mechanismsToRender]
   );
   const physicalValidationErrors = useMemo(
@@ -1355,7 +1356,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       const visual = mechanismRefs.current.get(mechanism.id);
       if (!visual) return;
       const state = calculateLinkage(mechanism, angle);
-      const renderPlan = fabricationRenderPlanForMechanism(mechanism);
+      const renderPlan = compileMechanismRenderPlan(mechanism);
       const renderedLayerZ = renderedLayerZForMechanism(mechanism, renderPlan);
       const isGearTrain = mechanism.type === 'gear' || mechanism.type === 'gear_linkage';
       const zForLayer = (layer: FabricationRenderLayer) => renderedLayerZ[renderPlan.layers.indexOf(layer)] ?? layer.z;

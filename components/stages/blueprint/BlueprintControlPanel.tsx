@@ -6,8 +6,7 @@ import type {
   FabricationRecipe,
   ProjectState,
 } from "../../../types";
-import { fabricationBoardCoordinateCallout } from "../../../utils/fabrication";
-import { referenceRecipeForType } from "../../../utils/mechanismReference";
+import { fabricationBoardCoordinateCallout, fabricationRecipeTitle } from "../../../utils/fabrication";
 import { downloadText } from "../../../utils/project";
 import { StageLeftSummary } from "../stageLayout";
 import { ContextHelp } from "../../ui/ContextHelp";
@@ -37,8 +36,7 @@ export const BlueprintControlPanel = ({
   selectedRecipe?: FabricationRecipe;
   onSelectRecipe: (mechanismId: string) => void;
 }) => {
-  const recipeTitle = (recipe: FabricationRecipe) =>
-    referenceRecipeForType(recipe.type).title;
+  const recipeTitle = (recipe: FabricationRecipe) => fabricationRecipeTitle(recipe);
   const downloadSvg = () =>
     pkg && downloadText(`${pkg.id}.svg`, pkg.svg, "image/svg+xml");
   const downloadCutSheetPdf = () =>

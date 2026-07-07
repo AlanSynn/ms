@@ -22,11 +22,11 @@ import {
   FABRICATION_RENDER_LAYER_Z_STEP,
   FABRICATION_RENDER_MIN_CLEARANCE,
   FABRICATION_RENDER_PART_DEPTH,
-  fabricationRenderPlanForMechanism,
   planetaryGearConventionForMechanism,
   planetaryGearRadii,
   validateMechanismPreviewReadiness,
 } from "../../../utils/fabrication";
+import { compileMechanismRenderPlan } from "../../../utils/mechanismCompiler";
 import { SCENE_PX_PER_MM, SCENE_VIEW } from "../../../utils/coordinates";
 import {
   fabricablePartOutlinePoints,
@@ -553,7 +553,7 @@ export const ThreeFoundryPreview = ({
       : baseInv;
   const pinionRotation = simulation.driveAngleDeg;
   const renderPlan = useMemo(
-    () => fabricationRenderPlanForMechanism(mechanism),
+    () => compileMechanismRenderPlan(mechanism),
     [mechanism],
   );
   const physicalValidationErrors = useMemo(
