@@ -8,11 +8,11 @@ Principle: show build, not explain with paragraphs.
 
 - `explore`: current flow has `FabricationRecipe`, package gen, 15x15 board settings, Assembly tab, printable HTML/PDF guide, browser tests. Missing: interactive step player; no `.lic` artifact today.
 - `designer`: Assembly becomes .lic/LEGO-like build sim. Blueprint owns files; Assembly owns how to build. Assemble mechanism module first, then mount to board or custom base.
-- `architect`: keep single-package. Build Assembly as derived read-only adapter over existing recipe/fabrication data. No second solver or exporter.
+- `architect`: keep single-package. Build Assembly as derived read-only adapter over existing recipe/fabrication data. No second solver/exporter.
 
 ## Non-negotiable workflow
 
-Every assembly recipe follows this order:
+Every assembly recipe follow this order:
 
 1. **Prepare parts**
    - Kit mode: show required prefab parts + hardware.
@@ -60,7 +60,7 @@ Owns:
 - 15x15 board mount animation,
 - printable guide export action.
 
-Center canvas shows only build sim. Printable guide stays downloadable/printable, not default center content.
+Center canvas show only build sim. Printable guide stay downloadable/printable, not default center content.
 
 ### Options tab
 
@@ -74,7 +74,7 @@ Owns:
 
 ## Data contract
 
-Keep `FabricationRecipe` as export contract. Derive playback state from it, no mutating `ProjectState`.
+Keep `FabricationRecipe` as export contract. Derive playback state from it, no mutate `ProjectState`.
 
 ```ts
 type AssemblyPhase =
@@ -167,7 +167,7 @@ Long instructions → tooltip/printable guide only.
 - Show export tray first: SVG, PDF, STL.
 - Show printed/cut parts as tray.
 - Use same stack + z-order as kit mode.
-- If no board/base configured, final assembled module stays standalone.
+- If no board/base configured, final assembled module stay standalone.
 
 ## Implementation phases
 
@@ -185,7 +185,7 @@ Tasks:
 3. Add contract checks:
    - reference recipe steps have action/coords/coordRoles/stack/check where expected,
    - playback derivation no mutate `ProjectState`,
-   - board coordinate round-trip stays stable.
+   - board coordinate round-trip stay stable.
 
 ### Phase 2 — replace Assembly center iframe
 
@@ -248,11 +248,11 @@ For final release, run full browser suite, no test time limit.
 
 - Assembly step-by-step + interactive, not document iframe.
 - Mechanism assembled before board mount.
-- Kit board mode uses 15x15 board + real recipe coordinate.
+- Kit board mode use 15x15 board + real recipe coordinate.
 - Custom mode exposes SVG/PDF/STL, no fake kit board.
-- Stack order visibly includes spacers + clips.
+- Stack order visibly include spacers + clips.
 - Step cards show active part, ghost target, highlighted holes, z-layer, check.
-- Printable guide still exists as export/print action.
+- Printable guide still exist as export/print action.
 - Unsupported mechanism types blocked; no fake assembly guide.
 - Blueprint + Assembly share same `FabricationRecipe` data.
 - Browser tests prove package generation, step navigation, board mount, custom export lane.
@@ -266,10 +266,10 @@ Installed + enough:
 - Three/Rapier for richer 3D/physics views if reused later,
 - existing fabrication/coordinate/physics utilities.
 
-Add library only if concrete implementation step proves existing renderer cannot animate exploded stack placement smoothly.
+Add library only if concrete implementation step prove existing renderer cannot animate exploded stack placement smoothly.
 
 ## Deferred on purpose
 
 - New `.lic` export format. Current need is `.lic-like` behavior, not file format.
-- Separate workspace/package split. Only after Assembly playback has second real consumer.
-- Full physics solver inside Assembly. Assembly reuses canonical mechanism simulation + physics sidecars, not another engine.
+- Separate workspace/package split. Only after Assembly playback have second real consumer.
+- Full physics solver inside Assembly. Assembly reuse canonical mechanism simulation + physics sidecars, not another engine.

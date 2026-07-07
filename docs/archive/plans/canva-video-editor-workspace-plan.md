@@ -6,13 +6,13 @@ Non-goal: no mock controls. Every visible control must wire to real `ProjectStat
 
 ## Research-backed thesis
 
-MotionSmith should become **one persistent mechanical canvas studio** instead of form-heavy workflow tabs.
+MotionSmith = **one persistent mechanical canvas studio**, not form-heavy workflow tabs.
 
 Reference patterns:
 
-- Canva-like editors keep creation approachable via visual side panels, direct selection editing, keyboard shortcuts, autosave/download/share flows, video timelines for time-based work.
-- Figma-like editors center canvas, use toolbar tools for edit modes, left/right sidebars for layers/properties, keyboard/zoom workflows for precise in-browser editing.
-- Accessible video-player/custom media controls expose play/pause and seek as first-class controls with keyboard-operable sliders.
+- Canva-like editors keep creation approachable: visual side panels, direct selection editing, keyboard shortcuts, autosave/download/share, video timelines for time-based work.
+- Figma-like editors center canvas, toolbar tools for edit modes, left/right sidebars for layers/properties, keyboard/zoom for precise in-browser editing.
+- Accessible video-player/custom media controls expose play/pause + seek as first-class keyboard-operable sliders.
 
 Useful references:
 
@@ -22,27 +22,27 @@ Useful references:
 - WAI-ARIA seek slider pattern: <https://www.w3.org/WAI/ARIA/apg/patterns/slider/examples/slider-seek/>
 - WAI-ARIA toolbar pattern: <https://www.w3.org/WAI/ARIA/apg/patterns/toolbar/>
 - MDN `HTMLMediaElement.currentTime`: <https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement/currentTime>
-- Canva official help URLs kept as product references, though local curl blocked by Canva during verification: <https://www.canva.com/help/creating-and-editing-videos/>, <https://www.canva.com/help/edit-element-timing/>, <https://www.canva.com/help/trim-videos/>, <https://www.canva.com/help/save/>, <https://www.canva.com/help/canva-keyboard-shortcuts/>.
+- Canva official help URLs kept as product references, local curl blocked by Canva during verification: <https://www.canva.com/help/creating-and-editing-videos/>, <https://www.canva.com/help/edit-element-timing/>, <https://www.canva.com/help/trim-videos/>, <https://www.canva.com/help/save/>, <https://www.canva.com/help/canva-keyboard-shortcuts/>.
 
 ## Visual thesis
 
 Calm MotionSmith-style editor: one large white paper/grid canvas, one blue-violet primary action, compact tool rail, right contextual inspector, bottom playback/timeline strip.
 
 - Keep light theme.
-- Treat first visible workspace as editor surface, not dashboard.
-- Use one accent color for primary action and playback.
-- Hide expert controls behind advanced sections; do not remove them.
-- Avoid card mosaics except template/mechanism galleries where cards are the interaction.
+- First visible workspace = editor surface, not dashboard.
+- One accent color for primary action + playback.
+- Expert controls hidden behind advanced sections; don't remove.
+- Avoid card mosaics except template/mechanism galleries (cards = interaction).
 
 ## Product model
 
-App has three products in one editor:
+App has 3 products in one editor:
 
 1. **Character authoring** — load, process, edit parts/skeleton.
 2. **Motion authoring** — draw paths, preview IK, choose/tune mechanisms.
-3. **Fabrication authoring** — validate board placement and export build artifacts.
+3. **Fabrication authoring** — validate board placement + export build artifacts.
 
-UI should expose these as workflow, but canvas and project state must stay shared.
+UI exposes these as workflow, but canvas + project state stay shared.
 
 ```text
 Start character → Draw path → Explore mechanism → Attach/tune → Build/export
@@ -71,22 +71,22 @@ Target layout:
 
 Rules:
 
-- Stage changes swap tools, layers, inspector content; should not feel like separate pages.
-- Viewport, selected item, playback progress, warnings should survive stage changes when valid.
-- Options should become settings drawer/workspace over same editor context, not mental reset.
+- Stage changes swap tools, layers, inspector content; shouldn't feel like separate pages.
+- Viewport, selected item, playback progress, warnings survive stage changes when valid.
+- Options become settings drawer/workspace over same editor context, not mental reset.
 
 ## Current baseline to reuse, not rebuild
 
-Already implemented and tested flows must be preserved. Move them only when extraction reduces `App.tsx` risk or enables shell.
+Already implemented + tested flows must be preserved. Move only when extraction reduces `App.tsx` risk or enables shell.
 
 - Command bar/menu actions, quick toolbar, save/import/export, options entry.
-- Hoisted canvas viewport and zoom toolbar.
-- Options parity controls and settings serialization.
+- Hoisted canvas viewport + zoom toolbar.
+- Options parity controls + settings serialization.
 - Character processing controls, ONNX upload/camera/package review, skeleton save, edit bridge.
 - Free path drawing, IK handle/anchor/fold controls, open/closed/smoothness.
 - Mechanism recommendation sheet, Foundry gallery/toolbar/range/motion point, Design binding.
 - Blueprint validation, board preview, recipes, downloads.
-- Existing browser tests in `tests/browser/workflow.spec.ts` and contracts in `tests/project-contract.test.ts`.
+- Existing browser tests in `tests/browser/workflow.spec.ts` + contracts in `tests/project-contract.test.ts`.
 
 If milestone mentions one of these, read as **reuse/refactor only**, not "build a second version".
 
@@ -107,12 +107,12 @@ type PlayerState = {
 
 Mapping:
 
-- Existing `angle` becomes derived value: `angle = progress * Math.PI * 2`.
+- Existing `angle` = derived value: `angle = progress * Math.PI * 2`.
 - Existing animation duration precedence stays: selected mechanism target path duration → selected path duration → `project.settings.animationDurationMs`.
-- Scrubber writes `progress` and pauses only when user starts dragging if live scrubbing causes accidental edits.
+- Scrubber writes `progress`; pauses only when user starts dragging if live scrub causes accidental edits.
 - Playback tick increments `progress` by elapsed time / active duration * speed.
-- If `loop` true, wrap at `1`; if false, clamp at `1` and pause.
-- Foundry may still keep local preview toggles, but playhead should read/write shared `progress` once M1 lands.
+- `loop` true → wrap at `1`; false → clamp at `1` + pause.
+- Foundry may keep local preview toggles, but playhead read/writes shared `progress` once M1 lands.
 
 ### `SelectionState`
 
@@ -131,12 +131,12 @@ type SelectionState =
 Precedence:
 
 1. Explicit canvas/object click sets `SelectionState`.
-2. Selecting part/path/mechanism through current controls also updates existing project selected ids.
-3. If selected object deleted or invalid after import/replacement, fall back to `{ type: 'none' }` and show next-action inspector.
-4. Blueprint recipe selection derived from mechanism id in current or pending fabrication package; does not need new persisted id.
+2. Selecting part/path/mechanism via current controls also updates existing project selected ids.
+3. Selected object deleted/invalid after import/replacement → fall back to `{ type: 'none' }` + show next-action inspector.
+4. Blueprint recipe selection derived from mechanism id in current/pending fabrication package; no new persisted id.
 5. Skeleton joint selection transient; joint edits still dispatch existing `update_joint` actions.
 
-Implementation rule: first inspector pass may read existing selected ids and synthesize `SelectionState`; add reducer actions only when direct canvas selection needs them.
+Implementation rule: first inspector pass may read existing selected ids + synthesize `SelectionState`; add reducer actions only when direct canvas selection needs them.
 
 ## Core interaction model
 
@@ -155,12 +155,12 @@ Clicking or keyboard-selecting any object chooses one selection type:
 
 ### 2. Canvas first, forms second
 
-Direct manipulation should be authoritative:
+Direct manipulation authoritative:
 
 - dragging path point updates path data;
 - changing smoothness/open/closed updates visible path immediately;
-- binding mechanism updates preview and blueprint recipes;
-- future mechanism handles must update same numeric params shown in inspector.
+- binding mechanism updates preview + blueprint recipes;
+- future mechanism handles update same numeric params shown in inspector.
 
 ### 3. Global player/timeline
 
@@ -189,8 +189,8 @@ Accessibility:
 Goal: "What can I make or load?"
 
 - Keep template gallery.
-- Keep ONNX image processing and camera capture as real browser flows.
-- Processing controls remain real: `Process Image`, `Generate Body Parts`, `Save Skeleton`, `Edit Parts / Skeleton / Boxes`.
+- Keep ONNX image processing + camera capture as real browser flows.
+- Processing controls stay real: `Process Image`, `Generate Body Parts`, `Save Skeleton`, `Edit Parts / Skeleton / Boxes`.
 - CTA after accepted character: **Draw a motion path**.
 
 ### Draw / Path
@@ -234,7 +234,7 @@ Goal: "Can I fabricate this?"
 
 ## Architecture plan
 
-Keep current `ProjectState` and reducer-style `applyProjectAction`. Do not introduce route store or duplicate screen-local project copies.
+Keep current `ProjectState` + reducer-style `applyProjectAction`. Don't introduce route store or duplicate screen-local project copies.
 
 Recommended extraction boundaries, in order:
 
@@ -253,7 +253,7 @@ Recommended extraction boundaries, in order:
 7. `shared/scene/`
    - canvas, coordinates, motion preview, export geometry.
 
-Ponytail constraint: extract only when it reduces `App.tsx` risk or enables editor shell. Do not create abstractions before moving real code.
+Ponytail constraint: extract only when reduces `App.tsx` risk or enables editor shell. Don't create abstractions before moving real code.
 
 ## Implementation milestones
 
@@ -274,14 +274,14 @@ First files: `App.tsx`, shared stage preview adapters, `tests/browser/workflow.s
 
 Deliverables:
 
-- Add bottom player UI to existing shell; do not replace command bar or stage rail.
+- Add bottom player UI to existing shell; don't replace command bar or stage rail.
 - Convert current `angle`/`isPlaying` handling to transient `PlayerState` contract above.
 - Path/Foundry/Design/Blueprint read from same normalized `progress` where applicable.
 
 Acceptance:
 
 - Browser test: changing scrubber changes visible IK/mechanism preview.
-- Browser test: Path → Design → Blueprint keeps playback progress and viewport.
+- Browser test: Path → Design → Blueprint keeps playback progress + viewport.
 - Browser test: player keyboard controls work.
 
 ### M2 — contextual inspector
@@ -293,26 +293,26 @@ Deliverables:
 - Introduce transient `SelectionState` in app shell.
 - Start by synthesizing selection from existing `selectedPartId`, `selectedPathId`, `selectedMechanismId`.
 - Move only visible controls needed for current selection into inspector; keep advanced panels alive until replaced by tests.
-- Empty selection shows current blocker and next CTA.
+- Empty selection shows current blocker + next CTA.
 
 Acceptance:
 
 - Browser test: selecting part/path/mechanism changes inspector.
 - Browser test: selecting joint exposes fold/lock/position controls without persisting new joint selection field.
-- Inspector controls mutate real project state and persist through save/reload where underlying state is persistent.
+- Inspector controls mutate real project state + persist through save/reload where underlying state persistent.
 
 ### M3 — Canva-like galleries and direct editing
 
 Deliverables:
 
-- Template gallery and mechanism gallery use consistent visual language.
+- Template gallery + mechanism gallery use consistent visual language.
 - Mechanism cards browsable/appliable without exposing raw params first.
-- Direct canvas tool HUD exposes active tool and key shortcut hints.
+- Direct canvas tool HUD exposes active tool + key shortcut hints.
 
 Acceptance:
 
 - Browser test: novice flow can complete without opening advanced panels.
-- Expert panels still expose numeric params and skeleton edits.
+- Expert panels still expose numeric params + skeleton edits.
 
 ### M4 — polish, accessibility, visual QA
 
@@ -321,12 +321,12 @@ Deliverables:
 - Keyboard shortcut overlay.
 - ARIA labels/slider semantics for timeline.
 - Reduced-motion mode respects app settings or OS preference.
-- Screenshot-based visual smoke for desktop and mobile critical flows.
+- Screenshot-based visual smoke for desktop + mobile critical flows.
 
 Acceptance:
 
 - Browser accessibility assertions for timeline/player labels.
-- Mobile: Draw path action remains visible and bottom player remains usable.
+- Mobile: Draw path action stays visible + bottom player stays usable.
 
 ## Do not build yet
 
@@ -338,7 +338,7 @@ Skip until concrete blocker appears:
 - cloud asset library;
 - plugin architecture;
 - canvas engine migration to Fabric/Konva/Pixi;
-- full same-page segmentation polygon editor if current Path Editor part/skeleton bridge remains enough;
+- full same-page segmentation polygon editor if current Path Editor part/skeleton bridge stays enough;
 - advanced keyframe/easing editor;
 - new state management dependency.
 
@@ -360,8 +360,8 @@ Browser tests:
 - character processing controls route to real workflows;
 - path draw/edit/lock/open/closed/smoothness;
 - global player controls Path/Foundry/Design/Blueprint preview;
-- inspector selection changes and mutates real state;
-- viewport and playback persist across stages;
+- inspector selection changes + mutates real state;
+- viewport + playback persist across stages;
 - export downloads reflect actual scene.
 
 ## Agent review summary
@@ -371,7 +371,7 @@ Designer review:
 - Use one persistent mechanical canvas studio.
 - Workflow should be Start → Draw → Explore → Attach → Build.
 - One global timeline/player is main missing editor affordance.
-- Do not build cloud/collaboration/multitrack/keyframe systems yet.
+- Don't build cloud/collaboration/multitrack/keyframe systems yet.
 
 Architect review:
 

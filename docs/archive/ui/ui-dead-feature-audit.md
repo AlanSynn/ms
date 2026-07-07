@@ -1,6 +1,6 @@
 # UI dead-feature audit
 
-Scope: visible MotionSmith UI/UX controls with no real browser execution, duplicated control adding no behavior, or legacy placeholder post compact editor rebuild.
+Scope: visible MotionSmith UI/UX controls lacking real browser execution, duplicated controls adding no behavior, or legacy placeholder post compact editor rebuild.
 
 ## Operating rule
 
@@ -10,15 +10,15 @@ Every visible control must do one immediately in browser:
 2. open real file/input/modal workflow,
 3. run ONNX/tracking/simulation/fit/export code,
 4. navigate to implemented stage, or
-5. be honest disabled guard with reason visible nearby.
+5. honest disabled guard with reason visible nearby.
 
-Failing one, remove it — no explanatory copy.
+Fail one → remove. No explanatory copy.
 
 ## Screen-by-screen implementation plan and status
 
 | Surface | Required real behavior | Current status / action |
 | --- | --- | --- |
-| App shell menus | All menu entries resolve through typed command registry + one `App.tsx` handler. | Implemented by `utils/appCommands.ts` + `commandHandlers satisfies Record<AppCommandId, () => void>`. Contract tests compare menu ids to handler ids. |
+| App shell menus | All menu entries resolve via typed command registry + one `App.tsx` handler. | Implemented via `utils/appCommands.ts` + `commandHandlers satisfies Record<AppCommandId, () => void>`. Contract tests compare menu ids to handler ids. |
 | Top command bar | File/Edit/View/Go/Options/Help menus execute same registry commands as shortcuts. | Implemented. Keep all new toolbar/menu actions registry-backed. |
 | Welcome / Getting Started | Starter, package load, local ONNX image import, project import, "do not show again" must open real workflows. | Implemented. Hardware camera capture still absent. |
 | Character | Load package, create from image, accept/discard generated package, part/outline/art/skeleton editing, save skeleton. | Implemented. Copy compacted "placeholder plates" → "gray plates" to avoid placeholder-like wording. |

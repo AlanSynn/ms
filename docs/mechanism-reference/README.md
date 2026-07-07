@@ -36,7 +36,7 @@ Current web contracts are maintained in the codebase modules and tests; the sour
 | `three_bar` / `linkage_three_bar` | content/domain reference only | no | no | no | No current physical recipe. |
 | `five_bar` / `linkage_five_bar` | content/domain reference only | no | no | no | No current physical recipe; needs synchronized dual inputs. |
 | `six_bar` / `linkage_six_bar` | catalog/content/domain reference only | no | no | no | Catalog entry exists; no current physical recipe. |
-| `geneva_drive` | catalog-only legacy idea | no | no | no | Present in `mechanism_catalog.json`, not in physical kit/export contract. |
+| `geneva_drive` | catalog-only legacy idea | no | no | no | Present in `source/mechanism-catalog.snapshot.json`, not in physical kit/export contract. |
 
 PRD-level implementation contracts live in `docs/prd/mechanisms/`. Those files are the task-level spec for keeping Foundry, Design, Blueprint, Assembly, and tests aligned with this reference.
 

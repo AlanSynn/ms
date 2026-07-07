@@ -67,4 +67,4 @@ DialogHost
 └─ CustomCouplerPointDialog
 ```
 
-Nothing to compress. All text inside code blocks (preserve verbatim). Two headings preserved exact. Zero natural-language prose.
+No prose to compress. Headings + code blocks only — all preserved verbatim.

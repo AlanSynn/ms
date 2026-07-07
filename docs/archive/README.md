@@ -2,15 +2,15 @@
 
 Last refreshed: 2026-07-07
 
-This directory stores **historical / superseded / provenance** documentation.
+Stores **historical / superseded / provenance** docs.
 
-Use only when you need:
+Use only when need:
 
-- past decision rationale,
-- evidence for architectural drift,
-- or archived implementation context.
+- past decision rationale
+- architectural drift evidence
+- archived impl context
 
-Active planning and implementation should stay in:
+Active planning/impl stay in:
 
 - `docs/README.md` (global docs map)
 - `docs/index.md` (hot/cold/index rails)
@@ -19,7 +19,7 @@ Active planning and implementation should stay in:
 
 ## Archive families
 
-- [`archive/plans/README.md`](plans/README.md) — archived implementation plans
+- [`archive/plans/README.md`](plans/README.md) — archived impl plans
 - [`archive/ui/README.md`](ui/README.md) — legacy UI docs/repro notes
 - [`archive/ports/README.md`](ports/README.md) — external porting mirrors
 - [`archive/analysis/README.md`](analysis/README.md) — historical audits/reports
@@ -28,13 +28,12 @@ Active planning and implementation should stay in:
 
 ## Governance
 
-1. Keep archive-only docs out of default implementation context.
-2. If a doc becomes active again, promote it back to the hot set (and update all maps).
-3. If a doc is obsolete and not needed, delete it and record that in session notes before cleanup.
-4. Do not add new product docs directly to `archive/`.
-
+1. Keep archive-only docs out of default impl context.
+2. If doc active again, promote back to hot set (update all maps).
+3. If obsolete/unused, delete + record in session notes before cleanup.
+4. Don't add new product docs directly to `archive/`.
 
 ## Deletion candidates
 
 - None currently.
-- Keep provenance bundles intact until an active task explicitly requires deletion, then remove after one release-cycle review and note rationale in session notes.
+- Keep provenance bundles intact until active task needs deletion. Remove after one release-cycle review, note rationale in session notes.

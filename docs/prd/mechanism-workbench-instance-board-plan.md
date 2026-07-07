@@ -25,7 +25,7 @@ MotionSmith should keep the classroom flow stable while letting students add mul
    - Motion preview for scene objects is simple rigid translation along the path; IK stays body-part-only.
 
 4. **Board legality is enforced once.**
-   - Use `coordinates.ts`, `project.ts`, and `fabrication.ts` as the single fabrication-kit authority.
+   - Use `utils/coordinates.ts`, `utils/project.ts`, and `utils/fabrication.ts` as the single fabrication-kit authority.
    - Blueprint remains the 2D print/board surface; Assembly remains the 3D exploded assembly surface.
    - Recommendation/add previews show the default 15×15 board fit, the user path, and the fitted generated path before adding the instance.
    - Unsupported mechanism families stay blocked until they have real reference recipes.

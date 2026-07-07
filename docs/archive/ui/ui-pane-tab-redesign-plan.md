@@ -6,20 +6,20 @@ Scope: layout/info architecture only; no impl this pass.
 
 ## 1. Problem statement
 
-Current editor has right intent — shared canvas, light MotionSmith style, real workflows — but pane roles not strict enough.
+Current editor: right intent — shared canvas, light MotionSmith style, real workflows — but pane roles not strict enough.
 
 Observed from code/docs:
 
-- `DESIGN.md` already says post-onboarding stages share one workbench shell, not feel like separate apps.
-- `docs/archive/ui/ui-to-web/CANVAS_LAYER_STRATEGY.md` says tab switching changes panel composition + layer visibility, not reset/replace canvas mental model.
-- `App.tsx` currently has fixed `app-rail` with only broad links/stats, each stage renders own internal grid with canvas plus controls.
-- Means: left pane underused, center can become mixed content panel instead of pure work surface, right pane often carries workflow nav, sensemaking, primary actions, fine param controls at once.
+- `README.md` says post-onboarding stages share one workbench shell, not separate apps.
+- `docs/archive/ui/ui-to-web/CANVAS_LAYER_STRATEGY.md`: tab switching changes panel composition + layer visibility, not reset/replace canvas mental model.
+- `App.tsx`: fixed `app-rail` with only broad links/stats; each stage renders own internal grid (canvas + controls).
+- Means: left pane underused, center becomes mixed content panel not pure work surface, right pane carries workflow nav + sensemaking + primary actions + fine param controls at once.
 
 User correction to honor:
 
-> Left pane underused, right pane tune selected details only, center must be only work surface.
+> Left pane underused; right pane tunes selected details only; center = only work surface.
 
-So new layout must make pane ownership explicit.
+New layout must make pane ownership explicit.
 
 ## 2. Visual thesis
 
@@ -48,16 +48,16 @@ Should not contain:
 
 ### Center: pure shared work canvas
 
-Center only work surface.
+Center = only work surface.
 
 Should contain:
 
 - persistent sheet/grid/canvas viewport;
 - character, skeleton, paths, mechanisms, blueprint overlays;
 - direct manipulation handles;
-- zoom toolbar plus direct manipulation handles/playhead/trace overlays;
+- zoom toolbar + direct manipulation handles/playhead/trace overlays;
 - foundry sandbox simulation as canvas layer, not separate card-like content island.
-- no canvas lens HUD, renderer sidecar, persistent explanatory callout cover work surface.
+- no canvas lens HUD, renderer sidecar, persistent explanatory callout covering work surface.
 
 Should not contain:
 
@@ -90,7 +90,7 @@ Should not contain:
 
 - Header: global app commands, stage tabs, save/import/export/options.
 - Bottom status: current blocker/next action + technical status.
-- Player dock: can stay floating, but tied to center canvas, not obscure right inspector.
+- Player dock: stay floating, but tied to center canvas, not obscure right inspector.
 
 ## 4. Stage-by-stage target composition
 

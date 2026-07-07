@@ -2,10 +2,10 @@
 
 Scope: `/Users/alansynn/Documents/MechAnim/.omx/team/perform-an-agent-llm-6ab07be7/worktrees/worker-3`
 
-## 1) Installed/active skills and plugins (evidence-backed)
+## 1) Installed/active skills/plugins (evidence-backed)
 
 ### Plugins (enabled)
-Configured in `/Users/alansynn/.codex/config.toml` lines 92-111:
+Config in `/Users/alansynn/.codex/config.toml` lines 92-111:
 - `ponytail@ponytail`
 - `browser@openai-bundled`
 - `documents@openai-primary-runtime`

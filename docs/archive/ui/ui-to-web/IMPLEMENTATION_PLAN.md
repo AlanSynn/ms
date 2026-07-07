@@ -1,13 +1,13 @@
 # UI-to-Web Full Implementation Plan
 
-Status: historical implementation plan (superseded by runtime contracts)
+Status: historical plan (superseded by runtime contracts)
 Source of truth: derived from `docs/archive/ui/ui-to-web/*`, screenshot bundle, current React app state after baseline commit `14b95f3`.
 
 ## Frontend-skill contract
 
 ### Visual thesis
 
-Calm MotionSmith/Canva-style mechanical studio: one large persistent paper-and-grid canvas, light editorial shell, single blue-violet action color, novice wording makes next physical step obvious.
+Calm MotionSmith/Canva-style mechanical studio: one big persistent paper-and-grid canvas, light editorial shell, single blue-violet action color, novice wording makes next physical step obvious.
 
 ### Content plan
 
@@ -28,8 +28,8 @@ Calm MotionSmith/Canva-style mechanical studio: one large persistent paper-and-g
 
 Implemented and verified:
 
-- React web app with stages: Character Selection, Path Editor, Mechanism Foundry, Mechanism Design, Blueprint Export, Options.
-- Real bundled ONNX pose model loading through `onnxruntime-web`.
+- React web app, stages: Character Selection, Path Editor, Mechanism Foundry, Mechanism Design, Blueprint Export, Options.
+- Real bundled ONNX pose model loading via `onnxruntime-web`.
 - Character package import/review/replacement flow.
 - Free path drawing, tracking modal, path validation, IK path preview.
 - Mechanism Foundry presets/library/sensemaking + export to Mechanism Design.
@@ -48,17 +48,17 @@ Verified before this plan:
 
 | Area | Required by docs | Current gap | Implementation decision |
 | --- | --- | --- | --- |
-| App shell menu | File/View/Edit/Options/Help actions + optional toolbar | Header only exposes Import/Save/Export; no menu mapping | Add compact command bar with real File/View/Edit/Options/Help action groups + status copy. Novice-friendly, not Qt chrome-heavy. |
+| App shell menu | File/View/Edit/Options/Help actions + optional toolbar | Header only exposes Import/Save/Export; no menu mapping | Add compact command bar: real File/View/Edit/Options/Help groups + status copy. Novice-friendly, not Qt chrome-heavy. |
 | Persistent viewport | Tab switching preserves pan/zoom | Viewport/camera state drifts across preview adapters if each remount owns it | Hoist `CanvasViewport`/camera state into `App`, pass to active preview adapters. |
 | Canvas zoom toolbar | +/−/fit/reset/1:1 style controls | Mouse wheel exists; panel buttons partial/missing | Add shared `CanvasZoomToolbar` overlay bound to hoisted viewport. |
 | Options dialog | Groups: Appearance, Simulation, Performance, Debugging, Workflow, Fabrication, Units | Options page has fewer controls + no modal/drawer framing | Expand `AppSettings` minimally, implement grouped options using real settings. |
-| Manual segmentation editor | Add/remove joints/layers, anchors, preview/apply | Full editor not present; current import package covers processed packages only | Add real lightweight in-browser Character Edit drawer backed by `ProjectState`: part add/remove, joint add/remove/lock, anchor assignment, apply immediately. Avoid image-bound polygon tracing until source image editing needed. |
-| Character selection dialog | Preset selection + assign character | Template gallery exists but not assignment dialog | Add real template/preset selector metadata for starting projects + mechanism assignment where useful. |
-| Recommendation dialog | Modal card grid from path data, apply payload | Foundry + direct add exists; no recommendation modal on Design `Get Mechanism` | Add `Get recommendations` sheet that ranks available mechanism presets from selected path, creates/updates real instance. |
+| Manual segmentation editor | Add/remove joints/layers, anchors, preview/apply | Full editor absent; current import package covers processed packages only | Add lightweight in-browser Character Edit drawer backed by `ProjectState`: part add/remove, joint add/remove/lock, anchor assignment, apply immediately. Avoid image-bound polygon tracing until source image editing needed. |
+| Character selection dialog | Preset selection + assign character | Template gallery exists but no assignment dialog | Add real template/preset selector metadata for starting projects + mechanism assignment where useful. |
+| Recommendation dialog | Modal card grid from path data, apply payload | Foundry + direct add exists; no recommendation modal on Design `Get Mechanism` | Add `Get recommendations` sheet ranking mechanism presets from selected path, creates/updates real instance. |
 | Foundry editor toolbar | Back, play, forces, velocity, trail, path preview, sensemaking, reset, add | Foundry controls exist but some toggles implicit | Add visible toggles, connect to preview/showTrace/showSensemaking display state. |
 | Grid/sheet consistency | 2cm grid + Letter bounds in every canvas mode | Grid/sheet exist in Canvas; need viewport preservation + options propagation tests | Preserve canvas state, add tests for cross-stage grid/viewport. |
 | State slices | Canonical project/paths/mechanisms/settings | Mostly in `ProjectState`; missing some UI slices | Keep state inside `ProjectState` where exported; keep transient UI in `App` only. |
-| Regression harness | pointer drag, tab switch, dialogs, exports | Existing 10 browser tests; need menu/options/recommendation/viewport tests | Add tests with data-testid/ARIA selectors for each milestone. |
+| Regression harness | pointer drag, tab switch, dialogs, exports | Existing 10 browser tests; need menu/options/recommendation/viewport tests | Add tests with data-testid/ARIA selectors per milestone. |
 
 ## Milestone commits
 
@@ -76,7 +76,7 @@ Acceptance:
 Deliverables:
 
 - Commit `docs/archive/ui/ui-to-web` bundle + this plan.
-- Keep large local `docs/archive/ports/to-port-web-onnx` reference mirror uncommitted unless future task explicitly asks to version it.
+- Keep large local `docs/archive/ports/to-port-web-onnx` reference mirror uncommitted unless future task asks to version it.
 
 Acceptance:
 
@@ -138,4 +138,4 @@ Acceptance:
 
 ## Stop condition
 
-Stop only when UI-to-web bundle controls are either implemented as real working flows or explicitly documented as out-of-scope with technical blocker. Disabled controls acceptable only when honest guards for unavailable local capability, not placeholders.
+Stop only when UI-to-web bundle controls implemented as real working flows or documented out-of-scope with technical blocker. Disabled controls OK only as honest guards for unavailable local capability, not placeholders.

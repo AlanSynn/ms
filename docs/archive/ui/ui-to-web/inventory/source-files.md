@@ -227,4 +227,4 @@
 - `src/automataii/presentation/qt/windows/components/workflow_state_machine.py` — misc
 - `src/automataii/presentation/qt/windows/components/workspace_layout_manager.py` — misc
 
-Input already minimal. No prose to compress — only heading, backticked paths (preserve), single-token category tags (already as terse as possible). Returned unchanged.
+Already min. Heading + backtick paths (keep exact) + 1-token tags. Nothing to cut.

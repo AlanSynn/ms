@@ -7,15 +7,15 @@ Web rebuild: no separate scene/view per tab like Qt. Keep **one persistent scene
 1. Left/right tool panel composition
 2. Scene layer visibility, editability, hit-test policy
 
-Reduces position/scale/character/skeleton/mechanism mismatches across tabs.
+Cuts position/scale/character/skeleton/mechanism mismatches across tabs.
 
 ## Observed Qt structure
 
 | Area | Current implementation | Evidence file |
 | --- | --- | --- |
 | Main window | `QMainWindow` + `QTabWidget`; Character Selection, Path Editor, Mechanism Design, Mechanism Foundry | `src/automataii/presentation/qt/main_window.py` |
-| Character canvas | `ImageProcessingView(QGraphicsView)`; draws image, skeleton, debug, grid directly | `src/automataii/presentation/qt/image_view.py` |
-| Editor canvas | `EditorView(QGraphicsView)`; character parts, skeleton item, path drawing, vertex edit, grid | `src/automataii/presentation/qt/views/editor_view.py` |
+| Character canvas | `ImageProcessingView(QGraphicsView)`; draws image, skeleton, debug, grid direct | `src/automataii/presentation/qt/image_view.py` |
+| Editor canvas | `EditorView(QGraphicsView)`; character parts, skeleton item, path draw, vertex edit, grid | `src/automataii/presentation/qt/views/editor_view.py` |
 | Mechanism Design canvas | `EditorView`-family view for parts, paths, mechanisms, handles | `src/automataii/presentation/qt/tabs/mechanism_design/tab.py`, `mechanism_design_ui.py` |
 | Foundry canvas | Separate `QGraphicsScene/QGraphicsView` + grid/fabrication board render | `src/automataii/presentation/qt/tabs/mechanism_foundry/foundry_view.py` |
 | View/camera sharing | `TabOrchestrator` store + restore shared camera state | `src/automataii/presentation/qt/windows/components/tab_orchestrator.py` |
@@ -131,7 +131,7 @@ Viewport transforms render-only, never mix into stored data.
 ## Interaction policy
 
 | Mode | Active layer hit test | Pointer behavior |
-| --- | --- |
+| --- | --- | --- |
 | Select | character/mechanism selectable | click select, drag selected items |
 | Skeleton edit | skeleton joints | drag joint, add/remove joint via panel |
 | Part/layer edit | character.parts | edit part boundaries, create/remove part layer |

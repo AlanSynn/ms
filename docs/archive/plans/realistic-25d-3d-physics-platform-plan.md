@@ -2,14 +2,14 @@
 
 Status: historical provenance (superseded)
 Created: 2026-06-25
-Scope: MotionSmith web editor after current 2D workflow stabilization
+Scope: MotionSmith web editor after current 2D workflow stabilize
 Baseline commit: `f295cdb Pin mechanism outputs to driven joints`
 
-> Direction update (2026-06-25): superseded by [`toon-25d-main-3d-unlock-plan.md`](../../prd/toon-25d-main-3d-unlock-plan.md). Preferred direction: **toon/WebGL 2.5D as main workbench** and **3D as camera unlock**, not SVG/CSS 2.5D first.
+> Direction update (2026-06-25): superseded by [`toon-25d-main-3d-unlock-plan.md`](../../prd/toon-25d-main-3d-unlock-plan.md). Preferred direction: **toon/WebGL 2.5D main workbench** + **3D camera unlock**, not SVG/CSS 2.5D first.
 
 ## 0. Decision in one paragraph
 
-Build full realistic platform as **2D-canonical authoring + derived 2.5D/3D/physics views**. Existing editor works around `ProjectState`, SVG path drawing, mechanism kinematics, IK preview, blueprint export. Do not replace with three.js editor. Add renderer/simulation boundary: 2D scene stays sole source of truth for editing + fabrication; 2.5D, 3D, physics are faithful lenses + sidecars reading same state, emit warnings/samples, write back only through explicit user actions.
+Build full realistic platform as **2D-canonical authoring + derived 2.5D/3D/physics views**. Existing editor works around `ProjectState`, SVG path drawing, mechanism kinematics, IK preview, blueprint export. Don't replace with three.js editor. Add renderer/simulation boundary: 2D scene stays sole source of truth for editing + fabrication; 2.5D, 3D, physics faithful lenses + sidecars reading same state, emit warnings/samples, write back only through explicit user actions.
 
 Shortest safe route to Viser-like robotics visualization impression without breaking novice drawing, mechanism attachment, or blueprint generation.
 
@@ -22,12 +22,12 @@ Shortest safe route to Viser-like robotics visualization impression without brea
    - select body part;
    - draw free path on shared canvas;
    - choose/fit mechanism;
-   - preview IK and mechanism-driven motion;
-   - export blueprint and assembly guide.
+   - preview IK + mechanism-driven motion;
+   - export blueprint + assembly guide.
 2. Add realistic visual understanding:
    - layered cardstock/plastic part depth;
    - pins, spacers, rods, cams, gears, board thickness;
-   - occlusion and shadows;
+   - occlusion + shadows;
    - exploded assembly view;
    - camera presets + optional orbit inspection.
 3. Add real physics support:
@@ -39,7 +39,7 @@ Shortest safe route to Viser-like robotics visualization impression without brea
    - action-first labels;
    - one central canvas;
    - right inspector scrolls own pane only;
-   - view modes are lenses over same project, not separate apps.
+   - view modes lenses over same project, not separate apps.
 
 ### Non-goals
 
@@ -51,7 +51,7 @@ Shortest safe route to Viser-like robotics visualization impression without brea
 
 ## 2. Current baseline we must protect
 
-Current app is 2D-first, already has valuable invariants:
+Current app 2D-first, already has valuable invariants:
 
 - `ProjectState` stores parts, skeleton, paths, mechanisms, settings, selected IDs, export state.
 - Path drawing uses scene-space points + SVG interaction.
@@ -72,12 +72,12 @@ bun run test:browser
 | Reference | Relevant point for this product |
 | --- | --- |
 | Viser README: <https://github.com/viser-project/viser> | Viser presents robotics/CV visualization style: 3D primitives, GUI widgets, scene interaction, transform gizmos, camera control, web client. MotionSmith borrow visual/interaction impression, not Python/server architecture. |
-| three.js OrbitControls docs: <https://threejs.org/docs/pages/OrbitControls.html> | Orbit controls fit optional inspection — orbit around target while supporting zoom/pan. Should not be active while drawing paths. |
+| three.js OrbitControls docs: <https://threejs.org/docs/pages/OrbitControls.html> | Orbit controls fit optional inspection — orbit around target + support zoom/pan. Not active while drawing paths. |
 | three.js OrthographicCamera docs: <https://threejs.org/docs/pages/OrthographicCamera.html> | Orthographic projection keeps object size constant with distance — fits authoring, blueprint inspection, fixed front/isometric views better than perspective distortion. |
 | Rapier JavaScript getting started: <https://rapier.rs/docs/user_guides/javascript/getting_started_js/> | Rapier provides browser JS rigid bodies, colliders, gravity, world stepping. Best candidate for real 3D physics. |
 | Rapier joints docs: <https://rapier.rs/docs/user_guides/javascript/joints/> | Rapier supports fixed, prismatic, revolute, spherical, other joints needed for mechanism constraints, motors, character-link constraints. |
 | Matter.js constraints docs: <https://brm.io/matter-js/docs/classes/Constraint.html> | Matter useful evidence for 2D pin/revolute constraints, but 2D — not final engine for true 3D preview. |
-| React Three Fiber docs: <https://r3f.docs.pmnd.rs/getting-started/introduction> | R3F adoptable later if three.js scene becomes complex + React-component-heavy; not first dependency. |
+| React Three Fiber docs: <https://r3f.docs.pmnd.rs/getting-started/introduction> | R3F adoptable later if three.js scene complex + React-component-heavy; not first dependency. |
 
 ## 4. Team review synthesis
 
@@ -103,7 +103,7 @@ Avoid starting with cannon-es, Ammo/Bullet, Pixi, or Konva for this requirement.
 - Use view lenses: `Studio`, `Depth`, `Physics`, `Blueprint`, `Inspect`.
 - Keep `Studio` default.
 - Physics explained through overlays: safe arcs, velocity arrows, force hints, constraint labels, short "why" cards.
-- 3D orbit is inspection mode with `Front`, `Iso`, `Orbit`, `Explode`, `Reset`, not authoring default.
+- 3D orbit inspection mode with `Front`, `Iso`, `Orbit`, `Explode`, `Reset`, not authoring default.
 
 ### Test review
 
@@ -157,7 +157,7 @@ Following remain authoritative in 2D:
 
 ### 5.3 SceneProjection module
 
-Add pure adapter module, initially without dependencies:
+Add pure adapter module, initially no dependencies:
 
 ```ts
 type SceneProjection = {
@@ -183,11 +183,11 @@ type ProjectedPart = {
 };
 ```
 
-`SceneProjection` recomputed from `ProjectState`; has no setters. Prevents second source of truth.
+`SceneProjection` recomputed from `ProjectState`; no setters. Prevents second source of truth.
 
 ### 5.4 PhysicsSession module
 
-Physics is runtime state, not project state:
+Physics runtime state, not project state:
 
 ```ts
 type PhysicsSession = {
@@ -353,7 +353,7 @@ Acceptance:
 Deliverables:
 
 - add contract tests for project round-trip, z-order, mechanism binding, viewport persistence, export invariants;
-- document canonical/derived boundary in code comments + `DESIGN.md` if needed.
+- document canonical/derived boundary in code comments + README.md if needed.
 
 Acceptance:
 

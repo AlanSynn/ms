@@ -23,4 +23,4 @@ file ui-to-web/screenshots/*.png
 find ui-to-web -maxdepth 3 -type f | sort
 ```
 
-Capture script avoid open camera dialog. Start camera worker, require hardware/permission side effects.
+Capture script skip open camera dialog. Start camera worker, need hardware/permission side effects.

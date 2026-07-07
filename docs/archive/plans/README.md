@@ -2,7 +2,7 @@
 
 Last refreshed: 2026-07-07
 
-Superseded plans, abandoned attempts, historical planning context.
+Superseded plans, abandoned attempts, historical context.
 
 ## Keep
 

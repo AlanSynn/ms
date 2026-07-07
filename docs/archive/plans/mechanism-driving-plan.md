@@ -3,13 +3,13 @@
 Status: historical provenance
 
 ## Goal
-Every mechanism shares one physical contract across Foundry, Design, Blueprint, fabrication stacks, export. Mechanism must be constrained assembly, not drawing shortcut.
+Mechanisms share one physical contract across Foundry, Design, Blueprint, fabrication stacks, export. Mechanism = constrained assembly, not drawing shortcut.
 
 ## Reference contract
-- MIT CDMC treats characters as rigid components connected by pin, point-on-line, phase/gear, fixed-state constraints. Runtime maps MotionSmith mechanisms to those constraints, solves/updates from one input driver phase.
-- CDMC gear phase constraint: `Cc = αi - f(αj)`, spur/bevel gears use `f(α) = -r * α` where `r` is tooth-count ratio. Planar external gear train: every mesh flips direction, endpoint speed ratio set by first and last pitch radii.
-- CDMC connects optimized driving mechanisms back to one input driver through intermediate gear trains. MotionSmith keeps as `driverGroupId + driverPhaseOffset` first, then adds full constraint graph solver once multi-driver UI ready.
-- PaperMech public pages verify user-facing taxonomy must support: rack-pinion, crank, cam, spur gears, planetary gears, walking/Jansen-style linkages. Legacy create/modules endpoints inaccessible, so PaperMech is taxonomy/reference source, not implementation spec.
+- MIT CDMC: characters = rigid components connected by pin, point-on-line, phase/gear, fixed-state constraints. Runtime maps MotionSmith mechanisms to those constraints, solves/updates from one input driver phase.
+- CDMC gear phase constraint: `Cc = αi - f(αj)`, spur/bevel gears use `f(α) = -r * α` where `r` = tooth-count ratio. Planar external gear train: every mesh flips direction, endpoint speed ratio set by first and last pitch radii.
+- CDMC connects optimized driving mechanisms back to one input driver via intermediate gear trains. MotionSmith keeps as `driverGroupId + driverPhaseOffset` first, then adds full constraint graph solver once multi-driver UI ready.
+- PaperMech public pages verify user-facing taxonomy must support: rack-pinion, crank, cam, spur gears, planetary gears, walking/Jansen-style linkages. Legacy create/modules endpoints inaccessible, so PaperMech = taxonomy/reference source, not implementation spec.
 
 Sources:
 - CDMC PDF: https://cfg.mit.edu/assets/files/CDMC_0.pdf
@@ -18,7 +18,7 @@ Sources:
 
 ## Shared model now
 `MechanismConfig` owns:
-- `gearTrainRadii`: ordered external spur gear pitch radii. Two values preserve old drive/output pair. More values are idlers.
+- `gearTrainRadii`: ordered external spur gear pitch radii. Two values preserve old drive/output pair. More values = idlers.
 - `driverGroupId`: mechanisms with same group driven by same virtual input shaft.
 - `driverPhaseOffset`: per-mechanism phase relative to group driver.
 
@@ -27,51 +27,51 @@ Canonical helpers in `utils/kinematics.ts`:
 - `gearTrainPitchCenterDistance(config)` sums adjacent pitch-radius distances for meshing chain.
 - `gearTrainResolvedCenterDistance(config)` preserves separated A/B endpoint span until idlers inserted; once idlers exist, snaps to full pitch-chain distance.
 - `gearTrainCenters(config)` places all gear centers on ground axis using resolved endpoint span.
-- `gearTrainOutputRatio(config)` computes external spur train parity and endpoint ratio.
+- `gearTrainOutputRatio(config)` computes external spur train parity + endpoint ratio.
 
 ## Mechanism constraints
 ### Four-bar
-Use strict A-B-C-D contract:
+Strict A-B-C-D contract:
 - A = `p1`, B = `j1`, C = `j2`, D = `p2`.
-- A-D is fixed ground link.
-- A-B crank, B-C coupler, C-D rocker are three moving bars.
-- Fabrication stack must expose exactly Input linkage, Coupler linkage, Output linkage separated by S10 spacers/clips.
+- A-D = fixed ground link.
+- A-B crank, B-C coupler, C-D rocker = three moving bars.
+- Fabrication stack exposes exactly Input linkage, Coupler linkage, Output linkage separated by S10 spacers/clips.
 
 ### Five-bar
-Current geared two-crank 5-bar remains:
-- P1 and P2 are fixed crank centers.
-- J1 and Aux are crank tips.
-- J2 is two-rod circle intersection.
+Geared two-crank 5-bar remains:
+- P1, P2 = fixed crank centers.
+- J1, Aux = crank tips.
+- J2 = two-rod circle intersection.
 - `speed2` and `phase` remain explicit until full driver graph replaces them.
 
 ### Gear train
 - Any number of external spur gears allowed through `gearTrainRadii`.
-- Pitch centers are cumulative adjacent radius sums along `groundAngle`.
-- Output ratio is `(-1)^(n-1) * r0 / rN`.
+- Pitch centers = cumulative adjacent radius sums along `groundAngle`.
+- Output ratio = `(-1)^(n-1) * r0 / rN`.
 - Fabrication inserts idler gear layers for trains longer than two gears, scales required parts with gear count.
 
 ### Six-bar
-Use strict Watt-style novice contract instead of visual-only overlay:
+Strict Watt-style novice contract instead of visual-only overlay:
 - A = `p1`, B = `j1`, C = `j2`, D = `p2`, E = `aux/effector`.
-- A-D is fixed ground link.
+- A-D = fixed ground link.
 - A-B crank, B-C coupler, C-D rocker form base four-bar.
-- C-E is dyad link (`rodLength`), D-E is follower (`couplerPointDist`).
-- Foundry, Design, physics, export, fabrication all read same dyad/follower lengths and stack labels (`Dyad link`, `Follower link`).
+- C-E = dyad link (`rodLength`), D-E = follower (`couplerPointDist`).
+- Foundry, Design, physics, export, fabrication all read same dyad/follower lengths + stack labels (`Dyad link`, `Follower link`).
 
 ### Driving metadata
-- `driverGroupId` is virtual input shaft id.
+- `driverGroupId` = virtual input shaft id.
 - `driverPhaseOffset` shifts mechanism's local input phase before kinematic constraints sampled.
 - `phase` remains existing secondary-output phase for legacy 5-bar/geared mechanisms.
-- This milestone persists and solves direct phase-offset contract. Later CDMC graph milestone should replace ad-hoc fields with typed `pin`, `pointOnLine`, `phase`, `gear`, `fixed` constraints plus Newton-style solve loop.
+- This milestone persists + solves direct phase-offset contract. Later CDMC graph milestone replaces ad-hoc fields with typed `pin`, `pointOnLine`, `phase`, `gear`, `fixed` constraints + Newton-style solve loop.
 
 ## Next milestones
 1. **Current milestone:** shared gear-train/driving metadata, four-bar contract tests, multi-idler gear train tests, six-bar dyad/follower tests.
 2. **Constraint graph milestone:** introduce typed `Connection` records (`pin`, `pointOnLine`, `phase`, `gear`, `fixed`), map every mechanism to CDMC-style constraints.
-3. **Driving UI milestone:** add compact driver-group editor: pick input shaft, assign mechanisms, phase offset, gear train auto-fill.
-4. **Jansen/advanced six-bar milestone:** add separate specialized walking/Jansen templates only after each has canonical constraints, fabrication stack, tests. Avoid fake drawing overlays.
+3. **Driving UI milestone:** compact driver-group editor: pick input shaft, assign mechanisms, phase offset, gear train auto-fill.
+4. **Jansen/advanced six-bar milestone:** separate specialized walking/Jansen templates only after each has canonical constraints, fabrication stack, tests. Avoid fake drawing overlays.
 5. **Blueprint milestone:** assembly guide animates `clip → linkage/gear → S10 spacer → ...` for every stack generated by same helpers.
 
 ## Verification rules
 - Tests must assert physical distances/ratios, not only visibility.
-- Foundry and Design telemetry must read same helpers as fabrication/export.
-- No mechanism-specific renderer may invent different gear count, pitch ratio, or spacer stack.
+- Foundry + Design telemetry must read same helpers as fabrication/export.
+- No mechanism-specific renderer invents different gear count, pitch ratio, or spacer stack.

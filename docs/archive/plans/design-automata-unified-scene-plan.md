@@ -1,21 +1,21 @@
 # Design Automata Unified Scene Plan
 
 Status: historical provenance (baseline implemented); active hardening done in baseline
-Date: 2026-07-05  
+Date: 2026-07-05
 Scope: Path -> Foundry -> Design -> Blueprint -> Assembly mechanism/character simulation.
 
 ## Problem
 
-Mechanism Design looked connected but was not one automata scene. Mechanism rendered by Foundry Three renderer, character rendered by nested Puppet renderer — visual overlay, not physical system where mechanism end-effector drives character part/object through selected path target.
+Mechanism Design looked connected but not one automata scene. Mechanism via Foundry Three renderer, character via nested Puppet renderer — visual overlay, not physical system where mechanism end-effector drives character part/object through selected path target.
 
 Observed root cause:
 
 - 2026-07-05 baseline: `DesignFoundryPreview.tsx` feeds `buildAutomataSceneModel` into one `ThreeFoundryPreview`; no nested Puppet context layer remains in Design.
 - `AssemblyThreePreview.tsx` splits character assembly + mechanism assembly into separate renderer branches.
-- `PathCanvasPane.tsx` previews path motion with `ThreePuppetPreview`, explicitly suppressing mechanisms.
-- Canonical domain motion seam now `utils/automataSceneModel.ts`; `utils/designAutomataProjection.ts` is compatibility wrapper only.
+- `PathCanvasPane.tsx` previews path motion with `ThreePuppetPreview`, suppresses mechanisms.
+- Canonical domain motion seam now `utils/automataSceneModel.ts`; `utils/designAutomataProjection.ts` compatibility wrapper only.
 
-This is why screenshot shows character/board + mechanism near each other instead of real mechanism-driven character.
+This why screenshot shows character/board + mechanism near each other instead of real mechanism-driven character.
 
 ## Product rule
 

@@ -1,6 +1,6 @@
 # Button / Dialog / Control Matrix
 
-Table collects user controls easy to miss during web port. Raw auto-scan evidence: `inventory/qt_ui_inventory.*`.
+Table collects user controls easy miss during web port. Raw auto-scan evidence: `inventory/qt_ui_inventory.*`.
 
 ## App shell
 
@@ -13,7 +13,7 @@ Table collects user controls easy to miss during web port. Raw auto-scan evidenc
 | File menu | Download Snapshot As... | download timestamped local snapshot |
 | File menu | Export Blueprint Package | export cut sheets + assembly guide |
 | File menu | Download Portable Copy | download portable local project copy |
-| View menu | Zoom In/Out/Fit/Reset View | operate on persistent canvas viewport |
+| View menu | Zoom In/Out/Fit/Reset View | operate persistent canvas viewport |
 | View menu | Save/Restore/Reset Workspace Layout | persist panel/tab/workspace prefs |
 | Edit menu | Back (Undo), Forward (Redo) | project command history |
 | Options menu | Preferences... | open Options drawer/dialog |

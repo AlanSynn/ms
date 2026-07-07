@@ -5,10 +5,10 @@
 - `repo/src/automataii/domain/animation/image_to_annotations.py`
   - Loads ONNXRuntime (`onnxruntime.InferenceSession`).
   - Required runtime model: `repo/models/onnx/pose_model.onnx`.
-  - Optional detector path support exists, but current default disables detector inference, uses full-image detection cause `detector_backbone.onnx` is backbone-only artifact.
-  - Uses OpenCV/NumPy/SciPy to preprocess images, run pose inference, build masks, write `char_cfg.yaml`, `mask.png`, `texture.png`, overlays, bounding boxes.
+  - Optional detector path exists, but default disables detector inference, uses full-image detection cause `detector_backbone.onnx` is backbone-only artifact.
+  - Uses OpenCV/NumPy/SciPy preprocess images, run pose inference, build masks, write `char_cfg.yaml`, `mask.png`, `texture.png`, overlays, bounding boxes.
 - `repo/models/onnx/pose_model.onnx`
-  - Main pose-estimation model used at runtime.
+  - Main pose-estimation model at runtime.
 - `repo/models/onnx/detector_backbone.onnx`
   - Bundled model artifact, packaging requirement; not used by default runtime detection unless explicitly passed.
 - `repo/models/onnx/test_onnx_inference.py`
@@ -78,7 +78,7 @@
 - `repo/models/test_complete_legacy.py`
   - Legacy PyTorch-to-ONNX comparison smoke.
 - `repo/scripts/semantic_analyzer.py`
-  - Development analysis tool. Uses TF-IDF by default, can use `sentence-transformers/all-MiniLM-L6-v2`; that model not stored in repo, would be downloaded/cached externally if used.
+  - Dev analysis tool. Uses TF-IDF by default, can use `sentence-transformers/all-MiniLM-L6-v2`; model not stored in repo, downloaded/cached externally if used.
 
 ## Current Python dependencies involved
 

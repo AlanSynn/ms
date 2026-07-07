@@ -14,4 +14,4 @@
 | recommendation-dialog-empty | `ui-to-web/screenshots/95-recommendation-dialog-empty.png` | ok (empty-data state) |
 | custom-coupler-dialog | `ui-to-web/screenshots/94-custom-coupler-dialog.png` | ok |
 
-Nothing to compress. Body = heading + table. File paths in backticks (protected). Status already terse. All 11 rows intact, order preserved.
+Nothing to compress. Body = heading + table only. Paths in backticks protected. Status already terse. 11 rows, order kept.

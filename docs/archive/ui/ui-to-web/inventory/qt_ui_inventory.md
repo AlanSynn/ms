@@ -1,3 +1,5 @@
+Doc already max-compressed. Pure technical inventory — all code refs, file paths, line numbers, cataloged UI strings. No author prose to compress. Compressing quoted UI text (e.g. `"Choose the unit system for your mechanism blueprint:"`) corrupt inventory accuracy. Preserve verbatim per rules.
+
 # Qt UI Inventory
 
 - Source root: `src/automataii/presentation/qt`

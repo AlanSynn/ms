@@ -2,7 +2,7 @@
 
 Last refreshed: 2026-07-07
 
-Single-purpose historical notes. No larger archive family fit.
+Single-purpose historical notes. No archive family fit.
 
 ## Keep
 
@@ -10,4 +10,4 @@ Single-purpose historical notes. No larger archive family fit.
 
 ## Retirement rule
 
-Note's behavior claim moved into active contracts? Delete, replace with short pointer to owning source of truth.
+Behavior claim moved into active contracts? Delete, replace with short pointer to owning source of truth.

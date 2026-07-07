@@ -1,6 +1,6 @@
 # Automataii UI → Web Port Specification
 
-Recursively reviews PyQt6 UI under `src/automataii/presentation/qt/`. Summarizes screens, tabs, buttons, dialogs, grids, canvas structure for web rebuild.
+Reviews PyQt6 UI under `src/automataii/presentation/qt/`. Summarizes screens, tabs, buttons, dialogs, grids, canvas structure for web rebuild.
 
 ## 0. Inspection evidence
 
@@ -42,11 +42,11 @@ Experiment mode title prefix (`1.`, `2.`, `3.`); Foundry hidden in experiment mo
 
 ### Web shell recommendation
 
-- Do **not** create separate canvases per route/tab.
+- **Not** separate canvas per route/tab.
 - One persistent center canvas, route-specific side panels.
-- Preserve top-level nav labels for continuity.
+- Keep top-level nav labels for continuity.
 - Options = modal drawer/dialog over same app state.
-- Keep status bar as bottom status/toast channel. Communicates workflow sequence, errors, save/export status.
+- Status bar = bottom status/toast channel. Signals workflow sequence, errors, save/export status.
 
 ## 2. Main menu and toolbar
 
@@ -64,7 +64,7 @@ Source: `src/automataii/presentation/qt/actions/action_manager.py`
 
 ### Toolbar
 
-Toolbar actions: New, Load Project, Download Snapshot, Export Blueprint Package, Download Portable Copy. Hidden by default; Options can show/hide.
+Toolbar actions: New, Load Project, Download Snapshot, Export Blueprint Package, Download Portable Copy. Hidden by default; Options show/hide.
 
 ### Web mapping
 
@@ -90,14 +90,14 @@ Source: `src/automataii/presentation/qt/tabs/image_processing_tab.py`
 
 - Horizontal splitter.
 - Left scrollable control panel, min ~220, max ~440, initial ~300.
-- Right panel with `ImageProcessingView` canvas and floating bottom-right zoom toolbar.
+- Right panel with `ImageProcessingView` canvas + floating bottom-right zoom toolbar.
 
 ### Left panel groups and controls
 
 | Group | Controls | Notes |
 | --- | --- | --- |
-| Input Drawing | `Use <Sample> Example` buttons, `Load Image File` | sample buttons from example images, limited to 2; browser hardware capture removed |
-| Processing Steps | `Process Image (Skeleton)`, `Edit Skeleton`, `Save Skeleton`, `Generate Body Parts`, plus optional `Extend Skeleton 10%`, `Lock/Unlock Joints` | implemented by `ProcessingStepsGroup`; detailed steps hideable |
+| Input Drawing | `Use <Sample> Example` buttons, `Load Image File` | sample buttons from example images, capped at 2; browser hardware capture removed |
+| Processing Steps | `Process Image (Skeleton)`, `Edit Skeleton`, `Save Skeleton`, `Generate Body Parts`, optional `Extend Skeleton 10%`, `Lock/Unlock Joints` | `ProcessingStepsGroup`; detailed steps hideable |
 | Recognition Editing | `Edit Parts / Skeleton / Boxes`, `Edit Skeleton Joints`, `Save Skeleton` | opens manual segmentation/skeleton editing surfaces |
 | View Controls | `+`, `−`, `⌖`, `1:1` | zoom in/out/fit/reset |
 | Character Setup | `Replace Character` | assigns processed image as current character |
@@ -118,7 +118,7 @@ Source: `src/automataii/presentation/qt/image_view.py`
 
 ### Web mapping
 
-- Panel: `CharacterPanel` with groups matching above.
+- Panel: `CharacterPanel`, groups match above.
 - Canvas layers: `source.image`, `skeleton.bonesJoints`, `overlays.debugStatus`, `grid`.
 - Floating zoom control → reusable `CanvasZoomToolbar`.
 - Manual edit launch opens `ManualSegmentationDialog`.
@@ -134,14 +134,14 @@ Source: `src/automataii/presentation/qt/tabs/editor/tab.py` and `tabs/editor/com
 - Horizontal splitter.
 - Left control panel with scroll area.
 - Right `EditorView(QGraphicsView)` canvas.
-- Splitter initial sizes roughly `[300, 900]`.
+- Splitter initial sizes ~ `[300, 900]`.
 
 ### Controls
 
 | Group | Controls | Behavior |
 | --- | --- | --- |
 | `1 Parts` | `QListWidget` of character parts | select active body part; tooltip: select then start drawing path |
-| `2 Motion Path` | status label `Select a part`; radio `Closed`/`Open`; `✏️ Start Drawing Path`; `Clear`; info label; `Smoothness` slider 0–100 with value label | draw/edit path for selected part; closed default |
+| `2 Motion Path` | status label `Select a part`; radio `Closed`/`Open`; `✏️ Start Drawing Path`; `Clear`; info label; `Smoothness` slider 0–100 + value label | draw/edit path for selected part; closed default |
 | `3 Animation` | status label; play/stop/reset icon buttons | IK animation playback from path data |
 | `4 View Controls` | `+`, `−`, `⌖`, `⎈` | zoom in/out/fit/center character |
 
@@ -151,7 +151,7 @@ Source: `src/automataii/presentation/qt/views/editor_view.py`
 
 - Class: `EditorView(QGraphicsView)`
 - Background grid via `drawBackground` with cached minor/major paths.
-- Character part items are `CharacterPartItem` with z index around `Z_PART_DEFAULT = 10`.
+- Character part items = `CharacterPartItem`, z index ~ `Z_PART_DEFAULT = 10`.
 - Skeleton overlay item uses `Z_SKELETON_OVERLAY = 50` in editor context.
 - Motion path drawing + vertex editing delegated to components.
 - Drag modes change by interaction mode: selection/rubber-band, path drawing, joint definition, skeleton edit, panning.
@@ -178,7 +178,7 @@ Sources:
 
 ### Layout
 
-- Left scrollable panel, fixed width around 300.
+- Left scrollable panel, fixed width ~300.
 - Right mechanism canvas/view.
 - Same visual language as Editor tab.
 
@@ -209,14 +209,14 @@ Important for web rebuild: user reported mismatches here.
 
 - Panel: `MechanismDesignPanel`.
 - Canvas layers: `character.parts`, `skeleton`, `motion.paths`, `mechanism.instances`, `mechanism.traces`, `handles.parametric`, `blueprint.fabrication`.
-- `Parametric Edit` no independent state. Toggles `handles.parametric.visible/editable`; updates canonical `MechanismInstance.parameters` immediately.
+- `Parametric Edit` has no independent state. Toggles `handles.parametric.visible/editable`; updates canonical `MechanismInstance.parameters` immediately.
 - If mechanism cannot solve full 360°, represent `validAngleRange`, draw/scrub valid range only. Don't block partially valid mechanisms.
 
 ## 6. Mechanism Foundry tab
 
 Screenshot: ![](screenshots/04-main-tab-mechanism-foundry.png)
 
-Source: `src/automataii/presentation/qt/tabs/mechanism_foundry/foundry_view.py` plus gallery/info widgets.
+Source: `src/automataii/presentation/qt/tabs/mechanism_foundry/foundry_view.py` + gallery/info widgets.
 
 ### States
 
@@ -259,9 +259,9 @@ Sources: `gallery_view.py`, `gallery_thumbnail.py`
 ### Foundry canvas/grid
 
 - Class uses separate `QGraphicsScene/QGraphicsView`.
-- Draws grid and axes with low z-values around -99.
-- Fabrication board/hole overlay around z -97.
-- Mechanism items z ~5–21 depending family.
+- Draws grid + axes, low z-values ~-99.
+- Fabrication board/hole overlay ~z -97.
+- Mechanism items z ~5–21 by family.
 - Uses physical context: grid enabled, grid cell cm, pitch choice, physical profile.
 - Snaps parameter values to physical kit constraints where enabled.
 
@@ -269,7 +269,7 @@ Sources: `gallery_view.py`, `gallery_thumbnail.py`
 
 - Foundry = route/panel preset over same scene store.
 - Gallery: non-canvas card grid.
-- When entering Foundry editor, either:
+- Entering Foundry editor, either:
   - same canvas, only `foundry.preview` visible, or
   - isolated preview scene, but export serializes exact canonical params into global scene.
 - `Add to Mechanism Tab` creates `MechanismInstance` with unique id every time, even if type repeats.
@@ -295,7 +295,7 @@ Source: `src/automataii/presentation/qt/tabs/options_tab.py`, opened by `Automat
 ### Web mapping
 
 - Modal dialog or right settings drawer.
-- Store options in a single app settings slice.
+- Store options in single app settings slice.
 - Grid/physical context updates dispatch to scene state immediately; invalidate snap caches/blueprint previews.
 
 ## 8. Dialog inventory
@@ -354,7 +354,7 @@ Source: `dialogs/recommendation_dialog.py`
 
 Web mapping:
 
-- Use a modal/sheet with preview cards.
+- Modal/sheet with preview cards.
 - Each recommendation carries full mechanism payload: type, params, key points, reverse direction, fabrication readiness, valid angle range.
 - Apply creates/updates mechanism instance; preview click only selects/highlights.
 
@@ -368,7 +368,7 @@ Screenshot: ![](screenshots/94-custom-coupler-dialog.png)
 Source: `tabs/mechanism_foundry/dialogs/custom_coupler_dialog.py`
 
 - Title: `Custom Coupler Path`
-- Description text about selecting a point along coupler link.
+- Description text about selecting point along coupler link.
 - Slider + numeric spinbox for `Fraction:`.
 - OK/Cancel.
 
@@ -390,7 +390,7 @@ Source: `tabs/mechanism_foundry/dialogs/custom_coupler_dialog.py`
 2. Letter sheet bounds visible where print/fabrication matters.
 3. Character scale-to-letter stored once, reflected in every tab.
 4. Grid rendering consistent across Character Selection, Path Editor, Mechanism Design, Foundry, Blueprint.
-5. Fabrication board coordinates derive from same scene coordinate system, not per-export generic defaults.
+5. Fabrication board coords derive from same scene coordinate system, not per-export generic defaults.
 
 ## 10. Z-order and layer mapping
 
@@ -464,7 +464,7 @@ Recommended slices:
 5. Port Mechanism Design instances + parametric handles.
 6. Port Recommendation dialog with card previews.
 7. Port Foundry gallery/editor + exact Add-to-Mechanism-Design serialization.
-8. Port Options and physical context propagation.
+8. Port Options + physical context propagation.
 9. Port Blueprint/Fabrication preview/export from canonical state.
 10. Add regression harness: screenshot snapshots + scene-state snapshots + pointer-drag tests.
 

@@ -11,13 +11,13 @@ Date: 2026-06-27
 
 ## Current stance
 
-- Keep one app package for now.
+- One app package for now.
 - Source-module seams first: `MechanismFeatureRegistry`, then `MechanismSnapshot`.
-- No libraries until benchmark or maintenance blocker proves need.
+- No libraries till benchmark/maintenance blocker proves need.
 
 ## Library evaluation snapshot
 
-Local dep check uses `package.json` + `bun.lock`; latest version check used `npm view` + official Bun GitHub latest release (`bun-v1.3.14`, published 2026-05-13) on 2026-06-27. Repo now installs with Bun 1.3.14.
+Local dep check uses `package.json`+`bun.lock`; latest version check used `npm view`+ official Bun GitHub latest release (`bun-v1.3.14`, published 2026-05-13) on 2026-06-27. Repo installs with Bun 1.3.14 now.
 
 | Area | Current | Latest observed | Decision |
 |---|---:|---:|---|
@@ -25,9 +25,9 @@ Local dep check uses `package.json` + `bun.lock`; latest version check used `npm
 | React / React DOM | 19.2.7 | 19.2.7 | Keep. |
 | Three | 0.185.0 | 0.185.0 | Keep. |
 | onnxruntime-web | 1.27.0 | 1.27.0 | Keep. |
-| @playwright/test | 1.61.1 | 1.61.1 | Keep; browser suite runs production preview without weakening coverage. |
-| Vite | 8.1.0 | 8.1.0 | Keep after build/test verification. |
-| TypeScript | 6.0.3 | 6.0.3 | Keep after typecheck verification. |
+| @playwright/test | 1.61.1 | 1.61.1 | Keep; browser suite runs production preview, coverage unchanged. |
+| Vite | 8.1.0 | 8.1.0 | Keep after build/test verify. |
+| TypeScript | 6.0.3 | 6.0.3 | Keep after typecheck verify. |
 | esbuild | 0.28.1 | 0.28.1 | Direct devDependency; contract tests invoke CLI. |
 | @react-three/fiber | not installed | 9.6.1 | Defer/avoid; imperative Three has cache/perf tests. Add only if renderer complexity bottlenecks. |
 | @react-three/drei | not installed | 10.7.7 | Defer; depends on R3F adoption. |
@@ -47,27 +47,27 @@ Local dep check uses `package.json` + `bun.lock`; latest version check used `npm
 - [x] M2 snapshot seam.
 - [ ] M3 stage/domain branch replacement.
   - [x] M3 slice 2: pane ownership / compact workbench corrections.
-  - [x] M3 slice 3: Foundry preview/physics extraction and WebGL pixel-ratio cap.
+  - [x] M3 slice 3: Foundry preview/physics extraction + WebGL pixel-ratio cap.
   - [x] M3 slice 4: Bun-first modern toolchain.
-  - [x] M3 slice 5: Rapier/Three high-performance physics kernel boundary and Viser-style scene policy.
+  - [x] M3 slice 5: Rapier/Three high-perf physics kernel boundary + Viser-style scene policy.
 
 ## Consensus review notes
 
-- Architect review round 1: revise. Required dependency/package adoption gate become executable in test spec.
+- Architect review round 1: revise. Required dependency/package adoption gate made executable in test spec.
 - Revision applied: added `Dependency/package governance gate` to `.omx/plans/test-spec-mechanism-subsystem-governance-execution.md`.
 - Architect review round 2: approve.
-- Critic review: approve. Confirmed milestones scoped, verifiable, feature-preserving, dependency/performance gated.
+- Critic review: approve. Confirmed milestones scoped, verifiable, feature-preserving, dependency/perf gated.
 - Runtime note: Codex native subagent notifications did not mirror into OMX tracker; tracker repaired with completed native subagent IDs before Autopilot state moved to `ultragoal`.
-- M2 code-review round 1: request changes / architectural block. Snapshot fingerprint covered core dims but missed persisted mechanism fields `showOutputGear` and `outputGearRadius`.
-- M2 code-review round 2: approve / architectural clear after persisted output-gear fields added to snapshot payload and fingerprint path.
+- M2 code-review round 1: request changes / architectural block. Snapshot fingerprint covered core dims but missed persisted mechanism fields `showOutputGear`+`outputGearRadius`.
+- M2 code-review round 2: approve / architectural clear after persisted output-gear fields added to snapshot payload + fingerprint path.
 
 ## Implementation log
 
-- M0: added `docs/subsystem-governance-and-mechanism-contracts.md` + this execution log to static contract corpus.
+- M0: added `docs/subsystem-governance-and-mechanism-contracts.md`+ this execution log to static contract corpus.
 - M0: locked governance contract strings for `ProjectState`, `MechanismFeatureRegistry`, `MechanismSnapshot`, `ToonSceneProjection`, duplicate-registry prohibition, performance governance.
 - M1: added `utils/mechanismFeatureRegistry.ts` as thin source-module seam over existing mechanism metadata, default factory, kinematics solver, feasible-range sampler, required-parts helper, fabrication stack, fabrication render plan.
 - M1: added contract coverage proving registry covers every `ALL_MECHANISM_TYPES` entry exactly once and delegates to canonical helpers rather than duplicating mechanism logic.
-- M2: added `utils/mechanismSnapshot.ts` as immutable derived DTO builder from `ProjectState` + mechanism id.
+- M2: added `utils/mechanismSnapshot.ts` as immutable derived DTO builder from `ProjectState`+ mechanism id.
 - M2: snapshot fingerprint now changes for mechanism parameters, output gear display/radius fields, target ids, relevant path data, physical-kit changes while preserving input `ProjectState`.
 - M2 rework: expanded snapshot mechanism payload to carry complete persisted behavior/rendering param set from `MechanismConfig` before stage adapters consume snapshots.
 - M2: contract coverage now checks deterministic snapshots, recursive freeze behavior, every mechanism type, fabrication plan validation results, adapter hints, missing-id null behavior.
