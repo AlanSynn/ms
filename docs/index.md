@@ -71,9 +71,6 @@ Keep for provenance and rollback reasoning, but do not use as default context.
 - [`adr/2026-06-27-high-performance-3d-physics-stack.md`](adr/2026-06-27-high-performance-3d-physics-stack.md)
 - [`archive/ports/to-port-web-onnx/`](archive/ports/to-port-web-onnx/)
 - [`archive/ui/ui-to-web/`](archive/ui/ui-to-web/)
-- [`archive/analysis/agent-llm-harness-audit-20260707.md`](archive/analysis/agent-llm-harness-audit-20260707.md)
-- [`archive/analysis/agent-llm-harness-audit-worker-3-20260707.md`](archive/analysis/agent-llm-harness-audit-worker-3-20260707.md)
-- [`archive/analysis/docs-contract-20260707-outdated-and-conflict-audit.md`](archive/analysis/docs-contract-20260707-outdated-and-conflict-audit.md)
 - [`archive/misc/z_axis_layering.md`](archive/misc/z_axis_layering.md)
 - All `.omx/context/*.md` and `.omx/state/*` runtime notes (tooling state, not product docs)
 

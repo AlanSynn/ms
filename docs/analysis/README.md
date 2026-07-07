@@ -8,9 +8,7 @@ Store audits, migration analyses, and review reports here. OMX workflow audits m
 
 ## Cold archives
 
-- [Agent/LLM/Harness Audit — 2026-07-07](../archive/analysis/agent-llm-harness-audit-20260707.md)
-- [Agent/LLM/Harness Audit (Task 3)](../archive/analysis/agent-llm-harness-audit-worker-3-20260707.md)
-- [Outdated/Conflict Audit — 2026-07-07](../archive/analysis/docs-contract-20260707-outdated-and-conflict-audit.md)
+- None currently active beyond this file’s provenance scope.
 
 ## Index rail
 
