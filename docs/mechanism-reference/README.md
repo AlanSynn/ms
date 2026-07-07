@@ -1,15 +1,17 @@
 # Automataii Mechanism Reference
 
-This folder is the portable mechanism-unit rulebook for rebuilding Automataii's mechanism and fabrication logic in another application. It extracts the current source-of-truth contracts from:
+This folder is the portable mechanism-unit rulebook for rebuilding Automataii's mechanism and fabrication logic in another application. It captures the current runtime contract and its historical provenance.
 
-- `src/automataii/shared/physical_kit.py`
-- `src/automataii/shared/fabrication_assembly.py`
-- `src/automataii/application/mechanism_foundry/controller.py`
-- `src/automataii/application/mechanism_foundry/mechanism_types.py`
-- `src/automataii/application/mechanism_transfer/contract.py`
-- `fabrication/manifest.json`
-- `fabrication/assembly/recipes.json`
-- `source/mechanism-catalog.snapshot.json`
+Current web contracts are maintained in the codebase modules and tests; the source-list below is historical provenance preserved for migration context:
+
+- `src/automataii/shared/physical_kit.py` *(legacy source path; historical only)*
+- `src/automataii/shared/fabrication_assembly.py` *(legacy source path; historical only)*
+- `src/automataii/application/mechanism_foundry/controller.py` *(legacy source path; historical only)*
+- `src/automataii/application/mechanism_foundry/mechanism_types.py` *(legacy source path; historical only)*
+- `src/automataii/application/mechanism_transfer/contract.py` *(legacy source path; historical only)*
+- `fabrication/manifest.json` (current local source snapshot)
+- `fabrication/assembly/recipes.json` (current local source snapshot)
+- `source/mechanism-catalog.snapshot.json` (historical migration artifact snapshot)
 
 ## Read order
 

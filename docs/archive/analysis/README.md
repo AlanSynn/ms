@@ -8,6 +8,7 @@ Historical audits, migration analyses, research reports. No longer part of activ
 
 - `agent-llm-harness-audit-20260707.md`
 - `agent-llm-harness-audit-worker-3-20260707.md`
+- `docs-contract-20260707-outdated-and-conflict-audit.md` — repository docs-management conflict audit and deletion plan.
 
 ## Retirement rule
 

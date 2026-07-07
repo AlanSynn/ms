@@ -10,6 +10,7 @@ Superseded plans, abandoned attempts, historical planning context.
 - `mechanism-driving-plan.md`
 - `design-automata-unified-scene-plan.md`
 - `realistic-25d-3d-physics-platform-plan.md`
+- `platform-rebuild-porting-flow.md`
 - `canva-video-editor-workspace-plan.md`
 
 ## Retirement rule

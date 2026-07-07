@@ -7,7 +7,6 @@ Last refreshed: 2026-07-07
 Use these first for implementation decisions, planning, and validation.
 
 - [`../AGENTS.md`](../AGENTS.md)
-- [`../DESIGN.md`](../DESIGN.md)
 - [`README.md`](../README.md)
 - [`app-command-shortcuts.md`](app-command-shortcuts.md)
 - [`workbench-flow-ux-contract.md`](workbench-flow-ux-contract.md)
@@ -15,7 +14,6 @@ Use these first for implementation decisions, planning, and validation.
 - [`mechanism-blueprint-manual.md`](mechanism-blueprint-manual.md)
 - [`deployment.md`](deployment.md)
 - [`macos-distribution.md`](macos-distribution.md)
-- [`platform-rebuild-porting-flow.md`](platform-rebuild-porting-flow.md)
 - [`mechanism-reference/`](mechanism-reference/)
 - [`mechanism-reference/00-symbols-coordinate-system.md`](mechanism-reference/00-symbols-coordinate-system.md)
 - [`mechanism-reference/01-physical-kit-parts.md`](mechanism-reference/01-physical-kit-parts.md)
@@ -67,6 +65,7 @@ Keep for provenance and rollback reasoning, but do not use as default context.
 - [`archive/plans/realistic-25d-3d-physics-platform-plan.md`](archive/plans/realistic-25d-3d-physics-platform-plan.md)
 - [`archive/plans/canva-video-editor-workspace-plan.md`](archive/plans/canva-video-editor-workspace-plan.md)
 - [`archive/ui/ui-dead-feature-audit.md`](archive/ui/ui-dead-feature-audit.md)
+- [`archive/plans/platform-rebuild-porting-flow.md`](archive/plans/platform-rebuild-porting-flow.md)
 - [`archive/execution/subsystem-governance-execution-log.md`](archive/execution/subsystem-governance-execution-log.md)
 - [`archive/plans/mechanism-driving-plan.md`](archive/plans/mechanism-driving-plan.md)
 - [`adr/2026-06-27-high-performance-3d-physics-stack.md`](adr/2026-06-27-high-performance-3d-physics-stack.md)
@@ -74,6 +73,7 @@ Keep for provenance and rollback reasoning, but do not use as default context.
 - [`archive/ui/ui-to-web/`](archive/ui/ui-to-web/)
 - [`archive/analysis/agent-llm-harness-audit-20260707.md`](archive/analysis/agent-llm-harness-audit-20260707.md)
 - [`archive/analysis/agent-llm-harness-audit-worker-3-20260707.md`](archive/analysis/agent-llm-harness-audit-worker-3-20260707.md)
+- [`archive/analysis/docs-contract-20260707-outdated-and-conflict-audit.md`](archive/analysis/docs-contract-20260707-outdated-and-conflict-audit.md)
 - [`archive/misc/z_axis_layering.md`](archive/misc/z_axis_layering.md)
 - All `.omx/context/*.md` and `.omx/state/*` runtime notes (tooling state, not product docs)
 

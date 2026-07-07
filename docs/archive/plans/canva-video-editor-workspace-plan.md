@@ -1,6 +1,6 @@
 # Canva / Video-Editor Workspace Plan
 
-Status: archived provenance; historical child plan under `../platform-rebuild-porting-flow.md`
+Status: archived provenance; historical child plan under `platform-rebuild-porting-flow.md`
 Scope: make MotionSmith behave like persistent in-browser editor: Canva-like creation, video-player-like motion, Figma-like selection/inspector editing.
 Non-goal: no mock controls. Every visible control must wire to real `ProjectState`, browser APIs, ONNX, playback, validation, or export.
 

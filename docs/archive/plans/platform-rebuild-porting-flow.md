@@ -1,9 +1,6 @@
-# Platform Rebuild UI/UX Porting Flow
+# Platform Rebuild UI/UX Porting Flow (Historical)
 
-This document is the UI/UX and product-flow source of truth for rebuilding
-Automataii on another platform. It deliberately leaves all existing documents in
-place and links to them as historical design evidence, implementation notes, and
-release/deployment references.
+This document is archived historical evidence for Qt-to-web/platform rebuild work. It preserves prior workflow mapping and implementation context for provenance/audit, while implementation authority now lives in current product contracts.
 
 Use this when the goal is a total rebuild, not a small Qt refactor. The new
 platform may be web, native desktop, tablet, or a hybrid app, but it must preserve
@@ -46,7 +43,7 @@ flowchart LR
 
 ## 2. Current screen map
 
-The Qt app currently creates these workflow surfaces in
+The legacy Qt app created these workflow surfaces in
 `src/automataii/presentation/qt/main_window.py`:
 
 | Order | Current object | User-facing name | Rebuild responsibility |
@@ -723,17 +720,17 @@ tree at `src/automataii/...`. The ONNX/AI subset that was copied for this port
 lives under `docs/archive/ports/to-port-web-onnx/`; current web implementation evidence
 lives in `App.tsx`, `components/`, `utils/`, `types.ts`, and `tests/`.
 
-- [`docs/mechanism-blueprint-manual.md`](mechanism-blueprint-manual.md) — user-facing
+- [`docs/mechanism-blueprint-manual.md`](../../mechanism-blueprint-manual.md) — user-facing
   blueprint/fabrication manual.
-- [`docs/deployment.md`](deployment.md) and
-  [`docs/macos-distribution.md`](macos-distribution.md) — release and packaging
+- [`docs/deployment.md`](../../deployment.md) and
+  [`docs/macos-distribution.md`](../../macos-distribution.md) — release and packaging
   references.
-- [`docs/archive/misc/z_axis_layering.md`](archive/misc/z_axis_layering.md) — layer ordering behavior.
-- [`docs/adr/`](adr/) — architecture decision records.
-- [`docs/prd/`](prd/) — product requirements and refactor plans.
-- [`docs/analysis/`](analysis/) — historical audits and migration analyses.
-- [`docs/observability/`](observability/) — scenario telemetry and diagnostics.
-- [`docs/sessions/`](sessions/) — previous implementation session summaries.
+- [`docs/archive/misc/z_axis_layering.md`](../misc/z_axis_layering.md) — layer ordering behavior.
+- [`docs/adr/`](../../adr/) — architecture decision records.
+- [`docs/prd/`](../../prd/) — product requirements and refactor plans.
+- [`docs/analysis/`](../../analysis/) — historical audits and migration analyses.
+- [`docs/observability/`](../../observability/) — scenario telemetry and diagnostics.
+- [`docs/sessions/`](../../sessions/) — previous implementation session summaries.
 
 
 ## 15. Current implementation inventory for porting

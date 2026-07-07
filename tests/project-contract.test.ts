@@ -294,9 +294,9 @@ const linkageSceneLengthIsFabricationPreset = (length: number) =>
   FABRICATION_LINKAGE_SPECS.some(spec => Math.abs(spec.lengthMm * SCENE_PX_PER_MM - length) < 1e-9);
 assert(existsSync(join(process.cwd(), 'resources/examples/raw/girl.png')), 'girl starter source image is present');
 assert(existsSync(join(process.cwd(), 'resources/examples/raw/boy.PNG')), 'boy starter source image is present');
-const designContract = readFileSync(join(process.cwd(), 'DESIGN.md'), 'utf8');
 const agentsContract = readFileSync(join(process.cwd(), 'AGENTS.md'), 'utf8');
 const docsMap = readFileSync(join(process.cwd(), 'docs', 'README.md'), 'utf8');
+const workbenchContractText = readFileSync(join(process.cwd(), 'docs', 'workbench-flow-ux-contract.md'), 'utf8');
 const noviceUiPlan = readFileSync(join(process.cwd(), 'docs', 'prd', 'novice-canva-style-ui-plan.md'), 'utf8');
 const classroomFieldPlan = readFileSync(join(process.cwd(), 'docs', 'prd', 'classroom-field-support-plan.md'), 'utf8');
 const assemblyStepPlayerPlan = readFileSync(join(process.cwd(), 'docs', 'prd', 'assembly-step-player-redesign-plan.md'), 'utf8');
@@ -312,7 +312,6 @@ const brandStaticFiles = [
   'bun.lock',
   'metadata.json',
   'README.md',
-  'DESIGN.md',
   'vite.config.ts',
   'run_browser.bat',
   'build_portable_exe.bat',
@@ -817,10 +816,6 @@ assert(agentsContract.includes('Classroom entry is theme-guided first') && agent
 assert(agentsContract.includes('`Reset Lesson` must restore a known-good lesson baseline') && agentsContract.includes('preserving app settings'), 'AGENTS.md locks stable lesson reset semantics');
 assert(agentsContract.includes('Blueprint owns build files') && agentsContract.includes('Assembly owns animated step-by-step build'), 'AGENTS.md preserves Blueprint versus Assembly role split');
 assert(agentsContract.includes('Use domain-driven vocabulary consistently') && agentsContract.includes('Keep harness engineering first-class'), 'AGENTS.md locks DDD vocabulary and harness-friendly seam rules');
-assert(designContract.includes('Shared editor workbench'), 'DESIGN.md documents the shared editor workbench');
-assert(designContract.includes('Project governance: `AGENTS.md`'), 'DESIGN.md points contributors at the project agent contract');
-assert(designContract.includes('#8b5cf6'), 'DESIGN.md uses the MotionSmith light primary color');
-assert(!designContract.includes('Cyber-Industrial Minimalism'), 'DESIGN.md no longer points contributors at the old dark CAD direction');
 assert(docsMap.includes('active novice flow and tutorial/help plan'), 'docs map treats the novice tutorial plan as an active implementation plan');
 assert(docsMap.includes('classroom field-study gap plan'), 'docs map treats the classroom field support plan as an active implementation plan');
 assert(agentsContract.includes('tinkerable workbench'), 'AGENTS.md codifies the tinkerable workbench direction');
@@ -3985,8 +3980,8 @@ assert(threePreviewText.includes('cut-hole-ring'), '3D puppet preview draws rais
 assert(threePreviewText.includes('transparent: false, opacity: 1'), '3D puppet body plates are opaque assembled solids, not ghost overlays');
 assert(threePreviewText.includes('disposeOwnedMaterials(scene)'), '3D puppet preview disposes owned decal textures on unmount');
 assert(agentsContract.includes('Path Editor must render only character, skeleton, editable path') && agentsContract.includes('Mechanism Design is the first workflow tab that overlays character + path + mechanism together'), 'AGENTS.md locks tab-scoped rendering ownership for Path vs Mechanism Design');
-assert(designContract.includes('Getting Started is a compact modal dialog'), 'DESIGN.md separates Getting Started from full-screen onboarding');
-assert(designContract.includes('The Character tab is functional'), 'DESIGN.md defines Character as a functional editor tab');
+assert(agentsContract.includes('Getting Started can be reopened from the Character/Getting Started action') && agentsContract.includes('compact modal'), 'AGENTS.md defines compact Getting Started reopen behavior and scope after startup');
+assert(workbenchContractText.includes('Character is correct creation owner') && workbenchContractText.includes('compact'), 'Workbench contract keeps Character as a compact functional creation owner');
 assert(indexText.includes('id="boot-loader"') && indexText.includes('aria-label="Loading MotionSmith"') && indexText.includes('boot-word') && indexText.includes('boot-version') && indexText.includes('Preparing AI model'), 'startup uses one static logo/wordmark/version/model boot loader before React mounts');
 assert(indexText.includes('resources/icons/AppIcon.png') && !indexText.includes('src-tauri/icons/icon.png'), 'startup boot loader uses the canonical MotionSmith app icon instead of the old blue grid path');
 assert(indexText.includes('#boot-loader .boot-word') && indexText.includes('max-width: calc(100vw - 2rem)') && indexText.includes('white-space: nowrap'), 'startup wordmark is viewport-constrained instead of clipped');

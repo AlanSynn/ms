@@ -11,19 +11,17 @@ For current tab, pane, button, and tooltip UX, use `workbench-flow-ux-contract.m
 
 - **Hot**: active contracts + active plans.
 - **Cold**: historical/provenance docs kept only for evidence.
-- **Index**: where each family lives (`docs/index.md`).
+- **Index**: where each family lives: `docs/index.md`.
 
 Start with:
 - [`index.md`](index.md)
 - [`../AGENTS.md`](../AGENTS.md)
-- [`../DESIGN.md`](../DESIGN.md)
 - [`../README.md`](../README.md)
 
 ## Active source of truth
 
 - [`../AGENTS.md`](../AGENTS.md) — repo operating contract, architecture discipline, verification gates.
-- [`../DESIGN.md`](../DESIGN.md) — UI/UX design contract.
-- [`platform-rebuild-porting-flow.md`](platform-rebuild-porting-flow.md) — parent rebuild requirements.
+- [`README.md`](../README.md) — UI/UX and product-level direction.
 - [`workbench-flow-ux-contract.md`](workbench-flow-ux-contract.md) — canonical tab/pane/button/tooltip flow contract and UX drift ledger.
 - [`app-command-shortcuts.md`](app-command-shortcuts.md) — app commands, menu items, keyboard shortcuts.
 - [`mechanism-reference/`](mechanism-reference/) — physical mechanism, spacer, z-stack, schema, and assembly rules.
@@ -57,12 +55,13 @@ Start with:
 
 ## Historical / evidence docs
 
-Keep these for provenance; do not treat them as current UI contract unless `DESIGN.md` or active plans cite them.
+Keep these for provenance; do not treat them as current UI contract unless active plans cite them.
 
 Use archive family maps first: [`archive/README.md`](archive/README.md), [`archive/plans/README.md`](archive/plans/README.md), [`archive/ui/README.md`](archive/ui/README.md), [`archive/analysis/README.md`](archive/analysis/README.md), [`archive/ports/README.md`](archive/ports/README.md), [`archive/execution/README.md`](archive/execution/README.md), [`archive/misc/README.md`](archive/misc/README.md)
 
 - [`archive/ui/ui-to-web/`](archive/ui/ui-to-web/) — Qt-to-web inventory, screenshots, porting evidence.
 - [`archive/ui/ui-pane-tab-redesign-plan.md`](archive/ui/ui-pane-tab-redesign-plan.md) — historical pane redesign notes; current contract is `workbench-flow-ux-contract.md` plus `subsystem-governance-and-mechanism-contracts.md`.
+- [`archive/plans/platform-rebuild-porting-flow.md`](archive/plans/platform-rebuild-porting-flow.md) — historical rebuild provenance (Qt-to-web rebuild sequence and authority map).
 - [`archive/plans/canva-video-editor-workspace-plan.md`](archive/plans/canva-video-editor-workspace-plan.md) — superseded by current pane/workbench contract.
 - [`archive/plans/realistic-25d-3d-physics-platform-plan.md`](archive/plans/realistic-25d-3d-physics-platform-plan.md) — superseded by toon 2.5D main + 3D unlock plan.
 - [`archive/plans/design-automata-unified-scene-plan.md`](archive/plans/design-automata-unified-scene-plan.md) — historical scene/unification prototype; current rule is SSOT + workbench contracts.

@@ -24,8 +24,8 @@
       "sha256": "4b71144e727be3bdd16efc7a9efd59d2620a481b4ca28fa9a5f98ef55b4ba484"
     },
     {
-      "source": "docs/platform-rebuild-porting-flow.md",
-      "bundle_path": "repo/docs/platform-rebuild-porting-flow.md",
+      "source": "docs/archive/plans/platform-rebuild-porting-flow.md",
+      "bundle_path": "repo/docs/archive/plans/platform-rebuild-porting-flow.md",
       "size_bytes": 36729,
       "sha256": "579d7b12a7b4bef50c9b1aad7d07e5c16302fe522db972f8fed50544f7448efa"
     },
