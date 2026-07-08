@@ -11,6 +11,7 @@
     "build:exe": "bun scripts/with-rustup-cargo.mjs tauri build --bundles app",
     "test": "bun run test:contracts",
     "test:contracts": "bun tests/project-contract.test.ts",
+    "generate:fabrication": "bun scripts/generate-fabrication-assets.ts",
     "build:dmg": "bun scripts/with-rustup-cargo.mjs tauri build --bundles dmg",
     "test:browser": "bun run build && env -u NO_COLOR PLAYWRIGHT_SERVER=preview playwright test",
     "build:tauri-frontend": "tsc && vite build --base ./"

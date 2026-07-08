@@ -114,6 +114,7 @@ const uniqSorted = (values: string[]) => [...new Set(values)];
 
 const updateManifest = (manifestPath: string, boardPath: string) => {
   const payload = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>;
+  const before = JSON.stringify(payload);
 
   const assembly = payload.assembly && typeof payload.assembly === 'object' ? payload.assembly as Record<string, unknown> : null;
   if (assembly) {
@@ -139,6 +140,8 @@ const updateManifest = (manifestPath: string, boardPath: string) => {
     payload.managed_files = uniqSorted(managed);
   }
 
+  const after = JSON.stringify(payload);
+  if (before === after) return;
   writeFileSync(manifestPath, `${JSON.stringify(payload, null, 2)}\n`);
 };
 

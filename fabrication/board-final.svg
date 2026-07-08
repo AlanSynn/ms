@@ -2,7 +2,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"
      width="305mm" height="305mm"
      viewBox="0 0 305 305"
-     data-profile-key="motionsmith-ms4n" data-grid-pitch-mm="20" data-hole-diameter-mm="4" data-board-role="main-board" data-grid-rows="15" data-grid-columns="15">
+     data-profile-key="motionsmith-ms4n" data-grid-pitch-mm="20" data-hole-diameter-mm="4" data-board-role="main-board" data-grid-rows="15" data-grid-columns="15" data-generated-by="scripts/generate-fabrication-board.ts">
   <title>MotionSmith 15x15 main board</title>
   <desc>Main fabrication board with 4 mm holes and engraved A-O / 1-15 coordinates.</desc>
   <defs>

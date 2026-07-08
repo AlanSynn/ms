@@ -1,7 +1,9 @@
 import type { Point } from '../types';
 import { boardColumnLabel, parseBoardCoordinateLabel } from './coordinates';
 
-export const FABRICATION_SOURCE_SSOT = 'fabrication/generate_fabrication_templates.py' as const;
+export const FABRICATION_SOURCE_PYTHON_TEMPLATES = 'fabrication/generate_fabrication_templates.py' as const;
+export const FABRICATION_SOURCE_BOARD_TS = 'scripts/generate-fabrication-board.ts' as const;
+export const FABRICATION_SOURCE_SSOT = FABRICATION_SOURCE_PYTHON_TEMPLATES;
 export const FABRICATION_SCHEMA_VERSION = 'automataii.fabrication.v1' as const;
 export const FABRICATION_PROFILE_KEY = 'motionsmith-ms4n' as const;
 export const FABRICATION_DEFAULT_GRID_PITCH_MM = 20;

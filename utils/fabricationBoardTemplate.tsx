@@ -7,6 +7,7 @@ const SCORE = '#777777';
 const TEXT = '#333333';
 const ENGRAVE_TEXT = '#008000';
 const BOARD_FILL = '#ffffff';
+export const FABRICATION_BOARD_GENERATOR = 'scripts/generate-fabrication-board.ts';
 
 export interface BoardTemplateMetadata {
   /** SVG data key for downstream tooling. */
@@ -152,7 +153,7 @@ export const makeFabricationBoardTemplateSvg = (options: BoardTemplateOptions = 
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"
      width="${formatNumber(widthMm)}mm" height="${formatNumber(heightMm)}mm"
      viewBox="0 0 ${formatNumber(widthMm)} ${formatNumber(heightMm)}"
-     data-profile-key="${escapeText(metadata.profileKey)}" data-grid-pitch-mm="${formatNumber(metadata.pitchMm)}" data-hole-diameter-mm="${formatNumber(metadata.holeDiameterMm)}" data-board-role="${metadata.role ?? 'assembly-board-map'}" data-grid-rows="${metadata.rows}" data-grid-columns="${metadata.columns}">
+     data-profile-key="${escapeText(metadata.profileKey)}" data-grid-pitch-mm="${formatNumber(metadata.pitchMm)}" data-hole-diameter-mm="${formatNumber(metadata.holeDiameterMm)}" data-board-role="${metadata.role ?? 'assembly-board-map'}" data-grid-rows="${metadata.rows}" data-grid-columns="${metadata.columns}" data-generated-by="${escapeText(FABRICATION_BOARD_GENERATOR)}">
   <title>${escapeText(title)}</title>
   <desc>${escapeText(desc)}</desc>
   <defs>

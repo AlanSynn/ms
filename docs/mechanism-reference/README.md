@@ -11,6 +11,7 @@ Current web contracts are maintained in the codebase modules and tests; the sour
 - `src/automataii/application/mechanism_transfer/contract.py` *(legacy source path; historical only)*
 - `fabrication/manifest.json` (current local source snapshot)
 - `fabrication/assembly/recipes.json` (current local source snapshot)
+- [`source/README.md`](source/README.md) (how snapshot files are packaged for rebuild workflows)
 - `source/mechanism-catalog.snapshot.json` (historical migration artifact snapshot)
 
 ## Read order

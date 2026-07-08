@@ -75,18 +75,36 @@ Managed files in this generated package: 56.
 ## Regeneration
 
 ```bash
-python3 fabrication/generate_fabrication_templates.py --output fabrication
+#!/usr/bin/env bash
+bun scripts/generate-fabrication-assets.ts --output fabrication
 ```
 
 ```bash
 bun scripts/generate-fabrication-board.ts --output fabrication
 ```
 
-`generate_fabrication_templates.py` still controls non-board mechanism parts and recipe
-assets. Use the TypeScript board generator for board map regeneration.
+`generate-fabrication-assets.ts` runs the TypeScript board adapter and the legacy
+Python non-board adapter in one pass.
+
+- Board source: `scripts/generate-fabrication-board.ts` (recommended canonical `board-final.svg` source).
+- Legacy non-board generator: `fabrication/generate_fabrication_templates.py` (existing mechanism parts/recipes).
 
 For a custom 2.5 cm board pitch, generate to a separate directory instead of overwriting the committed package:
 
 ```bash
-python3 fabrication/generate_fabrication_templates.py --output /tmp/automataii-fabrication-2_5cm --grid-cell-cm 2.5
+bun scripts/generate-fabrication-board.ts --output /tmp/ms-board --rows 15 --cols 15 --pitch-mm 25
 ```
+
+## Extending generation
+
+To add another managed fabrication source (for example a new part family export
+pipeline), add a new adapter entry to `scripts/generate-fabrication-assets.ts`:
+
+1. Add a `GeneratorAdapter` with `id`, `sourceSsot`, `mode`, and `run`.
+2. Ensure it writes/updates `manifest.json` as needed.
+3. Re-run `bun scripts/generate-fabrication-assets.ts --compare-committed` in CI
+   when extending the pipeline.
+
+`utils/fabricationBoardTemplate.tsx` is intentionally pure and import-safe for
+UI-side reuse, so future in-app board previews or variant exports can use the
+same template logic without duplicating SVG construction.
