@@ -2,9 +2,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"
      width="159mm" height="159mm"
      viewBox="0 0 159 159"
-     data-profile-key="motionsmith-ms4n"
-     data-grid-pitch-mm="20"
-     data-hole-diameter-mm="4">
+     data-profile-key="motionsmith-ms4n" data-grid-pitch-mm="20" data-hole-diameter-mm="4">
   <title>Automataii fabrication gear G7 / 7-space gear (56 teeth)</title>
   <desc>G7 / 7-space gear with 4 mm axle. Attachment holes, when present, sit on the board grid.</desc>
   <defs>

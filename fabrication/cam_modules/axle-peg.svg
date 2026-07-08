@@ -2,9 +2,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"
      width="70mm" height="18mm"
      viewBox="0 0 70 18"
-     data-profile-key="motionsmith-ms4n"
-     data-grid-pitch-mm="20"
-     data-hole-diameter-mm="4">
+     data-profile-key="motionsmith-ms4n" data-grid-pitch-mm="20" data-hole-diameter-mm="4">
   <title>Automataii fabrication cam module axle-peg</title>
   <desc>Axle peg for the pegboard-mounted gravity cam follower module. The 15x15 pegboard remains the structural base.</desc>
   <defs>

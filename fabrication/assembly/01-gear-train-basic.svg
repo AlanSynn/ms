@@ -2,9 +2,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"
      width="279.4mm" height="215.9mm"
      viewBox="0 0 279.4 215.9"
-     data-profile-key="motionsmith-ms4n"
-     data-grid-pitch-mm="20"
-     data-hole-diameter-mm="4">
+     data-profile-key="motionsmith-ms4n" data-grid-pitch-mm="20" data-hole-diameter-mm="4">
   <title>Automataii assembly guide gear-train-basic</title>
   <desc>Printable source SVG preview for Two-gear crank; the app export composes full PDF step cards.</desc>
   <defs>

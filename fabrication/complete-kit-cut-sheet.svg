@@ -2,9 +2,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"
      width="500mm" height="420mm"
      viewBox="0 0 500 420"
-     data-profile-key="motionsmith-ms4n"
-     data-grid-pitch-mm="20"
-     data-hole-diameter-mm="4">
+     data-profile-key="motionsmith-ms4n" data-grid-pitch-mm="20" data-hole-diameter-mm="4">
   <title>Automataii complete kit cut sheet</title>
   <desc>One-page actual-size cutter-bed sheet containing the current gear, linkage, and spacer starter kit.</desc>
   <defs>

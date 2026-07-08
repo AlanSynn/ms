@@ -2,9 +2,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"
      width="18mm" height="18mm"
      viewBox="0 0 18 18"
-     data-profile-key="motionsmith-ms4n"
-     data-grid-pitch-mm="20"
-     data-hole-diameter-mm="4">
+     data-profile-key="motionsmith-ms4n" data-grid-pitch-mm="20" data-hole-diameter-mm="4">
   <title>Automataii fabrication spacer s10</title>
   <desc>S10 spacer washer spacer with 4 mm center hole for axle/linkage/bracket clearance stacks.</desc>
   <defs>

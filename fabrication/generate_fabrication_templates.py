@@ -252,7 +252,7 @@ def board_coord_to_svg_xy(coord: str, *, x: float, y: float, size: float) -> tup
     col_number = int(col_label) if col_label.isdigit() else 1
     col = BOARD_COLUMNS.index(col_number) if col_number in BOARD_COLUMNS else 0
     pitch = size / max(1, len(BOARD_COLUMNS) - 1)
-    return x + col * pitch, y + row * pitch
+    return x + row * pitch, y + col * pitch
 
 
 def build_default_assembly_package(
@@ -511,19 +511,37 @@ def _data_attrs(**values: object) -> str:
 
 def _svg_document(template: SvgTemplate, spec: FabricationSpec) -> str:
     body = "\n".join(template.elements)
+    svg_metadata = template.metadata or {}
+    root_attributes = {
+        "data-profile-key": spec.profile.key,
+        "data-grid-pitch-mm": _fmt(spec.pitch_mm),
+        "data-hole-diameter-mm": spec.hole_diameter_attr,
+    }
+    board_role = svg_metadata.get("board_role")
+    grid_rows = svg_metadata.get("rows")
+    grid_columns = svg_metadata.get("columns")
+    if isinstance(board_role, str):
+        root_attributes["data-board-role"] = board_role
+    if isinstance(grid_rows, int):
+        root_attributes["data-grid-rows"] = str(grid_rows)
+    if isinstance(grid_columns, int):
+        root_attributes["data-grid-columns"] = str(grid_columns)
+    style_profile = str(svg_metadata.get("style_profile", "standard"))
+    include_cut = style_profile != "board-only"
+    cut_style_line = (
+        f'      .cut {{ fill: none; stroke: {CUT}; stroke-width: 0.25; stroke-miterlimit: 10; }}\n'
+        if include_cut else ""
+    )
     return f'''<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"
      width="{_fmt(template.width_mm)}mm" height="{_fmt(template.height_mm)}mm"
      viewBox="0 0 {_fmt(template.width_mm)} {_fmt(template.height_mm)}"
-     data-profile-key="{escape(spec.profile.key)}"
-     data-grid-pitch-mm="{_fmt(spec.pitch_mm)}"
-     data-hole-diameter-mm="{spec.hole_diameter_attr}">
+     {_attrs(**root_attributes)}>
   <title>{escape(template.title)}</title>
   <desc>{escape(template.desc)}</desc>
   <defs>
     <style>
-      .cut {{ fill: none; stroke: {CUT}; stroke-width: 0.25; stroke-miterlimit: 10; }}
-      .drill {{ fill: none; stroke: {DRILL}; stroke-width: 0.2; stroke-miterlimit: 10; }}
+{cut_style_line}      .drill {{ fill: none; stroke: {DRILL}; stroke-width: 0.2; stroke-miterlimit: 10; }}
       .score {{ fill: none; stroke: {SCORE}; stroke-width: 0.15; stroke-dasharray: 2 1; }}
       .label {{ fill: {TEXT}; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }}
       .engrave {{ fill: {ENGRAVE_TEXT}; font-family: Arial, Helvetica, sans-serif; font-size: 3.2px; font-weight: bold; }}
@@ -570,12 +588,18 @@ def _path(
 
 
 def _text(
-    x: float, y: float, value: str, *, class_name: str = "label", anchor: str = "middle"
+    x: float,
+    y: float,
+    value: str,
+    *,
+    class_name: str = "label",
+    anchor: str = "middle",
+    extra: dict[str, object] | None = None,
 ) -> str:
-    return (
-        f"  <text {_attrs(x=_fmt(x), y=_fmt(y), class_=class_name, text_anchor=anchor)}>"
-        f"{escape(value)}</text>"
-    )
+    attrs = _attrs(x=_fmt(x), y=_fmt(y), class_=class_name, text_anchor=anchor)
+    if extra:
+        attrs = f'{attrs} {_data_attrs(**extra)}'
+    return f"  <text {attrs}>{escape(value)}</text>"
 
 
 def _engrave_text(
@@ -2906,11 +2930,30 @@ def _assembly_board_grid_elements(
     highlighted = highlighted or []
     references = references or []
     pitch = size / max(1, len(BOARD_COLUMNS) - 1)
-    elements: list[str] = [_rect(x - 4.0, y - 4.0, size + 8.0, size + 8.0, "score board-outline")]
-    for col in BOARD_COLUMNS:
-        elements.append(_text(x + (col - 1) * pitch, y - 7.0, str(col), class_name="tiny"))
+    outline_inset = 5.0
+    elements: list[str] = [_rect(x - outline_inset, y - outline_inset, size + 2.0 * outline_inset, size + 2.0 * outline_inset, "score board-outline")]
     for row_index, row in enumerate(BOARD_ROWS):
-        elements.append(_text(x - 7.0, y + row_index * pitch + 1.0, row, class_name="tiny"))
+        elements.append(
+            _text(
+                x + row_index * pitch,
+                y - 7.0,
+                row,
+                class_name="coord-label",
+                anchor="middle",
+                extra={"axis": "horizontal", "index": row_index + 1, "label": row},
+            )
+        )
+    for col in BOARD_COLUMNS:
+        elements.append(
+            _text(
+                x - 7.0,
+                y + (col - 1) * pitch,
+                str(col),
+                class_name="coord-label",
+                anchor="end",
+                extra={"axis": "vertical", "index": col, "label": str(col)},
+            )
+        )
     for row in BOARD_ROWS:
         for col in BOARD_COLUMNS:
             label = f"{row}{col}"
@@ -2939,34 +2982,62 @@ def _assembly_board_grid_elements(
     return elements
 
 
-def _assembly_board_template(spec: FabricationSpec) -> SvgTemplate:
+def _main_board_template(spec: FabricationSpec, *, path: str, title: str, desc: str, width_mm: float) -> SvgTemplate:
     board_size = spec.pitch_mm * (len(BOARD_COLUMNS) - 1)
-    width_mm = 300.0
-    height_mm = 300.0
+    hole_radius = spec.hole_diameter_mm / 2.0
+    origin = 15.0
     elements = [
-        '  <g id="layer-board-grid">',
+        '  <g id="layer-board-grid" class="board-grid">',
         *_assembly_board_grid_elements(
-            x=12.0,
-            y=12.0,
+            x=origin,
+            y=origin,
             size=board_size,
-            hole_radius=spec.hole_diameter_mm / 2.0,
+            hole_radius=hole_radius,
         ),
         "  </g>",
     ]
     return SvgTemplate(
-        path="assembly/board-15x15.svg",
-        title="Automataii 15x15 hole assembly board map",
-        desc="225-hole coordinate board used by Automataii fabrication assembly guides.",
+        path=path,
+        title=title,
+        desc=desc,
         width_mm=width_mm,
-        height_mm=height_mm,
+        height_mm=width_mm,
         elements=tuple(elements),
         metadata={
-            "key": "board-15x15",
-            "label": "15x15 hole assembly board map",
-            "path": "assembly/board-15x15.svg",
+            "board_role": "main-board" if path == "board.svg" else "assembly-board-map",
             "rows": len(BOARD_ROWS),
             "columns": len(BOARD_COLUMNS),
+            "style_profile": "board-only",
+            "path": path,
+            "hole_diameter_mm": spec.hole_diameter_mm,
+            "pitch_mm": spec.pitch_mm,
+            "outline": {
+                "x": _fmt(origin - 5.0),
+                "y": _fmt(origin - 5.0),
+                "width": _fmt(board_size + 10.0),
+                "height": _fmt(board_size + 10.0),
+            },
         },
+    )
+
+
+def _assembly_board_template(spec: FabricationSpec) -> SvgTemplate:
+    return _main_board_template(
+        spec,
+        path="assembly/board.svg",
+        title="Automataii 15x15 main board map",
+        desc="Main 15x15 board map used by Automataii fabrication assembly guides.",
+        width_mm=305.0,
+    )
+
+
+def _main_board_asset_template(spec: FabricationSpec) -> SvgTemplate:
+    return _main_board_template(
+        spec,
+        path="board.svg",
+        title="MotionSmith 15x15 main board",
+        desc="Main fabrication board with 4 mm holes and engraved A-O / 1-15 coordinates.",
+        width_mm=305.0,
     )
 
 
@@ -3640,9 +3711,9 @@ the 15x15 hole board (15 rows x 15 columns = 225 board holes).
    `current-design-cut-sheets.pdf`, `assembly/assembly-guide.pdf`, and
    `assembly/kit-parts-to-cut.pdf` into the folder you choose.
 2. Use this committed `fabrication/assembly/` folder as the source template set only:
-   `board-15x15.svg`, `index.html`, and per-mechanism SVGs are generator/debug inputs for
+   `board.svg`, `index.html`, and per-mechanism SVGs are generator/debug inputs for
    the PDF package.
-3. Open `board-15x15.svg` only when you need to inspect the 225 row-letter/column-number
+3. Open `board.svg` only when you need to inspect the 225 row-letter/column-number
    holes directly.
 4. Follow one step card at a time: place the fastener at the called-out hole, then add spacers
    and parts in the exact `Stack` row order before running the check.
@@ -3804,7 +3875,7 @@ def _assembly_index_html(
     <h2>Quick start</h2>
     <ol>
       <li>Print or fabricate the linked part templates.</li>
-      <li>Open <a href="board-15x15.svg">board-15x15.svg</a> and find the called-out holes.</li>
+      <li>Open <a href="board.svg">board.svg</a> and find the called-out holes.</li>
       <li>Put the paper fastener through the board, then follow that step's Stack row exactly before leaving the tabs loose.</li>
       <li>After each step, run the motion check before adding the next layer.</li>
     </ol>
@@ -3983,8 +4054,10 @@ def write_fabrication_templates(
     cam_module_templates = [_cam_module_template(preset, spec) for preset in CAM_MODULE_PRESETS]
     complete_cut_sheet_template = _complete_kit_cut_sheet(spec)
     sheet_templates = _build_sheets(spec)
+    main_board_template = _main_board_asset_template(spec)
 
     fabrication_svg_templates = [
+        main_board_template,
         complete_cut_sheet_template,
         *gear_templates,
         *ring_gear_templates,
@@ -4052,7 +4125,7 @@ def write_fabrication_templates(
         "assembly": {
             "schema_version": ASSEMBLY_SCHEMA_VERSION,
             "recipes_source": "assembly/recipes.json",
-            "board_map": "assembly/board-15x15.svg",
+            "board_map": "assembly/board.svg",
             "guide_files": [
                 template.path
                 for template in assembly_templates

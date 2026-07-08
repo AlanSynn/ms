@@ -2,9 +2,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"
      width="305mm" height="305mm"
      viewBox="0 0 305 305"
-     data-profile-key="motionsmith-ms4n" data-grid-pitch-mm="20" data-hole-diameter-mm="4" data-board-role="main-board" data-grid-rows="15" data-grid-columns="15">
-  <title>MotionSmith 15x15 main board</title>
-  <desc>Main fabrication board with 4 mm holes and engraved A-O / 1-15 coordinates.</desc>
+     data-profile-key="motionsmith-ms4n" data-grid-pitch-mm="20" data-hole-diameter-mm="4" data-board-role="assembly-board-map" data-grid-rows="15" data-grid-columns="15">
+  <title>Automataii 15x15 main board map</title>
+  <desc>Main 15x15 board map used by Automataii fabrication assembly guides.</desc>
   <defs>
     <style>
       .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }

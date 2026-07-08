@@ -32,7 +32,7 @@ Keep MotionSmith easy to change without changing behavior: small files, one doma
 - Completed low-risk App stage navigation seam: stage handoff gate, recovery dispatch, stage-open status, and `goStage` wiring now live in `utils/appStageNavigation.ts`.
 - Next safe production seams: continue splitting pure `utils/fabrication.ts` concerns behind golden-master output hashes; broad validation/export/package movement still needs stronger harnesses.
 - High-risk seams that need stronger harnesses before editing: `components/ThreePuppetPreview.tsx`, `utils/project.ts`, `utils/fabrication.ts`, and `components/TrackingModal.tsx`.
-- Local ignored junk can be removed when seen: `.DS_Store`, `resources/.DS_Store`, `resources/examples/.DS_Store`, `fabrication/__pycache__/`, `fabrication/board-final.svg`, and `test-results/`. Do not delete `.agents/`, `.omx/`, `docs/archive/ports/to-port-web-onnx/`, `dist/`, or `node_modules/` as cleanup.
+- Local ignored junk can be removed when seen: `.DS_Store`, `resources/.DS_Store`, `resources/examples/.DS_Store`, `fabrication/__pycache__/`, `test-results/`. Do not delete `.agents/`, `.omx/`, `docs/archive/ports/to-port-web-onnx/`, `dist/`, or `node_modules/` as cleanup.
 
 
 ## 2026-07-04 team refactor audit synthesis

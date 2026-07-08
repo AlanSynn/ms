@@ -2,9 +2,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"
      width="62.4mm" height="62.4mm"
      viewBox="0 0 62.4 62.4"
-     data-profile-key="motionsmith-ms4n"
-     data-grid-pitch-mm="20"
-     data-hole-diameter-mm="4">
+     data-profile-key="motionsmith-ms4n" data-grid-pitch-mm="20" data-hole-diameter-mm="4">
   <title>Automataii fabrication cam oval</title>
   <desc>Oval / smooth rise cam profile with 4 mm axle and linkage/bracket/crank/handle holes.</desc>
   <defs>

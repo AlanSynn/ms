@@ -2,9 +2,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"
      width="215.9mm" height="279.4mm"
      viewBox="0 0 215.9 279.4"
-     data-profile-key="motionsmith-ms4n"
-     data-grid-pitch-mm="20"
-     data-hole-diameter-mm="4">
+     data-profile-key="motionsmith-ms4n" data-grid-pitch-mm="20" data-hole-diameter-mm="4">
   <title>Automataii fabrication sheet 05-prototype-set-b: Prototype set B</title>
   <desc>Workshop sheet containing: gears, linkages, cams, brackets. Nominal holes are 4 mm.</desc>
   <defs>

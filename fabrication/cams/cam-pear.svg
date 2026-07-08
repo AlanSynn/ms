@@ -2,9 +2,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"
      width="76.3mm" height="76.3mm"
      viewBox="0 0 76.3 76.3"
-     data-profile-key="motionsmith-ms4n"
-     data-grid-pitch-mm="20"
-     data-hole-diameter-mm="4">
+     data-profile-key="motionsmith-ms4n" data-grid-pitch-mm="20" data-hole-diameter-mm="4">
   <title>Automataii fabrication cam pear</title>
   <desc>Pear / slow-fast cam profile with 4 mm axle and linkage/bracket/crank/handle holes.</desc>
   <defs>

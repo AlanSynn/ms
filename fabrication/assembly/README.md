@@ -9,9 +9,9 @@ the 15x15 hole board (15 rows x 15 columns = 225 board holes).
    `current-design-cut-sheets.pdf`, `assembly/assembly-guide.pdf`, and
    `assembly/kit-parts-to-cut.pdf` into the folder you choose.
 2. Use this committed `fabrication/assembly/` folder as the source template set only:
-   `board-15x15.svg`, `index.html`, and per-mechanism SVGs are generator/debug inputs for
+   `board.svg`, `index.html`, and per-mechanism SVGs are generator/debug inputs for
    the PDF package.
-3. Open `board-15x15.svg` only when you need to inspect the 225 row-letter/column-number
+3. Open `board.svg` only when you need to inspect the 225 row-letter/column-number
    holes directly.
 4. Follow one step card at a time: place the fastener at the called-out hole, then add spacers
    and parts in the exact `Stack` row order before running the check.

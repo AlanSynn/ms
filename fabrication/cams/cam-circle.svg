@@ -2,9 +2,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"
      width="46mm" height="46mm"
      viewBox="0 0 46 46"
-     data-profile-key="motionsmith-ms4n"
-     data-grid-pitch-mm="20"
-     data-hole-diameter-mm="4">
+     data-profile-key="motionsmith-ms4n" data-grid-pitch-mm="20" data-hole-diameter-mm="4">
   <title>Automataii fabrication cam circle</title>
   <desc>Circle / steady cam profile with 4 mm axle and linkage/bracket/crank/handle holes.</desc>
   <defs>

@@ -2,9 +2,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"
      width="196mm" height="196mm"
      viewBox="0 0 196 196"
-     data-profile-key="motionsmith-ms4n"
-     data-grid-pitch-mm="20"
-     data-hole-diameter-mm="4">
+     data-profile-key="motionsmith-ms4n" data-grid-pitch-mm="20" data-hole-diameter-mm="4">
   <title>Automataii fabrication planetary ring gear R56</title>
   <desc>Fixed internal ring gear for G8 sun and G24 planet gears, with 4 mm board-mount holes.</desc>
   <defs>
