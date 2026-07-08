@@ -492,7 +492,10 @@ def _validate_fabrication_profile(profile: PhysicalKitProfile) -> None:
 
 
 def _fmt(value: float | int) -> str:
-    return f"{float(value):.3f}".rstrip("0").rstrip(".")
+    numeric = float(value)
+    if abs(numeric) < 0.0005:
+        return "0"
+    return f"{numeric:.3f}".rstrip("0").rstrip(".")
 
 
 def _attrs(**values: object) -> str:
@@ -2982,7 +2985,15 @@ def _assembly_board_grid_elements(
     return elements
 
 
-def _main_board_template(spec: FabricationSpec, *, path: str, title: str, desc: str, width_mm: float) -> SvgTemplate:
+def _main_board_template(
+    spec: FabricationSpec,
+    *,
+    path: str,
+    title: str,
+    desc: str,
+    width_mm: float,
+    board_role: str = "assembly-board-map",
+) -> SvgTemplate:
     board_size = spec.pitch_mm * (len(BOARD_COLUMNS) - 1)
     hole_radius = spec.hole_diameter_mm / 2.0
     origin = 15.0
@@ -3004,7 +3015,7 @@ def _main_board_template(spec: FabricationSpec, *, path: str, title: str, desc: 
         height_mm=width_mm,
         elements=tuple(elements),
         metadata={
-            "board_role": "main-board" if path == "board.svg" else "assembly-board-map",
+            "board_role": board_role,
             "rows": len(BOARD_ROWS),
             "columns": len(BOARD_COLUMNS),
             "style_profile": "board-only",
@@ -3021,22 +3032,13 @@ def _main_board_template(spec: FabricationSpec, *, path: str, title: str, desc: 
     )
 
 
-def _assembly_board_template(spec: FabricationSpec) -> SvgTemplate:
-    return _main_board_template(
-        spec,
-        path="assembly/board.svg",
-        title="Automataii 15x15 main board map",
-        desc="Main 15x15 board map used by Automataii fabrication assembly guides.",
-        width_mm=305.0,
-    )
-
-
 def _main_board_asset_template(spec: FabricationSpec) -> SvgTemplate:
     return _main_board_template(
         spec,
-        path="board.svg",
+        path="board-final.svg",
         title="MotionSmith 15x15 main board",
         desc="Main fabrication board with 4 mm holes and engraved A-O / 1-15 coordinates.",
+        board_role="main-board",
         width_mm=305.0,
     )
 
@@ -3678,7 +3680,6 @@ def _assembly_templates(
     spec: FabricationSpec,
 ) -> list[SvgTemplate]:
     templates = [
-        _assembly_board_template(spec),
         _assembly_parts_overview_template(assembly_package),
     ]
     raw_recipes = assembly_package.get("recipes", [])
@@ -3711,9 +3712,9 @@ the 15x15 hole board (15 rows x 15 columns = 225 board holes).
    `current-design-cut-sheets.pdf`, `assembly/assembly-guide.pdf`, and
    `assembly/kit-parts-to-cut.pdf` into the folder you choose.
 2. Use this committed `fabrication/assembly/` folder as the source template set only:
-   `board.svg`, `index.html`, and per-mechanism SVGs are generator/debug inputs for
-   the PDF package.
-3. Open `board.svg` only when you need to inspect the 225 row-letter/column-number
+   `../board-final.svg`, `index.html`, and per-mechanism SVGs are generator/debug inputs
+   for the PDF package.
+3. Open `../board-final.svg` only when you need to inspect the 225 row-letter/column-number
    holes directly.
 4. Follow one step card at a time: place the fastener at the called-out hole, then add spacers
    and parts in the exact `Stack` row order before running the check.
@@ -3875,7 +3876,7 @@ def _assembly_index_html(
     <h2>Quick start</h2>
     <ol>
       <li>Print or fabricate the linked part templates.</li>
-      <li>Open <a href="board.svg">board.svg</a> and find the called-out holes.</li>
+      <li>Open <a href="../board-final.svg">board-final.svg</a> and find the called-out holes.</li>
       <li>Put the paper fastener through the board, then follow that step's Stack row exactly before leaving the tabs loose.</li>
       <li>After each step, run the motion check before adding the next layer.</li>
     </ol>
@@ -3917,6 +3918,7 @@ sort the parts, then use the matching `assembly/` guide.
 ## Physical assumptions
 
 - Default committed pitch: `{pitch_mm:.1f} mm` (`{pitch_mm / 10.0:.2f} cm`) board spacing.
+- Main board map is canonically `board-final.svg` (15x15, 225 holes).
 - Nominal axle/linkage/bracket hole diameter: `{spec.hole_diameter_mm:.1f} mm`.
 - Gear presets: {gear_teeth}.
 - Linkage lengths: {linkage_lengths} board cells.
@@ -3946,13 +3948,17 @@ These files are nominal geometry, not material-specific kerf compensation. Befor
 
 - `kit/` contains the existing educational/module-oriented MS4N activity sheets, prompt cards, checks, and broad classroom materials.
 - `fabrication/` is the nominal-millimetre manufacturing package for the constrained physical parts requested here: gears, planetary ring gears, linkage bars, cams, followers, brackets, spacers, handles, and workshop cut sheets.
-- Shared physical assumptions come from `fabrication/generate_fabrication_templates.py` and are mirrored by `utils/fabrication.ts`; do not hand-edit generated `fabrication/` SVGs without updating the generator and drift test.
+- Shared physical assumptions come from `fabrication/generate_fabrication_templates.py` and are mirrored by `utils/fabrication.ts`; do not hand-edit generated `fabrication/` SVGs without updating the generators and drift tests.
+- `board-final.svg` is managed by `scripts/generate-fabrication-board.ts` (TypeScript source in
+  `utils/fabricationBoardTemplate.tsx`) so board geometry and drift checks are reusable across
+  runtime and tooling.
 
 ## Contents
 
 - `manifest.json` — machine-readable inventory and dimensions.
 - `complete-kit-cut-sheet.svg` — one actual-size cutter-bed page containing every unique physical part type.
-- `assembly/` — board-coordinate assembly guides, recipe data, and the 15x15 hole / 225-hole board map.
+- `board-final.svg` — canonical 15x15 pegboard map with A/O and 1/15 labels.
+- `assembly/` — board-coordinate assembly guides, recipe data, and per-mechanism SVG guides.
 - `gears/` — one SVG per gear preset; every gear includes a {_fmt(spec.hole_diameter_mm)} mm axle hole, and larger gears include {_fmt(spec.hole_diameter_mm)} mm linkage/bracket/crank/handle holes on the board grid.
 - `ring_gears/` — fixed internal ring gear for the planetary guide, with board-mount holes.
 - `linkages/` — one SVG per linkage length; holes are spaced on the board pitch.
@@ -3973,6 +3979,13 @@ Managed files in this generated package: {managed_count}.
 ```bash
 python3 fabrication/generate_fabrication_templates.py --output fabrication
 ```
+
+```bash
+bun scripts/generate-fabrication-board.ts --output fabrication
+```
+
+`generate_fabrication_templates.py` still controls non-board mechanism parts and recipe
+assets. Use the TypeScript board generator for board map regeneration.
 
 For a custom 2.5 cm board pitch, generate to a separate directory instead of overwriting the committed package:
 
@@ -4125,7 +4138,7 @@ def write_fabrication_templates(
         "assembly": {
             "schema_version": ASSEMBLY_SCHEMA_VERSION,
             "recipes_source": "assembly/recipes.json",
-            "board_map": "assembly/board.svg",
+            "board_map": "board-final.svg",
             "guide_files": [
                 template.path
                 for template in assembly_templates

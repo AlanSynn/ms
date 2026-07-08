@@ -1,5 +1,3 @@
-import { boardCoordinateLabel } from './coordinates';
-
 export const FABRICATION_BOARD_DEFAULT_CELL_COUNT = 15;
 export const FABRICATION_BOARD_DEFAULT_PITCH_MM = 20;
 export const FABRICATION_BOARD_DEFAULT_HOLE_DIAMETER_MM = 4;
@@ -23,6 +21,10 @@ export interface BoardTemplateMetadata {
   holeDiameterMm: number;
   /** Optional board role contract tag. */
   role?: 'main-board' | 'assembly-board-map' | string;
+  /** Optional board title override metadata. */
+  title?: string;
+  /** Optional board description override metadata. */
+  description?: string;
 }
 
 export interface BoardTemplateOptions {
@@ -46,6 +48,11 @@ export interface BoardTemplateOptions {
 
 const safeRows = (rows: number | undefined) => (Number.isFinite(rows ?? 0) ? Math.max(1, Math.floor(rows ?? 0)) : 1);
 const safeColumns = (columns: number | undefined) => (Number.isFinite(columns ?? 0) ? Math.max(1, Math.floor(columns ?? 0)) : 1);
+const formatNumber = (value: number) => {
+  if (!Number.isFinite(value)) return '0';
+  if (Math.abs(value - Math.round(value)) < 1e-9) return `${Math.round(value)}`;
+  return value.toFixed(1);
+};
 
 const toAxisLabel = (rowIndex: number) => {
   if (rowIndex < 26) return String.fromCharCode(65 + rowIndex);
@@ -82,6 +89,8 @@ export const makeFabricationBoardTemplateSpec = (options: BoardTemplateOptions =
     pitchMm,
     holeDiameterMm,
     role: options.role,
+    title: options.title,
+    description: options.description,
   };
 };
 
@@ -95,8 +104,9 @@ export const makeFabricationBoardTemplateSvg = (options: BoardTemplateOptions = 
   const metadata = makeFabricationBoardTemplateSpec(options);
   const sideCount = Math.max(metadata.rows, metadata.columns);
   const boardSizeMm = metadata.pitchMm * Math.max(1, sideCount - 1);
-  const margin = 15;
-  const widthMm = boardSizeMm + 2 * margin;
+  const origin = 15;
+  const labelMargin = 7;
+  const widthMm = boardSizeMm + origin + 10;
   const heightMm = widthMm;
   const step = boardSizeMm / Math.max(1, sideCount - 1);
   const holeRadius = metadata.holeDiameterMm / 2;
@@ -107,48 +117,42 @@ export const makeFabricationBoardTemplateSvg = (options: BoardTemplateOptions = 
   const desc = options.description ??
     `Main fabrication board with ${metadata.holeDiameterMm} mm holes and engraved A-${toAxisLabel(metadata.columns - 1)}/${metadata.rows} coordinates.`;
 
-  const boardRole = metadata.role ?? 'assembly-board-map';
-  const rootData = attrs({
-    'data-board-role': boardRole,
-    'data-grid-columns': metadata.columns,
-    'data-grid-rows': metadata.rows,
-    'data-grid-pitch-mm': metadata.pitchMm,
-    'data-hole-diameter-mm': metadata.holeDiameterMm,
-    'data-profile-key': metadata.profileKey,
-  });
-
-  const rows: string[] = [];
+  const rectElements: string[] = [];
+  const holeElements: string[] = [];
   const labelsRows: string[] = [];
   const labelCols: string[] = [];
   const holeClass = 'drill board-hole';
   const outerInset = 5;
 
-  rows.push(
-    `<rect x="${margin - outerInset}" y="${margin - outerInset}" width="${boardSizeMm + outerInset * 2}" height="${boardSizeMm + outerInset * 2}" class="score board-outline"/>`
+  rectElements.push(
+    `<rect x="${origin - outerInset}" y="${origin - outerInset}" width="${formatNumber(boardSizeMm + outerInset * 2)}" height="${formatNumber(boardSizeMm + outerInset * 2)}" class="score board-outline"/>`
   );
 
   for (let row = 0; row < metadata.rows; row += 1) {
     const label = toAxisLabel(row);
-    const x = margin + row * step;
-    labelsRows.push(`<text ${attrs({ x, y: margin - 7, class: 'coord-label', 'text-anchor': 'middle' })} data-axis="horizontal" data-index="${row + 1}" data-label="${label}">${escapeText(label)}</text>`);
+    const x = origin + row * step;
+    labelsRows.push(`<text ${attrs({ x, y: origin - labelMargin, class: 'coord-label', 'text-anchor': 'middle' })} data-axis="horizontal" data-index="${row + 1}" data-label="${label}">${escapeText(label)}</text>`);
   }
   for (let col = 0; col < metadata.columns; col += 1) {
     const label = String(col + 1);
-    const y = margin + col * step;
-    labelCols.push(`<text ${attrs({ x: margin - 7, y, class: 'coord-label', 'text-anchor': 'end' })} data-axis="vertical" data-index="${col + 1}" data-label="${label}">${escapeText(label)}</text>`);
+    const y = origin + col * step;
+    labelCols.push(`<text ${attrs({ x: origin - labelMargin, y, class: 'coord-label', 'text-anchor': 'end' })} data-axis="vertical" data-index="${col + 1}" data-label="${label}">${escapeText(label)}</text>`);
   }
 
   for (let row = 0; row < metadata.rows; row += 1) {
     for (let col = 0; col < metadata.columns; col += 1) {
-      const coord = boardCoordinateLabel(col, row);
-      const cx = margin + col * step;
-      const cy = margin + row * step;
-      rows.push(`<circle ${attrs({ cx, cy, r: holeRadius, class: holeClass })} data-board-coord="${coord}"/>`);
+      const coord = `${toAxisLabel(row)}${col + 1}`;
+      const cx = origin + row * step;
+      const cy = origin + col * step;
+      holeElements.push(`<circle ${attrs({ cx, cy, r: holeRadius, class: holeClass })} data-board-coord="${coord}"/>`);
     }
   }
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="${widthMm}mm" height="${heightMm}mm" viewBox="0 0 ${widthMm} ${heightMm}" ${rootData}>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1"
+     width="${formatNumber(widthMm)}mm" height="${formatNumber(heightMm)}mm"
+     viewBox="0 0 ${formatNumber(widthMm)} ${formatNumber(heightMm)}"
+     data-profile-key="${escapeText(metadata.profileKey)}" data-grid-pitch-mm="${formatNumber(metadata.pitchMm)}" data-hole-diameter-mm="${formatNumber(metadata.holeDiameterMm)}" data-board-role="${metadata.role ?? 'assembly-board-map'}" data-grid-rows="${metadata.rows}" data-grid-columns="${metadata.columns}">
   <title>${escapeText(title)}</title>
   <desc>${escapeText(desc)}</desc>
   <defs>
@@ -159,14 +163,17 @@ export const makeFabricationBoardTemplateSvg = (options: BoardTemplateOptions = 
       .engrave { fill: ${ENGRAVE_TEXT}; font-family: Arial, Helvetica, sans-serif; font-size: 3.2px; font-weight: bold; }
       .tiny { fill: ${TEXT}; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
       .small { fill: ${TEXT}; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
+      .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
+      .part-card-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 3.5px; font-weight: bold; }
       .coord-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 6px; font-weight: bold; }
       .paper { fill: ${BOARD_FILL}; stroke: none; }
     </style>
   </defs>
   <g id="layer-board-grid" class="board-grid">
-${labelsRows.map(line => `    ${line}`).join('\n')}
-${labelCols.map(line => `    ${line}`).join('\n')}
-${rows.map(line => `    ${line}`).join('\n')}
+${rectElements.map(line => `  ${line}`).join('\n')}
+${labelsRows.map(line => `  ${line}`).join('\n')}
+${labelCols.map(line => `  ${line}`).join('\n')}
+${holeElements.map(line => `  ${line}`).join('\n')}
   </g>
 </svg>`;
 };

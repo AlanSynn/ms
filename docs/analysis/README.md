@@ -5,6 +5,7 @@ Store audits, migration analyses, and review reports here. OMX workflow audits m
 ## Active audits
 
 - [Codebase Cleanup + Architecture Split Plan](codebase-cleanup-architecture-plan.md) — active cleanup/splitting plan.
+- [Fabrication board canonicalization migration audit (2026-07-07)](fabrication-board-canonicalization-2026-07-07.md) — board-map ownership, TS generator checks, and deletion set.
 
 ## Cold archives
 

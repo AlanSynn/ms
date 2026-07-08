@@ -22,6 +22,7 @@ Use these first for implementation decisions, planning, and validation.
 - [`mechanism-reference/04-portable-schema-and-validation.md`](mechanism-reference/04-portable-schema-and-validation.md)
 - [`mechanism-reference/05-assembly-process-guides.md`](mechanism-reference/05-assembly-process-guides.md)
 - [`analysis/codebase-cleanup-architecture-plan.md`](analysis/codebase-cleanup-architecture-plan.md)
+- [`analysis/fabrication-board-canonicalization-2026-07-07.md`](analysis/fabrication-board-canonicalization-2026-07-07.md)
 
 ### Active PRD set (required for current feature planning)
 

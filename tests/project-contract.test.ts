@@ -2138,6 +2138,16 @@ assert(linkageSceneLengthIsFabricationPreset(loadedSetOnlyFourBar.crankLength), 
 assert(linkageSceneLengthIsFabricationPreset(loadedSetOnlyFourBar.couplerLength), 'loaded four-bar snapshots snap coupler length to the fabricated linkage set');
 assert(linkageSceneLengthIsFabricationPreset(loadedSetOnlyFourBar.rockerLength), 'loaded four-bar snapshots snap output length to the fabricated linkage set');
 type FabricationManifest = {
+  board_rows?: number;
+  board_columns?: number;
+  assembly: {
+    board_map: string;
+    files?: string[];
+    guide_files?: string[];
+    recipes_source: string;
+    schema_version: string;
+    board_map_preview?: string;
+  };
   generated_by: string;
   source_ssot: string;
   grid_pitch_mm: number;
@@ -2645,7 +2655,37 @@ const assertSvgFilesParseAsXml = (rootDir: string, relPaths: string[], label: st
 };
 assertSvgFilesParseAsXml(join(process.cwd(), 'fabrication'), fabricationSvgManagedFiles, 'committed fabrication package');
 
-const mainBoardSvg = readFileSync(join(process.cwd(), 'fabrication', 'board.svg'), 'utf8');
+const legacyManagedBoardFiles = new Set(['board.svg', 'assembly/board.svg', 'board-final.svg']);
+const mainBoardPath = join(process.cwd(), 'fabrication', 'board-final.svg');
+const isLegacyBoardAsset = (path: string) => legacyManagedBoardFiles.has(path);
+const parseBoardHoleRecords = (svg: string) => {
+  const holes = [...svg.matchAll(/<circle\b[^>]*>/g)]
+    .map(match => match[0])
+    .map((tag) => {
+      const coord = tag.match(/\bdata-board-coord="([^"]+)"/)?.[1];
+      if (!coord) return null;
+      const cx = Number(tag.match(/\bcx="([^"]+)"/)?.[1]);
+      const cy = Number(tag.match(/\bcy="([^"]+)"/)?.[1]);
+      const r = Number(tag.match(/\br="([^"]+)"/)?.[1]);
+      return { coord, cx, cy, r };
+    })
+    .filter((entry): entry is { coord: string; cx: number; cy: number; r: number } => entry !== null && Number.isFinite(entry.cx) && Number.isFinite(entry.cy) && Number.isFinite(entry.r));
+  holes.sort((a, b) => a.coord.localeCompare(b.coord));
+  return holes;
+};
+const assertBoardCoordinatesMatch = (leftSvg: string, rightSvg: string, label: string) => {
+  const left = parseBoardHoleRecords(leftSvg);
+  const right = parseBoardHoleRecords(rightSvg);
+  assert.equal(left.length, right.length, `${label}: hole count matches`);
+  left.forEach((leftHole, index) => {
+    const rightHole = right[index];
+    assert.equal(leftHole.coord, rightHole.coord, `${label}: hole ${leftHole.coord} has same coordinate`);
+    assert.equal(leftHole.cx, rightHole.cx, `${label}: hole ${leftHole.coord} has same cx`);
+    assert.equal(leftHole.cy, rightHole.cy, `${label}: hole ${leftHole.coord} has same cy`);
+    assert.equal(leftHole.r, rightHole.r, `${label}: hole ${leftHole.coord} has same radius`);
+  });
+};
+const mainBoardSvg = readFileSync(mainBoardPath, 'utf8');
 const mainBoardTag = mainBoardSvg.match(/<svg\b[^>]*>/)?.[0];
 assert(mainBoardTag, 'fabrication main board SVG has a root svg tag');
 const attr = (tag: string, name: string) => {
@@ -2661,7 +2701,7 @@ const mmAttr = (tag: string, name: string) => {
 };
 const boardWidthMm = mmAttr(mainBoardTag, 'width');
 const boardHeightMm = mmAttr(mainBoardTag, 'height');
-assert.equal(attr(mainBoardTag, 'data-board-role'), 'main-board', 'fabrication/board.svg is the main board asset');
+assert.equal(attr(mainBoardTag, 'data-board-role'), 'main-board', 'fabrication/board-final.svg is the main board asset');
 assert.equal(attr(mainBoardTag, 'data-grid-columns'), '15', 'main board declares 15 columns');
 assert.equal(attr(mainBoardTag, 'data-grid-rows'), '15', 'main board declares 15 rows');
 assert.equal(attr(mainBoardTag, 'data-grid-pitch-mm'), '20', 'main board declares 20mm pitch');
@@ -2671,6 +2711,7 @@ assert(mainBoardSvg.includes('#0071bc'), 'main board uses blue engraving color')
 assert(!mainBoardSvg.includes('#ed1c24'), 'main board no longer uses red-only cut styling');
 const mainBoardCircleTags = [...mainBoardSvg.matchAll(/<circle\b[^>]*class="[^"]*\bdrill board-hole\b[^"]*"[^>]*>/g)].map(match => match[0]);
 assert.equal(mainBoardCircleTags.length, 225, 'main board has exactly 225 board holes');
+assert.equal(parseBoardHoleRecords(mainBoardSvg).length, 225, 'main board coordinate parser extracts 225 holes');
 const boardLetters = Array.from({ length: 15 }, (_, index) => String.fromCharCode(65 + index));
 const boardHoleByCoord = new Map(mainBoardCircleTags.map(tag => [attr(tag, 'data-board-coord'), tag]));
 boardLetters.forEach((letter, col) => {
@@ -2712,18 +2753,38 @@ try {
   assert.equal(generatedManifest.hole_diameter_mm, fabricationManifest.hole_diameter_mm, 'generator reproduces the committed hole diameter');
   assert.equal(generatedManifest.generated_by, 'fabrication/generate_fabrication_templates.py', 'regenerated manifest keeps the checked-in generator path');
   assert.equal(generatedManifest.source_ssot, 'fabrication/generate_fabrication_templates.py', 'regenerated manifest keeps the checked-in source-of-truth path');
+  assert.equal(generatedManifest.assembly.board_map, 'board-final.svg', 'python generator maps assembly board to board-final.svg');
+  const generatedPythonBoard = readFileSync(join(generatedFabricationDir, 'board-final.svg'), 'utf8');
+  assert.equal(generatedPythonBoard.length > 0, true, 'python generator keeps board-final board artifact for compatibility');
+  assertBoardCoordinatesMatch(mainBoardSvg, generatedPythonBoard, 'python board map parity');
   (['gears', 'linkages', 'ring_gears', 'cams', 'followers', 'brackets', 'handles', 'spacers', 'cam_modules'] as const).forEach(category => {
     assert.deepEqual(generatedManifest.parts[category], fabricationManifest.parts[category], `regenerated ${category} primitives match the committed fabrication contract`);
   });
-  assert.deepEqual(generatedManifest.managed_files, fabricationManifest.managed_files, 'regenerated fabrication package contains the committed managed-file set');
-  fabricationManifest.managed_files.forEach(relPath => {
+  const committedNonBoardManagedFiles = fabricationManifest.managed_files.filter(path => !isLegacyBoardAsset(path));
+  const generatedNonBoardManagedFiles = generatedManifest.managed_files.filter(path => !isLegacyBoardAsset(path));
+  assert.deepEqual(generatedNonBoardManagedFiles, committedNonBoardManagedFiles, 'regenerated non-board files remain the committed managed-file set');
+  committedNonBoardManagedFiles.forEach(relPath => {
     assert.equal(
       readFileSync(join(generatedFabricationDir, relPath), 'utf8'),
       readFileSync(join(process.cwd(), 'fabrication', relPath), 'utf8'),
       `generator emits committed fabrication asset ${relPath}`
     );
   });
-  assertSvgFilesParseAsXml(generatedFabricationDir, fabricationSvgManagedFiles, 'regenerated fabrication package');
+  assertSvgFilesParseAsXml(generatedFabricationDir, generatedNonBoardManagedFiles.filter(path => path.endsWith('.svg')), 'regenerated non-board fabrication assets');
+  const generatedBoardDir = mkdtempSync(join(tmpdir(), 'motionsmith-fabrication-board-'));
+  try {
+    execFileSync('bun', ['scripts/generate-fabrication-board.ts', '--output', generatedBoardDir], { cwd: process.cwd(), stdio: 'pipe' });
+    const generatedTsBoard = readFileSync(join(generatedBoardDir, 'board-final.svg'), 'utf8');
+    assert.equal(
+      readFileSync(join(process.cwd(), 'fabrication', 'board-final.svg'), 'utf8'),
+      generatedTsBoard,
+      'TS board generator reproduces the committed board-final SVG'
+    );
+    assertBoardCoordinatesMatch(mainBoardSvg, generatedTsBoard, 'ts board map parity');
+    assertSvgFilesParseAsXml(generatedBoardDir, ['board-final.svg'], 'ts-generated board artifact');
+  } finally {
+    rmSync(generatedBoardDir, { recursive: true, force: true });
+  }
 } finally {
   rmSync(generatedFabricationDir, { recursive: true, force: true });
 }

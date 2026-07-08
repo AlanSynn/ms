@@ -16,6 +16,7 @@ sort the parts, then use the matching `assembly/` guide.
 ## Physical assumptions
 
 - Default committed pitch: `20.0 mm` (`2.00 cm`) board spacing.
+- Main board map is canonically `board-final.svg` (15x15, 225 holes).
 - Nominal axle/linkage/bracket hole diameter: `4.0 mm`.
 - Gear presets: G1 / 1-space gear (8 teeth), G3 / 3-space gear (24 teeth), G5 / 5-space gear (40 teeth), G7 / 7-space gear (56 teeth).
 - Linkage lengths: 2, 4, 6, 8 board cells.
@@ -45,13 +46,17 @@ These files are nominal geometry, not material-specific kerf compensation. Befor
 
 - `kit/` contains the existing educational/module-oriented MS4N activity sheets, prompt cards, checks, and broad classroom materials.
 - `fabrication/` is the nominal-millimetre manufacturing package for the constrained physical parts requested here: gears, planetary ring gears, linkage bars, cams, followers, brackets, spacers, handles, and workshop cut sheets.
-- Shared physical assumptions come from `fabrication/generate_fabrication_templates.py` and are mirrored by `utils/fabrication.ts`; do not hand-edit generated `fabrication/` SVGs without updating the generator and drift test.
+- Shared physical assumptions come from `fabrication/generate_fabrication_templates.py` and are mirrored by `utils/fabrication.ts`; do not hand-edit generated `fabrication/` SVGs without updating the generators and drift tests.
+- `board-final.svg` is managed by `scripts/generate-fabrication-board.ts` (TypeScript source in
+  `utils/fabricationBoardTemplate.tsx`) so board geometry and drift checks are reusable across
+  runtime and tooling.
 
 ## Contents
 
 - `manifest.json` — machine-readable inventory and dimensions.
 - `complete-kit-cut-sheet.svg` — one actual-size cutter-bed page containing every unique physical part type.
-- `assembly/` — board-coordinate assembly guides, recipe data, and the 15x15 hole / 225-hole board map.
+- `board-final.svg` — canonical 15x15 pegboard map with A/O and 1/15 labels.
+- `assembly/` — board-coordinate assembly guides, recipe data, and per-mechanism SVG guides.
 - `gears/` — one SVG per gear preset; every gear includes a 4 mm axle hole, and larger gears include 4 mm linkage/bracket/crank/handle holes on the board grid.
 - `ring_gears/` — fixed internal ring gear for the planetary guide, with board-mount holes.
 - `linkages/` — one SVG per linkage length; holes are spaced on the board pitch.
@@ -65,13 +70,20 @@ These files are nominal geometry, not material-specific kerf compensation. Befor
   hot-glue. No thin neck is used.
 - `sheets/` — 11 workshop sheets for pre-fabricated sets.
 
-Managed files in this generated package: 57.
+Managed files in this generated package: 56.
 
 ## Regeneration
 
 ```bash
 python3 fabrication/generate_fabrication_templates.py --output fabrication
 ```
+
+```bash
+bun scripts/generate-fabrication-board.ts --output fabrication
+```
+
+`generate_fabrication_templates.py` still controls non-board mechanism parts and recipe
+assets. Use the TypeScript board generator for board map regeneration.
 
 For a custom 2.5 cm board pitch, generate to a separate directory instead of overwriting the committed package:
 

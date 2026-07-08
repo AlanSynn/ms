@@ -1,11 +1,10 @@
 {
   "assembly": {
-    "board_map": "assembly/board.svg",
+    "board_map": "board-final.svg",
     "files": [
       "assembly/README.md",
       "assembly/index.html",
       "assembly/recipes.json",
-      "assembly/board.svg",
       "assembly/parts-overview.svg",
       "assembly/01-gear-train-basic.svg",
       "assembly/02-cam-follower-basic.svg",
@@ -88,11 +87,10 @@
     "assembly/05-planetary-gear-basic.svg",
     "assembly/06-slider-crank-basic.svg",
     "assembly/README.md",
-    "assembly/board.svg",
     "assembly/index.html",
     "assembly/parts-overview.svg",
     "assembly/recipes.json",
-    "board.svg",
+    "board-final.svg",
     "brackets/bracket-2-hole-straight.svg",
     "brackets/bracket-3-hole-straight.svg",
     "brackets/bracket-l-3-hole.svg",
@@ -378,7 +376,7 @@
             0.0
           ],
           [
-            -0.0,
+            0.0,
             -12.0
           ]
         ],
@@ -416,7 +414,7 @@
             -4.592
           ],
           [
-            -0.0,
+            0.0,
             -12.0
           ],
           [
