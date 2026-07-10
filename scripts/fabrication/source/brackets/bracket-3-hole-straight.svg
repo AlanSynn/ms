@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1"
+     width="61mm" height="21mm"
+     viewBox="0 0 61 21"
+     data-profile-key="motionsmith-ms4n" data-grid-pitch-mm="20" data-hole-diameter-mm="4">
+  <title>Automataii fabrication bracket 3-hole-straight</title>
+  <desc>3-hole straight bracket with 4 mm holes on 20.0 mm centers.</desc>
+  <defs>
+    <style>
+      .cut { fill: none; stroke: #ed1c24; stroke-width: 0.25; stroke-miterlimit: 10; }
+      .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }
+      .score { fill: none; stroke: #777777; stroke-width: 0.15; stroke-dasharray: 2 1; }
+      .label { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }
+      .engrave { fill: #008000; font-family: Arial, Helvetica, sans-serif; font-size: 3.2px; font-weight: bold; }
+      .tiny { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
+      .small { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
+      .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
+      .part-card-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 3.5px; font-weight: bold; }
+      .coord-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 6px; font-weight: bold; }
+      .paper { fill: #ffffff; stroke: none; }
+    </style>
+  </defs>
+  <path d="M 10 3 L 50 3 A 7 7 0 0 1 50 17 L 10 17 A 7 7 0 0 1 10 3 Z" class="cut bracket-outline" data-bracket-key="3-hole-straight" data-pitch-mm="20" data-hole-count="3"/>
+  <circle cx="10" cy="10" r="2" class="drill bracket-hole linkage-hole" data-hole-role="bracket" data-hole-diameter-mm="4" data-hole-index="0" data-hole-x-mm="10" data-hole-y-mm="10"/>
+  <circle cx="30" cy="10" r="2" class="drill bracket-hole linkage-hole" data-hole-role="bracket" data-hole-diameter-mm="4" data-hole-index="1" data-hole-x-mm="30" data-hole-y-mm="10"/>
+  <circle cx="50" cy="10" r="2" class="drill bracket-hole linkage-hole" data-hole-role="bracket" data-hole-diameter-mm="4" data-hole-index="2" data-hole-x-mm="50" data-hole-y-mm="10"/>
+  <text x="30" y="5.8" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="3 Hole Bracket" textLength="24" lengthAdjust="spacingAndGlyphs" style="font-size:2.4px">3 Hole Bracket</text>
+</svg>

@@ -72,9 +72,8 @@ const minimumSceneLinkageLength = (value: number, fallback = 20) => Math.max(1, 
  *
  * This is intentionally fabrication-facing, not renderer-facing: every Three/2D
  * linkage blank should start from the physical span it represents so the drilled
- * holes match the generated SVG linkage templates from
- * fabrication/generate_fabrication_templates.py instead of being stretched from a
- * shorter visual placeholder.
+ * holes match the generated SVG linkage templates from the managed fabrication
+ * source template set instead of being stretched from a shorter visual placeholder.
  */
 export const fabricationLinkageSceneLengthsForMechanism = (mechanism: Pick<MechanismConfig, 'type' | 'groundLength' | 'crankLength' | 'couplerLength' | 'rockerLength' | 'couplerPointDist' | 'rodLength'>): FabricationLinkageRoleLengths => {
     const output = minimumSceneLinkageLength(Math.max(20, mechanism.couplerPointDist));

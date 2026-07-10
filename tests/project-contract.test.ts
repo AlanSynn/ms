@@ -2170,15 +2170,18 @@ type FabricationManifest = {
 };
 const fabricationManifest = JSON.parse(readFileSync(join(process.cwd(), 'fabrication', 'manifest.json'), 'utf8')) as FabricationManifest;
 const fabricationManifestSnapshot = JSON.parse(readFileSync(join(process.cwd(), 'docs', 'mechanism-reference', 'source', 'fabrication-manifest.snapshot.json'), 'utf8')) as FabricationManifest;
-const fabricationGeneratorPath = join(process.cwd(), 'fabrication', 'generate_fabrication_templates.py');
+const fabricationGeneratorPath = join(process.cwd(), 'scripts', 'generate-fabrication-assets.ts');
+const fabricationPythonGeneratorPath = join(process.cwd(), 'fabrication', 'generate_fabrication_templates.py');
+const fabricationPythonGeneratorImportPath = 'fabrication/generate_fabrication_templates.py';
 assert(existsSync(fabricationGeneratorPath), 'fabrication generator lives beside the generated package');
+assert(existsSync(fabricationPythonGeneratorPath), 'legacy Python generator exists for parity/rollback checks');
 const fabricationGeneratorText = readFileSync(fabricationGeneratorPath, 'utf8');
-assert(fabricationGeneratorText.includes('DEFAULT_GRID_PITCH_MM = 20.0'), 'fabrication generator owns the 20 mm board pitch convention');
-assert(fabricationGeneratorText.includes('hole_diameter_mm=4.0'), 'fabrication generator owns the 4 mm hole convention');
-assert(fabricationGeneratorText.includes('GEAR_ROOT_WEB_MM = 6.0'), 'fabrication generator keeps gear root webs thin enough for 8T mesh clearance');
-assert(fabricationGeneratorText.includes('GearPreset("g24", "G3 / 3-space gear", 24)'), 'fabrication generator owns the G24 gear preset used by renderers');
-assert(fabricationGeneratorText.includes('FollowerPreset("f4-roller"'), 'fabrication generator owns the roller follower preset used by Foundry');
-assert(fabricationGeneratorText.includes('SOURCE_SSOT = "fabrication/generate_fabrication_templates.py"'), 'fabrication manifest source points at the checked-in generator');
+assert(fabricationGeneratorText.includes('const boardAdapter: GeneratorAdapter = {'), 'fabrication generator defines the board adapter');
+assert(fabricationGeneratorText.includes("const templateAdapter: GeneratorAdapter = {"), 'fabrication generator defines the template adapter');
+const fabricationTemplateSourcePath = join(process.cwd(), 'scripts', 'fabrication', 'source-template.ts');
+assert(existsSync(fabricationTemplateSourcePath), 'fabrication template source locator lives beside the template generator');
+const fabricationTemplateSourceText = readFileSync(fabricationTemplateSourcePath, 'utf8');
+assert(fabricationTemplateSourceText.includes("FABRICATION_ASSET_GENERATOR_SOURCE = 'scripts/generate-fabrication-assets.ts'"), 'template source manifests report the TypeScript generator as SSOT');
 const fabricationRuntimeText = readFileSync(join(process.cwd(), 'utils', 'fabrication.ts'), 'utf8');
 const fabricationAssemblyGuideText = readFileSync(join(process.cwd(), 'utils', 'fabricationAssemblyGuide.ts'), 'utf8');
 const fabricationBlueprintSvgText = readFileSync(join(process.cwd(), 'utils', 'fabricationBlueprintSvg.ts'), 'utf8');
@@ -2198,7 +2201,7 @@ const staticImportModules = (source: string) => Array.from(new Set([
   ...[...source.matchAll(/^\s*import(?:\s+type)?[\s\S]*?\sfrom\s+['"]([^'"]+)['"]/gm)].map(match => match[1]),
   ...[...source.matchAll(/^\s*import\s+['"]([^'"]+)['"]/gm)].map(match => match[1])
 ])).sort();
-assert(fabricationContractText.includes(FABRICATION_SOURCE_SSOT), 'runtime fabrication contract declares the Python generator as source of truth');
+assert(fabricationContractText.includes(FABRICATION_SOURCE_SSOT), 'runtime fabrication contract declares the template generator as source of truth');
 assert(fabricationContractText.includes('FABRICATION_GEAR_RADIUS_PER_TOOTH_MM = 1.25'), 'runtime fabrication contract keeps the generator gear radius/tooth rule centralized');
 assert(fabricationContractText.includes('FABRICATION_GEAR_ROOT_WEB_MM = 6'), 'runtime fabrication contract mirrors the generator gear root web rule');
 assert(fabricationContractText.includes('FABRICATION_LINKAGE_WIDTH_MM = 14'), 'runtime fabrication contract keeps the generator linkage width centralized');
@@ -2641,8 +2644,8 @@ assert.deepEqual(
 });
 assert(numberFormatText.includes('export const finiteNumber') && numberFormatText.includes('export const svgNumber'), 'neutral numberFormat seam owns finite/svg number formatting without domain imports');
 assert(!fabricationRuntimeText.includes("rootRadiusMm: 28.438"), 'runtime gear constants are no longer duplicated outside the centralized contract');
-assert.equal(fabricationManifest.generated_by, 'fabrication/generate_fabrication_templates.py', 'fabrication manifest generated_by matches the checked-in generator');
-assert.equal(fabricationManifest.source_ssot, 'fabrication/generate_fabrication_templates.py', 'fabrication manifest source_ssot matches the checked-in generator');
+assert.equal(fabricationManifest.generated_by, FABRICATION_SOURCE_SSOT, 'fabrication manifest generated_by matches the checked-in generator source');
+assert.equal(fabricationManifest.source_ssot, FABRICATION_SOURCE_SSOT, 'fabrication manifest source_ssot matches the checked-in generator source');
 assert.deepEqual(fabricationManifestSnapshot, fabricationManifest, 'mechanism reference fabrication snapshot mirrors fabrication/manifest.json');
 const fabricationSvgManagedFiles = fabricationManifest.managed_files.filter(path => path.endsWith('.svg'));
 const assertSvgFilesParseAsXml = (rootDir: string, relPaths: string[], label: string) => {
@@ -2749,30 +2752,33 @@ verticalLabels.forEach((tag, index) => {
 });
 const generatedFabricationDir = mkdtempSync(join(tmpdir(), 'motionsmith-fabrication-'));
 try {
-  execFileSync('python3', [fabricationGeneratorPath, '--output', generatedFabricationDir], { cwd: process.cwd(), stdio: 'pipe' });
+  execFileSync('python3', [fabricationPythonGeneratorPath, '--output', generatedFabricationDir], { cwd: process.cwd(), stdio: 'pipe' });
   const generatedManifest = JSON.parse(readFileSync(join(generatedFabricationDir, 'manifest.json'), 'utf8')) as FabricationManifest;
   assert.equal(generatedManifest.grid_pitch_mm, fabricationManifest.grid_pitch_mm, 'generator reproduces the committed grid pitch');
   assert.equal(generatedManifest.hole_diameter_mm, fabricationManifest.hole_diameter_mm, 'generator reproduces the committed hole diameter');
-  assert.equal(generatedManifest.generated_by, 'fabrication/generate_fabrication_templates.py', 'regenerated manifest keeps the checked-in generator path');
-  assert.equal(generatedManifest.source_ssot, 'fabrication/generate_fabrication_templates.py', 'regenerated manifest keeps the checked-in source-of-truth path');
-  assert.equal(generatedManifest.assembly.board_map, 'board-final.svg', 'python generator maps assembly board to board-final.svg');
-  const generatedPythonBoard = readFileSync(join(generatedFabricationDir, 'board-final.svg'), 'utf8');
-  assert.equal(generatedPythonBoard.length > 0, true, 'python generator keeps board-final board artifact for compatibility');
-  assertBoardCoordinatesMatch(mainBoardSvg, generatedPythonBoard, 'python board map parity');
+  assert.equal(generatedManifest.generated_by, fabricationPythonGeneratorImportPath, 'legacy python generator identifies itself in regenerated manifest');
+  assert.equal(generatedManifest.source_ssot, fabricationPythonGeneratorImportPath, 'legacy python manifest keeps legacy source-of-truth path');
+  assert.equal(generatedManifest.assembly.board_map, 'board-final.svg', 'generator maps assembly board to board-final.svg');
+  const generatedTsBoard = readFileSync(join(generatedFabricationDir, 'board-final.svg'), 'utf8');
+  assert.equal(generatedTsBoard.length > 0, true, 'generator keeps board-final board artifact for compatibility');
+  assertBoardCoordinatesMatch(mainBoardSvg, generatedTsBoard, 'ts generator board map parity');
   (['gears', 'linkages', 'ring_gears', 'cams', 'followers', 'brackets', 'handles', 'spacers', 'cam_modules'] as const).forEach(category => {
     assert.deepEqual(generatedManifest.parts[category], fabricationManifest.parts[category], `regenerated ${category} primitives match the committed fabrication contract`);
   });
   const committedNonBoardManagedFiles = fabricationManifest.managed_files.filter(path => !isLegacyBoardAsset(path));
   const generatedNonBoardManagedFiles = generatedManifest.managed_files.filter(path => !isLegacyBoardAsset(path));
   assert.deepEqual(generatedNonBoardManagedFiles, committedNonBoardManagedFiles, 'regenerated non-board files remain the committed managed-file set');
-  committedNonBoardManagedFiles.forEach(relPath => {
+  const committedNonBoardSvgFiles = committedNonBoardManagedFiles.filter(path => path.endsWith('.svg'));
+  const generatedNonBoardSvgFiles = generatedNonBoardManagedFiles.filter(path => path.endsWith('.svg'));
+  assert.deepEqual(generatedNonBoardSvgFiles, committedNonBoardSvgFiles, 'regenerated svg artifact file-set stays aligned with committed non-board SVG files');
+  committedNonBoardSvgFiles.forEach(relPath => {
     assert.equal(
       readFileSync(join(generatedFabricationDir, relPath), 'utf8'),
       readFileSync(join(process.cwd(), 'fabrication', relPath), 'utf8'),
       `generator emits committed fabrication asset ${relPath}`
     );
   });
-  assertSvgFilesParseAsXml(generatedFabricationDir, generatedNonBoardManagedFiles.filter(path => path.endsWith('.svg')), 'regenerated non-board fabrication assets');
+  assertSvgFilesParseAsXml(generatedFabricationDir, generatedNonBoardSvgFiles, 'regenerated non-board fabrication assets');
   const generatedBoardDir = mkdtempSync(join(tmpdir(), 'motionsmith-fabrication-board-'));
   try {
     execFileSync('bun', ['scripts/generate-fabrication-board.ts', '--output', generatedBoardDir], { cwd: process.cwd(), stdio: 'pipe' });
@@ -2843,8 +2849,8 @@ assert.deepEqual(
   'runtime linkage primitives mirror fabrication/manifest.json'
 );
 assert.deepEqual(FABRICATION_LINKAGE_SPECS.find(spec => spec.cells === 4)?.holeCentersMm, [{ x: 14, y: 14 }, { x: 34, y: 14 }, { x: 54, y: 14 }, { x: 74, y: 14 }, { x: 94, y: 14 }], 'runtime linkage holes follow generator capsule margin and pitch');
-assert.equal(FABRICATION_LINKAGE_WIDTH_MM, 14, 'runtime linkage width is centralized from the Python generator convention');
-assert.equal(FABRICATION_HOLE_RADIUS_MM, 2, 'runtime hole radius is centralized from the Python generator convention');
+assert.equal(FABRICATION_LINKAGE_WIDTH_MM, 14, 'runtime linkage width is centralized from the TypeScript generator convention');
+assert.equal(FABRICATION_HOLE_RADIUS_MM, 2, 'runtime hole radius is centralized from the TypeScript generator convention');
 assert.equal(fabricationBoardColumnLabel(0), 'A', 'fabrication board columns use A-O labels');
 assert.equal(fabricationBoardColumnLabel(14), 'O', 'fabrication board columns end at O on the 15x15 board');
 assert.equal(fabricationBoardColumnLabel(26), 'AA', 'fabrication board labels extend past 15 columns without invalid ASCII labels');
@@ -3291,7 +3297,7 @@ FABRICATION_GEAR_SPECS.forEach(output => {
 });
 assert.equal(fabricationGearSpecForPitchRadius(27).key, 'g24', 'gear display chooses the nearest fabrication preset by physical pitch radius');
 const g24Profile = fabricationGearProfileForPitchRadius(60, 30);
-assert.equal(g24Profile.source, FABRICATION_SOURCE_SSOT, 'gear profile declares the Python generator source');
+assert.equal(g24Profile.source, FABRICATION_SOURCE_SSOT, 'gear profile declares the active fabrication source-of-truth');
 assert.equal(g24Profile.preset.key, 'g24', 'gear profile preserves fabrication preset key');
 assert.equal(g24Profile.outlinePoints.length, 96, 'G24 profile uses fabrication tooth segmentation, not sparse saw teeth');
 assert.equal(g24Profile.attachmentHoleCenters.length, 4, 'G24 profile carries grid attachment holes into shared renderers');

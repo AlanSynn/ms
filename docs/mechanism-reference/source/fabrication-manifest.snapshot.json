@@ -73,8 +73,8 @@
     ],
     "width_mm": 500
   },
-  "generated_at": "reproducible",
-  "generated_by": "fabrication/generate_fabrication_templates.py",
+  "generated_at": "managed-template",
+  "generated_by": "scripts/generate-fabrication-assets.ts",
   "grid_cell_cm": 2,
   "grid_pitch_mm": 20,
   "hole_diameter_mm": 4,
@@ -1279,5 +1279,5 @@
       "width_mm": 279.4
     }
   ],
-  "source_ssot": "fabrication/generate_fabrication_templates.py"
+  "source_ssot": "scripts/generate-fabrication-assets.ts"
 }

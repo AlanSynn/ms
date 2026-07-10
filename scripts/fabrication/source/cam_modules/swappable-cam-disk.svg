@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1"
+     width="58mm" height="58mm"
+     viewBox="0 0 58 58"
+     data-profile-key="motionsmith-ms4n" data-grid-pitch-mm="20" data-hole-diameter-mm="4">
+  <title>Automataii fabrication cam module swappable-cam-disk</title>
+  <desc>Swappable cam disk for the pegboard-mounted gravity cam follower module. The 15x15 pegboard remains the structural base.</desc>
+  <defs>
+    <style>
+      .cut { fill: none; stroke: #ed1c24; stroke-width: 0.25; stroke-miterlimit: 10; }
+      .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }
+      .score { fill: none; stroke: #777777; stroke-width: 0.15; stroke-dasharray: 2 1; }
+      .label { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }
+      .engrave { fill: #008000; font-family: Arial, Helvetica, sans-serif; font-size: 3.2px; font-weight: bold; }
+      .tiny { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
+      .small { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
+      .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
+      .part-card-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 3.5px; font-weight: bold; }
+      .coord-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 6px; font-weight: bold; }
+      .paper { fill: #ffffff; stroke: none; }
+    </style>
+  </defs>
+  <path d="M 49 29 L 48.924 30.22 L 48.696 31.431 L 48.319 32.623 L 47.794 33.788 L 47.126 34.917 L 46.321 36 L 45.383 37.03 L 44.321 37.999 L 43.142 38.899 L 41.856 39.725 L 40.472 40.468 L 39 41.124 L 37.452 41.688 L 35.84 42.156 L 34.176 42.523 L 32.473 42.787 L 30.743 42.947 L 29 43 L 27.257 42.947 L 25.527 42.787 L 23.824 42.523 L 22.16 42.156 L 20.548 41.688 L 19 41.124 L 17.528 40.468 L 16.144 39.725 L 14.858 38.899 L 13.679 37.999 L 12.617 37.03 L 11.679 36 L 10.874 34.917 L 10.206 33.788 L 9.681 32.623 L 9.304 31.431 L 9.076 30.22 L 9 29 L 9.076 27.78 L 9.304 26.569 L 9.681 25.377 L 10.206 24.212 L 10.874 23.083 L 11.679 22 L 12.617 20.97 L 13.679 20.001 L 14.858 19.101 L 16.144 18.275 L 17.528 17.532 L 19 16.876 L 20.548 16.312 L 22.16 15.844 L 23.824 15.477 L 25.527 15.213 L 27.257 15.053 L 29 15 L 30.743 15.053 L 32.473 15.213 L 34.176 15.477 L 35.84 15.844 L 37.452 16.312 L 39 16.876 L 40.472 17.532 L 41.856 18.275 L 43.142 19.101 L 44.321 20.001 L 45.383 20.97 L 46.321 22 L 47.126 23.083 L 47.794 24.212 L 48.319 25.377 L 48.696 26.569 L 48.924 27.78 Z" class="cut cam-module-outline cam-outline"/>
+  <circle cx="29" cy="29" r="2" class="drill cam-module-hole axle-hole linkage-hole" data-hole-role="axle" data-hole-diameter-mm="4" data-hole-index="0"/>
+  <circle cx="29" cy="29" r="20" class="score cam-sweep"/>
+  <text x="29" y="52" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="Cam Disk" style="font-size:3px">Cam Disk</text>
+</svg>

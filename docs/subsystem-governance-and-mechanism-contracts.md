@@ -129,7 +129,7 @@ utils/physicsSession.ts
   pure ProjectState + ToonSceneProjection + phase -> sampled physics contract
 
 utils/fabricationContract.ts
-  centralized fabrication primitive dimensions derived from fabrication/generate_fabrication_templates.py: linkage widths/holes, gear tooth/radius rules, ring gear, and S10 spacer
+  centralized fabrication primitive dimensions derived from `scripts/generate-fabrication-assets.ts` + board generator: linkage widths/holes, gear tooth/radius rules, ring gear, and S10 spacer
 
 utils/fabrication.ts
   consumes fabricationContract; owns stack, render plan, validation, package generation
@@ -613,7 +613,7 @@ The current M3 implementation work treats UI stages as adapters over the shared 
 
 - Make force/velocity/friction overlays consume `PhysicsSession` only.
 - Make Foundry/Design/Blueprint share `fabricationPlan` from the snapshot/registry.
-- Keep linkage, gear, ring gear, and spacer dimensions in `utils/fabricationContract.ts`; do not duplicate values from `fabrication/generate_fabrication_templates.py` in renderers.
+- Keep linkage, gear, ring gear, and spacer dimensions in `utils/fabricationContract.ts`; do not duplicate values from the generation source in renderers.
 - In Design 3D, render only the selected mechanism as live WebGL geometry; keep full-project mechanism/template counts as inventory telemetry so the editor remains tinkerable under many mechanisms.
 - Cache shared Three.js fabrication primitive geometries and avoid per-frame scene traversal; motion telemetry must update from kinematics, not from counting objects every frame.
 - Keep exploded view as an assembly lens over fabrication stack data.

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1"
+     width="54mm" height="104mm"
+     viewBox="0 0 54 104"
+     data-profile-key="motionsmith-ms4n" data-grid-pitch-mm="20" data-hole-diameter-mm="4">
+  <title>Automataii fabrication cam module u-channel-guide-cartridge</title>
+  <desc>U-channel guide cartridge for the pegboard-mounted gravity cam follower module. The 15x15 pegboard remains the structural base.</desc>
+  <defs>
+    <style>
+      .cut { fill: none; stroke: #ed1c24; stroke-width: 0.25; stroke-miterlimit: 10; }
+      .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }
+      .score { fill: none; stroke: #777777; stroke-width: 0.15; stroke-dasharray: 2 1; }
+      .label { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }
+      .engrave { fill: #008000; font-family: Arial, Helvetica, sans-serif; font-size: 3.2px; font-weight: bold; }
+      .tiny { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
+      .small { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
+      .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
+      .part-card-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 3.5px; font-weight: bold; }
+      .coord-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 6px; font-weight: bold; }
+      .paper { fill: #ffffff; stroke: none; }
+    </style>
+  </defs>
+  <path d="M 10 4 L 44 4 A 6 6 0 0 1 50 10 L 50 92 A 6 6 0 0 1 44 98 L 10 98 A 6 6 0 0 1 4 92 L 4 10 A 6 6 0 0 1 10 4 Z" class="cut cam-module-outline guide-cartridge-outline"/>
+  <path d="M 23 14 L 31 14 A 4 4 0 0 1 35 18 L 35 80 A 4 4 0 0 1 31 84 L 23 84 A 4 4 0 0 1 19 80 L 19 18 A 4 4 0 0 1 23 14 Z" class="cut guide-channel"/>
+  <path d="M 14 14 L 14 84" class="score guide-side-rail"/>
+  <path d="M 40 14 L 40 84" class="score guide-side-rail"/>
+  <circle cx="27" cy="20" r="2" class="drill cam-module-hole axle-hole linkage-hole" data-hole-role="peg-tab" data-hole-diameter-mm="4" data-hole-index="0"/>
+  <circle cx="27" cy="80" r="2" class="drill cam-module-hole axle-hole linkage-hole" data-hole-role="peg-tab" data-hole-diameter-mm="4" data-hole-index="1"/>
+  <text x="27" y="98" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="Guide Cartridge" style="font-size:3px">Guide Cartridge</text>
+</svg>

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1"
+     width="76.3mm" height="76.3mm"
+     viewBox="0 0 76.3 76.3"
+     data-profile-key="motionsmith-ms4n" data-grid-pitch-mm="20" data-hole-diameter-mm="4">
+  <title>Automataii fabrication cam pear</title>
+  <desc>Pear / slow-fast cam profile with 4 mm axle and linkage/bracket/crank/handle holes.</desc>
+  <defs>
+    <style>
+      .cut { fill: none; stroke: #ed1c24; stroke-width: 0.25; stroke-miterlimit: 10; }
+      .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }
+      .score { fill: none; stroke: #777777; stroke-width: 0.15; stroke-dasharray: 2 1; }
+      .label { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }
+      .engrave { fill: #008000; font-family: Arial, Helvetica, sans-serif; font-size: 3.2px; font-weight: bold; }
+      .tiny { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
+      .small { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
+      .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
+      .part-card-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 3.5px; font-weight: bold; }
+      .coord-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 6px; font-weight: bold; }
+      .paper { fill: #ffffff; stroke: none; }
+    </style>
+  </defs>
+  <path d="M 38.15 8 L 39.464 8.049 L 40.771 8.197 L 42.061 8.441 L 43.329 8.78 L 44.566 9.211 L 45.765 9.731 L 46.92 10.336 L 48.024 11.021 L 49.073 11.78 L 50.06 12.609 L 50.982 13.5 L 51.835 14.448 L 52.615 15.444 L 53.321 16.484 L 53.951 17.558 L 54.503 18.661 L 54.979 19.784 L 55.378 20.922 L 55.701 22.067 L 55.951 23.213 L 56.13 24.353 L 56.241 25.483 L 56.287 26.596 L 56.272 27.687 L 56.2 28.754 L 56.076 29.791 L 55.904 30.796 L 55.689 31.766 L 55.437 32.699 L 55.152 33.594 L 54.838 34.45 L 54.501 35.267 L 54.144 36.044 L 53.773 36.783 L 53.39 37.485 L 53 38.15 L 52.606 38.781 L 52.21 39.38 L 51.815 39.949 L 51.422 40.49 L 51.034 41.006 L 50.652 41.5 L 50.275 41.973 L 49.904 42.428 L 49.54 42.868 L 49.181 43.294 L 48.827 43.708 L 48.477 44.112 L 48.13 44.508 L 47.784 44.896 L 47.437 45.276 L 47.088 45.65 L 46.736 46.017 L 46.378 46.378 L 46.013 46.731 L 45.64 47.076 L 45.257 47.412 L 44.864 47.738 L 44.458 48.052 L 44.04 48.352 L 43.61 48.638 L 43.166 48.906 L 42.709 49.156 L 42.239 49.385 L 41.758 49.592 L 41.265 49.775 L 40.762 49.932 L 40.251 50.063 L 39.732 50.166 L 39.208 50.24 L 38.68 50.285 L 38.15 50.3 L 37.62 50.285 L 37.092 50.24 L 36.568 50.166 L 36.049 50.063 L 35.538 49.932 L 35.035 49.775 L 34.542 49.592 L 34.061 49.385 L 33.591 49.156 L 33.134 48.906 L 32.69 48.638 L 32.26 48.352 L 31.842 48.052 L 31.436 47.738 L 31.043 47.412 L 30.66 47.076 L 30.287 46.731 L 29.922 46.378 L 29.564 46.017 L 29.212 45.65 L 28.863 45.276 L 28.516 44.896 L 28.17 44.508 L 27.823 44.113 L 27.473 43.708 L 27.119 43.294 L 26.76 42.868 L 26.396 42.428 L 26.025 41.973 L 25.648 41.5 L 25.266 41.006 L 24.878 40.49 L 24.485 39.949 L 24.09 39.38 L 23.694 38.781 L 23.3 38.15 L 22.91 37.485 L 22.527 36.783 L 22.156 36.044 L 21.799 35.267 L 21.462 34.45 L 21.148 33.594 L 20.863 32.699 L 20.611 31.766 L 20.396 30.796 L 20.224 29.791 L 20.1 28.754 L 20.028 27.687 L 20.013 26.596 L 20.059 25.483 L 20.17 24.353 L 20.349 23.213 L 20.599 22.067 L 20.922 20.922 L 21.321 19.784 L 21.797 18.661 L 22.349 17.558 L 22.979 16.484 L 23.685 15.444 L 24.465 14.448 L 25.318 13.5 L 26.24 12.609 L 27.227 11.78 L 28.276 11.021 L 29.38 10.336 L 30.535 9.731 L 31.734 9.211 L 32.971 8.78 L 34.239 8.441 L 35.529 8.197 L 36.836 8.049 Z" class="cut cam-outline" data-cam-key="pear" data-base-radius-mm="18" data-eccentricity-mm="9" data-cam-lobes="1" data-profile-harmonic="0.35" data-rise-deg="150" data-high-dwell-deg="45" data-return-deg="75" data-physical-cam-preset="pear" data-profile-source="automataii.domain.mechanisms.cam.profile.build_pear_cam_profile_from_params" data-profile-sample-count="144"/>
+  <circle cx="38.15" cy="38.15" r="2" class="drill axle-hole" data-hole-role="axle" data-hole-diameter-mm="4"/>
+  <line x1="38.15" y1="38.15" x2="56.15" y2="38.15" class="score cam-base-radius"/>
+  <circle cx="38.15" cy="38.15" r="18" class="score cam-base-circle"/>
+  <circle cx="23.368" cy="32.027" r="2" class="drill linkage-hole bracket-hole crank-hole handle-hole" data-hole-role="linkage-bracket-crank-handle" data-attachment-kinds="linkage bracket crank handle" data-hole-diameter-mm="4" data-hole-index="0" data-hole-x-offset-mm="-14.782" data-hole-y-offset-mm="-6.123"/>
+  <circle cx="32.027" cy="23.368" r="2" class="drill linkage-hole bracket-hole crank-hole handle-hole" data-hole-role="linkage-bracket-crank-handle" data-attachment-kinds="linkage bracket crank handle" data-hole-diameter-mm="4" data-hole-index="1" data-hole-x-offset-mm="-6.123" data-hole-y-offset-mm="-14.782"/>
+  <circle cx="44.273" cy="23.368" r="2" class="drill linkage-hole bracket-hole crank-hole handle-hole" data-hole-role="linkage-bracket-crank-handle" data-attachment-kinds="linkage bracket crank handle" data-hole-diameter-mm="4" data-hole-index="2" data-hole-x-offset-mm="6.123" data-hole-y-offset-mm="-14.782"/>
+  <circle cx="52.932" cy="32.027" r="2" class="drill linkage-hole bracket-hole crank-hole handle-hole" data-hole-role="linkage-bracket-crank-handle" data-attachment-kinds="linkage bracket crank handle" data-hole-diameter-mm="4" data-hole-index="3" data-hole-x-offset-mm="14.782" data-hole-y-offset-mm="-6.123"/>
+  <text x="38.15" y="33.65" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="Pear Cam" textLength="14.144" lengthAdjust="spacingAndGlyphs" style="font-size:3.4px">Pear Cam</text>
+</svg>

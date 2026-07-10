@@ -1,19 +1,13 @@
-# Fabrication 1:1 parity trace
+# Fabrication 1:1 parity trace (TS source)
 
-Generated: 2026-07-10T19:06:03.379Z
+Generated: 2026-07-10T20:31:26.239Z
 
 ## Checks
-- python generation manifest loaded: ✅
-- committed manifest loaded: ✅
-- managed file set 1:1: ✅
-- manifest metadata parity: ✅
-- board coordinate parity (python vs committed): ✅ (225 / 225)
-- TS board generated: ✅
-- TS board exact vs committed: ✅ (225 / 225)
-- TS board coordinate parity: ✅
-
-## Hard failures
-- none
+- TS generation executed: ✅
+- managed manifest metadata parity: ✅
+- managed file set parity: ✅
+- board file present: ✅
+- board coordinate parity: ✅ (225/225)
 
 ## File-level parity
 - exact: 56
@@ -22,23 +16,25 @@ Generated: 2026-07-10T19:06:03.379Z
 - missing in generated: 0
 
 ## Mechanism-category parity matrix
-| category | python file count | ts strategy | ts coverage | metadata match | recommendation |
-|---|---:|---|---|---|---|
-| assembly | 10 | not-implemented | not-covered | N/A | Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category. |
-| board | 1 | full-svg-generation | covered | N/A | Already parity-covered in TS artifacts. |
-| brackets | 4 | not-implemented | not-covered | N/A | Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category. |
-| cam_modules | 8 | not-implemented | not-covered | N/A | Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category. |
-| cams | 4 | not-implemented | not-covered | N/A | Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category. |
-| followers | 4 | not-implemented | not-covered | N/A | Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category. |
-| gears | 4 | metadata-only | partial | ✅ | Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category. |
-| handles | 1 | not-implemented | not-covered | N/A | Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category. |
-| linkages | 4 | metadata-only | partial | ✅ | Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category. |
-| misc-root | 2 | not-implemented | not-covered | N/A | Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category. |
-| ring_gears | 1 | metadata-only | partial | ✅ | Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category. |
-| root-readme | 1 | not-implemented | not-covered | N/A | Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category. |
-| sheets | 11 | not-implemented | not-covered | N/A | Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category. |
-| spacers | 1 | metadata-only | partial | ✅ | Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category. |
+| category | file count | strategy | coverage | metadata match | generated-by | recommendation |
+|---|---:|---|---|---|---|---|
+| assembly | 10 | full-svg-generation | covered | n/a | scripts/generate-fabrication-assets.ts | TS-generated source path is authoritative for this category. |
+| board | 1 | full-svg-generation | covered | n/a | scripts/generate-fabrication-assets.ts | TS-generated source path is authoritative for this category. |
+| brackets | 4 | full-svg-generation | covered | n/a | scripts/generate-fabrication-assets.ts | TS-generated source path is authoritative for this category. |
+| cam_modules | 8 | full-svg-generation | covered | n/a | scripts/generate-fabrication-assets.ts | TS-generated source path is authoritative for this category. |
+| cams | 4 | full-svg-generation | covered | n/a | scripts/generate-fabrication-assets.ts | TS-generated source path is authoritative for this category. |
+| followers | 4 | full-svg-generation | covered | n/a | scripts/generate-fabrication-assets.ts | TS-generated source path is authoritative for this category. |
+| gears | 4 | full-svg-generation | covered | ✅ | scripts/generate-fabrication-assets.ts | TS-generated source path is authoritative for this category. |
+| handles | 1 | full-svg-generation | covered | n/a | scripts/generate-fabrication-assets.ts | TS-generated source path is authoritative for this category. |
+| linkages | 4 | full-svg-generation | covered | ✅ | scripts/generate-fabrication-assets.ts | TS-generated source path is authoritative for this category. |
+| misc-root | 1 | full-svg-generation | covered | n/a | scripts/generate-fabrication-assets.ts | TS-generated source path is authoritative for this category. |
+| ring_gears | 1 | full-svg-generation | covered | ✅ | scripts/generate-fabrication-assets.ts | TS-generated source path is authoritative for this category. |
+| root-readme | 2 | full-svg-generation | covered | n/a | scripts/generate-fabrication-assets.ts | TS-generated source path is authoritative for this category. |
+| sheets | 11 | full-svg-generation | covered | n/a | scripts/generate-fabrication-assets.ts | TS-generated source path is authoritative for this category. |
+| spacers | 1 | full-svg-generation | covered | ✅ | scripts/generate-fabrication-assets.ts | TS-generated source path is authoritative for this category. |
 
 ## Recommendations
-- Implement TS generators or adapters for parity-hard category files: assembly, brackets, cam_modules, cams, followers, gears, handles, linkages, misc-root, ring_gears, root-readme, sheets, spacers.
-- Current Python and TS parity checks are clean for board artifacts; remaining categories remain metadata-only parity only.
+- TS source output is currently fully 1:1 for managed categories including board and all mechanism families.
+
+## Hard failures
+- none

@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1"
+     width="279.4mm" height="215.9mm"
+     viewBox="0 0 279.4 215.9"
+     data-profile-key="motionsmith-ms4n" data-grid-pitch-mm="20" data-hole-diameter-mm="4">
+  <title>Automataii fabrication sheet 08-spacer-set: Spacer set</title>
+  <desc>Workshop sheet containing: spacers. Nominal holes are 4 mm.</desc>
+  <defs>
+    <style>
+      .cut { fill: none; stroke: #ed1c24; stroke-width: 0.25; stroke-miterlimit: 10; }
+      .drill { fill: none; stroke: #0071bc; stroke-width: 0.2; stroke-miterlimit: 10; }
+      .score { fill: none; stroke: #777777; stroke-width: 0.15; stroke-dasharray: 2 1; }
+      .label { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 4px; }
+      .engrave { fill: #008000; font-family: Arial, Helvetica, sans-serif; font-size: 3.2px; font-weight: bold; }
+      .tiny { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3px; }
+      .small { fill: #333333; font-family: Arial, Helvetica, sans-serif; font-size: 3.6px; }
+      .step-title { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 5px; font-weight: bold; }
+      .part-card-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 3.5px; font-weight: bold; }
+      .coord-label { fill: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 6px; font-weight: bold; }
+      .paper { fill: #ffffff; stroke: none; }
+    </style>
+  </defs>
+  <text x="12" y="12" class="label" text-anchor="start">08 Spacer set</text>
+  <text x="12" y="18" class="tiny" text-anchor="start">Stackable washer spacers for 4 mm axle/linkage hardware</text>
+  <g transform="translate(82 34)">
+  <circle cx="9" cy="9" r="5" class="cut spacer-outline washer-outline" data-spacer-key="s10" data-outer-diameter-mm="10" data-inner-diameter-mm="4"/>
+  </g>
+  <g transform="translate(82 34)">
+  <circle cx="9" cy="9" r="2" class="drill spacer-hole axle-hole linkage-hole bracket-hole" data-hole-role="spacer" data-hole-diameter-mm="4" data-hole-index="0"/>
+  </g>
+  <g transform="translate(82 34)">
+  <text x="12.2" y="9" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="Spacer" style="font-size:1.6px" transform="rotate(90 12.2 9)">Spacer</text>
+  </g>
+  <g transform="translate(104 34)">
+  <circle cx="9" cy="9" r="5" class="cut spacer-outline washer-outline" data-spacer-key="s10" data-outer-diameter-mm="10" data-inner-diameter-mm="4"/>
+  </g>
+  <g transform="translate(104 34)">
+  <circle cx="9" cy="9" r="2" class="drill spacer-hole axle-hole linkage-hole bracket-hole" data-hole-role="spacer" data-hole-diameter-mm="4" data-hole-index="0"/>
+  </g>
+  <g transform="translate(104 34)">
+  <text x="12.2" y="9" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="Spacer" style="font-size:1.6px" transform="rotate(90 12.2 9)">Spacer</text>
+  </g>
+  <g transform="translate(126 34)">
+  <circle cx="9" cy="9" r="5" class="cut spacer-outline washer-outline" data-spacer-key="s10" data-outer-diameter-mm="10" data-inner-diameter-mm="4"/>
+  </g>
+  <g transform="translate(126 34)">
+  <circle cx="9" cy="9" r="2" class="drill spacer-hole axle-hole linkage-hole bracket-hole" data-hole-role="spacer" data-hole-diameter-mm="4" data-hole-index="0"/>
+  </g>
+  <g transform="translate(126 34)">
+  <text x="12.2" y="9" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="Spacer" style="font-size:1.6px" transform="rotate(90 12.2 9)">Spacer</text>
+  </g>
+  <g transform="translate(148 34)">
+  <circle cx="9" cy="9" r="5" class="cut spacer-outline washer-outline" data-spacer-key="s10" data-outer-diameter-mm="10" data-inner-diameter-mm="4"/>
+  </g>
+  <g transform="translate(148 34)">
+  <circle cx="9" cy="9" r="2" class="drill spacer-hole axle-hole linkage-hole bracket-hole" data-hole-role="spacer" data-hole-diameter-mm="4" data-hole-index="0"/>
+  </g>
+  <g transform="translate(148 34)">
+  <text x="12.2" y="9" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="Spacer" style="font-size:1.6px" transform="rotate(90 12.2 9)">Spacer</text>
+  </g>
+  <g transform="translate(170 34)">
+  <circle cx="9" cy="9" r="5" class="cut spacer-outline washer-outline" data-spacer-key="s10" data-outer-diameter-mm="10" data-inner-diameter-mm="4"/>
+  </g>
+  <g transform="translate(170 34)">
+  <circle cx="9" cy="9" r="2" class="drill spacer-hole axle-hole linkage-hole bracket-hole" data-hole-role="spacer" data-hole-diameter-mm="4" data-hole-index="0"/>
+  </g>
+  <g transform="translate(170 34)">
+  <text x="12.2" y="9" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="Spacer" style="font-size:1.6px" transform="rotate(90 12.2 9)">Spacer</text>
+  </g>
+  <g transform="translate(192 34)">
+  <circle cx="9" cy="9" r="5" class="cut spacer-outline washer-outline" data-spacer-key="s10" data-outer-diameter-mm="10" data-inner-diameter-mm="4"/>
+  </g>
+  <g transform="translate(192 34)">
+  <circle cx="9" cy="9" r="2" class="drill spacer-hole axle-hole linkage-hole bracket-hole" data-hole-role="spacer" data-hole-diameter-mm="4" data-hole-index="0"/>
+  </g>
+  <g transform="translate(192 34)">
+  <text x="12.2" y="9" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="Spacer" style="font-size:1.6px" transform="rotate(90 12.2 9)">Spacer</text>
+  </g>
+  <g transform="translate(214 34)">
+  <circle cx="9" cy="9" r="5" class="cut spacer-outline washer-outline" data-spacer-key="s10" data-outer-diameter-mm="10" data-inner-diameter-mm="4"/>
+  </g>
+  <g transform="translate(214 34)">
+  <circle cx="9" cy="9" r="2" class="drill spacer-hole axle-hole linkage-hole bracket-hole" data-hole-role="spacer" data-hole-diameter-mm="4" data-hole-index="0"/>
+  </g>
+  <g transform="translate(214 34)">
+  <text x="12.2" y="9" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="Spacer" style="font-size:1.6px" transform="rotate(90 12.2 9)">Spacer</text>
+  </g>
+  <g transform="translate(236 34)">
+  <circle cx="9" cy="9" r="5" class="cut spacer-outline washer-outline" data-spacer-key="s10" data-outer-diameter-mm="10" data-inner-diameter-mm="4"/>
+  </g>
+  <g transform="translate(236 34)">
+  <circle cx="9" cy="9" r="2" class="drill spacer-hole axle-hole linkage-hole bracket-hole" data-hole-role="spacer" data-hole-diameter-mm="4" data-hole-index="0"/>
+  </g>
+  <g transform="translate(236 34)">
+  <text x="12.2" y="9" class="engrave" text-anchor="middle" dominant-baseline="middle" data-engrave-role="part-label" data-engrave-label="Spacer" style="font-size:1.6px" transform="rotate(90 12.2 9)">Spacer</text>
+  </g>
+</svg>

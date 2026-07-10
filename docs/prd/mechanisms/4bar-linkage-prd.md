@@ -27,7 +27,7 @@ C-D output rocker
 
 ## Fabrication contract
 
-- Use `fabrication/generate_fabrication_templates.py` linkage/hole/spacer rules via `utils/fabricationContract.ts`.
+- Use `scripts/generate-fabrication-assets.ts` linkage/hole/spacer rules via `utils/fabricationContract.ts`.
 - Default kit stack: back clip -> input L2 -> S10 -> coupler L4 -> S10 -> output L2 -> front clip.
 - B and C are floating joints, not board pins.
 
