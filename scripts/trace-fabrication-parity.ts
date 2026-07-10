@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -12,18 +12,19 @@ import {
   FABRICATION_SOURCE_SSOT,
 } from '../utils/fabricationContract';
 import { FABRICATION_ASSET_GENERATOR_SOURCE } from './fabrication/source-template';
+import { compareSvgContours } from './fabrication/svg-contour';
 
 const cwd = process.cwd();
 const reportDate = new Date().toISOString().split('T')[0];
 
 interface AuditFileDiff {
   path: string;
-  status: 'exact' | 'missing-in-committed' | 'missing-in-generated' | 'content-mismatch';
+  status: 'exact' | 'semantic-contour-match' | 'missing-in-committed' | 'missing-in-generated' | 'content-mismatch';
   reason?: string;
 }
 
 interface CategoryCoverage {
-  strategy: 'full-svg-generation';
+  strategy: 'template-copy' | 'ts-board-generation';
   status: 'covered';
   generatedBy: string;
   notes?: string;
@@ -62,6 +63,16 @@ interface AuditResult {
       details: string;
       tsHoleCount: number;
       committedHoleCount: number;
+    };
+    pythonTsSvgContourParity: {
+      status: 'ok' | 'blocked';
+      exactTextCount: number;
+      semanticContourCount: number;
+      firstMismatch?: string;
+    };
+    runtimeSceneBoundary: {
+      status: 'presentation-non-cutter';
+      details: string;
     };
   };
   fileDiffs: {
@@ -140,7 +151,7 @@ const bucketFilesByCategory = (paths: string[]) => {
   return grouped;
 };
 
-const compareTextFileSets = (leftManifest: Manifest, rightManifest: Manifest, leftRoot: string, rightRoot: string) => {
+const compareManagedFileSets = (leftManifest: Manifest, rightManifest: Manifest, leftRoot: string, rightRoot: string) => {
   const leftSet = new Set(Array.isArray(leftManifest.managed_files) ? leftManifest.managed_files : []);
   const rightSet = new Set(Array.isArray(rightManifest.managed_files) ? rightManifest.managed_files : []);
 
@@ -156,19 +167,33 @@ const compareTextFileSets = (leftManifest: Manifest, rightManifest: Manifest, le
       missingInCommitted.push({ path: relPath, status: 'missing-in-committed', reason: 'File exists only in generated output managed-set.' });
       continue;
     }
-    try {
-      const leftText = safeRead(leftPath);
-      const rightText = safeRead(rightPath);
-      if (leftText === rightText) exact.push({ path: relPath, status: 'exact' });
-      else mismatched.push({ path: relPath, status: 'content-mismatch', reason: 'Committed artifact differs from TS-generated output.' });
-    } catch (error) {
-      missingInGenerated.push({ path: relPath, status: 'missing-in-generated', reason: error instanceof Error ? error.message : `${error}` });
+    const leftExists = existsSync(leftPath);
+    const rightExists = existsSync(rightPath);
+    if (!leftExists) {
+      missingInCommitted.push({ path: relPath, status: 'missing-in-committed', reason: `Missing file ${leftPath}` });
+      continue;
     }
+    if (!rightExists) {
+      missingInGenerated.push({ path: relPath, status: 'missing-in-generated', reason: `Missing file ${rightPath}` });
+      continue;
+    }
+    const leftText = safeRead(leftPath);
+    const rightText = safeRead(rightPath);
+    if (relPath.endsWith('.svg')) {
+      try {
+        const semantic = compareSvgContours(leftText, rightText);
+        if (semantic.equal) exact.push({ path: relPath, status: leftText === rightText ? 'exact' : 'semantic-contour-match', reason: leftText === rightText ? undefined : 'Text differs only by ignored SVG metadata/formatting.' });
+        else mismatched.push({ path: relPath, status: 'content-mismatch', reason: semantic.firstMismatch ?? 'Committed artifact differs from TS-generated SVG contour.' });
+      } catch (error) {
+        mismatched.push({ path: relPath, status: 'content-mismatch', reason: error instanceof Error ? error.message : `${error}` });
+      }
+    } else if (leftText === rightText) exact.push({ path: relPath, status: 'exact' });
+    else mismatched.push({ path: relPath, status: 'content-mismatch', reason: 'Committed artifact differs from TS-generated output.' });
   }
 
   for (const relPath of [...leftSet].sort()) {
     if (!rightSet.has(relPath)) {
-      missingInCommitted.push({ path: relPath, status: 'missing-in-generated', reason: 'Committed managed file missing from generated output.' });
+      missingInGenerated.push({ path: relPath, status: 'missing-in-generated', reason: 'Committed managed file missing from generated output.' });
     }
   }
 
@@ -193,25 +218,25 @@ const normalizePointPairs = (value: unknown) => {
 };
 
 const buildCategoryCoverage = () => ({
-  board: { strategy: 'full-svg-generation' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
-  assembly: { strategy: 'full-svg-generation' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
-  gears: { strategy: 'full-svg-generation' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
-  ring_gears: { strategy: 'full-svg-generation' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
-  linkages: { strategy: 'full-svg-generation' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
-  cams: { strategy: 'full-svg-generation' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
-  followers: { strategy: 'full-svg-generation' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
-  brackets: { strategy: 'full-svg-generation' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
-  handles: { strategy: 'full-svg-generation' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
-  spacers: { strategy: 'full-svg-generation' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
-  cam_modules: { strategy: 'full-svg-generation' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
-  sheets: { strategy: 'full-svg-generation' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
-  'root-readme': { strategy: 'full-svg-generation' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
-  'misc-root': { strategy: 'full-svg-generation' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
+  board: { strategy: 'ts-board-generation' as const, status: 'covered' as const, generatedBy: 'scripts/generate-fabrication-board.ts' },
+  assembly: { strategy: 'template-copy' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
+  gears: { strategy: 'template-copy' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
+  ring_gears: { strategy: 'template-copy' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
+  linkages: { strategy: 'template-copy' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
+  cams: { strategy: 'template-copy' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
+  followers: { strategy: 'template-copy' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
+  brackets: { strategy: 'template-copy' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
+  handles: { strategy: 'template-copy' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
+  spacers: { strategy: 'template-copy' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
+  cam_modules: { strategy: 'template-copy' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
+  sheets: { strategy: 'template-copy' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
+  'root-readme': { strategy: 'template-copy' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
+  'misc-root': { strategy: 'template-copy' as const, status: 'covered' as const, generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE },
 });
 
 const metadataParity = (category: string, manifest: Manifest) => {
   const byCategory = buildCategoryCoverage() as Record<string, CategoryCoverage>;
-  const coverage = byCategory[category] ?? { strategy: 'full-svg-generation', status: 'covered', generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE, notes: 'No category fixture available yet.' };
+  const coverage = byCategory[category] ?? { strategy: 'template-copy', status: 'covered', generatedBy: FABRICATION_ASSET_GENERATOR_SOURCE, notes: 'No category fixture available yet.' };
   const parts = manifest.parts ?? {};
   const parity: CategoryAudit['parity'] = {};
 
@@ -320,7 +345,7 @@ const metadataParity = (category: string, manifest: Manifest) => {
 
 const buildMarkdown = (result: AuditResult) => {
   const lines: string[] = [];
-  lines.push('# Fabrication 1:1 parity trace (TS source)');
+  lines.push('# Python↔TypeScript managed SVG contour parity trace');
   lines.push('');
   lines.push(`Generated: ${result.generatedAt}`);
   lines.push('');
@@ -330,6 +355,8 @@ const buildMarkdown = (result: AuditResult) => {
   lines.push(`- managed file set parity: ${result.checks.managedFileSetExact ? '✅' : '❌'}`);
   lines.push(`- board file present: ${result.checks.boardPresence ? '✅' : '❌'}`);
   lines.push(`- board coordinate parity: ${result.checks.boardCoordinateParity.status === 'ok' ? '✅' : '❌'} (${result.checks.boardCoordinateParity.tsHoleCount}/${result.checks.boardCoordinateParity.committedHoleCount})`);
+  lines.push(`- Python↔TypeScript managed SVG contours: ${result.checks.pythonTsSvgContourParity.status === 'ok' ? '✅' : '❌'} (${result.checks.pythonTsSvgContourParity.semanticContourCount} semantic, ${result.checks.pythonTsSvgContourParity.exactTextCount} exact text)`);
+  lines.push(`- runtime Blueprint/scene SVGs: ${result.checks.runtimeSceneBoundary.status} — ${result.checks.runtimeSceneBoundary.details}`);
   lines.push('');
   lines.push('## File-level parity');
   lines.push(`- exact: ${result.fileDiffs.exact}`);
@@ -347,7 +374,10 @@ const buildMarkdown = (result: AuditResult) => {
   lines.push('| category | file count | strategy | coverage | metadata match | generated-by | recommendation |');
   lines.push('|---|---:|---|---|---|---|---|');
   for (const category of result.mechanismCoverage) {
-    const metadata = category.parity.metadataMatch === undefined ? 'n/a' : category.parity.metadataMatch ? '✅' : '⚠️';
+    let metadata = 'n/a';
+    if (category.parity.metadataMatch !== undefined) {
+      metadata = category.parity.metadataMatch ? '✅' : '⚠️';
+    }
     lines.push(`| ${category.category} | ${category.fileCount} | ${category.ts.strategy} | ${category.ts.status} | ${metadata} | ${category.ts.generatedBy} | ${category.recommendation} |`);
   }
 
@@ -382,6 +412,11 @@ const main = () => {
       managedFileSetExact: false,
       boardPresence: false,
       boardCoordinateParity: { status: 'blocked', details: 'not run', tsHoleCount: 0, committedHoleCount: 0 },
+      pythonTsSvgContourParity: { status: 'blocked', exactTextCount: 0, semanticContourCount: 0 },
+      runtimeSceneBoundary: {
+        status: 'presentation-non-cutter',
+        details: 'Blueprint/export scene SVGs reuse some primitives but are presentation/non-cutter outputs and are not claimed contour-identical.',
+      },
     },
     fileDiffs: {
       exact: 0,
@@ -402,15 +437,26 @@ const main = () => {
   };
 
   try {
-    execSync(`bun scripts/generate-fabrication-assets.ts --output ${outputDir}`, {
+    const generatorOutput = execFileSync('bun', ['scripts/generate-fabrication-assets.ts', '--output', outputDir, '--compare-committed', '--compare-python'], {
       cwd,
       stdio: 'pipe',
+      encoding: 'utf8',
     });
+    const generatorSummary = JSON.parse(generatorOutput) as { python_parity?: { status: boolean; exact_text_files?: string[]; semantic_contour_files?: string[]; first_mismatch?: string } };
     result.checks.generatedFromTs = true;
+    result.checks.pythonTsSvgContourParity = {
+      status: generatorSummary.python_parity?.status ? 'ok' : 'blocked',
+      exactTextCount: generatorSummary.python_parity?.exact_text_files?.length ?? 0,
+      semanticContourCount: generatorSummary.python_parity?.semantic_contour_files?.length ?? 0,
+      firstMismatch: generatorSummary.python_parity?.first_mismatch,
+    };
+    if (result.checks.pythonTsSvgContourParity.status !== 'ok') {
+      result.hardFailures.push(`Python↔TypeScript managed SVG contour parity failed: ${result.checks.pythonTsSvgContourParity.firstMismatch ?? 'unknown mismatch'}`);
+    }
 
-  const committedRoot = join(cwd, 'fabrication');
-  const committedManifest = parseManifest(result.paths.sourceManifestPath);
-  const generatedManifest = parseManifest(result.paths.generatedManifestPath);
+    const committedRoot = join(cwd, 'fabrication');
+    const committedManifest = parseManifest(result.paths.sourceManifestPath);
+    const generatedManifest = parseManifest(result.paths.generatedManifestPath);
     result.checks.manifestMetaMatch = jsonDeepEqual(
       {
         generated_by: committedManifest.generated_by,
@@ -432,7 +478,7 @@ const main = () => {
       }
     );
 
-    const fileDiff = compareTextFileSets(
+    const fileDiff = compareManagedFileSets(
       committedManifest,
       generatedManifest,
       committedRoot,
@@ -449,11 +495,13 @@ const main = () => {
 
     result.checks.managedFileSetExact = fileDiff.matched;
 
-    const committedBoard = safeRead(join(committedRoot, 'board-final.svg'));
-    const generatedBoard = safeRead(join(outputDir, 'board-final.svg'));
-    result.checks.boardPresence = existsSync(join(outputDir, 'board-final.svg'));
+    const committedBoardPath = join(committedRoot, 'board-final.svg');
+    const generatedBoardPath = join(outputDir, 'board-final.svg');
+    result.checks.boardPresence = existsSync(generatedBoardPath);
 
     if (result.checks.boardPresence) {
+      const committedBoard = safeRead(committedBoardPath);
+      const generatedBoard = safeRead(generatedBoardPath);
       const committedBoardSignature = parseBoardHoleSignature(committedBoard);
       const generatedBoardSignature = parseBoardHoleSignature(generatedBoard);
       if (committedBoardSignature === generatedBoardSignature) {
@@ -473,7 +521,7 @@ const main = () => {
         result.hardFailures.push('Board coordinate parity failed for committed and TS-generated board-final.svg.');
       }
     } else {
-      result.hardFailures.push('Committed board artifact is missing; cannot complete parity check.');
+      result.hardFailures.push('Generated board artifact is missing; cannot complete parity check.');
     }
 
     if (!result.checks.manifestMetaMatch) {
@@ -492,9 +540,12 @@ const main = () => {
       .map((category): CategoryAudit => {
         const paths = grouped[category] ?? [];
         const { coverage, parity } = metadataParity(category, committedManifest);
-        const recommendation = parity.metadataMatch === false
-          ? `Category ${category} metadata drift detected; check runtime contracts and manifest source data.`
-          : 'TS-generated source path is authoritative for this category.';
+        let recommendation = 'Template-copy artifacts are contour-checked against fresh Python and TS outputs.';
+        if (parity.metadataMatch === false) {
+          recommendation = `Category ${category} metadata drift detected; check runtime contracts and manifest source data.`;
+        } else if (category === 'board') {
+          recommendation = 'TypeScript board generation is contour-checked against fresh Python output.';
+        }
         return {
           category,
           filePaths: paths,
@@ -516,7 +567,7 @@ const main = () => {
     }
 
     if (!result.hardFailures.length) {
-      result.recommendations.push('TS source output is currently fully 1:1 for managed categories including board and all mechanism families.');
+      result.recommendations.push('Python↔TypeScript managed SVG contour parity holds for the copied template package plus generated board. Runtime Blueprint/scene SVGs remain presentation geometry, not cutter-contour identity evidence.');
     }
   } catch (error) {
     result.hardFailures.push(error instanceof Error ? error.message : `${error}`);

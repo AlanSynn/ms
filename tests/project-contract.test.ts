@@ -45,6 +45,7 @@ import { buildDesignAutomataProjection } from '../utils/designAutomataProjection
 import { WEBGL_PIXEL_RATIO_CAP, canvasPanOffset, canvasViewBoxForViewport, zoomCanvasViewportAtPoint } from '../utils/viewport';
 import { cachedThreeResource, clearThreeGroup, disposeThreeObjectGraph, setRendererPixelRatioCap } from '../utils/threeResourceKit';
 import { APP_COMMANDS, APP_MENU_GROUPS, commandById, commandIdForKeyboardEvent, validateAppCommandRegistry } from '../utils/appCommands';
+import { compareSvgContours, svgContourSignature } from '../scripts/fabrication/svg-contour';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_KERNEL_IMPORT, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY, physicsKernelCapability, runRapierFrictionProbe } from '../utils/physicsKernel';
 import { formatGridLabel, formatGridPitch, formatGridReadout } from '../utils/units';
 import { buildAssemblyPlaybackSteps, buildCharacterAssemblyPlan, pendingRecipeForMechanism, type CharacterAssemblyPlan } from '../utils/assemblyPlayback';
@@ -304,6 +305,10 @@ const assemblyStepPlayerPlan = readFileSync(join(process.cwd(), 'docs', 'prd', '
 const classroomGuidedEntryPlan = readFileSync(join(process.cwd(), 'docs', 'prd', 'classroom-guided-entry-plan.md'), 'utf8');
 const classroomSensemakingPlan = readFileSync(join(process.cwd(), 'docs', 'prd', 'classroom-sensemaking-discoverability-plan.md'), 'utf8');
 const codebaseCleanupPlan = readFileSync(join(process.cwd(), 'docs', 'analysis', 'codebase-cleanup-architecture-plan.md'), 'utf8');
+const fabricationParityReportText = readFileSync(join(process.cwd(), 'docs', 'analysis', 'fabrication-parity-2026-07-10.md'), 'utf8');
+const fabricationParityReportJsonText = readFileSync(join(process.cwd(), 'docs', 'analysis', 'fabrication-parity-2026-07-10.json'), 'utf8');
+const fabricationParityIndexText = readFileSync(join(process.cwd(), 'docs', 'analysis', 'README.md'), 'utf8');
+const fabricationParityTraceSource = readFileSync(join(process.cwd(), 'scripts', 'trace-fabrication-parity.ts'), 'utf8');
 const normalizedCodebaseCleanupPlan = codebaseCleanupPlan.replace(/\s+/g, ' ');
 const brandStaticFiles = [
   'App.tsx',
@@ -817,6 +822,18 @@ assert(agentsContract.includes('Classroom entry is theme-guided first') && agent
 assert(agentsContract.includes('`Reset Lesson` must restore a known-good lesson baseline') && agentsContract.includes('preserving app settings'), 'AGENTS.md locks stable lesson reset semantics');
 assert(agentsContract.includes('Blueprint owns build files') && agentsContract.includes('Assembly owns animated step-by-step build'), 'AGENTS.md preserves Blueprint versus Assembly role split');
 assert(agentsContract.includes('Use domain-driven vocabulary consistently') && agentsContract.includes('Keep harness engineering first-class'), 'AGENTS.md locks DDD vocabulary and harness-friendly seam rules');
+assert(agentsContract.includes('Prefer `$ask-claude` for high-token, low-importance, non-performance-sensitive support work') && agentsContract.includes('delegated output is draft evidence') && agentsContract.includes('leader owns source inspection, edits, final correctness, and verification'), 'AGENTS.md keeps the Claude delegation policy narrow and leader-owned');
+const fabricationParityLanguage = `${fabricationParityReportText}\n${fabricationParityReportJsonText}\n${fabricationParityIndexText}`;
+assert(!fabricationParityLanguage.includes('fully 1:1 for managed categories including board and all mechanism families'), 'fabrication parity reports reject the old unqualified full 1:1 mechanism-family claim');
+assert(!fabricationParityLanguage.includes('full-svg-generation'), 'fabrication parity reports label copied families honestly instead of full SVG generation');
+assert(fabricationParityLanguage.includes('template-copy'), 'fabrication parity reports label copied managed families as template-copy');
+assert(fabricationParityLanguage.includes('ts-board-generation') && fabricationParityLanguage.includes('scripts/generate-fabrication-board.ts'), 'fabrication parity reports label the board as TypeScript board generation');
+assert(fabricationParityLanguage.includes('Python↔TypeScript managed SVG contour'), 'fabrication parity reports scope 1:1 claims to Python↔TypeScript managed SVG contours');
+assert(fabricationParityLanguage.includes('presentation/non-cutter') || fabricationParityLanguage.includes('presentation geometry'), 'fabrication parity reports keep runtime Blueprint/scene SVGs outside cutter contour identity claims');
+assert(fabricationParityLanguage.includes('board coordinate parity') && fabricationParityLanguage.includes('Python↔TypeScript managed SVG contours'), 'fabrication parity report separates board coordinate parity wording from full managed SVG contour proof');
+assert(fabricationParityTraceSource.includes("missingInGenerated.push({ path: relPath, status: 'missing-in-generated', reason: 'Committed managed file missing from generated output.' })"), 'trace committed-only managed files are reported as missing in generated output');
+assert(fabricationParityTraceSource.includes('const leftExists = existsSync(leftPath)') && fabricationParityTraceSource.includes("missingInCommitted.push({ path: relPath, status: 'missing-in-committed', reason: `Missing file ${leftPath}` })"), 'trace missing committed files are reported as missing in committed output');
+assert(fabricationParityTraceSource.includes("mismatched.push({ path: relPath, status: 'content-mismatch', reason: error instanceof Error ? error.message : `${error}` })"), 'trace malformed existing SVG compare errors are content mismatches, not missing files');
 assert(docsMap.includes('active novice flow and tutorial/help plan'), 'docs map treats the novice tutorial plan as an active implementation plan');
 assert(docsMap.includes('classroom field-study gap plan'), 'docs map treats the classroom field support plan as an active implementation plan');
 assert(agentsContract.includes('tinkerable workbench'), 'AGENTS.md codifies the tinkerable workbench direction');
@@ -2178,6 +2195,13 @@ assert(existsSync(fabricationPythonGeneratorPath), 'legacy Python generator exis
 const fabricationGeneratorText = readFileSync(fabricationGeneratorPath, 'utf8');
 assert(fabricationGeneratorText.includes('const boardAdapter: GeneratorAdapter = {'), 'fabrication generator defines the board adapter');
 assert(fabricationGeneratorText.includes("const templateAdapter: GeneratorAdapter = {"), 'fabrication generator defines the template adapter');
+assert(fabricationGeneratorText.includes("const rightFiles = new Set<string>(listManagedFiles(readManifest(join(rightRoot, 'manifest.json'))));") && fabricationGeneratorText.includes('const report = compareManagedArtifacts(baseRoot, generatedRoot);'), 'fabrication generator compares actual generated manifest managed-file set as the right-side authority');
+assert(
+  fabricationGeneratorText.includes("} else if (relPath.endsWith('.svg')) {")
+  && fabricationGeneratorText.includes('const semantic = compareSvgContours(leftText, rightText);')
+  && fabricationGeneratorText.includes('if (!semantic.equal) mismatched.push(relPath);'),
+  'fabrication category summaries compare SVGs by contour before marking mismatched while exact text remains separate'
+);
 const fabricationTemplateSourcePath = join(process.cwd(), 'scripts', 'fabrication', 'source-template.ts');
 assert(existsSync(fabricationTemplateSourcePath), 'fabrication template source locator lives beside the template generator');
 const fabricationTemplateSourceText = readFileSync(fabricationTemplateSourcePath, 'utf8');
@@ -2659,6 +2683,85 @@ const assertSvgFilesParseAsXml = (rootDir: string, relPaths: string[], label: st
 };
 assertSvgFilesParseAsXml(join(process.cwd(), 'fabrication'), fabricationSvgManagedFiles, 'committed fabrication package');
 
+
+const baseContourFixture = '<svg height="10mm" width="10mm" viewBox="0 0 10 10" data-generated-by="a"><title>A</title><desc>B</desc><defs><style>.cut { stroke-width: 0.2504; fill: none; }</style></defs><g id="part" class="cut"><path class="cut" d="M 0 0 L 1.0004 1 Z" data-hole-diameter-mm="4"/><text x="1" y="2" class="engrave" style="font-size:5px" data-engrave-role="part-label">Gear</text></g></svg>';
+const equalContourFixture = '<?xml version="1.0"?><svg viewBox="0 0 10 10" width="10mm" height="10mm" data-generated-by="b"><desc>Ignored</desc><title>Ignored</title><defs><style>.cut{fill:none;stroke-width:0.25}</style></defs><g class="cut" id="part"><path data-hole-diameter-mm="4.0004" d="M 0 0 L 1 1 Z" class="cut"/><text data-engrave-role="part-label" style="font-size:5.0004px" class="engrave" y="2" x="1">Gear</text></g></svg>';
+assert(compareSvgContours(baseContourFixture, equalContourFixture).equal, 'SVG contour comparator ignores XML declaration, formatting, title/desc, attribute order, provenance, and sub-0.001mm numeric noise');
+[
+  ['path coordinate', baseContourFixture.replace('1.0004 1', '1.01 1')],
+  ['topology order', baseContourFixture.replace('<path class="cut"', '<circle cx="5" cy="5" r="1" class="drill"/><path class="cut"')],
+  ['transform', baseContourFixture.replace('<g id="part"', '<g transform="rotate(1)" id="part"')],
+  ['class operation', baseContourFixture.replace('class="cut" d=', 'class="score" d=')],
+  ['visible text', baseContourFixture.replace('>Gear</text>', '>Cam</text>')],
+  ['root width', baseContourFixture.replace('width="10mm"', 'width="11mm"')],
+  ['viewBox', baseContourFixture.replace('viewBox="0 0 10 10"', 'viewBox="0 0 11 10"')],
+  ['style semantics', baseContourFixture.replace('stroke-width: 0.2504', 'stroke-width: 0.3')],
+  ['role data attr', baseContourFixture.replace('data-hole-diameter-mm="4"', 'data-hole-diameter-mm="5"')],
+].forEach(([label, fixture]) => {
+  assert(!compareSvgContours(baseContourFixture, fixture).equal, `SVG contour comparator detects changed ${label}`);
+});
+assert.throws(() => svgContourSignature('<svg width="1mm" height="1mm" viewBox="0 0 1 1"><image href="x.png"/></svg>'), /Unsupported SVG tag/, 'SVG contour comparator fails closed on unsupported visible geometry');
+assert.throws(() => svgContourSignature('<svg width="1mm" height="1mm" viewBox="0 0 1 1"><path d="M 0x 0"/></svg>'), /Malformed SVG d token/, 'SVG contour comparator fails closed on malformed path numeric tokens');
+assert.throws(() => svgContourSignature('<svg width="1mm" height="1mm" viewBox="0 0 1 1"></svg><svg width="1mm" height="1mm" viewBox="0 0 1 1"></svg>'), /Unexpected content after svg root|Duplicate svg root/, 'SVG contour comparator fails closed on duplicate svg roots');
+assert.throws(() => svgContourSignature('<svg width="1mm" height="1mm" viewBox="0 0 1 1"><circle cx="1x" cy="1" r="1"/></svg>'), /Malformed numeric SVG attribute/, 'SVG contour comparator fails closed on malformed numeric tokens');
+assert.throws(() => svgContourSignature('<g><path d="M0 0"/></g>'), /Missing svg root/, 'SVG contour comparator fails closed on missing svg root');
+assert.throws(() => svgContourSignature('<svg width="1mm" height="1mm" viewBox="0 0 1"><path d="M 0 0"/></svg>'), /viewBox requires exactly four numbers/, 'SVG contour comparator rejects malformed viewBox arity');
+assert.throws(() => svgContourSignature('<svg width="1mm" height="1mm" viewBox="0 0 1 1"><polyline points="0 0 1"/></svg>'), /points requires x\/y pairs/, 'SVG contour comparator rejects odd-number points');
+assert.throws(() => svgContourSignature('<svg width="1mm" height="1mm" viewBox="0 0 1 1"><g transform="banana(1)"></g></svg>'), /Unsupported SVG transform function banana/, 'SVG contour comparator rejects unsupported transforms');
+assert.throws(() => svgContourSignature('<svg width="1mm" height="1mm" viewBox="0 0 1 1"><g transform="rotate(1 2)"></g></svg>'), /transform rotate arity/, 'SVG contour comparator rejects rotate with two args');
+assert.throws(() => svgContourSignature('<svg width="1mm" height="1mm" viewBox="0 0 1 1"><path d="M 0"/></svg>'), /path command M requires 2 numbers/, 'SVG contour comparator rejects incomplete M command');
+assert.throws(() => svgContourSignature('<svg width="1mm" height="1mm" viewBox="0 0 1 1"><path d="0 0"/></svg>'), /path numbers before command/, 'SVG contour comparator rejects path numbers before a command');
+assert.throws(() => svgContourSignature('<svg width="1mm" height="1mm" viewBox="0 0 1 1"><path d="M 0 0 Z 1"/></svg>'), /path command Z takes no numbers/, 'SVG contour comparator rejects residual numbers after Z');
+assert.throws(() => svgContourSignature('<svg width="1mm" width="1mm" height="1mm" viewBox="0 0 1 1"></svg>'), /Duplicate SVG attribute width/, 'SVG contour comparator rejects duplicate attributes');
+assert.throws(() => svgContourSignature('<svg width="1mm" height="1mm" viewBox="0 0 1 1"></svg>'), /Missing visible SVG geometry/, 'SVG contour comparator rejects root-only geometry-free SVGs');
+assert.throws(() => svgContourSignature('<svg width="1mm" height="1mm" viewBox="0 0 1 1"><rect width="1" height="1" data-folded-panel-width-mm="NaN"/></svg>'), /Malformed numeric SVG attribute data-folded-panel-width-mm/, 'SVG contour comparator rejects malformed numeric -mm data attrs');
+assert(!compareSvgContours('<svg width="1mm" height="1mm" viewBox="0 0 1 1"><rect width="1" height="1" data-score-area-mm2="1.0004" data-hole-index="2.0004"/></svg>', '<svg width="1mm" height="1mm" viewBox="0 0 1 1"><rect width="1" height="1" data-score-area-mm2="1.0016" data-hole-index="3"/></svg>').equal, 'SVG contour comparator includes numeric -mm2 and -index data attrs in semantics');
+assert(compareSvgContours('<svg width="1mm" height="1mm" viewBox="0 0 1 1"><rect width="1" height="1" data-score-area-mm2="1.0004" data-hole-index="2.0004"/></svg>', '<svg width="1mm" height="1mm" viewBox="0 0 1 1"><rect width="1" height="1" data-score-area-mm2="1" data-hole-index="2"/></svg>').equal, 'SVG contour comparator rounds numeric -mm2 and -index data attrs to 0.001mm');
+assert(!compareSvgContours('<svg width="1mm" height="1mm" viewBox="0 0 1 1"><style>.a{stroke:#0071bc}</style><circle cx="0" cy="0" r="1"/></svg>', '<svg width="1mm" height="1mm" viewBox="0 0 1 1"><style>.a{stroke:#71bc}</style><circle cx="0" cy="0" r="1"/></svg>').equal, 'SVG contour comparator preserves CSS hex colors instead of numeric-normalizing them');
+assert(!compareSvgContours('<svg width="1mm" height="1mm" viewBox="0 0 1 1"><circle cx="0" cy="0" r="1" data-board-coord="A01"/></svg>', '<svg width="1mm" height="1mm" viewBox="0 0 1 1"><circle cx="0" cy="0" r="1" data-board-coord="A1"/></svg>').equal, 'SVG contour comparator preserves role/string data attributes exactly');
+assert(!compareSvgContours('<svg width="1mm" height="1mm" viewBox="0 0 1 1"><style>.a{stroke:red}.a{stroke:blue}</style><circle cx="0" cy="0" r="1"/></svg>', '<svg width="1mm" height="1mm" viewBox="0 0 1 1"><style>.a{stroke:blue}.a{stroke:red}</style><circle cx="0" cy="0" r="1"/></svg>').equal, 'SVG contour comparator preserves stylesheet cascade rule order');
+const visibleLeafSvg = (leaf: string) => `<svg width="10mm" height="10mm" viewBox="0 0 10 10">${leaf}</svg>`;
+const supportedVisibleLeafFixtures = [
+  ['path', '<path d="M 0 0 L 1 1"/>'],
+  ['circle', '<circle cx="1" cy="1" r="1"/>'],
+  ['ellipse', '<ellipse cx="1" cy="1" rx="1" ry="0.5"/>'],
+  ['rect', '<rect width="1" height="1"/>'],
+  ['line', '<line x1="0" y1="0" x2="1" y2="1"/>'],
+  ['polyline', '<polyline points="0 0 1 1"/>'],
+  ['polygon', '<polygon points="0 0 1 0 1 1"/>'],
+  ['use href', '<defs><path id="p" d="M 0 0 L 1 1"/></defs><use href="#p"/>'],
+  ['use group href', '<defs><g id="mark"><path d="M 0 0 L 1 1"/></g></defs><use href="#mark"/>'],
+  ['use xlink', '<defs><path id="p" d="M 0 0 L 1 1"/></defs><use xlink:href="#p"/>'],
+  ['text', '<text x="0" y="0">Cut 1</text>'],
+] as const;
+for (const [label, leaf] of supportedVisibleLeafFixtures) {
+  assert(svgContourSignature(visibleLeafSvg(leaf)).records.length > 0, `SVG contour comparator accepts valid ${label} leaf`);
+}
+const emptyVisibleLeafFixtures = [
+  ['path', '<path/>'],
+  ['path d', '<path d=" "/>'],
+  ['circle', '<circle/>'],
+  ['ellipse', '<ellipse/>'],
+  ['rect', '<rect/>'],
+  ['line', '<line/>'],
+  ['polyline', '<polyline/>'],
+  ['polygon', '<polygon/>'],
+  ['use', '<use/>'],
+  ['text', '<text/>'],
+  ['text content', '<text>  </text>'],
+] as const;
+for (const [label, leaf] of emptyVisibleLeafFixtures) {
+  assert.throws(() => svgContourSignature(visibleLeafSvg(`<rect width="1" height="1"/>${leaf}`)), /Malformed SVG/, `SVG contour comparator rejects empty ${label} leaf even with another valid leaf`);
+}
+assert.throws(() => svgContourSignature('<svg width="1mm" height="1mm" viewBox="0 0 1 1"><style>.a{stroke:red}</style></svg>'), /Missing visible SVG geometry/, 'SVG contour comparator treats style as non-geometry');
+assert.throws(() => svgContourSignature(visibleLeafSvg('<defs><path id="p" d="M 0 0 L 1 1"/></defs>')), /Missing visible SVG geometry/, 'SVG contour comparator does not count defs-only geometry as visible');
+assert.throws(() => svgContourSignature(visibleLeafSvg('<path id="p" d="M 0 0 L 1 1"/><circle id="p" cx="1" cy="1" r="1"/>')), /Duplicate SVG id p/, 'SVG contour comparator rejects duplicate ids');
+assert.throws(() => svgContourSignature(visibleLeafSvg('<use href="#missing"/>')), /missing target #missing/, 'SVG contour comparator rejects missing local use refs');
+assert.throws(() => svgContourSignature(visibleLeafSvg('<use href="other.svg#p"/>')), /href must be local #id/, 'SVG contour comparator rejects external use refs');
+assert.throws(() => svgContourSignature(visibleLeafSvg('<style id="paint">.a{stroke:red}</style><use href="#paint"/>')), /target #paint has no visible geometry/, 'SVG contour comparator rejects use targets that are style-only');
+assert.throws(() => svgContourSignature(visibleLeafSvg('<g id="empty"></g><use href="#empty"/>')), /target #empty has no visible geometry/, 'SVG contour comparator rejects use targets that are empty groups');
+assert.throws(() => svgContourSignature(visibleLeafSvg('<defs><path id="p" d="M 0 0 L 1 1"/></defs><use href="#p" xlink:href="#other"/>')), /href mismatch/, 'SVG contour comparator rejects conflicting href and xlink:href');
+
 const legacyManagedBoardFiles = new Set(['board-final.svg']);
 const mainBoardPath = join(process.cwd(), 'fabrication', 'board-final.svg');
 const isLegacyBoardAsset = (path: string) => legacyManagedBoardFiles.has(path);
@@ -2759,9 +2862,10 @@ try {
   assert.equal(generatedManifest.generated_by, fabricationPythonGeneratorImportPath, 'legacy python generator identifies itself in regenerated manifest');
   assert.equal(generatedManifest.source_ssot, fabricationPythonGeneratorImportPath, 'legacy python manifest keeps legacy source-of-truth path');
   assert.equal(generatedManifest.assembly.board_map, 'board-final.svg', 'generator maps assembly board to board-final.svg');
-  const generatedTsBoard = readFileSync(join(generatedFabricationDir, 'board-final.svg'), 'utf8');
-  assert.equal(generatedTsBoard.length > 0, true, 'generator keeps board-final board artifact for compatibility');
-  assertBoardCoordinatesMatch(mainBoardSvg, generatedTsBoard, 'ts generator board map parity');
+  const generatedPythonBoard = readFileSync(join(generatedFabricationDir, 'board-final.svg'), 'utf8');
+  assert.equal(generatedPythonBoard.length > 0, true, 'generator keeps board-final board artifact for compatibility');
+  assertBoardCoordinatesMatch(mainBoardSvg, generatedPythonBoard, 'python generator board map parity');
+  assert(compareSvgContours(mainBoardSvg, generatedPythonBoard).equal, 'python generator reproduces the full board semantic contour');
   (['gears', 'linkages', 'ring_gears', 'cams', 'followers', 'brackets', 'handles', 'spacers', 'cam_modules'] as const).forEach(category => {
     assert.deepEqual(generatedManifest.parts[category], fabricationManifest.parts[category], `regenerated ${category} primitives match the committed fabrication contract`);
   });
@@ -2792,6 +2896,23 @@ try {
     assertSvgFilesParseAsXml(generatedBoardDir, ['board-final.svg'], 'ts-generated board artifact');
   } finally {
     rmSync(generatedBoardDir, { recursive: true, force: true });
+  }
+  const generatedTsFabricationDir = mkdtempSync(join(tmpdir(), 'motionsmith-fabrication-ts-'));
+  try {
+    const generationSummary = JSON.parse(execFileSync('bun', ['scripts/generate-fabrication-assets.ts', '--output', generatedTsFabricationDir, '--compare-committed', '--compare-python'], { cwd: process.cwd(), encoding: 'utf8' })) as {
+      python_parity?: { status: boolean; semantic_contour_files: string[]; exact_text_files: string[]; mismatches: string[] };
+    };
+    assert.equal(generationSummary.python_parity?.status, true, 'fresh TypeScript and Python managed SVG semantic contours match');
+    assert.deepEqual(generationSummary.python_parity?.mismatches, [], 'fresh TypeScript and Python managed SVG parity reports no mismatches');
+    assert.equal(generationSummary.python_parity?.semantic_contour_files.length, fabricationSvgManagedFiles.length, 'fresh TypeScript/Python parity covers every managed SVG including board');
+    const generatedTsManifest = JSON.parse(readFileSync(join(generatedTsFabricationDir, 'manifest.json'), 'utf8')) as FabricationManifest;
+    assert.deepEqual(generatedTsManifest.managed_files, fabricationManifest.managed_files, 'fresh TypeScript output keeps the managed SVG/path set aligned with committed fabrication package');
+    fabricationSvgManagedFiles.forEach(relPath => {
+      const semantic = compareSvgContours(readFileSync(join(generatedTsFabricationDir, relPath), 'utf8'), readFileSync(join(generatedFabricationDir, relPath), 'utf8'));
+      assert(semantic.equal, `fresh TypeScript/Python SVG contour parity holds for ${relPath}: ${semantic.firstMismatch ?? 'mismatch'}`);
+    });
+  } finally {
+    rmSync(generatedTsFabricationDir, { recursive: true, force: true });
   }
 } finally {
   rmSync(generatedFabricationDir, { recursive: true, force: true });

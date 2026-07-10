@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-07-10T20:31:26.239Z",
+  "generatedAt": "2026-07-10T22:54:06.930Z",
   "paths": {
     "sourceManifestPath": "/Users/alansynn/Documents/MechAnim/fabrication/manifest.json",
-    "generatedManifestPath": "/var/folders/3d/cclyxf1x3bjf_y3pf071s1r00000gr/T/ms-fab-ts-1783715486239-N89A6u/manifest.json",
-    "outputDir": "/var/folders/3d/cclyxf1x3bjf_y3pf071s1r00000gr/T/ms-fab-ts-1783715486239-N89A6u",
+    "generatedManifestPath": "/var/folders/3d/cclyxf1x3bjf_y3pf071s1r00000gr/T/ms-fab-ts-1783724046930-5V0qlq/manifest.json",
+    "outputDir": "/var/folders/3d/cclyxf1x3bjf_y3pf071s1r00000gr/T/ms-fab-ts-1783724046930-5V0qlq",
     "reportJsonPath": "/Users/alansynn/Documents/MechAnim/docs/analysis/fabrication-parity-2026-07-10.json",
     "reportMarkdownPath": "/Users/alansynn/Documents/MechAnim/docs/analysis/fabrication-parity-2026-07-10.md"
   },
@@ -17,6 +17,15 @@
       "details": "Board hole signatures match.",
       "tsHoleCount": 225,
       "committedHoleCount": 225
+    },
+    "pythonTsSvgContourParity": {
+      "status": "ok",
+      "exactTextCount": 53,
+      "semanticContourCount": 51
+    },
+    "runtimeSceneBoundary": {
+      "status": "presentation-non-cutter",
+      "details": "Blueprint/export scene SVGs reuse some primitives but are presentation/non-cutter outputs and are not claimed contour-identical."
     }
   },
   "fileDiffs": {
@@ -271,11 +280,11 @@
         "generatedFileCountExact": true
       },
       "ts": {
-        "strategy": "full-svg-generation",
+        "strategy": "template-copy",
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "TS-generated source path is authoritative for this category."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
     },
     {
       "category": "board",
@@ -287,11 +296,11 @@
         "generatedFileCountExact": true
       },
       "ts": {
-        "strategy": "full-svg-generation",
+        "strategy": "ts-board-generation",
         "status": "covered",
-        "generatedBy": "scripts/generate-fabrication-assets.ts"
+        "generatedBy": "scripts/generate-fabrication-board.ts"
       },
-      "recommendation": "TS-generated source path is authoritative for this category."
+      "recommendation": "TypeScript board generation is contour-checked against fresh Python output."
     },
     {
       "category": "brackets",
@@ -306,11 +315,11 @@
         "generatedFileCountExact": true
       },
       "ts": {
-        "strategy": "full-svg-generation",
+        "strategy": "template-copy",
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "TS-generated source path is authoritative for this category."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
     },
     {
       "category": "cam_modules",
@@ -329,11 +338,11 @@
         "generatedFileCountExact": true
       },
       "ts": {
-        "strategy": "full-svg-generation",
+        "strategy": "template-copy",
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "TS-generated source path is authoritative for this category."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
     },
     {
       "category": "cams",
@@ -348,11 +357,11 @@
         "generatedFileCountExact": true
       },
       "ts": {
-        "strategy": "full-svg-generation",
+        "strategy": "template-copy",
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "TS-generated source path is authoritative for this category."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
     },
     {
       "category": "followers",
@@ -367,11 +376,11 @@
         "generatedFileCountExact": true
       },
       "ts": {
-        "strategy": "full-svg-generation",
+        "strategy": "template-copy",
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "TS-generated source path is authoritative for this category."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
     },
     {
       "category": "gears",
@@ -390,11 +399,11 @@
         "generatedFileCountExact": true
       },
       "ts": {
-        "strategy": "full-svg-generation",
+        "strategy": "template-copy",
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "TS-generated source path is authoritative for this category."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
     },
     {
       "category": "handles",
@@ -406,11 +415,11 @@
         "generatedFileCountExact": true
       },
       "ts": {
-        "strategy": "full-svg-generation",
+        "strategy": "template-copy",
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "TS-generated source path is authoritative for this category."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
     },
     {
       "category": "linkages",
@@ -429,11 +438,11 @@
         "generatedFileCountExact": true
       },
       "ts": {
-        "strategy": "full-svg-generation",
+        "strategy": "template-copy",
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "TS-generated source path is authoritative for this category."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
     },
     {
       "category": "misc-root",
@@ -445,11 +454,11 @@
         "generatedFileCountExact": true
       },
       "ts": {
-        "strategy": "full-svg-generation",
+        "strategy": "template-copy",
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "TS-generated source path is authoritative for this category."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
     },
     {
       "category": "ring_gears",
@@ -465,11 +474,11 @@
         "generatedFileCountExact": true
       },
       "ts": {
-        "strategy": "full-svg-generation",
+        "strategy": "template-copy",
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "TS-generated source path is authoritative for this category."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
     },
     {
       "category": "root-readme",
@@ -482,11 +491,11 @@
         "generatedFileCountExact": true
       },
       "ts": {
-        "strategy": "full-svg-generation",
+        "strategy": "template-copy",
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "TS-generated source path is authoritative for this category."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
     },
     {
       "category": "sheets",
@@ -508,11 +517,11 @@
         "generatedFileCountExact": true
       },
       "ts": {
-        "strategy": "full-svg-generation",
+        "strategy": "template-copy",
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "TS-generated source path is authoritative for this category."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
     },
     {
       "category": "spacers",
@@ -528,15 +537,15 @@
         "generatedFileCountExact": true
       },
       "ts": {
-        "strategy": "full-svg-generation",
+        "strategy": "template-copy",
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "TS-generated source path is authoritative for this category."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
     }
   ],
   "recommendations": [
-    "TS source output is currently fully 1:1 for managed categories including board and all mechanism families."
+    "Python↔TypeScript managed SVG contour parity holds for the copied template package plus generated board. Runtime Blueprint/scene SVGs remain presentation geometry, not cutter-contour identity evidence."
   ],
   "hardFailures": []
 }

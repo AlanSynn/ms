@@ -108,6 +108,7 @@ The app must always trend toward real buildable artifacts, not illustration-only
 - Do not create duplicate canvas engines, duplicate mechanism registries, or disconnected preview state.
 - Keep code paths boring and testable: `ProjectState` -> projection/simulation -> viewport/export.
 - Avoid large UI copy rewrites when a smaller control, icon, handle, or state chip solves the problem.
+- Prefer `$ask-claude` for high-token, low-importance, non-performance-sensitive support work; delegated output is draft evidence, and the leader owns source inspection, edits, final correctness, and verification.
 
 ## 8. Subsystem / package governance
 

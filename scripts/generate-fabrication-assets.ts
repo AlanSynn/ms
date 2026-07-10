@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -9,10 +10,9 @@ import {
   rmSync,
   mkdtempSync,
 } from 'node:fs';
-import { execFileSync, execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
-import { lstatSync } from 'node:fs';
 
 import {
   FABRICATION_ASSET_GENERATOR_SOURCE,
@@ -29,6 +29,7 @@ import type {
   GenerationSummary,
   FabricationTemplateManifest,
 } from './fabrication/types';
+import { compareSvgContours } from './fabrication/svg-contour';
 
 const BOARD_FILE = 'board-final.svg';
 const BOARD_GENERATOR_SCRIPT = 'scripts/generate-fabrication-board.ts';
@@ -65,21 +66,17 @@ type CliOptions = {
 
 type CompareReport = {
   exact: string[];
+  contourExact: string[];
   missingInCommitted: string[];
   missingInGenerated: string[];
   mismatched: string[];
   managedExpected: string[];
   managedGenerated: string[];
+  firstMismatch?: string;
 };
 
 type CategoryDiff = CategorySummary & {
   categoryName: string;
-};
-
-type BoardSignature = {
-  signature: string;
-  holeCount: number;
-  holeRecords: Array<{ coord: string; cx: number; cy: number; r: number }>;
 };
 
 const ensureDirectory = (path: string) => {
@@ -104,34 +101,6 @@ const readManifest = (path: string): FabricationTemplateManifest => {
 
 const writeJson = (path: string, payload: unknown) => {
   writeFileSync(path, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
-};
-
-const normalizeBoardSignature = (svg: string) => {
-  const holes = [...svg.matchAll(/<circle\b[^>]*>/g)]
-    .map((match) => {
-      const tag = match[0];
-      const coord = tag.match(/\bdata-board-coord="([^"]+)"/)?.[1];
-      const cx = Number(tag.match(/\bcx="([^"]+)"/)?.[1]);
-      const cy = Number(tag.match(/\bcy="([^"]+)"/)?.[1]);
-      const r = Number(tag.match(/\br="([^"]+)"/)?.[1]);
-      if (!coord || !Number.isFinite(cx) || !Number.isFinite(cy) || !Number.isFinite(r)) {
-        return null;
-      }
-      return {
-        coord,
-        cx,
-        cy,
-        r,
-      };
-    })
-    .filter((entry): entry is { coord: string; cx: number; cy: number; r: number } => entry !== null)
-    .sort((a, b) => a.coord.localeCompare(b.coord));
-
-  return {
-    signature: JSON.stringify(holes),
-    holeCount: holes.length,
-    holeRecords: holes,
-  };
 };
 
 const copyPath = (sourceRoot: string, outputRoot: string, relPath: string) => {
@@ -249,55 +218,54 @@ const printUsage = () => {
   });
 };
 
-const getBoardSignature = (rootDir: string) => {
-  const boardText = readText(join(rootDir, BOARD_FILE));
-  const parsed = normalizeBoardSignature(boardText);
-  return {
-    ...parsed,
-    svg: boardText,
-  };
-};
-
-const compareTextArtifacts = (leftRoot: string, rightRoot: string, relPaths: readonly string[]): CompareReport => {
+const compareManagedArtifacts = (leftRoot: string, rightRoot: string): CompareReport => {
   const leftFiles = new Set<string>(listManagedFiles(readManifest(join(leftRoot, 'manifest.json'))));
-  const rightFiles = new Set<string>(relPaths);
+  const rightFiles = new Set<string>(listManagedFiles(readManifest(join(rightRoot, 'manifest.json'))));
   const mismatched: string[] = [];
   const exact: string[] = [];
+  const contourExact: string[] = [];
   const missingInCommitted: string[] = [];
   const missingInGenerated: string[] = [];
+  let firstMismatch: string | undefined;
 
-  const expectedSet = leftFiles;
-  const generatedSet = rightFiles;
-
-  for (const relPath of expectedSet) {
-    if (!generatedSet.has(relPath)) {
+  for (const relPath of leftFiles) {
+    if (!rightFiles.has(relPath)) {
       missingInGenerated.push(relPath);
+      firstMismatch ??= `${relPath}: missing in generated output manifest`;
       continue;
     }
-    const leftPath = join(leftRoot, relPath);
-    const rightPath = join(rightRoot, relPath);
-    const leftText = readText(leftPath);
-    const rightText = readText(rightPath);
-    if (leftText === rightText) {
-      exact.push(relPath);
-    } else {
+    const leftText = readText(join(leftRoot, relPath));
+    const rightText = readText(join(rightRoot, relPath));
+    if (leftText === rightText) exact.push(relPath);
+    if (relPath.endsWith('.svg')) {
+      const semantic = compareSvgContours(leftText, rightText);
+      if (semantic.equal) contourExact.push(relPath);
+      else {
+        mismatched.push(relPath);
+        firstMismatch ??= `${relPath}: ${semantic.firstMismatch ?? 'SVG contour mismatch'}`;
+      }
+    } else if (leftText !== rightText) {
       mismatched.push(relPath);
+      firstMismatch ??= `${relPath}: text mismatch`;
     }
   }
 
-  for (const relPath of generatedSet) {
-    if (!expectedSet.has(relPath)) {
+  for (const relPath of rightFiles) {
+    if (!leftFiles.has(relPath)) {
       missingInCommitted.push(relPath);
+      firstMismatch ??= `${relPath}: present only in generated output manifest`;
     }
   }
 
   return {
     exact,
+    contourExact,
     missingInCommitted,
     missingInGenerated,
     mismatched,
-    managedExpected: [...expectedSet].sort(),
-    managedGenerated: [...generatedSet].sort(),
+    managedExpected: [...leftFiles].sort(),
+    managedGenerated: [...rightFiles].sort(),
+    firstMismatch,
   };
 };
 
@@ -332,6 +300,9 @@ const buildCategorySummaries = (
       const rightText = readText(join(rightRoot, relPath));
       if (leftText === rightText) {
         exact.push(relPath);
+      } else if (relPath.endsWith('.svg')) {
+        const semantic = compareSvgContours(leftText, rightText);
+        if (!semantic.equal) mismatched.push(relPath);
       } else {
         mismatched.push(relPath);
       }
@@ -357,7 +328,7 @@ const buildCategorySummaries = (
   return summaries;
 };
 
-const normalizeManifest = (templateManifest: FabricationTemplateManifest, _outputRoot: string, generatedAt: string): FabricationTemplateManifest => {
+const normalizeManifest = (templateManifest: FabricationTemplateManifest, generatedAt: string): FabricationTemplateManifest => {
   const copy = JSON.parse(JSON.stringify(templateManifest)) as FabricationTemplateManifest;
   const managedFiles = listManagedFiles(copy);
 
@@ -452,9 +423,7 @@ const compareGeneratedWithManifest = (
   baseRoot: string,
   generatedRoot: string,
 ): { report: CompareReport; categorySummary: CategoryDiff[] } => {
-  const managedExpected = listManagedFiles(baseManifest);
-
-  const report = compareTextArtifacts(baseRoot, generatedRoot, managedExpected);
+  const report = compareManagedArtifacts(baseRoot, generatedRoot);
 
   const categorySummary = buildCategorySummaries(baseManifest, generatedManifest, baseRoot, generatedRoot).map((entry) => ({
     ...entry,
@@ -465,27 +434,20 @@ const compareGeneratedWithManifest = (
 };
 
 const compareToPython = (committedRoot: string, tsRoot: string, tempRoot: string) => {
-  execSync(`python3 fabrication/generate_fabrication_templates.py --output ${JSON.stringify(tempRoot)}`, {
+  execFileSync('python3', ['fabrication/generate_fabrication_templates.py', '--output', tempRoot], {
     stdio: 'pipe',
     cwd: process.cwd(),
   });
 
-  const committedManifestPath = join(committedRoot, 'manifest.json');
-  const tsManifestPath = join(tsRoot, 'manifest.json');
-  const pythonManifestPath = join(tempRoot, 'manifest.json');
-
-  const committedManifest = readManifest(committedManifestPath);
-  const tsManifest = readManifest(tsManifestPath);
-  const pythonManifest = readManifest(pythonManifestPath);
+  const tsManifest = readManifest(join(tsRoot, 'manifest.json'));
+  const pythonManifest = readManifest(join(tempRoot, 'manifest.json'));
 
   const normalizeForParityManifest = (manifest: Record<string, unknown>): Record<string, unknown> => {
     const value = JSON.parse(JSON.stringify(manifest)) as Record<string, unknown>;
     delete value.generated_at;
     delete value.generated_by;
     delete value.source_ssot;
-    if ('previous_generated_at' in value) {
-      delete value.previous_generated_at;
-    }
+    if ('previous_generated_at' in value) delete value.previous_generated_at;
     return value;
   };
 
@@ -502,34 +464,43 @@ const compareToPython = (committedRoot: string, tsRoot: string, tempRoot: string
   );
 
   const mismatches: string[] = [];
+  const exactText: string[] = [];
+  const semanticContours: string[] = [];
+  let firstMismatch: string | undefined;
 
   if (stableStringify(normalizeForParityManifest(tsManifest)) !== stableStringify(normalizeForParityManifest(pythonManifest))) {
     mismatches.push('manifest.json');
+    firstMismatch ??= 'manifest.json: metadata/content mismatch after provenance normalization';
   }
 
-  const boardTs = normalizeBoardSignature(readText(join(tsRoot, BOARD_FILE)));
-  const boardPython = normalizeBoardSignature(readText(join(tempRoot, BOARD_FILE)));
-  if (boardTs.signature !== boardPython.signature) {
-    mismatches.push(`board signature mismatch for ${BOARD_FILE}`);
+  const tsManaged = listManagedFiles(tsManifest);
+  const pythonManaged = listManagedFiles(pythonManifest);
+  if (JSON.stringify(tsManaged) !== JSON.stringify(pythonManaged)) {
+    mismatches.push('managed_files');
+    firstMismatch ??= `managed_files: TS=${tsManaged.length} Python=${pythonManaged.length}`;
   }
 
-  const managed = listManagedFiles(committedManifest);
-  for (const relPath of managed) {
-    if (relPath === BOARD_FILE || relPath === 'manifest.json') {
-      continue;
-    }
-    if (relPath === 'README.md' || relPath.endsWith('.md') || relPath.includes('.txt')) {
-      continue;
-    }
-    const left = readText(join(tsRoot, relPath));
-    const right = readText(join(tempRoot, relPath));
-    if (left !== right) {
+  for (const relPath of tsManaged) {
+    if (!pythonManaged.includes(relPath)) continue;
+    const tsText = readText(join(tsRoot, relPath));
+    const pythonText = readText(join(tempRoot, relPath));
+    if (tsText === pythonText) exactText.push(relPath);
+    if (!relPath.endsWith('.svg')) continue;
+    const semantic = compareSvgContours(tsText, pythonText);
+    if (semantic.equal) semanticContours.push(relPath);
+    else {
       mismatches.push(relPath);
+      firstMismatch ??= `${relPath}: ${semantic.firstMismatch ?? 'SVG contour mismatch'}`;
     }
   }
 
+  const committedManifest = readManifest(join(committedRoot, 'manifest.json'));
   return {
-    total: managed.length,
+    total: tsManaged.length,
+    svgTotal: tsManaged.filter((path) => path.endsWith('.svg')).length,
+    exactText,
+    semanticContours,
+    firstMismatch,
     mismatches,
     committed: committedManifest,
     ts: tsManifest,
@@ -545,12 +516,13 @@ const run = () => {
 
   const sourceManifest = loadTemplateManifest();
   const context = makeContext(outputRoot, sourceManifest, options);
+  const shouldRun = shouldRunAdapter(options);
 
   const generatedSet = new Set<string>(['manifest.json']);
   const executed = [] as GenerationSummary['executed'];
 
   for (const adapter of GENERATORS) {
-    if (!shouldRunAdapter(options)(adapter)) {
+    if (!shouldRun(adapter)) {
       executed.push({
         adapter_id: adapter.id,
         source_ssot: adapter.sourceSsot,
@@ -588,7 +560,7 @@ const run = () => {
   const beforeManifest = existsSync(manifestPath) ? readManifest(manifestPath) : null;
 
   const manifestGeneratedAt = sourceManifest.generated_at || 'reproducible';
-  const generatedManifest = normalizeManifest(sourceManifest, outputRoot, manifestGeneratedAt);
+  const generatedManifest = normalizeManifest(sourceManifest, manifestGeneratedAt);
   writeJson(manifestPath, generatedManifest);
 
   const afterManifest = readManifest(manifestPath);
@@ -606,15 +578,16 @@ const run = () => {
   };
   let boardParity = {
     status: false,
-    committed: getBoardSignature(join(process.cwd(), 'fabrication')).signature,
-    generated: getBoardSignature(outputRoot).signature,
+    firstMismatch: undefined as string | undefined,
   };
+  let committedComparison: ReturnType<typeof compareGeneratedWithManifest> | null = null;
 
   if (options.compareCommitted) {
     const committedRoot = join(process.cwd(), 'fabrication');
     const committedManifest = readManifest(join(committedRoot, 'manifest.json'));
 
     const comparison = compareGeneratedWithManifest(committedManifest, afterManifest, committedRoot, outputRoot);
+    committedComparison = comparison;
     categorySummary = comparison.categorySummary;
 
     manifestCoverage = {
@@ -627,17 +600,17 @@ const run = () => {
       mismatched: comparison.report.mismatched,
     };
 
+    const boardContour = compareSvgContours(readText(join(committedRoot, BOARD_FILE)), readText(join(outputRoot, BOARD_FILE)));
     boardParity = {
-      status: boardParity.committed === boardParity.generated,
-      committed: boardParity.committed,
-      generated: boardParity.generated,
+      status: boardContour.equal,
+      firstMismatch: boardContour.firstMismatch,
     };
 
     if (!manifestCoverage.managedFileSetExact) {
       throw new Error('Committed and generated managed file set mismatch');
     }
     if (!boardParity.status) {
-      throw new Error('Generated board-final.svg does not match committed board coordinates');
+      throw new Error(`Generated board-final.svg does not match committed board contour: ${boardParity.firstMismatch ?? 'unknown mismatch'}`);
     }
     const categoryFailures = categorySummary.filter(
       (entry) => entry.missingInCommitted.length || entry.missingInGenerated.length || entry.mismatched.length,
@@ -651,12 +624,19 @@ const run = () => {
     }
   }
 
-  let pythonParity: null | { mismatches: string[] } = null;
+  let pythonParity: null | { mismatches: string[]; exactText: string[]; semanticContours: string[]; firstMismatch?: string; total: number; svgTotal: number } = null;
   if (options.comparePython) {
     const tempOutput = mkdtempSync(join(tmpdir(), 'ms-fab-py-'));
     try {
       const result = compareToPython(join(process.cwd(), 'fabrication'), outputRoot, tempOutput);
-      pythonParity = { mismatches: result.mismatches };
+      pythonParity = {
+        mismatches: result.mismatches,
+        exactText: result.exactText,
+        semanticContours: result.semanticContours,
+        firstMismatch: result.firstMismatch,
+        total: result.total,
+        svgTotal: result.svgTotal,
+      };
       if (result.mismatches.length > 0) {
         throw new Error(`Python parity check failed for ${result.mismatches.length} managed artifact(s)`);
       }
@@ -689,16 +669,28 @@ const run = () => {
     committed_parity: options.compareCommitted
       ? {
           ...manifestCoverage,
-          board_signature_match: boardParity.status,
-          board_signature_committed: boardParity.committed,
-          board_signature_generated: boardParity.generated,
+          exact_text_files: committedComparison?.report.exact ?? [],
+          semantic_contour_files: committedComparison?.report.contourExact ?? [],
+          first_mismatch: committedComparison?.report.firstMismatch,
+          board_contour_match: boardParity.status,
+          board_first_mismatch: boardParity.firstMismatch,
           generated_manifest: {
             generated_by: afterManifest.generated_by,
             source_ssot: afterManifest.source_ssot,
           },
         }
       : undefined,
-    python_parity: pythonParity ? { status: pythonParity.mismatches.length === 0, mismatches: pythonParity.mismatches } : undefined,
+    python_parity: pythonParity
+      ? {
+          status: pythonParity.mismatches.length === 0,
+          total: pythonParity.total,
+          svg_total: pythonParity.svgTotal,
+          exact_text_files: pythonParity.exactText,
+          semantic_contour_files: pythonParity.semanticContours,
+          first_mismatch: pythonParity.firstMismatch,
+          mismatches: pythonParity.mismatches,
+        }
+      : undefined,
   };
 
   process.stdout.write(`${JSON.stringify(finalSummary)}\n`);
