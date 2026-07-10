@@ -14,7 +14,8 @@
     "generate:fabrication": "bun scripts/generate-fabrication-assets.ts",
     "build:dmg": "bun scripts/with-rustup-cargo.mjs tauri build --bundles dmg",
     "test:browser": "bun run build && env -u NO_COLOR PLAYWRIGHT_SERVER=preview playwright test",
-    "build:tauri-frontend": "tsc && vite build --base ./"
+    "build:tauri-frontend": "tsc && vite build --base ./",
+    "audit:fabrication-parity": "bun scripts/trace-fabrication-parity.ts"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.19.3",

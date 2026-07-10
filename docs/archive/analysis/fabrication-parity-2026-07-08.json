@@ -1,0 +1,331 @@
+{
+  "generatedAt": "2026-07-08T04:15:49.669Z",
+  "paths": {
+    "pythonOutputDir": "/var/folders/3d/cclyxf1x3bjf_y3pf071s1r00000gr/T/ms-fab-python-1783484149668-jdm56K",
+    "tsBoardOutputDir": "/var/folders/3d/cclyxf1x3bjf_y3pf071s1r00000gr/T/ms-fab-ts-board-1783484149668-zTVenW",
+    "pythonManifestPath": "/var/folders/3d/cclyxf1x3bjf_y3pf071s1r00000gr/T/ms-fab-python-1783484149668-jdm56K/manifest.json",
+    "committedManifestPath": "/Users/alansynn/Documents/MechAnim/fabrication/manifest.json",
+    "reportJsonPath": "/Users/alansynn/Documents/MechAnim/docs/archive/analysis/fabrication-parity-2026-07-08.json",
+    "reportMarkdownPath": "/Users/alansynn/Documents/MechAnim/docs/archive/analysis/fabrication-parity-2026-07-08.md"
+  },
+  "checks": {
+    "pythonManifestLoaded": true,
+    "committedManifestLoaded": true,
+    "pythonGenerated": true,
+    "managedFileSetExact": true,
+    "manifestMetaMatch": true,
+    "boardCoordinateParity": {
+      "status": "ok",
+      "details": "Board coordinate signatures match exactly.",
+      "pythonHoleCount": 225,
+      "committedHoleCount": 225
+    },
+    "tsBoardGenerated": true,
+    "tsBoardExactMatchCommitted": true,
+    "tsBoardCoordinateParity": {
+      "status": "ok",
+      "details": "TS board text is byte-identical to committed artifact.",
+      "tsHoleCount": 225,
+      "committedHoleCount": 225
+    }
+  },
+  "fileDiffs": {
+    "exact": 56,
+    "mismatched": [],
+    "missingInCommitted": [],
+    "missingInGenerated": []
+  },
+  "mechanismCoverage": [
+    {
+      "category": "assembly",
+      "python": {
+        "fileCount": 10,
+        "filePaths": [
+          "assembly/01-gear-train-basic.svg",
+          "assembly/02-cam-follower-basic.svg",
+          "assembly/03-four-bar-basic.svg",
+          "assembly/04-gear-linkage-crank.svg",
+          "assembly/05-planetary-gear-basic.svg",
+          "assembly/06-slider-crank-basic.svg",
+          "assembly/README.md",
+          "assembly/index.html",
+          "assembly/parts-overview.svg",
+          "assembly/recipes.json"
+        ]
+      },
+      "ts": {
+        "strategy": "not-implemented",
+        "status": "not-covered",
+        "notes": "No TypeScript generator path mapped for assembly artifacts."
+      },
+      "parity": {
+        "boardMapMatch": true,
+        "notes": "Python assembly board_map=board-final.svg"
+      },
+      "recommendation": "Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category."
+    },
+    {
+      "category": "board",
+      "python": {
+        "fileCount": 1,
+        "filePaths": [
+          "board-final.svg"
+        ]
+      },
+      "ts": {
+        "strategy": "full-svg-generation",
+        "status": "covered",
+        "generatedBy": "scripts/generate-fabrication-board.ts",
+        "notes": "board-final.svg is produced by TypeScript generator in-repo."
+      },
+      "parity": {},
+      "recommendation": "Already parity-covered in TS artifacts."
+    },
+    {
+      "category": "brackets",
+      "python": {
+        "fileCount": 4,
+        "filePaths": [
+          "brackets/bracket-2-hole-straight.svg",
+          "brackets/bracket-3-hole-straight.svg",
+          "brackets/bracket-l-3-hole.svg",
+          "brackets/bracket-triangle-3-hole.svg"
+        ]
+      },
+      "ts": {
+        "strategy": "not-implemented",
+        "status": "not-covered",
+        "notes": "No TypeScript generator path mapped for bracket SVG outputs."
+      },
+      "parity": {},
+      "recommendation": "Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category."
+    },
+    {
+      "category": "cam_modules",
+      "python": {
+        "fileCount": 8,
+        "filePaths": [
+          "cam_modules/axle-peg.svg",
+          "cam_modules/cam-lock-disk.svg",
+          "cam_modules/cam-spacer.svg",
+          "cam_modules/crank-handle.svg",
+          "cam_modules/gravity-follower-module.svg",
+          "cam_modules/paper-washer.svg",
+          "cam_modules/swappable-cam-disk.svg",
+          "cam_modules/u-channel-guide-cartridge.svg"
+        ]
+      },
+      "ts": {
+        "strategy": "not-implemented",
+        "status": "not-covered",
+        "notes": "No TypeScript generator path mapped for cam module SVG outputs."
+      },
+      "parity": {},
+      "recommendation": "Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category."
+    },
+    {
+      "category": "cams",
+      "python": {
+        "fileCount": 4,
+        "filePaths": [
+          "cams/cam-circle.svg",
+          "cams/cam-eccentric.svg",
+          "cams/cam-oval.svg",
+          "cams/cam-pear.svg"
+        ]
+      },
+      "ts": {
+        "strategy": "not-implemented",
+        "status": "not-covered",
+        "notes": "No TypeScript generator path mapped for cam SVG outputs."
+      },
+      "parity": {},
+      "recommendation": "Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category."
+    },
+    {
+      "category": "followers",
+      "python": {
+        "fileCount": 4,
+        "filePaths": [
+          "followers/follower-f3-round.svg",
+          "followers/follower-f4-roller.svg",
+          "followers/follower-f5-flat.svg",
+          "followers/follower-f6-linkage-output.svg"
+        ]
+      },
+      "ts": {
+        "strategy": "not-implemented",
+        "status": "not-covered",
+        "notes": "No TypeScript generator path mapped for follower SVG outputs."
+      },
+      "parity": {},
+      "recommendation": "Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category."
+    },
+    {
+      "category": "gears",
+      "python": {
+        "fileCount": 4,
+        "filePaths": [
+          "gears/gear-24t.svg",
+          "gears/gear-40t.svg",
+          "gears/gear-56t.svg",
+          "gears/gear-8t.svg"
+        ]
+      },
+      "ts": {
+        "strategy": "metadata-only",
+        "status": "partial",
+        "generatedBy": "fabrication/generate_fabrication_templates.py",
+        "notes": "Runtime constants mirror Python-authored geometry specs; no dedicated TypeScript SVG factory exists yet."
+      },
+      "parity": {
+        "metadataMatch": true,
+        "notes": "Python geometry metadata and TS constants are aligned for gears."
+      },
+      "recommendation": "Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category."
+    },
+    {
+      "category": "handles",
+      "python": {
+        "fileCount": 1,
+        "filePaths": [
+          "handles/handle-folding-fork-tripod.svg"
+        ]
+      },
+      "ts": {
+        "strategy": "not-implemented",
+        "status": "not-covered",
+        "notes": "No parity strategy registered for this category."
+      },
+      "parity": {},
+      "recommendation": "Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category."
+    },
+    {
+      "category": "linkages",
+      "python": {
+        "fileCount": 4,
+        "filePaths": [
+          "linkages/linkage-2-cell.svg",
+          "linkages/linkage-4-cell.svg",
+          "linkages/linkage-6-cell.svg",
+          "linkages/linkage-8-cell.svg"
+        ]
+      },
+      "ts": {
+        "strategy": "metadata-only",
+        "status": "partial",
+        "generatedBy": "fabrication/generate_fabrication_templates.py",
+        "notes": "Runtime constants mirror Python-authored geometry specs; no dedicated TypeScript SVG factory exists yet."
+      },
+      "parity": {
+        "metadataMatch": true,
+        "notes": "Python linkage geometry metadata and TS constants are aligned."
+      },
+      "recommendation": "Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category."
+    },
+    {
+      "category": "misc-root",
+      "python": {
+        "fileCount": 2,
+        "filePaths": [
+          "complete-kit-cut-sheet.svg",
+          "manifest.json"
+        ]
+      },
+      "ts": {
+        "strategy": "not-implemented",
+        "status": "not-covered",
+        "notes": "Misc root-level file paths have no TypeScript generator yet."
+      },
+      "parity": {},
+      "recommendation": "Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category."
+    },
+    {
+      "category": "ring_gears",
+      "python": {
+        "fileCount": 1,
+        "filePaths": [
+          "ring_gears/ring-g8-g24.svg"
+        ]
+      },
+      "ts": {
+        "strategy": "metadata-only",
+        "status": "partial",
+        "generatedBy": "fabrication/generate_fabrication_templates.py",
+        "notes": "Runtime constants mirror Python-authored geometry specs; no dedicated TypeScript SVG factory exists yet."
+      },
+      "parity": {
+        "metadataMatch": true,
+        "notes": "Python ring-gear geometry metadata and TS constants are aligned."
+      },
+      "recommendation": "Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category."
+    },
+    {
+      "category": "root-readme",
+      "python": {
+        "fileCount": 1,
+        "filePaths": [
+          "README.md"
+        ]
+      },
+      "ts": {
+        "strategy": "not-implemented",
+        "status": "not-covered",
+        "notes": "README.md is documentation contract, not generation output."
+      },
+      "parity": {},
+      "recommendation": "Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category."
+    },
+    {
+      "category": "sheets",
+      "python": {
+        "fileCount": 11,
+        "filePaths": [
+          "sheets/01-gear-set.svg",
+          "sheets/02-linkage-set.svg",
+          "sheets/03-cam-set.svg",
+          "sheets/04-prototype-set-a.svg",
+          "sheets/05-prototype-set-b.svg",
+          "sheets/06-bracket-set.svg",
+          "sheets/07-follower-set.svg",
+          "sheets/08-spacer-set.svg",
+          "sheets/09-planetary-ring-set.svg",
+          "sheets/10-gear-set-large.svg",
+          "sheets/11-handle-set.svg"
+        ]
+      },
+      "ts": {
+        "strategy": "not-implemented",
+        "status": "not-covered",
+        "notes": "No TypeScript generator path mapped for cut-sheet SVG outputs."
+      },
+      "parity": {},
+      "recommendation": "Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category."
+    },
+    {
+      "category": "spacers",
+      "python": {
+        "fileCount": 1,
+        "filePaths": [
+          "spacers/spacer-s10.svg"
+        ]
+      },
+      "ts": {
+        "strategy": "metadata-only",
+        "status": "partial",
+        "generatedBy": "fabrication/generate_fabrication_templates.py",
+        "notes": "Runtime constants mirror Python-authored geometry specs; no dedicated TypeScript SVG factory exists yet."
+      },
+      "parity": {
+        "metadataMatch": true,
+        "notes": "Python spacer metadata and TS constants are aligned."
+      },
+      "recommendation": "Parity gap: require a TS source generator or explicit adapter to claim full 1:1 parity for this category."
+    }
+  ],
+  "recommendations": [
+    "Implement TS generators or adapters for parity-hard category files: assembly, brackets, cam_modules, cams, followers, gears, handles, linkages, misc-root, ring_gears, root-readme, sheets, spacers.",
+    "Current Python and TS parity checks are clean for board artifacts; remaining categories remain metadata-only parity only."
+  ],
+  "hardFailures": []
+}

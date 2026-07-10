@@ -1,6 +1,6 @@
 # Documentation Index (Hot / Cold / Index)
 
-Last refreshed: 2026-07-07
+Last refreshed: 2026-07-10
 
 ## Hot (active contracts)
 
@@ -23,6 +23,7 @@ Use these first for implementation decisions, planning, and validation.
 - [`mechanism-reference/05-assembly-process-guides.md`](mechanism-reference/05-assembly-process-guides.md)
 - [`analysis/codebase-cleanup-architecture-plan.md`](analysis/codebase-cleanup-architecture-plan.md)
 - [`analysis/fabrication-board-canonicalization-2026-07-07.md`](analysis/fabrication-board-canonicalization-2026-07-07.md)
+- [`analysis/fabrication-parity-2026-07-10.md`](analysis/fabrication-parity-2026-07-10.md)
 
 ### Active PRD set (required for current feature planning)
 

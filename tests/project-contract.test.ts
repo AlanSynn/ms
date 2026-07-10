@@ -2656,7 +2656,7 @@ const assertSvgFilesParseAsXml = (rootDir: string, relPaths: string[], label: st
 };
 assertSvgFilesParseAsXml(join(process.cwd(), 'fabrication'), fabricationSvgManagedFiles, 'committed fabrication package');
 
-const legacyManagedBoardFiles = new Set(['board.svg', 'assembly/board.svg', 'board-final.svg']);
+const legacyManagedBoardFiles = new Set(['board-final.svg']);
 const mainBoardPath = join(process.cwd(), 'fabrication', 'board-final.svg');
 const isLegacyBoardAsset = (path: string) => legacyManagedBoardFiles.has(path);
 const parseBoardHoleRecords = (svg: string) => {
