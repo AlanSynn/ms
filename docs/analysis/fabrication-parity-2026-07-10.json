@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-07-10T22:54:06.930Z",
+  "generatedAt": "2026-07-11T00:19:45.677Z",
   "paths": {
     "sourceManifestPath": "/Users/alansynn/Documents/MechAnim/fabrication/manifest.json",
-    "generatedManifestPath": "/var/folders/3d/cclyxf1x3bjf_y3pf071s1r00000gr/T/ms-fab-ts-1783724046930-5V0qlq/manifest.json",
-    "outputDir": "/var/folders/3d/cclyxf1x3bjf_y3pf071s1r00000gr/T/ms-fab-ts-1783724046930-5V0qlq",
+    "generatedManifestPath": "/var/folders/3d/cclyxf1x3bjf_y3pf071s1r00000gr/T/ms-fab-ts-1783729185677-FUtuyk/manifest.json",
+    "outputDir": "/var/folders/3d/cclyxf1x3bjf_y3pf071s1r00000gr/T/ms-fab-ts-1783729185677-FUtuyk",
     "reportJsonPath": "/Users/alansynn/Documents/MechAnim/docs/analysis/fabrication-parity-2026-07-10.json",
     "reportMarkdownPath": "/Users/alansynn/Documents/MechAnim/docs/analysis/fabrication-parity-2026-07-10.md"
   },
@@ -18,9 +18,10 @@
       "tsHoleCount": 225,
       "committedHoleCount": 225
     },
-    "pythonTsSvgContourParity": {
+    "frozenPythonOracleParity": {
       "status": "ok",
-      "exactTextCount": 53,
+      "schemaVersion": 1,
+      "capturedAt": "2026-07-11T00:09:33.822Z",
       "semanticContourCount": 51
     },
     "runtimeSceneBoundary": {
@@ -284,7 +285,7 @@
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh TS output, committed artifacts, and the frozen oracle."
     },
     {
       "category": "board",
@@ -300,7 +301,7 @@
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-board.ts"
       },
-      "recommendation": "TypeScript board generation is contour-checked against fresh Python output."
+      "recommendation": "TypeScript board generation is contour-checked against committed output and the frozen oracle."
     },
     {
       "category": "brackets",
@@ -319,7 +320,7 @@
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh TS output, committed artifacts, and the frozen oracle."
     },
     {
       "category": "cam_modules",
@@ -342,7 +343,7 @@
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh TS output, committed artifacts, and the frozen oracle."
     },
     {
       "category": "cams",
@@ -361,7 +362,7 @@
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh TS output, committed artifacts, and the frozen oracle."
     },
     {
       "category": "followers",
@@ -380,7 +381,7 @@
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh TS output, committed artifacts, and the frozen oracle."
     },
     {
       "category": "gears",
@@ -403,7 +404,7 @@
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh TS output, committed artifacts, and the frozen oracle."
     },
     {
       "category": "handles",
@@ -419,7 +420,7 @@
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh TS output, committed artifacts, and the frozen oracle."
     },
     {
       "category": "linkages",
@@ -442,7 +443,7 @@
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh TS output, committed artifacts, and the frozen oracle."
     },
     {
       "category": "misc-root",
@@ -458,7 +459,7 @@
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh TS output, committed artifacts, and the frozen oracle."
     },
     {
       "category": "ring_gears",
@@ -478,7 +479,7 @@
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh TS output, committed artifacts, and the frozen oracle."
     },
     {
       "category": "root-readme",
@@ -495,7 +496,7 @@
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh TS output, committed artifacts, and the frozen oracle."
     },
     {
       "category": "sheets",
@@ -521,7 +522,7 @@
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh TS output, committed artifacts, and the frozen oracle."
     },
     {
       "category": "spacers",
@@ -541,11 +542,11 @@
         "status": "covered",
         "generatedBy": "scripts/generate-fabrication-assets.ts"
       },
-      "recommendation": "Template-copy artifacts are contour-checked against fresh Python and TS outputs."
+      "recommendation": "Template-copy artifacts are contour-checked against fresh TS output, committed artifacts, and the frozen oracle."
     }
   ],
   "recommendations": [
-    "Python↔TypeScript managed SVG contour parity holds for the copied template package plus generated board. Runtime Blueprint/scene SVGs remain presentation geometry, not cutter-contour identity evidence."
+    "TS managed SVG contour parity holds against committed artifacts and the frozen Python-derived oracle. Runtime Blueprint/scene SVGs remain presentation geometry, not cutter-contour identity evidence."
   ],
   "hardFailures": []
 }

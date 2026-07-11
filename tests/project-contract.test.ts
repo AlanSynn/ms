@@ -828,9 +828,9 @@ assert(!fabricationParityLanguage.includes('fully 1:1 for managed categories inc
 assert(!fabricationParityLanguage.includes('full-svg-generation'), 'fabrication parity reports label copied families honestly instead of full SVG generation');
 assert(fabricationParityLanguage.includes('template-copy'), 'fabrication parity reports label copied managed families as template-copy');
 assert(fabricationParityLanguage.includes('ts-board-generation') && fabricationParityLanguage.includes('scripts/generate-fabrication-board.ts'), 'fabrication parity reports label the board as TypeScript board generation');
-assert(fabricationParityLanguage.includes('Python↔TypeScript managed SVG contour'), 'fabrication parity reports scope 1:1 claims to Python↔TypeScript managed SVG contours');
+assert(fabricationParityLanguage.includes('TS/frozen-oracle managed SVG contour') || fabricationParityLanguage.includes('frozen Python-derived oracle'), 'fabrication parity reports scope 1:1 claims to TS/frozen-oracle managed SVG contours');
 assert(fabricationParityLanguage.includes('presentation/non-cutter') || fabricationParityLanguage.includes('presentation geometry'), 'fabrication parity reports keep runtime Blueprint/scene SVGs outside cutter contour identity claims');
-assert(fabricationParityLanguage.includes('board coordinate parity') && fabricationParityLanguage.includes('Python↔TypeScript managed SVG contours'), 'fabrication parity report separates board coordinate parity wording from full managed SVG contour proof');
+assert(fabricationParityLanguage.includes('board coordinate parity') && (fabricationParityLanguage.includes('TS/frozen-oracle managed SVG contours') || fabricationParityLanguage.includes('frozen Python-derived oracle')), 'fabrication parity report separates board coordinate parity wording from frozen-oracle managed SVG contour proof');
 assert(fabricationParityTraceSource.includes("missingInGenerated.push({ path: relPath, status: 'missing-in-generated', reason: 'Committed managed file missing from generated output.' })"), 'trace committed-only managed files are reported as missing in generated output');
 assert(fabricationParityTraceSource.includes('const leftExists = existsSync(leftPath)') && fabricationParityTraceSource.includes("missingInCommitted.push({ path: relPath, status: 'missing-in-committed', reason: `Missing file ${leftPath}` })"), 'trace missing committed files are reported as missing in committed output');
 assert(fabricationParityTraceSource.includes("mismatched.push({ path: relPath, status: 'content-mismatch', reason: error instanceof Error ? error.message : `${error}` })"), 'trace malformed existing SVG compare errors are content mismatches, not missing files');
@@ -2188,11 +2188,12 @@ type FabricationManifest = {
 const fabricationManifest = JSON.parse(readFileSync(join(process.cwd(), 'fabrication', 'manifest.json'), 'utf8')) as FabricationManifest;
 const fabricationManifestSnapshot = JSON.parse(readFileSync(join(process.cwd(), 'docs', 'mechanism-reference', 'source', 'fabrication-manifest.snapshot.json'), 'utf8')) as FabricationManifest;
 const fabricationGeneratorPath = join(process.cwd(), 'scripts', 'generate-fabrication-assets.ts');
-const fabricationPythonGeneratorPath = join(process.cwd(), 'fabrication', 'generate_fabrication_templates.py');
-const fabricationPythonGeneratorImportPath = 'fabrication/generate_fabrication_templates.py';
+const fabricationPythonOraclePath = join(process.cwd(), 'fabrication', 'fabrication-python-oracle.json');
 assert(existsSync(fabricationGeneratorPath), 'fabrication generator lives beside the generated package');
-assert(existsSync(fabricationPythonGeneratorPath), 'legacy Python generator exists for parity/rollback checks');
+assert(!existsSync(join(process.cwd(), 'fabrication', ['generate','fabrication','templates.py'].join('_'))), 'legacy Python generator has been deleted after oracle capture');
+assert(existsSync(fabricationPythonOraclePath), 'frozen Python-derived fabrication oracle is checked in');
 const fabricationGeneratorText = readFileSync(fabricationGeneratorPath, 'utf8');
+assert(!fabricationGeneratorText.includes('--compare-' + 'python') && !fabricationGeneratorText.includes('py' + 'thon3'), 'fabrication generator is TS-only and has no Python comparison path');
 assert(fabricationGeneratorText.includes('const boardAdapter: GeneratorAdapter = {'), 'fabrication generator defines the board adapter');
 assert(fabricationGeneratorText.includes("const templateAdapter: GeneratorAdapter = {"), 'fabrication generator defines the template adapter');
 assert(fabricationGeneratorText.includes("const rightFiles = new Set<string>(listManagedFiles(readManifest(join(rightRoot, 'manifest.json'))));") && fabricationGeneratorText.includes('const report = compareManagedArtifacts(baseRoot, generatedRoot);'), 'fabrication generator compares actual generated manifest managed-file set as the right-side authority');
@@ -2672,16 +2673,34 @@ assert.equal(fabricationManifest.generated_by, FABRICATION_SOURCE_SSOT, 'fabrica
 assert.equal(fabricationManifest.source_ssot, FABRICATION_SOURCE_SSOT, 'fabrication manifest source_ssot matches the checked-in generator source');
 assert.deepEqual(fabricationManifestSnapshot, fabricationManifest, 'mechanism reference fabrication snapshot mirrors fabrication/manifest.json');
 const fabricationSvgManagedFiles = fabricationManifest.managed_files.filter(path => path.endsWith('.svg'));
-const assertSvgFilesParseAsXml = (rootDir: string, relPaths: string[], label: string) => {
-  assert(relPaths.length > 0, `${label} has managed SVG files to parse`);
-  execFileSync('python3', [
-    '-c',
-    'from pathlib import Path\nimport sys, xml.etree.ElementTree as ET\nroot = Path(sys.argv[1])\nfor rel in sys.argv[2:]:\n    ET.parse(root / rel)\n',
-    rootDir,
-    ...relPaths
-  ], { cwd: process.cwd(), stdio: 'pipe' });
+type FabricationPythonOracle = {
+  schema_version: number;
+  captured_at: string;
+  source_command: string;
+  python_generator_sha256: string;
+  managed_files: string[];
+  files: Record<string, { source_svg_sha256: string; normalized_contour_records: string[]; contour_sha256: string }>;
 };
-assertSvgFilesParseAsXml(join(process.cwd(), 'fabrication'), fabricationSvgManagedFiles, 'committed fabrication package');
+const sha256Text = (value: string) => createHash('sha256').update(value).digest('hex');
+const fabricationPythonOracle = JSON.parse(readFileSync(fabricationPythonOraclePath, 'utf8')) as FabricationPythonOracle;
+assert.deepEqual(Object.keys(fabricationPythonOracle).sort(), ['captured_at', 'files', 'managed_files', 'python_generator_sha256', 'schema_version', 'source_command'].sort(), 'frozen oracle uses the approved schema fields');
+assert.equal(fabricationPythonOracle.schema_version, 1, 'frozen oracle schema version is explicit');
+assert(fabricationPythonOracle.captured_at && fabricationPythonOracle.source_command && fabricationPythonOracle.python_generator_sha256, 'frozen oracle keeps capture provenance');
+assert.deepEqual(fabricationPythonOracle.managed_files, [...fabricationManifest.managed_files].sort(), 'frozen oracle records the exact sorted managed-file inventory');
+assert.deepEqual(Object.keys(fabricationPythonOracle.files).sort(), fabricationSvgManagedFiles, 'frozen oracle stores contour records for every managed SVG only');
+const assertSvgFilesHaveVisibleContours = (rootDir: string, relPaths: string[], label: string) => {
+  assert(relPaths.length > 0, `${label} has managed SVG files to parse`);
+  relPaths.forEach(relPath => assert(svgContourSignature(readFileSync(join(rootDir, relPath), 'utf8')).records.length > 0, `${label}: ${relPath} has valid visible SVG contours`));
+};
+const assertSvgMatchesFrozenOracle = (rootDir: string, relPath: string, label: string) => {
+  const signature = svgContourSignature(readFileSync(join(rootDir, relPath), 'utf8'));
+  const oracleFile = fabricationPythonOracle.files[relPath];
+  assert(oracleFile, `${label}: ${relPath} exists in frozen oracle`);
+  assert.deepEqual(signature.records, oracleFile.normalized_contour_records, `${label}: ${relPath} contour records match frozen oracle`);
+  assert.equal(sha256Text(signature.signature), oracleFile.contour_sha256, `${label}: ${relPath} contour hash matches frozen oracle`);
+};
+assertSvgFilesHaveVisibleContours(join(process.cwd(), 'fabrication'), fabricationSvgManagedFiles, 'committed fabrication package');
+fabricationSvgManagedFiles.forEach(relPath => assertSvgMatchesFrozenOracle(join(process.cwd(), 'fabrication'), relPath, 'committed fabrication package'));
 
 
 const baseContourFixture = '<svg height="10mm" width="10mm" viewBox="0 0 10 10" data-generated-by="a"><title>A</title><desc>B</desc><defs><style>.cut { stroke-width: 0.2504; fill: none; }</style></defs><g id="part" class="cut"><path class="cut" d="M 0 0 L 1.0004 1 Z" data-hole-diameter-mm="4"/><text x="1" y="2" class="engrave" style="font-size:5px" data-engrave-role="part-label">Gear</text></g></svg>';
@@ -2762,9 +2781,7 @@ assert.throws(() => svgContourSignature(visibleLeafSvg('<style id="paint">.a{str
 assert.throws(() => svgContourSignature(visibleLeafSvg('<g id="empty"></g><use href="#empty"/>')), /target #empty has no visible geometry/, 'SVG contour comparator rejects use targets that are empty groups');
 assert.throws(() => svgContourSignature(visibleLeafSvg('<defs><path id="p" d="M 0 0 L 1 1"/></defs><use href="#p" xlink:href="#other"/>')), /href mismatch/, 'SVG contour comparator rejects conflicting href and xlink:href');
 
-const legacyManagedBoardFiles = new Set(['board-final.svg']);
 const mainBoardPath = join(process.cwd(), 'fabrication', 'board-final.svg');
-const isLegacyBoardAsset = (path: string) => legacyManagedBoardFiles.has(path);
 const parseBoardHoleRecords = (svg: string) => {
   const holes = [...svg.matchAll(/<circle\b[^>]*>/g)]
     .map(match => match[0])
@@ -2853,69 +2870,42 @@ verticalLabels.forEach((tag, index) => {
   assert.equal(numAttr(tag, 'x'), 8, `vertical label ${label} stays on the side label column`);
   assert.equal(numAttr(tag, 'y'), 15 + index * 20, `vertical label ${label} aligns to its hole row`);
 });
-const generatedFabricationDir = mkdtempSync(join(tmpdir(), 'motionsmith-fabrication-'));
+const generatedBoardDir = mkdtempSync(join(tmpdir(), 'motionsmith-fabrication-board-'));
 try {
-  execFileSync('python3', [fabricationPythonGeneratorPath, '--output', generatedFabricationDir], { cwd: process.cwd(), stdio: 'pipe' });
-  const generatedManifest = JSON.parse(readFileSync(join(generatedFabricationDir, 'manifest.json'), 'utf8')) as FabricationManifest;
-  assert.equal(generatedManifest.grid_pitch_mm, fabricationManifest.grid_pitch_mm, 'generator reproduces the committed grid pitch');
-  assert.equal(generatedManifest.hole_diameter_mm, fabricationManifest.hole_diameter_mm, 'generator reproduces the committed hole diameter');
-  assert.equal(generatedManifest.generated_by, fabricationPythonGeneratorImportPath, 'legacy python generator identifies itself in regenerated manifest');
-  assert.equal(generatedManifest.source_ssot, fabricationPythonGeneratorImportPath, 'legacy python manifest keeps legacy source-of-truth path');
-  assert.equal(generatedManifest.assembly.board_map, 'board-final.svg', 'generator maps assembly board to board-final.svg');
-  const generatedPythonBoard = readFileSync(join(generatedFabricationDir, 'board-final.svg'), 'utf8');
-  assert.equal(generatedPythonBoard.length > 0, true, 'generator keeps board-final board artifact for compatibility');
-  assertBoardCoordinatesMatch(mainBoardSvg, generatedPythonBoard, 'python generator board map parity');
-  assert(compareSvgContours(mainBoardSvg, generatedPythonBoard).equal, 'python generator reproduces the full board semantic contour');
-  (['gears', 'linkages', 'ring_gears', 'cams', 'followers', 'brackets', 'handles', 'spacers', 'cam_modules'] as const).forEach(category => {
-    assert.deepEqual(generatedManifest.parts[category], fabricationManifest.parts[category], `regenerated ${category} primitives match the committed fabrication contract`);
-  });
-  const committedNonBoardManagedFiles = fabricationManifest.managed_files.filter(path => !isLegacyBoardAsset(path));
-  const generatedNonBoardManagedFiles = generatedManifest.managed_files.filter(path => !isLegacyBoardAsset(path));
-  assert.deepEqual(generatedNonBoardManagedFiles, committedNonBoardManagedFiles, 'regenerated non-board files remain the committed managed-file set');
-  const committedNonBoardSvgFiles = committedNonBoardManagedFiles.filter(path => path.endsWith('.svg'));
-  const generatedNonBoardSvgFiles = generatedNonBoardManagedFiles.filter(path => path.endsWith('.svg'));
-  assert.deepEqual(generatedNonBoardSvgFiles, committedNonBoardSvgFiles, 'regenerated svg artifact file-set stays aligned with committed non-board SVG files');
-  committedNonBoardSvgFiles.forEach(relPath => {
-    assert.equal(
-      readFileSync(join(generatedFabricationDir, relPath), 'utf8'),
-      readFileSync(join(process.cwd(), 'fabrication', relPath), 'utf8'),
-      `generator emits committed fabrication asset ${relPath}`
-    );
-  });
-  assertSvgFilesParseAsXml(generatedFabricationDir, generatedNonBoardSvgFiles, 'regenerated non-board fabrication assets');
-  const generatedBoardDir = mkdtempSync(join(tmpdir(), 'motionsmith-fabrication-board-'));
-  try {
-    execFileSync('bun', ['scripts/generate-fabrication-board.ts', '--output', generatedBoardDir], { cwd: process.cwd(), stdio: 'pipe' });
-    const generatedTsBoard = readFileSync(join(generatedBoardDir, 'board-final.svg'), 'utf8');
-    assert.equal(
-      readFileSync(join(process.cwd(), 'fabrication', 'board-final.svg'), 'utf8'),
-      generatedTsBoard,
-      'TS board generator reproduces the committed board-final SVG'
-    );
-    assertBoardCoordinatesMatch(mainBoardSvg, generatedTsBoard, 'ts board map parity');
-    assertSvgFilesParseAsXml(generatedBoardDir, ['board-final.svg'], 'ts-generated board artifact');
-  } finally {
-    rmSync(generatedBoardDir, { recursive: true, force: true });
-  }
-  const generatedTsFabricationDir = mkdtempSync(join(tmpdir(), 'motionsmith-fabrication-ts-'));
-  try {
-    const generationSummary = JSON.parse(execFileSync('bun', ['scripts/generate-fabrication-assets.ts', '--output', generatedTsFabricationDir, '--compare-committed', '--compare-python'], { cwd: process.cwd(), encoding: 'utf8' })) as {
-      python_parity?: { status: boolean; semantic_contour_files: string[]; exact_text_files: string[]; mismatches: string[] };
-    };
-    assert.equal(generationSummary.python_parity?.status, true, 'fresh TypeScript and Python managed SVG semantic contours match');
-    assert.deepEqual(generationSummary.python_parity?.mismatches, [], 'fresh TypeScript and Python managed SVG parity reports no mismatches');
-    assert.equal(generationSummary.python_parity?.semantic_contour_files.length, fabricationSvgManagedFiles.length, 'fresh TypeScript/Python parity covers every managed SVG including board');
-    const generatedTsManifest = JSON.parse(readFileSync(join(generatedTsFabricationDir, 'manifest.json'), 'utf8')) as FabricationManifest;
-    assert.deepEqual(generatedTsManifest.managed_files, fabricationManifest.managed_files, 'fresh TypeScript output keeps the managed SVG/path set aligned with committed fabrication package');
-    fabricationSvgManagedFiles.forEach(relPath => {
-      const semantic = compareSvgContours(readFileSync(join(generatedTsFabricationDir, relPath), 'utf8'), readFileSync(join(generatedFabricationDir, relPath), 'utf8'));
-      assert(semantic.equal, `fresh TypeScript/Python SVG contour parity holds for ${relPath}: ${semantic.firstMismatch ?? 'mismatch'}`);
-    });
-  } finally {
-    rmSync(generatedTsFabricationDir, { recursive: true, force: true });
-  }
+  execFileSync('bun', ['scripts/generate-fabrication-board.ts', '--output', generatedBoardDir], { cwd: process.cwd(), stdio: 'pipe' });
+  const generatedTsBoard = readFileSync(join(generatedBoardDir, 'board-final.svg'), 'utf8');
+  assert.equal(
+    readFileSync(join(process.cwd(), 'fabrication', 'board-final.svg'), 'utf8'),
+    generatedTsBoard,
+    'TS board generator reproduces the committed board-final SVG'
+  );
+  assertBoardCoordinatesMatch(mainBoardSvg, generatedTsBoard, 'ts board map parity');
+  assertSvgFilesHaveVisibleContours(generatedBoardDir, ['board-final.svg'], 'ts-generated board artifact');
 } finally {
-  rmSync(generatedFabricationDir, { recursive: true, force: true });
+  rmSync(generatedBoardDir, { recursive: true, force: true });
+}
+const generatedTsFabricationDir = mkdtempSync(join(tmpdir(), 'motionsmith-fabrication-ts-'));
+try {
+  const oracleBefore = readFileSync(fabricationPythonOraclePath, 'utf8');
+  const generationSummary = JSON.parse(execFileSync('bun', ['scripts/generate-fabrication-assets.ts', '--output', generatedTsFabricationDir, '--compare-committed'], { cwd: process.cwd(), encoding: 'utf8' })) as {
+    committed_parity?: { managedFileSetExact: boolean; semantic_contour_files: string[]; exact_text_files: string[]; mismatched: string[] };
+    frozen_python_oracle_parity?: { status: boolean; semantic_contour_files: string[]; mismatches: string[] };
+  };
+  assert.equal(readFileSync(fabricationPythonOraclePath, 'utf8'), oracleBefore, 'ordinary TS generation does not rewrite the frozen oracle');
+  assert.equal(generationSummary.committed_parity?.managedFileSetExact, true, 'fresh TypeScript output matches the committed managed package');
+  assert.deepEqual(generationSummary.committed_parity?.mismatched, [], 'fresh TypeScript committed parity reports no mismatches');
+  assert.equal(generationSummary.frozen_python_oracle_parity?.status, true, 'fresh TypeScript output matches the frozen Python-derived oracle');
+  assert.deepEqual(generationSummary.frozen_python_oracle_parity?.mismatches, [], 'fresh TypeScript oracle parity reports no mismatches');
+  assert.equal(generationSummary.frozen_python_oracle_parity?.semantic_contour_files.length, fabricationSvgManagedFiles.length, 'fresh TypeScript/oracle parity covers every managed SVG including board');
+  const generatedTsManifest = JSON.parse(readFileSync(join(generatedTsFabricationDir, 'manifest.json'), 'utf8')) as FabricationManifest;
+  assert.deepEqual(generatedTsManifest.managed_files, fabricationManifest.managed_files, 'fresh TypeScript output keeps the managed SVG/path set aligned with committed fabrication package');
+  fabricationSvgManagedFiles.forEach(relPath => {
+    const semantic = compareSvgContours(readFileSync(join(generatedTsFabricationDir, relPath), 'utf8'), readFileSync(join(process.cwd(), 'fabrication', relPath), 'utf8'));
+    assert(semantic.equal, `fresh TypeScript/committed SVG contour parity holds for ${relPath}: ${semantic.firstMismatch ?? 'mismatch'}`);
+    assertSvgMatchesFrozenOracle(generatedTsFabricationDir, relPath, 'fresh TypeScript output');
+  });
+} finally {
+  rmSync(generatedTsFabricationDir, { recursive: true, force: true });
 }
 assert.deepEqual(
   FABRICATION_GEAR_SPECS.map(spec => ({

@@ -15,7 +15,7 @@ import { FABRICATION_ASSET_GENERATOR_SOURCE } from './fabrication/source-templat
 import { compareSvgContours } from './fabrication/svg-contour';
 
 const cwd = process.cwd();
-const reportDate = new Date().toISOString().split('T')[0];
+const reportDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
 
 interface AuditFileDiff {
   path: string;
@@ -64,9 +64,10 @@ interface AuditResult {
       tsHoleCount: number;
       committedHoleCount: number;
     };
-    pythonTsSvgContourParity: {
+    frozenPythonOracleParity: {
       status: 'ok' | 'blocked';
-      exactTextCount: number;
+      schemaVersion?: number;
+      capturedAt?: string;
       semanticContourCount: number;
       firstMismatch?: string;
     };
@@ -202,7 +203,6 @@ const compareManagedFileSets = (leftManifest: Manifest, rightManifest: Manifest,
     mismatched,
     missingInCommitted,
     missingInGenerated,
-    exactCount: exact.length,
     matched: mismatched.length === 0 && missingInCommitted.length === 0 && missingInGenerated.length === 0,
   };
 };
@@ -345,7 +345,7 @@ const metadataParity = (category: string, manifest: Manifest) => {
 
 const buildMarkdown = (result: AuditResult) => {
   const lines: string[] = [];
-  lines.push('# Python↔TypeScript managed SVG contour parity trace');
+  lines.push('# TS/frozen-oracle managed SVG contour parity trace');
   lines.push('');
   lines.push(`Generated: ${result.generatedAt}`);
   lines.push('');
@@ -355,7 +355,7 @@ const buildMarkdown = (result: AuditResult) => {
   lines.push(`- managed file set parity: ${result.checks.managedFileSetExact ? '✅' : '❌'}`);
   lines.push(`- board file present: ${result.checks.boardPresence ? '✅' : '❌'}`);
   lines.push(`- board coordinate parity: ${result.checks.boardCoordinateParity.status === 'ok' ? '✅' : '❌'} (${result.checks.boardCoordinateParity.tsHoleCount}/${result.checks.boardCoordinateParity.committedHoleCount})`);
-  lines.push(`- Python↔TypeScript managed SVG contours: ${result.checks.pythonTsSvgContourParity.status === 'ok' ? '✅' : '❌'} (${result.checks.pythonTsSvgContourParity.semanticContourCount} semantic, ${result.checks.pythonTsSvgContourParity.exactTextCount} exact text)`);
+  lines.push(`- TS/frozen-oracle managed SVG contours: ${result.checks.frozenPythonOracleParity.status === 'ok' ? '✅' : '❌'} (${result.checks.frozenPythonOracleParity.semanticContourCount} semantic)`);
   lines.push(`- runtime Blueprint/scene SVGs: ${result.checks.runtimeSceneBoundary.status} — ${result.checks.runtimeSceneBoundary.details}`);
   lines.push('');
   lines.push('## File-level parity');
@@ -412,7 +412,7 @@ const main = () => {
       managedFileSetExact: false,
       boardPresence: false,
       boardCoordinateParity: { status: 'blocked', details: 'not run', tsHoleCount: 0, committedHoleCount: 0 },
-      pythonTsSvgContourParity: { status: 'blocked', exactTextCount: 0, semanticContourCount: 0 },
+      frozenPythonOracleParity: { status: 'blocked', semanticContourCount: 0 },
       runtimeSceneBoundary: {
         status: 'presentation-non-cutter',
         details: 'Blueprint/export scene SVGs reuse some primitives but are presentation/non-cutter outputs and are not claimed contour-identical.',
@@ -431,27 +431,30 @@ const main = () => {
   };
 
   const writeReport = (forceFail = false) => {
-    writeFileSync(result.paths.reportJsonPath, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
-    writeFileSync(result.paths.reportMarkdownPath, buildMarkdown(result), 'utf8');
+    if (!process.argv.includes('--no-write')) {
+      writeFileSync(result.paths.reportJsonPath, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
+      writeFileSync(result.paths.reportMarkdownPath, buildMarkdown(result), 'utf8');
+    }
     if (forceFail) process.exitCode = 1;
   };
 
   try {
-    const generatorOutput = execFileSync('bun', ['scripts/generate-fabrication-assets.ts', '--output', outputDir, '--compare-committed', '--compare-python'], {
+    const generatorOutput = execFileSync('bun', ['scripts/generate-fabrication-assets.ts', '--output', outputDir, '--compare-committed'], {
       cwd,
       stdio: 'pipe',
       encoding: 'utf8',
     });
-    const generatorSummary = JSON.parse(generatorOutput) as { python_parity?: { status: boolean; exact_text_files?: string[]; semantic_contour_files?: string[]; first_mismatch?: string } };
+    const generatorSummary = JSON.parse(generatorOutput) as { frozen_python_oracle_parity?: { status: boolean; schema_version?: number; captured_at?: string; semantic_contour_files?: string[]; first_mismatch?: string } };
     result.checks.generatedFromTs = true;
-    result.checks.pythonTsSvgContourParity = {
-      status: generatorSummary.python_parity?.status ? 'ok' : 'blocked',
-      exactTextCount: generatorSummary.python_parity?.exact_text_files?.length ?? 0,
-      semanticContourCount: generatorSummary.python_parity?.semantic_contour_files?.length ?? 0,
-      firstMismatch: generatorSummary.python_parity?.first_mismatch,
+    result.checks.frozenPythonOracleParity = {
+      status: generatorSummary.frozen_python_oracle_parity?.status ? 'ok' : 'blocked',
+      schemaVersion: generatorSummary.frozen_python_oracle_parity?.schema_version,
+      capturedAt: generatorSummary.frozen_python_oracle_parity?.captured_at,
+      semanticContourCount: generatorSummary.frozen_python_oracle_parity?.semantic_contour_files?.length ?? 0,
+      firstMismatch: generatorSummary.frozen_python_oracle_parity?.first_mismatch,
     };
-    if (result.checks.pythonTsSvgContourParity.status !== 'ok') {
-      result.hardFailures.push(`Python↔TypeScript managed SVG contour parity failed: ${result.checks.pythonTsSvgContourParity.firstMismatch ?? 'unknown mismatch'}`);
+    if (result.checks.frozenPythonOracleParity.status !== 'ok') {
+      result.hardFailures.push(`Frozen Python oracle managed SVG contour parity failed: ${result.checks.frozenPythonOracleParity.firstMismatch ?? 'unknown mismatch'}`);
     }
 
     const committedRoot = join(cwd, 'fabrication');
@@ -540,11 +543,11 @@ const main = () => {
       .map((category): CategoryAudit => {
         const paths = grouped[category] ?? [];
         const { coverage, parity } = metadataParity(category, committedManifest);
-        let recommendation = 'Template-copy artifacts are contour-checked against fresh Python and TS outputs.';
+        let recommendation = 'Template-copy artifacts are contour-checked against fresh TS output, committed artifacts, and the frozen oracle.';
         if (parity.metadataMatch === false) {
           recommendation = `Category ${category} metadata drift detected; check runtime contracts and manifest source data.`;
         } else if (category === 'board') {
-          recommendation = 'TypeScript board generation is contour-checked against fresh Python output.';
+          recommendation = 'TypeScript board generation is contour-checked against committed output and the frozen oracle.';
         }
         return {
           category,
@@ -567,7 +570,7 @@ const main = () => {
     }
 
     if (!result.hardFailures.length) {
-      result.recommendations.push('Python↔TypeScript managed SVG contour parity holds for the copied template package plus generated board. Runtime Blueprint/scene SVGs remain presentation geometry, not cutter-contour identity evidence.');
+      result.recommendations.push('TS managed SVG contour parity holds against committed artifacts and the frozen Python-derived oracle. Runtime Blueprint/scene SVGs remain presentation geometry, not cutter-contour identity evidence.');
     }
   } catch (error) {
     result.hardFailures.push(error instanceof Error ? error.message : `${error}`);

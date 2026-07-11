@@ -10,7 +10,7 @@
 2. `fabrication/assembly/board.svg` (legacy committed)
 3. `fabrication/board-final.svg` (proposed canonical)
 4. Regenerated board artifact from `bun scripts/generate-fabrication-board.ts`
-5. Regenerated non-board asset package from `python3 fabrication/generate_fabrication_templates.py`
+5. Regenerated non-board asset package from the TS template source
 
 ## Coordinate geometry findings
 | Artifact | Grid role | Holes | Horizontal labels | Vertical labels | Width | Height |
@@ -30,12 +30,8 @@ All three artifacts expose the same `A1..O15` coordinate set and the same pitch/
 - Assembly docs/index now point to `../board-final.svg` and no longer to `board.svg`.
 
 ## Risk notes
-- Python generator emits `board-final.svg` as the canonical board asset and now aligns with
-  the same board path used by `fabrication/manifest.json`; TS board generation remains the
-  regression-owned path for canonical geometry.
-  - This keeps backward compatibility for Python-side non-board generation while avoiding false drift failures on board artifacts.
-- If TS gains additional board variants, `generate_fabrication_templates.py` can be updated
-  later by wiring its own `board-final.svg` generation call to the same spec.
+- TS generation is now the live path for both board geometry and managed template assets.
+- `fabrication/fabrication-python-oracle.json` remains a frozen historical contour reference; normal TS generation and audits read it but never rewrite it.
 
 ## Files removed as legacy
 - `fabrication/board.svg`
@@ -45,7 +41,7 @@ All three artifacts expose the same `A1..O15` coordinate set and the same pitch/
 ## Verification changes made
 - `tests/project-contract.test.ts`
   - Main board assertions now read `fabrication/board-final.svg`.
-  - Python-generated regeneration now compares only non-board assets.
+  - TS-only regeneration now compares managed assets against committed output and the frozen oracle.
   - Added TS board generator reproduction check that `bun scripts/generate-fabrication-board.ts` produces the committed `board-final.svg`.
 - `fabrication/manifest.json` and snapshot updated to map `assembly.board_map` and `assembly.files` board entry to `board-final.svg`.
 - `fabrication/README.md` and `fabrication/assembly` docs updated to reflect canonical board ownership.

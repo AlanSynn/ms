@@ -7,12 +7,10 @@ import {
   readdirSync,
   copyFileSync,
   writeFileSync,
-  rmSync,
-  mkdtempSync,
 } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { join, resolve, dirname } from 'node:path';
-import { tmpdir } from 'node:os';
 
 import {
   FABRICATION_ASSET_GENERATOR_SOURCE,
@@ -29,7 +27,7 @@ import type {
   GenerationSummary,
   FabricationTemplateManifest,
 } from './fabrication/types';
-import { compareSvgContours } from './fabrication/svg-contour';
+import { compareSvgContours, svgContourSignature } from './fabrication/svg-contour';
 
 const BOARD_FILE = 'board-final.svg';
 const BOARD_GENERATOR_SCRIPT = 'scripts/generate-fabrication-board.ts';
@@ -56,12 +54,10 @@ export type GeneratorMode = 'board' | 'non-board' | 'all';
 
 type CliOptions = {
   output: string;
-  outputAbsolute: boolean;
   adapters: string[];
   onlyBoard: boolean;
   onlyNonBoard: boolean;
   compareCommitted: boolean;
-  comparePython: boolean;
 };
 
 type CompareReport = {
@@ -137,12 +133,10 @@ const parseArgs = (): CliOptions => {
   const args = process.argv.slice(2);
   const options: CliOptions = {
     output: 'fabrication',
-    outputAbsolute: false,
     adapters: ['template-source', 'board-generator'],
     onlyBoard: false,
     onlyNonBoard: false,
     compareCommitted: false,
-    comparePython: false,
   };
 
   for (let index = 0; index < args.length; index += 1) {
@@ -155,7 +149,6 @@ const parseArgs = (): CliOptions => {
           throw new Error('Missing value for --output');
         }
         options.output = value;
-        options.outputAbsolute = value.startsWith('/') || value.startsWith('.') || value.startsWith('~');
         index += 1;
         break;
       }
@@ -179,9 +172,6 @@ const parseArgs = (): CliOptions => {
         break;
       case '--compare-committed':
         options.compareCommitted = true;
-        break;
-      case '--compare-python':
-        options.comparePython = true;
         break;
       case '--help':
       case '-h':
@@ -208,7 +198,7 @@ const parseArgs = (): CliOptions => {
 };
 
 const printUsage = () => {
-  console.log('Usage: bun scripts/generate-fabrication-assets.ts [--output <dir>] [--adapters <id,id2>] [--only-board] [--only-non-board] [--compare-committed] [--compare-python]');
+  console.log('Usage: bun scripts/generate-fabrication-assets.ts [--output <dir>] [--adapters <id,id2>] [--only-board] [--only-non-board] [--compare-committed]');
   console.log('Available adapters:');
   GENERATORS.forEach((generator) => {
     console.log(`  ${generator.id}`);
@@ -433,78 +423,78 @@ const compareGeneratedWithManifest = (
   return { report, categorySummary };
 };
 
-const compareToPython = (committedRoot: string, tsRoot: string, tempRoot: string) => {
-  execFileSync('python3', ['fabrication/generate_fabrication_templates.py', '--output', tempRoot], {
-    stdio: 'pipe',
-    cwd: process.cwd(),
-  });
+type FrozenPythonOracle = {
+  schema_version: number;
+  captured_at: string;
+  source_command: string;
+  python_generator_sha256: string;
+  managed_files: string[];
+  files: Record<string, {
+    source_svg_sha256: string;
+    normalized_contour_records: string[];
+    contour_sha256: string;
+  }>;
+};
 
-  const tsManifest = readManifest(join(tsRoot, 'manifest.json'));
-  const pythonManifest = readManifest(join(tempRoot, 'manifest.json'));
+const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 
-  const normalizeForParityManifest = (manifest: Record<string, unknown>): Record<string, unknown> => {
-    const value = JSON.parse(JSON.stringify(manifest)) as Record<string, unknown>;
-    delete value.generated_at;
-    delete value.generated_by;
-    delete value.source_ssot;
-    if ('previous_generated_at' in value) delete value.previous_generated_at;
-    return value;
-  };
+const readFrozenPythonOracle = (oraclePath = join(process.cwd(), 'fabrication', 'fabrication-python-oracle.json')): FrozenPythonOracle => {
+  const oracle = JSON.parse(readText(oraclePath)) as FrozenPythonOracle;
+  const required = ['schema_version', 'captured_at', 'source_command', 'python_generator_sha256', 'managed_files', 'files'];
+  for (const field of required) {
+    if (!(field in oracle)) throw new Error(`Python fabrication oracle missing ${field}`);
+  }
+  if (!Array.isArray(oracle.managed_files)) throw new Error('Python fabrication oracle managed_files must be an array');
+  if (!oracle.files || typeof oracle.files !== 'object') throw new Error('Python fabrication oracle files must be an object');
+  return oracle;
+};
 
-  const stableStringify = (payload: unknown): string => JSON.stringify(
-    payload,
-    (_key, value) => {
-      if (typeof value === 'number') return Number(value.toFixed(6));
-      if (value && typeof value === 'object' && !Array.isArray(value)) {
-        return Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right)));
-      }
-      return value;
-    },
-    0,
-  );
-
+const compareToFrozenPythonOracle = (generatedRoot: string, generatedManifest: FabricationTemplateManifest) => {
+  const oracle = readFrozenPythonOracle();
+  const generatedManaged = listManagedFiles(generatedManifest);
+  const oracleManaged = [...oracle.managed_files].sort();
   const mismatches: string[] = [];
-  const exactText: string[] = [];
   const semanticContours: string[] = [];
   let firstMismatch: string | undefined;
 
-  if (stableStringify(normalizeForParityManifest(tsManifest)) !== stableStringify(normalizeForParityManifest(pythonManifest))) {
-    mismatches.push('manifest.json');
-    firstMismatch ??= 'manifest.json: metadata/content mismatch after provenance normalization';
-  }
-
-  const tsManaged = listManagedFiles(tsManifest);
-  const pythonManaged = listManagedFiles(pythonManifest);
-  if (JSON.stringify(tsManaged) !== JSON.stringify(pythonManaged)) {
+  if (JSON.stringify(generatedManaged) !== JSON.stringify(oracleManaged)) {
     mismatches.push('managed_files');
-    firstMismatch ??= `managed_files: TS=${tsManaged.length} Python=${pythonManaged.length}`;
+    firstMismatch ??= `managed_files: generated=${generatedManaged.length} oracle=${oracleManaged.length}`;
   }
 
-  for (const relPath of tsManaged) {
-    if (!pythonManaged.includes(relPath)) continue;
-    const tsText = readText(join(tsRoot, relPath));
-    const pythonText = readText(join(tempRoot, relPath));
-    if (tsText === pythonText) exactText.push(relPath);
-    if (!relPath.endsWith('.svg')) continue;
-    const semantic = compareSvgContours(tsText, pythonText);
-    if (semantic.equal) semanticContours.push(relPath);
-    else {
+  const generatedSvgFiles = generatedManaged.filter((path) => path.endsWith('.svg'));
+  const oracleSvgFiles = Object.keys(oracle.files).sort();
+  if (JSON.stringify(generatedSvgFiles) !== JSON.stringify(oracleSvgFiles)) {
+    mismatches.push('oracle.files');
+    firstMismatch ??= `oracle.files: generated SVGs=${generatedSvgFiles.length} oracle SVGs=${oracleSvgFiles.length}`;
+  }
+
+  for (const relPath of generatedSvgFiles) {
+    const oracleFile = oracle.files[relPath];
+    if (!oracleFile) {
       mismatches.push(relPath);
-      firstMismatch ??= `${relPath}: ${semantic.firstMismatch ?? 'SVG contour mismatch'}`;
+      firstMismatch ??= `${relPath}: missing in frozen oracle`;
+      continue;
+    }
+    const signature = svgContourSignature(readText(join(generatedRoot, relPath)));
+    const contourSha = sha256(signature.signature);
+    if (contourSha === oracleFile.contour_sha256 && JSON.stringify(signature.records) === JSON.stringify(oracleFile.normalized_contour_records)) {
+      semanticContours.push(relPath);
+    } else {
+      mismatches.push(relPath);
+      firstMismatch ??= `${relPath}: frozen oracle contour mismatch`;
     }
   }
 
-  const committedManifest = readManifest(join(committedRoot, 'manifest.json'));
   return {
-    total: tsManaged.length,
-    svgTotal: tsManaged.filter((path) => path.endsWith('.svg')).length,
-    exactText,
+    status: mismatches.length === 0,
+    schema_version: oracle.schema_version,
+    captured_at: oracle.captured_at,
+    total: generatedManaged.length,
+    svg_total: generatedSvgFiles.length,
     semanticContours,
     firstMismatch,
     mismatches,
-    committed: committedManifest,
-    ts: tsManifest,
-    python: pythonManifest,
   };
 };
 
@@ -624,25 +614,9 @@ const run = () => {
     }
   }
 
-  let pythonParity: null | { mismatches: string[]; exactText: string[]; semanticContours: string[]; firstMismatch?: string; total: number; svgTotal: number } = null;
-  if (options.comparePython) {
-    const tempOutput = mkdtempSync(join(tmpdir(), 'ms-fab-py-'));
-    try {
-      const result = compareToPython(join(process.cwd(), 'fabrication'), outputRoot, tempOutput);
-      pythonParity = {
-        mismatches: result.mismatches,
-        exactText: result.exactText,
-        semanticContours: result.semanticContours,
-        firstMismatch: result.firstMismatch,
-        total: result.total,
-        svgTotal: result.svgTotal,
-      };
-      if (result.mismatches.length > 0) {
-        throw new Error(`Python parity check failed for ${result.mismatches.length} managed artifact(s)`);
-      }
-    } finally {
-      rmSync(tempOutput, { recursive: true, force: true });
-    }
+  const oracleParity = options.compareCommitted ? compareToFrozenPythonOracle(outputRoot, afterManifest) : null;
+  if (oracleParity && !oracleParity.status) {
+    throw new Error(`Frozen Python oracle parity failed for ${oracleParity.mismatches.length} managed artifact(s)`);
   }
 
   const summary: GenerationSummary = {
@@ -680,15 +654,16 @@ const run = () => {
           },
         }
       : undefined,
-    python_parity: pythonParity
+    frozen_python_oracle_parity: oracleParity
       ? {
-          status: pythonParity.mismatches.length === 0,
-          total: pythonParity.total,
-          svg_total: pythonParity.svgTotal,
-          exact_text_files: pythonParity.exactText,
-          semantic_contour_files: pythonParity.semanticContours,
-          first_mismatch: pythonParity.firstMismatch,
-          mismatches: pythonParity.mismatches,
+          status: oracleParity.status,
+          schema_version: oracleParity.schema_version,
+          captured_at: oracleParity.captured_at,
+          total: oracleParity.total,
+          svg_total: oracleParity.svg_total,
+          semantic_contour_files: oracleParity.semanticContours,
+          first_mismatch: oracleParity.firstMismatch,
+          mismatches: oracleParity.mismatches,
         }
       : undefined,
   };

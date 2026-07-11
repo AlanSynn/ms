@@ -86,7 +86,7 @@ bun scripts/generate-fabrication-board.ts --output fabrication
 `generate-fabrication-assets.ts` runs the TypeScript board adapter and the template adapter in one pass.
 
 - Board source: `scripts/generate-fabrication-board.ts` (recommended canonical `board-final.svg` source).
-- Optional legacy drift comparison: `fabrication/generate_fabrication_templates.py` via `--compare-python` when validating historical parity.
+- Frozen historical oracle: `fabrication/fabrication-python-oracle.json` is read by TS parity checks and is not rewritten by normal generation.
 
 For a custom 2.5 cm board pitch, generate to a separate directory instead of overwriting the committed package:
 
