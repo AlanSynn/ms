@@ -3,6 +3,7 @@ import { Point, MechanismConfig, JointState, AppSettings } from '../types';
 import { SCENE_PX_PER_MM } from './coordinates';
 import { fabricationGearSpecForPitchRadius } from './fabricationContract';
 import { normalizeGearLinkageToReference } from './mechanismReference';
+import { connectionPointAt, resolveFourBarConnectionSelections, resolveGearLinkageConnectionGeometry } from './mechanismConnectionSelections';
 
 const toRad = (deg: number) => (deg * Math.PI) / 180;
 
@@ -227,7 +228,10 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
     const driverPhaseOffset = config.driverPhaseOffset ?? 0;
     const angle1 = crankAngleRad * s1 + driverPhaseOffset;
 
-    const j1: Point = {
+    const fourBarConnections = config.type === '4bar' ? resolveFourBarConnectionSelections(config) : undefined;
+    const j1: Point = fourBarConnections?.inputJoint
+        ? connectionPointAt(fourBarConnections.inputJoint, p1, angle1).position
+        : {
         x: p1.x + config.crankLength * Math.cos(angle1),
         y: p1.y + config.crankLength * Math.sin(angle1),
     };
@@ -329,12 +333,13 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
         const ratio = hasInsertedIdlers ? gearTrainOutputRatio(radii) : directOutputRatio;
         const meshPhase = hasInsertedIdlers ? gearTrainMeshPhaseRadAt(radii, radii.length - 1) : 0;
         const outAngle = angle1 * ratio + meshPhase + (config.phase ?? 0);
+        const pins = resolveGearLinkageConnectionGeometry(referencePair, angle1, outAngle, centers);
         const handleRadius = Math.max(1, Math.abs(referencePair.couplerPointDist));
-        const drivePin: Point = {
+        const drivePin: Point = pins.drivePin?.position ?? {
             x: p1.x + handleRadius * Math.cos(angle1),
             y: p1.y + handleRadius * Math.sin(angle1)
         };
-        const outputPin: Point = {
+        const outputPin: Point = pins.outputPin?.position ?? {
             x: p2.x + handleRadius * Math.cos(outAngle),
             y: p2.y + handleRadius * Math.sin(outAngle)
         };
@@ -384,7 +389,8 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
             y: p1.y + config.groundLength * Math.sin(gAngle) 
         };
 
-        const j2 = getCircleIntersection(j1, config.couplerLength, p2, config.rockerLength, config.assemblyMode !== 'crossed');
+        const outputLength = fourBarConnections?.outputJoint?.length ?? config.rockerLength;
+        const j2 = getCircleIntersection(j1, config.couplerLength, p2, outputLength, config.assemblyMode !== 'crossed');
 
         if (!j2) {
             return { p1, p2, j1, j2: p1, effector: p1, isValid: false };

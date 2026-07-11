@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import type { BodyPartLayer, CanvasViewport, MechanismConfig, MechanismType, PhysicalKitSettings, Point, ProjectMotionPath, ProjectState, SceneObject, StandardSkeleton } from '../types';
 import { boardGridLines, defaultPhysicalKit, SCENE_PX_PER_MM, sceneBoundsForSheet } from '../utils/coordinates';
 import { calculateLinkage, normalizeCamProfileSamples, sampledCamProfileScale, gearPairOutputRatio, gearTrainCenters, gearTrainMeshPhaseRadAt, gearTrainOutputRatio, gearTrainPitchRadii, gearTrainRotationRatioAt, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from '../utils/kinematics';
-import { FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, validateMechanismPreviewReadiness, type FabricationLinkageRoleLengths, type FabricationRenderLayer, type FabricationRenderPlan } from '../utils/fabrication';
+import { FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, validateMechanismPreviewReadiness, type FabricationLinkageRoleLengths, type FabricationRenderLayer, type FabricationRenderPlan } from '../utils/fabrication';
 import { compileMechanismRenderPlan } from '../utils/mechanismCompiler';
 import { mechanismInventoryForMechanism, zeroMechanismInventory, type MechanismInventory } from '../utils/mechanismInventory';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, pointInsideOutline } from '../utils/partGeometry';
@@ -12,6 +12,7 @@ import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STA
 import { DEFAULT_PUPPET_VIEWER_LAYERS, VIEWER3D_CAMERA_PRESETS, VIEWER3D_CONTRACT_VERSION, createViewer3DContract, viewer3DLayerDataValue, type Viewer3DCameraPreset, type Viewer3DTabKey } from '../utils/viewer3d';
 import { ALL_MECHANISM_TYPES } from '../utils/mechanismTemplates';
 import { cachedThreeResource, clearThreeGroup, disposeMarkedThreeMaterials, disposeThreeObjectGraph, setRendererPixelRatioCap } from '../utils/threeResourceKit';
+import { connectionSelectionSignature, resolveFourBarConnectionSelections, resolveFourBarLinkageBlankPoses } from '../utils/mechanismConnectionSelections';
 
 const VIEW_SCALE = 35;
 const FABRICATION_LINKAGE_WIDTH_3D = Math.max(0.16, (FABRICATION_LINKAGE_WIDTH_MM * SCENE_PX_PER_MM) / VIEW_SCALE);
@@ -372,11 +373,12 @@ const updateUnitBar = (mesh: THREE.Object3D, a?: Point, b?: Point, z = 0) => {
   mesh.scale.set(Math.max(0.01, len), 1, 1);
 };
 
-const createHoledLink = (length: number, width: number, material: THREE.Material, edgeMaterial: THREE.Material, holeCount = 2, pitchMm = 20) => {
+const createHoledLink = (length: number, width: number, material: THREE.Material, edgeMaterial: THREE.Material, holeCount = 2, partKey?: string) => {
   const group = new THREE.Group();
   const safeLength = Math.max(0.08, length);
   const sceneLength = safeLength * VIEW_SCALE;
-  const spec = fabricationLinkageSpecForSceneLength(sceneLength, pitchMm, holeCount);
+  const spec = FABRICATION_LINKAGE_SPECS.find(candidate => candidate.key === partKey)
+    ?? fabricationLinkageSpecForSceneLength(sceneLength, FABRICATION_LINKAGE_SPECS[0]?.pitchMm, holeCount);
   const templateLength = Math.max(0.08, (spec.lengthMm * SCENE_PX_PER_MM) / VIEW_SCALE);
   const outlineLength = templateLength + width;
   const firstHoleX = spec.holeCentersMm[0]?.x ?? 0;
@@ -385,7 +387,7 @@ const createHoledLink = (length: number, width: number, material: THREE.Material
   group.userData.fabricationLocked = true;
   group.userData.fabricationSpecKey = spec.key;
   group.userData.fabricationHoleSpacingMm = spec.pitchMm;
-  const key = `holed-link:${spec.key}:${geometryKeyNumber(pitchMm)}:${geometryKeyNumber(outlineLength)}:${geometryKeyNumber(width)}:${geometryKeyNumber(FABRICATION_HOLE_RADIUS_3D)}`;
+  const key = `holed-link:${spec.key}:${geometryKeyNumber(spec.pitchMm)}:${geometryKeyNumber(outlineLength)}:${geometryKeyNumber(width)}:${geometryKeyNumber(FABRICATION_HOLE_RADIUS_3D)}`;
   const geometry = cachedGeometry(key, () => {
     const shape = roundedRect(outlineLength, width, width / 2);
     holeXs.forEach(x => shape.holes.push(holePath(x, 0, Math.min(FABRICATION_HOLE_RADIUS_3D, width * 0.34))));
@@ -662,7 +664,8 @@ const mechanismGeometrySignature = (mechanisms: MechanismConfig[], kit: Physical
   mechanism.camProfileSamples?.join(',') ?? '',
   mechanism.outputGearRadius,
   mechanism.gearTrainRadii?.join(',') ?? '',
-  mechanism.showOutputGear
+  mechanism.showOutputGear,
+  connectionSelectionSignature(mechanism.connectionSelections)
 ].join(':')).join('|');
 
 export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneObjects = {}, skeleton, mechanisms, paths, selectedPathId, angle = 0, viewport, setViewport, inputMode = 'always', testId = 'three-puppet', cameraPresets = PUPPET_CAMERA_PRESETS, showToolbar = true, initialLayers, assemblyOverlay, onSelectPart, onSelectSceneObject, onSelectMechanism, onSelectOnlyPointerDown, onSelectOnlyPointerMove, onSelectOnlyPointerUp, onSelectOnlyPointerCancel, onSelectOnlyWheel }: {
@@ -805,15 +808,22 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       ? planetaryCarrierOutputRatio(selectedMechanism.crankLength, selectedMechanism.rockerLength)
       : gearPairOutputRatio(selectedMechanism.crankLength, selectedMechanism.rockerLength);
   }, [selectedMechanism]);
-  const selectedLinkageHoleCounts = useMemo(() => selectedMechanism ? fabricationLinkageHoleCountsForMechanism(selectedMechanism, kit.gridPitchMm) : null, [kit.gridPitchMm, selectedMechanism]);
+  const selectedLinkageHoleCounts = useMemo(() => selectedMechanism ? fabricationLinkageHoleCountsForMechanism(selectedMechanism) : null, [selectedMechanism]);
   const selectedLinkageSpecs = useMemo(() => {
     if (!selectedMechanism) return null;
+    const fourBarConnections = resolveFourBarConnectionSelections(selectedMechanism);
     const lengths = fabricationLinkageSceneLengthsForMechanism(selectedMechanism);
     return Object.fromEntries(Object.entries(lengths).map(([role, length]) => {
       const typedRole = role as keyof FabricationLinkageRoleLengths;
-      return [role, fabricationLinkageSpecForSceneLength(length, kit.gridPitchMm, FABRICATION_LINKAGE_ROLE_MIN_HOLES[typedRole])];
+      const selectedPartKey = typedRole === 'driver' && fourBarConnections.inputJoint?.selection.kind === 'linkage-hole'
+        ? fourBarConnections.inputJoint.selection.linkageKey
+        : typedRole === 'output' && fourBarConnections.outputJoint?.selection.kind === 'linkage-hole'
+          ? fourBarConnections.outputJoint.selection.linkageKey
+          : undefined;
+      return [role, FABRICATION_LINKAGE_SPECS.find(spec => spec.key === selectedPartKey)
+        ?? fabricationLinkageSpecForSceneLength(length, FABRICATION_LINKAGE_SPECS[0]?.pitchMm, FABRICATION_LINKAGE_ROLE_MIN_HOLES[typedRole])];
     })) as Record<keyof FabricationLinkageRoleLengths, ReturnType<typeof fabricationLinkageSpecForSceneLength>>;
-  }, [kit.gridPitchMm, selectedMechanism]);
+  }, [selectedMechanism]);
   const selectedStackZGap = useMemo(() => {
     if (!selectedRenderPlan || selectedRenderPlan.layers.length < 2) return 0;
     return selectedRenderPlan.layers[1].z - selectedRenderPlan.layers[0].z;
@@ -1251,14 +1261,20 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       group.userData.mechanismId = mechanism.id;
       const sceneLinkLengths = fabricationLinkageSceneLengthsForMechanism(mechanism);
       const linkLengths = Object.fromEntries(Object.entries(sceneLinkLengths).map(([role, length]) => [role, Math.max(0.08, length / VIEW_SCALE)])) as Record<LinkKey, number>;
-      const pitchMm = kit.gridPitchMm;
+      const fourBarConnections = resolveFourBarConnectionSelections(mechanism);
+      const driverPartKey = fourBarConnections.inputJoint?.selection.kind === 'linkage-hole'
+        ? fourBarConnections.inputJoint.selection.linkageKey
+        : undefined;
+      const outputPartKey = fourBarConnections.outputJoint?.selection.kind === 'linkage-hole'
+        ? fourBarConnections.outputJoint.selection.linkageKey
+        : undefined;
       const links: Record<LinkKey, THREE.Group> = {
-        base: createHoledLink(linkLengths.base, FABRICATION_LINKAGE_WIDTH_3D, materials.mechBase, materials.edge, 3, pitchMm),
-        driver: createHoledLink(linkLengths.driver, FABRICATION_LINKAGE_WIDTH_3D, materials.mechDrive, materials.edge, 3, pitchMm),
-        coupler: createHoledLink(linkLengths.coupler, FABRICATION_LINKAGE_WIDTH_3D, materials.mechCoupler, materials.edge, 4, pitchMm),
-        output: createHoledLink(linkLengths.output, FABRICATION_LINKAGE_WIDTH_3D, materials.mechOutput, materials.edge, 3, pitchMm),
-        effector: createHoledLink(linkLengths.effector, FABRICATION_LINKAGE_WIDTH_3D, materials.mechOutput, materials.edge, 2, pitchMm),
-        follower: createHoledLink(linkLengths.follower, FABRICATION_LINKAGE_WIDTH_3D, materials.mechOutput, materials.edge, 2, pitchMm)
+        base: createHoledLink(linkLengths.base, FABRICATION_LINKAGE_WIDTH_3D, materials.mechBase, materials.edge, 3),
+        driver: createHoledLink(linkLengths.driver, FABRICATION_LINKAGE_WIDTH_3D, materials.mechDrive, materials.edge, 3, driverPartKey),
+        coupler: createHoledLink(linkLengths.coupler, FABRICATION_LINKAGE_WIDTH_3D, materials.mechCoupler, materials.edge, 4),
+        output: createHoledLink(linkLengths.output, FABRICATION_LINKAGE_WIDTH_3D, materials.mechOutput, materials.edge, 3, outputPartKey),
+        effector: createHoledLink(linkLengths.effector, FABRICATION_LINKAGE_WIDTH_3D, materials.mechOutput, materials.edge, 2),
+        follower: createHoledLink(linkLengths.follower, FABRICATION_LINKAGE_WIDTH_3D, materials.mechOutput, materials.edge, 2)
       };
       Object.values(links).forEach(link => group.add(link));
       const gears: THREE.Mesh[] = [];
@@ -1437,10 +1453,13 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       const groundAngle = ((mechanism.groundAngle ?? 0) * Math.PI) / 180;
       const outputAngle = Math.atan2(state.j2.y - state.p2.y, state.j2.x - state.p2.x);
       const standardLinks = () => {
+        const fourBarBlankPoses = resolveFourBarLinkageBlankPoses(mechanism, state);
+        const inputBlank = fourBarBlankPoses['4bar.input-joint'];
+        const outputBlank = fourBarBlankPoses['4bar.output-joint'];
         updateLink(visual.links.base, state.p1, state.p2, zBackClip);
-        updateLink(visual.links.driver, state.p1, state.j1, zDriver);
+        updateLink(visual.links.driver, inputBlank?.origin ?? state.p1, inputBlank?.end ?? state.j1, zDriver);
         updateLink(visual.links.coupler, state.isValid ? state.j1 : undefined, state.isValid ? state.j2 : undefined, zCoupler);
-        updateLink(visual.links.output, state.isValid ? state.p2 : undefined, state.isValid ? state.j2 : undefined, zOutput);
+        updateLink(visual.links.output, state.isValid ? outputBlank?.origin ?? state.p2 : undefined, state.isValid ? outputBlank?.end ?? state.j2 : undefined, zOutput);
         updateLink(visual.links.effector, state.isValid ? state.j2 : undefined, state.isValid ? state.effector : undefined, zOutput);
       };
 

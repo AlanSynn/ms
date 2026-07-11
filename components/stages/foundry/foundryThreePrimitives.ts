@@ -6,6 +6,7 @@ import type {
 } from "../../../types";
 import { sampledCamProfileScale } from "../../../utils/kinematics";
 import {
+  FABRICATION_LINKAGE_SPECS,
   FABRICATION_HOLE_RADIUS_MM,
   FABRICATION_LINKAGE_WIDTH_MM,
   FABRICATION_RENDER_MIN_CLEARANCE,
@@ -208,6 +209,7 @@ export const createFoundryThreePrimitiveFactory = ({
     z: number,
     mat: THREE.Material,
     holeCount = 2,
+    partKey?: string,
   ) => {
     if (!a || !b) return;
     const av = to3(a, z),
@@ -219,11 +221,12 @@ export const createFoundryThreePrimitiveFactory = ({
     const sceneLength = Math.hypot(b.x - a.x, b.y - a.y);
     const sourceSceneLength =
       sceneLength / Math.max(0.001, Math.abs(simulationScale));
-    const linkageSpec = fabricationLinkageSpecForSceneLength(
-      sourceSceneLength,
-      kit.gridPitchMm,
-      holeCount,
-    );
+    const linkageSpec = FABRICATION_LINKAGE_SPECS.find((spec) => spec.key === partKey)
+      ?? fabricationLinkageSpecForSceneLength(
+        sourceSceneLength,
+        FABRICATION_LINKAGE_SPECS[0]?.pitchMm,
+        holeCount,
+      );
     const sourceTemplateSceneLength = Math.max(
       1,
       linkageSpec.lengthMm * SCENE_PX_PER_MM,
@@ -241,7 +244,7 @@ export const createFoundryThreePrimitiveFactory = ({
     const group = new THREE.Group();
     group.position.set((av.x + bv.x) / 2, (av.y + bv.y) / 2, z);
     group.rotation.z = Math.atan2(dy, dx);
-    const geometryKey = `bar:${linkageSpec.key}:${kit.gridPitchMm}:${outlineLen.toFixed(3)}:${barW.toFixed(3)}:${thickness.toFixed(3)}`;
+    const geometryKey = `bar:${linkageSpec.key}:${linkageSpec.pitchMm}:${outlineLen.toFixed(3)}:${barW.toFixed(3)}:${thickness.toFixed(3)}`;
     const mesh = new THREE.Mesh(
       cachedGeometry(geometryKey, () => {
         const shape = roundedRectShape(outlineLen, barW);

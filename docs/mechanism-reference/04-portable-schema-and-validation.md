@@ -26,6 +26,10 @@ This file gives an app-neutral schema for porting mechanism units and assembly g
     "output_link": 40.0,
     "input_angle": 30.0
   },
+  "connection_selections": {
+    "4bar.input-joint": {"kind": "linkage-hole", "linkage_key": "linkage-2-cell", "hole_index": 2},
+    "4bar.output-joint": {"kind": "linkage-hole", "linkage_key": "linkage-2-cell", "hole_index": 2}
+  },
   "parts": [
     {"part_id": "linkages:linkage-2-cell", "count": 2, "role": "input-output-links"},
     {"part_id": "linkages:linkage-4-cell", "count": 1, "role": "coupler"},
@@ -54,6 +58,17 @@ This file gives an app-neutral schema for porting mechanism units and assembly g
   "assembly_recipe_key": "four-bar-basic"
 }
 ```
+
+`connection_selections` maps to `MechanismConfig.connectionSelections` in the app. Role names are portable identifiers and must not be replaced by renderer handle names such as `P1`, `J1`, or `J2`.
+
+Connection validation:
+
+- Supported authored roles are exactly `4bar.input-joint`, `4bar.output-joint`, `gear_linkage.drive-pin`, and `gear_linkage.output-pin`.
+- Four-bar roles require `{kind: "linkage-hole", linkage_key, hole_index}`. Gear-linkage roles require `{kind: "gear-attachment-hole", gear_key, gear_index, hole_index}`.
+- Missing legacy state may default deterministically and must record `defaulted` evidence.
+- Invalid authored roles, kinds, part keys, gear indices, or hole indices are rejected and dropped with evidence. Do not remap them.
+- `gear_train`, `planetary_gear`, `cam_follower`, and `slider_crank` use fixed/derived connections in the current kit and must not persist fake authored hole roles.
+- The selected physical hole must resolve to the same coordinate and part identity in kinematics, graph constraints, viewport, fabrication plan, and export metadata.
 
 ## 4.2 Board coordinate object
 

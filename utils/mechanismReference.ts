@@ -464,12 +464,26 @@ const unsupportedRecipe = (type: MechanismType, canonicalKey: ReferenceCanonical
     physicsRule: `${type} simulation-only motion`,
     foundryVisible: false,
     exportReady: false,
-    support: canonicalKey === 'unsupported' ? 'unsupported' : 'simulation-only',
+    support: 'unsupported',
     reason,
     requiredParts: [],
     stackLabels: [],
     assemblySteps: []
 });
+
+const crankDriverRecipe: ReferenceMechanismRecipe = {
+    appType: 'crank',
+    canonicalKey: 'driver',
+    title: 'Crank driver',
+    physicsRule: 'single rotary driver phase',
+    foundryVisible: true,
+    exportReady: false,
+    support: 'simulation-only',
+    reason: 'Low-level driver only; no standalone fabrication recipe.',
+    requiredParts: [],
+    stackLabels: [],
+    assemblySteps: []
+};
 
 const gearTrainSteps: ReferenceAssemblyStep[] = [
     step(1, 'Start at H6', 'place-fastener', ['H6'], ['board'], 'Place a paper fastener at H6.', 'The fastener turns freely.', bareFastener('H6')),
@@ -550,7 +564,7 @@ const sliderCrankSteps: ReferenceAssemblyStep[] = [
 ];
 
 export const REFERENCE_MECHANISM_RECIPES: Record<MechanismType, ReferenceMechanismRecipe> = {
-    crank: unsupportedRecipe('crank', 'driver', 'Low-level driver only; choose a physical mechanism recipe for fabrication.'),
+    crank: crankDriverRecipe,
     '4bar': {
         appType: '4bar',
         canonicalKey: 'four_bar',

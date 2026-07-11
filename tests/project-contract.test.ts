@@ -19,6 +19,7 @@ import { makeCutSheetPdf as directMakeCutSheetPdf } from '../utils/fabricationCu
 import { makeCustomPartsPdf as directMakeCustomPartsPdf, makeCustomPartsStl as directMakeCustomPartsStl, makeCustomPartsSvg as directMakeCustomPartsSvg } from '../utils/fabricationCustomParts';
 import { fabricationGearPathD as profileFabricationGearPathD, fabricationGearProfileForPitchRadius as profileFabricationGearProfileForPitchRadius, fabricationRingGearPathD as profileFabricationRingGearPathD, fabricationRingGearProfileForPitchRadius as profileFabricationRingGearProfileForPitchRadius } from '../utils/fabricationProfiles';
 import { compileAuthoredMechanismGraph, compileFabricationRecipe, compileMechanism, compileMechanismGraphFabrication, compileMechanismRenderPlan, summarizeCompiledMechanism } from '../utils/mechanismCompiler';
+import { CONNECTION_SELECTION_ROLES, authorMechanismConnectionSelection, connectionSelectionAccepted, connectionSelectionSceneCoordinates, connectionSelectionSignature, mechanismConnectionHoleCandidates, normalizeMechanismConnectionSelections, resolveFourBarConnectionSelections, resolveFourBarLinkageBlankPoses } from '../utils/mechanismConnectionSelections';
 import { mechanismInventoryForMechanism } from '../utils/mechanismInventory';
 import { closePhysicalValue as readinessClosePhysicalValue, closeToBoardPitch as readinessCloseToBoardPitch, closeToFabricationLinkage as readinessCloseToFabricationLinkage, physicalTolerance as readinessPhysicalTolerance, sampleFeasibleRange as readinessSampleFeasibleRange } from '../utils/fabricationReadiness';
 import { FABRICATION_RENDER_LAYER_Z_STEP as renderPlanLayerZStep, FABRICATION_RENDER_MIN_CLEARANCE as renderPlanMinClearance, FABRICATION_RENDER_PART_DEPTH as renderPlanPartDepth, fabricationRenderPlanForMechanism as renderPlanForMechanism, validateFabricationStack as renderPlanValidateFabricationStack } from '../utils/fabricationRenderPlan';
@@ -35,9 +36,10 @@ import { buildToonSceneProjection } from '../utils/sceneProjection';
 import { buildFoundryPhysicsOverlay, buildKinematicPhysicsSession, mechanismPhysicsRule } from '../utils/physicsSession';
 import { contourPathD, fabricablePartOutlinePoints, partLandmarkJointIds, partLandmarkLocalPoints, partOutlineBounds, partWorldPointToLocal, pointInsideOutline, scaleContour } from '../utils/partGeometry';
 import { MECHANISM_FEATURE_REGISTRY, mechanismFeature, validateMechanismFeatureRegistry, type MechanismDragHandle } from '../utils/mechanismFeatureRegistry';
-import { MECHANISM_FEASIBILITY_AUTHORITY_KEYS, MECHANISM_NON_FEASIBILITY_EDIT_KEYS, MECHANISM_REPLACEMENT_ONLY_KEYS, constrainMechanismCommit, constrainMechanismUpdate, mechanismEditIsSafe, mechanismMotionCompletes, mechanismUpdateRequiresReplacement, motionSafeParamRange, safeMechanismUpdate } from '../utils/mechanismEditAuthority';
+import { MECHANISM_FEASIBILITY_AUTHORITY_KEYS, MECHANISM_NON_FEASIBILITY_EDIT_KEYS, MECHANISM_REPLACEMENT_ONLY_KEYS, constrainMechanismCommit, constrainMechanismUpdate, mechanismEditIsSafe, mechanismMotionCompletes, mechanismParamIsPlacementRecoveryEditable, mechanismUpdateRequiresReplacement, motionSafeParamRange, safeMechanismUpdate } from '../utils/mechanismEditAuthority';
 import { buildMechanismSnapshot, buildMechanismSnapshots, mechanismSnapshotFingerprint } from '../utils/mechanismSnapshot';
 import { createFoundryPlaybackFrame, foundryPlaybackPhaseToInputAngle, generateFoundryPlaybackPointTraces } from '../utils/foundryPlayback';
+import { foundryPinStackPoints } from '../utils/mechanismPreviewStacks';
 import { createMechanismFitContext, createSceneMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext, pointsToSvgPath } from '../utils/mechanismPreview';
 import { buildMechanismRecommendations, fitMechanismToTargetPath } from '../utils/mechanismRecommendations';
 import { buildAutomataSceneModel } from '../utils/automataSceneModel';
@@ -67,7 +69,7 @@ import { CLASSROOM_ASSESSMENT_KEYS, CLASSROOM_COPY, classroomAssessmentFor, clas
 import { MECHANISM_TYPES as SANITIZE_MECHANISM_TYPES, sanitizeMechanismRuntime } from '../utils/sanitize';
 import { generateSmartConfig, mutateConfig, OPTIMIZER_MECHANISM_TYPES } from '../utils/optimizer';
 import { isBoardFixedCoordRole, normalizeGearLinkageToReference, normalizeGearTrainToFabrication, normalizeMechanismToFabricationSet, normalizeMechanismToReference, REFERENCE_DEFAULTS, REFERENCE_EXPORT_READY_TYPES, REFERENCE_FOUNDRY_TYPES, REFERENCE_MECHANISM_RECIPES, referenceRecipeForType } from '../utils/mechanismReference';
-import type { AppStage, BodyPartLayer, FoundryExportPackage, MechanismConfig, MechanismType, Point, ProjectAction, ProjectState, SceneObject } from '../types';
+import type { AppStage, BodyPartLayer, ConnectionSelection, FoundryExportPackage, MechanismConfig, MechanismType, Point, ProjectAction, ProjectState, SceneObject } from '../types';
 
 projectSelfCheck();
 
@@ -305,8 +307,14 @@ const assemblyStepPlayerPlan = readFileSync(join(process.cwd(), 'docs', 'prd', '
 const classroomGuidedEntryPlan = readFileSync(join(process.cwd(), 'docs', 'prd', 'classroom-guided-entry-plan.md'), 'utf8');
 const classroomSensemakingPlan = readFileSync(join(process.cwd(), 'docs', 'prd', 'classroom-sensemaking-discoverability-plan.md'), 'utf8');
 const codebaseCleanupPlan = readFileSync(join(process.cwd(), 'docs', 'analysis', 'codebase-cleanup-architecture-plan.md'), 'utf8');
-const fabricationParityReportText = readFileSync(join(process.cwd(), 'docs', 'analysis', 'fabrication-parity-2026-07-10.md'), 'utf8');
-const fabricationParityReportJsonText = readFileSync(join(process.cwd(), 'docs', 'analysis', 'fabrication-parity-2026-07-10.json'), 'utf8');
+const fabricationParityReportDir = join(process.cwd(), 'docs', 'analysis');
+const latestFabricationParityReport = readdirSync(fabricationParityReportDir)
+  .filter(name => /^fabrication-parity-\d{4}-\d{2}-\d{2}\.md$/.test(name))
+  .sort()
+  .at(-1);
+assert(latestFabricationParityReport, 'docs/analysis keeps a current dated fabrication parity report');
+const fabricationParityReportText = readFileSync(join(fabricationParityReportDir, latestFabricationParityReport), 'utf8');
+const fabricationParityReportJsonText = readFileSync(join(fabricationParityReportDir, latestFabricationParityReport.replace(/\.md$/, '.json')), 'utf8');
 const fabricationParityIndexText = readFileSync(join(process.cwd(), 'docs', 'analysis', 'README.md'), 'utf8');
 const fabricationParityTraceSource = readFileSync(join(process.cwd(), 'scripts', 'trace-fabrication-parity.ts'), 'utf8');
 const normalizedCodebaseCleanupPlan = codebaseCleanupPlan.replace(/\s+/g, ' ');
@@ -824,6 +832,7 @@ assert(agentsContract.includes('Blueprint owns build files') && agentsContract.i
 assert(agentsContract.includes('Use domain-driven vocabulary consistently') && agentsContract.includes('Keep harness engineering first-class'), 'AGENTS.md locks DDD vocabulary and harness-friendly seam rules');
 assert(agentsContract.includes('Prefer `$ask-claude` for high-token, low-importance, non-performance-sensitive support work') && agentsContract.includes('delegated output is draft evidence') && agentsContract.includes('leader owns source inspection, edits, final correctness, and verification'), 'AGENTS.md keeps the Claude delegation policy narrow and leader-owned');
 const fabricationParityLanguage = `${fabricationParityReportText}\n${fabricationParityReportJsonText}\n${fabricationParityIndexText}`;
+assert(fabricationParityIndexText.includes(latestFabricationParityReport), 'analysis index points to the latest active fabrication parity report');
 assert(!fabricationParityLanguage.includes('fully 1:1 for managed categories including board and all mechanism families'), 'fabrication parity reports reject the old unqualified full 1:1 mechanism-family claim');
 assert(!fabricationParityLanguage.includes('full-svg-generation'), 'fabrication parity reports label copied families honestly instead of full SVG generation');
 assert(fabricationParityLanguage.includes('template-copy'), 'fabrication parity reports label copied managed families as template-copy');
@@ -1179,7 +1188,7 @@ assert(Math.abs((scaledReplacement.mechanisms[0].anchorX ?? 0) - ((coarsePreviou
 assert(Math.abs(scaledReplacement.paths['legacy-wave'].points[0].x - (coarsePrevious.paths['legacy-wave'].points[0].x * 1.5)) < 1e-9, 'larger replacement scales retained path points around matching joints');
 assert.deepEqual(SANITIZE_MECHANISM_TYPES, [...ALL_MECHANISM_TYPES], 'import sanitizer accepts every low-level mechanism template including crank');
 const expectedGraphAuthorableTypes: MechanismType[] = ALL_MECHANISM_TYPES.filter(type => type !== 'crank');
-const expectedReferenceFoundryTypes: MechanismType[] = ['4bar', 'cam', 'gear', 'gear_linkage', 'planetary_gear'];
+const expectedReferenceFoundryTypes: MechanismType[] = ['crank', '4bar', 'cam', 'gear', 'gear_linkage', 'planetary_gear'];
 const nonFoundryMechanismTypes: MechanismType[] = ['yoke', 'quick-return', 'rack-pinion', '5bar', '6bar'];
 assert.deepEqual(AUTHORABLE_MECHANISM_TYPES, expectedGraphAuthorableTypes, 'authorable mechanism types use every graph-compiled family except the low-level crank driver');
 assert.deepEqual(REFERENCE_EXPORT_READY_TYPES, ['4bar', 'piston', 'cam', 'gear', 'gear_linkage', 'planetary_gear'], 'mechanism-reference export-ready types remain the legacy novice recipe catalog, not the graph compiler authoring gate');
@@ -1297,12 +1306,12 @@ ALL_MECHANISM_TYPES.forEach(type => {
   const denseFabrication = compileMechanismGraphFabrication(mechanism, denseKit);
   const partKeys = (recipe = defaultFabrication.recipe) => recipe?.requiredParts.map(part => part.part ?? part.name).sort() ?? [];
   assert.equal(denseFabrication.buildable, true, 'graph fabrication compiler keeps the same mechanism buildable on a larger dense-pitch kit');
-  assert.notDeepEqual(partKeys(defaultFabrication.recipe), partKeys(denseFabrication.recipe), 'graph fabrication compiler derives linkage specs from active gridPitchMm instead of default 20mm cells');
+  assert.deepEqual(partKeys(defaultFabrication.recipe), partKeys(denseFabrication.recipe), 'active board pitch does not change fixed managed linkage part identity');
   assert(denseFabrication.recipe?.assemblySteps.flatMap(step => step.coords ?? []).some(coord => isBoardCoordinateInKit(coord, denseKit) && !isBoardCoordinateInKit(coord, sample.settings.physicalKit)), 'graph fabrication compiler emits active-kit board labels instead of silently clamping to the 15x15 kit');
-  const denseEditorLinkLength = fabricationLinkageSpecForCells(4, denseKit.gridPitchMm).lengthMm * SCENE_PX_PER_MM;
+  const denseEditorLinkLength = fabricationLinkageSpecForCells(4).lengthMm * SCENE_PX_PER_MM;
   const denseEditedMechanism = { ...mechanism, couplerLength: denseEditorLinkLength };
   const denseEditedRecipe = compileMechanismGraphFabrication(denseEditedMechanism, denseKit).recipe;
-  assert(denseEditedRecipe?.requiredParts.some(part => part.part === 'linkages:linkage-4-cell'), 'kit-aware parametric editor output compiles to the intended dense-kit 4-cell linkage part');
+  assert(denseEditedRecipe?.requiredParts.some(part => part.part === 'linkages:linkage-4-cell'), 'parametric editor output keeps the intended managed 4-cell linkage part on a different board pitch');
 }
 previewReadyTypes.forEach(type => {
   const mechanism = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism(type, `graph-${type}`)));
@@ -1718,6 +1727,31 @@ ALL_MECHANISM_TYPES.forEach(type => {
     { anchorX: 200, anchorY: 0 },
     'central runtime authority preserves edits that are feasible under the active physical kit'
   );
+  const recoveryKit = { ...sample.settings.physicalKit, gridPitchMm: 25 };
+  const offGridPlacement = mechanismWithGeneratedPath({
+    ...fourbar,
+    anchorX: -120,
+    anchorY: 100,
+    groundLength: 200,
+    crankLength: 80,
+    couplerLength: 240,
+    rockerLength: 160,
+  });
+  assert.equal(mechanismEditIsSafe(offGridPlacement, recoveryKit), false, 'grid pitch changes can leave existing mechanisms unsafe without auto-resnapping them');
+  assert.equal(motionSafeParamRange(offGridPlacement, 'anchorX', recoveryKit)?.currentSafe, false, 'off-grid anchor reports an unsafe current state for fabrication/export gating');
+  assert.equal(mechanismParamIsPlacementRecoveryEditable(offGridPlacement, 'anchorX', recoveryKit), true, 'Design keeps anchor X editable for placement recovery');
+  assert.equal(mechanismParamIsPlacementRecoveryEditable(offGridPlacement, 'anchorY', recoveryKit), true, 'Design keeps anchor Y editable for placement recovery');
+  assert.equal(mechanismParamIsPlacementRecoveryEditable(offGridPlacement, 'groundLength', recoveryKit), true, 'Design keeps the explicit four-bar board span editable during placement recovery');
+  const repairedX = constrainMechanismUpdate(offGridPlacement, { anchorX: 0 }, recoveryKit);
+  assert.deepEqual(repairedX, { anchorX: 0 }, 'anchor recovery changes only the requested placement field');
+  const repairedY = constrainMechanismUpdate({ ...offGridPlacement, ...repairedX }, { anchorY: 100 }, recoveryKit);
+  assert.deepEqual(repairedY, { anchorY: 100 }, 'already-repaired anchor Y remains a placement-only update without relocking recovery');
+  const recoveredPlacement = { ...offGridPlacement, ...repairedX, ...repairedY };
+  assert.equal(recoveredPlacement.groundLength, offGridPlacement.groundLength, 'staged anchor recovery preserves the board span');
+  assert.equal(recoveredPlacement.crankLength, offGridPlacement.crankLength, 'staged anchor recovery preserves the selected input-link distance');
+  assert.equal(recoveredPlacement.couplerLength, offGridPlacement.couplerLength, 'staged anchor recovery preserves the managed coupler length');
+  assert.equal(recoveredPlacement.rockerLength, offGridPlacement.rockerLength, 'staged anchor recovery preserves the selected output-link distance');
+  assert(mechanismEditIsSafe(recoveredPlacement, recoveryKit), 'staged anchor recovery restores a fabrication-safe mechanism without resizing links');
 }
 {
   const cam = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism('cam', 'safe-cam-profile')));
@@ -1785,10 +1819,10 @@ ALL_MECHANISM_TYPES.forEach(type => {
     kit: denseKit,
     onChange: () => undefined,
   }));
-  const denseLinkLengths = FABRICATION_LINKAGE_SPECS
-    .map(spec => fabricationLinkageSpecForCells(spec.cells, denseKit.gridPitchMm).lengthMm * SCENE_PX_PER_MM)
+  const managedLinkLengths = FABRICATION_LINKAGE_SPECS
+    .map(spec => spec.lengthMm * SCENE_PX_PER_MM)
     .join(',');
-  assert(denseHtml.includes('data-kit-grid-pitch-mm="10"') && denseHtml.includes(`data-link-option-scene-lengths="${denseLinkLengths}"`), 'parametric editor renders kit-aware link choices from the active physical kit');
+  assert(denseHtml.includes('data-kit-grid-pitch-mm="10"') && denseHtml.includes(`data-link-option-scene-lengths="${managedLinkLengths}"`), 'parametric editor reports active board pitch while keeping managed linkage vectors canonical');
 }
 
 ALL_MECHANISM_TYPES.forEach(type => {
@@ -1823,6 +1857,598 @@ assert(mechanismFeature('cam').interactionPolicy(createDefaultMechanism('cam')).
 assert(!mechanismFeature('cam').interactionPolicy(createDefaultMechanism('cam')).editableParameters.includes('crankLength'), 'cam hides fixed module radii from generic numeric editing');
 assert(!mechanismFeature('cam').interactionPolicy(createDefaultMechanism('cam')).editableParameters.includes('rockerLength'), 'cam hides fixed guide travel from generic numeric editing');
 assert(!mechanismFeature('piston').interactionPolicy(createDefaultMechanism('piston')).editableParameters.includes('rodLength'), 'slider-crank piston hides fixed kit rod dimensions from generic numeric editing');
+
+const connectionSelectionContractFailures: string[] = [];
+const checkConnectionSelectionContract = (name: string, check: () => void) => {
+  try {
+    check();
+  } catch (error) {
+    connectionSelectionContractFailures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+const selectedLinkageKey = FABRICATION_LINKAGE_SPECS.find(spec => spec.holeCentersMm.length >= 3)?.key ?? FABRICATION_LINKAGE_SPECS[0].key;
+const selectedGearKey = FABRICATION_GEAR_SPECS.find(spec => spec.attachmentHoleCentersMm.length >= 3)?.key ?? FABRICATION_GEAR_SPECS[0].key;
+const withConnectionSelections = <T extends MechanismConfig>(mechanism: T, connectionSelections: Record<string, ConnectionSelection>): T =>
+  ({ ...mechanism, connectionSelections }) as T;
+const projectWithConnectionMechanism = (mechanism: MechanismConfig): ProjectState => ({ ...sample, mechanisms: [mechanism] });
+const loadedConnectionMechanism = (mechanism: MechanismConfig): MechanismConfig => loadProjectSnapshot(JSON.parse(serializeProject(projectWithConnectionMechanism(mechanism)))).mechanisms[0];
+const connectionSnapshot = (mechanism: MechanismConfig) => buildMechanismSnapshot(projectWithConnectionMechanism(mechanism), mechanism.id);
+type ConnectionSnapshot = NonNullable<ReturnType<typeof buildMechanismSnapshot>>;
+const graphNode = (snapshot: ConnectionSnapshot, id: string) => snapshot.graph.nodes.find(node => node.id === id);
+const graphConstraint = (snapshot: ConnectionSnapshot, id: string) => snapshot.graph.constraints.find(constraint => constraint.id === id);
+const connectionPointDistance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
+const assertConnectionGraphPoint = (snapshot: ConnectionSnapshot, nodeId: string, expected: Point, label: string) => assertPointClose(graphNode(snapshot, nodeId)?.position, expected, label);
+const assertConnectionGraphDistance = (snapshot: ConnectionSnapshot, constraintId: string, label: string) => {
+  const constraint = graphConstraint(snapshot, constraintId);
+  assert(constraint && Number.isFinite(constraint.value), `${label} constraint has a finite target length`);
+  const [startId, endId] = constraint.nodes;
+  const start = graphNode(snapshot, startId)?.position;
+  const end = graphNode(snapshot, endId)?.position;
+  assert(start && end, `${label} constraint endpoints have graph positions`);
+  const expected = Math.abs(constraint.value as number);
+  const actual = connectionPointDistance(start, end);
+  const tolerance = readinessPhysicalTolerance(expected);
+  assert(Math.abs(actual - expected) <= tolerance, `${label} actual distance ${actual} matches ${expected} within repo tolerance ${tolerance}`);
+};
+const assertFabricationValidConnectionFixture = (mechanism: MechanismConfig, label: string) => {
+  assert.equal(calculateLinkage(mechanism, 0).isValid, true, `${label} closes at the graph reference phase`);
+  assert.deepEqual(validateMechanismPreviewReadiness(mechanism), [], `${label} is preview-ready instead of relying on infeasible geometry`);
+  const fabrication = compileMechanismGraphFabrication(mechanism, sample.settings.physicalKit);
+  assert.equal(fabrication.buildable, true, `${label} is fabrication-valid: ${fabrication.blocker ?? fabrication.renderPlan.validationErrors.join(' | ')}`);
+};
+const stableConnectionFingerprint = (mechanism: MechanismConfig): string => {
+  const snapshot = connectionSnapshot(mechanism);
+  assert(snapshot, `${mechanism.id} snapshot exists`);
+  return snapshot.fingerprint;
+};
+const jsonHasConnectionValidation = (value: unknown): boolean => /connection selection|connectionSelections|invalid role|wrong kind|holeIndex|gearIndex|linkageKey|gearKey/i.test(stableGoldenMasterJson(value));
+
+checkConnectionSelectionContract('persists exact ConnectionSelectionRole union and validates role/kind pairs', () => {
+  const typesText = readFileSync(join(process.cwd(), 'types.ts'), 'utf8');
+  for (const role of CONNECTION_SELECTION_ROLES) assert(typesText.includes(`'${role}'`), `${role} is in the persisted role union`);
+  assert(!/ConnectionSelections\s*=\s*Partial<Record<\s*MechanismDragHandle/.test(typesText), 'connection selections are not keyed by generic MechanismDragHandle values');
+  assert(typesText.includes("kind: 'linkage-hole'") && typesText.includes("kind: 'gear-attachment-hole'"), 'only linkage-hole and gear-attachment-hole value kinds are serializable');
+  assert(typesText.includes('linkageKey: FabricationLinkageKey') && typesText.includes('gearKey: FabricationGearKey'), 'connection part keys use the typed fabrication inventory key contracts');
+
+  const validFourBar = withConnectionSelections(createDefaultMechanism('4bar', 'connection-valid-4bar'), {
+    '4bar.output-joint': { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 2 },
+    '4bar.input-joint': { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 0 }
+  });
+  assert.deepEqual(
+    (
+      loadedConnectionMechanism(validFourBar) as unknown as {
+        connectionSelections?: unknown;
+      }
+    ).connectionSelections,
+    (validFourBar as unknown as { connectionSelections: unknown }).connectionSelections,
+    '4bar linkage-hole selections round-trip through save/load'
+  );
+  assert.equal(connectionSelectionSignature(validFourBar.connectionSelections), `4bar.input-joint:${selectedLinkageKey}:0|4bar.output-joint:${selectedLinkageKey}:2`, 'connection selection signatures use canonical role order instead of object insertion order');
+
+  const validGearLinkage = withConnectionSelections(createDefaultMechanism('gear_linkage', 'connection-valid-gear-linkage'), {
+    'gear_linkage.drive-pin': { kind: 'gear-attachment-hole', gearKey: selectedGearKey, gearIndex: 0, holeIndex: 0 },
+    'gear_linkage.output-pin': { kind: 'gear-attachment-hole', gearKey: selectedGearKey, gearIndex: 1, holeIndex: 2 }
+  });
+  assert.deepEqual(
+    (
+      loadedConnectionMechanism(validGearLinkage) as unknown as {
+        connectionSelections?: unknown;
+      }
+    ).connectionSelections,
+    (validGearLinkage as unknown as { connectionSelections: unknown }).connectionSelections,
+    'gear_linkage gear-attachment-hole selections round-trip through save/load'
+  );
+
+  const invalidFourBar = withConnectionSelections(createDefaultMechanism('4bar', 'connection-invalid-roles'), {
+    P1: { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 0 },
+    J1: { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 1 },
+    J2: { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 2 },
+    '4bar.input-joint': { kind: 'gear-attachment-hole', gearKey: selectedGearKey, gearIndex: 0, holeIndex: 0 },
+    '4bar.output-joint': { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 99 },
+    '4bar.board-hole': { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 0 },
+    'gear.center': { kind: 'gear-attachment-hole', gearKey: selectedGearKey, gearIndex: 0, holeIndex: 0 },
+    illegal: { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 0 }
+  });
+  const loadedInvalid = loadedConnectionMechanism(invalidFourBar) as unknown as { connectionSelections?: Record<string, unknown>; warnings?: string[] };
+  assert.deepEqual(Object.keys(loadedInvalid.connectionSelections ?? {}).sort(), [], 'P1/J1/J2/board-hole/gear-center/illegal and role-kind mismatches are dropped instead of remapped');
+  assert(jsonHasConnectionValidation(loadedInvalid), 'invalid authored connection state carries explicit validation evidence');
+});
+
+checkConnectionSelectionContract('derives defaults only when legacy selections are genuinely missing and keeps snapshot fingerprints stable', () => {
+  const missingLegacy = createDefaultMechanism('4bar', 'connection-missing-legacy');
+  const loadedMissingA = loadedConnectionMechanism(missingLegacy);
+  const loadedMissingB = loadedConnectionMechanism(missingLegacy);
+  assert.deepEqual((loadedMissingA as unknown as { connectionSelections?: unknown }).connectionSelections, (loadedMissingB as unknown as { connectionSelections?: unknown }).connectionSelections, 'missing legacy selection defaults are deterministic');
+  assert.equal(stableConnectionFingerprint(loadedMissingA), stableConnectionFingerprint(loadedMissingB), 'missing legacy defaults produce a stable snapshot fingerprint');
+
+  const fourBarDefaults = normalizeMechanismConnectionSelections(missingLegacy, undefined);
+  const defaultInput = fourBarDefaults.connectionSelections?.['4bar.input-joint'];
+  const defaultOutput = fourBarDefaults.connectionSelections?.['4bar.output-joint'];
+  assert(defaultInput?.kind === 'linkage-hole' && defaultOutput?.kind === 'linkage-hole', '4bar legacy defaults resolve both physical roles');
+  const partialFourBar = normalizeMechanismConnectionSelections(missingLegacy, {
+    '4bar.input-joint': defaultInput,
+  });
+  assert.deepEqual(partialFourBar.connectionSelections?.['4bar.input-joint'], defaultInput, 'partial 4bar state preserves its authored input role');
+  assert.deepEqual(partialFourBar.connectionSelections?.['4bar.output-joint'], defaultOutput, 'partial 4bar state defaults only the genuinely absent output role');
+  assert(connectionSelectionAccepted(partialFourBar.connectionSelectionValidation, '4bar.input-joint'), 'present partial 4bar input is accepted as authored');
+  assert(partialFourBar.connectionSelectionValidation?.entries.some(entry => entry.role === '4bar.output-joint' && entry.status === 'defaulted'), 'absent partial 4bar output keeps compatibility-default evidence');
+
+  const explicitlyReauthoredDefault = authorMechanismConnectionSelection(
+    { ...missingLegacy, ...fourBarDefaults },
+    '4bar.input-joint',
+    defaultInput,
+  );
+  assert(connectionSelectionAccepted(explicitlyReauthoredDefault.connectionSelectionValidation, '4bar.input-joint'), 'explicitly reselecting the deterministic input hole records authored acceptance');
+  assert(explicitlyReauthoredDefault.connectionSelectionValidation?.entries.some(entry => entry.role === '4bar.output-joint' && entry.status === 'defaulted'), 'explicit input reauthoring preserves unrelated legacy-default provenance');
+
+  const missingGearLinkage = createDefaultMechanism('gear_linkage', 'connection-partial-gear-linkage');
+  const gearLinkageDefaults = normalizeMechanismConnectionSelections(missingGearLinkage, undefined);
+  const defaultDrive = gearLinkageDefaults.connectionSelections?.['gear_linkage.drive-pin'];
+  const defaultOutputPin = gearLinkageDefaults.connectionSelections?.['gear_linkage.output-pin'];
+  assert(defaultDrive?.kind === 'gear-attachment-hole' && defaultOutputPin?.kind === 'gear-attachment-hole', 'gear_linkage legacy defaults resolve both physical roles');
+  const partialGearLinkage = normalizeMechanismConnectionSelections(missingGearLinkage, {
+    'gear_linkage.drive-pin': defaultDrive,
+  });
+  assert.deepEqual(partialGearLinkage.connectionSelections?.['gear_linkage.drive-pin'], defaultDrive, 'partial gear_linkage state preserves its authored drive pin');
+  assert.deepEqual(partialGearLinkage.connectionSelections?.['gear_linkage.output-pin'], defaultOutputPin, 'partial gear_linkage state defaults only the genuinely absent output pin');
+  assert(connectionSelectionAccepted(partialGearLinkage.connectionSelectionValidation, 'gear_linkage.drive-pin'), 'present partial gear_linkage drive pin is accepted as authored');
+  assert(partialGearLinkage.connectionSelectionValidation?.entries.some(entry => entry.role === 'gear_linkage.output-pin' && entry.status === 'defaulted'), 'absent partial gear_linkage output pin keeps compatibility-default evidence');
+
+  const invalidAuthored = withConnectionSelections(createDefaultMechanism('4bar', 'connection-invalid-not-default'), {
+    '4bar.input-joint': { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 999 }
+  });
+  const loadedInvalid = loadedConnectionMechanism(invalidAuthored) as unknown as { connectionSelections?: Record<string, unknown> };
+  assert(!loadedInvalid.connectionSelections?.['4bar.input-joint'], 'authored invalid holeIndex does not become the deterministic default');
+  assert.deepEqual(loadedInvalid.connectionSelections?.['4bar.output-joint'], defaultOutput, 'invalid authored input does not suppress the genuinely absent output default');
+  assert.notEqual(stableConnectionFingerprint(loadedInvalid as MechanismConfig), stableConnectionFingerprint(loadedMissingA), 'authored invalid state is distinguishable from genuinely missing legacy defaults in snapshots/fingerprints');
+});
+
+checkConnectionSelectionContract('preserves authored invalid connection evidence after rejected entries are dropped', () => {
+  const invalidAuthored = withConnectionSelections(createDefaultMechanism('4bar', 'connection-invalid-evidence'), {
+    '4bar.input-joint': { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 999 },
+    illegal: { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 0 }
+  });
+  const loadedInvalid = loadedConnectionMechanism(invalidAuthored);
+  assert.deepEqual(Object.keys(loadedInvalid.connectionSelections ?? {}), ['4bar.output-joint'], 'invalid authored entries are dropped while the genuinely absent sibling role defaults');
+  assert.equal(loadedInvalid.connectionSelectionValidation?.status, 'invalid', 'dropped authored entries retain an invalid validation result');
+  assert(loadedInvalid.connectionSelectionValidation?.entries.some(entry => entry.role === '4bar.input-joint' && entry.status === 'rejected'), 'retained validation identifies the dropped authored input as rejected');
+  assert(loadedInvalid.connectionSelectionValidation?.entries.some(entry => entry.role === 'illegal' && entry.status === 'rejected'), 'retained validation identifies the illegal authored role as rejected');
+  assert(loadedInvalid.connectionSelectionValidation?.entries.some(entry => entry.role === '4bar.output-joint' && entry.status === 'defaulted'), 'retained validation distinguishes the genuinely absent output default from rejected authored state');
+
+  const snapshot = connectionSnapshot(loadedInvalid);
+  assert(snapshot, 'invalid authored connection snapshot exists');
+  const compiled = compileMechanism(loadedInvalid);
+  const evidenceSurfaces: Record<string, unknown> = {
+    'snapshot mechanism': snapshot.mechanism.connectionSelectionValidation,
+    'snapshot graph': snapshot.graph.connectionSelectionSummary,
+    'snapshot fabrication plan': snapshot.fabricationPlan.connectionSelectionSummary,
+    'snapshot compiler summary': snapshot.graphCompiler.connectionSelectionSummary,
+    'direct graph': mechanismGraphForMechanism(loadedInvalid).connectionSelectionSummary,
+    'direct compiler summary': summarizeCompiledMechanism(compiled).connectionSelectionSummary
+  };
+  assert.deepEqual(
+    Object.entries(evidenceSurfaces)
+      .filter(([, value]) => !jsonHasConnectionValidation(value))
+      .map(([surface]) => surface),
+    [],
+    'authored invalid connection validation evidence survives every snapshot, graph, fabrication, and compiler summary surface'
+  );
+});
+
+checkConnectionSelectionContract('repairs only the physically re-authored role while preserving unrelated rejection evidence', () => {
+  const invalidAuthored = withConnectionSelections(createDefaultMechanism('4bar', 'connection-per-role-repair'), {
+    '4bar.input-joint': { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 998 },
+    '4bar.output-joint': { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 999 }
+  });
+  const invalidState = normalizeMechanismConnectionSelections(invalidAuthored, invalidAuthored.connectionSelections);
+  const invalidMechanism = { ...invalidAuthored, ...invalidState };
+  const repairCandidates = mechanismConnectionHoleCandidates(invalidMechanism, calculateLinkage(invalidMechanism, 0));
+  assert(repairCandidates.some(candidate => candidate.role === '4bar.input-joint'), 'rejected 4bar input still exposes physical-hole candidates for an explicit repair gesture');
+  assert(repairCandidates.filter(candidate => candidate.role === '4bar.input-joint').every(candidate => !candidate.selected), 'rejected 4bar input candidates do not masquerade as a default authored selection');
+  const repaired = { ...invalidMechanism, ...authorMechanismConnectionSelection(invalidMechanism, '4bar.input-joint', { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 1 }) };
+  assert.equal(repaired.connectionSelections?.['4bar.input-joint']?.holeIndex, 1, 'new physical input gesture replaces the rejected input role');
+  assert(!repaired.connectionSelections?.['4bar.output-joint'], 'unrepaired output selection remains dropped');
+  assert.equal(repaired.connectionSelectionValidation?.status, 'invalid', 'unrelated rejected output evidence keeps the mechanism invalid');
+  assert(repaired.connectionSelectionValidation?.entries.some(entry => entry.role === '4bar.output-joint' && entry.status === 'rejected'), 'unrelated output rejection survives input repair');
+  assert(!repaired.connectionSelectionValidation?.entries.some(entry => entry.role === '4bar.input-joint' && entry.status === 'rejected'), 'repaired input rejection is cleared by its new physical gesture');
+});
+
+checkConnectionSelectionContract('keeps 4bar selected physical holes authoritative over legacy endpoint scalars', () => {
+  const scalarDesynced = withConnectionSelections(
+    { ...createDefaultMechanism('4bar', 'connection-fourbar-scalar-desync'), crankLength: 999, rockerLength: 777 },
+    {
+      '4bar.input-joint': { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 1 },
+      '4bar.output-joint': { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 2 }
+    }
+  );
+  const loaded = loadedConnectionMechanism(scalarDesynced);
+  const resolved = resolveFourBarConnectionSelections(loaded);
+  assert(resolved.inputJoint && resolved.outputJoint, '4bar selected input/output holes resolve to physical endpoint lengths');
+  assert.equal(loaded.crankLength, resolved.inputJoint.length, 'selected input physical hole updates the compatibility crankLength scalar');
+  assert.equal(loaded.rockerLength, resolved.outputJoint.length, 'selected output physical hole updates the compatibility rockerLength scalar');
+  const state = calculateLinkage(loaded, 0);
+  const coordinates = connectionSelectionSceneCoordinates(loaded, state, loaded.connectionSelections);
+  const inputCoordinate = coordinates['4bar.input-joint'];
+  const outputCoordinate = coordinates['4bar.output-joint'];
+  assert(inputCoordinate && outputCoordinate, '4bar selected-hole coordinates exist');
+  assertPointClose(state.j1, inputCoordinate, 'J1 stays driven by the selected input hole, not stale crankLength');
+  assertPointClose(state.j2, outputCoordinate, 'J2 stays driven by the selected output hole, not stale rockerLength');
+  assertConnectionGraphPoint(connectionSnapshot(loaded)!, 'j1', inputCoordinate, 'graph J1 stays synchronized to selected physical input hole');
+  assertConnectionGraphPoint(connectionSnapshot(loaded)!, 'j2', outputCoordinate, 'graph J2 stays synchronized to selected physical output hole');
+});
+
+checkConnectionSelectionContract('keeps the selected full linkage blank while using an interior hole as the effective 4bar joint', () => {
+  const fullSpec = FABRICATION_LINKAGE_SPECS.at(-1)!;
+  const selectedHoleIndex = Math.min(2, fullSpec.holeCentersMm.length - 2);
+  const mechanism = loadedConnectionMechanism(withConnectionSelections(createDefaultMechanism('4bar', 'connection-full-blank-interior-hole'), {
+    '4bar.input-joint': { kind: 'linkage-hole', linkageKey: fullSpec.key, holeIndex: selectedHoleIndex },
+    '4bar.output-joint': { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 2 }
+  }));
+  const selectedHole = fullSpec.holeCentersMm[selectedHoleIndex];
+  const firstHole = fullSpec.holeCentersMm[0];
+  const expectedJointDistance = Math.hypot(selectedHole.x - firstHole.x, selectedHole.y - firstHole.y) * SCENE_PX_PER_MM;
+  const state = calculateLinkage(mechanism, 0);
+  const resolved = resolveFourBarConnectionSelections(mechanism);
+  const blankPose = resolveFourBarLinkageBlankPoses(mechanism, state)['4bar.input-joint'];
+  const graph = mechanismGraphForMechanism(mechanism);
+  const fabrication = compileMechanismGraphFabrication(mechanism, sample.settings.physicalKit);
+
+  assert.equal(resolved.inputJoint?.length, expectedJointDistance, 'effective input distance comes from the selected interior hole offset');
+  assert.equal(graph.constraints.find(constraint => constraint.id === 'input-length')?.value, expectedJointDistance, 'graph distance constraint uses the selected interior hole offset');
+  assert.equal(blankPose?.partKey, fullSpec.key, 'shared renderer pose keeps the selected full managed blank key');
+  assert.equal(blankPose?.selectedHoleIndex, selectedHoleIndex, 'shared renderer pose identifies the physical interior pivot');
+  assert(blankPose && connectionPointDistance(blankPose.origin, blankPose.end) > expectedJointDistance, 'full blank renderer pose extends beyond the selected interior joint');
+  assert(fabrication.recipe?.requiredParts.some(part => part.part === `linkages:${fullSpec.key}`), 'fabrication requiredParts keeps the full selected linkage blank instead of substituting a shorter part');
+  assert(fabrication.renderPlan.connectionSelectionSummary?.connectionSelections?.['4bar.input-joint']?.kind === 'linkage-hole', 'render plan carries the same selected full-blank role');
+});
+
+checkConnectionSelectionContract('propagates independent fabrication-valid 4bar hole coordinates through graph, kinematics, fabrication, and export snapshots', () => {
+  const fourBarBase = createDefaultMechanism('4bar', 'connection-coordinate-4bar');
+  const fourBarInputA = withConnectionSelections(fourBarBase, {
+    '4bar.input-joint': { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 1 },
+    '4bar.output-joint': { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 2 }
+  });
+  const fourBarInputB = withConnectionSelections(fourBarBase, {
+    '4bar.input-joint': { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 2 },
+    '4bar.output-joint': { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 2 }
+  });
+  const fourBarOutputB = withConnectionSelections(fourBarBase, {
+    '4bar.input-joint': { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 1 },
+    '4bar.output-joint': { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 1 }
+  });
+  const fourBarInputASnapshot = connectionSnapshot(fourBarInputA);
+  const fourBarInputBSnapshot = connectionSnapshot(fourBarInputB);
+  const fourBarOutputBSnapshot = connectionSnapshot(fourBarOutputB);
+  assert(fourBarInputASnapshot && fourBarInputBSnapshot && fourBarOutputBSnapshot, '4bar selection snapshots exist');
+  [fourBarInputA, fourBarInputB, fourBarOutputB].forEach((mechanism, index) => assertFabricationValidConnectionFixture(mechanism, `4bar fabrication-valid selection ${index + 1}`));
+  assert.deepEqual(fourBarInputA.connectionSelections?.['4bar.output-joint'], fourBarInputB.connectionSelections?.['4bar.output-joint'], '4bar input variation leaves the authored output selection record unchanged');
+  assert.deepEqual(fourBarInputA.connectionSelections?.['4bar.input-joint'], fourBarOutputB.connectionSelections?.['4bar.input-joint'], '4bar output variation leaves the authored input selection record unchanged');
+  assert.deepEqual(graphNode(fourBarInputASnapshot, 'p1')?.position, graphNode(fourBarInputBSnapshot, 'p1')?.position, '4bar input variation keeps fixed input ground unchanged');
+  assert.deepEqual(graphNode(fourBarInputASnapshot, 'p2')?.position, graphNode(fourBarInputBSnapshot, 'p2')?.position, '4bar input variation keeps fixed output ground unchanged');
+  assert.equal(graphConstraint(fourBarInputASnapshot, 'coupler-length')?.value, graphConstraint(fourBarInputBSnapshot, 'coupler-length')?.value, '4bar input variation leaves derived coupler length unchanged');
+  assert.equal(graphConstraint(fourBarInputASnapshot, 'output-length')?.value, graphConstraint(fourBarInputBSnapshot, 'output-length')?.value, '4bar input variation leaves effective output length unchanged');
+  assert.notDeepEqual(graphNode(fourBarInputASnapshot, 'j1')?.position, graphNode(fourBarInputBSnapshot, 'j1')?.position, '4bar input-joint hole changes input crank coordinate');
+  assert.deepEqual(graphNode(fourBarInputASnapshot, 'j1')?.position, graphNode(fourBarOutputBSnapshot, 'j1')?.position, '4bar output-joint variation leaves the input crank coordinate unchanged');
+  assert.notDeepEqual(graphNode(fourBarInputASnapshot, 'j2')?.position, graphNode(fourBarOutputBSnapshot, 'j2')?.position, '4bar output-joint hole changes output rocker coordinate');
+  ([[fourBarInputA, fourBarInputASnapshot, '4bar short input'], [fourBarInputB, fourBarInputBSnapshot, '4bar full input'], [fourBarOutputB, fourBarOutputBSnapshot, '4bar short output']] as const).forEach(([mechanism, snapshot, label]) => {
+    const state = calculateLinkage(mechanism, 0);
+    assertConnectionGraphPoint(snapshot, 'p1', state.p1, `${label} graph p1 matches calculateLinkage`);
+    assertConnectionGraphPoint(snapshot, 'p2', state.p2, `${label} graph p2 matches calculateLinkage`);
+    assertConnectionGraphPoint(snapshot, 'j1', state.j1, `${label} graph j1 matches calculateLinkage`);
+    assertConnectionGraphPoint(snapshot, 'j2', state.j2, `${label} graph j2 matches calculateLinkage`);
+    assertConnectionGraphPoint(snapshot, 'effector', state.effector, `${label} graph effector matches calculateLinkage`);
+    assertConnectionGraphDistance(snapshot, 'input-length', `${label} input-length`);
+    assertConnectionGraphDistance(snapshot, 'coupler-length', `${label} coupler-length`);
+    assertConnectionGraphDistance(snapshot, 'output-length', `${label} output-length`);
+  });
+  assert(jsonHasConnectionValidation(fourBarInputBSnapshot.fabricationPlan) && jsonHasConnectionValidation(fourBarInputBSnapshot.graphCompiler), '4bar selected hole role is visible in fabrication/export compiler summaries');
+});
+
+checkConnectionSelectionContract('keeps Foundry hole geometry in the shared connection-selection domain', () => {
+  const foundryStageText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'MechanismFoundry.tsx'), 'utf8');
+  const foundryOverlayText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'FoundryOverlayLayer.tsx'), 'utf8');
+  assert(foundryStageText.includes('mechanismConnectionHoleCandidates') && foundryStageText.includes('connectionSelectionSceneCoordinates'), 'Foundry consumes shared connection-selection geometry helpers');
+  assert(/connectionSelectionSceneCoordinates\(\s*landedFoundry,\s*selectedSimulation\.state,\s*selectedConnectionState\.connectionSelections,\s*\)/.test(foundryStageText), 'Foundry selected-coordinate telemetry uses the canonical normalized/defaulted selection pair');
+  assert(foundryStageText.includes('authorMechanismConnectionSelection('), 'Foundry delegates physical-hole writes and per-role validation repair to the connection-selection domain');
+  assert(!foundryStageText.includes('connectionSelectionValidation.entries.filter'), 'Foundry does not manipulate connection-validation evidence in the stage layer');
+  assert(!foundryStageText.includes('...(landedFoundry.connectionSelections ?? {})'), 'Foundry physical-hole writes never start from partial raw persisted selections');
+  assert(foundryOverlayText.includes('onPointerDown={onConnectionHolePointerDown(handle)}'), 'Foundry physical holes author through the pointer-down affordance path');
+  assert(!foundryOverlayText.includes('onClick={onConnectionHolePointerDown(handle)'), 'Foundry physical holes do not dispatch the same authoring gesture again on click');
+  for (const privateGeometry of ['FABRICATION_GEAR_SPECS', 'FABRICATION_LINKAGE_SPECS', 'SCENE_PX_PER_MM', 'gearTrainPitchRadii', 'rotateSceneOffset']) {
+    assert(!foundryStageText.includes(privateGeometry), `Foundry stage does not own private ${privateGeometry} connection geometry`);
+  }
+
+  const fourBar = withConnectionSelections(createDefaultMechanism('4bar', 'connection-candidate-4bar'), {
+    '4bar.input-joint': { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 1 },
+    '4bar.output-joint': { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 2 }
+  });
+  const fourBarState = calculateLinkage(fourBar, 0);
+  const fourBarCandidates = mechanismConnectionHoleCandidates(fourBar, fourBarState);
+  assert(fourBarCandidates.some(candidate => candidate.role === '4bar.input-joint' && candidate.kind === 'linkage-hole' && candidate.partKey === selectedLinkageKey && candidate.holeIndex === 1 && candidate.selected), '4bar input candidate carries exact role/kind/part/hole/selected selection data');
+  assert(fourBarCandidates.some(candidate => candidate.role === '4bar.output-joint' && candidate.selection.kind === 'linkage-hole' && candidate.selection.holeIndex === 2 && candidate.selected), '4bar output candidate carries canonical linkage selection data');
+  assert(!fourBarCandidates.some(candidate => candidate.role.startsWith('4bar.') && candidate.holeIndex === 0), '4bar ground hole remains validator-compatible but is not authorable in Foundry candidates');
+  const fourBarCoordinates = connectionSelectionSceneCoordinates(fourBar, fourBarState);
+  assertPointClose(fourBarCandidates.find(candidate => candidate.role === '4bar.input-joint' && candidate.selected)?.coordinate, fourBarCoordinates['4bar.input-joint'], '4bar selected candidate coordinate matches shared selected-coordinate helper');
+
+  const gear = withConnectionSelections(createDefaultMechanism('gear_linkage', 'connection-candidate-gear-linkage'), {
+    'gear_linkage.drive-pin': { kind: 'gear-attachment-hole', gearKey: selectedGearKey, gearIndex: 0, holeIndex: 0 },
+    'gear_linkage.output-pin': { kind: 'gear-attachment-hole', gearKey: selectedGearKey, gearIndex: 1, holeIndex: 1 }
+  });
+  const gearState = calculateLinkage(gear, 0);
+  const gearCandidates = mechanismConnectionHoleCandidates(gear, gearState);
+  assert(gearCandidates.some(candidate => candidate.role === 'gear_linkage.drive-pin' && candidate.kind === 'gear-attachment-hole' && candidate.partKey === selectedGearKey && candidate.selection.kind === 'gear-attachment-hole' && candidate.selection.gearIndex === 0 && candidate.selected), 'gear_linkage drive candidate carries exact role/kind/part/hole/gear selection data');
+  assert(gearCandidates.some(candidate => candidate.role === 'gear_linkage.output-pin' && candidate.selection.kind === 'gear-attachment-hole' && candidate.selection.gearIndex === 1 && candidate.selected), 'gear_linkage output candidate carries canonical output gear selection data');
+  const gearCoordinates = connectionSelectionSceneCoordinates(gear, gearState);
+  assertPointClose(gearCoordinates['gear_linkage.drive-pin'], gearState.j1, 'gear_linkage selected drive coordinate is the canonical calculated drive pin');
+  assertPointClose(gearCoordinates['gear_linkage.output-pin'], gearState.j2, 'gear_linkage selected output coordinate is the canonical calculated output pin');
+  assertPointClose(gearCandidates.find(candidate => candidate.role === 'gear_linkage.output-pin' && candidate.selected)?.coordinate, gearCoordinates['gear_linkage.output-pin'], 'gear_linkage selected candidate coordinate matches shared selected-coordinate helper');
+
+  const nextDriveCandidate = gearCandidates.find(candidate => candidate.role === 'gear_linkage.drive-pin' && candidate.holeIndex === 2);
+  const nextOutputCandidate = gearCandidates.find(candidate => candidate.role === 'gear_linkage.output-pin' && candidate.holeIndex === 2);
+  assert(nextDriveCandidate && nextOutputCandidate, 'gear_linkage exposes alternate drive and output attachment-hole candidates');
+  const gearWithNextDrive = withConnectionSelections(gear, {
+    'gear_linkage.drive-pin': { kind: 'gear-attachment-hole', gearKey: selectedGearKey, gearIndex: 0, holeIndex: 2 },
+    'gear_linkage.output-pin': { kind: 'gear-attachment-hole', gearKey: selectedGearKey, gearIndex: 1, holeIndex: 1 }
+  });
+  const gearWithNextDriveState = calculateLinkage(gearWithNextDrive, 0);
+  const gearWithNextDriveCoordinates = connectionSelectionSceneCoordinates(gearWithNextDrive, gearWithNextDriveState);
+  assertPointClose(nextDriveCandidate.coordinate, gearWithNextDriveCoordinates['gear_linkage.drive-pin'], 'drive candidate coordinate before selection equals its canonical selected coordinate after selection');
+
+  const gearWithNextOutput = withConnectionSelections(gear, {
+    'gear_linkage.drive-pin': { kind: 'gear-attachment-hole', gearKey: selectedGearKey, gearIndex: 0, holeIndex: 0 },
+    'gear_linkage.output-pin': { kind: 'gear-attachment-hole', gearKey: selectedGearKey, gearIndex: 1, holeIndex: 2 }
+  });
+  const gearWithNextOutputState = calculateLinkage(gearWithNextOutput, 0);
+  const gearWithNextOutputCoordinates = connectionSelectionSceneCoordinates(gearWithNextOutput, gearWithNextOutputState);
+  assertPointClose(nextOutputCandidate.coordinate, gearWithNextOutputCoordinates['gear_linkage.output-pin'], 'output candidate coordinate before selection equals its canonical selected coordinate after selection');
+  assertPointClose(gearWithNextOutputState.j1, gearState.j1, 'changing the output attachment hole does not move the drive pin');
+  assertPointClose(gearWithNextOutputState.p1, gearState.p1, 'changing the output attachment hole does not move the drive center');
+  assertPointClose(gearWithNextOutputState.p2, gearState.p2, 'changing the output attachment hole does not move the output center');
+});
+
+checkConnectionSelectionContract('recovers gear_linkage candidates after endpoint gear geometry invalidates an old selection', () => {
+  const driveSpec = FABRICATION_GEAR_SPECS.find(spec => spec.key !== selectedGearKey && spec.attachmentHoleCentersMm.length >= 3) ?? FABRICATION_GEAR_SPECS[0];
+  const driveRadius = driveSpec.pitchRadiusMm * SCENE_PX_PER_MM;
+  const changedDrive = withConnectionSelections(
+    { ...createDefaultMechanism('gear_linkage', 'connection-gear-linkage-gear-change'), gearTrainRadii: [driveRadius, createDefaultMechanism('gear_linkage', 'connection-gear-linkage-gear-change-base').gearTrainRadii?.at(-1) ?? driveRadius], crankLength: driveRadius },
+    {
+      'gear_linkage.drive-pin': { kind: 'gear-attachment-hole', gearKey: selectedGearKey, gearIndex: 0, holeIndex: 1 },
+      'gear_linkage.output-pin': { kind: 'gear-attachment-hole', gearKey: selectedGearKey, gearIndex: 1, holeIndex: 2 }
+    }
+  );
+  const normalized = normalizeMechanismConnectionSelections(changedDrive, changedDrive.connectionSelections);
+  assert(!normalized.connectionSelections?.['gear_linkage.drive-pin'], 'old drive gearKey selection is dropped after endpoint gear geometry changes');
+  assert.deepEqual(normalized.connectionSelections?.['gear_linkage.output-pin'], changedDrive.connectionSelections?.['gear_linkage.output-pin'], 'valid output-pin selection survives an unrelated drive gear change');
+  assert.equal(normalized.connectionSelectionValidation?.status, 'invalid', 'stale drive selection leaves fresh invalid evidence');
+  assert(normalized.connectionSelectionValidation?.entries.some(entry => entry.role === 'gear_linkage.drive-pin' && entry.status === 'rejected' && /gearKey/.test(entry.reason ?? '')), 'invalid evidence names the stale drive gearKey');
+
+  const state = calculateLinkage(changedDrive, 0);
+  const candidates = mechanismConnectionHoleCandidates(changedDrive, state, changedDrive.connectionSelections);
+  assert(candidates.some(candidate => candidate.role === 'gear_linkage.drive-pin' && candidate.partKey === driveSpec.key && candidate.holeIndex !== 1 && !candidate.selected), 'candidate recovery exposes unselected holes from the current drive gear spec');
+  assert(candidates.some(candidate => candidate.role === 'gear_linkage.output-pin' && candidate.partKey === selectedGearKey && candidate.holeIndex === 2 && candidate.selected), 'candidate recovery preserves the still-valid output selection');
+
+  const replacement = candidates.find(candidate => candidate.role === 'gear_linkage.drive-pin' && candidate.partKey === driveSpec.key && candidate.holeIndex !== 1)!;
+  const repaired = { ...changedDrive, ...normalized, ...authorMechanismConnectionSelection({ ...changedDrive, ...normalized }, 'gear_linkage.drive-pin', replacement.selection) };
+  assert.deepEqual(repaired.connectionSelections?.['gear_linkage.drive-pin'], replacement.selection, 'new physical-hole gesture replaces exactly the stale drive role');
+  assert.deepEqual(repaired.connectionSelections?.['gear_linkage.output-pin'], normalized.connectionSelections?.['gear_linkage.output-pin'], 'new drive gesture preserves the unrelated output selection');
+});
+
+checkConnectionSelectionContract('propagates independent gear_linkage holes and nonzero driver phase through graph, kinematics, fabrication, and export snapshots', () => {
+  const gearBase = createDefaultMechanism('gear_linkage', 'connection-coordinate-gear-linkage');
+  const gearDriveA = withConnectionSelections(gearBase, {
+    'gear_linkage.drive-pin': { kind: 'gear-attachment-hole', gearKey: selectedGearKey, gearIndex: 0, holeIndex: 0 },
+    'gear_linkage.output-pin': { kind: 'gear-attachment-hole', gearKey: selectedGearKey, gearIndex: 1, holeIndex: 1 }
+  });
+  const gearDriveB = withConnectionSelections(gearBase, {
+    'gear_linkage.drive-pin': { kind: 'gear-attachment-hole', gearKey: selectedGearKey, gearIndex: 0, holeIndex: 2 },
+    'gear_linkage.output-pin': { kind: 'gear-attachment-hole', gearKey: selectedGearKey, gearIndex: 1, holeIndex: 1 }
+  });
+  const gearOutputB = withConnectionSelections(gearBase, {
+    'gear_linkage.drive-pin': { kind: 'gear-attachment-hole', gearKey: selectedGearKey, gearIndex: 0, holeIndex: 0 },
+    'gear_linkage.output-pin': { kind: 'gear-attachment-hole', gearKey: selectedGearKey, gearIndex: 1, holeIndex: 2 }
+  });
+  const gearDriveASnapshot = connectionSnapshot(gearDriveA);
+  const gearDriveBSnapshot = connectionSnapshot(gearDriveB);
+  const gearOutputBSnapshot = connectionSnapshot(gearOutputB);
+  assert(gearDriveASnapshot && gearDriveBSnapshot && gearOutputBSnapshot, 'gear_linkage selection snapshots exist');
+  [gearDriveA, gearDriveB, gearOutputB].forEach((mechanism, index) => assertFabricationValidConnectionFixture(mechanism, `gear_linkage fabrication-valid selection ${index + 1}`));
+  assert.deepEqual(gearDriveA.connectionSelections?.['gear_linkage.output-pin'], gearDriveB.connectionSelections?.['gear_linkage.output-pin'], 'gear_linkage drive variation leaves the authored output-pin selection unchanged');
+  assert.deepEqual(gearDriveA.connectionSelections?.['gear_linkage.drive-pin'], gearOutputB.connectionSelections?.['gear_linkage.drive-pin'], 'gear_linkage output variation leaves the authored drive-pin selection unchanged');
+  assert.deepEqual(graphNode(gearDriveASnapshot, 'gear-0')?.position, graphNode(gearDriveBSnapshot, 'gear-0')?.position, 'gear_linkage drive variation keeps first gear center fixed');
+  assert.deepEqual(graphNode(gearDriveASnapshot, 'gear-1')?.position, graphNode(gearDriveBSnapshot, 'gear-1')?.position, 'gear_linkage drive variation keeps last gear center fixed');
+  assert.equal(graphConstraint(gearDriveASnapshot, 'drive-connector-length')?.value, graphConstraint(gearDriveBSnapshot, 'drive-connector-length')?.value, 'gear_linkage drive variation leaves the derived drive connector length unchanged');
+  assert.equal(graphConstraint(gearDriveASnapshot, 'output-connector-length')?.value, graphConstraint(gearDriveBSnapshot, 'output-connector-length')?.value, 'gear_linkage drive variation leaves the derived output connector length unchanged');
+  assert.notDeepEqual(graphNode(gearDriveASnapshot, 'drive-pin')?.position, graphNode(gearDriveBSnapshot, 'drive-pin')?.position, 'gear_linkage drive-pin hole changes first gear attachment offset');
+  assert.deepEqual(graphNode(gearDriveASnapshot, 'output-pin')?.position, graphNode(gearDriveBSnapshot, 'output-pin')?.position, 'gear_linkage drive-pin hole does not mutate output authored pin');
+  assert.notDeepEqual(graphNode(gearDriveASnapshot, 'output-pin')?.position, graphNode(gearOutputBSnapshot, 'output-pin')?.position, 'gear_linkage output-pin hole changes last gear attachment offset');
+
+  const phasedGear = withConnectionSelections(
+    { ...gearBase, id: 'connection-coordinate-gear-linkage-phase', driverPhaseOffset: 0.37 },
+    {
+      'gear_linkage.drive-pin': { kind: 'gear-attachment-hole', gearKey: selectedGearKey, gearIndex: 0, holeIndex: 0 },
+      'gear_linkage.output-pin': { kind: 'gear-attachment-hole', gearKey: selectedGearKey, gearIndex: 1, holeIndex: 2 }
+    }
+  );
+  const phasedSnapshot = connectionSnapshot(phasedGear);
+  assert(phasedSnapshot, 'gear_linkage nonzero driver phase snapshot exists');
+  assert.notEqual(phasedGear.driverPhaseOffset, 0, 'gear_linkage parity fixture exercises a nonzero driver phase offset');
+  assertFabricationValidConnectionFixture(phasedGear, 'gear_linkage nonzero driver phase selection');
+  const phasedState = calculateLinkage(phasedGear, 0);
+  assertConnectionGraphPoint(phasedSnapshot, 'gear-0', phasedState.p1, 'gear_linkage phased graph drive center matches calculateLinkage');
+  assertConnectionGraphPoint(phasedSnapshot, 'gear-1', phasedState.p2, 'gear_linkage phased graph output center matches calculateLinkage');
+  assertConnectionGraphPoint(phasedSnapshot, 'drive-pin', phasedState.j1, 'gear_linkage phased graph drive pin matches calculateLinkage');
+  assertConnectionGraphPoint(phasedSnapshot, 'output-pin', phasedState.j2, 'gear_linkage phased graph output pin matches calculateLinkage');
+  assertConnectionGraphPoint(phasedSnapshot, 'effector', phasedState.effector, 'gear_linkage phased graph connector matches calculateLinkage');
+  assertConnectionGraphDistance(phasedSnapshot, 'drive-crank-offset', 'gear_linkage phased drive crank offset');
+  assertConnectionGraphDistance(phasedSnapshot, 'output-crank-offset', 'gear_linkage phased output crank offset');
+  assertConnectionGraphDistance(phasedSnapshot, 'drive-connector-length', 'gear_linkage phased drive connector');
+  assertConnectionGraphDistance(phasedSnapshot, 'output-connector-length', 'gear_linkage phased output connector');
+  assert.equal(graphConstraint(phasedSnapshot, 'connector-output')?.value, graphConstraint(phasedSnapshot, 'drive-connector-length')?.value, 'gear_linkage shared connector output retains the derived connector length');
+  assert(jsonHasConnectionValidation(gearDriveBSnapshot.fabricationPlan) && jsonHasConnectionValidation(gearDriveBSnapshot.graphCompiler), 'gear_linkage selected hole role is visible in fabrication/export compiler summaries');
+  const selectedGearFabrication = compileMechanismGraphFabrication(gearDriveB, sample.settings.physicalKit);
+  const denseSelectedGearFabrication = compileMechanismGraphFabrication(gearDriveB, { ...sample.settings.physicalKit, gridPitchMm: 10, boardCells: 30 });
+  const selectedGearParts = (recipe = selectedGearFabrication.recipe) => recipe?.requiredParts.filter(part => part.category === 'gear').map(part => part.part).sort() ?? [];
+  const selectedAttachmentSpec = FABRICATION_GEAR_SPECS.find(spec => spec.key === selectedGearKey);
+  assert(selectedAttachmentSpec, 'selected managed gear specification exists');
+  const selectedDriveRadius = Math.hypot(selectedAttachmentSpec.attachmentHoleCentersMm[2].x, selectedAttachmentSpec.attachmentHoleCentersMm[2].y) * SCENE_PX_PER_MM;
+  const selectedOutputRadius = Math.hypot(selectedAttachmentSpec.attachmentHoleCentersMm[1].x, selectedAttachmentSpec.attachmentHoleCentersMm[1].y) * SCENE_PX_PER_MM;
+  assert.equal(graphNode(gearDriveBSnapshot, 'drive-crank-link')?.fabricated, false, 'drive gear attachment span remains in the graph but is embodied by the gear instead of a duplicate linkage blank');
+  assert.equal(graphNode(gearDriveBSnapshot, 'output-crank-link')?.fabricated, false, 'output gear attachment span remains in the graph but is embodied by the gear instead of a duplicate linkage blank');
+  assert(Math.abs((graphConstraint(gearDriveBSnapshot, 'drive-crank-offset')?.value ?? Number.NaN) - selectedDriveRadius) <= 1e-9, 'drive attachment constraint carries the selected managed gear-hole radius');
+  assert(Math.abs((graphConstraint(gearDriveBSnapshot, 'output-crank-offset')?.value ?? Number.NaN) - selectedOutputRadius) <= 1e-9, 'output attachment constraint carries the selected managed gear-hole radius');
+  assert.deepEqual(
+    selectedGearFabrication.recipe?.requiredParts.filter(part => part.category === 'linkage').map(part => ({ part: part.part, quantity: part.quantity })),
+    [{ part: 'linkages:linkage-4-cell', quantity: 2 }],
+    'gear_linkage fabrication emits only the two connector blanks, not duplicate crank blanks for gear-internal attachment spans'
+  );
+  assert.deepEqual(
+    selectedGearFabrication.renderPlan.layers.filter(layer => layer.renderKind === 'linkage').map(layer => layer.label),
+    ['Drive connector 5-hole link', 'Output connector 5-hole link'],
+    'Foundry, Design, Blueprint, and Assembly share the connector-only gear_linkage fabrication layers'
+  );
+  const selectedGearState = calculateLinkage(gearDriveB, 0);
+  const selectedGearMovingLayerIndexes = selectedGearFabrication.renderPlan.layers.flatMap((layer, index) => ['clip', 'spacer', 'base'].includes(layer.renderKind) ? [] : [index]);
+  const selectedGearSpacerLayerIndexes = selectedGearFabrication.renderPlan.layers.flatMap((layer, index) => layer.renderKind === 'spacer' ? [index] : []);
+  const selectedGearPinStacks = foundryPinStackPoints(
+    'gear_linkage',
+    [selectedGearState.p1, selectedGearState.p2, selectedGearState.j1, selectedGearState.j2, selectedGearState.effector],
+    selectedGearMovingLayerIndexes,
+    selectedGearSpacerLayerIndexes
+  );
+  const movingLabelsAt = (pinId: string) => selectedGearPinStacks
+    .find(pin => pin.id === pinId)?.movingLayerIndexes
+    .map(index => selectedGearFabrication.renderPlan.layers[index]?.label) ?? [];
+  assert.deepEqual(movingLabelsAt('B'), ['Drive G3 / 3-space gear', 'Drive connector 5-hole link'], 'B joins the selected drive gear hole directly to the drive connector blank');
+  assert.deepEqual(movingLabelsAt('C'), ['Output G3 / 3-space gear', 'Output connector 5-hole link'], 'C joins the selected output gear hole directly to the output connector blank without a duplicate layer');
+  assert.deepEqual(movingLabelsAt('R'), ['Drive connector 5-hole link', 'Output connector 5-hole link'], 'R joins exactly the two connector blanks');
+  assert.deepEqual(selectedGearPinStacks.slice(2).map(pin => [pin.id, pin.spacerLayerIndexes.length]), [['B', 1], ['C', 2], ['R', 1]], 'gear_linkage B/C/R preserve the one/two/one S10 clearance contract after removing duplicate crank blanks');
+  assert(!/crank|attachment span/i.test(selectedGearFabrication.renderPlan.stackSummary), 'gear_linkage fabrication stack excludes non-fabricated attachment spans');
+  assert(selectedGearParts().includes(`gears:${selectedGearKey}`), 'gear_linkage requiredParts keeps the selected endpoint gear identity while its attachment hole changes');
+  assert.deepEqual(selectedGearParts(denseSelectedGearFabrication.recipe), selectedGearParts(), 'active board pitch does not silently rescale selected managed gear vectors');
+});
+
+const inconsistentDistanceGraph = mechanismGraphFromDraft({
+  id: 'connection-inconsistent-distance',
+  familyId: 'connection-distance-validation',
+  nodes: [
+    { id: 'board-a', label: 'Board pivot A', role: 'board-anchor', position: { x: 0, y: 0 } },
+    { id: 'output', label: 'Output point', role: 'output-point', position: { x: 80, y: 0 } },
+    { id: 'link-a', label: 'Physical 80-unit link', role: 'link', position: { x: 40, y: 0 }, value: 80 }
+  ],
+  constraints: [
+    { id: 'board-a-fixed', label: 'Pivot A stays fixed', role: 'fixed-to-board', nodes: ['board-a'] },
+    { id: 'board-a-snap', label: 'Pivot A fits a hole', role: 'board-snap', nodes: ['board-a'] },
+    { id: 'inconsistent-distance', label: 'Inconsistent authored link length', role: 'distance', nodes: ['board-a', 'output'], value: 40 }
+  ]
+});
+
+checkConnectionSelectionContract('rejects inconsistent graph distance constraints during graph validation', () => {
+  const validation = validateMechanismGraph(inconsistentDistanceGraph);
+  assert.equal(validation.valid, false, 'graph validation rejects a distance target that disagrees with positioned endpoints');
+  assert(validation.diagnostics.some(diagnostic => diagnostic.severity === 'error' && diagnostic.message.includes('inconsistent-distance') && /distance|constraint/i.test(diagnostic.message)), 'graph validation identifies the inconsistent distance constraint explicitly');
+});
+
+checkConnectionSelectionContract('blocks inconsistent graph distance constraints before fabrication', () => {
+  const compilation = compileAuthoredMechanismGraph(inconsistentDistanceGraph, sample.settings.physicalKit);
+  assert.equal(compilation.fabrication.buildable, false, 'fabrication compiler refuses an inconsistent graph distance constraint');
+  assert.equal(compilation.fabrication.recipe, undefined, 'inconsistent graph distance does not emit a fabrication recipe');
+  assert(compilation.blockers.some(blocker => blocker.includes('inconsistent-distance') && /distance|constraint/i.test(blocker)), 'fabrication blocker preserves the inconsistent distance diagnostic');
+  assert(compilation.fabrication.renderPlan.validationErrors.some(error => error.includes('inconsistent-distance') && /distance|constraint/i.test(error)), 'render plan carries the inconsistent distance blocker instead of fabrication layers');
+});
+
+checkConnectionSelectionContract('reports shared family connection policy separately from scalar edit policy', () => {
+  const policyByType = Object.fromEntries(ALL_MECHANISM_TYPES.map(type => [type, (mechanismFeature(type).interactionPolicy(createDefaultMechanism(type)) as unknown as { connectionPolicy?: unknown }).connectionPolicy]));
+  assert.deepEqual(
+    policyByType['4bar'],
+    { authored: { '4bar.input-joint': 'linkage-hole', '4bar.output-joint': 'linkage-hole' }, fixed: ['4bar.input-ground', '4bar.output-ground'], derived: ['4bar.coupler', '4bar.effector', '4bar.aux'], blocked: [] },
+    '4bar exposes only linkage-hole authored roles and keeps grounds/coupler derived or fixed'
+  );
+  assert.deepEqual(
+    policyByType.gear_linkage,
+    {
+      authored: {
+        'gear_linkage.drive-pin': 'gear-attachment-hole',
+        'gear_linkage.output-pin': 'gear-attachment-hole'
+      },
+      fixed: ['gear_linkage.drive-center', 'gear_linkage.output-center'],
+      derived: ['gear_linkage.connector-link', 'gear_linkage.aux'],
+      blocked: []
+    },
+    'gear_linkage exposes only gear attachment authored roles and keeps centers/connector derived or fixed'
+  );
+  assert.deepEqual(
+    policyByType.gear,
+    {
+      authored: {},
+      fixed: ['gear.drive-axle', 'gear.output-axle'],
+      derived: ['gear.mesh', 'gear.phase', 'gear.output'],
+      blocked: []
+    },
+    'gear exposes explicit fixed axle and derived mesh/output roles'
+  );
+  assert.deepEqual(
+    policyByType.planetary_gear,
+    {
+      authored: {},
+      fixed: ['planetary_gear.sun-axle', 'planetary_gear.ring-gear'],
+      derived: ['planetary_gear.planet-gear', 'planetary_gear.carrier', 'planetary_gear.output'],
+      blocked: []
+    },
+    'planetary_gear exposes explicit fixed ring/sun and derived carrier/planet roles'
+  );
+  assert.deepEqual(
+    policyByType.cam,
+    {
+      authored: {},
+      fixed: ['cam.cam-axle', 'cam.follower-guide'],
+      derived: ['cam.cam-profile-contact', 'cam.follower', 'cam.effector'],
+      blocked: []
+    },
+    'cam exposes explicit fixed axle/guide and derived follower roles'
+  );
+  assert.deepEqual(
+    policyByType.piston,
+    {
+      authored: {},
+      fixed: ['piston.crank-ground', 'piston.slider-guide'],
+      derived: ['piston.crank', 'piston.connecting-rod', 'piston.slider', 'piston.effector'],
+      blocked: []
+    },
+    'piston exposes explicit fixed guide and derived slider-crank roles'
+  );
+  for (const type of ['gear', 'planetary_gear', 'cam', 'piston'] as const) {
+    const policy = policyByType[type] as { authored: Record<string, unknown>; fixed: string[]; derived: string[]; blocked: string[] };
+    const mechanism = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism(type, `connection-fixed-derived-${type}`)));
+    const fakeAuthored = normalizeMechanismConnectionSelections(mechanism, {
+      '4bar.input-joint': { kind: 'linkage-hole', linkageKey: selectedLinkageKey, holeIndex: 1 }
+    });
+    assert.deepEqual(policy.authored, {}, `${type} has no authored connection roles`);
+    assert(policy.fixed.length > 0 && policy.derived.length > 0, `${type} exposes concrete fixed and derived connection roles`);
+    assert.deepEqual(policy.blocked, [], `${type} remains supported rather than using a non-authorable blocker`);
+    assert.deepEqual(Object.keys(fakeAuthored.connectionSelections ?? {}), [], `${type} rejects foreign authored hole state instead of remapping it`);
+    assert(fakeAuthored.connectionSelectionValidation?.entries.some(entry => entry.status === 'rejected'), `${type} preserves rejection evidence for foreign authored hole state`);
+    const state = calculateLinkage(mechanism, 0);
+    assert.deepEqual(mechanismConnectionHoleCandidates(mechanism, state), [], `${type} exposes no physical-hole authoring targets`);
+    assert.deepEqual(validateMechanismPreviewReadiness(mechanism), [], `${type} fixed/derived connection contract remains preview-ready`);
+    assert.equal(compileMechanismGraphFabrication(mechanism, sample.settings.physicalKit).buildable, true, `${type} fixed/derived connection contract remains fabrication-ready`);
+  }
+  assert.deepEqual(
+    policyByType.crank,
+    {
+      authored: {},
+      fixed: ['crank.ground'],
+      derived: ['crank.link', 'crank.effector'],
+      blocked: []
+    },
+    'crank stays supported with explicit fixed/derived roles and no authored selection'
+  );
+  assert(!JSON.stringify(policyByType).match(/shared-family-(?:fixed|derived)|supported-driver-(?:fixed|derived)/), 'connection policies never use sentinel fixed/derived role strings');
+  for (const type of ['yoke', 'quick-return', '5bar', '6bar', 'rack-pinion'] as const) assert.deepEqual(policyByType[type], { authored: {}, fixed: [], derived: [], blocked: ['non-authorable'] }, `${type} stays blocked and non-authorable`);
+});
+
+if (connectionSelectionContractFailures.length) {
+  throw new AggregateError(connectionSelectionContractFailures.map(message => new Error(message)), `editable mechanism connection contract regressions (${connectionSelectionContractFailures.length})`);
+}
 const sampleMechanismId = sample.mechanisms[0].id;
 const snapshotBeforeProject = serializeProject(sample);
 const snapshotA = buildMechanismSnapshot(sample, sampleMechanismId);
@@ -2010,13 +2636,13 @@ assert.deepEqual(
   {
     project: '93372a7836e2125515a5ee6e31b9dc6f6e4c28e8327fdc64a079692b7e82a24c',
     lesson: '7cbae0556655b14af8ce4300a47958482652e611f8053a38d461157b42c48a59',
-    mechanismSnapshot: 'e909e86e76f91e00c78736e9f3aea9e5eb2d883213603e740c9545119c42ed72',
-    allMechanismSnapshots: 'fecacf24385fc9a3c48e97089c53a3496ffe636661e7496318bac6f14a8fddb6',
+    mechanismSnapshot: '9c9689cb04efaf60447ca5bd0ec68df565ad9c857b2a8bbbacfb85fba034c249',
+    allMechanismSnapshots: 'e795d536ca59619b20c67b8992a38115a1a368121425c7a90a5c83be785b846f',
     sceneProjection: 'ed3784b3c1f5956742d0aa49a5a4a7ff2366d4b1ce030d730d9527580b873aba',
     svg: '2ee6db5a38edb343faa9d4dab491eb6e1142b7fa9c8c770b5039f3bb08cfce20',
     dxf: '18b15942d57d5c7b80161d71657d21ea8c7edc6450249dc27cbfb025d533d9a6',
     fabricationRecipes: '7f4ea519983c00740cdff505bd367a4e7be644f11ec687ca6b3ba8bf0f789e98',
-    compilerRenderPlans: 'c49cd9f576e1f2b86cf5d86c5de53f02169bd0243ea0e7c8d43efdb509a50ca5',
+    compilerRenderPlans: '57392e9862f9c04ceba4e7d97fcc66c420357645f464e7f5402c2f67d777d0f1',
     stacks: '56b797c659cdb568281fca6034cd9f4360766302039f325b0c9d73ced144987f'
   },
   'golden master locks ProjectState, mechanism snapshot, scene projection, export, and fabrication stack behavior before App.tsx refactors'
@@ -5282,7 +5908,7 @@ assert(offBoardRequiredParts.some(part => part.category === 'blocker' && /^Fix: 
   const linkageStart = calculateLinkage(mechanism, 0);
   const linkageQuarter = calculateLinkage(mechanism, Math.PI / 2);
   assert(Math.hypot(linkageQuarter.j2.x - linkageStart.j2.x, linkageQuarter.j2.y - linkageStart.j2.y) > 1, 'gear-linkage output endpoint is a second driving crank, not a stationary placeholder');
-  assert.deepEqual(requiredPartQuantities('gear_linkage'), { 'Paper fastener': 8, 'Spacer 10mm OD / 4mm hole': 6, 'G3 / 3-space gear': 2, '3-hole link': 2, '5-hole link': 2 }, 'gear-linkage required parts come from the graph compiler recipe');
+  assert.deepEqual(requiredPartQuantities('gear_linkage'), { 'Paper fastener': 6, 'Spacer 10mm OD / 4mm hole': 4, 'G3 / 3-space gear': 2, '5-hole link': 2 }, 'gear-linkage required parts use gear attachment holes directly instead of duplicating them as crank blanks');
   const dynamicGearLinkageParts = mechanismRequiredParts({ ...mechanism, gearTrainRadii: [gearSceneRadiusByKey('g40'), gearSceneRadiusByKey('g8'), gearSceneRadiusByKey('g56')], couplerLength: linkageSceneLengthByCells(6) });
   assert.equal(dynamicGearLinkageParts.find(part => part.name === 'G5 / 5-space gear')?.quantity, 1, 'gear-linkage required parts preserve a selected large drive gear');
   assert.equal(dynamicGearLinkageParts.find(part => part.name === 'G1 / 1-space gear')?.quantity, 1, 'gear-linkage required parts preserve selected idler gears');

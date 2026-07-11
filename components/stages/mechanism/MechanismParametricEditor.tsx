@@ -1,12 +1,15 @@
 import React, { useMemo, useRef } from "react";
 
-import type { MechanismConfig, PhysicalKitSettings } from "../../../types";
+import type {
+  ConnectionSelectionRole,
+  MechanismConfig,
+  PhysicalKitSettings,
+} from "../../../types";
 import { SCENE_PX_PER_MM } from "../../../utils/coordinates";
 import {
   FABRICATION_GEAR_SPECS,
   FABRICATION_LINKAGE_SPECS,
   fabricationGearSpecForPitchRadius,
-  fabricationLinkageSpecForCells,
   fabricationLinkageSpecForSceneLength,
 } from "../../../utils/fabrication";
 import {
@@ -19,6 +22,10 @@ import {
   mechanismMotionCompletes,
   safeMechanismUpdate,
 } from "./mechanismParamPolicy";
+import {
+  connectionSelectionAccepted,
+  normalizeMechanismConnectionSelections,
+} from "../../../utils/mechanismConnectionSelections";
 
 type FabricationGearOption = (typeof FABRICATION_GEAR_SPECS)[number];
 type FabricationLinkageOption = (typeof FABRICATION_LINKAGE_SPECS)[number];
@@ -26,26 +33,8 @@ type FabricationLinkageOption = (typeof FABRICATION_LINKAGE_SPECS)[number];
 const defaultKitPitchMm = () => FABRICATION_LINKAGE_SPECS[0]?.pitchMm ?? 20;
 const kitGridPitchMm = (kit?: PhysicalKitSettings) =>
   Math.max(1, kit?.gridPitchMm ?? defaultKitPitchMm());
-const gearSpecsForPitch = (kitPitchMm: number): FabricationGearOption[] => {
-  const gearPitchScale = kitPitchMm / defaultKitPitchMm();
-  return FABRICATION_GEAR_SPECS.map((spec) =>
-    fabricationGearSpecForPitchRadius(
-      spec.pitchRadiusMm * gearPitchScale,
-      kitPitchMm,
-    ),
-  );
-};
-const linkageSpecsForPitch = (
-  kitPitchMm: number,
-): FabricationLinkageOption[] =>
-  FABRICATION_LINKAGE_SPECS.map((spec) =>
-    fabricationLinkageSpecForCells(spec.cells, kitPitchMm),
-  );
-const gearSpecForSceneRadius = (radius: number, kitPitchMm = defaultKitPitchMm()) =>
-  fabricationGearSpecForPitchRadius(
-    Math.abs(radius) / SCENE_PX_PER_MM,
-    kitPitchMm,
-  );
+const gearSpecForSceneRadius = (radius: number) =>
+  fabricationGearSpecForPitchRadius(Math.abs(radius) / SCENE_PX_PER_MM);
 const gearSceneRadiusForKey = (
   key: string,
   specs: readonly FabricationGearOption[] = FABRICATION_GEAR_SPECS,
@@ -56,16 +45,24 @@ const gearSceneRadiusForKey = (
     specs[0] ??
     FABRICATION_GEAR_SPECS[0]
   ).pitchRadiusMm * SCENE_PX_PER_MM;
-const linkageSceneLengthForCells = (
-  cells: number,
-  kitPitchMm = defaultKitPitchMm(),
-) => fabricationLinkageSpecForCells(cells, kitPitchMm).lengthMm * SCENE_PX_PER_MM;
-const linkageCellsForSceneLength = (
-  length: number,
-  kitPitchMm = defaultKitPitchMm(),
-) => fabricationLinkageSpecForSceneLength(length, kitPitchMm).cells;
+const linkageSceneLengthForCells = (cells: number) =>
+  (FABRICATION_LINKAGE_SPECS.find((spec) => spec.cells === cells) ?? FABRICATION_LINKAGE_SPECS[0]).lengthMm * SCENE_PX_PER_MM;
+const linkageCellsForSceneLength = (length: number) =>
+  fabricationLinkageSpecForSceneLength(length).cells;
 const gearOptionLabel = (teeth: number) => `${teeth} teeth`;
 const linkageOptionLabel = (holeCount: number) => `${holeCount}-hole`;
+const connectionRoleLabel = (role: ConnectionSelectionRole): string => {
+  switch (role) {
+    case "4bar.input-joint":
+      return "Input joint";
+    case "4bar.output-joint":
+      return "Output joint";
+    case "gear_linkage.drive-pin":
+      return "Drive pin";
+    case "gear_linkage.output-pin":
+      return "Output pin";
+  }
+};
 type SafeOption<T> = { item: T; working: boolean; current: boolean };
 const unsafeOptionLabel = (label: string, current: boolean) =>
   current ? `${label} · current` : `${label} · locked`;
@@ -82,11 +79,8 @@ export const MechanismParametricEditor = ({
   testId?: string;
 }) => {
   const kitPitchMm = kitGridPitchMm(kit);
-  const gearSpecs = useMemo(() => gearSpecsForPitch(kitPitchMm), [kitPitchMm]);
-  const linkageSpecs = useMemo(
-    () => linkageSpecsForPitch(kitPitchMm),
-    [kitPitchMm],
-  );
+  const gearSpecs = FABRICATION_GEAR_SPECS;
+  const linkageSpecs = FABRICATION_LINKAGE_SPECS;
   const radii =
     mechanism.type === "gear" || mechanism.type === "gear_linkage"
       ? gearTrainPitchRadii(mechanism)
@@ -114,7 +108,10 @@ export const MechanismParametricEditor = ({
   };
   const updateGearRadius = (index: number, key: string) => {
     const updates = gearRadiusUpdates(index, key);
-    if (!safeMechanismUpdate(mechanism, updates, kit)) return;
+    const endpointGearEdit =
+      mechanism.type === "gear_linkage" &&
+      (index === 0 || index === Math.max(0, radii.length - 1));
+    if (!endpointGearEdit && !safeMechanismUpdate(mechanism, updates, kit)) return;
     onChange(updates);
   };
   const idlerGearUpdatesForKey = (key: string) => {
@@ -174,11 +171,10 @@ export const MechanismParametricEditor = ({
   ): SafeOption<FabricationLinkageOption>[] => {
     const currentCells = linkageCellsForSceneLength(
       Number(mechanism[key] ?? 0),
-      kitPitchMm,
     );
     return linkageSpecs.map((spec) => {
       const updates = {
-        [key]: linkageSceneLengthForCells(spec.cells, kitPitchMm),
+        [key]: linkageSceneLengthForCells(spec.cells),
       } as Partial<MechanismConfig>;
       const current = spec.cells === currentCells;
       return {
@@ -214,11 +210,10 @@ export const MechanismParametricEditor = ({
   >[] => {
     const currentCells = linkageCellsForSceneLength(
       mechanism.couplerLength,
-      kitPitchMm,
     );
     return linkageSpecs.map((spec) => {
       const updates = {
-        couplerLength: linkageSceneLengthForCells(spec.cells, kitPitchMm),
+        couplerLength: linkageSceneLengthForCells(spec.cells),
       };
       const current = spec.cells === currentCells;
       return {
@@ -250,12 +245,39 @@ export const MechanismParametricEditor = ({
           safeGearOptions(
             index,
             options,
-            gearSpecForSceneRadius(radius, kitPitchMm).key,
+            gearSpecForSceneRadius(radius).key,
           ).filter((option) => !option.working).length
         );
       }, 0)
     : 0;
   const hasLockedMotionOptions = linkageLockCount + gearLockCount > 0;
+  const connectionState = useMemo(
+    () =>
+      normalizeMechanismConnectionSelections(
+        mechanism,
+        mechanism.connectionSelections,
+        mechanism.connectionSelectionValidation,
+      ),
+    [mechanism],
+  );
+  const connectionConfirmations = Object.entries(connectionState.connectionSelections ?? {}).map(([role, selection]) => ({
+    role,
+    label: connectionRoleLabel(role as ConnectionSelectionRole),
+    part: selection.kind === "linkage-hole" ? selection.linkageKey : selection.gearKey,
+    hole: selection.holeIndex,
+  }));
+  const acceptedFourBarInput =
+    mechanism.type === "4bar" &&
+    connectionSelectionAccepted(
+      connectionState.connectionSelectionValidation,
+      "4bar.input-joint",
+    );
+  const acceptedFourBarOutput =
+    mechanism.type === "4bar" &&
+    connectionSelectionAccepted(
+      connectionState.connectionSelectionValidation,
+      "4bar.output-joint",
+    );
   const canAddIdlerGear = idlerGearOptions.length > 0;
   if (!renderGearControls && !renderLinkageControls && mechanism.type !== "cam")
     return null;
@@ -271,6 +293,15 @@ export const MechanismParametricEditor = ({
         .map((spec) => spec.pitchRadiusMm * SCENE_PX_PER_MM)
         .join(",")}
     >
+      {connectionConfirmations.length > 0 && (
+        <div className="mb-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black uppercase tracking-wider text-blue-700">
+          {connectionConfirmations.map((item) => (
+            <div key={item.role}>
+              {item.label}: {item.part} #{item.hole}
+            </div>
+          ))}
+        </div>
+      )}
       {renderGearControls && (
         <div className="space-y-2">
           <div className="section-title">Gear sizes</div>
@@ -286,7 +317,7 @@ export const MechanismParametricEditor = ({
               mechanism.type === "gear_linkage" && (index === 0 || isOutput)
                 ? endpointGearOptions
                 : gearSpecs;
-            const selected = gearSpecForSceneRadius(radius, kitPitchMm).key;
+            const selected = gearSpecForSceneRadius(radius).key;
             const safeOptions = safeGearOptions(index, options, selected);
             const activeValue = safeOptions.some(
               (option) => option.item.key === selected,
@@ -370,11 +401,13 @@ export const MechanismParametricEditor = ({
               const safeOptions = safeLinkageOptions(key);
               const currentValue = linkageCellsForSceneLength(
                 Number(mechanism[key] ?? 0),
-                kitPitchMm,
               );
               const lockedCount = safeOptions.filter(
                 (option) => !option.working,
               ).length;
+              const connectionLocked =
+                (key === "crankLength" && acceptedFourBarInput) ||
+                (key === "rockerLength" && acceptedFourBarOutput);
               return (
                 <label
                   key={key}
@@ -390,11 +423,12 @@ export const MechanismParametricEditor = ({
                       safeOptions.filter((option) => option.working).length
                     }
                     data-locked-motion-options={lockedCount}
+                    disabled={connectionLocked}
                     onChange={(event) => {
+                      if (connectionLocked) return;
                       const updates = {
                         [key]: linkageSceneLengthForCells(
                           Number(event.target.value),
-                          kitPitchMm,
                         ),
                       } as Partial<MechanismConfig>;
                       if (!safeMechanismUpdate(mechanism, updates, kit)) return;
@@ -430,7 +464,6 @@ export const MechanismParametricEditor = ({
                 className="field mt-1"
                 value={linkageCellsForSceneLength(
                   mechanism.couplerLength,
-                  kitPitchMm,
                 )}
                 data-motion-safe-options={
                   pairedLinkOptions().filter((option) => option.working).length
@@ -442,7 +475,6 @@ export const MechanismParametricEditor = ({
                   const updates = {
                     couplerLength: linkageSceneLengthForCells(
                       Number(event.target.value),
-                      kitPitchMm,
                     ),
                   };
                   if (!safeMechanismUpdate(mechanism, updates, kit)) return;

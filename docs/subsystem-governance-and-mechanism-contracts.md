@@ -1,7 +1,7 @@
 # MotionSmith Subsystem Governance and Mechanism Contract Plan
 
-Status: proposed architecture contract
-Date: 2026-06-26
+Status: active architecture contract
+Last refreshed: 2026-07-11
 Scope: interface/interaction governance, mechanism convention ownership, 2D/3D/physics/fabrication parity, and future subsystem boundaries.
 
 ## 0. Executive decision
@@ -107,10 +107,22 @@ utils/project.ts
 utils/mechanismTemplates.ts
   mechanism type list and human metadata seed
 
-utils/mechanismFeatureRegistry.ts       (new)
+utils/mechanismReference.ts
+  canonical per-family geometry and reference normalization
+
+utils/mechanismFeatureRegistry.ts
   one registry for mechanism feature contracts
 
-utils/mechanismSnapshot.ts              (new, phase 1 single file)
+utils/mechanismConnectionSelections.ts
+  persisted physical-hole roles, validation/defaulting, geometry, and authoring
+
+utils/mechanismGraph.ts
+  canonical derived mechanism graph and constraints
+
+utils/mechanismGraphFabricationCompiler.ts
+  graph -> fabrication plan boundary
+
+utils/mechanismSnapshot.ts
   immutable per-mechanism derived snapshots and fingerprints
 
 utils/kinematics.ts
@@ -190,22 +202,22 @@ type MechanismFeatureContract = {
   type: MechanismType;
   label: string;
   sense: string;
-  goodFor: string[];
+  goodFor: string;
+  constraint: string;
   authorable: boolean;
 
-  defaults: () => MechanismConfig;
-  parameterSchema: MechanismParameterSpec[];
+  defaults: (id?: string) => MechanismConfig;
+  requiredParts: (config: MechanismConfig) => Array<{ name: string; quantity: number }>;
 
-  sampleKinematics: (input: MechanismSampleInput) => MechanismSample;
-  sampleFeasibleRange: (config: MechanismConfig) => FeasibleRange;
+  sampleKinematics: (config: MechanismConfig, angleRad: number) => JointState;
+  sampleFeasibleRange: (config: MechanismConfig, samples?: number) => MechanismFeasibleRange;
 
   interactionPolicy: (config: MechanismConfig) => MechanismInteractionPolicy;
   projectionHints: (config: MechanismConfig) => MechanismProjectionHint[];
   physicsHints: (config: MechanismConfig) => MechanismPhysicsHint[];
 
-  fabricationStack: (config: MechanismConfig, kit: PhysicalKit) => FabricationStackLayer[];
-  fabricationPlan: (config: MechanismConfig, kit: PhysicalKit) => FabricationRenderPlan;
-  validate: (config: MechanismConfig, project: ProjectState) => MechanismIssue[];
+  fabricationPlan: (config: MechanismConfig) => FabricationRenderPlan;
+  validate: (config: MechanismConfig) => MechanismFeatureIssue[];
 };
 ```
 
@@ -215,6 +227,16 @@ Rules:
 - This registry must not import React, DOM, Three, or UI components.
 - The registry returns plain serializable data or stable math outputs.
 - A mechanism type is incomplete until it passes contract coverage for 2D, 3D, physics, fabrication, and export.
+
+### 4.2.1 Physical connection authoring
+
+- `ProjectState.mechanisms[].connectionSelections` is the persisted authority for selectable physical holes.
+- The current authorable role union is exact: `4bar.input-joint`, `4bar.output-joint`, `gear_linkage.drive-pin`, and `gear_linkage.output-pin`.
+- `4bar` roles select `linkage-hole`; `gear_linkage` roles select `gear-attachment-hole`. `gear`, `planetary_gear`, `cam`, and `piston` publish fixed/derived connection roles but no authorable hole state.
+- Missing legacy state may receive deterministic defaults with `defaulted` evidence. Malformed authored state is rejected and dropped with evidence; never remap it to another role or hole.
+- The visible Foundry physical-hole overlay is the only writer. Numeric/parametric editors may confirm the selection but must not provide a second authoring path.
+- `utils/mechanismConnectionSelections.ts` owns role validation, compatibility projection, selected coordinates, and signatures. Graph, kinematics, 2D/3D preview, Design, Blueprint, and Assembly consume the same resolved selection.
+- Adding an authorable family requires one coordinated contract change: persisted role union, feature-registry policy, connection-domain geometry, graph constraints, kinematics, fabrication plan, visible affordance, snapshot/export propagation, and production-preview coverage.
 
 ### 4.3 Mechanism snapshot
 

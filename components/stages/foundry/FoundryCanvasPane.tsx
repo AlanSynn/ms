@@ -19,6 +19,7 @@ import {
 } from "./FoundryCanvasChrome";
 import {
   FoundryOverlayLayer,
+  type FoundryConnectionHoleHandle,
   type FoundryParamHandle,
   type FoundryParamHandleId,
 } from "./FoundryOverlayLayer";
@@ -77,6 +78,10 @@ type FoundryCanvasPaneProps = {
   forceRaw: Point;
   foundryParamHandles: FoundryParamHandle[];
   foundryParamHandleZSummary: string;
+  connectionHoleHandles: FoundryConnectionHoleHandle[];
+  connectionSelectionCoordinates: Record<string, Point>;
+  connectionExportSignature: string;
+  selectedConnection?: { role: string; kind: string; holeIndex: number };
   hasManualAnchor: boolean;
   landingBoardLabel: string;
   onSetCameraPreset: (preset: Exclude<FoundryViewPreset, "custom">) => void;
@@ -99,6 +104,9 @@ type FoundryCanvasPaneProps = {
   onProjectionSizeChange: (size: FoundryOverlaySize) => void;
   onParamPointerDown: (
     handle: FoundryParamHandleId,
+  ) => React.PointerEventHandler<SVGCircleElement>;
+  onConnectionHolePointerDown: (
+    handle: FoundryConnectionHoleHandle,
   ) => React.PointerEventHandler<SVGCircleElement>;
   onParamPointerMove: React.PointerEventHandler<SVGCircleElement>;
   onParamPointerUp: React.PointerEventHandler<SVGCircleElement>;
@@ -152,6 +160,10 @@ export const FoundryCanvasPane = ({
   forceRaw,
   foundryParamHandles,
   foundryParamHandleZSummary,
+  connectionHoleHandles,
+  connectionSelectionCoordinates,
+  connectionExportSignature,
+  selectedConnection,
   hasManualAnchor,
   landingBoardLabel,
   onSetCameraPreset,
@@ -175,6 +187,7 @@ export const FoundryCanvasPane = ({
   onParamPointerDown,
   onParamPointerMove,
   onParamPointerUp,
+  onConnectionHolePointerDown,
 }: FoundryCanvasPaneProps) => {
   const pathFitError = useMemo(() => {
     if (!userPathPoints.length || !previewPoints.length) return undefined;
@@ -314,6 +327,9 @@ export const FoundryCanvasPane = ({
       onPointerCancel={onPointerCancel}
       onWheel={onWheel}
       onProjectionSizeChange={onProjectionSizeChange}
+      connectionSelectionCoordinates={connectionSelectionCoordinates}
+      connectionExportSignature={connectionExportSignature}
+      selectedConnection={selectedConnection}
     >
       {userPathD && (
         <svg
@@ -355,6 +371,8 @@ export const FoundryCanvasPane = ({
         physicsRule={physicsRule}
         foundryParamHandles={foundryParamHandles}
         foundryParamHandleZSummary={foundryParamHandleZSummary}
+        connectionHoleHandles={connectionHoleHandles}
+        onConnectionHolePointerDown={onConnectionHolePointerDown}
         hasManualAnchor={hasManualAnchor}
         landingBoardLabel={landingBoardLabel}
         onParamPointerDown={onParamPointerDown}

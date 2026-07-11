@@ -13,6 +13,7 @@ import {
     type MechanismGraphDiagnostic,
     type MechanismGraphMotionSample
 } from './mechanismGraph';
+import type { ConnectionSelectionSummary } from './mechanismConnectionSelections';
 import { validateMechanismPreviewReadiness } from './mechanismPreviewReadiness';
 import { preferredMotionJointId } from './motion';
 
@@ -59,6 +60,7 @@ export type MechanismGraphCompilerSummary = {
     driverCount: number;
     diagnosticCount: number;
     diagnostics: MechanismGraphDiagnostic[];
+    connectionSelectionSummary?: ConnectionSelectionSummary;
     motionSampleCount: number;
     feasiblePercentValid: number;
     readinessErrorCount: number;
@@ -249,6 +251,7 @@ export const summarizeCompiledMechanism = (compiled: CompiledMechanism): Mechani
     driverCount: compiled.graph.drivers.length,
     diagnosticCount: compiled.graph.diagnostics.length + compiled.graphValidationDiagnostics.length,
     diagnostics: [...compiled.graph.diagnostics, ...compiled.graphValidationDiagnostics],
+    connectionSelectionSummary: compiled.graph.connectionSelectionSummary,
     motionSampleCount: compiled.motionSamples.length,
     feasiblePercentValid: compiled.feasibleRange.percentValid,
     readinessErrorCount: compiled.readinessErrors.length,

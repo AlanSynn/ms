@@ -6,6 +6,7 @@ import {
     type FabricationStackLayer,
     type FabricationStackMechanism
 } from './fabricationStackModel';
+import type { ConnectionSelectionSummary } from './mechanismConnectionSelections';
 
 export type FabricationRenderKind = 'base' | 'clip' | 'linkage' | 'spacer' | 'gear' | 'guide' | 'cam' | 'rack' | 'follower';
 
@@ -20,6 +21,7 @@ export type FabricationRenderLayer = FabricationStackLayer & {
 export type FabricationRenderPlan = {
     base: FabricationRenderLayer;
     layers: FabricationRenderLayer[];
+    connectionSelectionSummary?: ConnectionSelectionSummary;
     stackSummary: string;
     roleSummary: string;
     occurrenceSummary: string;

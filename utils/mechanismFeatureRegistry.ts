@@ -1,4 +1,10 @@
-import type { JointState, MechanismConfig, MechanismType } from '../types';
+import type {
+    ConnectionSelection,
+    ConnectionSelectionRole,
+    JointState,
+    MechanismConfig,
+    MechanismType,
+} from '../types';
 import type { FabricationRenderPlan } from './fabrication';
 import { sampleFeasibleRange } from './fabrication';
 import { calculateLinkage } from './kinematics';
@@ -9,6 +15,13 @@ import { createDefaultMechanism, mechanismRequiredParts } from './project';
 export type MechanismFeatureRole = 'driver' | 'linkage' | 'linear-guide' | 'gear-train' | 'cam-follower' | 'compound';
 export type MechanismProjectionRole = 'rotary' | 'linear' | 'compound';
 export type MechanismDragHandle = 'P1' | 'P2' | 'J1' | 'J2' | 'Effector' | 'Aux';
+export type MechanismConnectionKind = ConnectionSelection['kind'];
+export type MechanismConnectionPolicy = {
+    authored: Partial<Record<ConnectionSelectionRole, MechanismConnectionKind>>;
+    fixed: string[];
+    derived: string[];
+    blocked: string[];
+};
 export type MechanismFeasibleRange = ReturnType<typeof sampleFeasibleRange>;
 
 export type MechanismFeatureIssue = {
@@ -20,6 +33,7 @@ export type MechanismInteractionPolicy = {
     role: MechanismFeatureRole;
     editableParameters: Array<keyof MechanismConfig>;
     draggableHandles: MechanismDragHandle[];
+    connectionPolicy: MechanismConnectionPolicy;
     writesProjectState: true;
 };
 
@@ -139,6 +153,49 @@ const draggableHandlesForType = (type: MechanismType): MechanismDragHandle[] => 
     }
 };
 
+const connectionPolicyForType = (type: MechanismType): MechanismConnectionPolicy => {
+    switch (type) {
+        case '4bar':
+            return {
+                authored: {
+                    '4bar.input-joint': 'linkage-hole',
+                    '4bar.output-joint': 'linkage-hole'
+                },
+                fixed: ['4bar.input-ground', '4bar.output-ground'],
+                derived: ['4bar.coupler', '4bar.effector', '4bar.aux'],
+                blocked: []
+            };
+        case 'gear_linkage':
+            return {
+                authored: {
+                    'gear_linkage.drive-pin': 'gear-attachment-hole',
+                    'gear_linkage.output-pin': 'gear-attachment-hole'
+                },
+                fixed: ['gear_linkage.drive-center', 'gear_linkage.output-center'],
+                derived: ['gear_linkage.connector-link', 'gear_linkage.aux'],
+                blocked: []
+            };
+        case 'gear':
+            return { authored: {}, fixed: ['gear.drive-axle', 'gear.output-axle'], derived: ['gear.mesh', 'gear.phase', 'gear.output'], blocked: [] };
+        case 'planetary_gear':
+            return { authored: {}, fixed: ['planetary_gear.sun-axle', 'planetary_gear.ring-gear'], derived: ['planetary_gear.planet-gear', 'planetary_gear.carrier', 'planetary_gear.output'], blocked: [] };
+        case 'cam':
+            return { authored: {}, fixed: ['cam.cam-axle', 'cam.follower-guide'], derived: ['cam.cam-profile-contact', 'cam.follower', 'cam.effector'], blocked: [] };
+        case 'piston':
+            return { authored: {}, fixed: ['piston.crank-ground', 'piston.slider-guide'], derived: ['piston.crank', 'piston.connecting-rod', 'piston.slider', 'piston.effector'], blocked: [] };
+        case 'crank':
+            return { authored: {}, fixed: ['crank.ground'], derived: ['crank.link', 'crank.effector'], blocked: [] };
+        case 'yoke':
+        case 'quick-return':
+        case '5bar':
+        case '6bar':
+        case 'rack-pinion':
+            return { authored: {}, fixed: [], derived: [], blocked: ['non-authorable'] };
+        default:
+            return { authored: {}, fixed: [], derived: [], blocked: [] };
+    }
+};
+
 const validateFeature = (type: MechanismType, mechanism: MechanismConfig): MechanismFeatureIssue[] => {
     const issues: MechanismFeatureIssue[] = [];
     if (mechanism.type !== type) {
@@ -170,6 +227,7 @@ const buildFeature = (type: MechanismType): MechanismFeatureContract => {
             role: roleForType(type),
             editableParameters: editableParametersForType(type),
             draggableHandles: draggableHandlesForType(type),
+            connectionPolicy: connectionPolicyForType(type),
             writesProjectState: true
         }),
         projectionHints: () => [{

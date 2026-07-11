@@ -3,6 +3,7 @@ import { boardToScene, defaultPhysicalKit, sceneToBoardRaw, SCENE_PX_PER_MM } fr
 import { closePhysicalValue, physicalTolerance } from './fabricationReadiness';
 import {
     FABRICATION_GEAR_SPECS,
+    FABRICATION_LINKAGE_SPECS,
     FABRICATION_SPACER_SPEC,
     fabricationGearSpecForPitchRadius,
     fabricationRingGearSpecForPitchRadius,
@@ -78,6 +79,9 @@ const DIMENSIONED_GRAPH_PART_ROLES = new Set<MechanismGraphNodeRole>([
     'ring-gear'
 ]);
 
+const graphNodeIsFabricatedPart = (node: MechanismGraphNode) =>
+    node.fabricated !== false && GRAPH_FABRICATION_PART_ROLES.has(node.role);
+
 const FABRICATED_CONSTRAINT_ROLES = new Set<MechanismConstraintRole>(['distance', 'gear-mesh', 'contact', 'prismatic', 'pin-joint']);
 
 const stack = (...items: Array<{ label: string; role: string; part?: string }>): FabricationRecipe['assemblySteps'][number]['stack'] =>
@@ -88,21 +92,48 @@ const finiteGraphPartValue = (node: MechanismGraphNode) => {
     return Number(node.value);
 };
 
-const linkageSpecForGraphNode = (node: MechanismGraphNode, kit: PhysicalKitSettings) => {
-    const cells = Math.max(2, Math.round(Math.abs(finiteGraphPartValue(node)) / Math.max(1, SCENE_PX_PER_MM * kit.gridPitchMm)));
-    return fabricationLinkageSpecForCells(cells, kit.gridPitchMm);
+const selectedLinkageSpecForGraphNode = (graph: MechanismGraph, node: MechanismGraphNode) => {
+    const role = node.id === 'input-link'
+        ? '4bar.input-joint'
+        : node.id === 'output-link'
+            ? '4bar.output-joint'
+            : undefined;
+    const selection = role ? graph.connectionSelectionSummary?.connectionSelections?.[role] : undefined;
+    return selection?.kind === 'linkage-hole'
+        ? FABRICATION_LINKAGE_SPECS.find(spec => spec.key === selection.linkageKey)
+        : undefined;
 };
 
-const graphGearSpecForNode = (node: MechanismGraphNode, kit: PhysicalKitSettings) =>
-    fabricationGearSpecForPitchRadius(Math.abs(finiteGraphPartValue(node)) / SCENE_PX_PER_MM, kit.gridPitchMm);
+const linkageSpecForGraphNode = (graph: MechanismGraph, node: MechanismGraphNode) => {
+    const selected = selectedLinkageSpecForGraphNode(graph, node);
+    if (selected) return selected;
+    const cells = Math.max(2, Math.round(Math.abs(finiteGraphPartValue(node)) / Math.max(1, SCENE_PX_PER_MM * 20)));
+    return fabricationLinkageSpecForCells(cells);
+};
 
-const graphPartLabelForNode = (node: MechanismGraphNode, source: MechanismGraph['source'], kit: PhysicalKitSettings) => {
+const selectedGearSpecForGraphNode = (graph: MechanismGraph, node: MechanismGraphNode) => {
+    if (graph.mechanismType !== 'gear_linkage') return undefined;
+    const selections = graph.connectionSelectionSummary?.connectionSelections;
+    const selection = node.id === 'gear-0'
+        ? selections?.['gear_linkage.drive-pin']
+        : selections?.['gear_linkage.output-pin'];
+    return selection?.kind === 'gear-attachment-hole' && node.id === `gear-${selection.gearIndex}`
+        ? FABRICATION_GEAR_SPECS.find(spec => spec.key === selection.gearKey)
+        : undefined;
+};
+
+const graphGearSpecForNode = (graph: MechanismGraph, node: MechanismGraphNode) =>
+    selectedGearSpecForGraphNode(graph, node)
+    ?? fabricationGearSpecForPitchRadius(Math.abs(finiteGraphPartValue(node)) / SCENE_PX_PER_MM);
+
+const graphPartLabelForNode = (node: MechanismGraphNode, graph: MechanismGraph) => {
+    const { source } = graph;
     if (node.role === 'ring-gear') {
-        const ringLabel = fabricationRingGearSpecForPitchRadius(Math.abs(finiteGraphPartValue(node)) / SCENE_PX_PER_MM, kit.gridPitchMm).label;
+        const ringLabel = fabricationRingGearSpecForPitchRadius(Math.abs(finiteGraphPartValue(node)) / SCENE_PX_PER_MM).label;
         return source !== 'family-definition' ? node.label || ringLabel : ringLabel;
     }
     if (node.role === 'gear') {
-        const gearLabel = graphGearSpecForNode(node, kit).label;
+        const gearLabel = graphGearSpecForNode(graph, node).label;
         if (source !== 'family-definition') return node.label || gearLabel;
         const idlerMatch = /^Idler gear\s*(\d+)$/i.exec(node.label);
         if (idlerMatch) return `Idler ${gearLabel} ${idlerMatch[1]}`;
@@ -110,22 +141,22 @@ const graphPartLabelForNode = (node: MechanismGraphNode, source: MechanismGraph[
         return roleLabel ? `${roleLabel} ${gearLabel}` : gearLabel;
     }
     if (node.role === 'link') {
-        const holeLabel = fabricationPartDisplayLabel(linkageSpecForGraphNode(node, kit).label);
+        const holeLabel = fabricationPartDisplayLabel(linkageSpecForGraphNode(graph, node).label);
         if (source !== 'family-definition') return node.label || holeLabel;
         const roleLabel = node.label.replace(/\blink\b/i, '').trim();
         return roleLabel ? `${roleLabel} ${holeLabel}` : holeLabel;
     }
-    if (node.role === 'rigid-part') return node.label || fabricationPartDisplayLabel(linkageSpecForGraphNode(node, kit).label);
+    if (node.role === 'rigid-part') return node.label || fabricationPartDisplayLabel(linkageSpecForGraphNode(graph, node).label);
     return node.label;
 };
 
-const graphPartKeyForNode = (node: MechanismGraphNode, role: FabricationStackLayer['role'], kit: PhysicalKitSettings) => {
-    if (node.role === 'link' || node.role === 'rigid-part') return `linkages:${linkageSpecForGraphNode(node, kit).key}`;
+const graphPartKeyForNode = (node: MechanismGraphNode, role: FabricationStackLayer['role'], graph: MechanismGraph) => {
+    if (node.role === 'link' || node.role === 'rigid-part') return `linkages:${linkageSpecForGraphNode(graph, node).key}`;
     if (node.role === 'ring-gear') {
-        return `ring_gears:${fabricationRingGearSpecForPitchRadius(Math.abs(finiteGraphPartValue(node)) / SCENE_PX_PER_MM, kit.gridPitchMm).key}`;
+        return `ring_gears:${fabricationRingGearSpecForPitchRadius(Math.abs(finiteGraphPartValue(node)) / SCENE_PX_PER_MM).key}`;
     }
     if (node.role === 'gear') {
-        return `gears:${graphGearSpecForNode(node, kit).key}`;
+        return `gears:${graphGearSpecForNode(graph, node).key}`;
     }
     return `${role}s:${node.id}`;
 };
@@ -207,7 +238,11 @@ const renderRoleForAssemblyStackItem = (item: AssemblyStackItem): FabricationSta
     return 'linkage';
 };
 
-const graphRenderPlan = (assemblySteps: FabricationRecipe['assemblySteps'], validationErrors: string[]): FabricationRenderPlan => {
+const graphRenderPlan = (
+    graph: MechanismGraph,
+    assemblySteps: FabricationRecipe['assemblySteps'],
+    validationErrors: string[]
+): FabricationRenderPlan => {
     const stackLayers: FabricationStackLayer[] = assemblySteps
         .filter(step => step.role !== 'place-fastener')
         .flatMap(step => (step.stack ?? []).flatMap(item => {
@@ -239,6 +274,7 @@ const graphRenderPlan = (assemblySteps: FabricationRecipe['assemblySteps'], vali
     return {
         base: { ...fabricationBaseLayer(), source: 'mechanism-graph', stackIndex: -1, occurrence: 0, z: 0, renderKind: 'base' },
         layers,
+        ...(graph.connectionSelectionSummary ? { connectionSelectionSummary: graph.connectionSelectionSummary } : {}),
         stackSummary: layers.map(item => item.label).join(' → '),
         roleSummary: layers.map(item => item.role).join('>'),
         occurrenceSummary: layers.map(item => `${item.role}#${item.occurrence}:${item.label}`).join('>'),
@@ -316,7 +352,7 @@ const explicitLinkPartIdsForConstraints = (
 
 export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defaultPhysicalKit()): AuthoredGraphFabricationResult => {
     const missingDimensionNodes = graph.nodes.filter(node =>
-        GRAPH_FABRICATION_PART_ROLES.has(node.role)
+        graphNodeIsFabricatedPart(node)
         && DIMENSIONED_GRAPH_PART_ROLES.has(node.role)
         && !Number.isFinite(node.value)
     );
@@ -326,7 +362,7 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
             recipeCompilerSource: 'compileGraphFabricationRecipe',
             buildable: false,
             blocker,
-            renderPlan: graphRenderPlan([], [blocker])
+            renderPlan: graphRenderPlan(graph, [], [blocker])
         };
     }
     const validation = validateMechanismGraph(graph);
@@ -336,7 +372,7 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
             recipeCompilerSource: 'compileGraphFabricationRecipe',
             buildable: false,
             blocker: 'Graph invalid',
-            renderPlan: graphRenderPlan([], validationErrors)
+            renderPlan: graphRenderPlan(graph, [], validationErrors)
         };
     }
     const nodeById = new Map(graph.nodes.map(node => [node.id, node]));
@@ -345,11 +381,15 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
         .flatMap(constraint => constraint.nodes));
     const boardMountedNodes = graph.nodes.filter(node => node.role === 'board-anchor' || boardMountedNodeIds.has(node.id));
     const primaryAnchor = boardMountedNodes.map(node => boardCoordinateForPoint(node.position, kit)).find(placement => placement?.snapped);
-    const explicitPartNodes = graph.nodes.filter(node => (node.role === 'link' || node.role === 'rigid-part') && Number.isFinite(node.value));
+    const explicitPartNodes = graph.nodes.filter(node =>
+        node.fabricated !== false
+        && (node.role === 'link' || node.role === 'rigid-part')
+        && Number.isFinite(node.value)
+    );
     const linkConstraintEntries = fabricatedLinkConstraints(graph.constraints, explicitPartNodes, nodeById, kit);
     const representedLinkPartNodeIds = explicitLinkPartIdsForConstraints(linkConstraintEntries);
     const fabricatedMovingPartNodes = graph.nodes.filter(node =>
-        GRAPH_FABRICATION_PART_ROLES.has(node.role)
+        graphNodeIsFabricatedPart(node)
         && !['fastener', 'spacer'].includes(node.role)
         && !representedLinkPartNodeIds.has(node.id)
     );
@@ -411,7 +451,7 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
             recipeCompilerSource: 'compileGraphFabricationRecipe',
             buildable: false,
             blocker,
-            renderPlan: graphRenderPlan([], [blocker, ...recipeErrors.filter(error => error !== blocker)])
+            renderPlan: graphRenderPlan(graph, [], [blocker, ...recipeErrors.filter(error => error !== blocker)])
         };
     }
     if (!fabricatedMovingPartFootprintsFit) {
@@ -419,7 +459,7 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
             recipeCompilerSource: 'compileGraphFabricationRecipe',
             buildable: false,
             blocker: 'Placement off board',
-            renderPlan: graphRenderPlan([], ['Placement off board'])
+            renderPlan: graphRenderPlan(graph, [], ['Placement off board'])
         };
     }
     const boardCoordinateForNode = (nodeId: string) => {
@@ -473,7 +513,7 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
                 recipeCompilerSource: 'compileGraphFabricationRecipe',
                 buildable: false,
                 blocker,
-                renderPlan: graphRenderPlan([], [blocker])
+                renderPlan: graphRenderPlan(graph, [], [blocker])
             };
         }
         const camCoord = boardCoordinateForNode(camNode.id);
@@ -495,11 +535,11 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
                 { label: 'Axle peg', role: 'spacer', part: 'spacers:axle-peg' },
                 { label: 'Paper washer', role: 'spacer', part: 'spacers:paper-washer' },
                 { label: 'Cam spacer', role: 'spacer', part: 'spacers:cam-spacer' },
-                { label: graphPartLabelForNode(camNode, graph.source, kit), role: 'moving-part', part: graphPartKeyForNode(camNode, 'cam', kit) },
+                { label: graphPartLabelForNode(camNode, graph), role: 'moving-part', part: graphPartKeyForNode(camNode, 'cam', graph) },
                 { label: 'Paper washer', role: 'spacer', part: 'spacers:paper-washer' },
                 { label: 'Cam lock disk', role: 'clip', part: 'hardware:cam-lock-disk' },
-                { label: graphPartLabelForNode(guideNode, graph.source, kit), role: 'moving-part', part: graphPartKeyForNode(guideNode, 'guide', kit) },
-                { label: graphPartLabelForNode(followerNode, graph.source, kit), role: 'moving-part', part: graphPartKeyForNode(followerNode, 'follower', kit) }
+                { label: graphPartLabelForNode(guideNode, graph), role: 'moving-part', part: graphPartKeyForNode(guideNode, 'guide', graph) },
+                { label: graphPartLabelForNode(followerNode, graph), role: 'moving-part', part: graphPartKeyForNode(followerNode, 'follower', graph) }
             )
         } satisfies FabricationRecipe['assemblySteps'][number];
         const assemblySteps = [...boardSteps, camAssemblyStep].map((step, index) => ({ ...step, index: index + 1 }));
@@ -514,7 +554,7 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
         };
         const requiredParts = requiredPartsFromAssemblySteps(assemblySteps)
             .sort((a, b) => camModulePartPriority(a) - camModulePartPriority(b));
-        const renderPlan = graphRenderPlan(assemblySteps, validationErrors);
+        const renderPlan = graphRenderPlan(graph, assemblySteps, validationErrors);
         const recipe: FabricationRecipe = {
             mechanismId: graph.mechanismId,
             type: 'graph',
@@ -547,7 +587,7 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
 
     const linkSteps = linkConstraintEntries.map(({ constraint, partNode }, index) => {
         const coords = constraint.nodes.slice(0, 2).map(boardCoordinateForNode);
-        const label = graphPartLabelForNode(partNode, graph.source, kit);
+        const label = graphPartLabelForNode(partNode, graph);
         return {
             index: boardSteps.length + index + 1,
             label: `Add ${label}`,
@@ -561,7 +601,7 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
             check: 'The link can swing without rubbing.',
             stack: stack(
                 { label: 'Back Clip', role: 'clip' },
-                { label, role: 'moving-part', part: graphPartKeyForNode(partNode, graphPartRoleForNode(partNode.role) ?? 'linkage', kit) },
+                { label, role: 'moving-part', part: graphPartKeyForNode(partNode, graphPartRoleForNode(partNode.role) ?? 'linkage', graph) },
                 { label: FABRICATION_SPACER_SPEC.label, role: 'spacer', part: `spacers:${FABRICATION_SPACER_SPEC.key}` },
                 { label: `End hole ${coords[1] ?? coords[0] ?? primaryAnchor.coordinate}`, role: coordRoleForNode(constraint.nodes[1] ?? constraint.nodes[0]) },
                 { label: 'Paper fastener', role: 'hardware', part: 'hardware:paper-fastener' },
@@ -570,11 +610,11 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
         } satisfies FabricationRecipe['assemblySteps'][number];
     });
     const partSteps = graph.nodes
-        .filter(node => GRAPH_FABRICATION_PART_ROLES.has(node.role) && !representedLinkPartNodeIds.has(node.id))
+        .filter(node => graphNodeIsFabricatedPart(node) && !representedLinkPartNodeIds.has(node.id))
         .map((node, index) => {
         const coord = boardCoordinateForNode(node.id);
         const role = graphPartRoleForNode(node.role) ?? 'linkage';
-        const label = graphPartLabelForNode(node, graph.source, kit);
+        const label = graphPartLabelForNode(node, graph);
         const stackReferenceRole = boardMountedNodeIds.has(node.id) ? 'board' : coordRoleForNode(node.id);
         return {
             index: boardSteps.length + linkSteps.length + index + 1,
@@ -589,7 +629,7 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
             check: role === 'gear' ? 'The gear spins without rubbing.' : 'The part moves freely.',
             stack: stack(
                 { label: 'Back Clip', role: 'clip' },
-                { label, role: 'moving-part', part: graphPartKeyForNode(node, role, kit) },
+                { label, role: 'moving-part', part: graphPartKeyForNode(node, role, graph) },
                 { label: FABRICATION_SPACER_SPEC.label, role: 'spacer', part: `spacers:${FABRICATION_SPACER_SPEC.key}` },
                 { label: `Graph point ${coord}`, role: stackReferenceRole },
                 { label: 'Paper fastener', role: 'hardware', part: 'hardware:paper-fastener' },
@@ -602,7 +642,7 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
         : [...linkSteps, ...partSteps];
     const assemblySteps = [...boardSteps, ...movingPartSteps].map((step, index) => ({ ...step, index: index + 1 }));
     const requiredParts = requiredPartsFromAssemblySteps(assemblySteps);
-    const renderPlan = graphRenderPlan(assemblySteps, validationErrors);
+    const renderPlan = graphRenderPlan(graph, assemblySteps, validationErrors);
     const recipe: FabricationRecipe = {
         mechanismId: graph.mechanismId,
         type: 'graph',

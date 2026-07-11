@@ -3,6 +3,7 @@ import { FoundryCanvasPane } from "./FoundryCanvasPane";
 import { FoundryInspectorPanel } from "./FoundryInspectorPanel";
 import { FoundryWorkflowPanel } from "./FoundryWorkflowPanel";
 import type {
+  FoundryConnectionHoleHandle,
   FoundryParamHandle,
   FoundryParamHandleId,
 } from "./FoundryOverlayLayer";
@@ -27,6 +28,7 @@ import {
 import type {
   AppStage,
   BodyPartLayer,
+  ConnectionSelectionRole,
   FoundryExportPackage,
   MechanismConfig,
   MechanismType,
@@ -51,6 +53,14 @@ import {
   sampleFeasibleRange,
 } from "../../../utils/fabrication";
 import { compileMechanismRenderPlan } from "../../../utils/mechanismCompiler";
+import {
+  authorMechanismConnectionSelection,
+  connectionSelectionAccepted,
+  connectionSelectionSignature,
+  connectionSelectionSceneCoordinates,
+  mechanismConnectionHoleCandidates,
+  normalizeMechanismConnectionSelections,
+} from "../../../utils/mechanismConnectionSelections";
 import {
   boardToScene,
   bodyPartPivotScene,
@@ -150,6 +160,8 @@ export const MechanismFoundry = ({
     pan: { x: 0, y: 0 },
   });
   const [foundryRigOpacity, setFoundryRigOpacity] = useState(85);
+  const [lastSelectedConnectionRole, setLastSelectedConnectionRole] =
+    useState<ConnectionSelectionRole | null>(null);
   const [foundryProjectionSize, setFoundryProjectionSize] =
     useState<FoundryOverlaySize>(FOUNDRY_OVERLAY_SIZE);
   const [isOrbitingFoundry, setIsOrbitingFoundry] = useState(false);
@@ -347,6 +359,13 @@ export const MechanismFoundry = ({
       compileMechanismRenderPlan(landedFoundry, project.settings.physicalKit),
     [landedFoundry, project.settings.physicalKit],
   );
+  const selectedConnectionState =
+    foundryRenderPlan.connectionSelectionSummary ??
+    normalizeMechanismConnectionSelections(
+      landedFoundry,
+      landedFoundry.connectionSelections,
+      landedFoundry.connectionSelectionValidation,
+    );
   const foundryTopLayer = foundryRenderPlan.layers.at(-1);
   const foundryStackLayerZ = useMemo(
     () =>
@@ -455,6 +474,14 @@ export const MechanismFoundry = ({
       range?.currentSafe && Math.abs(range.max - range.min) > 0.001,
     );
   };
+  const fourBarInputAuthored = connectionSelectionAccepted(
+    selectedConnectionState.connectionSelectionValidation,
+    "4bar.input-joint",
+  );
+  const fourBarOutputAuthored = connectionSelectionAccepted(
+    selectedConnectionState.connectionSelectionValidation,
+    "4bar.output-joint",
+  );
   const rawFoundryParamHandles: Array<
     Omit<FoundryParamHandle, "z" | "screen">
   > = [
@@ -476,15 +503,19 @@ export const MechanismFoundry = ({
             id: "B" as const,
             label: "B crank",
             point: selectedSimulation.state.j1,
-            draggable: paramHasSafeTravel("crankLength"),
+            draggable:
+              !fourBarInputAuthored &&
+              (fourBarOutputAuthored || paramHasSafeTravel("crankLength")),
           },
           {
             id: "C" as const,
             label: "C output",
             point: selectedSimulation.state.j2,
             draggable:
-              paramHasSafeTravel("couplerLength") ||
-              paramHasSafeTravel("rockerLength"),
+              !fourBarOutputAuthored &&
+              (fourBarInputAuthored ||
+                paramHasSafeTravel("couplerLength") ||
+                paramHasSafeTravel("rockerLength")),
           },
           {
             id: "D" as const,
@@ -509,6 +540,44 @@ export const MechanismFoundry = ({
   const foundryParamHandleZSummary = foundryParamHandles
     .map((handle) => `${handle.id}:${handle.z.toFixed(2)}`)
     .join(",");
+
+  const authoredConnectionSelectionCoordinates = useMemo(
+    () =>
+      connectionSelectionSceneCoordinates(
+        landedFoundry,
+        selectedSimulation.state,
+        selectedConnectionState.connectionSelections,
+      ),
+    [
+      landedFoundry,
+      selectedConnectionState.connectionSelections,
+      selectedSimulation.state,
+    ],
+  );
+  const connectionExportSignature = connectionSelectionSignature(
+    foundryRenderPlan.connectionSelectionSummary?.connectionSelections ?? {},
+  );
+  const connectionHoleHandles: FoundryConnectionHoleHandle[] = useMemo(
+    () =>
+      mechanismConnectionHoleCandidates(
+        landedFoundry,
+        selectedSimulation.state,
+        landedFoundry.connectionSelections,
+      ).flatMap((candidate) => {
+        const { coordinate, ...handle } = candidate;
+        const screen = projectFoundryOverlayPoint(
+          coordinate,
+          foundryCamera,
+          foundryProjectionSize,
+          0,
+        );
+        return screen ? [{ ...handle, screen }] : [];
+      }),
+    [foundryCamera, foundryProjectionSize, landedFoundry, selectedSimulation.state],
+  );
+  const selectedConnectionHandle =
+    connectionHoleHandles.find((handle) => handle.role === lastSelectedConnectionRole && handle.selected) ??
+    connectionHoleHandles.find((handle) => handle.selected);
   const primaryOutputTrace =
     rawFoundryPointTraces.find((trace) => trace.primary) ??
     rawFoundryPointTraces[0];
@@ -529,6 +598,7 @@ export const MechanismFoundry = ({
   const hardBlocked =
     !targetReady ||
     range.percentValid === 0 ||
+    selectedConnectionState.connectionSelectionValidation?.status === "invalid" ||
     !Number.isFinite(landing.x) ||
     !Number.isFinite(landing.y);
   const foundryCameraLabel =
@@ -687,6 +757,10 @@ export const MechanismFoundry = ({
       { preserveGeneratedPath: true },
     );
   };
+  const applyDirectFoundryUpdates = (updates: Partial<MechanismConfig>) => {
+    if (!Object.keys(updates).length) return;
+    setFoundry(refreshEditedFoundryMechanism({ ...foundry, ...updates }));
+  };
   const applySafeFoundryUpdates = (updates: Partial<MechanismConfig>) => {
     const constrainedUpdates = constrainMechanismUpdate(
       foundry,
@@ -694,9 +768,7 @@ export const MechanismFoundry = ({
       project.settings.physicalKit,
     );
     if (!Object.keys(constrainedUpdates).length) return;
-    setFoundry(
-      refreshEditedFoundryMechanism({ ...foundry, ...constrainedUpdates }),
-    );
+    applyDirectFoundryUpdates(constrainedUpdates);
   };
   const updateFoundryParam = (key: keyof MechanismConfig, value: number) => {
     if (key === "anchorX" || key === "anchorY") {
@@ -724,6 +796,14 @@ export const MechanismFoundry = ({
     applySafeFoundryUpdates({ [key]: value } as Partial<MechanismConfig>);
   };
   const updateFoundryParams = (updates: Partial<MechanismConfig>) => {
+    if (updates.connectionSelections) {
+      setFoundry(mechanismWithGeneratedPath({ ...foundry, ...updates }));
+      return;
+    }
+    if (foundry.type === "gear_linkage" && updates.gearTrainRadii) {
+      applyDirectFoundryUpdates(updates);
+      return;
+    }
     applySafeFoundryUpdates(updates);
   };
   const foundryPointFromOverlayEvent = (
@@ -786,12 +866,35 @@ export const MechanismFoundry = ({
         "couplerLength",
         sceneDistance(s.j1, point),
       ),
-      rockerLength: clampMechanismParam(
-        "rockerLength",
-        sceneDistance(s.p2, point),
-      ),
+      ...(fourBarOutputAuthored
+        ? {}
+        : {
+            rockerLength: clampMechanismParam(
+              "rockerLength",
+              sceneDistance(s.p2, point),
+            ),
+          }),
     });
   };
+
+  const handleConnectionHolePointerDown =
+    (handle: FoundryConnectionHoleHandle) =>
+    (event: React.PointerEvent<SVGCircleElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (Number.isFinite(event.pointerId) && !event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }
+      setFoundryPlaying(false);
+      setLastSelectedConnectionRole(handle.role);
+      updateFoundryParams(
+        authorMechanismConnectionSelection(
+          landedFoundry,
+          handle.role,
+          handle.selection,
+        ),
+      );
+    };
   const handleFoundryParamPointerDown =
     (handle: FoundryParamHandleId) =>
     (event: React.PointerEvent<SVGCircleElement>) => {
@@ -962,6 +1065,7 @@ export const MechanismFoundry = ({
           foundry.recommendation ?? FOUNDRY_PRESETS[preset]?.recommendation,
         simulationFriction: project.settings.simulationFriction,
         simulationMassKg: project.settings.simulationMassKg,
+        connectionExportSignature,
       },
       warnings: range.warning ? [range.warning] : [],
       source: "mechanism-foundry",
@@ -1064,6 +1168,10 @@ export const MechanismFoundry = ({
             forceRaw={forceRaw}
             foundryParamHandles={foundryParamHandles}
             foundryParamHandleZSummary={foundryParamHandleZSummary}
+            connectionHoleHandles={connectionHoleHandles}
+            connectionSelectionCoordinates={authoredConnectionSelectionCoordinates}
+            connectionExportSignature={connectionExportSignature}
+            selectedConnection={selectedConnectionHandle ? { role: selectedConnectionHandle.role, kind: selectedConnectionHandle.kind, holeIndex: selectedConnectionHandle.holeIndex } : undefined}
             hasManualAnchor={Boolean(manualAnchor)}
             landingBoardLabel={landingBoard.label}
             onSetCameraPreset={setCameraPreset}
@@ -1092,6 +1200,7 @@ export const MechanismFoundry = ({
             onParamPointerDown={handleFoundryParamPointerDown}
             onParamPointerMove={handleFoundryParamPointerMove}
             onParamPointerUp={handleFoundryParamPointerUp}
+            onConnectionHolePointerDown={handleConnectionHolePointerDown}
           />,
         ),
         inspector: inspectorPane(

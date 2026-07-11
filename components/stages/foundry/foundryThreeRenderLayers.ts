@@ -17,6 +17,7 @@ import {
   type FoundryPinStackPoint,
 } from "../../../utils/mechanismPreviewStacks";
 import type { FoundryThreePrimitiveFactory } from "./foundryThreePrimitives";
+import { resolveFourBarLinkageBlankPoses } from "../../../utils/mechanismConnectionSelections";
 import {
   foundryAssemblyLayerState,
   type FoundryAssemblySceneFrame,
@@ -105,6 +106,7 @@ export const renderFoundryDynamicLayers = ({
     );
 
   const s = simulation.state;
+  const fourBarBlankPoses = resolveFourBarLinkageBlankPoses(mechanism, s);
   const angle = pinionRotation;
   const camGuideFallback = {
     x: Math.cos(degToRad(mechanism.groundAngle ?? 90)),
@@ -181,10 +183,27 @@ export const renderFoundryDynamicLayers = ({
       addBar(s.p2, s.aux, z, mat, linkageHoleCountFromLabel(label, 2));
     else if (mechanism.type === "planetary_gear" && /carrier/i.test(label))
       addBar(s.p1, s.p2, z, mat, linkageHoleCountFromLabel(label, 3));
-    else if (mechanism.type === "4bar" && /output|rocker/i.test(label))
-      addBar(s.p2, s.j2, z, mat, linkageHoleCountFromLabel(label, 3));
-    else if (/input|crank|left/i.test(label))
-      addBar(s.p1, s.j1, z, mat, linkageHoleCountFromLabel(label, 3));
+    else if (mechanism.type === "4bar" && /output|rocker/i.test(label)) {
+      const pose = fourBarBlankPoses["4bar.output-joint"];
+      addBar(
+        pose?.origin ?? s.p2,
+        pose?.end ?? s.j2,
+        z,
+        mat,
+        pose?.holeCount ?? linkageHoleCountFromLabel(label, 3),
+        pose?.partKey,
+      );
+    } else if (/input|crank|left/i.test(label)) {
+      const pose = mechanism.type === "4bar" ? fourBarBlankPoses["4bar.input-joint"] : undefined;
+      addBar(
+        pose?.origin ?? s.p1,
+        pose?.end ?? s.j1,
+        z,
+        mat,
+        pose?.holeCount ?? linkageHoleCountFromLabel(label, 3),
+        pose?.partKey,
+      );
+    }
     else if (/right/i.test(label))
       addBar(s.p2, s.j2, z, mat, linkageHoleCountFromLabel(label, 3));
     else if (/coupler|center|carrier/i.test(label))

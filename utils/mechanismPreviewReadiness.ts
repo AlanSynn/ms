@@ -10,9 +10,10 @@ import {
 import { gearTrainPitchCenterDistance, gearTrainPitchRadii, gearTrainResolvedCenterDistance } from './kinematics';
 import { compileGraphFabricationRecipe } from './mechanismGraphFabricationCompiler';
 import { mechanismGraphForMechanism } from './mechanismGraph';
+import { normalizeMechanismConnectionSelections } from './mechanismConnectionSelections';
 
 export const validateMechanismPreviewReadiness = (mechanism: MechanismConfig, kit?: PhysicalKitSettings): string[] => {
-    const pitchMm = kit?.gridPitchMm;
+    const boardPitchMm = kit?.gridPitchMm;
     const graphFabrication = compileGraphFabricationRecipe(mechanismGraphForMechanism(mechanism), kit);
     const renderPlanErrors = graphFabrication.renderPlan.validationErrors;
     const errors = [
@@ -35,11 +36,18 @@ export const validateMechanismPreviewReadiness = (mechanism: MechanismConfig, ki
     if ((mechanism.type === 'gear' || mechanism.type === 'gear_linkage' || mechanism.type === 'planetary_gear') && (mechanism.gearRatio ?? 0) === 0) errors.push('gear ratio 0.');
 
     if (mechanism.type === '4bar') {
+        const connectionState = normalizeMechanismConnectionSelections(
+            mechanism,
+            mechanism.connectionSelections,
+            mechanism.connectionSelectionValidation,
+        );
+        const hasResolvedInputHole = connectionState.connectionSelections?.['4bar.input-joint']?.kind === 'linkage-hole';
+        const hasResolvedOutputHole = connectionState.connectionSelections?.['4bar.output-joint']?.kind === 'linkage-hole';
         const lengthsAreFabricationSnapped =
-            closeToBoardPitch(mechanism.groundLength, pitchMm) &&
-            closeToFabricationLinkage(mechanism.crankLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.driver, pitchMm) &&
-            closeToFabricationLinkage(mechanism.couplerLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.coupler, pitchMm) &&
-            closeToFabricationLinkage(mechanism.rockerLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.output, pitchMm);
+            closeToBoardPitch(mechanism.groundLength, boardPitchMm) &&
+            (hasResolvedInputHole || closeToFabricationLinkage(mechanism.crankLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.driver)) &&
+            closeToFabricationLinkage(mechanism.couplerLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.coupler) &&
+            (hasResolvedOutputHole || closeToFabricationLinkage(mechanism.rockerLength, FABRICATION_LINKAGE_ROLE_MIN_HOLES.output));
         if (!lengthsAreFabricationSnapped) errors.push('snap four-bar linkage lengths.');
     }
 

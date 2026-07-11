@@ -26,6 +26,30 @@ export interface Transform {
     scale: number;
 }
 
+export type ConnectionSelectionRole =
+    | '4bar.input-joint'
+    | '4bar.output-joint'
+    | 'gear_linkage.drive-pin'
+    | 'gear_linkage.output-pin';
+
+export type FabricationLinkageKey = `linkage-${number}-cell`;
+export type FabricationGearKey = 'g8' | 'g24' | 'g40' | 'g56';
+
+export type ConnectionSelection =
+    | { kind: 'linkage-hole'; linkageKey: FabricationLinkageKey; holeIndex: number }
+    | { kind: 'gear-attachment-hole'; gearKey: FabricationGearKey; gearIndex: number; holeIndex: number };
+
+export type ConnectionSelections = Partial<Record<ConnectionSelectionRole, ConnectionSelection>>;
+
+export interface ConnectionSelectionValidation {
+    status: 'valid' | 'invalid';
+    entries: Array<{
+        role: string;
+        status: 'accepted' | 'defaulted' | 'rejected';
+        reason?: string;
+    }>;
+}
+
 export interface MechanismConfig {
     id: string;
     type: MechanismType;
@@ -91,6 +115,8 @@ export interface MechanismConfig {
     source?: 'manual' | 'foundry' | 'optimized' | 'imported';
     generatedPath?: Point[];
     warnings?: string[];
+    connectionSelections?: ConnectionSelections;
+    connectionSelectionValidation?: ConnectionSelectionValidation;
 }
 
 export interface FoundryExportPackage {
@@ -105,7 +131,7 @@ export interface FoundryExportPackage {
     simulationSummary: string;
     visual: { color: string; scale: number; constraintsVisible: boolean };
     animation: { duration: number; steps: number; loop: boolean };
-    metadata: { sourceTab: string; selectedPreset?: string; recommendation?: string; simulationFriction?: number; simulationMassKg?: number };
+    metadata: { sourceTab: string; selectedPreset?: string; recommendation?: string; simulationFriction?: number; simulationMassKg?: number; connectionExportSignature?: string };
     targetPartId?: string;
     targetSceneObjectId?: string;
     targetPathId?: string;

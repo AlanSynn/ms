@@ -1,7 +1,7 @@
 # MotionSmith Project Agents Contract
 
 Status: active
-Last refreshed: 2026-06-29
+Last refreshed: 2026-07-11
 Scope: every implementation, design, test, and documentation change in this repository.
 
 This file is the project-level rulebook for future agents. If older docs or UI copy drift from this contract, update the product to match this file and `README.md`; do not add another explanatory layer.
@@ -127,7 +127,7 @@ Keep files compact by responsibility, not by ceremony. Split code when one file 
 - Domain modules compute. UI modules compose. Renderer modules draw. Export modules serialize. A file that does two of these gets split at the existing seam.
 - Use SOLID as a guardrail, not boilerplate: single responsibility first; open extension through existing registries/contracts; dependency inversion only at real boundaries such as renderer, physics, import, or export.
 - Do not create interfaces, factories, providers, or adapters with one implementation. Plain typed functions are preferred until a second real consumer exists.
-- New mechanism behavior enters the shared domain path first: `utils/mechanismReference.ts`, `utils/mechanismFeatureRegistry.ts`, `utils/kinematics.ts`, fabrication manifest/recipes, then UI. No stage component may invent a private mechanism rule.
+- New mechanism behavior enters the shared domain path first: `utils/mechanismReference.ts`, `utils/mechanismFeatureRegistry.ts`, `utils/kinematics.ts`, fabrication manifest/recipes, then UI. Physical connection authoring additionally enters through `utils/mechanismConnectionSelections.ts`, then the shared graph/compiler path; update the exact role policy, kinematics, fabrication plan, visible hole affordance, persistence, and cross-stage contract tests together. No stage component may invent a private mechanism rule or scalar-only substitute for a physical connection.
 - File-size target: keep new files under roughly 400 lines and refactor files over roughly 800 lines when already touching them. Do not churn stable large files just to satisfy a number; move behavior with tests.
 - Refactor by extraction only unless the task is a redesign: move code, preserve names/behavior, run tests, then simplify. Never mix huge file moves with feature changes.
 - UI leaf extraction must preserve existing public mount/import contracts with temporary re-exports until call sites move; contract tests should lock the mount before compatibility exports are removed.

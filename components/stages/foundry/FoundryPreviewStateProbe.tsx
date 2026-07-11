@@ -125,6 +125,9 @@ type FoundryPreviewStateProbeProps = {
   physicalValidationSummary: string;
   assemblySceneFrame?: FoundryAssemblySceneFrame;
   assemblyLayerFocusSummary: string;
+  connectionSelectionCoordinates: Record<string, Point>;
+  connectionExportSignature: string;
+  selectedConnection?: { role: string; kind: string; holeIndex: number };
 };
 
 export const FoundryPreviewStateProbe = ({
@@ -199,6 +202,9 @@ export const FoundryPreviewStateProbe = ({
   physicalValidationSummary,
   assemblySceneFrame,
   assemblyLayerFocusSummary,
+  connectionSelectionCoordinates,
+  connectionExportSignature,
+  selectedConnection,
 }: FoundryPreviewStateProbeProps) => {
   const assemblyBoardMarkerCount =
     assemblySceneFrame?.kind === "character"
@@ -250,6 +256,11 @@ export const FoundryPreviewStateProbe = ({
       data-camera-pan-y={(camera.pan?.y ?? 0).toFixed(3)}
       data-camera-distance={foundryCameraDistance(camera).toFixed(3)}
       data-rig-opacity={rigOpacity.toFixed(2)}
+      data-three-connection-selection-coordinates={JSON.stringify(connectionSelectionCoordinates)}
+      data-three-fabrication-export-signature={connectionExportSignature}
+      data-three-selected-connection-role={selectedConnection?.role ?? ""}
+      data-three-selected-connection-kind={selectedConnection?.kind ?? ""}
+      data-three-selected-connection-hole-index={selectedConnection ? String(selectedConnection.holeIndex) : ""}
       data-three-renderer="webgl"
       data-three-engine-stack={PHYSICS_RENDER_STACK}
       data-physics-kernel={PHYSICS_KERNEL_ENGINE}

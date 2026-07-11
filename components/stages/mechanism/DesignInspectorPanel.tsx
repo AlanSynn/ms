@@ -22,6 +22,7 @@ import {
   motionSafeParamRange,
   shouldShowMechanismParam,
 } from "./mechanismParamPolicy";
+import { mechanismParamIsPlacementRecoveryEditable } from "../../../utils/mechanismEditAuthority";
 
 type DesignInspectorPanelProps = {
   project: ProjectState;
@@ -235,7 +236,14 @@ export const DesignInspectorPanel = ({
                   min={safeRange?.min ?? p.min}
                   max={safeRange?.max ?? p.max}
                   step={p.step}
-                  disabled={safeRange?.currentSafe === false}
+                  disabled={
+                    safeRange?.currentSafe === false &&
+                    !mechanismParamIsPlacementRecoveryEditable(
+                      selectedMechanism,
+                      p.key,
+                      project.settings.physicalKit,
+                    )
+                  }
                   onChange={(value) =>
                     updateMechanism(selectedMechanism.id, {
                       [p.key]: clampMechanismParamForMotion(

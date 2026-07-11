@@ -25,6 +25,7 @@ import {
   gearTrainResolvedCenterDistance,
 } from "./kinematics";
 import { compileMechanismGraphFabrication } from "./mechanismCompiler";
+import { resolveFourBarConnectionSelections } from "./mechanismConnectionSelections";
 
 export type MechanismParamMeta = {
   key: keyof MechanismConfig;
@@ -186,23 +187,23 @@ const mechanismDimensionsAreBuildable = (
     return false;
   }
   if (mechanism.type === "4bar") {
+    const connections = resolveFourBarConnectionSelections(mechanism);
     return (
       closeToBoardPitch(mechanism.groundLength, kit.gridPitchMm) &&
-      closeToFabricationLinkage(
-        mechanism.crankLength,
-        FABRICATION_LINKAGE_ROLE_MIN_HOLES.driver,
-        kit.gridPitchMm,
-      ) &&
+      (connections.inputJoint !== undefined ||
+        closeToFabricationLinkage(
+          mechanism.crankLength,
+          FABRICATION_LINKAGE_ROLE_MIN_HOLES.driver,
+        )) &&
       closeToFabricationLinkage(
         mechanism.couplerLength,
         FABRICATION_LINKAGE_ROLE_MIN_HOLES.coupler,
-        kit.gridPitchMm,
       ) &&
-      closeToFabricationLinkage(
-        mechanism.rockerLength,
-        FABRICATION_LINKAGE_ROLE_MIN_HOLES.output,
-        kit.gridPitchMm,
-      )
+      (connections.outputJoint !== undefined ||
+        closeToFabricationLinkage(
+          mechanism.rockerLength,
+          FABRICATION_LINKAGE_ROLE_MIN_HOLES.output,
+        ))
     );
   }
   if (mechanism.type === "gear") {
@@ -257,7 +258,28 @@ export const mechanismEditIsSafe = (
   mechanismDimensionsAreBuildable(mechanism, kit) &&
   mechanismGraphBuildIsSafe(mechanism, kit);
 
-const nearestBuildableBoardAnchorValue = (
+const MECHANISM_PLACEMENT_RECOVERY_KEYS = new Set<keyof MechanismConfig>([
+  "anchorX",
+  "anchorY",
+]);
+
+export const mechanismParamIsPlacementRecoveryEditable = (
+  mechanism: MechanismConfig,
+  key: keyof MechanismConfig,
+  _kit: PhysicalKitSettings = defaultPhysicalKit(),
+): key is "anchorX" | "anchorY" | "groundLength" =>
+  MECHANISM_PLACEMENT_RECOVERY_KEYS.has(key) ||
+  (mechanism.type === "4bar" && key === "groundLength");
+
+const nearestBoardSpan = (value: number, kit: PhysicalKitSettings) => {
+  const center = Math.floor(kit.boardCells / 2);
+  const a = boardToScene(center, center, kit);
+  const b = boardToScene(Math.min(kit.boardCells - 1, center + 1), center, kit);
+  const pitch = Math.max(1, Math.hypot(b.x - a.x, b.y - a.y));
+  return Math.max(pitch, Math.round(Math.abs(value) / pitch) * pitch);
+};
+
+const boardAnchorAxisCandidates = (
   mechanism: MechanismConfig,
   key: "anchorX" | "anchorY",
   requestedValue: number,
@@ -272,7 +294,7 @@ const nearestBuildableBoardAnchorValue = (
     key === "anchorX"
       ? Math.max(0, Math.min(kit.boardCells - 1, currentBoard.row))
       : Math.max(0, Math.min(kit.boardCells - 1, currentBoard.col));
-  const candidates = Array.from({ length: kit.boardCells }, (_, index) => {
+  return Array.from({ length: kit.boardCells }, (_, index) => {
     const point =
       key === "anchorX"
         ? boardToScene(index, fixedIndex, kit)
@@ -281,11 +303,27 @@ const nearestBuildableBoardAnchorValue = (
   }).sort(
     (a, b) => Math.abs(a - requestedValue) - Math.abs(b - requestedValue),
   );
-  return (
-    candidates.find((value) =>
-      mechanismEditIsSafe({ ...mechanism, [key]: value }, kit),
-    ) ?? Number(mechanism[key] ?? 0)
+};
+
+const nearestBuildableBoardAnchorValue = (
+  mechanism: MechanismConfig,
+  key: "anchorX" | "anchorY",
+  requestedValue: number,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+) => {
+  const candidates = boardAnchorAxisCandidates(
+    mechanism,
+    key,
+    requestedValue,
+    kit,
   );
+  const safeCandidate = candidates.find((value) =>
+    mechanismEditIsSafe({ ...mechanism, [key]: value }, kit),
+  );
+  if (safeCandidate !== undefined) return safeCandidate;
+  return mechanismParamIsPlacementRecoveryEditable(mechanism, key, kit)
+    ? (candidates[0] ?? Number(mechanism[key] ?? 0))
+    : Number(mechanism[key] ?? 0);
 };
 
 export const motionSafeParamRange = (
@@ -339,6 +377,13 @@ export const clampMechanismParamForMotion = (
   if (key === "anchorX" || key === "anchorY") {
     return nearestBuildableBoardAnchorValue(mechanism, key, value, kit);
   }
+  if (
+    key === "groundLength" &&
+    mechanism.type === "4bar" &&
+    !mechanismEditIsSafe(mechanism, kit)
+  ) {
+    return nearestBoardSpan(clampMechanismParam(key, value), kit);
+  }
   const range = motionSafeParamRange(mechanism, key, kit);
   const clamped = clampMechanismParam(key, value);
   const bounded = range?.currentSafe
@@ -371,6 +416,7 @@ export const MECHANISM_FEASIBILITY_AUTHORITY_KEYS = [
   "phase",
   "outputGearRadius",
   "showOutputGear",
+  "connectionSelections",
 ] as const satisfies readonly (keyof MechanismConfig)[];
 
 export const MECHANISM_REPLACEMENT_ONLY_KEYS = [
@@ -397,6 +443,7 @@ export const MECHANISM_NON_FEASIBILITY_EDIT_KEYS = [
   "source",
   "generatedPath",
   "warnings",
+  "connectionSelectionValidation",
 ] as const satisfies readonly (keyof MechanismConfig)[];
 
 const motionAuthorityKeys = new Set<keyof MechanismConfig>(
@@ -464,15 +511,15 @@ export const constrainMechanismUpdate = (
         return;
       }
       if (!isFiniteScalarParam(key, value)) return;
-      const nextValue = clampMechanismParamForMotion(
-        { ...mechanism, ...constrained },
-        key,
-        value,
-        kit,
-      );
+      const current = { ...mechanism, ...constrained };
+      const nextValue = clampMechanismParamForMotion(current, key, value, kit);
       if (nextValue !== mechanism[key]) {
-        (constrained as Record<keyof MechanismConfig, unknown>)[key] =
-          nextValue;
+        if (
+          mechanismParamIsPlacementRecoveryEditable(current, key, kit) ||
+          mechanismEditIsSafe({ ...current, [key]: nextValue }, kit)
+        ) {
+          (constrained as Record<keyof MechanismConfig, unknown>)[key] = nextValue;
+        }
       }
     },
   );

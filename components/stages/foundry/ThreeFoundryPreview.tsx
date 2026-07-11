@@ -120,6 +120,9 @@ type ThreeFoundryPreviewProps = {
   onAutomataPartSelect?: (partId: string) => void;
   onAutomataSceneObjectSelect?: (objectId: string) => void;
   assemblySceneFrame?: FoundryAssemblySceneFrame;
+  connectionSelectionCoordinates?: Record<string, Point>;
+  connectionExportSignature?: string;
+  selectedConnection?: { role: string; kind: string; holeIndex: number };
   viewerTab?: Viewer3DTabKey;
   automataContext?: FoundryAutomataContext;
   children: React.ReactNode;
@@ -504,6 +507,9 @@ export const ThreeFoundryPreview = ({
   onAutomataPartSelect,
   onAutomataSceneObjectSelect,
   assemblySceneFrame,
+  connectionSelectionCoordinates = {},
+  connectionExportSignature = "",
+  selectedConnection,
   viewerTab = "foundry",
   automataContext,
   children,
@@ -597,6 +603,7 @@ export const ThreeFoundryPreview = ({
         ? "planetary-coplanar-ring-sun-planet"
         : "exploded-stack"
       : "not-gear-train";
+
   const viewerContract = useMemo(
     () =>
       createViewer3DContract(viewerTab, camera.preset, {
@@ -1621,6 +1628,9 @@ export const ThreeFoundryPreview = ({
         physicalValidationSummary={physicalValidationSummary}
         assemblySceneFrame={assemblySceneFrame}
         assemblyLayerFocusSummary={assemblyLayerFocusSummary}
+        connectionSelectionCoordinates={connectionSelectionCoordinates}
+        connectionExportSignature={connectionExportSignature}
+        selectedConnection={selectedConnection}
       />
       {children}
     </div>

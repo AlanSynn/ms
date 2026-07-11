@@ -1,5 +1,5 @@
 import React from "react";
-import type { Point } from "../../../types";
+import type { ConnectionSelection, ConnectionSelectionRole, Point } from "../../../types";
 import type { FoundryOverlaySize } from "../../../utils/foundryCamera";
 
 export type FoundryParamHandleId = "M" | "A" | "B" | "C" | "D";
@@ -11,6 +11,16 @@ export type FoundryParamHandle = {
   draggable: boolean;
   z: number;
   screen: Point;
+};
+
+export type FoundryConnectionHoleHandle = {
+  role: ConnectionSelectionRole;
+  kind: ConnectionSelection["kind"];
+  partKey: string;
+  holeIndex: number;
+  screen: Point;
+  selected: boolean;
+  selection: ConnectionSelection;
 };
 
 type FoundryOverlayLayerProps = {
@@ -35,6 +45,10 @@ type FoundryOverlayLayerProps = {
   physicsRule: string;
   foundryParamHandles: FoundryParamHandle[];
   foundryParamHandleZSummary: string;
+  connectionHoleHandles: FoundryConnectionHoleHandle[];
+  onConnectionHolePointerDown: (
+    handle: FoundryConnectionHoleHandle,
+  ) => React.PointerEventHandler<SVGCircleElement>;
   hasManualAnchor: boolean;
   landingBoardLabel: string;
   onParamPointerDown: (
@@ -66,6 +80,8 @@ export const FoundryOverlayLayer = ({
   physicsRule,
   foundryParamHandles,
   foundryParamHandleZSummary,
+  connectionHoleHandles,
+  onConnectionHolePointerDown,
   hasManualAnchor,
   landingBoardLabel,
   onParamPointerDown,
@@ -76,6 +92,7 @@ export const FoundryOverlayLayer = ({
     data-testid="foundry-preview-overlay"
     viewBox={`0 0 ${foundryProjectionSize.width} ${foundryProjectionSize.height}`}
     className="foundry-preview-overlay"
+    style={{ pointerEvents: "auto" }}
     aria-label="Foundry physical joint overlay"
     data-projection-aspect={(
       foundryProjectionSize.width / Math.max(1, foundryProjectionSize.height)
@@ -236,7 +253,7 @@ export const FoundryOverlayLayer = ({
         {foundryParamHandles.map((handle) => (
           <g
             key={handle.id}
-            transform={`translate(${handle.screen!.x} ${handle.screen!.y})`}
+            transform={`translate(${handle.screen.x} ${handle.screen.y})`}
             data-testid={`foundry-param-handle-group-${handle.id}`}
           >
             <circle
@@ -262,6 +279,37 @@ export const FoundryOverlayLayer = ({
             <text className="foundry-param-label" x="10" y="-8">
               {handle.id}
             </text>
+          </g>
+        ))}
+      </g>
+    )}
+
+    {connectionHoleHandles.length > 0 && (
+      <g
+        data-testid="foundry-connection-hole-handles"
+        data-authority="physical-affordance"
+      >
+        {connectionHoleHandles.map((handle) => (
+          <g
+            key={`${handle.role}-${handle.partKey}-${handle.holeIndex}`}
+            transform={`translate(${handle.screen.x} ${handle.screen.y})`}
+            data-testid={`foundry-connection-hole-${handle.role}-${handle.holeIndex}`}
+          >
+            <circle
+              className="foundry-connection-hole-hit"
+              style={{ pointerEvents: "auto" }}
+              data-connection-role={handle.role}
+              data-connection-kind={handle.kind}
+              data-connection-part-key={handle.partKey}
+              data-connection-hole-index={handle.holeIndex}
+              r="10"
+              fill={handle.selected ? "#f59e0b" : "#ffffff"}
+              fillOpacity={handle.selected ? "0.92" : "0.72"}
+              stroke={handle.selected ? "#92400e" : "#2563eb"}
+              strokeWidth="3"
+              onPointerDown={onConnectionHolePointerDown(handle)}
+            />
+            <circle r="3" fill="#111827" pointerEvents="none" />
           </g>
         ))}
       </g>

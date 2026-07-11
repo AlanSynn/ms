@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import { CLASSROOM_LESSONS, createLessonProject, serializeProject } from '../../utils/project';
 import { FABRICATION_RENDER_LAYER_Z_STEP } from '../../utils/fabrication';
 import { APP_COMMANDS, APP_MENU_GROUPS, commandById, type AppCommandId } from '../../utils/appCommands';
+import { FOUNDRY_MECHANISM_TYPES } from '../../utils/mechanismTemplates';
+import type { ConnectionSelectionRole, Point } from '../../types';
 
 
 const TEST_ONNX_MODEL_BYTES = Buffer.alloc(1_000_001, 1);
@@ -103,10 +105,13 @@ type ThreeScreenTarget = {
   visible: boolean;
 };
 
-const readThreeScreenTargets = async (locator: Locator, attribute: string) => {
+const readJsonAttribute = async <T>(locator: Locator, attribute: string, fallback: T): Promise<T> => {
   const value = await locator.getAttribute(attribute);
-  return JSON.parse(value || '[]') as ThreeScreenTarget[];
+  return value ? JSON.parse(value) as T : fallback;
 };
+
+const readThreeScreenTargets = <T extends ThreeScreenTarget = ThreeScreenTarget>(locator: Locator, attribute: string) =>
+  readJsonAttribute<T[]>(locator, attribute, []);
 
 const waitForThreeSceneObjectTarget = async (locator: Locator, objectId: string) => {
   let target: ThreeScreenTarget | undefined;
@@ -447,6 +452,11 @@ test('Character tab owns separate scene objects and later tabs only render them'
   await page.getByTestId('character-part-item-head').click();
   await page.getByRole('button', { name: 'Mechanism Design', exact: true }).click();
   await expect(designPuppet).toHaveAttribute('data-selected-scene-object-id', '');
+  const designPlayer = page.getByTestId('workspace-player-dock');
+  await expect(designPlayer).toBeVisible();
+  const designPause = designPlayer.getByRole('button', { name: 'Pause', exact: true });
+  if (await designPause.isVisible()) await designPause.click();
+  await designPlayer.getByRole('button', { name: 'Start over', exact: true }).click();
   const objectCanvasBox = await objectDesignPreview.locator('canvas.foundry-three-canvas').boundingBox();
   expect(objectCanvasBox, 'design Foundry canvas supports object picking').toBeTruthy();
   await expect.poll(async () =>
@@ -731,6 +741,292 @@ const expectProjectCounts = async (page: Page, parts: number, paths: number, mec
   await expect(page.getByTestId('stage-project-card')).toHaveAttribute('aria-label', new RegExp(`${parts} parts, ${paths} paths, ${mechanisms} mechanisms`));
   await expect(page.getByTestId('stage-project-card')).not.toBeVisible();
 };
+
+
+type ConnectionHoleTarget = {
+  role: ConnectionSelectionRole;
+  kind: 'linkage-hole' | 'gear-attachment-hole';
+  partKey: string;
+  holeIndex: number;
+};
+
+const waitForConnectionHoleTarget = async (
+  page: Page,
+  role: ConnectionSelectionRole,
+  options: { holeIndex?: number; excludeHoleIndex?: number } = {},
+) => {
+  let target: ConnectionHoleTarget | undefined;
+  await expect.poll(async () => {
+    target = undefined;
+    const markers = page.locator(
+      `circle.foundry-connection-hole-hit[data-connection-role="${role}"]`,
+    );
+    const candidates: Array<{ marker: Locator; target: ConnectionHoleTarget }> = [];
+    for (let index = 0; index < await markers.count(); index += 1) {
+      const marker = markers.nth(index);
+      const holeIndex = Number(await marker.getAttribute('data-connection-hole-index'));
+      const kind = await marker.getAttribute('data-connection-kind');
+      const partKey = await marker.getAttribute('data-connection-part-key');
+      if (
+        !Number.isInteger(holeIndex)
+        || (kind !== 'linkage-hole' && kind !== 'gear-attachment-hole')
+        || !partKey
+        || (options.holeIndex !== undefined && holeIndex !== options.holeIndex)
+        || (options.excludeHoleIndex !== undefined && holeIndex === options.excludeHoleIndex)
+      ) continue;
+      candidates.push({ marker, target: { role, kind, partKey, holeIndex } });
+    }
+    candidates.sort((a, b) => a.target.holeIndex - b.target.holeIndex);
+    for (const candidate of candidates) {
+      if (!(await candidate.marker.isVisible())) continue;
+      const isPhysicalHitTarget = await candidate.marker.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          bounds.left + bounds.width / 2,
+          bounds.top + bounds.height / 2,
+        );
+        return hit === element || Boolean(hit && element.parentElement?.contains(hit));
+      });
+      if (isPhysicalHitTarget) {
+        target = candidate.target;
+        break;
+      }
+    }
+    return target ? `${target.role}:${target.holeIndex}` : '';
+  }, {
+    message: `${options.excludeHoleIndex === undefined ? '' : 'non-default '}physical hole affordance is visible for ${role}`,
+  }).toContain(`${role}:`);
+  return target!;
+};
+
+const waitForConnectionCoordinate = async (rig: Locator, role: ConnectionSelectionRole, previous?: Point) => {
+  let coordinate: Point | undefined;
+  await expect.poll(async () => {
+    const coordinates = await readJsonAttribute<Partial<Record<ConnectionSelectionRole, Point>>>(
+      rig,
+      'data-three-connection-selection-coordinates',
+      {},
+    );
+    coordinate = coordinates[role];
+    if (!coordinate || !Number.isFinite(coordinate.x) || !Number.isFinite(coordinate.y)) return false;
+    return !previous || coordinate.x !== previous.x || coordinate.y !== previous.y;
+  }, {
+    message: `canonical connection coordinate ${previous ? 'changes' : 'is available'} for ${role}`,
+  }).toBe(true);
+  return coordinate!;
+};
+
+const connectionSignaturePart = (signature: string | null, role: ConnectionSelectionRole) =>
+  (signature ?? '').split('|').find(part => part.startsWith(`${role}:`)) ?? '';
+
+const waitForConnectionSignature = async (rig: Locator, roles: readonly ConnectionSelectionRole[]) => {
+  let signature: string | null = null;
+  await expect.poll(async () => {
+    signature = await rig.getAttribute('data-three-fabrication-export-signature');
+    return roles.every(role => connectionSignaturePart(signature, role));
+  }, { message: `compiler connection signature contains ${roles.join(' and ')}` }).toBe(true);
+  return signature!;
+};
+
+const connectionSignatureHoleIndex = (signature: string, role: ConnectionSelectionRole) => {
+  const holeIndex = Number(connectionSignaturePart(signature, role).split(':').at(-1));
+  expect(Number.isInteger(holeIndex), `compiler signature exposes a hole index for ${role}`).toBe(true);
+  return holeIndex;
+};
+
+const clickConnectionHoleTarget = async (page: Page, target: ConnectionHoleTarget) => {
+  const marker = page.getByTestId(`foundry-connection-hole-${target.role}-${target.holeIndex}`).locator('circle.foundry-connection-hole-hit');
+  await expect(marker, `${target.role} hole ${target.holeIndex} is a visible physical overlay affordance`).toHaveAttribute('data-connection-role', target.role);
+  await expect(marker).toHaveAttribute('data-connection-kind', target.kind);
+  await expect(marker).toHaveAttribute('data-connection-part-key', target.partKey);
+  await expect(marker).toHaveAttribute('data-connection-hole-index', String(target.holeIndex));
+  await marker.click();
+};
+
+test('physical hole selection authors connection role and updates preview/export only through visible affordance', async ({ page }) => {
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  await page.goto('/');
+  await openCharacterScreen(page);
+  await clickStage(page, 'Foundry');
+  await expect(page.getByRole('heading', { name: 'Foundry' })).toBeVisible();
+  const foundryRig = page.getByTestId('foundry-camera-rig');
+  await expect(foundryRig).toHaveAttribute('data-mechanism-type', '4bar');
+
+  const beforeExportSignature = await waitForConnectionSignature(foundryRig, ['4bar.input-joint', '4bar.output-joint']);
+  const initialInputHoleIndex = connectionSignatureHoleIndex(beforeExportSignature, '4bar.input-joint');
+  const initialOutputSignaturePart = connectionSignaturePart(beforeExportSignature, '4bar.output-joint');
+  const initialInputHole = await waitForConnectionHoleTarget(page, '4bar.input-joint', { holeIndex: initialInputHoleIndex });
+  const beforeInput = await waitForConnectionCoordinate(foundryRig, '4bar.input-joint');
+  const foundryParametricEditor = page.getByTestId('foundry-parametric-editor');
+  await clickConnectionHoleTarget(page, initialInputHole);
+  await expect(foundryRig, 'explicitly selecting the deterministic default records the authored role').toHaveAttribute('data-three-selected-connection-role', '4bar.input-joint');
+  await expect(foundryRig).toHaveAttribute('data-three-selected-connection-hole-index', String(initialInputHoleIndex));
+  await expect(foundryParametricEditor.getByLabel('Input link length'), 'explicit same-hole authoring locks the accepted input endpoint').toBeDisabled();
+  await expect(foundryParametricEditor.getByLabel('Output link length'), 'same-hole input authoring preserves unrelated output default provenance').toBeEnabled();
+  await expect(foundryRig, 'same-hole authoring preserves physical geometry/export identity').toHaveAttribute('data-three-fabrication-export-signature', beforeExportSignature);
+  const inputHole = await waitForConnectionHoleTarget(page, '4bar.input-joint', { excludeHoleIndex: initialInputHoleIndex });
+  expect(inputHole.kind, '4bar input role is authored from linkage holes').toBe('linkage-hole');
+  await clickConnectionHoleTarget(page, inputHole);
+
+  await expect(foundryRig, 'preview exposes selected role/kind/part/hole after physical affordance drag').toHaveAttribute('data-three-selected-connection-role', '4bar.input-joint');
+  await expect(foundryRig).toHaveAttribute('data-three-selected-connection-kind', 'linkage-hole');
+  await expect(foundryRig).toHaveAttribute('data-three-selected-connection-hole-index', String(inputHole.holeIndex));
+  await expect(foundryParametricEditor, 'shared editor confirms selected connection but is display-only').toContainText(/4bar\.input-joint|Input joint/i);
+  await expect(foundryParametricEditor.getByTestId('connection-selection-author')).toHaveCount(0);
+  await expect(foundryParametricEditor.getByLabel('Input link length'), 'input endpoint size is confirmation-only after physical-hole authoring').toBeDisabled();
+  await expect(foundryParametricEditor.getByLabel('Output link length'), 'input authoring does not lock the independent output endpoint').toBeEnabled();
+  await expect(foundryParametricEditor.getByLabel('Coupler link length'), 'coupler length remains the editable scalar').toBeEnabled();
+  await expect(page.getByTestId('foundry-param-handle-B'), 'B/J1 handle is visible but cannot author an alternate input endpoint scalar').toHaveAttribute('data-draggable', 'false');
+  await expect(page.getByTestId('foundry-param-handle-C'), 'input authoring leaves the independent C/J2 output handle available').toHaveAttribute('data-draggable', 'true');
+
+  const afterInput = await waitForConnectionCoordinate(foundryRig, '4bar.input-joint', beforeInput);
+  expect(afterInput, 'live preview exposes the selected input coordinate').toBeTruthy();
+  expect(afterInput, 'dragging a different physical hole changes the preview coordinate').not.toEqual(beforeInput);
+  const afterInputSignature = await foundryRig.getAttribute('data-three-fabrication-export-signature');
+  expect(connectionSignaturePart(afterInputSignature, '4bar.output-joint'), 'input authoring preserves the independent output selection').toBe(initialOutputSignaturePart);
+
+  const currentOutputHoleIndex = connectionSignatureHoleIndex(afterInputSignature!, '4bar.output-joint');
+  await waitForConnectionHoleTarget(page, '4bar.output-joint', { holeIndex: currentOutputHoleIndex });
+  const beforeOutput = await waitForConnectionCoordinate(foundryRig, '4bar.output-joint');
+  const outputHole = await waitForConnectionHoleTarget(page, '4bar.output-joint', { excludeHoleIndex: currentOutputHoleIndex });
+  await clickConnectionHoleTarget(page, outputHole);
+
+  await expect(foundryRig, 'preview exposes the independently authored output role').toHaveAttribute('data-three-selected-connection-role', '4bar.output-joint');
+  await expect(foundryRig).toHaveAttribute('data-three-selected-connection-kind', 'linkage-hole');
+  await expect(foundryRig).toHaveAttribute('data-three-selected-connection-hole-index', String(outputHole.holeIndex));
+  await expect(foundryParametricEditor.getByLabel('Input link length'), 'output authoring preserves the accepted input lock').toBeDisabled();
+  await expect(foundryParametricEditor.getByLabel('Output link length'), 'output endpoint locks only after its own physical-hole authoring').toBeDisabled();
+  await expect(page.getByTestId('foundry-param-handle-B')).toHaveAttribute('data-draggable', 'false');
+  await expect(page.getByTestId('foundry-param-handle-C'), 'C/J2 locks after the output role is accepted').toHaveAttribute('data-draggable', 'false');
+  await waitForConnectionCoordinate(foundryRig, '4bar.output-joint', beforeOutput);
+  const afterPreviewExportSignature = await foundryRig.getAttribute('data-three-fabrication-export-signature');
+  expect(connectionSignaturePart(afterPreviewExportSignature, '4bar.input-joint'), 'output authoring does not mutate the accepted input signature').toBe(connectionSignaturePart(afterInputSignature, '4bar.input-joint'));
+  expect(connectionSignaturePart(afterPreviewExportSignature, '4bar.output-joint'), 'output authoring changes only the output signature').not.toBe(initialOutputSignaturePart);
+  expect(afterPreviewExportSignature, 'independent physical holes change the fabrication/export signature before package generation').not.toBe(beforeExportSignature);
+
+  await page.getByRole('button', { name: /Use mechanism/i }).click();
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+  await expect(page.getByTestId('design-parametric-editor'), 'Design editor is also display-only for authored hole selections').toContainText(/4bar\.input-joint|Input joint/i);
+  await expect(page.getByTestId('design-parametric-editor').getByTestId('connection-selection-author')).toHaveCount(0);
+  await clickStage(page, 'Blueprint');
+  await expect(page.getByRole('button', { name: /Generate package/i })).toBeEnabled();
+  await page.getByRole('button', { name: /Generate package/i }).click();
+  const afterExport = await readBlueprintPackage(page);
+  expect(afterExport.metadataJson, 'generated export metadata matches the live selected-hole export signature').toContain(String(afterPreviewExportSignature));
+  expect(afterExport.metadataJson, 'export persists the dedicated input role instead of generic handles').toContain('4bar.input-joint');
+  expect(afterExport.metadataJson, 'export persists the independently authored output role').toContain('4bar.output-joint');
+  expect(afterExport.metadataJson).not.toMatch(/"(?:P1|J1|J2|board-hole|gear-center)"/);
+
+  expectCleanPage(pageErrors, consoleErrors);
+});
+
+test('gear linkage physical hole selection authors drive/output pins and exports dedicated metadata', async ({ page }) => {
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  await page.goto('/');
+  await openCharacterScreen(page);
+  await clickStage(page, 'Foundry');
+  await expect(page.getByRole('heading', { name: 'Foundry' })).toBeVisible();
+  await page.getByText('Mechanism options').click();
+  const mechanismType = page.getByLabel('Foundry mechanism type');
+
+  for (const type of ['gear', 'planetary_gear', 'cam', 'piston']) {
+    if (await mechanismType.locator(`option[value="${type}"]`).count()) {
+      await mechanismType.selectOption(type);
+      const rig = page.getByTestId('foundry-camera-rig');
+      await expect(rig, `${type} is selected through the visible Foundry control`).toHaveAttribute('data-mechanism-type', type);
+      await expect(page.locator('circle.foundry-connection-hole-hit'), `${type} does not expose authored connection-hole targets`).toHaveCount(0);
+      await expect(page.getByTestId('foundry-parametric-editor').getByTestId('connection-selection-author'), `${type} editor has no connection authoring control`).toHaveCount(0);
+    }
+  }
+
+  await mechanismType.selectOption('gear_linkage');
+  const foundryRig = page.getByTestId('foundry-camera-rig');
+  await expect(foundryRig).toHaveAttribute('data-mechanism-type', 'gear_linkage');
+  await page.getByLabel('Drive gear size').selectOption('g40');
+  await page.getByLabel('Output gear size').selectOption('g40');
+
+  const initialSignature = await waitForConnectionSignature(foundryRig, ['gear_linkage.drive-pin', 'gear_linkage.output-pin']);
+  const initialDriveHoleIndex = connectionSignatureHoleIndex(initialSignature, 'gear_linkage.drive-pin');
+  const initialOutputHoleIndex = connectionSignatureHoleIndex(initialSignature, 'gear_linkage.output-pin');
+  await waitForConnectionHoleTarget(page, 'gear_linkage.drive-pin', { holeIndex: initialDriveHoleIndex });
+  const initialDriveCoordinate = await waitForConnectionCoordinate(foundryRig, 'gear_linkage.drive-pin');
+  const initialDriveSignaturePart = connectionSignaturePart(initialSignature, 'gear_linkage.drive-pin');
+  const initialOutputSignaturePart = connectionSignaturePart(initialSignature, 'gear_linkage.output-pin');
+
+  const driveHole = await waitForConnectionHoleTarget(page, 'gear_linkage.drive-pin', { excludeHoleIndex: initialDriveHoleIndex });
+  expect(driveHole.kind, 'gear linkage drive pin is authored from gear attachment holes').toBe('gear-attachment-hole');
+  expect(driveHole.partKey, 'drive pin hole comes from the selected drive gear blank').toBe('g40');
+  await clickConnectionHoleTarget(page, driveHole);
+
+  await expect(foundryRig, 'preview exposes selected drive-pin role after physical affordance drag').toHaveAttribute('data-three-selected-connection-role', 'gear_linkage.drive-pin');
+  await expect(foundryRig).toHaveAttribute('data-three-selected-connection-kind', 'gear-attachment-hole');
+  await expect(foundryRig).toHaveAttribute('data-three-selected-connection-hole-index', String(driveHole.holeIndex));
+  await expect(page.getByTestId('foundry-parametric-editor'), 'shared editor confirms selected gear-linkage connection but is display-only').toContainText(/gear_linkage\.drive-pin|Drive pin/i);
+  await expect(page.getByTestId('foundry-parametric-editor').getByTestId('connection-selection-author')).toHaveCount(0);
+
+  const afterDriveCoordinate = await waitForConnectionCoordinate(foundryRig, 'gear_linkage.drive-pin', initialDriveCoordinate);
+  const outputAfterDrive = await waitForConnectionCoordinate(foundryRig, 'gear_linkage.output-pin');
+  const afterDriveSignature = await foundryRig.getAttribute('data-three-fabrication-export-signature');
+  expect(afterDriveCoordinate, 'selecting a non-default drive-pin hole changes the canonical drive coordinate').not.toEqual(initialDriveCoordinate);
+  expect(connectionSignaturePart(afterDriveSignature, 'gear_linkage.drive-pin')).toContain(`gear_linkage.drive-pin:${driveHole.partKey}:0:${driveHole.holeIndex}`);
+  expect(connectionSignaturePart(afterDriveSignature, 'gear_linkage.drive-pin'), 'drive-pin selection changes its compiler signature').not.toBe(initialDriveSignaturePart);
+  expect(connectionSignaturePart(afterDriveSignature, 'gear_linkage.output-pin'), 'drive-pin selection does not mutate output-pin signature').toBe(initialOutputSignaturePart);
+
+  await page.getByLabel('Drive gear size').selectOption('g24');
+  await expect.poll(async () => connectionSignaturePart(await foundryRig.getAttribute('data-three-fabrication-export-signature'), 'gear_linkage.drive-pin'), { message: 'stale drive-pin selection is dropped after drive gear geometry changes' }).toBe('');
+  const afterDriveGearChangeSignature = await foundryRig.getAttribute('data-three-fabrication-export-signature');
+  expect(connectionSignaturePart(afterDriveGearChangeSignature, 'gear_linkage.output-pin'), 'drive gear geometry change preserves the still-valid output-pin selection').toBe(initialOutputSignaturePart);
+  const replacementDriveHole = await waitForConnectionHoleTarget(page, 'gear_linkage.drive-pin', { excludeHoleIndex: driveHole.holeIndex });
+  expect(replacementDriveHole.partKey, 'recovered drive candidates come from the current drive gear blank').toBe('g24');
+  await clickConnectionHoleTarget(page, replacementDriveHole);
+  const afterDriveRepairSignature = await waitForConnectionSignature(foundryRig, ['gear_linkage.drive-pin', 'gear_linkage.output-pin']);
+  expect(connectionSignaturePart(afterDriveRepairSignature, 'gear_linkage.drive-pin')).toContain(`gear_linkage.drive-pin:g24:0:${replacementDriveHole.holeIndex}`);
+  expect(connectionSignaturePart(afterDriveRepairSignature, 'gear_linkage.output-pin'), 'new drive gesture preserves the unrelated output-pin selection').toBe(initialOutputSignaturePart);
+
+  const outputHole = await waitForConnectionHoleTarget(page, 'gear_linkage.output-pin', { excludeHoleIndex: initialOutputHoleIndex });
+  expect(outputHole.kind, 'gear linkage output pin is authored from gear attachment holes').toBe('gear-attachment-hole');
+  expect(outputHole.partKey, 'output pin hole comes from the selected output gear blank').toBe('g40');
+  await clickConnectionHoleTarget(page, outputHole);
+
+  await expect(foundryRig, 'preview exposes selected output-pin role after physical affordance drag').toHaveAttribute('data-three-selected-connection-role', 'gear_linkage.output-pin');
+  await expect(foundryRig).toHaveAttribute('data-three-selected-connection-kind', 'gear-attachment-hole');
+  await expect(foundryRig).toHaveAttribute('data-three-selected-connection-hole-index', String(outputHole.holeIndex));
+
+  const afterOutputCoordinate = await waitForConnectionCoordinate(foundryRig, 'gear_linkage.output-pin', outputAfterDrive);
+  const afterOutputSignature = await foundryRig.getAttribute('data-three-fabrication-export-signature');
+  expect(afterOutputCoordinate, 'selecting a non-default output-pin hole changes the canonical output coordinate').not.toEqual(outputAfterDrive);
+  expect(connectionSignaturePart(afterOutputSignature, 'gear_linkage.drive-pin'), 'output-pin selection does not mutate drive-pin signature').toBe(connectionSignaturePart(afterDriveRepairSignature, 'gear_linkage.drive-pin'));
+  expect(connectionSignaturePart(afterOutputSignature, 'gear_linkage.output-pin')).toContain(`gear_linkage.output-pin:${outputHole.partKey}:1:${outputHole.holeIndex}`);
+  expect(connectionSignaturePart(afterOutputSignature, 'gear_linkage.output-pin'), 'output-pin selection changes its compiler signature').not.toBe(initialOutputSignaturePart);
+
+  await page.getByRole('button', { name: /Use mechanism/i }).click();
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+  await expect(page.getByTestId('design-parametric-editor'), 'Design confirms the authored gear-linkage selection without authoring controls').toContainText(/gear_linkage\.output-pin|Output pin/i);
+  await expect(page.getByTestId('design-parametric-editor').getByTestId('connection-selection-author')).toHaveCount(0);
+
+  await clickStage(page, 'Blueprint');
+  await expect(page.getByRole('button', { name: /Generate package/i })).toBeEnabled();
+  await page.getByRole('button', { name: /Generate package/i }).click();
+  const exportedPackage = await readBlueprintPackage(page);
+  expect(exportedPackage.metadataJson, 'export metadata contains the live compiler-derived connection signature').toContain(String(afterOutputSignature));
+  expect(exportedPackage.metadataJson, 'export metadata contains the dedicated drive-pin role').toContain('gear_linkage.drive-pin');
+  expect(exportedPackage.metadataJson, 'export metadata contains the dedicated output-pin role').toContain('gear_linkage.output-pin');
+  expect(exportedPackage.metadataJson, 'export metadata excludes legacy generic connection identifiers').not.toMatch(/\b(?:P1|J1|J2|board-hole|gear-center)\b/);
+
+  expectCleanPage(pageErrors, consoleErrors);
+});
 
 test('MotionSmith header logo returns to Character home', async ({ page }) => {
   await page.goto('/');
@@ -1652,10 +1948,14 @@ test('Options and validation gates update browser blueprint output', async ({ pa
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   await expect(page.getByTestId('design-shared-foundry-preview')).toBeVisible();
   await expect(page.getByTestId('design-canvas')).toHaveCount(0);
-  await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').fill('0');
-  await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').press('Enter');
-  await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').fill('100');
-  await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').press('Enter');
+  const anchorXInput = page.getByLabel('anchor X number');
+  const anchorYInput = page.getByLabel('anchor Y number');
+  await expect(anchorXInput, 'Design keeps off-grid anchor X editable so users can recover after grid pitch changes').toBeEnabled();
+  await expect(anchorYInput, 'Design keeps off-grid anchor Y editable so users can recover after grid pitch changes').toBeEnabled();
+  await anchorXInput.fill('0');
+  await anchorXInput.press('Enter');
+  await anchorYInput.fill('100');
+  await anchorYInput.press('Enter');
   await clickStage(page, 'Blueprint');
   await expect(page.getByRole('button', { name: /Generate package/i })).toBeEnabled();
   await expect(page.getByTestId('blueprint-control-panel')).toContainText(/Ready\.|Motion \d+%/);
@@ -1674,9 +1974,11 @@ test('Options and validation gates update browser blueprint output', async ({ pa
   const metadata = await downloadMetadataJson(page);
   expect(metadata.profile.gridPitchMm).toBe(25);
 
-  await page.getByRole('button', { name: /Mechanism Design/i }).click();
-  await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').fill('255');
-  await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').press('Enter');
+  await page.getByRole('button', { name: /Options/i }).click();
+  const laterGridPitchInput = page.getByLabel('Grid pitch mm number');
+  await expect(laterGridPitchInput, 'Board pitch remains editable after generating a package').toBeEnabled();
+  await laterGridPitchInput.fill('30');
+  await laterGridPitchInput.press('Enter');
   await clickStage(page, 'Blueprint');
   await expect(page.getByTestId('blueprint-control-panel').getByText(/anchor off grid/)).toBeVisible();
   await expect(page.getByRole('button', { name: /Snap to hole/ })).toBeVisible();
@@ -2009,9 +2311,10 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(page.getByRole('heading', { name: 'Foundry' })).toBeVisible();
   await expect(page.getByTestId('stage-right-inspector').getByTestId('foundry-visible-sensemaking')).toContainText('Crank turns');
   await expect(page.getByTestId('foundry-mechanism-gallery')).not.toContainText('Crank turns -> rocker swings');
-  await expect(page.locator('[data-testid^="foundry-mini-simulation-"]')).toHaveCount(5);
-  await expect(page.locator('[data-testid^="foundry-mini-linkage-"]')).toHaveCount(5);
-  await expect(page.locator('[data-testid^="foundry-mini-ghost-"]')).toHaveCount(10);
+  const foundryMechanismTypeCount = FOUNDRY_MECHANISM_TYPES.length;
+  await expect(page.locator('[data-testid^="foundry-mini-simulation-"]')).toHaveCount(foundryMechanismTypeCount);
+  await expect(page.locator('[data-testid^="foundry-mini-linkage-"]')).toHaveCount(foundryMechanismTypeCount);
+  await expect(page.locator('[data-testid^="foundry-mini-ghost-"]')).toHaveCount(foundryMechanismTypeCount * 2);
   await expect(page.getByTestId('foundry-three-canvas')).toBeVisible();
   const threeScene = page.getByTestId('foundry-camera-rig');
   await expect(threeScene).toHaveAttribute('data-three-renderer', 'webgl');
@@ -2340,8 +2643,8 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(threeScene, 'Gear-linkage gear axles include local board-side spacer z in their fastener spans').toHaveAttribute('data-three-pin-stack-z-sources', 'gear-axles-include-board-side-spacer');
   await expect(threeScene, 'Gear-linkage pins are the two fixed gear axles plus two gear crank pins and one shared R connector').toHaveAttribute('data-three-physical-pin-contract', 'fixed-gear-axles-plus-two-crank-links');
   await expect(threeScene, 'Gear-linkage has no orphan hardware tower beyond its five real pin sites').toHaveAttribute('data-three-physical-pin-count', '5');
-  await expect(threeScene, 'Gear-linkage geometry maps each layer to its reference role').toHaveAttribute('data-three-geometry-contract', /Drive G3 \/ 3-space gear:fixed-board-gear.*Output G3 \/ 3-space gear:fixed-board-gear.*Drive 5-hole link:B-pin-to-R.*Output 5-hole link:C-pin-to-R/);
-  await expect(threeScene, 'Gear-linkage stack exposes G3/G3/L4/L4 in reference order').toHaveAttribute('data-three-stack-order', /Drive G3 \/ 3-space gear.*Output G3 \/ 3-space gear.*Drive 5-hole link.*Output 5-hole link/);
+  await expect(threeScene, 'Gear-linkage geometry keeps selected gear holes embedded in the gear disks and maps only connector blanks to B-R/C-R').toHaveAttribute('data-three-geometry-contract', /Drive G3 \/ 3-space gear:fixed-board-gear.*Output G3 \/ 3-space gear:fixed-board-gear.*Drive connector 5-hole link:B-pin-to-R.*Output connector 5-hole link:C-pin-to-R/);
+  await expect(threeScene, 'Gear-linkage stack exposes G3/G3 plus the two managed connector blanks without duplicate crank links').toHaveAttribute('data-three-stack-order', /Drive G3 \/ 3-space gear.*Output G3 \/ 3-space gear.*Drive connector 5-hole link.*Output connector 5-hole link/);
   await expect(threeScene).toHaveAttribute('data-three-gear-radii', '60.00,60.00');
   await expect(threeScene).toHaveAttribute('data-three-linkage-pin-radius', '40.00');
   await expect(threeScene, 'Gear-linkage endpoint gear centers stay separated until idlers close the pitch chain').toHaveAttribute('data-three-gear-linkage-spacing-contract', 'separated-endpoints-await-idlers');
@@ -2349,10 +2652,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(threeScene, 'Gear-linkage crank pins pass through real off-center gear holes before spacer-separated links').toHaveAttribute('data-three-gear-linkage-crank-stack-contract', 'B-gear-hole>S10>drive-link;C-gear-hole>S10>S10>output-link;R-drive-link>S10>output-link');
   await expect(threeScene, 'Gear-linkage has no extra output bracket beyond the shared R fastener').toHaveAttribute('data-three-gear-linkage-bracket-anchor', 'no-output-bracket');
   const gearLinkagePinOrder = await threeScene.getAttribute('data-three-gear-linkage-pin-z-order');
-  expect(gearLinkagePinOrder, 'drive crank pin stacks gear, S10 spacer, then linkage').toContain('B:gear<S10<linkage');
-  expect(gearLinkagePinOrder, 'output crank pin stacks gear, two S10 spacers, then upper output linkage').toContain('C:gear<S10<S10<linkage');
-  expect(gearLinkagePinOrder, 'shared R connector stacks the two links with spacer clearance and no bracket').toContain('R:linkage<S10<linkage');
-  expect(gearLinkagePinOrder, 'gear-linkage moving pin z-order has no invalid floating stack').not.toContain('invalid');
+  expect(gearLinkagePinOrder, 'B/C/R expose exactly the two gear-hole connector joints and shared connector stack without duplicate linkage layers').toBe('B:gear<S10<linkage,C:gear<S10<S10<linkage,R:linkage<S10<linkage');
   await page.getByLabel('Foundry mechanism type').selectOption('cam');
   expect(Number(await threeScene.getAttribute('data-three-cam-count')), 'Cam follower uses a cam profile, not a generic gear').toBeGreaterThanOrEqual(1);
   expect(Number(await threeScene.getAttribute('data-three-follower-count')), 'Cam follower shows its follower block').toBeGreaterThanOrEqual(1);

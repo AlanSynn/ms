@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-07-11T00:19:45.677Z",
+  "generatedAt": "2026-07-11T17:32:50.117Z",
   "paths": {
     "sourceManifestPath": "/Users/alansynn/Documents/MechAnim/fabrication/manifest.json",
-    "generatedManifestPath": "/var/folders/3d/cclyxf1x3bjf_y3pf071s1r00000gr/T/ms-fab-ts-1783729185677-FUtuyk/manifest.json",
-    "outputDir": "/var/folders/3d/cclyxf1x3bjf_y3pf071s1r00000gr/T/ms-fab-ts-1783729185677-FUtuyk",
-    "reportJsonPath": "/Users/alansynn/Documents/MechAnim/docs/analysis/fabrication-parity-2026-07-10.json",
-    "reportMarkdownPath": "/Users/alansynn/Documents/MechAnim/docs/analysis/fabrication-parity-2026-07-10.md"
+    "generatedManifestPath": "/var/folders/3d/cclyxf1x3bjf_y3pf071s1r00000gr/T/ms-fab-ts-1783791170116-75FIvH/manifest.json",
+    "outputDir": "/var/folders/3d/cclyxf1x3bjf_y3pf071s1r00000gr/T/ms-fab-ts-1783791170116-75FIvH",
+    "reportJsonPath": "/Users/alansynn/Documents/MechAnim/docs/analysis/fabrication-parity-2026-07-11.json",
+    "reportMarkdownPath": "/Users/alansynn/Documents/MechAnim/docs/analysis/fabrication-parity-2026-07-11.md"
   },
   "checks": {
     "generatedFromTs": true,

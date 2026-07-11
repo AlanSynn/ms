@@ -5,6 +5,7 @@ import { compileMechanism, summarizeCompiledMechanism, type MechanismGraphCompil
 import type { MechanismFeatureIssue, MechanismInteractionPolicy, MechanismPhysicsHint, MechanismProjectionHint, MechanismFeasibleRange } from './mechanismFeatureRegistry';
 import { normalizeMechanismToFabricationSet } from './mechanismReference';
 import { mechanismFeature } from './mechanismFeatureRegistry';
+import { normalizeMechanismConnectionSelections } from './mechanismConnectionSelections';
 
 export interface MechanismSnapshotSourceIds {
     projectId: string;
@@ -58,6 +59,8 @@ export interface MechanismSnapshotMechanism {
     presetId?: string;
     recommendation?: string;
     generatedPath: Point[];
+    connectionSelections?: MechanismConfig['connectionSelections'];
+    connectionSelectionValidation?: MechanismConfig['connectionSelectionValidation'];
     warnings: string[];
 }
 
@@ -139,7 +142,13 @@ const deepFreeze = <T>(value: T): T => {
 
 const cloneData = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
-const snapshotMechanism = (mechanism: MechanismConfig): MechanismSnapshotMechanism => ({
+export const snapshotMechanism = (mechanism: MechanismConfig): MechanismSnapshotMechanism => {
+    const connectionState = normalizeMechanismConnectionSelections(mechanism, mechanism.connectionSelections);
+    const connectionSelectionValidation = connectionState.connectionSelectionValidation
+        ?? (mechanism.connectionSelectionValidation?.status === 'invalid'
+            ? mechanism.connectionSelectionValidation
+            : undefined);
+    return ({
     id: mechanism.id,
     type: mechanism.type,
     visible: mechanism.visible,
@@ -180,8 +189,11 @@ const snapshotMechanism = (mechanism: MechanismConfig): MechanismSnapshotMechani
     presetId: mechanism.presetId,
     recommendation: mechanism.recommendation,
     generatedPath: clonePoints(mechanism.generatedPath),
+    connectionSelections: connectionState.connectionSelections ? cloneData(connectionState.connectionSelections) : undefined,
+    connectionSelectionValidation: connectionSelectionValidation ? cloneData(connectionSelectionValidation) : undefined,
     warnings: [...(mechanism.warnings ?? [])]
-});
+    });
+};
 
 const snapshotPath = (path?: ProjectMotionPath): MechanismSnapshotPath | undefined => path ? ({
     id: path.id,
@@ -229,7 +241,9 @@ export const buildMechanismSnapshot = (project: ProjectState, mechanismId: strin
         driverGroupId: normalizedMechanism.driverGroupId,
         driverPhaseOffset: normalizedMechanism.driverPhaseOffset,
         rodLength: normalizedMechanism.rodLength,
-        phase: normalizedMechanism.phase
+        phase: normalizedMechanism.phase,
+        connectionSelections: normalizedMechanism.connectionSelections,
+        connectionSelectionValidation: normalizedMechanism.connectionSelectionValidation
     };
     const snapshotAngles = [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2];
     if (!snapshotAngles.some(angle => Math.abs(angle - angleRad) < 1e-9)) snapshotAngles.push(angleRad);

@@ -48,6 +48,10 @@ import {
   sanitizeMechanismType,
   sanitizePoint,
 } from "./sanitize";
+import {
+  mechanismConnectionCompatibilityUpdates,
+  normalizeMechanismConnectionSelections,
+} from "./mechanismConnectionSelections";
 import { isUsableContourPoints } from "./partGeometry";
 import {
   DEFAULT_CLASSROOM_ASSESSMENT_KEY,
@@ -940,7 +944,21 @@ const reconcileMechanismTargets = (
     targetAnchorJointId,
     activeVisualPartIds: targetPartId ? [targetPartId] : [],
   });
-  return mechanismWithGeneratedPath(normalized, options);
+  const connectionState = normalizeMechanismConnectionSelections(
+    normalized,
+    mechanism.connectionSelections,
+    mechanism.connectionSelectionValidation,
+  );
+  const compatibilityUpdates = mechanismConnectionCompatibilityUpdates(normalized, connectionState);
+  return mechanismWithGeneratedPath(
+    {
+      ...normalized,
+      ...compatibilityUpdates,
+      connectionSelections: connectionState.connectionSelections,
+      connectionSelectionValidation: connectionState.connectionSelectionValidation,
+    },
+    options,
+  );
 };
 
 export const createEmptyProject = (): ProjectState => ({
@@ -2783,7 +2801,7 @@ const normalizeSceneObjectSnapshot = (
   };
 };
 
-const normalizeMechanismSnapshot = (value: unknown): MechanismConfig => {
+export const normalizeMechanismSnapshot = (value: unknown): MechanismConfig => {
   const raw = asRecord(value);
   const type = sanitizeMechanismType(raw.type);
   const base = createDefaultMechanism(
@@ -2954,9 +2972,21 @@ const normalizeMechanismSnapshot = (value: unknown): MechanismConfig => {
     Array.isArray(raw.gearTrainRadii) ||
     Array.isArray(raw.camProfileSamples) ||
     Array.isArray(raw.generatedPath);
-  return hasFittedGeometry
+  const fabricationNormalized = hasFittedGeometry
     ? normalizeMechanismToFabricationSet(normalized)
     : normalizeMechanismToReference(normalized);
+  const connectionState = normalizeMechanismConnectionSelections(
+    fabricationNormalized,
+    raw.connectionSelections,
+    (raw as Partial<MechanismConfig>).connectionSelectionValidation,
+  );
+  const compatibilityUpdates = mechanismConnectionCompatibilityUpdates(fabricationNormalized, connectionState);
+  return {
+    ...fabricationNormalized,
+    ...compatibilityUpdates,
+    connectionSelections: connectionState.connectionSelections,
+    connectionSelectionValidation: connectionState.connectionSelectionValidation,
+  };
 };
 
 export const migrateProjectSnapshot = (raw: unknown): ProjectState => {

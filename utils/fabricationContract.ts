@@ -1,5 +1,7 @@
-import type { Point } from '../types';
+import type { FabricationGearKey, FabricationLinkageKey, Point } from '../types';
 import { boardColumnLabel, parseBoardCoordinateLabel } from './coordinates';
+
+export type { FabricationGearKey, FabricationLinkageKey } from '../types';
 
 export const FABRICATION_SOURCE_BOARD_TS = 'scripts/generate-fabrication-board.ts' as const;
 export const FABRICATION_SOURCE_TEMPLATE_TS = 'scripts/generate-fabrication-assets.ts' as const;
@@ -16,8 +18,6 @@ export const FABRICATION_LINKAGE_RADIUS_MM = FABRICATION_LINKAGE_WIDTH_MM / 2;
 export const FABRICATION_LINKAGE_MARGIN_MM = 7;
 export const FABRICATION_BOARD_ROWS = 15;
 export const FABRICATION_BOARD_COLUMNS = 15;
-
-export type FabricationGearKey = 'g8' | 'g24' | 'g40' | 'g56';
 
 type GearPreset = {
     key: FabricationGearKey;
@@ -37,7 +37,7 @@ export type FabricationGearSpec = GearPreset & {
 
 export type FabricationLinkageSpec = {
     source: typeof FABRICATION_SOURCE_SSOT;
-    key: `linkage-${number}-cell`;
+    key: FabricationLinkageKey;
     label: string;
     engravingLabel: string;
     path: string;

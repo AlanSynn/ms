@@ -100,9 +100,9 @@ const MECHANISM_PREVIEW_STACK_POLICIES: Record<
     assemblyPins: defaultAssemblyPins,
     layerGeometryContract: (label, renderKind) => {
       if (renderKind === "gear") return `${label}:fixed-board-gear`;
-      if (/drive.*L|Drive L|drive.*linkage/i.test(label))
+      if (/drive.*connector|drive.*L|Drive L/i.test(label))
         return `${label}:B-pin-to-R`;
-      if (/output.*L|Output L|output.*linkage/i.test(label))
+      if (/output.*connector|output.*L|Output L/i.test(label))
         return `${label}:C-pin-to-R`;
       if (/L4|linkage/i.test(label)) return `${label}:gear-pin-to-R`;
       if (/2-hole|bracket/i.test(label)) return `${label}:R-connector`;
@@ -276,9 +276,9 @@ export const foundryPinStackPoints = (
   }
 
   if (type === "gear_linkage") {
-    const gearCount = Math.max(
-      2,
-      Math.min(points.length, Math.max(2, cleanIndexes.length - 4)),
+    const gearCount = Math.min(
+      cleanIndexes.length,
+      Math.max(2, points.length - 3),
     );
     const gearIndexes = cleanIndexes.slice(0, gearCount);
     const linkageIndexes = cleanIndexes.slice(gearCount);
@@ -307,12 +307,10 @@ export const foundryPinStackPoints = (
         return {
           id: pinId(index),
           point,
-          movingLayerIndexes: [
-            gearIndexes[0],
-            linkageIndexes[0],
-            linkageIndexes[2],
-          ].filter((item): item is number => typeof item === "number"),
-          spacerLayerIndexes: spacerIndexesFrom(Math.max(0, gearCount - 1), 2),
+          movingLayerIndexes: [gearIndexes[0], linkageIndexes[0]].filter(
+            (item): item is number => typeof item === "number",
+          ),
+          spacerLayerIndexes: spacerIndexesFrom(gearCount),
         };
       }
       if (index === gearCount + 1) {
@@ -322,15 +320,13 @@ export const foundryPinStackPoints = (
           movingLayerIndexes: [
             gearIndexes.at(-1),
             linkageIndexes[1] ?? linkageIndexes[0],
-            linkageIndexes[3] ?? linkageIndexes[2] ?? linkageIndexes[1] ?? linkageIndexes[0],
           ].filter((item): item is number => typeof item === "number"),
           spacerLayerIndexes: spacerIndexesFrom(Math.max(0, gearCount), 2),
         };
       }
-      const moving = [
-        linkageIndexes[2] ?? linkageIndexes[0],
-        linkageIndexes[3] ?? linkageIndexes[1],
-      ].filter((item): item is number => typeof item === "number");
+      const moving = linkageIndexes
+        .slice(0, 2)
+        .filter((item): item is number => typeof item === "number");
       return {
         id: pinId(index),
         point,
