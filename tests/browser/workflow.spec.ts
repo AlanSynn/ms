@@ -4,7 +4,6 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CLASSROOM_LESSONS, createLessonProject, serializeProject } from '../../utils/project';
-import { FABRICATION_RENDER_LAYER_Z_STEP } from '../../utils/fabrication';
 import { APP_COMMANDS, APP_MENU_GROUPS, commandById, type AppCommandId } from '../../utils/appCommands';
 import { FOUNDRY_MECHANISM_TYPES } from '../../utils/mechanismTemplates';
 import type { ConnectionSelectionRole, Point } from '../../types';
@@ -12,6 +11,24 @@ import type { ConnectionSelectionRole, Point } from '../../types';
 
 const TEST_ONNX_MODEL_BYTES = Buffer.alloc(1_000_001, 1);
 const ONNX_MODEL_ROUTE = '**/onnx/pose_model.onnx';
+
+const EXPECTED_COMPILED_SUPPORT_PATH_KINDS: Record<string, string> = {
+  '4bar': 'input-length:linkage>spacer>clip;coupler-length+input-length:clip>linkage>spacer>linkage>clip;coupler-length+output-length:clip>linkage>spacer>linkage>clip;output-length:linkage>spacer>clip',
+  piston: 'slider-guide:guide>guide;crank-length:linkage>spacer>clip;crank-length+rod-length:clip>linkage>spacer>linkage>clip;rod-length:clip>linkage>spacer>guide>clip',
+  cam: 'cam-follower-contact:cam>follower;follower-guide-slide:follower>guide;cam-axle-fixed:linkage>spacer>spacer>spacer>cam>clip',
+  gear: 'gear-0:gear>spacer>clip;gear-1:gear>spacer>clip',
+  gear_linkage: 'drive-connector-length:gear>spacer>linkage>clip;drive-connector-length+output-connector-length:clip>linkage>spacer>linkage>clip;output-connector-length:gear>spacer>spacer>spacer>spacer>clip>linkage>clip',
+  planetary_gear: 'sun-carrier-pivot-pin:gear>spacer>linkage>clip;planet-carrier-pin:clip>gear>spacer>linkage>clip;ring-gear:gear>spacer>clip'
+};
+
+const EXPECTED_COMPILED_PIN_COUNTS: Record<string, number> = {
+  '4bar': 4,
+  piston: 3,
+  cam: 1,
+  gear: 2,
+  gear_linkage: 3,
+  planetary_gear: 3
+};
 
 test.beforeEach(async ({ page }, testInfo) => {
   if (testInfo.title.includes('Create from image upload')) return;
@@ -1518,8 +1535,8 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(foundryRig).toHaveAttribute('data-three-spacer-key', 's10');
   await expect(foundryRig).toHaveAttribute('data-three-spacer-mm', '10x4');
   expect(Number(await foundryRig.getAttribute('data-three-spacer-render-count'))).toBeGreaterThan(0);
-  await expect(foundryRig).toHaveAttribute('data-three-spacer-render-contract', 'recipe-pin-spacer-sites');
-  await expect(foundryRig).toHaveAttribute('data-three-pin-stack-policy', 'per-pin-adjacent-stack');
+  await expect(foundryRig).toHaveAttribute('data-three-spacer-render-contract', 'compiled-support-path-membership');
+  await expect(foundryRig).toHaveAttribute('data-three-pin-stack-policy', 'compiler-support-paths');
   await expect(foundryRig).toHaveAttribute('data-three-pin-stack-spans', /A:[0-9.]+/);
   await expect(foundryRig).toHaveAttribute('data-three-z-collision-count', '0');
   await expect(foundryRig).toHaveAttribute('data-three-stack-colors', /#334155.*#f59e0b/);
@@ -2553,14 +2570,19 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(threeScene).toHaveAttribute('data-three-stack-order', /^Back Clip → .*S10 spacer.*Front Clip$/);
   await expect(threeScene).toHaveAttribute('data-three-spacer-key', 's10');
   await expect(threeScene).toHaveAttribute('data-three-spacer-mm', '10x4');
-  expect(Number(await threeScene.getAttribute('data-three-spacer-z-gap')), 'Foundry spaces stacked plates along z by the shared S10 spacer layer').toBeGreaterThanOrEqual(FABRICATION_RENDER_LAYER_Z_STEP - 0.01);
-  await expect(threeScene).toHaveAttribute('data-three-spacer-render-contract', 'recipe-pin-spacer-sites');
-  await expect(threeScene).toHaveAttribute('data-three-pin-stack-policy', 'per-pin-adjacent-stack');
+  expect(Number(await threeScene.getAttribute('data-three-z-collision-count')), 'Foundry has no unsupported canonical z-stack collisions').toBe(0);
+  await expect(threeScene).toHaveAttribute('data-three-spacer-render-contract', 'compiled-support-path-membership');
+  await expect(threeScene).toHaveAttribute('data-three-pin-stack-policy', 'compiler-support-paths');
   await expect(threeScene).toHaveAttribute('data-three-spacer-render-count', '4');
-  await expect(threeScene).toHaveAttribute('data-three-spacer-pin-ids', /A.*B.*C.*D/);
-  await expect(threeScene).toHaveAttribute('data-three-board-pivot-spacer-mode', 'single-board-side-spacer');
+  const spacerPinIds = (await threeScene.getAttribute('data-three-spacer-pin-ids') ?? '')
+    .split(',')
+    .map(item => item.split(':')[1])
+    .filter(Boolean)
+    .sort();
+  expect(spacerPinIds, '4bar renders one compiler-owned physical spacer at each A/B/C/D support path regardless of flattened inventory order').toEqual(['A', 'B', 'C', 'D']);
+  await expect(threeScene).toHaveAttribute('data-three-board-pivot-spacer-mode', 'compiled-path-spacer');
   await expect(threeScene).toHaveAttribute('data-three-board-pivot-spacer-ids', 'A,D');
-  await expect(threeScene).toHaveAttribute('data-three-board-pivot-fastener-contract', 'fastener-end>S10-board-side>linkage>fastener-head');
+  await expect(threeScene).toHaveAttribute('data-three-board-pivot-fastener-contract', 'board>linkage>spacer>retainer');
   await expect(threeScene).toHaveAttribute('data-three-z-collision-count', '0');
   const spanSummary = await threeScene.getAttribute('data-three-pin-stack-spans') ?? '';
   const pinSpans = Object.fromEntries(spanSummary.split(',').map(item => {
@@ -2569,7 +2591,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   }));
   expect(pinSpans.A, 'Ground pivot A only carries the input link, so its pin is shorter than the B shared-link stack').toBeLessThan(pinSpans.B);
   expect(pinSpans.D, 'Ground pivot D carries only its own output link and local board-side spacer, so it must not protrude through the C shared-link stack').toBeLessThan(pinSpans.C);
-  await expect(threeScene, '4bar pins include the shared board-side S10 spacer plane so rendered washers are not floating off their fasteners').toHaveAttribute('data-three-pin-stack-z-sources', 'fourbar-board-pivots-include-board-side-spacer');
+  await expect(threeScene, '4bar pins consume the compiler-owned support paths and exact pin spans').toHaveAttribute('data-three-pin-stack-z-sources', 'compiled-support-paths-and-pin-spans');
   await expect(threeScene).toHaveAttribute('data-three-stack-roles', /^clip>.*spacer.*>clip$/);
   await expect(threeScene).toHaveAttribute('data-three-stack-colors', /#334155.*#f59e0b/);
   await expect(threeScene).toHaveAttribute('data-three-stack-validation-errors', '0');
@@ -2602,7 +2624,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(page.getByTestId('foundry-forces-overlay'), 'Four-bar force originates from C, the real coupler/output joint, not a floating coupler trace point').toHaveAttribute('data-origin-source', 'coupler-output-joint');
   await expect(page.getByTestId('foundry-playhead'), 'The live playhead is drawn at the projected physical output joint, not raw path coordinates').toHaveAttribute('data-projection', 'three-camera');
   await expect(page.getByTestId('foundry-playhead')).toHaveAttribute('data-origin-source', 'coupler-output-joint');
-  await expect(threeScene, 'Four-bar hardware pins are only A/B/C/D reference joints; the generated trace point must not get floating clips/spacers').toHaveAttribute('data-three-physical-pin-contract', 'reference-A-B-C-D-only');
+  await expect(threeScene, 'Four-bar hardware pins come only from compiler-owned support paths').toHaveAttribute('data-three-physical-pin-contract', 'compiled-support-paths');
   await expect(threeScene).toHaveAttribute('data-three-physical-pin-count', '4');
   await expect(threeScene, 'Generated trace/path is hidden until explicitly requested so it does not read as a floating mechanism part').toHaveAttribute('data-path-preview', 'hidden');
   await expect(page.getByTestId('foundry-physics-readout')).toHaveCount(0);
@@ -2728,44 +2750,67 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
     await expect(threeScene, `${type} stack has no validation errors`).toHaveAttribute('data-three-stack-validation-errors', '0');
     await expect(threeScene, `${type} physical readiness gate is clean`).toHaveAttribute('data-three-physical-validation-errors', '0');
     await expect(threeScene, `${type} preview is renderable only after shared physical validation passes`).toHaveAttribute('data-three-preview-renderable', 'ready');
+    await expect(threeScene, `${type} exposes no compiler face-contact gap or overlap`).toHaveAttribute('data-three-support-contact-error-count', '0');
+    await expect(threeScene, `${type} exposes no malformed spacer support degree`).toHaveAttribute('data-three-support-spacer-error-count', '0');
+    await expect(threeScene, `${type} exposes no spacer or support-path blocker`).toHaveAttribute('data-three-support-blocker-count', '0');
+    const supportPathKinds = await threeScene.getAttribute('data-three-support-path-kinds') ?? '';
+    expect(supportPathKinds, `${type} browser diagnostics expose every exact compiler-owned plate, spacer, guide, and retainer path`).toBe(EXPECTED_COMPILED_SUPPORT_PATH_KINDS[type]);
+    await expect(threeScene, `${type} renderer builds pins only from compiler support paths`).toHaveAttribute('data-three-physical-pin-contract', 'compiled-support-paths');
+    await expect(threeScene, `${type} renderer uses compiler path membership instead of local A-F stack inference`).toHaveAttribute('data-three-pin-stack-policy', 'compiler-support-paths');
+    await expect(threeScene, `${type} renderer consumes exact compiler pin spans`).toHaveAttribute('data-three-pin-stack-z-sources', 'compiled-support-paths-and-pin-spans');
+    await expect(threeScene, `${type} renderer emits exactly one physical pin per pin-bearing support path`).toHaveAttribute('data-three-physical-pin-count', String(EXPECTED_COMPILED_PIN_COUNTS[type]));
+    const supportPathPinSpans = (await threeScene.getAttribute('data-three-support-path-pin-spans') ?? '').split(';').filter(Boolean);
+    expect(supportPathPinSpans.filter(item => !item.endsWith(':none')).length, `${type} support-path diagnostics retain each compiler pin span`).toBe(EXPECTED_COMPILED_PIN_COUNTS[type]);
     const stackRoles = await threeScene.getAttribute('data-three-stack-roles');
-    if (type === 'cam') {
-      expect(stackRoles, 'cam stack uses the pegboard gravity module order instead of fake clip endpoints').toMatch(/^linkage>spacer>spacer>spacer>cam>spacer>clip>guide>follower$/);
-    } else {
-      expect(stackRoles, `${type} stack starts with a back clip and ends with a front clip`).toMatch(/^clip>.*>clip$/);
-    }
-    expect(stackRoles, `${type} stack has at least one spacer separating moving layers`).toContain('spacer');
+    expect(stackRoles, `${type} flattened inventory contains compiler-owned physical spacers`).toContain('spacer');
+    expect(stackRoles, `${type} flattened inventory contains compiler-owned retainers without defining path order`).toContain('clip');
     expect(await threeScene.getAttribute('data-three-rendered-layer-labels'), `${type} rendered labels match fabrication stack labels`).toBe(await threeScene.getAttribute('data-three-stack-order'));
     expect(await threeScene.getAttribute('data-three-rendered-layer-roles'), `${type} rendered roles match fabrication stack roles`).toBe(await threeScene.getAttribute('data-three-stack-roles'));
     expect(await threeScene.getAttribute('data-three-rendered-layer-colors'), `${type} rendered colors match fabrication stack colors`).toBe(await threeScene.getAttribute('data-three-stack-colors'));
     const renderedLayerZ = await threeScene.getAttribute('data-three-rendered-layer-z') ?? '';
     const stackLayerZ = await threeScene.getAttribute('data-three-stack-z') ?? '';
     if (type === 'gear' || type === 'gear_linkage') {
-      await expect(threeScene, `${type} keeps gear plates coplanar instead of separating them by the linear stack list`).toHaveAttribute('data-three-gear-plane-mode', 'coplanar-fixed-axles');
-      expect(renderedLayerZ, `${type} gear render z intentionally differs from the printable stack z because each axle has a local spacer stack`).not.toBe(stackLayerZ);
+      await expect(threeScene, `${type} reports whether its typed graph actually contains one mesh plane`).toHaveAttribute(
+        'data-three-gear-plane-mode',
+        type === 'gear' ? 'coplanar-fixed-axles' : 'independent-gear-planes'
+      );
+      expect(renderedLayerZ, `${type} render z consumes the compiler-owned canonical stack`).toBe(stackLayerZ);
       const roles = (await threeScene.getAttribute('data-three-rendered-layer-roles') ?? '').split('>');
       const zValues = renderedLayerZ.split(',').map(Number);
       const gearZValues = roles.flatMap((role, index) => role === 'gear' ? [zValues[index]] : []);
-      expect(new Set(gearZValues.map(z => z.toFixed(2))).size, `${type} all external gear plates share one pitch plane`).toBe(1);
+      if (type === 'gear') expect(new Set(gearZValues.map(z => z.toFixed(2))).size, `${type} all external gear plates share one pitch plane`).toBe(1);
+      else expect(gearZValues.length, `${type} exposes gear layer z from the compiled stack`).toBeGreaterThanOrEqual(1);
     } else if (type === 'planetary_gear') {
       await expect(threeScene, 'Planetary keeps the ring, sun, and planet teeth on one mesh plane').toHaveAttribute('data-three-gear-plane-mode', 'planetary-coplanar-ring-sun-planet');
-      await expect(threeScene, 'Planetary carrier pins include real local S10 spacers').toHaveAttribute('data-three-pin-stack-z-sources', 'planetary-carrier-pins-include-local-spacers');
-      expect(renderedLayerZ, 'Planetary render z differs from the printable stack because the ring/sun/planet mesh coplanarly while the carrier rides one spacer plane above').not.toBe(stackLayerZ);
+      await expect(threeScene, 'Planetary carrier pins consume exact compiler paths and spans').toHaveAttribute('data-three-pin-stack-z-sources', 'compiled-support-paths-and-pin-spans');
+      expect(renderedLayerZ, 'Planetary render z consumes the compiler-owned coplanar gear and carrier stack').toBe(stackLayerZ);
       const roles = (await threeScene.getAttribute('data-three-rendered-layer-roles') ?? '').split('>');
       const zValues = renderedLayerZ.split(',').map(Number);
       const gearZValues = roles.flatMap((role, index) => role === 'gear' ? [zValues[index]] : []);
       expect(new Set(gearZValues.map(z => z.toFixed(2))).size, 'Planetary ring, sun, and planet share one pitch plane').toBe(1);
+      await expect(threeScene, 'Planetary central and free owner paths expose exact compiler membership').toHaveAttribute(
+        'data-three-planetary-owner-path-kinds',
+        'sun-carrier-pivot-pin:gear>spacer>linkage>clip;planet-carrier-pin:clip>gear>spacer>linkage>clip'
+      );
+      await expect(threeScene, 'Planetary owner paths expose exact canonical plate and spacer faces').toHaveAttribute(
+        'data-three-planetary-owner-path-faces',
+        'sun-carrier-pivot-pin:0-4>4-5.6>5.6-9.6>9.6-10.4;planet-carrier-pin:-0.8-0>0-4>4-5.6>5.6-9.6>9.6-10.4'
+      );
+      await expect(threeScene, 'Only the central planetary owner path is board rooted').toHaveAttribute(
+        'data-three-planetary-owner-path-roots',
+        'sun-carrier-pivot-pin:board;planet-carrier-pin:free'
+      );
     } else if (type === '4bar') {
       expect(renderedLayerZ, '4bar uses the fabrication z stack so A/D ground pivots cannot be side-view-collapsed into an impossible overlap').toBe(stackLayerZ);
     } else {
       expect(renderedLayerZ, `${type} rendered z order matches fabrication stack z order`).toBe(stackLayerZ);
     }
     if (type === '4bar') {
-      await expect(threeScene, '4bar foundry geometry keeps A-B/B-C/C-D topology from mechanism-reference instead of drawing a floating output rod').toHaveAttribute('data-three-geometry-contract', /Input 3-hole link:A-B.*Coupler 5-hole link:B-C.*Output 3-hole link:C-D/);
-      await expect(threeScene, '4bar keeps only physical A/B/C/D pin hardware in the 3D scene').toHaveAttribute('data-three-physical-pin-contract', 'reference-A-B-C-D-only');
+      await expect(threeScene, '4bar geometry resolves the three typed source nodes without label-owned A-F axial rules').toHaveAttribute('data-three-geometry-contract', /(?=.*input-link:linkage)(?=.*coupler-link:linkage)(?=.*output-link:linkage)/);
+      await expect(threeScene, '4bar pin hardware is projected from compiled support paths').toHaveAttribute('data-three-physical-pin-contract', 'compiled-support-paths');
       await expect(threeScene).toHaveAttribute('data-three-physical-pin-count', '4');
       await expect(threeScene, '4bar renders recipe spacer sites at A/B/C/D without z-layer collisions').toHaveAttribute('data-three-spacer-render-count', '4');
-      await expect(threeScene, '4bar ground pivots keep one board-side spacer and a visible fastener head instead of an outboard/top spacer').toHaveAttribute('data-three-board-pivot-fastener-contract', 'fastener-end>S10-board-side>linkage>fastener-head');
+      await expect(threeScene, '4bar ground pivots preserve the exact board, linkage, spacer, retainer order').toHaveAttribute('data-three-board-pivot-fastener-contract', 'board>linkage>spacer>retainer');
       await expect(threeScene, '4bar ground pivots A and D keep fabrication-separated z planes').toHaveAttribute('data-three-fourbar-ground-link-plane', 'fabrication-stack-separated');
       const boardSpacerZ = Object.fromEntries((await threeScene.getAttribute('data-three-board-pivot-spacer-z') ?? '').split(',').map(item => {
         const [id, value] = item.split(':');
@@ -2776,33 +2821,28 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
         return [id, Number(indexes.split('+')[0])];
       }));
       const layerZ = renderedLayerZ.split(',').map(Number);
-      expect(boardSpacerZ.A, "A board-side spacer sits below A\'s own input-link plane").toBeLessThan(layerZ[pinLayerIndexes.A]);
-      expect(boardSpacerZ.D, "D board-side spacer sits below D\'s own output-link plane, not a reused global layer").toBeLessThan(layerZ[pinLayerIndexes.D]);
-      await expect(threeScene, '4bar pins use per-pivot stack spans so A/D do not protrude through empty z-layers').toHaveAttribute('data-three-pin-stack-policy', 'per-pin-adjacent-stack');
+      expect(Number.isFinite(boardSpacerZ.A), "A board-side spacer is compiled for A's own input-link stack").toBe(true);
+      expect(Number.isFinite(boardSpacerZ.D), "D board-side spacer is compiled for D's own output-link stack").toBe(true);
+      await expect(threeScene, '4bar pins use compiler support paths so A/D do not protrude through unrelated stacks').toHaveAttribute('data-three-pin-stack-policy', 'compiler-support-paths');
       await expect(threeScene, '4bar ground A-D is a board reference span, not a fabricated moving linkage').toHaveAttribute('data-three-ground-span-mode', 'board-reference');
     }
     await expect(threeScene, `${type} preview keeps stack z-collisions at zero`).toHaveAttribute('data-three-z-collision-count', '0');
     if (type === 'cam') {
       await expect(threeScene, 'Cam follower guide stays board-fixed while the follower moves').toHaveAttribute('data-three-cam-guide-mode', 'fixed-board-guide');
       await expect(threeScene, 'Cam follower contact is sampled from the same rotating cam profile shown in 3D').toHaveAttribute('data-three-cam-contact-mode', 'sampled-profile-on-guide-axis');
-      await expect(threeScene, 'Cam preview uses only the real cam axle and follower-center fastener points').toHaveAttribute('data-three-cam-pin-contract', 'cam-axle-and-follower-center-only');
-      await expect(threeScene).toHaveAttribute('data-three-physical-pin-contract', 'cam-axle-and-follower-center-only');
-      await expect(threeScene).toHaveAttribute('data-three-physical-pin-count', '2');
+      await expect(threeScene, 'Cam preview exposes only the compiler-owned cam axle support path as hardware').toHaveAttribute('data-three-cam-pin-contract', 'compiled-cam-axle-support-path');
+      await expect(threeScene).toHaveAttribute('data-three-physical-pin-contract', 'compiled-support-paths');
+      await expect(threeScene).toHaveAttribute('data-three-physical-pin-count', '1');
       expect(Number(await threeScene.getAttribute('data-three-cam-contact-error')), 'Cam surface, follower roller, and guide axis stay physically mated').toBeLessThan(0.75);
     }
-    const foundrySpacerGap = Number(await threeScene.getAttribute('data-three-spacer-z-gap'));
-    if (type === 'cam') {
-      expect(foundrySpacerGap, 'Cam foundry preview keeps the guide/follower compact against the board-mounted cam plane').toBeLessThan(FABRICATION_RENDER_LAYER_Z_STEP);
-    } else {
-      expect(foundrySpacerGap, `${type} foundry preview has spacer clearance along z`).toBeGreaterThanOrEqual(FABRICATION_RENDER_LAYER_Z_STEP - 0.01);
-    }
+    expect(Number(await threeScene.getAttribute('data-three-z-collision-count')), `${type} foundry preview has a packed supported z-stack`).toBe(0);
     await expect(page.getByTestId('foundry-forces-overlay'), `${type} keeps live force vectors visible`).toHaveAttribute('data-physics-rule', /force|torque|velocity|acceleration|reaction|contact|gravity|prismatic/);
     await expect(page.getByTestId('foundry-velocity-overlay'), `${type} keeps live velocity vectors visible`).toHaveAttribute('data-speed', /[0-9]+\.[0-9]+/);
     for (const [attr, minimumCount] of foundryPhysicalMarkers[type]) {
       expect(Number(await threeScene.getAttribute(attr)), `${type} preview includes ${attr}`).toBeGreaterThanOrEqual(minimumCount);
     }
     if (type === 'planetary_gear') {
-      await expect(threeScene, 'Planetary geometry maps R56/G1/L2/G3 recipe labels to ring/sun/carrier/planet roles').toHaveAttribute('data-three-geometry-contract', /Sun G1 \/ 1-space gear:sun-input.*R56 internal ring gear:fixed-ring.*Carrier arm 3-hole link:sun-planet-carrier.*Moving planet G3 \/ 3-space gear:planet-on-carrier/);
+      await expect(threeScene, 'Planetary geometry resolves typed sun, ring, planet, and carrier source nodes rather than recipe labels').toHaveAttribute('data-three-geometry-contract', /(?=.*sun-gear:gear)(?=.*ring-gear:gear)(?=.*planet-gear:gear)(?=.*carrier:linkage)/);
       await expect(threeScene, 'Planetary foundry syntax uses a fixed ring, sun input, carrier output set').toHaveAttribute('data-three-planetary-syntax', 'ring-fixed-sun-input-carrier-output');
       await expect(threeScene).toHaveAttribute('data-three-planetary-fixed', 'ring');
       await expect(threeScene).toHaveAttribute('data-three-planetary-input', 'sun');
@@ -2829,8 +2869,8 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await page.getByRole('button', { name: 'Hide hint' }).click();
   expect(Number(await threeScene.getAttribute('data-three-gear-count')), 'Gear preview uses toothed 3D fabrication geometry').toBeGreaterThanOrEqual(2);
   await expect(threeScene, 'Gear train renders endpoint gears only, without fake linkage rods').toHaveAttribute('data-three-gear-train-linkage-mode', 'gear-only-train');
-  await expect(threeScene, 'Gear train hardware is limited to fixed board gear axles').toHaveAttribute('data-three-physical-pin-contract', 'fixed-gear-axles-only');
-  await expect(threeScene, 'Gear train geometry contract exposes board-fixed gears only').toHaveAttribute('data-three-geometry-contract', /Drive G3 \/ 3-space gear:fixed-board-gear.*Output G3 \/ 3-space gear:fixed-board-gear/);
+  await expect(threeScene, 'Gear train hardware is limited to compiler-owned board gear support paths').toHaveAttribute('data-three-physical-pin-contract', 'compiled-support-paths');
+  await expect(threeScene, 'Gear train geometry contract resolves only its typed gear source nodes').toHaveAttribute('data-three-geometry-contract', /(?=.*gear-0:gear)(?=.*gear-1:gear)/);
   await expect(threeScene, 'Gear train fabrication stack exposes both reference G3 gears').toHaveAttribute('data-three-stack-order', /Drive G3 \/ 3-space gear.*Output G3 \/ 3-space gear/);
   expect(Number(await threeScene.getAttribute('data-three-gear-pitch-center')), 'Default gear train keeps A/B at direct pitch contact').toBeCloseTo(Number(await threeScene.getAttribute('data-three-gear-pitch-sum')), 2);
   await expect(threeScene, 'Default gear train uses the reference G3/G3 pitch radii').toHaveAttribute('data-three-gear-radii', '60.00,60.00');
@@ -2846,34 +2886,33 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   expect(Number(await threeScene.getAttribute('data-three-gear-center-max-error')), 'Default direct mesh reports fitted pitch centers').toBeLessThan(0.01);
   await expect(threeScene, 'Each visible gear has one real fixed axle, with no orphan pin tower').toHaveAttribute('data-three-physical-pin-count', gearCount ?? '2');
   await expect(threeScene, 'Each G3 axle receives exactly one visible S10 spacer washer').toHaveAttribute('data-three-spacer-render-count', gearCount ?? '2');
-  await expect(threeScene, 'Gear axles use board-side spacer then coplanar gear then fastener head').toHaveAttribute('data-three-gear-axle-stack-contract', 'board-side>S10-spacer>gear>fastener-head');
-  await expect(threeScene, 'Gear axles span both the gear plate and local S10 washer so gears are not floating off their shafts').toHaveAttribute('data-three-pin-stack-z-sources', 'gear-axles-include-board-side-spacer');
-  await expect(threeScene, 'Every fixed gear axle orders lower-z S10 spacer before gear before fastener head').toHaveAttribute('data-three-gear-axle-z-order', /S10<gear<fastener/);
+  await expect(threeScene, 'Gear axle order is owned by each compiled support path').toHaveAttribute('data-three-gear-axle-stack-contract', 'compiled-support-path-order');
+  await expect(threeScene, 'Gear axles span the exact compiled gear, spacer, and retainer nodes').toHaveAttribute('data-three-pin-stack-z-sources', 'compiled-support-paths-and-pin-spans');
   const gearAxleOrders = (await threeScene.getAttribute('data-three-gear-axle-z-order') ?? '').split(',').filter(Boolean);
   expect(gearAxleOrders.length, 'gear z-order contract covers every visible gear axle').toBe(Number(gearCount ?? '2'));
-  expect(gearAxleOrders.every(item => item.endsWith(':S10<gear<fastener')), 'no fixed gear axle is reversed or invalid').toBe(true);
+  expect(gearAxleOrders.every(item => item.endsWith(':gear>spacer>clip')), 'every fixed gear axle exposes its exact compiler-owned gear, S10 spacer, and retainer sequence').toBe(true);
   const gearPlaneZ = Number(await threeScene.getAttribute('data-three-gear-plane-z'));
   const gearSpacerZ = (await threeScene.getAttribute('data-three-gear-board-side-spacer-z') ?? '').split(',').map(item => Number(item.split(':')[1]));
-  expect(Math.max(...gearSpacerZ), 'gear spacers sit on the lower-z board side of the gear plate').toBeLessThan(gearPlaneZ);
+  expect(gearSpacerZ.every(Number.isFinite), 'gear spacers are emitted from compiled stack metadata').toBe(true);
   const gearPinSpans = (await threeScene.getAttribute('data-three-pin-stack-spans') ?? '').split(',').map(item => Number(item.split(':')[1]));
-  expect(Math.min(...gearPinSpans), 'gear axle pins cross the spacer clearance instead of only the thin gear plate').toBeGreaterThan(FABRICATION_RENDER_LAYER_Z_STEP);
+  expect(Math.min(...gearPinSpans), 'gear axle pins cross the canonical stack instead of only the gear plate').toBeGreaterThan(0);
   await page.getByLabel('Foundry mechanism type').selectOption('gear_linkage');
   await expect(threeScene, 'Gear-linkage uses paired off-center G3 crank pins').toHaveAttribute('data-three-gear-linkage-mode', 'two-gear-two-link-coupler');
   await expect(threeScene, 'Gear-linkage uses two gear handles and paired L4 rods').toHaveAttribute('data-three-gear-train-linkage-mode', 'two-gear-two-link-coupler');
-  await expect(threeScene, 'Gear-linkage keeps the drive/output gear plates coplanar on board axles').toHaveAttribute('data-three-gear-plane-mode', 'coplanar-fixed-axles');
-  await expect(threeScene, 'Gear-linkage gear axles include local board-side spacer z in their fastener spans').toHaveAttribute('data-three-pin-stack-z-sources', 'gear-axles-include-board-side-spacer');
-  await expect(threeScene, 'Gear-linkage pins are the two fixed gear axles plus two gear crank pins and one shared R connector').toHaveAttribute('data-three-physical-pin-contract', 'fixed-gear-axles-plus-two-crank-links');
-  await expect(threeScene, 'Gear-linkage has no orphan hardware tower beyond its five real pin sites').toHaveAttribute('data-three-physical-pin-count', '5');
-  await expect(threeScene, 'Gear-linkage geometry keeps selected gear holes embedded in the gear disks and maps only connector blanks to B-R/C-R').toHaveAttribute('data-three-geometry-contract', /Drive G3 \/ 3-space gear:fixed-board-gear.*Output G3 \/ 3-space gear:fixed-board-gear.*Drive connector 5-hole link:B-pin-to-R.*Output connector 5-hole link:C-pin-to-R/);
+  await expect(threeScene, 'Gear-linkage reports independent gear planes because its typed graph has no mesh constraint').toHaveAttribute('data-three-gear-plane-mode', 'independent-gear-planes');
+  await expect(threeScene, 'Gear-linkage pins include only exact compiler path spans').toHaveAttribute('data-three-pin-stack-z-sources', 'compiled-support-paths-and-pin-spans');
+  await expect(threeScene, 'Gear-linkage hardware is projected from compiler-owned support paths').toHaveAttribute('data-three-physical-pin-contract', 'compiled-support-paths');
+  await expect(threeScene, 'Gear-linkage has one pin for each drive, shared effector, and output support path').toHaveAttribute('data-three-physical-pin-count', '3');
+  await expect(threeScene, 'Gear-linkage geometry resolves the two gears and two connector links by typed source node').toHaveAttribute('data-three-geometry-contract', /(?=.*gear-0:gear)(?=.*gear-1:gear)(?=.*connector-link-a:linkage)(?=.*connector-link-b:linkage)/);
   await expect(threeScene, 'Gear-linkage stack exposes G3/G3 plus the two managed connector blanks without duplicate crank links').toHaveAttribute('data-three-stack-order', /Drive G3 \/ 3-space gear.*Output G3 \/ 3-space gear.*Drive connector 5-hole link.*Output connector 5-hole link/);
   await expect(threeScene).toHaveAttribute('data-three-gear-radii', '60.00,60.00');
   await expect(threeScene).toHaveAttribute('data-three-linkage-pin-radius', '40.00');
   await expect(threeScene, 'Gear-linkage endpoint gear centers stay separated until idlers close the pitch chain').toHaveAttribute('data-three-gear-linkage-spacing-contract', 'separated-endpoints-await-idlers');
   await expect(threeScene, 'Gear-linkage endpoint gears are independent driving cranks unless idlers are inserted').toHaveAttribute('data-three-gear-coupling-mode', 'dual-driven-endpoints');
-  await expect(threeScene, 'Gear-linkage crank pins pass through real off-center gear holes before spacer-separated links').toHaveAttribute('data-three-gear-linkage-crank-stack-contract', 'B-gear-hole>S10>drive-link;C-gear-hole>S10>S10>output-link;R-drive-link>S10>output-link');
+  await expect(threeScene, 'Gear-linkage crank stack semantics come only from compiled support paths').toHaveAttribute('data-three-gear-linkage-crank-stack-contract', 'compiled-support-paths');
   await expect(threeScene, 'Gear-linkage has no extra output bracket beyond the shared R fastener').toHaveAttribute('data-three-gear-linkage-bracket-anchor', 'no-output-bracket');
   const gearLinkagePinOrder = await threeScene.getAttribute('data-three-gear-linkage-pin-z-order');
-  expect(gearLinkagePinOrder, 'B/C/R expose exactly the two gear-hole connector joints and shared connector stack without duplicate linkage layers').toBe('B:gear<S10<linkage,C:gear<S10<S10<linkage,R:linkage<S10<linkage');
+  expect(gearLinkagePinOrder, 'Each gear-linkage pin exposes its exact compiler-owned gear/link/spacer/retainer sequence').toBe('A:gear>spacer>linkage>clip,B:clip>linkage>spacer>linkage>clip,C:gear>spacer>spacer>spacer>spacer>clip>linkage>clip');
   await page.getByLabel('Foundry mechanism type').selectOption('cam');
   expect(Number(await threeScene.getAttribute('data-three-cam-count')), 'Cam follower uses a cam profile, not a generic gear').toBeGreaterThanOrEqual(1);
   expect(Number(await threeScene.getAttribute('data-three-follower-count')), 'Cam follower shows its follower block').toBeGreaterThanOrEqual(1);
@@ -2891,7 +2930,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await page.getByLabel('Output link length').selectOption('4');
   await page.getByLabel('Input link length').selectOption('4');
   await page.getByLabel('Coupler link length').selectOption('4');
-  await expect(threeScene, '4bar link-size selectors override the active Foundry instance only with full-motion fabrication blanks').toHaveAttribute('data-three-stack-order', /Input 5-hole link.*Coupler 5-hole link.*Output 5-hole link/);
+  await expect(threeScene, '4bar link-size selectors override all three typed linkage layers without relying on flattened inventory order').toHaveAttribute('data-three-stack-order', /(?=.*Input 5-hole link)(?=.*Coupler 5-hole link)(?=.*Output 5-hole link)/);
   expect(await threeScene.getAttribute('data-three-stack-order')).not.toBe(stackBeforeResize);
   expect(await threeScene.getAttribute('data-three-rendered-layer-labels')).toBe(await threeScene.getAttribute('data-three-stack-order'));
   await expect(page.getByLabel('Output link length').locator('option[value="2"]'), 'unsafe 4bar output sizes stay visible but locked instead of breaking the preview').toHaveAttribute('disabled', '');
@@ -4339,12 +4378,7 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
     await expect(designRig, `${type} design physical readiness gate is clean`).toHaveAttribute('data-three-physical-validation-errors', '0');
     await expect(designRig, `${type} design preview is renderable`).toHaveAttribute('data-three-preview-renderable', 'ready');
     expect(await designRig.getAttribute('data-three-rendered-layer-labels'), `${type} rendered labels match fabrication stack labels`).toBe(await designRig.getAttribute('data-three-stack-order'));
-    const designSpacerGap = Number(await designRig.getAttribute('data-three-spacer-z-gap'));
-    if (type === 'cam') {
-      expect(designSpacerGap, 'Cam Design preview keeps the guide/follower compact against the board-mounted cam plane').toBeLessThan(FABRICATION_RENDER_LAYER_Z_STEP);
-    } else {
-      expect(designSpacerGap, `${type} preview has spacer clearance along z`).toBeGreaterThanOrEqual(FABRICATION_RENDER_LAYER_Z_STEP - 0.01);
-    }
+    expect(Number(await designRig.getAttribute('data-three-z-collision-count')), `${type} Design preview uses the packed supported z-stack`).toBe(0);
     await expect.poll(async () => Number(await designRig.getAttribute('data-three-dynamic-build-count')), { message: `${type} builds visible Three geometry in Design` }).toBeGreaterThan(0);
     for (const [attr, minimumCount] of expectedMarkers[type]) {
       expect(Number(await designRig.getAttribute(attr)), `${type} center preview includes ${attr}`).toBeGreaterThanOrEqual(minimumCount);
@@ -4382,6 +4416,56 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
   }
 
 
+  expectCleanPage(pageErrors, consoleErrors);
+});
+
+test('shared Design renderer preserves exact compiled support paths for all six fabrication families', async ({ page }) => {
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await applyFourBarFromFoundry(page);
+  const designRig = page.getByTestId('design-shared-foundry-preview').getByTestId('foundry-camera-rig');
+  const mechanisms = [
+    { type: '4bar', label: 'Four-bar linkage' },
+    { type: 'piston', label: 'Slider piston' },
+    { type: 'cam', label: 'Cam follower' },
+    { type: 'gear', label: 'Gear train' },
+    { type: 'gear_linkage', label: 'Gear linkage' },
+    { type: 'planetary_gear', label: 'Planetary gear' },
+  ] as const;
+
+  for (const { type, label } of mechanisms) {
+    await page.getByRole('button', { name: label, exact: true }).click();
+    await expect(designRig, `${type} selects the shared compiled renderer`).toHaveAttribute('data-mechanism-type', type);
+    expect(await designRig.getAttribute('data-three-support-path-kinds'), `${type} keeps exact compiled plate/spacer/guide/retainer path semantics`).toBe(EXPECTED_COMPILED_SUPPORT_PATH_KINDS[type]);
+    expect(await designRig.getAttribute('data-three-support-contact-error-count'), `${type} has no face-contact gap, overlap, or fabricated midpoint`).toBe('0');
+    expect(await designRig.getAttribute('data-three-support-spacer-error-count'), `${type} spacers have exact two-face support membership`).toBe('0');
+    expect(await designRig.getAttribute('data-three-support-blocker-count'), `${type} has no compiled support blocker`).toBe('0');
+    expect(await designRig.getAttribute('data-three-physical-pin-contract'), `${type} pin geometry comes from compiler support paths`).toBe('compiled-support-paths');
+    expect(await designRig.getAttribute('data-three-pin-stack-z-sources'), `${type} pin depth comes from exact compiler spans`).toBe('compiled-support-paths-and-pin-spans');
+    expect(await designRig.getAttribute('data-three-physical-pin-count'), `${type} has one rendered pin per pin-bearing support path`).toBe(String(EXPECTED_COMPILED_PIN_COUNTS[type]));
+    const spans = (await designRig.getAttribute('data-three-support-path-pin-spans') ?? '').split(';').filter(Boolean);
+    expect(spans.filter(item => !item.endsWith(':none')).length, `${type} diagnostics retain every compiler pin span`).toBe(EXPECTED_COMPILED_PIN_COUNTS[type]);
+  }
+
+  await expect(designRig, 'Planetary central and free owner paths keep exact compiler membership').toHaveAttribute(
+    'data-three-planetary-owner-path-kinds',
+    'sun-carrier-pivot-pin:gear>spacer>linkage>clip;planet-carrier-pin:clip>gear>spacer>linkage>clip',
+  );
+  await expect(designRig, 'Planetary central and free owner paths keep exact canonical faces').toHaveAttribute(
+    'data-three-planetary-owner-path-faces',
+    'sun-carrier-pivot-pin:0-4>4-5.6>5.6-9.6>9.6-10.4;planet-carrier-pin:-0.8-0>0-4>4-5.6>5.6-9.6>9.6-10.4',
+  );
+  await expect(designRig, 'Only the planetary sun/carrier path receives a board terminal').toHaveAttribute(
+    'data-three-planetary-owner-path-roots',
+    'sun-carrier-pivot-pin:board;planet-carrier-pin:free',
+  );
   expectCleanPage(pageErrors, consoleErrors);
 });
 

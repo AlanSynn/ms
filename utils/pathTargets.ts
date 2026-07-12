@@ -38,6 +38,32 @@ export const pathOwnedTargetFields = (path: ProjectMotionPath) => ({
   activeVisualPartIds: path.sceneObjectId ? [] : [path.partId],
 });
 
+export type MechanismTargetFields = Pick<
+  MechanismConfig,
+  | "targetPartId"
+  | "targetSceneObjectId"
+  | "targetPathId"
+  | "targetAnchorJointId"
+>;
+
+export const mechanismMatchesTargetFields = (
+  mechanism: MechanismConfig,
+  target: MechanismTargetFields,
+) =>
+  mechanism.targetPartId === target.targetPartId &&
+  mechanism.targetSceneObjectId === target.targetSceneObjectId &&
+  mechanism.targetPathId === target.targetPathId &&
+  (Boolean(target.targetSceneObjectId) ||
+    mechanism.targetAnchorJointId === target.targetAnchorJointId);
+
+export const mechanismForTargetFields = (
+  project: ProjectState,
+  target: MechanismTargetFields,
+) =>
+  project.mechanisms.find((mechanism) =>
+    mechanismMatchesTargetFields(mechanism, target),
+  );
+
 export const pathOwnerExists = (project: ProjectState, path: ProjectMotionPath) =>
   path.sceneObjectId
     ? Boolean(project.sceneObjects[path.sceneObjectId])

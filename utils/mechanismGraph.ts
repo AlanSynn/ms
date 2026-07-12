@@ -53,10 +53,9 @@ export type MechanismGraphDiagnostic = {
     message: string;
 };
 
-export type MechanismGraphNode = {
+type MechanismGraphNodeBase = {
     id: string;
     label: string;
-    role: MechanismGraphNodeRole;
     /** False when this graph span is embodied by another fabricated part, such as a gear attachment hole. */
     fabricated?: boolean;
     position?: Point;
@@ -64,16 +63,23 @@ export type MechanismGraphNode = {
     samples?: number[];
 };
 
-export type MechanismConstraint = {
+export type MechanismGraphNode =
+    | (MechanismGraphNodeBase & { role: 'moving-joint'; ownerPartId?: string })
+    | (MechanismGraphNodeBase & { role: Exclude<MechanismGraphNodeRole, 'moving-joint'>; ownerPartId?: never });
+
+type MechanismConstraintBase = {
     id: string;
     label: string;
-    role: MechanismConstraintRole;
     nodes: string[];
     value?: number;
     angle?: number;
     vector?: Point;
     samples?: number[];
 };
+
+export type MechanismConstraint =
+    | (MechanismConstraintBase & { role: 'distance'; fabricatedPartNodeId: string })
+    | (MechanismConstraintBase & { role: Exclude<MechanismConstraintRole, 'distance'>; fabricatedPartNodeId?: never });
 
 export type MechanismGraphSource = 'family-definition' | 'free-graph-authoring' | 'imported-graph';
 
@@ -278,9 +284,9 @@ export const fourBarMechanismGraph = (mechanism: MechanismConfig): MechanismGrap
         constraints: [
             ...fixedBoardConstraints('p1', 'Input pivot'),
             ...fixedBoardConstraints('p2', 'Output pivot'),
-            { id: 'input-length', label: 'Input link length', role: 'distance', nodes: ['p1', 'j1'], value: inputLength },
-            { id: 'coupler-length', label: 'Coupler link length', role: 'distance', nodes: ['j1', 'j2'], value: mechanism.couplerLength },
-            { id: 'output-length', label: 'Output link length', role: 'distance', nodes: ['p2', 'j2'], value: outputLength },
+            { id: 'input-length', label: 'Input link length', role: 'distance', nodes: ['p1', 'j1'], value: inputLength, fabricatedPartNodeId: 'input-link' },
+            { id: 'coupler-length', label: 'Coupler link length', role: 'distance', nodes: ['j1', 'j2'], value: mechanism.couplerLength, fabricatedPartNodeId: 'coupler-link' },
+            { id: 'output-length', label: 'Output link length', role: 'distance', nodes: ['p2', 'j2'], value: outputLength, fabricatedPartNodeId: 'output-link' },
             outputOffset('effector-offset', 'Target point rides on coupler', ['j1', 'j2', 'effector'], mechanism.couplerPointDist, mechanism.couplerPointAngle)
         ],
         drivers: [{ id: 'input-rotation', label: 'Turn input pivot', role: 'rotary-input', nodeId: 'p1', solver: 'closed-form-kinematics', ratio: mechanism.speed1 ?? 1 }],
@@ -351,8 +357,8 @@ export const pistonMechanismGraph = (mechanism: MechanismConfig): MechanismGraph
         constraints: [
             ...fixedBoardConstraints('p1', 'Crank pivot'),
             ...fixedBoardConstraints('guide-anchor', 'Slider guide mount'),
-            { id: 'crank-length', label: 'Crank link length', role: 'distance', nodes: ['p1', 'j1'], value: mechanism.crankLength },
-            { id: 'rod-length', label: 'Connecting rod length', role: 'distance', nodes: ['j1', 'slider'], value: mechanism.rodLength ?? mechanism.couplerLength },
+            { id: 'crank-length', label: 'Crank link length', role: 'distance', nodes: ['p1', 'j1'], value: mechanism.crankLength, fabricatedPartNodeId: 'crank-link' },
+            { id: 'rod-length', label: 'Connecting rod length', role: 'distance', nodes: ['j1', 'slider'], value: mechanism.rodLength ?? mechanism.couplerLength, fabricatedPartNodeId: 'connecting-rod' },
             { id: 'slider-guide', label: 'Slider stays inside the guide', role: 'prismatic', nodes: ['slider', 'guide'], value: mechanism.sliderOffset },
             outputOffset('effector-offset', 'Target point rides on slider rod', ['j1', 'slider', 'effector'], mechanism.couplerPointDist, mechanism.couplerPointAngle)
         ],
@@ -436,8 +442,8 @@ export const gearLinkageMechanismGraph = (mechanism: MechanismConfig): Mechanism
             { id: 'gear-phase', label: radii.length > 2 ? 'Meshed gears keep opposite phase' : 'Endpoint cranks keep selected timing', role: 'phase', nodes: gearNodes.map(node => node.id), value: gearTrainOutputRatio(radii) },
             outputOffset('drive-crank-offset', 'Drive link rides on drive gear', ['gear-0', 'drive-pin'], driveOffset.length, driveOffset.angleDegrees),
             outputOffset('output-crank-offset', 'Output link rides on output gear', ['gear-' + Math.max(0, radii.length - 1), 'output-pin'], outputOffsetGeometry.length, outputOffsetGeometry.angleDegrees),
-            { id: 'drive-connector-length', label: 'Drive linkage length', role: 'distance', nodes: ['drive-pin', 'effector'], value: linkLength },
-            { id: 'output-connector-length', label: 'Output linkage length', role: 'distance', nodes: ['output-pin', 'effector'], value: linkLength },
+            { id: 'drive-connector-length', label: 'Drive linkage length', role: 'distance', nodes: ['drive-pin', 'effector'], value: linkLength, fabricatedPartNodeId: 'connector-link-a' },
+            { id: 'output-connector-length', label: 'Output linkage length', role: 'distance', nodes: ['output-pin', 'effector'], value: linkLength, fabricatedPartNodeId: 'connector-link-b' },
             outputOffset('connector-output', 'Target point is the shared linkage connector', ['drive-pin', 'output-pin', 'effector'], linkLength, connectorOffset.angleDegrees)
         ],
         drivers: [
@@ -469,6 +475,8 @@ export const planetaryGearMechanismGraph = (mechanism: MechanismConfig): Mechani
             { id: 'ring-gear', label: 'Fixed ring gear', role: 'ring-gear', position: p1, value: ringRadius },
             { id: 'carrier', label: 'Carrier arm', role: 'link', position: midpoint(p1, state.p2), value: carrierRadius },
             { id: 'planet-gear', label: 'Moving planet gear', role: 'gear', position: state.p2, value: planetRadius },
+            { id: 'carrier-central-pivot', label: 'Carrier central pivot', role: 'moving-joint', fabricated: false, position: p1, ownerPartId: 'carrier' },
+            { id: 'carrier-planet-pivot', label: 'Carrier planet pivot', role: 'moving-joint', fabricated: false, position: state.p2, ownerPartId: 'carrier' },
             { id: 'output-point', label: 'Carrier output point', role: 'output-point', position: state.effector, value: mechanism.couplerPointDist }
         ],
         constraints: [
@@ -476,7 +484,8 @@ export const planetaryGearMechanismGraph = (mechanism: MechanismConfig): Mechani
             ...fixedBoardConstraints('ring-gear', 'Ring gear'),
             { id: 'sun-planet-mesh', label: 'Planet meshes with sun gear', role: 'gear-mesh', nodes: ['sun-gear', 'planet-gear'], value: sunRadius + planetRadius },
             { id: 'planet-ring-mesh', label: 'Planet meshes inside ring gear', role: 'gear-mesh', nodes: ['planet-gear', 'ring-gear'], value: ringRadius - planetRadius },
-            { id: 'planet-carrier-pin', label: 'Planet axle rides on carrier', role: 'pin-joint', nodes: ['carrier', 'planet-gear'] },
+            { id: 'sun-carrier-pivot-pin', label: 'Sun axle supports carrier', role: 'pin-joint', nodes: ['sun-gear', 'carrier-central-pivot'] },
+            { id: 'planet-carrier-pin', label: 'Planet axle rides on carrier', role: 'pin-joint', nodes: ['planet-gear', 'carrier-planet-pivot'] },
             { id: 'carrier-phase', label: 'Carrier follows planetary ratio', role: 'phase', nodes: ['sun-gear', 'carrier'], value: planetaryCarrierOutputRatio(sunRadius, planetRadius) },
             { id: 'planet-spin-phase', label: 'Planet spins from gear contact', role: 'phase', nodes: ['sun-gear', 'planet-gear'], value: planetaryPlanetSpinRatio(sunRadius, planetRadius) },
             outputOffset('carrier-output', 'Target point rides on carrier', ['carrier', 'output-point'], mechanism.couplerPointDist, mechanism.couplerPointAngle)
@@ -509,7 +518,7 @@ export const crankMechanismGraph = (mechanism: MechanismConfig): MechanismGraph 
         ],
         constraints: [
             ...fixedBoardConstraints('p1', 'Crank pivot'),
-            { id: 'crank-length', label: 'Crank link length', role: 'distance', nodes: ['p1', 'j1'], value: mechanism.crankLength },
+            { id: 'crank-length', label: 'Crank link length', role: 'distance', nodes: ['p1', 'j1'], value: mechanism.crankLength, fabricatedPartNodeId: 'crank-link' },
             outputOffset('effector-offset', 'Target rides on crank pin', ['j1', 'effector'], mechanism.couplerPointDist || mechanism.crankLength, mechanism.couplerPointAngle)
         ],
         drivers: [{ id: 'crank-rotation', label: 'Turn crank', role: 'rotary-input', nodeId: 'p1', solver: 'closed-form-kinematics', ratio: mechanism.speed1 ?? 1 }],
@@ -543,7 +552,7 @@ export const yokeMechanismGraph = (mechanism: MechanismConfig): MechanismGraph =
         constraints: [
             ...fixedBoardConstraints('p1', 'Crank pivot'),
             ...fixedBoardConstraints('guide-anchor', 'Yoke guide mount'),
-            { id: 'crank-length', label: 'Crank link length', role: 'distance', nodes: ['p1', 'j1'], value: mechanism.crankLength },
+            { id: 'crank-length', label: 'Crank link length', role: 'distance', nodes: ['p1', 'j1'], value: mechanism.crankLength, fabricatedPartNodeId: 'crank-link' },
             { id: 'yoke-slide', label: 'Yoke moves in guide', role: 'prismatic', nodes: ['yoke-slider', 'guide'], value: mechanism.sliderOffset },
             outputOffset('effector-offset', 'Target point rides on yoke', ['yoke-slider', 'effector'], mechanism.couplerPointDist, mechanism.couplerPointAngle)
         ],
@@ -578,8 +587,8 @@ export const quickReturnMechanismGraph = (mechanism: MechanismConfig): Mechanism
         constraints: [
             ...fixedBoardConstraints('p1', 'Crank pivot'),
             ...fixedBoardConstraints('p2', 'Slotted arm pivot'),
-            { id: 'crank-length', label: 'Crank link length', role: 'distance', nodes: ['p1', 'j1'], value: mechanism.crankLength },
-            { id: 'arm-length', label: 'Slotted arm length', role: 'distance', nodes: ['p2', 'j2'], value: mechanism.rockerLength },
+            { id: 'crank-length', label: 'Crank link length', role: 'distance', nodes: ['p1', 'j1'], value: mechanism.crankLength, fabricatedPartNodeId: 'crank-link' },
+            { id: 'arm-length', label: 'Slotted arm length', role: 'distance', nodes: ['p2', 'j2'], value: mechanism.rockerLength, fabricatedPartNodeId: 'slotted-arm' },
             { id: 'slot-contact', label: 'Crank pin slides in slot', role: 'prismatic', nodes: ['j1', 'slotted-arm'] },
             outputOffset('effector-offset', 'Target point rides on slotted arm', ['j2', 'effector'], mechanism.couplerPointDist, mechanism.couplerPointAngle)
         ],
@@ -618,10 +627,10 @@ export const fiveBarMechanismGraph = (mechanism: MechanismConfig): MechanismGrap
         constraints: [
             ...fixedBoardConstraints('p1', 'Left pivot'),
             ...fixedBoardConstraints('p2', 'Right pivot'),
-            { id: 'left-crank-length', label: 'Left crank length', role: 'distance', nodes: ['p1', 'j1'], value: mechanism.crankLength },
-            { id: 'right-crank-length', label: 'Right crank length', role: 'distance', nodes: ['p2', 'aux'], value: mechanism.rockerLength },
-            { id: 'left-coupler-length', label: 'Left coupler length', role: 'distance', nodes: ['j1', 'j2'], value: mechanism.couplerLength },
-            { id: 'right-coupler-length', label: 'Right coupler length', role: 'distance', nodes: ['aux', 'j2'], value: rightRodLength },
+            { id: 'left-crank-length', label: 'Left crank length', role: 'distance', nodes: ['p1', 'j1'], value: mechanism.crankLength, fabricatedPartNodeId: 'left-crank' },
+            { id: 'right-crank-length', label: 'Right crank length', role: 'distance', nodes: ['p2', 'aux'], value: mechanism.rockerLength, fabricatedPartNodeId: 'right-crank' },
+            { id: 'left-coupler-length', label: 'Left coupler length', role: 'distance', nodes: ['j1', 'j2'], value: mechanism.couplerLength, fabricatedPartNodeId: 'left-coupler' },
+            { id: 'right-coupler-length', label: 'Right coupler length', role: 'distance', nodes: ['aux', 'j2'], value: rightRodLength, fabricatedPartNodeId: 'right-coupler' },
             outputOffset('effector-offset', 'Target point rides on shared joint', ['j2', 'effector'], mechanism.couplerPointDist, mechanism.couplerPointAngle)
         ],
         drivers: [
@@ -664,11 +673,11 @@ export const sixBarMechanismGraph = (mechanism: MechanismConfig): MechanismGraph
         constraints: [
             ...fixedBoardConstraints('p1', 'Input pivot'),
             ...fixedBoardConstraints('p2', 'Output pivot'),
-            { id: 'input-length', label: 'Input link length', role: 'distance', nodes: ['p1', 'j1'], value: mechanism.crankLength },
-            { id: 'coupler-length', label: 'Coupler link length', role: 'distance', nodes: ['j1', 'j2'], value: mechanism.couplerLength },
-            { id: 'output-length', label: 'Output link length', role: 'distance', nodes: ['p2', 'j2'], value: mechanism.rockerLength },
-            { id: 'dyad-length', label: 'Dyad link length', role: 'distance', nodes: ['j2', 'aux'], value: dyadLength },
-            { id: 'follower-length', label: 'Follower link length', role: 'distance', nodes: ['p2', 'aux'], value: followerLength }
+            { id: 'input-length', label: 'Input link length', role: 'distance', nodes: ['p1', 'j1'], value: mechanism.crankLength, fabricatedPartNodeId: 'input-link' },
+            { id: 'coupler-length', label: 'Coupler link length', role: 'distance', nodes: ['j1', 'j2'], value: mechanism.couplerLength, fabricatedPartNodeId: 'coupler-link' },
+            { id: 'output-length', label: 'Output link length', role: 'distance', nodes: ['p2', 'j2'], value: mechanism.rockerLength, fabricatedPartNodeId: 'output-link' },
+            { id: 'dyad-length', label: 'Dyad link length', role: 'distance', nodes: ['j2', 'aux'], value: dyadLength, fabricatedPartNodeId: 'dyad-link' },
+            { id: 'follower-length', label: 'Follower link length', role: 'distance', nodes: ['p2', 'aux'], value: followerLength, fabricatedPartNodeId: 'follower-link' }
         ],
         drivers: [{ id: 'input-rotation', label: 'Turn input pivot', role: 'rotary-input', nodeId: 'p1', solver: 'closed-form-kinematics', ratio: mechanism.speed1 ?? 1 }],
         diagnostics: []
@@ -815,6 +824,19 @@ export const validateMechanismGraph = (graph: MechanismGraph): MechanismGraphVal
         finiteDiagnostic(diagnostics, `node ${node.id}.value`, node.value);
         finiteSamplesDiagnostic(diagnostics, `node ${node.id}.samples`, node.samples);
     });
+    const fabricatedOwnerRoles = new Set<MechanismGraphNodeRole>(['link', 'rigid-part', 'gear', 'ring-gear', 'cam', 'follower', 'guide', 'slider']);
+    graph.nodes.forEach(node => {
+        if ('ownerPartId' in node && node.ownerPartId !== undefined) {
+            if (node.fabricated !== false) diagnostics.push({ severity: 'error', message: `Graph owned pivot ${node.id} must be nonfabricated.` });
+            if (!node.position) diagnostics.push({ severity: 'error', message: `Graph owned pivot ${node.id} needs a position.` });
+            const owner = nodeById.get(node.ownerPartId);
+            if (!owner) diagnostics.push({ severity: 'error', message: `Graph owned pivot ${node.id} references missing owner ${node.ownerPartId}.` });
+            else if (owner.id === node.id || owner.fabricated === false || !fabricatedOwnerRoles.has(owner.role)) diagnostics.push({ severity: 'error', message: `Graph owned pivot ${node.id} has unsupported owner ${owner.id}.` });
+            const pins = graph.constraints.filter(constraint => constraint.role === 'pin-joint' && constraint.nodes.includes(node.id));
+            if (pins.length !== 1) diagnostics.push({ severity: 'error', message: `Graph owned pivot ${node.id} must participate in exactly one pin.` });
+        }
+    });
+
     graph.constraints.forEach(constraint => {
         if (!constraint.id || !constraint.label || !constraint.role) diagnostics.push({ severity: 'error', message: `Graph constraint ${constraint.id || '(missing)'} is missing id, label, or role.` });
         if (!constraint.nodes.length) diagnostics.push({ severity: 'error', message: `Graph constraint ${constraint.id} has no nodes.` });
@@ -822,11 +844,30 @@ export const validateMechanismGraph = (graph: MechanismGraph): MechanismGraphVal
         constraint.nodes.forEach(nodeId => {
             if (!nodeIdSet.has(nodeId)) diagnostics.push({ severity: 'error', message: `Graph constraint ${constraint.id} references missing node ${nodeId}.` });
         });
+        if (constraint.role === 'distance') {
+            const fabricatedPartNodeId = constraint.fabricatedPartNodeId;
+            const fabricatedPart = fabricatedPartNodeId ? nodeById.get(fabricatedPartNodeId) : undefined;
+            if (!fabricatedPartNodeId) diagnostics.push({ severity: 'error', message: `Graph distance constraint ${constraint.id} is missing fabricatedPartNodeId.` });
+            else if (!fabricatedPart) diagnostics.push({ severity: 'error', message: `Graph distance constraint ${constraint.id} references missing fabricated part ${fabricatedPartNodeId}.` });
+            else if (fabricatedPart.fabricated === false || (fabricatedPart.role !== 'link' && fabricatedPart.role !== 'rigid-part')) {
+                diagnostics.push({ severity: 'error', message: `Graph distance constraint ${constraint.id} references unsupported fabricated part ${fabricatedPartNodeId}.` });
+            }
+        } else {
+            const invalidFabricatedPartNodeId = (constraint as MechanismConstraintBase & { fabricatedPartNodeId?: unknown }).fabricatedPartNodeId;
+            if (invalidFabricatedPartNodeId !== undefined) diagnostics.push({ severity: 'error', message: `Graph ${constraint.role} constraint ${constraint.id} cannot own fabricated part ${String(invalidFabricatedPartNodeId)}.` });
+        }
         finiteDiagnostic(diagnostics, `constraint ${constraint.id}.value`, constraint.value);
         finiteDiagnostic(diagnostics, `constraint ${constraint.id}.angle`, constraint.angle);
         finitePointDiagnostic(diagnostics, `constraint ${constraint.id}.vector`, constraint.vector);
         finiteSamplesDiagnostic(diagnostics, `constraint ${constraint.id}.samples`, constraint.samples);
-        if (constraint.role === 'distance' && constraint.nodes.length === 2 && Number.isFinite(constraint.value)) {
+        if (constraint.role === 'pin-joint' && constraint.nodes.length === 2) {
+            const [a, b] = constraint.nodes.map(nodeId => nodeById.get(nodeId));
+            if (a?.position && b?.position) {
+                const actual = Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y);
+                if (actual > MECHANISM_GRAPH_POSITIONED_DISTANCE_TOLERANCE) diagnostics.push({ severity: 'error', message: `Graph pin-joint ${constraint.id} endpoints are not coincident.` });
+            }
+        }
+        if ((constraint.role === 'distance' || constraint.role === 'gear-mesh') && constraint.nodes.length === 2 && Number.isFinite(constraint.value)) {
             const [start, end] = constraint.nodes.map(nodeId => nodeById.get(nodeId)?.position);
             if (start && end
                 && Number.isFinite(start.x) && Number.isFinite(start.y)
@@ -837,12 +878,17 @@ export const validateMechanismGraph = (graph: MechanismGraph): MechanismGraphVal
                 if (Math.abs(actual - expected) > tolerance) {
                     diagnostics.push({
                         severity: 'error',
-                        message: `Graph distance constraint ${constraint.id} positions are ${actual} apart but value is ${expected} (tolerance ${tolerance}).`
+                        message: `Graph ${constraint.role} constraint ${constraint.id} positions are ${actual} apart but value is ${expected} (tolerance ${tolerance}).`
                     });
                 }
             }
         }
     });
+    const distanceOwnerIds = graph.constraints
+        .filter((constraint): constraint is Extract<MechanismConstraint, { role: 'distance' }> => constraint.role === 'distance')
+        .map(constraint => constraint.fabricatedPartNodeId)
+        .filter(Boolean);
+    duplicateIds(distanceOwnerIds).forEach(id => diagnostics.push({ severity: 'error', message: `Fabricated graph part ${id} is owned by multiple distance constraints.` }));
     graph.drivers.forEach(driver => {
         if (!driver.id || !driver.label || !driver.nodeId) diagnostics.push({ severity: 'error', message: `Graph driver ${driver.id || '(missing)'} is missing id, label, or nodeId.` });
         if (!nodeIdSet.has(driver.nodeId)) diagnostics.push({ severity: 'error', message: `Graph driver ${driver.id} references missing node ${driver.nodeId}.` });

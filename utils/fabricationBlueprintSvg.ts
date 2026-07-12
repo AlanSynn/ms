@@ -11,6 +11,7 @@ import { fabricationRecipeTitle } from './fabricationRecipes';
 import { svgNumber } from './numberFormat';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlineBounds } from './partGeometry';
 import { sampledCamProfileScale } from './kinematics';
+import { buildMechanismSceneContracts } from './mechanismSceneContract';
 
 const camProfilePathD = (samples: number[] | undefined, x: number, y: number, radius: number) => {
     if (!samples?.length) return '';
@@ -66,9 +67,10 @@ export const makeBlueprintSvg = (project: ProjectState, recipes: FabricationReci
         return map;
     }, new Map<string, number>()).entries());
     const camProfiles = camProfileEntries(recipes);
+    const mechanismSceneContracts = buildMechanismSceneContracts(project, recipes);
     const buildCoordinates = buildCoordinateEntries(project, recipes);
     let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 680" width="900" height="680" data-blueprint-source="fabrication-contract">`;
-    svg += `<metadata>${esc(JSON.stringify({ project: project.metadata.name, profile: kit.profileKey, gridPitchMm: kit.gridPitchMm, mechanisms: recipes.map(r => r.mechanismId), camProfiles: recipes.filter(recipeHasCamProfile).map(r => ({ id: r.mechanismId, samples: r.camProfileSamples ?? [] })) }))}</metadata>`;
+    svg += `<metadata>${esc(JSON.stringify({ project: project.metadata.name, profile: kit.profileKey, gridPitchMm: kit.gridPitchMm, mechanisms: recipes.map(r => r.mechanismId), camProfiles: recipes.filter(recipeHasCamProfile).map(r => ({ id: r.mechanismId, samples: r.camProfileSamples ?? [] })), mechanismSceneContracts }))}</metadata>`;
     svg += `<rect width="900" height="680" fill="#f8fafc"/>`;
     svg += `<style><![CDATA[text{font-family:Manrope,Inter,Arial,sans-serif}.caps{font-size:11px;font-weight:900;letter-spacing:.14em;fill:#64748b}.body{font-size:11px;font-weight:800;fill:#1f2937}.muted{fill:#64748b}.chip{fill:#eef2ff;stroke:#c4b5fd;stroke-width:1}.sheet{fill:#fff;stroke:#0f172a;stroke-width:1.5}.hole{fill:#cbd5e1}.anchor{fill:#ef4444;stroke:#fff;stroke-width:2.5}.callout{fill:#fff7ed;stroke:#fed7aa;stroke-width:1.1}]]></style>`;
     const sheet = { x: 450 + bounds.x, y: 340 - bounds.y - bounds.height, width: bounds.width, height: bounds.height };
@@ -118,6 +120,7 @@ export const makeBlueprintPreviewSvg = (project: ProjectState, recipes: Fabricat
         return map;
     }, new Map<string, number>()).entries());
     const camProfiles = camProfileEntries(recipes);
+    const mechanismSceneContracts = buildMechanismSceneContracts(project, recipes);
     const camProfileSamples = camProfiles[0]?.samples;
     const point = (p: Point, x: number, y: number, scale: number) => `${svgNumber(x + p.x * scale)} ${svgNumber(y + p.y * scale)}`;
     const path = (points: Point[], x: number, y: number, scale: number) => points.length
@@ -197,7 +200,7 @@ export const makeBlueprintPreviewSvg = (project: ProjectState, recipes: Fabricat
     }).join('');
 
     let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 680" width="900" height="680" data-blueprint-source="fabrication-contract" data-blueprint-visual-mode="print-sheet-hero" data-blueprint-visual-density="student-simple">`;
-    svg += `<metadata>${esc(JSON.stringify({ project: project.metadata.name, profile: kit.profileKey, gridPitchMm: kit.gridPitchMm, recipes: recipes.map(r => ({ id: r.mechanismId, type: r.type, board: r.boardCoordinate })), characterPages: layout.pageCount }))}</metadata>`;
+    svg += `<metadata>${esc(JSON.stringify({ project: project.metadata.name, profile: kit.profileKey, gridPitchMm: kit.gridPitchMm, recipes: recipes.map(r => ({ id: r.mechanismId, type: r.type, board: r.boardCoordinate })), characterPages: layout.pageCount, mechanismSceneContracts }))}</metadata>`;
     svg += `<rect width="900" height="680" fill="#f8fafc"/>`;
     svg += `<style><![CDATA[text{font-family:Manrope,Inter,Arial,sans-serif}.caps{font-size:12px;font-weight:900;letter-spacing:.16em;fill:#64748b}.body{font-size:12px;font-weight:850;fill:#1f2937}.muted{fill:#64748b}.small{font-size:10px;font-weight:800}.mini-label{font-size:7px;font-weight:850;fill:#64748b}.page-label{font-size:9px;font-weight:900;fill:#64748b}.sheet-card,.print-page,.board-card{fill:#fff;stroke:#e2e8f0;stroke-width:1.5}.print-page{stroke:#cbd5e1}.empty-card,.mechanism-tile{fill:#fff;stroke:#e2e8f0;stroke-width:1.2}.hole{fill:#cbd5e1;opacity:.48}.anchor{fill:#8b5cf6;stroke:white;stroke-width:2}.part-hole{fill:#fff;stroke:#334155;stroke-width:2}.gear-shape{fill:#ede9fe;stroke:#8b5cf6;stroke-width:3;stroke-dasharray:3 4}.spacer-shape{fill:#fef3c7;stroke:#d97706;stroke-width:3}.clip-shape{fill:#e0f2fe;stroke:#0284c7;stroke-width:2}.link-shape{fill:#dbeafe;stroke:#2563eb;stroke-width:2}.cam-shape{fill:#fed7aa;stroke:#ea580c;stroke-width:2.4}.guide-shape{fill:#dbeafe;stroke:#2563eb;stroke-width:2.4}.follower-shape{fill:#dcfce7;stroke:#16a34a;stroke-width:2.2}.step-dot{fill:#ede9fe;stroke:#8b5cf6;stroke-width:1.4}.trace{fill:none;stroke:#8b5cf6;stroke-width:2;stroke-dasharray:8 8;opacity:.52}]]></style>`;
     svg += `<g data-blueprint-flow="visual-summary"><circle cx="38" cy="36" r="10" class="step-dot"/><path d="M54 36H96" class="trace"/><circle cx="112" cy="36" r="10" class="step-dot"/><path d="M128 36H170" class="trace"/><circle cx="186" cy="36" r="10" class="step-dot"/><text x="210" y="41" class="caps">PRINT · CUT · BUILD</text></g>`;

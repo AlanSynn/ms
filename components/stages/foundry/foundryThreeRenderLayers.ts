@@ -7,6 +7,7 @@ import {
 import { foundryPlanetaryPlanetRotationDeg } from "../../../utils/foundryPlayback";
 import {
   planetaryRingPitchRadius,
+  type FabricationRenderLayer,
   type FabricationRenderPlan,
 } from "../../../utils/fabrication";
 import { degToRad } from "../../../utils/foundryCamera";
@@ -14,9 +15,11 @@ import type { MechanismPreviewSimulation } from "../../../utils/mechanismPreview
 import {
   foundrySpacerTouchesPin,
   type FoundryPinStack,
-  type FoundryPinStackPoint,
 } from "../../../utils/mechanismPreviewStacks";
-import type { FoundryThreePrimitiveFactory } from "./foundryThreePrimitives";
+import type {
+  FoundryFabricationMeshMetadata,
+  FoundryThreePrimitiveFactory,
+} from "./foundryThreePrimitives";
 import { resolveFourBarLinkageBlankPoses } from "../../../utils/mechanismConnectionSelections";
 import {
   foundryAssemblyLayerState,
@@ -27,11 +30,6 @@ type VisiblePathTrace = {
   points: Point[];
 };
 
-type LocalSpacerZForPin = (
-  pin: FoundryPinStackPoint,
-  spacerLayerIndex?: number,
-) => number | undefined;
-
 type FoundryDynamicLayerRenderOptions = {
   mechanism: MechanismConfig;
   simulation: MechanismPreviewSimulation;
@@ -39,7 +37,6 @@ type FoundryDynamicLayerRenderOptions = {
   renderPlan: FabricationRenderPlan;
   renderedLayerZ: number[];
   pinStacks: FoundryPinStack[];
-  localSpacerZForPin: LocalSpacerZForPin;
   visiblePathTraces: VisiblePathTrace[];
   pathLayerZ: number;
   showPathPreview: boolean;
@@ -53,11 +50,14 @@ type FoundryDynamicLayerRenderOptions = {
   assemblySceneFrame?: FoundryAssemblySceneFrame;
 };
 
-const linkageHoleCountFromLabel = (label: string, fallback: number) => {
-  const match = /\bL(\d+)\b/i.exec(label);
-  const cells = match ? Number(match[1]) : NaN;
-  return Number.isFinite(cells) ? Math.max(2, cells + 1) : fallback;
-};
+const linkageHoleCountForSource = (sourceNodeId: string | undefined) => ({
+  "coupler-link": 5,
+  "connector-link-a": 5,
+  "connector-link-b": 5,
+  "carrier": 3,
+  "dyad-link": 2,
+  "follower-link": 2,
+}[sourceNodeId ?? ""] ?? 3);
 
 export const renderFoundryDynamicLayers = ({
   mechanism,
@@ -66,7 +66,6 @@ export const renderFoundryDynamicLayers = ({
   renderPlan,
   renderedLayerZ,
   pinStacks,
-  localSpacerZForPin,
   visiblePathTraces,
   pathLayerZ,
   showPathPreview,
@@ -95,6 +94,16 @@ export const renderFoundryDynamicLayers = ({
     addPin,
     addPath,
   } = primitives;
+  const supportPathById = new Map(renderPlan.supportPaths.map((path) => [path.id, path]));
+  const metadataForLayer = (layer: FabricationRenderLayer): FoundryFabricationMeshMetadata => ({
+    fabricationLayerId: layer.layerId,
+    supportPathIds: [...layer.supportPathIds],
+    primitiveKind: "layer",
+    pinSpanIds: layer.supportPathIds.flatMap((pathId) => {
+      const pinSpanId = supportPathById.get(pathId)?.pinSpanId;
+      return pinSpanId ? [pinSpanId] : [];
+    }),
+  });
 
   if (showTrail)
     visiblePathTraces.forEach((trace) =>
@@ -160,68 +169,69 @@ export const renderFoundryDynamicLayers = ({
     ? materialForLayer(clipLayer.color, 0.66, 0.03)
     : material.dark;
   const renderLinkageLayer = (
-    label: string,
+    layer: FabricationRenderLayer,
     z: number,
     mat: THREE.Material,
   ) => {
-    if (mechanism.type === "gear") return;
-    if (
-      mechanism.type === "gear_linkage" &&
-      /drive.*L|Drive L|drive.*linkage/i.test(label)
-    )
-      addBar(s.j1, s.effector, z, mat, linkageHoleCountFromLabel(label, 4));
-    else if (
-      mechanism.type === "gear_linkage" &&
-      /output.*L|Output L|output.*linkage|L4|linkage/i.test(label)
-    )
-      addBar(s.j2, s.effector, z, mat, linkageHoleCountFromLabel(label, 4));
-    else if (mechanism.type === "6bar" && /output rocker/i.test(label))
-      addBar(s.p2, s.j2, z, mat, linkageHoleCountFromLabel(label, 3));
-    else if (mechanism.type === "6bar" && /dyad/i.test(label))
-      addBar(s.j2, s.aux, z, mat, linkageHoleCountFromLabel(label, 2));
-    else if (mechanism.type === "6bar" && /follower/i.test(label))
-      addBar(s.p2, s.aux, z, mat, linkageHoleCountFromLabel(label, 2));
-    else if (mechanism.type === "planetary_gear" && /carrier/i.test(label))
-      addBar(s.p1, s.p2, z, mat, linkageHoleCountFromLabel(label, 3));
-    else if (mechanism.type === "4bar" && /output|rocker/i.test(label)) {
+    const holeCount = linkageHoleCountForSource(layer.sourceNodeId);
+    const metadata = metadataForLayer(layer);
+    if (layer.sourceNodeId === "connector-link-a")
+      addBar(s.j1, s.effector, z, mat, holeCount, undefined, metadata);
+    else if (layer.sourceNodeId === "connector-link-b")
+      addBar(s.j2, s.effector, z, mat, holeCount, undefined, metadata);
+    else if (layer.sourceNodeId === "carrier")
+      addBar(s.p1, s.p2, z, mat, holeCount, undefined, metadata);
+    else if (layer.sourceNodeId === "output-link" && mechanism.type === "4bar") {
       const pose = fourBarBlankPoses["4bar.output-joint"];
       addBar(
         pose?.origin ?? s.p2,
         pose?.end ?? s.j2,
         z,
         mat,
-        pose?.holeCount ?? linkageHoleCountFromLabel(label, 3),
+        pose?.holeCount ?? holeCount,
         pose?.partKey,
+        metadata,
       );
-    } else if (/input|crank|left/i.test(label)) {
-      const pose = mechanism.type === "4bar" ? fourBarBlankPoses["4bar.input-joint"] : undefined;
+    } else if (layer.sourceNodeId === "input-link" && mechanism.type === "4bar") {
+      const pose = fourBarBlankPoses["4bar.input-joint"];
       addBar(
         pose?.origin ?? s.p1,
         pose?.end ?? s.j1,
         z,
         mat,
-        pose?.holeCount ?? linkageHoleCountFromLabel(label, 3),
+        pose?.holeCount ?? holeCount,
         pose?.partKey,
+        metadata,
       );
+    } else {
+      const endpoints: Record<string, [Point | undefined, Point | undefined]> = {
+        "input-link": [s.p1, s.j1],
+        "crank-link": [s.p1, s.j1],
+        "cam-axle": [s.p1, s.j1],
+        "coupler-link": [s.j1, s.j2],
+        "connecting-rod": [s.j1, s.j2],
+        "output-link": [s.p2, s.j2],
+        "slotted-arm": [s.p2, s.j2],
+        "left-crank": [s.p1, s.j1],
+        "right-crank": [s.p2, s.aux],
+        "left-coupler": [s.j1, s.j2],
+        "right-coupler": [s.aux, s.j2],
+        "dyad-link": [s.j2, s.aux],
+        "follower-link": [s.p2, s.aux],
+      };
+      const [a, b] = endpoints[layer.sourceNodeId ?? ""] ?? [s.j1, s.j2];
+      addBar(a, b, z, mat, holeCount, undefined, metadata);
     }
-    else if (/right/i.test(label))
-      addBar(s.p2, s.j2, z, mat, linkageHoleCountFromLabel(label, 3));
-    else if (/coupler|center|carrier/i.test(label))
-      addBar(s.j1, s.j2, z, mat, linkageHoleCountFromLabel(label, 4));
-    else if (/output|follower/i.test(label))
-      addBar(s.j2, s.effector, z, mat, linkageHoleCountFromLabel(label, 2));
-    else addBar(s.j1, s.j2, z, mat, linkageHoleCountFromLabel(label, 3));
   };
   const renderGearLayer = (
-    label: string,
+    layer: FabricationRenderLayer,
     z: number,
     mat: THREE.Material,
-    gearTrainIndex = 0,
   ) => {
-    if (mechanism.type === "planetary_gear") {
-      if (/ring/i.test(label))
-        addRingGear(s.p1, planetaryRingPitchRadius(mechanism), z, 0, mat);
-      else if (/planet|G3|3-space/i.test(label)) {
+    const metadata = metadataForLayer(layer);
+    if (layer.sourceNodeId === "ring-gear")
+        addRingGear(s.p1, planetaryRingPitchRadius(mechanism), z, 0, mat, metadata);
+    else if (layer.sourceNodeId === "planet-gear") {
         const planetCenters = [s.p2];
         const planetCount = Math.max(1, planetCenters.length);
         planetCenters.forEach((center, index) =>
@@ -236,10 +246,14 @@ export const renderFoundryDynamicLayers = ({
               planetCount,
             ),
             mat,
+            metadata,
           ),
         );
-      } else addGear(s.p1, mechanism.crankLength, z, angle, mat);
-    } else if (isGearTrain) {
+    } else if (layer.sourceNodeId === "sun-gear")
+      addGear(s.p1, mechanism.crankLength, z, angle, mat, metadata);
+    else if (isGearTrain) {
+      const match = /^gear-(\d+)$/.exec(layer.sourceNodeId ?? "");
+      const gearTrainIndex = match ? Number(match[1]) : 0;
       const index = Math.max(
         0,
         Math.min(gearTrainIndex, Math.max(0, gearRadii.length - 1)),
@@ -266,10 +280,10 @@ export const renderFoundryDynamicLayers = ({
         z,
         angle * ratio + phaseDeg,
         mat,
+        metadata,
       );
-    } else addGear(s.p1, mechanism.crankLength, z, angle, mat);
+    } else addGear(s.p1, mechanism.crankLength, z, angle, mat, metadata);
   };
-  let gearTrainLayerIndex = 0;
   renderPlan.layers.forEach((layerItem, index) => {
     const z = renderedLayerZ[index] ?? layerItem.z;
     const assemblyLayerState = foundryAssemblyLayerState(
@@ -288,63 +302,69 @@ export const renderFoundryDynamicLayers = ({
       pinStacks
         .filter((pin) => foundrySpacerTouchesPin(pin, index))
         .forEach((pin) =>
-          addSpacerWasher(pin.point, localSpacerZForPin(pin, index) ?? z, mat),
+          addSpacerWasher(pin.point, z, mat, {
+            fabricationLayerId: layerItem.layerId,
+            supportPathIds: [pin.pathId],
+            pinSpanIds: [pin.pinSpanId],
+            primitiveKind: "layer",
+          }),
         );
     else if (layerItem.renderKind === "linkage")
-      renderLinkageLayer(layerItem.label, z, mat);
+      renderLinkageLayer(layerItem, z, mat);
     else if (layerItem.renderKind === "gear") {
-      renderGearLayer(layerItem.label, z, mat, gearTrainLayerIndex);
-      if (isGearTrain) gearTrainLayerIndex += 1;
+      renderGearLayer(layerItem, z, mat);
     } else if (layerItem.renderKind === "cam")
-      addCam(s.p1, z, degToRad(angle), mat);
+      addCam(s.p1, z, degToRad(angle), mat, metadataForLayer(layerItem));
     else if (layerItem.renderKind === "guide") {
       const slotRotation =
-        mechanism.type === "cam"
+        layerItem.sourceNodeId === "follower-guide"
           ? camGuideRotation
-          : /follower|slider|rack/i.test(layerItem.label)
+          : layerItem.sourceNodeId === "guide"
             ? Math.PI / 2
             : Math.atan2(s.j2.y - s.p2.y, s.j2.x - s.p2.x);
       const slotCenter =
-        mechanism.type === "cam"
+        layerItem.sourceNodeId === "follower-guide"
           ? camGuideCenter
-          : /quick/i.test(layerItem.label)
+          : layerItem.sourceNodeId === "slotted-arm"
             ? { x: (s.p2.x + s.j2.x) / 2, y: (s.p2.y + s.j2.y) / 2 }
             : s.j2;
       addSlotPlate(
         slotCenter,
-        /rack/i.test(layerItem.label) ? 4.8 : 3.2,
+        layerItem.sourceNodeId === "guide" && mechanism.type === "rack-pinion" ? 4.8 : 3.2,
         slotRotation,
         z,
         mat,
+        metadataForLayer(layerItem),
       );
     } else if (layerItem.renderKind === "rack") {
-      addRack(s.j2, z, mat);
-      addEndStop(s.j2, -2.55, z + 0.04);
-      addEndStop(s.j2, 2.55, z + 0.04);
+      const metadata = metadataForLayer(layerItem);
+      addRack(s.j2, z, mat, metadata);
+      addEndStop(s.j2, -2.55, z, metadata);
+      addEndStop(s.j2, 2.55, z, metadata);
     } else if (layerItem.renderKind === "follower")
       addFollowerBlock(
         s.j2,
         z,
         mat,
         mechanism.type === "cam" ? camFollowerRotation : 0,
+        metadataForLayer(layerItem),
       );
   });
   pinStacks.forEach((pinStack) => {
-    const boardPivotFastener =
-      mechanism.type === "4bar" &&
-      (pinStack.id === "A" || pinStack.id === "D");
-    addClipCap(
-      pinStack.point,
-      pinStack.bottomZ,
-      clipMat,
-      boardPivotFastener ? 1.5 : 1.35,
-    );
-    addClipCap(
-      pinStack.point,
-      pinStack.topZ + (boardPivotFastener ? 0.035 : 0),
-      clipMat,
-      boardPivotFastener ? 1.75 : 1.35,
-    );
-    addPin(pinStack.point, pinStack.centerZ, pinStack.lengthZ);
+    pinStack.retainerZ.forEach((z) => {
+      const clipLayerIndex = pinStack.clipLayerIndexes.find((index) => Math.abs((renderedLayerZ[index] ?? renderPlan.layers[index]?.z ?? 0) - z) <= 1e-6);
+      const clipLayer = clipLayerIndex === undefined ? undefined : renderPlan.layers[clipLayerIndex];
+      addClipCap(pinStack.point, z, clipMat, 1.35, {
+        ...(clipLayer ? { fabricationLayerId: clipLayer.layerId } : {}),
+        supportPathIds: [pinStack.pathId],
+        pinSpanIds: [pinStack.pinSpanId],
+        primitiveKind: "retainer",
+      });
+    });
+    addPin(pinStack.point, pinStack.centerZ, pinStack.lengthZ, {
+      supportPathIds: [pinStack.pathId],
+      pinSpanIds: [pinStack.pinSpanId],
+      primitiveKind: "pin",
+    });
   });
 };

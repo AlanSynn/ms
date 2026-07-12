@@ -20,8 +20,7 @@ import {
 import {
   FABRICATION_HOLE_RADIUS_MM,
   FABRICATION_RENDER_LAYER_Z_STEP,
-  FABRICATION_RENDER_MIN_CLEARANCE,
-  FABRICATION_RENDER_PART_DEPTH,
+  FABRICATION_Z_EPSILON_MM,
   planetaryGearConventionForMechanism,
   planetaryGearRadii,
   validateMechanismPreviewReadiness,
@@ -68,14 +67,11 @@ import {
 import { renderFoundryDynamicLayers } from "./foundryThreeRenderLayers";
 import {
   foundryAssemblyPinContract,
-  foundryAssemblyPinPoints,
   foundryLocalSpacerZForPin,
-  foundryLocalSpacerZsForPin,
   foundryPinStackPoints,
   foundryPinStacks,
   foundryRenderedLayerZForMechanism,
   foundrySpacerTouchesPin,
-  isMovingRenderKind,
   type FoundryPinStackPoint,
 } from "../../../utils/mechanismPreviewStacks";
 
@@ -561,47 +557,45 @@ export const ThreeFoundryPreview = ({
   const stackLayerZ = useMemo(
     () =>
       renderPlan.layers.map(
-        (item) =>
+        (item, presentationIndex) =>
           item.z +
-          explode * item.stackIndex * FABRICATION_RENDER_LAYER_Z_STEP * 1.5,
+          explode * presentationIndex * FABRICATION_RENDER_LAYER_Z_STEP * 1.5,
       ),
     [explode, renderPlan],
   );
-  const gearLayerIndexes = useMemo(
+  const gearPlaneLayerIndexes = useMemo(
     () =>
       renderPlan.layers.flatMap((item, index) =>
-        item.renderKind === "gear" ? [index] : [],
+        item.gearPlaneId ? [index] : [],
       ),
     [renderPlan.layers],
   );
   const gearMeshPlaneZ =
-    (isGearTrain || isPlanetaryGear) && explode <= 0 && gearLayerIndexes.length
-      ? stackLayerZ[gearLayerIndexes[0]]
+    explode <= 0 && gearPlaneLayerIndexes.length
+      ? stackLayerZ[gearPlaneLayerIndexes[0]]
       : undefined;
   const renderedLayerZ = useMemo(
     () =>
       foundryRenderedLayerZForMechanism(
-        mechanism.type,
         renderPlan.layers,
         stackLayerZ,
-        gearMeshPlaneZ,
       ),
-    [gearMeshPlaneZ, mechanism.type, renderPlan.layers, stackLayerZ],
+    [renderPlan.layers, stackLayerZ],
   );
   const activeGearPlaneZ =
     typeof gearMeshPlaneZ === "number"
       ? gearMeshPlaneZ
-      : isPlanetaryGear && gearLayerIndexes.length
-        ? renderedLayerZ[gearLayerIndexes[0]]
+      : gearPlaneLayerIndexes.length
+        ? renderedLayerZ[gearPlaneLayerIndexes[0]]
         : undefined;
-  const gearPlaneMode = isGearTrain
-    ? typeof gearMeshPlaneZ === "number"
-      ? "coplanar-fixed-axles"
-      : "exploded-stack"
-    : isPlanetaryGear
-      ? typeof gearMeshPlaneZ === "number"
+  const gearPlaneMode = gearPlaneLayerIndexes.length
+    ? explode > 0
+      ? "exploded-stack"
+      : isPlanetaryGear
         ? "planetary-coplanar-ring-sun-planet"
-        : "exploded-stack"
+        : "coplanar-fixed-axles"
+    : isGearTrain
+      ? "independent-gear-planes"
       : "not-gear-train";
 
   const viewerContract = useMemo(
@@ -631,28 +625,6 @@ export const ThreeFoundryPreview = ({
   const spacerLayerCount = renderPlan.layers.filter(
     (item) => item.role === "spacer",
   ).length;
-  const assemblyPinPoints = useMemo(
-    () =>
-      isGearTrain
-        ? mechanism.type === "gear_linkage"
-          ? [
-              ...gearCenters,
-              simulation.state.j1,
-              simulation.state.j2,
-              simulation.state.effector,
-            ].filter((point): point is Point => Boolean(point))
-          : gearCenters
-        : foundryAssemblyPinPoints(mechanism.type, simulation.state),
-    [gearCenters, isGearTrain, mechanism.type, simulation.state],
-  );
-  const assemblyPinContract = foundryAssemblyPinContract(mechanism.type);
-  const movingLayerIndexes = useMemo(
-    () =>
-      renderPlan.layers.flatMap((item, index) =>
-        isMovingRenderKind(item.renderKind) ? [index] : [],
-      ),
-    [renderPlan.layers],
-  );
   const spacerLayerIndexes = useMemo(
     () =>
       renderPlan.layers.flatMap((item, index) =>
@@ -663,43 +635,32 @@ export const ThreeFoundryPreview = ({
   const pinStackPoints = useMemo(
     () =>
       foundryPinStackPoints(
-        mechanism.type,
-        assemblyPinPoints,
-        movingLayerIndexes,
-        spacerLayerIndexes,
+        renderPlan,
+        {
+          state: simulation.state,
+          gearCenters,
+          planetCenters: [simulation.state.p2],
+        },
       ),
-    [assemblyPinPoints, mechanism.type, movingLayerIndexes, spacerLayerIndexes],
+    [gearCenters, renderPlan, simulation.state],
   );
-  const localSpacerZsForPin = useMemo(
-    () => (pin: FoundryPinStackPoint) =>
-      foundryLocalSpacerZsForPin(
-        mechanism.type,
-        pin,
-        renderedLayerZ,
-        renderPlan.layers,
-      ),
-    [mechanism.type, renderPlan.layers, renderedLayerZ],
+  const assemblyPinPoints = useMemo(
+    () => pinStackPoints.map((pin) => pin.point),
+    [pinStackPoints],
   );
+  const assemblyPinContract = foundryAssemblyPinContract();
   const localSpacerZForPin = useMemo(
     () => (pin: FoundryPinStackPoint, spacerLayerIndex?: number) =>
       foundryLocalSpacerZForPin(
-        mechanism.type,
         pin,
         renderedLayerZ,
-        renderPlan.layers,
         spacerLayerIndex,
       ),
-    [mechanism.type, renderPlan.layers, renderedLayerZ],
+    [renderedLayerZ],
   );
-  const usesLocalSpacerPins =
-    mechanism.type === "4bar" || isGearTrain || isPlanetaryGear;
   const pinStacks = useMemo(
-    () =>
-      foundryPinStacks(pinStackPoints, renderedLayerZ, {
-        includeSpacerZ: usesLocalSpacerPins,
-        spacerZForPin: localSpacerZsForPin,
-      }),
-    [localSpacerZsForPin, pinStackPoints, renderedLayerZ, usesLocalSpacerPins],
+    () => foundryPinStacks(pinStackPoints, renderPlan),
+    [pinStackPoints, renderPlan],
   );
   const spacerRenderCount = spacerLayerIndexes.reduce(
     (count, spacerIndex) =>
@@ -708,85 +669,46 @@ export const ThreeFoundryPreview = ({
         .length,
     0,
   );
-  const boardPivotPinStacks =
-    mechanism.type === "4bar"
-      ? pinStacks.filter((pin) => pin.id === "A" || pin.id === "D")
-      : [];
+  const boardSupportNodeIds = new Set(
+    renderPlan.supportNodes
+      .filter((node) => node.kind === "board")
+      .map((node) => node.id),
+  );
+  const boardPivotPinStacks = pinStacks.filter((pin) =>
+    pin.supportNodeIds.some((nodeId) => boardSupportNodeIds.has(nodeId)),
+  );
   const boardPivotSpacerZ = (pin: FoundryPinStackPoint) =>
     localSpacerZForPin(pin);
   const boardPivotSpacerSummary = boardPivotPinStacks
     .map((pin) => `${pin.id}:${boardPivotSpacerZ(pin)?.toFixed(2) ?? "n/a"}`)
     .join(",");
+  const gearPinStackPoints = pinStackPoints.filter((pin) =>
+    pin.movingLayerIndexes.some(
+      (index) => renderPlan.layers[index]?.renderKind === "gear",
+    ),
+  );
   const gearBoardSpacerSummary = isGearTrain
-    ? pinStackPoints
-        .slice(0, gearCenters.length)
+    ? gearPinStackPoints
         .map(
           (pin) => `${pin.id}:${localSpacerZForPin(pin)?.toFixed(2) ?? "n/a"}`,
         )
         .join(",")
     : "";
   const gearAxleZOrderSummary = isGearTrain
-    ? pinStackPoints
-        .slice(0, gearCenters.length)
-        .map((pin) => {
-          const gearLayerIndex = pin.movingLayerIndexes.find(
-            (index) => renderPlan.layers[index]?.renderKind === "gear",
-          );
-          const gearZ =
-            typeof gearLayerIndex === "number"
-              ? renderedLayerZ[gearLayerIndex]
-              : undefined;
-          const spacerZ = localSpacerZForPin(pin);
-          const fastenerZ = pinStacks.find(
-            (stack) => stack.id === pin.id,
-          )?.topZ;
-          const ordered =
-            typeof spacerZ === "number" &&
-            typeof gearZ === "number" &&
-            typeof fastenerZ === "number" &&
-            spacerZ < gearZ &&
-            gearZ < fastenerZ;
-          return `${pin.id}:${ordered ? "S10<gear<fastener" : "invalid"}`;
-        })
+    ? gearPinStackPoints
+        .map((pin) => `${pin.id}:${pin.layerIndexes
+          .map((index) => renderPlan.layers[index]?.renderKind)
+          .filter(Boolean)
+          .join(">")}`)
         .join(",")
     : "";
   const gearLinkagePinZOrderSummary =
     mechanism.type === "gear_linkage"
       ? pinStackPoints
-          .slice(gearCenters.length)
-          .map((pin) => {
-            const movingEntries = pin.movingLayerIndexes
-              .map((index) => ({
-                z: renderedLayerZ[index],
-                label:
-                  renderPlan.layers[index]?.renderKind === "gear"
-                    ? "gear"
-                    : renderPlan.layers[index]?.renderKind === "guide"
-                      ? "bracket"
-                      : (renderPlan.layers[index]?.renderKind ?? "part"),
-              }))
-              .filter(
-                (entry): entry is { z: number; label: string } =>
-                  typeof entry.z === "number",
-              );
-            const spacerEntries = localSpacerZsForPin(pin).map((z) => ({
-              z,
-              label: "S10",
-            }));
-            const ordered = [...movingEntries, ...spacerEntries]
-              .sort((a, b) => a.z - b.z)
-              .map((entry) => entry.label)
-              .join("<");
-            const validCrank =
-              pin.id === "B"
-                ? /gear<.*S10<.*linkage/.test(ordered)
-                : pin.id === "C"
-                  ? /gear<.*S10<.*S10<.*linkage/.test(ordered)
-                  : pin.id === "R"
-                    ? /linkage<.*S10<.*linkage/.test(ordered)
-                    : true;
-            return `${pin.id}:${validCrank ? ordered : "invalid"}`;
-          })
+          .map((pin) => `${pin.id}:${pin.layerIndexes
+            .map((index) => renderPlan.layers[index]?.renderKind)
+            .filter(Boolean)
+            .join(">")}`)
           .join(",")
       : "";
   const stackZGap =
@@ -806,7 +728,7 @@ export const ThreeFoundryPreview = ({
     .map((pin) => `${pin.id}:${pin.lengthZ.toFixed(2)}`)
     .join(",");
   const pinStackLayerSummary = pinStackPoints
-    .map((pin) => `${pin.id}:${pin.movingLayerIndexes.join("+") || "none"}`)
+    .map((pin) => `${pin.id}:${pin.layerIndexes.join("+") || "none"}`)
     .join(",");
   const spacerPinIdSummary = spacerLayerIndexes
     .map(
@@ -818,7 +740,7 @@ export const ThreeFoundryPreview = ({
     )
     .join(",");
   const gearAxleCenters = isGearTrain
-    ? pinStackPoints.slice(0, gearCenters.length).map((pin) => pin.point)
+    ? gearPinStackPoints.map((pin) => pin.point)
     : [];
   const gearCenterSummary = gearCenters
     .map((point) => `${point.x.toFixed(2)}:${point.y.toFixed(2)}`)
@@ -891,43 +813,40 @@ export const ThreeFoundryPreview = ({
           mechanism.rockerLength,
         )
       : gearPairOutputRatio(mechanism.crankLength, mechanism.rockerLength);
-  const localSpacerViolationCount = usesLocalSpacerPins
-    ? pinStackPoints.reduce((count, pin) => {
-        const movingZ = pin.movingLayerIndexes
-          .map((index) => renderedLayerZ[index])
-          .filter((z): z is number => typeof z === "number")
-          .sort((a, b) => a - b);
-        const uniqueMovingZ = movingZ.filter(
-          (z, index) => index === 0 || Math.abs(z - movingZ[index - 1]) > 0.001,
-        );
-        if (!uniqueMovingZ.length) return count;
-        const spacerZs = localSpacerZsForPin(pin);
-        const expectsLocalSpacer =
-          mechanism.type === "4bar"
-            ? pin.id === "A" ||
-              pin.id === "D" ||
-              ((pin.id === "B" || pin.id === "C") && uniqueMovingZ.length >= 2)
-            : isGearTrain || isPlanetaryGear;
-        if (!expectsLocalSpacer) return count;
-        if (!spacerZs.length) return count + 1;
-        const minZ = uniqueMovingZ[0];
-        const maxZ = uniqueMovingZ.at(-1) ?? minZ;
-        const invalid = spacerZs.some((z) =>
-          uniqueMovingZ.length === 1
-            ? !(
-                z < minZ &&
-                z >= minZ - FABRICATION_RENDER_LAYER_Z_STEP &&
-                z + FABRICATION_RENDER_MIN_CLEARANCE / 2 <=
-                  minZ - FABRICATION_RENDER_PART_DEPTH / 2 + 0.001
-              )
-            : !(z > minZ && z < maxZ),
-        );
-        return count + (invalid ? 1 : 0);
-      }, 0)
-    : 0;
-  const zCollisionCount =
-    pinStacks.filter((pin) => pin.topZ <= pin.bottomZ || pin.lengthZ <= 0)
-      .length + localSpacerViolationCount;
+  const supportNodeById = new Map(
+    renderPlan.supportNodes.map((node) => [node.id, node]),
+  );
+  const supportContactErrorCount = renderPlan.supportEdges.filter((edge) => {
+    if (edge.kind !== "face-contact" && edge.kind !== "retains") return false;
+    const from = supportNodeById.get(edge.fromNodeId);
+    const to = supportNodeById.get(edge.toNodeId);
+    if (!from || !to || typeof edge.contactFaceMm !== "number") return true;
+    return Math.abs(from.frontFaceMm - to.backFaceMm) > FABRICATION_Z_EPSILON_MM
+      || Math.abs(edge.contactFaceMm - from.frontFaceMm) > FABRICATION_Z_EPSILON_MM
+      || Math.abs(edge.contactFaceMm - to.backFaceMm) > FABRICATION_Z_EPSILON_MM;
+  }).length;
+  const spacerSupportErrorCount = renderPlan.supportPaths.reduce((count, path) => {
+    const pathEdges = renderPlan.supportEdges.filter(
+      (edge) => edge.supportPathId === path.id
+        && (edge.kind === "face-contact" || edge.kind === "retains"),
+    );
+    const pathSpacerNodeIds = path.orderedLayerIds.flatMap((layerId) => {
+      const layer = renderPlan.layers.find((candidate) => candidate.layerId === layerId);
+      if (layer?.renderKind !== "spacer") return [];
+      return renderPlan.supportNodes
+        .filter((node) => node.ownerLayerId === layerId)
+        .map((node) => node.id);
+    });
+    return count + pathSpacerNodeIds.filter((nodeId) =>
+      pathEdges.filter((edge) => edge.fromNodeId === nodeId || edge.toNodeId === nodeId).length !== 2,
+    ).length;
+  }, 0);
+  const supportBlockerCount = renderPlan.validationErrors.length
+    + supportContactErrorCount
+    + spacerSupportErrorCount;
+  const zCollisionCount = pinStacks.filter(
+    (pin) => pin.topZ <= pin.bottomZ || pin.lengthZ <= 0,
+  ).length + supportContactErrorCount + spacerSupportErrorCount;
   const visiblePathTraces = useMemo(
     () =>
       pathTraces.length
@@ -1318,7 +1237,7 @@ export const ThreeFoundryPreview = ({
     const root = new THREE.Group();
     root.name = "foundry-dynamic";
     scene.add(root);
-    if (renderPlan.validationErrors.length || physicalValidationErrors.length) {
+    if (supportBlockerCount || physicalValidationErrors.length) {
       dynamicBuildCountRef.current += 1;
       if (stateRef.current) {
         stateRef.current.dataset.threeDynamicBuildCount = String(
@@ -1352,7 +1271,6 @@ export const ThreeFoundryPreview = ({
       renderPlan,
       renderedLayerZ,
       pinStacks,
-      localSpacerZForPin,
       visiblePathTraces,
       pathLayerZ,
       showPathPreview,
@@ -1521,13 +1439,13 @@ export const ThreeFoundryPreview = ({
     pinStacks,
     rigOpacity,
     physicalValidationErrors,
+    supportBlockerCount,
     assemblySceneFrame,
     pinBottomZ,
     pinTopZ,
     automataBaseZ,
     viewerTab,
     pathPoints,
-    localSpacerZForPin,
     automataContext,
   ]);
 
@@ -1599,6 +1517,9 @@ export const ThreeFoundryPreview = ({
         pinStackLayerSummary={pinStackLayerSummary}
         pinSpanSummary={pinSpanSummary}
         zCollisionCount={zCollisionCount}
+        supportContactErrorCount={supportContactErrorCount}
+        spacerSupportErrorCount={spacerSupportErrorCount}
+        supportBlockerCount={supportBlockerCount}
         camContactErrorForData={camContactErrorForData}
         simulationScale={simulation.scale}
         pinionRotation={pinionRotation}

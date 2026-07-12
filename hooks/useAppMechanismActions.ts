@@ -22,7 +22,10 @@ import {
   normalizeGearMeshMechanism,
 } from "../utils/mechanismRecommendations";
 import { constrainMechanismUpdate } from "../utils/mechanismEditAuthority";
-import { pathOwnedTargetFields } from "../utils/pathTargets";
+import {
+  mechanismForTargetFields,
+  pathOwnedTargetFields,
+} from "../utils/pathTargets";
 
 const GENERATED_PATH_GEOMETRY_KEYS = new Set<keyof MechanismConfig>([
   "anchorX",
@@ -224,14 +227,7 @@ export const useAppMechanismActions = ({
             targetAnchorJointId: pkg.targetAnchorJointId,
             activeVisualPartIds: pkg.targetPartId ? [pkg.targetPartId] : [],
           };
-      const existingTarget = project.mechanisms.find(
-        (mechanism) =>
-          mechanism.targetPartId === targetFields.targetPartId &&
-          mechanism.targetSceneObjectId === targetFields.targetSceneObjectId &&
-          mechanism.targetPathId === targetFields.targetPathId &&
-          (targetFields.targetSceneObjectId ||
-            mechanism.targetAnchorJointId === targetFields.targetAnchorJointId),
-      );
+      const existingTarget = mechanismForTargetFields(project, targetFields);
       const fittedFoundryParameters =
         pkg.parameters as Partial<MechanismConfig>;
       const rawMechanism = mechanismWithGeneratedPath(

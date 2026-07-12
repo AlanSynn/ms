@@ -18,6 +18,7 @@ import {
     fabricationRenderPlanForMechanism,
     validateFabricationStack
 } from './fabricationRenderPlan';
+import { buildMechanismSceneContracts } from './mechanismSceneContract';
 import {
     FABRICATION_GEAR_SPECS,
     FABRICATION_HOLE_RADIUS_MM,
@@ -73,15 +74,28 @@ export {
 export type { FabricationFeasibleRange } from './fabricationReadiness';
 export { sampleFeasibleRange } from './fabricationReadiness';
 export { validateMechanismPreviewReadiness } from './mechanismPreviewReadiness';
-export type { FabricationRenderKind, FabricationRenderLayer, FabricationRenderPlan } from './fabricationRenderPlan';
+export type { FabricationRenderKind, FabricationRenderLayer, FabricationRenderPlan, PhysicalZMm, PackedFabricationLayer, CompiledSupportPath, PinSpanMm } from './mechanismFabricationZStack';
+export {
+    fabricationRenderPlanForMechanism,
+    validateFabricationStack
+} from './fabricationRenderPlan';
 export {
     FABRICATION_RENDER_BASE_Z,
     FABRICATION_RENDER_LAYER_Z_STEP,
     FABRICATION_RENDER_MIN_CLEARANCE,
     FABRICATION_RENDER_PART_DEPTH,
-    fabricationRenderPlanForMechanism,
-    validateFabricationStack
-} from './fabricationRenderPlan';
+    FABRICATION_Z_RENDER_UNITS_PER_MM,
+    FABRICATION_Z_EPSILON_MM,
+    BOARD_DEPTH_MM,
+    PLATE_DEPTH_MM,
+    SPACER_DEPTH_MM,
+    CLIP_HEAD_DEPTH_MM,
+    FASTENER_TAB_DEPTH_MM,
+    PIN_BACK_TERMINAL_MM,
+    PIN_FRONT_TERMINAL_MM,
+    projectFabricationZMm,
+    unprojectFabricationZ
+} from './mechanismFabricationZStack';
 
 export { makeBlueprintPreviewSvg, makeBlueprintSvg } from './fabricationBlueprintSvg';
 export {
@@ -270,6 +284,7 @@ export const createFabricationPackage = (project: ProjectState): FabricationPack
             return map;
         }, new Map<string, number>())
     ).map(([name, quantity]) => ({ name, quantity }));
+    const mechanismSceneContracts = buildMechanismSceneContracts(project, recipes);
 
     const metadata = {
         projectId: project.metadata.id,
@@ -277,6 +292,7 @@ export const createFabricationPackage = (project: ProjectState): FabricationPack
         createdAt: new Date().toISOString(),
         profile: project.settings.physicalKit,
         validationIssues: validation.issues,
+        mechanismSceneContracts,
         sceneSnapshot: {
             metadata: project.metadata,
             paths: project.paths,

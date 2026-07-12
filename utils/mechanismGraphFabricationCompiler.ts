@@ -1,6 +1,6 @@
-import type { FabricationPartRequirement, FabricationRecipe, PhysicalKitSettings, Point } from '../types';
+import type { AssemblyStepStackItem, FabricationPartRequirement, FabricationRecipe, PhysicalKitSettings, Point } from '../types';
 import { boardToScene, defaultPhysicalKit, sceneToBoardRaw, SCENE_PX_PER_MM } from './coordinates';
-import { closePhysicalValue, physicalTolerance } from './fabricationReadiness';
+import { physicalTolerance } from './fabricationReadiness';
 import {
     FABRICATION_GEAR_SPECS,
     FABRICATION_LINKAGE_SPECS,
@@ -11,12 +11,13 @@ import {
     fabricationPartDisplayLabel
 } from './fabricationContract';
 import {
-    FABRICATION_RENDER_BASE_Z,
-    FABRICATION_RENDER_LAYER_Z_STEP,
+    PLATE_DEPTH_MM,
+    SPACER_DEPTH_MM,
+    packFabricationRenderPlan,
     type FabricationRenderKind,
     type FabricationRenderLayer,
     type FabricationRenderPlan
-} from './fabricationRenderPlan';
+} from './mechanismFabricationZStack';
 import { assemblyStepFingerprint, type AssemblyStepFingerprint } from './fabricationAssemblyFingerprint';
 import { fabricationBaseLayer, STACK_COLORS, type FabricationStackLayer } from './fabricationStackModel';
 import { validateMechanismGraph, type MechanismConstraintRole, type MechanismGraph, type MechanismGraphNode, type MechanismGraphNodeRole } from './mechanismGraph';
@@ -84,7 +85,13 @@ const graphNodeIsFabricatedPart = (node: MechanismGraphNode) =>
 
 const FABRICATED_CONSTRAINT_ROLES = new Set<MechanismConstraintRole>(['distance', 'gear-mesh', 'contact', 'prismatic', 'pin-joint']);
 
-const stack = (...items: Array<{ label: string; role: string; part?: string }>): FabricationRecipe['assemblySteps'][number]['stack'] =>
+type GraphAssemblyStackItem = AssemblyStepStackItem;
+
+type GraphAssemblyStep = Omit<FabricationRecipe['assemblySteps'][number], 'stack'> & {
+    stack?: GraphAssemblyStackItem[];
+};
+
+const stack = (...items: Array<Omit<GraphAssemblyStackItem, 'order'>>): GraphAssemblyStackItem[] =>
     items.map((item, index) => ({ order: index + 1, ...item }));
 
 const finiteGraphPartValue = (node: MechanismGraphNode) => {
@@ -222,128 +229,296 @@ const requiredPartsFromAssemblySteps = (assemblySteps: FabricationRecipe['assemb
 
 type AssemblyStackItem = NonNullable<FabricationRecipe['assemblySteps'][number]['stack']>[number];
 
-const renderRoleForAssemblyStackItem = (item: AssemblyStackItem): FabricationStackLayer['role'] | null => {
-    const role = item.role.toLowerCase();
-    const label = item.label.toLowerCase();
-    const part = item.part?.toLowerCase() ?? '';
-    if (role === 'hardware') return null;
-    if (role === 'spacer' || part.startsWith('spacers:') || label.includes('spacer')) return 'spacer';
-    if (role === 'paper-fastener' || role === 'clip' || part.startsWith('hardware:paper-fastener')) return 'clip';
-    if (role !== 'moving-part') return null;
-    if (part.startsWith('linkages:') || label.includes('link')) return 'linkage';
-    if (part.startsWith('gears:') || label.includes('gear')) return 'gear';
-    if (part.startsWith('cams:') || label.includes('cam')) return 'cam';
-    if (part.startsWith('guides:') || label.includes('guide')) return 'guide';
-    if (part.startsWith('followers:') || label.includes('follower') || label.includes('slider')) return 'follower';
-    return 'linkage';
-};
-
 const graphRenderPlan = (
     graph: MechanismGraph,
-    assemblySteps: FabricationRecipe['assemblySteps'],
+    assemblySteps: GraphAssemblyStep[],
     validationErrors: string[]
 ): FabricationRenderPlan => {
-    const stackLayers: FabricationStackLayer[] = assemblySteps
-        .filter(step => step.role !== 'place-fastener')
-        .flatMap(step => (step.stack ?? []).flatMap(item => {
-        const role = renderRoleForAssemblyStackItem(item);
-        return role ? [{ label: item.label, role, color: STACK_COLORS[role] }] : [];
+    const nodeById = new Map(graph.nodes.map(node => [node.id, node]));
+    const boardMountedNodeIds = new Set(graph.constraints
+        .filter(constraint => constraint.role === 'fixed-to-board' || constraint.role === 'board-snap')
+        .flatMap(constraint => constraint.nodes));
+    const stackLayers = assemblySteps.flatMap(step => (step.stack ?? []).flatMap(item => {
+        if (item.axialRole !== 'structural' || !item.sourceNodeId) return [];
+        const node = nodeById.get(item.sourceNodeId);
+        const role = node ? graphPartRoleForNode(node.role) ?? 'linkage' : 'linkage';
+        return [{
+            label: item.label,
+            role,
+            color: STACK_COLORS[role],
+            stepIndex: step.index,
+            stackItemIndex: item.order - 1,
+            sourceNodeId: item.sourceNodeId,
+            sourceConstraintIds: [...(item.sourceConstraintIds ?? [])]
+        }];
     }));
-    const isPegboardCamModule = stackLayers.some(item => item.label === 'Swappable cam disk')
-        && stackLayers.some(item => item.label === 'U-channel guide cartridge')
-        && stackLayers.some(item => item.label === 'Preassembled gravity follower module');
-    const compactCamZ = isPegboardCamModule ? [
-        Number((-FABRICATION_RENDER_LAYER_Z_STEP * 0.45).toFixed(2)),
-        FABRICATION_RENDER_BASE_Z,
-        Number((FABRICATION_RENDER_BASE_Z + FABRICATION_RENDER_LAYER_Z_STEP * 0.32).toFixed(2)),
-        Number((FABRICATION_RENDER_BASE_Z + FABRICATION_RENDER_LAYER_Z_STEP * 0.58).toFixed(2)),
-        Number((FABRICATION_RENDER_BASE_Z + FABRICATION_RENDER_LAYER_Z_STEP * 0.92).toFixed(2)),
-        Number((FABRICATION_RENDER_BASE_Z + FABRICATION_RENDER_LAYER_Z_STEP * 1.08).toFixed(2)),
-        Number((FABRICATION_RENDER_BASE_Z + FABRICATION_RENDER_LAYER_Z_STEP * 1.22).toFixed(2)),
-        Number((FABRICATION_RENDER_BASE_Z + FABRICATION_RENDER_LAYER_Z_STEP * 0.98).toFixed(2)),
-        Number((FABRICATION_RENDER_BASE_Z + FABRICATION_RENDER_LAYER_Z_STEP * 1.04).toFixed(2))
-    ] : [];
-    const layers = stackLayers.map((item, index): FabricationRenderLayer => ({
-        ...item,
-        source: 'mechanism-graph',
-        stackIndex: index,
-        occurrence: stackLayers.slice(0, index).filter(previous => previous.role === item.role).length,
-        z: compactCamZ[index] ?? FABRICATION_RENDER_BASE_Z + index * FABRICATION_RENDER_LAYER_Z_STEP,
-        renderKind: renderKindForGraphRole(item.role)
-    }));
-    return {
-        base: { ...fabricationBaseLayer(), source: 'mechanism-graph', stackIndex: -1, occurrence: 0, z: 0, renderKind: 'base' },
-        layers,
-        ...(graph.connectionSelectionSummary ? { connectionSelectionSummary: graph.connectionSelectionSummary } : {}),
-        stackSummary: layers.map(item => item.label).join(' → '),
-        roleSummary: layers.map(item => item.role).join('>'),
-        occurrenceSummary: layers.map(item => `${item.role}#${item.occurrence}:${item.label}`).join('>'),
-        colorSummary: layers.map(item => item.color).join(','),
-        zSummary: layers.map(item => item.z.toFixed(2)).join(','),
-        validationErrors
+    const occurrenceByRole = new Map<FabricationStackLayer['role'], number>();
+    const drafts = stackLayers.map(item => {
+        const occurrence = occurrenceByRole.get(item.role) ?? 0;
+        occurrenceByRole.set(item.role, occurrence + 1);
+        return {
+            label: item.label,
+            role: item.role,
+            color: item.color,
+            source: 'mechanism-graph' as const,
+            stackIndex: item.stepIndex,
+            stackItemIndex: item.stackItemIndex,
+            occurrence,
+            renderKind: renderKindForGraphRole(item.role),
+            sourceNodeId: item.sourceNodeId,
+            sourceConstraintIds: item.sourceConstraintIds,
+            preferredBackFaceMm: undefined as number | undefined
+        };
+    });
+    const draftIndexesByNode = new Map<string, number[]>();
+    drafts.forEach((draft, index) => draftIndexesByNode.set(draft.sourceNodeId, [...(draftIndexesByNode.get(draft.sourceNodeId) ?? []), index]));
+    const exactDraftIndex = (nodeId: string) => {
+        const matches = draftIndexesByNode.get(nodeId) ?? [];
+        if (matches.length !== 1) return undefined;
+        return matches[0];
     };
+    const gearNodeIds = new Set(graph.nodes.filter(node => node.role === 'gear' || node.role === 'ring-gear').map(node => node.id));
+    const parent = new Map([...gearNodeIds].map(id => [id, id]));
+    const find = (id: string): string => {
+        const p = parent.get(id) ?? id;
+        if (p === id) return p;
+        const r = find(p);
+        parent.set(id, r);
+        return r;
+    };
+    const unite = (a: string, b: string) => { parent.set(find(a), find(b)); };
+    graph.constraints.filter(constraint => constraint.role === 'gear-mesh').forEach(constraint => {
+        const [a, b] = constraint.nodes;
+        if (gearNodeIds.has(a) && gearNodeIds.has(b)) unite(a, b);
+    });
+    const components = new Map<string, string[]>();
+    [...gearNodeIds].forEach(id => {
+        const root = find(id);
+        components.set(root, [...(components.get(root) ?? []), id]);
+    });
+    const gearPlaneComponents = [...components.values()]
+        .map(ids => ids.sort())
+        .filter(ids => ids.length >= 2)
+        .map(ids => ({ id: `${graph.id}:gear-plane:${ids.join('+')}`, sourceNodeIds: ids }));
+
+    const parentDraft = new Map(drafts.map((_, index) => [index, index]));
+    const findDraft = (index: number): number => {
+        const value = parentDraft.get(index) ?? index;
+        if (value === index) return value;
+        const root = findDraft(value);
+        parentDraft.set(index, root);
+        return root;
+    };
+    const uniteDraft = (a: number, b: number) => parentDraft.set(findDraft(a), findDraft(b));
+    gearPlaneComponents.forEach(component => {
+        const indexes = component.sourceNodeIds.map(exactDraftIndex).filter((value): value is number => typeof value === 'number');
+        indexes.slice(1).forEach(index => uniteDraft(indexes[0], index));
+    });
+    graph.constraints.filter(constraint => constraint.role === 'contact' || constraint.role === 'prismatic').forEach(constraint => {
+        const indexes = constraint.nodes.map(exactDraftIndex).filter((value): value is number => typeof value === 'number');
+        indexes.slice(1).forEach(index => uniteDraft(indexes[0], index));
+    });
+
+    const attachmentDrafts = new Map<string, Set<number>>();
+    const attach = (nodeId: string, draftIndex: number | undefined) => {
+        if (typeof draftIndex !== 'number') return;
+        const indexes = attachmentDrafts.get(nodeId) ?? new Set<number>();
+        indexes.add(draftIndex);
+        attachmentDrafts.set(nodeId, indexes);
+    };
+    drafts.forEach((draft, index) => attach(draft.sourceNodeId, index));
+    graph.constraints.filter(constraint => constraint.role === 'distance').forEach(constraint => {
+        const partIndex = drafts.findIndex(draft => draft.sourceConstraintIds.includes(constraint.id));
+        constraint.nodes.slice(0, 2).forEach(nodeId => attach(nodeId, partIndex >= 0 ? partIndex : undefined));
+    });
+    graph.constraints.filter(constraint => constraint.role === 'output-offset').forEach(constraint => {
+        if (constraint.nodes.length !== 2) return;
+        const structuralIndexes = constraint.nodes.map(exactDraftIndex).filter((value): value is number => typeof value === 'number');
+        constraint.nodes.forEach(nodeId => structuralIndexes.forEach(index => attach(nodeId, index)));
+    });
+
+    type RelationCandidate = {
+        id: string;
+        sourceKind: 'board' | 'pin-joint' | 'distance-joint' | 'contact' | 'prismatic' | 'generated-joint';
+        sourceIds: string[];
+        rootNodeId: string;
+        draftIndexes: number[];
+        rootedToBoard: boolean;
+        pinBearing: boolean;
+        transitionKinds?: Array<'face-contact' | 'contact-overlap' | 'guide-capture'>;
+        ownerExpansions?: Array<{ pivotNodeId: string; ownerPartId: string; ownerLayerId: string }>;
+    };
+    const draftLayerId = (index: number) => {
+        const draft = drafts[index];
+        return `${graph.id}:step:${draft.stackIndex}:node:${draft.sourceNodeId}:occ:${draft.occurrence}`;
+    };
+    const resolveConstraintDrafts = (constraint: MechanismGraph['constraints'][number]) => constraint.nodes.flatMap(nodeId => {
+        const node = nodeById.get(nodeId);
+        const sourceId = node?.role === 'moving-joint' && node.ownerPartId ? node.ownerPartId : nodeId;
+        const index = exactDraftIndex(sourceId);
+        return typeof index === 'number' ? [index] : [];
+    });
+    const ownerExpansionsFor = (constraint: MechanismGraph['constraints'][number]) => constraint.nodes.flatMap(nodeId => {
+        const node = nodeById.get(nodeId);
+        if (node?.role !== 'moving-joint' || !node.ownerPartId) return [];
+        const ownerIndex = exactDraftIndex(node.ownerPartId);
+        return typeof ownerIndex === 'number'
+            ? [{ pivotNodeId: node.id, ownerPartId: node.ownerPartId, ownerLayerId: draftLayerId(ownerIndex) }]
+            : [];
+    });
+    const candidates: RelationCandidate[] = [];
+    graph.constraints.filter(constraint => constraint.role === 'pin-joint').forEach(constraint => {
+        const indexes = [...new Set(resolveConstraintDrafts(constraint))];
+        candidates.push({
+            id: `${graph.id}:support:pin:${constraint.id}:occ:0`, sourceKind: 'pin-joint', sourceIds: [constraint.id],
+            rootNodeId: constraint.nodes[0] ?? constraint.id, draftIndexes: indexes,
+            rootedToBoard: constraint.nodes.some(nodeId => boardMountedNodeIds.has(nodeId)), pinBearing: true,
+            ownerExpansions: ownerExpansionsFor(constraint)
+        });
+    });
+    graph.constraints.filter(constraint => constraint.role === 'contact' || constraint.role === 'prismatic').forEach(constraint => {
+        const indexes = [...new Set(resolveConstraintDrafts(constraint))];
+        const sourceKind = constraint.role === 'contact' ? 'contact' as const : 'prismatic' as const;
+        candidates.push({
+            id: `${graph.id}:support:${sourceKind}:${constraint.id}:occ:0`, sourceKind, sourceIds: [constraint.id],
+            rootNodeId: constraint.nodes[0] ?? constraint.id, draftIndexes: indexes,
+            rootedToBoard: constraint.nodes.some(nodeId => boardMountedNodeIds.has(nodeId)), pinBearing: false,
+            transitionKinds: indexes.slice(1).map(() => sourceKind === 'contact' ? 'contact-overlap' : 'guide-capture')
+        });
+    });
+    const distanceConstraints = graph.constraints.filter(constraint => constraint.role === 'distance');
+    const distanceJointNodeIds = [...new Set(distanceConstraints.flatMap(constraint => constraint.nodes.slice(0, 2)))];
+    distanceJointNodeIds.forEach(nodeId => {
+        const incident = distanceConstraints.filter(constraint => constraint.nodes.slice(0, 2).includes(nodeId));
+        const indexes = [...(attachmentDrafts.get(nodeId) ?? [])];
+        if (!indexes.length) return;
+        const sourceIds = incident.map(constraint => constraint.id).sort();
+        candidates.push({
+            id: `${graph.id}:support:distance:${nodeId}:${sourceIds.join('+')}:occ:0`, sourceKind: 'distance-joint', sourceIds,
+            rootNodeId: nodeId, draftIndexes: indexes,
+            rootedToBoard: nodeById.get(nodeId)?.role === 'board-anchor' || boardMountedNodeIds.has(nodeId) || indexes.some(index => boardMountedNodeIds.has(drafts[index].sourceNodeId)),
+            pinBearing: true
+        });
+    });
+    if (graph.mechanismType === 'cam') {
+        const crank = exactDraftIndex('cam-axle');
+        const cam = exactDraftIndex('cam-disk');
+        if (typeof crank === 'number' && typeof cam === 'number') candidates.push({
+            id: `${graph.id}:support:board:cam-axle:occ:0`, sourceKind: 'board', sourceIds: ['cam-axle-fixed'], rootNodeId: 'cam-axle',
+            draftIndexes: [crank, cam], rootedToBoard: true, pinBearing: true
+        });
+    }
+
+    const relationDraftIndexes = new Set(candidates.flatMap(candidate => candidate.draftIndexes));
+    drafts.forEach((draft, index) => {
+        if (!boardMountedNodeIds.has(draft.sourceNodeId) || relationDraftIndexes.has(index)) return;
+        candidates.push({
+            id: `${graph.id}:support:board:${draft.sourceNodeId}:occ:0`, sourceKind: 'board', sourceIds: [], rootNodeId: draft.sourceNodeId,
+            draftIndexes: [index], rootedToBoard: true, pinBearing: true
+        });
+    });
+    drafts.forEach((draft, index) => {
+        if (candidates.some(candidate => candidate.draftIndexes.includes(index))) return;
+        candidates.push({
+            id: `${graph.id}:support:generated:${draft.sourceNodeId}:occ:0`, sourceKind: 'generated-joint', sourceIds: draft.sourceConstraintIds,
+            rootNodeId: draft.sourceNodeId, draftIndexes: [index], rootedToBoard: false, pinBearing: true
+        });
+    });
+
+    const groupMembers = new Map<number, number[]>();
+    drafts.forEach((_, index) => {
+        const root = findDraft(index);
+        groupMembers.set(root, [...(groupMembers.get(root) ?? []), index]);
+    });
+    const groupLevel = new Map<number, number>();
+    candidates.filter(candidate => candidate.rootedToBoard).forEach(candidate => candidate.draftIndexes.forEach(index => groupLevel.set(findDraft(index), 0)));
+    const sequentialCandidates = candidates.filter(candidate => !candidate.transitionKinds?.length && candidate.draftIndexes.length > 1);
+    const groupAdjacency = new Map<number, Set<number>>();
+    sequentialCandidates.forEach(candidate => {
+        const groups = [...new Set(candidate.draftIndexes.map(findDraft))];
+        groups.slice(1).forEach((group, index) => {
+            const previous = groups[index];
+            groupAdjacency.set(previous, new Set([...(groupAdjacency.get(previous) ?? []), group]));
+            groupAdjacency.set(group, new Set([...(groupAdjacency.get(group) ?? []), previous]));
+        });
+    });
+    const queue = [...groupLevel.keys()];
+    while (queue.length) {
+        const group = queue.shift()!;
+        const level = groupLevel.get(group) ?? 0;
+        (groupAdjacency.get(group) ?? []).forEach(next => {
+            if (groupLevel.has(next)) return;
+            groupLevel.set(next, level + 1);
+            queue.push(next);
+        });
+    }
+    groupMembers.forEach((_, group) => { if (!groupLevel.has(group)) groupLevel.set(group, 0); });
+    for (let pass = 0; pass < drafts.length; pass += 1) {
+        let changed = false;
+        sequentialCandidates.forEach(candidate => {
+            const groups = [...new Set(candidate.draftIndexes.map(findDraft))]
+                .sort((a, b) => (groupLevel.get(a) ?? 0) - (groupLevel.get(b) ?? 0) || Math.min(...groupMembers.get(a)!) - Math.min(...groupMembers.get(b)!));
+            groups.slice(1).forEach((group, index) => {
+                const required = (groupLevel.get(groups[index]) ?? 0) + 1;
+                if ((groupLevel.get(group) ?? 0) < required) {
+                    groupLevel.set(group, required);
+                    changed = true;
+                }
+            });
+        });
+        if (!changed) break;
+    }
+    const preferredBack = (index: number) => {
+        const sourceNodeId = drafts[index].sourceNodeId;
+        if (graph.mechanismType === 'cam' && ['cam-disk', 'follower-head', 'follower-guide'].includes(sourceNodeId)) return 8.8;
+        return Number(((groupLevel.get(findDraft(index)) ?? 0) * (PLATE_DEPTH_MM + SPACER_DEPTH_MM)).toFixed(6));
+    };
+    drafts.forEach((draft, index) => { draft.preferredBackFaceMm = preferredBack(index); });
+    candidates.forEach(candidate => {
+        if (candidate.transitionKinds?.length) return;
+        candidate.draftIndexes.sort((a, b) => preferredBack(a) - preferredBack(b) || a - b);
+    });
+    let aliasOrdinal = 0;
+    const pathDrafts = candidates.map(candidate => ({
+        id: candidate.id,
+        sourceKind: candidate.sourceKind,
+        sourceIds: candidate.sourceIds,
+        rootNodeId: candidate.rootNodeId,
+        orderedDraftIndexes: candidate.draftIndexes,
+        transitionKinds: candidate.transitionKinds,
+        rootedToBoard: candidate.rootedToBoard,
+        pinBearing: candidate.pinBearing,
+        accessoryStackIndex: Math.max(0, ...candidate.draftIndexes.map(index => drafts[index]?.stackIndex ?? 0)),
+        ownerExpansions: candidate.ownerExpansions,
+        ...(candidate.pinBearing ? { displayAlias: String.fromCharCode(65 + aliasOrdinal++) } : {})
+    }));
+    return packFabricationRenderPlan({
+        graphId: graph.id,
+        layers: drafts,
+        validationErrors,
+        ...(graph.connectionSelectionSummary ? { connectionSelectionSummary: graph.connectionSelectionSummary } : {}),
+        gearPlaneComponents,
+        pathDrafts
+    });
 };
 
-const explicitPartNodeMatchesConstraint = (
-    node: MechanismGraphNode,
-    constraint: MechanismGraph['constraints'][number],
-    nodeById: Map<string, MechanismGraphNode>,
-    kit: PhysicalKitSettings
-) => {
-    if ((node.role !== 'link' && node.role !== 'rigid-part') || !Number.isFinite(node.value) || !Number.isFinite(constraint.value)) return false;
-    const [startNode, endNode] = constraint.nodes.slice(0, 2).map(nodeId => nodeById.get(nodeId));
-    if (!startNode?.position || !endNode?.position || !node.position) return false;
-    const midpoint = { x: (startNode.position.x + endNode.position.x) / 2, y: (startNode.position.y + endNode.position.y) / 2 };
-    return closePhysicalValue(Math.abs(node.value ?? 0), Math.abs(constraint.value ?? 0))
-        && distanceBetween(node.position, midpoint) <= physicalTolerance(Math.abs(constraint.value ?? 0) || SCENE_PX_PER_MM * kit.gridPitchMm);
-};
-
-const constraintPartNameScore = (
-    node: MechanismGraphNode,
-    constraint: MechanismGraph['constraints'][number]
-) => {
-    const nodeText = `${node.id} ${node.label}`.toLowerCase();
-    const constraintText = `${constraint.id} ${constraint.label}`.toLowerCase();
-    return [
-        'input',
-        'output',
-        'coupler',
-        'left',
-        'right',
-        'drive',
-        'crank',
-        'connector',
-        'rod',
-        'dyad',
-        'follower',
-        'carrier',
-        'slotted',
-        'arm'
-    ].reduce((score, token) => score + (nodeText.includes(token) && constraintText.includes(token) ? 1 : 0), 0);
-};
+const assemblyStepsWithPackedZ = (assemblySteps: FabricationRecipe['assemblySteps'], renderPlan: FabricationRenderPlan): FabricationRecipe['assemblySteps'] =>
+    assemblySteps.map(step => ({
+        ...step,
+        zMm: renderPlan.layers.find(layer => layer.stackIndex === step.index)?.centerMm ?? step.zMm
+    }));
 
 const fabricatedLinkConstraints = (
     constraints: MechanismGraph['constraints'],
-    explicitPartNodes: MechanismGraphNode[],
-    nodeById: Map<string, MechanismGraphNode>,
-    kit: PhysicalKitSettings
-) => {
-    const usedPartNodeIds = new Set<string>();
-    return constraints
-        .filter(constraint =>
-            (constraint.role === 'distance' || (constraint.role === 'output-offset' && constraint.nodes.length === 2))
-            && Number.isFinite(constraint.value)
-            && constraint.nodes.length >= 2
-        )
-        .map(constraint => {
-            const partNode = explicitPartNodes
-                .filter(node => !usedPartNodeIds.has(node.id) && explicitPartNodeMatchesConstraint(node, constraint, nodeById, kit))
-                .sort((a, b) => constraintPartNameScore(b, constraint) - constraintPartNameScore(a, constraint))[0];
-            if (partNode) usedPartNodeIds.add(partNode.id);
-            return { constraint, partNode };
-        })
-        .filter((entry): entry is { constraint: MechanismGraph['constraints'][number]; partNode: MechanismGraphNode } => Boolean(entry.partNode));
-};
+    nodeById: Map<string, MechanismGraphNode>
+) => constraints
+    .filter((constraint): constraint is Extract<MechanismGraph['constraints'][number], { role: 'distance' }> =>
+        constraint.role === 'distance'
+        && Number.isFinite(constraint.value)
+        && constraint.nodes.length >= 2
+    )
+    .map(constraint => ({ constraint, partNode: nodeById.get(constraint.fabricatedPartNodeId) }))
+    .filter((entry): entry is { constraint: Extract<MechanismGraph['constraints'][number], { role: 'distance' }>; partNode: MechanismGraphNode } => Boolean(entry.partNode));
 
 const explicitLinkPartIdsForConstraints = (
     constraints: Array<{ partNode: MechanismGraphNode }>
@@ -381,12 +556,7 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
         .flatMap(constraint => constraint.nodes));
     const boardMountedNodes = graph.nodes.filter(node => node.role === 'board-anchor' || boardMountedNodeIds.has(node.id));
     const primaryAnchor = boardMountedNodes.map(node => boardCoordinateForPoint(node.position, kit)).find(placement => placement?.snapped);
-    const explicitPartNodes = graph.nodes.filter(node =>
-        node.fabricated !== false
-        && (node.role === 'link' || node.role === 'rigid-part')
-        && Number.isFinite(node.value)
-    );
-    const linkConstraintEntries = fabricatedLinkConstraints(graph.constraints, explicitPartNodes, nodeById, kit);
+    const linkConstraintEntries = fabricatedLinkConstraints(graph.constraints, nodeById);
     const representedLinkPartNodeIds = explicitLinkPartIdsForConstraints(linkConstraintEntries);
     const fabricatedMovingPartNodes = graph.nodes.filter(node =>
         graphNodeIsFabricatedPart(node)
@@ -405,8 +575,9 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
     const fabricatedBoardConstraintNodesArePlaced = [...fabricatedConstraintNodeIds]
         .filter(nodeId => boardMountedNodeIds.has(nodeId) || nodeById.get(nodeId)?.role === 'board-anchor')
         .every(nodeId => boardCoordinateForPoint(nodeById.get(nodeId)?.position, kit)?.snapped);
-    const linkConstraintEndpointsArePlaced = linkConstraintEntries.every(({ constraint }) =>
-        constraint.nodes.slice(0, 2).every(nodeId => {
+    const linkConstraintEndpointsArePlaced = linkConstraintEntries.every(({ constraint, partNode }) =>
+        Boolean(partNode.position && Number.isFinite(partNode.position.x) && Number.isFinite(partNode.position.y))
+        && constraint.nodes.slice(0, 2).every(nodeId => {
             const point = nodeById.get(nodeId)?.position;
             return point && Number.isFinite(point.x) && Number.isFinite(point.y);
         })
@@ -524,22 +695,22 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
             label: 'Add pegboard cam follower module',
             role: 'add-part',
             boardCoordinate: camCoord,
-            zMm: Number((FABRICATION_RENDER_BASE_Z * 10).toFixed(1)),
+            zMm: 0,
             coords: [camCoord, guideCoord, followerCoord],
             coordRoles: ['board', 'guide_reference', 'contact_reference'],
             action: 'stack-layer',
             instruction: 'Add the crank, washers, cam disk, guide cartridge, and follower module on the pegboard.',
             check: 'The follower should slide in the guide and stay on the cam.',
             stack: stack(
-                { label: 'Crank handle', role: 'moving-part', part: 'linkages:crank-handle' },
-                { label: 'Axle peg', role: 'spacer', part: 'spacers:axle-peg' },
-                { label: 'Paper washer', role: 'spacer', part: 'spacers:paper-washer' },
-                { label: 'Cam spacer', role: 'spacer', part: 'spacers:cam-spacer' },
-                { label: graphPartLabelForNode(camNode, graph), role: 'moving-part', part: graphPartKeyForNode(camNode, 'cam', graph) },
-                { label: 'Paper washer', role: 'spacer', part: 'spacers:paper-washer' },
-                { label: 'Cam lock disk', role: 'clip', part: 'hardware:cam-lock-disk' },
-                { label: graphPartLabelForNode(guideNode, graph), role: 'moving-part', part: graphPartKeyForNode(guideNode, 'guide', graph) },
-                { label: graphPartLabelForNode(followerNode, graph), role: 'moving-part', part: graphPartKeyForNode(followerNode, 'follower', graph) }
+                { label: 'Crank handle', role: 'moving-part', part: 'linkages:crank-handle', sourceNodeId: 'cam-axle', sourceConstraintIds: ['cam-axle-fixed'], axialRole: 'structural' },
+                { label: 'Axle peg', role: 'spacer', part: 'spacers:axle-peg', sourceConstraintIds: ['cam-axle-fixed'], axialRole: 'spacer' },
+                { label: 'Paper washer', role: 'spacer', part: 'spacers:paper-washer', sourceConstraintIds: ['cam-axle-fixed'], axialRole: 'spacer' },
+                { label: 'Cam spacer', role: 'spacer', part: 'spacers:cam-spacer', sourceConstraintIds: ['cam-axle-fixed'], axialRole: 'spacer' },
+                { label: graphPartLabelForNode(camNode, graph), role: 'moving-part', part: graphPartKeyForNode(camNode, 'cam', graph), sourceNodeId: camNode.id, sourceConstraintIds: ['cam-follower-contact'], axialRole: 'structural' },
+                { label: 'Paper washer', role: 'spacer', part: 'spacers:paper-washer', sourceConstraintIds: ['cam-axle-fixed'], axialRole: 'spacer' },
+                { label: 'Cam lock disk', role: 'clip', part: 'hardware:cam-lock-disk', sourceConstraintIds: ['cam-axle-fixed'], axialRole: 'front-retainer' },
+                { label: graphPartLabelForNode(guideNode, graph), role: 'moving-part', part: graphPartKeyForNode(guideNode, 'guide', graph), sourceNodeId: guideNode.id, sourceConstraintIds: ['follower-guide-slide'], axialRole: 'structural' },
+                { label: graphPartLabelForNode(followerNode, graph), role: 'moving-part', part: graphPartKeyForNode(followerNode, 'follower', graph), sourceNodeId: followerNode.id, sourceConstraintIds: ['cam-follower-contact', 'follower-guide-slide'], axialRole: 'structural' }
             )
         } satisfies FabricationRecipe['assemblySteps'][number];
         const assemblySteps = [...boardSteps, camAssemblyStep].map((step, index) => ({ ...step, index: index + 1 }));
@@ -555,6 +726,7 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
         const requiredParts = requiredPartsFromAssemblySteps(assemblySteps)
             .sort((a, b) => camModulePartPriority(a) - camModulePartPriority(b));
         const renderPlan = graphRenderPlan(graph, assemblySteps, validationErrors);
+        const packedAssemblySteps = assemblyStepsWithPackedZ(assemblySteps, renderPlan);
         const recipe: FabricationRecipe = {
             mechanismId: graph.mechanismId,
             type: 'graph',
@@ -572,16 +744,16 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
                 `Parts: ${requiredParts.map(part => `${fabricationPartDisplayLabel(part.name)} × ${part.quantity}`).join(', ')}.`,
                 validationErrors.length ? `Fix: ${validationErrors.join('; ')}` : 'Ready.'
             ],
-            assemblySteps,
+            assemblySteps: packedAssemblySteps,
             warnings: graph.diagnostics.filter(diagnostic => diagnostic.severity === 'warning').map(diagnostic => diagnostic.message)
         };
         return {
             recipeCompilerSource: 'compileGraphFabricationRecipe',
-            buildable: validationErrors.length === 0,
-            blocker: validationErrors.length ? 'Graph invalid' : undefined,
+            buildable: renderPlan.validationErrors.length === 0,
+            blocker: renderPlan.validationErrors[0],
             recipe,
             renderPlan,
-            assemblyStepFingerprints: assemblySteps.map(assemblyStepFingerprint)
+            assemblyStepFingerprints: packedAssemblySteps.map(assemblyStepFingerprint)
         };
     }
 
@@ -593,19 +765,19 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
             label: `Add ${label}`,
             role: 'add-part',
             boardCoordinate: coords[0] ?? primaryAnchor.coordinate,
-            zMm: Number((FABRICATION_RENDER_BASE_Z * 10 + index * FABRICATION_RENDER_LAYER_Z_STEP * 10).toFixed(1)),
+            zMm: 0,
             coords,
             coordRoles: constraint.nodes.slice(0, 2).map(nodeId => coordRoleForNode(nodeId)),
             action: 'stack-layer',
             instruction: `Connect ${fabricationPartDisplayLabel(label)} between ${coords.join(' and ')}.`,
             check: 'The link can swing without rubbing.',
             stack: stack(
-                { label: 'Back Clip', role: 'clip' },
-                { label, role: 'moving-part', part: graphPartKeyForNode(partNode, graphPartRoleForNode(partNode.role) ?? 'linkage', graph) },
-                { label: FABRICATION_SPACER_SPEC.label, role: 'spacer', part: `spacers:${FABRICATION_SPACER_SPEC.key}` },
+                { label: 'Back Clip', role: 'clip', sourceConstraintIds: [constraint.id], axialRole: 'back-retainer' },
+                { label, role: 'moving-part', part: graphPartKeyForNode(partNode, graphPartRoleForNode(partNode.role) ?? 'linkage', graph), sourceNodeId: partNode.id, sourceConstraintIds: [constraint.id], axialRole: 'structural' },
+                { label: FABRICATION_SPACER_SPEC.label, role: 'spacer', part: `spacers:${FABRICATION_SPACER_SPEC.key}`, sourceConstraintIds: [constraint.id], axialRole: 'spacer' },
                 { label: `End hole ${coords[1] ?? coords[0] ?? primaryAnchor.coordinate}`, role: coordRoleForNode(constraint.nodes[1] ?? constraint.nodes[0]) },
                 { label: 'Paper fastener', role: 'hardware', part: 'hardware:paper-fastener' },
-                { label: 'Front Clip', role: 'clip' }
+                { label: 'Front Clip', role: 'clip', sourceConstraintIds: [constraint.id], axialRole: 'front-retainer' }
             )
         } satisfies FabricationRecipe['assemblySteps'][number];
     });
@@ -621,19 +793,19 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
             label: `Add ${node.label}`,
             role: 'add-part',
             boardCoordinate: coord,
-            zMm: Number((FABRICATION_RENDER_BASE_Z * 10 + (linkSteps.length + index) * FABRICATION_RENDER_LAYER_Z_STEP * 10).toFixed(1)),
+            zMm: 0,
             coords: [coord],
             coordRoles: [coordRoleForNode(node.id)],
             action: 'stack-layer',
             instruction: `Place ${fabricationPartDisplayLabel(label)} at ${coord}.`,
             check: role === 'gear' ? 'The gear spins without rubbing.' : 'The part moves freely.',
             stack: stack(
-                { label: 'Back Clip', role: 'clip' },
-                { label, role: 'moving-part', part: graphPartKeyForNode(node, role, graph) },
-                { label: FABRICATION_SPACER_SPEC.label, role: 'spacer', part: `spacers:${FABRICATION_SPACER_SPEC.key}` },
+                { label: 'Back Clip', role: 'clip', axialRole: 'back-retainer' },
+                { label, role: 'moving-part', part: graphPartKeyForNode(node, role, graph), sourceNodeId: node.id, axialRole: 'structural' },
+                { label: FABRICATION_SPACER_SPEC.label, role: 'spacer', part: `spacers:${FABRICATION_SPACER_SPEC.key}`, axialRole: 'spacer' },
                 { label: `Graph point ${coord}`, role: stackReferenceRole },
                 { label: 'Paper fastener', role: 'hardware', part: 'hardware:paper-fastener' },
-                { label: 'Front Clip', role: 'clip' }
+                { label: 'Front Clip', role: 'clip', axialRole: 'front-retainer' }
             )
         } satisfies FabricationRecipe['assemblySteps'][number];
     });
@@ -643,6 +815,7 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
     const assemblySteps = [...boardSteps, ...movingPartSteps].map((step, index) => ({ ...step, index: index + 1 }));
     const requiredParts = requiredPartsFromAssemblySteps(assemblySteps);
     const renderPlan = graphRenderPlan(graph, assemblySteps, validationErrors);
+    const packedAssemblySteps = assemblyStepsWithPackedZ(assemblySteps, renderPlan);
     const recipe: FabricationRecipe = {
         mechanismId: graph.mechanismId,
         type: 'graph',
@@ -660,14 +833,15 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
             `Parts: ${requiredParts.map(part => `${fabricationPartDisplayLabel(part.name)} × ${part.quantity}`).join(', ')}.`,
             validationErrors.length ? `Fix: ${validationErrors.join('; ')}` : 'Ready.'
         ],
-        assemblySteps,
+        assemblySteps: packedAssemblySteps,
         warnings: graph.diagnostics.filter(diagnostic => diagnostic.severity === 'warning').map(diagnostic => diagnostic.message)
     };
     return {
         recipeCompilerSource: 'compileGraphFabricationRecipe',
-        buildable: true,
+        buildable: renderPlan.validationErrors.length === 0,
+        blocker: renderPlan.validationErrors[0],
         recipe,
         renderPlan,
-        assemblyStepFingerprints: assemblySteps.map(assemblyStepFingerprint)
+        assemblyStepFingerprints: packedAssemblySteps.map(assemblyStepFingerprint)
     };
 };

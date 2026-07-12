@@ -23,6 +23,10 @@ export const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, 
     : ((angle / (Math.PI * 2)) % 1 + 1) % 1;
   const percent = Math.round(progress * 100);
   const goStep = (next: number) => stepPlayback?.onStepChange(Math.max(0, Math.min(maxStepIndex, next)));
+  const scrubWorkspace = (nextPercent: number) => {
+    setIsPlaying(false);
+    setAngle((nextPercent / 100) * Math.PI * 2);
+  };
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const dragStart = useRef<{ x: number; y: number; offset: { x: number; y: number } } | null>(null);
@@ -91,7 +95,7 @@ export const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, 
       min={0}
       max={stepPlayback ? maxStepIndex : 100}
       value={stepPlayback ? stepIndex : percent}
-      onChange={event => stepPlayback ? goStep(Number(event.currentTarget.value)) : setAngle((Number(event.currentTarget.value) / 100) * Math.PI * 2)}
+      onChange={event => stepPlayback ? goStep(Number(event.currentTarget.value)) : scrubWorkspace(Number(event.currentTarget.value))}
     />
   </aside>;
 };

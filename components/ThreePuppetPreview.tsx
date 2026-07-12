@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import type { BodyPartLayer, CanvasViewport, MechanismConfig, MechanismType, PhysicalKitSettings, Point, ProjectMotionPath, ProjectState, SceneObject, StandardSkeleton } from '../types';
 import { boardGridLines, defaultPhysicalKit, SCENE_PX_PER_MM, sceneBoundsForSheet } from '../utils/coordinates';
 import { calculateLinkage, normalizeCamProfileSamples, sampledCamProfileScale, gearPairOutputRatio, gearTrainCenters, gearTrainMeshPhaseRadAt, gearTrainOutputRatio, gearTrainPitchRadii, gearTrainRotationRatioAt, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from '../utils/kinematics';
-import { FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, validateMechanismPreviewReadiness, type FabricationLinkageRoleLengths, type FabricationRenderLayer, type FabricationRenderPlan } from '../utils/fabrication';
+import { FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, projectFabricationZMm, validateMechanismPreviewReadiness, type FabricationLinkageRoleLengths, type FabricationRenderPlan } from '../utils/fabrication';
 import { compileMechanismRenderPlan } from '../utils/mechanismCompiler';
 import { mechanismInventoryForMechanism, zeroMechanismInventory, type MechanismInventory } from '../utils/mechanismInventory';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, pointInsideOutline } from '../utils/partGeometry';
@@ -13,6 +13,7 @@ import { DEFAULT_PUPPET_VIEWER_LAYERS, VIEWER3D_CAMERA_PRESETS, VIEWER3D_CONTRAC
 import { ALL_MECHANISM_TYPES } from '../utils/mechanismTemplates';
 import { cachedThreeResource, clearThreeGroup, disposeMarkedThreeMaterials, disposeThreeObjectGraph, setRendererPixelRatioCap } from '../utils/threeResourceKit';
 import { connectionSelectionSignature, resolveFourBarConnectionSelections, resolveFourBarLinkageBlankPoses } from '../utils/mechanismConnectionSelections';
+import { foundryPinStackPoints, foundryPinStacks } from '../utils/mechanismPreviewStacks';
 
 const VIEW_SCALE = 35;
 const FABRICATION_LINKAGE_WIDTH_3D = Math.max(0.16, (FABRICATION_LINKAGE_WIDTH_MM * SCENE_PX_PER_MM) / VIEW_SCALE);
@@ -492,7 +493,7 @@ const ringGearShape = (pitchRadius: number) => {
   return shape;
 };
 
-const updateLink = (group: THREE.Object3D, a?: Point, b?: Point, z = 0) => {
+const updateLink = (group: THREE.Object3D, a?: Point, b?: Point, z = 0, physicalDepth = 0.11) => {
   if (!a || !b) {
     group.visible = false;
     return;
@@ -504,14 +505,16 @@ const updateLink = (group: THREE.Object3D, a?: Point, b?: Point, z = 0) => {
   group.position.set((av.x + bv.x) / 2, (av.y + bv.y) / 2, z);
   group.rotation.z = Math.atan2(bv.y - av.y, bv.x - av.x);
   group.scale.x = group.userData.fabricationLocked === true ? 1 : len / Math.max(0.01, Number(group.userData.baseLength ?? len));
+  group.scale.z = physicalDepth / 0.11;
 };
 
-const updateObject = (object: THREE.Object3D | undefined, center?: Point, z = 0, rotation = 0) => {
+const updateObject = (object: THREE.Object3D | undefined, center?: Point, z = 0, rotation = 0, physicalDepth?: number, sourceDepth = 1) => {
   if (!object || !center) return;
   const p = to3(center, z);
   object.visible = true;
   object.position.set(p.x, p.y, p.z);
   object.rotation.z = rotation;
+  if (typeof physicalDepth === 'number') object.scale.z = physicalDepth / sourceDepth;
 };
 
 const hideObject = (object: THREE.Object3D | undefined) => {
@@ -611,41 +614,17 @@ const partGeometrySignature = (parts: BodyPartLayer[], project?: ProjectState, s
 ].join('::');
 
 
-const planetaryLayerIndexesForPlan = (layers: FabricationRenderLayer[]) => {
-  const ring = layers.findIndex(layer => layer.renderKind === 'gear' && /ring/i.test(layer.label));
-  const sun = layers.findIndex(layer => layer.renderKind === 'gear' && /G1|sun/i.test(layer.label));
-  const carrier = layers.findIndex(layer => layer.renderKind === 'linkage' && /carrier|L2|linkage/i.test(layer.label));
-  const planet = layers.findIndex(layer => layer.renderKind === 'gear' && /G3|planet/i.test(layer.label));
-  if ([ring, sun, carrier, planet].some(index => index < 0)) return null;
-  return { ring, sun, carrier, planet };
-};
+const gearMeshPlaneZForPlan = (renderPlan: FabricationRenderPlan) =>
+  renderPlan.layers.find(layer => layer.gearPlaneId)?.z;
 
-const gearMeshPlaneZForMechanism = (mechanism: MechanismConfig, renderPlan: FabricationRenderPlan) => {
-  if (!['gear', 'gear_linkage', 'planetary_gear'].includes(mechanism.type)) return undefined;
-  return renderPlan.layers.find(layer => layer.renderKind === 'gear')?.z;
-};
-
-const renderedLayerZForMechanism = (mechanism: MechanismConfig, renderPlan: FabricationRenderPlan) => {
-  const gearPlaneZ = gearMeshPlaneZForMechanism(mechanism, renderPlan);
-  if (typeof gearPlaneZ !== 'number') return renderPlan.layers.map(layer => layer.z);
-  if (mechanism.type === 'gear' || mechanism.type === 'gear_linkage') {
-    return renderPlan.layers.map(layer => layer.renderKind === 'gear' ? gearPlaneZ : layer.z);
+const gearPlaneModeForMechanism = (mechanism: MechanismConfig | undefined, renderPlan: FabricationRenderPlan | null) => {
+  const gearPlaneZ = renderPlan ? gearMeshPlaneZForPlan(renderPlan) : undefined;
+  if (!mechanism) return 'not-gear-train';
+  if (typeof gearPlaneZ !== 'number') {
+    return mechanism.type === 'gear' || mechanism.type === 'gear_linkage'
+      ? 'independent-gear-planes'
+      : 'not-gear-train';
   }
-  if (mechanism.type === 'planetary_gear') {
-    const planetary = planetaryLayerIndexesForPlan(renderPlan.layers);
-    if (!planetary) return renderPlan.layers.map(layer => layer.z);
-    const carrierPlaneZ = Number((gearPlaneZ + FABRICATION_RENDER_LAYER_Z_STEP).toFixed(3));
-    return renderPlan.layers.map((layer, index) => {
-      if (index === planetary.ring || index === planetary.sun || index === planetary.planet) return gearPlaneZ;
-      if (index === planetary.carrier) return carrierPlaneZ;
-      return layer.z;
-    });
-  }
-  return renderPlan.layers.map(layer => layer.z);
-};
-
-const gearPlaneModeForMechanism = (mechanism?: MechanismConfig, gearPlaneZ?: number) => {
-  if (!mechanism || typeof gearPlaneZ !== 'number') return 'not-gear-train';
   if (mechanism.type === 'planetary_gear') return 'planetary-coplanar-ring-sun-planet';
   if (mechanism.type === 'gear' || mechanism.type === 'gear_linkage') return 'coplanar-fixed-axles';
   return 'not-gear-train';
@@ -780,16 +759,16 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     ? normalizeCamProfileSamples(selectedMechanism.camProfileSamples).map(value => value.toFixed(2)).join(',')
     : '', [selectedMechanism]);
   const selectedGearPlaneZ = useMemo(() => {
-    if (!selectedMechanism || !selectedRenderPlan) return undefined;
-    return gearMeshPlaneZForMechanism(selectedMechanism, selectedRenderPlan);
-  }, [selectedMechanism, selectedRenderPlan]);
+    if (!selectedRenderPlan) return undefined;
+    return gearMeshPlaneZForPlan(selectedRenderPlan);
+  }, [selectedRenderPlan]);
   const selectedRenderedLayerZ = useMemo(() => {
-    if (!selectedMechanism || !selectedRenderPlan) return [];
-    return renderedLayerZForMechanism(selectedMechanism, selectedRenderPlan);
-  }, [selectedMechanism, selectedRenderPlan]);
+    if (!selectedRenderPlan) return [];
+    return selectedRenderPlan.layers.map(layer => layer.z);
+  }, [selectedRenderPlan]);
   const selectedGearPlaneMode = useMemo(
-    () => gearPlaneModeForMechanism(selectedMechanism, selectedGearPlaneZ),
-    [selectedGearPlaneZ, selectedMechanism]
+    () => gearPlaneModeForMechanism(selectedMechanism, selectedRenderPlan),
+    [selectedMechanism, selectedRenderPlan]
   );
   const selectedGearOutputRatio = useMemo(() => {
     if (!selectedMechanism) return 0;
@@ -1358,96 +1337,48 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       if (!visual) return;
       const state = calculateLinkage(mechanism, angle);
       const renderPlan = mechanismRenderPlans.get(mechanism.id) ?? compileMechanismRenderPlan(mechanism, kit);
-      const renderedLayerZ = renderedLayerZForMechanism(mechanism, renderPlan);
       const isGearTrain = mechanism.type === 'gear' || mechanism.type === 'gear_linkage';
-      const zForLayer = (layer: FabricationRenderLayer) => renderedLayerZ[renderPlan.layers.indexOf(layer)] ?? layer.z;
-      const zLayer = (labels: string[], fallback: number, occurrence = 0) => {
-        const layer = renderPlan.layers.filter(item => labels.includes(item.label))[occurrence];
-        return layer ? zForLayer(layer) : fallback;
-      };
-      const zRole = (role: string, occurrence: number, fallback: number) => {
-        const layer = renderPlan.layers.find(item => item.role === role && item.occurrence === occurrence);
-        return layer ? zForLayer(layer) : fallback;
-      };
-      const zLastRole = (role: string, fallback: number) => {
-        const layer = renderPlan.layers.filter(item => item.role === role).at(-1);
-        return layer ? zForLayer(layer) : fallback;
-      };
-      const zBackClip = zLayer(['Back Clip'], 0.22);
-      const zDriver = zRole('linkage', 0, zLayer(['Input L2 linkage', 'L2 linkage', 'Drive linkage', 'Input linkage', 'Crank linkage', 'Left crank linkage'], 0.76));
-      const zFirstGear = mechanism.type === 'cam'
-        ? zRole('cam', 0, zLayer(['Swappable cam disk', 'Cam disk'], 0.4))
-        : zRole('gear', 0, zLayer(['Drive G3 / 3-space gear', 'G1 / 1-space gear', 'R56 internal ring gear', 'Drive gear', 'Left timing gear', 'Pinion gear', 'Ring gear'], 0.4));
-      const zSecondGear = zRole('gear', 1, zFirstGear + FABRICATION_RENDER_LAYER_Z_STEP);
-      const zDriverGear = mechanism.type === 'planetary_gear' ? zSecondGear : zFirstGear;
-      const zRingGear = mechanism.type === 'planetary_gear' ? zFirstGear : zDriverGear;
-      const zCoupler = mechanism.type === 'cam'
-        ? zRole('guide', 0, zLayer(['U-channel guide cartridge', 'Follower guide'], zDriver + FABRICATION_RENDER_LAYER_Z_STEP))
-        : zRole('linkage', 1, zLayer(['Coupler L4 linkage', 'L4 linkage', 'L6 linkage', '2-hole bracket', '3-hole bracket', 'Coupler linkage', 'Center coupler', 'Carrier linkage', 'Slider guide', 'Rack guide', 'Follower guide'], zDriver + FABRICATION_RENDER_LAYER_Z_STEP));
-      const zOutput = mechanism.type === 'cam'
-        ? zRole('follower', 0, zLayer(['Preassembled gravity follower module', 'Follower linkage'], zCoupler + FABRICATION_RENDER_LAYER_Z_STEP))
-        : zRole('linkage', 2, zLayer(['Output L2 linkage', 'L4 linkage', '2-hole bracket', 'Output linkage', 'Right crank linkage', 'Follower linkage'], zCoupler + FABRICATION_RENDER_LAYER_Z_STEP));
-      const zDyad = zRole('linkage', 3, zLayer(['Dyad link'], zOutput + FABRICATION_RENDER_LAYER_Z_STEP));
-      const zFollower = zRole('linkage', 4, zLayer(['Follower link'], zDyad + FABRICATION_RENDER_LAYER_Z_STEP));
-      const zOutputMoving = isGearTrain ? zDriverGear : zLastRole('gear', zLayer(['Toothed rack', 'G3 / 3-space gear', 'Output G3 / 3-space gear', 'Planet gear', 'Sun gear', 'Output gear', 'Right timing gear'], zOutput));
-      const boardSideSpacerZ = (movingZ: number) =>
-        Number((movingZ - (FABRICATION_RENDER_PART_DEPTH + FABRICATION_RENDER_MIN_CLEARANCE) / 2).toFixed(3));
-      const uniqueSortedZ = (values: number[]) =>
-        values
-          .filter(value => Number.isFinite(value))
-          .sort((a, b) => a - b)
-          .filter((value, index, sorted) => index === 0 || Math.abs(value - sorted[index - 1]) > 0.001);
-      const betweenMovingZ = (values: number[], count = 1) => {
-        const zValues = uniqueSortedZ(values);
-        if (zValues.length < 2) return [];
-        const minZ = zValues[0];
-        const maxZ = zValues.at(-1) ?? minZ;
-        return Array.from({ length: Math.max(1, count) }, (_, index) =>
-          Number((minZ + ((maxZ - minZ) * (index + 1)) / (count + 1)).toFixed(3))
-        );
-      };
-      const boardToMovingZ = (movingZ: number) =>
-        uniqueSortedZ([zBackClip, boardSideSpacerZ(movingZ), movingZ]);
-      const adjacentMovingZ = (a: number, b: number, spacerCount = 1) =>
-        uniqueSortedZ([a, ...betweenMovingZ([a, b], spacerCount), b]);
-      const pinSpanForZ = (values: number[]) => {
-        const zValues = uniqueSortedZ(values);
-        const minZ = zValues[0] ?? zBackClip;
-        const maxZ = zValues.at(-1) ?? minZ;
-        const bottom = minZ - FABRICATION_RENDER_PART_DEPTH / 2 - 0.08;
-        const top = maxZ + FABRICATION_RENDER_PART_DEPTH / 2 + 0.18;
-        return {
-          center: (bottom + top) / 2,
-          length: Math.max(0.36, top - bottom)
-        };
-      };
-      const pinSite = (point: Point | undefined, zValues: number[]) => ({ point, zValues: uniqueSortedZ(zValues) });
+      const layerForSource = (sourceNodeId: string) =>
+        renderPlan.layers.find(layer => layer.sourceNodeId === sourceNodeId);
+      const zForSource = (sourceNodeId: string, fallback = renderPlan.base.z) =>
+        layerForSource(sourceNodeId)?.z ?? fallback;
+      const zForFirstSource = (sourceNodeIds: string[], fallback = renderPlan.base.z) =>
+        sourceNodeIds.map(layerForSource).find(Boolean)?.z ?? fallback;
+      const depthForSource = (sourceNodeId: string, fallbackMm = 4) =>
+        projectFabricationZMm(layerForSource(sourceNodeId)?.physicalDepthMm ?? fallbackMm);
+      const updateSourceLink = (link: THREE.Object3D, sourceNodeId: string, a?: Point, b?: Point, fallbackZ = renderPlan.base.z) =>
+        updateLink(link, a, b, zForSource(sourceNodeId, fallbackZ), depthForSource(sourceNodeId));
+      const updateSourceObject = (object: THREE.Object3D | undefined, sourceNodeId: string, center?: Point, rotation = 0, sourceDepth = 1) =>
+        updateObject(object, center, zForSource(sourceNodeId), rotation, depthForSource(sourceNodeId), sourceDepth);
+      const zBackClip = renderPlan.base.z;
+      const zDriver = zForFirstSource(['input-link', 'crank-link', 'connector-link-a', 'carrier', 'left-crank']);
+      const zDriverGear = mechanism.type === 'cam'
+        ? zForSource('cam-disk')
+        : mechanism.type === 'planetary_gear'
+          ? zForSource('sun-gear')
+          : zForSource('gear-0', zForSource('pinion-gear'));
+      const zRingGear = zForSource('ring-gear', zDriverGear);
+      const zCoupler = zForFirstSource(['coupler-link', 'connecting-rod', 'follower-guide', 'left-coupler', 'guide'], zDriver);
+      const zOutput = zForFirstSource(['output-link', 'slider', 'follower-head', 'connector-link-b', 'right-crank', 'rack'], zCoupler);
+      const zDyad = zForSource('dyad-link', zOutput);
+      const zFollower = zForSource('follower-link', zDyad);
+      const gearRadiiForPins = isGearTrain ? gearTrainPitchRadii(mechanism) : [];
+      const zOutputMoving = mechanism.type === 'planetary_gear'
+        ? zForSource('planet-gear', zOutput)
+        : isGearTrain
+          ? zForSource(`gear-${Math.max(0, gearRadiiForPins.length - 1)}`, zDriverGear)
+          : zForFirstSource(['rack', 'output-link', 'follower-head'], zOutput);
       const gearPinCenters = isGearTrain ? gearTrainCenters(mechanism) : [];
       const carrierAngle = angle * (mechanism.speed1 ?? 1) * planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength);
       const planetCentersForPins = mechanism.type === 'planetary_gear' ? planetaryPlanetCenters(state.p1, mechanism, carrierAngle) : [];
-      const genericPinSites = () => [
-        pinSite(state.p1, boardToMovingZ(zDriver)),
-        pinSite(state.p2, boardToMovingZ(zOutput)),
-        pinSite(state.j1, adjacentMovingZ(zDriver, zCoupler)),
-        pinSite(state.j2, adjacentMovingZ(zCoupler, zOutput)),
-        pinSite(state.aux, adjacentMovingZ(zOutput, zDyad)),
-        pinSite(state.effector, [zOutput])
-      ];
-      const pinSites = mechanism.type === 'gear'
-        ? gearPinCenters.map(center => pinSite(center, boardToMovingZ(zDriverGear)))
-        : mechanism.type === 'gear_linkage'
-          ? [
-              ...gearPinCenters.map(center => pinSite(center, boardToMovingZ(zDriverGear))),
-              pinSite(state.j1, adjacentMovingZ(zDriverGear, zDriver)),
-              pinSite(state.j2, adjacentMovingZ(zDriverGear, zOutput, 2)),
-              pinSite(state.effector, adjacentMovingZ(zDriver, zOutput))
-            ]
-          : mechanism.type === 'planetary_gear'
-            ? [
-                pinSite(state.p1, uniqueSortedZ([zRingGear, zDriverGear, zDriver])),
-                pinSite(planetCentersForPins[0], uniqueSortedZ([zRingGear, zOutputMoving, zDriver]))
-              ]
-            : genericPinSites();
+      const pinSites = foundryPinStacks(
+        foundryPinStackPoints(renderPlan, {
+          state,
+          gearCenters: gearPinCenters,
+          planetCenters: planetCentersForPins,
+        }),
+        renderPlan,
+      );
       Object.values(visual.extras).forEach(extra => hideObject(extra));
       updateLink(visual.links.follower, undefined, undefined);
       const groundAngle = ((mechanism.groundAngle ?? 0) * Math.PI) / 180;
@@ -1456,21 +1387,21 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
         const fourBarBlankPoses = resolveFourBarLinkageBlankPoses(mechanism, state);
         const inputBlank = fourBarBlankPoses['4bar.input-joint'];
         const outputBlank = fourBarBlankPoses['4bar.output-joint'];
-        updateLink(visual.links.base, state.p1, state.p2, zBackClip);
-        updateLink(visual.links.driver, inputBlank?.origin ?? state.p1, inputBlank?.end ?? state.j1, zDriver);
-        updateLink(visual.links.coupler, state.isValid ? state.j1 : undefined, state.isValid ? state.j2 : undefined, zCoupler);
-        updateLink(visual.links.output, state.isValid ? outputBlank?.origin ?? state.p2 : undefined, state.isValid ? outputBlank?.end ?? state.j2 : undefined, zOutput);
+        updateLink(visual.links.base, state.p1, state.p2, zBackClip, projectFabricationZMm(renderPlan.base.physicalDepthMm));
+        updateSourceLink(visual.links.driver, 'input-link', inputBlank?.origin ?? state.p1, inputBlank?.end ?? state.j1, zDriver);
+        updateSourceLink(visual.links.coupler, 'coupler-link', state.isValid ? state.j1 : undefined, state.isValid ? state.j2 : undefined, zCoupler);
+        updateSourceLink(visual.links.output, 'output-link', state.isValid ? outputBlank?.origin ?? state.p2 : undefined, state.isValid ? outputBlank?.end ?? state.j2 : undefined, zOutput);
         updateLink(visual.links.effector, state.isValid ? state.j2 : undefined, state.isValid ? state.effector : undefined, zOutput);
       };
 
       if (mechanism.type === 'piston') {
         updateLink(visual.links.base, undefined, undefined);
-        updateLink(visual.links.driver, state.p1, state.j1, zDriver);
-        updateLink(visual.links.coupler, state.isValid ? state.j1 : undefined, state.isValid ? state.j2 : undefined, zCoupler);
+        updateSourceLink(visual.links.driver, 'crank-link', state.p1, state.j1, zDriver);
+        updateSourceLink(visual.links.coupler, 'connecting-rod', state.isValid ? state.j1 : undefined, state.isValid ? state.j2 : undefined, zCoupler);
         updateLink(visual.links.output, state.isValid ? state.j2 : undefined, state.isValid ? state.effector : undefined, zOutput);
         updateLink(visual.links.effector, undefined, undefined);
-        updateObject(visual.extras.sliderGuide, state.j2, zCoupler, groundAngle);
-        updateObject(visual.extras.sliderBlock, state.j2, zOutput, groundAngle);
+        updateSourceObject(visual.extras.sliderGuide, 'guide', state.j2, groundAngle, 0.14);
+        updateSourceObject(visual.extras.sliderBlock, 'slider', state.j2, groundAngle, 0.18);
       } else if (mechanism.type === 'yoke') {
         updateLink(visual.links.base, undefined, undefined);
         updateLink(visual.links.driver, state.p1, state.j1, zDriver);
@@ -1506,9 +1437,9 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
         updateLink(visual.links.coupler, undefined, undefined);
         updateLink(visual.links.output, undefined, undefined);
         updateLink(visual.links.effector, undefined, undefined);
-        updateObject(visual.extras.camProfile, state.p1, zDriverGear, angle * (mechanism.speed1 ?? 1));
-        updateObject(visual.extras.followerGuide, state.j2, zCoupler, groundAngle);
-        updateObject(visual.extras.followerBlock, state.j2, zOutput, groundAngle);
+        updateSourceObject(visual.extras.camProfile, 'cam-disk', state.p1, angle * (mechanism.speed1 ?? 1), 0.2);
+        updateSourceObject(visual.extras.followerGuide, 'follower-guide', state.j2, groundAngle, 0.14);
+        updateSourceObject(visual.extras.followerBlock, 'follower-head', state.j2, groundAngle, 0.18);
       } else if (mechanism.type === 'rack-pinion') {
         const rackGuide = rackGuideCenter(mechanism, state);
         updateLink(visual.links.base, undefined, undefined);
@@ -1528,19 +1459,19 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
         updateLink(visual.links.effector, undefined, undefined);
       } else if (mechanism.type === 'gear_linkage') {
         updateLink(visual.links.base, undefined, undefined);
-        updateLink(visual.links.driver, state.isValid ? state.j1 : undefined, state.isValid ? state.effector : undefined, zDriver);
+        updateSourceLink(visual.links.driver, 'connector-link-a', state.isValid ? state.j1 : undefined, state.isValid ? state.effector : undefined, zDriver);
         updateLink(visual.links.coupler, undefined, undefined);
-        updateLink(visual.links.output, state.isValid ? state.j2 : undefined, state.isValid ? state.effector : undefined, zOutput);
+        updateSourceLink(visual.links.output, 'connector-link-b', state.isValid ? state.j2 : undefined, state.isValid ? state.effector : undefined, zOutput);
         updateLink(visual.links.effector, undefined, undefined);
       } else if (mechanism.type === 'planetary_gear') {
         const carrierAngle = angle * (mechanism.speed1 ?? 1) * planetaryCarrierOutputRatio(mechanism.crankLength, mechanism.rockerLength);
         const planetCenters = planetaryPlanetCenters(state.p1, mechanism, carrierAngle);
         updateLink(visual.links.base, undefined, undefined);
-        updateLink(visual.links.driver, state.p1, planetCenters[0], zDriver);
+        updateSourceLink(visual.links.driver, 'carrier', state.p1, planetCenters[0], zDriver);
         updateLink(visual.links.coupler, undefined, undefined);
         updateLink(visual.links.output, undefined, undefined);
         updateLink(visual.links.effector, undefined, undefined);
-        updateObject(visual.extras.ringGear, state.p1, zRingGear, 0);
+        updateSourceObject(visual.extras.ringGear, 'ring-gear', state.p1, 0, 0.14);
       } else {
         standardLinks();
       }
@@ -1550,31 +1481,30 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
           ? [state.p1, ...planetCentersForPins]
           : [];
         const point = isGearTrain ? (gearCenters[index] ?? state.p2) : mechanism.type === 'planetary_gear' ? (planetaryCenters[index] ?? state.p2) : index === 0 ? state.p1 : state.p2;
-        const gearZ = isGearTrain
-          ? zDriverGear
-          : index === 0
-          ? zDriverGear
+        const gearSourceNodeId = isGearTrain
+          ? `gear-${index}`
           : mechanism.type === 'planetary_gear'
-            ? zOutputMoving
-            : isGearTrain && index < visual.gears.length - 1
-              ? zLayer([`Idler G3 / 3-space gear ${index}`, `Idler gear ${index}`], zOutputMoving)
-              : zLayer(['Output G3 / 3-space gear', 'G3 / 3-space gear', 'Output gear', 'Right timing gear', 'Planet gear', 'Sun gear'], zOutputMoving);
+            ? index === 0 ? 'sun-gear' : 'planet-gear'
+            : 'pinion-gear';
+        const gearLayer = layerForSource(gearSourceNodeId);
+        const gearZ = gearLayer?.z ?? (index === 0 ? zDriverGear : zOutputMoving);
         const p = to3(point, gearZ);
-        gear.position.set(p.x, p.y, p.z);
+        const physicalDepth = projectFabricationZMm(gearLayer?.physicalDepthMm ?? 4);
+        gear.position.set(p.x, p.y, p.z - physicalDepth / 2);
+        gear.scale.z = physicalDepth / 0.16;
         gear.rotation.z = mechanismGearRotations(mechanism, angle)[index] ?? 0;
       });
       visual.pins.forEach((pin, index) => {
         const site = pinSites[index];
         const point = site?.point;
-        if (!point || !site.zValues.length) {
+        if (!point) {
           pin.visible = false;
           return;
         }
-        const pinSpan = pinSpanForZ(site.zValues);
-        const p = to3(point, pinSpan.center);
+        const p = to3(point, site.centerZ);
         pin.visible = true;
         pin.position.copy(p);
-        pin.scale.set(1, pinSpan.length / 0.36, 1);
+        pin.scale.set(1, site.lengthZ / 0.36, 1);
       });
     });
     render();

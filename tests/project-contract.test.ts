@@ -9,7 +9,7 @@ import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { boardCoordinateLabel, boardGridLines, boardToScene, bodyPartPivotScene, isBoardCoordinateInKit, physicalKitPreset, placeBodyPartPivotAt, SCENE_PX_PER_MM, SCENE_VIEW, sceneToBoard, sceneToBoardRaw, sceneToSheetMm, sceneToSvg, sheetMmToScene } from '../utils/coordinates';
 import { CLASSROOM_LESSONS, classroomLessonById, createDefaultMechanism, createDefaultSceneObject, createEmptyProject, createLessonProject, createSampleProject, handoffGate, loadProjectSnapshot, serializeProject, applyProjectAction, projectSelfCheck, mechanismRequiredParts, mechanismWithGeneratedPath, replaceCharacterProject, resetProjectToLessonBaseline } from '../utils/project';
-import { createFabricationPackage, newFabricationIssues, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, PLANETARY_GEAR_PLANET_COUNT, fabricationBoardColumnLabel, fabricationBoardCoordinateCallout, fabricationBoardRowLabel, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForCells, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRecipeStackSummary, makeBlueprintPreviewSvg, makeBlueprintSvg, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRenderPlanForMechanism, fabricationStackForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryPlanetCenters, readableFabricationStackSummary, sampleFeasibleRange, validateFabricationStack, validateForFabrication, validateMechanismPreviewReadiness } from '../utils/fabrication';
+import { createFabricationPackage, newFabricationIssues, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_Z_EPSILON_MM, BOARD_DEPTH_MM, PLATE_DEPTH_MM, SPACER_DEPTH_MM, CLIP_HEAD_DEPTH_MM, projectFabricationZMm, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, PLANETARY_GEAR_PLANET_COUNT, fabricationBoardColumnLabel, fabricationBoardCoordinateCallout, fabricationBoardRowLabel, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForCells, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRecipeStackSummary, makeBlueprintPreviewSvg, makeBlueprintSvg, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRenderPlanForMechanism, fabricationStackForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryPlanetCenters, readableFabricationStackSummary, sampleFeasibleRange, validateFabricationStack, validateForFabrication, validateMechanismPreviewReadiness } from '../utils/fabrication';
 import { FABRICATION_BOARD_GENERATOR } from '../utils/fabricationBoardTemplate';
 import { FABRICATION_GEAR_ROOT_WEB_MM, fabricationGearEngravingLabel, fabricationLinkageEngravingLabel, fabricationRingGearEngravingLabel, fabricationSpacerEngravingLabel } from '../utils/fabricationContract';
 import { makeAssemblyGuideHtml as directMakeAssemblyGuideHtml, makeAssemblyGuidePdf as directMakeAssemblyGuidePdf } from '../utils/fabricationAssemblyGuide';
@@ -39,7 +39,7 @@ import { MECHANISM_FEATURE_REGISTRY, mechanismFeature, validateMechanismFeatureR
 import { MECHANISM_FEASIBILITY_AUTHORITY_KEYS, MECHANISM_NON_FEASIBILITY_EDIT_KEYS, MECHANISM_REPLACEMENT_ONLY_KEYS, constrainMechanismCommit, constrainMechanismUpdate, mechanismEditIsSafe, mechanismMotionCompletes, mechanismParamIsPlacementRecoveryEditable, mechanismUpdateRequiresReplacement, motionSafeParamRange, safeMechanismUpdate } from '../utils/mechanismEditAuthority';
 import { buildMechanismSnapshot, buildMechanismSnapshots, mechanismSnapshotFingerprint } from '../utils/mechanismSnapshot';
 import { createFoundryPlaybackFrame, foundryPlaybackPhaseToInputAngle, generateFoundryPlaybackPointTraces } from '../utils/foundryPlayback';
-import { foundryPinStackPoints } from '../utils/mechanismPreviewStacks';
+import { foundryPinStackPoints, foundryPinStacks, foundryRenderedLayerZForMechanism } from '../utils/mechanismPreviewStacks';
 import { createMechanismFitContext, createSceneMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext, pointsToSvgPath } from '../utils/mechanismPreview';
 import { buildMechanismRecommendations, fitMechanismToTargetPath } from '../utils/mechanismRecommendations';
 import { pathBelongsToTarget, pathOwnedTargetFields } from '../utils/pathTargets';
@@ -53,8 +53,11 @@ import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_KERNEL_IMP
 import { formatGridLabel, formatGridPitch, formatGridReadout } from '../utils/units';
 import { buildAssemblyPlaybackSteps, buildCharacterAssemblyPlan, pendingRecipeForMechanism, type CharacterAssemblyPlan } from '../utils/assemblyPlayback';
 import { buildCharacterAssemblySceneFrame, buildMechanismAssemblySceneFrame } from '../utils/assemblySceneFrame';
-import { buildMechanismSceneContract } from '../utils/mechanismSceneContract';
-import { MECHANISM_GRAPH_ADAPTER_TYPES, MECHANISM_GRAPH_LIVE_SOLVE_BUDGET_MS, mechanismGraphForMechanism, mechanismGraphFromDraft, sampleMechanismGraphMotion, validateMechanismGraph } from '../utils/mechanismGraph';
+import { buildMechanismSceneContract, buildMechanismSceneContracts } from '../utils/mechanismSceneContract';
+import { createFoundryThreePrimitiveFactory, disposeFoundryThreeObject } from '../components/stages/foundry/foundryThreePrimitives';
+import { renderFoundryDynamicLayers } from '../components/stages/foundry/foundryThreeRenderLayers';
+import { fittedGearTrainCenters } from '../components/stages/foundry/foundryPreviewGeometry';
+import { MECHANISM_GRAPH_ADAPTER_TYPES, MECHANISM_GRAPH_LIVE_SOLVE_BUDGET_MS, mechanismGraphForMechanism, mechanismGraphFromDraft, sampleMechanismGraphMotion, validateMechanismGraph, type MechanismGraph } from '../utils/mechanismGraph';
 import { buildAssemblyGuideModel } from '../components/stages/assembly/assemblyGuideModel';
 import { selectBlueprintRecipe } from '../components/stages/blueprint/BlueprintExport';
 import { BlueprintControlPanel } from '../components/stages/blueprint/BlueprintControlPanel';
@@ -1571,7 +1574,7 @@ ALL_MECHANISM_TYPES.forEach(type => {
     constraints: [
       { id: 'board-a-fixed', label: 'Pivot A stays fixed', role: 'fixed-to-board', nodes: ['board-a'] },
       { id: 'board-a-snap', label: 'Pivot A fits a hole', role: 'board-snap', nodes: ['board-a'] },
-      { id: 'link-length', label: 'Link length stays fixed', role: 'distance', nodes: ['board-a', 'output'], value: 80 },
+      { id: 'link-length', label: 'Link length stays fixed', role: 'distance', nodes: ['board-a', 'output'], value: 80, fabricatedPartNodeId: 'link-a' },
       { id: 'output-clearance', label: 'Output clears board pivot', role: 'clearance', nodes: ['output', 'board-b'], value: 20 }
     ],
     drivers: [{ id: 'teacher-turn', label: 'Turn pivot A', role: 'rotary-input', nodeId: 'board-a', solver: 'constraint-graph', ratio: 1 }]
@@ -1647,17 +1650,18 @@ ALL_MECHANISM_TYPES.forEach(type => {
     familyId: 'teacher-linkage-demo',
     nodes: [
       { id: 'board-a', label: 'Board pivot A', role: 'board-anchor', position: { x: 0, y: 0 } },
-      { id: 'output', label: 'Output point', role: 'output-point' }
+      { id: 'output', label: 'Output point', role: 'output-point' },
+      { id: 'student-link', label: 'Student link', role: 'link', position: { x: 40, y: 0 }, value: 80 }
     ],
     constraints: [
       { id: 'board-a-fixed', label: 'Pivot A stays fixed', role: 'fixed-to-board', nodes: ['board-a'] },
       { id: 'board-a-snap', label: 'Pivot A fits a hole', role: 'board-snap', nodes: ['board-a'] },
-      { id: 'link-length', label: 'Link length stays fixed', role: 'distance', nodes: ['board-a', 'output'], value: 80 }
+      { id: 'link-length', label: 'Link length stays fixed', role: 'distance', nodes: ['board-a', 'output'], value: 80, fabricatedPartNodeId: 'student-link' }
     ]
   });
   const compilation = compileAuthoredMechanismGraph(graphWithMissingDistanceEndpoint);
   assert.equal(compilation.fabrication.buildable, false, 'graph-owned compiler blocks fabricated constraints whose endpoints have no finite board placement');
-  assert(compilation.blockers.includes('No fabricated moving part in graph'), 'missing fabricated constraint endpoint positions surface as explicit graph blockers');
+  assert(compilation.blockers.includes('Fabricated link endpoints need positions: Link length stays fixed'), 'missing fabricated constraint endpoint positions surface as explicit graph blockers');
 }
 {
   const explicitPartsGraph = mechanismGraphFromDraft({
@@ -2569,21 +2573,22 @@ checkConnectionSelectionContract('propagates independent gear_linkage holes and 
     'Foundry, Design, Blueprint, and Assembly share the connector-only gear_linkage fabrication layers'
   );
   const selectedGearState = calculateLinkage(gearDriveB, 0);
-  const selectedGearMovingLayerIndexes = selectedGearFabrication.renderPlan.layers.flatMap((layer, index) => ['clip', 'spacer', 'base'].includes(layer.renderKind) ? [] : [index]);
-  const selectedGearSpacerLayerIndexes = selectedGearFabrication.renderPlan.layers.flatMap((layer, index) => layer.renderKind === 'spacer' ? [index] : []);
   const selectedGearPinStacks = foundryPinStackPoints(
-    'gear_linkage',
-    [selectedGearState.p1, selectedGearState.p2, selectedGearState.j1, selectedGearState.j2, selectedGearState.effector],
-    selectedGearMovingLayerIndexes,
-    selectedGearSpacerLayerIndexes
+    selectedGearFabrication.renderPlan,
+    { state: selectedGearState, gearCenters: gearTrainCenters(gearDriveB) }
   );
-  const movingLabelsAt = (pinId: string) => selectedGearPinStacks
-    .find(pin => pin.id === pinId)?.movingLayerIndexes
+  const movingLabelsAt = (rootNodeId: string) => selectedGearPinStacks
+    .find(pin => pin.rootNodeId === rootNodeId)?.movingLayerIndexes
     .map(index => selectedGearFabrication.renderPlan.layers[index]?.label) ?? [];
-  assert.deepEqual(movingLabelsAt('B'), ['Drive G3 / 3-space gear', 'Drive connector 5-hole link'], 'B joins the selected drive gear hole directly to the drive connector blank');
-  assert.deepEqual(movingLabelsAt('C'), ['Output G3 / 3-space gear', 'Output connector 5-hole link'], 'C joins the selected output gear hole directly to the output connector blank without a duplicate layer');
-  assert.deepEqual(movingLabelsAt('R'), ['Drive connector 5-hole link', 'Output connector 5-hole link'], 'R joins exactly the two connector blanks');
-  assert.deepEqual(selectedGearPinStacks.slice(2).map(pin => [pin.id, pin.spacerLayerIndexes.length]), [['B', 1], ['C', 2], ['R', 1]], 'gear_linkage B/C/R preserve the one/two/one S10 clearance contract after removing duplicate crank blanks');
+  assert.deepEqual(movingLabelsAt('drive-pin'), ['Drive G3 / 3-space gear', 'Drive connector 5-hole link'], 'typed drive-pin path joins the selected drive gear hole directly to the drive connector blank');
+  assert.deepEqual(movingLabelsAt('output-pin'), ['Output G3 / 3-space gear', 'Output connector 5-hole link'], 'typed output-pin path joins the selected output gear hole directly to the output connector blank without a duplicate layer');
+  assert.deepEqual(movingLabelsAt('effector'), ['Drive connector 5-hole link', 'Output connector 5-hole link'], 'typed effector path joins exactly the two connector blanks');
+  const pathKindsAt = (rootNodeId: string) => selectedGearPinStacks
+    .find(pin => pin.rootNodeId === rootNodeId)?.layerIndexes
+    .map(index => selectedGearFabrication.renderPlan.layers[index]?.renderKind) ?? [];
+  assert.deepEqual(pathKindsAt('drive-pin'), ['gear', 'spacer', 'linkage', 'clip'], 'drive gear/link path includes its exact physical S10 and front retainer sequence');
+  assert.deepEqual(pathKindsAt('effector'), ['clip', 'linkage', 'spacer', 'linkage', 'clip'], 'free connector path includes both retainers and its exact physical S10');
+  assert.deepEqual(pathKindsAt('output-pin'), ['gear', 'spacer', 'spacer', 'spacer', 'spacer', 'clip', 'linkage', 'clip'], 'output gear/link path fills the fixed-depth interval with compiled spacers and retainers instead of an air gap');
   assert(!/crank|attachment span/i.test(selectedGearFabrication.renderPlan.stackSummary), 'gear_linkage fabrication stack excludes non-fabricated attachment spans');
   assert(selectedGearParts().includes(`gears:${selectedGearKey}`), 'gear_linkage requiredParts keeps the selected endpoint gear identity while its attachment hole changes');
   assert.deepEqual(selectedGearParts(denseSelectedGearFabrication.recipe), selectedGearParts(), 'active board pitch does not silently rescale selected managed gear vectors');
@@ -2600,7 +2605,7 @@ const inconsistentDistanceGraph = mechanismGraphFromDraft({
   constraints: [
     { id: 'board-a-fixed', label: 'Pivot A stays fixed', role: 'fixed-to-board', nodes: ['board-a'] },
     { id: 'board-a-snap', label: 'Pivot A fits a hole', role: 'board-snap', nodes: ['board-a'] },
-    { id: 'inconsistent-distance', label: 'Inconsistent authored link length', role: 'distance', nodes: ['board-a', 'output'], value: 40 }
+    { id: 'inconsistent-distance', label: 'Inconsistent authored link length', role: 'distance', nodes: ['board-a', 'output'], value: 40, fabricatedPartNodeId: 'link-a' }
   ]
 });
 
@@ -2896,15 +2901,17 @@ const goldenMaster = {
 assert.deepEqual(
   Object.fromEntries(Object.entries(goldenMaster).map(([key, value]) => [key, goldenMasterHash(value)])),
   {
+    // Intentional contract delta: graph snapshots now carry explicit fabricated-part ownership,
+    // and compiler plans preserve logical layer presentation while retaining canonical physical faces.
     project: '5d48935d44d3a5c330cfdb4df1d80b820e00c52cfa7bc023ec8bbfaef9a93a76',
     lesson: 'fb158b8a608db24816fc3ff58a27ea5aad094be0fa5abf7e32e6c363cb02c91a',
-    mechanismSnapshot: '729e1db7f4b837dcf4fd9a73325998ba412a725fc946be2adbd991633a1c34cf',
-    allMechanismSnapshots: 'dfdf9c8124e19c2455ef84ce425f958c61412fec340d3302a425817a8703b088',
+    mechanismSnapshot: '8eabe7a88aa08979c0122b1f45cae000a47ef850f6d477c3a64b0d92adbbcc08',
+    allMechanismSnapshots: '40effd0d941c5505219d9711c8d814a35ddf47751a28dcdab131411ca9de1c85',
     sceneProjection: '83a68eace3b0a56bf8269ff2f37ce08c727bac04ae2713e6e5b389a929d04f0d',
     svg: '2ee6db5a38edb343faa9d4dab491eb6e1142b7fa9c8c770b5039f3bb08cfce20',
     dxf: '18b15942d57d5c7b80161d71657d21ea8c7edc6450249dc27cbfb025d533d9a6',
-    fabricationRecipes: '37f6afa19787de05d66a885c1c87449e0f0f0aaa823e406dd34732eb408004a4',
-    compilerRenderPlans: '57392e9862f9c04ceba4e7d97fcc66c420357645f464e7f5402c2f67d777d0f1',
+    fabricationRecipes: 'c6be241496b7283920c118586cd2f14e52c736eab328485f6951187860baf758',
+    compilerRenderPlans: '43494df628752b701873450fdd99924cd563a8d0e84ed5fd30c0a5b097eb6e54',
     stacks: '56b797c659cdb568281fca6034cd9f4360766302039f325b0c9d73ced144987f'
   },
   'golden master locks ProjectState, mechanism snapshot, scene projection, export, and fabrication stack behavior before App.tsx refactors'
@@ -3106,6 +3113,7 @@ const fabricationReadinessText = readFileSync(join(process.cwd(), 'utils', 'fabr
 const fabricationRenderPlanText = readFileSync(join(process.cwd(), 'utils', 'fabricationRenderPlan.ts'), 'utf8');
 const fabricationSizingText = readFileSync(join(process.cwd(), 'utils', 'fabricationSizing.ts'), 'utf8');
 const fabricationStackModelText = readFileSync(join(process.cwd(), 'utils', 'fabricationStackModel.ts'), 'utf8');
+const mechanismFabricationZStackText = readFileSync(join(process.cwd(), 'utils', 'mechanismFabricationZStack.ts'), 'utf8');
 const simplePdfSourceText = readFileSync(join(process.cwd(), 'utils', 'simplePdf.ts'), 'utf8');
 const fabricationCharacterPrintLayoutText = readFileSync(join(process.cwd(), 'utils', 'fabricationCharacterPrintLayout.ts'), 'utf8');
 const fabricationContractText = readFileSync(join(process.cwd(), 'utils', 'fabricationContract.ts'), 'utf8');
@@ -3217,8 +3225,9 @@ assert(
   fabricationStackModelText.includes("from './fabricationContract'")
   && fabricationStackModelText.includes("from './mechanismReference'")
   && fabricationStackModelText.includes("from './kinematics'")
+  && fabricationStackModelText.includes("from './mechanismFabricationZStack'")
   && !fabricationStackModelText.includes("from './fabrication'"),
-  'fabricationStackModel owns stack modeling without importing the broad fabrication facade'
+  'fabricationStackModel owns structural stack modeling and validation while depending inward on the axial leaf'
 );
 [
   './fabrication',
@@ -3241,14 +3250,12 @@ assert(
   'FabricationPackage',
   'createFabricationPackage',
   'validateForFabrication',
-  'validateFabricationStack',
-  'fabricationRenderPlanForMechanism',
   'document.',
   'window.',
   'localStorage',
   'createElement'
 ].forEach(forbiddenText => {
-  assert(!fabricationStackModelText.includes(forbiddenText), `fabricationStackModel stays stack-only and must not reference ${forbiddenText}`);
+  assert(!fabricationStackModelText.includes(forbiddenText), `fabricationStackModel stays domain-only and must not reference ${forbiddenText}`);
 });
 assert.deepEqual(
   staticImportModules(fabricationAssemblyGuideText),
@@ -3285,12 +3292,17 @@ assert.deepEqual(
   assert(!fabricationAssemblyGuideText.includes(forbiddenText), `fabricationAssemblyGuide stays assembly-artifact-only and must not reference ${forbiddenText}`);
 });
 assert(fabricationAssemblyGuideText.includes('window.print()'), 'assembly guide artifact keeps the explicit print button behavior');
+assert.deepEqual(staticImportModules(fabricationRenderPlanText), [], 'fabricationRenderPlan compatibility facade has no implementation imports');
 assert(
-  fabricationRenderPlanText.includes("from './fabricationContract'")
-  && fabricationRenderPlanText.includes("from './fabricationStackModel'")
-  && fabricationRenderPlanText.includes("from './mechanismReference'")
-  && !fabricationRenderPlanText.includes("from './fabrication'"),
-  'fabricationRenderPlan owns stack validation and z-order plans without importing the broad fabrication facade'
+  fabricationRenderPlanText.includes("from './fabricationStackModel'")
+  && fabricationRenderPlanText.includes("from './mechanismFabricationZStack'")
+  && !/export\s+(?:const|function|class)\b/.test(fabricationRenderPlanText),
+  'fabricationRenderPlan delegates and re-exports only, without owning construction or validation'
+);
+assert(
+  !mechanismFabricationZStackText.includes("from './fabricationStackModel'")
+  && !mechanismFabricationZStackText.includes("from './fabricationRenderPlan'"),
+  'mechanismFabricationZStack remains the dependency-leaf axial contract with no structural-model or compatibility-facade import'
 );
 [
   './fabrication',
@@ -3392,7 +3404,7 @@ assert.deepEqual(
 });
 assert.deepEqual(
   staticImportModules(fabricationBlueprintSvgText),
-  ['../types', './coordinates', './fabricationCharacterPrintLayout', './fabricationContract', './fabricationRecipes', './kinematics', './numberFormat', './partGeometry'].sort(),
+  ['../types', './coordinates', './fabricationCharacterPrintLayout', './fabricationContract', './fabricationRecipes', './kinematics', './mechanismSceneContract', './numberFormat', './partGeometry'].sort(),
   'fabricationBlueprintSvg owns deterministic Blueprint SVG rendering with an exact focused import set'
 );
 [
@@ -4429,7 +4441,7 @@ const foundryWorkflowPanelText = readFileSync(join(process.cwd(), 'components', 
 const foundryInspectorPanelText = readFileSync(join(process.cwd(), 'components', 'stages', 'foundry', 'FoundryInspectorPanel.tsx'), 'utf8');
 assert.deepEqual(
   staticImportModules(mechanismGraphFabricationCompilerText),
-  ['../types', './coordinates', './fabricationAssemblyFingerprint', './fabricationContract', './fabricationReadiness', './fabricationRenderPlan', './fabricationStackModel', './mechanismGraph'].sort(),
+  ['../types', './coordinates', './fabricationAssemblyFingerprint', './fabricationContract', './fabricationReadiness', './fabricationStackModel', './mechanismFabricationZStack', './mechanismGraph'].sort(),
   'mechanismGraphFabricationCompiler owns graph-to-fabrication lowering with a focused import set'
 );
 const foundryStageText = `${mechanismFoundryText}
@@ -4711,13 +4723,13 @@ assert(mechanismLinkagePreviewText.includes('mechanismTopologySummary') && mecha
 assert(mechanismLinkagePreviewText.includes('assemblyCoordRoles') && mechanismLinkagePreviewText.includes('data-compiler-coord-roles') && mechanismLinkagePreviewText.includes('data-compiler-buildable'), 'active Foundry SVG renderer exposes graph compiler assembly coordinate role telemetry');
 assert(mechanismLinkagePreviewText.includes('fabricationRingGearPathD') && foundry3dText.includes('fabricationRingGearProfileForPitchRadius'), 'active Foundry/Design renderers use shared ring/sun/planet/carrier gear geometry');
 assert(threePreviewText.includes("mechDrive: new THREE.MeshStandardMaterial({ color: '#60a5fa'") && threePreviewText.includes("mechCoupler: new THREE.MeshStandardMaterial({ color: '#60a5fa'") && threePreviewText.includes("mechOutput: new THREE.MeshStandardMaterial({ color: '#60a5fa'"), 'integrated Design/Assembly puppet preview uses the Foundry linkage color instead of a private mechanism palette');
-assert(foundry3dText.includes('fixed-gear-axles-only'), 'Foundry 3D gear train preview declares fixed gear axles rather than generic mechanism pins');
-assert(foundry3dText.includes('coplanar-fixed-axles') && foundry3dText.includes('gear-axles-include-board-side-spacer'), 'Foundry 3D gear train preview keeps gear plates coplanar and spans board-side local spacer stacks');
-assert(foundry3dText.includes('planetary-coplanar-ring-sun-planet') && foundry3dText.includes('planetary-carrier-pins-include-local-spacers'), 'Foundry 3D planetary preview keeps ring/sun/planet coplanar while carrier pins use local S10 spacers');
-assert(foundry3dText.includes('/planet|G3|3-space/i'), 'Foundry 3D planetary renderer recognizes the mechanism-reference G3 label as the moving planet gear');
-assert(foundry3dText.includes('board-side>S10-spacer>gear>fastener-head'), 'Foundry 3D gear train preview documents lower-z board-side gear axle ordering');
-assert(foundry3dText.includes('S10<gear<fastener'), 'Foundry 3D gear train preview exposes the runtime lower-z S10, gear, fastener z-order contract');
-assert(foundry3dText.includes('data-three-pin-stack-clearance-contract="local-spacers-fill-adjacent-z-gaps"') && foundry3dText.includes('FABRICATION_RENDER_MIN_CLEARANCE / 2'), 'Foundry local spacer validation fills board-to-part and part-to-part z gaps instead of allowing floating full-depth washers');
+assert(foundryPreviewStacksText.includes('renderPlan.supportPaths.flatMap') && foundryPreviewStacksText.includes('path.orderedLayerIds') && foundryPreviewStacksText.includes('path.pinSpanId'), 'Foundry pin sites consume compiler support paths and exact ordered membership instead of reconstructing A-F stacks');
+assert(foundryPreviewStacksText.includes('projectFabricationZMm(span.backFaceMm)') && foundryPreviewStacksText.includes('projectFabricationZMm(span.physicalDepthMm)') && !foundryPreviewStacksText.includes('FABRICATION_RENDER_LAYER_Z_STEP') && !foundryPreviewStacksText.includes('FABRICATION_RENDER_PART_DEPTH'), 'Foundry pin cylinders project exact compiler pin spans without uniform-slot depth inference');
+assert(foundry3dText.includes('coplanar-fixed-axles') && foundry3dText.includes('gearPlaneLayerIndexes') && foundry3dText.includes('item.gearPlaneId'), 'Foundry gear coplanarity is enabled only by compiler gear-plane metadata');
+assert(foundry3dText.includes('planetary-coplanar-ring-sun-planet') && foundryThreeRenderLayersText.includes('layer.sourceNodeId === "planet-gear"') && !foundryThreeRenderLayersText.includes('/planet|G3|3-space/i'), 'Foundry renders planetary gear members from typed source ids, not mechanism-reference labels');
+assert(foundryPreviewStateProbeText.includes('data-three-support-contact-error-count') && foundryPreviewStateProbeText.includes('data-three-support-spacer-error-count') && foundryPreviewStateProbeText.includes('data-three-support-blocker-count'), 'Foundry exposes compiled contact, spacer, and aggregate support blockers');
+assert(foundryPreviewStateProbeText.includes('data-three-support-path-ids') && foundryPreviewStateProbeText.includes('data-three-support-path-sources') && foundryPreviewStateProbeText.includes('data-three-support-path-layer-ids') && foundryPreviewStateProbeText.includes('data-three-support-path-pin-spans'), 'Foundry diagnostics expose exact compiler path provenance, membership, and pin spans');
+assert(foundryPreviewStateProbeText.includes('data-three-planetary-owner-path-kinds') && foundryPreviewStateProbeText.includes('data-three-planetary-owner-path-faces') && foundryPreviewStateProbeText.includes('data-three-planetary-owner-path-roots'), 'Foundry browser telemetry exposes exact planetary owner-path sequence, faces, and board/free roots');
 assert(foundryStageText.includes('foundry-parametric-editor') && mechanismDesignStageText.includes('design-parametric-editor'), 'Foundry and Design both mount the same compact parametric mechanism editor');
 assert(mechanismFoundryText.includes('refreshEditedFoundryMechanism') && mechanismFoundryText.includes('bcTraces.length === 0') && mechanismFoundryText.includes('mechanismWithGeneratedPath(normalized)') && !mechanismFoundryText.includes('createPathFittedFoundry({ ...foundry, ...updates }'), 'Foundry parametric edits recompute the mechanism path from the edited mechanism instead of re-optimizing away user-selected link sizes or crashing when no B/C trace is valid');
 assert(mechanismParametricEditorText.includes('Drive gear size') && mechanismParametricEditorText.includes('Output gear size') && mechanismParametricEditorText.includes('Paired link length'), 'parametric editor exposes gear and linkage fabrication selectors instead of hidden generic numbers');
@@ -4803,7 +4815,8 @@ assert(threeResourceKitText.includes('export const cachedThreeResource') && thre
 }
 assert(!threePreviewText.includes('scene.traverse(child =>'), '3D puppet preview does not traverse the whole scene every animation frame for telemetry');
 assert.equal(threePreviewText.includes('const renderedMechanisms = mechanismsToRender') && threePreviewText.includes('data-three-selected-mechanism-id') && threePreviewText.includes('data-three-rendered-mechanism-ids') && threePreviewText.includes('data-three-mechanism-generated-path-counts'), true, '3D puppet preview renders active mechanisms and exposes mechanism ids/generated path counts so Assembly can prove fitted-mechanism continuity');
-assert(threePreviewText.includes("const pinSites = mechanism.type === 'gear'") && threePreviewText.includes('boardToMovingZ(zDriverGear)') && !threePreviewText.includes('[state.p1, state.p2, state.j1, state.j2, state.aux, state.effector].forEach'), '3D puppet mechanism pins use per-site z spans instead of one global pin tower through empty planes');
+assert(threePreviewText.includes('foundryPinStackPoints(renderPlan') && threePreviewText.includes('foundryPinStacks(') && threePreviewText.includes('site.centerZ') && threePreviewText.includes('site.lengthZ'), '3D puppet mechanism pins consume compiler support paths and exact pin spans');
+assert(!threePreviewText.includes('FABRICATION_RENDER_LAYER_Z_STEP') && !threePreviewText.includes('boardToMovingZ') && !threePreviewText.includes('pinSpanForZ') && !threePreviewText.includes('zLayer('), '3D puppet preview contains no private uniform-slot, label, or pin-span Z reconstruction');
 assert(mechanismDesignText.includes('<DesignFoundryPreview') && designFoundryPreviewText.includes('export const DesignFoundryPreview') && designFoundryPreviewText.includes('data-testid="design-shared-foundry-preview"'), 'Mechanism Design owns a thin automata preview adapter instead of a separate legacy renderer');
 assert(designFoundryPreviewText.includes('<ThreeFoundryPreview') && !designFoundryPreviewText.includes('<ThreePuppetPreview') && !designFoundryPreviewText.includes('design-foundry-context-layer') && designFoundryPreviewText.includes('automataContext={automataContext}') && foundryCanvasPaneText.includes('<ThreeFoundryPreview'), 'Design renders mechanism plus character/object context inside the same Foundry Three scene instead of a parallel puppet overlay');
 assert(designFoundryPreviewText.includes('data-renderer-source="ThreeFoundryPreview"') && designFoundryPreviewText.includes('data-shared-with="foundry-renderer"') && designFoundryPreviewText.includes('data-design-scene-mode="single-foundry-automata-scene"') && designFoundryPreviewText.includes('data-automata-model-source="buildAutomataSceneModel"'), 'Mechanism Design advertises single-scene Foundry-renderer mechanism truth with automata telemetry');
@@ -5626,7 +5639,7 @@ assert(pkg.assemblyGuideHtml.includes('Spacer 10mm OD / 4mm hole'), 'assembly gu
 assert(pkg.assemblyGuideHtml.includes('row') && pkg.assemblyGuideHtml.includes('column'), 'assembly guide includes row/column callouts');
 assert(pkg.assemblyGuideHtml.includes('<strong>Target:</strong> Right lower arm') && pkg.assemblyGuideHtml.includes('path-right-arm') && pkg.assemblyGuideHtml.includes('right_hand'), 'assembly guide keeps compact target/path/anchor connection details');
 assert(pkg.assemblyGuidePdf.includes('Target: Right lower arm') && pkg.assemblyGuidePdf.includes('path-right-arm'), 'assembly guide PDF keeps offline target/path connection details');
-assert(FABRICATION_RENDER_LAYER_Z_STEP >= FABRICATION_RENDER_PART_DEPTH + FABRICATION_RENDER_MIN_CLEARANCE, 'fabrication render z step includes part thickness plus spacer clearance');
+assert.equal(FABRICATION_RENDER_MIN_CLEARANCE, 0, 'fabrication render z uses canonical face contact instead of positive clearance gaps');
 assert.equal(renderPlanLayerZStep, FABRICATION_RENDER_LAYER_Z_STEP, 'fabricationRenderPlan preserves public layer z-step behind the fabrication facade');
 assert.equal(renderPlanPartDepth, FABRICATION_RENDER_PART_DEPTH, 'fabricationRenderPlan preserves public part depth behind the fabrication facade');
 assert.equal(renderPlanMinClearance, FABRICATION_RENDER_MIN_CLEARANCE, 'fabricationRenderPlan preserves public spacer clearance behind the fabrication facade');
@@ -5667,11 +5680,10 @@ REFERENCE_EXPORT_READY_TYPES.forEach(type => {
     const camGuideZ = zForLabel('U-channel guide cartridge');
     const camFollowerZ = zForLabel('Preassembled gravity follower module');
     assert(typeof camDiskZ === 'number' && typeof camGuideZ === 'number' && typeof camFollowerZ === 'number', 'cam render plan exposes disk, guide, and follower z layers');
-    assert(Math.max(Math.abs(camGuideZ - camDiskZ), Math.abs(camFollowerZ - camDiskZ)) < FABRICATION_RENDER_LAYER_Z_STEP, 'cam module render plan keeps guide/follower near the cam disk instead of serially floating out from the board');
+    assert(plan.layers.every(layer => layer.physicalDepthMm > 0), 'cam module render plan emits canonical physical depths');
   } else {
     assert.deepEqual(zValues, [...zValues].sort((a, b) => a - b), `${type} render plan z order follows stack order`);
-    const zGaps = zValues.slice(1).map((z, index) => Number((z - zValues[index]).toFixed(2)));
-    assert(zGaps.every(gap => gap >= FABRICATION_RENDER_LAYER_Z_STEP), `${type} render plan leaves spacer clearance between every z layer`);
+    assert(plan.layers.every(layer => Math.abs((layer.frontFaceMm - layer.backFaceMm) - layer.physicalDepthMm) <= 0.001), `${type} render plan emits packed canonical faces`);
   }
   const movingZValues = plan.layers.filter(layer => !['clip', 'spacer', 'base'].includes(layer.role)).map(layer => layer.z.toFixed(2));
   assert.equal(new Set(movingZValues).size, movingZValues.length, `${type} moving mechanism layers occupy distinct z planes`);
@@ -5687,6 +5699,442 @@ REFERENCE_EXPORT_READY_TYPES.forEach(type => {
   expectStackError(validStack.filter(layer => layer.role !== 'spacer'), 'S10 spacer', 'fabrication stack validation rejects adjacent moving layers without S10 spacers');
   expectStackError(validStack.map(layer => layer.role === 'spacer' ? { ...layer, label: 'Wrong spacer' } : layer), 'S10 spacer', 'fabrication stack validation rejects non-S10 spacer labels');
   expectStackError([{ ...validStack[1], label: 'Base board', role: 'base' }, ...validStack], 'moving stack must not include Base board', 'fabrication stack validation keeps the base board out of moving stacks');
+}
+
+
+{
+  const zStackTypes: MechanismType[] = ['4bar', 'piston', 'cam', 'gear', 'gear_linkage', 'planetary_gear'];
+  const expectedPinPathKinds: Record<string, Record<string, string>> = {
+    '4bar': {
+      p1: 'linkage>spacer>clip',
+      j1: 'clip>linkage>spacer>linkage>clip',
+      j2: 'clip>linkage>spacer>linkage>clip',
+      p2: 'linkage>spacer>clip'
+    },
+    piston: {
+      p1: 'linkage>spacer>clip',
+      j1: 'clip>linkage>spacer>linkage>clip',
+      slider: 'clip>linkage>spacer>guide>clip'
+    },
+    cam: {
+      'cam-axle': 'linkage>spacer>spacer>spacer>cam>clip'
+    },
+    gear: {
+      'gear-0': 'gear>spacer>clip',
+      'gear-1': 'gear>spacer>clip'
+    },
+    gear_linkage: {
+      'drive-pin': 'gear>spacer>linkage>clip',
+      effector: 'clip>linkage>spacer>linkage>clip',
+      'output-pin': 'gear>spacer>spacer>spacer>spacer>clip>linkage>clip'
+    },
+    planetary_gear: {
+      'sun-gear': 'gear>spacer>linkage>clip',
+      'planet-gear': 'clip>gear>spacer>linkage>clip',
+      'ring-gear': 'gear>spacer>clip'
+    }
+  };
+  zStackTypes.forEach(type => {
+    const mechanism = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism(type, `z-stack-${type}`)));
+    const plan = compileMechanismRenderPlan(mechanism, sample.settings.physicalKit);
+    assert(plan.layers.length > 0, `${type} z-stack compiler emits layers`);
+    assert(plan.supportPaths.length > 0, `${type} z-stack compiler emits support paths`);
+    assert(plan.supportNodes.length > 0, `${type} z-stack compiler emits retained support nodes`);
+    assert(plan.pinSpans.length > 0, `${type} z-stack compiler emits pin spans`);
+    [...plan.layers, plan.base].forEach(layer => {
+      assert(Number.isFinite(layer.backFaceMm) && Number.isFinite(layer.frontFaceMm) && Number.isFinite(layer.centerMm), `${type} layer ${layer.label} has finite canonical faces`);
+      assert(Math.abs((layer.frontFaceMm - layer.backFaceMm) - layer.physicalDepthMm) <= FABRICATION_Z_EPSILON_MM, `${type} layer ${layer.label} depth matches faces`);
+      assert(Math.abs(((layer.backFaceMm + layer.frontFaceMm) / 2) - layer.centerMm) <= FABRICATION_Z_EPSILON_MM, `${type} layer ${layer.label} center matches midpoint`);
+      assert.equal(layer.z, projectFabricationZMm(layer.centerMm), `${type} layer ${layer.label} render z is projected canonical center`);
+    });
+    assert.equal(plan.base.backFaceMm, -BOARD_DEPTH_MM, `${type} board starts behind the front face`);
+    assert.equal(plan.base.frontFaceMm, 0, `${type} board front face is canonical zero`);
+    plan.layers.forEach(layer => {
+      const expectedDepth = layer.renderKind === 'spacer' ? SPACER_DEPTH_MM : layer.renderKind === 'clip' ? CLIP_HEAD_DEPTH_MM : PLATE_DEPTH_MM;
+      assert.equal(layer.physicalDepthMm, expectedDepth, `${type} ${layer.label} uses fixed compiler-owned depth`);
+    });
+    const wideHolePlan = compileMechanismRenderPlan(mechanism, { ...sample.settings.physicalKit, holeDiameterMm: 8 });
+    assert.deepEqual(
+      wideHolePlan.layers.map(layer => [layer.layerId, layer.backFaceMm, layer.frontFaceMm, layer.centerMm, layer.physicalDepthMm, layer.gearPlaneId ?? '']),
+      plan.layers.map(layer => [layer.layerId, layer.backFaceMm, layer.frontFaceMm, layer.centerMm, layer.physicalDepthMm, layer.gearPlaneId ?? '']),
+      `${type} canonical z is independent of hole diameter`
+    );
+    plan.pinSpans.forEach(span => {
+      const crossed = plan.supportNodes.filter(node => span.supportNodeIds.includes(node.id));
+      assert(crossed.length > 0, `${type} pin ${span.id} crosses retained nodes`);
+      const crossesBoard = crossed.some(node => node.kind === 'board');
+      if (crossesBoard) assert.equal(span.backFaceMm, -1.2, `${type} board pin ${span.id} starts at the board-tab terminal`);
+      else assert(span.backFaceMm < Math.min(...crossed.map(node => node.backFaceMm)), `${type} free pin ${span.id} starts behind retained stack`);
+      assert(span.frontFaceMm > Math.max(...crossed.map(node => node.frontFaceMm)), `${type} pin ${span.id} reaches beyond retained stack`);
+    });
+    const supportNodeById = new Map(plan.supportNodes.map(node => [node.id, node]));
+    plan.supportEdges.filter(edge => edge.kind === 'face-contact' || edge.kind === 'retains').forEach(edge => {
+      const from = supportNodeById.get(edge.fromNodeId);
+      const to = supportNodeById.get(edge.toNodeId);
+      assert(from, `${type} support edge ${edge.id} resolves its from node`);
+      assert(to, `${type} support edge ${edge.id} resolves its to node`);
+      const faceError = Math.abs(from!.frontFaceMm - to!.backFaceMm);
+      assert(faceError <= FABRICATION_Z_EPSILON_MM, `${type} ${edge.kind} edge ${edge.id} joins epsilon-equal faces instead of spanning a gap or overlap`);
+      assert(Math.abs((edge.contactFaceMm ?? Number.NaN) - from!.frontFaceMm) <= FABRICATION_Z_EPSILON_MM, `${type} ${edge.kind} edge ${edge.id} records the actual shared face`);
+    });
+    const pinBearingPaths = plan.supportPaths.filter(path => path.pinSpanId);
+    assert(pinBearingPaths.length > 0, `${type} emits at least one physical pin-bearing support path`);
+    pinBearingPaths.forEach(path => {
+      const kinds = path.orderedLayerIds.map(layerId => plan.layers.find(layer => layer.layerId === layerId)?.renderKind);
+      assert.equal(kinds.join('>'), expectedPinPathKinds[type][path.rootNodeId], `${type} ${path.rootNodeId} path keeps its exact compiled plate/spacer/retainer sequence`);
+      assert(kinds.includes('spacer'), `${type} pin-bearing path ${path.id} includes a physical spacer layer`);
+      assert(kinds.includes('clip'), `${type} pin-bearing path ${path.id} includes a physical retainer layer`);
+      const span = plan.pinSpans.find(candidate => candidate.id === path.pinSpanId);
+      assert(span, `${type} pin-bearing path ${path.id} resolves its compiled pin span`);
+      path.orderedLayerIds.forEach(layerId => {
+        const supportNodeId = plan.supportNodes.find(node => node.ownerLayerId === layerId)?.id;
+        assert(supportNodeId && span!.supportNodeIds.includes(supportNodeId), `${type} pin ${span!.id} includes path layer ${layerId} in its retained support nodes`);
+      });
+      path.orderedLayerIds.filter(layerId => plan.layers.find(layer => layer.layerId === layerId)?.renderKind === 'spacer').forEach(layerId => {
+        const spacerNodeId = plan.supportNodes.find(node => node.ownerLayerId === layerId)?.id;
+        const spacerContacts = plan.supportEdges.filter(edge => edge.supportPathId === path.id
+          && (edge.kind === 'face-contact' || edge.kind === 'retains')
+          && (edge.fromNodeId === spacerNodeId || edge.toNodeId === spacerNodeId));
+        assert.equal(spacerContacts.length, 2, `${type} spacer ${layerId} has exactly one incoming and one outgoing face contact on ${path.id}`);
+      });
+    });
+    if (['gear', 'gear_linkage', 'planetary_gear'].includes(type)) {
+      const planeLayers = plan.layers.filter(layer => layer.gearPlaneId);
+      const graph = mechanismGraphForMechanism(mechanism);
+      const hasMesh = graph.constraints.some(constraint => constraint.role === 'gear-mesh');
+      if (hasMesh) assert(planeLayers.length >= 2, `${type} has a gear-mesh plane`);
+      if (hasMesh) {
+        const faces = new Set(planeLayers.map(layer => `${layer.backFaceMm}:${layer.frontFaceMm}:${layer.physicalDepthMm}`));
+        assert.equal(faces.size, 1, `${type} gear mesh members share identical faces`);
+        assert(plan.layers.filter(layer => layer.renderKind !== 'gear').every(layer => !layer.gearPlaneId), `${type} non-gears do not join the gear plane`);
+      }
+      if (type === 'planetary_gear') {
+        const gearFrontFaceMm = Math.max(...planeLayers.map(layer => layer.frontFaceMm));
+        const carrierLayer = plan.layers.find(layer => layer.sourceNodeId === 'carrier');
+        assert(carrierLayer, 'planetary compiler emits the carrier layer');
+        assert(Math.abs((carrierLayer!.backFaceMm - gearFrontFaceMm) - SPACER_DEPTH_MM) <= FABRICATION_Z_EPSILON_MM, 'planetary carrier sits exactly one spacer above the coplanar sun/ring/planet plane');
+      }
+    }
+  });
+
+
+
+  const badGearMeshGraph = mechanismGraphForMechanism(createDefaultMechanism('gear', 'z-stack-bad-gear-plane'));
+  const badGearMesh = {
+    ...badGearMeshGraph,
+    constraints: badGearMeshGraph.constraints.map(constraint =>
+      constraint.role === 'gear-mesh' ? { ...constraint, value: 1 } : constraint
+    )
+  };
+  const badGearValidation = validateMechanismGraph(badGearMesh);
+  const badGearCompilation = compileAuthoredMechanismGraph(badGearMesh);
+  assert.equal(badGearValidation.valid, false, 'negative gear-plane case rejects a gear mesh whose XY pitch span does not match the authored value');
+  assert.equal(badGearCompilation.fabrication.buildable, false, 'general graph fabrication is not buildable when graph or render validation has blockers');
+  assert(badGearCompilation.fabrication.renderPlan?.validationErrors.some(error => error.includes('gear-mesh') && error.includes('positions')), 'negative gear-plane blocker is carried into the render plan');
+
+  const supportBlockedPlan = compileMechanismRenderPlan(createDefaultMechanism('4bar', 'z-stack-support-blocker'), { ...sample.settings.physicalKit, boardCells: 1 });
+  assert(supportBlockedPlan.validationErrors.some(error => /Placement off board|No board-snapped graph anchor/.test(error)), 'support blocker case remains a compiler validation error instead of a visual-only z offset');
+
+  const expectedDistancePartOwners: Partial<Record<MechanismType, Record<string, string>>> = {
+    '4bar': {
+      'input-length': 'input-link',
+      'coupler-length': 'coupler-link',
+      'output-length': 'output-link'
+    },
+    piston: {
+      'crank-length': 'crank-link',
+      'rod-length': 'connecting-rod'
+    },
+    gear_linkage: {
+      'drive-connector-length': 'connector-link-a',
+      'output-connector-length': 'connector-link-b'
+    }
+  };
+  zStackTypes.forEach(type => {
+    const graph = mechanismGraphForMechanism(createDefaultMechanism(type, `typed-distance-owner-${type}`));
+    const expectedOwners = expectedDistancePartOwners[type] ?? {};
+    const distanceConstraints = graph.constraints.filter(constraint => constraint.role === 'distance');
+    assert.equal(distanceConstraints.length, Object.keys(expectedOwners).length, `${type} exposes the expected typed fabricated distance relations`);
+    distanceConstraints.forEach(constraint => {
+      const owner = (constraint as typeof constraint & { fabricatedPartNodeId?: string }).fabricatedPartNodeId;
+      assert.equal(owner, expectedOwners[constraint.id], `${type} ${constraint.id} explicitly owns its fabricated part node`);
+    });
+  });
+  const logicalFourBarPlan = compileMechanismRenderPlan(createDefaultMechanism('4bar', 'logical-stack-order'));
+  assert.deepEqual(
+    logicalFourBarPlan.layers.filter(layer => layer.renderKind === 'linkage').map(layer => layer.sourceNodeId),
+    ['input-link', 'coupler-link', 'output-link'],
+    'compiled layer presentation preserves logical Input -> Coupler -> Output order independently of physical face packing'
+  );
+
+  const typedOwnerTrap = mechanismGraphFromDraft({
+    id: 'typed-owner-trap',
+    familyId: 'typed-owner-trap',
+    nodes: [
+      { id: 'board-a', label: 'Board A', role: 'board-anchor', position: { x: 0, y: 0 } },
+      { id: 'output', label: 'Output', role: 'output-point', position: { x: 80, y: 0 } },
+      { id: 'declared-link', label: 'Unrelated words', role: 'link', position: { x: 0, y: 80 }, value: 80 },
+      { id: 'heuristic-decoy', label: 'Link length stays fixed', role: 'link', position: { x: 40, y: 0 }, value: 80 }
+    ],
+    constraints: [
+      { id: 'board-a-fixed', label: 'Board A stays fixed', role: 'fixed-to-board', nodes: ['board-a'] },
+      { id: 'board-a-snap', label: 'Board A snaps', role: 'board-snap', nodes: ['board-a'] },
+      { id: 'owned-distance', label: 'Link length stays fixed', role: 'distance', nodes: ['board-a', 'output'], value: 80, fabricatedPartNodeId: 'declared-link' }
+    ]
+  });
+  const typedOwnerTrapCompilation = compileAuthoredMechanismGraph(typedOwnerTrap);
+  assert.equal(typedOwnerTrapCompilation.fabrication.buildable, true, 'typed fabricated part ownership does not require matching labels or midpoints');
+  const declaredOwnerLayer = typedOwnerTrapCompilation.fabrication.renderPlan.layers.find(layer => layer.sourceNodeId === 'declared-link');
+  const heuristicDecoyLayer = typedOwnerTrapCompilation.fabrication.renderPlan.layers.find(layer => layer.sourceNodeId === 'heuristic-decoy');
+  assert(declaredOwnerLayer?.sourceConstraintIds.includes('owned-distance'), 'explicit fabricatedPartNodeId owns the distance assembly layer even when its label and position do not match');
+  assert(!heuristicDecoyLayer?.sourceConstraintIds.includes('owned-distance'), 'a label/midpoint decoy cannot steal typed distance membership');
+  const declaredOwnerStackItem = typedOwnerTrapCompilation.fabrication.recipe?.assemblySteps.flatMap(step => step.stack ?? [])
+    .find(item => item.sourceNodeId === 'declared-link');
+  assert(declaredOwnerStackItem?.sourceConstraintIds?.includes('owned-distance'), 'compiled assembly steps carry the exact typed constraint-to-fabricated-part ownership');
+  const missingTypedOwnerGraph: MechanismGraph = {
+    ...typedOwnerTrap,
+    constraints: typedOwnerTrap.constraints.map(constraint => constraint.role === 'distance'
+      ? { ...constraint, fabricatedPartNodeId: 'missing-fabricated-part' }
+      : constraint)
+  };
+  const missingTypedOwnerValidation = validateMechanismGraph(missingTypedOwnerGraph);
+  const missingTypedOwnerCompilation = compileAuthoredMechanismGraph(missingTypedOwnerGraph);
+  assert.equal(missingTypedOwnerValidation.valid, false, 'missing typed fabricated part references fail graph validation even when a label/midpoint decoy exists');
+  assert(missingTypedOwnerValidation.diagnostics.some(diagnostic => diagnostic.message.includes('owned-distance') && diagnostic.message.includes('missing-fabricated-part')), 'missing typed owner diagnostic names the constraint and bad part id');
+  assert.equal(missingTypedOwnerCompilation.fabrication.buildable, false, 'missing typed fabricated part references block general graph fabrication');
+  const unsupportedTypedOwnerGraph: MechanismGraph = {
+    ...typedOwnerTrap,
+    constraints: typedOwnerTrap.constraints.map(constraint => constraint.role === 'distance'
+      ? { ...constraint, fabricatedPartNodeId: 'output' }
+      : constraint)
+  };
+  const unsupportedTypedOwnerValidation = validateMechanismGraph(unsupportedTypedOwnerGraph);
+  assert.equal(unsupportedTypedOwnerValidation.valid, false, 'typed ownership cannot target a non-fabricated output node even when a matching link decoy exists');
+  assert(unsupportedTypedOwnerValidation.diagnostics.some(diagnostic => diagnostic.message.includes('owned-distance') && diagnostic.message.includes('unsupported fabricated part output')), 'invalid typed owner diagnostic names the constraint and unsupported node');
+  assert.equal(compileAuthoredMechanismGraph(unsupportedTypedOwnerGraph).fabrication.buildable, false, 'unsupported typed fabricated part references block general graph compilation');
+  const duplicateTypedOwnerGraph: MechanismGraph = {
+    ...typedOwnerTrap,
+    constraints: [
+      ...typedOwnerTrap.constraints,
+      { id: 'duplicate-owned-distance', label: 'Second owner claim', role: 'distance', nodes: ['board-a', 'output'], value: 80, fabricatedPartNodeId: 'declared-link' }
+    ]
+  };
+  const duplicateTypedOwnerValidation = validateMechanismGraph(duplicateTypedOwnerGraph);
+  assert.equal(duplicateTypedOwnerValidation.valid, false, 'one fabricated part cannot be claimed by multiple typed distance constraints');
+  assert(duplicateTypedOwnerValidation.diagnostics.some(diagnostic => diagnostic.message.includes('declared-link') && diagnostic.message.includes('multiple distance constraints')), 'duplicate typed ownership diagnostic names the multiply-owned fabricated part');
+
+  const axialSceneContracts = zStackTypes.map(type => {
+    const mechanism = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism(type, `axial-scene-${type}`)));
+    const compiled = compileMechanism(mechanism, undefined, undefined, sample.settings.physicalKit);
+    const renderPlan = compiled.fabrication.renderPlan;
+    const contract = buildMechanismSceneContract(mechanism, undefined, sample.settings.physicalKit) as ReturnType<typeof buildMechanismSceneContract> & {
+      supportPaths?: typeof renderPlan.supportPaths;
+      supportNodes?: typeof renderPlan.supportNodes;
+      supportEdges?: typeof renderPlan.supportEdges;
+      pinSpans?: typeof renderPlan.pinSpans;
+      gearPlaneIds?: string[];
+      renderPlanValidationErrors?: string[];
+    };
+    assert.deepEqual(contract.supportPaths, renderPlan.supportPaths, `${type} scene contract carries exact compiled support paths`);
+    assert.deepEqual(contract.supportNodes, renderPlan.supportNodes, `${type} scene contract carries exact compiled support nodes`);
+    assert.deepEqual(contract.supportEdges, renderPlan.supportEdges, `${type} scene contract carries exact compiled support edges`);
+    assert.deepEqual(contract.pinSpans, renderPlan.pinSpans, `${type} scene contract carries exact compiled pin spans`);
+    assert.deepEqual(contract.gearPlaneIds, [...new Set(renderPlan.layers.flatMap(layer => layer.gearPlaneId ? [layer.gearPlaneId] : []))].sort(), `${type} scene contract carries exact compiled gear-plane ids`);
+    assert.deepEqual(contract.renderPlanValidationErrors, renderPlan.validationErrors, `${type} scene contract carries exact compiler validation blockers`);
+    assert.deepEqual(
+      contract.layers.map(layer => ({
+        id: layer.id,
+        backFaceMm: (layer as typeof layer & { backFaceMm?: number }).backFaceMm,
+        centerMm: (layer as typeof layer & { centerMm?: number }).centerMm,
+        frontFaceMm: (layer as typeof layer & { frontFaceMm?: number }).frontFaceMm,
+        physicalDepthMm: (layer as typeof layer & { physicalDepthMm?: number }).physicalDepthMm,
+        gearPlaneId: (layer as typeof layer & { gearPlaneId?: string }).gearPlaneId
+      })),
+      [renderPlan.base, ...renderPlan.layers].map(layer => ({
+        id: layer.layerId,
+        backFaceMm: layer.backFaceMm,
+        centerMm: layer.centerMm,
+        frontFaceMm: layer.frontFaceMm,
+        physicalDepthMm: layer.physicalDepthMm,
+        gearPlaneId: layer.gearPlaneId
+      })),
+      `${type} scene layers preserve exact canonical faces and gear-plane membership`
+    );
+    return { mechanism, contract };
+  });
+  const axialBlueprintProject: ProjectState = {
+    ...sample,
+    mechanisms: axialSceneContracts.map(({ mechanism }) => ({
+      ...mechanism,
+      targetPartId: 'right_hand_part',
+      targetPathId: 'path-right-arm',
+      targetAnchorJointId: 'right_hand',
+      activeVisualPartIds: ['right_hand_part']
+    })),
+    selectedMechanismId: axialSceneContracts[0]?.mechanism.id
+  };
+  const axialBlueprintRecipes = axialBlueprintProject.mechanisms.map(mechanism => compileFabricationRecipe(axialBlueprintProject, mechanism));
+  const parseSvgMetadata = (svg: string) => {
+    const encoded = svg.match(/<metadata>([\s\S]*?)<\/metadata>/)?.[1];
+    assert(encoded, 'Blueprint SVG includes metadata JSON');
+    const decoded = encoded!
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&');
+    return JSON.parse(decoded) as { mechanismSceneContracts?: unknown[] };
+  };
+  const expectedAxialContracts = JSON.parse(JSON.stringify(buildMechanismSceneContracts(axialBlueprintProject, axialBlueprintRecipes)));
+  assert.deepEqual(parseSvgMetadata(makeBlueprintSvg(axialBlueprintProject, axialBlueprintRecipes)).mechanismSceneContracts, expectedAxialContracts, 'Blueprint SVG metadata carries exact six-family compiler scene contracts');
+  assert.deepEqual(parseSvgMetadata(makeBlueprintPreviewSvg(axialBlueprintProject, axialBlueprintRecipes)).mechanismSceneContracts, expectedAxialContracts, 'Blueprint preview SVG metadata carries exact six-family compiler scene contracts');
+  axialBlueprintProject.mechanisms.forEach(mechanism => {
+    const singleMechanismProject: ProjectState = { ...sample, mechanisms: [mechanism], selectedMechanismId: mechanism.id };
+    const singleRecipe = compileFabricationRecipe(singleMechanismProject, mechanism);
+    const axialPackageMetadata = JSON.parse(createFabricationPackage(singleMechanismProject).metadataJson) as { mechanismSceneContracts?: unknown[] };
+    const expectedContract = JSON.parse(JSON.stringify(buildMechanismSceneContracts(singleMechanismProject, [singleRecipe])));
+    assert.deepEqual(axialPackageMetadata.mechanismSceneContracts, expectedContract, `${mechanism.type} portable fabrication export metadata carries the exact compiler scene contract`);
+  });
+
+  zStackTypes.forEach(type => {
+    const mechanism = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism(type, `three-box-${type}`)));
+    const renderPlan = compileMechanismRenderPlan(mechanism, sample.settings.physicalKit);
+    assert.deepEqual(renderPlan.validationErrors, [], `${type} mesh parity probe starts from a valid compiled render plan`);
+    const simulation = fitMechanismSimulationWithContext(mechanism, 0.47, createMechanismFitContext(mechanism, 360, 240));
+    const isGearTrain = mechanism.type === 'gear' || mechanism.type === 'gear_linkage';
+    const gearRadii = isGearTrain ? gearTrainPitchRadii(mechanism) : [mechanism.crankLength, mechanism.rockerLength];
+    const gearCenters = isGearTrain ? fittedGearTrainCenters(gearRadii, simulation.state.p1, simulation.state.p2) : [];
+    const renderedLayerZ = foundryRenderedLayerZForMechanism(renderPlan.layers, renderPlan.layers.map(layer => layer.z));
+    const pinStackPoints = foundryPinStackPoints(renderPlan, {
+      state: simulation.state,
+      gearCenters,
+      planetCenters: [simulation.state.p2]
+    });
+    const pinStacks = foundryPinStacks(pinStackPoints, renderPlan);
+    const root = new THREE.Group();
+    const geometryCache = new Map<string, THREE.BufferGeometry>();
+    const materialCache = new Map<string, THREE.Material>();
+    const primitives = createFoundryThreePrimitiveFactory({
+      root,
+      geometryCache,
+      materialCache,
+      mechanism,
+      kit: sample.settings.physicalKit,
+      color: mechanism.color,
+      rigOpacity: 1,
+      baseColor: renderPlan.base.color,
+      simulationScale: simulation.scale
+    });
+    renderFoundryDynamicLayers({
+      mechanism,
+      simulation,
+      primitives,
+      renderPlan,
+      renderedLayerZ,
+      pinStacks,
+      visiblePathTraces: [],
+      pathLayerZ: 0,
+      showPathPreview: false,
+      showTrail: false,
+      pinionRotation: simulation.driveAngleDeg,
+      isGearTrain,
+      gearRadii,
+      gearCenters,
+      gearUsesMeshPhases: mechanism.type === 'gear' || gearRadii.length > 2,
+      gearOutputRatioForDisplay: isGearTrain ? gearTrainOutputRatio(mechanism) : gearPairOutputRatio(mechanism.crankLength, mechanism.rockerLength)
+    });
+    root.updateMatrixWorld(true);
+    const taggedMeshes: THREE.Mesh[] = [];
+    root.traverse(object => {
+      if ((object as THREE.Mesh).isMesh && (object.userData.fabricationLayerId || object.userData.fabricationPinSpanIds?.length)) taggedMeshes.push(object as THREE.Mesh);
+    });
+    const tolerance = 1e-5;
+    renderPlan.layers.forEach(layer => {
+      const meshes = taggedMeshes.filter(mesh => mesh.userData.fabricationLayerId === layer.layerId);
+      assert(meshes.length > 0, `${type} ${layer.layerId} emits at least one real tagged structural mesh`);
+      const box = meshes.reduce((bounds, mesh) => bounds.union(new THREE.Box3().setFromObject(mesh)), new THREE.Box3());
+      const actualCenter = (box.min.z + box.max.z) / 2;
+      const actualDepth = box.max.z - box.min.z;
+      assert(Math.abs(box.min.z - projectFabricationZMm(layer.backFaceMm)) <= tolerance, `${type} ${layer.layerId} Box3 back face matches compiled backFaceMm`);
+      assert(Math.abs(actualCenter - projectFabricationZMm(layer.centerMm)) <= tolerance, `${type} ${layer.layerId} Box3 center matches compiled centerMm`);
+      assert(Math.abs(box.max.z - projectFabricationZMm(layer.frontFaceMm)) <= tolerance, `${type} ${layer.layerId} Box3 front face matches compiled frontFaceMm`);
+      assert(Math.abs(actualDepth - projectFabricationZMm(layer.physicalDepthMm)) <= tolerance, `${type} ${layer.layerId} Box3 depth matches compiled physicalDepthMm`);
+      const taggedSupportPathIds = [...new Set(meshes.flatMap(mesh => mesh.userData.fabricationSupportPathIds ?? []))].sort();
+      assert.deepEqual(taggedSupportPathIds, [...layer.supportPathIds].sort(), `${type} ${layer.layerId} real meshes carry exact compiler support path ids`);
+      const expectedPinSpanIds = [...new Set(layer.supportPathIds.flatMap(pathId => {
+        const pinSpanId = renderPlan.supportPaths.find(path => path.id === pathId)?.pinSpanId;
+        return pinSpanId ? [pinSpanId] : [];
+      }))].sort();
+      const taggedPinSpanIds = [...new Set(meshes.flatMap(mesh => mesh.userData.fabricationPinSpanIds ?? []))].sort();
+      assert.deepEqual(taggedPinSpanIds, expectedPinSpanIds, `${type} ${layer.layerId} real meshes carry exact compiler pin-span ids`);
+    });
+    renderPlan.pinSpans.forEach(pinSpan => {
+      const pinMesh = taggedMeshes.find(mesh => mesh.userData.fabricationPrimitiveKind === 'pin' && (mesh.userData.fabricationPinSpanIds ?? []).includes(pinSpan.id));
+      assert(pinMesh, `${type} ${pinSpan.id} emits a real tagged pin mesh`);
+      const box = new THREE.Box3().setFromObject(pinMesh!);
+      assert(Math.abs(box.min.z - projectFabricationZMm(pinSpan.backFaceMm)) <= tolerance, `${type} ${pinSpan.id} pin Box3 back face matches compiled span`);
+      assert(Math.abs(box.max.z - projectFabricationZMm(pinSpan.frontFaceMm)) <= tolerance, `${type} ${pinSpan.id} pin Box3 front face matches compiled span`);
+    });
+    disposeFoundryThreeObject(root);
+    geometryCache.forEach(geometry => geometry.dispose());
+    materialCache.forEach(material => material.dispose());
+  });
+
+  const planetaryGraph = mechanismGraphForMechanism(createDefaultMechanism('planetary_gear', 'z-stack-planetary-graph'));
+  const carrier = planetaryGraph.nodes.find(node => node.id === 'carrier');
+  assert(carrier?.role === 'link', 'planetary carrier remains a midpoint link');
+  assert(planetaryGraph.nodes.some(node => node.id === 'carrier-central-pivot' && node.role === 'moving-joint' && node.fabricated === false && node.ownerPartId === 'carrier'), 'planetary central pivot is a part-owned moving joint');
+  assert(planetaryGraph.nodes.some(node => node.id === 'carrier-planet-pivot' && node.role === 'moving-joint' && node.fabricated === false && node.ownerPartId === 'carrier'), 'planetary planet pivot is a part-owned moving joint');
+  assert.deepEqual(planetaryGraph.constraints.find(constraint => constraint.id === 'sun-carrier-pivot-pin')?.nodes, ['sun-gear', 'carrier-central-pivot'], 'planetary sun/carrier support uses the explicit owner pivot');
+  assert.deepEqual(planetaryGraph.constraints.find(constraint => constraint.id === 'planet-carrier-pin')?.nodes, ['planet-gear', 'carrier-planet-pivot'], 'planetary planet/carrier support uses the explicit owner pivot');
+  const planetaryPlanMechanism = createDefaultMechanism('planetary_gear', 'z-stack-planetary-plan');
+  const planetaryPlanGraph = mechanismGraphForMechanism(planetaryPlanMechanism);
+  const planetaryPlan = compileMechanismRenderPlan(planetaryPlanMechanism);
+  const ownerPaths = planetaryPlan.supportPaths.filter(path => path.ownerExpansions.length);
+  assert.equal(ownerPaths.length, 2, 'planetary compiler expands exactly the two part-owned pivots into support paths');
+  assert(ownerPaths.every(path => path.ownerExpansions.every(expansion => expansion.ownerPartId === 'carrier')), 'planetary owner expansions reference only the carrier layer');
+  const centralPathId = `${planetaryPlanGraph.id}:support:pin:sun-carrier-pivot-pin:occ:0`;
+  const planetPathId = `${planetaryPlanGraph.id}:support:pin:planet-carrier-pin:occ:0`;
+  const centralPath = planetaryPlan.supportPaths.find(path => path.id === centralPathId);
+  const planetPath = planetaryPlan.supportPaths.find(path => path.id === planetPathId);
+  assert(centralPath, 'planetary central owner path keeps the stable explicit pin id');
+  assert(planetPath, 'planetary planet owner path keeps the stable explicit pin id');
+  const layerSequence = (path: NonNullable<typeof centralPath>) => path.orderedLayerIds.map(layerId => {
+    const layer = planetaryPlan.layers.find(candidate => candidate.layerId === layerId);
+    assert(layer, `planetary path ${path.id} resolves layer ${layerId}`);
+    return [layer!.renderKind, layer!.sourceNodeId ?? '', layer!.backFaceMm, layer!.frontFaceMm] as const;
+  });
+  assert.deepEqual(layerSequence(centralPath!), [
+    ['gear', 'sun-gear', 0, 4],
+    ['spacer', '', 4, 5.6],
+    ['linkage', 'carrier', 5.6, 9.6],
+    ['clip', '', 9.6, 10.4]
+  ], 'planetary central path is board -> sun gear -> physical S10 spacer -> shared carrier -> front retainer');
+  assert.deepEqual(layerSequence(planetPath!), [
+    ['clip', '', -0.8, 0],
+    ['gear', 'planet-gear', 0, 4],
+    ['spacer', '', 4, 5.6],
+    ['linkage', 'carrier', 5.6, 9.6],
+    ['clip', '', 9.6, 10.4]
+  ], 'planetary free planet path is back retainer -> planet gear -> physical S10 spacer -> shared carrier -> front retainer');
+  const carrierLayerId = planetaryPlan.layers.find(layer => layer.sourceNodeId === 'carrier')?.layerId;
+  assert(carrierLayerId, 'planetary plan exposes one typed carrier layer');
+  assert(centralPath!.orderedLayerIds.includes(carrierLayerId!), 'central owner path uses the typed carrier layer');
+  assert(planetPath!.orderedLayerIds.includes(carrierLayerId!), 'planet owner path uses the same typed carrier layer');
+  const boardSupportNodeId = planetaryPlan.supportNodes.find(node => node.kind === 'board')?.id;
+  const centralSpan = planetaryPlan.pinSpans.find(span => span.id === centralPath!.pinSpanId);
+  const planetSpan = planetaryPlan.pinSpans.find(span => span.id === planetPath!.pinSpanId);
+  assert(boardSupportNodeId && centralSpan?.supportNodeIds.includes(boardSupportNodeId), 'planetary central pin is board rooted');
+  assert(boardSupportNodeId && !planetSpan?.supportNodeIds.includes(boardSupportNodeId), 'planetary free planet pin is not falsely board rooted');
+  assert.equal(centralSpan?.backFaceMm, -1.2, 'planetary board pin starts at the board tab terminal');
+  const planetFirstNode = planetaryPlan.supportNodes.find(node => node.ownerLayerId === planetPath!.orderedLayerIds[0]);
+  assert(planetFirstNode, 'planetary free path resolves its back retainer support node');
+  assert.equal(planetSpan?.backFaceMm, planetFirstNode!.backFaceMm - 0.8, 'planetary free pin starts 0.8 mm behind its first retained support face');
+  const compilerSource = readFileSync(join(process.cwd(), 'utils/mechanismGraphFabricationCompiler.ts'), 'utf8');
+  assert(!compilerSource.includes('sourceNodeForLayer'), 'graph Z compilation does not infer source ownership from labels');
+  assert(!compilerSource.includes('lower.includes(node.id.toLowerCase())'), 'graph Z compilation has no substring fallback for source membership');
+  const previewStackSource = readFileSync(join(process.cwd(), 'utils/mechanismPreviewStacks.ts'), 'utf8');
+  assert(!previewStackSource.includes('MechanismType') && !previewStackSource.includes('type ===') && !previewStackSource.includes('pin.id ==='), 'preview stack projection does not infer axial membership from mechanism family or A-F aliases');
 }
 
 const assertFiniteDeep = (value: unknown, label: string): void => {
@@ -6129,7 +6577,7 @@ assert(offBoardRequiredParts.some(part => part.category === 'blocker' && /^Fix: 
   const camGuideZ = camRenderPlan.layers.find(layer => layer.label === 'U-channel guide cartridge')?.z;
   const camFollowerZ = camRenderPlan.layers.find(layer => layer.label === 'Preassembled gravity follower module')?.z;
   assert(typeof camDiskZ === 'number' && typeof camGuideZ === 'number' && typeof camFollowerZ === 'number', 'cam render plan exposes disk, guide, and follower module layers');
-  assert(Math.max(Math.abs(camGuideZ - camDiskZ), Math.abs(camFollowerZ - camDiskZ)) < FABRICATION_RENDER_LAYER_Z_STEP, 'cam guide and gravity follower stay in the compact board-mounted cam plane instead of floating as a full serial z-stack');
+  assert(camRenderPlan.layers.every(layer => layer.physicalDepthMm > 0), 'cam guide and gravity follower use canonical physical depth instead of a full serial visual gap assertion');
   assert.deepEqual(camRecipe.stackLabels, ['15x15 pegboard base', 'Axle peg', 'Crank handle', 'Paper washer', 'Cam spacer', 'Swappable cam disk', 'Paper washer', 'Cam lock disk', 'U-channel guide cartridge', 'Preassembled gravity follower module'], 'cam stack labels document the pegboard base plus plug-in modules');
   const camRecipeText = JSON.stringify(camRecipe);
   assert(!/S10 spacer|Eccentric cam|Round follower|2-hole bracket|rubber band|spring|metal bearing|plastic spacer|backplate|free-floating loose rail/i.test(camRecipeText), 'cam recipe data blocks the old stack and excluded hardware');

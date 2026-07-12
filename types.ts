@@ -277,6 +277,9 @@ export interface AssemblyStepStackItem {
     label: string;
     role: string;
     part?: string;
+    sourceNodeId?: string;
+    sourceConstraintIds?: string[];
+    axialRole?: 'structural' | 'spacer' | 'back-retainer' | 'front-retainer';
 }
 
 export interface FabricationRecipe {

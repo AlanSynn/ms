@@ -8,11 +8,9 @@ import type {
   FoundryParamHandleId,
 } from "./FoundryOverlayLayer";
 import {
-  foundryAssemblyPinPoints,
   foundryPinStackPoints,
   foundryPinStacks,
   foundryRenderedLayerZForMechanism,
-  isMovingRenderKind,
 } from "../../../utils/mechanismPreviewStacks";
 import {
   clampMechanismParam,
@@ -99,6 +97,10 @@ import {
   uid,
 } from "../../../utils/project";
 import { preferredMotionJointId } from "../../../utils/motion";
+import {
+  mechanismForTargetFields,
+  pathOwnedTargetFields,
+} from "../../../utils/pathTargets";
 
 const traceDistanceToGeneratedPath = (
   trace: { points: Point[] },
@@ -219,14 +221,32 @@ export const MechanismFoundry = ({
     landingBoard.row,
     project.settings.physicalKit,
   );
+  const targetFields = selectedPath
+    ? pathOwnedTargetFields(selectedPath)
+    : {
+        targetPartId: foundry.targetPartId,
+        targetSceneObjectId: foundry.targetSceneObjectId,
+        targetPathId: foundry.targetPathId,
+        targetAnchorJointId: foundry.targetAnchorJointId,
+      };
+  const targetIdentity = [
+    targetFields.targetPartId ?? "",
+    targetFields.targetSceneObjectId ?? "",
+    targetFields.targetPathId ?? "",
+    targetFields.targetAnchorJointId ?? "",
+  ].join(":");
+  const draftMechanismId = useMemo(() => uid("mech"), [targetIdentity]);
+  const foundryMechanismId =
+    mechanismForTargetFields(project, targetFields)?.id ?? draftMechanismId;
   const landedFoundry = useMemo(
     () => ({
       ...foundry,
+      id: foundryMechanismId,
       anchorX: landing.x,
       anchorY: landing.y,
       sceneAnchor: landing,
     }),
-    [foundry, landing.x, landing.y],
+    [foundry, foundryMechanismId, landing.x, landing.y],
   );
   const anchorMarker = {
     x: 180 + (landing.x / SCENE_VIEW.width) * 360,
@@ -370,10 +390,10 @@ export const MechanismFoundry = ({
   const foundryStackLayerZ = useMemo(
     () =>
       foundryRenderPlan.layers.map(
-        (item) =>
+        (item, presentationIndex) =>
           item.z +
           (foundryExplode / 100) *
-            item.stackIndex *
+            presentationIndex *
             FABRICATION_RENDER_LAYER_Z_STEP *
             1.5,
       ),
@@ -382,45 +402,22 @@ export const MechanismFoundry = ({
   const foundryRenderedLayerZ = useMemo(
     () =>
       foundryRenderedLayerZForMechanism(
-        landedFoundry.type,
         foundryRenderPlan.layers,
         foundryStackLayerZ,
       ),
-    [foundryRenderPlan.layers, foundryStackLayerZ, landedFoundry.type],
-  );
-  const foundryMovingLayerIndexes = useMemo(
-    () =>
-      foundryRenderPlan.layers.flatMap((item, index) =>
-        isMovingRenderKind(item.renderKind) ? [index] : [],
-      ),
-    [foundryRenderPlan.layers],
-  );
-  const foundrySpacerLayerIndexes = useMemo(
-    () =>
-      foundryRenderPlan.layers.flatMap((item, index) =>
-        item.role === "spacer" ? [index] : [],
-      ),
-    [foundryRenderPlan.layers],
+    [foundryRenderPlan.layers, foundryStackLayerZ],
   );
   const foundryOverlayPinStacks = useMemo(
     () =>
       foundryPinStacks(
         foundryPinStackPoints(
-          landedFoundry.type,
-          foundryAssemblyPinPoints(
-            landedFoundry.type,
-            selectedSimulation.state,
-          ),
-          foundryMovingLayerIndexes,
-          foundrySpacerLayerIndexes,
+          foundryRenderPlan,
+          { state: selectedSimulation.state },
         ),
-        foundryRenderedLayerZ,
+        foundryRenderPlan,
       ),
     [
-      foundryMovingLayerIndexes,
-      foundryRenderedLayerZ,
-      foundrySpacerLayerIndexes,
-      landedFoundry.type,
+      foundryRenderPlan,
       selectedSimulation.state,
     ],
   );
@@ -432,7 +429,7 @@ export const MechanismFoundry = ({
     (foundryTopLayer?.z ?? 0.22) +
     (foundryTopLayer
       ? (foundryExplode / 100) *
-        foundryTopLayer.stackIndex *
+        Math.max(0, foundryRenderPlan.layers.length - 1) *
         FABRICATION_RENDER_LAYER_Z_STEP *
         1.5
       : 0) +
@@ -1022,7 +1019,7 @@ export const MechanismFoundry = ({
     return () => cancelAnimationFrame(frame);
   }, [foundryPlaying, project.settings.animationSpeed]);
   const makePackage = (): FoundryExportPackage => {
-    const mechanismId = uid("mech");
+    const mechanismId = landedFoundry.id;
     const state = calculateLinkage(landedFoundry, 0);
     const physicalOutputPoint =
       mechanismTraceDefinitionsForState(landedFoundry.type, state).find(

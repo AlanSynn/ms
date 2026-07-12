@@ -96,6 +96,9 @@ type FoundryPreviewStateProbeProps = {
   pinStackLayerSummary: string;
   pinSpanSummary: string;
   zCollisionCount: number;
+  supportContactErrorCount: number;
+  spacerSupportErrorCount: number;
+  supportBlockerCount: number;
   camContactErrorForData: number;
   simulationScale: number;
   pinionRotation: number;
@@ -173,6 +176,9 @@ export const FoundryPreviewStateProbe = ({
   pinStackLayerSummary,
   pinSpanSummary,
   zCollisionCount,
+  supportContactErrorCount,
+  spacerSupportErrorCount,
+  supportBlockerCount,
   camContactErrorForData,
   simulationScale,
   pinionRotation,
@@ -218,6 +224,43 @@ export const FoundryPreviewStateProbe = ({
     mechanism.type === "gear" || mechanism.type === "gear_linkage";
   const isPlanetaryGear = mechanism.type === "planetary_gear";
   const primaryPath = visiblePathTraces.find((trace) => trace.primary);
+  const layerById = new Map(renderPlan.layers.map((layer) => [layer.layerId, layer]));
+  const supportNodeById = new Map(renderPlan.supportNodes.map((node) => [node.id, node]));
+  const pinSpanById = new Map(renderPlan.pinSpans.map((span) => [span.id, span]));
+  const pathKinds = (path: FabricationRenderPlan["supportPaths"][number]) => path.orderedLayerIds
+    .map((layerId) => layerById.get(layerId)?.renderKind)
+    .filter((kind): kind is NonNullable<typeof kind> => Boolean(kind));
+  const supportPathKindSummary = renderPlan.supportPaths
+    .map((path) => `${path.sourceIds.join("+") || path.rootNodeId}:${pathKinds(path).join(">")}`)
+    .join(";");
+  const supportPathSourceSummary = renderPlan.supportPaths
+    .map((path) => `${path.id}:${path.sourceIds.join("+")}`)
+    .join(";");
+  const supportPathLayerSummary = renderPlan.supportPaths
+    .map((path) => `${path.id}:${path.orderedLayerIds.join(">")}`)
+    .join(";");
+  const supportPathPinSpanSummary = renderPlan.supportPaths
+    .map((path) => `${path.id}:${path.pinSpanId ?? "none"}`)
+    .join(";");
+  const planetaryOwnerPaths = renderPlan.supportPaths.filter((path) =>
+    path.sourceIds.some((id) => id === "sun-carrier-pivot-pin" || id === "planet-carrier-pin"),
+  );
+  const planetaryOwnerPathKinds = planetaryOwnerPaths
+    .map((path) => `${path.sourceIds[0]}:${pathKinds(path).join(">")}`)
+    .join(";");
+  const planetaryOwnerPathFaces = planetaryOwnerPaths
+    .map((path) => `${path.sourceIds[0]}:${path.orderedLayerIds.map((layerId) => {
+      const layer = layerById.get(layerId);
+      return layer ? `${layer.backFaceMm}-${layer.frontFaceMm}` : "missing";
+    }).join(">")}`)
+    .join(";");
+  const planetaryOwnerPathRoots = planetaryOwnerPaths
+    .map((path) => {
+      const span = path.pinSpanId ? pinSpanById.get(path.pinSpanId) : undefined;
+      const rootedToBoard = span?.supportNodeIds.some((nodeId) => supportNodeById.get(nodeId)?.kind === "board") ?? false;
+      return `${path.sourceIds[0]}:${rootedToBoard ? "board" : "free"}`;
+    })
+    .join(";");
   const primaryPathBounds = primaryPath?.points.length
     ? (() => {
         const xs = primaryPath.points.map((point) => point.x);
@@ -351,9 +394,9 @@ export const FoundryPreviewStateProbe = ({
       }
       data-three-gear-axle-stack-contract={
         isGearTrain
-          ? "board-side>S10-spacer>gear>fastener-head"
+          ? "compiled-support-path-order"
           : isPlanetaryGear
-            ? "sun/carrier and planet/carrier pins use local S10 spacers"
+            ? "compiled-owner-support-path-order"
             : "not-gear-train"
       }
       data-three-gear-board-side-spacer-z={gearBoardSpacerSummary}
@@ -361,7 +404,7 @@ export const FoundryPreviewStateProbe = ({
       data-three-gear-linkage-spacing-contract={gearLinkageSpacingContract}
       data-three-gear-linkage-crank-stack-contract={
         mechanism.type === "gear_linkage"
-          ? "B-gear-hole>S10>drive-link;C-gear-hole>S10>S10>output-link;R-drive-link>S10>output-link"
+          ? "compiled-support-paths"
           : "not-gear-linkage"
       }
       data-three-gear-linkage-bracket-anchor={
@@ -376,10 +419,10 @@ export const FoundryPreviewStateProbe = ({
       data-three-spacer-mm={`${FABRICATION_SPACER_SPEC.outerDiameterMm}x${FABRICATION_SPACER_SPEC.innerDiameterMm}`}
       data-three-spacer-layers={spacerLayerCount}
       data-three-spacer-render-count={spacerRenderCount}
-      data-three-spacer-render-contract="recipe-pin-spacer-sites"
+      data-three-spacer-render-contract="compiled-support-path-membership"
       data-three-spacer-pin-ids={spacerPinIdSummary}
       data-three-board-pivot-spacer-mode={
-        mechanism.type === "4bar" ? "single-board-side-spacer" : "not-board-pivot"
+        mechanism.type === "4bar" ? "compiled-path-spacer" : "not-board-pivot"
       }
       data-three-board-pivot-spacer-ids={boardPivotPinStacks
         .map((pin) => pin.id)
@@ -390,25 +433,28 @@ export const FoundryPreviewStateProbe = ({
       }
       data-three-board-pivot-fastener-contract={
         mechanism.type === "4bar"
-          ? "fastener-end>S10-board-side>linkage>fastener-head"
+          ? "board>linkage>spacer>retainer"
           : "template-specific"
       }
       data-three-physical-pin-count={assemblyPinPoints.length}
       data-three-physical-pin-contract={assemblyPinContract}
-      data-three-pin-stack-policy="per-pin-adjacent-stack"
-      data-three-pin-stack-z-sources={
-        mechanism.type === "4bar"
-          ? "fourbar-board-pivots-include-board-side-spacer"
-          : isGearTrain
-            ? "gear-axles-include-board-side-spacer"
-            : isPlanetaryGear
-              ? "planetary-carrier-pins-include-local-spacers"
-              : "moving-layers-only"
-      }
+      data-three-pin-stack-policy="compiler-support-paths"
+      data-three-pin-stack-z-sources="compiled-support-paths-and-pin-spans"
       data-three-pin-stack-layer-indexes={pinStackLayerSummary}
       data-three-pin-stack-spans={pinSpanSummary}
-      data-three-pin-stack-clearance-contract="local-spacers-fill-adjacent-z-gaps"
+      data-three-pin-stack-clearance-contract="face-adjacent-compiled-support"
       data-three-z-collision-count={zCollisionCount}
+      data-three-support-contact-error-count={supportContactErrorCount}
+      data-three-support-spacer-error-count={spacerSupportErrorCount}
+      data-three-support-blocker-count={supportBlockerCount}
+      data-three-support-path-kinds={supportPathKindSummary}
+      data-three-support-path-ids={renderPlan.supportPaths.map((path) => path.id).join(";")}
+      data-three-support-path-sources={supportPathSourceSummary}
+      data-three-support-path-layer-ids={supportPathLayerSummary}
+      data-three-support-path-pin-spans={supportPathPinSpanSummary}
+      data-three-planetary-owner-path-kinds={planetaryOwnerPathKinds}
+      data-three-planetary-owner-path-faces={planetaryOwnerPathFaces}
+      data-three-planetary-owner-path-roots={planetaryOwnerPathRoots}
       data-three-ground-span-mode={
         mechanism.type === "4bar" ? "board-reference" : "rendered-reference"
       }
@@ -427,7 +473,7 @@ export const FoundryPreviewStateProbe = ({
           : ""
       }
       data-three-cam-pin-contract={
-        mechanism.type === "cam" ? "cam-axle-and-follower-center-only" : "not-cam"
+        mechanism.type === "cam" ? "compiled-cam-axle-support-path" : "not-cam"
       }
       data-three-cam-rotation-deg={
         mechanism.type === "cam" ? pinionRotation.toFixed(2) : ""
@@ -497,19 +543,13 @@ export const FoundryPreviewStateProbe = ({
         .map((z) => z.toFixed(2))
         .join(",")}
       data-three-geometry-contract={renderPlan.layers
-        .map((item) =>
-          foundryLayerGeometryContract(
-            mechanism.type,
-            item.label,
-            item.renderKind,
-          ),
-        )
+        .map((item) => foundryLayerGeometryContract(item))
         .join(" → ")}
       data-three-stack-validation-errors={renderPlan.validationErrors.length}
       data-three-physical-validation-errors={physicalValidationErrors.length}
       data-three-physical-validation-summary={physicalValidationSummary}
       data-three-preview-renderable={
-        renderPlan.validationErrors.length || physicalValidationErrors.length
+        supportBlockerCount || physicalValidationErrors.length
           ? "blocked"
           : "ready"
       }

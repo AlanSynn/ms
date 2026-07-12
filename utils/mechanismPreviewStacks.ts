@@ -1,198 +1,32 @@
-import type { MechanismType, Point } from "../types";
+import type { Point } from "../types";
 import type { calculateLinkage } from "./kinematics";
 import {
-  FABRICATION_RENDER_LAYER_Z_STEP,
-  FABRICATION_RENDER_MIN_CLEARANCE,
-  FABRICATION_RENDER_PART_DEPTH,
-} from "./fabricationRenderPlan";
+  projectFabricationZMm,
+  type FabricationRenderLayer,
+  type FabricationRenderPlan,
+} from "./mechanismFabricationZStack";
 
 type LinkageState = ReturnType<typeof calculateLinkage>;
 
-type MechanismPreviewStackPolicy = {
-  pinContract: string;
-  assemblyPins: (state: LinkageState) => Point[];
-  layerGeometryContract?: (
-    label: string,
-    renderKind: string,
-  ) => string | undefined;
+export type FoundrySupportPointContext = {
+  state: LinkageState;
+  gearCenters?: Point[];
+  planetCenters?: Point[];
 };
-
-const compactPoints = (points: Array<Point | undefined>) =>
-  points.filter(Boolean) as Point[];
-
-const defaultAssemblyPins = (state: LinkageState) =>
-  compactPoints([
-    state.p1,
-    state.p2,
-    state.j1,
-    state.j2,
-    state.aux,
-    state.effector,
-  ]);
-
-const guidedOutputPins = (state: LinkageState) =>
-  compactPoints([state.p1, state.j1, state.j2]);
-
-const MECHANISM_PREVIEW_STACK_POLICIES: Record<
-  MechanismType,
-  MechanismPreviewStackPolicy
-> = {
-  crank: {
-    pinContract: "template-specific-output",
-    assemblyPins: defaultAssemblyPins,
-  },
-  "4bar": {
-    pinContract: "reference-A-B-C-D-only",
-    assemblyPins: (state) =>
-      compactPoints([state.p1, state.j1, state.j2, state.p2]),
-    layerGeometryContract: (label, renderKind) => {
-      if (renderKind !== "linkage") return undefined;
-      if (/input|crank/i.test(label)) return `${label}:A-B`;
-      if (/coupler/i.test(label)) return `${label}:B-C`;
-      if (/output|rocker/i.test(label)) return `${label}:C-D`;
-      return undefined;
-    },
-  },
-  piston: {
-    pinContract: "guided-output-only",
-    assemblyPins: guidedOutputPins,
-  },
-  yoke: {
-    pinContract: "guided-output-only",
-    assemblyPins: guidedOutputPins,
-  },
-  "quick-return": {
-    pinContract: "guided-output-only",
-    assemblyPins: guidedOutputPins,
-  },
-  "5bar": {
-    pinContract: "reference-ground-chain-only",
-    assemblyPins: (state) =>
-      compactPoints([state.p1, state.j1, state.j2, state.aux, state.p2]),
-  },
-  "6bar": {
-    pinContract: "reference-ground-chain-only",
-    assemblyPins: (state) =>
-      compactPoints([state.p1, state.j1, state.j2, state.aux, state.p2]),
-  },
-  cam: {
-    pinContract: "cam-axle-and-follower-center-only",
-    assemblyPins: (state) => compactPoints([state.p1, state.j2]),
-    layerGeometryContract: (label, renderKind) => {
-      if (renderKind === "cam") return `${label}:rotating-cam`;
-      if (renderKind === "follower") return `${label}:guided-follower`;
-      if (renderKind === "guide") return `${label}:fixed-guide`;
-      return undefined;
-    },
-  },
-  "rack-pinion": {
-    pinContract: "guided-output-only",
-    assemblyPins: guidedOutputPins,
-  },
-  gear: {
-    pinContract: "fixed-gear-axles-only",
-    assemblyPins: defaultAssemblyPins,
-    layerGeometryContract: (label, renderKind) =>
-      renderKind === "gear" ? `${label}:fixed-board-gear` : undefined,
-  },
-  gear_linkage: {
-    pinContract: "fixed-gear-axles-plus-two-crank-links",
-    assemblyPins: defaultAssemblyPins,
-    layerGeometryContract: (label, renderKind) => {
-      if (renderKind === "gear") return `${label}:fixed-board-gear`;
-      if (/drive.*connector|drive.*L|Drive L/i.test(label))
-        return `${label}:B-pin-to-R`;
-      if (/output.*connector|output.*L|Output L/i.test(label))
-        return `${label}:C-pin-to-R`;
-      if (/L4|linkage/i.test(label)) return `${label}:gear-pin-to-R`;
-      if (/2-hole|bracket/i.test(label)) return `${label}:R-connector`;
-      return undefined;
-    },
-  },
-  planetary_gear: {
-    pinContract: "sun-and-carrier-planet-axles",
-    assemblyPins: (state) => compactPoints([state.p1, state.p2]),
-    layerGeometryContract: (label) => {
-      if (/ring/i.test(label)) return `${label}:fixed-ring`;
-      if (/sun|G1|1-space/i.test(label)) return `${label}:sun-input`;
-      if (/planet|G3|3-space/i.test(label)) return `${label}:planet-on-carrier`;
-      if (/carrier/i.test(label)) return `${label}:sun-planet-carrier`;
-      return undefined;
-    },
-  },
-};
-
-export const foundryLayerGeometryContract = (
-  type: MechanismType,
-  label: string,
-  renderKind: string,
-) =>
-  MECHANISM_PREVIEW_STACK_POLICIES[type].layerGeometryContract?.(
-    label,
-    renderKind,
-  ) ?? `${label}:${renderKind}`;
-
-export type FoundryRenderLayerLike = { label: string; renderKind: string };
-
-export const foundryPlanetaryLayerIndexes = (
-  type: MechanismType,
-  layers: FoundryRenderLayerLike[],
-) => {
-  if (type !== "planetary_gear") return undefined;
-  const ring = layers.findIndex(
-    (item) => item.renderKind === "gear" && /ring/i.test(item.label),
-  );
-  const sun = layers.findIndex(
-    (item) => item.renderKind === "gear" && /sun|G1|1-space/i.test(item.label),
-  );
-  const carrier = layers.findIndex(
-    (item) =>
-      item.renderKind === "linkage" && /carrier|L2|linkage/i.test(item.label),
-  );
-  const planet = layers.findIndex(
-    (item) =>
-      item.renderKind === "gear" && /planet|G3|3-space/i.test(item.label),
-  );
-  if (ring < 0 || sun < 0 || carrier < 0 || planet < 0) return undefined;
-  return { ring, sun, carrier, planet };
-};
-
-export const foundryRenderedLayerZForMechanism = (
-  type: MechanismType,
-  layers: FoundryRenderLayerLike[],
-  stackLayerZ: number[],
-  gearMeshPlaneZ?: number,
-) => {
-  const z = stackLayerZ.map((value, index) =>
-    typeof gearMeshPlaneZ === "number" && layers[index]?.renderKind === "gear"
-      ? gearMeshPlaneZ
-      : value,
-  );
-  const planetaryLayers = foundryPlanetaryLayerIndexes(type, layers);
-  if (planetaryLayers && typeof gearMeshPlaneZ === "number") {
-    z[planetaryLayers.ring] = gearMeshPlaneZ;
-    z[planetaryLayers.sun] = gearMeshPlaneZ;
-    z[planetaryLayers.planet] = gearMeshPlaneZ;
-    z[planetaryLayers.carrier] = Number(
-      (gearMeshPlaneZ + FABRICATION_RENDER_LAYER_Z_STEP).toFixed(3),
-    );
-  }
-  return z;
-};
-
-export const foundryAssemblyPinPoints = (
-  type: MechanismType,
-  state: LinkageState,
-): Point[] => MECHANISM_PREVIEW_STACK_POLICIES[type].assemblyPins(state);
-
-export const foundryAssemblyPinContract = (type: MechanismType) =>
-  MECHANISM_PREVIEW_STACK_POLICIES[type].pinContract;
 
 export type FoundryPinStackPoint = {
   id: string;
+  pathId: string;
+  rootNodeId: string;
+  sourceIds: string[];
   point: Point;
+  orderedLayerIds: string[];
+  layerIndexes: number[];
   movingLayerIndexes: number[];
   spacerLayerIndexes: number[];
+  clipLayerIndexes: number[];
+  supportNodeIds: string[];
+  pinSpanId: string;
 };
 
 export type FoundryPinStack = FoundryPinStackPoint & {
@@ -200,216 +34,100 @@ export type FoundryPinStack = FoundryPinStackPoint & {
   topZ: number;
   centerZ: number;
   lengthZ: number;
+  retainerZ: number[];
 };
+
+const pointForTypedNode = (
+  nodeId: string,
+  { state, gearCenters = [], planetCenters = [] }: FoundrySupportPointContext,
+): Point | undefined => {
+  const gearMatch = /^gear-(\d+)$/.exec(nodeId);
+  if (gearMatch) {
+    const index = Number(gearMatch[1]);
+    return gearCenters[index] ?? (index === 0 ? state.p1 : state.p2);
+  }
+  switch (nodeId) {
+    case "p1":
+    case "cam-axle":
+    case "cam-disk":
+    case "pinion-gear":
+    case "sun-gear":
+    case "ring-gear":
+      return state.p1;
+    case "p2":
+      return state.p2;
+    case "j1":
+    case "drive-pin":
+      return state.j1;
+    case "j2":
+    case "output-pin":
+    case "slider":
+    case "yoke-slider":
+    case "rack":
+    case "follower-head":
+      return state.j2;
+    case "aux":
+      return state.aux;
+    case "effector":
+    case "output-point":
+      return state.effector;
+    case "planet-gear":
+      return planetCenters[0] ?? state.p2;
+    default:
+      return undefined;
+  }
+};
+
+export const foundryLayerGeometryContract = (
+  layer: Pick<FabricationRenderLayer, "layerId" | "sourceNodeId" | "renderKind">,
+) => `${layer.sourceNodeId ?? layer.layerId}:${layer.renderKind}`;
+
+export const foundryRenderedLayerZForMechanism = (
+  layers: FabricationRenderLayer[],
+  stackLayerZ: number[],
+) => layers.map((layer, index) => stackLayerZ[index] ?? layer.z);
+
+export const foundryAssemblyPinContract = () => "compiled-support-paths";
 
 export const isMovingRenderKind = (renderKind: string) =>
   !["clip", "spacer", "base"].includes(renderKind);
 
 export const foundryPinStackPoints = (
-  type: MechanismType,
-  points: Point[],
-  movingLayerIndexes: number[],
-  spacerLayerIndexes: number[],
+  renderPlan: FabricationRenderPlan,
+  context: FoundrySupportPointContext,
 ): FoundryPinStackPoint[] => {
-  const ids = ["A", "B", "C", "D", "E", "F"];
-  const cleanIndexes = movingLayerIndexes.filter((index) =>
-    Number.isFinite(index),
+  const layerIndexById = new Map(
+    renderPlan.layers.map((layer, index) => [layer.layerId, index]),
   );
-  const cleanSpacerIndexes = spacerLayerIndexes.filter((index) =>
-    Number.isFinite(index),
-  );
-  const spacerIndexesFrom = (start: number, count = 1) =>
-    Array.from(
-      { length: count },
-      (_, offset) =>
-        cleanSpacerIndexes[
-          Math.max(0, Math.min(cleanSpacerIndexes.length - 1, start + offset))
-        ],
-    ).filter((item): item is number => typeof item === "number");
-  const spacerIndexesForPin = (pinMovingLayerIndexes: number[]) => {
-    const between = cleanSpacerIndexes.filter(
-      (spacerIndex) =>
-        pinMovingLayerIndexes.some((index) => index < spacerIndex) &&
-        pinMovingLayerIndexes.some((index) => index > spacerIndex),
-    );
-    if (between.length) return [...new Set(between)];
-    if (pinMovingLayerIndexes.length !== 1) return [];
-    const movingIndex = pinMovingLayerIndexes[0];
-    const before = [...cleanSpacerIndexes]
-      .reverse()
-      .find((spacerIndex) => spacerIndex < movingIndex);
-    const after = cleanSpacerIndexes.find(
-      (spacerIndex) => spacerIndex > movingIndex,
-    );
-    const nearest =
-      movingIndex === cleanIndexes[0]
-        ? [after]
-        : movingIndex === cleanIndexes.at(-1)
-          ? [before]
-          : [before, after];
-    return [
-      ...new Set(
-        nearest.filter((item): item is number => typeof item === "number"),
+  const pinSpanById = new Map(renderPlan.pinSpans.map((span) => [span.id, span]));
+  return renderPlan.supportPaths.flatMap((path) => {
+    if (!path.pinSpanId) return [];
+    const pinSpan = pinSpanById.get(path.pinSpanId);
+    const point = pointForTypedNode(path.rootNodeId, context);
+    if (!pinSpan || !point) return [];
+    const layerIndexes = path.orderedLayerIds
+      .map((layerId) => layerIndexById.get(layerId))
+      .filter((index): index is number => typeof index === "number");
+    return [{
+      id: path.displayAlias ?? path.rootNodeId,
+      pathId: path.id,
+      rootNodeId: path.rootNodeId,
+      sourceIds: [...path.sourceIds],
+      point,
+      orderedLayerIds: [...path.orderedLayerIds],
+      layerIndexes,
+      movingLayerIndexes: layerIndexes.filter((index) =>
+        isMovingRenderKind(renderPlan.layers[index]?.renderKind ?? "base"),
       ),
-    ];
-  };
-  if (!points.length || !cleanIndexes.length)
-    return points.map((point, index) => ({
-      id: ids[index] ?? `P${index + 1}`,
-      point,
-      movingLayerIndexes: [],
-      spacerLayerIndexes: [],
-    }));
-
-  if (type === "gear") {
-    return points.map((point, index) => {
-      const pinMovingLayerIndexes = [
-        cleanIndexes[Math.min(index, cleanIndexes.length - 1)],
-      ].filter((item): item is number => typeof item === "number");
-      return {
-        id: ids[index] ?? `P${index + 1}`,
-        point,
-        movingLayerIndexes: pinMovingLayerIndexes,
-        spacerLayerIndexes: spacerIndexesFrom(index),
-      };
-    });
-  }
-
-  if (type === "gear_linkage") {
-    const gearCount = Math.min(
-      cleanIndexes.length,
-      Math.max(2, points.length - 3),
-    );
-    const gearIndexes = cleanIndexes.slice(0, gearCount);
-    const linkageIndexes = cleanIndexes.slice(gearCount);
-    const pinId = (index: number) => {
-      if (index < gearCount) {
-        if (index === 0) return "A";
-        if (index === gearCount - 1) return "D";
-        return `I${index}`;
-      }
-      if (index === gearCount) return "B";
-      if (index === gearCount + 1) return "C";
-      return "R";
-    };
-    return points.map((point, index) => {
-      if (index < gearCount) {
-        return {
-          id: pinId(index),
-          point,
-          movingLayerIndexes: [gearIndexes[index]].filter(
-            (item): item is number => typeof item === "number",
-          ),
-          spacerLayerIndexes: spacerIndexesFrom(index),
-        };
-      }
-      if (index === gearCount) {
-        return {
-          id: pinId(index),
-          point,
-          movingLayerIndexes: [gearIndexes[0], linkageIndexes[0]].filter(
-            (item): item is number => typeof item === "number",
-          ),
-          spacerLayerIndexes: spacerIndexesFrom(gearCount),
-        };
-      }
-      if (index === gearCount + 1) {
-        return {
-          id: pinId(index),
-          point,
-          movingLayerIndexes: [
-            gearIndexes.at(-1),
-            linkageIndexes[1] ?? linkageIndexes[0],
-          ].filter((item): item is number => typeof item === "number"),
-          spacerLayerIndexes: spacerIndexesFrom(Math.max(0, gearCount), 2),
-        };
-      }
-      const moving = linkageIndexes
-        .slice(0, 2)
-        .filter((item): item is number => typeof item === "number");
-      return {
-        id: pinId(index),
-        point,
-        movingLayerIndexes: moving,
-        spacerLayerIndexes: spacerIndexesFrom(
-          gearCount,
-          Math.max(1, moving.length - 1),
-        ),
-      };
-    });
-  }
-
-  if (type === "planetary_gear") {
-    const sunIndex = cleanIndexes[1] ?? cleanIndexes[0];
-    const carrierIndex = cleanIndexes[2] ?? sunIndex;
-    const planetIndex = cleanIndexes[3] ?? carrierIndex;
-    return points.map((point, index) => {
-      if (index === 0) {
-        return {
-          id: "A",
-          point,
-          movingLayerIndexes: [sunIndex, carrierIndex].filter(
-            (item): item is number => typeof item === "number",
-          ),
-          spacerLayerIndexes: spacerIndexesFrom(1),
-        };
-      }
-      return {
-        id: ids[index] ?? `P${index + 1}`,
-        point,
-        movingLayerIndexes: [carrierIndex, planetIndex].filter(
-          (item): item is number => typeof item === "number",
-        ),
-        spacerLayerIndexes: spacerIndexesFrom(2),
-      };
-    });
-  }
-
-  if (type === "cam") {
-    return points.map((point, index) => {
-      const pinMovingLayerIndexes =
-        index === 0
-          ? [cleanIndexes[0], cleanIndexes[1]]
-          : [cleanIndexes[2], cleanIndexes[3]];
-      return {
-        id: index === 0 ? "A" : "B",
-        point,
-        movingLayerIndexes: pinMovingLayerIndexes.filter(
-          (item): item is number => typeof item === "number",
-        ),
-        spacerLayerIndexes: spacerIndexesFrom(index === 0 ? 0 : 2),
-      };
-    });
-  }
-
-  if (
-    (type === "4bar" || type === "5bar" || type === "6bar") &&
-    points.length === cleanIndexes.length + 1
-  ) {
-    return points.map((point, index) => {
-      const pinMovingLayerIndexes = [
-        cleanIndexes[index - 1],
-        cleanIndexes[index],
-      ].filter((item): item is number => typeof item === "number");
-      return {
-        id: ids[index] ?? `P${index + 1}`,
-        point,
-        movingLayerIndexes: pinMovingLayerIndexes,
-        spacerLayerIndexes: spacerIndexesForPin(pinMovingLayerIndexes),
-      };
-    });
-  }
-
-  return points.map((point, index) => {
-    const pinMovingLayerIndexes = [
-      cleanIndexes[Math.min(index, cleanIndexes.length - 1)],
-    ].filter((item): item is number => typeof item === "number");
-    return {
-      id: ids[index] ?? `P${index + 1}`,
-      point,
-      movingLayerIndexes: pinMovingLayerIndexes,
-      spacerLayerIndexes: spacerIndexesForPin(pinMovingLayerIndexes),
-    };
+      spacerLayerIndexes: layerIndexes.filter(
+        (index) => renderPlan.layers[index]?.renderKind === "spacer",
+      ),
+      clipLayerIndexes: layerIndexes.filter(
+        (index) => renderPlan.layers[index]?.renderKind === "clip",
+      ),
+      supportNodeIds: [...pinSpan.supportNodeIds],
+      pinSpanId: pinSpan.id,
+    }];
   });
 };
 
@@ -418,127 +136,53 @@ export const foundrySpacerTouchesPin = (
   spacerLayerIndex: number,
 ) => pin.spacerLayerIndexes.includes(spacerLayerIndex);
 
+export const foundryLayerTouchesPin = (
+  pin: FoundryPinStackPoint,
+  layerIndex: number,
+) => pin.layerIndexes.includes(layerIndex);
+
 export const foundryPinStacks = (
   pinPoints: FoundryPinStackPoint[],
-  renderedLayerZ: number[],
-  options: {
-    includeSpacerZ?: boolean;
-    spacerZForPin?: (pin: FoundryPinStackPoint) => number[] | undefined;
-  } = {},
-): FoundryPinStack[] =>
-  pinPoints.map((pin) => {
-    const localSpacerZ = options.includeSpacerZ
-      ? options.spacerZForPin?.(pin)
-      : undefined;
-    const zIndexes = options.includeSpacerZ
-      ? localSpacerZ?.length
-        ? pin.movingLayerIndexes
-        : [...pin.movingLayerIndexes, ...pin.spacerLayerIndexes]
-      : pin.movingLayerIndexes;
-    const stackZ = [
-      ...zIndexes
-        .map((index) => renderedLayerZ[index])
-        .filter((z): z is number => typeof z === "number"),
-      ...(localSpacerZ ?? []),
-    ];
-    const minZ = stackZ.length
-      ? Math.min(...stackZ)
-      : (renderedLayerZ[0] ?? FABRICATION_RENDER_LAYER_Z_STEP);
-    const maxZ = stackZ.length ? Math.max(...stackZ) : minZ;
-    const bottomZ = Number(
-      (minZ - FABRICATION_RENDER_PART_DEPTH / 2 - 0.08).toFixed(3),
-    );
-    const topZ = Number(
-      (maxZ + FABRICATION_RENDER_PART_DEPTH / 2 + 0.18).toFixed(3),
-    );
-    const lengthZ = Math.max(0.46, Number((topZ - bottomZ).toFixed(3)));
-    return {
-      ...pin,
-      bottomZ,
-      topZ,
-      centerZ: Number(((bottomZ + topZ) / 2).toFixed(3)),
-      lengthZ,
-    };
-  });
-
-export const foundryLocalSpacerZsForPin = (
-  type: MechanismType,
-  pin: FoundryPinStackPoint,
-  renderedLayerZ: number[],
-  layers: FoundryRenderLayerLike[],
-) => {
-  const boardSideSpacerZ = (movingZ: number) =>
-    Number(
-      (
-        movingZ -
-        (FABRICATION_RENDER_PART_DEPTH + FABRICATION_RENDER_MIN_CLEARANCE) / 2
-      ).toFixed(3),
-    );
-  const movingZ = pin.movingLayerIndexes
-    .map((index) => renderedLayerZ[index])
-    .filter((z): z is number => typeof z === "number")
-    .sort((a, b) => a - b);
-  const uniqueMovingZ = movingZ.filter(
-    (z, index) => index === 0 || Math.abs(z - movingZ[index - 1]) > 0.001,
+  renderPlan: FabricationRenderPlan,
+): FoundryPinStack[] => {
+  const pinSpanById = new Map(renderPlan.pinSpans.map((span) => [span.id, span]));
+  const supportNodeById = new Map(
+    renderPlan.supportNodes.map((node) => [node.id, node]),
   );
-  const betweenMovingLayers = () =>
-    uniqueMovingZ
-      .slice(1)
-      .map((z, index) => Number(((uniqueMovingZ[index] + z) / 2).toFixed(3)));
-  if (type === "4bar") {
-    if ((pin.id === "A" || pin.id === "D") && uniqueMovingZ.length === 1) {
-      return [boardSideSpacerZ(uniqueMovingZ[0])];
-    }
-    if ((pin.id === "B" || pin.id === "C") && uniqueMovingZ.length >= 2)
-      return betweenMovingLayers().slice(0, 1);
-  }
-  if (type === "gear_linkage" && uniqueMovingZ.length >= 2) {
-    const minZ = uniqueMovingZ[0];
-    const maxZ = uniqueMovingZ.at(-1) ?? minZ;
-    const spacerCount = Math.max(
-      pin.spacerLayerIndexes.length,
-      uniqueMovingZ.length - 1,
-    );
-    return Array.from({ length: spacerCount }, (_, index) =>
-      Number(
-        (minZ + ((maxZ - minZ) * (index + 1)) / (spacerCount + 1)).toFixed(3),
-      ),
-    );
-  }
-  if (type === "planetary_gear" && uniqueMovingZ.length >= 2)
-    return betweenMovingLayers().slice(0, 1);
-  if (
-    (type === "gear" || type === "gear_linkage") &&
-    pin.movingLayerIndexes.some((index) => layers[index]?.renderKind === "gear")
-  ) {
-    const gearLayerIndex = pin.movingLayerIndexes.find(
-      (index) => layers[index]?.renderKind === "gear",
-    );
-    const gearZ =
-      typeof gearLayerIndex === "number"
-        ? renderedLayerZ[gearLayerIndex]
-        : undefined;
-    return typeof gearZ === "number" ? [boardSideSpacerZ(gearZ)] : [];
-  }
-  return [];
+  return pinPoints.flatMap((pin) => {
+    const span = pinSpanById.get(pin.pinSpanId);
+    if (!span) return [];
+    const retainerZ = span.supportNodeIds
+      .map((nodeId) => supportNodeById.get(nodeId))
+      .filter((node) => node && ["clip", "fastener-head", "fastener-tab"].includes(node.kind))
+      .map((node) => projectFabricationZMm(node!.centerMm));
+    return [{
+      ...pin,
+      bottomZ: projectFabricationZMm(span.backFaceMm),
+      topZ: projectFabricationZMm(span.frontFaceMm),
+      centerZ: projectFabricationZMm(span.centerMm),
+      lengthZ: projectFabricationZMm(span.physicalDepthMm),
+      retainerZ: [...new Set(retainerZ)].sort((a, b) => a - b),
+    }];
+  });
 };
 
-export const foundryLocalSpacerZForPin = (
-  type: MechanismType,
+export const foundryLocalSpacerZsForPin = (
   pin: FoundryPinStackPoint,
   renderedLayerZ: number[],
-  layers: FoundryRenderLayerLike[],
+) => pin.spacerLayerIndexes
+  .map((index) => renderedLayerZ[index])
+  .filter((z): z is number => typeof z === "number");
+
+export const foundryLocalSpacerZForPin = (
+  pin: FoundryPinStackPoint,
+  renderedLayerZ: number[],
   spacerLayerIndex?: number,
 ) => {
-  const spacerZs = foundryLocalSpacerZsForPin(
-    type,
-    pin,
-    renderedLayerZ,
-    layers,
-  );
   if (typeof spacerLayerIndex === "number") {
-    const spacerOrdinal = pin.spacerLayerIndexes.indexOf(spacerLayerIndex);
-    return spacerZs[Math.max(0, spacerOrdinal)] ?? spacerZs[0];
+    return pin.spacerLayerIndexes.includes(spacerLayerIndex)
+      ? renderedLayerZ[spacerLayerIndex]
+      : undefined;
   }
-  return spacerZs[0];
+  return foundryLocalSpacerZsForPin(pin, renderedLayerZ)[0];
 };

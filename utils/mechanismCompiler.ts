@@ -2,7 +2,7 @@ import type { FabricationPartRequirement, FabricationRecipe, MechanismConfig, Ph
 import { boardToScene, defaultPhysicalKit, sceneToBoardRaw } from './coordinates';
 import { assemblyStepFingerprint, type AssemblyStepFingerprint } from './fabricationAssemblyFingerprint';
 import { sampleFeasibleRange, type FabricationFeasibleRange } from './fabricationReadiness';
-import type { FabricationRenderPlan } from './fabricationRenderPlan';
+import type { FabricationRenderPlan } from './mechanismFabricationZStack';
 import { compileGraphFabricationRecipe, type AuthoredGraphFabricationResult } from './mechanismGraphFabricationCompiler';
 import {
     MECHANISM_GRAPH_IR_VERSION,
@@ -159,7 +159,7 @@ export const compileFabricationRecipe = (project: ProjectState, mechanism: Mecha
     {
         const graph = mechanismGraphForMechanism(mechanism);
     const compiled = compileGraphFabricationRecipe(graph, project.settings.physicalKit);
-    return compiled.recipe
+    return compiled.buildable && compiled.recipe
         ? graphRecipeWithProjectContext(project, mechanism, compiled.recipe)
         : graphRecipeBlocker(project, mechanism, compiled.blocker ?? 'Graph fabrication blocked');
     };
