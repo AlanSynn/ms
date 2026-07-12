@@ -10,6 +10,7 @@ import {
   FABRICATION_GEAR_SPECS,
   FABRICATION_LINKAGE_SPECS,
   fabricationGearSpecForPitchRadius,
+  fabricationPartDisplayLabel,
   fabricationLinkageSpecForSceneLength,
 } from "../../../utils/fabrication";
 import {
@@ -260,12 +261,21 @@ export const MechanismParametricEditor = ({
       ),
     [mechanism],
   );
-  const connectionConfirmations = Object.entries(connectionState.connectionSelections ?? {}).map(([role, selection]) => ({
-    role,
-    label: connectionRoleLabel(role as ConnectionSelectionRole),
-    part: selection.kind === "linkage-hole" ? selection.linkageKey : selection.gearKey,
-    hole: selection.holeIndex,
-  }));
+  const connectionConfirmations = Object.entries(connectionState.connectionSelections ?? {}).map(([role, selection]) => {
+    const rawPartKey = selection.kind === "linkage-hole" ? selection.linkageKey : selection.gearKey;
+    const partLabel =
+      selection.kind === "linkage-hole"
+        ? linkageSpecs.find((spec) => spec.key === rawPartKey)?.label
+        : gearSpecs.find((spec) => spec.key === rawPartKey)?.label;
+    return {
+      role,
+      kind: selection.kind,
+      label: connectionRoleLabel(role as ConnectionSelectionRole),
+      rawPartKey,
+      partLabel: partLabel ? fabricationPartDisplayLabel(partLabel) : "Selected part",
+      holeIndex: selection.holeIndex,
+    };
+  });
   const acceptedFourBarInput =
     mechanism.type === "4bar" &&
     connectionSelectionAccepted(
@@ -296,8 +306,15 @@ export const MechanismParametricEditor = ({
       {connectionConfirmations.length > 0 && (
         <div className="mb-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black uppercase tracking-wider text-blue-700">
           {connectionConfirmations.map((item) => (
-            <div key={item.role}>
-              {item.label}: {item.part} #{item.hole}
+            <div
+              key={item.role}
+              data-testid={`connection-selection-confirmation-${item.role}`}
+              data-connection-role={item.role}
+              data-connection-kind={item.kind}
+              data-connection-part-key={item.rawPartKey}
+              data-connection-hole-index={item.holeIndex}
+            >
+              {item.label}: {item.partLabel} · Hole {item.holeIndex + 1}
             </div>
           ))}
         </div>

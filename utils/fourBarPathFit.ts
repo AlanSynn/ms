@@ -1,10 +1,11 @@
-import type { MechanismConfig, Point, ProjectMotionPath, ProjectState } from '../types';
+import type { FabricationIssue, MechanismConfig, Point, ProjectMotionPath, ProjectState } from '../types';
 import { boardToScene, sceneToBoard, SCENE_PX_PER_MM } from './coordinates';
 import { FABRICATION_LINKAGE_SPECS } from './fabricationContract';
-import { validateMechanismPreviewReadiness, validateForFabrication } from './fabrication';
+import { newFabricationIssues, validateForFabrication, visibleFabricationMessages } from './fabrication';
 import { generateMechanismPointTraces } from './kinematics';
 import { normalizeMechanismToFabricationSet } from './mechanismReference';
 import { mechanismWithGeneratedPath } from './project';
+import { pathOwnedTargetFields } from './pathTargets';
 
 const pathMetrics = (path: ProjectMotionPath) => {
   const length =
@@ -18,30 +19,29 @@ const pathMetrics = (path: ProjectMotionPath) => {
   return { length };
 };
 
-const fabricationErrorsForCandidate = (
+const fabricationIssuesForCandidate = (
   project: ProjectState,
   mechanism: MechanismConfig,
-) => {
-  const readinessErrors = validateMechanismPreviewReadiness(mechanism, project.settings.physicalKit);
+): FabricationIssue[] => {
   const siblingMechanisms = project.mechanisms.filter(
     (candidate) => candidate.id !== mechanism.id,
   );
-  const baseline = new Set(
-    validateForFabrication({ ...project, mechanisms: siblingMechanisms }).errors,
-  );
+  const baselineIssues = validateForFabrication({ ...project, mechanisms: siblingMechanisms }).issues;
   const candidateProject: ProjectState = {
     ...project,
     mechanisms: [...siblingMechanisms, mechanism],
   };
-  return [
-    ...new Set([
-      ...readinessErrors,
-      ...validateForFabrication(candidateProject).errors.filter(
-        (error) => !baseline.has(error),
-      ),
-    ]),
-  ];
+  return newFabricationIssues(
+    baselineIssues,
+    validateForFabrication(candidateProject).issues,
+  );
 };
+
+const fabricationErrorsForCandidate = (
+  project: ProjectState,
+  mechanism: MechanismConfig,
+) => visibleFabricationMessages(fabricationIssuesForCandidate(project, mechanism), 'error');
+
 
 const pathPointsForFit = (path: ProjectMotionPath): Point[] => {
   if (!path.closed || path.points.length < 3) return path.points;
@@ -183,6 +183,7 @@ export const fitFourBarKitMechanismToPath = (
     error: number,
   ) => {
     if (top.length >= 12 && error >= top.at(-1)!.error) return;
+    if (fabricationErrorsForCandidate(validationProject, mechanismCandidate).length) return;
     top.push({ mechanism: mechanismCandidate, error });
     top.sort((a, b) => a.error - b.error);
     if (top.length > 12) top.pop();
@@ -227,13 +228,7 @@ export const fitFourBarKitMechanismToPath = (
                   rockerLength,
                   groundAngle,
                   assemblyMode,
-                  targetPartId: path.sceneObjectId ? undefined : (mechanism.targetPartId ?? path.partId),
-                  targetSceneObjectId: path.sceneObjectId,
-                  targetPathId: path.id,
-                  targetAnchorJointId: path.sceneObjectId
-                    ? undefined
-                    : (mechanism.targetAnchorJointId ?? path.targetAnchorJointId),
-                  activeVisualPartIds: path.sceneObjectId ? [] : [mechanism.targetPartId ?? path.partId],
+                  ...pathOwnedTargetFields(path),
                   source: 'optimized',
                   recommendation: 'Fit path',
                 });
@@ -268,5 +263,5 @@ export const fitFourBarKitMechanismToPath = (
   return top.find(
     (candidate) =>
       !fabricationErrorsForCandidate(validationProject, candidate.mechanism).length,
-  )?.mechanism;
+  )?.mechanism ?? top[0]?.mechanism;
 };

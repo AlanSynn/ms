@@ -110,15 +110,37 @@ export {
 export const fabricationGearSpecForPitchRadius = sharedFabricationGearSpecForPitchRadius;
 export const fabricationLinkageSpecForCells = sharedFabricationLinkageSpecForCells;
 
+export const fabricationIssueKey = (issue: Pick<FabricationIssue, 'severity' | 'message' | 'mechanismId' | 'partId' | 'pathId'>) =>
+    [issue.severity, issue.message, issue.mechanismId ?? '', issue.partId ?? '', issue.pathId ?? ''].join('|');
+
+export const fabricationVisibleIssueKey = (issue: Pick<FabricationIssue, 'severity' | 'message'>) =>
+    `${issue.severity}|${issue.message}`;
+
+export const newFabricationIssues = (baseline: FabricationIssue[], candidate: FabricationIssue[]) => {
+    const baselineKeys = new Set(baseline.map(fabricationIssueKey));
+    return candidate.filter(issue => !baselineKeys.has(fabricationIssueKey(issue)));
+};
+
+export const visibleFabricationMessages = (issues: FabricationIssue[], severity: FabricationIssue['severity']) => {
+    const seen = new Set<string>();
+    return issues.flatMap(issue => {
+        if (issue.severity !== severity) return [];
+        const key = fabricationVisibleIssueKey(issue);
+        if (seen.has(key)) return [];
+        seen.add(key);
+        return [issue.message];
+    });
+};
+
 export const validateForFabrication = (project: ProjectState) => {
-    const warnings: string[] = [];
-    const errors: string[] = [];
     const issues: FabricationIssue[] = [];
+    const issueKeys = new Set<string>();
     const add = (severity: FabricationIssue['severity'], message: string, extra: Partial<FabricationIssue> = {}) => {
-        const target = severity === 'error' ? errors : warnings;
-        if (target.includes(message)) return;
-        issues.push({ severity, message, recoveryStage: severity === 'error' ? 'design' : 'blueprint', recoveryAction: 'Review item', ...extra });
-        target.push(message);
+        const issue: FabricationIssue = { severity, message, recoveryStage: severity === 'error' ? 'design' : 'blueprint', recoveryAction: 'Review item', ...extra };
+        const key = fabricationIssueKey(issue);
+        if (issueKeys.has(key)) return;
+        issueKeys.add(key);
+        issues.push(issue);
     };
     const sheet = sceneBoundsForSheet(project.settings.physicalKit);
     const snapTolerance = project.settings.physicsSnapMode === 'fast' ? 4 : project.settings.physicsSnapMode === 'high' ? 0.25 : 0.5;
@@ -138,7 +160,7 @@ export const validateForFabrication = (project: ProjectState) => {
             { x: part.transform.x + part.bounds.x * part.transform.scale, y: part.transform.y + (part.bounds.y + part.bounds.height) * part.transform.scale },
             { x: part.transform.x + (part.bounds.x + part.bounds.width) * part.transform.scale, y: part.transform.y + (part.bounds.y + part.bounds.height) * part.transform.scale }
         ];
-        if (corners.some(p => !insideSheet(p))) add('warning', `${part.id}: visible part extends outside sheet bounds.`, { partId, recoveryStage: 'path', recoveryAction: 'Move part inside sheet' });
+        if (corners.some(p => !insideSheet(p))) add('warning', 'Move: visible part outside sheet.', { partId, recoveryStage: 'path', recoveryAction: 'Move part inside sheet' });
     });
     project.sceneObjectOrder.forEach(objectId => {
         const object = project.sceneObjects[objectId];
@@ -151,25 +173,25 @@ export const validateForFabrication = (project: ProjectState) => {
             { x: object.transform.x - halfWidth, y: object.transform.y + halfHeight },
             { x: object.transform.x + halfWidth, y: object.transform.y + halfHeight }
         ];
-        if (corners.some(p => !insideSheet(p))) add('warning', `${object.id}: visible object extends outside sheet bounds.`, { recoveryStage: 'character', recoveryAction: 'Move object inside sheet' });
+        if (corners.some(p => !insideSheet(p))) add('warning', 'Move: visible object outside sheet.', { recoveryStage: 'character', recoveryAction: 'Move object inside sheet' });
     });
     activeMechanisms.forEach(m => {
-        validateMechanismPreviewReadiness(m, project.settings.physicalKit).forEach(message => add('error', `${m.id}: ${message}`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Choose ready template' }));
-        (bindingWarnings[m.id] ?? []).forEach(message => add('error', `${m.id}: ${message}`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Rebind mechanism target' }));
+        validateMechanismPreviewReadiness(m, project.settings.physicalKit).forEach(message => add('error', message, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Choose ready template' }));
+        (bindingWarnings[m.id] ?? []).forEach(message => add('error', message, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Rebind mechanism target' }));
         if (!m.id) add('error', 'Mechanism missing per-instance id.', { recoveryStage: 'design', recoveryAction: 'Select or recreate mechanism' });
-        if ((!m.targetPartId && !m.targetSceneObjectId) || !m.targetPathId) add('error', `${m.id}: choose target + path.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Choose target + path' });
-        if (m.targetPartId && !project.parts[m.targetPartId]) add('error', `${m.id}: missing target part ${m.targetPartId}.`, { mechanismId: m.id, partId: m.targetPartId, recoveryStage: 'design', recoveryAction: 'Choose existing part' });
-        if (m.targetSceneObjectId && !project.sceneObjects[m.targetSceneObjectId]) add('error', `${m.id}: missing target object ${m.targetSceneObjectId}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Choose existing object' });
+        if ((!m.targetPartId && !m.targetSceneObjectId) || !m.targetPathId) add('error', 'Fix: choose target + path.', { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Choose target + path' });
+        if (m.targetPartId && !project.parts[m.targetPartId]) add('error', 'Fix: choose existing part.', { mechanismId: m.id, partId: m.targetPartId, recoveryStage: 'design', recoveryAction: 'Choose existing part' });
+        if (m.targetSceneObjectId && !project.sceneObjects[m.targetSceneObjectId]) add('error', 'Fix: choose existing object.', { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Choose existing object' });
         if (m.targetPathId) {
             const path = project.paths[m.targetPathId];
-            if (!path) add('error', `${m.id}: missing path ${m.targetPathId}.`, { mechanismId: m.id, pathId: m.targetPathId, recoveryStage: 'path', recoveryAction: 'Choose valid path' });
-            else if (!mechanismMatchesPathOwner(m, path, project)) add('error', `${m.id}: path belongs to ${path.sceneObjectId ?? path.partId}.`, { mechanismId: m.id, pathId: m.targetPathId, partId: m.targetPartId, recoveryStage: 'design', recoveryAction: 'Rebind target path' });
+            if (!path) add('error', 'Fix: choose valid path.', { mechanismId: m.id, pathId: m.targetPathId, recoveryStage: 'path', recoveryAction: 'Choose valid path' });
+            else if (!mechanismMatchesPathOwner(m, path, project)) add('error', 'Fix: rebind target path.', { mechanismId: m.id, pathId: m.targetPathId, partId: m.targetPartId, recoveryStage: 'design', recoveryAction: 'Rebind target path' });
         }
         const physicalNumbers = [m.crankLength, m.couplerLength, m.groundLength, m.rockerLength, m.sliderOffset, m.couplerPointDist, m.couplerPointAngle];
         if (m.type === '5bar' || m.type === '6bar' || m.type === 'piston') physicalNumbers.push(m.rodLength ?? Number.NaN);
         if (m.type === 'gear' || m.type === 'gear_linkage' || m.type === 'planetary_gear') physicalNumbers.push(m.gearRatio ?? Number.NaN, m.speed2 ?? Number.NaN);
-        if (!physicalNumbers.every(Number.isFinite)) add('error', `${m.id}: bad dimension.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Fix dimensions' });
-        if ((m.type === 'gear' || m.type === 'gear_linkage' || m.type === 'planetary_gear') && (m.gearRatio ?? 0) === 0) add('error', `${m.id}: gear ratio 0.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Choose non-zero ratio' });
+        if (!physicalNumbers.every(Number.isFinite)) add('error', 'Fix: bad dimension.', { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Fix dimensions' });
+        if ((m.type === 'gear' || m.type === 'gear_linkage' || m.type === 'planetary_gear') && (m.gearRatio ?? 0) === 0) add('error', 'Fix: choose non-zero ratio.', { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Choose non-zero ratio' });
         if (m.type === 'gear' || m.type === 'gear_linkage' || m.type === 'planetary_gear') {
             const expectedCenterDistance = m.type === 'gear'
                 ? gearTrainPitchCenterDistance(m)
@@ -177,43 +199,43 @@ export const validateForFabrication = (project: ProjectState) => {
                     ? gearTrainResolvedCenterDistance(m)
                     : m.crankLength + m.rockerLength;
             if (Math.abs(m.groundLength - expectedCenterDistance) > Math.max(1, expectedCenterDistance * 0.03)) {
-                add(fabricationSeverity, `${m.id}: snap gear pitch.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Snap gear pitch' });
+                add(fabricationSeverity, 'Fix: snap gear pitch.', { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Snap gear pitch' });
             }
         }
-        if (m.type === 'rack-pinion' && Math.abs(m.sliderOffset) < Math.max(2, m.crankLength * 0.8)) add('warning', `${m.id}: rack guide too close.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Move rack guide' });
-        if (m.type === 'rack-pinion' && m.rockerLength < m.crankLength * (2 * Math.PI + 2)) add(fabricationSeverity, `${m.id}: rack too short.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Lengthen rack' });
+        if (m.type === 'rack-pinion' && Math.abs(m.sliderOffset) < Math.max(2, m.crankLength * 0.8)) add('warning', 'Move: rack guide too close.', { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Move rack guide' });
+        if (m.type === 'rack-pinion' && m.rockerLength < m.crankLength * (2 * Math.PI + 2)) add(fabricationSeverity, 'Fix: lengthen rack.', { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Lengthen rack' });
         const range = sampleFeasibleRange(m);
-        if (range.warning?.startsWith('No motion')) add('error', `${m.id}: ${range.warning}.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Adjust' });
-        else if (range.warning) add('warning', `${m.id}: ${range.warning}`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Review partial motion' });
+        if (range.warning?.startsWith('No motion')) add('error', `${range.warning}.`, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Adjust' });
+        else if (range.warning) add('warning', range.warning, { mechanismId: m.id, recoveryStage: 'foundry', recoveryAction: 'Review partial motion' });
         if (!Number.isFinite(m.anchorX) || !Number.isFinite(m.anchorY)) {
-            add('error', `${m.id}: missing board anchor.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Drag to board' });
+            add('error', 'Fix: missing board anchor.', { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Drag to board' });
             return;
         }
         const board = sceneToBoardRaw({ x: m.anchorX!, y: m.anchorY! }, project.settings.physicalKit);
         const boardScene = board.valid ? boardToScene(board.col, board.row, project.settings.physicalKit) : null;
         let placementHasIssue = false;
         if (!board.valid) {
-            add(fabricationSeverity, `${m.id}: off board at ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move onto board' });
+            add(fabricationSeverity, `Move: anchor off board at ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move onto board' });
             placementHasIssue = true;
         }
         else if (boardScene && Math.hypot(boardScene.x - m.anchorX!, boardScene.y - m.anchorY!) > snapTolerance) {
-            add(fabricationSeverity, `${m.id}: anchor off grid at ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Snap to hole' });
+            add(fabricationSeverity, `Fix: anchor off grid at ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Snap to hole' });
             placementHasIssue = true;
         }
         else if (board.col <= 0 || board.row <= 0 || board.col >= project.settings.physicalKit.boardCells - 1 || board.row >= project.settings.physicalKit.boardCells - 1) {
-            add('warning', `${m.id}: near board edge ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move inward' });
+            add('warning', `Move: near board edge ${board.label}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move inward' });
         }
         if (board.valid) {
             const graphFabrication = compileMechanismGraphFabrication(m, project.settings.physicalKit);
             if (!graphFabrication.recipe) {
                 const graphBlocker = graphFabrication.blocker;
                 if (!graphBlocker) {
-                    add('error', `${m.id}: graph compiler did not explain why this cannot build.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Report bug' });
+                    add('error', 'Fix: report build blocker.', { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Report bug' });
                 }
                 else {
                     const message = graphBlocker === 'Placement off board'
-                        ? `${m.id}: assembly holes off board near ${board.label}.`
-                        : `${m.id}: ${graphBlocker}.`;
+                        ? `Move: assembly holes off board near ${board.label}.`
+                        : `Fix: ${graphBlocker}.`;
                     add(fabricationSeverity, message, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: graphBlocker === 'Placement off board' ? 'Move inward' : 'Choose ready template' });
                 }
                 placementHasIssue = true;
@@ -222,16 +244,20 @@ export const validateForFabrication = (project: ProjectState) => {
                 isBoardFixedCoordRole(step.coordRoles?.[index] ?? '') && !isValidBoardCoordinate(coord)
             ));
             if (offBoardStep) {
-                add('error', `${m.id}: assembly holes off board near ${offBoardStep.boardCoordinate}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move inward' });
+                add('error', `Move: assembly holes off board near ${offBoardStep.boardCoordinate}.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Move inward' });
                 placementHasIssue = true;
             }
         }
         const path = m.type === 'planetary_gear'
             ? primaryFoundryPlaybackPath(m, 72)
             : generateCurvePoints(m, 72).points;
-        if (!placementHasIssue && path.some(p => !insideSheet(p))) add('error', `${m.id}: path outside sheet.`, { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Resize or move' });
+        if (!placementHasIssue && path.some(p => !insideSheet(p))) add('error', 'Move or resize: path outside sheet.', { mechanismId: m.id, recoveryStage: 'design', recoveryAction: 'Resize or move' });
     });
-    return { warnings, errors, issues };
+    return {
+        warnings: visibleFabricationMessages(issues, 'warning'),
+        errors: visibleFabricationMessages(issues, 'error'),
+        issues,
+    };
 };
 
 export const createFabricationPackage = (project: ProjectState): FabricationPackage => {

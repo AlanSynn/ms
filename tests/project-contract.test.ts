@@ -9,7 +9,7 @@ import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { boardCoordinateLabel, boardGridLines, boardToScene, bodyPartPivotScene, isBoardCoordinateInKit, physicalKitPreset, placeBodyPartPivotAt, SCENE_PX_PER_MM, SCENE_VIEW, sceneToBoard, sceneToBoardRaw, sceneToSheetMm, sceneToSvg, sheetMmToScene } from '../utils/coordinates';
 import { CLASSROOM_LESSONS, classroomLessonById, createDefaultMechanism, createDefaultSceneObject, createEmptyProject, createLessonProject, createSampleProject, handoffGate, loadProjectSnapshot, serializeProject, applyProjectAction, projectSelfCheck, mechanismRequiredParts, mechanismWithGeneratedPath, replaceCharacterProject, resetProjectToLessonBaseline } from '../utils/project';
-import { createFabricationPackage, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, PLANETARY_GEAR_PLANET_COUNT, fabricationBoardColumnLabel, fabricationBoardCoordinateCallout, fabricationBoardRowLabel, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForCells, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRecipeStackSummary, makeBlueprintPreviewSvg, makeBlueprintSvg, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRenderPlanForMechanism, fabricationStackForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryPlanetCenters, readableFabricationStackSummary, sampleFeasibleRange, validateFabricationStack, validateForFabrication, validateMechanismPreviewReadiness } from '../utils/fabrication';
+import { createFabricationPackage, newFabricationIssues, FABRICATION_GEAR_SPECS, FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_RENDER_LAYER_Z_STEP, FABRICATION_RENDER_MIN_CLEARANCE, FABRICATION_RENDER_PART_DEPTH, FABRICATION_RING_GEAR_SPEC, FABRICATION_SOURCE_SSOT, FABRICATION_SPACER_SPEC, PLANETARY_GEAR_PLANET_COUNT, fabricationBoardColumnLabel, fabricationBoardCoordinateCallout, fabricationBoardRowLabel, fabricationGearPathD, fabricationGearProfileForPitchRadius, fabricationGearSpecForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForCells, fabricationLinkageSpecForSceneLength, fabricationPartDisplayLabel, fabricationRecipeStackSummary, makeBlueprintPreviewSvg, makeBlueprintSvg, fabricationRingGearPathD, fabricationRingGearProfileForPitchRadius, fabricationRenderPlanForMechanism, fabricationStackForMechanism, fabricationStackSummary, planetaryGearConventionForMechanism, planetaryPlanetCenters, readableFabricationStackSummary, sampleFeasibleRange, validateFabricationStack, validateForFabrication, validateMechanismPreviewReadiness } from '../utils/fabrication';
 import { FABRICATION_BOARD_GENERATOR } from '../utils/fabricationBoardTemplate';
 import { FABRICATION_GEAR_ROOT_WEB_MM, fabricationGearEngravingLabel, fabricationLinkageEngravingLabel, fabricationRingGearEngravingLabel, fabricationSpacerEngravingLabel } from '../utils/fabricationContract';
 import { makeAssemblyGuideHtml as directMakeAssemblyGuideHtml, makeAssemblyGuidePdf as directMakeAssemblyGuidePdf } from '../utils/fabricationAssemblyGuide';
@@ -29,7 +29,7 @@ import { circlePath as simplePdfCirclePath, hexRgb as simplePdfHexRgb, makePdfDo
 import { generateDXF, generateSVG } from '../utils/exporter';
 import { createProjectFromPackageData, parseCharConfig } from '../utils/packageLoader';
 import { animationDeltaRadians, calculateLinkage, camFollowerRise, camProfileScale, gearPairOutputRatio, gearTrainMeshPhaseDegAt, gearTrainMeshPhaseRadAt, gearTrainOutputRatio, gearTrainCenters, gearTrainPitchCenterDistance, gearTrainPitchRadii, gearTrainResolvedCenterDistance, gearTrainRotationRatioAt, generateCurvePoints, generateMechanismPointTraces, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio, planetaryRingPitchRadius, sampledCamProfileScale } from '../utils/kinematics';
-import { animatedPartsForProject, describeMotionChain, mechanismBindingWarnings, motionAnchorJointIds, motionChainRootJointIds, motionPreviewForPath, motionPreviewForProject, motionPreviewForTarget, pointOnGeneratedMechanismPath, pointOnProjectPath, preferredMotionJointId } from '../utils/motion';
+import { animatedPartsForProject, describeMotionChain, mechanismBindingWarnings, mechanismDriverIdentity, motionAnchorJointIds, motionChainRootJointIds, motionPreviewForPath, motionPreviewForProject, motionPreviewForTarget, pointOnGeneratedMechanismPath, pointOnProjectPath, preferredMotionJointId } from '../utils/motion';
 import { buildCutBaseViewport, clientPointToCutPoint, panCutViewport, zoomCutViewport, type CutFrame } from '../utils/cutEditorViewport';
 import { addDrawSamplePoint, normalizeDrawTimedPoints } from '../utils/pathDrawing';
 import { buildToonSceneProjection } from '../utils/sceneProjection';
@@ -42,6 +42,7 @@ import { createFoundryPlaybackFrame, foundryPlaybackPhaseToInputAngle, generateF
 import { foundryPinStackPoints } from '../utils/mechanismPreviewStacks';
 import { createMechanismFitContext, createSceneMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext, pointsToSvgPath } from '../utils/mechanismPreview';
 import { buildMechanismRecommendations, fitMechanismToTargetPath } from '../utils/mechanismRecommendations';
+import { pathBelongsToTarget, pathOwnedTargetFields } from '../utils/pathTargets';
 import { buildAutomataSceneModel } from '../utils/automataSceneModel';
 import { buildDesignAutomataProjection } from '../utils/designAutomataProjection';
 import { WEBGL_PIXEL_RATIO_CAP, canvasPanOffset, canvasViewBoxForViewport, zoomCanvasViewportAtPoint } from '../utils/viewport';
@@ -56,10 +57,12 @@ import { buildMechanismSceneContract } from '../utils/mechanismSceneContract';
 import { MECHANISM_GRAPH_ADAPTER_TYPES, MECHANISM_GRAPH_LIVE_SOLVE_BUDGET_MS, mechanismGraphForMechanism, mechanismGraphFromDraft, sampleMechanismGraphMotion, validateMechanismGraph } from '../utils/mechanismGraph';
 import { buildAssemblyGuideModel } from '../components/stages/assembly/assemblyGuideModel';
 import { selectBlueprintRecipe } from '../components/stages/blueprint/BlueprintExport';
+import { BlueprintControlPanel } from '../components/stages/blueprint/BlueprintControlPanel';
 import { MechanismLinkagePreview } from '../components/stages/foundry/MechanismLinkagePreview';
 import { FoundryInspectorPanel } from '../components/stages/foundry/FoundryInspectorPanel';
 import { FoundryWorkflowPanel } from '../components/stages/foundry/FoundryWorkflowPanel';
 import { MechanismParametricEditor } from '../components/stages/mechanism/MechanismParametricEditor';
+import { MechanismRecommendationSheet } from '../components/stages/path/MechanismRecommendationSheet';
 import { useAppMechanismActions } from '../hooks/useAppMechanismActions';
 import { createStageNavigator, navigateAppStage } from '../utils/appStageNavigation';
 import { assemblyCoordToSvg, characterBoardProjector, characterCanvasProjector, smoothAssemblyProgress, svgPathFromPoints } from '../components/stages/assembly/assemblyGeometry';
@@ -69,10 +72,11 @@ import { CLASSROOM_ASSESSMENT_KEYS, CLASSROOM_COPY, classroomAssessmentFor, clas
 import { MECHANISM_TYPES as SANITIZE_MECHANISM_TYPES, sanitizeMechanismRuntime } from '../utils/sanitize';
 import { generateSmartConfig, mutateConfig, OPTIMIZER_MECHANISM_TYPES } from '../utils/optimizer';
 import { isBoardFixedCoordRole, normalizeGearLinkageToReference, normalizeGearTrainToFabrication, normalizeMechanismToFabricationSet, normalizeMechanismToReference, REFERENCE_DEFAULTS, REFERENCE_EXPORT_READY_TYPES, REFERENCE_FOUNDRY_TYPES, REFERENCE_MECHANISM_RECIPES, referenceRecipeForType } from '../utils/mechanismReference';
-import type { AppStage, BodyPartLayer, ConnectionSelection, FoundryExportPackage, MechanismConfig, MechanismType, Point, ProjectAction, ProjectState, SceneObject } from '../types';
+import type { AppStage, BodyPartLayer, ConnectionSelection, FoundryExportPackage, MechanismConfig, MechanismType, Point, ProjectAction, ProjectState, SceneObject, StandardJoint } from '../types';
 
 projectSelfCheck();
 
+const g006StudentWarningCopyViolations: string[] = [];
 const cutSourceFrame: CutFrame = { x: 0, y: -300, width: 500, height: 300 };
 const cutFallbackFrame: CutFrame = { x: 150, y: -210, width: 140, height: 160 };
 const cutViewport = buildCutBaseViewport({
@@ -228,9 +232,6 @@ const renderMechanismActionHarness = (overrides: {
 } = {}) => {
   const project = overrides.project ?? createSampleProject({ includeMechanism: true });
   const selectedMechanism = overrides.selectedMechanism ?? project.mechanisms[0];
-  const selectedPart =
-    overrides.selectedPart ??
-    (selectedMechanism?.targetPartId ? project.parts[selectedMechanism.targetPartId] : undefined);
   const selectedPath =
     overrides.selectedPath ??
     (selectedMechanism?.targetPathId ? project.paths[selectedMechanism.targetPathId] : undefined);
@@ -243,8 +244,6 @@ const renderMechanismActionHarness = (overrides: {
     actions = useAppMechanismActions({
       project,
       dispatch: (action) => dispatches.push(action),
-      selectedPart,
-      selectedSceneObject: overrides.selectedSceneObject,
       selectedPath,
       selectedMechanism,
       foundry: overrides.foundry ?? createDefaultMechanism('4bar', 'foundry-preview-contract'),
@@ -830,7 +829,7 @@ assert(agentsContract.includes('Classroom entry is theme-guided first') && agent
 assert(agentsContract.includes('`Reset Lesson` must restore a known-good lesson baseline') && agentsContract.includes('preserving app settings'), 'AGENTS.md locks stable lesson reset semantics');
 assert(agentsContract.includes('Blueprint owns build files') && agentsContract.includes('Assembly owns animated step-by-step build'), 'AGENTS.md preserves Blueprint versus Assembly role split');
 assert(agentsContract.includes('Use domain-driven vocabulary consistently') && agentsContract.includes('Keep harness engineering first-class'), 'AGENTS.md locks DDD vocabulary and harness-friendly seam rules');
-assert(agentsContract.includes('Prefer `$ask-claude` for high-token, low-importance, non-performance-sensitive support work') && agentsContract.includes('delegated output is draft evidence') && agentsContract.includes('leader owns source inspection, edits, final correctness, and verification'), 'AGENTS.md keeps the Claude delegation policy narrow and leader-owned');
+assert(agentsContract.includes('Prefer `$ask-claude` for high-token, low-importance, non-performance-sensitive support work') && agentsContract.includes('Delegate long-log reading, routine test execution and pass/fail triage') && agentsContract.includes('Keep difficult planning, architecture, integration decisions, source edits, irreversible actions, and final verification with the leader') && agentsContract.includes('Treat delegated summaries and success text as untrusted') && agentsContract.includes('preserve raw output and exit codes'), 'AGENTS.md keeps routine high-token work delegated while planning, edits, and final evidence stay leader-owned');
 const fabricationParityLanguage = `${fabricationParityReportText}\n${fabricationParityReportJsonText}\n${fabricationParityIndexText}`;
 assert(fabricationParityIndexText.includes(latestFabricationParityReport), 'analysis index points to the latest active fabrication parity report');
 assert(!fabricationParityLanguage.includes('fully 1:1 for managed categories including board and all mechanism families'), 'fabrication parity reports reject the old unqualified full 1:1 mechanism-family claim');
@@ -918,6 +917,74 @@ for (const id of guidedLessonIds) {
   assert(CLASSROOM_LESSONS.some(lesson => lesson.id === id), `${id} is present in the guided classroom theme library`);
   assert.equal(classroomLessonById(id)?.startStage, 'character', `${id} starts in Character for immediate ownership edits`);
 }
+const assertGuidedLessonContracts = () => {
+const assertFrontFacingAnatomy = (project: ProjectState, label: string) => {
+  const skeleton = project.skeleton;
+  assert(skeleton, `${label} has skeleton for front-facing anatomy`);
+  for (const [rightJointId, leftJointId] of [['right_shoulder', 'left_shoulder'], ['right_hand', 'left_hand'], ['right_hip', 'left_hip'], ['right_foot', 'left_foot']] as const) {
+    const rightJoint: StandardJoint | undefined = skeleton.joints[rightJointId];
+    const leftJoint: StandardJoint | undefined = skeleton.joints[leftJointId];
+    assert(rightJoint && leftJoint, `${label} keeps ${rightJointId}/${leftJointId} joint ids`);
+    assert(rightJoint.position.x < leftJoint.position.x, `${label} places anatomical ${rightJointId} at smaller scene X than ${leftJointId}`);
+    assert(sceneToSvg(rightJoint.position).x < sceneToSvg(leftJoint.position).x, `${label} places anatomical ${rightJointId} at smaller screen X than ${leftJointId}`);
+  }
+  for (const jointId of ['root', 'hip', 'torso', 'neck', 'head_top'] as const) {
+    assert(Math.abs((skeleton.joints[jointId]?.position.x ?? Number.NaN)) < 1e-9, `${label} keeps center joint ${jointId} centered`);
+  }
+  assert.deepEqual(Object.fromEntries(Object.entries(skeleton.joints).map(([id, joint]) => [id, joint.parentId])), {
+    root: null,
+    hip: 'root',
+    torso: 'hip',
+    neck: 'torso',
+    head_top: 'neck',
+    left_shoulder: 'torso',
+    left_elbow: 'left_shoulder',
+    left_hand: 'left_elbow',
+    right_shoulder: 'torso',
+    right_elbow: 'right_shoulder',
+    right_hand: 'right_elbow',
+    left_hip: 'root',
+    left_knee: 'left_hip',
+    left_foot: 'left_knee',
+    right_hip: 'root',
+    right_knee: 'right_hip',
+    right_foot: 'right_knee'
+  }, `${label} preserves humanoid joint hierarchy and ids while flipping only coordinates`);
+  for (const [rightPartId, leftPartId] of [['right_arm_upper', 'left_arm_upper'], ['right_hand_part', 'left_hand_part'], ['right_leg_upper', 'left_leg_upper'], ['right_foot_part', 'left_foot_part']] as const) {
+    const right = project.parts[rightPartId];
+    const left = project.parts[leftPartId];
+    assert(right && left, `${label} keeps ${rightPartId}/${leftPartId} part ids`);
+    assert(right.transform.x < left.transform.x, `${label} places anatomical ${rightPartId} at smaller scene X than ${leftPartId}`);
+    assert(sceneToSvg(right.transform).x < sceneToSvg(left.transform).x, `${label} places anatomical ${rightPartId} at smaller screen X than ${leftPartId}`);
+  }
+};
+const assertBuiltInSampleExactReflection = (project: ProjectState) => {
+  const skeleton = project.skeleton;
+  assert(skeleton, 'built-in sample has skeleton for exact left/right reflection');
+  for (const [rightJointId, leftJointId] of [['right_shoulder', 'left_shoulder'], ['right_elbow', 'left_elbow'], ['right_hand', 'left_hand'], ['right_hip', 'left_hip'], ['right_knee', 'left_knee'], ['right_foot', 'left_foot']] as const) {
+    const rightX: number | undefined = skeleton.joints[rightJointId]?.position.x;
+    const leftX: number | undefined = skeleton.joints[leftJointId]?.position.x;
+    assert.equal(typeof rightX, 'number', `built-in sample keeps ${rightJointId}`);
+    assert.equal(typeof leftX, 'number', `built-in sample keeps ${leftJointId}`);
+    assert.equal(rightX! + leftX!, 0, `built-in sample ${rightJointId}/${leftJointId} joint X values are exact reflections`);
+    assert.equal(Math.abs(rightX!), Math.abs(leftX!), `built-in sample ${rightJointId}/${leftJointId} joint X magnitudes match`);
+  }
+  assert.equal(Math.abs(skeleton.joints.right_hand.position.x), 128, 'built-in sample preserves the original hand joint X magnitude');
+  for (const [rightPartId, leftPartId] of [['right_arm_upper', 'left_arm_upper'], ['right_arm_lower', 'left_arm_lower'], ['right_hand_part', 'left_hand_part'], ['right_leg_upper', 'left_leg_upper'], ['right_leg_lower', 'left_leg_lower'], ['right_foot_part', 'left_foot_part']] as const) {
+    const right = project.parts[rightPartId];
+    const left = project.parts[leftPartId];
+    assert(right && left, `built-in sample keeps ${rightPartId}/${leftPartId}`);
+    assert.equal(right.transform.x + left.transform.x, 0, `built-in sample ${rightPartId}/${leftPartId} part X values are exact reflections`);
+    assert.equal(right.transform.rotation + left.transform.rotation, 0, `built-in sample ${rightPartId}/${leftPartId} rotations are exact reflections`);
+    assert.equal(Math.abs(right.transform.x), Math.abs(left.transform.x), `built-in sample ${rightPartId}/${leftPartId} part X magnitudes match`);
+  }
+  const rightHandPart = project.parts.right_hand_part;
+  assert(rightHandPart, 'built-in sample keeps right_hand_part');
+  assert.equal(Math.abs(rightHandPart.transform.x), 134, 'built-in sample preserves the original hand part X magnitude');
+};
+assertFrontFacingAnatomy(starterSample, 'built-in sample humanoid');
+assertBuiltInSampleExactReflection(starterSample);
+for (const lesson of CLASSROOM_LESSONS) assertFrontFacingAnatomy(createLessonProject(lesson.id), `${lesson.id} guided lesson`);
 assert(CLASSROOM_LESSONS.every(lesson => lesson.outcome && lesson.changeCue && lesson.buildCue && lesson.sensemaking?.directTranslation && lesson.sensemaking?.tryThis && lesson.sensemaking?.expectedAnswer && lesson.sensemaking?.evidenceCue && lesson.sensemaking?.clipSlot === 'generated-loop'), 'guided lesson entries carry result-first outcome, change cue, build cue, hidden sensemaking, check answers, evidence cues, and generated-loop clip slots');
 for (const [type, metadata] of Object.entries(MECHANISM_TEMPLATE_LIBRARY)) {
   assert(metadata.classroomSensemaking.directTranslation, `${type} has direct translation sensemaking`);
@@ -1009,8 +1076,7 @@ assert.equal(classroomLesson.selectedMechanismId, 'mech-1', 'waving-arm lesson s
 assert.equal(classroomLesson.paths['path-right-arm'].partId, 'right_hand_part', 'waving-arm lesson targets the hand part instead of the lower arm plate');
 assert.equal(classroomLesson.mechanisms[0].targetPartId, 'right_hand_part', 'waving-arm mechanism binds to the hand part instead of the lower arm plate');
 assert.equal(classroomLesson.mechanisms[0].targetAnchorJointId, 'right_hand', 'waving-arm lesson drives the hand end-effector');
-assert.equal(classroomLesson.mechanisms[0].anchorX, 200, 'waving-arm keeps the driver outside the arm path instead of over the character');
-assert.equal(classroomLesson.mechanisms[0].groundAngle, 180, 'waving-arm points the mechanism back toward the character from the outside');
+
 assert((classroomLesson.mechanisms[0].generatedPath?.length ?? 0) >= 3, 'waving-arm lesson mechanism has generated motion samples for simulation and fit checks');
 const classroomLessonRoundTrip = loadProjectSnapshot(JSON.parse(serializeProject(classroomLesson)));
 assert.equal(classroomLessonRoundTrip.mechanisms[0].groundLength, classroomLesson.mechanisms[0].groundLength, 'lesson load preserves fitted mechanism geometry');
@@ -1022,11 +1088,124 @@ const wavingFourBarRecommendation = wavingRecommendations.find(option => option.
 assert(wavingFourBarRecommendation, 'recommendation audit keeps a valid four-bar card for the classroom hand-wave path');
 assert.deepEqual(wavingFourBarRecommendation!.fabricationErrors, [], 'four-bar recommendation card is fabrication-ready instead of hidden by path-outside validation');
 assert.deepEqual(validateForFabrication({ ...recommendationAuditProject, mechanisms: [wavingFourBarRecommendation!.mechanism] }).errors, [], 'four-bar recommendation board fit validates against physical generated motion, not only the stored preview trace');
+const insertedWavingRecommendationProject = applyProjectAction(recommendationAuditProject, {
+  type: 'upsert_mechanism',
+  mechanism: wavingFourBarRecommendation!.mechanism,
+});
+const insertedWavingRecommendation = insertedWavingRecommendationProject.mechanisms.find(mechanism => mechanism.id === wavingFourBarRecommendation!.mechanism.id);
+assert(insertedWavingRecommendation, 'recommendation insertion stores the selected recommended mechanism');
+assert.equal(
+  mechanismEditIsSafe(insertedWavingRecommendation, insertedWavingRecommendationProject.settings.physicalKit),
+  true,
+  'newly inserted recommendation mechanisms stay safe through the public upsert seam'
+);
+const recommendationSheetMarkup = renderToString(createElement(MechanismRecommendationSheet, {
+  isOpen: true,
+  project: recommendationAuditProject,
+  selectedPart: recommendationAuditProject.parts[wavingPathForRecommendations.partId],
+  selectedPath: wavingPathForRecommendations,
+  onClose: () => undefined,
+  onApply: () => undefined,
+}));
+const recommendationPrimaryCopyViolations = [
+  /Fit score\s+\d+\/100/.test(recommendationSheetMarkup) ? 'raw fit score appears in recommendation primary copy' : '',
+  /class="recommendation-score"[^>]*>\d+</.test(recommendationSheetMarkup) ? 'standalone raw recommendation score appears in primary copy' : '',
+  /Loose fit score\s+\d+/i.test(recommendationSheetMarkup) ? 'loose fit score appears in recommendation primary copy' : '',
+  /Score \${option\.score}\/100/.test(readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'MechanismRecommendationSheet.tsx'), 'utf8')) ? 'applied recommendation stores raw score in student copy' : '',
+].filter(Boolean);
+g006StudentWarningCopyViolations.push(...recommendationPrimaryCopyViolations.map(violation => `recommendation: ${violation}`));
+assert.equal(typeof wavingFourBarRecommendation!.score, 'number', 'recommendation keeps structured technical score outside primary copy');
+const assertGuidedPathStaysViewerLeft = (project: ProjectState, pathId: string, label: string) => {
+  const torsoX = project.skeleton?.joints.torso.position.x;
+  assert.equal(typeof torsoX, 'number', `${label} has a torso centerline`);
+  const path = project.paths[pathId];
+  assert(path, `${label} path exists`);
+  assert(path.points.every(point => point.x < torsoX!), `${label} stays wholly on anatomical right / viewer-left side`);
+};
+const assertGuidedMechanismDrivesInwardFromViewerLeft = (project: ProjectState, pathId: string, label: string) => {
+  const path = project.paths[pathId];
+  const mechanism = project.mechanisms[0];
+  const target = path?.targetAnchorJointId ? project.skeleton?.joints[path.targetAnchorJointId]?.position : undefined;
+  assert(path && mechanism && target, `${label} has a path, mechanism, and target joint`);
+  assert((mechanism.anchorX ?? Infinity) < target.x, `${label} mechanism anchor is farther outward on viewer-left than its target joint`);
+  assert(Math.cos(((mechanism.groundAngle ?? 0) * Math.PI) / 180) > 0, `${label} ground/link direction points back toward the target`);
+};
+assertGuidedPathStaysViewerLeft(classroomLesson, 'path-right-arm', 'waving-arm hand path');
+assertGuidedMechanismDrivesInwardFromViewerLeft(classroomLesson, 'path-right-arm', 'waving-arm mechanism');
+const generatedPlaybackMirrorFailures: string[] = [];
+const assertGeneratedPlaybackMirrorsPreFlipBaseline = (
+  lessonId: 'waving-arm' | 'walking-leg',
+  historical: Pick<MechanismConfig, 'anchorX' | 'groundAngle' | 'assemblyMode' | 'couplerPointAngle'>,
+) => {
+  const project = createLessonProject(lessonId);
+  const current = project.mechanisms[0];
+  assert(current?.generatedPath?.length, `${lessonId} has current generated playback samples`);
+  const anchorY = current.anchorY ?? current.sceneAnchor?.y ?? current.transform?.y ?? 0;
+  const reference = mechanismWithGeneratedPath({
+    ...current,
+    ...historical,
+    anchorY,
+    speed1: 1,
+    driverPhaseOffset: 0,
+    transform: { x: historical.anchorX!, y: anchorY, rotation: historical.groundAngle!, scale: current.transform?.scale ?? 1 },
+    sceneAnchor: { x: historical.anchorX!, y: anchorY },
+  });
+  assert(reference.generatedPath?.length, `${lessonId} has pre-flip generated playback samples`);
+  if (current.generatedPath.length !== reference.generatedPath.length) {
+    generatedPlaybackMirrorFailures.push(`${lessonId} sample count ${current.generatedPath.length} !== ${reference.generatedPath.length}`);
+    return;
+  }
+  const mismatchIndex = current.generatedPath.findIndex((point, index) => {
+    const expected = reference.generatedPath![index];
+    return Math.abs(point.x + expected.x) > 1e-6 || Math.abs(point.y - expected.y) > 1e-6;
+  });
+  if (mismatchIndex !== -1) {
+    const point = current.generatedPath[mismatchIndex];
+    const expected = reference.generatedPath[mismatchIndex]!;
+    generatedPlaybackMirrorFailures.push(`${lessonId} sample ${mismatchIndex}: actual (${point.x.toFixed(3)}, ${point.y.toFixed(3)}) expected (${(-expected.x).toFixed(3)}, ${expected.y.toFixed(3)})`);
+  }
+};
+assertGeneratedPlaybackMirrorsPreFlipBaseline('waving-arm', {
+  anchorX: 200,
+  groundAngle: 180,
+  assemblyMode: 'crossed',
+  couplerPointAngle: -13.2,
+});
+assertGeneratedPlaybackMirrorsPreFlipBaseline('walking-leg', {
+  anchorX: 160,
+  groundAngle: 180,
+  assemblyMode: 'open',
+  couplerPointAngle: 40,
+});
+assert.deepEqual(generatedPlaybackMirrorFailures, [], 'waving-arm and walking-leg generated playback paths mirror pre-flip samples without reversing order');
+const previousRightSideWavingArmPath = (() => {
+  const shoulder = { x: 58, y: 92 };
+  const elbow = { x: 108, y: 28 };
+  const hand = { x: 128, y: -34 };
+  const reach = Math.hypot(elbow.x - shoulder.x, elbow.y - shoulder.y) + Math.hypot(hand.x - elbow.x, hand.y - elbow.y);
+  const center = { x: shoulder.x + reach * 0.68, y: shoulder.y - reach * 0.12 };
+  const rx = reach * 0.24;
+  const ry = reach * 0.34;
+  return [
+    { x: center.x - rx * 0.25, y: center.y + ry * 0.82 },
+    { x: center.x + rx * 0.75, y: center.y + ry * 0.42 },
+    { x: center.x + rx, y: center.y - ry * 0.25 },
+    { x: center.x + rx * 0.12, y: center.y - ry },
+    { x: center.x - rx * 0.85, y: center.y - ry * 0.15 }
+  ];
+})();
+const roundedWavingArmPath = classroomLesson.paths['path-right-arm'].points.map(point => ({
+  x: Number(point.x.toFixed(3)),
+  y: Number(point.y.toFixed(3))
+}));
+const roundedMirroredPreviousWavingArmPath = previousRightSideWavingArmPath.map(point => ({
+  x: Number((-point.x).toFixed(3)),
+  y: Number(point.y.toFixed(3))
+}));
+assert.deepEqual(roundedWavingArmPath, roundedMirroredPreviousWavingArmPath, 'waving-arm built-in path mirrors the previous X coordinates without reversing point/timing order');
 const occupiedAnchorRecommendations = buildMechanismRecommendations(classroomLesson, classroomLesson.parts[classroomLesson.selectedPartId!], classroomLesson.paths['path-right-arm']);
 const occupiedFourBarRecommendation = occupiedAnchorRecommendations.find(option => option.type === '4bar');
-assert.equal(occupiedFourBarRecommendation?.mechanism.targetPartId, 'right_arm_lower', 'recommendations retarget to the closest parent part when the hand anchor already has a driver');
-assert.equal(occupiedFourBarRecommendation?.mechanism.targetAnchorJointId, 'right_hand', 'recommendation retarget keeps the hand end-effector for IK motion');
-assert.deepEqual(validateForFabrication({ ...classroomLesson, mechanisms: [...classroomLesson.mechanisms, { ...occupiedFourBarRecommendation!.mechanism, id: 'recommendation-contract-4bar' }] }).errors, [], 'retargeted recommendation can be added as a second Blueprint-ready mechanism without duplicate-anchor blockers');
+assert.equal(occupiedFourBarRecommendation, undefined, 'recommendations do not retarget an occupied hand path to a parent limb');
 const guidedChainReach = (project: ProjectState, jointIds: string[]) => {
   const skeleton = project.skeleton;
   assert(skeleton, 'guided project has skeleton');
@@ -1069,19 +1248,23 @@ assert.equal(walkingLegMechanism.type, '4bar', 'walking-leg guided theme creates
 assert.equal(walkingLegLesson.selectedPathId, 'path-right-foot-step', 'walking-leg guided theme creates an editable foot path');
 assert.equal(walkingLegLesson.paths['path-right-foot-step'].partId, 'right_foot_part', 'walking-leg drives the foot part instead of the lower leg plate');
 assert.equal(walkingLegMechanism.targetPartId, 'right_foot_part', 'walking-leg mechanism binds to the foot part instead of the lower leg plate');
-assert((walkingLegMechanism.anchorX ?? -Infinity) > Math.max(...walkingLegLesson.paths['path-right-foot-step'].points.map(point => point.x)), 'walking-leg keeps the linkage driver to the outside of the foot path');
-assert.equal(walkingLegMechanism.groundAngle, 180, 'walking-leg points the mechanism back toward the character from the outside');
+assertGuidedPathStaysViewerLeft(walkingLegLesson, 'path-right-foot-step', 'walking-leg foot path');
+assertGuidedMechanismDrivesInwardFromViewerLeft(walkingLegLesson, 'path-right-foot-step', 'walking-leg mechanism');
+
 assertGuidedPathUsesReach(walkingLegLesson, 'path-right-foot-step', ['right_hip', 'right_knee', 'right_foot'], 0.7);
 const spinGearsLesson = createLessonProject('spin-gears');
 assert.equal(spinGearsLesson.mechanisms[0]?.type, 'gear', 'spin-gears guided theme creates a real gear mechanism baseline');
 assert.equal(spinGearsLesson.selectedPathId, 'path-gear-spin', 'spin-gears guided theme includes a visible hand path for Design/Assembly validation');
 assert.equal(spinGearsLesson.mechanisms[0]?.targetPartId, 'right_hand_part', 'spin-gears lesson binds the gear motion to the hand part');
+assertGuidedPathStaysViewerLeft(spinGearsLesson, 'path-gear-spin', 'spin-gears hand path');
+assertGuidedMechanismDrivesInwardFromViewerLeft(spinGearsLesson, 'path-gear-spin', 'spin-gears mechanism');
 const spinGearCenters = gearTrainCenters(spinGearsLesson.mechanisms[0]);
 const spinGearRightHandX = spinGearsLesson.skeleton?.joints.right_hand.position.x ?? 0;
-assert.equal(spinGearsLesson.mechanisms[0]?.groundAngle, 180, 'spin-gears drives inward from the outside gear');
 assert.deepEqual(spinGearsLesson.mechanisms[0]?.gearTrainRadii, [60, 20], 'spin-gears uses a large outside drive gear and a smaller moving gear near the hand');
-assert(spinGearCenters[0].x > spinGearRightHandX && (spinGearCenters.at(-1)?.x ?? Infinity) <= spinGearRightHandX, 'spin-gears orders character, moving gear, then outside drive gear');
+assert(spinGearCenters[0].x < spinGearRightHandX && (spinGearCenters.at(-1)?.x ?? -Infinity) >= spinGearRightHandX, 'spin-gears orders outside drive gear, moving gear, then character on viewer-left');
 assert.throws(() => createLessonProject('missing' as never), /Unknown classroom lesson/, 'invalid classroom lesson IDs fail loudly instead of silently creating blank projects');
+};
+assertGuidedLessonContracts();
 const resetLessonState = resetProjectToLessonBaseline({
   ...classroomLesson,
   selectedPartId: 'head',
@@ -1120,6 +1303,8 @@ for (const requiredPartId of ['left_arm_upper', 'left_arm_lower', 'left_hand_par
 assert(sample.partOrder.every(id => ['#cbd5e1', '#e2e8f0', '#b6c2d2', '#d1d5db', '#94a3b8'].includes(sample.parts[id].fillColor)), 'sample character uses muted placeholder part colors');
 assert.equal(sample.mechanisms[0].targetAnchorJointId, 'right_hand', 'sample waving arm drives the hand, not the shoulder root');
 assert.deepEqual(motionAnchorJointIds(sample, 'right_arm_lower'), ['right_elbow', 'right_hand'], 'IK handle choices stay inside the selected lower-limb part');
+assert.equal(pathBelongsToTarget(sample.paths['path-right-arm'], 'part', 'right_hand_part', sample), true, 'character path belongs to its exact part owner');
+assert.equal(pathBelongsToTarget(sample.paths['path-right-arm'], 'part', 'right_arm_lower', sample), false, 'character path is not owned by an ancestor part that can reach the same joint');
 assert.deepEqual(motionChainRootJointIds(sample, 'right_arm_lower', 'right_hand'), ['right_shoulder', 'right_elbow', 'right_hand'], 'IK chain root choices expose every ancestor from part root to handle');
 assert.deepEqual(motionChainRootJointIds(sample, 'right_hand_part', 'right_hand'), ['right_shoulder', 'right_elbow', 'right_hand'], 'hand targets can still drive the whole arm IK chain');
 assert.deepEqual(motionChainRootJointIds(sample, 'right_foot_part', 'right_foot'), ['right_hip', 'right_knee', 'right_foot'], 'foot targets can still drive the whole leg IK chain');
@@ -1655,7 +1840,7 @@ const reducerUnsnappedFourBar = mechanismWithGeneratedPath({
   targetPathId: 'path-right-arm',
   couplerLength: normalizeMechanismToReference(createDefaultMechanism('4bar', 'reducer-snaps-fourbar-base')).couplerLength + 11
 });
-const reducerSnappedProject = applyProjectAction(sample, { type: 'upsert_mechanism', mechanism: reducerUnsnappedFourBar });
+const reducerSnappedProject = applyProjectAction({ ...sample, mechanisms: [], selectedMechanismId: undefined }, { type: 'upsert_mechanism', mechanism: reducerUnsnappedFourBar });
 const reducerSnappedFourBar = reducerSnappedProject.mechanisms.find(mechanism => mechanism.id === 'reducer-snaps-fourbar');
 assert(reducerSnappedFourBar, 'mechanism reducer stores inserted four-bar');
 assert.deepEqual(validateMechanismPreviewReadiness(reducerSnappedFourBar), [], 'upserted four-bar mechanisms are snapped to fabrication hole/linkage lengths before storage');
@@ -1718,6 +1903,46 @@ ALL_MECHANISM_TYPES.forEach(type => {
   const range = motionSafeParamRange(fourbar, 'groundLength');
   assert(range?.currentSafe, 'four-bar ground length has a runtime safe range');
   assert.equal(constrainMechanismUpdate(fourbar, { groundLength: 9999 }).groundLength, undefined, 'central runtime authority rejects impossible four-bar ground length writes');
+  const brandNewUnsafeFourbar = mechanismWithGeneratedPath({
+    ...fourbar,
+    id: 'brand-new-unsafe-upsert-contract',
+    groundLength: 300,
+    crankLength: 10,
+    couplerLength: 10,
+    rockerLength: 10,
+  });
+  assert.equal(mechanismEditIsSafe(brandNewUnsafeFourbar, sample.settings.physicalKit), false, 'contract fixture starts unsafe before reducer upsert');
+  const brandNewUnsafeProject = applyProjectAction({ ...sample, mechanisms: [], selectedMechanismId: undefined }, {
+    type: 'upsert_mechanism',
+    mechanism: brandNewUnsafeFourbar,
+  });
+  const storedBrandNewUnsafe = brandNewUnsafeProject.mechanisms.find(mechanism => mechanism.id === brandNewUnsafeFourbar.id);
+  assert(storedBrandNewUnsafe, 'brand-new mechanism upsert keeps a recoverable record or safe replacement');
+  assert.equal(
+    mechanismEditIsSafe(storedBrandNewUnsafe, brandNewUnsafeProject.settings.physicalKit),
+    true,
+    'reducer/runtime upsert of a brand-new mechanism cannot store unsafe mechanism state'
+  );
+
+  const legacyUnsafeSnapshot = loadProjectSnapshot({
+    ...sample,
+    mechanisms: [brandNewUnsafeFourbar],
+    selectedMechanismId: brandNewUnsafeFourbar.id,
+  });
+  const legacyUnsafeMechanism = legacyUnsafeSnapshot.mechanisms.find(mechanism => mechanism.id === brandNewUnsafeFourbar.id);
+  assert(legacyUnsafeMechanism, 'legacy unsafe imports remain represented for recovery');
+  assert.equal(legacyUnsafeSnapshot.selectedMechanismId, brandNewUnsafeFourbar.id, 'legacy unsafe imports can remain the current mechanism');
+  assert.equal(
+    mechanismEditIsSafe(legacyUnsafeMechanism, legacyUnsafeSnapshot.settings.physicalKit),
+    false,
+    'legacy unsafe current mechanism is reported unsafe for recovery UI and export gating'
+  );
+  assert.equal(
+    constrainMechanismUpdate(legacyUnsafeMechanism, { crankLength: 120 }, legacyUnsafeSnapshot.settings.physicalKit).crankLength,
+    undefined,
+    'ordinary parameter edits stay constrained while a legacy unsafe mechanism is in recovery'
+  );
+
   const largerKit = { ...sample.settings.physicalKit, boardCells: 40 };
   const kitSpecificPlacement = { ...fourbar, anchorX: 200, anchorY: 0 };
   assert(!mechanismEditIsSafe(kitSpecificPlacement), 'default physical kit still rejects mechanisms outside its board');
@@ -1823,6 +2048,43 @@ ALL_MECHANISM_TYPES.forEach(type => {
     .map(spec => spec.lengthMm * SCENE_PX_PER_MM)
     .join(',');
   assert(denseHtml.includes('data-kit-grid-pitch-mm="10"') && denseHtml.includes(`data-link-option-scene-lengths="${managedLinkLengths}"`), 'parametric editor reports active board pitch while keeping managed linkage vectors canonical');
+
+  const visibleText = (htmlText: string) => htmlText.replace(/<[^>]+>/g, '');
+  const linkageSpec = FABRICATION_LINKAGE_SPECS.find(spec => spec.holeCentersMm.length >= 3) ?? FABRICATION_LINKAGE_SPECS[0];
+  const linkageHoleIndex = 1;
+  const linkageConfirmationHtml = renderToString(createElement(MechanismParametricEditor, {
+    mechanism: {
+      ...mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism('4bar', 'linkage-confirmation-render'))),
+      connectionSelections: {
+        '4bar.input-joint': { kind: 'linkage-hole', linkageKey: linkageSpec.key, holeIndex: linkageHoleIndex }
+      }
+    },
+    onChange: () => undefined,
+  }));
+  const linkageVisibleText = visibleText(linkageConfirmationHtml);
+  assert(linkageVisibleText.includes(`Input joint: ${fabricationPartDisplayLabel(linkageSpec.label)} · Hole ${linkageHoleIndex + 1}`), 'linkage-hole confirmation shows student-safe part label and one-based physical hole ordinal');
+  assert(!linkageVisibleText.includes(linkageSpec.key) && !/#\d+/.test(linkageVisibleText) && !/linkage-\d+-cell|4bar\.|snake_case/.test(linkageVisibleText), 'linkage-hole confirmation hides raw keys, zero-based #indexes, and internal identifiers from visible copy');
+  assert(linkageConfirmationHtml.includes('data-connection-role="4bar.input-joint"') && linkageConfirmationHtml.includes('data-connection-kind="linkage-hole"') && linkageConfirmationHtml.includes(`data-connection-part-key="${linkageSpec.key}"`) && linkageConfirmationHtml.includes(`data-connection-hole-index="${linkageHoleIndex}"`), 'linkage-hole confirmation retains raw diagnostic metadata in attributes');
+
+  const gearSpec = FABRICATION_GEAR_SPECS.find(spec => spec.attachmentHoleCentersMm.length >= 3) ?? FABRICATION_GEAR_SPECS[0];
+  const gearHoleIndex = 0;
+  const gearRadius = gearSpec.pitchRadiusMm * SCENE_PX_PER_MM;
+  const gearConfirmationHtml = renderToString(createElement(MechanismParametricEditor, {
+    mechanism: {
+      ...mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism('gear_linkage', 'gear-confirmation-render'))),
+      crankLength: gearRadius,
+      rockerLength: gearRadius,
+      gearTrainRadii: [gearRadius, gearRadius],
+      connectionSelections: {
+        'gear_linkage.drive-pin': { kind: 'gear-attachment-hole', gearKey: gearSpec.key, gearIndex: 0, holeIndex: gearHoleIndex }
+      }
+    },
+    onChange: () => undefined,
+  }));
+  const gearVisibleText = visibleText(gearConfirmationHtml);
+  assert(gearVisibleText.includes(`Drive pin: ${fabricationPartDisplayLabel(gearSpec.label)} · Hole ${gearHoleIndex + 1}`), 'gear-attachment-hole confirmation shows student-safe gear label and one-based physical hole ordinal');
+  assert(!gearVisibleText.includes(gearSpec.key) && !/#\d+/.test(gearVisibleText) && !/gear_linkage\.|snake_case/.test(gearVisibleText), 'gear-attachment-hole confirmation hides raw keys, zero-based #indexes, and internal identifiers from visible copy');
+  assert(gearConfirmationHtml.includes('data-connection-role="gear_linkage.drive-pin"') && gearConfirmationHtml.includes('data-connection-kind="gear-attachment-hole"') && gearConfirmationHtml.includes(`data-connection-part-key="${gearSpec.key}"`) && gearConfirmationHtml.includes(`data-connection-hole-index="${gearHoleIndex}"`), 'gear-attachment-hole confirmation retains raw diagnostic metadata in attributes');
 }
 
 ALL_MECHANISM_TYPES.forEach(type => {
@@ -2584,10 +2846,10 @@ const allMechanismSnapshotProject: ProjectState = {
   ...sample,
   mechanisms: ALL_MECHANISM_TYPES.map(type => ({
     ...createDefaultMechanism(type, `${type}-snapshot`),
-    targetPartId: 'right_arm_lower',
+    targetPartId: 'right_hand_part',
     targetPathId: 'path-right-arm',
     targetAnchorJointId: 'right_hand',
-    activeVisualPartIds: ['right_arm_lower']
+    activeVisualPartIds: ['right_hand_part']
   }))
 };
 const allMechanismSnapshots = buildMechanismSnapshots(allMechanismSnapshotProject);
@@ -2608,10 +2870,10 @@ const goldenAllMechanismSnapshots = buildMechanismSnapshots({
   ...goldenSample,
   mechanisms: ALL_MECHANISM_TYPES.map(type => ({
     ...createDefaultMechanism(type, `${type}-snapshot`),
-    targetPartId: 'right_arm_lower',
+    targetPartId: 'right_hand_part',
     targetPathId: 'path-right-arm',
     targetAnchorJointId: 'right_hand',
-    activeVisualPartIds: ['right_arm_lower']
+    activeVisualPartIds: ['right_hand_part']
   }))
 });
 const goldenExportConfig = {
@@ -2634,14 +2896,14 @@ const goldenMaster = {
 assert.deepEqual(
   Object.fromEntries(Object.entries(goldenMaster).map(([key, value]) => [key, goldenMasterHash(value)])),
   {
-    project: '93372a7836e2125515a5ee6e31b9dc6f6e4c28e8327fdc64a079692b7e82a24c',
-    lesson: '7cbae0556655b14af8ce4300a47958482652e611f8053a38d461157b42c48a59',
-    mechanismSnapshot: '9c9689cb04efaf60447ca5bd0ec68df565ad9c857b2a8bbbacfb85fba034c249',
-    allMechanismSnapshots: 'e795d536ca59619b20c67b8992a38115a1a368121425c7a90a5c83be785b846f',
-    sceneProjection: 'ed3784b3c1f5956742d0aa49a5a4a7ff2366d4b1ce030d730d9527580b873aba',
+    project: '5d48935d44d3a5c330cfdb4df1d80b820e00c52cfa7bc023ec8bbfaef9a93a76',
+    lesson: 'fb158b8a608db24816fc3ff58a27ea5aad094be0fa5abf7e32e6c363cb02c91a',
+    mechanismSnapshot: '729e1db7f4b837dcf4fd9a73325998ba412a725fc946be2adbd991633a1c34cf',
+    allMechanismSnapshots: 'dfdf9c8124e19c2455ef84ce425f958c61412fec340d3302a425817a8703b088',
+    sceneProjection: '83a68eace3b0a56bf8269ff2f37ce08c727bac04ae2713e6e5b389a929d04f0d',
     svg: '2ee6db5a38edb343faa9d4dab491eb6e1142b7fa9c8c770b5039f3bb08cfce20',
     dxf: '18b15942d57d5c7b80161d71657d21ea8c7edc6450249dc27cbfb025d533d9a6',
-    fabricationRecipes: '7f4ea519983c00740cdff505bd367a4e7be644f11ec687ca6b3ba8bf0f789e98',
+    fabricationRecipes: '37f6afa19787de05d66a885c1c87449e0f0f0aaa823e406dd34732eb408004a4',
     compilerRenderPlans: '57392e9862f9c04ceba4e7d97fcc66c420357645f464e7f5402c2f67d777d0f1',
     stacks: '56b797c659cdb568281fca6034cd9f4360766302039f325b0c9d73ced144987f'
   },
@@ -2677,10 +2939,10 @@ previewReadyTypes.forEach(type => {
 {
   const mechanism = mechanismWithGeneratedPath(normalizeGearLinkageToReference({
     ...createDefaultMechanism('gear_linkage', 'stage-parity-live-recipe'),
-    targetPartId: 'right_arm_lower',
+    targetPartId: 'right_hand_part',
     targetPathId: 'path-right-arm',
     targetAnchorJointId: 'right_hand',
-    activeVisualPartIds: ['right_arm_lower']
+    activeVisualPartIds: ['right_hand_part']
   }));
   const project = { ...sample, selectedMechanismId: mechanism.id, mechanisms: [mechanism] };
   const directRecipe = compileFabricationRecipe(project, mechanism);
@@ -4331,6 +4593,14 @@ assert(mechanismFoundryText.includes('<FoundryWorkflowPanel') && foundryWorkflow
 assert(mechanismFoundryText.includes('fitMechanismToTargetPath') && mechanismFoundryText.includes('onFitPath={() => applyPathFit()}') && !mechanismFoundryText.includes('lastPathFitSignatureRef') && !mechanismFoundryText.includes('applyPathFit(next)') && foundryWorkflowPanelText.includes('data-testid="foundry-fit-path"') && foundryWorkflowPanelText.includes('foundry.fitPath') && foundryCanvasPaneText.includes('data-fit-board-cells') && foundryCanvasPaneText.includes('data-fit-target-path'), 'Foundry exposes a prominent Fit path action while preserving the default mechanism until the user clicks Fit');
 const foundryFitContractSeed = createDefaultMechanism('4bar', 'foundry-fit-contract');
 const foundryFitContract = fitMechanismToTargetPath(sample, foundryFitContractSeed, 'path-right-arm');
+const staleParentFitContract = fitMechanismToTargetPath(sample, { ...foundryFitContractSeed, id: 'stale-parent-fit-contract', targetPartId: 'right_arm_lower', targetAnchorJointId: 'right_elbow', activeVisualPartIds: ['right_arm_lower'] }, 'path-right-arm');
+assert.equal(staleParentFitContract.targetPartId, sample.paths['path-right-arm'].partId, 'Fit path replaces stale parent targetPartId with the selected path owner');
+assert.equal(staleParentFitContract.targetAnchorJointId, sample.paths['path-right-arm'].targetAnchorJointId, 'Fit path replaces stale parent targetAnchorJointId with the selected path anchor');
+assert.deepEqual(staleParentFitContract.activeVisualPartIds, [sample.paths['path-right-arm'].partId], 'Fit path replaces stale activeVisualPartIds with the selected path owner');
+const reconciledStaleParent = applyProjectAction({ ...sample, mechanisms: [], selectedMechanismId: undefined }, { type: 'upsert_mechanism', mechanism: { ...sample.mechanisms[0], id: 'stale-parent-reconcile-contract', targetPartId: 'right_arm_lower', targetPathId: 'path-right-arm', targetAnchorJointId: 'right_elbow', activeVisualPartIds: ['right_arm_lower'] } }).mechanisms.find(mechanism => mechanism.id === 'stale-parent-reconcile-contract')!;
+assert.equal(reconciledStaleParent.targetPartId, sample.paths['path-right-arm'].partId, 'project reconciliation replaces stale parent targetPartId with the selected path owner');
+assert.equal(reconciledStaleParent.targetAnchorJointId, sample.paths['path-right-arm'].targetAnchorJointId, 'project reconciliation replaces stale parent targetAnchorJointId with the selected path anchor');
+assert.deepEqual(reconciledStaleParent.activeVisualPartIds, [sample.paths['path-right-arm'].partId], 'project reconciliation replaces stale activeVisualPartIds with the selected path owner');
 assert.equal(foundryFitContract.id, foundryFitContractSeed.id, 'Fit path preserves the active Foundry preview instance id');
 assert.equal(foundryFitContract.targetPathId, 'path-right-arm', 'Fit path writes the selected drawn path only after the explicit Fit action');
 assert(
@@ -4537,7 +4807,7 @@ assert(threePreviewText.includes("const pinSites = mechanism.type === 'gear'") &
 assert(mechanismDesignText.includes('<DesignFoundryPreview') && designFoundryPreviewText.includes('export const DesignFoundryPreview') && designFoundryPreviewText.includes('data-testid="design-shared-foundry-preview"'), 'Mechanism Design owns a thin automata preview adapter instead of a separate legacy renderer');
 assert(designFoundryPreviewText.includes('<ThreeFoundryPreview') && !designFoundryPreviewText.includes('<ThreePuppetPreview') && !designFoundryPreviewText.includes('design-foundry-context-layer') && designFoundryPreviewText.includes('automataContext={automataContext}') && foundryCanvasPaneText.includes('<ThreeFoundryPreview'), 'Design renders mechanism plus character/object context inside the same Foundry Three scene instead of a parallel puppet overlay');
 assert(designFoundryPreviewText.includes('data-renderer-source="ThreeFoundryPreview"') && designFoundryPreviewText.includes('data-shared-with="foundry-renderer"') && designFoundryPreviewText.includes('data-design-scene-mode="single-foundry-automata-scene"') && designFoundryPreviewText.includes('data-automata-model-source="buildAutomataSceneModel"'), 'Mechanism Design advertises single-scene Foundry-renderer mechanism truth with automata telemetry');
-assert(automataSceneModelText.includes('mechanismFeature(normalizedMechanism.type)') && automataSceneModelText.includes('const mechanisms = normalizedMechanisms.length ? normalizedMechanisms : [normalizedMechanism]') && automataSceneModelText.includes('motionPreviewForProject(project, previewMechanisms, angle)') && automataSceneModelText.includes('motionPreviewForProject(project, [motionMechanism], angle)'), 'Automata scene model reuses Foundry registry semantics, drives the full automata scene, and reads the selected IK/object target for inspector feedback');
+assert(automataSceneModelText.includes('mechanismFeature(normalizedMechanism.type)') && automataSceneModelText.includes('const mechanisms = normalizedMechanisms.length ? normalizedMechanisms : [normalizedMechanism]') && automataSceneModelText.includes('const fullMotionPreview = motionPreviewForProject(project, mechanisms, angle)') && automataSceneModelText.includes('const selectedMotionPreview = motionPreviewForProject(project, [normalizedMechanism], angle)'), 'Automata scene model reuses Foundry registry semantics, drives the full automata scene from normalized mechanisms, and reads the selected normalized mechanism target for inspector feedback');
 assert(foundry3dText.includes('const placeFoundryLocalGroup') && foundry3dText.includes('group.rotation.z = (-transform.rotation * Math.PI) / 180') && foundry3dText.includes('const placeSceneLocalGroup') && foundry3dText.includes('group.rotation.z = (transform.rotation * Math.PI) / 180'), 'Foundry keeps y-down fit-space rotations separate from scene-preserving automata rotations');
 assert(foundryPreviewModelText.includes("frame: 'fit' | 'scene' = 'fit'") && automataSceneModelText.includes("'scene'"), 'Design/Assembly automata previews request the scene-preserving Foundry preview frame instead of re-fitting the character scene');
 assert(foundry3dText.includes('data-three-stack-source') && designFoundryPreviewText.includes('data-foundry-feature-label') && designFoundryPreviewText.includes('data-foundry-feature-issue-count'), 'Mechanism Design exposes Foundry feature provenance for browser verification');
@@ -4577,12 +4847,18 @@ assert(designAutomataProjectionText.includes('buildAutomataSceneModel') && !desi
   const handPivot = bodyPartPivotScene(drivenHand, canonical.skeleton);
   assert(Math.hypot(handPivot.x - canonical.generatedTarget!.x, handPivot.y - canonical.generatedTarget!.y) < 1e-6, 'Driven hand part pivot stays on the fitted mechanism output in scene coordinates');
   const mismatch = buildAutomataSceneModel(fixture, staleLessonMechanism, Math.PI * 0.42, 'design-live');
-  assert.equal(mismatch.motionSource, 'userPath-fallback', 'Design falls back to the authored path instead of tearing the character onto a stale unfitted generated path');
+  assert.equal(mismatch.motionSource, 'generatedPath', 'Design keeps attached character motion on the actual rendered mechanism source when path fit is mismatched');
   assert.equal(mismatch.pathFitStatus, 'mismatch', 'Design flags stale generatedPath samples that are far from the authored path');
   assert((mismatch.pathFitError ?? 0) > (mismatch.pathFitThreshold ?? Number.POSITIVE_INFINITY), 'Design exposes the stale generatedPath fit error for harnesses and UI warnings');
-  const authoredTarget = pointOnProjectPath(fittedPath, Math.PI * 0.42);
-  assert(mismatch.target, 'Fallback preview keeps an authored motion target');
-  assert(Math.hypot(mismatch.target!.x - authoredTarget.x, mismatch.target!.y - authoredTarget.y) < 1e-6, 'Fallback preview keeps the driven target on the authored path rather than the remote stale mechanism trace');
+  const actualGeneratedTarget = pointOnGeneratedMechanismPath(staleLessonMechanism.generatedPath ?? [], Math.PI * 0.42);
+  assert(mismatch.target && actualGeneratedTarget, 'Mismatch preview keeps an actual generated mechanism target');
+  assert((mismatch.targetError ?? Number.POSITIVE_INFINITY) < 1e-9, 'Mismatch telemetry keeps the selected IK target attached to the generated mechanism output');
+  assert(Math.hypot(mismatch.target!.x - actualGeneratedTarget!.x, mismatch.target!.y - actualGeneratedTarget!.y) < 1e-6, 'Mismatch preview keeps the driven target on the rendered mechanism path');
+  assert(mismatch.warnings[staleLessonMechanism.id]?.includes('Fit path before attaching the character.'), 'Mismatch remains a warning instead of changing the motion source');
+  const mismatchDrivenHand = mismatch.animatedParts.right_hand_part;
+  assert(mismatchDrivenHand && mismatch.skeleton, 'Mismatch preview still animates the target part through IK');
+  const mismatchHandPivot = bodyPartPivotScene(mismatchDrivenHand, mismatch.skeleton);
+  assert(Math.hypot(mismatchHandPivot.x - actualGeneratedTarget!.x, mismatchHandPivot.y - actualGeneratedTarget!.y) < 1e-6, 'Mismatch preview drives the character from the generated mechanism target');
   const sceneFit = createSceneMechanismFitContext(fittedMechanism, 360, 240, 96);
   const sceneOrigin = sceneFit.map({ x: 0, y: 0 });
   const sceneUp = sceneFit.map({ x: 0, y: 100 });
@@ -4653,16 +4929,17 @@ const assertMotionFitSourceContracts = () => {
   assert.equal(foundrySplitPathControls, true, 'Foundry separates the drawn user path from the generated mechanism path in the same fit-context coordinate basis so students can compare fit before applying the mechanism');
 
   const designGeneratedPathMotion =
-    automataSceneModelText.includes('motionPreviewForProject(project, [motionMechanism], angle)') &&
+    automataSceneModelText.includes('const fullMotionPreview = motionPreviewForProject(project, mechanisms, angle)') &&
+    automataSceneModelText.includes('const selectedMotionPreview = motionPreviewForProject(project, [normalizedMechanism], angle)') &&
     automataSceneModelText.includes('generatedTarget && selectedMotionPreview.target') &&
     automataSceneModelText.includes("? 'generatedPath'") &&
-    automataSceneModelText.includes("'userPath-fallback'") &&
+    !automataSceneModelText.includes("'userPath-fallback'") &&
     designFoundryPreviewText.includes('data-design-motion-source={sceneModel.motionSource}') &&
     designFoundryPreviewText.includes('data-design-path-fit-status={sceneModel.pathFitStatus}') &&
     designFoundryPreviewText.includes('data-design-target-error') &&
     designFoundryPreviewText.includes('data-design-target-x') &&
     designFoundryPreviewText.includes('data-design-animated-part-count');
-  assert.equal(designGeneratedPathMotion, true, 'Mechanism Design drives fitted mechanisms from generatedPath and falls back to the authored path when stale generatedPath samples would tear the character away');
+  assert.equal(designGeneratedPathMotion, true, 'Mechanism Design drives fitted and mismatched mechanisms from generatedPath while keeping mismatch as telemetry/warning only');
 
   const puppetMechanismContinuity =
     threePreviewText.includes('data-three-selected-mechanism-generated-path-count') &&
@@ -4771,6 +5048,9 @@ assert(threePreviewText.includes('DEFAULT_PUPPET_VIEWER_LAYERS') && threePreview
 assert(foundry3dText.includes('data-viewer-contract={VIEWER3D_CONTRACT_VERSION}') && threePreviewText.includes('data-viewer-contract={VIEWER3D_CONTRACT_VERSION}'), '3D viewer state exposes a shared contract marker across tabs');
 assert(foundry3dText.includes('data-viewer-contract-state={JSON.stringify(viewerContract)}') && threePreviewText.includes('data-viewer-contract-state={JSON.stringify(viewerContract)}'), '3D viewer state exposes the normalized tab/layer contract payload for browser checks');
 assert(mechanismDesignText.includes('<DesignFoundryPreview') && designFoundryPreviewText.includes('data-testid="design-shared-foundry-preview"') && mechanismDesignText.includes('showTrace={showTrace}') && designWorkflowPanelText.includes('data-testid="design-toggle-trace"') && designFoundryPreviewText.includes('data-design-show-trace={showTrace ? "true" : "false"}') && designFoundryPreviewText.includes('data-design-trace-layer={showTrace ? "shown" : "hidden"}') && designFoundryPreviewText.includes('const showMechanismPath = showTrace && showMechanismPathPreview'), 'Mechanism Design center is the integrated automata workbench, and Trace controls real path/trail visibility');
+if (!(/new Set|unique|dedup/i.test(designWorkflowPanelText) || /new Set|unique|dedup/i.test(designInspectorPanelText))) {
+  g006StudentWarningCopyViolations.push('presentation: Design warning panels do not deduplicate repeated warning strings at the existing boundary');
+}
 assert(threePreviewText.includes('const mechanismSignature = useMemo(() => mechanismGeometrySignature(renderedMechanisms, kit)') && threePreviewText.includes('mechanism.camProfileSamples?.join') && threePreviewText.includes('[mechanismSignature, kit, rendererStatus]') && !threePreviewText.includes('[mechanismSignature, renderedMechanisms, rendererStatus]'), '3D puppet mechanism geometry rebuilds on real topology/fabrication/cam-shape/kit changes, not every scrub-frame prop identity update');
 assert(designFoundryPreviewText.includes('showPathPreview={showMechanismPath}') && designFoundryPreviewText.includes('pathTraces={sceneModel.foundryPreview.pointTraces}') && designFoundryPreviewText.includes('data-testid="design-user-path-overlay"'), 'Mechanism Design routes fitted mechanism traces and user path overlays through the Foundry preview seam');
 assert(threePreviewText.includes('const mechanismHits = raycaster.intersectObjects([roots.mechanismsLayer], true)') && threePreviewText.includes("const projectedMechanism = bestTarget('mechanism')"), 'Integrated 3D puppet selection supports direct and projected mechanism picking while preserving object and part hit priority');
@@ -5106,10 +5386,12 @@ assert(directPinnedHand && Math.hypot(directPinnedHand.x - 210, directPinnedHand
 const directPreview = motionPreviewForTarget(sample, 'right_arm_lower', 'right_hand', { x: 210, y: 40 }, { parts: {}, skeleton: sample.skeleton }, { pinTarget: false });
 const directPreviewHand = directPreview.skeleton?.joints.right_hand.position;
 assert(directPreviewHand && Math.hypot(directPreviewHand.x - 210, directPreviewHand.y - 40) > 1, '2-joint direct path preview preserves non-pinned limb length');
+const rightArmSide = Math.sign((sample.skeleton?.joints.right_hand.position.x ?? 0) - (sample.skeleton?.joints.right_shoulder.position.x ?? 0)) || 1;
+const bendDirectionTarget = { x: rightArmSide * 180, y: 90 };
 const rightBendProject = applyProjectAction(sample, { type: 'update_joint', jointId: 'right_elbow', updates: { bendDirection: 1 } });
 const leftBendProject = applyProjectAction(sample, { type: 'update_joint', jointId: 'right_elbow', updates: { bendDirection: -1 } });
-const rightBendPreview = motionPreviewForTarget(rightBendProject, 'right_arm_lower', 'right_hand', { x: 180, y: 90 }, { parts: {}, skeleton: rightBendProject.skeleton }, { rootJointId: 'right_shoulder', pinTarget: true });
-const leftBendPreview = motionPreviewForTarget(leftBendProject, 'right_arm_lower', 'right_hand', { x: 180, y: 90 }, { parts: {}, skeleton: leftBendProject.skeleton }, { rootJointId: 'right_shoulder', pinTarget: true });
+const rightBendPreview = motionPreviewForTarget(rightBendProject, 'right_arm_lower', 'right_hand', bendDirectionTarget, { parts: {}, skeleton: rightBendProject.skeleton }, { rootJointId: 'right_shoulder', pinTarget: true });
+const leftBendPreview = motionPreviewForTarget(leftBendProject, 'right_arm_lower', 'right_hand', bendDirectionTarget, { parts: {}, skeleton: leftBendProject.skeleton }, { rootJointId: 'right_shoulder', pinTarget: true });
 const rightBendElbow = rightBendPreview.skeleton?.joints.right_elbow.position;
 const leftBendElbow = leftBendPreview.skeleton?.joints.right_elbow.position;
 assert(rightBendElbow && leftBendElbow && Math.hypot(rightBendElbow.x - leftBendElbow.x, rightBendElbow.y - leftBendElbow.y) > 1, '3-joint IK fold direction changes elbow/knee side');
@@ -5120,10 +5402,10 @@ assert(Number.isFinite(multiPreview.skeleton?.joints.right_finger_tip.position.x
 assert(Math.hypot((multiPreview.skeleton?.joints.right_elbow.position.x ?? 0) - (multiJointProject.skeleton?.joints.right_elbow.position.x ?? 0), (multiPreview.skeleton?.joints.right_elbow.position.y ?? 0) - (multiJointProject.skeleton?.joints.right_elbow.position.y ?? 0)) > 1, 'multi-joint IK updates intermediate body-chain joints instead of only moving the distal handle');
 const boundMechanism = (type: Parameters<typeof createDefaultMechanism>[0], id: string) => ({
   ...createDefaultMechanism(type, id),
-  targetPartId: 'right_arm_lower',
+  targetPartId: 'right_hand_part',
   targetPathId: 'path-right-arm',
   targetAnchorJointId: 'right_hand',
-  activeVisualPartIds: ['right_arm_lower']
+  activeVisualPartIds: ['right_hand_part']
 });
 const roundTrip = loadProjectSnapshot(JSON.parse(serializeProject(sample)));
 assert.equal(roundTrip.partOrder.length, sample.partOrder.length, 'project JSON round-trip keeps parts');
@@ -5170,9 +5452,35 @@ assert(Math.hypot(sheetRoundTrip.x - 40, sheetRoundTrip.y + 80) < 1e-9, 'scene/s
 const boardRoundTrip = boardToScene(originBoard.col, originBoard.row, sample.settings.physicalKit);
 assert.deepEqual(boardRoundTrip, { x: 0, y: 0 }, 'board center round-trips');
 
+const elbowPathOrigin = sample.skeleton!.joints.right_elbow.position;
 const twoFourBars = {
   ...sample,
-  mechanisms: [boundMechanism('4bar', 'a'), { ...boundMechanism('4bar', 'b'), targetAnchorJointId: 'right_elbow' }]
+  paths: {
+    ...sample.paths,
+    'path-right-elbow': {
+      ...sample.paths['path-right-arm'],
+      id: 'path-right-elbow',
+      partId: 'right_arm_lower',
+      targetAnchorJointId: 'right_elbow',
+      chainRootJointId: 'right_elbow',
+      points: [
+        elbowPathOrigin,
+        { x: elbowPathOrigin.x + 24, y: elbowPathOrigin.y },
+        { x: elbowPathOrigin.x + 24, y: elbowPathOrigin.y + 24 },
+        { x: elbowPathOrigin.x, y: elbowPathOrigin.y + 24 }
+      ]
+    }
+  },
+  mechanisms: [
+    boundMechanism('4bar', 'a'),
+    {
+      ...boundMechanism('4bar', 'b'),
+      targetPartId: 'right_arm_lower',
+      targetPathId: 'path-right-elbow',
+      targetAnchorJointId: 'right_elbow',
+      activeVisualPartIds: ['right_arm_lower']
+    }
+  ]
 };
 const pkg = createFabricationPackage(twoFourBars);
 assert.equal(directMakeBlueprintSvg(twoFourBars, pkg.recipes), makeBlueprintSvg(twoFourBars, pkg.recipes), 'fabrication facade preserves the direct printable Blueprint SVG renderer');
@@ -6270,6 +6578,7 @@ assert.equal(optionsRoundTrip.settings.physicalKit.exportMode, 'prefab-board', '
 assert.equal(optionsRoundTrip.settings.physicalKit.cutSheetFileType, 'svg', 'cut-sheet file type round-trips');
 assert(sample.characterPackage?.partsInfo && sample.characterPackage.charCfg, 'sample project carries character package review artifacts');
 const detachedMechanismProject = { ...sample, mechanisms: [createDefaultMechanism('4bar', 'detached')] };
+assert.deepEqual(mechanismBindingWarnings(detachedMechanismProject).detached, ['Choose a target.'], 'Design warns detached visible mechanisms to choose a target');
 assert(validateForFabrication(detachedMechanismProject).errors.some(e => e.includes('choose target + path')), 'fabrication blocks detached visible mechanisms');
 const noEnabledMechanismProject = { ...sample, mechanisms: sample.mechanisms.map(m => ({ ...m, enabled: false })) };
 assert(validateForFabrication(noEnabledMechanismProject).errors.some(e => e.includes('No enabled mechanism')), 'fabrication blocks zero-recipe blueprint packages');
@@ -6463,6 +6772,32 @@ joints:
 `)
 );
 assert(keyedSkeletonProject.skeleton?.joints.hand, 'package import supports keyed joints char_cfg');
+const sideLabeledPackageProject = createProjectFromPackageData(
+  { parts: { torso: { roi: [0, 0, 200, 200], anchor_joint: 'root' } } },
+  parseCharConfig(`
+width: 200
+height: 200
+joints:
+  root:
+    position: [100, 120]
+    parent: null
+  left_shoulder:
+    position: [150, 80]
+    parent: root
+  left_hand:
+    position: [160, 100]
+    parent: left_shoulder
+  right_shoulder:
+    position: [50, 80]
+    parent: root
+  right_hand:
+    position: [40, 100]
+    parent: right_shoulder
+`)
+);
+assert.equal(sideLabeledPackageProject.skeleton?.metadata.sourceFormat, 'char_cfg.yaml', 'imported user character fixture uses the package import path');
+assert.equal(sideLabeledPackageProject.skeleton?.joints.left_hand.position.x, 60, 'package import preserves source left-hand landmark X without global mirroring');
+assert.equal(sideLabeledPackageProject.skeleton?.joints.right_hand.position.x, -60, 'package import preserves source right-hand landmark X without global mirroring');
 const foundryPath = generateCurvePoints(createDefaultMechanism('5bar', 'foundry-preserve'), 96).points;
 assert.equal(
   mechanismWithGeneratedPath({ ...createDefaultMechanism('5bar', 'foundry-preserve'), generatedPath: foundryPath }, { preserveGeneratedPath: true }).generatedPath?.length,
@@ -6502,7 +6837,7 @@ const generatedPathSelectionProject = applyProjectAction(sample, {
 });
 assert.deepEqual(generatedPathSelectionProject.mechanisms[0].generatedPath, generatedPathSentinel, 'selecting a mechanism preserves stored fitted generated paths even without Foundry export metadata');
 const anchorOverride = applyProjectAction(sample, { type: 'upsert_mechanism', mechanism: { ...sample.mechanisms[0], targetAnchorJointId: 'right_elbow' } });
-assert.equal(anchorOverride.mechanisms[0].targetAnchorJointId, 'right_elbow', 'mechanism target anchor override survives reducer reconciliation');
+assert.equal(anchorOverride.mechanisms[0].targetAnchorJointId, 'right_hand', 'mechanism target anchor reconciles to the selected path owner anchor');
 const lockedPartProject = { ...sample, parts: { ...sample.parts, right_arm_lower: { ...sample.parts.right_arm_lower, locked: true } } };
 assert.equal(
   applyProjectAction(lockedPartProject, { type: 'update_part', partId: 'right_arm_lower', updates: { transform: { ...sample.parts.right_arm_lower.transform, x: 999 } } }).parts.right_arm_lower.transform.x,
@@ -6514,9 +6849,10 @@ assert.equal(
   'right_arm_lower',
   'locked parts reject deletion'
 );
-const lockedPathAttempt = applyProjectAction(lockedPartProject, { type: 'upsert_path', path: { ...sample.paths['path-right-arm'], points: [{ x: 1, y: 2 }, { x: 3, y: 4 }] } });
-assert.deepEqual(lockedPathAttempt.paths['path-right-arm'].points, sample.paths['path-right-arm'].points, 'locked parts reject path edits');
-assert(applyProjectAction(lockedPartProject, { type: 'delete_path', pathId: 'path-right-arm' }).paths['path-right-arm'], 'locked parts reject path deletion');
+const lockedPathProject = { ...sample, parts: { ...sample.parts, right_hand_part: { ...sample.parts.right_hand_part, locked: true } } };
+const lockedPathAttempt = applyProjectAction(lockedPathProject, { type: 'upsert_path', path: { ...sample.paths['path-right-arm'], points: [{ x: 1, y: 2 }, { x: 3, y: 4 }] } });
+assert.deepEqual(lockedPathAttempt.paths['path-right-arm'].points, sample.paths['path-right-arm'].points, 'locked path owner parts reject path edits');
+assert(applyProjectAction(lockedPathProject, { type: 'delete_path', pathId: 'path-right-arm' }).paths['path-right-arm'], 'locked path owner parts reject path deletion');
 const lockedJointProject = { ...sample, skeleton: { ...sample.skeleton!, joints: { ...sample.skeleton!.joints, right_shoulder: { ...sample.skeleton!.joints.right_shoulder, locked: true } } } };
 assert.equal(
   applyProjectAction(lockedJointProject, { type: 'update_joint', jointId: 'right_shoulder', updates: { position: { x: 999, y: 999 } } }).skeleton?.joints.right_shoulder.position.x,
@@ -6532,7 +6868,9 @@ const wrongTarget = {
   },
   mechanisms: [{ ...sample.mechanisms[0], targetPartId: 'right_arm_lower', targetPathId: 'path-left' }]
 };
-assert(validateForFabrication(wrongTarget).errors.some(e => e.includes('belongs to left_arm_lower')), 'fabrication rejects mismatched target part/path');
+const wrongTargetValidation = validateForFabrication(wrongTarget);
+assert(wrongTargetValidation.errors.includes('Fix: rebind target path.'), 'fabrication rejects mismatched target part/path with a generic direct action');
+assert(wrongTargetValidation.issues.some(issue => issue.message === 'Fix: rebind target path.' && issue.partId === 'right_arm_lower' && issue.pathId === 'path-left'), 'fabrication mismatch keeps structured partId/pathId outside student copy');
 assert.equal(handoffGate({ ...sample, parts: {}, partOrder: [], skeleton: null, paths: {}, mechanisms: [] }, 'path').ok, false, 'stage handoff blocks path work before character data');
 assert.equal(handoffGate({ ...sample, mechanisms: [] }, 'design').ok, true, 'stage handoff allows Design to add the first mechanism after character load');
 assert.equal(handoffGate(sample, 'blueprint').ok, true, 'stage handoff permits blueprint when mechanisms are valid');
@@ -6679,7 +7017,8 @@ const elbowRootPath = { ...ikProject.paths['path-right-arm'], chainRootJointId: 
 const elbowRootPreview = motionPreviewForPath(ikProject, elbowRootPath, 0);
 assert.deepEqual(elbowRootPreview.skeleton?.joints.right_elbow.position, ikProject.skeleton?.joints.right_elbow.position, 'path-specific IK root keeps the chosen elbow/knee joint attached');
 assert(Math.hypot((elbowRootPreview.skeleton?.joints.right_hand.position.x ?? 0) - elbowRootPath.points[0].x, (elbowRootPreview.skeleton?.joints.right_hand.position.y ?? 0) - elbowRootPath.points[0].y) > 1, 'non-pinned path preview with shortened chain preserves segment length instead of teleporting');
-const rootOnlyPath = { ...ikProject.paths['path-right-arm'], chainRootJointId: 'right_elbow', targetAnchorJointId: 'right_elbow' };
+const assertPhysicalDriverConflictContracts = async () => {
+const rootOnlyPath = { ...ikProject.paths['path-right-arm'], partId: 'right_arm_lower', chainRootJointId: 'right_elbow', targetAnchorJointId: 'right_elbow' };
 const rootOnlyPreview = motionPreviewForPath(ikProject, rootOnlyPath, 0);
 assert(Math.hypot((rootOnlyPreview.skeleton?.joints.right_elbow.position.x ?? 0) - rootOnlyPath.points[0].x, (rootOnlyPreview.skeleton?.joints.right_elbow.position.y ?? 0) - rootOnlyPath.points[0].y) < 1e-9, 'root-only IK translates the selected whole part so its handle follows the path point');
 assert(rootOnlyPreview.parts.right_arm_lower && rootOnlyPreview.parts.right_arm_lower.transform.x !== ikProject.parts.right_arm_lower.transform.x, 'root-only IK preview moves the visible whole part instead of returning a static preview');
@@ -6694,6 +7033,103 @@ const drivenMechanism = {
   activeVisualPartIds: ['right_arm_lower']
 };
 const drivenProject: ProjectState = { ...ikProject, mechanisms: [drivenMechanism] };
+const duplicateDriverInsert = applyProjectAction(drivenProject, {
+  type: 'upsert_mechanism',
+  mechanism: { ...drivenMechanism, id: 'brand-new-duplicate-driver', anchorX: drivenMechanism.anchorX + 12 },
+});
+assert.equal(duplicateDriverInsert.mechanisms.length, drivenProject.mechanisms.length, 'reducer rejects a brand-new active duplicate driver');
+assert.equal(duplicateDriverInsert.mechanisms.some(mechanism => mechanism.id === 'brand-new-duplicate-driver'), false, 'brand-new duplicate driver is not inserted');
+const independentDriver = mechanismWithGeneratedPath({
+  ...drivenMechanism,
+  id: 'independent-head-driver',
+  targetPartId: 'head',
+  targetPathId: undefined,
+  targetAnchorJointId: undefined,
+  activeVisualPartIds: ['head'],
+});
+const independentDriverProject = applyProjectAction(drivenProject, { type: 'upsert_mechanism', mechanism: independentDriver });
+assert.equal(independentDriverProject.mechanisms.length, 2, 'reducer still accepts an active mechanism on a different driver identity');
+const retargetConflictProject = applyProjectAction(independentDriverProject, {
+  type: 'upsert_mechanism',
+  mechanism: { ...independentDriverProject.mechanisms.find(mechanism => mechanism.id === 'independent-head-driver')!, ...pathOwnedTargetFields(ikProject.paths['path-right-arm']) },
+});
+assert.equal(retargetConflictProject.mechanisms.find(mechanism => mechanism.id === 'independent-head-driver')?.targetPartId, 'head', 'retargeting an existing mechanism to an occupied driver preserves prior state');
+assert.equal(retargetConflictProject.mechanisms.find(mechanism => mechanism.id === 'independent-head-driver')?.targetPathId, undefined, 'retarget conflict does not partially apply an occupied path');
+const legacyDuplicateSnapshot = loadProjectSnapshot({
+  ...drivenProject,
+  mechanisms: [
+    drivenMechanism,
+    { ...drivenMechanism, id: 'legacy-duplicate-driver', anchorX: drivenMechanism.anchorX + 12 },
+  ],
+  selectedMechanismId: 'legacy-duplicate-driver',
+});
+assert.equal(legacyDuplicateSnapshot.mechanisms.length, 2, 'legacy duplicate-driver snapshots remain represented on load');
+assert(mechanismBindingWarnings(legacyDuplicateSnapshot)['legacy-duplicate-driver']?.includes('Choose another target.'), 'legacy duplicate-driver snapshots surface recovery warnings');
+const legacyThreeWayDuplicateSnapshot = loadProjectSnapshot({
+  ...drivenProject,
+  mechanisms: [
+    drivenMechanism,
+    { ...drivenMechanism, id: 'legacy-duplicate-driver', anchorX: drivenMechanism.anchorX + 12 },
+    { ...drivenMechanism, id: 'legacy-third-driver', anchorX: drivenMechanism.anchorX + 24 },
+  ],
+  selectedMechanismId: 'legacy-third-driver',
+});
+const legacyThreeWayIncrementalRecovery = applyProjectAction(legacyThreeWayDuplicateSnapshot, {
+  type: 'set_mechanisms',
+  mechanisms: legacyThreeWayDuplicateSnapshot.mechanisms.map(mechanism => mechanism.id === 'legacy-third-driver'
+    ? { ...mechanism, targetPartId: 'head', targetPathId: undefined, targetAnchorJointId: undefined, activeVisualPartIds: ['head'] }
+    : mechanism),
+  selectedMechanismId: 'legacy-third-driver',
+});
+assert.equal(legacyThreeWayIncrementalRecovery.mechanisms.find(mechanism => mechanism.id === 'legacy-third-driver')?.targetPartId, 'head', 'legacy three-way duplicate-driver recovery can reduce to the original legacy pair');
+assert.deepEqual(Object.keys(mechanismBindingWarnings(legacyThreeWayIncrementalRecovery)).sort(), ['drive-effector', 'legacy-duplicate-driver'], 'legacy three-way recovery preserves the remaining original duplicate pair for later cleanup');
+const legacyPairNewThirdRejected = applyProjectAction(legacyDuplicateSnapshot, {
+  type: 'upsert_mechanism',
+  mechanism: { ...drivenMechanism, id: 'new-third-duplicate-driver', anchorX: drivenMechanism.anchorX + 36 },
+});
+assert.equal(legacyPairNewThirdRejected.mechanisms.some(mechanism => mechanism.id === 'new-third-duplicate-driver'), false, 'legacy duplicate-driver pair rejects a newly introduced third duplicate driver');
+const setMechanismsDuplicateRejected = applyProjectAction(drivenProject, {
+  type: 'set_mechanisms',
+  mechanisms: [drivenMechanism, { ...drivenMechanism, id: 'set-duplicate-driver', anchorX: drivenMechanism.anchorX + 24 }],
+  selectedMechanismId: 'set-duplicate-driver',
+});
+assert.deepEqual(setMechanismsDuplicateRejected.mechanisms.map(mechanism => mechanism.id), ['drive-effector'], 'set_mechanisms rejects a new duplicate driver set');
+assert.equal(setMechanismsDuplicateRejected.selectedMechanismId, drivenProject.selectedMechanismId, 'rejected set_mechanisms duplicate does not apply selection side effects');
+const legacyDuplicateSelect = applyProjectAction(legacyDuplicateSnapshot, {
+  type: 'set_mechanisms',
+  mechanisms: legacyDuplicateSnapshot.mechanisms,
+  selectedMechanismId: 'drive-effector',
+});
+assert.equal(legacyDuplicateSelect.selectedMechanismId, 'drive-effector', 'set_mechanisms preserves unchanged legacy duplicates while selecting');
+assert.equal(legacyDuplicateSelect.mechanisms.length, 2, 'unchanged legacy duplicate assignments survive set_mechanisms selection');
+const legacyDuplicateSetRecovery = applyProjectAction(legacyDuplicateSnapshot, {
+  type: 'set_mechanisms',
+  mechanisms: legacyDuplicateSnapshot.mechanisms.map(mechanism => mechanism.id === 'legacy-duplicate-driver'
+    ? { ...mechanism, targetPartId: 'head', targetPathId: undefined, targetAnchorJointId: undefined, activeVisualPartIds: ['head'] }
+    : mechanism),
+  selectedMechanismId: 'legacy-duplicate-driver',
+});
+assert.equal(legacyDuplicateSetRecovery.mechanisms.find(mechanism => mechanism.id === 'legacy-duplicate-driver')?.targetPartId, 'head', 'set_mechanisms accepts recovery that retargets a legacy duplicate');
+assert.deepEqual(mechanismBindingWarnings(legacyDuplicateSetRecovery), {}, 'set_mechanisms recovery removes legacy duplicate warnings');
+const recoveredLegacyDuplicate = applyProjectAction(legacyDuplicateSnapshot, {
+  type: 'upsert_mechanism',
+  mechanism: {
+    ...legacyDuplicateSnapshot.mechanisms.find(mechanism => mechanism.id === 'legacy-duplicate-driver')!,
+    targetPartId: 'head',
+    targetPathId: undefined,
+    targetAnchorJointId: undefined,
+    activeVisualPartIds: ['head'],
+  },
+});
+assert.equal(recoveredLegacyDuplicate.mechanisms.find(mechanism => mechanism.id === 'legacy-duplicate-driver')?.targetPartId, 'head', 'legacy duplicate-driver snapshots can be retargeted for recovery');
+assert.equal(mechanismDriverIdentity(drivenProject, drivenMechanism), mechanismDriverIdentity(drivenProject, { ...drivenMechanism, targetPartId: 'right_hand_part', activeVisualPartIds: ['right_hand_part'] }), 'canonical driver identity uses chain root and target joint, not only part id');
+assert.deepEqual(pathOwnedTargetFields(ikProject.paths['path-right-arm']), {
+  targetPartId: 'right_hand_part',
+  targetSceneObjectId: undefined,
+  targetPathId: 'path-right-arm',
+  targetAnchorJointId: 'right_hand',
+  activeVisualPartIds: ['right_hand_part'],
+}, 'shared path target helper returns exact part-owned target fields');
 const animated = animatedPartsForProject(drivenProject, drivenProject.mechanisms, 0);
 const mechanismPreview = motionPreviewForProject(drivenProject, drivenProject.mechanisms, 0);
 const mechanismState = calculateLinkage(drivenMechanism, 0);
@@ -6760,6 +7196,7 @@ assert.equal(optimizedObjectDispatch.mechanism.targetPartId, undefined, 'Design 
 assert.equal(optimizedObjectDispatch.mechanism.targetPathId, 'path-object-piggy', 'Design Fit keeps the selected mechanism target path');
 const sampleMechanism = sample.mechanisms[0];
 assert(sampleMechanism, 'sample has a mechanism for driven-target checks');
+assert(typeof sampleMechanism.anchorX === 'number', 'sample mechanism has a numeric anchorX for duplicate-driver offsets');
 for (const phase of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
   const state = calculateLinkage(sampleMechanism, phase);
   const preview = motionPreviewForProject(sample, sample.mechanisms, phase);
@@ -6774,9 +7211,67 @@ for (const phase of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
 }
 const conflictProject: ProjectState = { ...drivenProject, mechanisms: [drivenMechanism, { ...drivenMechanism, id: 'second-driver', anchorX: drivenMechanism.anchorX + 8 }] };
 const conflicts = mechanismBindingWarnings(conflictProject);
-assert(conflicts['drive-effector']?.some(w => w.includes('also drives right_arm_lower:right_shoulder:right_hand')), 'first duplicate driver receives explicit conflict warning');
-assert(conflicts['second-driver']?.some(w => w.includes('also drives right_arm_lower:right_shoulder:right_hand')), 'second duplicate driver receives explicit conflict warning');
-assert(validateForFabrication(conflictProject).errors.some(e => e.includes('only one mechanism can own a target anchor')), 'blueprint export blocks ambiguous duplicate target drivers');
+assert(conflicts['drive-effector']?.includes('Choose another target.'), 'first duplicate driver receives direct target-change action');
+assert(conflicts['second-driver']?.includes('Choose another target.'), 'second duplicate driver receives direct target-change action');
+const missingBindingCopyProject: ProjectState = {
+  ...drivenProject,
+  mechanisms: [
+    { ...drivenMechanism, id: 'mech_missing_part', targetPartId: 'right_hand_part_missing' },
+    { ...drivenMechanism, id: 'mech_missing_path', targetPathId: 'path_missing_hand' },
+    { ...drivenMechanism, id: 'mech_missing_anchor', targetPartId: 'right_arm_lower', targetAnchorJointId: 'right_wrist_missing' },
+    ...conflictProject.mechanisms,
+  ],
+};
+const studentBindingWarnings = mechanismBindingWarnings(missingBindingCopyProject);
+assert.deepEqual(Object.keys(studentBindingWarnings).sort(), ['drive-effector', 'mech_missing_anchor', 'mech_missing_part', 'mech_missing_path', 'second-driver'].sort(), 'binding warnings keep mechanism ids as structured keys outside primary copy');
+const bindingWarningCopyViolations = Object.values(studentBindingWarnings).flatMap(messages => messages).flatMap(message => {
+  const violations: string[] = [];
+  if (message.length > 48) violations.push(`too long: ${message}`);
+  if (/Target part\s+\S+/.test(message)) violations.push(`raw target part id: ${message}`);
+  if (/Target path\s+\S+/.test(message)) violations.push(`raw target path id: ${message}`);
+  if (/Target anchor\s+\S+/.test(message)) violations.push(`raw target anchor id: ${message}`);
+  if (/\b[a-z][a-z0-9]*_[a-z0-9_]*\b/.test(message)) violations.push(`snake_case id: ${message}`);
+  if (/\b[a-z][a-z0-9_]*:[a-z][a-z0-9_]*\b/.test(message)) violations.push(`colon tuple: ${message}`);
+  if (missingBindingCopyProject.mechanisms.some(mechanism => message.startsWith(`${mechanism.id} `))) violations.push(`mechanism id prefix: ${message}`);
+  if (/Loose fit score\s+\d+/i.test(message)) violations.push(`raw loose score: ${message}`);
+  return violations;
+});
+g006StudentWarningCopyViolations.push(...bindingWarningCopyViolations.map(violation => `binding: ${violation}`));
+assert.deepEqual(g006StudentWarningCopyViolations, [], 'G006 student warning copy stays short and direct, hides technical ids/tuples/raw scores, and deduplicates presentation warnings');
+const conflictFabricationErrors = validateForFabrication(conflictProject).errors;
+assert(conflictFabricationErrors.includes('Choose another target.'), 'blueprint export blocks ambiguous duplicate target drivers with the same direct action');
+assert(!conflictFabricationErrors.some(e => /drive-effector|second-driver|right_shoulder:right_hand|only one mechanism can own a target anchor/.test(e)), 'blueprint duplicate target errors keep ids and tuples out of student copy');
+const canonicalDuplicateProject: ProjectState = {
+  ...sample,
+  mechanisms: [
+    { ...sampleMechanism, id: 'exact-hand-driver', targetPartId: 'right_hand_part', targetAnchorJointId: 'right_hand', targetPathId: 'path-right-arm', activeVisualPartIds: ['right_hand_part'] },
+    { ...sampleMechanism, id: 'parent-hand-driver', targetPartId: 'right_arm_lower', targetAnchorJointId: 'right_hand', targetPathId: 'path-right-arm', activeVisualPartIds: ['right_arm_lower'], anchorX: sampleMechanism.anchorX + 8 }
+  ]
+};
+const canonicalDuplicateWarnings = mechanismBindingWarnings(canonicalDuplicateProject);
+assert.deepEqual(Object.keys(canonicalDuplicateWarnings).sort(), ['exact-hand-driver', 'parent-hand-driver'], 'duplicate physical character drivers are reported on structured mechanism keys');
+assert(canonicalDuplicateWarnings['exact-hand-driver']?.includes('Choose another target.'), 'exact owner driver conflicts with parent-part driver for the same chain root and target joint');
+assert(canonicalDuplicateWarnings['parent-hand-driver']?.includes('Choose another target.'), 'parent-part driver cannot evade duplicate rejection for the same chain root and target joint');
+const canonicalDuplicateFabricationErrors = validateForFabrication(canonicalDuplicateProject).errors;
+assert(canonicalDuplicateFabricationErrors.includes('Choose another target.'), 'Blueprint export rejects duplicate physical character drivers even when targetPartId differs');
+assert(!canonicalDuplicateFabricationErrors.some(e => /exact-hand-driver|parent-hand-driver|right_shoulder:right_hand|only one mechanism can own a target anchor/.test(e)), 'Blueprint canonical duplicate errors keep ids and tuples out of student copy');
+const candidateMaskBaselineIssue = { severity: 'error' as const, message: 'Fix: snap gear pitch.', mechanismId: 'baseline-mechanism', recoveryStage: 'design' as const, recoveryAction: 'Snap gear pitch' };
+const candidateMaskNewIssue = { ...candidateMaskBaselineIssue, mechanismId: 'candidate-mechanism' };
+assert.deepEqual(newFabricationIssues([candidateMaskBaselineIssue], [candidateMaskNewIssue]), [candidateMaskNewIssue], 'a pre-existing generic fabrication error cannot mask the same new candidate issue with a different structured identity');
+const duplicateVisibleValidation = validateForFabrication(canonicalDuplicateProject);
+assert.equal(duplicateVisibleValidation.errors.filter(message => message === 'Choose another target.').length, 1, 'public Blueprint errors dedupe equivalent severity and message');
+assert.equal(duplicateVisibleValidation.issues.filter(issue => issue.severity === 'error' && issue.message === 'Choose another target.').length, 2, 'structured Blueprint issues retain separate duplicate-driver mechanism ids');
+const duplicateVisibleBlueprintMarkup = renderToString(createElement(BlueprintControlPanel, {
+  project: canonicalDuplicateProject,
+  goStage: () => undefined,
+  validation: duplicateVisibleValidation,
+  create: () => undefined,
+  recipes: [],
+  onSelectRecipe: () => undefined,
+}));
+assert.equal((duplicateVisibleBlueprintMarkup.match(/Choose another target\./g) ?? []).length, 1, 'Blueprint visible summary renders equivalent severity/message feedback once');
+};
+await assertPhysicalDriverConflictContracts();
 const exportedForSettings = applyProjectAction(sample, { type: 'set_export', fabricationPackage: createFabricationPackage(sample) });
 const uiSettingsProject = applyProjectAction(exportedForSettings, { type: 'update_settings', settings: { toolbarVisible: !exportedForSettings.settings.toolbarVisible, debugVisuals: true, detailedProcessingSteps: true } });
 assert.equal(uiSettingsProject.lastExport, exportedForSettings.lastExport, 'UI-only options do not clear export package');

@@ -33,7 +33,7 @@ export type AutomataSceneModel = {
     pathFitError?: number;
     pathFitThreshold?: number;
     pathFitStatus: 'fit' | 'mismatch' | 'unmeasured';
-    motionSource: 'generatedPath' | 'userPath-fallback' | 'linkage-effector' | 'missing-target' | 'none';
+    motionSource: 'generatedPath' | 'linkage-effector' | 'missing-target' | 'none';
     featureLabel?: string;
     featureIssues: MechanismFeatureIssue[];
     warnings: Record<string, string[]>;
@@ -87,11 +87,6 @@ const generatedPathPhaseError = (generatedPath: Point[] | undefined, userPath: P
     return total / sampleCount;
 };
 
-const sampledProjectPathForGeneratedMotion = (path: ProjectMotionPath, sampleCount = 96): Point[] =>
-    Array.from({ length: sampleCount }, (_, index) =>
-        pointOnProjectPath(path, (index / sampleCount) * Math.PI * 2)
-    );
-
 export const buildAutomataSceneModel = (
     project: ProjectState,
     mechanism: MechanismConfig | undefined,
@@ -136,25 +131,19 @@ export const buildAutomataSceneModel = (
         : pathFitError > pathFitThreshold
             ? 'mismatch'
             : 'fit';
-    const motionMechanism: MechanismConfig = pathFitStatus === 'mismatch' && userPath?.points.length
-        ? { ...normalizedMechanism, generatedPath: sampledProjectPathForGeneratedMotion(userPath) }
-        : normalizedMechanism;
-    const previewMechanisms = mechanisms.map(item => item.id === normalizedMechanism.id ? motionMechanism : item);
-    const fullMotionPreview = motionPreviewForProject(project, previewMechanisms, angle);
-    const selectedMotionPreview = motionPreviewForProject(project, [motionMechanism], angle);
+    const fullMotionPreview = motionPreviewForProject(project, mechanisms, angle);
+    const selectedMotionPreview = motionPreviewForProject(project, [normalizedMechanism], angle);
     const generatedTarget = mechanismPath ? pointOnGeneratedMechanismPath(mechanismPath.points, angle) : undefined;
-    const fallbackTarget = pathFitStatus === 'mismatch' && userPath ? pointOnProjectPath(userPath, angle) : undefined;
-    const expectedTarget = fallbackTarget ?? generatedTarget;
     const targetError = generatedTarget && selectedMotionPreview.target
-        ? distance(selectedMotionPreview.target, expectedTarget ?? generatedTarget)
+        ? distance(selectedMotionPreview.target, generatedTarget)
         : undefined;
-    const motionSource = fallbackTarget && selectedMotionPreview.target
-        ? 'userPath-fallback'
-        : generatedTarget && selectedMotionPreview.target
-            ? 'generatedPath'
-            : generatedTarget
-                ? 'missing-target'
-                : 'linkage-effector';
+    const motionSource = generatedTarget && selectedMotionPreview.target
+        ? 'generatedPath'
+        : generatedTarget
+            ? 'missing-target'
+            : selectedMotionPreview.target
+                ? 'linkage-effector'
+                : 'none';
     const feature = mechanismFeature(normalizedMechanism.type);
     const warnings = mechanismBindingWarnings(project, mechanisms);
     if (pathFitStatus === 'mismatch') {

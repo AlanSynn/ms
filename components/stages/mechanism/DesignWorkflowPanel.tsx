@@ -8,8 +8,9 @@ import type {
   ProjectAction,
   ProjectState,
 } from "../../../types";
-import { mechanismBindingWarnings } from "../../../utils/motion";
+import { mechanismBindingWarnings, mechanismDriverIdentity } from "../../../utils/motion";
 import { fitMechanismToTargetPath } from "../../../utils/mechanismRecommendations";
+import { pathOwnedTargetFields } from "../../../utils/pathTargets";
 import {
   classroomAssessmentFor,
   classroomCueTitleFor,
@@ -62,20 +63,35 @@ export const DesignWorkflowPanel = ({
     ? classroomUseExampleFor(selectedMechanism.type)
     : undefined;
   const bindingWarnings = mechanismBindingWarnings(project);
+  const bindingWarningMessages = Array.from(
+    new Set(Object.values(bindingWarnings).flat()),
+  );
   const addLibraryMechanism = (type: MechanismType) => {
     const base = createDefaultMechanism(type, uid("mech"));
     const path = project.selectedPathId
       ? project.paths[project.selectedPathId]
       : undefined;
+    const pathDriver = path
+      ? mechanismDriverIdentity(project, {
+          ...base,
+          ...pathOwnedTargetFields(path),
+          visible: true,
+          enabled: true,
+        })
+      : undefined;
+    const pathOccupied = Boolean(
+      pathDriver &&
+        project.mechanisms.some(
+          (mechanism) => mechanismDriverIdentity(project, mechanism) === pathDriver,
+        ),
+    );
     const mechanism =
-      path && path.points.length >= 3
+      path && path.points.length >= 3 && !pathOccupied
         ? fitMechanismToTargetPath(
             project,
             {
               ...base,
-              targetPathId: path.id,
-              targetPartId: path.sceneObjectId ? undefined : path.partId,
-              targetSceneObjectId: path.sceneObjectId,
+              ...pathOwnedTargetFields(path),
             },
             path.id,
           )
@@ -175,13 +191,11 @@ export const DesignWorkflowPanel = ({
           </div>
         )}
         {selectedUseExample && <ClassroomExampleVideo example={selectedUseExample} />}
-        {Object.entries(bindingWarnings).map(([id, warnings]) =>
-          warnings.length ? (
-            <div className="warning" key={id}>
-              {warnings.join("; ")}
-            </div>
-          ) : null,
-        )}
+        {bindingWarningMessages.map((warning) => (
+          <div className="warning" key={warning}>
+            {warning}
+          </div>
+        ))}
         <button className="btn-primary w-full" onClick={onBlueprint}>
           Blueprint
         </button>

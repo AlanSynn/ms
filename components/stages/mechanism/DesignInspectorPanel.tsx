@@ -10,8 +10,8 @@ import type {
 } from "../../../types";
 import { sampleFeasibleRange } from "../../../utils/fabrication";
 import {
-  mechanismBindingWarnings,
   motionAnchorJointIds,
+  mechanismDriverIdentity,
   motionChainOptionLabel,
   preferredMotionJointId,
 } from "../../../utils/motion";
@@ -23,6 +23,7 @@ import {
   shouldShowMechanismParam,
 } from "./mechanismParamPolicy";
 import { mechanismParamIsPlacementRecoveryEditable } from "../../../utils/mechanismEditAuthority";
+import { pathOwnedTargetFields } from "../../../utils/pathTargets";
 
 type DesignInspectorPanelProps = {
   project: ProjectState;
@@ -55,10 +56,12 @@ export const DesignInspectorPanel = ({
       ? "No full motion. Try reset or smaller links."
       : "Motion may jam. Try a smaller move."
     : null;
-  const bindingWarnings = mechanismBindingWarnings(project);
-  const selectedBindingWarnings = selectedMechanism
-    ? (bindingWarnings[selectedMechanism.id] ?? [])
-    : [];
+  const warningMessages = Array.from(
+    new Set([
+      ...(motionWarning ? [motionWarning] : []),
+      ...(selectedMechanism?.warnings ?? []),
+    ]),
+  );
   const targetAnchorOptions = selectedMechanism?.targetPartId
     ? motionAnchorJointIds(project, selectedMechanism.targetPartId)
     : [];
@@ -79,6 +82,23 @@ export const DesignInspectorPanel = ({
       ? path.sceneObjectId === selectedMechanism.targetSceneObjectId
       : !selectedMechanism?.targetPartId ||
         (!path.sceneObjectId && path.partId === selectedMechanism.targetPartId);
+  const pathOccupied = (path: ProjectMotionPath) => {
+    if (!selectedMechanism) return false;
+    const candidateDriver = mechanismDriverIdentity(project, {
+      ...selectedMechanism,
+      ...pathOwnedTargetFields(path),
+      visible: true,
+      enabled: true,
+    });
+    return Boolean(
+      candidateDriver &&
+        project.mechanisms.some(
+          (mechanism) =>
+            mechanism.id !== selectedMechanism.id &&
+            mechanismDriverIdentity(project, mechanism) === candidateDriver,
+        ),
+    );
+  };
   const updateTarget = (value: string) => {
     if (!selectedMechanism) return;
     const targetSceneObjectId = value.startsWith("object:")
@@ -87,11 +107,12 @@ export const DesignInspectorPanel = ({
     const targetPartId = value && !targetSceneObjectId ? value : undefined;
     const targetPath = targetPartId
       ? Object.values(project.paths).find(
-          (path) => !path.sceneObjectId && path.partId === targetPartId,
+          (path) =>
+            !path.sceneObjectId && path.partId === targetPartId && !pathOccupied(path),
         )
       : targetSceneObjectId
         ? Object.values(project.paths).find(
-            (path) => path.sceneObjectId === targetSceneObjectId,
+            (path) => path.sceneObjectId === targetSceneObjectId && !pathOccupied(path),
           )
         : undefined;
     updateMechanism(selectedMechanism.id, {
@@ -179,7 +200,11 @@ export const DesignInspectorPanel = ({
             {Object.values(project.paths)
               .filter(pathBelongsToSelection)
               .map((p) => (
-                <option key={p.id} value={p.id}>
+                <option
+                  key={p.id}
+                  value={p.id}
+                  disabled={pathOccupied(p)}
+                >
                   {p.sceneObjectId
                     ? `${project.sceneObjects[p.sceneObjectId]?.name ?? "Object"} path`
                     : project.parts[p.partId]?.name
@@ -263,14 +288,8 @@ export const DesignInspectorPanel = ({
               </React.Fragment>
             );
           })}
-          {selectedBindingWarnings.map((w, i) => (
-            <div className="warning" key={`binding-${w}-${i}`}>
-              {w}
-            </div>
-          ))}
-          {motionWarning && <div className="warning">{motionWarning}</div>}
-          {selectedMechanism.warnings?.map((w, i) => (
-            <div className="warning" key={`${w}-${i}`}>
+          {warningMessages.map((w) => (
+            <div className="warning" key={w}>
               {w}
             </div>
           ))}

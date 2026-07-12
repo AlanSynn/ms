@@ -653,6 +653,16 @@ const writeWavingArmLessonProject = async () => {
   return path;
 };
 
+const writeUnoccupiedWavingArmLessonProject = async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'motionsmith-lesson-'));
+  const path = join(dir, 'waving-arm-unoccupied.motionsmith.json');
+  const project = createLessonProject('waving-arm');
+  project.mechanisms = [];
+  project.selectedMechanismId = undefined;
+  await writeFile(path, serializeProject(project), 'utf8');
+  return path;
+};
+
 const importWavingArmLessonProject = async (page: Page, targetStage: 'character' | 'path' = 'path') => {
   await waitForBootLoader(page);
   const projectPath = await writeWavingArmLessonProject();
@@ -674,6 +684,21 @@ const importWavingArmLessonProject = async (page: Page, targetStage: 'character'
 
 const openWavingArmTemplate = async (page: Page) => {
   await importWavingArmLessonProject(page, 'path');
+};
+
+const openUnoccupiedWavingArmTemplate = async (page: Page) => {
+  await waitForBootLoader(page);
+  const projectPath = await writeUnoccupiedWavingArmLessonProject();
+  const gettingStarted = page.getByTestId('getting-started-dialog');
+  if (await gettingStarted.count()) {
+    if (await gettingStarted.getByTestId('guided-project-library').count()) {
+      await gettingStarted.getByRole('button', { name: 'Starters' }).click();
+    }
+    await page.getByTestId('getting-started-import-input').setInputFiles(projectPath);
+  } else {
+    await page.getByTestId('project-file-input').setInputFiles(projectPath);
+  }
+  await expect(page.getByRole('heading', { name: 'Path Editor' })).toBeVisible();
 };
 
 const applyFourBarFromFoundry = async (page: Page) => {
@@ -721,6 +746,63 @@ const waitForStableBox = async (page: Page, locator: Locator, label: string) => 
   return previous;
 };
 
+const assertNoDocumentHorizontalOverflow = async (page: Page, label: string) => {
+  const metrics = await page.evaluate(() => ({
+    bodyOverflow: getComputedStyle(document.body).overflow,
+    bodyOverflowX: getComputedStyle(document.body).overflowX,
+    bodyScrollWidth: document.body.scrollWidth,
+    bodyClientWidth: document.body.clientWidth,
+    documentScrollWidth: document.documentElement.scrollWidth,
+    documentClientWidth: document.documentElement.clientWidth,
+  }));
+  expect(metrics.bodyOverflow, `${label}: body shell remains overflow-hidden`).toBe('hidden');
+  expect(metrics.bodyOverflowX, `${label}: body shell keeps horizontal overflow hidden`).toBe('hidden');
+  expect(metrics.documentScrollWidth, `${label}: document has no horizontal overflow`).toBeLessThanOrEqual(metrics.documentClientWidth + 1);
+  expect(metrics.bodyScrollWidth, `${label}: body has no horizontal overflow`).toBeLessThanOrEqual(metrics.bodyClientWidth + 1);
+};
+
+const expectReachableInViewportOrOwnScroller = async (locator: Locator, label: string) => {
+  await expect(locator, `${label} is visible`).toBeVisible();
+  const result = await locator.evaluate((node) => {
+    const margin = 1;
+    const insideViewport = (rect: DOMRect) =>
+      rect.left >= -margin
+      && rect.top >= -margin
+      && rect.right <= window.innerWidth + margin
+      && rect.bottom <= window.innerHeight + margin;
+    const nearestScroller = (element: Element) => {
+      for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+        if (parent === document.body || parent === document.documentElement) return null;
+        const style = getComputedStyle(parent);
+        const scrollsY = /(auto|scroll|overlay)/.test(style.overflowY) && parent.scrollHeight > parent.clientHeight + 1;
+        const scrollsX = /(auto|scroll|overlay)/.test(style.overflowX) && parent.scrollWidth > parent.clientWidth + 1;
+        if (scrollsY || scrollsX) return parent;
+      }
+      return null;
+    };
+
+    const initialRect = node.getBoundingClientRect();
+    if (insideViewport(initialRect)) return { ok: true, via: 'viewport' };
+
+    const scroller = nearestScroller(node);
+    if (!scroller) return { ok: false, via: 'none' };
+
+    node.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    const rect = node.getBoundingClientRect();
+    const scrollerRect = scroller.getBoundingClientRect();
+    const insideScroller =
+      rect.left >= scrollerRect.left - margin
+      && rect.top >= scrollerRect.top - margin
+      && rect.right <= scrollerRect.right + margin
+      && rect.bottom <= scrollerRect.bottom + margin;
+    return {
+      ok: insideViewport(rect) && insideScroller,
+      via: scroller.getAttribute('data-testid') || scroller.className || scroller.tagName,
+    };
+  });
+  expect(result.ok, `${label} is inside viewport or reachable through its own scroll container (${result.via})`).toBe(true);
+};
+
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const stageButtonName = (name: string | RegExp) => {
   if (name instanceof RegExp) return name;
@@ -742,6 +824,47 @@ const expectProjectCounts = async (page: Page, parts: number, paths: number, mec
   await expect(page.getByTestId('stage-project-card')).not.toBeVisible();
 };
 
+test.describe('Ultragoal anatomy contracts', () => {
+test('Ultragoal G003 built-in front character keeps anatomical right on viewer left', async ({ page }) => {
+  await page.goto('/');
+  await openCharacterScreen(page);
+  await page.getByTestId('character-preview-pane').getByRole('button', { name: 'Zoom out' }).click();
+  await page.getByTestId('character-preview-pane').getByRole('button', { name: 'Zoom out' }).click();
+  await page.getByTestId('character-three-puppet-view-2d').click();
+
+  const puppet = page.getByTestId('character-three-puppet-state');
+  await expect(puppet).toHaveAttribute('data-camera-preset', 'front');
+  await expect(puppet).toHaveAttribute('data-layer-character', 'shown');
+
+  const expectedLabels = {
+    right_hand_part: 'Right hand',
+    left_hand_part: 'Left hand',
+    right_foot_part: 'Right foot',
+    left_foot_part: 'Left foot',
+  } as const;
+  for (const [id, label] of Object.entries(expectedLabels)) {
+    await expect(page.getByTestId(`character-part-item-${id}`), `${id} keeps its anatomical label`).toContainText(label);
+  }
+
+  const head = await waitForThreePartTarget(puppet, 'head');
+  const torso = await waitForThreePartTarget(puppet, 'torso');
+  const rightHand = await waitForThreePartTarget(puppet, 'right_hand_part');
+  const leftHand = await waitForThreePartTarget(puppet, 'left_hand_part');
+  const rightFoot = await waitForThreePartTarget(puppet, 'right_foot_part');
+  const leftFoot = await waitForThreePartTarget(puppet, 'left_foot_part');
+
+  expect(rightHand.id).toBe('right_hand_part');
+  expect(leftHand.id).toBe('left_hand_part');
+  expect(rightFoot.id).toBe('right_foot_part');
+  expect(leftFoot.id).toBe('left_foot_part');
+  expect(head.y, 'head renders above torso in front view').toBeLessThan(torso.y);
+  expect(torso.y, 'torso renders above both feet in front view').toBeLessThan(Math.min(rightFoot.y, leftFoot.y));
+  expect(Math.max(rightHand.y, leftHand.y), 'hands render above feet in front view').toBeLessThan(Math.min(rightFoot.y, leftFoot.y));
+  expect(rightHand.x, 'anatomical right hand should appear viewer-left of anatomical left hand').toBeLessThan(leftHand.x);
+  expect(rightFoot.x, 'anatomical right foot should appear viewer-left of anatomical left foot').toBeLessThan(leftFoot.x);
+});
+
+});
 
 type ConnectionHoleTarget = {
   role: ConnectionSelectionRole;
@@ -877,7 +1000,13 @@ test('physical hole selection authors connection role and updates preview/export
   await expect(foundryRig, 'preview exposes selected role/kind/part/hole after physical affordance drag').toHaveAttribute('data-three-selected-connection-role', '4bar.input-joint');
   await expect(foundryRig).toHaveAttribute('data-three-selected-connection-kind', 'linkage-hole');
   await expect(foundryRig).toHaveAttribute('data-three-selected-connection-hole-index', String(inputHole.holeIndex));
-  await expect(foundryParametricEditor, 'shared editor confirms selected connection but is display-only').toContainText(/4bar\.input-joint|Input joint/i);
+  await expect(foundryParametricEditor, 'shared editor confirms selected connection but is display-only').toContainText(/Input joint/i);
+  const inputConfirmation = foundryParametricEditor.getByTestId('connection-selection-confirmation-4bar.input-joint');
+  await expect(inputConfirmation, 'visible confirmation uses one-based physical hole copy').toContainText(`Hole ${inputHole.holeIndex + 1}`);
+  await expect(inputConfirmation, 'visible confirmation hides raw linkage key and #index copy').not.toContainText(new RegExp(`${inputHole.partKey}|#${inputHole.holeIndex}`));
+  await expect(inputConfirmation).toHaveAttribute('data-connection-role', '4bar.input-joint');
+  await expect(inputConfirmation).toHaveAttribute('data-connection-part-key', inputHole.partKey);
+  await expect(inputConfirmation).toHaveAttribute('data-connection-hole-index', String(inputHole.holeIndex));
   await expect(foundryParametricEditor.getByTestId('connection-selection-author')).toHaveCount(0);
   await expect(foundryParametricEditor.getByLabel('Input link length'), 'input endpoint size is confirmation-only after physical-hole authoring').toBeDisabled();
   await expect(foundryParametricEditor.getByLabel('Output link length'), 'input authoring does not lock the independent output endpoint').toBeEnabled();
@@ -973,8 +1102,15 @@ test('gear linkage physical hole selection authors drive/output pins and exports
   await expect(foundryRig, 'preview exposes selected drive-pin role after physical affordance drag').toHaveAttribute('data-three-selected-connection-role', 'gear_linkage.drive-pin');
   await expect(foundryRig).toHaveAttribute('data-three-selected-connection-kind', 'gear-attachment-hole');
   await expect(foundryRig).toHaveAttribute('data-three-selected-connection-hole-index', String(driveHole.holeIndex));
-  await expect(page.getByTestId('foundry-parametric-editor'), 'shared editor confirms selected gear-linkage connection but is display-only').toContainText(/gear_linkage\.drive-pin|Drive pin/i);
-  await expect(page.getByTestId('foundry-parametric-editor').getByTestId('connection-selection-author')).toHaveCount(0);
+  const gearParametricEditor = page.getByTestId('foundry-parametric-editor');
+  await expect(gearParametricEditor, 'shared editor confirms selected gear-linkage connection but is display-only').toContainText(/Drive pin/i);
+  const driveConfirmation = gearParametricEditor.getByTestId('connection-selection-confirmation-gear_linkage.drive-pin');
+  await expect(driveConfirmation, 'visible gear confirmation uses one-based physical hole copy').toContainText(`Hole ${driveHole.holeIndex + 1}`);
+  await expect(driveConfirmation, 'visible gear confirmation hides raw gear key and #index copy').not.toContainText(new RegExp(`${driveHole.partKey}|#${driveHole.holeIndex}`));
+  await expect(driveConfirmation).toHaveAttribute('data-connection-role', 'gear_linkage.drive-pin');
+  await expect(driveConfirmation).toHaveAttribute('data-connection-part-key', driveHole.partKey);
+  await expect(driveConfirmation).toHaveAttribute('data-connection-hole-index', String(driveHole.holeIndex));
+  await expect(gearParametricEditor.getByTestId('connection-selection-author')).toHaveCount(0);
 
   const afterDriveCoordinate = await waitForConnectionCoordinate(foundryRig, 'gear_linkage.drive-pin', initialDriveCoordinate);
   const outputAfterDrive = await waitForConnectionCoordinate(foundryRig, 'gear_linkage.output-pin');
@@ -1062,6 +1198,91 @@ test('Medium-width desktop keeps editor panes from cutting off the canvas', asyn
   expect(canvasBox!.width, 'center canvas stays usable at medium desktop width').toBeGreaterThanOrEqual(280);
   expect(rightBox!.x + rightBox!.width, 'right inspector stays inside the viewport').toBeLessThanOrEqual(viewport!.width + 1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 4)).toBe(true);
+});
+
+
+test.describe('Ultragoal warning and responsive contracts', () => {
+test('G006 student warning UX hides raw ids and fit scores in Design recommendations', async ({ page }) => {
+  await page.goto('/');
+  await openUnoccupiedWavingArmTemplate(page);
+  await clickStage(page, 'Design');
+  await page.getByRole('button', { name: /Recommend/i }).click();
+  const sheet = page.getByTestId('recommendation-sheet');
+  await expect(sheet).toBeVisible();
+
+  const cards = sheet.locator('[data-testid^="recommendation-card-"]');
+  await expect(cards.first(), 'recommendation cards are available for the imported lesson path').toBeVisible();
+  await expect.soft(sheet, 'student cards should not expose raw numeric fit scores').not.toContainText(/Fit score\s+\d+\/100/i);
+  for (let i = 0; i < await cards.count(); i += 1) {
+    const card = cards.nth(i);
+    const use = card.getByRole('button', { name: /^Use$/ });
+    const blocked = card.getByText(/Blocked|Draw more path|Check/i).first();
+    expect.soft(
+      (await use.count()) > 0 || (await blocked.count()) > 0,
+      `recommendation card ${i + 1} keeps Use or blocked state understandable`,
+    ).toBe(true);
+  }
+
+  await sheet.getByRole('button', { name: 'Close' }).click();
+  await expect(sheet).toHaveCount(0);
+
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await clickStage(page, 'Design');
+  await page.getByRole('button', { name: /Four-bar linkage/i }).click();
+
+  const warningRegion = page.getByTestId('stage-left-pane');
+  const warnings = warningRegion.locator('.warning');
+  await expect(warnings.first(), 'Design shows the primary student warning near the mechanism list').toBeVisible();
+
+  const warningTexts = (await warnings.allTextContents()).map(text => text.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const primaryWarning = warningTexts[0] ?? '';
+  expect.soft(primaryWarning.length, `primary warning is compact: ${primaryWarning}`).toBeLessThanOrEqual(90);
+  expect.soft(primaryWarning, 'primary warning starts with an action or blocker').toMatch(/^(Fix|Choose|Use|Remove|Move|Check|Draw|Add|Unlock|Pick|Select|Blocked|No)\b/i);
+  for (const warning of warningTexts) {
+    expect.soft(warning, `warning hides mechanism/path/part/object ids: ${warning}`).not.toMatch(/\b(?:mech|path|part|object)[-_][A-Za-z0-9_-]+\b/i);
+    expect.soft(warning, `warning hides snake_case ids: ${warning}`).not.toMatch(/\b[a-z]+(?:_[a-z0-9]+)+\b/);
+    expect.soft(warning, `warning hides anchor tuples: ${warning}`).not.toMatch(/\b(?:part|object|joint|path):[^\s;]+/i);
+    expect.soft(warning, `warning hides raw fit scores: ${warning}`).not.toMatch(/\b(?:Fit\s*)?score\s+\d+\/100\b/i);
+  }
+
+  const normalizedWarnings = warningTexts.map(text => text
+    .replace(/\bmech[-_][A-Za-z0-9_-]+\b/gi, '<mechanism>')
+    .replace(/\b[a-z]+(?:_[a-z0-9]+)+\b/g, '<id>')
+    .replace(/\b(?:part|object|joint|path):[^\s;]+/gi, '<anchor>')
+    .replace(/\s+/g, ' ')
+    .trim());
+  const repeatedEquivalentWarnings = normalizedWarnings.filter((text, index, all) => text && all.indexOf(text) !== index);
+  expect.soft(repeatedEquivalentWarnings, 'equivalent warnings appear at most once in the Design warning region').toEqual([]);
+});
+
+test('G005 responsive shell keeps primary surfaces reachable without page overflow', async ({ page }) => {
+  for (const viewport of [
+    { width: 1920, height: 1080 },
+    { width: 1200, height: 520 },
+  ]) {
+    const label = `${viewport.width}x${viewport.height}`;
+    await page.setViewportSize(viewport);
+    await page.goto('/');
+    await waitForBootLoader(page);
+
+    await assertNoDocumentHorizontalOverflow(page, `${label} welcome`);
+    const gettingStarted = page.getByTestId('getting-started-dialog');
+    await expectReachableInViewportOrOwnScroller(gettingStarted, `${label} Getting Started modal`);
+    await expectReachableInViewportOrOwnScroller(gettingStarted.getByTestId('getting-started-card-guided'), `${label} Getting Started primary action`);
+    await expectReachableInViewportOrOwnScroller(gettingStarted.getByRole('button', { name: 'Open full project' }), `${label} Getting Started footer action`);
+
+    await importWavingArmLessonProject(page, 'path');
+    await assertNoDocumentHorizontalOverflow(page, `${label} workbench`);
+    await expectReachableInViewportOrOwnScroller(page.locator('header.app-header'), `${label} header`);
+    await expectReachableInViewportOrOwnScroller(page.getByTestId('app-header-home'), `${label} home action`);
+    await expectReachableInViewportOrOwnScroller(page.getByTestId('shared-workbench'), `${label} shared workbench`);
+    await expectReachableInViewportOrOwnScroller(page.getByTestId('stage-canvas-pane'), `${label} center canvas`);
+    await expectReachableInViewportOrOwnScroller(page.getByTestId('stage-right-inspector'), `${label} right inspector`);
+    await expectReachableInViewportOrOwnScroller(page.getByTestId('stage-player-row'), `${label} playback dock`);
+    await expectReachableInViewportOrOwnScroller(page.getByTestId('status-bar'), `${label} status footer`);
+  }
+});
 });
 
 test('character → path → foundry → design → blueprint runs end-to-end in browser', async ({ page }) => {
@@ -2698,6 +2919,48 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   expectCleanPage(pageErrors, consoleErrors);
 });
 
+test.describe('Foundry parameter safety contracts', () => {
+test('Foundry clamps feasible numeric parameter edits without adding jam warnings', async ({ page }) => {
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByRole('button', { name: /Foundry/i }).click();
+  await expect(page.getByRole('heading', { name: 'Foundry' })).toBeVisible();
+
+  await page.getByText('Mechanism options').click();
+  await page.getByLabel('Foundry mechanism type').selectOption('planetary_gear');
+
+  const phase = page.getByLabel('phase number');
+  await expect(phase, 'existing feasible planetary parameter is editable').toBeEnabled();
+  const min = Number(await phase.getAttribute('min'));
+  const max = Number(await phase.getAttribute('max'));
+  expect(Number.isFinite(min) && Number.isFinite(max), 'visible numeric control exposes min/max bounds').toBe(true);
+  expect(min, 'numeric parameter has a feasible range').toBeLessThan(max);
+
+  const before = Number(await phase.inputValue());
+  await phase.fill(String(max + 1000));
+  await phase.press('Enter');
+
+  await expect.poll(async () => Number(await phase.inputValue()), {
+    message: 'out-of-range feasible parameter edit clamps or reverts inside visible bounds',
+  }).toBeLessThanOrEqual(max);
+  const committed = Number(await phase.inputValue());
+  expect(committed, 'committed UI value stays above the visible minimum').toBeGreaterThanOrEqual(min);
+  expect(committed, 'committed UI value rejects the requested out-of-range value').not.toBe(max + 1000);
+  expect(committed === before || committed === max, 'control either reverts to the prior safe value or clamps to the visible maximum').toBe(true);
+
+  await page.getByLabel('Foundry mechanism type').selectOption('4bar');
+  await page.getByLabel('Foundry preset').selectOption('compact');
+  await page.getByLabel('Output link length').selectOption('4');
+  await page.getByLabel('Input link length').selectOption('4');
+  await page.getByLabel('Coupler link length').selectOption('4');
+  await expect(page.getByLabel('Output link length').locator('option[value="2"]'), 'unsafe 4bar output sizes stay visible but locked instead of breaking the preview').toHaveAttribute('disabled', '');
+  await expect(page.getByLabel('Output link length').locator('option[value="2"]')).toContainText(/locked/i);
+  await expect(page.getByTestId('mechanism-motion-option-locks')).toContainText(/Locked choices may jam/);
+  await expect(page.getByTestId('foundry-motion-warning')).toHaveCount(0);
+  await expect(page.getByTestId('stage-left-pane')).not.toContainText(/Motion may jam|No full motion/);
+});
+});
+
 test('Character tab owns body layer and skeleton edits used by design controls', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
@@ -2770,6 +3033,58 @@ test('Character tab owns body layer and skeleton edits used by design controls',
   expectCleanPage(pageErrors, consoleErrors);
 });
 
+test.describe('Recommendation driver ownership contracts', () => {
+test('Recommendation keeps a limb path on its exact owner and one physical driver', async ({ page }) => {
+  await page.goto('/');
+  await openWavingArmTemplate(page);
+  await page.getByRole('button', { name: /Mechanism Design/i }).click();
+  await page.getByRole('button', { name: /Recommend/i }).click();
+  await expect(page.getByTestId('recommendation-sheet')).toBeVisible();
+
+  const enabledOccupiedUses = page.getByTestId('recommendation-sheet').locator('button.btn-primary:not(:disabled)');
+  if (await enabledOccupiedUses.count()) {
+    await enabledOccupiedUses.first().click();
+  } else {
+    await page.getByTestId('recommendation-sheet').getByRole('button', { name: 'Close' }).click();
+    await page.goto('/');
+    await openUnoccupiedWavingArmTemplate(page);
+    await page.getByRole('button', { name: /Mechanism Design/i }).click();
+    await page.getByRole('button', { name: /Recommend/i }).click();
+    await expect(page.getByTestId('recommendation-card-4bar')).toBeVisible();
+    await page.getByTestId('recommendation-card-4bar').getByRole('button', { name: /^Use$/ }).click();
+  }
+
+  const designPreview = page.getByTestId('design-shared-foundry-preview');
+  await expect(designPreview).toHaveAttribute('data-design-motion-source', 'generatedPath');
+  await expect(designPreview).toHaveAttribute('data-design-target-joint-id', 'right_hand');
+  expect(Number(await designPreview.getAttribute('data-design-target-error')), 'visible character target stays attached to the actual mechanism target').toBeLessThan(0.01);
+
+  await clickStage(page, 'Blueprint');
+  await expect(page.getByRole('button', { name: /Generate package/i })).toBeEnabled();
+  await page.getByRole('button', { name: /Generate package/i }).click();
+  const metadata = await downloadMetadataJson(page);
+  const mechanisms = metadata.sceneSnapshot.mechanisms as Array<{
+    id: string;
+    source?: string;
+    presetId?: string;
+    targetPartId?: string;
+    targetPathId?: string;
+    targetAnchorJointId?: string;
+    activeVisualPartIds?: string[];
+  }>;
+  const rightHandDrivers = mechanisms.filter((mechanism) =>
+    mechanism.targetPathId === 'path-right-arm' && mechanism.targetAnchorJointId === 'right_hand',
+  );
+  expect(rightHandDrivers, 'only one mechanism may drive the right_shoulder→right_hand physical target').toHaveLength(1);
+  expect(rightHandDrivers[0]).toMatchObject({
+    targetPartId: 'right_hand_part',
+    targetPathId: 'path-right-arm',
+    targetAnchorJointId: 'right_hand',
+  });
+  expect(rightHandDrivers[0].activeVisualPartIds).toEqual(['right_hand_part']);
+});
+});
+
 test('Recommendation sheet applies a distinct mechanism and blueprint recipe', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
@@ -2779,7 +3094,7 @@ test('Recommendation sheet applies a distinct mechanism and blueprint recipe', a
   });
 
   await page.goto('/');
-  await openWavingArmTemplate(page);
+  await openUnoccupiedWavingArmTemplate(page);
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   const initialMechanisms = await page.getByLabel('Mechanism instance').evaluate((select: HTMLSelectElement) => select.options.length);
   await page.getByRole('button', { name: /Recommend/i }).click();
@@ -2824,7 +3139,7 @@ test('Recommendation sheet applies a distinct mechanism and blueprint recipe', a
   expect(new Set(metadata.recipes.map((recipe: { mechanismId: string }) => recipe.mechanismId)).size).toBe(initialMechanisms + 1);
   const appliedRecommendation = metadata.sceneSnapshot.mechanisms.find((mechanism: { id: string; presetId?: string; source?: string; targetPathId?: string; targetPartId?: string; generatedPath?: Array<{ x: number; y: number }> }) => mechanism.source === 'optimized' && mechanism.presetId?.startsWith('recommendation-'));
   expect(appliedRecommendation).toBeTruthy();
-  expect(appliedRecommendation?.targetPartId).toBe('right_arm_lower');
+  expect(appliedRecommendation?.targetPartId).toBe('right_hand_part');
   expect(appliedRecommendation?.targetPathId).toBe('path-right-arm');
   expect(appliedRecommendation?.generatedPath?.length ?? 0).toBeGreaterThanOrEqual(3);
   const appliedRecipe = metadata.recipes.find((recipe: { mechanismId: string; offsetFromBoardMm?: { x: number; y: number } }) => recipe.mechanismId === appliedRecommendation?.id);
@@ -2840,7 +3155,7 @@ test('Recommendation sheet applies a distinct mechanism and blueprint recipe', a
   await expect(assemblyScene).toHaveAttribute('data-mechanism-scene-contract-layer-count', /[1-9]/);
 
   await page.goto('/');
-  await openWavingArmTemplate(page);
+  await openUnoccupiedWavingArmTemplate(page);
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   await page.getByRole('button', { name: /Recommend/i }).click();
   await expect(page.getByTestId('recommendation-sheet')).toBeVisible();
@@ -3798,9 +4113,11 @@ test('Detached visible mechanisms block browser blueprint generation', async ({ 
   await page.getByRole('button', { name: 'Slider piston', exact: true }).click();
   await page.getByLabel('Mechanism target').selectOption('head');
   await expect(page.getByLabel('Mechanism motion path')).toHaveValue('');
+  await page.getByRole('button', { name: 'Cam follower', exact: true }).click();
 
   await clickStage(page, 'Blueprint');
   await expect(page.getByTestId('blueprint-control-panel').getByText(/choose target \+ path/)).toBeVisible();
+  await expect(page.getByTestId('blueprint-control-panel').getByText(/choose target \+ path/)).toHaveCount(1);
   await expect(page.getByRole('button', { name: /Generate package/i })).toBeDisabled();
 });
 
@@ -3828,17 +4145,19 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   await expect(page.getByTestId('design-parametric-editor')).toHaveCount(0);
   await expect(page.getByLabel('slider offset number')).toHaveCount(0);
   await expect(page.getByLabel('rod length number')).toHaveCount(0);
-  await expect(page.getByLabel('Mechanism target')).toHaveValue('right_hand_part');
-  await expect(page.getByLabel('Mechanism motion path')).toHaveValue('path-right-arm');
+  await expect(page.getByLabel('Mechanism target')).toHaveValue('');
+  await expect(page.getByLabel('Mechanism motion path')).toHaveValue('');
 
   await page.getByLabel('Mechanism target').selectOption('head');
   await expect(page.getByLabel('Mechanism motion path')).toHaveValue('');
   const headPathOptions = await page.getByLabel('Mechanism motion path').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
   expect(headPathOptions).toEqual(['No path']);
   await page.getByLabel('Mechanism target').selectOption('right_hand_part');
-  const handPathOptions = await page.getByLabel('Mechanism motion path').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
-  expect(handPathOptions.join(' ')).toContain('Right hand path');
-  expect(handPathOptions.join(' ')).not.toContain('pts');
+  await expect(page.getByLabel('Mechanism motion path')).toHaveValue('');
+  const handPathOptions = await page.getByLabel('Mechanism motion path').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => ({ text: option.textContent ?? '', value: option.value, disabled: option.disabled })));
+  expect(handPathOptions.map(option => option.text).join(' ')).toContain('Right hand path');
+  expect(handPathOptions.map(option => option.text).join(' ')).not.toContain('pts');
+  expect(handPathOptions.find(option => option.value === 'path-right-arm')?.disabled).toBe(true);
   const anchorOptionValues = await page.getByLabel('Motion handle').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));
   expect(anchorOptionValues).toEqual(['', 'right_hand']);
   const anchorOptions = await page.getByLabel('Motion handle').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
@@ -3846,7 +4165,6 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   expect(anchorOptions.join(' ')).not.toContain('left hand');
   await expect(page.getByLabel('Motion handle')).toHaveValue('right_hand');
   await expect(page.getByTestId('mechanism-ik-chain-summary')).toHaveCount(0);
-  await page.getByLabel('Mechanism motion path').selectOption('path-right-arm');
 
   await page.getByRole('button', { name: 'Delete', exact: true }).click();
   await expectProjectCounts(page, 14, 1, 1);
@@ -3976,7 +4294,7 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
   await expect(designPreview.locator('canvas.foundry-three-canvas')).toBeVisible();
   await page.getByTestId('design-foundry-camera-controls').getByRole('button', { name: 'Front', exact: true }).click();
   await expect(designRig).toHaveAttribute('data-camera-preset', 'front');
-  await expect(designPreview).toHaveAttribute('data-design-motion-source', 'userPath-fallback');
+  await expect(designPreview).toHaveAttribute('data-design-motion-source', 'generatedPath');
   await expect(designPreview).toHaveAttribute('data-design-path-fit-status', 'mismatch');
   expect(Number(await designPreview.getAttribute('data-design-target-error'))).toBeLessThan(0.01);
   const headTarget = await waitForThreePartTarget(designRig, 'head');
@@ -3990,7 +4308,7 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
     const moved = (await readThreeScreenTargets(designRig, 'data-three-part-screen-targets'))
       .find(item => item.id === 'right_hand_part' && item.visible);
     return moved ? Math.hypot(moved.x - drivenHandBefore.x, moved.y - drivenHandBefore.y) : 0;
-  }, { message: 'visible Design hand part follows the authored path fallback when the mechanism has not been fitted' }).toBeGreaterThan(2);
+  }, { message: 'visible Design hand part follows the rendered mechanism path through scrubber changes' }).toBeGreaterThan(2);
   expect(Number(await designPreview.getAttribute('data-design-target-error'))).toBeLessThan(0.01);
 
   const expectedMarkers: Record<string, Array<[string, number]>> = {

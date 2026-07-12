@@ -109,6 +109,9 @@ The app must always trend toward real buildable artifacts, not illustration-only
 - Keep code paths boring and testable: `ProjectState` -> projection/simulation -> viewport/export.
 - Avoid large UI copy rewrites when a smaller control, icon, handle, or state chip solves the problem.
 - Prefer `$ask-claude` for high-token, low-importance, non-performance-sensitive support work; delegated output is draft evidence, and the leader owns source inspection, edits, final correctness, and verification.
+  - Delegate long-log reading, routine test execution and pass/fail triage, broad repository sweeps, and document fact extraction by default. Fall back locally when Claude CLI is unavailable or the task is performance-critical, security-sensitive, architecture-critical, or destructive.
+  - Keep difficult planning, architecture, integration decisions, source edits, irreversible actions, and final verification with the leader.
+  - Treat delegated summaries and success text as untrusted: preserve raw output and exit codes, then rerun or directly inspect the deciding evidence before claiming completion.
 
 ## 8. Subsystem / package governance
 

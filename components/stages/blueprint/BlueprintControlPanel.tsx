@@ -6,7 +6,7 @@ import type {
   FabricationRecipe,
   ProjectState,
 } from "../../../types";
-import { fabricationBoardCoordinateCallout, fabricationRecipeTitle } from "../../../utils/fabrication";
+import { fabricationBoardCoordinateCallout, fabricationRecipeTitle, fabricationVisibleIssueKey } from "../../../utils/fabrication";
 import { downloadText } from "../../../utils/project";
 import { StageLeftSummary } from "../stageLayout";
 import { ContextHelp } from "../../ui/ContextHelp";
@@ -37,6 +37,9 @@ export const BlueprintControlPanel = ({
   onSelectRecipe: (mechanismId: string) => void;
 }) => {
   const recipeTitle = (recipe: FabricationRecipe) => fabricationRecipeTitle(recipe);
+  const visibleIssues = validation.issues.filter((issue, index, issues) =>
+    issues.findIndex((candidate) => fabricationVisibleIssueKey(candidate) === fabricationVisibleIssueKey(issue)) === index,
+  );
   const downloadSvg = () =>
     pkg && downloadText(`${pkg.id}.svg`, pkg.svg, "image/svg+xml");
   const downloadCutSheetPdf = () =>
@@ -70,10 +73,10 @@ export const BlueprintControlPanel = ({
           <ContextHelp helpId="blueprint.boardPreview" />
         </div>
         <div className="mt-4 space-y-2">
-          {validation.issues.map((issue, index) => (
+          {visibleIssues.map((issue) => (
             <div
               className={issue.severity === "error" ? "error" : "warning"}
-              key={`${issue.message}-${index}`}
+              key={fabricationVisibleIssueKey(issue)}
             >
               <div>{issue.message}</div>
               <button

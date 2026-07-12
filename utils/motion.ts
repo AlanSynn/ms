@@ -213,6 +213,23 @@ const jointDisplayName = (skeleton: StandardSkeleton | null | undefined, id?: st
 const coreBodyRootIds = new Set(['root', 'hip', 'torso', 'neck']);
 const uniqueIds = (ids: string[]) => [...new Set(ids)];
 
+const characterDriverKey = (rootJointId: string | undefined, targetJointId: string | undefined) =>
+    rootJointId && targetJointId ? `character:${rootJointId}:${targetJointId}` : undefined;
+
+export const mechanismDriverIdentity = (project: ProjectState, mechanism: MechanismConfig): string | undefined => {
+    if (!mechanism.visible || mechanism.enabled === false) return undefined;
+    const path = mechanism.targetPathId ? project.paths[mechanism.targetPathId] : undefined;
+    const sceneObjectId = mechanism.targetSceneObjectId ?? path?.sceneObjectId;
+    if (sceneObjectId) return project.sceneObjects[sceneObjectId] ? `object:${sceneObjectId}` : undefined;
+    const partId = mechanism.targetPartId ?? (!path?.sceneObjectId ? path?.partId : undefined);
+    const part = partId ? project.parts[partId] : undefined;
+    if (!part) return undefined;
+    const targetJointId = preferredMotionJointId(project, partId, mechanism.targetAnchorJointId ?? path?.targetAnchorJointId);
+    const rootOptions = motionChainRootJointIds(project, partId, targetJointId);
+    const rootJointId = path?.chainRootJointId && rootOptions.includes(path.chainRootJointId) ? path.chainRootJointId : part.anchorJointId;
+    return characterDriverKey(rootJointId, targetJointId ?? part.anchorJointId);
+};
+
 function motionRootOptionsFor(skeleton: StandardSkeleton, partRootJointId: string, targetJointId: string) {
     if (!skeleton.joints[partRootJointId] || !skeleton.joints[targetJointId]) return [];
     const directChain = motionJointChain(skeleton, partRootJointId, targetJointId);
@@ -545,56 +562,58 @@ export const motionPreviewForPath = (
 export const mechanismBindingWarnings = (project: ProjectState, mechanisms: MechanismConfig[] = project.mechanisms) => {
     const warnings: Record<string, string[]> = {};
     const add = (mechanismId: string, message: string) => {
-        warnings[mechanismId] = [...(warnings[mechanismId] ?? []), message];
+        warnings[mechanismId] = [...new Set([...(warnings[mechanismId] ?? []), message])];
     };
     const drivenTargets = new Map<string, string>();
     mechanisms.filter(m => m.visible && m.enabled !== false).forEach(m => {
         if (m.targetSceneObjectId) {
             const object = project.sceneObjects[m.targetSceneObjectId];
             if (!object) {
-                add(m.id, `Target object ${m.targetSceneObjectId} is missing.`);
+                add(m.id, 'Choose a target.');
                 return;
             }
             if (m.targetPathId) {
                 const path = project.paths[m.targetPathId];
-                if (!path) add(m.id, `Target path ${m.targetPathId} is missing.`);
-                else if (path.sceneObjectId !== m.targetSceneObjectId) add(m.id, `Target path ${m.targetPathId} belongs to ${path.sceneObjectId ?? path.partId}, not ${m.targetSceneObjectId}.`);
+                if (!path) add(m.id, 'Choose a path.');
+                else if (path.sceneObjectId !== m.targetSceneObjectId) add(m.id, "Choose this target's path.");
             }
-            const key = `object:${m.targetSceneObjectId}`;
-            const owner = drivenTargets.get(key);
+            const key = mechanismDriverIdentity(project, m);
+            const owner = key ? drivenTargets.get(key) : undefined;
             if (owner) {
-                add(owner, `${m.id} also drives ${key}; only one mechanism can own a target.`);
-                add(m.id, `${owner} also drives ${key}; only one mechanism can own a target.`);
-            } else {
+                add(owner, 'Choose another target.');
+                add(m.id, 'Choose another target.');
+            } else if (key) {
                 drivenTargets.set(key, m.id);
             }
             return;
         }
-        if (!m.targetPartId) return;
+        if (!m.targetPartId) {
+            add(m.id, 'Choose a target.');
+            return;
+        }
         const part = project.parts[m.targetPartId];
         if (!part) {
-            add(m.id, `Target part ${m.targetPartId} is missing.`);
+            add(m.id, 'Choose a target.');
             return;
         }
         if (m.targetPathId) {
             const path = project.paths[m.targetPathId];
-            if (!path) add(m.id, `Target path ${m.targetPathId} is missing.`);
-            else if (!mechanismMatchesPathOwner(m, path, project)) add(m.id, `Target path ${m.targetPathId} belongs to ${path.sceneObjectId ?? path.partId}, not ${m.targetPartId}.`);
+            if (!path) add(m.id, 'Choose a path.');
+            else if (!mechanismMatchesPathOwner(m, path, project)) add(m.id, "Choose this target's path.");
         }
         if (m.targetAnchorJointId && !motionAnchorJointIds(project, m.targetPartId).includes(m.targetAnchorJointId)) {
-            add(m.id, `Target anchor ${m.targetAnchorJointId} is outside ${m.targetPartId}'s skeleton chain.`);
+            add(m.id, 'Choose a handle on this limb.');
         }
         const path = m.targetPathId ? project.paths[m.targetPathId] : undefined;
         const targetJointId = preferredMotionJointId(project, m.targetPartId, m.targetAnchorJointId ?? path?.targetAnchorJointId);
         const rootOptions = motionChainRootJointIds(project, m.targetPartId, targetJointId);
-        if (path?.chainRootJointId && !rootOptions.includes(path.chainRootJointId)) add(m.id, `Chain root ${path.chainRootJointId} is outside ${m.targetPartId}'s IK path.`);
-        const rootJointId = path?.chainRootJointId && rootOptions.includes(path.chainRootJointId) ? path.chainRootJointId : part.anchorJointId;
-        const key = `${m.targetPartId}:${rootJointId}:${targetJointId ?? part.anchorJointId}`;
-        const owner = drivenTargets.get(key);
-        if (owner) {
-            add(owner, `${m.id} also drives ${key}; only one mechanism can own a target anchor.`);
-            add(m.id, `${owner} also drives ${key}; only one mechanism can own a target anchor.`);
-        } else {
+        if (path?.chainRootJointId && !rootOptions.includes(path.chainRootJointId)) add(m.id, 'Choose a handle on this limb.');
+        const key = mechanismDriverIdentity(project, m);
+        const owner = key ? drivenTargets.get(key) : undefined;
+        if (key && owner) {
+            add(owner, 'Choose another target.');
+            add(m.id, 'Choose another target.');
+        } else if (key) {
             drivenTargets.set(key, m.id);
         }
     });
@@ -612,13 +631,13 @@ export const motionPreviewForProject = (project: ProjectState, mechanisms: Mecha
             const state = calculateLinkage(m, angle);
             const generatedTarget = pointOnGeneratedMechanismPath(m.generatedPath ?? [], angle);
             if (!state.isValid && !generatedTarget) {
-                warnings[m.id] = [...(warnings[m.id] ?? []), 'Current mechanism angle is outside the valid motion range.'];
+                warnings[m.id] = [...(warnings[m.id] ?? []), 'Motion may jam. Try a smaller move.'];
                 return;
             }
-            if (!state.isValid) warnings[m.id] = [...(warnings[m.id] ?? []), 'Current mechanism angle is outside the valid motion range.'];
-            const key = `object:${m.targetSceneObjectId}`;
-            if (drivenTargets.has(key)) return;
-            drivenTargets.add(key);
+            if (!state.isValid) warnings[m.id] = [...(warnings[m.id] ?? []), 'Motion may jam. Try a smaller move.'];
+            const key = mechanismDriverIdentity(project, m);
+            if (key && drivenTargets.has(key)) return;
+            if (key) drivenTargets.add(key);
             preview = motionPreviewForSceneObject(project, m.targetSceneObjectId, generatedTarget ?? state.effector, preview);
             return;
         }
@@ -626,17 +645,17 @@ export const motionPreviewForProject = (project: ProjectState, mechanisms: Mecha
         const state = calculateLinkage(m, angle);
         const generatedTarget = pointOnGeneratedMechanismPath(m.generatedPath ?? [], angle);
         if (!state.isValid && !generatedTarget) {
-            warnings[m.id] = [...(warnings[m.id] ?? []), 'Current mechanism angle is outside the valid motion range.'];
+            warnings[m.id] = [...(warnings[m.id] ?? []), 'Motion may jam. Try a smaller move.'];
             return;
         }
-        if (!state.isValid) warnings[m.id] = [...(warnings[m.id] ?? []), 'Current mechanism angle is outside the valid motion range.'];
+        if (!state.isValid) warnings[m.id] = [...(warnings[m.id] ?? []), 'Motion may jam. Try a smaller move.'];
         const path = m.targetPathId ? project.paths[m.targetPathId] : undefined;
         const targetJointId = preferredMotionJointId(project, m.targetPartId, m.targetAnchorJointId ?? path?.targetAnchorJointId);
         const rootOptions = motionChainRootJointIds(project, m.targetPartId, targetJointId);
         const rootJointId = path?.chainRootJointId && rootOptions.includes(path.chainRootJointId) ? path.chainRootJointId : undefined;
-        const key = `${m.targetPartId}:${rootJointId ?? project.parts[m.targetPartId].anchorJointId}:${targetJointId ?? project.parts[m.targetPartId].anchorJointId}`;
-        if (drivenTargets.has(key)) return;
-        drivenTargets.add(key);
+        const key = mechanismDriverIdentity(project, m);
+        if (key && drivenTargets.has(key)) return;
+        if (key) drivenTargets.add(key);
         preview = motionPreviewForTarget(project, m.targetPartId, targetJointId, generatedTarget ?? state.effector, preview, { pinTarget: true, rootJointId });
     });
     return { ...preview, warnings };

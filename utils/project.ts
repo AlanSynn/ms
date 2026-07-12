@@ -58,6 +58,8 @@ import {
   normalizeClassroomAssessmentKey,
 } from "./classroomContent";
 import { constrainMechanismCommit } from "./mechanismEditAuthority";
+import { mechanismDriverIdentity } from "./motion";
+import { pathOwnedTargetFields } from "./pathTargets";
 
 export const APP_STATE_VERSION = 1;
 
@@ -347,18 +349,18 @@ const defaultSkeleton = () =>
     joint("torso", 0, 40, "hip"),
     joint("neck", 0, 120, "torso"),
     joint("head_top", 0, 170, "neck"),
-    joint("left_shoulder", -58, 92, "torso"),
-    joint("left_elbow", -108, 28, "left_shoulder"),
-    joint("left_hand", -128, -34, "left_elbow"),
-    joint("right_shoulder", 58, 92, "torso"),
-    joint("right_elbow", 108, 28, "right_shoulder"),
-    joint("right_hand", 128, -34, "right_elbow"),
-    joint("left_hip", -34, -72, "root"),
-    joint("left_knee", -50, -150, "left_hip"),
-    joint("left_foot", -72, -218, "left_knee"),
-    joint("right_hip", 34, -72, "root"),
-    joint("right_knee", 50, -150, "right_hip"),
-    joint("right_foot", 72, -218, "right_knee"),
+    joint("left_shoulder", 58, 92, "torso"),
+    joint("left_elbow", 108, 28, "left_shoulder"),
+    joint("left_hand", 128, -34, "left_elbow"),
+    joint("right_shoulder", -58, 92, "torso"),
+    joint("right_elbow", -108, 28, "right_shoulder"),
+    joint("right_hand", -128, -34, "right_elbow"),
+    joint("left_hip", 34, -72, "root"),
+    joint("left_knee", 50, -150, "left_hip"),
+    joint("left_foot", 72, -218, "left_knee"),
+    joint("right_hip", -34, -72, "root"),
+    joint("right_knee", -50, -150, "right_hip"),
+    joint("right_foot", -72, -218, "right_knee"),
   ]);
 
 const pointDistance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -381,20 +383,25 @@ const chainReach = (skeleton: StandardSkeleton, jointIds: string[]) =>
 
 const guidedArmWavePath = (skeleton: StandardSkeleton): Point[] => {
   const shoulder = skeletonPoint(skeleton, "right_shoulder");
+  const hand = skeletonPoint(skeleton, "right_hand");
   const reach = chainReach(skeleton, [
     "right_shoulder",
     "right_elbow",
     "right_hand",
   ]);
-  const center = { x: shoulder.x + reach * 0.68, y: shoulder.y - reach * 0.12 };
+  const side = Math.sign(hand.x - shoulder.x) || 1;
+  const center = {
+    x: shoulder.x + side * reach * 0.68,
+    y: shoulder.y - reach * 0.12,
+  };
   const rx = reach * 0.24;
   const ry = reach * 0.34;
   return [
-    { x: center.x - rx * 0.25, y: center.y + ry * 0.82 },
-    { x: center.x + rx * 0.75, y: center.y + ry * 0.42 },
-    { x: center.x + rx, y: center.y - ry * 0.25 },
-    { x: center.x + rx * 0.12, y: center.y - ry },
-    { x: center.x - rx * 0.85, y: center.y - ry * 0.15 },
+    { x: center.x + side * -rx * 0.25, y: center.y + ry * 0.82 },
+    { x: center.x + side * rx * 0.75, y: center.y + ry * 0.42 },
+    { x: center.x + side * rx, y: center.y - ry * 0.25 },
+    { x: center.x + side * rx * 0.12, y: center.y - ry },
+    { x: center.x + side * -rx * 0.85, y: center.y - ry * 0.15 },
   ];
 };
 
@@ -411,16 +418,18 @@ const guidedHeadBobPath = (skeleton: StandardSkeleton): Point[] => {
 };
 
 const guidedFootStepPath = (skeleton: StandardSkeleton): Point[] => {
+  const hip = skeletonPoint(skeleton, "right_hip");
   const foot = skeletonPoint(skeleton, "right_foot");
   const reach = chainReach(skeleton, ["right_hip", "right_knee", "right_foot"]);
+  const side = Math.sign(foot.x - hip.x) || 1;
   const stride = Math.min(reach * 0.24, 36);
   const lift = Math.min(reach * 0.2, 30);
   return [
-    { x: foot.x - stride * 0.7, y: foot.y + 2 },
-    { x: foot.x + stride * 0.2, y: foot.y + lift * 0.25 },
-    { x: foot.x + stride * 0.75, y: foot.y + lift },
-    { x: foot.x + stride * 0.15, y: foot.y + lift * 1.25 },
-    { x: foot.x - stride * 0.85, y: foot.y + lift * 0.55 },
+    { x: foot.x - side * stride * 0.7, y: foot.y + 2 },
+    { x: foot.x + side * stride * 0.2, y: foot.y + lift * 0.25 },
+    { x: foot.x + side * stride * 0.75, y: foot.y + lift },
+    { x: foot.x + side * stride * 0.15, y: foot.y + lift * 1.25 },
+    { x: foot.x - side * stride * 0.85, y: foot.y + lift * 0.55 },
   ];
 };
 
@@ -858,33 +867,12 @@ const pathGeneratedGeometryUnchanged = (
   );
 };
 
-const partCanReachJoint = (
-  part: BodyPartLayer | undefined,
-  jointId: string | undefined,
-  skeleton: StandardSkeleton | null | undefined,
-) => {
-  if (!part || !jointId) return false;
-  if (part.anchorJointId === jointId) return true;
-  const descendants = new Set<string>();
-  const visit = (id: string) => {
-    (skeleton?.hierarchy[id] ?? []).forEach((childId) => {
-      if (!descendants.has(childId)) {
-        descendants.add(childId);
-        visit(childId);
-      }
-    });
-  };
-  visit(part.anchorJointId);
-  return descendants.has(jointId);
-};
-
 const reconcileMechanismTargets = (
   mechanism: MechanismConfig,
   parts: Record<string, BodyPartLayer>,
   paths: Record<string, ProjectMotionPath>,
   sceneObjects: Record<string, SceneObject> = {},
   options: { preserveGeneratedPath?: boolean } = {},
-  skeleton?: StandardSkeleton | null,
 ) => {
   let targetSceneObjectId =
     mechanism.targetSceneObjectId && sceneObjects[mechanism.targetSceneObjectId]
@@ -909,40 +897,25 @@ const reconcileMechanismTargets = (
       } else {
         targetPathId = undefined;
       }
+    } else if (parts[path.partId]) {
+      targetPartId = path.partId;
+      targetSceneObjectId = undefined;
     } else {
-      const pathPartId = path.partId;
-      const requestedPart = targetPartId ? parts[targetPartId] : undefined;
-      const pathTargetJointId =
-        path.targetAnchorJointId ?? parts[pathPartId]?.anchorJointId;
-      if (
-        requestedPart &&
-        partCanReachJoint(requestedPart, pathTargetJointId, skeleton)
-      ) {
-        targetPartId = requestedPart.id;
-        targetSceneObjectId = undefined;
-      } else if (parts[pathPartId]) {
-        targetPartId = pathPartId;
-        targetSceneObjectId = undefined;
-      } else {
-        targetPathId = undefined;
-      }
+      targetPathId = undefined;
     }
   }
-  const pathAnchorJointId = targetPathId
-    ? paths[targetPathId]?.targetAnchorJointId
-    : undefined;
-  const targetAnchorJointId = targetPartId
-    ? (mechanism.targetAnchorJointId ??
-      pathAnchorJointId ??
-      parts[targetPartId]?.anchorJointId)
-    : undefined;
+  const path = targetPathId ? paths[targetPathId] : undefined;
+  const pathFields = path ? pathOwnedTargetFields(path) : undefined;
   const normalized = normalizeMechanismToFabricationSet({
     ...mechanism,
     targetPartId,
     targetSceneObjectId,
     targetPathId,
-    targetAnchorJointId,
+    targetAnchorJointId: targetPartId
+      ? (mechanism.targetAnchorJointId ?? parts[targetPartId]?.anchorJointId)
+      : undefined,
     activeVisualPartIds: targetPartId ? [targetPartId] : [],
+    ...(pathFields ?? {}),
   });
   const connectionState = normalizeMechanismConnectionSelections(
     normalized,
@@ -959,6 +932,38 @@ const reconcileMechanismTargets = (
     },
     options,
   );
+};
+
+const mechanismDriverConflictSignatures = (project: ProjectState) => {
+  const drivers = new Map<string, string[]>();
+  project.mechanisms.forEach((mechanism) => {
+    const driver = mechanismDriverIdentity(project, mechanism);
+    if (!driver) return;
+    drivers.set(driver, [...(drivers.get(driver) ?? []), mechanism.id]);
+  });
+  return [...drivers.entries()]
+    .flatMap(([driver, ids]) => {
+      const sortedIds = ids.sort();
+      return sortedIds.flatMap((left, leftIndex) =>
+        sortedIds.slice(leftIndex + 1).map((right) => `${driver}:${left},${right}`),
+      );
+    })
+    .sort();
+};
+
+const mechanismDriverConflict = (project: ProjectState, mechanism: MechanismConfig) => {
+  const driver = mechanismDriverIdentity(project, mechanism);
+  if (!driver) return false;
+  return project.mechanisms.some(
+    (candidate) =>
+      candidate.id !== mechanism.id &&
+      mechanismDriverIdentity(project, candidate) === driver,
+  );
+};
+
+const introducesMechanismDriverConflict = (current: ProjectState, next: ProjectState) => {
+  const currentConflicts = new Set(mechanismDriverConflictSignatures(current));
+  return mechanismDriverConflictSignatures(next).some((signature) => !currentConflicts.has(signature));
 };
 
 export const createEmptyProject = (): ProjectState => ({
@@ -1013,7 +1018,7 @@ export const createSampleProject = (
       "left_arm_upper",
       "Left upper arm",
       "left_shoulder",
-      { x: -80, y: 56, rotation: -20, scale: 1 },
+      { x: 80, y: 56, rotation: 20, scale: 1 },
       { width: 44, height: 104 },
       "#b6c2d2",
       3,
@@ -1023,7 +1028,7 @@ export const createSampleProject = (
       "left_arm_lower",
       "Left lower arm",
       "left_elbow",
-      { x: -116, y: -10, rotation: -18, scale: 1 },
+      { x: 116, y: -10, rotation: 18, scale: 1 },
       { width: 42, height: 104 },
       "#b6c2d2",
       3,
@@ -1033,7 +1038,7 @@ export const createSampleProject = (
       "left_hand_part",
       "Left hand",
       "left_hand",
-      { x: -134, y: -54, rotation: -18, scale: 1 },
+      { x: 134, y: -54, rotation: 18, scale: 1 },
       { width: 40, height: 42 },
       "#d1d5db",
       4,
@@ -1043,7 +1048,7 @@ export const createSampleProject = (
       "right_arm_upper",
       "Right upper arm",
       "right_shoulder",
-      { x: 80, y: 56, rotation: 20, scale: 1 },
+      { x: -80, y: 56, rotation: -20, scale: 1 },
       { width: 44, height: 104 },
       "#b6c2d2",
       3,
@@ -1053,7 +1058,7 @@ export const createSampleProject = (
       "right_arm_lower",
       "Right lower arm",
       "right_elbow",
-      { x: 116, y: -10, rotation: 18, scale: 1 },
+      { x: -116, y: -10, rotation: -18, scale: 1 },
       { width: 42, height: 104 },
       "#b6c2d2",
       3,
@@ -1063,7 +1068,7 @@ export const createSampleProject = (
       "right_hand_part",
       "Right hand",
       "right_hand",
-      { x: 134, y: -54, rotation: 18, scale: 1 },
+      { x: -134, y: -54, rotation: -18, scale: 1 },
       { width: 40, height: 42 },
       "#d1d5db",
       4,
@@ -1073,7 +1078,7 @@ export const createSampleProject = (
       "left_leg_upper",
       "Left upper leg",
       "left_hip",
-      { x: -42, y: -114, rotation: -8, scale: 1 },
+      { x: 42, y: -114, rotation: 8, scale: 1 },
       { width: 48, height: 108 },
       "#94a3b8",
       1,
@@ -1083,7 +1088,7 @@ export const createSampleProject = (
       "left_leg_lower",
       "Left lower leg",
       "left_knee",
-      { x: -60, y: -194, rotation: -8, scale: 1 },
+      { x: 60, y: -194, rotation: 8, scale: 1 },
       { width: 48, height: 112 },
       "#94a3b8",
       1,
@@ -1093,7 +1098,7 @@ export const createSampleProject = (
       "left_foot_part",
       "Left foot",
       "left_foot",
-      { x: -82, y: -238, rotation: -8, scale: 1 },
+      { x: 82, y: -238, rotation: 8, scale: 1 },
       { width: 66, height: 58 },
       "#94a3b8",
       2,
@@ -1103,7 +1108,7 @@ export const createSampleProject = (
       "right_leg_upper",
       "Right upper leg",
       "right_hip",
-      { x: 42, y: -114, rotation: 8, scale: 1 },
+      { x: -42, y: -114, rotation: -8, scale: 1 },
       { width: 48, height: 108 },
       "#94a3b8",
       1,
@@ -1113,7 +1118,7 @@ export const createSampleProject = (
       "right_leg_lower",
       "Right lower leg",
       "right_knee",
-      { x: 60, y: -194, rotation: 8, scale: 1 },
+      { x: -60, y: -194, rotation: -8, scale: 1 },
       { width: 48, height: 112 },
       "#94a3b8",
       1,
@@ -1123,7 +1128,7 @@ export const createSampleProject = (
       "right_foot_part",
       "Right foot",
       "right_foot",
-      { x: 82, y: -238, rotation: 8, scale: 1 },
+      { x: -82, y: -238, rotation: -8, scale: 1 },
       { width: 66, height: 58 },
       "#94a3b8",
       2,
@@ -1141,7 +1146,7 @@ export const createSampleProject = (
     ? [createDefaultMechanism("4bar", "mech-1")]
     : [];
   if (mechanisms[0]) {
-    mechanisms[0].targetPartId = "right_arm_lower";
+    mechanisms[0].targetPartId = "right_hand_part";
     mechanisms[0].targetPathId = "path-right-arm";
     mechanisms[0].targetAnchorJointId = "right_hand";
     Object.assign(
@@ -1185,7 +1190,7 @@ export const createSampleProject = (
     paths: {
       "path-right-arm": {
         id: "path-right-arm",
-        partId: "right_arm_lower",
+        partId: "right_hand_part",
         targetAnchorJointId: "right_hand",
         chainRootJointId: "right_shoulder",
         points: pathPoints,
@@ -1198,7 +1203,7 @@ export const createSampleProject = (
       },
     },
     mechanisms,
-    selectedPartId: "right_arm_lower",
+    selectedPartId: "right_hand_part",
     selectedPathId: "path-right-arm",
     selectedMechanismId: mechanisms[0]?.id,
     characterPackage: {
@@ -1371,11 +1376,15 @@ export const createLessonProject = (
     const armFourBar = mechanisms[0];
     if (armFourBar) {
       Object.assign(armFourBar, {
-        anchorX: 200,
+        anchorX: -200,
         anchorY: 80,
-        groundAngle: 180,
-        transform: { x: 200, y: 80, rotation: 180, scale: 1 },
-        sceneAnchor: { x: 200, y: 80 },
+        groundAngle: 0,
+        speed1: -1,
+        driverPhaseOffset: Math.PI,
+        assemblyMode: "open",
+        couplerPointAngle: 13.2,
+        transform: { x: -200, y: 80, rotation: 0, scale: 1 },
+        sceneAnchor: { x: -200, y: 80 },
         targetPartId: "right_hand_part",
         targetPathId: "path-right-arm",
         targetAnchorJointId: "right_hand",
@@ -1440,11 +1449,15 @@ export const createLessonProject = (
     };
     const legFourBar = createDefaultMechanism("4bar", "mech-walking-leg");
     Object.assign(legFourBar, {
-      anchorX: 160,
+      anchorX: -160,
       anchorY: -120,
-      groundAngle: 180,
-      transform: { x: 160, y: -120, rotation: 180, scale: 1 },
-      sceneAnchor: { x: 160, y: -120 },
+      groundAngle: 0,
+      speed1: -1,
+      driverPhaseOffset: Math.PI,
+      assemblyMode: "crossed",
+      couplerPointAngle: -40,
+      transform: { x: -160, y: -120, rotation: 0, scale: 1 },
+      sceneAnchor: { x: -160, y: -120 },
       targetPartId: "right_foot_part",
       targetPathId: pathId,
       targetAnchorJointId: "right_foot",
@@ -1459,6 +1472,9 @@ export const createLessonProject = (
     selectedMechanismId = legFourBar.id;
   } else if (lesson.id === "spin-gears") {
     const pathId = "path-gear-spin";
+    const rightShoulder = lessonSkeleton.joints.right_shoulder.position;
+    const rightHand = lessonSkeleton.joints.right_hand.position;
+    const side = Math.sign(rightHand.x - rightShoulder.x) || 1;
     paths = {
       [pathId]: {
         id: pathId,
@@ -1466,10 +1482,10 @@ export const createLessonProject = (
         targetAnchorJointId: "right_hand",
         chainRootJointId: "right_shoulder",
         points: [
-          { x: 118, y: 40 },
-          { x: 150, y: 72 },
-          { x: 118, y: 104 },
-          { x: 86, y: 72 },
+          { x: rightHand.x + side * -10, y: rightHand.y + 74 },
+          { x: rightHand.x + side * 22, y: rightHand.y + 106 },
+          { x: rightHand.x + side * -10, y: rightHand.y + 138 },
+          { x: rightHand.x + side * -42, y: rightHand.y + 106 },
         ],
         duration: 1600,
         closed: true,
@@ -1481,18 +1497,23 @@ export const createLessonProject = (
     };
     const gear = createDefaultMechanism("gear", "mech-spin-gears");
     const gearRadii: [number, number] = [60, 20];
+    const gearGridStep = project.settings.physicalKit.gridPitchMm * SCENE_PX_PER_MM;
+    const gearAnchorX =
+      Math.round((rightHand.x + side * (gearRadii[0] + gearRadii[1])) / gearGridStep) *
+      gearGridStep;
+    const gearGroundAngle = side < 0 ? 0 : 180;
     Object.assign(gear, {
-      anchorX: 200,
+      anchorX: gearAnchorX,
       anchorY: 80,
-      groundAngle: 180,
+      groundAngle: gearGroundAngle,
       groundLength: 80,
       crankLength: gearRadii[0],
       rockerLength: gearRadii[1],
       gearTrainRadii: gearRadii,
       gearRatio: gearTrainOutputRatio(gearRadii),
       speed2: gearTrainOutputRatio(gearRadii),
-      transform: { x: 200, y: 80, rotation: 0, scale: 1 },
-      sceneAnchor: { x: 200, y: 80 },
+      transform: { x: gearAnchorX, y: 80, rotation: gearGroundAngle, scale: 1 },
+      sceneAnchor: { x: gearAnchorX, y: 80 },
       targetPartId: "right_hand_part",
       targetPathId: pathId,
       targetAnchorJointId: "right_hand",
@@ -2354,7 +2375,6 @@ export const applyProjectAction = (
                   preserveGeneratedPathFor(m) &&
                   pathGeneratedGeometryUnchanged(previousPath, path),
               },
-              project.skeleton,
             )
           : m,
       );
@@ -2378,7 +2398,6 @@ export const applyProjectAction = (
               paths,
               project.sceneObjects,
               { preserveGeneratedPath: preserveGeneratedPathFor(m) },
-              project.skeleton,
             )
           : m,
       );
@@ -2392,22 +2411,24 @@ export const applyProjectAction = (
             : project.selectedPathId,
       });
     }
-    case "set_mechanisms":
-      return touch({
-        ...project,
-        mechanisms: action.mechanisms.map((m) =>
-          reconcileMechanismTargets(
-            m,
-            project.parts,
-            project.paths,
-            project.sceneObjects,
-            { preserveGeneratedPath: preserveGeneratedPathFor(m) },
-            project.skeleton,
-          ),
+    case "set_mechanisms": {
+      const mechanisms = action.mechanisms.map((m) =>
+        reconcileMechanismTargets(
+          m,
+          project.parts,
+          project.paths,
+          project.sceneObjects,
+          { preserveGeneratedPath: preserveGeneratedPathFor(m) },
         ),
+      );
+      const next = {
+        ...project,
+        mechanisms,
         selectedMechanismId:
           action.selectedMechanismId ?? project.selectedMechanismId,
-      });
+      };
+      return introducesMechanismDriverConflict(project, next) ? project : touch(next);
+    }
     case "upsert_mechanism": {
       const mechanism = reconcileMechanismTargets(
         action.mechanism,
@@ -2415,14 +2436,16 @@ export const applyProjectAction = (
         project.paths,
         project.sceneObjects,
         { preserveGeneratedPath: preserveGeneratedPathFor(action.mechanism) },
-        project.skeleton,
       );
       const previous = project.mechanisms.find((m) => m.id === mechanism.id);
+      const commitBase =
+        previous ?? createDefaultMechanism(mechanism.type, mechanism.id);
       const accepted = constrainMechanismCommit(
-        previous,
+        commitBase,
         mechanism,
         project.settings.physicalKit,
       );
+      if (mechanismDriverConflict(project, accepted)) return project;
       const mechanisms = previous
         ? project.mechanisms.map((m) => (m.id === accepted.id ? accepted : m))
         : [...project.mechanisms, accepted];
@@ -3033,7 +3056,6 @@ export const migrateProjectSnapshot = (raw: unknown): ProjectState => {
       paths,
       sceneObjects,
       { preserveGeneratedPath: true },
-      skeleton,
     ),
   );
   const selectedPartId =

@@ -150,7 +150,7 @@ export const MechanismRecommendationSheet = ({
         ...option.mechanism,
         id: uid("mech"),
         presetId: `recommendation-${option.type}`,
-        recommendation: `${option.reason} Score ${option.score}/100.`,
+        recommendation: option.reason,
         warnings: option.mechanism.warnings,
       }),
     );
@@ -190,6 +190,7 @@ export const MechanismRecommendationSheet = ({
                 key={option.type}
                 className="recommendation-card recommendation-option"
                 data-testid={`recommendation-card-${option.type}`}
+                data-score={option.score}
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -197,10 +198,9 @@ export const MechanismRecommendationSheet = ({
                       {option.label}
                     </div>
                     <div className="text-xs font-black uppercase tracking-wider text-slate-500">
-                      Fit score {option.score}/100
+                      {option.fabricationErrors.length ? "Blocked" : "Ready"}
                     </div>
                   </div>
-                  <span className="recommendation-score">{option.score}</span>
                 </div>
                 <RecommendationFitPreview
                   option={option}

@@ -1,13 +1,11 @@
 import { useCallback, useState } from "react";
 import type {
   AppStage,
-  BodyPartLayer,
   FoundryExportPackage,
   GlobalConfig,
   MechanismConfig,
   ProjectAction,
   ProjectMotionPath,
-  SceneObject,
   ProjectState,
 } from "../types";
 import { generateDXF, generateSVG } from "../utils/exporter";
@@ -24,6 +22,7 @@ import {
   normalizeGearMeshMechanism,
 } from "../utils/mechanismRecommendations";
 import { constrainMechanismUpdate } from "../utils/mechanismEditAuthority";
+import { pathOwnedTargetFields } from "../utils/pathTargets";
 
 const GENERATED_PATH_GEOMETRY_KEYS = new Set<keyof MechanismConfig>([
   "anchorX",
@@ -63,8 +62,6 @@ const hasStoredGeneratedPath = (mechanism: MechanismConfig) =>
 export const useAppMechanismActions = ({
   project,
   dispatch,
-  selectedPart,
-  selectedSceneObject,
   selectedPath,
   selectedMechanism,
   foundry,
@@ -76,8 +73,6 @@ export const useAppMechanismActions = ({
 }: {
   project: ProjectState;
   dispatch: (action: ProjectAction) => void;
-  selectedPart?: BodyPartLayer;
-  selectedSceneObject?: SceneObject;
   selectedPath?: ProjectMotionPath;
   selectedMechanism?: MechanismConfig;
   foundry: MechanismConfig;
@@ -94,28 +89,12 @@ export const useAppMechanismActions = ({
       const mechanism = project.mechanisms.find((m) => m.id === id);
       if (!mechanism) return;
       const nextUpdates = { ...updates };
-      if (updates.targetPathId) {
-        const path = project.paths[updates.targetPathId];
-        if (path) {
-          if (path.sceneObjectId) {
-            nextUpdates.targetSceneObjectId = path.sceneObjectId;
-            nextUpdates.targetPartId = undefined;
-            nextUpdates.targetAnchorJointId = undefined;
-          } else {
-            nextUpdates.targetPartId = path.partId;
-            nextUpdates.targetSceneObjectId = undefined;
-            nextUpdates.targetAnchorJointId =
-              path.targetAnchorJointId ??
-              preferredMotionJointId(
-                project,
-                path.partId,
-                mechanism.targetAnchorJointId,
-                { preferDistalWhenRoot: !mechanism.targetAnchorJointId },
-              );
-          }
-        }
-      }
-      if (updates.targetPartId !== undefined) {
+      const pathUpdate = updates.targetPathId
+        ? project.paths[updates.targetPathId]
+        : undefined;
+      if (pathUpdate) {
+        Object.assign(nextUpdates, pathOwnedTargetFields(pathUpdate));
+      } else if (updates.targetPartId !== undefined) {
         const pathId = updates.targetPathId ?? mechanism.targetPathId;
         if (
           pathId &&
@@ -130,7 +109,7 @@ export const useAppMechanismActions = ({
             })
           : undefined;
       }
-      if (updates.targetSceneObjectId !== undefined) {
+      if (!pathUpdate && updates.targetSceneObjectId !== undefined) {
         const pathId = updates.targetPathId ?? mechanism.targetPathId;
         if (
           pathId &&
@@ -151,10 +130,7 @@ export const useAppMechanismActions = ({
         hasStoredGeneratedPath(mechanism) &&
         !changesGeneratedPathGeometry(constrainedUpdates);
       const fitted =
-        constrainedUpdates.targetPathId &&
-        (constrainedUpdates.targetPathId !== undefined ||
-          constrainedUpdates.targetPartId !== undefined ||
-          constrainedUpdates.targetSceneObjectId !== undefined)
+        constrainedUpdates.targetPathId
           ? fitMechanismToTargetPath(
               project,
               normalized,
@@ -205,24 +181,15 @@ export const useAppMechanismActions = ({
       id: selectedMechanism.id,
       color: selectedMechanism.color,
       visible: true,
-      targetPartId: fitPath.sceneObjectId
-        ? undefined
-        : fitPath.partId || selectedMechanism.targetPartId || selectedPart?.id,
-      targetSceneObjectId:
-        fitPath.sceneObjectId ??
-        selectedMechanism.targetSceneObjectId ??
-        selectedSceneObject?.id,
-      targetPathId: fitPath.id,
+      ...pathOwnedTargetFields(fitPath),
       source: "optimized",
       warnings:
-        bestScore > 350 ? [`Loose fit score ${Math.round(bestScore)}`] : [],
+        bestScore > 350 ? ["Fit is loose. Try Fit again."] : [],
     });
     setOptimizerBusy(false);
   }, [
     project,
     selectedMechanism,
-    selectedPart,
-    selectedSceneObject,
     selectedPath,
     updateMechanism,
   ]);
@@ -247,19 +214,24 @@ export const useAppMechanismActions = ({
 
   const exportFoundryMechanism = useCallback(
     (pkg: FoundryExportPackage) => {
+      const pkgPath = pkg.targetPathId ? project.paths[pkg.targetPathId] : undefined;
+      const targetFields = pkgPath
+        ? pathOwnedTargetFields(pkgPath)
+        : {
+            targetPartId: pkg.targetPartId,
+            targetSceneObjectId: pkg.targetSceneObjectId,
+            targetPathId: pkg.targetPathId,
+            targetAnchorJointId: pkg.targetAnchorJointId,
+            activeVisualPartIds: pkg.targetPartId ? [pkg.targetPartId] : [],
+          };
       const existingTarget = project.mechanisms.find(
         (mechanism) =>
-          mechanism.targetPartId === pkg.targetPartId &&
-          mechanism.targetSceneObjectId === pkg.targetSceneObjectId &&
-          mechanism.targetPathId === pkg.targetPathId &&
-          (pkg.targetSceneObjectId ||
-            preferredMotionJointId(
-              project,
-              mechanism.targetPartId,
-              mechanism.targetAnchorJointId,
-            ) === pkg.targetAnchorJointId),
+          mechanism.targetPartId === targetFields.targetPartId &&
+          mechanism.targetSceneObjectId === targetFields.targetSceneObjectId &&
+          mechanism.targetPathId === targetFields.targetPathId &&
+          (targetFields.targetSceneObjectId ||
+            mechanism.targetAnchorJointId === targetFields.targetAnchorJointId),
       );
-      const activeVisualPartIds = selectedPart ? [selectedPart.id] : [];
       const fittedFoundryParameters =
         pkg.parameters as Partial<MechanismConfig>;
       const rawMechanism = mechanismWithGeneratedPath(
@@ -270,17 +242,13 @@ export const useAppMechanismActions = ({
           anchorX: pkg.pivot.x,
           anchorY: pkg.pivot.y,
           color: fittedFoundryParameters.color ?? foundry.color,
-          targetPartId: pkg.targetPartId,
-          targetSceneObjectId: pkg.targetSceneObjectId,
-          targetPathId: pkg.targetPathId,
-          targetAnchorJointId: pkg.targetAnchorJointId,
+          ...targetFields,
           presetId: pkg.metadata.selectedPreset,
           recommendation: pkg.metadata.recommendation,
           source: "foundry",
           foundryExport: pkg,
           generatedPath: pkg.generatedPath,
           warnings: pkg.warnings,
-          activeVisualPartIds,
         },
         { preserveGeneratedPath: true },
       );
@@ -312,7 +280,6 @@ export const useAppMechanismActions = ({
               ...(pkg.warnings ?? []),
             ]),
           ],
-          activeVisualPartIds,
         },
         { preserveGeneratedPath: true },
       );
@@ -320,7 +287,7 @@ export const useAppMechanismActions = ({
       dispatch({ type: "upsert_mechanism", mechanism });
       setStage("design");
     },
-    [dispatch, foundry, project, selectedPart, setStage],
+    [dispatch, foundry, project, setStage],
   );
 
   const applyRecommendedMechanism = useCallback(

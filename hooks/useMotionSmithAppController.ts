@@ -204,8 +204,6 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   } = useAppMechanismActions({
     project,
     dispatch,
-    selectedPart,
-    selectedSceneObject,
     selectedPath,
     selectedMechanism,
     foundry,

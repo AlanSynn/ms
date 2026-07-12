@@ -1,15 +1,16 @@
-import type { BodyPartLayer, MechanismConfig, MechanismType, Point, ProjectMotionPath, ProjectState } from "../types";
+import type { BodyPartLayer, FabricationIssue, MechanismConfig, MechanismType, Point, ProjectMotionPath, ProjectState } from "../types";
 import { generateCurvePoints, gearTrainOutputRatio, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from "./kinematics";
 import { generateSmartConfig } from "./optimizer";
 import { createDefaultMechanism, mechanismWithGeneratedPath } from "./project";
-import { sampleFeasibleRange, validateMechanismPreviewReadiness, validateForFabrication } from "./fabrication";
+import { newFabricationIssues, sampleFeasibleRange, validateForFabrication, visibleFabricationMessages } from "./fabrication";
 import { boardToScene, sceneBoundsForSheet, sceneToBoard, SCENE_PX_PER_MM } from "./coordinates";
-import { motionAnchorJointIds, preferredMotionJointId } from "./motion";
 import { MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY } from "./mechanismTemplates";
 import { isReferenceFoundryVisible, normalizeMechanismToFabricationSet, normalizeMechanismToReference } from "./mechanismReference";
 import { fitPathToBox } from "./mechanismPreview";
 import { fitFourBarKitMechanismToPath } from "./fourBarPathFit";
 import { generateFoundryPlaybackPointTraces, primaryFoundryPlaybackPath } from "./foundryPlayback";
+import { preferredMotionJointId } from "./motion";
+import { pathOwnedTargetFields } from "./pathTargets";
 
 export type MechanismRecommendation = {
   type: MechanismType;
@@ -282,45 +283,43 @@ export const fitRecommendedMechanismToSheet = (
     : searched;
 };
 
-const fabricationErrorsForCandidate = (
+const fabricationIssuesForCandidate = (
   project: ProjectState,
   mechanism: MechanismConfig,
-) => {
-  const readinessErrors = validateMechanismPreviewReadiness(mechanism, project.settings.physicalKit).map(
-    (error) => `${mechanism.id}: ${error}`,
-  );
+): FabricationIssue[] => {
+  const targetPath = mechanism.targetPathId
+    ? project.paths[mechanism.targetPathId]
+    : undefined;
   const targetAnchor = mechanism.targetPartId
     ? preferredMotionJointId(project, mechanism.targetPartId, mechanism.targetAnchorJointId)
     : undefined;
   const siblingMechanisms = project.mechanisms.filter((m) => {
     if (m.id === mechanism.id) return false;
     if (
-      mechanism.targetPathId &&
+      targetPath &&
       m.targetPathId === mechanism.targetPathId &&
-      m.targetPartId === mechanism.targetPartId &&
-      m.targetSceneObjectId === mechanism.targetSceneObjectId &&
       (!mechanism.targetPartId ||
         preferredMotionJointId(project, mechanism.targetPartId, m.targetAnchorJointId) === targetAnchor)
     )
       return false;
-    return true;
+    return targetPath ? !mechanismOccupiesPathTarget(project, m, targetPath) : true;
   });
-  const baseline = new Set(
-    validateForFabrication({ ...project, mechanisms: siblingMechanisms }).errors,
-  );
+  const baselineIssues = validateForFabrication({ ...project, mechanisms: siblingMechanisms }).issues;
   const candidateProject: ProjectState = {
     ...project,
     mechanisms: [...siblingMechanisms, mechanism],
   };
-  return [
-    ...new Set([
-      ...readinessErrors,
-      ...validateForFabrication(candidateProject).errors.filter(
-        (error) => !baseline.has(error),
-      ),
-    ]),
-  ];
+  return newFabricationIssues(
+    baselineIssues,
+    validateForFabrication(candidateProject).issues,
+  );
 };
+
+const fabricationErrorsForCandidate = (
+  project: ProjectState,
+  mechanism: MechanismConfig,
+) => visibleFabricationMessages(fabricationIssuesForCandidate(project, mechanism), 'error');
+
 
 export const normalizeGearMeshMechanism = (
   mechanism: MechanismConfig,
@@ -328,144 +327,54 @@ export const normalizeGearMeshMechanism = (
   return normalizeMechanismToFabricationSet(mechanism);
 };
 
-const availableMotionAnchorForRecommendation = (
-  project: ProjectState,
-  partId: string,
-) => {
-  const anchors = motionAnchorJointIds(project, partId);
-  const occupied = new Set(
-    project.mechanisms
-      .filter(
-        (m) => m.visible && m.enabled !== false && m.targetPartId === partId,
-      )
-      .map((m) =>
-        preferredMotionJointId(project, partId, m.targetAnchorJointId),
-      )
-      .filter(Boolean),
-  );
-  return (
-    [...anchors].reverse().find((anchor) => !occupied.has(anchor)) ??
-    preferredMotionJointId(project, partId, undefined, {
-      preferDistalWhenRoot: true,
-    })
-  );
+const normalizedId = (id?: string) => {
+  const trimmed = id?.trim();
+  return trimmed || undefined;
 };
 
-const anchorOccupiedByPart = (
-  project: ProjectState,
-  partId: string,
-  anchorId: string | undefined,
-) => {
-  if (!anchorId) return false;
-  return project.mechanisms.some((mechanism) =>
-    mechanism.visible &&
-    mechanism.enabled !== false &&
-    mechanism.targetPartId === partId &&
-    preferredMotionJointId(project, partId, mechanism.targetAnchorJointId) === anchorId,
-  );
-};
-
-const recommendationTargetPart = (
-  project: ProjectState,
-  selectedPart: BodyPartLayer | undefined,
-  selectedPath: ProjectMotionPath,
-) => {
-  if (!selectedPart) return undefined;
-  const pathAnchor = selectedPath.targetAnchorJointId;
-  if (!pathAnchor || !anchorOccupiedByPart(project, selectedPart.id, pathAnchor)) {
-    return selectedPart;
-  }
-  const candidates = Object.values(project.parts)
-    .filter((part) =>
-      part.id !== selectedPart.id &&
-      motionAnchorJointIds(project, part.id).includes(pathAnchor) &&
-      !anchorOccupiedByPart(project, part.id, pathAnchor),
-    )
-    .sort((a, b) =>
-      motionAnchorJointIds(project, a.id).length -
-      motionAnchorJointIds(project, b.id).length,
-    );
-  return candidates[0] ?? selectedPart;
-};
-
-const recommendationTargetAnchor = (
-  project: ProjectState,
-  selectedPart: BodyPartLayer,
-  selectedPath: ProjectMotionPath,
-) => {
-  const anchors = motionAnchorJointIds(project, selectedPart.id);
-  const pathAnchor =
-    selectedPath.targetAnchorJointId &&
-    anchors.includes(selectedPath.targetAnchorJointId)
-      ? selectedPath.targetAnchorJointId
-      : undefined;
-  const occupied = new Set(
-    project.mechanisms
-      .filter(
-        (m) =>
-          m.visible &&
-          m.enabled !== false &&
-          m.targetPartId === selectedPart.id,
-      )
-      .map((m) =>
-        preferredMotionJointId(
-          project,
-          selectedPart.id,
-          m.targetAnchorJointId ??
-            (m.targetPathId
-              ? project.paths[m.targetPathId]?.targetAnchorJointId
-              : undefined),
-        ),
-      )
-      .filter(Boolean),
-  );
-  if (pathAnchor && !occupied.has(pathAnchor)) return pathAnchor;
-  return (
-    availableMotionAnchorForRecommendation(project, selectedPart.id) ??
-    pathAnchor ??
-    preferredMotionJointId(project, selectedPart.id, undefined, {
-      preferDistalWhenRoot: true,
-    })
-  );
-};
-
-const retargetDuplicateRecommendationOwner = (
+const mechanismOccupiesPathTarget = (
   project: ProjectState,
   mechanism: MechanismConfig,
+  path: ProjectMotionPath,
 ) => {
-  const anchorId = mechanism.targetAnchorJointId;
-  if (!mechanism.targetPartId || !anchorId) return mechanism;
-  const directErrors = validateForFabrication({
-    ...project,
-    mechanisms: [...project.mechanisms, mechanism],
-  }).errors;
-  if (!directErrors.some((error) => error.includes('also drives'))) return mechanism;
-  const candidates = Object.values(project.parts)
-    .filter((part) =>
-      part.id !== mechanism.targetPartId &&
-      motionAnchorJointIds(project, part.id).includes(anchorId),
-    )
-    .sort((a, b) =>
-      motionAnchorJointIds(project, a.id).length -
-      motionAnchorJointIds(project, b.id).length,
+  if (!mechanism.visible || mechanism.enabled === false) return false;
+  const mechanismTargetPathId = normalizedId(mechanism.targetPathId);
+  if (mechanismTargetPathId && mechanismTargetPathId === normalizedId(path.id))
+    return true;
+  const mechanismPath = mechanismTargetPathId
+    ? project.paths[mechanismTargetPathId]
+    : undefined;
+  if (path.sceneObjectId) {
+    return (
+      normalizedId(mechanism.targetSceneObjectId) === normalizedId(path.sceneObjectId) ||
+      normalizedId(mechanismPath?.sceneObjectId) === normalizedId(path.sceneObjectId)
     );
-  for (const part of candidates) {
-    const candidate: MechanismConfig = {
-      ...mechanism,
-      targetPartId: part.id,
-      targetAnchorJointId: anchorId,
-      activeVisualPartIds: [part.id],
-    };
-    const candidateErrors = validateForFabrication({
-      ...project,
-      mechanisms: [...project.mechanisms, candidate],
-    }).errors;
-    if (!candidateErrors.some((error) => error.includes('also drives'))) {
-      return candidate;
-    }
   }
-  return mechanism;
+  if (mechanismPath?.sceneObjectId) return false;
+  const pathPartId = normalizedId(path.partId);
+  const pathAnchor = preferredMotionJointId(
+    project,
+    pathPartId,
+    normalizedId(path.targetAnchorJointId),
+  );
+  const mechanismPartId = normalizedId(mechanismPath?.partId ?? mechanism.targetPartId);
+  const mechanismAnchor = preferredMotionJointId(
+    project,
+    mechanismPartId,
+    normalizedId(mechanism.targetAnchorJointId ?? mechanismPath?.targetAnchorJointId),
+  );
+  return mechanismPartId === pathPartId && mechanismAnchor === pathAnchor;
 };
+
+const exactPathTargetOccupied = (
+  project: ProjectState,
+  path: ProjectMotionPath,
+  mechanismId?: string,
+) =>
+  project.mechanisms.some((mechanism) => {
+    if (mechanism.id === mechanismId) return false;
+    return mechanismOccupiesPathTarget(project, mechanism, path);
+  });
 
 const createRecommendedMechanism = (
   project: ProjectState,
@@ -476,7 +385,7 @@ const createRecommendedMechanism = (
   score: number,
 ): MechanismConfig => {
   const metrics = pathMetrics(selectedPath);
-  const targetPart = recommendationTargetPart(project, selectedPart, selectedPath);
+  const targetFields = pathOwnedTargetFields(selectedPath);
   const landingBoard = sceneToBoard(
     selectedPath.points[0],
     project.settings.physicalKit,
@@ -567,13 +476,7 @@ const createRecommendedMechanism = (
         : (smart.rodLength ?? base.rodLength),
     assemblyMode: type === "6bar" ? "open" : base.assemblyMode,
     phase: 0,
-    targetPartId: targetPart?.id,
-    targetSceneObjectId: selectedPath.sceneObjectId,
-    targetPathId: selectedPath.id,
-    targetAnchorJointId: targetPart
-      ? recommendationTargetAnchor(project, targetPart, selectedPath)
-      : undefined,
-    activeVisualPartIds: targetPart ? [targetPart.id] : [],
+    ...targetFields,
     source: "optimized",
     presetId: `recommendation-${type}`,
     recommendation: reason,
@@ -582,10 +485,7 @@ const createRecommendedMechanism = (
   const normalized = mechanismWithGeneratedPath(
     normalizeGearMeshMechanism(normalizeMechanismToReference(tuned)),
   );
-  return retargetDuplicateRecommendationOwner(
-    project,
-    fitRecommendedMechanismToSheet(project, normalized),
-  );
+  return fitRecommendedMechanismToSheet(project, normalized);
 };
 
 const localizeFittedMechanismAnchor = (
@@ -735,15 +635,15 @@ const readyMechanismFallbackForPath = (
       anchorX: anchor.x,
       anchorY: anchor.y,
       sceneAnchor: anchor,
-      targetPartId: path?.sceneObjectId ? undefined : (path?.partId ?? mechanism.targetPartId),
-      targetSceneObjectId: path?.sceneObjectId ?? mechanism.targetSceneObjectId,
-      targetPathId: path?.id ?? mechanism.targetPathId,
-      targetAnchorJointId:
-        path?.sceneObjectId ? undefined : (mechanism.targetAnchorJointId ?? path?.targetAnchorJointId),
-      activeVisualPartIds:
-        !path?.sceneObjectId && (path?.partId || mechanism.targetPartId)
-          ? [path?.partId ?? mechanism.targetPartId!]
-          : (mechanism.activeVisualPartIds ?? []),
+      ...(path
+        ? pathOwnedTargetFields(path)
+        : {
+            targetPartId: mechanism.targetPartId,
+            targetSceneObjectId: mechanism.targetSceneObjectId,
+            targetPathId: mechanism.targetPathId,
+            targetAnchorJointId: mechanism.targetAnchorJointId,
+            activeVisualPartIds: mechanism.activeVisualPartIds ?? [],
+          }),
     }),
     project,
   );
@@ -790,16 +690,11 @@ export const fitMechanismToTargetPath = (
             presetId: mechanism.presetId ?? fitted.presetId,
             recommendation: mechanism.recommendation ?? fitted.recommendation,
             warnings: mechanism.warnings ?? fitted.warnings,
-            targetPartId: path.sceneObjectId ? undefined : path.partId,
-            targetSceneObjectId: path.sceneObjectId,
-            targetPathId: path.id,
-            targetAnchorJointId:
-              path.sceneObjectId
-                ? undefined
-                : (mechanism.targetAnchorJointId ??
-                  path.targetAnchorJointId ??
-                  fitted.targetAnchorJointId),
-            activeVisualPartIds: path.sceneObjectId ? [] : [path.partId],
+            transform: mechanism.transform ?? fitted.transform,
+            connectionSelections: mechanism.connectionSelections ?? fitted.connectionSelections,
+            connectionSelectionValidation:
+              mechanism.connectionSelectionValidation ?? fitted.connectionSelectionValidation,
+            ...pathOwnedTargetFields(path),
           }),
           Number.isFinite(mechanism.anchorX) && Number.isFinite(mechanism.anchorY)
             ? { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 }
@@ -829,9 +724,7 @@ export const fitMechanismToTargetPath = (
     warnings: [
       ...new Set([
         ...(unchanged.warnings ?? []),
-        ...fittedErrors,
-        ...fallbackErrors,
-        ...unchangedErrors,
+        "Fix the mechanism before building.",
       ]),
     ],
   });
@@ -844,6 +737,7 @@ export const buildMechanismRecommendations = (
 ): MechanismRecommendation[] => {
   if (!selectedPath || (!selectedPart && !selectedPath.sceneObjectId) || selectedPath.points.length < 3)
     return [];
+  if (exactPathTargetOccupied(project, selectedPath)) return [];
   const metrics = pathMetrics(selectedPath);
   const compact = Math.max(metrics.width, metrics.height) < 120;
   const linear = metrics.directness > 0.72;
@@ -939,8 +833,8 @@ export const buildMechanismRecommendations = (
         mechanism,
         previewPath: fitPathToBox(mechanism.generatedPath ?? [], 220, 120),
         feasibility: fabricationErrors.length
-          ? `Blocked: ${fabricationErrors[0]}`
-          : (range.warning ?? "360°"),
+          ? "Fix the mechanism before building."
+          : (range.warning ?? "Full motion"),
         fabricationErrors,
       };
     })
