@@ -6,6 +6,7 @@ import type {
   FoundryConnectionHoleHandle,
   FoundryParamHandle,
   FoundryParamHandleId,
+  DraggingFoundryConnectionSelection,
 } from "./FoundryOverlayLayer";
 import {
   foundryPinStackPoints,
@@ -50,6 +51,7 @@ import {
   FABRICATION_RENDER_LAYER_Z_STEP,
   sampleFeasibleRange,
 } from "../../../utils/fabrication";
+import { compactStudentActionForFabricationDiagnostic } from "../../../utils/fabricationReadiness";
 import { compileMechanismRenderPlan } from "../../../utils/mechanismCompiler";
 import {
   authorMechanismConnectionSelection,
@@ -88,6 +90,7 @@ import {
   pointsToSvgPath,
 } from "../../../utils/mechanismPreview";
 import {
+  fitRecommendedMechanismToSheet,
   fitMechanismToTargetPath,
   normalizeGearMeshMechanism,
 } from "../../../utils/mechanismRecommendations";
@@ -182,6 +185,15 @@ export const MechanismFoundry = ({
   const foundryParamDragRef = useRef<{
     pointerId: number;
     handle: FoundryParamHandleId;
+  } | null>(null);
+  const foundryConnectionDragRef = useRef<{
+    pointerId: number;
+    role: ConnectionSelectionRole;
+    startX: number;
+    startY: number;
+    startHoleIndex: number;
+    lastHoleIndex: number;
+    moved: boolean;
   } | null>(null);
   const targetReady = Boolean(
     (selectedPart || selectedSceneObject) &&
@@ -289,11 +301,7 @@ export const MechanismFoundry = ({
   const library = MECHANISM_LIBRARY[foundry.type];
   const classroomSensemaking = library.classroomSensemaking;
   const feasibilityText = range.warning ?? "360°";
-  const motionWarning = range.warning
-    ? range.warning.startsWith("No motion")
-      ? "No full motion. Try reset or smaller links."
-      : "Motion may jam. Try a smaller move."
-    : null;
+  const motionWarning = compactStudentActionForFabricationDiagnostic(range.warning);
   const foundryFitContext = useMemo(
     () =>
       createMechanismFitContext(
@@ -554,24 +562,52 @@ export const MechanismFoundry = ({
   const connectionExportSignature = connectionSelectionSignature(
     foundryRenderPlan.connectionSelectionSummary?.connectionSelections ?? {},
   );
-  const connectionHoleHandles: FoundryConnectionHoleHandle[] = useMemo(
-    () =>
-      mechanismConnectionHoleCandidates(
-        landedFoundry,
-        selectedSimulation.state,
-        landedFoundry.connectionSelections,
-      ).flatMap((candidate) => {
-        const { coordinate, ...handle } = candidate;
-        const screen = projectFoundryOverlayPoint(
-          coordinate,
-          foundryCamera,
-          foundryProjectionSize,
-          0,
-        );
-        return screen ? [{ ...handle, screen }] : [];
-      }),
-    [foundryCamera, foundryProjectionSize, landedFoundry, selectedSimulation.state],
-  );
+  const connectionHoleHandles: FoundryConnectionHoleHandle[] = useMemo(() => {
+    const zForConnection = (
+      role: ConnectionSelectionRole,
+      selection: FoundryConnectionHoleHandle["selection"],
+    ) => {
+      const target =
+        role === "4bar.input-joint"
+          ? { sourceNodeId: "input-link", renderKind: "linkage" }
+          : role === "4bar.output-joint"
+            ? { sourceNodeId: "output-link", renderKind: "linkage" }
+            : selection.kind === "gear-attachment-hole"
+              ? { sourceNodeId: `gear-${selection.gearIndex}`, renderKind: "gear" }
+              : undefined;
+      const index = target
+        ? foundryRenderPlan.layers.findIndex(
+            (layer) =>
+              layer.sourceNodeId === target.sourceNodeId &&
+              layer.renderKind === target.renderKind,
+          )
+        : -1;
+      return index >= 0 ? (foundryRenderedLayerZ[index] ?? 0) : 0;
+    };
+
+    return mechanismConnectionHoleCandidates(
+      landedFoundry,
+      selectedSimulation.state,
+      landedFoundry.connectionSelections,
+    ).flatMap((candidate) => {
+      const { coordinate, ...handle } = candidate;
+      const z = zForConnection(handle.role, handle.selection);
+      const screen = projectFoundryOverlayPoint(
+        coordinate,
+        foundryCamera,
+        foundryProjectionSize,
+        z,
+      );
+      return screen ? [{ ...handle, z, screen }] : [];
+    });
+  }, [
+    foundryCamera,
+    foundryProjectionSize,
+    foundryRenderedLayerZ,
+    foundryRenderPlan.layers,
+    landedFoundry,
+    selectedSimulation.state,
+  ]);
   const selectedConnectionHandle =
     connectionHoleHandles.find((handle) => handle.role === lastSelectedConnectionRole && handle.selected) ??
     connectionHoleHandles.find((handle) => handle.selected);
@@ -874,23 +910,177 @@ export const MechanismFoundry = ({
     });
   };
 
+  const foundryConnectionHolePointFromEvent = (
+    event: React.PointerEvent<SVGCircleElement>,
+  ) => {
+    const svg = event.currentTarget.ownerSVGElement;
+    if (!svg) return undefined;
+    const rect = svg.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return undefined;
+    return {
+      x:
+        ((event.clientX - rect.left) / rect.width) *
+        foundryProjectionSize.width,
+      y:
+        ((event.clientY - rect.top) / rect.height) *
+        foundryProjectionSize.height,
+    };
+  };
+  const connectionSnapDistanceSq = 24 ** 2;
+  const pickConnectionHoleByRole = (
+    role: ConnectionSelectionRole,
+    point: Point,
+  ) => {
+    const candidates = connectionHoleHandles.filter(
+      (candidate) => candidate.role === role,
+    );
+    if (!candidates.length) return undefined;
+    let best = { handle: candidates[0], distanceSq: Number.POSITIVE_INFINITY };
+    for (const candidate of candidates) {
+      const dx = candidate.screen.x - point.x;
+      const dy = candidate.screen.y - point.y;
+      const distanceSq = dx * dx + dy * dy;
+      if (distanceSq < best.distanceSq) {
+        best = { handle: candidate, distanceSq };
+      }
+    }
+    return best.distanceSq <= connectionSnapDistanceSq
+      ? best.handle.holeIndex
+      : undefined;
+  };
+  const pickConnectionHoleUnderPointer = (
+    event: React.PointerEvent<SVGCircleElement>,
+    role: ConnectionSelectionRole,
+  ) => {
+    const svg = event.currentTarget.ownerSVGElement;
+    if (!svg) return undefined;
+    const hit = svg.ownerDocument.elementFromPoint(
+      event.clientX,
+      event.clientY,
+    );
+    if (!hit) return undefined;
+    const target = hit.closest("circle.foundry-connection-hole-hit");
+    if (!target) return undefined;
+    if (target.getAttribute("data-connection-role") !== role) {
+      return undefined;
+    }
+    const holeIndex = Number(target.getAttribute("data-connection-hole-index"));
+    return Number.isFinite(holeIndex) &&
+      connectionHoleHandles.some(
+        (candidate) =>
+          candidate.role === role && candidate.holeIndex === holeIndex,
+      )
+      ? holeIndex
+      : undefined;
+  };
+  const setConnectionHoleSelection = (selection: {
+    role: ConnectionSelectionRole;
+    holeIndex: number;
+  }) => {
+    const target = connectionHoleHandles.find(
+      (candidate) =>
+        candidate.role === selection.role &&
+        candidate.holeIndex === selection.holeIndex,
+    );
+    if (!target) return;
+    updateFoundryParams(
+      authorMechanismConnectionSelection(
+        landedFoundry,
+        target.role,
+        target.selection,
+      ),
+    );
+    setLastSelectedConnectionRole(target.role);
+  };
+  const [draggingConnectionSelection, setDraggingConnectionSelection] =
+    useState<DraggingFoundryConnectionSelection | undefined>(undefined);
   const handleConnectionHolePointerDown =
     (handle: FoundryConnectionHoleHandle) =>
     (event: React.PointerEvent<SVGCircleElement>) => {
       event.preventDefault();
       event.stopPropagation();
-      if (Number.isFinite(event.pointerId) && !event.currentTarget.hasPointerCapture(event.pointerId)) {
+      if (
+        Number.isFinite(event.pointerId) &&
+        !event.currentTarget.hasPointerCapture(event.pointerId)
+      ) {
         event.currentTarget.setPointerCapture(event.pointerId);
       }
       setFoundryPlaying(false);
       setLastSelectedConnectionRole(handle.role);
-      updateFoundryParams(
-        authorMechanismConnectionSelection(
-          landedFoundry,
-          handle.role,
-          handle.selection,
-        ),
+      foundryConnectionDragRef.current = {
+        pointerId: event.pointerId,
+        role: handle.role,
+        startX: event.clientX,
+        startY: event.clientY,
+        startHoleIndex: handle.holeIndex,
+        lastHoleIndex: handle.holeIndex,
+        moved: false,
+      };
+      setDraggingConnectionSelection({
+        role: handle.role,
+        holeIndex: handle.holeIndex,
+      });
+    };
+  const handleConnectionHolePointerMove =
+    (_handle: FoundryConnectionHoleHandle) =>
+    (event: React.PointerEvent<SVGCircleElement>) => {
+      const drag = foundryConnectionDragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      const point = foundryConnectionHolePointFromEvent(event);
+      if (!point) return;
+      const moveSq =
+        (event.clientX - drag.startX) ** 2 +
+        (event.clientY - drag.startY) ** 2;
+      if (!drag.moved && moveSq < 9) {
+        setDraggingConnectionSelection({
+          role: drag.role,
+          holeIndex: drag.lastHoleIndex,
+        });
+        return;
+      }
+      if (!drag.moved) {
+        drag.moved = true;
+      }
+      const snapHoleIndex = pickConnectionHoleByRole(drag.role, point);
+      drag.lastHoleIndex = snapHoleIndex ?? drag.startHoleIndex;
+      setDraggingConnectionSelection({
+        role: drag.role,
+        holeIndex: drag.lastHoleIndex,
+      });
+    };
+  const handleConnectionHolePointerUp =
+    (_handle: FoundryConnectionHoleHandle) =>
+    (event: React.PointerEvent<SVGCircleElement>) => {
+      const drag = foundryConnectionDragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      const cancelled = event.type === "pointercancel";
+      const point = foundryConnectionHolePointFromEvent(event);
+      const underPointerHole = pickConnectionHoleUnderPointer(event, drag.role);
+      const nearHole =
+        point &&
+        point.x >= 0 &&
+        point.y >= 0 &&
+        point.x <= foundryProjectionSize.width &&
+        point.y <= foundryProjectionSize.height
+          ? pickConnectionHoleByRole(drag.role, point)
+          : undefined;
+      const snapHoleIndex = underPointerHole ?? nearHole;
+      foundryConnectionDragRef.current = null;
+      setDraggingConnectionSelection(undefined);
+      if (cancelled || snapHoleIndex === undefined) return;
+      const target = connectionHoleHandles.find(
+        (candidate) =>
+          candidate.role === drag.role && candidate.holeIndex === snapHoleIndex,
       );
+      if (target) {
+        setConnectionHoleSelection({
+          role: target.role,
+          holeIndex: target.holeIndex,
+        });
+      }
     };
   const handleFoundryParamPointerDown =
     (handle: FoundryParamHandleId) =>
@@ -936,8 +1126,10 @@ export const MechanismFoundry = ({
       y: landing.y,
     },
   });
-  const setAnchoredFoundry = (mechanism: MechanismConfig) =>
-    setFoundry(normalizeGearMeshMechanism(keepCurrentAnchor(mechanism)));
+  const setAnchoredFoundry = (mechanism: MechanismConfig) => {
+    const anchored = normalizeGearMeshMechanism(keepCurrentAnchor(mechanism));
+    setFoundry(fitRecommendedMechanismToSheet(project, anchored));
+  };
   const createPathFittedFoundry = (mechanism: MechanismConfig) => {
     const anchored = keepCurrentAnchor(mechanism);
     if (!targetReady || !selectedPath)
@@ -1064,7 +1256,7 @@ export const MechanismFoundry = ({
         simulationMassKg: project.settings.simulationMassKg,
         connectionExportSignature,
       },
-      warnings: range.warning ? [range.warning] : [],
+      warnings: motionWarning ? [motionWarning] : [],
       source: "mechanism-foundry",
     };
   };
@@ -1198,6 +1390,9 @@ export const MechanismFoundry = ({
             onParamPointerMove={handleFoundryParamPointerMove}
             onParamPointerUp={handleFoundryParamPointerUp}
             onConnectionHolePointerDown={handleConnectionHolePointerDown}
+            onConnectionHolePointerMove={handleConnectionHolePointerMove}
+            onConnectionHolePointerUp={handleConnectionHolePointerUp}
+            draggingConnectionSelection={draggingConnectionSelection}
           />,
         ),
         inspector: inspectorPane(

@@ -9,6 +9,7 @@ import type {
   ProjectState,
 } from "../../../types";
 import { sampleFeasibleRange } from "../../../utils/fabrication";
+import { compactStudentActionForFabricationDiagnostic } from "../../../utils/fabricationReadiness";
 import {
   motionAnchorJointIds,
   mechanismDriverIdentity,
@@ -51,16 +52,18 @@ export const DesignInspectorPanel = ({
   const selectedRange = selectedMechanism
     ? sampleFeasibleRange(selectedMechanism)
     : undefined;
-  const motionWarning = selectedRange?.warning
-    ? selectedRange.warning.startsWith("No motion")
-      ? "No full motion. Try reset or smaller links."
-      : "Motion may jam. Try a smaller move."
-    : null;
+  const motionWarning = compactStudentActionForFabricationDiagnostic(
+    selectedRange?.warning,
+  );
   const warningMessages = Array.from(
-    new Set([
-      ...(motionWarning ? [motionWarning] : []),
-      ...(selectedMechanism?.warnings ?? []),
-    ]),
+    new Set(
+      [
+        motionWarning,
+        ...(selectedMechanism?.warnings ?? []).map(
+          compactStudentActionForFabricationDiagnostic,
+        ),
+      ].filter((warning): warning is string => Boolean(warning)),
+    ),
   );
   const targetAnchorOptions = selectedMechanism?.targetPartId
     ? motionAnchorJointIds(project, selectedMechanism.targetPartId)

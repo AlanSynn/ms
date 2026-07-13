@@ -10,7 +10,7 @@ export const FABRICATION_ASSET_TEMPLATE_MANIFEST = `${FABRICATION_ASSET_TEMPLATE
 export type TemplateCategoryBuckets = Record<ManagedCategory, string[]>;
 
 const normalizeCategory = (path: string): ManagedCategory => {
-  if (path === 'board-final.svg' || path === 'board.svg' || path === 'assembly/board.svg') return 'board';
+  if (path === 'board-final.svg') return 'board';
   if (path === 'README.md') return 'root-readme';
   if (path === 'manifest.json') return 'manifest';
   const root = path.split('/')[0];

@@ -22,6 +22,7 @@ import {
   type FoundryConnectionHoleHandle,
   type FoundryParamHandle,
   type FoundryParamHandleId,
+  type DraggingFoundryConnectionSelection,
 } from "./FoundryOverlayLayer";
 import { ThreeFoundryPreview } from "./ThreeFoundryPreview";
 
@@ -108,6 +109,13 @@ type FoundryCanvasPaneProps = {
   onConnectionHolePointerDown: (
     handle: FoundryConnectionHoleHandle,
   ) => React.PointerEventHandler<SVGCircleElement>;
+  onConnectionHolePointerMove: (
+    handle: FoundryConnectionHoleHandle,
+  ) => React.PointerEventHandler<SVGCircleElement>;
+  onConnectionHolePointerUp: (
+    handle: FoundryConnectionHoleHandle,
+  ) => React.PointerEventHandler<SVGCircleElement>;
+  draggingConnectionSelection?: DraggingFoundryConnectionSelection;
   onParamPointerMove: React.PointerEventHandler<SVGCircleElement>;
   onParamPointerUp: React.PointerEventHandler<SVGCircleElement>;
 };
@@ -188,6 +196,9 @@ export const FoundryCanvasPane = ({
   onParamPointerMove,
   onParamPointerUp,
   onConnectionHolePointerDown,
+  onConnectionHolePointerMove,
+  onConnectionHolePointerUp,
+  draggingConnectionSelection,
 }: FoundryCanvasPaneProps) => {
   const pathFitError = useMemo(() => {
     if (!userPathPoints.length || !previewPoints.length) return undefined;
@@ -373,6 +384,9 @@ export const FoundryCanvasPane = ({
         foundryParamHandleZSummary={foundryParamHandleZSummary}
         connectionHoleHandles={connectionHoleHandles}
         onConnectionHolePointerDown={onConnectionHolePointerDown}
+        onConnectionHolePointerMove={onConnectionHolePointerMove}
+        onConnectionHolePointerUp={onConnectionHolePointerUp}
+        draggingConnectionSelection={draggingConnectionSelection}
         hasManualAnchor={hasManualAnchor}
         landingBoardLabel={landingBoardLabel}
         onParamPointerDown={onParamPointerDown}

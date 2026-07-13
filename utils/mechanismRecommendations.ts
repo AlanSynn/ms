@@ -1,15 +1,22 @@
 import type { BodyPartLayer, FabricationIssue, MechanismConfig, MechanismType, Point, ProjectMotionPath, ProjectState } from "../types";
 import { generateCurvePoints, gearTrainOutputRatio, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from "./kinematics";
 import { generateSmartConfig } from "./optimizer";
-import { createDefaultMechanism, mechanismWithGeneratedPath } from "./project";
+import { createDefaultMechanism } from "./mechanismDefaults";
+import { mechanismWithGeneratedPath } from "./mechanismGeneratedPath";
 import { newFabricationIssues, sampleFeasibleRange, validateForFabrication, visibleFabricationMessages } from "./fabrication";
+import { compactStudentActionForFabricationDiagnostic } from "./fabricationReadiness";
 import { boardToScene, sceneBoundsForSheet, sceneToBoard, SCENE_PX_PER_MM } from "./coordinates";
 import { MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY } from "./mechanismTemplates";
 import { isReferenceFoundryVisible, normalizeMechanismToFabricationSet, normalizeMechanismToReference } from "./mechanismReference";
 import { fitPathToBox } from "./mechanismPreview";
-import { fitFourBarKitMechanismToPath } from "./fourBarPathFit";
+import { compileMechanismGraphFabrication } from "./mechanismCompiler";
+import { fitFourBarKitMechanismToPath as fitFourBarPathFit } from "./fourBarPathFit";
 import { generateFoundryPlaybackPointTraces, primaryFoundryPlaybackPath } from "./foundryPlayback";
-import { preferredMotionJointId } from "./motion";
+import {
+  pointOnGeneratedMechanismPath,
+  pointOnProjectPath,
+  preferredMotionJointId,
+} from "./motion";
 import { pathOwnedTargetFields } from "./pathTargets";
 
 export type MechanismRecommendation = {
@@ -190,10 +197,18 @@ export const fitRecommendedMechanismToSheet = (
       Math.max(0, bounds.maxY - (sheet.y + sheet.height - margin))
     );
   };
+  const placementIsOffBoard = (candidate: MechanismConfig) =>
+    compileMechanismGraphFabrication(
+      candidate,
+      project.settings.physicalKit,
+    ).blocker === "Placement off board";
   const searchBoardFit = (seed: MechanismConfig) => {
     let best = seed;
     let bestOverflow = sheetOverflow(seed);
-    if (bestOverflow <= 0.01) return best;
+    let bestOffBoard = placementIsOffBoard(seed);
+    let bestDistance = 0;
+    if (bestOverflow <= 0.01 && !bestOffBoard) return best;
+    const seedAnchor = { x: seed.anchorX ?? 0, y: seed.anchorY ?? 0 };
     const cells = project.settings.physicalKit.boardCells;
     for (let col = 0; col < cells; col += 1) {
       for (let row = 0; row < cells; row += 1) {
@@ -208,10 +223,22 @@ export const fitRecommendedMechanismToSheet = (
           project,
         );
         const overflow = sheetOverflow(candidate);
-        if (overflow < bestOverflow) {
+        const offBoard = placementIsOffBoard(candidate);
+        const distance = Math.hypot(
+          (candidate.anchorX ?? 0) - seedAnchor.x,
+          (candidate.anchorY ?? 0) - seedAnchor.y,
+        );
+        if (
+          (bestOffBoard && !offBoard) ||
+          (bestOffBoard === offBoard && overflow < bestOverflow - 0.01) ||
+          (bestOffBoard === offBoard &&
+            Math.abs(overflow - bestOverflow) <= 0.01 &&
+            distance < bestDistance)
+        ) {
           best = candidate;
           bestOverflow = overflow;
-          if (bestOverflow <= 0.01) return best;
+          bestOffBoard = offBoard;
+          bestDistance = distance;
         }
       }
     }
@@ -221,7 +248,7 @@ export const fitRecommendedMechanismToSheet = (
   let moved = false;
   for (let i = 0; i < 4; i++) {
     const bounds = boundsForSheet(fitted);
-    if (!bounds) return fitted;
+    if (!bounds) break;
     let dx = 0;
     let dy = 0;
     if (bounds.minX < sheet.x + margin) dx = sheet.x + margin - bounds.minX;
@@ -230,7 +257,10 @@ export const fitRecommendedMechanismToSheet = (
     if (bounds.minY < sheet.y + margin) dy = sheet.y + margin - bounds.minY;
     if (bounds.maxY > sheet.y + sheet.height - margin)
       dy = sheet.y + sheet.height - margin - bounds.maxY;
-    if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return fitted;
+    if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) {
+      if (!placementIsOffBoard(fitted)) return fitted;
+      break;
+    }
     moved = true;
     const previousAnchor = { x: fitted.anchorX ?? 0, y: fitted.anchorY ?? 0 };
     const adjusted = snapMechanismAnchor(
@@ -659,17 +689,24 @@ export const fitMechanismToTargetPath = (
   const object = path?.sceneObjectId ? project.sceneObjects[path.sceneObjectId] : undefined;
   if (!path || (!part && !object) || path.points.length < 3)
     return snapMechanismAnchor(normalizeGearMeshMechanism(mechanism), project);
-  if (mechanism.type === "4bar") {
-    const fittedFourBar = fitFourBarKitMechanismToPath(project, mechanism, path);
-    if (fittedFourBar) return fittedFourBar;
-  }
-  const fittedCandidate = mechanism.type === "gear_linkage"
-    ? fitGearLinkageOutputToPath(
-        project,
-        readyMechanismFallbackForPath(project, mechanism, path),
-        path,
-      )
-    : (() => {
+  const targetFields = pathOwnedTargetFields(path);
+  const unchanged = mechanismWithGeneratedPath(
+    snapMechanismAnchor(
+      normalizeGearMeshMechanism(
+        normalizeMechanismToReference({ ...mechanism, ...targetFields }),
+      ),
+      project,
+    ),
+  );
+  const fittedCandidate = mechanism.type === "4bar"
+    ? fitFourBarPathFit(project, mechanism, path)
+    : mechanism.type === "gear_linkage"
+      ? fitGearLinkageOutputToPath(
+          project,
+          readyMechanismFallbackForPath(project, mechanism, path),
+          path,
+        )
+      : (() => {
         const fitted = createRecommendedMechanism(
           project,
           part,
@@ -694,31 +731,43 @@ export const fitMechanismToTargetPath = (
             connectionSelections: mechanism.connectionSelections ?? fitted.connectionSelections,
             connectionSelectionValidation:
               mechanism.connectionSelectionValidation ?? fitted.connectionSelectionValidation,
-            ...pathOwnedTargetFields(path),
+            ...targetFields,
           }),
           Number.isFinite(mechanism.anchorX) && Number.isFinite(mechanism.anchorY)
             ? { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 }
             : undefined,
         );
       })();
-  const fittedErrors = fabricationErrorsForCandidate(project, fittedCandidate);
-  if (!fittedErrors.length) {
-    return fittedCandidate;
-  }
   const fallback = fitRecommendedMechanismToSheet(
     project,
     readyMechanismFallbackForPath(project, mechanism, path),
   );
-  const fallbackErrors = fabricationErrorsForCandidate(project, fallback);
-  if (!fallbackErrors.length) return fallback;
-  const unchanged = mechanismWithGeneratedPath(
-    snapMechanismAnchor(
-      normalizeGearMeshMechanism(normalizeMechanismToReference(mechanism)),
-      project,
-    ),
+  const targetSamples = Array.from({ length: 96 }, (_, index) =>
+    pointOnProjectPath(path, (index / 96) * Math.PI * 2),
   );
-  const unchangedErrors = fabricationErrorsForCandidate(project, unchanged);
-  if (!unchangedErrors.length) return unchanged;
+  const fitScore = (candidate: MechanismConfig) => {
+    const generated = foundryVisiblePath(candidate, 96);
+    const first = generated[0];
+    const targetStart = targetSamples[0];
+    const startDistance = first && targetStart
+      ? Math.hypot(first.x - targetStart.x, first.y - targetStart.y)
+      : Number.POSITIVE_INFINITY;
+    const phaseError = path.timedPoints?.length && generated.length
+      ? targetSamples.reduce((sum, target, index) => {
+          const phase = (index / targetSamples.length) * Math.PI * 2;
+          const generatedPoint = pointOnGeneratedMechanismPath(generated, phase);
+          return generatedPoint
+            ? sum + Math.hypot(generatedPoint.x - target.x, generatedPoint.y - target.y)
+            : Number.POSITIVE_INFINITY;
+        }, 0) / targetSamples.length
+      : 0;
+    return nearestPathError(generated, targetSamples) + startDistance * 0.25 + phaseError;
+  };
+  const viable = [fittedCandidate, fallback, unchanged]
+    .filter((candidate): candidate is MechanismConfig => Boolean(candidate))
+    .filter((candidate) => !fabricationErrorsForCandidate(project, candidate).length)
+    .sort((a, b) => fitScore(a) - fitScore(b));
+  if (viable[0]) return viable[0];
   return mechanismWithGeneratedPath({
     ...unchanged,
     warnings: [
@@ -794,7 +843,7 @@ export const buildMechanismRecommendations = (
         candidate.score,
       );
       const kitFittedMechanism = candidate.type === "4bar"
-        ? fitFourBarKitMechanismToPath(project, initialMechanism, selectedPath)
+        ? fitFourBarPathFit(project, initialMechanism, selectedPath)
         : undefined;
       const initialErrors = fabricationErrorsForCandidate(
         project,
@@ -834,7 +883,7 @@ export const buildMechanismRecommendations = (
         previewPath: fitPathToBox(mechanism.generatedPath ?? [], 220, 120),
         feasibility: fabricationErrors.length
           ? "Fix the mechanism before building."
-          : (range.warning ?? "Full motion"),
+          : (compactStudentActionForFabricationDiagnostic(range.warning) ?? "Full motion"),
         fabricationErrors,
       };
     })

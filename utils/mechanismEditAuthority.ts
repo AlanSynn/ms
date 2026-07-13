@@ -121,6 +121,11 @@ const MOTION_SAFE_PARAM_SAMPLES = 28;
 const MOTION_SAFE_RANGE_STEPS = 24;
 const MOTION_AUTHORITY_SAMPLES = 48;
 
+const uniqueSortedNumbers = (values: number[]) =>
+  [...new Set(values.map((value) => Number(value.toFixed(4))))].sort(
+    (a, b) => a - b,
+  );
+
 export const mechanismMotionCompletes = (mechanism: MechanismConfig) =>
   sampleFeasibleRange(mechanism, MOTION_SAFE_PARAM_SAMPLES).warning === null;
 
@@ -279,10 +284,9 @@ const nearestBoardSpan = (value: number, kit: PhysicalKitSettings) => {
   return Math.max(pitch, Math.round(Math.abs(value) / pitch) * pitch);
 };
 
-const boardAnchorAxisCandidates = (
+const boardAnchorAxisValues = (
   mechanism: MechanismConfig,
   key: "anchorX" | "anchorY",
-  requestedValue: number,
   kit: PhysicalKitSettings = defaultPhysicalKit(),
 ) => {
   const currentAnchor = {
@@ -294,15 +298,63 @@ const boardAnchorAxisCandidates = (
     key === "anchorX"
       ? Math.max(0, Math.min(kit.boardCells - 1, currentBoard.row))
       : Math.max(0, Math.min(kit.boardCells - 1, currentBoard.col));
-  return Array.from({ length: kit.boardCells }, (_, index) => {
-    const point =
-      key === "anchorX"
-        ? boardToScene(index, fixedIndex, kit)
-        : boardToScene(fixedIndex, index, kit);
-    return key === "anchorX" ? point.x : point.y;
-  }).sort(
+  return uniqueSortedNumbers(
+    Array.from({ length: kit.boardCells }, (_, index) => {
+      const point =
+        key === "anchorX"
+          ? boardToScene(index, fixedIndex, kit)
+          : boardToScene(fixedIndex, index, kit);
+      return key === "anchorX" ? point.x : point.y;
+    }),
+  );
+};
+
+const boardAnchorAxisCandidates = (
+  mechanism: MechanismConfig,
+  key: "anchorX" | "anchorY",
+  requestedValue: number,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+) =>
+  boardAnchorAxisValues(mechanism, key, kit).sort(
     (a, b) => Math.abs(a - requestedValue) - Math.abs(b - requestedValue),
   );
+
+const motionSafeParamCandidates = (
+  mechanism: MechanismConfig,
+  param: MechanismParamMeta,
+  current: number,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+) => {
+  if (param.key === "anchorX" || param.key === "anchorY") {
+    return uniqueSortedNumbers([
+      ...boardAnchorAxisValues(mechanism, param.key, kit),
+      current,
+    ]);
+  }
+  const step = param.step;
+  if (step && step > 0) {
+    const totalSteps = Math.floor(
+      (param.max - param.min) / step + 1e-9,
+    );
+    const stride = Math.max(
+      1,
+      Math.ceil(totalSteps / MOTION_SAFE_RANGE_STEPS),
+    );
+    const values = Array.from(
+      { length: Math.floor(totalSteps / stride) + 1 },
+      (_, index) => param.min + index * stride * step,
+    );
+    values.push(param.min, param.max, current);
+    return uniqueSortedNumbers(values);
+  }
+  return uniqueSortedNumbers([
+    ...Array.from(
+      { length: MOTION_SAFE_RANGE_STEPS + 1 },
+      (_, index) =>
+        param.min + ((param.max - param.min) * index) / MOTION_SAFE_RANGE_STEPS,
+    ),
+    current,
+  ]);
 };
 
 const nearestBuildableBoardAnchorValue = (
@@ -336,15 +388,7 @@ export const motionSafeParamRange = (
   const current = Number(mechanism[key] ?? 0);
   if (!Number.isFinite(current))
     return { min: param.min, max: param.max, locked: false, currentSafe: true };
-  const values = Array.from(
-    { length: MOTION_SAFE_RANGE_STEPS + 1 },
-    (_, index) =>
-      param.min + ((param.max - param.min) * index) / MOTION_SAFE_RANGE_STEPS,
-  );
-  values.push(current);
-  const sorted = [
-    ...new Set(values.map((value) => Number(value.toFixed(4)))),
-  ].sort((a, b) => a - b);
+  const sorted = motionSafeParamCandidates(mechanism, param, current, kit);
   const safeAt = (value: number) =>
     mechanismEditIsSafe({ ...mechanism, [key]: value }, kit);
   const currentSafe = safeAt(current);

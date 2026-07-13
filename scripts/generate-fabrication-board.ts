@@ -22,7 +22,7 @@ type Options = {
 };
 
 const SCRIPT_PATH = 'scripts/generate-fabrication-board.ts';
-const BOARD_FILE_CANDIDATES = ['board.svg', 'assembly/board.svg', 'board-final.svg'];
+const LEGACY_BOARD_FILES = ['board.svg', 'assembly/board.svg'];
 
 const parseArgs = (): Options => {
   const args = process.argv.slice(2);
@@ -122,7 +122,7 @@ const updateManifest = (manifestPath: string, boardPath: string) => {
     if (Array.isArray(assembly.files)) {
       const files = assembly.files as string[];
       for (let idx = files.length - 1; idx >= 0; idx -= 1) {
-        if (files[idx] === 'assembly/board.svg') {
+        if (LEGACY_BOARD_FILES.includes(files[idx])) {
           files[idx] = boardPath;
         }
       }
@@ -132,7 +132,7 @@ const updateManifest = (manifestPath: string, boardPath: string) => {
   if (Array.isArray(payload.managed_files)) {
     const managed = payload.managed_files as string[];
     for (let idx = managed.length - 1; idx >= 0; idx -= 1) {
-      if (BOARD_FILE_CANDIDATES.includes(managed[idx])) {
+      if (LEGACY_BOARD_FILES.includes(managed[idx])) {
         managed[idx] = boardPath;
       }
     }

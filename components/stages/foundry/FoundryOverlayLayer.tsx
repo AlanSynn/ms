@@ -18,9 +18,16 @@ export type FoundryConnectionHoleHandle = {
   kind: ConnectionSelection["kind"];
   partKey: string;
   holeIndex: number;
+  z: number;
   screen: Point;
   selected: boolean;
+  provisional: boolean;
   selection: ConnectionSelection;
+};
+
+export type DraggingFoundryConnectionSelection = {
+  role: ConnectionSelectionRole;
+  holeIndex: number;
 };
 
 type FoundryOverlayLayerProps = {
@@ -49,6 +56,13 @@ type FoundryOverlayLayerProps = {
   onConnectionHolePointerDown: (
     handle: FoundryConnectionHoleHandle,
   ) => React.PointerEventHandler<SVGCircleElement>;
+  onConnectionHolePointerMove: (
+    handle: FoundryConnectionHoleHandle,
+  ) => React.PointerEventHandler<SVGCircleElement>;
+  onConnectionHolePointerUp: (
+    handle: FoundryConnectionHoleHandle,
+  ) => React.PointerEventHandler<SVGCircleElement>;
+  draggingConnectionSelection?: DraggingFoundryConnectionSelection;
   hasManualAnchor: boolean;
   landingBoardLabel: string;
   onParamPointerDown: (
@@ -82,6 +96,9 @@ export const FoundryOverlayLayer = ({
   foundryParamHandleZSummary,
   connectionHoleHandles,
   onConnectionHolePointerDown,
+  onConnectionHolePointerMove,
+  onConnectionHolePointerUp,
+  draggingConnectionSelection,
   hasManualAnchor,
   landingBoardLabel,
   onParamPointerDown,
@@ -289,29 +306,64 @@ export const FoundryOverlayLayer = ({
         data-testid="foundry-connection-hole-handles"
         data-authority="physical-affordance"
       >
-        {connectionHoleHandles.map((handle) => (
-          <g
-            key={`${handle.role}-${handle.partKey}-${handle.holeIndex}`}
-            transform={`translate(${handle.screen.x} ${handle.screen.y})`}
-            data-testid={`foundry-connection-hole-${handle.role}-${handle.holeIndex}`}
-          >
-            <circle
-              className="foundry-connection-hole-hit"
-              style={{ pointerEvents: "auto" }}
-              data-connection-role={handle.role}
-              data-connection-kind={handle.kind}
-              data-connection-part-key={handle.partKey}
-              data-connection-hole-index={handle.holeIndex}
-              r="10"
-              fill={handle.selected ? "#f59e0b" : "#ffffff"}
-              fillOpacity={handle.selected ? "0.92" : "0.72"}
-              stroke={handle.selected ? "#92400e" : "#2563eb"}
-              strokeWidth="3"
-              onPointerDown={onConnectionHolePointerDown(handle)}
-            />
-            <circle r="3" fill="#111827" pointerEvents="none" />
-          </g>
-        ))}
+        {connectionHoleHandles
+          .filter((handle) =>
+            draggingConnectionSelection
+              ? handle.role === draggingConnectionSelection.role
+              : handle.selected || handle.provisional,
+          )
+          .map((handle) => {
+            const isDragTarget =
+              draggingConnectionSelection?.role === handle.role &&
+              draggingConnectionSelection.holeIndex === handle.holeIndex;
+            const isCandidate =
+              draggingConnectionSelection?.role === handle.role &&
+              !handle.selected;
+            return (
+              <g
+                key={`${handle.role}-${handle.partKey}-${handle.holeIndex}`}
+                transform={`translate(${handle.screen.x} ${handle.screen.y})`}
+                data-testid={`foundry-connection-hole-${handle.role}-${handle.holeIndex}`}
+              >
+                <circle
+                  className="foundry-connection-hole-hit"
+                  style={{ pointerEvents: "auto" }}
+                  data-connection-role={handle.role}
+                  data-connection-kind={handle.kind}
+                  data-connection-part-key={handle.partKey}
+                  data-connection-hole-index={handle.holeIndex}
+                  data-connection-z={handle.z.toFixed(3)}
+                  data-connection-selected={String(handle.selected)}
+                  data-connection-provisional={String(handle.provisional)}
+                  r={isDragTarget ? "11.5" : "10"}
+                  fill={
+                    isDragTarget
+                      ? "rgba(245, 158, 11, 0.34)"
+                      : handle.selected
+                        ? "#f59e0b"
+                        : "rgba(37, 99, 235, 0.18)"
+                  }
+                  fillOpacity={
+                    handle.selected || isDragTarget ? "0.92" : "0.42"
+                  }
+                  stroke={
+                    isDragTarget
+                      ? "#b45309"
+                      : handle.selected
+                        ? "#92400e"
+                        : "#2563eb"
+                  }
+                  strokeOpacity={isCandidate ? "0.7" : "1"}
+                  strokeWidth={isDragTarget ? "4" : "3"}
+                  onPointerDown={onConnectionHolePointerDown(handle)}
+                  onPointerMove={onConnectionHolePointerMove(handle)}
+                  onPointerUp={onConnectionHolePointerUp(handle)}
+                  onPointerCancel={onConnectionHolePointerUp(handle)}
+                />
+                <circle r="3" fill="#111827" pointerEvents="none" />
+              </g>
+            );
+          })}
       </g>
     )}
     {(isPickingAnchor || hasManualAnchor) && projectedAnchorMarker && (

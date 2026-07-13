@@ -45,6 +45,12 @@ export const sampleFeasibleRange = (mechanism: MechanismConfig, samples = 96): F
         warning: profileWarning ?? (valid === totalSamples + 1 ? null : valid === 0 ? 'No motion' : `Motion ${Math.round((valid / (totalSamples + 1)) * 100)}% · ${intervalText}`)
     };
 };
+export const compactStudentActionForFabricationDiagnostic = (diagnostic: string | null | undefined) => {
+    if (!diagnostic) return null;
+    if (/^No motion\b/.test(diagnostic)) return 'No full motion. Try reset or smaller links.';
+    if (/^Motion \d+%(?:\s|$)/.test(diagnostic)) return 'Motion may jam. Try a smaller move.';
+    return diagnostic;
+};
 
 export const physicalTolerance = (value: number) => Math.max(1, Math.abs(value) * 0.03);
 

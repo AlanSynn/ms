@@ -11,7 +11,6 @@ import type { AppCommandHandlerMap } from "../utils/appCommands";
 import { createAppCommandHandlers } from "../utils/appCommandHandlers";
 import {
   classroomLessonById,
-  createDefaultMechanism,
   createEmptyProject,
   createLessonProject,
   createSampleProject,
@@ -19,6 +18,7 @@ import {
   resetProjectToLessonBaseline,
   serializeProject,
 } from "../utils/project";
+import { foundryPreviewFromProject } from "../utils/mechanismDefaults";
 import {
   projectSnapshotFileName,
   readAutosaveProject,
@@ -107,13 +107,6 @@ export const useAppProjectCommands = ({
       serializeProject(project),
     );
     setCommandStatus(status);
-  };
-
-  const foundryPreviewFromProject = (lessonProject: ProjectState) => {
-    const mechanism = lessonProject.mechanisms[0];
-    return mechanism
-      ? { ...mechanism, id: "foundry-preview" }
-      : createDefaultMechanism("4bar", "foundry-preview");
   };
 
   const openLessonProject = (

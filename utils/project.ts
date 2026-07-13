@@ -22,25 +22,19 @@ import {
   sceneBoundsForSheet,
 } from "./coordinates";
 import {
-  FABRICATION_GEAR_SPECS,
-  FABRICATION_RING_GEAR_SPEC,
-} from "./fabricationContract";
-import {
   REFERENCE_DEFAULTS,
-  isReferenceFoundryVisible,
   normalizeMechanismToFabricationSet,
   normalizeMechanismToReference,
 } from "./mechanismReference";
-import { compileMechanismGraphFabrication } from "./mechanismCompiler";
 import {
-  defaultCamProfileSamples,
+  createDefaultMechanism,
+  mechanismRequiredParts,
+} from "./mechanismDefaults";
+import { mechanismWithGeneratedPath } from "./mechanismGeneratedPath";
+import {
   gearTrainOutputRatio,
-  generateCurvePoints,
   normalizeCamProfileSamples,
-  planetaryCarrierOutputRatio,
-  planetaryPlanetSpinRatio,
 } from "./kinematics";
-import { primaryFoundryPlaybackPath } from "./foundryPlayback";
 import {
   clampNumber,
   finiteNumber,
@@ -59,25 +53,19 @@ import {
 } from "./classroomContent";
 import { constrainMechanismCommit } from "./mechanismEditAuthority";
 import { mechanismDriverIdentity } from "./motion";
+import { fitMechanismToTargetPath } from "./mechanismRecommendations";
 import { pathOwnedTargetFields } from "./pathTargets";
+import {
+  guidedFourBarTimedPoints,
+  guidedGearDriverPhaseOffset,
+  guidedGearTimedPoints,
+  guidedHeadBobTimedPoints,
+} from "./guidedLessonTiming";
+
+export { createDefaultMechanism, mechanismRequiredParts } from "./mechanismDefaults";
+export { mechanismWithGeneratedPath } from "./mechanismGeneratedPath";
 
 export const APP_STATE_VERSION = 1;
-
-const DEFAULT_DRIVE_GEAR_RADIUS = REFERENCE_DEFAULTS.gearTrain.driveRadius; // reference G3 / 24T
-const DEFAULT_OUTPUT_GEAR_RADIUS = REFERENCE_DEFAULTS.gearTrain.outputRadius; // reference G3 / 24T
-const defaultGearRadiusByTeeth = (teeth: number, fallbackMm: number) =>
-  (FABRICATION_GEAR_SPECS.find((spec) => spec.teeth === teeth)?.pitchRadiusMm ??
-    fallbackMm) * SCENE_PX_PER_MM;
-const DEFAULT_PLANETARY_SUN_RADIUS = defaultGearRadiusByTeeth(
-  FABRICATION_RING_GEAR_SPEC.compatibleSunTeeth,
-  10,
-);
-const DEFAULT_PLANETARY_PLANET_RADIUS = defaultGearRadiusByTeeth(
-  FABRICATION_RING_GEAR_SPEC.compatiblePlanetTeeth,
-  30,
-);
-const DEFAULT_PLANETARY_CARRIER_RADIUS =
-  DEFAULT_PLANETARY_SUN_RADIUS + DEFAULT_PLANETARY_PLANET_RADIUS;
 
 export const nowIso = () => new Date().toISOString();
 export const uid = (prefix: string) =>
@@ -363,74 +351,67 @@ const defaultSkeleton = () =>
     joint("right_foot", -72, -218, "right_knee"),
   ]);
 
-const pointDistance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
-
 const skeletonPoint = (skeleton: StandardSkeleton, jointId: string): Point =>
   skeleton.joints[jointId]?.position ?? { x: 0, y: 0 };
-
-const chainReach = (skeleton: StandardSkeleton, jointIds: string[]) =>
-  jointIds
-    .slice(1)
-    .reduce(
-      (sum, jointId, index) =>
-        sum +
-        pointDistance(
-          skeletonPoint(skeleton, jointIds[index]),
-          skeletonPoint(skeleton, jointId),
-        ),
-      0,
-    );
 
 const guidedArmWavePath = (skeleton: StandardSkeleton): Point[] => {
   const shoulder = skeletonPoint(skeleton, "right_shoulder");
   const hand = skeletonPoint(skeleton, "right_hand");
-  const reach = chainReach(skeleton, [
-    "right_shoulder",
-    "right_elbow",
-    "right_hand",
-  ]);
   const side = Math.sign(hand.x - shoulder.x) || 1;
-  const center = {
-    x: shoulder.x + side * reach * 0.68,
-    y: shoulder.y - reach * 0.12,
-  };
-  const rx = reach * 0.24;
-  const ry = reach * 0.34;
+  const mirror = -side;
   return [
-    { x: center.x + side * -rx * 0.25, y: center.y + ry * 0.82 },
-    { x: center.x + side * rx * 0.75, y: center.y + ry * 0.42 },
-    { x: center.x + side * rx, y: center.y - ry * 0.25 },
-    { x: center.x + side * rx * 0.12, y: center.y - ry },
-    { x: center.x + side * -rx * 0.85, y: center.y - ry * 0.15 },
-  ];
+    { x: -118, y: -13.589 },
+    { x: -127.382, y: 12.393 },
+    { x: -129.157, y: 18.257 },
+    { x: -120.269, y: -7.898 },
+    { x: -109.154, y: -33.187 },
+    { x: -95.905, y: -57.426 },
+    { x: -80.617, y: -80.434 },
+    { x: -63.408, y: -102.041 },
+    { x: -59.346, y: -106.627 },
+    { x: -76.967, y: -85.354 },
+    { x: -92.696, y: -62.645 },
+    { x: -106.407, y: -38.664 },
+  ].map((offset) => ({
+    x: shoulder.x + offset.x * mirror,
+    y: shoulder.y + offset.y,
+  }));
 };
 
 const guidedHeadBobPath = (skeleton: StandardSkeleton): Point[] => {
   const headTop = skeletonPoint(skeleton, "head_top");
-  const reach = chainReach(skeleton, ["neck", "head_top"]);
-  const lift = Math.max(18, Math.min(34, reach * 0.45));
+  const centerY = headTop.y - 2.4;
+  const lift = 2.4;
   return [
-    { x: headTop.x, y: headTop.y - lift * 0.85 },
-    { x: headTop.x, y: headTop.y - lift * 0.05 },
-    { x: headTop.x, y: headTop.y - lift * 0.35 },
-    { x: headTop.x, y: headTop.y - lift * 0.65 },
+    { x: headTop.x, y: centerY - lift },
+    { x: headTop.x, y: centerY },
+    { x: headTop.x, y: centerY + lift },
+    { x: headTop.x, y: centerY },
   ];
 };
 
 const guidedFootStepPath = (skeleton: StandardSkeleton): Point[] => {
   const hip = skeletonPoint(skeleton, "right_hip");
   const foot = skeletonPoint(skeleton, "right_foot");
-  const reach = chainReach(skeleton, ["right_hip", "right_knee", "right_foot"]);
   const side = Math.sign(foot.x - hip.x) || 1;
-  const stride = Math.min(reach * 0.24, 36);
-  const lift = Math.min(reach * 0.2, 30);
+  const mirror = -side;
   return [
-    { x: foot.x - side * stride * 0.7, y: foot.y + 2 },
-    { x: foot.x + side * stride * 0.2, y: foot.y + lift * 0.25 },
-    { x: foot.x + side * stride * 0.75, y: foot.y + lift },
-    { x: foot.x + side * stride * 0.15, y: foot.y + lift * 1.25 },
-    { x: foot.x - side * stride * 0.85, y: foot.y + lift * 0.55 },
-  ];
+    { x: -62, y: -49.589 },
+    { x: -71.382, y: -23.607 },
+    { x: -73.157, y: -17.743 },
+    { x: -64.269, y: -43.898 },
+    { x: -53.154, y: -69.187 },
+    { x: -39.905, y: -93.426 },
+    { x: -24.617, y: -116.434 },
+    { x: -7.408, y: -138.041 },
+    { x: -3.346, y: -142.627 },
+    { x: -20.967, y: -121.354 },
+    { x: -36.696, y: -98.645 },
+    { x: -50.407, y: -74.664 },
+  ].map((offset) => ({
+    x: hip.x + offset.x * mirror,
+    y: hip.y + offset.y,
+  }));
 };
 
 type StarterPartShape = "torso" | "head" | "limb" | "hand" | "foot";
@@ -605,228 +586,6 @@ export const createDefaultSceneObject = (
   visible: true,
   locked: false,
   zIndex: 20,
-});
-
-export const createDefaultMechanism = (
-  type: MechanismConfig["type"] = "4bar",
-  id = uid("mech"),
-): MechanismConfig => ({
-  id,
-  type,
-  visible: true,
-  enabled: true,
-  color:
-    type === "5bar" ||
-    type === "6bar" ||
-    type === "gear" ||
-    type === "gear_linkage" ||
-    type === "planetary_gear" ||
-    type === "rack-pinion"
-      ? "#d97706"
-      : type === "piston"
-        ? "#059669"
-        : type === "yoke" || type === "cam"
-          ? "#f59e0b"
-          : "#3b82f6",
-  anchorX: -120,
-  anchorY: -40,
-  transform: { x: -120, y: -40, rotation: 0, scale: 1 },
-  sceneAnchor: { x: -120, y: -40 },
-  activeVisualPartIds: [],
-  groundAngle: type === "cam" || type === "rack-pinion" ? 90 : 0,
-  groundLength:
-    type === "gear"
-      ? DEFAULT_DRIVE_GEAR_RADIUS + DEFAULT_OUTPUT_GEAR_RADIUS
-      : type === "gear_linkage"
-        ? REFERENCE_DEFAULTS.gearLinkage.centerDistance
-        : type === "planetary_gear"
-          ? DEFAULT_PLANETARY_CARRIER_RADIUS
-          : type === "piston" ||
-              type === "yoke" ||
-              type === "cam" ||
-              type === "rack-pinion"
-            ? 0
-            : REFERENCE_DEFAULTS.fourBar.ground,
-  crankLength:
-    type === "6bar"
-      ? 55
-      : type === "5bar"
-        ? 60
-        : type === "gear" || type === "gear_linkage"
-          ? DEFAULT_DRIVE_GEAR_RADIUS
-          : type === "planetary_gear"
-            ? DEFAULT_PLANETARY_SUN_RADIUS
-            : type === "piston"
-              ? REFERENCE_DEFAULTS.sliderCrank.crank
-              : type === "cam"
-                ? REFERENCE_DEFAULTS.cam.radius
-                : type === "rack-pinion"
-                  ? 42
-                  : REFERENCE_DEFAULTS.fourBar.input,
-  couplerLength:
-    type === "6bar"
-      ? 145
-      : type === "piston"
-        ? REFERENCE_DEFAULTS.sliderCrank.rod
-        : type === "gear_linkage"
-          ? REFERENCE_DEFAULTS.gearLinkage.outputLinkage
-          : type === "yoke" ||
-              type === "cam" ||
-              type === "gear" ||
-              type === "planetary_gear" ||
-              type === "rack-pinion"
-            ? 0
-            : REFERENCE_DEFAULTS.fourBar.coupler,
-  rockerLength:
-    type === "6bar"
-      ? 110
-      : type === "5bar"
-        ? 48
-        : type === "quick-return"
-          ? 130
-          : type === "gear" || type === "gear_linkage"
-            ? DEFAULT_OUTPUT_GEAR_RADIUS
-            : type === "planetary_gear"
-              ? DEFAULT_PLANETARY_PLANET_RADIUS
-              : type === "cam"
-                ? REFERENCE_DEFAULTS.cam.followerTravel
-                : type === "rack-pinion"
-                  ? 380
-                  : type === "piston"
-                    ? 0
-                    : REFERENCE_DEFAULTS.fourBar.output,
-  sliderOffset:
-    type === "piston"
-      ? REFERENCE_DEFAULTS.sliderCrank.guideOffset
-      : type === "rack-pinion"
-        ? 56
-        : type === "cam"
-          ? REFERENCE_DEFAULTS.cam.followerRadius
-          : 0,
-  couplerPointDist:
-    type === "6bar"
-      ? 100
-      : type === "5bar"
-        ? 90
-        : type === "gear_linkage"
-          ? REFERENCE_DEFAULTS.gearLinkage.handleRadius
-          : type === "planetary_gear"
-            ? REFERENCE_DEFAULTS.planetary.carrierRadius
-            : type === "rack-pinion"
-              ? 70
-              : 78,
-  couplerPointAngle:
-    type === "piston" ||
-    type === "yoke" ||
-    type === "cam" ||
-    type === "rack-pinion"
-      ? 0
-      : 40,
-  assemblyMode: type === "4bar" || type === "6bar" ? "open" : undefined,
-  speed1: 1,
-  speed2:
-    type === "5bar"
-      ? -2
-      : type === "gear" || type === "gear_linkage"
-        ? gearTrainOutputRatio([
-            DEFAULT_DRIVE_GEAR_RADIUS,
-            DEFAULT_OUTPUT_GEAR_RADIUS,
-          ])
-        : type === "planetary_gear"
-          ? planetaryPlanetSpinRatio(
-              DEFAULT_PLANETARY_SUN_RADIUS,
-              DEFAULT_PLANETARY_PLANET_RADIUS,
-            )
-          : 1,
-  gearRatio:
-    type === "gear" || type === "gear_linkage"
-      ? gearTrainOutputRatio([
-          DEFAULT_DRIVE_GEAR_RADIUS,
-          DEFAULT_OUTPUT_GEAR_RADIUS,
-        ])
-      : type === "planetary_gear"
-        ? planetaryCarrierOutputRatio(
-            DEFAULT_PLANETARY_SUN_RADIUS,
-            DEFAULT_PLANETARY_PLANET_RADIUS,
-          )
-        : undefined,
-  gearTrainRadii:
-    type === "gear" || type === "gear_linkage"
-      ? [DEFAULT_DRIVE_GEAR_RADIUS, DEFAULT_OUTPUT_GEAR_RADIUS]
-      : undefined,
-  camProfileSamples: type === "cam" ? defaultCamProfileSamples() : undefined,
-  driverGroupId: "driver-1",
-  driverPhaseOffset: 0,
-  rodLength:
-    type === "6bar"
-      ? 95
-      : type === "piston"
-        ? REFERENCE_DEFAULTS.sliderCrank.rod
-        : 110,
-  phase: 0,
-  source: "manual",
-  presetId: "balanced",
-  recommendation: "balanced default",
-  warnings: [],
-});
-
-export const mechanismRequiredParts = (
-  mechanism: Pick<MechanismConfig, "type"> & Partial<MechanismConfig>,
-) => {
-  const defaultMechanism = createDefaultMechanism(
-    mechanism.type,
-    `required-parts-${mechanism.type}`,
-  );
-  const compiled = compileMechanismGraphFabrication({
-    ...defaultMechanism,
-    ...mechanism,
-  });
-  if (compiled.recipe) return compiled.recipe.requiredParts;
-  const blocker = compiled.blocker ?? "Graph compiler blocked this mechanism";
-  return [
-    {
-      name: `Fix: ${blocker}`,
-      label: blocker,
-      key: "compiler-blocker",
-      category: "blocker",
-      quantity: 1,
-    },
-  ];
-};
-
-const generatedMechanismPath = (mechanism: MechanismConfig) => {
-  if (isReferenceFoundryVisible(mechanism.type)) {
-    const foundryPath = primaryFoundryPlaybackPath(mechanism, 96);
-    if (foundryPath.length) return foundryPath;
-  }
-  return generateCurvePoints(mechanism, 96).points;
-};
-
-export const mechanismWithGeneratedPath = (
-  mechanism: MechanismConfig,
-  options: { preserveGeneratedPath?: boolean } = {},
-): MechanismConfig => ({
-  ...mechanism,
-  transform: mechanism.transform ?? {
-    x: mechanism.anchorX ?? 0,
-    y: mechanism.anchorY ?? 0,
-    rotation: mechanism.groundAngle ?? 0,
-    scale: 1,
-  },
-  sceneAnchor: { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 },
-  activeVisualPartIds: mechanism.targetPartId
-    ? [mechanism.targetPartId]
-    : (mechanism.activeVisualPartIds ?? []),
-  fabricationMetadata: {
-    ...(mechanism.fabricationMetadata ?? {}),
-    sceneAnchor: { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 },
-    targetPathId: mechanism.targetPathId,
-    requiredParts: mechanismRequiredParts(mechanism),
-  },
-  generatedPath:
-    options.preserveGeneratedPath && mechanism.generatedPath?.length
-      ? mechanism.generatedPath
-      : generatedMechanismPath(mechanism),
 });
 
 const preserveGeneratedPathFor = (mechanism: MechanismConfig) =>
@@ -1173,6 +932,7 @@ export const createSampleProject = (
   }
 
   const pathPoints = guidedArmWavePath(skeleton);
+  const armPathDuration = 1800;
 
   return {
     ...createEmptyProject(),
@@ -1194,8 +954,12 @@ export const createSampleProject = (
         targetAnchorJointId: "right_hand",
         chainRootJointId: "right_shoulder",
         points: pathPoints,
-        duration: 1800,
-        closed: false,
+        timedPoints: guidedFourBarTimedPoints(
+          { x: -200, y: 200 },
+          armPathDuration,
+        ),
+        duration: armPathDuration,
+        closed: true,
         enabled: true,
         visible: true,
         source: "drawn",
@@ -1357,6 +1121,31 @@ export const createLessonProject = (
   let selectedPartId = project.selectedPartId;
   let selectedPathId = project.selectedPathId;
   let selectedMechanismId = project.selectedMechanismId;
+  const persistLessonMechanism = (
+    mechanism: MechanismConfig,
+    pathId: string,
+  ): MechanismConfig => {
+    const path = paths[pathId];
+    if (!path) return mechanismWithGeneratedPath(mechanism);
+    const targeted = { ...mechanism, ...pathOwnedTargetFields(path) };
+    const fitted = fitMechanismToTargetPath(
+      { ...project, paths, mechanisms },
+      targeted,
+      pathId,
+    );
+    return {
+      ...fitted,
+      id: mechanism.id,
+      color: mechanism.color,
+      visible: mechanism.visible,
+      enabled: mechanism.enabled,
+      source: mechanism.source,
+      presetId: mechanism.presetId,
+      recommendation: mechanism.recommendation,
+      warnings: [...new Set([...(mechanism.warnings ?? []), ...(fitted.warnings ?? [])])],
+      ...pathOwnedTargetFields(path),
+    };
+  };
 
   if (lesson.id === "waving-arm") {
     const armPath = paths["path-right-arm"];
@@ -1377,25 +1166,32 @@ export const createLessonProject = (
     if (armFourBar) {
       Object.assign(armFourBar, {
         anchorX: -200,
-        anchorY: 80,
+        anchorY: 200,
         groundAngle: 0,
+        groundLength: 320,
+        crankLength: 80,
+        couplerLength: 160,
+        rockerLength: 320,
+        couplerPointDist: 80,
+        couplerPointAngle: 45,
+        assemblyMode: "crossed",
         speed1: -1,
         driverPhaseOffset: Math.PI,
-        assemblyMode: "open",
-        couplerPointAngle: 13.2,
-        transform: { x: -200, y: 80, rotation: 0, scale: 1 },
-        sceneAnchor: { x: -200, y: 80 },
+        transform: { x: -200, y: 200, rotation: 0, scale: 1 },
+        sceneAnchor: { x: -200, y: 200 },
         targetPartId: "right_hand_part",
         targetPathId: "path-right-arm",
         targetAnchorJointId: "right_hand",
         activeVisualPartIds: ["right_hand_part"],
         recommendation: lesson.description,
       } satisfies Partial<MechanismConfig>);
-      mechanisms = [mechanismWithGeneratedPath(armFourBar)];
+      mechanisms = [persistLessonMechanism(armFourBar, "path-right-arm")];
       selectedMechanismId = armFourBar.id;
     }
   } else if (lesson.id === "head-bob") {
     const pathId = "path-head-bob";
+    const pathDuration = 1600;
+    const headTop = skeletonPoint(lessonSkeleton, "head_top");
     paths = {
       [pathId]: {
         id: pathId,
@@ -1403,7 +1199,8 @@ export const createLessonProject = (
         targetAnchorJointId: "head_top",
         chainRootJointId: "neck",
         points: guidedHeadBobPath(lessonSkeleton),
-        duration: 1600,
+        timedPoints: guidedHeadBobTimedPoints(headTop, pathDuration),
+        duration: pathDuration,
         closed: false,
         enabled: true,
         visible: true,
@@ -1413,11 +1210,15 @@ export const createLessonProject = (
     };
     const cam = createDefaultMechanism("cam", "mech-head-bob");
     Object.assign(cam, {
-      anchorX: 200,
-      anchorY: 80,
+      anchorX: 0,
+      anchorY: 120,
       groundAngle: 90,
-      transform: { x: 200, y: 80, rotation: 90, scale: 1 },
-      sceneAnchor: { x: 200, y: 80 },
+      driverPhaseOffset: Math.PI / 2,
+      crankLength: 28,
+      sliderOffset: 16,
+      camProfileSamples: [0.84, 0.92, 1, 0.92],
+      transform: { x: 0, y: 120, rotation: 90, scale: 1 },
+      sceneAnchor: { x: 0, y: 120 },
       targetPartId: "head",
       targetPathId: pathId,
       targetAnchorJointId: "head_top",
@@ -1426,12 +1227,13 @@ export const createLessonProject = (
       presetId: "lesson-head-bob",
       recommendation: lesson.description,
     } satisfies Partial<MechanismConfig>);
-    mechanisms = [mechanismWithGeneratedPath(cam)];
+    mechanisms = [persistLessonMechanism(cam, pathId)];
     selectedPartId = "head";
     selectedPathId = pathId;
     selectedMechanismId = cam.id;
   } else if (lesson.id === "walking-leg") {
     const pathId = "path-right-foot-step";
+    const pathDuration = 1900;
     paths = {
       [pathId]: {
         id: pathId,
@@ -1439,7 +1241,11 @@ export const createLessonProject = (
         targetAnchorJointId: "right_foot",
         chainRootJointId: "right_hip",
         points: guidedFootStepPath(lessonSkeleton),
-        duration: 1900,
+        timedPoints: guidedFourBarTimedPoints(
+          { x: -120, y: 0 },
+          pathDuration,
+        ),
+        duration: pathDuration,
         closed: true,
         enabled: true,
         visible: true,
@@ -1449,15 +1255,20 @@ export const createLessonProject = (
     };
     const legFourBar = createDefaultMechanism("4bar", "mech-walking-leg");
     Object.assign(legFourBar, {
-      anchorX: -160,
-      anchorY: -120,
+      anchorX: -120,
+      anchorY: 0,
       groundAngle: 0,
+      groundLength: 320,
+      crankLength: 80,
+      couplerLength: 160,
+      rockerLength: 320,
+      couplerPointDist: 80,
+      couplerPointAngle: 0,
+      assemblyMode: "crossed",
       speed1: -1,
       driverPhaseOffset: Math.PI,
-      assemblyMode: "crossed",
-      couplerPointAngle: -40,
-      transform: { x: -160, y: -120, rotation: 0, scale: 1 },
-      sceneAnchor: { x: -160, y: -120 },
+      transform: { x: -120, y: 0, rotation: 0, scale: 1 },
+      sceneAnchor: { x: -120, y: 0 },
       targetPartId: "right_foot_part",
       targetPathId: pathId,
       targetAnchorJointId: "right_foot",
@@ -1466,28 +1277,49 @@ export const createLessonProject = (
       presetId: "lesson-walking-leg",
       recommendation: lesson.description,
     } satisfies Partial<MechanismConfig>);
-    mechanisms = [mechanismWithGeneratedPath(legFourBar)];
+    mechanisms = [persistLessonMechanism(legFourBar, pathId)];
     selectedPartId = "right_foot_part";
     selectedPathId = pathId;
     selectedMechanismId = legFourBar.id;
   } else if (lesson.id === "spin-gears") {
     const pathId = "path-gear-spin";
+    const pathDuration = 1600;
     const rightShoulder = lessonSkeleton.joints.right_shoulder.position;
     const rightHand = lessonSkeleton.joints.right_hand.position;
     const side = Math.sign(rightHand.x - rightShoulder.x) || 1;
+    const gearRadii: [number, number] = [60, 20];
+    const gearGridStep = project.settings.physicalKit.gridPitchMm * SCENE_PX_PER_MM;
+    const gearAnchorX =
+      Math.round((rightHand.x + side * (gearRadii[0] + gearRadii[1])) / gearGridStep) *
+      gearGridStep;
+    const gearGroundAngle = side < 0 ? 0 : 180;
+    const gearGroundAngleRad = (gearGroundAngle * Math.PI) / 180;
+    const outputCenter = {
+      x:
+        gearAnchorX +
+        (gearRadii[0] + gearRadii[1]) * Math.cos(gearGroundAngleRad),
+      y: 80 + (gearRadii[0] + gearRadii[1]) * Math.sin(gearGroundAngleRad),
+    };
     paths = {
       [pathId]: {
         id: pathId,
         partId: "right_hand_part",
         targetAnchorJointId: "right_hand",
         chainRootJointId: "right_shoulder",
-        points: [
-          { x: rightHand.x + side * -10, y: rightHand.y + 74 },
-          { x: rightHand.x + side * 22, y: rightHand.y + 106 },
-          { x: rightHand.x + side * -10, y: rightHand.y + 138 },
-          { x: rightHand.x + side * -42, y: rightHand.y + 106 },
-        ],
-        duration: 1600,
+        points: Array.from({ length: 8 }, (_, index) => {
+          const angle = (index / 8) * Math.PI * 2;
+          return {
+            x: outputCenter.x + gearRadii[1] * Math.cos(angle),
+            y: outputCenter.y + gearRadii[1] * Math.sin(angle),
+          };
+        }),
+        timedPoints: guidedGearTimedPoints(
+          outputCenter,
+          gearRadii,
+          gearRadii[1],
+          pathDuration,
+        ),
+        duration: pathDuration,
         closed: true,
         enabled: true,
         visible: true,
@@ -1496,12 +1328,6 @@ export const createLessonProject = (
       },
     };
     const gear = createDefaultMechanism("gear", "mech-spin-gears");
-    const gearRadii: [number, number] = [60, 20];
-    const gearGridStep = project.settings.physicalKit.gridPitchMm * SCENE_PX_PER_MM;
-    const gearAnchorX =
-      Math.round((rightHand.x + side * (gearRadii[0] + gearRadii[1])) / gearGridStep) *
-      gearGridStep;
-    const gearGroundAngle = side < 0 ? 0 : 180;
     Object.assign(gear, {
       anchorX: gearAnchorX,
       anchorY: 80,
@@ -1512,6 +1338,7 @@ export const createLessonProject = (
       gearTrainRadii: gearRadii,
       gearRatio: gearTrainOutputRatio(gearRadii),
       speed2: gearTrainOutputRatio(gearRadii),
+      driverPhaseOffset: guidedGearDriverPhaseOffset(gearRadii),
       transform: { x: gearAnchorX, y: 80, rotation: gearGroundAngle, scale: 1 },
       sceneAnchor: { x: gearAnchorX, y: 80 },
       targetPartId: "right_hand_part",
@@ -1522,7 +1349,7 @@ export const createLessonProject = (
       presetId: "lesson-spin-gears",
       recommendation: lesson.description,
     } satisfies Partial<MechanismConfig>);
-    mechanisms = [mechanismWithGeneratedPath(gear)];
+    mechanisms = [persistLessonMechanism(gear, pathId)];
     selectedPartId = "right_hand_part";
     selectedPathId = pathId;
     selectedMechanismId = gear.id;

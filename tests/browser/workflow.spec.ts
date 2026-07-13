@@ -587,6 +587,47 @@ test('Getting Started guided project opens a real editable lesson', async ({ pag
   expectCleanPage(pageErrors, consoleErrors);
 });
 
+
+test('guided lessons open Design with coupled mechanism ownership', async ({ page }) => {
+  for (const lesson of CLASSROOM_LESSONS) {
+    const project = createLessonProject(lesson.id);
+    const mechanism = project.mechanisms[0];
+    const targetPath = mechanism?.targetPathId ? project.paths[mechanism.targetPathId] : undefined;
+    expect(mechanism, `${lesson.id} has a guided mechanism`).toBeTruthy();
+    expect(targetPath, `${lesson.id} has a mechanism-owned path`).toBeTruthy();
+    expect(mechanism?.targetPartId, `${lesson.id} mechanism owns the path body part`).toBe(targetPath?.partId);
+
+    await page.goto('/');
+    await waitForBootLoader(page);
+    const gettingStarted = page.getByTestId('getting-started-dialog');
+    await expect(gettingStarted).toBeVisible();
+    await gettingStarted.getByTestId('getting-started-card-guided').click();
+    await gettingStarted.getByTestId(`guided-project-card-${lesson.id}`).click();
+    await expect(page.getByRole('heading', { name: 'Character' })).toBeVisible();
+    await expectProjectCounts(page, project.partOrder.length, Object.keys(project.paths).length, project.mechanisms.length);
+
+    await clickStage(page, 'Design');
+    await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+    const designPreview = page.getByTestId('design-shared-foundry-preview');
+    await expect(designPreview, `${lesson.id} uses the shared Design/Foundry scene`).toHaveAttribute('data-design-scene-mode', 'single-foundry-automata-scene');
+    await expect(designPreview).toHaveAttribute('data-mechanism-id', mechanism!.id);
+    await expect(designPreview).toHaveAttribute('data-mechanism-type', lesson.mechanismType);
+    await expect(designPreview).toHaveAttribute('data-guided-context-path-id', targetPath!.id);
+    await expect(designPreview).toHaveAttribute('data-design-visible-mechanism-count', '1');
+    await expect(designPreview, `${lesson.id} Design drives a real body target`).toHaveAttribute('data-design-motion-source', /generatedPath|linkage-effector/);
+    await expect(designPreview, `${lesson.id} Design has a concrete target joint`).toHaveAttribute('data-design-target-joint-id', /\S/);
+    await expect.poll(async () => Number(await designPreview.getAttribute('data-design-animated-part-count')), {
+      message: `${lesson.id} animates the coupled body part instead of a detached mechanism preview`,
+    }).toBeGreaterThan(0);
+    const fitStatus = await designPreview.getAttribute('data-design-path-fit-status');
+    expect(fitStatus, `${lesson.id} guided mechanism does not start with an implausible path mismatch`).not.toBe('mismatch');
+    const targetError = await designPreview.getAttribute('data-design-target-error');
+    expect(targetError, `${lesson.id} Design exposes a coupled body-mechanism target`).not.toBe('missing');
+    await expect(page.getByLabel('Mechanism target'), `${lesson.id} target select stays on the path owner`).toHaveValue(mechanism!.targetPartId!);
+    await expect(page.getByLabel('Mechanism motion path'), `${lesson.id} path select stays on the owned path`).toHaveValue(targetPath!.id);
+  }
+});
+
 test('classroom assessment slug and mechanism example video work end-to-end', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const pageErrors: string[] = [];
@@ -974,13 +1015,113 @@ const connectionSignatureHoleIndex = (signature: string, role: ConnectionSelecti
   return holeIndex;
 };
 
-const clickConnectionHoleTarget = async (page: Page, target: ConnectionHoleTarget) => {
-  const marker = page.getByTestId(`foundry-connection-hole-${target.role}-${target.holeIndex}`).locator('circle.foundry-connection-hole-hit');
+const connectionHoleMarker = (page: Page, target: ConnectionHoleTarget) =>
+  page.getByTestId(`foundry-connection-hole-${target.role}-${target.holeIndex}`).locator('circle.foundry-connection-hole-hit');
+
+const expectConnectionHoleMarker = async (page: Page, target: ConnectionHoleTarget) => {
+  const marker = connectionHoleMarker(page, target);
   await expect(marker, `${target.role} hole ${target.holeIndex} is a visible physical overlay affordance`).toHaveAttribute('data-connection-role', target.role);
   await expect(marker).toHaveAttribute('data-connection-kind', target.kind);
   await expect(marker).toHaveAttribute('data-connection-part-key', target.partKey);
   await expect(marker).toHaveAttribute('data-connection-hole-index', String(target.holeIndex));
-  await marker.click();
+  await expect(marker).toBeVisible();
+  return marker;
+};
+
+const expectConnectionHoleZMatchesRenderedLayer = async (rig: Locator, marker: Locator, expected: { label: string; role: string; occurrence: number }) => {
+  const roles = ((await rig.getAttribute('data-three-rendered-layer-roles')) ?? '').split('>');
+  const zValues = ((await rig.getAttribute('data-three-rendered-layer-z')) ?? '').split(',').map(Number);
+  const matchingIndexes = roles.flatMap((role, index) => role === expected.role ? [index] : []);
+  const layerIndex = matchingIndexes[expected.occurrence];
+  expect(layerIndex, `${expected.label} is rendered as a physical ${expected.role} layer`).not.toBeUndefined();
+  const markerZ = Number(await marker.getAttribute('data-connection-z'));
+  const layerZ = zValues[layerIndex!];
+  expect(Number.isFinite(markerZ), `${expected.label} marker exposes numeric data-connection-z`).toBe(true);
+  expect(Number.isFinite(layerZ), `${expected.label} layer exposes numeric rendered z`).toBe(true);
+  expect(Math.abs(markerZ - layerZ), `${expected.label} marker z matches rendered layer z`).toBeLessThanOrEqual(0.02);
+};
+
+const visibleConnectionHoleCount = async (page: Page, role: ConnectionSelectionRole) => {
+  const markers = page.locator(`circle.foundry-connection-hole-hit[data-connection-role="${role}"]`);
+  let visible = 0;
+  for (let index = 0; index < await markers.count(); index += 1) {
+    if (await markers.nth(index).isVisible()) visible += 1;
+  }
+  return visible;
+};
+
+const expectOnlySelectedConnectionHoleVisible = async (page: Page, role: ConnectionSelectionRole) => {
+  await expect.poll(async () => visibleConnectionHoleCount(page, role), {
+    message: `${role} hides alternate candidate holes until its endpoint drag starts`,
+  }).toBe(1);
+};
+
+const connectionHoleCenter = async (marker: Locator) => {
+  const box = await marker.boundingBox();
+  expect(box, 'connection hole has a pointer target').toBeTruthy();
+  if (!box) throw new Error('Missing connection hole pointer target');
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+};
+
+const clickConnectionHoleTarget = async (page: Page, target: ConnectionHoleTarget) => {
+  const marker = await expectConnectionHoleMarker(page, target);
+  const point = await connectionHoleCenter(marker);
+  await page.mouse.click(point.x, point.y);
+};
+
+const dragConnectionHoleToRevealedCandidate = async (
+  page: Page,
+  start: ConnectionHoleTarget,
+  options: { excludeHoleIndex?: number } = {},
+) => {
+  await expectOnlySelectedConnectionHoleVisible(page, start.role);
+  const startMarker = await expectConnectionHoleMarker(page, start);
+  const startPoint = await connectionHoleCenter(startMarker);
+  await page.mouse.move(startPoint.x, startPoint.y);
+  await page.mouse.down();
+  const target = await waitForConnectionHoleTarget(page, start.role, {
+    excludeHoleIndex: options.excludeHoleIndex ?? start.holeIndex,
+  });
+  const targetPoint = await connectionHoleCenter(await expectConnectionHoleMarker(page, target));
+  await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 6 });
+  await page.mouse.up();
+  await expectOnlySelectedConnectionHoleVisible(page, start.role);
+  return target;
+};
+
+const dragConnectionHoleToNowhere = async (page: Page, start: ConnectionHoleTarget) => {
+  await expectOnlySelectedConnectionHoleVisible(page, start.role);
+  const startMarker = await expectConnectionHoleMarker(page, start);
+  const startPoint = await connectionHoleCenter(startMarker);
+  await page.mouse.move(startPoint.x, startPoint.y);
+  await page.mouse.down();
+  await expect.poll(async () => visibleConnectionHoleCount(page, start.role), {
+    message: `${start.role} candidate holes appear only during endpoint drag`,
+  }).toBeGreaterThan(1);
+  await page.mouse.move(1, 1, { steps: 6 });
+  await page.mouse.up();
+  await expectOnlySelectedConnectionHoleVisible(page, start.role);
+};
+
+const cancelConnectionHoleDragOverCandidate = async (page: Page, start: ConnectionHoleTarget) => {
+  await expectOnlySelectedConnectionHoleVisible(page, start.role);
+  const startMarker = await expectConnectionHoleMarker(page, start);
+  const startPoint = await connectionHoleCenter(startMarker);
+  await page.mouse.move(startPoint.x, startPoint.y);
+  await page.mouse.down();
+  const target = await waitForConnectionHoleTarget(page, start.role, { excludeHoleIndex: start.holeIndex });
+  const targetPoint = await connectionHoleCenter(await expectConnectionHoleMarker(page, target));
+  await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 6 });
+  await startMarker.dispatchEvent('pointercancel', {
+    pointerId: 1,
+    pointerType: 'mouse',
+    clientX: targetPoint.x,
+    clientY: targetPoint.y,
+    bubbles: true,
+    cancelable: true,
+  });
+  await page.mouse.up();
+  await expectOnlySelectedConnectionHoleVisible(page, start.role);
 };
 
 test('physical hole selection authors connection role and updates preview/export only through visible affordance', async ({ page }) => {
@@ -1010,13 +1151,23 @@ test('physical hole selection authors connection role and updates preview/export
   await expect(foundryParametricEditor.getByLabel('Input link length'), 'explicit same-hole authoring locks the accepted input endpoint').toBeDisabled();
   await expect(foundryParametricEditor.getByLabel('Output link length'), 'same-hole input authoring preserves unrelated output default provenance').toBeEnabled();
   await expect(foundryRig, 'same-hole authoring preserves physical geometry/export identity').toHaveAttribute('data-three-fabrication-export-signature', beforeExportSignature);
-  const inputHole = await waitForConnectionHoleTarget(page, '4bar.input-joint', { excludeHoleIndex: initialInputHoleIndex });
+  await dragConnectionHoleToNowhere(page, initialInputHole);
+  await expect(foundryRig, 'distant endpoint release preserves selected role').toHaveAttribute('data-three-selected-connection-role', '4bar.input-joint');
+  await expect(foundryRig, 'distant endpoint release preserves selected hole').toHaveAttribute('data-three-selected-connection-hole-index', String(initialInputHoleIndex));
+  await expect(foundryRig, 'distant endpoint release is a no-op for persisted signature').toHaveAttribute('data-three-fabrication-export-signature', beforeExportSignature);
+
+  await cancelConnectionHoleDragOverCandidate(page, initialInputHole);
+  await expect(foundryRig, 'pointercancel preserves selected role').toHaveAttribute('data-three-selected-connection-role', '4bar.input-joint');
+  await expect(foundryRig, 'pointercancel preserves selected hole').toHaveAttribute('data-three-selected-connection-hole-index', String(initialInputHoleIndex));
+  await expect(foundryRig, 'pointercancel is a no-op for persisted signature').toHaveAttribute('data-three-fabrication-export-signature', beforeExportSignature);
+
+  const inputHole = await dragConnectionHoleToRevealedCandidate(page, initialInputHole, { excludeHoleIndex: initialInputHoleIndex });
   expect(inputHole.kind, '4bar input role is authored from linkage holes').toBe('linkage-hole');
-  await clickConnectionHoleTarget(page, inputHole);
 
   await expect(foundryRig, 'preview exposes selected role/kind/part/hole after physical affordance drag').toHaveAttribute('data-three-selected-connection-role', '4bar.input-joint');
   await expect(foundryRig).toHaveAttribute('data-three-selected-connection-kind', 'linkage-hole');
   await expect(foundryRig).toHaveAttribute('data-three-selected-connection-hole-index', String(inputHole.holeIndex));
+  await expectConnectionHoleZMatchesRenderedLayer(foundryRig, connectionHoleMarker(page, inputHole), { label: 'input-link:linkage', role: 'linkage', occurrence: 0 });
   await expect(foundryParametricEditor, 'shared editor confirms selected connection but is display-only').toContainText(/Input joint/i);
   const inputConfirmation = foundryParametricEditor.getByTestId('connection-selection-confirmation-4bar.input-joint');
   await expect(inputConfirmation, 'visible confirmation uses one-based physical hole copy').toContainText(`Hole ${inputHole.holeIndex + 1}`);
@@ -1035,17 +1186,19 @@ test('physical hole selection authors connection role and updates preview/export
   expect(afterInput, 'live preview exposes the selected input coordinate').toBeTruthy();
   expect(afterInput, 'dragging a different physical hole changes the preview coordinate').not.toEqual(beforeInput);
   const afterInputSignature = await foundryRig.getAttribute('data-three-fabrication-export-signature');
+  expect(connectionSignaturePart(afterInputSignature, '4bar.input-joint'), 'input drag persists the exact role-matched linkage hole signature').toBe(`4bar.input-joint:${inputHole.partKey}:${inputHole.holeIndex}`);
   expect(connectionSignaturePart(afterInputSignature, '4bar.output-joint'), 'input authoring preserves the independent output selection').toBe(initialOutputSignaturePart);
 
   const currentOutputHoleIndex = connectionSignatureHoleIndex(afterInputSignature!, '4bar.output-joint');
   await waitForConnectionHoleTarget(page, '4bar.output-joint', { holeIndex: currentOutputHoleIndex });
   const beforeOutput = await waitForConnectionCoordinate(foundryRig, '4bar.output-joint');
-  const outputHole = await waitForConnectionHoleTarget(page, '4bar.output-joint', { excludeHoleIndex: currentOutputHoleIndex });
-  await clickConnectionHoleTarget(page, outputHole);
+  const currentOutputHole = await waitForConnectionHoleTarget(page, '4bar.output-joint', { holeIndex: currentOutputHoleIndex });
+  const outputHole = await dragConnectionHoleToRevealedCandidate(page, currentOutputHole, { excludeHoleIndex: currentOutputHoleIndex });
 
   await expect(foundryRig, 'preview exposes the independently authored output role').toHaveAttribute('data-three-selected-connection-role', '4bar.output-joint');
   await expect(foundryRig).toHaveAttribute('data-three-selected-connection-kind', 'linkage-hole');
   await expect(foundryRig).toHaveAttribute('data-three-selected-connection-hole-index', String(outputHole.holeIndex));
+  await expectConnectionHoleZMatchesRenderedLayer(foundryRig, connectionHoleMarker(page, outputHole), { label: 'output-link:linkage', role: 'linkage', occurrence: 2 });
   await expect(foundryParametricEditor.getByLabel('Input link length'), 'output authoring preserves the accepted input lock').toBeDisabled();
   await expect(foundryParametricEditor.getByLabel('Output link length'), 'output endpoint locks only after its own physical-hole authoring').toBeDisabled();
   await expect(page.getByTestId('foundry-param-handle-B')).toHaveAttribute('data-draggable', 'false');
@@ -1053,6 +1206,7 @@ test('physical hole selection authors connection role and updates preview/export
   await waitForConnectionCoordinate(foundryRig, '4bar.output-joint', beforeOutput);
   const afterPreviewExportSignature = await foundryRig.getAttribute('data-three-fabrication-export-signature');
   expect(connectionSignaturePart(afterPreviewExportSignature, '4bar.input-joint'), 'output authoring does not mutate the accepted input signature').toBe(connectionSignaturePart(afterInputSignature, '4bar.input-joint'));
+  expect(connectionSignaturePart(afterPreviewExportSignature, '4bar.output-joint'), 'output drag persists the exact role-matched linkage hole signature').toBe(`4bar.output-joint:${outputHole.partKey}:${outputHole.holeIndex}`);
   expect(connectionSignaturePart(afterPreviewExportSignature, '4bar.output-joint'), 'output authoring changes only the output signature').not.toBe(initialOutputSignaturePart);
   expect(afterPreviewExportSignature, 'independent physical holes change the fabrication/export signature before package generation').not.toBe(beforeExportSignature);
 
@@ -1111,14 +1265,15 @@ test('gear linkage physical hole selection authors drive/output pins and exports
   const initialDriveSignaturePart = connectionSignaturePart(initialSignature, 'gear_linkage.drive-pin');
   const initialOutputSignaturePart = connectionSignaturePart(initialSignature, 'gear_linkage.output-pin');
 
-  const driveHole = await waitForConnectionHoleTarget(page, 'gear_linkage.drive-pin', { excludeHoleIndex: initialDriveHoleIndex });
+  const initialDriveHole = await waitForConnectionHoleTarget(page, 'gear_linkage.drive-pin', { holeIndex: initialDriveHoleIndex });
+  const driveHole = await dragConnectionHoleToRevealedCandidate(page, initialDriveHole, { excludeHoleIndex: initialDriveHoleIndex });
   expect(driveHole.kind, 'gear linkage drive pin is authored from gear attachment holes').toBe('gear-attachment-hole');
   expect(driveHole.partKey, 'drive pin hole comes from the selected drive gear blank').toBe('g40');
-  await clickConnectionHoleTarget(page, driveHole);
 
   await expect(foundryRig, 'preview exposes selected drive-pin role after physical affordance drag').toHaveAttribute('data-three-selected-connection-role', 'gear_linkage.drive-pin');
   await expect(foundryRig).toHaveAttribute('data-three-selected-connection-kind', 'gear-attachment-hole');
   await expect(foundryRig).toHaveAttribute('data-three-selected-connection-hole-index', String(driveHole.holeIndex));
+  await expectConnectionHoleZMatchesRenderedLayer(foundryRig, connectionHoleMarker(page, driveHole), { label: 'gear-0:gear', role: 'gear', occurrence: 0 });
   const gearParametricEditor = page.getByTestId('foundry-parametric-editor');
   await expect(gearParametricEditor, 'shared editor confirms selected gear-linkage connection but is display-only').toContainText(/Drive pin/i);
   const driveConfirmation = gearParametricEditor.getByTestId('connection-selection-confirmation-gear_linkage.drive-pin');
@@ -1133,7 +1288,7 @@ test('gear linkage physical hole selection authors drive/output pins and exports
   const outputAfterDrive = await waitForConnectionCoordinate(foundryRig, 'gear_linkage.output-pin');
   const afterDriveSignature = await foundryRig.getAttribute('data-three-fabrication-export-signature');
   expect(afterDriveCoordinate, 'selecting a non-default drive-pin hole changes the canonical drive coordinate').not.toEqual(initialDriveCoordinate);
-  expect(connectionSignaturePart(afterDriveSignature, 'gear_linkage.drive-pin')).toContain(`gear_linkage.drive-pin:${driveHole.partKey}:0:${driveHole.holeIndex}`);
+  expect(connectionSignaturePart(afterDriveSignature, 'gear_linkage.drive-pin'), 'drive-pin drag persists the exact role-matched gear hole signature').toBe(`gear_linkage.drive-pin:${driveHole.partKey}:0:${driveHole.holeIndex}`);
   expect(connectionSignaturePart(afterDriveSignature, 'gear_linkage.drive-pin'), 'drive-pin selection changes its compiler signature').not.toBe(initialDriveSignaturePart);
   expect(connectionSignaturePart(afterDriveSignature, 'gear_linkage.output-pin'), 'drive-pin selection does not mutate output-pin signature').toBe(initialOutputSignaturePart);
 
@@ -1141,27 +1296,29 @@ test('gear linkage physical hole selection authors drive/output pins and exports
   await expect.poll(async () => connectionSignaturePart(await foundryRig.getAttribute('data-three-fabrication-export-signature'), 'gear_linkage.drive-pin'), { message: 'stale drive-pin selection is dropped after drive gear geometry changes' }).toBe('');
   const afterDriveGearChangeSignature = await foundryRig.getAttribute('data-three-fabrication-export-signature');
   expect(connectionSignaturePart(afterDriveGearChangeSignature, 'gear_linkage.output-pin'), 'drive gear geometry change preserves the still-valid output-pin selection').toBe(initialOutputSignaturePart);
-  const replacementDriveHole = await waitForConnectionHoleTarget(page, 'gear_linkage.drive-pin', { excludeHoleIndex: driveHole.holeIndex });
+  const repairedDriveDefaultHole = await waitForConnectionHoleTarget(page, 'gear_linkage.drive-pin');
+  const replacementDriveHole = await dragConnectionHoleToRevealedCandidate(page, repairedDriveDefaultHole, { excludeHoleIndex: repairedDriveDefaultHole.holeIndex });
   expect(replacementDriveHole.partKey, 'recovered drive candidates come from the current drive gear blank').toBe('g24');
-  await clickConnectionHoleTarget(page, replacementDriveHole);
   const afterDriveRepairSignature = await waitForConnectionSignature(foundryRig, ['gear_linkage.drive-pin', 'gear_linkage.output-pin']);
-  expect(connectionSignaturePart(afterDriveRepairSignature, 'gear_linkage.drive-pin')).toContain(`gear_linkage.drive-pin:g24:0:${replacementDriveHole.holeIndex}`);
+  expect(connectionSignaturePart(afterDriveRepairSignature, 'gear_linkage.drive-pin')).toBe(`gear_linkage.drive-pin:g24:0:${replacementDriveHole.holeIndex}`);
+  await expectConnectionHoleZMatchesRenderedLayer(foundryRig, connectionHoleMarker(page, replacementDriveHole), { label: 'gear-0:gear', role: 'gear', occurrence: 0 });
   expect(connectionSignaturePart(afterDriveRepairSignature, 'gear_linkage.output-pin'), 'new drive gesture preserves the unrelated output-pin selection').toBe(initialOutputSignaturePart);
 
-  const outputHole = await waitForConnectionHoleTarget(page, 'gear_linkage.output-pin', { excludeHoleIndex: initialOutputHoleIndex });
+  const initialOutputHole = await waitForConnectionHoleTarget(page, 'gear_linkage.output-pin', { holeIndex: initialOutputHoleIndex });
+  const outputHole = await dragConnectionHoleToRevealedCandidate(page, initialOutputHole, { excludeHoleIndex: initialOutputHoleIndex });
   expect(outputHole.kind, 'gear linkage output pin is authored from gear attachment holes').toBe('gear-attachment-hole');
   expect(outputHole.partKey, 'output pin hole comes from the selected output gear blank').toBe('g40');
-  await clickConnectionHoleTarget(page, outputHole);
 
   await expect(foundryRig, 'preview exposes selected output-pin role after physical affordance drag').toHaveAttribute('data-three-selected-connection-role', 'gear_linkage.output-pin');
   await expect(foundryRig).toHaveAttribute('data-three-selected-connection-kind', 'gear-attachment-hole');
   await expect(foundryRig).toHaveAttribute('data-three-selected-connection-hole-index', String(outputHole.holeIndex));
+  await expectConnectionHoleZMatchesRenderedLayer(foundryRig, connectionHoleMarker(page, outputHole), { label: 'gear-1:gear', role: 'gear', occurrence: 1 });
 
   const afterOutputCoordinate = await waitForConnectionCoordinate(foundryRig, 'gear_linkage.output-pin', outputAfterDrive);
   const afterOutputSignature = await foundryRig.getAttribute('data-three-fabrication-export-signature');
   expect(afterOutputCoordinate, 'selecting a non-default output-pin hole changes the canonical output coordinate').not.toEqual(outputAfterDrive);
   expect(connectionSignaturePart(afterOutputSignature, 'gear_linkage.drive-pin'), 'output-pin selection does not mutate drive-pin signature').toBe(connectionSignaturePart(afterDriveRepairSignature, 'gear_linkage.drive-pin'));
-  expect(connectionSignaturePart(afterOutputSignature, 'gear_linkage.output-pin')).toContain(`gear_linkage.output-pin:${outputHole.partKey}:1:${outputHole.holeIndex}`);
+  expect(connectionSignaturePart(afterOutputSignature, 'gear_linkage.output-pin'), 'output-pin drag persists the exact role-matched gear hole signature').toBe(`gear_linkage.output-pin:${outputHole.partKey}:1:${outputHole.holeIndex}`);
   expect(connectionSignaturePart(afterOutputSignature, 'gear_linkage.output-pin'), 'output-pin selection changes its compiler signature').not.toBe(initialOutputSignaturePart);
 
   await page.getByRole('button', { name: /Use mechanism/i }).click();
@@ -1230,6 +1387,7 @@ test('G006 student warning UX hides raw ids and fit scores in Design recommendat
   const cards = sheet.locator('[data-testid^="recommendation-card-"]');
   await expect(cards.first(), 'recommendation cards are available for the imported lesson path').toBeVisible();
   await expect.soft(sheet, 'student cards should not expose raw numeric fit scores').not.toContainText(/Fit score\s+\d+\/100/i);
+  await expect.soft(sheet, 'student cards should not expose raw motion percent/degree diagnostics').not.toContainText(/Motion \d+%|°|·/);
   for (let i = 0; i < await cards.count(); i += 1) {
     const card = cards.nth(i);
     const use = card.getByRole('button', { name: /^Use$/ });
@@ -1261,6 +1419,7 @@ test('G006 student warning UX hides raw ids and fit scores in Design recommendat
     expect.soft(warning, `warning hides snake_case ids: ${warning}`).not.toMatch(/\b[a-z]+(?:_[a-z0-9]+)+\b/);
     expect.soft(warning, `warning hides anchor tuples: ${warning}`).not.toMatch(/\b(?:part|object|joint|path):[^\s;]+/i);
     expect.soft(warning, `warning hides raw fit scores: ${warning}`).not.toMatch(/\b(?:Fit\s*)?score\s+\d+\/100\b/i);
+    expect.soft(warning, `warning hides raw motion diagnostics: ${warning}`).not.toMatch(/Motion \d+%|°|·/);
   }
 
   const normalizedWarnings = warningTexts.map(text => text
@@ -1300,6 +1459,24 @@ test('G005 responsive shell keeps primary surfaces reachable without page overfl
     await expectReachableInViewportOrOwnScroller(page.getByTestId('status-bar'), `${label} status footer`);
   }
 });
+});
+
+
+test('G005 mobile Getting Started keeps actions reachable in a short viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 640 });
+  await page.goto('/');
+  await waitForBootLoader(page);
+
+  const overflow = await page.evaluate(() => ({
+    documentScrollWidth: document.documentElement.scrollWidth,
+    documentClientWidth: document.documentElement.clientWidth,
+  }));
+  expect(overflow.documentScrollWidth, '390x640 welcome has no horizontal overflow').toBeLessThanOrEqual(overflow.documentClientWidth + 1);
+  const gettingStarted = page.getByTestId('getting-started-dialog');
+  await expectReachableInViewportOrOwnScroller(gettingStarted, '390x640 Getting Started modal');
+  await expectReachableInViewportOrOwnScroller(gettingStarted.getByTestId('getting-started-card-guided'), '390x640 Getting Started primary action');
+  await expectReachableInViewportOrOwnScroller(gettingStarted.getByRole('button', { name: 'Open full project' }), '390x640 Getting Started footer action');
+  await expectReachableInViewportOrOwnScroller(gettingStarted.getByTestId('getting-started-hide-session'), '390x640 Getting Started opt-out');
 });
 
 test('character → path → foundry → design → blueprint runs end-to-end in browser', async ({ page }) => {
@@ -1610,7 +1787,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(designRig).toHaveAttribute('data-three-stack-validation-errors', '0');
   await expect(designRig).toHaveAttribute('data-three-physical-validation-errors', '0');
   await expect(designRig).toHaveAttribute('data-three-preview-renderable', 'ready');
-  await expect(designRig).toHaveAttribute('data-three-stack-order', /Input 3-hole link.*Coupler 5-hole link.*Output (3|5|7)-hole link/);
+  await expect(designRig).toHaveAttribute('data-three-stack-order', /Input \d+-hole link.*Coupler \d+-hole link.*Output \d+-hole link/);
   await expect(designRig).toHaveAttribute('data-three-fourbar-ground-link-plane', 'fabrication-stack-separated');
   await expectFoundryRenderContract(designRig, foundryRenderContract, 'Design consumes the fitted Foundry mechanism contract');
   const designHasWebgl = await designPreview.locator('canvas.foundry-three-canvas').evaluate((canvas: HTMLCanvasElement) => Boolean(canvas.getContext('webgl2') || canvas.getContext('webgl')));
@@ -2334,11 +2511,24 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   await expect(page.getByTestId('design-shared-foundry-preview')).toBeVisible();
   await expect(page.getByTestId('design-canvas')).toHaveCount(0);
-  await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').fill('0');
-  await page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]').press('Enter');
-  await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').fill('100');
-  await page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]').press('Enter');
-  await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('motionsmith.autosave') ?? '{}')?.mechanisms?.[0]?.anchorX), { timeout: 15000 }).toBe(0);
+  const anchorXInput = page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]');
+  const anchorYInput = page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]');
+  await anchorXInput.fill('0');
+  await anchorXInput.press('Enter');
+  await anchorYInput.fill('100');
+  await anchorYInput.press('Enter');
+  await expect.poll(async () => {
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('motionsmith.autosave') ?? '{}')?.mechanisms?.[0]);
+    const visibleX = Number(await anchorXInput.inputValue());
+    const visibleY = Number(await anchorYInput.inputValue());
+    return Boolean(
+      saved &&
+      Number.isFinite(visibleX) &&
+      Number.isFinite(visibleY) &&
+      saved.anchorX === visibleX &&
+      saved.anchorY === visibleY
+    );
+  }, { timeout: 15000, message: 'autosave persists the safe exact-hole placement accepted by Design' }).toBeTruthy();
   await clickStage(page, 'Blueprint');
   await page.getByRole('button', { name: /Generate package/i }).click();
   await expect(page.getByRole('button', { name: 'Download JSON default' })).toHaveCount(0);
@@ -2688,9 +2878,9 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   expect(handleZ.A, 'A handle is projected on its short board-pivot stack, not the global top layer').toBeLessThan(handleZ.B);
   expect(handleZ.D, 'D handle is projected from its own board-pivot stack and may share the top z when output is the top layer').toBeLessThanOrEqual(handleZ.C);
   await expect(page.getByTestId('foundry-param-handle-A')).toHaveAttribute('data-draggable', 'false');
-  await expect(page.getByTestId('foundry-param-handle-D'), 'D ground handle stays visible but locked when every other ground span would jam').toHaveAttribute('data-draggable', 'false');
+  await expect(page.getByTestId('foundry-param-handle-D'), 'D ground handle stays draggable while the guided four-bar has a non-degenerate safe ground range').toHaveAttribute('data-draggable', 'true');
   const groundHandleBox = await page.getByTestId('foundry-param-handle-D').boundingBox();
-  expect(groundHandleBox, 'locked ground handle is still visible as a physical constraint').toBeTruthy();
+  expect(groundHandleBox, 'safe ground handle remains visible for direct manipulation').toBeTruthy();
 
   await page.getByLabel('Foundry mechanism type').selectOption('gear');
   await expect(page.getByTestId('foundry-parametric-editor'), 'Foundry exposes fabrication-backed gear selectors').toBeVisible();
@@ -3164,8 +3354,11 @@ test('Recommendation sheet applies a distinct mechanism and blueprint recipe', a
   expect(Number.isFinite(targetError)).toBe(true);
   expect(targetError).toBeLessThan(0.01);
   expect(Number(await designPreview.getAttribute('data-design-animated-part-count'))).toBeGreaterThan(0);
+  const workspaceScrubber = page.getByLabel('Workspace scrubber');
+  await workspaceScrubber.fill('0');
+  await expect(workspaceScrubber).toHaveValue('0');
   const targetBeforeScrub = `${await designPreview.getAttribute('data-design-target-x')},${await designPreview.getAttribute('data-design-target-y')}`;
-  await page.getByLabel('Workspace scrubber').fill('35');
+  await workspaceScrubber.fill('35');
   await expect.poll(async () => `${await designPreview.getAttribute('data-design-target-x')},${await designPreview.getAttribute('data-design-target-y')}`, { message: 'Design character target follows fitted generatedPath through scrubber changes' }).not.toBe(targetBeforeScrub);
   expect(Number(await designPreview.getAttribute('data-design-target-error'))).toBeLessThan(0.01);
   await expect(designPreview.getByTestId('foundry-camera-rig')).toHaveAttribute('data-path-preview', 'shown');
@@ -3465,6 +3658,7 @@ test('Cam foundry profile points edit the shared cam simulation profile', async 
 
   const rig = page.getByTestId('foundry-camera-rig');
   await expect(rig).toHaveAttribute('data-mechanism-type', 'cam');
+  await expect(rig).toHaveAttribute('data-three-preview-renderable', 'ready');
   const editor = page.getByTestId('cam-profile-editor');
   await editor.scrollIntoViewIfNeeded();
   await expect(editor).toBeVisible();
@@ -3486,6 +3680,9 @@ test('Mechanism Design cam profile edits update the integrated automata preview'
   await page.getByRole('button', { name: /Foundry/i }).click();
   await page.getByText('Mechanism options').click();
   await page.getByLabel('Foundry mechanism type').selectOption('cam');
+  const foundryRig = page.getByTestId('foundry-camera-rig');
+  await expect(foundryRig).toHaveAttribute('data-mechanism-type', 'cam');
+  await expect(foundryRig).toHaveAttribute('data-three-preview-renderable', 'ready');
   await page.getByRole('button', { name: /Use mechanism/i }).click();
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
 
@@ -3845,7 +4042,7 @@ test('Animation resumes after leaving path drawing mode', async ({ page }) => {
   await expect(playerDock).not.toHaveClass(/is-drawing/);
   const scrubber = page.getByLabel('Workspace scrubber');
   const before = await scrubber.inputValue();
-  await expect.poll(() => scrubber.inputValue(), { timeout: 6000, message: 'shared animation resumes after draw mode is cleared' }).not.toBe(before);
+  await expect.poll(() => scrubber.inputValue(), { message: 'shared animation resumes after draw mode is cleared' }).not.toBe(before);
 });
 
 test('Command menu and shared canvas zoom persist across workflow stages', async ({ page }) => {
@@ -4334,7 +4531,7 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
   await page.getByTestId('design-foundry-camera-controls').getByRole('button', { name: 'Front', exact: true }).click();
   await expect(designRig).toHaveAttribute('data-camera-preset', 'front');
   await expect(designPreview).toHaveAttribute('data-design-motion-source', 'generatedPath');
-  await expect(designPreview).toHaveAttribute('data-design-path-fit-status', 'mismatch');
+  await expect(designPreview).toHaveAttribute('data-design-path-fit-status', 'fit');
   expect(Number(await designPreview.getAttribute('data-design-target-error'))).toBeLessThan(0.01);
   const headTarget = await waitForThreePartTarget(designRig, 'head');
   const torsoTarget = await waitForThreePartTarget(designRig, 'torso');

@@ -1,6 +1,7 @@
 import type {
   ConnectionSelection,
   ConnectionSelectionRole,
+  MechanismType,
   ConnectionSelectionValidation,
   MechanismConfig,
   Point,
@@ -12,12 +13,38 @@ import {
 } from './fabricationContract';
 import { SCENE_PX_PER_MM } from './coordinates';
 
-export const CONNECTION_SELECTION_ROLES = [
+const FOUR_BAR_CONNECTION_ROLES = [
   '4bar.input-joint',
   '4bar.output-joint',
+] as const satisfies readonly ConnectionSelectionRole[];
+
+const GEAR_LINKAGE_CONNECTION_ROLES = [
   'gear_linkage.drive-pin',
   'gear_linkage.output-pin',
 ] as const satisfies readonly ConnectionSelectionRole[];
+
+export const CONNECTION_SELECTION_ROLES = [
+  ...FOUR_BAR_CONNECTION_ROLES,
+  ...GEAR_LINKAGE_CONNECTION_ROLES,
+] as const satisfies readonly ConnectionSelectionRole[];
+
+const MECHANISM_TYPE_CONNECTION_ROLES = {
+  crank: [] as const,
+  '4bar': FOUR_BAR_CONNECTION_ROLES,
+  piston: [] as const,
+  yoke: [] as const,
+  'quick-return': [] as const,
+  '5bar': [] as const,
+  '6bar': [] as const,
+  cam: [] as const,
+  'rack-pinion': [] as const,
+  gear: [] as const,
+  gear_linkage: GEAR_LINKAGE_CONNECTION_ROLES,
+  planetary_gear: [] as const,
+} satisfies Record<MechanismType, readonly ConnectionSelectionRole[]>;
+
+export const connectionSelectionRolesForMechanism = (type: MechanismType): readonly ConnectionSelectionRole[] =>
+  MECHANISM_TYPE_CONNECTION_ROLES[type];
 
 export type ConnectionSelectionSummary = {
   connectionSelections: MechanismConfig['connectionSelections'];
@@ -36,8 +63,8 @@ export const connectionSelectionSignature = (
   }).join('|');
 
 const roleSet = new Set<string>(CONNECTION_SELECTION_ROLES);
-const linkageRoles = new Set<ConnectionSelectionRole>(['4bar.input-joint', '4bar.output-joint']);
-const gearRoles = new Set<ConnectionSelectionRole>(['gear_linkage.drive-pin', 'gear_linkage.output-pin']);
+const linkageRoles = new Set<ConnectionSelectionRole>(MECHANISM_TYPE_CONNECTION_ROLES['4bar']);
+const gearRoles = new Set<ConnectionSelectionRole>(MECHANISM_TYPE_CONNECTION_ROLES.gear_linkage);
 
 const linkageSpec = (key: unknown) =>
   typeof key === 'string' ? FABRICATION_LINKAGE_SPECS.find((spec) => spec.key === key) : undefined;
@@ -103,19 +130,12 @@ const defaultGearSelection = (mechanism: MechanismConfig, role: ConnectionSelect
 };
 
 const defaultSelections = (mechanism: MechanismConfig): Partial<Record<ConnectionSelectionRole, ConnectionSelection>> => {
-  if (mechanism.type === '4bar') {
-    return {
-      '4bar.input-joint': defaultLinkageSelection(mechanism, '4bar.input-joint'),
-      '4bar.output-joint': defaultLinkageSelection(mechanism, '4bar.output-joint'),
-    };
-  }
-  if (mechanism.type === 'gear_linkage') {
-    return {
-      'gear_linkage.drive-pin': defaultGearSelection(mechanism, 'gear_linkage.drive-pin'),
-      'gear_linkage.output-pin': defaultGearSelection(mechanism, 'gear_linkage.output-pin'),
-    };
-  }
-  return {};
+  return Object.fromEntries(
+    connectionSelectionRolesForMechanism(mechanism.type).map((role) => [role, defaultSelectionForRole(mechanism, role)]).filter(([, selection]) => selection) as [
+      ConnectionSelectionRole,
+      ConnectionSelection,
+    ][],
+  );
 };
 
 const reject = (validation: ConnectionSelectionValidation, role: string, reason: string) => {
@@ -189,12 +209,11 @@ export const normalizeMechanismConnectionSelections = (
     }
     const item = value as Record<string, unknown>;
     if (linkageRoles.has(typedRole)) {
-      if (mechanism.type !== '4bar') {
-        reject(validation, role, 'role is not valid for mechanism type');
-        continue;
-      }
-      if (item.kind !== 'linkage-hole') {
-        reject(validation, role, 'wrong kind for 4bar role');
+      if (mechanism.type !== '4bar' || item.kind !== 'linkage-hole') {
+        const reason = mechanism.type !== '4bar'
+          ? 'role is not valid for mechanism type'
+          : 'wrong kind for 4bar role';
+        reject(validation, role, reason);
         continue;
       }
       const spec = linkageSpec(item.linkageKey);
@@ -410,6 +429,7 @@ export type MechanismConnectionHoleCandidate = {
   selection: ConnectionSelection;
   coordinate: Point;
   selected: boolean;
+  provisional: boolean;
 };
 
 const sameSelection = (a: ConnectionSelection | undefined, b: ConnectionSelection) => {
@@ -546,6 +566,7 @@ export const mechanismConnectionHoleCandidates = (
       const selection: ConnectionSelection = { kind: 'linkage-hole', linkageKey: spec.key, holeIndex };
       const local = resolvedLocal(role, selection, { x: hole.x - ground.x, y: hole.y - ground.y });
       if (!local) return;
+      const selectedForRole = selected[role];
       candidates.push({
         role,
         kind: selection.kind,
@@ -553,7 +574,8 @@ export const mechanismConnectionHoleCandidates = (
         holeIndex,
         selection,
         coordinate: connectionPointAt(local, pose.origin, pose.angle).position,
-        selected: sameSelection(selected[role], selection),
+        selected: sameSelection(selectedForRole, selection),
+        provisional: !selectedForRole && sameSelection(active, selection),
       });
     });
   };
@@ -575,6 +597,7 @@ export const mechanismConnectionHoleCandidates = (
       };
       const local = resolvedLocal(role, selection, hole);
       if (!local) return;
+      const selectedForRole = selected[role];
       candidates.push({
         role,
         kind: selection.kind,
@@ -582,7 +605,8 @@ export const mechanismConnectionHoleCandidates = (
         holeIndex,
         selection,
         coordinate: connectionPointAt(local, pose.origin, phase).position,
-        selected: sameSelection(selected[role], selection),
+        selected: sameSelection(selectedForRole, selection),
+        provisional: !selectedForRole && sameSelection(active, selection),
       });
     });
   };

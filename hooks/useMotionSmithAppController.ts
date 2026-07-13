@@ -185,6 +185,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     stage,
     dispatch,
     setProject,
+    setFoundry,
     setStage,
     setCommandStatus,
     setShowGettingStarted,

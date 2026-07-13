@@ -2,7 +2,12 @@ import { useState, type Dispatch, type SetStateAction } from "react";
 import type { StarterImageTemplate } from "../components/AppShell";
 import { processingLabel } from "../components/stages/character/ProgressBlock";
 import type { PendingCharacterReview } from "../components/stages/character/CharacterImportOverlays";
-import type { AppStage, ProjectAction, ProjectState } from "../types";
+import type {
+  AppStage,
+  MechanismConfig,
+  ProjectAction,
+  ProjectState,
+} from "../types";
 import {
   createProjectFromProcessed,
   downloadText,
@@ -13,6 +18,7 @@ import {
   type WebOnnxCacheStatus,
 } from "../utils/webOnnx";
 import { loadCharacterPackage } from "../utils/packageLoader";
+import { foundryPreviewFromProject } from "../utils/mechanismDefaults";
 
 type SetProjectOptions = {
   history?: boolean;
@@ -24,6 +30,7 @@ type UseAppCharacterImportActionsParams = {
   stage: AppStage;
   dispatch: (action: ProjectAction) => void;
   setProject: (project: ProjectState, options?: SetProjectOptions) => void;
+  setFoundry: Dispatch<SetStateAction<MechanismConfig>>;
   setStage: (stage: AppStage) => void;
   setCommandStatus: (status: string) => void;
   setShowGettingStarted: (show: boolean) => void;
@@ -35,6 +42,7 @@ export const useAppCharacterImportActions = ({
   stage,
   dispatch,
   setProject,
+  setFoundry,
   setStage,
   setCommandStatus,
   setShowGettingStarted,
@@ -187,7 +195,9 @@ export const useAppCharacterImportActions = ({
   const importProject = async (file: File) => {
     try {
       const raw = JSON.parse(await file.text());
-      setProject(loadProjectSnapshot(raw), { resetHistory: true });
+      const loadedProject = loadProjectSnapshot(raw);
+      setProject(loadedProject, { resetHistory: true });
+      setFoundry(foundryPreviewFromProject(loadedProject));
       setCommandStatus(`Loaded project ${file.name}`);
       setShowGettingStarted(false);
       setStage("path");

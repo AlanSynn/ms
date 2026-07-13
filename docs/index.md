@@ -1,6 +1,6 @@
 # Documentation Index (Hot / Cold / Index)
 
-Last refreshed: 2026-07-11
+Last refreshed: 2026-07-13
 
 ## Hot (active contracts)
 
@@ -22,8 +22,7 @@ Use these first for implementation decisions, planning, and validation.
 - [`mechanism-reference/04-portable-schema-and-validation.md`](mechanism-reference/04-portable-schema-and-validation.md)
 - [`mechanism-reference/05-assembly-process-guides.md`](mechanism-reference/05-assembly-process-guides.md)
 - [`analysis/codebase-cleanup-architecture-plan.md`](analysis/codebase-cleanup-architecture-plan.md)
-- [`analysis/fabrication-board-canonicalization-2026-07-07.md`](analysis/fabrication-board-canonicalization-2026-07-07.md)
-- [`analysis/fabrication-parity-2026-07-11.md`](analysis/fabrication-parity-2026-07-11.md)
+- [`analysis/fabrication-parity-2026-07-13.md`](analysis/fabrication-parity-2026-07-13.md)
 
 ### Active PRD set (required for current feature planning)
 
@@ -60,6 +59,7 @@ Keep for provenance and rollback reasoning, but do not use as default context.
 - [`archive/ports/README.md`](archive/ports/README.md)
 - [`archive/execution/README.md`](archive/execution/README.md)
 - [`archive/misc/README.md`](archive/misc/README.md)
+- [`archive/analysis/fabrication-board-canonicalization-2026-07-07.md`](archive/analysis/fabrication-board-canonicalization-2026-07-07.md)
 
 - [`archive/plans/assembly-lic-stepper-plan.md`](archive/plans/assembly-lic-stepper-plan.md)
 - [`archive/ui/ui-pane-tab-redesign-plan.md`](archive/ui/ui-pane-tab-redesign-plan.md)

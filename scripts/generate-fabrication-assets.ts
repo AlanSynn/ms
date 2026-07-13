@@ -392,7 +392,7 @@ const templateAdapter: GeneratorAdapter = {
   sourceSsot: FABRICATION_ASSET_GENERATOR_SOURCE,
   run: (context) => {
     const managedFiles = listManagedFiles(context.sourceManifest).filter(
-      (value) => value !== BOARD_FILE && value !== 'manifest.json' && value !== 'assembly/board.svg' && value !== 'board.svg',
+      (value) => value !== BOARD_FILE && value !== 'manifest.json',
     );
 
     const generated = new Set<string>();

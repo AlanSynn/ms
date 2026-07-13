@@ -625,6 +625,7 @@ export const motionPreviewForProject = (project: ProjectState, mechanisms: Mecha
     const drivenTargets = new Set<string>();
     let preview: MotionPreview = { parts: {}, sceneObjects: {}, skeleton: project.skeleton, warnings };
     mechanisms.filter(m => m.visible && m.enabled !== false).forEach(m => {
+        if (warnings[m.id]?.length) return;
         if (m.targetSceneObjectId) {
             const object = project.sceneObjects[m.targetSceneObjectId];
             if (!object) return;

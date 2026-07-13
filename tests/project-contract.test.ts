@@ -21,7 +21,7 @@ import { fabricationGearPathD as profileFabricationGearPathD, fabricationGearPro
 import { compileAuthoredMechanismGraph, compileFabricationRecipe, compileMechanism, compileMechanismGraphFabrication, compileMechanismRenderPlan, summarizeCompiledMechanism } from '../utils/mechanismCompiler';
 import { CONNECTION_SELECTION_ROLES, authorMechanismConnectionSelection, connectionSelectionAccepted, connectionSelectionSceneCoordinates, connectionSelectionSignature, mechanismConnectionHoleCandidates, normalizeMechanismConnectionSelections, resolveFourBarConnectionSelections, resolveFourBarLinkageBlankPoses } from '../utils/mechanismConnectionSelections';
 import { mechanismInventoryForMechanism } from '../utils/mechanismInventory';
-import { closePhysicalValue as readinessClosePhysicalValue, closeToBoardPitch as readinessCloseToBoardPitch, closeToFabricationLinkage as readinessCloseToFabricationLinkage, physicalTolerance as readinessPhysicalTolerance, sampleFeasibleRange as readinessSampleFeasibleRange } from '../utils/fabricationReadiness';
+import { closePhysicalValue as readinessClosePhysicalValue, closeToBoardPitch as readinessCloseToBoardPitch, closeToFabricationLinkage as readinessCloseToFabricationLinkage, compactStudentActionForFabricationDiagnostic, physicalTolerance as readinessPhysicalTolerance, sampleFeasibleRange as readinessSampleFeasibleRange } from '../utils/fabricationReadiness';
 import { FABRICATION_RENDER_LAYER_Z_STEP as renderPlanLayerZStep, FABRICATION_RENDER_MIN_CLEARANCE as renderPlanMinClearance, FABRICATION_RENDER_PART_DEPTH as renderPlanPartDepth, fabricationRenderPlanForMechanism as renderPlanForMechanism, validateFabricationStack as renderPlanValidateFabricationStack } from '../utils/fabricationRenderPlan';
 import { FABRICATION_LINKAGE_ROLE_MIN_HOLES as sizingRoleMinHoles, PLANETARY_GEAR_PLANET_COUNT as sizingPlanetCount, fabricationLinkageHoleCountsForMechanism as sizingFabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism as sizingFabricationLinkageSceneLengthsForMechanism, planetaryGearConventionForMechanism as sizingPlanetaryGearConventionForMechanism, planetaryPlanetCenters as sizingPlanetaryPlanetCenters } from '../utils/fabricationSizing';
 import { fabricationLinkageSpecForSceneLength as stackModelFabricationLinkageSpecForSceneLength, fabricationStackForMechanism as stackModelFabricationStackForMechanism, fabricationStackSummary as stackModelFabricationStackSummary, readableFabricationStackSummary as stackModelReadableFabricationStackSummary } from '../utils/fabricationStackModel';
@@ -38,10 +38,11 @@ import { contourPathD, fabricablePartOutlinePoints, partLandmarkJointIds, partLa
 import { MECHANISM_FEATURE_REGISTRY, mechanismFeature, validateMechanismFeatureRegistry, type MechanismDragHandle } from '../utils/mechanismFeatureRegistry';
 import { MECHANISM_FEASIBILITY_AUTHORITY_KEYS, MECHANISM_NON_FEASIBILITY_EDIT_KEYS, MECHANISM_REPLACEMENT_ONLY_KEYS, constrainMechanismCommit, constrainMechanismUpdate, mechanismEditIsSafe, mechanismMotionCompletes, mechanismParamIsPlacementRecoveryEditable, mechanismUpdateRequiresReplacement, motionSafeParamRange, safeMechanismUpdate } from '../utils/mechanismEditAuthority';
 import { buildMechanismSnapshot, buildMechanismSnapshots, mechanismSnapshotFingerprint } from '../utils/mechanismSnapshot';
-import { createFoundryPlaybackFrame, foundryPlaybackPhaseToInputAngle, generateFoundryPlaybackPointTraces } from '../utils/foundryPlayback';
+import { createFoundryPlaybackFrame, foundryPlaybackPhaseToInputAngle, generateFoundryPlaybackPointTraces, primaryFoundryPlaybackPath } from '../utils/foundryPlayback';
 import { foundryPinStackPoints, foundryPinStacks, foundryRenderedLayerZForMechanism } from '../utils/mechanismPreviewStacks';
 import { createMechanismFitContext, createSceneMechanismFitContext, fitMechanismSimulation, fitMechanismSimulationWithContext, pointsToSvgPath } from '../utils/mechanismPreview';
-import { buildMechanismRecommendations, fitMechanismToTargetPath } from '../utils/mechanismRecommendations';
+import { buildMechanismRecommendations, fitMechanismToTargetPath, fitRecommendedMechanismToSheet } from '../utils/mechanismRecommendations';
+import { foundryPreviewFromProject } from '../utils/mechanismDefaults';
 import { pathBelongsToTarget, pathOwnedTargetFields } from '../utils/pathTargets';
 import { buildAutomataSceneModel } from '../utils/automataSceneModel';
 import { buildDesignAutomataProjection } from '../utils/designAutomataProjection';
@@ -75,7 +76,7 @@ import { CLASSROOM_ASSESSMENT_KEYS, CLASSROOM_COPY, classroomAssessmentFor, clas
 import { MECHANISM_TYPES as SANITIZE_MECHANISM_TYPES, sanitizeMechanismRuntime } from '../utils/sanitize';
 import { generateSmartConfig, mutateConfig, OPTIMIZER_MECHANISM_TYPES } from '../utils/optimizer';
 import { isBoardFixedCoordRole, normalizeGearLinkageToReference, normalizeGearTrainToFabrication, normalizeMechanismToFabricationSet, normalizeMechanismToReference, REFERENCE_DEFAULTS, REFERENCE_EXPORT_READY_TYPES, REFERENCE_FOUNDRY_TYPES, REFERENCE_MECHANISM_RECIPES, referenceRecipeForType } from '../utils/mechanismReference';
-import type { AppStage, BodyPartLayer, ConnectionSelection, FoundryExportPackage, MechanismConfig, MechanismType, Point, ProjectAction, ProjectState, SceneObject, StandardJoint } from '../types';
+import type { AppStage, BodyPartLayer, ConnectionSelection, FoundryExportPackage, MechanismConfig, MechanismType, Point, ProjectAction, ProjectMotionPath, ProjectState, SceneObject, StandardJoint } from '../types';
 
 projectSelfCheck();
 
@@ -270,6 +271,48 @@ const renderMechanismActionHarness = (overrides: {
 };
 
 const classroomLesson = createLessonProject('waving-arm');
+const classroomFoundryPreview = foundryPreviewFromProject(classroomLesson);
+assert.equal(classroomFoundryPreview.id, 'foundry-preview', 'Foundry keeps a draft identity separate from the persisted mechanism id');
+assert.equal(classroomFoundryPreview.targetPathId, classroomLesson.selectedPathId, 'Foundry opens an imported project from its selected persisted mechanism instead of an unrelated default');
+assert.deepEqual(classroomFoundryPreview.generatedPath, classroomLesson.mechanisms[0].generatedPath, 'Foundry import preserves the canonical persisted mechanism motion samples');
+assert.equal(foundryPreviewFromProject(createEmptyProject()).id, 'foundry-preview', 'Foundry import falls back to a stable empty-project draft');
+const guidedCamAnchor = {
+  x: classroomFoundryPreview.anchorX ?? 0,
+  y: classroomFoundryPreview.anchorY ?? 0,
+};
+const guidedCamAtImportedAnchor = mechanismWithGeneratedPath({
+  ...createDefaultMechanism('cam', 'guided-cam-board-fit'),
+  anchorX: guidedCamAnchor.x,
+  anchorY: guidedCamAnchor.y,
+  sceneAnchor: guidedCamAnchor,
+  transform: {
+    x: guidedCamAnchor.x,
+    y: guidedCamAnchor.y,
+    rotation: 90,
+    scale: 1,
+  },
+});
+assert.equal(
+  compileMechanismGraphFabrication(guidedCamAtImportedAnchor, classroomLesson.settings.physicalKit).blocker,
+  'Placement off board',
+  'guided Foundry fixture starts with a cam footprint outside the board at the imported four-bar anchor',
+);
+const boardFittedGuidedCam = fitRecommendedMechanismToSheet(classroomLesson, guidedCamAtImportedAnchor);
+assert.notDeepEqual(
+  [boardFittedGuidedCam.anchorX, boardFittedGuidedCam.anchorY],
+  [guidedCamAtImportedAnchor.anchorX, guidedCamAtImportedAnchor.anchorY],
+  'template replacement moves an off-board footprint to a nearby board hole',
+);
+assert.equal(
+  compileMechanismGraphFabrication(boardFittedGuidedCam, classroomLesson.settings.physicalKit).buildable,
+  true,
+  'sheet fitting uses compiler placement readiness rather than visual bounds alone',
+);
+assert.equal(
+  mechanismEditIsSafe(boardFittedGuidedCam, classroomLesson.settings.physicalKit),
+  true,
+  'board-fitted template replacement is immediately safe for parametric editing',
+);
 const expectedCanvasDragHandles: Record<MechanismType, MechanismDragHandle[]> = {
   crank: ['P1', 'J1'],
   '4bar': ['P1', 'J1', 'P2', 'J2', 'Effector'],
@@ -1114,16 +1157,26 @@ const recommendationPrimaryCopyViolations = [
   /Fit score\s+\d+\/100/.test(recommendationSheetMarkup) ? 'raw fit score appears in recommendation primary copy' : '',
   /class="recommendation-score"[^>]*>\d+</.test(recommendationSheetMarkup) ? 'standalone raw recommendation score appears in primary copy' : '',
   /Loose fit score\s+\d+/i.test(recommendationSheetMarkup) ? 'loose fit score appears in recommendation primary copy' : '',
+  /Motion \d+%|°|·/.test(recommendationSheetMarkup) ? 'raw motion diagnostic appears in recommendation primary copy' : '',
   /Score \${option\.score}\/100/.test(readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'MechanismRecommendationSheet.tsx'), 'utf8')) ? 'applied recommendation stores raw score in student copy' : '',
 ].filter(Boolean);
 g006StudentWarningCopyViolations.push(...recommendationPrimaryCopyViolations.map(violation => `recommendation: ${violation}`));
 assert.equal(typeof wavingFourBarRecommendation!.score, 'number', 'recommendation keeps structured technical score outside primary copy');
+assert.equal(compactStudentActionForFabricationDiagnostic('Motion 83% · 0°–120°'), 'Motion may jam. Try a smaller move.', 'raw partial-motion diagnostics become compact student action copy');
+assert.equal(compactStudentActionForFabricationDiagnostic('No motion'), 'No full motion. Try reset or smaller links.', 'raw no-motion diagnostics become compact student action copy');
+assert.equal(compactStudentActionForFabricationDiagnostic('Fix: snap gear pitch.'), 'Fix: snap gear pitch.', 'unrelated fabrication blockers are unchanged');
 const assertGuidedPathStaysViewerLeft = (project: ProjectState, pathId: string, label: string) => {
   const torsoX = project.skeleton?.joints.torso.position.x;
   assert.equal(typeof torsoX, 'number', `${label} has a torso centerline`);
   const path = project.paths[pathId];
   assert(path, `${label} path exists`);
   assert(path.points.every(point => point.x < torsoX!), `${label} stays wholly on anatomical right / viewer-left side`);
+};
+const assertGuidedPathYAboveJoint = (project: ProjectState, pathId: string, jointId: string, label: string) => {
+  const joint = project.skeleton?.joints[jointId]?.position;
+  const path = project.paths[pathId];
+  assert(joint && path, `${label} has resting joint and path`);
+  assert(path.points.every(point => point.y > joint.y), `${label} full motion stays above resting ${jointId}`);
 };
 const assertGuidedMechanismDrivesInwardFromViewerLeft = (project: ProjectState, pathId: string, label: string) => {
   const path = project.paths[pathId];
@@ -1134,78 +1187,204 @@ const assertGuidedMechanismDrivesInwardFromViewerLeft = (project: ProjectState, 
   assert(Math.cos(((mechanism.groundAngle ?? 0) * Math.PI) / 180) > 0, `${label} ground/link direction points back toward the target`);
 };
 assertGuidedPathStaysViewerLeft(classroomLesson, 'path-right-arm', 'waving-arm hand path');
+assertGuidedPathYAboveJoint(classroomLesson, 'path-right-arm', 'right_hand', 'waving-arm hand path');
+assert(
+  Math.max(...classroomLesson.paths['path-right-arm'].points.map(point => point.y)) > classroomLesson.skeleton!.joints.right_shoulder.position.y,
+  'waving-arm hand path rises above the resting right shoulder instead of only fitting its generated trace',
+);
 assertGuidedMechanismDrivesInwardFromViewerLeft(classroomLesson, 'path-right-arm', 'waving-arm mechanism');
-const generatedPlaybackMirrorFailures: string[] = [];
-const assertGeneratedPlaybackMirrorsPreFlipBaseline = (
-  lessonId: 'waving-arm' | 'walking-leg',
-  historical: Pick<MechanismConfig, 'anchorX' | 'groundAngle' | 'assemblyMode' | 'couplerPointAngle'>,
-) => {
-  const project = createLessonProject(lessonId);
-  const current = project.mechanisms[0];
-  assert(current?.generatedPath?.length, `${lessonId} has current generated playback samples`);
-  const anchorY = current.anchorY ?? current.sceneAnchor?.y ?? current.transform?.y ?? 0;
-  const reference = mechanismWithGeneratedPath({
-    ...current,
-    ...historical,
-    anchorY,
-    speed1: 1,
-    driverPhaseOffset: 0,
-    transform: { x: historical.anchorX!, y: anchorY, rotation: historical.groundAngle!, scale: current.transform?.scale ?? 1 },
-    sceneAnchor: { x: historical.anchorX!, y: anchorY },
-  });
-  assert(reference.generatedPath?.length, `${lessonId} has pre-flip generated playback samples`);
-  if (current.generatedPath.length !== reference.generatedPath.length) {
-    generatedPlaybackMirrorFailures.push(`${lessonId} sample count ${current.generatedPath.length} !== ${reference.generatedPath.length}`);
-    return;
-  }
-  const mismatchIndex = current.generatedPath.findIndex((point, index) => {
-    const expected = reference.generatedPath![index];
-    return Math.abs(point.x + expected.x) > 1e-6 || Math.abs(point.y - expected.y) > 1e-6;
-  });
-  if (mismatchIndex !== -1) {
-    const point = current.generatedPath[mismatchIndex];
-    const expected = reference.generatedPath[mismatchIndex]!;
-    generatedPlaybackMirrorFailures.push(`${lessonId} sample ${mismatchIndex}: actual (${point.x.toFixed(3)}, ${point.y.toFixed(3)}) expected (${(-expected.x).toFixed(3)}, ${expected.y.toFixed(3)})`);
-  }
+const symmetricNearestDistances = (generated: Point[], target: Point[]) => {
+  const oneWay = (from: Point[], to: Point[]) =>
+    from.map((point) =>
+      to.reduce(
+        (best, candidate) => Math.min(best, Math.hypot(point.x - candidate.x, point.y - candidate.y)),
+        Number.POSITIVE_INFINITY,
+      ),
+    );
+  return [...oneWay(generated, target), ...oneWay(target, generated)];
 };
-assertGeneratedPlaybackMirrorsPreFlipBaseline('waving-arm', {
-  anchorX: 200,
-  groundAngle: 180,
-  assemblyMode: 'crossed',
-  couplerPointAngle: -13.2,
-});
-assertGeneratedPlaybackMirrorsPreFlipBaseline('walking-leg', {
-  anchorX: 160,
-  groundAngle: 180,
-  assemblyMode: 'open',
-  couplerPointAngle: 40,
-});
-assert.deepEqual(generatedPlaybackMirrorFailures, [], 'waving-arm and walking-leg generated playback paths mirror pre-flip samples without reversing order');
-const previousRightSideWavingArmPath = (() => {
-  const shoulder = { x: 58, y: 92 };
-  const elbow = { x: 108, y: 28 };
-  const hand = { x: 128, y: -34 };
-  const reach = Math.hypot(elbow.x - shoulder.x, elbow.y - shoulder.y) + Math.hypot(hand.x - elbow.x, hand.y - elbow.y);
-  const center = { x: shoulder.x + reach * 0.68, y: shoulder.y - reach * 0.12 };
-  const rx = reach * 0.24;
-  const ry = reach * 0.34;
-  return [
-    { x: center.x - rx * 0.25, y: center.y + ry * 0.82 },
-    { x: center.x + rx * 0.75, y: center.y + ry * 0.42 },
-    { x: center.x + rx, y: center.y - ry * 0.25 },
-    { x: center.x + rx * 0.12, y: center.y - ry },
-    { x: center.x - rx * 0.85, y: center.y - ry * 0.15 }
-  ];
-})();
-const roundedWavingArmPath = classroomLesson.paths['path-right-arm'].points.map(point => ({
-  x: Number(point.x.toFixed(3)),
-  y: Number(point.y.toFixed(3))
-}));
-const roundedMirroredPreviousWavingArmPath = previousRightSideWavingArmPath.map(point => ({
-  x: Number((-point.x).toFixed(3)),
-  y: Number(point.y.toFixed(3))
-}));
-assert.deepEqual(roundedWavingArmPath, roundedMirroredPreviousWavingArmPath, 'waving-arm built-in path mirrors the previous X coordinates without reversing point/timing order');
+
+const generatedPathReachLimit = (project: ProjectState, path: ProjectMotionPath) => {
+  const skeleton = project.skeleton;
+  if (!skeleton || !path.chainRootJointId || !path.targetAnchorJointId) return Number.POSITIVE_INFINITY;
+  let joint = skeleton.joints[path.targetAnchorJointId];
+  let reach = 0;
+  while (joint?.parentId) {
+    const parent = skeleton.joints[joint.parentId];
+    if (!parent) break;
+    reach += Math.hypot(joint.position.x - parent.position.x, joint.position.y - parent.position.y);
+    if (parent.id === path.chainRootJointId) return reach;
+    joint = parent;
+  }
+  return Number.POSITIVE_INFINITY;
+};
+
+const assertGuidedMechanismsStoreKinematicPaths = () => {
+  const maxFitLimits: Record<string, number> = {
+    'waving-arm': 12,
+    'head-bob': 2,
+    'walking-leg': 12,
+    'spin-gears': 12,
+  };
+  const projectSourceForGuidedLessons = readFileSync(join(process.cwd(), 'utils', 'project.ts'), 'utf8');
+  const guidedLessonTimingSource = readFileSync(join(process.cwd(), 'utils', 'guidedLessonTiming.ts'), 'utf8');
+  const createLessonProjectSource = projectSourceForGuidedLessons.match(/export const createLessonProject[\s\S]*?export const resetProjectToLessonBaseline/)?.[0] ?? '';
+  assert(/fitMechanismToTargetPath/.test(createLessonProjectSource), 'createLessonProject fits guided mechanisms through the shared path fitter before storage');
+  assert(!/compactGeneratedPathControlPoints/.test(createLessonProjectSource), 'createLessonProject preserves authored lesson paths instead of rewriting them from mechanism samples');
+  assert(!/mechanismGeneratedPath|generateCurvePoints\(|calculateLinkage\(|primaryFoundryPlaybackPath\(/.test(guidedLessonTimingSource), 'guided lesson phase timing stays authored and physical-law based instead of sampling runtime mechanism output');
+  assert(!/sheetWidthMm|boardCells/.test(createLessonProjectSource), 'createLessonProject does not mutate physical kit dimensions to make guided mechanisms fit');
+  const failures: string[] = [];
+  for (const lesson of CLASSROOM_LESSONS) {
+    const authoredStarter = createSampleProject({ includeMechanism: lesson.id === 'waving-arm' });
+    const authoredSkeleton = authoredStarter.skeleton!;
+    const authoredPath = (() => {
+      if (lesson.id === 'waving-arm') return authoredStarter.paths['path-right-arm'];
+      if (lesson.id === 'head-bob') {
+        const headTop = authoredSkeleton.joints.head_top.position;
+        return {
+          points: [
+            { x: headTop.x, y: headTop.y - 4.8 },
+            { x: headTop.x, y: headTop.y - 2.4 },
+            { x: headTop.x, y: headTop.y },
+            { x: headTop.x, y: headTop.y - 2.4 },
+          ],
+          closed: false,
+        };
+      }
+      if (lesson.id === 'walking-leg') {
+        const hip = authoredSkeleton.joints.right_hip.position;
+        const foot = authoredSkeleton.joints.right_foot.position;
+        const side = Math.sign(foot.x - hip.x) || 1;
+        const mirror = -side;
+        return {
+          points: [
+            { x: -62, y: -49.589 },
+            { x: -71.382, y: -23.607 },
+            { x: -73.157, y: -17.743 },
+            { x: -64.269, y: -43.898 },
+            { x: -53.154, y: -69.187 },
+            { x: -39.905, y: -93.426 },
+            { x: -24.617, y: -116.434 },
+            { x: -7.408, y: -138.041 },
+            { x: -3.346, y: -142.627 },
+            { x: -20.967, y: -121.354 },
+            { x: -36.696, y: -98.645 },
+            { x: -50.407, y: -74.664 },
+          ].map(offset => ({ x: hip.x + offset.x * mirror, y: hip.y + offset.y })),
+          closed: true,
+        };
+      }
+      const shoulder = authoredSkeleton.joints.right_shoulder.position;
+      const hand = authoredSkeleton.joints.right_hand.position;
+      const side = Math.sign(hand.x - shoulder.x) || 1;
+      const gearRadii: [number, number] = [60, 20];
+      const gridStep = authoredStarter.settings.physicalKit.gridPitchMm * SCENE_PX_PER_MM;
+      const anchorX = Math.round((hand.x + side * (gearRadii[0] + gearRadii[1])) / gridStep) * gridStep;
+      const groundAngle = side < 0 ? 0 : Math.PI;
+      const center = {
+        x: anchorX + (gearRadii[0] + gearRadii[1]) * Math.cos(groundAngle),
+        y: 80 + (gearRadii[0] + gearRadii[1]) * Math.sin(groundAngle),
+      };
+      return {
+        points: Array.from({ length: 8 }, (_, index) => {
+          const angle = (index / 8) * Math.PI * 2;
+          return {
+            x: center.x + gearRadii[1] * Math.cos(angle),
+            y: center.y + gearRadii[1] * Math.sin(angle),
+          };
+        }),
+        closed: true,
+      };
+    })();
+    const project = createLessonProject(lesson.id);
+    const mechanism = project.mechanisms[0];
+    if (!mechanism) {
+      failures.push(`${lesson.id}: missing mechanism`);
+      continue;
+    }
+    const path = mechanism.targetPathId ? project.paths[mechanism.targetPathId] : undefined;
+    if (!path) {
+      failures.push(`${lesson.id}: missing target path ${mechanism.targetPathId ?? '<none>'}`);
+      continue;
+    }
+    assert.deepEqual(path.points, authoredPath.points, `${lesson.id} preserves its independently constructed authored path points`);
+    assert.equal(path.closed, authoredPath.closed, `${lesson.id} preserves its authored open/closed path contract`);
+    assert((path.timedPoints?.length ?? 0) >= 24, `${lesson.id} carries explicit phase keyframes instead of falling back to arc-length timing`);
+    if (path.closed) {
+      assert((path.timedPoints?.at(-1)?.time ?? path.duration) < path.duration, `${lesson.id} reserves the final closed-path interval for the return to its first phase keyframe`);
+    }
+    const fabrication = validateForFabrication(project);
+    if (fabrication.errors.length || fabrication.warnings.length) {
+      failures.push(`${lesson.id}: fabrication ${JSON.stringify({ errors: fabrication.errors, warnings: fabrication.warnings })}`);
+    }
+    const expectedTargetFields = pathOwnedTargetFields(path);
+    assert.deepEqual({
+      targetPartId: mechanism.targetPartId,
+      targetSceneObjectId: mechanism.targetSceneObjectId,
+      targetPathId: mechanism.targetPathId,
+      targetAnchorJointId: mechanism.targetAnchorJointId,
+      activeVisualPartIds: mechanism.activeVisualPartIds,
+    }, expectedTargetFields, `${lesson.id} mechanism target ownership follows its authored path`);
+    const generated = mechanism.generatedPath ?? [];
+    if (generated.length !== 96) {
+      failures.push(`${lesson.id}: generatedPath sample count ${generated.length}`);
+      continue;
+    }
+    const runtimePath = primaryFoundryPlaybackPath(mechanism, 96);
+    const expected = runtimePath.length ? runtimePath : generateCurvePoints(mechanism, 96).points;
+    assert.deepEqual(generated, expected, `${lesson.id} stored generatedPath comes from runtime mechanism kinematics`);
+    const authoredSamples = Array.from({ length: generated.length }, (_, index) =>
+      pointOnProjectPath(
+        {
+          ...path,
+          points: authoredPath.points,
+          timedPoints: undefined,
+          closed: authoredPath.closed,
+        },
+        (index / generated.length) * Math.PI * 2,
+      ),
+    );
+    const copiedAuthoredPath = generated.every((point, index) => {
+      const authored = authoredSamples[index];
+      return Math.hypot(point.x - authored.x, point.y - authored.y) < 1e-9;
+    });
+    assert.equal(copiedAuthoredPath, false, `${lesson.id} generatedPath is not copied from authored path samples`);
+    const distances = symmetricNearestDistances(generated, authoredSamples);
+    const fitError = Math.max(...distances);
+    if (fitError > maxFitLimits[lesson.id]) {
+      failures.push(`${lesson.id}: max fit error ${fitError.toFixed(2)} > ${maxFitLimits[lesson.id]}`);
+    }
+    const phaseDistances = Array.from({ length: generated.length }, (_, index) => {
+      const phase = (index / generated.length) * Math.PI * 2;
+      const generatedPoint = pointOnGeneratedMechanismPath(generated, phase);
+      const authoredPoint = pointOnProjectPath(path, phase);
+      return generatedPoint
+        ? Math.hypot(generatedPoint.x - authoredPoint.x, generatedPoint.y - authoredPoint.y)
+        : Number.POSITIVE_INFINITY;
+    });
+    const rmsPhaseError = Math.sqrt(
+      phaseDistances.reduce((sum, distance) => sum + distance * distance, 0) /
+        Math.max(1, phaseDistances.length),
+    );
+    const maxPhaseError = Math.max(...phaseDistances);
+    if (rmsPhaseError > 1.25 || maxPhaseError > 2) {
+      failures.push(
+        `${lesson.id}: phase error rms ${rmsPhaseError.toFixed(2)} > 1.25 or max ${maxPhaseError.toFixed(2)} > 2`,
+      );
+    }
+    const root = project.skeleton?.joints[path.chainRootJointId ?? ''];
+    const reach = generatedPathReachLimit(project, path);
+    if (root && Number.isFinite(reach)) {
+      const maxReach = Math.max(...generated.map((point) => Math.hypot(point.x - root.position.x, point.y - root.position.y)));
+      if (maxReach > reach + 1e-6) {
+        failures.push(`${lesson.id}: generated reach ${maxReach.toFixed(2)} > ${reach.toFixed(2)}`);
+      }
+    }
+  }
+  assert.deepEqual(failures, [], 'guided lesson mechanisms persist real kinematic generatedPath samples within phase, contour, reach, and fabrication thresholds');
+};
+assertGuidedMechanismsStoreKinematicPaths();
+assert(classroomLesson.paths['path-right-arm'].points.length <= 12, 'waving-arm built-in path stays a compact editable baseline instead of storing all runtime samples');
 const occupiedAnchorRecommendations = buildMechanismRecommendations(classroomLesson, classroomLesson.parts[classroomLesson.selectedPartId!], classroomLesson.paths['path-right-arm']);
 const occupiedFourBarRecommendation = occupiedAnchorRecommendations.find(option => option.type === '4bar');
 assert.equal(occupiedFourBarRecommendation, undefined, 'recommendations do not retarget an occupied hand path to a parent limb');
@@ -1242,7 +1421,7 @@ assert(headBobMechanism, 'head-bob has a mechanism');
 assert.equal(headBobMechanism.type, 'cam', 'head-bob guided theme creates a real cam mechanism baseline');
 assert.equal(headBobLesson.selectedPathId, 'path-head-bob', 'head-bob guided theme creates an editable head lift path');
 assert.equal(headBobLesson.paths['path-head-bob'].targetAnchorJointId, 'head_top', 'head-bob drives the top head joint instead of collapsing to the neck');
-assert((headBobMechanism.anchorX ?? -Infinity) > Math.max(...headBobLesson.paths['path-head-bob'].points.map(point => point.x)), 'head-bob keeps the cam driver to the outside of the head path');
+assert.equal(sceneToBoard({ x: headBobMechanism.anchorX ?? 0, y: headBobMechanism.anchorY ?? 0 }, headBobLesson.settings.physicalKit).valid, true, 'head-bob cam driver stays on a kit board hole');
 assertGuidedPathUsesReach(headBobLesson, 'path-head-bob', ['neck', 'head_top'], 0.45);
 const walkingLegLesson = createLessonProject('walking-leg');
 const walkingLegMechanism = walkingLegLesson.mechanisms[0];
@@ -1252,6 +1431,12 @@ assert.equal(walkingLegLesson.selectedPathId, 'path-right-foot-step', 'walking-l
 assert.equal(walkingLegLesson.paths['path-right-foot-step'].partId, 'right_foot_part', 'walking-leg drives the foot part instead of the lower leg plate');
 assert.equal(walkingLegMechanism.targetPartId, 'right_foot_part', 'walking-leg mechanism binds to the foot part instead of the lower leg plate');
 assertGuidedPathStaysViewerLeft(walkingLegLesson, 'path-right-foot-step', 'walking-leg foot path');
+{
+  const restingFoot = walkingLegLesson.skeleton!.joints.right_foot.position;
+  const points = walkingLegLesson.paths['path-right-foot-step'].points;
+  assert(Math.min(...points.map(point => point.x)) < restingFoot.x && Math.max(...points.map(point => point.x)) > restingFoot.x, 'walking-leg foot path spans both sides of the resting right foot x');
+  assert(Math.min(...points.map(point => Math.hypot(point.x - restingFoot.x, point.y - restingFoot.y))) <= 40, 'walking-leg foot path starts near the resting foot before using the full reachable leg motion');
+}
 assertGuidedMechanismDrivesInwardFromViewerLeft(walkingLegLesson, 'path-right-foot-step', 'walking-leg mechanism');
 
 assertGuidedPathUsesReach(walkingLegLesson, 'path-right-foot-step', ['right_hip', 'right_knee', 'right_foot'], 0.7);
@@ -1312,6 +1497,22 @@ assert.deepEqual(motionChainRootJointIds(sample, 'right_arm_lower', 'right_hand'
 assert.deepEqual(motionChainRootJointIds(sample, 'right_hand_part', 'right_hand'), ['right_shoulder', 'right_elbow', 'right_hand'], 'hand targets can still drive the whole arm IK chain');
 assert.deepEqual(motionChainRootJointIds(sample, 'right_foot_part', 'right_foot'), ['right_hip', 'right_knee', 'right_foot'], 'foot targets can still drive the whole leg IK chain');
 assert.equal(preferredMotionJointId(sample, 'right_arm_lower', 'left_hand'), 'right_elbow', 'invalid IK anchor falls back to the target part root');
+{
+  const invalidAnchorMechanism = {
+    ...sample.mechanisms[0],
+    id: 'missing-anchor-driver',
+    targetAnchorJointId: 'removed_target_joint',
+  };
+  const invalidAnchorProject: ProjectState = {
+    ...sample,
+    mechanisms: [invalidAnchorMechanism],
+    selectedMechanismId: invalidAnchorMechanism.id,
+  };
+  assert(mechanismBindingWarnings(invalidAnchorProject, [invalidAnchorMechanism])[invalidAnchorMechanism.id]?.includes('Choose a handle on this limb.'), 'missing target anchor joint reports a direct repair action');
+  const invalidPreview = motionPreviewForProject(invalidAnchorProject, [invalidAnchorMechanism], Math.PI / 3);
+  assert.deepEqual(invalidPreview.skeleton, invalidAnchorProject.skeleton, 'missing target anchor preview leaves the skeleton unchanged instead of falling back to torso/root movement');
+  assert.deepEqual(invalidPreview.parts, {}, 'missing target anchor preview emits no body-part overrides instead of moving the wrong limb');
+}
 
 const replacementBase = createSampleProject({ includeMechanism: true });
 const coarsePrevious: ProjectState = {
@@ -1906,6 +2107,17 @@ ALL_MECHANISM_TYPES.forEach(type => {
   const fourbar = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism('4bar', 'safe-range-fourbar')));
   const range = motionSafeParamRange(fourbar, 'groundLength');
   assert(range?.currentSafe, 'four-bar ground length has a runtime safe range');
+  for (const type of ['4bar', 'gear', 'gear_linkage'] as const) {
+    const defaultMechanism = mechanismWithGeneratedPath(normalizeMechanismToReference(createDefaultMechanism(type, `safe-anchor-range-${type}`)));
+    assert(mechanismEditIsSafe(defaultMechanism, sample.settings.physicalKit), `${type} default starts buildable before anchor range probing`);
+    for (const key of ['anchorX', 'anchorY'] as const) {
+      const anchorRange = motionSafeParamRange(defaultMechanism, key, sample.settings.physicalKit);
+      assert(anchorRange?.currentSafe, `${type} ${key} exposes a current-safe range`);
+      assert(anchorRange!.min < anchorRange!.max, `${type} ${key} range is non-degenerate when safe board positions exist`);
+      assert(mechanismEditIsSafe({ ...defaultMechanism, [key]: anchorRange!.min }, sample.settings.physicalKit), `${type} ${key} min endpoint stays safe under the active kit`);
+      assert(mechanismEditIsSafe({ ...defaultMechanism, [key]: anchorRange!.max }, sample.settings.physicalKit), `${type} ${key} max endpoint stays safe under the active kit`);
+    }
+  }
   assert.equal(constrainMechanismUpdate(fourbar, { groundLength: 9999 }).groundLength, undefined, 'central runtime authority rejects impossible four-bar ground length writes');
   const brandNewUnsafeFourbar = mechanismWithGeneratedPath({
     ...fourbar,
@@ -2901,16 +3113,16 @@ const goldenMaster = {
 assert.deepEqual(
   Object.fromEntries(Object.entries(goldenMaster).map(([key, value]) => [key, goldenMasterHash(value)])),
   {
-    // Intentional contract delta: graph snapshots now carry explicit fabricated-part ownership,
-    // and compiler plans preserve logical layer presentation while retaining canonical physical faces.
-    project: '5d48935d44d3a5c330cfdb4df1d80b820e00c52cfa7bc023ec8bbfaef9a93a76',
-    lesson: 'fb158b8a608db24816fc3ff58a27ea5aad094be0fa5abf7e32e6c363cb02c91a',
-    mechanismSnapshot: '8eabe7a88aa08979c0122b1f45cae000a47ef850f6d477c3a64b0d92adbbcc08',
-    allMechanismSnapshots: '40effd0d941c5505219d9711c8d814a35ddf47751a28dcdab131411ca9de1c85',
-    sceneProjection: '83a68eace3b0a56bf8269ff2f37ce08c727bac04ae2713e6e5b389a929d04f0d',
+    // Intentional contract delta: authored guided paths remain unchanged while their
+    // buildable mechanism baselines are fitted before storage and stay inside IK reach.
+    project: '93e89eece443126d9b80a1b612a72bbd436e6cd90591c70e1f7a35545af5d203',
+    lesson: '7e59dbc07d311a5ab128ff8f744fa0344d73335f9889b6c2ac3d64b37d00e771',
+    mechanismSnapshot: 'b1f3b1f6dea010127b2e06087262bf7ed914649fbbf4054a4ec58120e0df0092',
+    allMechanismSnapshots: '376fbac4ae3e56d360f8f2ae4a1d966fbd893786d4acf3b664e81564a01e3f94',
+    sceneProjection: '4b4226cdbe43b2543b8ea45fa6d11da898239e19698e2ef0c53e8b70e4968586',
     svg: '2ee6db5a38edb343faa9d4dab491eb6e1142b7fa9c8c770b5039f3bb08cfce20',
     dxf: '18b15942d57d5c7b80161d71657d21ea8c7edc6450249dc27cbfb025d533d9a6',
-    fabricationRecipes: 'c6be241496b7283920c118586cd2f14e52c736eab328485f6951187860baf758',
+    fabricationRecipes: '76af73e2cfd8902d120557fa6ea1ba3bc64a94b315574d6334cb52edd4d559cc',
     compilerRenderPlans: '43494df628752b701873450fdd99924cd563a8d0e84ed5fd30c0a5b097eb6e54',
     stacks: '56b797c659cdb568281fca6034cd9f4360766302039f325b0c9d73ced144987f'
   },
@@ -4621,14 +4833,10 @@ assert(
 );
 assert(sampleFeasibleRange(foundryFitContract).percentValid >= 0.98, '4bar path fitting only accepts full-rotation kit candidates');
 const foundryFitGenerated = foundryFitContract.generatedPath ?? [];
-const foundryFitTraces = generateMechanismPointTraces(foundryFitContract, 36).traces.filter(trace => trace.id === 'B' || trace.id === 'C');
-assert(
-  foundryFitGenerated.length > 1 &&
-    foundryFitTraces.some(trace =>
-      trace.points.length === foundryFitGenerated.length &&
-      Math.hypot(trace.points[0].x - foundryFitGenerated[0].x, trace.points[0].y - foundryFitGenerated[0].y) < 1e-6
-    ),
-  '4bar path fitting exposes the closest physical B/C joint trace as the generated mechanism path',
+assert.deepEqual(
+  foundryFitGenerated,
+  primaryFoundryPlaybackPath(foundryFitContract, 96),
+  '4bar path fitting stores the canonical runtime mechanism path instead of a scored B/C search trace',
 );
 const nearestGeneratedPathError = (generated: Point[], target: Point[]) => {
   if (!generated.length || !target.length) return Number.POSITIVE_INFINITY;
@@ -4837,10 +5045,10 @@ assert(!automataSceneModelText.includes('firstVisiblePath'), 'Automata scene mod
 assert(designAutomataProjectionText.includes('buildAutomataSceneModel') && !designAutomataProjectionText.includes('motionPreviewForProject') && !designAutomataProjectionText.includes('mechanismFeature('), 'Legacy Design projection file is a thin compatibility wrapper around the canonical automata scene model');
 {
   const fixture = createLessonProject('waving-arm');
-  const staleLessonMechanism = fixture.mechanisms[0]!;
+  const lessonMechanism = fixture.mechanisms[0]!;
   const fittedPath = fixture.paths['path-right-arm'];
   const fittedMechanism = {
-    ...staleLessonMechanism,
+    ...lessonMechanism,
     generatedPath: Array.from({ length: 96 }, (_, index) => pointOnProjectPath(fittedPath, (index / 96) * Math.PI * 2))
   };
   const fittedFixture = { ...fixture, mechanisms: [fittedMechanism] };
@@ -4859,7 +5067,12 @@ assert(designAutomataProjectionText.includes('buildAutomataSceneModel') && !desi
   assert(drivenHand && canonical.generatedTarget && canonical.skeleton, 'Canonical automata model animates the hand target part through IK');
   const handPivot = bodyPartPivotScene(drivenHand, canonical.skeleton);
   assert(Math.hypot(handPivot.x - canonical.generatedTarget!.x, handPivot.y - canonical.generatedTarget!.y) < 1e-6, 'Driven hand part pivot stays on the fitted mechanism output in scene coordinates');
-  const mismatch = buildAutomataSceneModel(fixture, staleLessonMechanism, Math.PI * 0.42, 'design-live');
+  const staleLessonMechanism = {
+    ...lessonMechanism,
+    generatedPath: (lessonMechanism.generatedPath ?? []).map(point => ({ x: point.x + 300, y: point.y }))
+  };
+  const mismatchFixture = { ...fixture, mechanisms: [staleLessonMechanism] };
+  const mismatch = buildAutomataSceneModel(mismatchFixture, staleLessonMechanism, Math.PI * 0.42, 'design-live');
   assert.equal(mismatch.motionSource, 'generatedPath', 'Design keeps attached character motion on the actual rendered mechanism source when path fit is mismatched');
   assert.equal(mismatch.pathFitStatus, 'mismatch', 'Design flags stale generatedPath samples that are far from the authored path');
   assert((mismatch.pathFitError ?? 0) > (mismatch.pathFitThreshold ?? Number.POSITIVE_INFINITY), 'Design exposes the stale generatedPath fit error for harnesses and UI warnings');
@@ -4902,8 +5115,18 @@ assert(
     mechanismRecommendationsText.includes('mechanisms: [...siblingMechanisms, mechanism]'),
   'fabrication candidate validation replaces the matching target/path/anchor driver instead of appending duplicate target drivers during refit',
 );
-assert(mechanismRecommendationsText.includes('const fittedErrors = fabricationErrorsForCandidate(project, fittedCandidate)') && mechanismRecommendationsText.includes('const fallbackErrors = fabricationErrorsForCandidate(project, fallback)'), 'path fitting gates fitted mechanisms through full fabrication validation, not preview-only geometry');
-assert(mechanismRecommendationsText.includes('const unchanged = mechanismWithGeneratedPath(') && mechanismRecommendationsText.includes('const unchangedErrors = fabricationErrorsForCandidate(project, unchanged)'), 'path fitting falls back to the previous/snapped mechanism instead of returning an invalid fit candidate');
+assert(
+  mechanismRecommendationsText.includes('const viable = [fittedCandidate, fallback, unchanged]') &&
+    mechanismRecommendationsText.includes('.filter((candidate) => !fabricationErrorsForCandidate(project, candidate).length)') &&
+    mechanismRecommendationsText.includes('if (viable[0]) return viable[0]'),
+  'path fitting gates every fitted, fallback, and unchanged candidate through full fabrication validation before selecting the best fit',
+);
+assert(
+  mechanismRecommendationsText.includes('const unchanged = mechanismWithGeneratedPath(') &&
+    mechanismRecommendationsText.includes('const viable = [fittedCandidate, fallback, unchanged]') &&
+    mechanismRecommendationsText.includes('...unchanged,'),
+  'path fitting retains the previous snapped mechanism as a fabrication-validated candidate and final warning fallback',
+);
 assert(mechanismRecommendationsText.includes('previousAnchor') && mechanismRecommendationsText.includes('gridPitchMm * SCENE_PX_PER_MM'), 'recommendation sheet fitting nudges by whole board holes when a sub-hole correction snaps back to the same invalid anchor');
 assert(projectText.includes('normalizeMechanismToFabricationSet({') && projectText.includes('const reconcileMechanismTargets'), 'ProjectState reducers centrally normalize saved mechanisms to fabrication-ready reference sets');
 assert(mechanismRecommendationsText.includes('localizeFittedMechanismAnchor') && mechanismRecommendationsText.includes('maxDistance = 120'), 'Foundry export preserves the picked board anchor locality when fitting a mechanism to a path');
@@ -4986,7 +5209,7 @@ assert.equal(pathWorkflowPanelText.includes('Choose mechanism'), false, 'Path Ed
 assert(pathWorkflowPanelText.includes('aria-label="Motion target"') && pathWorkflowPanelText.includes('<optgroup label="Body parts">') && pathWorkflowPanelText.includes('<optgroup label="Scene objects">'), 'Path target selector labels mixed body/object targets honestly');
 assert(designInspectorPanelText.includes('aria-label="Mechanism target"') && designInspectorPanelText.includes('<optgroup label="Body parts">') && designInspectorPanelText.includes('<optgroup label="Scene objects">'), 'Design target selector labels mixed body/object mechanism targets honestly');
 
-assert(appText.includes('useAppCharacterImportActions({') && !appText.includes('const runWebOnnx =') && !appText.includes('const importCharacterPackage =') && !appText.includes('const importProject =') && !appText.includes('const acceptPendingCharacter =') && appCharacterImportActionsHookText.includes('createProjectFromProcessed') && appCharacterImportActionsHookText.includes('processImageWithWebOnnx') && appCharacterImportActionsHookText.includes('loadCharacterPackage') && appCharacterImportActionsHookText.includes('loadProjectSnapshot') && appCharacterImportActionsHookText.includes('setProject(pendingCharacter.project, { resetHistory: true })') && appCharacterImportActionsHookText.includes('returnStage: "character"'), 'App delegates character import/review actions to useAppCharacterImportActions while preserving ONNX/package/project import review semantics');
+assert(appText.includes('useAppCharacterImportActions({') && !appText.includes('const runWebOnnx =') && !appText.includes('const importCharacterPackage =') && !appText.includes('const importProject =') && !appText.includes('const acceptPendingCharacter =') && appCharacterImportActionsHookText.includes('createProjectFromProcessed') && appCharacterImportActionsHookText.includes('processImageWithWebOnnx') && appCharacterImportActionsHookText.includes('loadCharacterPackage') && appCharacterImportActionsHookText.includes('loadProjectSnapshot') && appCharacterImportActionsHookText.includes('setFoundry(foundryPreviewFromProject(loadedProject))') && appCharacterImportActionsHookText.includes('setProject(pendingCharacter.project, { resetHistory: true })') && appCharacterImportActionsHookText.includes('returnStage: "character"'), 'App delegates character import/review actions to useAppCharacterImportActions while keeping imported project and Foundry state coupled');
 assert(workspacePlayerDockHookText.includes('const showsWorkspacePlayer =') && workspacePlayerDockHookText.includes('editorStage === "path"') && workspacePlayerDockHookText.includes('editorStage === "design"') && workspacePlayerDockHookText.includes('editorStage === "assembly"'), 'shared playback dock is restricted to Path, Mechanism Design, and Assembly instead of leaking onto unrelated tabs');
 assert(appText.includes('useWorkspacePlayerDock') && !appText.includes('<WorkspacePlayerDock') && !appText.includes('const [assemblyPlaying'), 'App delegates shared player dock assembly and Assembly dock state to useWorkspacePlayerDock');
 assert(workspacePlayerDockHookText.includes('setAssemblyStepProgress(0)') && workspacePlayerDockHookText.includes('onStepChange: goSharedAssemblyStep'), 'workspace player dock owns Assembly previous/next step handoff and scrubber reset');
@@ -5101,7 +5324,8 @@ assert(appUiText.includes('getting-started-dialog') && appUiText.includes('getti
 assert(appUiText.includes('const [showGuided, setShowGuided] = useState(false)') && appUiText.includes('Start.') && appUiText.includes('Pick a project.'), 'Getting Started opens as starter choices and moves guided projects behind the explicit Guide tile');
 assert(gettingStartedDialogCommandSource.includes('Starter rig') && gettingStartedDialogCommandSource.includes('Open full project') && !gettingStartedDialogCommandSource.includes('Character file') && !gettingStartedDialogCommandSource.includes('>Humanoid<') && !gettingStartedDialogCommandSource.includes('>Package<') && !gettingStartedDialogCommandSource.includes('Import project'), 'Getting Started keeps starter choices compact and leaves character file loading to the Character tab');
 assert(appUiText.includes('getting-started-card-guided') && appUiText.includes('Open Guide') && appUiText.includes('guided-project-library') && appUiText.includes('guided-project-card-${lesson.id}') && appUiText.includes('Don&apos;t show again this session'), 'Getting Started exposes guided projects through a Guide tile with a session-only opt-out while keeping open exploration visible');
-assert(appUiText.includes('GuidedLessonMotionPreview') && appUiText.includes('guided-project-preview-${lessonId}') && appUiText.includes('data-preview-mode="rendered-character-motion"') && appUiText.includes('data-motion-preview="character-path"') && appUiText.includes('gearTrainCenters(mechanism)') && indexText.includes('repeat(auto-fit, minmax(13rem, 1fr))') && indexText.includes('.guided-project-preview') && indexText.includes('min-height: min(82vh, 43rem)') && indexText.includes('min-height: 11.25rem'), 'Guide project cards render larger character-motion thumbnails and the Start dialog uses taller starter cards');
+assert(appUiText.includes('GuidedLessonMotionPreview') && appUiText.includes('guided-project-preview-${lessonId}') && appUiText.includes('data-preview-mode="rendered-character-motion"') && appUiText.includes('data-motion-preview="character-path"') && appUiText.includes('gearTrainCenters(mechanism)') && indexText.includes('repeat(auto-fit, minmax(13rem, 1fr))') && indexText.includes('.guided-project-preview') && indexText.includes('--ms-viewport-height: 100vh') && indexText.includes('@supports (height: 100dvh)') && indexText.includes(':root { --ms-viewport-height: 100dvh; }') && indexText.includes('.getting-started-dialog { width: min(94vw, 70rem); min-height: min(calc(var(--ms-viewport-height) - 7rem), 43rem); max-height: min(calc(var(--ms-viewport-height) - 2rem), 64rem);') && indexText.includes('min-height: 11.25rem'), 'Guide project cards render larger character-motion thumbnails and Getting Started sizes from the shared viewport variable with dvh support');
+assert(!indexText.includes('min-height: min(82vh, 43rem)'), 'Getting Started no longer locks a stale raw-vh min-height contract');
 assert(appUiText.includes('Change') && appUiText.includes('Build') && appUiText.includes('data-change-cue') && appUiText.includes('data-direct-translation') && appUiText.includes('data-evidence-cue') && appUiText.includes('data-expected-answer') && appUiText.includes('data-clip-slot') && gettingStartedDialogCommandSource.includes('starter-card-cues') && gettingStartedDialogCommandSource.includes('Edit one move') && gettingStartedDialogCommandSource.includes('Ready to build'), 'Guided and starter cards show compact action cues while carrying local classroom check/evidence metadata without visible sensemaking text load');
 assert(characterLessonOwnershipText.includes('character-make-it-yours') && characterLessonOwnershipText.includes('Make it yours') && characterLessonOwnershipText.includes('data-change-cue={activeClassroomLesson.changeCue}') && characterLessonOwnershipText.includes('data-build-cue={activeClassroomLesson.buildCue}') && characterLessonOwnershipText.includes('Select a part') && characterLessonOwnershipText.includes('Place joints') && characterSelectionText.includes('<CharacterLessonOwnership') && !appText.includes('Change {activeClassroomLesson.changeCue}') && !appText.includes('Build {activeClassroomLesson.buildCue}'), 'Guided lessons land on Character with character-only rigging controls while keeping lesson metadata for later stages');
 assert(gettingStartedDialogCommandSource.includes('getting-started-card-humanoid') && gettingStartedDialogCommandSource.includes('getting-started-card-image') && !gettingStartedDialogCommandSource.includes('getting-started-card-package') && gettingStartedDialogCommandSource.includes('getting-started-card-${template.id}') && starterImageTemplatesText.includes('id: "girl"') && starterImageTemplatesText.includes('id: "boy"'), 'Getting Started exposes compact starter/result choices including Girl and Boy without a duplicate character-file card');
@@ -7475,10 +7699,10 @@ const drivenMechanism = {
   anchorX: ikProject.paths['path-right-arm'].points[0].x + 30,
   anchorY: ikProject.paths['path-right-arm'].points[0].y - 20,
   crankLength: 10,
-  targetPartId: 'right_arm_lower',
+  targetPartId: 'right_hand_part',
   targetPathId: 'path-right-arm',
   targetAnchorJointId: 'right_hand',
-  activeVisualPartIds: ['right_arm_lower']
+  activeVisualPartIds: ['right_hand_part']
 };
 const drivenProject: ProjectState = { ...ikProject, mechanisms: [drivenMechanism] };
 const duplicateDriverInsert = applyProjectAction(drivenProject, {

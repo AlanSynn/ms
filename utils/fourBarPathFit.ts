@@ -4,7 +4,7 @@ import { FABRICATION_LINKAGE_SPECS } from './fabricationContract';
 import { newFabricationIssues, validateForFabrication, visibleFabricationMessages } from './fabrication';
 import { generateMechanismPointTraces } from './kinematics';
 import { normalizeMechanismToFabricationSet } from './mechanismReference';
-import { mechanismWithGeneratedPath } from './project';
+import { mechanismWithGeneratedPath } from './mechanismGeneratedPath';
 import { pathOwnedTargetFields } from './pathTargets';
 
 const pathMetrics = (path: ProjectMotionPath) => {
@@ -81,19 +81,50 @@ const resamplePolyline = (points: Point[], count: number): Point[] => {
   );
 };
 
-const averageNearestDistance = (from: Point[], to: Point[]) =>
-  from.reduce((sum, point) => {
-    const nearest = to.reduce(
+const nearestDistances = (from: Point[], to: Point[]) =>
+  from.map((point) =>
+    to.reduce(
       (best, candidate) =>
         Math.min(best, Math.hypot(point.x - candidate.x, point.y - candidate.y)),
       Number.POSITIVE_INFINITY,
-    );
-    return sum + nearest;
-  }, 0) / Math.max(1, from.length);
+    ),
+  );
 
-const pathFitError = (candidate: Point[], target: Point[]) =>
-  averageNearestDistance(candidate, target) +
-  averageNearestDistance(target, candidate);
+const pathFitError = (candidate: Point[], target: Point[]) => {
+  const candidateDistances = nearestDistances(candidate, target);
+  const targetDistances = nearestDistances(target, candidate);
+  const allDistances = [...candidateDistances, ...targetDistances];
+  const mean =
+    allDistances.reduce((sum, distance) => sum + distance, 0) /
+    Math.max(1, allDistances.length);
+  return mean + Math.max(...allDistances, 0) * 1.5;
+};
+
+const pathMotionReach = (project: ProjectState, path: ProjectMotionPath) => {
+  if (path.sceneObjectId || !project.skeleton) return undefined;
+  const targetJointId =
+    path.targetAnchorJointId ?? project.parts[path.partId]?.anchorJointId;
+  const rootJointId =
+    path.chainRootJointId ?? project.parts[path.partId]?.anchorJointId;
+  if (!targetJointId || !rootJointId) return undefined;
+  const target = project.skeleton.joints[targetJointId];
+  const root = project.skeleton.joints[rootJointId];
+  if (!target || !root) return undefined;
+  let reach = 0;
+  let joint = target;
+  while (joint.id !== rootJointId) {
+    const parent = joint.parentId
+      ? project.skeleton.joints[joint.parentId]
+      : undefined;
+    if (!parent) return undefined;
+    reach += Math.hypot(
+      joint.position.x - parent.position.x,
+      joint.position.y - parent.position.y,
+    );
+    joint = parent;
+  }
+  return { root: root.position, reach };
+};
 
 const boardAnchorCandidatesForFit = (
   project: ProjectState,
@@ -159,6 +190,7 @@ export const fitFourBarKitMechanismToPath = (
 ) => {
   const targetPoints = resamplePolyline(pathPointsForFit(path), 32);
   if (targetPoints.length < 3) return undefined;
+  const motionReach = pathMotionReach(project, path);
   const kitLengths = FABRICATION_LINKAGE_SPECS.map(
     (spec) => spec.lengthMm * SCENE_PX_PER_MM,
   );
@@ -234,24 +266,30 @@ export const fitFourBarKitMechanismToPath = (
                 });
                 const traces = generateMechanismPointTraces(candidate, 36);
                 if (traces.percentValid < 0.98) continue;
-                const movingTraces = traces.traces.filter((trace) =>
-                  trace.id === 'B' || trace.id === 'C',
-                );
+                const movingTraces = traces.traces.filter((trace) => trace.primary);
                 for (const trace of movingTraces) {
                   const tracePoints = resamplePolyline(trace.points, 32);
                   const error = pathFitError(tracePoints, targetPoints);
-                  const candidateWithTrace = mechanismWithGeneratedPath(
-                    {
-                      ...candidate,
-                      generatedPath: trace.points,
-                      warnings:
-                        error / fitScale > 0.35
-                          ? ['Closest kit fit. Try a smaller move if it misses.']
-                          : [],
-                    },
-                    { preserveGeneratedPath: true },
-                  );
-                  rememberCandidate(candidateWithTrace, error);
+                  const candidateWithGeneratedPath = mechanismWithGeneratedPath({
+                    ...candidate,
+                    warnings:
+                      error / fitScale > 0.5
+                        ? ['Closest kit fit. Try a smaller move if it misses.']
+                        : [],
+                  });
+                  if (
+                    motionReach &&
+                    candidateWithGeneratedPath.generatedPath?.some(
+                      (point) =>
+                        Math.hypot(
+                          point.x - motionReach.root.x,
+                          point.y - motionReach.root.y,
+                        ) >
+                        motionReach.reach + 1e-6,
+                    )
+                  )
+                    continue;
+                  rememberCandidate(candidateWithGeneratedPath, error);
                 }
               }
             }
