@@ -1,4 +1,5 @@
-import type { MechanismConfig } from '../types';
+import type { MechanismConfig, PhysicalKitSettings } from '../types';
+import { defaultPhysicalKit } from './coordinates';
 import {
   calculateLinkage,
   mechanismTraceDefinitionsForState,
@@ -48,6 +49,7 @@ export const createFoundryPlaybackFrame = (
   mechanism: MechanismConfig,
   playbackPhaseRad: number,
   context: MechanismFitContext,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
 ): FoundryPlaybackFrame => {
   const inputAngleRad = foundryPlaybackPhaseToInputAngle(
     mechanism,
@@ -60,6 +62,7 @@ export const createFoundryPlaybackFrame = (
       mechanism,
       inputAngleRad,
       context,
+      kit,
     ),
   };
 };
@@ -88,6 +91,7 @@ const foundryPlaybackTraceLoops = (mechanism: MechanismConfig) =>
 export const generateFoundryPlaybackPointTraces = (
   mechanism: MechanismConfig,
   resolution = 36,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
 ): { traces: MechanismPointTrace[]; percentValid: number } => {
   const samplesPerCycle = Math.max(1, Math.floor(resolution));
   const loops = foundryPlaybackTraceLoops(mechanism);
@@ -101,7 +105,7 @@ export const generateFoundryPlaybackPointTraces = (
       mechanism,
       playbackPhaseRad,
     );
-    const state = calculateLinkage(mechanism, inputAngleRad);
+    const state = calculateLinkage(mechanism, inputAngleRad, kit);
     if (!state.isValid) continue;
     validCount += 1;
     mechanismTraceDefinitionsForState(mechanism.type, state).forEach((def) => {
@@ -131,10 +135,30 @@ export const generateFoundryPlaybackPointTraces = (
   return { traces: allTraces, percentValid: validCount / totalSamples };
 };
 
+export const resolveFoundryPlaybackTraceAuthority = (
+  mechanism: MechanismConfig,
+  resolution = 36,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+  displayTraceId?: string | null,
+) => {
+  const result = generateFoundryPlaybackPointTraces(
+    mechanism,
+    resolution,
+    kit,
+  );
+  const primary =
+    result.traces.find((trace) => trace.primary) ?? result.traces[0];
+  return {
+    ...result,
+    primary,
+    display:
+      result.traces.find((trace) => trace.id === displayTraceId) ?? primary,
+  };
+};
+
 export const primaryFoundryPlaybackPath = (
   mechanism: MechanismConfig,
   resolution = 36,
-) =>
-  generateFoundryPlaybackPointTraces(mechanism, resolution).traces.find(
-    (trace) => trace.primary,
-  )?.points ?? [];
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+) => resolveFoundryPlaybackTraceAuthority(mechanism, resolution, kit).primary
+  ?.points ?? [];

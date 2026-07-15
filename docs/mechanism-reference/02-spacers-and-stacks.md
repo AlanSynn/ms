@@ -190,7 +190,7 @@ H_carrier@coord > F > S10 > moving-part > S10 > tabs-loose
 
 Use cases:
 
-- planetary G3 planet gear near `H10`, fastened through the L2 carrier free hole.
+- planetary G3 planet gear near `H10`, fastened through the L4 carrier third hole.
 
 Rules:
 

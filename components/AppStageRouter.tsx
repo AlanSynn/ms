@@ -14,6 +14,7 @@ import type {
   CanvasViewport,
   FoundryExportPackage,
   MechanismConfig,
+  MechanismEditFeedback,
   Point,
   ProjectAction,
   ProjectMotionPath,
@@ -66,6 +67,7 @@ export type AppStageRouterProps = {
 
   selectedMechanism?: MechanismConfig;
   updateMechanism: (id: string, updates: Partial<MechanismConfig>) => void;
+  mechanismEditFeedback: MechanismEditFeedback | null;
   showTrace: boolean;
   setShowTrace: (v: boolean) => void;
   onOptimize: () => void | Promise<void>;
@@ -119,6 +121,7 @@ export const AppStageRouter = ({
   onFoundryExport,
   selectedMechanism,
   updateMechanism,
+  mechanismEditFeedback,
   showTrace,
   setShowTrace,
   onOptimize,
@@ -196,10 +199,12 @@ export const AppStageRouter = ({
         project={project}
         selectedMechanism={selectedMechanism}
         updateMechanism={updateMechanism}
+        mechanismEditFeedback={mechanismEditFeedback}
         dispatch={dispatch}
         showTrace={showTrace}
         setShowTrace={setShowTrace}
         angle={angle}
+        setIsPlaying={setIsPlaying}
         onOptimize={onOptimize}
         onRecommendations={onRecommendations}
         optimizerBusy={optimizerBusy}

@@ -82,8 +82,8 @@
   <text x="57" y="121" class="tiny" text-anchor="middle">G8</text>
   <rect x="153" y="116" width="22" height="7.5" class="score part-card" style="fill:#94a3b8;fill-opacity:0.22;stroke:#94a3b8;stroke-width:0.5" data-step="4" data-part-key="spacers:s10" data-part-index="1"/>
   <text x="164" y="121" class="tiny" text-anchor="middle">S10</text>
-  <rect x="178" y="116" width="22" height="7.5" class="score part-card" style="fill:#60a5fa;fill-opacity:0.22;stroke:#60a5fa;stroke-width:0.5" data-step="4" data-part-key="linkages:linkage-2-cell" data-part-index="2"/>
-  <text x="189" y="121" class="tiny" text-anchor="middle">L2</text>
+  <rect x="178" y="116" width="22" height="7.5" class="score part-card" style="fill:#60a5fa;fill-opacity:0.22;stroke:#60a5fa;stroke-width:0.5" data-step="4" data-part-key="linkages:linkage-4-cell" data-part-index="2"/>
+  <text x="189" y="121" class="tiny" text-anchor="middle">L4</text>
   <rect x="21" y="174" width="22" height="7.5" class="score part-card" style="fill:#94a3b8;fill-opacity:0.22;stroke:#94a3b8;stroke-width:0.5" data-step="5" data-part-key="spacers:s10" data-part-index="1"/>
   <text x="32" y="179" class="tiny" text-anchor="middle">S10</text>
   <rect x="46" y="174" width="22" height="7.5" class="score part-card" style="fill:#fbbf24;fill-opacity:0.22;stroke:#fbbf24;stroke-width:0.5" data-step="5" data-part-key="gears:g24" data-part-index="2"/>

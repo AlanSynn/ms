@@ -1,4 +1,4 @@
-import type { AppStage, CanvasViewport, ProjectState } from "../types";
+import type { AppStage, CanvasViewport, ProjectSnapshotLoadResult, ProjectState } from "../types";
 import { loadProjectSnapshot, serializeProject } from "./project";
 import { normalizeCanvasViewport } from "./viewport";
 
@@ -52,15 +52,29 @@ export const writeAutosaveSnapshot = (project: ProjectState) => {
   }
 };
 
-export const readAutosaveProject = (): ProjectState | null => {
+export type AutosaveProjectReadResult =
+  | ProjectSnapshotLoadResult
+  | { status: "missing" };
+
+export const readAutosaveProject = (
+  currentProject: ProjectState,
+): AutosaveProjectReadResult => {
   const stored = readStorageWithLegacy(
     STORAGE_KEYS.autosave,
     LEGACY_STORAGE_KEYS.autosave,
   );
-  if (!stored.value) return null;
-  const project = loadProjectSnapshot(JSON.parse(stored.value));
-  if (stored.fromLegacy) migrateStorageValue(STORAGE_KEYS.autosave, stored.value);
-  return project;
+  if (!stored.value) return { status: "missing" };
+  let raw: unknown;
+  try {
+    raw = JSON.parse(stored.value);
+  } catch {
+    return loadProjectSnapshot(undefined, currentProject);
+  }
+  const loaded = loadProjectSnapshot(raw, currentProject);
+  if (loaded.status === "loaded" && stored.fromLegacy) {
+    migrateStorageValue(STORAGE_KEYS.autosave, stored.value);
+  }
+  return loaded;
 };
 
 export type WorkspaceLayoutSnapshot = {

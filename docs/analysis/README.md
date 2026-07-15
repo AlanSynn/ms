@@ -5,7 +5,7 @@ Store audits, migration analyses, and review reports here. OMX workflow audits m
 ## Active audits
 
 - [Codebase Cleanup + Architecture Split Plan](codebase-cleanup-architecture-plan.md) — active cleanup/splitting plan.
-- [Fabrication parity trace (2026-07-13)](fabrication-parity-2026-07-13.md) — TS managed SVG contour checks against committed artifacts and the frozen Python-derived oracle; runtime Blueprint/scene SVGs are presentation/non-cutter evidence only.
+- [Fabrication parity trace (2026-07-15)](fabrication-parity-2026-07-15.md) — TS managed SVG contour checks against committed artifacts and the frozen Python-derived oracle; runtime Blueprint/scene SVGs are presentation/non-cutter evidence only.
 
 ## Cold archives
 

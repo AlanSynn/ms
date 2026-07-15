@@ -1,7 +1,9 @@
-import { AppStage, MechanismConfig, Point, ProjectState } from '../types';
+import { AppStage, Point, ProjectState } from '../types';
 import { boardGridLines, sceneBoundsForSheet, SCENE_PX_PER_MM } from './coordinates';
-import { calculateLinkage } from './kinematics';
 import { mechanismTemplateLabel } from './mechanismTemplates';
+import { buildMechanismSceneContracts, type MechanismSceneContract } from './mechanismSceneContract';
+import type { MechanismPhysicalPartInstance } from './mechanismPhysicalInstances';
+import { MECHANISM_BINDING_BLOCKER } from './pathTargets';
 
 export type ProjectionSourceType =
     | 'board'
@@ -45,6 +47,10 @@ export interface ToonSceneNode {
     material: ToonMaterial;
     interactive: boolean;
     exportRole: ProjectionExportRole;
+    mechanismCompilerSignature?: string;
+    mechanismLayerId?: string;
+    mechanismSourceNodeId?: string;
+    mechanismRuntimeMode?: MechanismSceneContract['runtimeMode'];
 }
 
 export interface InteractionBinding {
@@ -160,12 +166,29 @@ const baseNode = (node: Omit<ToonSceneNode, 'renderOrder'>): ToonSceneNode => ({
     thicknessMm: finite(node.thicknessMm)
 });
 
-const mechanismAnchor = (mechanism: MechanismConfig): Point => ({
-    x: finite(mechanism.anchorX ?? mechanism.sceneAnchor?.x ?? mechanism.transform?.x ?? 0),
-    y: finite(mechanism.anchorY ?? mechanism.sceneAnchor?.y ?? mechanism.transform?.y ?? 0)
-});
-
 const mechanismNodeDepth = (mechanismIndex: number) => nodeDepth('mechanism', 20 + mechanismIndex * 0.25);
+
+const physicalPointToScene = (
+    pointMm: Point,
+    instance: MechanismPhysicalPartInstance,
+): Point => {
+    const c = Math.cos(instance.pose.rotationRad);
+    const s = Math.sin(instance.pose.rotationRad);
+    return {
+        x: (instance.pose.translationMm.x + pointMm.x * c - pointMm.y * s) * SCENE_PX_PER_MM,
+        y: (instance.pose.translationMm.y + pointMm.x * s + pointMm.y * c) * SCENE_PX_PER_MM,
+    };
+};
+
+const physicalMaterial = (instance: MechanismPhysicalPartInstance): ToonMaterial =>
+    physicalInstanceIsHardware(instance)
+        ? 'pin'
+        : instance.kind === 'base'
+            ? 'board'
+            : 'toyMetal';
+
+const physicalInstanceIsHardware = (instance: MechanismPhysicalPartInstance) =>
+    instance.kind === 'pin' || instance.kind === 'retainer' || instance.kind === 'spacer' || instance.kind === 'clip';
 
 const geometryAnchor = (geometry: ProjectionGeometry): Point => {
     if (geometry.kind === 'rect' || geometry.kind === 'circle') return clonePoint(geometry.center);
@@ -348,73 +371,73 @@ export const buildToonSceneProjection = (project: ProjectState): ToonSceneProjec
         }));
     });
 
-    project.mechanisms.forEach((mechanism, index) => {
-        if (!mechanism.visible || mechanism.enabled === false) return;
-        const anchor = mechanismAnchor(mechanism);
-        const resolvedMechanism = { ...mechanism, anchorX: anchor.x, anchorY: anchor.y };
-        const state = calculateLinkage(resolvedMechanism, 0);
-        const depth = mechanismNodeDepth(index);
-        const baseId = `/mechanisms/${pathSegment(mechanism.id)}`;
+    const mechanismById = new Map(project.mechanisms.map(mechanism => [mechanism.id, mechanism]));
+    buildMechanismSceneContracts(project).forEach((contract, index) => {
+        const mechanism = mechanismById.get(contract.mechanismId);
+        if (!mechanism) return;
         const templateLabel = mechanismTemplateLabel(mechanism.type);
-        nodes.push(baseNode({
-            id: `${baseId}/base`,
-            sourceType: 'mechanism',
-            sourceId: mechanism.id,
-            label: `${templateLabel} base`,
-            geometry: { kind: 'circle', center: anchor, radius: 6 },
-            transform2d: { x: anchor.x, y: anchor.y, rotationRad: rotationRad(mechanism.groundAngle ?? 0), scale: 1 },
-            depthMm: depth,
-            thicknessMm: 2.2,
-            material: 'toyMetal',
-            interactive: true,
-            exportRole: 'fabrication'
-        }));
-        nodes.push(baseNode({
-            id: `${baseId}/output`,
-            sourceType: 'mechanism',
-            sourceId: mechanism.id,
-            label: `${templateLabel} output`,
-            geometry: { kind: 'circle', center: clonePoint(state.effector), radius: 5 },
-            transform2d: { x: state.effector.x, y: state.effector.y, rotationRad: 0, scale: 1 },
-            depthMm: depth + 0.5,
-            thicknessMm: 2,
-            material: state.isValid ? 'pin' : 'warning',
-            interactive: true,
-            exportRole: 'fabrication'
-        }));
-        nodes.push(baseNode({
-            id: `${baseId}/link/base-to-output`,
-            sourceType: 'hardware',
-            parentId: `${baseId}/base`,
-            label: `${templateLabel} linkage preview`,
-            geometry: { kind: 'line', from: anchor, to: clonePoint(state.effector), width: 3 },
-            transform2d: { x: 0, y: 0, rotationRad: 0, scale: 1 },
-            depthMm: depth + 0.25,
-            thicknessMm: 1,
-            material: 'toyMetal',
-            interactive: false,
-            exportRole: 'preview-only'
-        }));
+        const baseId = `/mechanisms/${pathSegment(mechanism.id)}`;
+        const definitionByPartKey = new Map(contract.physicalDefinitions.map(definition => [definition.partKey, definition]));
+        const physicalInstances = contract.physicalInstances.filter(instance => instance.kind !== 'base');
+        const firstLayerId = physicalInstances.find(instance => instance.layerId && !physicalInstanceIsHardware(instance))?.layerId;
+        const firstNodeId = firstLayerId ? `${baseId}/layers/${pathSegment(firstLayerId)}` : undefined;
+        const rootParentId = firstNodeId;
 
-        const anchorPoint = clonePoint(state.effector);
-        labels.push({
-            id: `/labels/mechanisms/${pathSegment(mechanism.id)}`,
-            text: mechanism.targetPartId ? `drives ${mechanism.targetPartId}` : mechanism.targetSceneObjectId ? `drives ${mechanism.targetSceneObjectId}` : `${templateLabel} preview`,
-            anchorNodeId: `${baseId}/output`,
-            anchorPoint,
-            severity: mechanism.targetPartId || mechanism.targetSceneObjectId ? 'info' : 'warning',
-            collapsible: true
+        physicalInstances.forEach((instance) => {
+            const definition = definitionByPartKey.get(instance.partKey);
+            if (!definition?.contourMm.length) return;
+            const layerId = instance.layerId ?? instance.instanceId;
+            const hardware = physicalInstanceIsHardware(instance);
+            const contour = definition.contourMm.map(point => physicalPointToScene(point, instance));
+            const anchor = contour.length ? geometryAnchor({ kind: 'polyline', points: contour, closed: true, width: 1 }) : { x: 0, y: 0 };
+            nodes.push(baseNode({
+                id: instance.layerId
+                    ? `${baseId}/layers/${pathSegment(layerId)}`
+                    : `${baseId}/hardware/${pathSegment(instance.instanceId)}`,
+                sourceType: hardware ? 'hardware' : 'mechanism',
+                sourceId: mechanism.id,
+                ...(hardware && rootParentId ? { parentId: rootParentId } : {}),
+                label: contract.layers.find(layer => layer.layerId === instance.layerId)?.label ?? instance.partKey,
+                geometry: { kind: 'polyline', points: contour, closed: true, width: 1 },
+                transform2d: { x: anchor.x, y: anchor.y, rotationRad: instance.pose.rotationRad, scale: 1 },
+                depthMm: mechanismNodeDepth(index) + instance.z.centerMm,
+                thicknessMm: instance.z.physicalDepthMm,
+                material: physicalMaterial(instance),
+                interactive: !hardware && instance.layerId === firstLayerId,
+                exportRole: contract.projectDriveEnabled ? 'fabrication' : 'preview-only',
+                mechanismCompilerSignature: contract.compilerSignature,
+                ...(instance.layerId ? { mechanismLayerId: instance.layerId } : {}),
+                ...(instance.sourceNodeId ? { mechanismSourceNodeId: instance.sourceNodeId } : {}),
+                mechanismRuntimeMode: contract.runtimeMode,
+            }));
         });
 
-        if (!state.isValid) {
+        const anchorNode = firstNodeId ? nodes.find(node => node.id === firstNodeId) : undefined;
+        const anchorPoint = anchorNode ? geometryAnchor(anchorNode.geometry) : { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 };
+        labels.push({
+            id: `/labels/mechanisms/${pathSegment(mechanism.id)}`,
+            text: contract.projectDriveEnabled
+                ? mechanism.targetPartId
+                    ? `drives ${mechanism.targetPartId}`
+                    : mechanism.targetSceneObjectId
+                        ? `drives ${mechanism.targetSceneObjectId}`
+                        : `${templateLabel} preview`
+                : `${templateLabel} recovery`,
+            anchorNodeId: firstNodeId,
+            anchorPoint,
+            severity: contract.projectDriveEnabled ? 'info' : 'warning',
+            collapsible: true,
+        });
+
+        if (!contract.projectDriveEnabled) {
             warnings.push({
-                id: `/warnings/mechanisms/${pathSegment(mechanism.id)}/invalid-sample`,
+                id: `/warnings/mechanisms/${pathSegment(mechanism.id)}/binding`,
                 severity: 'warning',
-                message: `${templateLabel}: no output at phase 0`,
-                sourceNodeId: `${baseId}/output`,
+                message: contract.runtimeBlocker ?? MECHANISM_BINDING_BLOCKER,
+                sourceNodeId: firstNodeId,
                 sourceType: 'mechanism',
                 sourceId: mechanism.id,
-                recoveryStage: 'design'
+                recoveryStage: 'design',
             });
         }
         (mechanism.warnings ?? []).forEach((message, warningIndex) => {
@@ -422,10 +445,10 @@ export const buildToonSceneProjection = (project: ProjectState): ToonSceneProjec
                 id: `/warnings/mechanisms/${pathSegment(mechanism.id)}/${warningIndex}`,
                 severity: 'warning',
                 message,
-                sourceNodeId: `${baseId}/base`,
+                sourceNodeId: firstNodeId,
                 sourceType: 'mechanism',
                 sourceId: mechanism.id,
-                recoveryStage: 'design'
+                recoveryStage: 'design',
             });
         });
     });

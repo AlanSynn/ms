@@ -125,6 +125,7 @@ export const REFERENCE_PART_HOLE_COUNTS: Record<string, number> = {
     'cam_modules:swappable-cam-disk': 1,
     'cam_modules:u-channel-guide-cartridge': 2,
     'cam_modules:gravity-follower-module': 1,
+    'cam_modules:gravity-follower-module-v2': 3,
     'spacers:s10': 0
 };
 
@@ -366,7 +367,7 @@ const PAPER_WASHER = () => part('cam_modules:paper-washer', 'cam_modules', 'pape
 const CAM_SPACER = () => part('cam_modules:cam-spacer', 'cam_modules', 'cam-spacer', 'Cam spacer', 1);
 const CAM_DISK = () => part('cam_modules:swappable-cam-disk', 'cam_modules', 'swappable-cam-disk', 'Swappable cam disk', 1);
 const CAM_GUIDE_CARTRIDGE = () => part('cam_modules:u-channel-guide-cartridge', 'cam_modules', 'u-channel-guide-cartridge', 'U-channel guide cartridge', 1);
-const GRAVITY_FOLLOWER = () => part('cam_modules:gravity-follower-module', 'cam_modules', 'gravity-follower-module', 'Preassembled gravity follower module', 1);
+const GRAVITY_FOLLOWER = () => part('cam_modules:gravity-follower-module-v2', 'cam_modules', 'gravity-follower-module-v2', 'Preassembled gravity follower module v2', 1);
 
 const stack = (items: Array<Omit<ReferenceAssemblyStackItem, 'order'>>): ReferenceAssemblyStackItem[] =>
     items.map((item, index) => ({ ...item, order: index + 1 }));
@@ -513,13 +514,13 @@ const camSteps: ReferenceAssemblyStep[] = [
     ])),
     step(4, 'Insert gravity follower', 'insert-follower', ['J9', 'J7'], ['guide_reference', 'board'], 'Drop the preassembled gravity follower module into the cartridge so the rounded head rests on the cam.', 'The follower falls under gravity and does not bind.', stack([
         { label: 'U-channel guide cartridge', role: 'guide-cartridge', part: 'cam_modules:u-channel-guide-cartridge' },
-        { label: 'Preassembled gravity follower module', role: 'gravity-follower', part: 'cam_modules:gravity-follower-module' },
+        { label: 'Preassembled gravity follower module v2', role: 'gravity-follower', part: 'cam_modules:gravity-follower-module-v2' },
         { label: 'Swappable cam disk', role: 'cam-disk', part: 'cam_modules:swappable-cam-disk' }
     ])),
     step(5, 'Test cam contact', 'test-motion', ['J7', 'J9'], ['board', 'guide_reference'], 'Turn the crank slowly and watch the follower move up and down along the cartridge.', 'The rounded follower head stays on the cam edge through one full turn.', stack([
         { label: 'Crank handle', role: 'handle', part: 'cam_modules:crank-handle' },
         { label: 'Swappable cam disk', role: 'cam-disk', part: 'cam_modules:swappable-cam-disk' },
-        { label: 'Preassembled gravity follower module', role: 'gravity-follower', part: 'cam_modules:gravity-follower-module' }
+        { label: 'Preassembled gravity follower module v2', role: 'gravity-follower', part: 'cam_modules:gravity-follower-module-v2' }
     ]))
 ];
 
@@ -549,7 +550,7 @@ const planetarySteps: ReferenceAssemblyStep[] = [
     step(1, 'Pin the sun axle', 'place-fastener', ['H8'], ['board'], 'Place the sun gear fastener at H8.', 'The center axle is straight and fixed.', bareFastener('H8')),
     step(2, 'Mount R56 internal ring gear', 'add-ring', ['D8', 'H4', 'H12', 'L8'], ['board', 'board', 'board', 'board'], 'Center R56 internal ring gear around H8 and fasten its outer mount holes at D8, H4, H12, and L8.', 'The ring gear is fixed to the board and does not rotate.', fixedPartStack('D8', 'R56 internal ring gear', 'ring_gears:ring-g8-g24', 'Repeat this stack at D8, H4, H12, L8')),
     step(3, 'Add G1 sun gear', 'add-part', ['H8'], ['board'], 'Add S10 spacer, then place G1 on H8.', 'G1 spins cleanly before the carrier is added.', movingPartStack('Board hole H8', 'G1 / 1-space gear', 'gears:g8')),
-    step(4, 'Add carrier link', 'add-linkage', ['H8', 'H10'], ['board', 'carrier_reference'], 'Place L2 from H8 toward H10 as the carrier.', 'The carrier swings loosely around the sun axle.', movingPartStack('Board hole H8', 'L2 carrier linkage', 'linkages:linkage-2-cell')),
+    step(4, 'Add carrier link', 'add-linkage', ['H8', 'H10'], ['board', 'carrier_reference'], 'Place L4 from H8 through its third hole at H10 as the carrier.', 'The carrier swings loosely around the sun axle.', movingPartStack('Board hole H8', 'L4 carrier linkage', 'linkages:linkage-4-cell')),
     step(5, 'Add G3 moving planet gear', 'add-part', ['H10'], ['carrier_reference'], 'Align the free carrier hole near H10, then fasten G3 through the carrier hole only (not the board) so it meshes with both G1 and R56 internal ring gear.', 'The planet axle travels with the carrier and rolls between sun and ring.', movingPartStack('Carrier hole near H10', 'G3 / 3-space gear', 'gears:g24', 'carrier-hole')),
     step(6, 'Rotate the carrier', 'test-motion', ['H8', 'H10'], ['board', 'carrier_reference'], 'Hold the ring fixed and use the carrier end/handle hole to orbit the planet around H8.', 'If the orbit binds, loosen the planet fastener and spacer stack.', movingPartStack('Carrier hole near H10', 'G3 / 3-space gear', 'gears:g24', 'carrier-hole'))
 ];
@@ -584,7 +585,7 @@ export const REFERENCE_MECHANISM_RECIPES: Record<MechanismType, ReferenceMechani
         canonicalKey: 'slider_crank',
         title: 'Slider-crank linkage',
         physicsRule: 'slider thrust + guide normal force',
-        foundryVisible: false,
+        foundryVisible: true,
         exportReady: true,
         support: 'fabrication-ready',
         recipeId: 'slider-crank-basic',
@@ -608,7 +609,7 @@ export const REFERENCE_MECHANISM_RECIPES: Record<MechanismType, ReferenceMechani
         recipeId: 'pegboard-gravity-cam-follower',
         guideSvg: 'fabrication/assembly/02-cam-follower-basic.svg',
         requiredParts: [CAM_AXLE(), CAM_HANDLE(), CAM_LOCK(), PAPER_WASHER(), CAM_SPACER(), CAM_DISK(), CAM_GUIDE_CARTRIDGE(), GRAVITY_FOLLOWER()],
-        stackLabels: ['15x15 pegboard base', 'Axle peg', 'Crank handle', 'Paper washer', 'Cam spacer', 'Swappable cam disk', 'Paper washer', 'Cam lock disk', 'U-channel guide cartridge', 'Preassembled gravity follower module'],
+        stackLabels: ['15x15 pegboard base', 'Axle peg', 'Crank handle', 'Paper washer', 'Cam spacer', 'Swappable cam disk', 'Paper washer', 'Cam lock disk', 'U-channel guide cartridge', 'Preassembled gravity follower module v2'],
         assemblySteps: camSteps
     },
     'rack-pinion': unsupportedRecipe('rack-pinion', 'unsupported', 'Rack-pinion has no mechanism-reference recipe or kit part contract yet.'),
@@ -650,8 +651,8 @@ export const REFERENCE_MECHANISM_RECIPES: Record<MechanismType, ReferenceMechani
         support: 'fabrication-ready',
         recipeId: 'planetary-gear-basic',
         guideSvg: 'fabrication/assembly/05-planetary-gear-basic.svg',
-        requiredParts: [R56(), G1(), G3(1), L2(1), S10],
-        stackLabels: ['R56 internal ring gear', 'G1 / 1-space gear', 'L2 carrier linkage', 'G3 / 3-space gear'],
+        requiredParts: [R56(), G1(), G3(1), L4(1), S10],
+        stackLabels: ['R56 internal ring gear', 'G1 / 1-space gear', 'L4 carrier linkage', 'G3 / 3-space gear'],
         assemblySteps: planetarySteps
     }
 };

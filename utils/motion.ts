@@ -1,7 +1,13 @@
 import { BodyPartLayer, MechanismConfig, Point, ProjectMotionPath, ProjectState, SceneObject, StandardJoint, StandardSkeleton } from '../types';
 import { calculateLinkage } from './kinematics';
 import { placeBodyPartPivotAt } from './coordinates';
-import { mechanismMatchesPathOwner } from './pathTargets';
+import { assessMechanismTargetBinding } from './pathTargets';
+import {
+    mechanismRuntimeWarnings,
+    runtimeMechanisms,
+} from './mechanismRuntimePolicy';
+import { descendantJoints, motionAnchorJointIds, preferredMotionJointId } from './motionTargetSelection';
+export { motionAnchorJointIds, preferredMotionJointId } from './motionTargetSelection';
 
 export interface MotionPreview {
     parts: Record<string, BodyPartLayer>;
@@ -109,62 +115,12 @@ export const pointOnProjectPath = (path: ProjectMotionPath, angle: number): Poin
     return path.points.at(-1) ?? { x: 0, y: 0 };
 };
 
-const descendantJoints = (skeleton: StandardSkeleton | null | undefined, rootJointId: string) => {
-    const seen = new Set<string>([rootJointId]);
-    const stack = [...(skeleton?.hierarchy[rootJointId] ?? [])];
-    while (stack.length) {
-        const id = stack.pop()!;
-        if (seen.has(id)) continue;
-        seen.add(id);
-        stack.push(...(skeleton?.hierarchy[id] ?? []));
-    }
-    return seen;
-};
-
-const deepestDescendantJointId = (skeleton: StandardSkeleton | null | undefined, rootJointId: string) => {
-    let best = rootJointId;
-    let bestDepth = 0;
-    const walk = (id: string, depth: number) => {
-        if (depth > bestDepth) {
-            best = id;
-            bestDepth = depth;
-        }
-        (skeleton?.hierarchy[id] ?? []).forEach(child => walk(child, depth + 1));
-    };
-    walk(rootJointId, 0);
-    return best;
-};
-
-export const motionAnchorJointIds = (project: ProjectState, partId: string | undefined): string[] => {
-    const part = partId ? project.parts[partId] : undefined;
-    if (!part) return [];
-    const allowed = descendantJoints(project.skeleton, part.anchorJointId);
-    const ordered = Object.keys(project.skeleton?.joints ?? {}).filter(id => allowed.has(id));
-    return ordered.length ? ordered : [part.anchorJointId];
-};
-
 export const motionChainRootJointIds = (project: ProjectState, partId: string | undefined, targetJointId: string | undefined): string[] => {
     const part = partId ? project.parts[partId] : undefined;
     const skeleton = project.skeleton;
     if (!part || !skeleton) return [];
     const target = preferredMotionJointId(project, partId, targetJointId, { preferDistalWhenRoot: !targetJointId }) ?? part.anchorJointId;
     return motionRootOptionsFor(skeleton, part.anchorJointId, target);
-};
-
-export const preferredMotionJointId = (
-    project: ProjectState,
-    partId: string | undefined,
-    requestedJointId?: string,
-    options: { preferDistalWhenRoot?: boolean } = {}
-) => {
-    const part = partId ? project.parts[partId] : undefined;
-    if (!part) return requestedJointId;
-    const rootJointId = part.anchorJointId;
-    const allowed = new Set(motionAnchorJointIds(project, partId));
-    const requested = requestedJointId && allowed.has(requestedJointId) ? requestedJointId : undefined;
-    if (requested && (!options.preferDistalWhenRoot || requested !== rootJointId)) return requested;
-    if (options.preferDistalWhenRoot) return deepestDescendantJointId(project.skeleton, rootJointId);
-    return requested ?? rootJointId;
 };
 
 const visualPartIdsForJoints = (project: ProjectState, targetPartId: string, jointIds: Set<string>, explicitIds: string[] = []) => {
@@ -213,21 +169,9 @@ const jointDisplayName = (skeleton: StandardSkeleton | null | undefined, id?: st
 const coreBodyRootIds = new Set(['root', 'hip', 'torso', 'neck']);
 const uniqueIds = (ids: string[]) => [...new Set(ids)];
 
-const characterDriverKey = (rootJointId: string | undefined, targetJointId: string | undefined) =>
-    rootJointId && targetJointId ? `character:${rootJointId}:${targetJointId}` : undefined;
-
 export const mechanismDriverIdentity = (project: ProjectState, mechanism: MechanismConfig): string | undefined => {
     if (!mechanism.visible || mechanism.enabled === false) return undefined;
-    const path = mechanism.targetPathId ? project.paths[mechanism.targetPathId] : undefined;
-    const sceneObjectId = mechanism.targetSceneObjectId ?? path?.sceneObjectId;
-    if (sceneObjectId) return project.sceneObjects[sceneObjectId] ? `object:${sceneObjectId}` : undefined;
-    const partId = mechanism.targetPartId ?? (!path?.sceneObjectId ? path?.partId : undefined);
-    const part = partId ? project.parts[partId] : undefined;
-    if (!part) return undefined;
-    const targetJointId = preferredMotionJointId(project, partId, mechanism.targetAnchorJointId ?? path?.targetAnchorJointId);
-    const rootOptions = motionChainRootJointIds(project, partId, targetJointId);
-    const rootJointId = path?.chainRootJointId && rootOptions.includes(path.chainRootJointId) ? path.chainRootJointId : part.anchorJointId;
-    return characterDriverKey(rootJointId, targetJointId ?? part.anchorJointId);
+    return assessMechanismTargetBinding(project, mechanism).driverKey;
 };
 
 function motionRootOptionsFor(skeleton: StandardSkeleton, partRootJointId: string, targetJointId: string) {
@@ -559,91 +503,36 @@ export const motionPreviewForPath = (
     ? motionPreviewForSceneObject(project, path.sceneObjectId, pointOnProjectPath(path, angle), { parts: {}, sceneObjects: {}, skeleton: project.skeleton })
     : motionPreviewForTarget(project, path.partId, targetJointId, pointOnProjectPath(path, angle), { parts: {}, sceneObjects: {}, skeleton: project.skeleton }, { rootJointId: path.chainRootJointId });
 
-export const mechanismBindingWarnings = (project: ProjectState, mechanisms: MechanismConfig[] = project.mechanisms) => {
-    const warnings: Record<string, string[]> = {};
-    const add = (mechanismId: string, message: string) => {
-        warnings[mechanismId] = [...new Set([...(warnings[mechanismId] ?? []), message])];
-    };
-    const drivenTargets = new Map<string, string>();
-    mechanisms.filter(m => m.visible && m.enabled !== false).forEach(m => {
-        if (m.targetSceneObjectId) {
-            const object = project.sceneObjects[m.targetSceneObjectId];
-            if (!object) {
-                add(m.id, 'Choose a target.');
-                return;
-            }
-            if (m.targetPathId) {
-                const path = project.paths[m.targetPathId];
-                if (!path) add(m.id, 'Choose a path.');
-                else if (path.sceneObjectId !== m.targetSceneObjectId) add(m.id, "Choose this target's path.");
-            }
-            const key = mechanismDriverIdentity(project, m);
-            const owner = key ? drivenTargets.get(key) : undefined;
-            if (owner) {
-                add(owner, 'Choose another target.');
-                add(m.id, 'Choose another target.');
-            } else if (key) {
-                drivenTargets.set(key, m.id);
-            }
-            return;
-        }
-        if (!m.targetPartId) {
-            add(m.id, 'Choose a target.');
-            return;
-        }
-        const part = project.parts[m.targetPartId];
-        if (!part) {
-            add(m.id, 'Choose a target.');
-            return;
-        }
-        if (m.targetPathId) {
-            const path = project.paths[m.targetPathId];
-            if (!path) add(m.id, 'Choose a path.');
-            else if (!mechanismMatchesPathOwner(m, path, project)) add(m.id, "Choose this target's path.");
-        }
-        if (m.targetAnchorJointId && !motionAnchorJointIds(project, m.targetPartId).includes(m.targetAnchorJointId)) {
-            add(m.id, 'Choose a handle on this limb.');
-        }
-        const path = m.targetPathId ? project.paths[m.targetPathId] : undefined;
-        const targetJointId = preferredMotionJointId(project, m.targetPartId, m.targetAnchorJointId ?? path?.targetAnchorJointId);
-        const rootOptions = motionChainRootJointIds(project, m.targetPartId, targetJointId);
-        if (path?.chainRootJointId && !rootOptions.includes(path.chainRootJointId)) add(m.id, 'Choose a handle on this limb.');
-        const key = mechanismDriverIdentity(project, m);
-        const owner = key ? drivenTargets.get(key) : undefined;
-        if (key && owner) {
-            add(owner, 'Choose another target.');
-            add(m.id, 'Choose another target.');
-        } else if (key) {
-            drivenTargets.set(key, m.id);
-        }
-    });
-    return warnings;
-};
+export const mechanismBindingWarnings = (
+    project: ProjectState,
+    mechanisms: MechanismConfig[] = project.mechanisms,
+) => mechanismRuntimeWarnings(project, mechanisms);
 
-export const motionPreviewForProject = (project: ProjectState, mechanisms: MechanismConfig[], angle: number): MotionPreview => {
+export const motionPreviewForProject = (
+    project: ProjectState,
+    mechanisms: MechanismConfig[],
+    angle: number
+): MotionPreview => {
+    const activeMechanisms = runtimeMechanisms(project, mechanisms);
     const warnings = mechanismBindingWarnings(project, mechanisms);
-    const drivenTargets = new Set<string>();
     let preview: MotionPreview = { parts: {}, sceneObjects: {}, skeleton: project.skeleton, warnings };
-    mechanisms.filter(m => m.visible && m.enabled !== false).forEach(m => {
+    activeMechanisms.forEach(m => {
         if (warnings[m.id]?.length) return;
         if (m.targetSceneObjectId) {
             const object = project.sceneObjects[m.targetSceneObjectId];
             if (!object) return;
-            const state = calculateLinkage(m, angle);
+            const state = calculateLinkage(m, angle, project.settings.physicalKit);
             const generatedTarget = pointOnGeneratedMechanismPath(m.generatedPath ?? [], angle);
             if (!state.isValid && !generatedTarget) {
                 warnings[m.id] = [...(warnings[m.id] ?? []), 'Motion may jam. Try a smaller move.'];
                 return;
             }
             if (!state.isValid) warnings[m.id] = [...(warnings[m.id] ?? []), 'Motion may jam. Try a smaller move.'];
-            const key = mechanismDriverIdentity(project, m);
-            if (key && drivenTargets.has(key)) return;
-            if (key) drivenTargets.add(key);
             preview = motionPreviewForSceneObject(project, m.targetSceneObjectId, generatedTarget ?? state.effector, preview);
             return;
         }
         if (!m.targetPartId || !project.parts[m.targetPartId]) return;
-        const state = calculateLinkage(m, angle);
+        const state = calculateLinkage(m, angle, project.settings.physicalKit);
         const generatedTarget = pointOnGeneratedMechanismPath(m.generatedPath ?? [], angle);
         if (!state.isValid && !generatedTarget) {
             warnings[m.id] = [...(warnings[m.id] ?? []), 'Motion may jam. Try a smaller move.'];
@@ -654,9 +543,6 @@ export const motionPreviewForProject = (project: ProjectState, mechanisms: Mecha
         const targetJointId = preferredMotionJointId(project, m.targetPartId, m.targetAnchorJointId ?? path?.targetAnchorJointId);
         const rootOptions = motionChainRootJointIds(project, m.targetPartId, targetJointId);
         const rootJointId = path?.chainRootJointId && rootOptions.includes(path.chainRootJointId) ? path.chainRootJointId : undefined;
-        const key = mechanismDriverIdentity(project, m);
-        if (key && drivenTargets.has(key)) return;
-        if (key) drivenTargets.add(key);
         preview = motionPreviewForTarget(project, m.targetPartId, targetJointId, generatedTarget ?? state.effector, preview, { pinTarget: true, rootJointId });
     });
     return { ...preview, warnings };

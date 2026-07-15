@@ -63,7 +63,9 @@ const writeGettingStartedHiddenForSession = (hidden: boolean) => {
 const createInitialProject = () => {
   if (typeof window === "undefined") return createEmptyProject();
   try {
-    return readAutosaveProject() ?? createEmptyProject();
+    const initialProject = createEmptyProject();
+    const restored = readAutosaveProject(initialProject);
+    return restored.status === "loaded" ? restored.project : initialProject;
   } catch {
     return createEmptyProject();
   }
@@ -196,6 +198,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   );
   const {
     optimizerBusy,
+    mechanismEditFeedback,
     updateMechanism,
     optimizeSelectedMechanism,
     exportMechanismSvg,
@@ -343,6 +346,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     },
     mechanism: {
       updateMechanism,
+      mechanismEditFeedback,
       showTrace,
       setShowTrace,
       onOptimize: optimizeSelectedMechanism,

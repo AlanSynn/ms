@@ -1,9 +1,11 @@
-import type { MechanismConfig, MechanismType, Point, ProjectState } from '../types';
-import { calculateLinkage, gearTrainResolvedCenterDistance } from './kinematics';
+import type { ConnectionSelectionRole, MechanismConfig, MechanismType, Point, ProjectState } from '../types';
+import { calculateLinkage, camFollowerConstraintError, gearTrainResolvedCenterDistance } from './kinematics';
+import { physicalConnectionForRole, resolveMechanismPhysicalConnections } from './mechanismConnectionSelections';
 import { mechanismTemplateLabel } from './mechanismTemplates';
 import type { ProjectionSourceType, ToonSceneProjection } from './sceneProjection';
 import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STACK, PHYSICS_UPDATE_POLICY } from './physicsKernel';
 import { referencePhysicsRuleForType } from './mechanismReference';
+import { runtimeMechanisms } from './mechanismRuntimePolicy';
 
 export type PhysicsBodyKind = 'fixed' | 'kinematic' | 'joint' | 'driver';
 export type PhysicsConstraintKind = 'pin' | 'rod' | 'guide' | 'target';
@@ -51,6 +53,7 @@ export interface PhysicsSession {
     bodyCount: number;
     constraintCount: number;
     activeMechanismCount: number;
+    mechanismCompilerSignatures: string[];
     maxSpeed: number;
     maxForce: number;
     maxConstraintError: number;
@@ -100,6 +103,7 @@ const add = (a: Point, b: Point): Point => ({ x: finite(a.x + b.x), y: finite(a.
 
 export interface FoundryPhysicsSimulation {
   state: ReturnType<typeof calculateLinkage>;
+  rawState?: ReturnType<typeof calculateLinkage>;
   scale: number;
   pathPoints: Point[];
 }
@@ -174,16 +178,6 @@ const foundryPhysicalPlayhead = (
 const foundryConstraintError = (mechanism: MechanismConfig, simulation: FoundryPhysicsSimulation): number => {
   const s = simulation.state;
   const scaledLength = (length: number | undefined) => Math.max(0, finite(length ?? 0)) * simulation.scale;
-  const guideAxisError = (origin: Point | undefined, contact: Point | undefined, follower: Point | undefined) => {
-    if (!origin || !contact || !follower) return 0;
-    const guideDx = follower.x - origin.x;
-    const guideDy = follower.y - origin.y;
-    const guideLength = Math.hypot(guideDx, guideDy);
-    if (guideLength < 1e-9) return 0;
-    const ux = guideDx / guideLength;
-    const uy = guideDy / guideLength;
-    return Math.abs((contact.x - origin.x) * uy - (contact.y - origin.y) * ux);
-  };
   const errors = mechanism.type === 'gear'
     ? [Math.abs(fittedDistance(s.p1, s.p2) - scaledLength(gearTrainResolvedCenterDistance(mechanism)))]
     : mechanism.type === 'gear_linkage'
@@ -199,10 +193,8 @@ const foundryConstraintError = (mechanism: MechanismConfig, simulation: FoundryP
       : mechanism.type === 'rack-pinion'
         ? [Math.abs(fittedDistance(s.p1, s.j1) - scaledLength(mechanism.crankLength)), fittedDistance(s.j2, s.p2)]
         : mechanism.type === 'cam'
-          ? [
-            Math.abs(fittedDistance(s.j1, s.j2) - scaledLength(mechanism.sliderOffset)),
-            guideAxisError(s.p1, s.j1, s.j2)
-          ]
+          ? [camFollowerConstraintError(mechanism, simulation.rawState ?? s)
+            * (simulation.rawState ? simulation.scale : 1)]
           : mechanism.type === 'piston'
             ? [fittedDistance(s.j2, s.effector)]
             : mechanism.type === 'yoke'
@@ -303,6 +295,18 @@ export const buildKinematicPhysicsSession = (
   angleRad = 0,
   stepMs = 16.667
 ): PhysicsSession => {
+  const activeMechanisms = runtimeMechanisms(project);
+  const activeMechanismIds = new Set(activeMechanisms.map((mechanism) => mechanism.id));
+  const activeMechanismNodeIds = new Set(
+    projection.nodes
+      .filter((node) => node.sourceType === 'mechanism' && Boolean(node.sourceId && activeMechanismIds.has(node.sourceId)))
+      .map((node) => node.id),
+  );
+  const mechanismCompilerSignatures = [...new Set(
+    projection.nodes
+      .filter((node) => node.sourceType === 'mechanism' && Boolean(node.sourceId && activeMechanismIds.has(node.sourceId)))
+      .flatMap((node) => node.mechanismCompilerSignature ? [node.mechanismCompilerSignature] : []),
+  )].sort();
   const bodies: PhysicsBodySample[] = [];
   const constraints: PhysicsConstraintSample[] = [];
   const frictionCoefficient = finite(project.settings.simulationFriction, 0.18);
@@ -316,6 +320,13 @@ export const buildKinematicPhysicsSession = (
 
   projection.nodes
     .filter(node => ['part', 'joint', 'mechanism', 'hardware'].includes(node.sourceType))
+    .filter(node =>
+      node.sourceType === 'mechanism'
+        ? Boolean(node.sourceId && activeMechanismIds.has(node.sourceId))
+        : node.sourceType === 'hardware'
+          ? Boolean(node.parentId && activeMechanismNodeIds.has(node.parentId))
+          : true,
+    )
     .forEach(node => {
       const anchor = geometryAnchor(node.geometry);
       bodies.push({
@@ -331,15 +342,16 @@ export const buildKinematicPhysicsSession = (
       });
     });
 
-  project.mechanisms
-    .filter(mechanism => mechanism.visible && mechanism.enabled !== false)
-    .forEach(mechanism => {
+  activeMechanisms.forEach(mechanism => {
       const templateLabel = mechanismTemplateLabel(mechanism.type);
       const anchor = resolvedAnchor(mechanism);
       const resolved = { ...mechanism, anchorX: anchor.x, anchorY: anchor.y };
-      const current = calculateLinkage(resolved, angleRad);
-      const previous = calculateLinkage(resolved, angleRad - 0.02);
-      const next = calculateLinkage(resolved, angleRad + 0.02);
+      const current = calculateLinkage(resolved, angleRad, project.settings.physicalKit);
+      const previous = calculateLinkage(resolved, angleRad - 0.02, project.settings.physicalKit);
+      const next = calculateLinkage(resolved, angleRad + 0.02, project.settings.physicalKit);
+      const physicalConnections = resolveMechanismPhysicalConnections(resolved, project.settings.physicalKit);
+      const sourceLength = (role: ConnectionSelectionRole) =>
+        physicalConnectionForRole(physicalConnections, role)?.local?.length ?? 0;
       const depth = projection.nodes.find(node => node.sourceType === 'mechanism' && node.sourceId === mechanism.id)?.depthMm ?? 25;
       const samples: Array<[string, Point, Point, Point, PhysicsBodyKind]> = [
         ['p1', current.p1, previous.p1, next.p1, 'driver'],
@@ -365,8 +377,14 @@ export const buildKinematicPhysicsSession = (
         });
       });
       const actualDistance = (a: Point, b: Point) => distance(a, b);
+      const crankConstraintLength = () => {
+        if (mechanism.type === '4bar') return sourceLength('4bar.input-joint');
+        if (mechanism.type === 'piston') return sourceLength('piston.crank-pin');
+        if (mechanism.type === 'gear') return sourceLength('gear.drive-pin');
+        return finite(mechanism.crankLength);
+      };
       const addCrankConstraint = () =>
-        addConstraint(constraints, `/physics/constraints/${mechanism.id}/crank`, 'rod', current.p1, current.j1, finite(mechanism.crankLength), 'crank length', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/crank`, 'rod', current.p1, current.j1, crankConstraintLength(), 'crank length', mechanism.id);
       const addTargetConstraint = () =>
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/target`, 'target', current.effector, current.effector, 0, 'end effector target', mechanism.id);
       if (mechanism.type === 'crank') {
@@ -374,7 +392,7 @@ export const buildKinematicPhysicsSession = (
       } else if (mechanism.type === '4bar') {
         addCrankConstraint();
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/coupler`, 'rod', current.j1, current.j2, finite(mechanism.couplerLength), 'coupler length', mechanism.id);
-        addConstraint(constraints, `/physics/constraints/${mechanism.id}/rocker`, 'rod', current.j2, current.p2, finite(mechanism.rockerLength), 'rocker length', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/rocker`, 'rod', current.j2, current.p2, sourceLength('4bar.output-joint'), 'rocker length', mechanism.id);
       } else if (mechanism.type === '6bar') {
         addCrankConstraint();
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/coupler`, 'rod', current.j1, current.j2, finite(mechanism.couplerLength), 'coupler length', mechanism.id);
@@ -388,7 +406,7 @@ export const buildKinematicPhysicsSession = (
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/right-coupler`, 'rod', current.aux ?? current.j2, current.j2, finite(mechanism.rodLength ?? mechanism.couplerLength), 'right coupler length', mechanism.id);
       } else if (mechanism.type === 'piston') {
         addCrankConstraint();
-        addConstraint(constraints, `/physics/constraints/${mechanism.id}/coupler`, 'rod', current.j1, current.j2, finite(mechanism.couplerLength), 'coupler length', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/coupler`, 'rod', current.j1, current.j2, sourceLength('piston.rod-slider-pin'), 'coupler length', mechanism.id);
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/slider-guide`, 'guide', current.j2, current.j2, 0, 'slider guide', mechanism.id);
       } else if (mechanism.type === 'yoke') {
         addCrankConstraint();
@@ -407,19 +425,19 @@ export const buildKinematicPhysicsSession = (
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/pinion-contact`, 'pin', current.p1, current.j1, finite(mechanism.crankLength), 'pinion pitch contact', mechanism.id);
       } else if (mechanism.type === 'gear') {
         addCrankConstraint();
-        addConstraint(constraints, `/physics/constraints/${mechanism.id}/output-radius`, 'rod', current.p2, current.j2, finite(mechanism.rockerLength), 'output pitch radius', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/output-radius`, 'rod', current.p2, current.j2, sourceLength('gear.output-pin'), 'output attachment radius', mechanism.id);
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/gear-span`, 'guide', current.p1, current.p2, finite(gearTrainResolvedCenterDistance(mechanism)), 'gear mesh pair', mechanism.id);
       } else if (mechanism.type === 'gear_linkage') {
-        addConstraint(constraints, `/physics/constraints/${mechanism.id}/drive-handle-radius`, 'rod', current.p1, current.j1, finite(mechanism.couplerPointDist), 'off-center drive gear handle radius', mechanism.id);
-        addConstraint(constraints, `/physics/constraints/${mechanism.id}/output-handle-radius`, 'rod', current.p2, current.j2, finite(mechanism.couplerPointDist), 'off-center output gear handle radius', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/drive-handle-radius`, 'rod', current.p1, current.j1, sourceLength('gear_linkage.drive-pin'), 'off-center drive gear handle radius', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/output-handle-radius`, 'rod', current.p2, current.j2, sourceLength('gear_linkage.output-pin'), 'off-center output gear handle radius', mechanism.id);
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/gear-span`, 'guide', current.p1, current.p2, finite(gearTrainResolvedCenterDistance(mechanism)), 'gear endpoint span', mechanism.id);
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/drive-linkage-arm`, 'rod', current.j1, current.effector, finite(mechanism.couplerLength), 'drive L4 linkage arm', mechanism.id);
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/output-linkage-arm`, 'rod', current.j2, current.effector, finite(mechanism.couplerLength), 'output L4 linkage arm', mechanism.id);
       } else if (mechanism.type === 'planetary_gear') {
         addCrankConstraint();
-        addConstraint(constraints, `/physics/constraints/${mechanism.id}/carrier`, 'guide', current.p1, current.p2, finite(mechanism.groundLength), 'planet carrier radius', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/carrier`, 'guide', current.p1, current.p2, sourceLength('planetary_gear.carrier-planet-pivot'), 'planet carrier radius', mechanism.id);
         addConstraint(constraints, `/physics/constraints/${mechanism.id}/planet-mesh`, 'guide', current.p2, current.j2, finite(mechanism.rockerLength), 'planet gear mesh', mechanism.id);
-        addConstraint(constraints, `/physics/constraints/${mechanism.id}/output-arm`, 'rod', current.p1, current.effector, finite(mechanism.couplerPointDist), 'carrier output radius', mechanism.id);
+        addConstraint(constraints, `/physics/constraints/${mechanism.id}/output-arm`, 'rod', current.p1, current.effector, sourceLength('planetary_gear.carrier-output-hole'), 'carrier output radius', mechanism.id);
       }
       addTargetConstraint();
       if (!current.isValid) warnings.push({ id: `/physics/warnings/${mechanism.id}/invalid`, severity: 'warning', message: `${templateLabel} kinematic sample is outside its valid linkage range.`, sourceId: mechanism.id });
@@ -439,7 +457,8 @@ export const buildKinematicPhysicsSession = (
     summary: {
       bodyCount: bodies.length,
       constraintCount: constraints.length,
-      activeMechanismCount: project.mechanisms.filter(mechanism => mechanism.visible && mechanism.enabled !== false).length,
+      activeMechanismCount: activeMechanisms.length,
+      mechanismCompilerSignatures,
       maxSpeed: finite(maxSpeed),
       maxForce: finite(maxForce),
       maxConstraintError: finite(maxConstraintError),

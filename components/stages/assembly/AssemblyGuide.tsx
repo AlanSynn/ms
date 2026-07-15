@@ -25,6 +25,7 @@ import {
   createFabricationPackage,
   validateForFabrication,
 } from "../../../utils/fabrication";
+import { isSoftReadinessBlocker } from "../../../utils/fabricationReadiness";
 
 export const AssemblyGuide = ({
   project,
@@ -49,13 +50,23 @@ export const AssemblyGuide = ({
   setPlaying: Dispatch<SetStateAction<boolean>>;
   setStepCount: Dispatch<SetStateAction<number>>;
 }) => {
-  const validation = validateForFabrication(project);
+  const validation = validateForFabrication(project, {
+    allowSoftReadinessBlockers: true,
+  });
+  const buildReady =
+    validation.readiness.status === "project-ready" ||
+    !validation.readiness.blockers.some((blocker) => !isSoftReadinessBlocker(blocker));
   const create = () =>
     dispatch({
       type: "set_export",
-      fabricationPackage: createFabricationPackage(project),
+      fabricationPackage: createFabricationPackage(project, {
+        allowSoftReadinessBlockers: true,
+      }),
     });
-  const pkg = project.lastExport;
+  const pkg = buildReady ? project.lastExport : undefined;
+  const buildProject = buildReady
+    ? project
+    : { ...project, mechanisms: [], selectedMechanismId: undefined };
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const [assemblyMode, setAssemblyMode] =
     useState<AssemblyGuideMode>("mechanism");
@@ -77,14 +88,14 @@ export const AssemblyGuide = ({
   } = useMemo(
     () =>
       buildAssemblyGuideModel({
-        project,
+        project: buildProject,
         pkg,
         selectedRecipeId,
         assemblyMode,
         lane,
         stepIndex,
       }),
-    [project, pkg, selectedRecipeId, assemblyMode, lane, stepIndex],
+    [buildProject, pkg, selectedRecipeId, assemblyMode, lane, stepIndex],
   );
   const { goAssemblyStep } = useAssemblyGuidePlayback({
     activeStepCount,

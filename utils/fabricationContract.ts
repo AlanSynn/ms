@@ -1,12 +1,27 @@
-import type { FabricationGearKey, FabricationLinkageKey, Point } from '../types';
-import { boardColumnLabel, parseBoardCoordinateLabel } from './coordinates';
+import type {
+    FabricationBoardMountKey,
+    FabricationGearKey,
+    FabricationLinkageKey,
+    FabricationModuleHoleId,
+    FabricationModuleKey,
+    Point,
+} from '../types';
+import { boardColumnLabel, boardCoordinateLabel, parseBoardCoordinateLabel } from './coordinates';
 
-export type { FabricationGearKey, FabricationLinkageKey } from '../types';
+export type {
+    FabricationBoardMountKey,
+    FabricationGearKey,
+    FabricationLinkageKey,
+    FabricationModuleHoleId,
+    FabricationModuleKey,
+} from '../types';
 
 export const FABRICATION_SOURCE_BOARD_TS = 'scripts/generate-fabrication-board.ts' as const;
 export const FABRICATION_SOURCE_TEMPLATE_TS = 'scripts/generate-fabrication-assets.ts' as const;
 export const FABRICATION_SOURCE_SSOT = FABRICATION_SOURCE_TEMPLATE_TS;
 export const FABRICATION_SCHEMA_VERSION = 'automataii.fabrication.v1' as const;
+/** Persisted physical connection inventory; independent from the legacy cut-file schema. */
+export const FABRICATION_CONNECTION_SCHEMA_VERSION = 'motionsmith.physical-connections.v2' as const;
 export const FABRICATION_PROFILE_KEY = 'motionsmith-ms4n' as const;
 export const FABRICATION_DEFAULT_GRID_PITCH_MM = 20;
 export const FABRICATION_HOLE_DIAMETER_MM = 4;
@@ -84,6 +99,37 @@ export type FabricationRingGearSpec = {
     mountHoleCentersMm: Point[];
 };
 
+export type FabricationBoardMountSpec = {
+    key: FabricationBoardMountKey;
+    partKey: string;
+    sourceHoleIndices: readonly number[];
+    /** Source-SVG coordinates, retained to prove the actual printed vector. */
+    sourceHoleCentersMm: readonly Point[];
+    /** Required ordered local vector(s), never a scalar board-hole substitute. */
+    orderedDeltasMm: readonly Point[];
+    gridPitchCount: number;
+};
+
+export type FabricationModuleSpec = {
+    key: FabricationModuleKey;
+    partKey: string;
+    path: string;
+    version: 2;
+    holes: Readonly<Record<FabricationModuleHoleId, Point>>;
+};
+
+/**
+ * A reviewed assembly placement ties a source mount vector to board geometry.
+ * `boardPitchDirection` is the board-space direction for each 20 mm source
+ * pitch; it also captures required rotation for a non-square source part.
+ */
+export type FabricationReferenceBoardMountPlacement = {
+    mountKey: FabricationBoardMountKey;
+    anchor: { col: number; row: number };
+    boardPitchDirection: { col: number; row: number };
+    rotationQuarterTurns: 0 | 1 | 2 | 3;
+};
+
 const GEAR_PRESETS: readonly GearPreset[] = [
     { key: 'g8', label: 'G1 / 1-space gear', path: 'gears/gear-8t.svg', teeth: 8 },
     { key: 'g24', label: 'G3 / 3-space gear', path: 'gears/gear-24t.svg', teeth: 24 },
@@ -92,6 +138,85 @@ const GEAR_PRESETS: readonly GearPreset[] = [
 ] as const;
 
 export const FABRICATION_LINKAGE_LENGTH_CELLS = [2, 4, 6, 8] as const;
+
+/** Approved guide mount retained across v1/v2 project migration. */
+export const HISTORIC_V1_CAM_GUIDE_BOARD_HOLES = ['J11', 'J9'] as const;
+
+export const FABRICATION_BOARD_MOUNT_SPECS: readonly FabricationBoardMountSpec[] = [
+    {
+        key: 'cam-guide-2-hole',
+        partKey: 'cam_modules:u-channel-guide-cartridge',
+        sourceHoleIndices: [0, 1],
+        sourceHoleCentersMm: [{ x: 27, y: 20 }, { x: 27, y: 60 }],
+        orderedDeltasMm: [{ x: 0, y: 40 }],
+        gridPitchCount: 2,
+    },
+    {
+        key: 'piston-guide-3-hole',
+        partKey: 'brackets:3-hole-straight',
+        sourceHoleIndices: [0, 1, 2],
+        sourceHoleCentersMm: [{ x: 10, y: 10 }, { x: 30, y: 10 }, { x: 50, y: 10 }],
+        orderedDeltasMm: [{ x: 20, y: 0 }, { x: 40, y: 0 }],
+        gridPitchCount: 1,
+    },
+] as const;
+
+/**
+ * Active v2 reference placements derived from the approved assembly layout.
+ * The piston bracket is rotated 90°.
+ */
+export const FABRICATION_REFERENCE_BOARD_MOUNT_PLACEMENTS: readonly FabricationReferenceBoardMountPlacement[] = [
+    {
+        mountKey: 'cam-guide-2-hole',
+        anchor: { col: 9, row: 10 },
+        boardPitchDirection: { col: 0, row: -1 },
+        rotationQuarterTurns: 0,
+    },
+    {
+        mountKey: 'piston-guide-3-hole',
+        anchor: { col: 6, row: 10 },
+        boardPitchDirection: { col: 0, row: 1 },
+        rotationQuarterTurns: 1,
+    },
+] as const;
+
+export const fabricationBoardMountSpec = (key: FabricationBoardMountKey) =>
+    FABRICATION_BOARD_MOUNT_SPECS.find((spec) => spec.key === key);
+
+export const fabricationReferenceBoardMountHoleIds = (
+    key: FabricationBoardMountKey,
+): readonly string[] | undefined => {
+    const spec = fabricationBoardMountSpec(key);
+    const placement = FABRICATION_REFERENCE_BOARD_MOUNT_PLACEMENTS.find((item) => item.mountKey === key);
+    if (!spec || !placement) return undefined;
+    return spec.sourceHoleIndices.map((_, index) =>
+        boardCoordinateLabel(
+            placement.anchor.col + placement.boardPitchDirection.col * index * spec.gridPitchCount,
+            placement.anchor.row + placement.boardPitchDirection.row * index * spec.gridPitchCount,
+        ),
+    );
+};
+
+/**
+ * The v1 one-hole follower remains on disk for reproducible v1 evidence. Only
+ * this v2 inventory may author the three named output choices.
+ */
+export const FABRICATION_MODULE_SPECS: readonly FabricationModuleSpec[] = [
+    {
+        key: 'gravity-follower-module-v2',
+        partKey: 'cam_modules:gravity-follower-module-v2',
+        path: 'cam_modules/gravity-follower-module-v2.svg',
+        version: 2,
+        holes: {
+            'output-0': { x: 19, y: 16 },
+            'output-1': { x: 19, y: 46 },
+            'output-2': { x: 19, y: 76 },
+        },
+    },
+] as const;
+
+export const fabricationModuleSpec = (key: FabricationModuleKey) =>
+    FABRICATION_MODULE_SPECS.find((spec) => spec.key === key);
 
 export const fabricationGearEngravingLabel = (teeth: number) => `${Math.round(teeth)} Tooth Gear`;
 export const fabricationLinkageEngravingLabel = (cells: number) => `${Math.round(cells) + 1} Hole Linkage`;

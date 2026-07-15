@@ -14,7 +14,7 @@ import { normalizeMechanismConnectionSelections } from './mechanismConnectionSel
 
 export const validateMechanismPreviewReadiness = (mechanism: MechanismConfig, kit?: PhysicalKitSettings): string[] => {
     const boardPitchMm = kit?.gridPitchMm;
-    const graphFabrication = compileGraphFabricationRecipe(mechanismGraphForMechanism(mechanism), kit);
+    const graphFabrication = compileGraphFabricationRecipe(mechanismGraphForMechanism(mechanism, kit), kit);
     const renderPlanErrors = graphFabrication.renderPlan.validationErrors;
     const errors = [
         ...renderPlanErrors,

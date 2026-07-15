@@ -181,7 +181,9 @@ export const MechanismRecommendationSheet = ({
             className="recommendation-empty"
             data-testid="recommendation-empty"
           >
-            Draw more path.
+            {(selectedPath?.points.length ?? 0) < 3
+              ? "Draw more path."
+              : "No safe fit."}
           </div>
         ) : (
           <div className="recommendation-grid mt-5">

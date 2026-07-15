@@ -5,6 +5,7 @@ import { pathFromPoints, sceneToSvg } from '../../utils/coordinates';
 import { gearTrainCenters, gearTrainPitchRadii } from '../../utils/kinematics';
 import { type ClassroomLessonId, createLessonProject } from '../../utils/project';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlinePathD } from '../../utils/partGeometry';
+import { resolveMechanismRuntimeGate } from '../../utils/mechanismRuntimePolicy';
 
 export type StarterImageTemplate = { id: string; label: string; fileName: string; url: string; thumbUrl: string };
 export type GuidedLessonTile = {
@@ -62,6 +63,7 @@ const mechanismSceneAnchor = (mechanism: MechanismConfig): Point =>
     mechanism.sceneAnchor ?? mechanism.transform ?? { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 };
 
 const lessonGearGlyphs = (project: ProjectState | null) => (project?.mechanisms ?? [])
+    .filter(mechanism => project && resolveMechanismRuntimeGate(project, mechanism).canDriveProject)
     .filter(mechanism => mechanism.type === 'gear' || mechanism.type === 'planetary_gear')
     .map(mechanism => {
         const centers = mechanism.type === 'gear' ? gearTrainCenters(mechanism) : [mechanismSceneAnchor(mechanism)];
@@ -93,7 +95,9 @@ const GuidedLessonMotionPreview = ({ lessonId, project }: { lessonId: string; pr
         .map(id => project.parts[id])
         .filter((part): part is BodyPartLayer => Boolean(part) && part.visible !== false) ?? [];
     const selectedPath = project?.selectedPathId ? project.paths[project.selectedPathId] : Object.values(project?.paths ?? {})[0];
-    const generatedPath = !selectedPath ? project?.mechanisms.find(mechanism => mechanism.generatedPath?.length)?.generatedPath : undefined;
+    const generatedPath = !selectedPath ? project?.mechanisms.find(mechanism =>
+        resolveMechanismRuntimeGate(project, mechanism).canDriveProject && mechanism.generatedPath?.length
+    )?.generatedPath : undefined;
     const tracePoints = selectedPath?.points?.length ? selectedPath.points : generatedPath;
     const svgPoints: Point[] = [];
     const focusPoints: Point[] = [];

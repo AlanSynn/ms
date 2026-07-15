@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import type {
+  ConnectionSelectionRole,
   MechanismConfig,
   PhysicalKitSettings,
   Point,
@@ -19,16 +20,21 @@ import {
 } from "./FoundryCanvasChrome";
 import {
   FoundryOverlayLayer,
-  type FoundryConnectionHoleHandle,
   type FoundryParamHandle,
   type FoundryParamHandleId,
-  type DraggingFoundryConnectionSelection,
 } from "./FoundryOverlayLayer";
+import {
+  MechanismConnectionOverlay,
+  type DraggingMechanismConnectionSelection,
+  type MechanismConnectionHoleHandle,
+} from "../mechanism/MechanismConnectionOverlay";
 import { ThreeFoundryPreview } from "./ThreeFoundryPreview";
+import type { MechanismSceneContract } from "../../../utils/mechanismSceneContract";
 
 type FoundryCanvasPaneProps = {
   foundry: MechanismConfig;
   landedFoundry: MechanismConfig;
+  mechanismContract: MechanismSceneContract;
   foundryPlaying: boolean;
   foundryPhase: number;
   foundryPhaseDegrees: number;
@@ -79,10 +85,12 @@ type FoundryCanvasPaneProps = {
   forceRaw: Point;
   foundryParamHandles: FoundryParamHandle[];
   foundryParamHandleZSummary: string;
-  connectionHoleHandles: FoundryConnectionHoleHandle[];
+  connectionHoleHandles: MechanismConnectionHoleHandle[];
   connectionSelectionCoordinates: Record<string, Point>;
   connectionExportSignature: string;
   selectedConnection?: { role: string; kind: string; holeIndex: number };
+  connectionBlocker?: string | null;
+  connectionRecoveryRole?: ConnectionSelectionRole | null;
   hasManualAnchor: boolean;
   landingBoardLabel: string;
   onSetCameraPreset: (preset: Exclude<FoundryViewPreset, "custom">) => void;
@@ -106,16 +114,14 @@ type FoundryCanvasPaneProps = {
   onParamPointerDown: (
     handle: FoundryParamHandleId,
   ) => React.PointerEventHandler<SVGCircleElement>;
+  onConnectionHoleSelect: (handle: MechanismConnectionHoleHandle) => void;
+  onConnectionHoleInteractionStart: () => void;
   onConnectionHolePointerDown: (
-    handle: FoundryConnectionHoleHandle,
+    handle: MechanismConnectionHoleHandle,
   ) => React.PointerEventHandler<SVGCircleElement>;
-  onConnectionHolePointerMove: (
-    handle: FoundryConnectionHoleHandle,
-  ) => React.PointerEventHandler<SVGCircleElement>;
-  onConnectionHolePointerUp: (
-    handle: FoundryConnectionHoleHandle,
-  ) => React.PointerEventHandler<SVGCircleElement>;
-  draggingConnectionSelection?: DraggingFoundryConnectionSelection;
+  onConnectionHolePointerMove: React.PointerEventHandler<SVGCircleElement>;
+  onConnectionHolePointerUp: React.PointerEventHandler<SVGCircleElement>;
+  draggingConnectionSelection?: DraggingMechanismConnectionSelection;
   onParamPointerMove: React.PointerEventHandler<SVGCircleElement>;
   onParamPointerUp: React.PointerEventHandler<SVGCircleElement>;
 };
@@ -123,6 +129,7 @@ type FoundryCanvasPaneProps = {
 export const FoundryCanvasPane = ({
   foundry,
   landedFoundry,
+  mechanismContract,
   foundryPlaying,
   foundryPhase,
   foundryPhaseDegrees,
@@ -172,6 +179,8 @@ export const FoundryCanvasPane = ({
   connectionSelectionCoordinates,
   connectionExportSignature,
   selectedConnection,
+  connectionBlocker,
+  connectionRecoveryRole,
   hasManualAnchor,
   landingBoardLabel,
   onSetCameraPreset,
@@ -195,6 +204,8 @@ export const FoundryCanvasPane = ({
   onParamPointerDown,
   onParamPointerMove,
   onParamPointerUp,
+  onConnectionHoleSelect,
+  onConnectionHoleInteractionStart,
   onConnectionHolePointerDown,
   onConnectionHolePointerMove,
   onConnectionHolePointerUp,
@@ -307,6 +318,7 @@ export const FoundryCanvasPane = ({
     />
     <ThreeFoundryPreview
       mechanism={landedFoundry}
+      mechanismContract={mechanismContract}
       simulation={selectedPhysicalSimulation}
       kit={kit}
       camera={foundryCamera}
@@ -382,16 +394,24 @@ export const FoundryCanvasPane = ({
         physicsRule={physicsRule}
         foundryParamHandles={foundryParamHandles}
         foundryParamHandleZSummary={foundryParamHandleZSummary}
-        connectionHoleHandles={connectionHoleHandles}
-        onConnectionHolePointerDown={onConnectionHolePointerDown}
-        onConnectionHolePointerMove={onConnectionHolePointerMove}
-        onConnectionHolePointerUp={onConnectionHolePointerUp}
-        draggingConnectionSelection={draggingConnectionSelection}
         hasManualAnchor={hasManualAnchor}
         landingBoardLabel={landingBoardLabel}
         onParamPointerDown={onParamPointerDown}
         onParamPointerMove={onParamPointerMove}
         onParamPointerUp={onParamPointerUp}
+      />
+      <MechanismConnectionOverlay
+        surface="foundry"
+        projectionSize={foundryProjectionSize}
+        handles={connectionHoleHandles}
+        dragging={draggingConnectionSelection}
+        recoveryRole={connectionRecoveryRole}
+        blocker={connectionBlocker}
+        onInteractionStart={onConnectionHoleInteractionStart}
+        onSelect={onConnectionHoleSelect}
+        onPointerDown={onConnectionHolePointerDown}
+        onPointerMove={onConnectionHolePointerMove}
+        onPointerUp={onConnectionHolePointerUp}
       />
     </ThreeFoundryPreview>
     <div hidden data-testid="foundry-toolbar-state">

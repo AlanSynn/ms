@@ -1,9 +1,13 @@
 
-import { GlobalConfig, MechanismConfig, Point } from '../types';
+import { GlobalConfig, MechanismConfig, Point, ProjectState } from '../types';
 import { calculateLinkage, gearTrainCenters, gearTrainOutputRatio, gearTrainPitchRadii, generateCurvePoints, sampledCamProfileScale } from './kinematics';
 import { SCENE_PX_PER_MM, SCENE_VIEW, sceneToSvg } from './coordinates';
 import { finiteNumber, sanitizeHexColor, sanitizeMechanismRuntime, svgNumber } from './sanitize';
 import { fabricationGearPathD } from './fabrication';
+import { projectMechanismReadiness } from './mechanismReadiness';
+import { buildProjectMechanismSceneContract, type MechanismSceneContract } from './mechanismSceneContract';
+import type { MechanismPhysicalPartInstance } from './mechanismPhysicalInstances';
+import { MECHANISM_BINDING_BLOCKER } from './pathTargets';
 
 // --- DXF HELPER FUNCTIONS ---
 
@@ -40,9 +44,29 @@ const camProfilePoints = (center: Point, radius: number, samples?: number[], ste
 const camProfilePathD = (center: Point, radius: number, samples?: number[]) => `${rawPath(camProfilePoints(center, radius, samples))} Z`;
 const activeMechanisms = (config: GlobalConfig) => config.mechanisms.map(sanitizeMechanismRuntime).filter(m => m.visible && m.enabled !== false);
 
+export type GuardedMechanismExport =
+    | { ok: true; artifact: string; mechanismIds: string[] }
+    | { ok: false; blockers: string[] };
+
+const projectReadyContracts = (
+    project: ProjectState,
+    angle: number,
+): { contracts: MechanismSceneContract[]; mechanismIds: string[] } | { blockers: string[] } => {
+    const readiness = projectMechanismReadiness(project);
+    if (readiness.status !== 'project-ready') return { blockers: readiness.blockers };
+    const contracts = readiness.activeMechanismIds.flatMap(mechanismId => {
+        const contract = buildProjectMechanismSceneContract(project, mechanismId, undefined, angle);
+        return contract?.projectDriveEnabled ? [contract] : [];
+    });
+    return contracts.length === readiness.activeMechanismIds.length
+        ? { contracts, mechanismIds: readiness.activeMechanismIds }
+        : { blockers: [MECHANISM_BINDING_BLOCKER] };
+};
+
 // --- EXPORT FUNCTIONS ---
 
-export const generateDXF = (config: GlobalConfig, angle: number): string => {
+/** Bounded legacy geometry diagnostic. Runtime downloads must use the ProjectState export below. */
+export const generateLowLevelMechanismDXF = (config: GlobalConfig, angle: number): string => {
     let content = dxfHeader();
 
     // 1. Trace Paths (Green)
@@ -136,7 +160,8 @@ export const generateDXF = (config: GlobalConfig, angle: number): string => {
     return content;
 };
 
-export const generateSVG = (config: GlobalConfig, angle: number): string => {
+/** Bounded legacy geometry diagnostic. Runtime downloads must use the ProjectState export below. */
+export const generateLowLevelMechanismSVG = (config: GlobalConfig, angle: number): string => {
     const origin = sceneToSvg({ x: 0, y: 0 });
 
     let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SCENE_VIEW.width} ${SCENE_VIEW.height}" style="background-color: #f8fafc">`;
@@ -240,4 +265,78 @@ export const generateSVG = (config: GlobalConfig, angle: number): string => {
 
     svg += `</g></svg>`;
     return svg;
+};
+
+const escapeXml = (value: string) => value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+
+const physicalPoint = (pointMm: Point, instance: MechanismPhysicalPartInstance): Point => {
+    const c = Math.cos(instance.pose.rotationRad);
+    const s = Math.sin(instance.pose.rotationRad);
+    return {
+        x: (instance.pose.translationMm.x + pointMm.x * c - pointMm.y * s) * SCENE_PX_PER_MM,
+        y: (instance.pose.translationMm.y + pointMm.x * s + pointMm.y * c) * SCENE_PX_PER_MM,
+    };
+};
+
+const canonicalProjectSvg = (contracts: MechanismSceneContract[]) => {
+    const origin = sceneToSvg({ x: 0, y: 0 });
+    const metadata = escapeXml(JSON.stringify({ mechanismSceneContracts: contracts }));
+    let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SCENE_VIEW.width} ${SCENE_VIEW.height}"><metadata>${metadata}</metadata>`;
+    svg += `<g transform="translate(${origin.x}, ${origin.y}) scale(1, -1)">`;
+    contracts.forEach(contract => {
+        const definitions = new Map(contract.physicalDefinitions.map(definition => [definition.partKey, definition]));
+        svg += `<g data-mechanism-id="${escapeXml(contract.mechanismId)}" data-compiler-signature="${escapeXml(contract.compilerSignature)}">`;
+        contract.physicalInstances.forEach(instance => {
+            const definition = definitions.get(instance.partKey);
+            if (!definition?.contourMm.length) return;
+            const points = definition.contourMm.map(point => physicalPoint(point, instance));
+            const layerId = instance.layerId ?? instance.instanceId;
+            svg += `<path data-layer-id="${escapeXml(layerId)}"${instance.sourceNodeId ? ` data-source-node-id="${escapeXml(instance.sourceNodeId)}"` : ''} d="${rawPath(points)} Z" fill="none" stroke="#334155" stroke-width="1" />`;
+            definition.holes.forEach(hole => {
+                const center = physicalPoint(hole.centerMm, instance);
+                svg += `<circle data-layer-id="${escapeXml(layerId)}" data-hole-id="${escapeXml(hole.id)}" cx="${svgNumber(center.x)}" cy="${svgNumber(center.y)}" r="${svgNumber(hole.diameterMm * SCENE_PX_PER_MM / 2)}" fill="none" stroke="#64748b" stroke-width="1" />`;
+            });
+        });
+        svg += `</g>`;
+    });
+    return `${svg}</g></svg>`;
+};
+
+const canonicalProjectDxf = (contracts: MechanismSceneContract[]) => {
+    let dxf = dxfHeader();
+    contracts.forEach(contract => {
+        dxf += `999\nMotionSmith compiler ${contract.compilerSignature.replace(/[\r\n]/g, ' ')}\n`;
+        const definitions = new Map(contract.physicalDefinitions.map(definition => [definition.partKey, definition]));
+        contract.physicalInstances.forEach(instance => {
+            const definition = definitions.get(instance.partKey);
+            if (!definition?.contourMm.length) return;
+            const layerId = instance.layerId ?? instance.instanceId;
+            const layer = `MECH_${contract.mechanismId}_${layerId}`;
+            dxf += dxfPolyline(definition.contourMm.map(point => physicalPoint(point, instance)), layer, 7);
+            definition.holes.forEach(hole => {
+                const center = physicalPoint(hole.centerMm, instance);
+                dxf += dxfCircle(center.x, center.y, hole.diameterMm * SCENE_PX_PER_MM / 2, `${layer}_${hole.id}`, 7);
+            });
+        });
+    });
+    return dxf + dxfFooter();
+};
+
+export const generateProjectReadySVG = (project: ProjectState, angle: number): GuardedMechanismExport => {
+    const ready = projectReadyContracts(project, angle);
+    return 'blockers' in ready
+        ? { ok: false, blockers: ready.blockers }
+        : { ok: true, artifact: canonicalProjectSvg(ready.contracts), mechanismIds: ready.mechanismIds };
+};
+
+export const generateProjectReadyDXF = (project: ProjectState, angle: number): GuardedMechanismExport => {
+    const ready = projectReadyContracts(project, angle);
+    return 'blockers' in ready
+        ? { ok: false, blockers: ready.blockers }
+        : { ok: true, artifact: canonicalProjectDxf(ready.contracts), mechanismIds: ready.mechanismIds };
 };

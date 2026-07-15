@@ -423,17 +423,31 @@ const compareGeneratedWithManifest = (
   return { report, categorySummary };
 };
 
+type OracleFile = {
+  source_svg_sha256: string;
+  normalized_contour_records?: string[];
+  contour_sha256: string;
+};
+
 type FrozenPythonOracle = {
   schema_version: number;
   captured_at: string;
   source_command: string;
   python_generator_sha256: string;
   managed_files: string[];
-  files: Record<string, {
-    source_svg_sha256: string;
-    normalized_contour_records: string[];
-    contour_sha256: string;
-  }>;
+  files: Record<string, OracleFile>;
+};
+
+type ReviewedV2Oracle = {
+  schema_version: 2;
+  baseline_kind: 'reviewed-source-delta';
+  signature_format: 'svg-contour-sha256-v1';
+  reviewed_at: string;
+  review_reason: string;
+  base_oracle: string;
+  managed_file_additions: string[];
+  managed_file_removals: string[];
+  files: Record<string, OracleFile>;
 };
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -449,8 +463,75 @@ const readFrozenPythonOracle = (oraclePath = join(process.cwd(), 'fabrication', 
   return oracle;
 };
 
+const readReviewedV2Oracle = (oraclePath: string): ReviewedV2Oracle => {
+  const oracle = JSON.parse(readText(oraclePath)) as ReviewedV2Oracle;
+  const required = [
+    'schema_version',
+    'baseline_kind',
+    'signature_format',
+    'reviewed_at',
+    'review_reason',
+    'base_oracle',
+    'managed_file_additions',
+    'managed_file_removals',
+    'files',
+  ];
+  for (const field of required) {
+    if (!(field in oracle)) throw new Error(`Reviewed v2 fabrication oracle missing ${field}`);
+  }
+  if (oracle.schema_version !== 2 || oracle.baseline_kind !== 'reviewed-source-delta' || oracle.signature_format !== 'svg-contour-sha256-v1') {
+    throw new Error('Reviewed v2 fabrication oracle has an unsupported schema');
+  }
+  if (!Array.isArray(oracle.managed_file_additions) || !Array.isArray(oracle.managed_file_removals) || !oracle.files || typeof oracle.files !== 'object') {
+    throw new Error('Reviewed v2 fabrication oracle has invalid inventory data');
+  }
+  return oracle;
+};
+
+const versionedOracleForManifest = (generatedManifest: FabricationTemplateManifest) => {
+  const config = generatedManifest.contour_oracle;
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    return {
+      oracle: readFrozenPythonOracle(),
+      kind: 'frozen-python-v1' as const,
+      sourceHashPaths: new Set<string>(),
+    };
+  }
+  const raw = config as Record<string, unknown>;
+  if (raw.version !== 2 || typeof raw.baseline !== 'string' || typeof raw.base_oracle !== 'string') {
+    return {
+      oracle: readFrozenPythonOracle(),
+      kind: 'frozen-python-v1' as const,
+      sourceHashPaths: new Set<string>(),
+    };
+  }
+  const root = join(process.cwd(), 'fabrication');
+  const base = readFrozenPythonOracle(join(root, raw.base_oracle));
+  const delta = readReviewedV2Oracle(join(root, raw.baseline));
+  if (delta.base_oracle !== raw.base_oracle) {
+    throw new Error('Reviewed v2 fabrication oracle base does not match manifest');
+  }
+  const managed_files = [
+    ...base.managed_files.filter((path) => !delta.managed_file_removals.includes(path)),
+    ...delta.managed_file_additions,
+  ].sort();
+  return {
+    oracle: {
+      ...base,
+      schema_version: delta.schema_version,
+      captured_at: delta.reviewed_at,
+      managed_files,
+      files: { ...base.files, ...delta.files },
+    },
+    kind: delta.baseline_kind,
+    // The v1 Python oracle is a contour baseline. Only v2 reviewed deltas
+    // deliberately freeze source bytes in addition to the contour signature.
+    sourceHashPaths: new Set(Object.keys(delta.files)),
+  };
+};
+
 const compareToFrozenPythonOracle = (generatedRoot: string, generatedManifest: FabricationTemplateManifest) => {
-  const oracle = readFrozenPythonOracle();
+  const { oracle, kind, sourceHashPaths } = versionedOracleForManifest(generatedManifest);
   const generatedManaged = listManagedFiles(generatedManifest);
   const oracleManaged = [...oracle.managed_files].sort();
   const mismatches: string[] = [];
@@ -477,8 +558,12 @@ const compareToFrozenPythonOracle = (generatedRoot: string, generatedManifest: F
       continue;
     }
     const signature = svgContourSignature(readText(join(generatedRoot, relPath)));
+    const sourceSha = sha256(readText(join(generatedRoot, relPath)));
     const contourSha = sha256(signature.signature);
-    if (contourSha === oracleFile.contour_sha256 && JSON.stringify(signature.records) === JSON.stringify(oracleFile.normalized_contour_records)) {
+    const sameRecords = oracleFile.normalized_contour_records === undefined
+      || JSON.stringify(signature.records) === JSON.stringify(oracleFile.normalized_contour_records);
+    const sourceMatches = !sourceHashPaths.has(relPath) || sourceSha === oracleFile.source_svg_sha256;
+    if (sourceMatches && contourSha === oracleFile.contour_sha256 && sameRecords) {
       semanticContours.push(relPath);
     } else {
       mismatches.push(relPath);
@@ -488,6 +573,7 @@ const compareToFrozenPythonOracle = (generatedRoot: string, generatedManifest: F
 
   return {
     status: mismatches.length === 0,
+    kind,
     schema_version: oracle.schema_version,
     captured_at: oracle.captured_at,
     total: generatedManaged.length,
@@ -657,6 +743,7 @@ const run = () => {
     frozen_python_oracle_parity: oracleParity
       ? {
           status: oracleParity.status,
+          kind: oracleParity.kind,
           schema_version: oracleParity.schema_version,
           captured_at: oracleParity.captured_at,
           total: oracleParity.total,

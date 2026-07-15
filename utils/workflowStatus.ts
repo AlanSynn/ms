@@ -4,7 +4,8 @@ import type {
   ProjectMotionPath,
   ProjectState,
 } from "../types";
-import { validateForFabrication } from "./fabrication";
+import { projectMechanismReadiness } from "./mechanismReadiness";
+import { hasHardReadinessBlockers } from "./fabricationReadiness";
 
 export type WorkflowStatus = {
   stageLabel: string;
@@ -19,7 +20,9 @@ export const workflowStatusFor = (
   selectedPart?: BodyPartLayer,
   selectedPath?: ProjectMotionPath,
 ): WorkflowStatus => {
-  const validation = validateForFabrication(project);
+  const readiness = stage === "blueprint" || stage === "assembly"
+    ? projectMechanismReadiness(project)
+    : undefined;
   const enabledMechanisms = project.mechanisms.filter(
     (mechanism) => mechanism.visible && mechanism.enabled !== false,
   );
@@ -49,11 +52,15 @@ export const workflowStatusFor = (
     blocker = enabledMechanisms.length ? "OK" : "No mechanism";
     nextAction = enabledMechanisms.length ? "Check target" : "Pick mechanism";
   } else if (stage === "blueprint") {
-    blocker = validation.errors[0] ?? validation.warnings[0] ?? "OK";
-    nextAction = validation.errors.length ? "Fix" : "Make sheets";
+    blocker = readiness?.blockers[0] ?? "OK";
+    const isHardBlocker = readiness?.status === "blocked" &&
+      hasHardReadinessBlockers(readiness.blockers);
+    nextAction = isHardBlocker ? "Fix" : "Make sheets";
   } else if (stage === "assembly") {
-    blocker = validation.errors[0] ?? validation.warnings[0] ?? "OK";
-    nextAction = validation.errors.length ? "Fix blueprint" : "Build";
+    blocker = readiness?.blockers[0] ?? "OK";
+    const isHardBlocker = readiness?.status === "blocked" &&
+      hasHardReadinessBlockers(readiness.blockers);
+    nextAction = isHardBlocker ? "Fix blueprint" : "Build";
   } else if (stage === "options") {
     nextAction = "Tune settings";
   } else {

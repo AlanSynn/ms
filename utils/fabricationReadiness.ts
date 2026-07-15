@@ -1,8 +1,9 @@
-import type { MechanismConfig } from '../types';
+import type { MechanismConfig, PhysicalKitSettings } from '../types';
 import { SCENE_PX_PER_MM } from './coordinates';
 import { fabricationLinkageSpecForSceneLength } from './fabricationStackModel';
 import { calculateLinkage, camProfileSmoothnessWarning } from './kinematics';
 import { REFERENCE_DEFAULTS } from './mechanismReference';
+import { MECHANISM_BINDING_BLOCKER } from './pathTargets';
 
 export type FabricationFeasibleRange = {
     percentValid: number;
@@ -12,7 +13,11 @@ export type FabricationFeasibleRange = {
     warning: string | null;
 };
 
-export const sampleFeasibleRange = (mechanism: MechanismConfig, samples = 96): FabricationFeasibleRange => {
+export const sampleFeasibleRange = (
+    mechanism: MechanismConfig,
+    samples = 96,
+    kit?: PhysicalKitSettings,
+): FabricationFeasibleRange => {
     const profileWarning = mechanism.type === 'cam'
         ? camProfileSmoothnessWarning(mechanism.camProfileSamples)
         : null;
@@ -23,7 +28,7 @@ export const sampleFeasibleRange = (mechanism: MechanismConfig, samples = 96): F
     const totalSamples = baseSamples * loops;
     for (let i = 0; i <= totalSamples; i++) {
         const angle = (i / totalSamples) * Math.PI * 2;
-        validSamples[i] = calculateLinkage(mechanism, angle).isValid;
+        validSamples[i] = calculateLinkage(mechanism, angle, kit).isValid;
         if (validSamples[i]) valid++;
     }
     const intervals: Array<{ startDeg: number; endDeg: number }> = [];
@@ -45,12 +50,59 @@ export const sampleFeasibleRange = (mechanism: MechanismConfig, samples = 96): F
         warning: profileWarning ?? (valid === totalSamples + 1 ? null : valid === 0 ? 'No motion' : `Motion ${Math.round((valid / (totalSamples + 1)) * 100)}% · ${intervalText}`)
     };
 };
-export const compactStudentActionForFabricationDiagnostic = (diagnostic: string | null | undefined) => {
+export const compactStudentActionForFabricationDiagnostic = (
+    diagnostic: string | null | undefined,
+): string | null => {
     if (!diagnostic) return null;
-    if (/^No motion\b/.test(diagnostic)) return 'No full motion. Try reset or smaller links.';
-    if (/^Motion \d+%(?:\s|$)/.test(diagnostic)) return 'Motion may jam. Try a smaller move.';
-    return diagnostic;
+    const text = diagnostic.trim();
+    const action: string | null = (() => {
+        if (/^Fix:\s*Choose anchor\.?$/i.test(text)) return MECHANISM_BINDING_BLOCKER;
+        if (/^Fix:\s*/i.test(text)) {
+            const fix = compactStudentActionForFabricationDiagnostic(text.replace(/^Fix:\s*/i, ''));
+            return fix?.startsWith('Fix ') ? fix : fix ? `Fix: ${fix.replace(/[.]$/, '')}.` : null;
+        }
+        if (/^No motion\b/i.test(text)) return 'No full motion. Try reset or smaller links.';
+        if (/^Motion \d+%(?:\s|$)/i.test(text)) return 'Motion may jam. Try a smaller move.';
+        if (/mechanisms? collide|collision/i.test(text)) return 'Move one mechanism. Mechanisms collide.';
+        if (/outside sheet|off[- ]sheet|off board|outside board|placement off board/i.test(text)) return 'Fit inside board.';
+        if (/choose another target|duplicate target|target.+(?:used|occupied)/i.test(text)) return 'Choose another target.';
+        if (/choose (?:this target's )?path|missing path|no path/i.test(text)) return 'Choose a path.';
+        if (/choose a target|missing target|no target/i.test(text)) return 'Choose a target.';
+        if (/no active mechanism/i.test(text)) return 'Add a mechanism.';
+        if (/physical envelope incomplete/i.test(text)) return 'Fit mechanism parts.';
+        if (/not fabrication-ready|fabrication unsupported/i.test(text)) return 'Choose a buildable mechanism.';
+        if (/fix mechanism geometry/i.test(text)) return 'Fix mechanism geometry.';
+        if (/graph invalid|graph fabrication blocked|constraint|validation|\bscore\b|[_()[\]{}]/i.test(text)) {
+            return 'Fix mechanism setup.';
+        }
+        return text;
+    })();
+    return action && action.length > 90 ? `${action.slice(0, 87).trimEnd()}...` : action;
 };
+
+const normalizeReadinessBlocker = (diagnostic: string | null | undefined) => {
+  const compact = compactStudentActionForFabricationDiagnostic(diagnostic);
+  if (!compact) return null;
+  const withoutFix = compact.replace(/^Fix:\s*/i, "").trim();
+  return withoutFix;
+};
+
+export const isSoftReadinessBlocker = (
+  diagnostic: string | null | undefined,
+): boolean => {
+  const normalized = normalizeReadinessBlocker(diagnostic);
+  if (!normalized) return false;
+  return [
+    /^Fit inside board\.?$/i,
+    /^Fit mechanism parts\.?$/i,
+    /^Motion may jam\./i,
+    /^No full motion\./i,
+  ].some((pattern) => pattern.test(normalized));
+};
+
+export const hasHardReadinessBlockers = (
+  blockers: readonly string[],
+): boolean => blockers.some((blocker) => !isSoftReadinessBlocker(blocker));
 
 export const physicalTolerance = (value: number) => Math.max(1, Math.abs(value) * 0.03);
 

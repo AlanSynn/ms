@@ -168,26 +168,13 @@ export const useAppCharacterImportActions = ({
   };
 
   const importCharacterPackage = async (files: FileList | File[]) => {
-    dispatch({
-      type: "set_processing",
-      processing: {
-        stage: "loading-model",
-        message: "Loading character…",
-        progress: 20,
-      },
-    });
+    setCommandStatus("Loading character…");
     try {
       queueCharacterReview(await loadCharacterPackage(files), "Ready to use.");
     } catch (error) {
-      dispatch({
-        type: "set_processing",
-        processing: {
-          stage: "error",
-          message: "Couldn’t load character",
-          progress: 0,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
+      setCommandStatus(
+        `Couldn’t load character: ${error instanceof Error ? error.message : String(error)}`,
+      );
       setStage("character");
     }
   };
@@ -195,22 +182,18 @@ export const useAppCharacterImportActions = ({
   const importProject = async (file: File) => {
     try {
       const raw = JSON.parse(await file.text());
-      const loadedProject = loadProjectSnapshot(raw);
+      const loaded = loadProjectSnapshot(raw, project);
+      if (loaded.status === "rejected") {
+        setCommandStatus(loaded.blocker);
+        return;
+      }
+      const loadedProject = loaded.project;
       setProject(loadedProject, { resetHistory: true });
       setFoundry(foundryPreviewFromProject(loadedProject));
       setCommandStatus(`Loaded project ${file.name}`);
       setShowGettingStarted(false);
       setStage("path");
     } catch (error) {
-      dispatch({
-        type: "set_processing",
-        processing: {
-          stage: "error",
-          message: "Project import failed",
-          progress: 0,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
       setCommandStatus(
         `Project import failed: ${error instanceof Error ? error.message : String(error)}`,
       );

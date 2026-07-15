@@ -4,21 +4,28 @@ import type {
   PhysicalKitSettings,
   Point,
 } from "../../../types";
-import { sampledCamProfileScale } from "../../../utils/kinematics";
+import {
+  normalizeCamProfileSamples,
+  sampledCamProfileScale,
+} from "../../../utils/kinematics";
 import {
   FABRICATION_LINKAGE_SPECS,
   FABRICATION_HOLE_RADIUS_MM,
   FABRICATION_LINKAGE_WIDTH_MM,
+  FABRICATION_SPACER_SPEC,
+} from "../../../utils/fabricationContract";
+import {
+  CLIP_HEAD_DEPTH_MM,
   PLATE_DEPTH_MM,
   SPACER_DEPTH_MM,
-  CLIP_HEAD_DEPTH_MM,
   projectFabricationZMm,
-  FABRICATION_SPACER_SPEC,
+} from "../../../utils/mechanismFabricationZStack";
+import {
   fabricationGearProfileForPitchRadius,
-  fabricationLinkageSpecForSceneLength,
   fabricationRingGearProfileForPitchRadius,
   fabricationRingInnerGearOutlinePoints,
-} from "../../../utils/fabrication";
+} from "../../../utils/fabricationProfiles";
+import { fabricationLinkageSpecForSceneLength } from "../../../utils/fabricationStackModel";
 import { SCENE_PX_PER_MM } from "../../../utils/coordinates";
 import {
   cachedThreeResource,
@@ -235,17 +242,26 @@ export const createFoundryThreePrimitiveFactory = ({
     holeCount = 2,
     partKey?: string,
     metadata?: FoundryFabricationMeshMetadata,
+    exactCapsule?: {
+      center?: Point;
+      rotation?: number;
+      centerlineLengthPx: number;
+      radiusPx: number;
+    },
   ) => {
-    if (!a || !b) return;
-    const av = to3(a, z),
-      bv = to3(b, z);
-    const dx = bv.x - av.x,
-      dy = bv.y - av.y,
-      len = Math.hypot(dx, dy);
-    if (len < 0.05) return;
-    const sceneLength = Math.hypot(b.x - a.x, b.y - a.y);
+    const mappedCenter = exactCapsule?.center;
+    const mappedRotation = exactCapsule?.rotation;
+    const exactLengthPx = exactCapsule?.centerlineLengthPx;
+    const exactRadiusPx = exactCapsule?.radiusPx;
+    if (!a || !b) {
+      if (!mappedCenter || !exactLengthPx || !exactRadiusPx) return;
+    }
+    const worldSceneLength = Math.hypot((b?.x ?? 0) - (a?.x ?? 0), (b?.y ?? 0) - (a?.y ?? 0));
+    const hasExactCapsule = Number.isFinite(exactLengthPx ?? Number.NaN) && Number.isFinite(exactRadiusPx ?? Number.NaN) && Number.isFinite(mappedCenter?.x ?? Number.NaN) && Number.isFinite(mappedCenter?.y ?? Number.NaN);
     const sourceSceneLength =
-      sceneLength / Math.max(0.001, Math.abs(simulationScale));
+      worldSceneLength / Math.max(0.001, Math.abs(simulationScale));
+    const effectiveSceneLength = hasExactCapsule ? exactLengthPx! : worldSceneLength;
+    if (effectiveSceneLength <= 0.001) return;
     const linkageSpec = FABRICATION_LINKAGE_SPECS.find((spec) => spec.key === partKey)
       ?? fabricationLinkageSpecForSceneLength(
         sourceSceneLength,
@@ -256,23 +272,40 @@ export const createFoundryThreePrimitiveFactory = ({
       1,
       linkageSpec.lengthMm * SCENE_PX_PER_MM,
     );
-    const previewScale = sceneLength / sourceTemplateSceneLength;
+    const previewScale = effectiveSceneLength / sourceTemplateSceneLength;
     const templateLen = linkageSpec.lengthMm * mmToThree * previewScale;
+    const holeRangeMm = (linkageSpec.holeCentersMm.at(-1)?.x ?? linkageSpec.lengthMm) - (linkageSpec.holeCentersMm[0]?.x ?? 0);
+    const holeScalePx = holeRangeMm > 0
+      ? effectiveSceneLength / (holeRangeMm * SCENE_PX_PER_MM)
+      : previewScale;
     const firstHoleX = linkageSpec.holeCentersMm[0]?.x ?? 0;
     const holeXs = linkageSpec.holeCentersMm.map(
       (point) =>
-        (point.x - firstHoleX - linkageSpec.lengthMm / 2) *
-        mmToThree *
-        previewScale,
+        hasExactCapsule
+          ? (((point.x - firstHoleX) * SCENE_PX_PER_MM * holeScalePx) - effectiveSceneLength / 2) / 18
+          : (point.x - firstHoleX - linkageSpec.lengthMm / 2) * mmToThree * previewScale,
     );
-    const outlineLen = templateLen + barW;
+    const outlineLen = hasExactCapsule
+      ? (exactLengthPx! + exactRadiusPx! * 2) / 18
+      : Math.max(templateLen, effectiveSceneLength * mmToThree);
+    const outlineWidth = hasExactCapsule
+      ? Math.max(0.0001, exactRadiusPx! * 2 / 18)
+      : barW;
+    const center = mappedCenter ? to3(mappedCenter, z) : {
+      x: (to3(a!, z).x + to3(b!, z).x) / 2,
+      y: (to3(a!, z).y + to3(b!, z).y) / 2,
+      z,
+    };
+    const angle = Number.isFinite(mappedRotation ?? NaN)
+      ? -mappedRotation!
+      : -Math.atan2((b?.y ?? 0) - (a?.y ?? 0), (b?.x ?? 0) - (a?.x ?? 0));
     const group = new THREE.Group();
-    group.position.set((av.x + bv.x) / 2, (av.y + bv.y) / 2, z);
-    group.rotation.z = Math.atan2(dy, dx);
-    const geometryKey = `bar:${linkageSpec.key}:${linkageSpec.pitchMm}:${outlineLen.toFixed(3)}:${barW.toFixed(3)}:${thickness.toFixed(3)}`;
+    group.position.copy(center);
+    group.rotation.z = angle;
+    const geometryKey = `bar:${linkageSpec.key}:${linkageSpec.pitchMm}:${outlineLen.toFixed(3)}:${outlineWidth.toFixed(3)}:${thickness.toFixed(3)}:${effectiveSceneLength.toFixed(3)}:${exactRadiusPx?.toFixed(3) ?? 'auto'}`;
     const mesh = new THREE.Mesh(
       cachedGeometry(geometryKey, () => {
-        const shape = roundedRectShape(outlineLen, barW);
+        const shape = roundedRectShape(outlineLen, outlineWidth);
         shape.holes.push(...holeXs.map((x) => circularHole(x, 0)));
         return new THREE.ExtrudeGeometry(shape, {
           depth: thickness,
@@ -306,16 +339,32 @@ export const createFoundryThreePrimitiveFactory = ({
     rotation: number,
     mat: THREE.Material,
     metadata?: FoundryFabricationMeshMetadata,
+    outerRadiusPx?: number,
   ) => {
     const r = Math.max(0.38, (radius * simulationScale) / 18);
     const profile = fabricationGearProfileForPitchRadius(r, radius / SCENE_PX_PER_MM);
-    const shape = shapeFromPoints(profile.outlinePoints);
-    const axleHoleRadius = Math.max(holeR * 0.7, profile.axleHoleRadius);
+    const requestedOuterRadiusWorld = Number.isFinite(outerRadiusPx ?? Number.NaN)
+      ? (outerRadiusPx! / 18)
+      : undefined;
+    const gearScale = requestedOuterRadiusWorld
+      ? requestedOuterRadiusWorld / Math.max(profile.outerRadius, 0.001)
+      : 1;
+    const shape = shapeFromPoints(profile.outlinePoints.map(point => ({
+      x: point.x * gearScale,
+      y: point.y * gearScale,
+    })));
+    const axleHoleRadius = Math.max(holeR * 0.7, profile.axleHoleRadius * gearScale);
     shape.holes.push(circularHole(0, 0, axleHoleRadius));
     profile.attachmentHoleCenters.forEach((point) =>
-      shape.holes.push(circularHole(point.x, point.y, Math.max(holeR * 0.55, profile.axleHoleRadius))),
+      shape.holes.push(
+        circularHole(
+          point.x * gearScale,
+          point.y * gearScale,
+          Math.max(holeR * 0.55, profile.axleHoleRadius * gearScale),
+        ),
+      ),
     );
-    const geometryKey = `gear:${mechanism.type}:${radius.toFixed(3)}:${simulationScale.toFixed(3)}:${thickness.toFixed(3)}`;
+    const geometryKey = `gear:${mechanism.type}:${radius.toFixed(3)}:${simulationScale.toFixed(3)}:${(outerRadiusPx ?? 0).toFixed(3)}:${thickness.toFixed(3)}`;
     const mesh = new THREE.Mesh(
       cachedGeometry(
         geometryKey,
@@ -338,7 +387,7 @@ export const createFoundryThreePrimitiveFactory = ({
     holes.position.set(c.x, c.y, z);
     holes.rotation.z = mesh.rotation.z;
     addHoleRing(holes, 0, 0, 0);
-    profile.attachmentHoleCenters.forEach((point) => addHoleRing(holes, point.x, point.y, 0));
+    profile.attachmentHoleCenters.forEach((point) => addHoleRing(holes, point.x * gearScale, point.y * gearScale, 0));
     root.add(holes);
   };
   const addRingGear = (
@@ -348,21 +397,35 @@ export const createFoundryThreePrimitiveFactory = ({
     rotation: number,
     mat: THREE.Material,
     metadata?: FoundryFabricationMeshMetadata,
+    outerRadiusPx?: number,
   ) => {
     const r = Math.max(0.82, (radius * simulationScale) / 18);
     const profile = fabricationRingGearProfileForPitchRadius(r);
+    const requestedOuterRadiusWorld = Number.isFinite(outerRadiusPx ?? Number.NaN)
+      ? (outerRadiusPx! / 18)
+      : undefined;
+    const ringScale = requestedOuterRadiusWorld
+      ? requestedOuterRadiusWorld / Math.max(profile.outerRadius, 0.001)
+      : 1;
     const shape = new THREE.Shape();
-    shape.absellipse(0, 0, profile.outerRadius, profile.outerRadius, 0, Math.PI * 2, false);
+    shape.absellipse(0, 0,
+      profile.outerRadius * ringScale,
+      profile.outerRadius * ringScale,
+      0,
+      Math.PI * 2,
+      false);
     const inner = new THREE.Path();
     fabricationRingInnerGearOutlinePoints(r).forEach((point, index) => {
-      if (index === 0) inner.moveTo(point.x, point.y);
-      else inner.lineTo(point.x, point.y);
+      if (index === 0) inner.moveTo(point.x * ringScale, point.y * ringScale);
+      else inner.lineTo(point.x * ringScale, point.y * ringScale);
     });
     inner.closePath();
     shape.holes.push(inner);
-    const mountHoleRadius = Math.max(holeR * 0.58, profile.mountHoleRadius);
-    profile.mountHoleCenters.forEach((point) => shape.holes.push(circularHole(point.x, point.y, mountHoleRadius)));
-    const geometryKey = `ring-gear:${radius.toFixed(3)}:${simulationScale.toFixed(3)}:${thickness.toFixed(3)}`;
+    const mountHoleRadius = Math.max(holeR * 0.58, profile.mountHoleRadius * ringScale);
+    profile.mountHoleCenters.forEach((point) =>
+      shape.holes.push(circularHole(point.x * ringScale, point.y * ringScale, mountHoleRadius)),
+    );
+    const geometryKey = `ring-gear:${radius.toFixed(3)}:${(outerRadiusPx ?? 0).toFixed(3)}:${simulationScale.toFixed(3)}:${thickness.toFixed(3)}`;
     const mesh = new THREE.Mesh(
       cachedGeometry(
         geometryKey,
@@ -383,15 +446,31 @@ export const createFoundryThreePrimitiveFactory = ({
     root.add(mesh);
     const holes = new THREE.Group();
     holes.position.set(c.x, c.y, z);
-    profile.mountHoleCenters.forEach((point) => addHoleRing(holes, point.x, point.y, 0));
+    profile.mountHoleCenters.forEach((point) => addHoleRing(holes, point.x * ringScale, point.y * ringScale, 0));
     root.add(holes);
   };
-  const addCam = (center: Point, z: number, rotation: number, mat: THREE.Material, metadata?: FoundryFabricationMeshMetadata) => {
-    const r = Math.max(0.5, (mechanism.crankLength * simulationScale) / 22);
+  const addCam = (
+    center: Point,
+    z: number,
+    rotation: number,
+    mat: THREE.Material,
+    metadata?: FoundryFabricationMeshMetadata,
+    outerRadiusPx?: number,
+  ) => {
+    const samples = normalizeCamProfileSamples(mechanism.camProfileSamples);
+    const pointCount = Math.max(4, samples.length * 4);
+    const profile = Array.from({ length: pointCount }, (_, index) =>
+      sampledCamProfileScale((index / pointCount) * Math.PI * 2, samples)
+    );
+    const normalizedMax = Math.max(...profile, 1);
+    const mappedRadius = Number.isFinite(outerRadiusPx ?? Number.NaN)
+      ? outerRadiusPx! / 18
+      : (mechanism.crankLength * simulationScale) / 18;
+    const r = Math.max(0.5, mappedRadius);
     const shape = new THREE.Shape();
-    for (let i = 0; i < 56; i++) {
-      const a = (i / 56) * Math.PI * 2;
-      const rr = r * sampledCamProfileScale(a, mechanism.camProfileSamples);
+    for (let i = 0; i < pointCount; i++) {
+      const a = (i / pointCount) * Math.PI * 2;
+      const rr = (r * sampledCamProfileScale(a, samples)) / normalizedMax;
       const x = Math.cos(a) * rr,
         y = Math.sin(a) * rr;
       if (i === 0) shape.moveTo(x, y);
@@ -399,7 +478,7 @@ export const createFoundryThreePrimitiveFactory = ({
     }
     shape.closePath();
     shape.holes.push(circularHole(0, 0, holeR * 1.35));
-    const geometryKey = `cam:${mechanism.crankLength.toFixed(2)}:${(mechanism.camProfileSamples ?? []).join(",")}:${simulationScale.toFixed(3)}:${thickness.toFixed(3)}`;
+    const geometryKey = `cam:${mechanism.crankLength.toFixed(2)}:${(mechanism.camProfileSamples ?? []).join(",")}:${(outerRadiusPx ?? 0).toFixed(3)}:${simulationScale.toFixed(3)}:${thickness.toFixed(3)}`;
     const mesh = new THREE.Mesh(
       cachedGeometry(
         geometryKey,
@@ -417,21 +496,27 @@ export const createFoundryThreePrimitiveFactory = ({
   };
   const addSlotPlate = (
     center: Point,
-    length: number,
-    rotation: number,
     z: number,
     mat: THREE.Material,
+    rotation = 0,
+    length = 3.2,
     metadata?: FoundryFabricationMeshMetadata,
+    outerDimensions?: {
+      widthPx: number;
+      heightPx: number;
+    },
   ) => {
     const c = to3(center, z);
     const group = new THREE.Group();
     group.position.copy(c);
     group.rotation.z = rotation;
-    const geometryKey = `slot:${length.toFixed(3)}:${barW.toFixed(3)}:${thickness.toFixed(3)}`;
+    const plateLengthWorld = outerDimensions ? outerDimensions.widthPx / 18 : length;
+    const plateHeightWorld = outerDimensions ? outerDimensions.heightPx / 18 : barW * 1.35;
+    const geometryKey = `slot:${length.toFixed(3)}:${barW.toFixed(3)}:${plateLengthWorld.toFixed(3)}:${plateHeightWorld.toFixed(3)}:${thickness.toFixed(3)}`;
     const mesh = new THREE.Mesh(
       cachedGeometry(geometryKey, () => {
-        const shape = roundedRectShape(length, barW * 1.35, barW * 0.28);
-        shape.holes.push(roundedRectShape(length * 0.7, barW * 0.46, barW * 0.23));
+        const shape = roundedRectShape(plateLengthWorld, plateHeightWorld, plateHeightWorld * 0.28);
+        shape.holes.push(roundedRectShape(plateLengthWorld * 0.7, plateHeightWorld * 0.46, plateHeightWorld * 0.23));
         return new THREE.ExtrudeGeometry(shape, {
           depth: thickness,
           bevelEnabled: false,
@@ -452,27 +537,34 @@ export const createFoundryThreePrimitiveFactory = ({
     mat: THREE.Material,
     rotation = 0,
     metadata?: FoundryFabricationMeshMetadata,
+    outerDimensions?: {
+      widthPx: number;
+      heightPx: number;
+    },
   ) => {
     const c = to3(center, z);
     const group = new THREE.Group();
     group.position.copy(c);
     group.rotation.z = rotation;
-    const blockKey = `follower-block:${barW.toFixed(3)}:${thickness.toFixed(3)}`;
+    const blockWidth = outerDimensions ? outerDimensions.widthPx / 18 : barW * 1.45;
+    const blockHeight = outerDimensions ? outerDimensions.heightPx / 18 : barW * 1.8;
+    const blockKey = `follower-block:${barW.toFixed(3)}:${outerDimensions ? `${blockWidth.toFixed(3)}:${blockHeight.toFixed(3)}` : thickness.toFixed(3)}:${thickness.toFixed(3)}`;
     const block = new THREE.Mesh(
-      cachedGeometry(blockKey, () => new THREE.BoxGeometry(barW * 1.45, barW * 1.8, thickness)),
+      cachedGeometry(blockKey, () => new THREE.BoxGeometry(blockWidth, blockHeight, thickness)),
       mat,
     );
     tagFabricationMesh(block, metadata);
     addEdges(block, blockKey);
     group.add(block);
+    const rollerRadius = Math.min(holeR * 1.3, blockWidth * 0.45, blockHeight * 0.45);
     const roller = new THREE.Mesh(
       cachedGeometry(
-        `follower-roller:${holeR.toFixed(3)}:${thickness.toFixed(3)}`,
-        () => new THREE.CylinderGeometry(holeR * 1.3, holeR * 1.3, thickness, 28),
+        `follower-roller:${rollerRadius.toFixed(3)}:${thickness.toFixed(3)}`,
+        () => new THREE.CylinderGeometry(rollerRadius, rollerRadius, thickness, 28),
       ),
       material.accent,
     );
-    roller.position.set(0, -barW * 0.74, 0);
+    roller.position.set(0, -blockHeight / 2 + rollerRadius, 0);
     roller.rotation.x = Math.PI / 2;
     tagFabricationMesh(roller, metadata);
     group.add(roller);
@@ -490,31 +582,51 @@ export const createFoundryThreePrimitiveFactory = ({
     addEdges(stop, stopKey);
     root.add(stop);
   };
-  const addRack = (center: Point, z: number, mat: THREE.Material, metadata?: FoundryFabricationMeshMetadata) => {
-    const c = to3(center, z);
+  const addRack = (
+    center: Point,
+    z: number,
+    mat: THREE.Material,
+    metadata?: FoundryFabricationMeshMetadata,
+    outerDimensions?: {
+      center?: Point;
+      rotation?: number;
+      widthPx: number;
+      heightPx: number;
+    },
+  ) => {
+    const exact = outerDimensions !== undefined;
+    const rackCenter = outerDimensions?.center ?? center;
+    const c = to3(rackCenter, z);
     const group = new THREE.Group();
     group.position.copy(c);
-    const rackKey = `rack:${barW.toFixed(3)}:${thickness.toFixed(3)}`;
+    group.rotation.z = outerDimensions ? -(outerDimensions.rotation ?? 0) : 0;
+    const rackHeightWorld = outerDimensions ? outerDimensions.heightPx / 18 : barW;
+    const rackWidthWorld = outerDimensions ? outerDimensions.widthPx / 18 : 4.6;
+    const rackKey = `rack:${barW.toFixed(3)}:${rackWidthWorld.toFixed(3)}:${rackHeightWorld.toFixed(3)}:${thickness.toFixed(3)}:${exact.toString()}`;
     const rack = new THREE.Mesh(
-      cachedGeometry(rackKey, () => new THREE.BoxGeometry(4.6, barW, thickness)),
+      cachedGeometry(rackKey, () => new THREE.BoxGeometry(rackWidthWorld, rackHeightWorld, thickness)),
       mat,
     );
     tagFabricationMesh(rack, metadata);
     addEdges(rack, rackKey);
     group.add(rack);
-    for (let i = 0; i < 10; i++) {
-      const toothKey = `rack-tooth:${thickness.toFixed(3)}`;
-      const tooth = new THREE.Mesh(
-        cachedGeometry(toothKey, () => new THREE.BoxGeometry(0.22, 0.18, thickness)),
-        mat,
-      );
-      tooth.position.set(-2.1 + i * 0.46, -barW * 0.65, 0);
-      tooth.rotation.z = Math.PI / 4;
-      tagFabricationMesh(tooth, metadata);
-      group.add(tooth);
+
+    if (!exact) {
+      for (let i = 0; i < 10; i++) {
+        const toothKey = `rack-tooth:${thickness.toFixed(3)}`;
+        const tooth = new THREE.Mesh(
+          cachedGeometry(toothKey, () => new THREE.BoxGeometry(0.22, 0.18, thickness)),
+          mat,
+        );
+        tooth.position.set(-2.1 + i * 0.46, -barW * 0.65, 0);
+        tooth.rotation.z = Math.PI / 4;
+        tagFabricationMesh(tooth, metadata);
+        group.add(tooth);
+      }
     }
-      root.add(group);
-    };
+
+    root.add(group);
+  };
   const addPin = (point: Point, centerZ: number, lengthZ: number, metadata?: FoundryFabricationMeshMetadata) => {
     const p = to3(point, centerZ);
     const pin = new THREE.Mesh(

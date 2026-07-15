@@ -360,7 +360,7 @@ gravity = downward preload
 | `cam_modules:cam-spacer` | 1 | spacing tube/ring that keeps the cam disk off the pegboard |
 | `cam_modules:swappable-cam-disk` | 1 | replaceable cam profile disk |
 | `cam_modules:u-channel-guide-cartridge` | 1 | integrated guide side rails, cover, stops, and peg tabs |
-| `cam_modules:gravity-follower-module` | 1 | preassembled weighted vertical follower with rounded head and output tab |
+| `cam_modules:gravity-follower-module-v2` | 1 | preassembled weighted vertical follower with rounded head and three named output holes |
 
 ### Exact recipe
 
@@ -369,7 +369,7 @@ gravity = downward preload
 | 1 | `J7(board)` | `pegboard@J7 > crank handle behind board > axle peg > paper washer` |
 | 2 | `J7(board)` | `paper washer > cam spacer > swappable cam disk > paper washer > cam lock disk` |
 | 3 | `J11(board)`, `J9(board)` | `U-channel guide cartridge plugged into pegboard` |
-| 4 | `J9(guide_reference)`, `J7(board)` | `preassembled gravity follower module inside guide; rounded head rests on cam disk` |
+| 4 | `J9(guide_reference)`, `J7(board)` | `preassembled gravity follower module v2 inside guide; rounded head rests on cam disk` |
 | 5 | `J7(board)`, `J9(guide_reference)` | `turn crank; cam edge lifts follower; follower returns by gravity` |
 
 Rules:
@@ -404,7 +404,7 @@ Rules:
 S = sun gear = G1 / g8 / 8 teeth
 P = planet gear = G3 / g24 / 24 teeth
 R = fixed ring gear = R56 / ring-g8-g24
-C = carrier link = L2
+C = carrier link = L4
 O = sun/ring centre = H8
 P_c = planet axle on carrier near H10
 r_s = 10 mm
@@ -419,7 +419,7 @@ r_ring_pitch = r_s + 2r_p = 70 mm
 | `sun_teeth` | `8` | forced to first gear preset `g8` |
 | `planet_teeth` | `24` | forced to second gear preset `g24` |
 | `planet_count` | `1` | fixed single-planet authoring recipe until multi-planet carrier fabrication is implemented |
-| `carrier_arm_length` | `40 mm` | nearest linkage length, default `L2` |
+| `carrier_arm_length` | `80 mm` | nearest linkage length, default `L4` |
 | `physical_ring_gear` | `ring-g8-g24` | forced |
 | `input_angle` | `30°` | angle only |
 
@@ -430,7 +430,7 @@ r_ring_pitch = r_s + 2r_p = 70 mm
 | `ring_gears:ring-g8-g24` (`R56`) | 1 | fixed internal ring |
 | `gears:g8` (`G1`) | 1 | rotating sun gear |
 | `gears:g24` (`G3`) | 1 | moving planet gear |
-| `linkages:linkage-2-cell` (`L2`) | 1 | carrier arm |
+| `linkages:linkage-4-cell` (`L4`) | 1 | carrier arm |
 
 ### Planetary render / spacer plane contract
 
@@ -439,8 +439,8 @@ The default authoring type is the common sun–ring–planet gearset: fixed ring
 For every assembled preview and simulation:
 
 - `R56`, `G1`, and `G3` render on one shared gear mesh plane so the internal ring, sun, and planet teeth can mesh physically.
-- `L2 carrier linkage` renders on the next spacer plane and connects the sun center to the moving planet axle.
-- The center pin stack is `G1 sun gear → S10 → L2 carrier linkage`; the planet pin stack is `L2 carrier linkage → S10 → G3 planet gear`.
+- `L4 carrier linkage` renders on the next spacer plane and connects the sun center to the moving planet axle.
+- The center pin stack is `G1 sun gear → S10 → L4 carrier linkage`; the planet pin stack is `L4 carrier linkage → S10 → G3 planet gear`.
 - The ring mount holes are fixed board fasteners. They are not carrier pins and must not be counted as the moving sun/planet axle stack.
 | `spacers:s10` | 8 | clearance stacks |
 
@@ -451,7 +451,7 @@ For every assembled preview and simulation:
 | 1 | `H8(board)` | `B@H8 > F > tabs-behind-board` |
 | 2 | `D8(board)`, `H4(board)`, `H12(board)`, `L8(board)` | `B@D8 > F > S10 > R56_fixed > tabs-behind-board`, repeated |
 | 3 | `H8(board)` | `B@H8 > F > S10 > G1_sun > S10 > tabs-loose` |
-| 4 | `H8(board)`, `H10(carrier_reference)` | `B@H8 > F > S10 > L2_carrier > S10 > tabs-loose` |
+| 4 | `H8(board)`, `H10(carrier_reference)` | `B@H8 > F > S10 > L4_carrier > S10 > tabs-loose` |
 | 5 | `H10(carrier_reference)` | `H_carrier@H10 > F > S10 > G3_planet > S10 > tabs-loose` |
 | 6 | `H8(board)`, `H10(carrier_reference)` | planet carrier stack for motion check |
 

@@ -1,5 +1,5 @@
 import { MechanismConfig, MechanismType, Point } from '../types';
-import { normalizeMechanismToFabricationSet } from './mechanismReference';
+import { normalizeAuthoredMechanismToFabricationSet } from './mechanismConnectionSelections';
 import { ALL_MECHANISM_TYPES } from './mechanismTemplates';
 import { finiteNumber, svgNumber } from './numberFormat';
 
@@ -62,5 +62,5 @@ export const sanitizeMechanismRuntime = (mechanism: MechanismConfig): MechanismC
         rodLength: mechanism.rodLength === undefined ? undefined : finiteNumber(mechanism.rodLength, 0),
         phase: finiteNumber(mechanism.phase, 0)
     };
-    return normalizeMechanismToFabricationSet(sanitized);
+    return normalizeAuthoredMechanismToFabricationSet(sanitized);
 };

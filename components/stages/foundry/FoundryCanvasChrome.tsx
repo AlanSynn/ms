@@ -192,8 +192,11 @@ export const FoundryPlaybackPanel = ({
       min="0"
       max="360"
       value={foundryPhaseDegrees}
+      aria-valuetext={`${Math.round((foundryPhaseDegrees / 360) * 100)}%`}
       onChange={(event) => onPhaseChange(Number(event.target.value))}
     />
-    <span>{Math.round((foundryPhaseDegrees / 360) * 100)}%</span>
+    <output data-testid="foundry-playback-percent" aria-label="Playback percent">
+      {Math.round((foundryPhaseDegrees / 360) * 100)}%
+    </output>
   </div>
 );

@@ -73,6 +73,11 @@
     ],
     "width_mm": 500
   },
+  "contour_oracle": {
+    "base_oracle": "fabrication-python-oracle.json",
+    "baseline": "fabrication-v2-reviewed-oracle.json",
+    "version": 2
+  },
   "generated_at": "managed-template",
   "generated_by": "scripts/generate-fabrication-assets.ts",
   "grid_cell_cm": 2,
@@ -100,6 +105,7 @@
     "cam_modules/cam-spacer.svg",
     "cam_modules/crank-handle.svg",
     "cam_modules/gravity-follower-module.svg",
+    "cam_modules/gravity-follower-module-v2.svg",
     "cam_modules/paper-washer.svg",
     "cam_modules/swappable-cam-disk.svg",
     "cam_modules/u-channel-guide-cartridge.svg",
@@ -333,7 +339,7 @@
           ],
           [
             27,
-            80
+            60
           ]
         ],
         "hole_count": 2,
@@ -358,6 +364,36 @@
         "label": "Preassembled gravity follower module",
         "module_kind": "follower",
         "path": "cam_modules/gravity-follower-module.svg"
+      },
+      {
+        "contract": "pegboard-mounted-gravity-cam-follower-module-v2",
+        "engraving_label": "Gravity Follower V2",
+        "hole_centers_mm": [
+          [
+            19,
+            16
+          ],
+          [
+            19,
+            46
+          ],
+          [
+            19,
+            76
+          ]
+        ],
+        "hole_count": 3,
+        "hole_diameter_mm": 4,
+        "hole_ids": [
+          "output-0",
+          "output-1",
+          "output-2"
+        ],
+        "inventory_version": 2,
+        "key": "gravity-follower-module-v2",
+        "label": "Preassembled gravity follower module v2",
+        "module_kind": "follower",
+        "path": "cam_modules/gravity-follower-module-v2.svg"
       }
     ],
     "cams": [

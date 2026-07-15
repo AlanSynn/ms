@@ -221,7 +221,7 @@ export const AssemblyCharacterThreePreview = ({
     [previewModel, project, sceneModel],
   );
 
-  if (!previewModel || !mechanism) {
+  if (!previewModel || !mechanism || !sceneModel.mechanismContract) {
     return (
       <section
         className="assembly-three-preview assembly-character-three-preview"
@@ -264,6 +264,7 @@ export const AssemblyCharacterThreePreview = ({
     >
       <ThreeFoundryPreview
         mechanism={designMechanism}
+        mechanismContract={sceneModel.mechanismContract}
         simulation={physicalSimulation}
         kit={project.settings.physicalKit}
         camera={camera}
@@ -272,8 +273,8 @@ export const AssemblyCharacterThreePreview = ({
         pathPoints={previewPoints}
         pathTraces={pointTraces}
         showGrid
-        showPathPreview={step.phase === "test-character"}
-        showTrail={step.phase === "test-character"}
+        showPathPreview={step.phase === "test-character" && sceneModel.mechanismContract.projectDriveEnabled === true}
+        showTrail={step.phase === "test-character" && sceneModel.mechanismContract.projectDriveEnabled === true}
         showForces={false}
         showVelocity={false}
         explode={stepLift(sceneFrame.motion, progress, playing)}
@@ -363,7 +364,7 @@ export const AssemblyMechanismThreePreview = ({
     [previewModel, project, sceneModel, showAutomataContext],
   );
 
-  if (!previewModel) {
+  if (!previewModel || !sceneModel.mechanismContract) {
     return (
       <section
         className="assembly-three-preview assembly-mechanism-three-preview"
@@ -414,6 +415,7 @@ export const AssemblyMechanismThreePreview = ({
     >
       <ThreeFoundryPreview
         mechanism={designMechanism}
+        mechanismContract={sceneModel.mechanismContract}
         simulation={physicalSimulation}
         kit={project.settings.physicalKit}
         camera={camera}
@@ -422,8 +424,8 @@ export const AssemblyMechanismThreePreview = ({
         pathPoints={previewPoints}
         pathTraces={pointTraces}
         showGrid
-        showPathPreview={step.phase === "test-motion"}
-        showTrail={step.phase === "test-motion"}
+        showPathPreview={step.phase === "test-motion" && sceneModel.mechanismContract.projectDriveEnabled === true}
+        showTrail={step.phase === "test-motion" && sceneModel.mechanismContract.projectDriveEnabled === true}
         showForces={false}
         showVelocity={false}
         explode={explode}

@@ -1,11 +1,30 @@
 
-import { Point, MechanismConfig, JointState, AppSettings } from '../types';
-import { SCENE_PX_PER_MM } from './coordinates';
+import { Point, MechanismConfig, JointState, AppSettings, PhysicalKitSettings } from '../types';
+import { defaultPhysicalKit, SCENE_PX_PER_MM } from './coordinates';
 import { fabricationGearSpecForPitchRadius } from './fabricationContract';
 import { normalizeGearLinkageToReference } from './mechanismReference';
-import { connectionPointAt, resolveFourBarConnectionSelections, resolveGearLinkageConnectionGeometry } from './mechanismConnectionSelections';
+import {
+    connectionPointAt,
+    physicalConnectionForRole,
+    resolveMechanismPhysicalConnections,
+} from './mechanismConnectionSelections';
 
 const toRad = (deg: number) => (deg * Math.PI) / 180;
+
+const HIGH_DENSITY_SAFETY_PHASE_TYPES = new Set<MechanismConfig['type']>(['5bar', '6bar', 'planetary_gear']);
+
+export const mechanismSafetyPhaseSchedule = (type: MechanismConfig['type']): number[] => {
+    const count = HIGH_DENSITY_SAFETY_PHASE_TYPES.has(type) ? 384 : 48;
+    return Array.from({ length: count }, (_, index) => (Math.PI * 2 * index) / count);
+};
+
+export const synchronizedMechanismSafetyPhaseSchedule = (
+    first: MechanismConfig['type'],
+    second: MechanismConfig['type']
+): number[] => {
+    const count = Math.max(mechanismSafetyPhaseSchedule(first).length, mechanismSafetyPhaseSchedule(second).length);
+    return Array.from({ length: count }, (_, index) => (Math.PI * 2 * index) / count);
+};
 
 export const camProfileScale = (angleRad: number) => 0.72 + 0.2 * (1 - Math.cos(angleRad)) + 0.08 * Math.sin(angleRad * 2);
 
@@ -215,7 +234,11 @@ function getCircleIntersection(p0: Point, r0: number, p1: Point, r1: number, fli
     }
 }
 
-export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number): JointState => {
+export const calculateLinkage = (
+    config: MechanismConfig,
+    crankAngleRad: number,
+    kit: PhysicalKitSettings = defaultPhysicalKit(),
+): JointState => {
     // P1: Anchor Point (Main Crank Pivot)
     const p1: Point = { 
         x: config.anchorX ?? 0, 
@@ -227,14 +250,19 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
     const s1 = config.speed1 ?? 1;
     const driverPhaseOffset = config.driverPhaseOffset ?? 0;
     const angle1 = crankAngleRad * s1 + driverPhaseOffset;
-
-    const fourBarConnections = config.type === '4bar' ? resolveFourBarConnectionSelections(config) : undefined;
-    const j1: Point = fourBarConnections?.inputJoint
-        ? connectionPointAt(fourBarConnections.inputJoint, p1, angle1).position
-        : {
-        x: p1.x + config.crankLength * Math.cos(angle1),
-        y: p1.y + config.crankLength * Math.sin(angle1),
-    };
+    const physicalConnections = resolveMechanismPhysicalConnections(config, kit);
+    const invalidPhysicalSelection = !physicalConnections.valid;
+    if (invalidPhysicalSelection) return { p1, p2: p1, j1: p1, j2: p1, effector: p1, isValid: false };
+    const fourBarInput = physicalConnectionForRole(physicalConnections, '4bar.input-joint')?.local;
+    const pistonCrank = physicalConnectionForRole(physicalConnections, 'piston.crank-pin')?.local;
+    const j1: Point = config.type === '4bar' && fourBarInput
+        ? connectionPointAt(fourBarInput, p1, angle1).position
+        : config.type === 'piston' && pistonCrank
+            ? connectionPointAt(pistonCrank, p1, angle1).position
+            : {
+                x: p1.x + config.crankLength * Math.cos(angle1),
+                y: p1.y + config.crankLength * Math.sin(angle1),
+            };
 
     // --- BASIC CRANK ---
     if (config.type === 'crank') {
@@ -243,25 +271,32 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
 
     // --- CAM FOLLOWER ---
     else if (config.type === 'cam') {
-        const trackAngle = toRad(config.groundAngle ?? 90);
+        const guideMount = physicalConnectionForRole(physicalConnections, 'cam.guide-mount')?.boardMount;
+        const followerOutput = physicalConnectionForRole(physicalConnections, 'cam.follower-output-hole')?.local;
+        if (!guideMount || !followerOutput) return { p1, p2: p1, j1: p1, j2: p1, effector: p1, isValid: false };
+        // The guide SVG is vertical in source space. Its selected ordered board
+        // tuple is the transform; a scalar ground angle is only legacy UI state.
+        const trackAngle = guideMount.sourceRotation + Math.PI / 2;
         const radius = Math.max(1, config.crankLength);
         const followerRadius = Math.max(0, config.sliderOffset || 0);
         const axis = { x: Math.cos(trackAngle), y: Math.sin(trackAngle) };
         const contactProfileAngle = trackAngle - angle1;
         const contactRadius = radius * sampledCamProfileScale(contactProfileAngle, config.camProfileSamples);
+        const guideProjection = (p1.x - guideMount.center.x) * axis.x + (p1.y - guideMount.center.y) * axis.y;
         const contactPoint: Point = {
-            x: p1.x + axis.x * contactRadius,
-            y: p1.y + axis.y * contactRadius
+            x: guideMount.center.x + axis.x * (guideProjection + contactRadius),
+            y: guideMount.center.y + axis.y * (guideProjection + contactRadius)
         };
         const followerCenter: Point = {
-            x: p1.x + axis.x * (contactRadius + followerRadius),
-            y: p1.y + axis.y * (contactRadius + followerRadius)
+            x: guideMount.center.x + axis.x * (guideProjection + contactRadius + followerRadius),
+            y: guideMount.center.y + axis.y * (guideProjection + contactRadius + followerRadius)
         };
         const driveReference: Point = {
             x: p1.x + radius * Math.cos(angle1),
             y: p1.y + radius * Math.sin(angle1)
         };
-        return { p1, p2: followerCenter, j1: contactPoint, j2: followerCenter, aux: driveReference, effector: followerCenter, isValid: true };
+        const effector = connectionPointAt(followerOutput, followerCenter, trackAngle - Math.PI / 2).position;
+        return { p1, p2: followerCenter, j1: contactPoint, j2: followerCenter, aux: driveReference, effector, isValid: true };
     }
 
     // --- RACK AND PINION ---
@@ -295,19 +330,14 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
     else if (config.type === 'gear') {
         const radii = gearTrainPitchRadii(config);
         const centers = gearTrainCenters(config);
-        const inputRadius = radii[0];
-        const outputRadius = radii.at(-1) ?? config.rockerLength;
         const p2 = centers.at(-1) ?? p1;
-        const drivePoint: Point = {
-            x: p1.x + inputRadius * Math.cos(angle1),
-            y: p1.y + inputRadius * Math.sin(angle1)
-        };
         const ratio = gearTrainOutputRatio(radii);
         const outAngle = angle1 * ratio + gearTrainMeshPhaseRadAt(radii, radii.length - 1) + (config.phase ?? 0);
-        const j2: Point = {
-            x: p2.x + outputRadius * Math.cos(outAngle),
-            y: p2.y + outputRadius * Math.sin(outAngle)
-        };
+        const drivePin = physicalConnectionForRole(physicalConnections, 'gear.drive-pin')?.local;
+        const outputPin = physicalConnectionForRole(physicalConnections, 'gear.output-pin')?.local;
+        if (!drivePin || !outputPin) return { p1, p2, j1: p1, j2: p2, effector: p2, isValid: false };
+        const drivePoint = connectionPointAt(drivePin, p1, angle1).position;
+        const j2 = connectionPointAt(outputPin, p2, outAngle).position;
         const effector: Point = {
             x: j2.x + config.couplerPointDist * Math.cos(outAngle + toRad(config.couplerPointAngle)),
             y: j2.y + config.couplerPointDist * Math.sin(outAngle + toRad(config.couplerPointAngle))
@@ -333,16 +363,14 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
         const ratio = hasInsertedIdlers ? gearTrainOutputRatio(radii) : directOutputRatio;
         const meshPhase = hasInsertedIdlers ? gearTrainMeshPhaseRadAt(radii, radii.length - 1) : 0;
         const outAngle = angle1 * ratio + meshPhase + (config.phase ?? 0);
-        const pins = resolveGearLinkageConnectionGeometry(referencePair, angle1, outAngle, centers);
-        const handleRadius = Math.max(1, Math.abs(referencePair.couplerPointDist));
-        const drivePin: Point = pins.drivePin?.position ?? {
-            x: p1.x + handleRadius * Math.cos(angle1),
-            y: p1.y + handleRadius * Math.sin(angle1)
-        };
-        const outputPin: Point = pins.outputPin?.position ?? {
-            x: p2.x + handleRadius * Math.cos(outAngle),
-            y: p2.y + handleRadius * Math.sin(outAngle)
-        };
+        const resolved = resolveMechanismPhysicalConnections(referencePair, kit);
+        const driveConnection = physicalConnectionForRole(resolved, 'gear_linkage.drive-pin')?.local;
+        const outputConnection = physicalConnectionForRole(resolved, 'gear_linkage.output-pin')?.local;
+        if (!resolved.valid || !driveConnection || !outputConnection) {
+            return { p1, p2, j1: p1, j2: p2, effector: p1, isValid: false };
+        }
+        const drivePin = connectionPointAt(driveConnection, centers[0] ?? p1, angle1).position;
+        const outputPin = connectionPointAt(outputConnection, centers.at(-1) ?? p2, outAngle).position;
         const linkLength = Math.max(1, Math.abs(referencePair.couplerLength));
         const effector = getCircleIntersection(drivePin, linkLength, outputPin, linkLength, config.assemblyMode !== 'crossed');
         const fallbackEffector = { x: (drivePin.x + outputPin.x) / 2, y: (drivePin.y + outputPin.y) / 2 };
@@ -360,22 +388,17 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
     // --- PLANETARY GEAR / EPITROCHOID OUTPUT ---
     else if (config.type === 'planetary_gear') {
         const planet = Math.max(1, config.rockerLength || 36);
-        const carrier = Math.max(1, config.groundLength || positiveRadius(config.crankLength) + planet);
-        const arm = config.couplerPointDist || 65;
+        const carrierConnection = physicalConnectionForRole(physicalConnections, 'planetary_gear.carrier-planet-pivot')?.local;
+        const outputConnection = physicalConnectionForRole(physicalConnections, 'planetary_gear.carrier-output-hole')?.local;
+        if (!carrierConnection || !outputConnection) return { p1, p2: p1, j1: p1, j2: p1, effector: p1, isValid: false };
         const carrierAngle = angle1 * planetaryCarrierOutputRatio(config.crankLength, planet);
         const spin = angle1 * planetaryPlanetSpinRatio(config.crankLength, planet) + (config.phase ?? 0);
-        const center: Point = {
-            x: p1.x + carrier * Math.cos(carrierAngle),
-            y: p1.y + carrier * Math.sin(carrierAngle)
-        };
+        const center = connectionPointAt(carrierConnection, p1, carrierAngle).position;
         const j2: Point = {
             x: center.x + planet * Math.cos(spin),
             y: center.y + planet * Math.sin(spin)
         };
-        const effector: Point = {
-            x: p1.x + arm * Math.cos(carrierAngle + toRad(config.couplerPointAngle)),
-            y: p1.y + arm * Math.sin(carrierAngle + toRad(config.couplerPointAngle))
-        };
+        const effector = connectionPointAt(outputConnection, p1, carrierAngle).position;
         return { p1, p2: center, j1, j2, aux: center, effector, isValid: true };
     }
 
@@ -389,7 +412,8 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
             y: p1.y + config.groundLength * Math.sin(gAngle) 
         };
 
-        const outputLength = fourBarConnections?.outputJoint?.length ?? config.rockerLength;
+        const outputLength = physicalConnectionForRole(physicalConnections, '4bar.output-joint')?.local?.length;
+        if (!outputLength) return { p1, p2, j1, j2: p1, effector: p1, isValid: false };
         const j2 = getCircleIntersection(j1, config.couplerLength, p2, outputLength, config.assemblyMode !== 'crossed');
 
         if (!j2) {
@@ -477,13 +501,19 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
 
     // --- SLIDER CRANK (PISTON) ---
     else if (config.type === 'piston') {
-        const trackAngle = toRad(config.groundAngle ?? 0);
+        const guideMount = physicalConnectionForRole(physicalConnections, 'piston.guide-mount')?.boardMount;
+        const rodConnection = physicalConnectionForRole(physicalConnections, 'piston.rod-slider-pin')?.local;
+        if (!guideMount || !rodConnection) return { p1, p2: p1, j1: p1, j2: p1, effector: p1, isValid: false };
+        // The printed piston guide starts horizontal. Its selected board tuple
+        // supplies the rotation, including the legal vertical reference tuple.
+        const trackAngle = guideMount.sourceRotation;
         const offset = config.sliderOffset || 0;
-        const rodLength = Math.max(1, Number.isFinite(config.rodLength) ? (config.rodLength ?? config.couplerLength) : config.couplerLength);
+        const rodLength = rodConnection.length;
+        const guideCenter = guideMount.center;
 
         // Transform J1 to local space where P1 is 0,0 and track is horizontal y = offset
-        const dx = j1.x - p1.x;
-        const dy = j1.y - p1.y;
+        const dx = j1.x - guideCenter.x;
+        const dy = j1.y - guideCenter.y;
         
         const localJ1x = dx * Math.cos(-trackAngle) - dy * Math.sin(-trackAngle);
         const localJ1y = dx * Math.sin(-trackAngle) + dy * Math.cos(-trackAngle);
@@ -492,8 +522,8 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
         const dy_link = localTrackY - localJ1y;
         
         if (Math.abs(dy_link) > rodLength) {
-             const p2x = p1.x + (localJ1x) * Math.cos(trackAngle) - localTrackY * Math.sin(trackAngle);
-             const p2y = p1.y + (localJ1x) * Math.sin(trackAngle) + localTrackY * Math.cos(trackAngle);
+             const p2x = guideCenter.x + (localJ1x) * Math.cos(trackAngle) - localTrackY * Math.sin(trackAngle);
+             const p2y = guideCenter.y + (localJ1x) * Math.sin(trackAngle) + localTrackY * Math.cos(trackAngle);
              return { p1, p2: {x: p2x, y: p2y}, j1, j2: p1, effector: p1, isValid: false };
         }
 
@@ -502,8 +532,8 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
         const localJ2y = localTrackY;
         
         const j2: Point = {
-            x: p1.x + localJ2x * Math.cos(trackAngle) - localJ2y * Math.sin(trackAngle),
-            y: p1.y + localJ2x * Math.sin(trackAngle) + localJ2y * Math.cos(trackAngle)
+            x: guideCenter.x + localJ2x * Math.cos(trackAngle) - localJ2y * Math.sin(trackAngle),
+            y: guideCenter.y + localJ2x * Math.sin(trackAngle) + localJ2y * Math.cos(trackAngle)
         };
 
         const couplerAngle = Math.atan2(j2.y - j1.y, j2.x - j1.x);
@@ -573,7 +603,35 @@ export const calculateLinkage = (config: MechanismConfig, crankAngleRad: number)
     return { p1, p2: p1, j1, j2: p1, effector: p1, isValid: false };
 };
 
-export const generateCurvePoints = (config: MechanismConfig, resolution: number = 36): { points: Point[], percentValid: number } => {
+export const camFollowerConstraintError = (
+    config: MechanismConfig,
+    state: JointState,
+    kit: PhysicalKitSettings = defaultPhysicalKit(),
+): number => {
+    if (config.type !== 'cam' || !state.isValid) return Number.POSITIVE_INFINITY;
+    const guideMount = physicalConnectionForRole(
+        resolveMechanismPhysicalConnections(config, kit),
+        'cam.guide-mount',
+    )?.boardMount;
+    if (!guideMount) return Number.POSITIVE_INFINITY;
+    const trackAngle = guideMount.sourceRotation + Math.PI / 2;
+    const axis = { x: Math.cos(trackAngle), y: Math.sin(trackAngle) };
+    const guideError = (point: Point) => Math.abs(
+        (point.x - guideMount.center.x) * axis.y
+        - (point.y - guideMount.center.y) * axis.x,
+    );
+    const contactGap = Math.abs(
+        Math.hypot(state.j2.x - state.j1.x, state.j2.y - state.j1.y)
+        - Math.max(0, config.sliderOffset),
+    );
+    return Math.max(contactGap, guideError(state.j1), guideError(state.j2));
+};
+
+export const generateCurvePoints = (
+    config: MechanismConfig,
+    resolution: number = 36,
+    kit: PhysicalKitSettings = defaultPhysicalKit(),
+): { points: Point[], percentValid: number } => {
     const points: Point[] = [];
     let validCount = 0;
     
@@ -585,7 +643,7 @@ export const generateCurvePoints = (config: MechanismConfig, resolution: number 
 
     for (let i = 0; i < res; i++) {
         const angle = (i / resolution) * 2 * Math.PI;
-        const state = calculateLinkage(config, angle);
+        const state = calculateLinkage(config, angle, kit);
         if (state.isValid) {
             points.push(state.effector);
             validCount++;
@@ -622,11 +680,11 @@ export const mechanismTraceDefinitionsForState = (
     ];
     if (type === 'cam') return [
         { id: 'B', label: 'B cam contact', point: state.j1 },
-        { id: 'C', label: 'C follower', point: state.j2, primary: true }
+        { id: 'C', label: 'C follower output', point: state.effector, primary: true }
     ];
     if (type === 'planetary_gear') return [
         { id: 'B', label: 'B drive point', point: state.j1 },
-        { id: 'C', label: 'C carrier', point: state.p2, primary: true },
+        { id: 'C', label: 'C carrier output', point: state.effector, primary: true },
         { id: 'D', label: 'D planet pitch trace', point: state.j2 }
     ];
     if (type === 'crank') return [
@@ -652,7 +710,11 @@ export const mechanismTraceDefinitionsForState = (
  * coupler-effector curve. Keep generateCurvePoints as the optimizer/exporter
  * effector trace; use this helper for point-specific mechanism previews.
  */
-export const generateMechanismPointTraces = (config: MechanismConfig, resolution: number = 36): { traces: MechanismPointTrace[], percentValid: number } => {
+export const generateMechanismPointTraces = (
+    config: MechanismConfig,
+    resolution: number = 36,
+    kit: PhysicalKitSettings = defaultPhysicalKit(),
+): { traces: MechanismPointTrace[], percentValid: number } => {
     const traces = new Map<string, MechanismPointTrace>();
     let validCount = 0;
     let loops = 1;
@@ -661,7 +723,7 @@ export const generateMechanismPointTraces = (config: MechanismConfig, resolution
 
     for (let i = 0; i < res; i++) {
         const angle = (i / resolution) * 2 * Math.PI;
-        const state = calculateLinkage(config, angle);
+        const state = calculateLinkage(config, angle, kit);
         if (!state.isValid) continue;
         validCount++;
         mechanismTraceDefinitionsForState(config.type, state).forEach(def => {

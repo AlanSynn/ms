@@ -30,16 +30,63 @@ export type ConnectionSelectionRole =
     | '4bar.input-joint'
     | '4bar.output-joint'
     | 'gear_linkage.drive-pin'
-    | 'gear_linkage.output-pin';
+    | 'gear_linkage.output-pin'
+    | 'gear.drive-pin'
+    | 'gear.output-pin'
+    | 'planetary_gear.carrier-planet-pivot'
+    | 'planetary_gear.carrier-output-hole'
+    | 'cam.guide-mount'
+    | 'cam.follower-output-hole'
+    | 'piston.crank-pin'
+    | 'piston.rod-slider-pin'
+    | 'piston.guide-mount';
 
 export type FabricationLinkageKey = `linkage-${number}-cell`;
 export type FabricationGearKey = 'g8' | 'g24' | 'g40' | 'g56';
+export type FabricationBoardMountKey = 'cam-guide-2-hole' | 'piston-guide-3-hole';
+export type FabricationModuleKey = 'gravity-follower-module-v2';
+export type FabricationModuleHoleId = 'output-0' | 'output-1' | 'output-2';
 
 export type ConnectionSelection =
     | { kind: 'linkage-hole'; linkageKey: FabricationLinkageKey; holeIndex: number }
-    | { kind: 'gear-attachment-hole'; gearKey: FabricationGearKey; gearIndex: number; holeIndex: number };
+    | { kind: 'gear-attachment-hole'; gearKey: FabricationGearKey; gearIndex: number; holeIndex: number }
+    | {
+        kind: 'board-mount-pattern';
+        mountKey: FabricationBoardMountKey;
+        /** Ordered physical board-hole tuple; never a scalar board-hole substitute. */
+        boardHoleIds: readonly string[];
+      }
+    | {
+        kind: 'module-hole';
+        moduleKey: FabricationModuleKey;
+        holeId: FabricationModuleHoleId;
+      };
 
 export type ConnectionSelections = Partial<Record<ConnectionSelectionRole, ConnectionSelection>>;
+
+export type RejectedConnectionSelectionReason =
+    | 'invalid-selection-shape'
+    | 'invalid-role'
+    | 'wrong-family'
+    | 'invalid-kind'
+    | 'invalid-inventory-key'
+    | 'invalid-index'
+    | 'invalid-mount-pattern'
+    | 'incompatible-selection';
+
+/**
+ * Bounded recovery-only evidence for a rejected imported connection. This is
+ * deliberately not an authored selection and never contains raw JSON or UI
+ * coordinates.
+ */
+export interface RejectedConnectionSelectionDiagnostic {
+    sourceVersion: 1 | 2;
+    role: ConnectionSelectionRole | 'unknown';
+    kind: ConnectionSelection['kind'] | 'unknown';
+    catalogKey?: string;
+    indices?: number[];
+    reason: RejectedConnectionSelectionReason;
+}
 
 export interface ConnectionSelectionValidation {
     status: 'valid' | 'invalid';
@@ -117,6 +164,7 @@ export interface MechanismConfig {
     warnings?: string[];
     connectionSelections?: ConnectionSelections;
     connectionSelectionValidation?: ConnectionSelectionValidation;
+    rejectedConnectionSelectionDiagnostics?: RejectedConnectionSelectionDiagnostic[];
 }
 
 export interface FoundryExportPackage {
@@ -139,6 +187,37 @@ export interface FoundryExportPackage {
     warnings: string[];
     source: 'mechanism-foundry';
 }
+
+export type MechanismCommitIntent = 'simulation-only' | 'fabrication-package';
+
+export interface MechanismRecoveryCandidates {
+    targetPartIds: string[];
+    targetSceneObjectIds: string[];
+    targetPathIds: string[];
+    targetAnchorJointIds: string[];
+}
+
+export interface MechanismEditFeedback {
+    mechanismId: string;
+    blocker: string;
+    recoveryCandidates: MechanismRecoveryCandidates;
+}
+
+type MechanismCandidateTransactionBase = {
+    intent: MechanismCommitIntent;
+    mechanism: MechanismConfig;
+    previousExists: boolean;
+    fingerprint?: string;
+    foundryExport?: FoundryExportPackage;
+    blocker?: string;
+    recoveryCandidates?: MechanismRecoveryCandidates;
+};
+
+export type MechanismCandidateTransactionResult = MechanismCandidateTransactionBase & (
+    | { status: 'ready' }
+    | { status: 'committed' }
+    | { status: 'blocked' }
+);
 
 export interface GlobalConfig {
     speed: number;
@@ -383,7 +462,7 @@ export interface CharacterPackageArtifact {
 }
 
 export interface ProjectState {
-    version: 1;
+    version: 2;
     metadata: {
         id: string;
         name: string;
@@ -413,8 +492,23 @@ export interface ProjectState {
     lastFoundryExport?: FoundryExportPackage;
 }
 
+export type ProjectSnapshotLoadResult =
+    | {
+        status: 'loaded';
+        project: ProjectState;
+        sourceVersion: 1 | 2;
+        migrated: boolean;
+        diagnostics: RejectedConnectionSelectionDiagnostic[];
+      }
+    | {
+        status: 'rejected';
+        project: ProjectState;
+        blocker: 'Fix: Update project';
+        reason: 'unsupported-version' | 'invalid-snapshot';
+      };
+
 export type ProjectAction =
-    | { type: 'load_project'; project: ProjectState }
+    | { type: 'load_project'; project: unknown }
     | { type: 'set_processing'; processing: ProcessingStatus }
     | { type: 'select_part'; partId?: string }
     | { type: 'select_scene_object'; objectId?: string }
@@ -432,11 +526,15 @@ export type ProjectAction =
     | { type: 'upsert_path'; path: ProjectMotionPath }
     | { type: 'delete_path'; pathId: string }
     | { type: 'set_mechanisms'; mechanisms: MechanismConfig[]; selectedMechanismId?: string }
-    | { type: 'upsert_mechanism'; mechanism: MechanismConfig }
+    | {
+        type: 'upsert_mechanism';
+        mechanism: MechanismConfig;
+        replaceMechanismId?: string;
+      }
+    | { type: 'commit_mechanism_candidate'; result: MechanismCandidateTransactionResult & { status: 'committed' | 'blocked' } }
     | { type: 'delete_mechanism'; mechanismId: string }
     | { type: 'update_settings'; settings: Partial<AppSettings> }
-    | { type: 'set_export'; fabricationPackage: FabricationPackage }
-    | { type: 'set_foundry_export'; foundryExport: FoundryExportPackage };
+    | { type: 'set_export'; fabricationPackage: FabricationPackage };
 
 // Tracking Feature Types
 export interface TrackingPoint {

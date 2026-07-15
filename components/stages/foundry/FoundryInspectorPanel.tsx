@@ -244,6 +244,13 @@ export const FoundryInspectorPanel = ({
                   max={safeRange?.max ?? param.max}
                   step={param.step}
                   disabled={safeRange?.currentSafe === false}
+                  constraint={
+                    safeRange?.currentSafe === false
+                      ? "Not fitting"
+                      : safeRange?.locked
+                        ? "Fit inside board"
+                        : undefined
+                  }
                   onChange={(value) =>
                     onChangeParam(
                       param.key,
@@ -256,11 +263,6 @@ export const FoundryInspectorPanel = ({
                     )
                   }
                 />
-                {safeRange?.locked && (
-                  <div className="motion-option-lock-note">
-                    Safe range only.
-                  </div>
-                )}
               </React.Fragment>
             );
           })}

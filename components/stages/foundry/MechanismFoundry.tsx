@@ -3,11 +3,13 @@ import { FoundryCanvasPane } from "./FoundryCanvasPane";
 import { FoundryInspectorPanel } from "./FoundryInspectorPanel";
 import { FoundryWorkflowPanel } from "./FoundryWorkflowPanel";
 import type {
-  FoundryConnectionHoleHandle,
   FoundryParamHandle,
   FoundryParamHandleId,
-  DraggingFoundryConnectionSelection,
 } from "./FoundryOverlayLayer";
+import {
+  projectMechanismConnectionHoleHandles,
+  useMechanismConnectionDrag,
+} from "../mechanism/MechanismConnectionOverlay";
 import {
   foundryPinStackPoints,
   foundryPinStacks,
@@ -17,7 +19,13 @@ import {
   clampMechanismParam,
   motionSafeParamRange,
 } from "../mechanism/mechanismParamPolicy";
-import { constrainMechanismUpdate } from "../../../utils/mechanismEditAuthority";
+import {
+  constrainMechanismUpdate,
+  resolveMechanismCandidateCommit,
+  resolveNewMechanismCandidateCommit,
+} from "../../../utils/mechanismEditAuthority";
+import { resolveFoundryTransaction } from "../../../utils/foundryTransaction";
+import { isReferenceExportReady } from "../../../utils/mechanismReference";
 import {
   EditorStageFrame,
   canvasPane,
@@ -27,11 +35,11 @@ import {
 import type {
   AppStage,
   BodyPartLayer,
-  ConnectionSelectionRole,
   FoundryExportPackage,
   MechanismConfig,
   MechanismType,
   Point,
+  PhysicalKitSettings,
   ProjectMotionPath,
   ProjectState,
   SceneObject,
@@ -39,12 +47,11 @@ import type {
 import {
   calculateLinkage,
   generateCurvePoints,
-  generateMechanismPointTraces,
   mechanismTraceDefinitionsForState,
 } from "../../../utils/kinematics";
 import {
   createFoundryPlaybackFrame,
-  generateFoundryPlaybackPointTraces,
+  resolveFoundryPlaybackTraceAuthority,
 } from "../../../utils/foundryPlayback";
 import { buildFoundryPhysicsOverlay } from "../../../utils/physicsSession";
 import {
@@ -52,13 +59,11 @@ import {
   sampleFeasibleRange,
 } from "../../../utils/fabrication";
 import { compactStudentActionForFabricationDiagnostic } from "../../../utils/fabricationReadiness";
-import { compileMechanismRenderPlan } from "../../../utils/mechanismCompiler";
+import { buildProjectMechanismSceneContract } from "../../../utils/mechanismSceneContract";
 import {
-  authorMechanismConnectionSelection,
-  connectionSelectionAccepted,
   connectionSelectionSignature,
   connectionSelectionSceneCoordinates,
-  mechanismConnectionHoleCandidates,
+  normalizeAuthoredMechanismToFabricationSet,
   normalizeMechanismConnectionSelections,
 } from "../../../utils/mechanismConnectionSelections";
 import {
@@ -105,24 +110,18 @@ import {
   pathOwnedTargetFields,
 } from "../../../utils/pathTargets";
 
-const traceDistanceToGeneratedPath = (
-  trace: { points: Point[] },
-  generatedPath: Point[],
+export const resolveLocalFoundryCandidate = (
+  previous: MechanismConfig,
+  candidate: MechanismConfig,
+  kit: PhysicalKitSettings,
+  fresh = false,
 ) => {
-  if (!trace.points.length || !generatedPath.length)
-    return Number.POSITIVE_INFINITY;
-  const count = Math.min(12, trace.points.length, generatedPath.length);
-  return Array.from({ length: count }, (_, index) => {
-    const generatedIndex = Math.round(
-      (index * (generatedPath.length - 1)) / Math.max(1, count - 1),
-    );
-    const traceIndex = Math.round(
-      (index * (trace.points.length - 1)) / Math.max(1, count - 1),
-    );
-    const a = generatedPath[generatedIndex];
-    const b = trace.points[traceIndex];
-    return Math.hypot(a.x - b.x, a.y - b.y);
-  }).reduce((sum, distance) => sum + distance, 0);
+  const result = fresh
+    ? resolveNewMechanismCandidateCommit(candidate, kit)
+    : resolveMechanismCandidateCommit(previous, candidate, kit);
+  return result.status === "accepted"
+    ? { accepted: true as const, mechanism: result.mechanism }
+    : { accepted: false as const, mechanism: previous };
 };
 
 export const MechanismFoundry = ({
@@ -165,8 +164,6 @@ export const MechanismFoundry = ({
     pan: { x: 0, y: 0 },
   });
   const [foundryRigOpacity, setFoundryRigOpacity] = useState(85);
-  const [lastSelectedConnectionRole, setLastSelectedConnectionRole] =
-    useState<ConnectionSelectionRole | null>(null);
   const [foundryProjectionSize, setFoundryProjectionSize] =
     useState<FoundryOverlaySize>(FOUNDRY_OVERLAY_SIZE);
   const [isOrbitingFoundry, setIsOrbitingFoundry] = useState(false);
@@ -185,15 +182,6 @@ export const MechanismFoundry = ({
   const foundryParamDragRef = useRef<{
     pointerId: number;
     handle: FoundryParamHandleId;
-  } | null>(null);
-  const foundryConnectionDragRef = useRef<{
-    pointerId: number;
-    role: ConnectionSelectionRole;
-    startX: number;
-    startY: number;
-    startHoleIndex: number;
-    lastHoleIndex: number;
-    moved: boolean;
   } | null>(null);
   const targetReady = Boolean(
     (selectedPart || selectedSceneObject) &&
@@ -233,14 +221,20 @@ export const MechanismFoundry = ({
     landingBoard.row,
     project.settings.physicalKit,
   );
-  const targetFields = selectedPath
+  const targetFields = useMemo(() => selectedPath
     ? pathOwnedTargetFields(selectedPath)
     : {
         targetPartId: foundry.targetPartId,
         targetSceneObjectId: foundry.targetSceneObjectId,
         targetPathId: foundry.targetPathId,
         targetAnchorJointId: foundry.targetAnchorJointId,
-      };
+      }, [
+        foundry.targetAnchorJointId,
+        foundry.targetPartId,
+        foundry.targetPathId,
+        foundry.targetSceneObjectId,
+        selectedPath,
+      ]);
   const targetIdentity = [
     targetFields.targetPartId ?? "",
     targetFields.targetSceneObjectId ?? "",
@@ -260,43 +254,51 @@ export const MechanismFoundry = ({
     }),
     [foundry, foundryMechanismId, landing.x, landing.y],
   );
+  const foundrySceneMechanism = useMemo(
+    () => ({ ...landedFoundry, ...targetFields }),
+    [landedFoundry, targetFields],
+  );
+  const foundrySceneProject = useMemo(() => {
+    const exists = project.mechanisms.some((mechanism) => mechanism.id === foundrySceneMechanism.id);
+    return {
+      ...project,
+      mechanisms: exists
+        ? project.mechanisms.map((mechanism) => mechanism.id === foundrySceneMechanism.id ? foundrySceneMechanism : mechanism)
+        : [...project.mechanisms, foundrySceneMechanism],
+    };
+  }, [foundrySceneMechanism, project]);
+  const foundrySceneContract = useMemo(
+    () => buildProjectMechanismSceneContract(foundrySceneProject, foundrySceneMechanism.id, undefined, 0),
+    [foundrySceneMechanism.id, foundrySceneProject],
+  );
+  const foundryProjectDriveEnabled = foundrySceneContract?.projectDriveEnabled === true;
   const anchorMarker = {
     x: 180 + (landing.x / SCENE_VIEW.width) * 360,
     y: 120 - (landing.y / SCENE_VIEW.height) * 240,
   };
-  const rawFoundryPointTraces = useMemo(() => {
-    const traces = generateFoundryPlaybackPointTraces(landedFoundry, 96).traces;
-    const selectedTrace = selectedOutputTraceId
-      ? traces.find((trace) => trace.id === selectedOutputTraceId)
-      : undefined;
-    if (selectedTrace)
-      return traces.map((trace) => ({
-        ...trace,
-        primary: trace.id === selectedTrace.id,
-      }));
-    const generatedPath = landedFoundry.generatedPath ?? [];
-    if (!generatedPath.length || traces.length < 2) return traces;
-    const fittedTrace = traces.reduce((best, trace) =>
-      traceDistanceToGeneratedPath(trace, generatedPath) <
-      traceDistanceToGeneratedPath(best, generatedPath)
-        ? trace
-        : best,
-    );
-    return traces.map((trace) => ({
-      ...trace,
-      primary: trace.id === fittedTrace.id,
-    }));
-  }, [landedFoundry, selectedOutputTraceId]);
+  const foundryTraceAuthority = useMemo(
+    () => resolveFoundryPlaybackTraceAuthority(
+      landedFoundry,
+      96,
+      project.settings.physicalKit,
+      selectedOutputTraceId,
+    ),
+    [landedFoundry, project.settings.physicalKit, selectedOutputTraceId],
+  );
+  const rawFoundryPointTraces = foundryTraceAuthority.traces;
   const preview = useMemo(
     () =>
-      rawFoundryPointTraces.find((trace) => trace.primary)?.points ??
-      rawFoundryPointTraces[0]?.points ??
-      generateCurvePoints(landedFoundry, 96).points,
-    [landedFoundry, rawFoundryPointTraces],
+      foundryTraceAuthority.primary?.points ??
+      generateCurvePoints(
+        landedFoundry,
+        96,
+        project.settings.physicalKit,
+      ).points,
+    [foundryTraceAuthority.primary, landedFoundry, project.settings.physicalKit],
   );
   const range = useMemo(
-    () => sampleFeasibleRange(landedFoundry),
-    [landedFoundry],
+    () => sampleFeasibleRange(landedFoundry, 96, project.settings.physicalKit),
+    [landedFoundry, project.settings.physicalKit],
   );
   const library = MECHANISM_LIBRARY[foundry.type];
   const classroomSensemaking = library.classroomSensemaking;
@@ -310,17 +312,19 @@ export const MechanismFoundry = ({
         240,
         96,
         selectedPath?.points ?? [],
+        project.settings.physicalKit,
       ),
-    [landedFoundry, selectedPath?.points],
+    [landedFoundry, project.settings.physicalKit, selectedPath?.points],
   );
   const foundryPlaybackFrame = useMemo(
     () =>
       createFoundryPlaybackFrame(
         landedFoundry,
-        foundryPhase,
+        foundryProjectDriveEnabled ? foundryPhase : 0,
         foundryFitContext,
+        project.settings.physicalKit,
       ),
-    [landedFoundry, foundryPhase, foundryFitContext],
+    [foundryProjectDriveEnabled, foundryFitContext, foundryPhase, landedFoundry, project.settings.physicalKit],
   );
   const selectedSimulation = foundryPlaybackFrame.simulation;
   const foundryPointTraces = useMemo(
@@ -382,22 +386,20 @@ export const MechanismFoundry = ({
     constraintError,
     rule: physicsRule,
   } = physicsOverlay;
-  const foundryRenderPlan = useMemo(
-    () =>
-      compileMechanismRenderPlan(landedFoundry, project.settings.physicalKit),
-    [landedFoundry, project.settings.physicalKit],
-  );
+  const foundryRenderPlan = foundrySceneContract?.renderPlan;
+  const foundryRenderLayers = foundryRenderPlan?.layers ?? [];
   const selectedConnectionState =
-    foundryRenderPlan.connectionSelectionSummary ??
+    foundryRenderPlan?.connectionSelectionSummary ??
     normalizeMechanismConnectionSelections(
       landedFoundry,
       landedFoundry.connectionSelections,
       landedFoundry.connectionSelectionValidation,
+      { kit: project.settings.physicalKit },
     );
-  const foundryTopLayer = foundryRenderPlan.layers.at(-1);
+  const foundryTopLayer = foundryRenderLayers.at(-1);
   const foundryStackLayerZ = useMemo(
     () =>
-      foundryRenderPlan.layers.map(
+      foundryRenderLayers.map(
         (item, presentationIndex) =>
           item.z +
           (foundryExplode / 100) *
@@ -405,25 +407,26 @@ export const MechanismFoundry = ({
             FABRICATION_RENDER_LAYER_Z_STEP *
             1.5,
       ),
-    [foundryExplode, foundryRenderPlan.layers],
+    [foundryExplode, foundryRenderLayers],
   );
   const foundryRenderedLayerZ = useMemo(
     () =>
       foundryRenderedLayerZForMechanism(
-        foundryRenderPlan.layers,
+        foundryRenderLayers,
         foundryStackLayerZ,
       ),
-    [foundryRenderPlan.layers, foundryStackLayerZ],
+    [foundryRenderLayers, foundryStackLayerZ],
   );
   const foundryOverlayPinStacks = useMemo(
-    () =>
-      foundryPinStacks(
+    () => foundryRenderPlan
+      ? foundryPinStacks(
         foundryPinStackPoints(
           foundryRenderPlan,
           { state: selectedSimulation.state },
         ),
         foundryRenderPlan,
-      ),
+      )
+      : [],
     [
       foundryRenderPlan,
       selectedSimulation.state,
@@ -437,7 +440,7 @@ export const MechanismFoundry = ({
     (foundryTopLayer?.z ?? 0.22) +
     (foundryTopLayer
       ? (foundryExplode / 100) *
-        Math.max(0, foundryRenderPlan.layers.length - 1) *
+        Math.max(0, foundryRenderLayers.length - 1) *
         FABRICATION_RENDER_LAYER_Z_STEP *
         1.5
       : 0) +
@@ -479,14 +482,6 @@ export const MechanismFoundry = ({
       range?.currentSafe && Math.abs(range.max - range.min) > 0.001,
     );
   };
-  const fourBarInputAuthored = connectionSelectionAccepted(
-    selectedConnectionState.connectionSelectionValidation,
-    "4bar.input-joint",
-  );
-  const fourBarOutputAuthored = connectionSelectionAccepted(
-    selectedConnectionState.connectionSelectionValidation,
-    "4bar.output-joint",
-  );
   const rawFoundryParamHandles: Array<
     Omit<FoundryParamHandle, "z" | "screen">
   > = [
@@ -508,19 +503,13 @@ export const MechanismFoundry = ({
             id: "B" as const,
             label: "B crank",
             point: selectedSimulation.state.j1,
-            draggable:
-              !fourBarInputAuthored &&
-              (fourBarOutputAuthored || paramHasSafeTravel("crankLength")),
+            draggable: false,
           },
           {
             id: "C" as const,
             label: "C output",
             point: selectedSimulation.state.j2,
-            draggable:
-              !fourBarOutputAuthored &&
-              (fourBarInputAuthored ||
-                paramHasSafeTravel("couplerLength") ||
-                paramHasSafeTravel("rockerLength")),
+            draggable: false,
           },
           {
             id: "D" as const,
@@ -552,75 +541,48 @@ export const MechanismFoundry = ({
         landedFoundry,
         selectedSimulation.state,
         selectedConnectionState.connectionSelections,
+        project.settings.physicalKit,
       ),
     [
       landedFoundry,
+      project.settings.physicalKit,
       selectedConnectionState.connectionSelections,
       selectedSimulation.state,
     ],
   );
   const connectionExportSignature = connectionSelectionSignature(
-    foundryRenderPlan.connectionSelectionSummary?.connectionSelections ?? {},
+    foundryRenderPlan?.connectionSelectionSummary?.connectionSelections ?? {},
   );
-  const connectionHoleHandles: FoundryConnectionHoleHandle[] = useMemo(() => {
-    const zForConnection = (
-      role: ConnectionSelectionRole,
-      selection: FoundryConnectionHoleHandle["selection"],
-    ) => {
-      const target =
-        role === "4bar.input-joint"
-          ? { sourceNodeId: "input-link", renderKind: "linkage" }
-          : role === "4bar.output-joint"
-            ? { sourceNodeId: "output-link", renderKind: "linkage" }
-            : selection.kind === "gear-attachment-hole"
-              ? { sourceNodeId: `gear-${selection.gearIndex}`, renderKind: "gear" }
-              : undefined;
-      const index = target
-        ? foundryRenderPlan.layers.findIndex(
-            (layer) =>
-              layer.sourceNodeId === target.sourceNodeId &&
-              layer.renderKind === target.renderKind,
-          )
-        : -1;
-      return index >= 0 ? (foundryRenderedLayerZ[index] ?? 0) : 0;
-    };
-
-    return mechanismConnectionHoleCandidates(
+  const connectionHoleHandles = useMemo(
+    () =>
+      projectMechanismConnectionHoleHandles({
+        mechanism: landedFoundry,
+        state: selectedSimulation.state,
+        kit: project.settings.physicalKit,
+        camera: foundryCamera,
+        projectionSize: foundryProjectionSize,
+        layers: foundryRenderLayers,
+        renderedLayerZ: foundryRenderedLayerZ,
+      }),
+    [
+      foundryCamera,
+      foundryProjectionSize,
+      foundryRenderedLayerZ,
+      foundryRenderLayers,
       landedFoundry,
+      project.settings.physicalKit,
       selectedSimulation.state,
-      landedFoundry.connectionSelections,
-    ).flatMap((candidate) => {
-      const { coordinate, ...handle } = candidate;
-      const z = zForConnection(handle.role, handle.selection);
-      const screen = projectFoundryOverlayPoint(
-        coordinate,
-        foundryCamera,
-        foundryProjectionSize,
-        z,
-      );
-      return screen ? [{ ...handle, z, screen }] : [];
-    });
-  }, [
-    foundryCamera,
-    foundryProjectionSize,
-    foundryRenderedLayerZ,
-    foundryRenderPlan.layers,
-    landedFoundry,
-    selectedSimulation.state,
-  ]);
-  const selectedConnectionHandle =
-    connectionHoleHandles.find((handle) => handle.role === lastSelectedConnectionRole && handle.selected) ??
-    connectionHoleHandles.find((handle) => handle.selected);
-  const primaryOutputTrace =
-    rawFoundryPointTraces.find((trace) => trace.primary) ??
-    rawFoundryPointTraces[0];
-  const outputTraceLabel = primaryOutputTrace?.id ?? "—";
+    ],
+  );
+  const primaryOutputTrace = foundryTraceAuthority.primary;
+  const displayOutputTrace = foundryTraceAuthority.display;
+  const outputTraceLabel = displayOutputTrace?.id ?? "—";
   const cycleOutputTrace = () => {
     if (rawFoundryPointTraces.length < 2) return;
     const currentIndex = Math.max(
       0,
       rawFoundryPointTraces.findIndex(
-        (trace) => trace.id === primaryOutputTrace?.id,
+        (trace) => trace.id === displayOutputTrace?.id,
       ),
     );
     const next =
@@ -628,12 +590,27 @@ export const MechanismFoundry = ({
     setSelectedOutputTraceId(next?.id ?? null);
     setShowPathPreview(true);
   };
-  const hardBlocked =
-    !targetReady ||
-    range.percentValid === 0 ||
-    selectedConnectionState.connectionSelectionValidation?.status === "invalid" ||
-    !Number.isFinite(landing.x) ||
-    !Number.isFinite(landing.y);
+  const foundryCandidate = useMemo(
+    () => mechanismWithGeneratedPath({
+      ...landedFoundry,
+      ...targetFields,
+      source: "foundry",
+      warnings: motionWarning ? [motionWarning] : [],
+    }, { kit: project.settings.physicalKit }),
+    [landedFoundry, motionWarning, project.settings.physicalKit, targetFields],
+  );
+  const foundryIntent = isReferenceExportReady(foundryCandidate.type)
+    ? "fabrication-package" as const
+    : "simulation-only" as const;
+  const foundryTransaction = useMemo(
+    () => resolveFoundryTransaction({
+      project,
+      candidate: foundryCandidate,
+      intent: foundryIntent,
+    }),
+    [foundryCandidate, foundryIntent, project],
+  );
+  const hardBlocked = !targetReady || !foundryProjectDriveEnabled;
   const foundryCameraLabel =
     foundryCamera.preset === "custom"
       ? "Custom view"
@@ -641,6 +618,29 @@ export const MechanismFoundry = ({
   const foundryPhaseDegrees = Math.round(
     ((((foundryPhase / (Math.PI * 2)) % 1) + 1) % 1) * 360,
   );
+  const installFoundryCandidate = (
+    candidate: MechanismConfig,
+    fresh = false,
+    manualAnchorAfterInstall?: Point | null,
+  ) => {
+    const result = resolveLocalFoundryCandidate(
+      landedFoundry,
+      candidate,
+      project.settings.physicalKit,
+      fresh,
+    );
+    if (!result.accepted) return false;
+    const approvedAnchor = {
+      x: result.mechanism.anchorX ?? 0,
+      y: result.mechanism.anchorY ?? 0,
+    };
+    const keepManualAnchor = manualAnchorAfterInstall === undefined
+      ? Boolean(manualAnchor)
+      : manualAnchorAfterInstall !== null;
+    setManualAnchor(keepManualAnchor ? approvedAnchor : null);
+    setFoundry(result.mechanism);
+    return true;
+  };
   const applyAnchor = (point: Point) => {
     const board = sceneToBoard(point, project.settings.physicalKit);
     const snapped = boardToScene(
@@ -648,23 +648,26 @@ export const MechanismFoundry = ({
       board.row,
       project.settings.physicalKit,
     );
-    setManualAnchor(snapped);
-    setFoundry({
-      ...foundry,
-      anchorX: snapped.x,
-      anchorY: snapped.y,
-      sceneAnchor: snapped,
-      transform: {
-        ...(foundry.transform ?? {
+    installFoundryCandidate(
+      {
+        ...landedFoundry,
+        anchorX: snapped.x,
+        anchorY: snapped.y,
+        sceneAnchor: snapped,
+        transform: {
+          ...(landedFoundry.transform ?? {
+            x: snapped.x,
+            y: snapped.y,
+            rotation: landedFoundry.groundAngle ?? 0,
+            scale: 1,
+          }),
           x: snapped.x,
           y: snapped.y,
-          rotation: foundry.groundAngle ?? 0,
-          scale: 1,
-        }),
-        x: snapped.x,
-        y: snapped.y,
+        },
       },
-    });
+      false,
+      snapped,
+    );
   };
   const updateFoundryProjectionSize = (size: FoundryOverlaySize) =>
     setFoundryProjectionSize((prev) =>
@@ -772,31 +775,24 @@ export const MechanismFoundry = ({
     }));
   };
   const refreshEditedFoundryMechanism = (mechanism: MechanismConfig) => {
-    const normalized = normalizeGearMeshMechanism(mechanism);
-    if (normalized.type !== "4bar" || !normalized.generatedPath?.length)
-      return mechanismWithGeneratedPath(normalized);
-    const bcTraces = generateMechanismPointTraces(normalized, 96).traces.filter(
-      (trace) => trace.id === "B" || trace.id === "C",
+    const normalized = normalizeAuthoredMechanismToFabricationSet(
+      mechanism,
+      project.settings.physicalKit,
     );
-    if (bcTraces.length === 0) return mechanismWithGeneratedPath(normalized);
-    const selectedTrace = bcTraces.reduce((best, trace) =>
-      traceDistanceToGeneratedPath(trace, normalized.generatedPath ?? []) <
-      traceDistanceToGeneratedPath(best, normalized.generatedPath ?? [])
-        ? trace
-        : best,
-    );
-    return mechanismWithGeneratedPath(
-      { ...normalized, generatedPath: selectedTrace.points },
-      { preserveGeneratedPath: true },
-    );
+    return mechanismWithGeneratedPath(normalized, {
+      kit: project.settings.physicalKit,
+    });
   };
   const applyDirectFoundryUpdates = (updates: Partial<MechanismConfig>) => {
-    if (!Object.keys(updates).length) return;
-    setFoundry(refreshEditedFoundryMechanism({ ...foundry, ...updates }));
+    if (!Object.keys(updates).length) return false;
+    const candidate = updates.connectionSelections
+      ? { ...landedFoundry, ...updates }
+      : refreshEditedFoundryMechanism({ ...landedFoundry, ...updates });
+    return installFoundryCandidate(candidate);
   };
   const applySafeFoundryUpdates = (updates: Partial<MechanismConfig>) => {
     const constrainedUpdates = constrainMechanismUpdate(
-      foundry,
+      landedFoundry,
       updates,
       project.settings.physicalKit,
     );
@@ -806,18 +802,17 @@ export const MechanismFoundry = ({
   const updateFoundryParam = (key: keyof MechanismConfig, value: number) => {
     if (key === "anchorX" || key === "anchorY") {
       const anchor = {
-        x: key === "anchorX" ? value : (foundry.anchorX ?? landing.x),
-        y: key === "anchorY" ? value : (foundry.anchorY ?? landing.y),
+        x: key === "anchorX" ? value : (landedFoundry.anchorX ?? landing.x),
+        y: key === "anchorY" ? value : (landedFoundry.anchorY ?? landing.y),
       };
-      setManualAnchor(anchor);
       applySafeFoundryUpdates({
         [key]: value,
         sceneAnchor: anchor,
         transform: {
-          ...(foundry.transform ?? {
+          ...(landedFoundry.transform ?? {
             x: anchor.x,
             y: anchor.y,
-            rotation: foundry.groundAngle ?? 0,
+            rotation: landedFoundry.groundAngle ?? 0,
             scale: 1,
           }),
           x: anchor.x,
@@ -829,15 +824,9 @@ export const MechanismFoundry = ({
     applySafeFoundryUpdates({ [key]: value } as Partial<MechanismConfig>);
   };
   const updateFoundryParams = (updates: Partial<MechanismConfig>) => {
-    if (updates.connectionSelections) {
-      setFoundry(mechanismWithGeneratedPath({ ...foundry, ...updates }));
-      return;
-    }
-    if (foundry.type === "gear_linkage" && updates.gearTrainRadii) {
+    if (updates.connectionSelections || updates.gearTrainRadii)
       applyDirectFoundryUpdates(updates);
-      return;
-    }
-    applySafeFoundryUpdates(updates);
+    else applySafeFoundryUpdates(updates);
   };
   const foundryPointFromOverlayEvent = (
     event: React.PointerEvent<SVGCircleElement>,
@@ -867,8 +856,6 @@ export const MechanismFoundry = ({
   ) => {
     const s = selectedSimulation.state;
     const scale = Math.max(0.001, selectedSimulation.scale);
-    const sceneDistance = (a: Point, b: Point) =>
-      Math.hypot(a.x - b.x, a.y - b.y) / scale;
     if (handle === "M") {
       applyAnchor({
         x: landing.x + (point.x - s.p1.x) / scale,
@@ -876,212 +863,41 @@ export const MechanismFoundry = ({
       });
       return;
     }
-    if (handle === "B") {
-      updateFoundryParam(
-        "crankLength",
-        clampMechanismParam("crankLength", sceneDistance(s.p1, point)),
-      );
+    if (handle === "B" || handle === "C") {
       return;
     }
     if (handle === "D") {
-      updateFoundryParams({
-        groundLength: clampMechanismParam(
-          "groundLength",
-          sceneDistance(s.p1, point),
-        ),
+      const intendedEndpoint = {
+        x: landing.x + (point.x - s.p1.x) / scale,
+        y: landing.y - (point.y - s.p1.y) / scale,
+      };
+      const board = sceneToBoard(
+        intendedEndpoint,
+        project.settings.physicalKit,
+      );
+      const endpoint = boardToScene(
+        board.col,
+        board.row,
+        project.settings.physicalKit,
+      );
+      applyDirectFoundryUpdates({
+        groundLength: Math.hypot(endpoint.x - landing.x, endpoint.y - landing.y),
         groundAngle:
-          (Math.atan2(point.y - s.p1.y, point.x - s.p1.x) * 180) / Math.PI,
+          (Math.atan2(endpoint.y - landing.y, endpoint.x - landing.x) * 180) /
+          Math.PI,
       });
       return;
     }
-    updateFoundryParams({
-      couplerLength: clampMechanismParam(
-        "couplerLength",
-        sceneDistance(s.j1, point),
-      ),
-      ...(fourBarOutputAuthored
-        ? {}
-        : {
-            rockerLength: clampMechanismParam(
-              "rockerLength",
-              sceneDistance(s.p2, point),
-            ),
-          }),
-    });
   };
 
-  const foundryConnectionHolePointFromEvent = (
-    event: React.PointerEvent<SVGCircleElement>,
-  ) => {
-    const svg = event.currentTarget.ownerSVGElement;
-    if (!svg) return undefined;
-    const rect = svg.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return undefined;
-    return {
-      x:
-        ((event.clientX - rect.left) / rect.width) *
-        foundryProjectionSize.width,
-      y:
-        ((event.clientY - rect.top) / rect.height) *
-        foundryProjectionSize.height,
-    };
-  };
-  const connectionSnapDistanceSq = 24 ** 2;
-  const pickConnectionHoleByRole = (
-    role: ConnectionSelectionRole,
-    point: Point,
-  ) => {
-    const candidates = connectionHoleHandles.filter(
-      (candidate) => candidate.role === role,
-    );
-    if (!candidates.length) return undefined;
-    let best = { handle: candidates[0], distanceSq: Number.POSITIVE_INFINITY };
-    for (const candidate of candidates) {
-      const dx = candidate.screen.x - point.x;
-      const dy = candidate.screen.y - point.y;
-      const distanceSq = dx * dx + dy * dy;
-      if (distanceSq < best.distanceSq) {
-        best = { handle: candidate, distanceSq };
-      }
-    }
-    return best.distanceSq <= connectionSnapDistanceSq
-      ? best.handle.holeIndex
-      : undefined;
-  };
-  const pickConnectionHoleUnderPointer = (
-    event: React.PointerEvent<SVGCircleElement>,
-    role: ConnectionSelectionRole,
-  ) => {
-    const svg = event.currentTarget.ownerSVGElement;
-    if (!svg) return undefined;
-    const hit = svg.ownerDocument.elementFromPoint(
-      event.clientX,
-      event.clientY,
-    );
-    if (!hit) return undefined;
-    const target = hit.closest("circle.foundry-connection-hole-hit");
-    if (!target) return undefined;
-    if (target.getAttribute("data-connection-role") !== role) {
-      return undefined;
-    }
-    const holeIndex = Number(target.getAttribute("data-connection-hole-index"));
-    return Number.isFinite(holeIndex) &&
-      connectionHoleHandles.some(
-        (candidate) =>
-          candidate.role === role && candidate.holeIndex === holeIndex,
-      )
-      ? holeIndex
-      : undefined;
-  };
-  const setConnectionHoleSelection = (selection: {
-    role: ConnectionSelectionRole;
-    holeIndex: number;
-  }) => {
-    const target = connectionHoleHandles.find(
-      (candidate) =>
-        candidate.role === selection.role &&
-        candidate.holeIndex === selection.holeIndex,
-    );
-    if (!target) return;
-    updateFoundryParams(
-      authorMechanismConnectionSelection(
-        landedFoundry,
-        target.role,
-        target.selection,
-      ),
-    );
-    setLastSelectedConnectionRole(target.role);
-  };
-  const [draggingConnectionSelection, setDraggingConnectionSelection] =
-    useState<DraggingFoundryConnectionSelection | undefined>(undefined);
-  const handleConnectionHolePointerDown =
-    (handle: FoundryConnectionHoleHandle) =>
-    (event: React.PointerEvent<SVGCircleElement>) => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (
-        Number.isFinite(event.pointerId) &&
-        !event.currentTarget.hasPointerCapture(event.pointerId)
-      ) {
-        event.currentTarget.setPointerCapture(event.pointerId);
-      }
-      setFoundryPlaying(false);
-      setLastSelectedConnectionRole(handle.role);
-      foundryConnectionDragRef.current = {
-        pointerId: event.pointerId,
-        role: handle.role,
-        startX: event.clientX,
-        startY: event.clientY,
-        startHoleIndex: handle.holeIndex,
-        lastHoleIndex: handle.holeIndex,
-        moved: false,
-      };
-      setDraggingConnectionSelection({
-        role: handle.role,
-        holeIndex: handle.holeIndex,
-      });
-    };
-  const handleConnectionHolePointerMove =
-    (_handle: FoundryConnectionHoleHandle) =>
-    (event: React.PointerEvent<SVGCircleElement>) => {
-      const drag = foundryConnectionDragRef.current;
-      if (!drag || drag.pointerId !== event.pointerId) return;
-      const point = foundryConnectionHolePointFromEvent(event);
-      if (!point) return;
-      const moveSq =
-        (event.clientX - drag.startX) ** 2 +
-        (event.clientY - drag.startY) ** 2;
-      if (!drag.moved && moveSq < 9) {
-        setDraggingConnectionSelection({
-          role: drag.role,
-          holeIndex: drag.lastHoleIndex,
-        });
-        return;
-      }
-      if (!drag.moved) {
-        drag.moved = true;
-      }
-      const snapHoleIndex = pickConnectionHoleByRole(drag.role, point);
-      drag.lastHoleIndex = snapHoleIndex ?? drag.startHoleIndex;
-      setDraggingConnectionSelection({
-        role: drag.role,
-        holeIndex: drag.lastHoleIndex,
-      });
-    };
-  const handleConnectionHolePointerUp =
-    (_handle: FoundryConnectionHoleHandle) =>
-    (event: React.PointerEvent<SVGCircleElement>) => {
-      const drag = foundryConnectionDragRef.current;
-      if (!drag || drag.pointerId !== event.pointerId) return;
-      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-        event.currentTarget.releasePointerCapture(event.pointerId);
-      }
-      const cancelled = event.type === "pointercancel";
-      const point = foundryConnectionHolePointFromEvent(event);
-      const underPointerHole = pickConnectionHoleUnderPointer(event, drag.role);
-      const nearHole =
-        point &&
-        point.x >= 0 &&
-        point.y >= 0 &&
-        point.x <= foundryProjectionSize.width &&
-        point.y <= foundryProjectionSize.height
-          ? pickConnectionHoleByRole(drag.role, point)
-          : undefined;
-      const snapHoleIndex = underPointerHole ?? nearHole;
-      foundryConnectionDragRef.current = null;
-      setDraggingConnectionSelection(undefined);
-      if (cancelled || snapHoleIndex === undefined) return;
-      const target = connectionHoleHandles.find(
-        (candidate) =>
-          candidate.role === drag.role && candidate.holeIndex === snapHoleIndex,
-      );
-      if (target) {
-        setConnectionHoleSelection({
-          role: target.role,
-          holeIndex: target.holeIndex,
-        });
-      }
-    };
+  const connectionInteraction = useMechanismConnectionDrag({
+    mechanism: landedFoundry,
+    handles: connectionHoleHandles,
+    projectionSize: foundryProjectionSize,
+    kit: project.settings.physicalKit,
+    onCommit: applyDirectFoundryUpdates,
+    onInteractionStart: () => setFoundryPlaying(false),
+  });
   const handleFoundryParamPointerDown =
     (handle: FoundryParamHandleId) =>
     (event: React.PointerEvent<SVGCircleElement>) => {
@@ -1127,16 +943,33 @@ export const MechanismFoundry = ({
     },
   });
   const setAnchoredFoundry = (mechanism: MechanismConfig) => {
+    const anchored = normalizeAuthoredMechanismToFabricationSet(
+      keepCurrentAnchor(mechanism),
+      project.settings.physicalKit,
+    );
+    installFoundryCandidate(fitRecommendedMechanismToSheet(project, anchored));
+  };
+  const setFreshAnchoredFoundry = (
+    mechanism: MechanismConfig,
+    manualAnchorAfterInstall?: Point | null,
+  ) => {
     const anchored = normalizeGearMeshMechanism(keepCurrentAnchor(mechanism));
-    setFoundry(fitRecommendedMechanismToSheet(project, anchored));
+    installFoundryCandidate(
+      fitRecommendedMechanismToSheet(project, anchored),
+      true,
+      manualAnchorAfterInstall,
+    );
   };
   const createPathFittedFoundry = (mechanism: MechanismConfig) => {
     const anchored = keepCurrentAnchor(mechanism);
     if (!targetReady || !selectedPath)
-      return normalizeGearMeshMechanism(anchored);
+      return normalizeAuthoredMechanismToFabricationSet(
+        anchored,
+        project.settings.physicalKit,
+      );
     return fitMechanismToTargetPath(
       project,
-      {
+      normalizeAuthoredMechanismToFabricationSet({
         ...anchored,
         targetPartId: selectedPath.sceneObjectId
           ? undefined
@@ -1151,23 +984,21 @@ export const MechanismFoundry = ({
           : [selectedPath.partId],
         source: "optimized",
         recommendation: mechanism.recommendation ?? "Fit path",
-      },
+      }, project.settings.physicalKit),
       selectedPath.id,
     );
   };
   const applyPathFit = (mechanism = foundry) => {
     setFoundryPlaying(false);
     setFoundryPhase(0);
-    setManualAnchor(null);
     setSelectedOutputTraceId(null);
     setShowUserPathPreview(true);
     setShowPathPreview(true);
-    setFoundry(createPathFittedFoundry(mechanism));
+    installFoundryCandidate(createPathFittedFoundry(mechanism), false, null);
   };
   const resetFoundryPreview = () => {
     setFoundryPlaying(false);
     setFoundryPhase(0);
-    setManualAnchor(null);
     setSelectedOutputTraceId(null);
     setIsPickingAnchor(false);
     setShowForces(true);
@@ -1181,13 +1012,21 @@ export const MechanismFoundry = ({
       preset: "iso",
       pan: { x: 0, y: 0 },
     });
-    setAnchoredFoundry({
-      ...createDefaultMechanism(foundry.type, "foundry-preview"),
-      color: foundry.color,
-      presetId: "balanced",
-      recommendation: FOUNDRY_PRESETS.balanced.recommendation,
-    });
+    setFreshAnchoredFoundry(
+      {
+        ...createDefaultMechanism(foundry.type, "foundry-preview"),
+        color: foundry.color,
+        presetId: "balanced",
+        recommendation: FOUNDRY_PRESETS.balanced.recommendation,
+      },
+      null,
+    );
   };
+  useEffect(() => {
+    if (foundryProjectDriveEnabled) return;
+    setFoundryPlaying(false);
+    setFoundryPhase(0);
+  }, [foundryProjectDriveEnabled]);
   useEffect(() => {
     if (!foundryPlaying) return;
     let frame = 0;
@@ -1212,7 +1051,11 @@ export const MechanismFoundry = ({
   }, [foundryPlaying, project.settings.animationSpeed]);
   const makePackage = (): FoundryExportPackage => {
     const mechanismId = landedFoundry.id;
-    const state = calculateLinkage(landedFoundry, 0);
+    const state = calculateLinkage(
+      landedFoundry,
+      0,
+      project.settings.physicalKit,
+    );
     const physicalOutputPoint =
       mechanismTraceDefinitionsForState(landedFoundry.type, state).find(
         (trace) => trace.id === primaryOutputTrace?.id,
@@ -1228,10 +1071,10 @@ export const MechanismFoundry = ({
       createdAt: new Date().toISOString(),
       mechanismId,
       mechanismType: landedFoundry.type,
-      parameters: { ...landedFoundry, id: mechanismId },
+      parameters: { ...foundryCandidate, id: mechanismId },
       pivot: landing,
       outputPoint: state.isValid ? physicalOutputPoint : undefined,
-      generatedPath: preview,
+      generatedPath: foundryCandidate.generatedPath ?? preview,
       simulationSummary: feasibilityText,
       visual: {
         color: landedFoundry.color,
@@ -1240,7 +1083,7 @@ export const MechanismFoundry = ({
       },
       animation: {
         duration: selectedPath?.duration ?? 3200,
-        steps: preview.length,
+        steps: foundryCandidate.generatedPath?.length ?? preview.length,
         loop: true,
       },
       targetPartId: selectedPart?.id,
@@ -1260,7 +1103,10 @@ export const MechanismFoundry = ({
       source: "mechanism-foundry",
     };
   };
-  const useFoundryMechanism = () => onExport(makePackage());
+  const useFoundryMechanism = () => {
+    if (!foundryProjectDriveEnabled) return;
+    onExport(makePackage());
+  };
   const selectFoundryMechanismType = (type: MechanismType) => {
     setSelectedOutputTraceId(null);
     const next = {
@@ -1269,7 +1115,7 @@ export const MechanismFoundry = ({
       presetId: "balanced",
       recommendation: FOUNDRY_PRESETS.balanced.recommendation,
     };
-    setAnchoredFoundry(next);
+    setFreshAnchoredFoundry(next);
   };
   const selectFoundryPreset = (presetId: string) => {
     setSelectedOutputTraceId(null);
@@ -1286,7 +1132,8 @@ export const MechanismFoundry = ({
       presetId,
       recommendation: preset.recommendation,
     };
-    setAnchoredFoundry(next);
+    if (presetId === "balanced") setFreshAnchoredFoundry(next);
+    else setAnchoredFoundry(next);
   };
   return (
     <EditorStageFrame
@@ -1302,6 +1149,11 @@ export const MechanismFoundry = ({
             targetReady={targetReady}
             isPickingAnchor={isPickingAnchor}
             hardBlocked={hardBlocked}
+            transactionBlocker={
+              targetReady && foundryTransaction.status === "blocked"
+                ? foundryTransaction.blocker
+                : undefined
+            }
             onToggleAnchorPick={() => setIsPickingAnchor((value) => !value)}
             onFitPath={() => applyPathFit()}
             onUseMechanism={useFoundryMechanism}
@@ -1309,10 +1161,11 @@ export const MechanismFoundry = ({
           />,
         ),
         canvas: canvasPane(
-          <FoundryCanvasPane
+          foundrySceneContract ? <FoundryCanvasPane
             foundry={foundry}
             landedFoundry={landedFoundry}
-            foundryPlaying={foundryPlaying}
+            mechanismContract={foundrySceneContract}
+            foundryPlaying={foundryPlaying && foundryProjectDriveEnabled}
             foundryPhase={foundryPhase}
             foundryPhaseDegrees={foundryPhaseDegrees}
             foundryCamera={foundryCamera}
@@ -1328,10 +1181,10 @@ export const MechanismFoundry = ({
             kit={project.settings.physicalKit}
             showFoundryGrid={showFoundryGrid}
             showUserPathPreview={showUserPathPreview}
-            showPathPreview={showPathPreview}
-            showTrail={showTrail}
-            showForces={showForces}
-            showVelocity={showVelocity}
+            showPathPreview={showPathPreview && foundryProjectDriveEnabled}
+            showTrail={showTrail && foundryProjectDriveEnabled}
+            showForces={showForces && foundryProjectDriveEnabled}
+            showVelocity={showVelocity && foundryProjectDriveEnabled}
             outputTraceLabel={outputTraceLabel}
             canCycleOutputTrace={rawFoundryPointTraces.length > 1}
             isPickingAnchor={isPickingAnchor}
@@ -1340,11 +1193,11 @@ export const MechanismFoundry = ({
             isPanningFoundry={isPanningFoundry}
             physicsRule={physicsRule}
             motionWarning={motionWarning}
-            velocityMagnitude={velocityMagnitude}
-            forceMagnitude={forceMagnitude}
+            velocityMagnitude={foundryProjectDriveEnabled ? velocityMagnitude : 0}
+            forceMagnitude={foundryProjectDriveEnabled ? forceMagnitude : 0}
             frictionCoefficient={project.settings.simulationFriction}
-            frictionMagnitude={frictionMagnitude}
-            constraintError={constraintError}
+            frictionMagnitude={foundryProjectDriveEnabled ? frictionMagnitude : 0}
+            constraintError={foundryProjectDriveEnabled ? constraintError : 0}
             projectedPlayhead={projectedPlayhead}
             projectedVelocityTip={projectedVelocityTip}
             projectedForceTip={projectedForceTip}
@@ -1360,7 +1213,9 @@ export const MechanismFoundry = ({
             connectionHoleHandles={connectionHoleHandles}
             connectionSelectionCoordinates={authoredConnectionSelectionCoordinates}
             connectionExportSignature={connectionExportSignature}
-            selectedConnection={selectedConnectionHandle ? { role: selectedConnectionHandle.role, kind: selectedConnectionHandle.kind, holeIndex: selectedConnectionHandle.holeIndex } : undefined}
+            selectedConnection={connectionInteraction.selectedHandle ? { role: connectionInteraction.selectedHandle.role, kind: connectionInteraction.selectedHandle.kind, holeIndex: connectionInteraction.selectedHandle.holeIndex } : undefined}
+            connectionBlocker={connectionInteraction.blocker}
+            connectionRecoveryRole={connectionInteraction.recoveryRole}
             hasManualAnchor={Boolean(manualAnchor)}
             landingBoardLabel={landingBoard.label}
             onSetCameraPreset={setCameraPreset}
@@ -1389,11 +1244,17 @@ export const MechanismFoundry = ({
             onParamPointerDown={handleFoundryParamPointerDown}
             onParamPointerMove={handleFoundryParamPointerMove}
             onParamPointerUp={handleFoundryParamPointerUp}
-            onConnectionHolePointerDown={handleConnectionHolePointerDown}
-            onConnectionHolePointerMove={handleConnectionHolePointerMove}
-            onConnectionHolePointerUp={handleConnectionHolePointerUp}
-            draggingConnectionSelection={draggingConnectionSelection}
-          />,
+            onConnectionHoleSelect={connectionInteraction.selectHandle}
+            onConnectionHoleInteractionStart={connectionInteraction.beginInteraction}
+            onConnectionHolePointerDown={connectionInteraction.onPointerDown}
+            onConnectionHolePointerMove={connectionInteraction.onPointerMove}
+            onConnectionHolePointerUp={connectionInteraction.onPointerUp}
+            draggingConnectionSelection={connectionInteraction.dragging}
+          /> : (
+            <div className="foundry-preview-blocked" data-testid="foundry-unsafe-preview">
+              Fix mechanism geometry.
+            </div>
+          ),
         ),
         inspector: inspectorPane(
           <FoundryInspectorPanel

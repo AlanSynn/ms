@@ -4,6 +4,7 @@ import { MechanismParametricEditor } from "./MechanismParametricEditor";
 import { MiniNumber, Toggle } from "../../ui/InspectorControls";
 import type {
   MechanismConfig,
+  MechanismEditFeedback,
   ProjectAction,
   ProjectMotionPath,
   ProjectState,
@@ -24,12 +25,17 @@ import {
   shouldShowMechanismParam,
 } from "./mechanismParamPolicy";
 import { mechanismParamIsPlacementRecoveryEditable } from "../../../utils/mechanismEditAuthority";
-import { pathOwnedTargetFields } from "../../../utils/pathTargets";
+import {
+  assessMechanismTargetBinding,
+  pathOwnedTargetFields,
+} from "../../../utils/pathTargets";
+import { projectMechanismReadiness } from "../../../utils/mechanismReadiness";
 
 type DesignInspectorPanelProps = {
   project: ProjectState;
   selectedMechanism?: MechanismConfig;
   updateMechanism: (id: string, updates: Partial<MechanismConfig>) => void;
+  mechanismEditFeedback?: MechanismEditFeedback | null;
   dispatch: (action: ProjectAction) => void;
   optimizerBusy: boolean;
   onOptimize: () => void;
@@ -42,6 +48,7 @@ export const DesignInspectorPanel = ({
   project,
   selectedMechanism,
   updateMechanism,
+  mechanismEditFeedback,
   dispatch,
   optimizerBusy,
   onOptimize,
@@ -49,15 +56,32 @@ export const DesignInspectorPanel = ({
   exportDxf,
   onBlueprint,
 }: DesignInspectorPanelProps) => {
+  const projectReadiness = projectMechanismReadiness(project);
+  const editFeedback =
+    mechanismEditFeedback?.mechanismId === selectedMechanism?.id
+      ? mechanismEditFeedback
+      : undefined;
+  const recoveryCandidates = editFeedback?.recoveryCandidates ?? (selectedMechanism
+    ? assessMechanismTargetBinding(project, selectedMechanism).recoveryCandidates
+    : undefined);
+  const buildBlocked = projectReadiness.status === "blocked";
   const selectedRange = selectedMechanism
-    ? sampleFeasibleRange(selectedMechanism)
+    ? sampleFeasibleRange(
+        selectedMechanism,
+        96,
+        project.settings.physicalKit,
+      )
     : undefined;
   const motionWarning = compactStudentActionForFabricationDiagnostic(
     selectedRange?.warning,
   );
+  const readinessWarning = compactStudentActionForFabricationDiagnostic(
+    projectReadiness.blockers[0],
+  );
   const warningMessages = Array.from(
     new Set(
       [
+        editFeedback?.blocker,
         motionWarning,
         ...(selectedMechanism?.warnings ?? []).map(
           compactStudentActionForFabricationDiagnostic,
@@ -68,13 +92,10 @@ export const DesignInspectorPanel = ({
   const targetAnchorOptions = selectedMechanism?.targetPartId
     ? motionAnchorJointIds(project, selectedMechanism.targetPartId)
     : [];
-  const selectedTargetAnchor = selectedMechanism?.targetPartId
-    ? preferredMotionJointId(
-        project,
-        selectedMechanism.targetPartId,
-        selectedMechanism.targetAnchorJointId,
-      )
-    : undefined;
+  const selectedTargetAnchor = selectedMechanism?.targetAnchorJointId &&
+    targetAnchorOptions.includes(selectedMechanism.targetAnchorJointId)
+      ? selectedMechanism.targetAnchorJointId
+      : undefined;
   const targetSelectValue = selectedMechanism?.targetSceneObjectId
     ? `object:${selectedMechanism.targetSceneObjectId}`
     : selectedMechanism?.targetPartId
@@ -171,7 +192,15 @@ export const DesignInspectorPanel = ({
             <option value="">No target</option>
             <optgroup label="Body parts">
               {project.partOrder.map((id) => (
-                <option key={id} value={id}>
+                <option
+                  key={id}
+                  value={id}
+                  data-recovery-target={
+                    recoveryCandidates?.targetPartIds.includes(id)
+                      ? `part:${id}`
+                      : undefined
+                  }
+                >
                   {project.parts[id].name}
                 </option>
               ))}
@@ -181,7 +210,15 @@ export const DesignInspectorPanel = ({
                 {project.sceneObjectOrder.map((id) => {
                   const object = project.sceneObjects[id];
                   return object ? (
-                    <option key={id} value={`object:${id}`}>
+                    <option
+                      key={id}
+                      value={`object:${id}`}
+                      data-recovery-target={
+                        recoveryCandidates?.targetSceneObjectIds.includes(id)
+                          ? `object:${id}`
+                          : undefined
+                      }
+                    >
                       {object.name}
                     </option>
                   ) : null;
@@ -207,6 +244,11 @@ export const DesignInspectorPanel = ({
                   key={p.id}
                   value={p.id}
                   disabled={pathOccupied(p)}
+                  data-recovery-target={
+                    recoveryCandidates?.targetPathIds.includes(p.id)
+                      ? `path:${p.id}`
+                      : undefined
+                  }
                 >
                   {p.sceneObjectId
                     ? `${project.sceneObjects[p.sceneObjectId]?.name ?? "Object"} path`
@@ -229,7 +271,15 @@ export const DesignInspectorPanel = ({
             >
               <option value="">Default handle</option>
               {targetAnchorOptions.map((id) => (
-                <option key={id} value={id}>
+                <option
+                  key={id}
+                  value={id}
+                  data-recovery-target={
+                    recoveryCandidates?.targetAnchorJointIds.includes(id)
+                      ? `anchor:${id}`
+                      : undefined
+                  }
+                >
                   {motionChainOptionLabel(
                     project,
                     selectedMechanism.targetPartId,
@@ -256,6 +306,13 @@ export const DesignInspectorPanel = ({
               p.key,
               project.settings.physicalKit,
             );
+            const disabled =
+              safeRange?.currentSafe === false &&
+              !mechanismParamIsPlacementRecoveryEditable(
+                selectedMechanism,
+                p.key,
+                project.settings.physicalKit,
+              );
             return (
               <React.Fragment key={String(p.key)}>
                 <MiniNumber
@@ -264,13 +321,13 @@ export const DesignInspectorPanel = ({
                   min={safeRange?.min ?? p.min}
                   max={safeRange?.max ?? p.max}
                   step={p.step}
-                  disabled={
-                    safeRange?.currentSafe === false &&
-                    !mechanismParamIsPlacementRecoveryEditable(
-                      selectedMechanism,
-                      p.key,
-                      project.settings.physicalKit,
-                    )
+                  disabled={disabled}
+                  constraint={
+                    disabled
+                      ? "Not fitting"
+                      : safeRange?.locked
+                        ? "Fit inside board"
+                        : undefined
                   }
                   onChange={(value) =>
                     updateMechanism(selectedMechanism.id, {
@@ -283,11 +340,6 @@ export const DesignInspectorPanel = ({
                     } as Partial<MechanismConfig>)
                   }
                 />
-                {safeRange?.locked && (
-                  <div className="motion-option-lock-note">
-                    Safe range only.
-                  </div>
-                )}
               </React.Fragment>
             );
           })}
@@ -296,6 +348,11 @@ export const DesignInspectorPanel = ({
               {w}
             </div>
           ))}
+          {buildBlocked && readinessWarning && !warningMessages.includes(readinessWarning) && (
+            <div className="warning" data-testid="design-readiness-blocker">
+              {readinessWarning}
+            </div>
+          )}
           <div className="flex flex-wrap gap-2">
             <button
               className="btn-primary"
@@ -322,15 +379,16 @@ export const DesignInspectorPanel = ({
             </button>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button className="btn-secondary" onClick={exportSvg}>
+            <button className="btn-secondary" disabled={buildBlocked} onClick={exportSvg}>
               SVG
             </button>
-            <button className="btn-secondary" onClick={exportDxf}>
+            <button className="btn-secondary" disabled={buildBlocked} onClick={exportDxf}>
               DXF
             </button>
             <button
               className="btn-primary"
               aria-label="Export Blueprint"
+              disabled={buildBlocked}
               onClick={onBlueprint}
             >
               Blueprint

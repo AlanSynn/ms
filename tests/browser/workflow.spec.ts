@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { CLASSROOM_LESSONS, createLessonProject, serializeProject } from '../../utils/project';
 import { APP_COMMANDS, APP_MENU_GROUPS, commandById, type AppCommandId } from '../../utils/appCommands';
 import { FOUNDRY_MECHANISM_TYPES } from '../../utils/mechanismTemplates';
-import type { ConnectionSelectionRole, Point } from '../../types';
+import type { ConnectionSelection, ConnectionSelectionRole, Point } from '../../types';
 
 
 const TEST_ONNX_MODEL_BYTES = Buffer.alloc(1_000_001, 1);
@@ -614,13 +614,18 @@ test('guided lessons open Design with coupled mechanism ownership', async ({ pag
     await expect(designPreview).toHaveAttribute('data-mechanism-type', lesson.mechanismType);
     await expect(designPreview).toHaveAttribute('data-guided-context-path-id', targetPath!.id);
     await expect(designPreview).toHaveAttribute('data-design-visible-mechanism-count', '1');
-    await expect(designPreview, `${lesson.id} Design drives a real body target`).toHaveAttribute('data-design-motion-source', /generatedPath|linkage-effector/);
+    await expect(designPreview, `${lesson.id} Design drives its stored fitted motion`).toHaveAttribute('data-design-motion-source', 'generatedPath');
+    await expect(designPreview, `${lesson.id} Design keeps the authored path sample count`).toHaveAttribute('data-design-generated-path-count', String(targetPath!.points.length));
     await expect(designPreview, `${lesson.id} Design has a concrete target joint`).toHaveAttribute('data-design-target-joint-id', /\S/);
     await expect.poll(async () => Number(await designPreview.getAttribute('data-design-animated-part-count')), {
       message: `${lesson.id} animates the coupled body part instead of a detached mechanism preview`,
     }).toBeGreaterThan(0);
-    const fitStatus = await designPreview.getAttribute('data-design-path-fit-status');
-    expect(fitStatus, `${lesson.id} guided mechanism does not start with an implausible path mismatch`).not.toBe('mismatch');
+    await expect(designPreview, `${lesson.id} guided mechanism starts fitted to its authored path`).toHaveAttribute('data-design-path-fit-status', 'fit');
+    const fitError = Number(await designPreview.getAttribute('data-design-path-fit-error'));
+    const fitThreshold = Number(await designPreview.getAttribute('data-design-path-fit-threshold'));
+    expect(Number.isFinite(fitError), `${lesson.id} exposes a finite guided path fit error`).toBe(true);
+    expect(Number.isFinite(fitThreshold), `${lesson.id} exposes a finite guided path fit threshold`).toBe(true);
+    expect(fitError, `${lesson.id} guided path fit error stays within its exposed threshold`).toBeLessThanOrEqual(fitThreshold);
     const targetError = await designPreview.getAttribute('data-design-target-error');
     expect(targetError, `${lesson.id} Design exposes a coupled body-mechanism target`).not.toBe('missing');
     await expect(page.getByLabel('Mechanism target'), `${lesson.id} target select stays on the path owner`).toHaveValue(mechanism!.targetPartId!);
@@ -710,6 +715,15 @@ const writeWavingArmLessonProject = async () => {
   await writeFile(path, serializeProject(createLessonProject('waving-arm')), 'utf8');
   return path;
 };
+
+const G006_POINTER_ROLE_BY_FAMILY = {
+  '4bar': '4bar.input-joint',
+  gear_linkage: 'gear_linkage.drive-pin',
+  gear: 'gear.drive-pin',
+  planetary_gear: 'planetary_gear.carrier-output-hole',
+  cam: 'cam.follower-output-hole',
+  piston: 'piston.rod-slider-pin',
+} as const;
 
 const writeUnoccupiedWavingArmLessonProject = async () => {
   const dir = await mkdtemp(join(tmpdir(), 'motionsmith-lesson-'));
@@ -926,15 +940,21 @@ test('Ultragoal G003 built-in front character keeps anatomical right on viewer l
 
 type ConnectionHoleTarget = {
   role: ConnectionSelectionRole;
-  kind: 'linkage-hole' | 'gear-attachment-hole';
+  kind: ConnectionSelection['kind'];
   partKey: string;
   holeIndex: number;
 };
 
+const isConnectionSelectionKind = (kind: string | null): kind is ConnectionSelection['kind'] =>
+  kind === 'linkage-hole'
+  || kind === 'gear-attachment-hole'
+  || kind === 'board-mount-pattern'
+  || kind === 'module-hole';
+
 const waitForConnectionHoleTarget = async (
   page: Page,
   role: ConnectionSelectionRole,
-  options: { holeIndex?: number; excludeHoleIndex?: number } = {},
+  options: { partKey?: string; holeIndex?: number; excludeHoleIndex?: number; capturedPointer?: boolean } = {},
 ) => {
   let target: ConnectionHoleTarget | undefined;
   await expect.poll(async () => {
@@ -943,22 +963,33 @@ const waitForConnectionHoleTarget = async (
       `circle.foundry-connection-hole-hit[data-connection-role="${role}"]`,
     );
     const candidates: Array<{ marker: Locator; target: ConnectionHoleTarget }> = [];
-    for (let index = 0; index < await markers.count(); index += 1) {
-      const marker = markers.nth(index);
+    for (const marker of await markers.all()) {
       const holeIndex = Number(await marker.getAttribute('data-connection-hole-index'));
       const kind = await marker.getAttribute('data-connection-kind');
       const partKey = await marker.getAttribute('data-connection-part-key');
       if (
         !Number.isInteger(holeIndex)
-        || (kind !== 'linkage-hole' && kind !== 'gear-attachment-hole')
+        || !isConnectionSelectionKind(kind)
         || !partKey
+        || (options.partKey !== undefined && partKey !== options.partKey)
         || (options.holeIndex !== undefined && holeIndex !== options.holeIndex)
         || (options.excludeHoleIndex !== undefined && holeIndex === options.excludeHoleIndex)
       ) continue;
       candidates.push({ marker, target: { role, kind, partKey, holeIndex } });
     }
-    candidates.sort((a, b) => a.target.holeIndex - b.target.holeIndex);
+    candidates.sort((a, b) => {
+      if (options.excludeHoleIndex !== undefined) {
+        const distance = Math.abs(a.target.holeIndex - options.excludeHoleIndex)
+          - Math.abs(b.target.holeIndex - options.excludeHoleIndex);
+        if (distance) return distance;
+      }
+      return a.target.holeIndex - b.target.holeIndex;
+    });
     for (const candidate of candidates) {
+      if (options.capturedPointer) {
+        target = candidate.target;
+        break;
+      }
       if (!(await candidate.marker.isVisible())) continue;
       const isPhysicalHitTarget = await candidate.marker.evaluate((element) => {
         const bounds = element.getBoundingClientRect();
@@ -973,7 +1004,7 @@ const waitForConnectionHoleTarget = async (
         break;
       }
     }
-    return target ? `${target.role}:${target.holeIndex}` : '';
+    return target ? `${target.role}:${target.partKey}:${target.holeIndex}` : '';
   }, {
     message: `${options.excludeHoleIndex === undefined ? '' : 'non-default '}physical hole affordance is visible for ${role}`,
   }).toContain(`${role}:`);
@@ -1016,7 +1047,24 @@ const connectionSignatureHoleIndex = (signature: string, role: ConnectionSelecti
 };
 
 const connectionHoleMarker = (page: Page, target: ConnectionHoleTarget) =>
-  page.getByTestId(`foundry-connection-hole-${target.role}-${target.holeIndex}`).locator('circle.foundry-connection-hole-hit');
+  page.getByTestId(`foundry-connection-hole-${target.role}-${target.partKey}-${target.holeIndex}`);
+
+const selectedConnectionHoleTarget = async (
+  page: Page,
+  role: ConnectionSelectionRole,
+): Promise<ConnectionHoleTarget> => {
+  const marker = page.locator(
+    `circle.foundry-connection-hole-hit[data-connection-role="${role}"][data-connection-selected="true"]`,
+  );
+  await expect(marker).toHaveCount(1);
+  const kind = await marker.getAttribute('data-connection-kind');
+  const partKey = await marker.getAttribute('data-connection-part-key');
+  const holeIndex = Number(await marker.getAttribute('data-connection-hole-index'));
+  expect(isConnectionSelectionKind(kind)).toBe(true);
+  expect(partKey).toBeTruthy();
+  expect(Number.isInteger(holeIndex)).toBe(true);
+  return { role, kind: kind as ConnectionSelection['kind'], partKey: partKey!, holeIndex };
+};
 
 const expectConnectionHoleMarker = async (page: Page, target: ConnectionHoleTarget) => {
   const marker = connectionHoleMarker(page, target);
@@ -1024,6 +1072,7 @@ const expectConnectionHoleMarker = async (page: Page, target: ConnectionHoleTarg
   await expect(marker).toHaveAttribute('data-connection-kind', target.kind);
   await expect(marker).toHaveAttribute('data-connection-part-key', target.partKey);
   await expect(marker).toHaveAttribute('data-connection-hole-index', String(target.holeIndex));
+  await expect(marker).toHaveAttribute('aria-label', new RegExp(escapeRegExp(target.partKey)));
   await expect(marker).toBeVisible();
   return marker;
 };
@@ -1044,9 +1093,7 @@ const expectConnectionHoleZMatchesRenderedLayer = async (rig: Locator, marker: L
 const visibleConnectionHoleCount = async (page: Page, role: ConnectionSelectionRole) => {
   const markers = page.locator(`circle.foundry-connection-hole-hit[data-connection-role="${role}"]`);
   let visible = 0;
-  for (let index = 0; index < await markers.count(); index += 1) {
-    if (await markers.nth(index).isVisible()) visible += 1;
-  }
+  for (const marker of await markers.all()) if (await marker.isVisible()) visible += 1;
   return visible;
 };
 
@@ -1065,53 +1112,66 @@ const connectionHoleCenter = async (marker: Locator) => {
 
 const clickConnectionHoleTarget = async (page: Page, target: ConnectionHoleTarget) => {
   const marker = await expectConnectionHoleMarker(page, target);
-  const point = await connectionHoleCenter(marker);
-  await page.mouse.click(point.x, point.y);
+  await marker.click();
 };
 
 const dragConnectionHoleToRevealedCandidate = async (
   page: Page,
   start: ConnectionHoleTarget,
-  options: { excludeHoleIndex?: number } = {},
+  options: { partKey?: string; excludeHoleIndex?: number } = {},
 ) => {
   await expectOnlySelectedConnectionHoleVisible(page, start.role);
   const startMarker = await expectConnectionHoleMarker(page, start);
-  const startPoint = await connectionHoleCenter(startMarker);
-  await page.mouse.move(startPoint.x, startPoint.y);
+  await startMarker.hover();
   await page.mouse.down();
   const target = await waitForConnectionHoleTarget(page, start.role, {
+    partKey: options.partKey,
     excludeHoleIndex: options.excludeHoleIndex ?? start.holeIndex,
+    capturedPointer: true,
   });
-  const targetPoint = await connectionHoleCenter(await expectConnectionHoleMarker(page, target));
-  await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 6 });
+  await (await expectConnectionHoleMarker(page, target)).hover({ force: true });
   await page.mouse.up();
   await expectOnlySelectedConnectionHoleVisible(page, start.role);
   return target;
 };
 
-const dragConnectionHoleToNowhere = async (page: Page, start: ConnectionHoleTarget) => {
+const dragConnectionHoleToNowhere = async (
+  page: Page,
+  start: ConnectionHoleTarget,
+  surface: 'foundry' | 'design' = 'foundry',
+  inspectRecovery?: (recovery: Locator) => Promise<void>,
+) => {
   await expectOnlySelectedConnectionHoleVisible(page, start.role);
   const startMarker = await expectConnectionHoleMarker(page, start);
-  const startPoint = await connectionHoleCenter(startMarker);
-  await page.mouse.move(startPoint.x, startPoint.y);
+  await startMarker.hover();
   await page.mouse.down();
   await expect.poll(async () => visibleConnectionHoleCount(page, start.role), {
     message: `${start.role} candidate holes appear only during endpoint drag`,
   }).toBeGreaterThan(1);
   await page.mouse.move(1, 1, { steps: 6 });
   await page.mouse.up();
+  const recovery = page.getByTestId(`${surface}-connection-recovery`);
+  await expect(recovery).toHaveText('Fix: Choose anchor');
+  await expect.poll(async () => page.locator(
+    `circle.foundry-connection-hole-hit[data-connection-role="${start.role}"][data-recovery-candidate="true"]`,
+  ).count(), { message: `${start.role} shows compatible recovery targets after an invalid drop` }).toBeGreaterThan(0);
+  await inspectRecovery?.(recovery);
+  await clickConnectionHoleTarget(page, start);
+  await expect(page.getByTestId(`${surface}-connection-recovery`)).toHaveCount(0);
   await expectOnlySelectedConnectionHoleVisible(page, start.role);
 };
 
 const cancelConnectionHoleDragOverCandidate = async (page: Page, start: ConnectionHoleTarget) => {
   await expectOnlySelectedConnectionHoleVisible(page, start.role);
   const startMarker = await expectConnectionHoleMarker(page, start);
-  const startPoint = await connectionHoleCenter(startMarker);
-  await page.mouse.move(startPoint.x, startPoint.y);
+  await startMarker.hover();
   await page.mouse.down();
-  const target = await waitForConnectionHoleTarget(page, start.role, { excludeHoleIndex: start.holeIndex });
-  const targetPoint = await connectionHoleCenter(await expectConnectionHoleMarker(page, target));
-  await page.mouse.move(targetPoint.x, targetPoint.y, { steps: 6 });
+  const target = await waitForConnectionHoleTarget(page, start.role, {
+    excludeHoleIndex: start.holeIndex,
+  });
+  const targetMarker = await expectConnectionHoleMarker(page, target);
+  await targetMarker.hover({ force: true });
+  const targetPoint = await connectionHoleCenter(targetMarker);
   await startMarker.dispatchEvent('pointercancel', {
     pointerId: 1,
     pointerType: 'mouse',
@@ -1149,7 +1209,7 @@ test('physical hole selection authors connection role and updates preview/export
   await expect(foundryRig, 'explicitly selecting the deterministic default records the authored role').toHaveAttribute('data-three-selected-connection-role', '4bar.input-joint');
   await expect(foundryRig).toHaveAttribute('data-three-selected-connection-hole-index', String(initialInputHoleIndex));
   await expect(foundryParametricEditor.getByLabel('Input link length'), 'explicit same-hole authoring locks the accepted input endpoint').toBeDisabled();
-  await expect(foundryParametricEditor.getByLabel('Output link length'), 'same-hole input authoring preserves unrelated output default provenance').toBeEnabled();
+  await expect(foundryParametricEditor.getByLabel('Output link length'), 'physical output role owns its endpoint length before explicit authoring').toBeDisabled();
   await expect(foundryRig, 'same-hole authoring preserves physical geometry/export identity').toHaveAttribute('data-three-fabrication-export-signature', beforeExportSignature);
   await dragConnectionHoleToNowhere(page, initialInputHole);
   await expect(foundryRig, 'distant endpoint release preserves selected role').toHaveAttribute('data-three-selected-connection-role', '4bar.input-joint');
@@ -1177,10 +1237,10 @@ test('physical hole selection authors connection role and updates preview/export
   await expect(inputConfirmation).toHaveAttribute('data-connection-hole-index', String(inputHole.holeIndex));
   await expect(foundryParametricEditor.getByTestId('connection-selection-author')).toHaveCount(0);
   await expect(foundryParametricEditor.getByLabel('Input link length'), 'input endpoint size is confirmation-only after physical-hole authoring').toBeDisabled();
-  await expect(foundryParametricEditor.getByLabel('Output link length'), 'input authoring does not lock the independent output endpoint').toBeEnabled();
+  await expect(foundryParametricEditor.getByLabel('Output link length'), 'input authoring preserves physical-role authority over the output endpoint').toBeDisabled();
   await expect(foundryParametricEditor.getByLabel('Coupler link length'), 'coupler length remains the editable scalar').toBeEnabled();
   await expect(page.getByTestId('foundry-param-handle-B'), 'B/J1 handle is visible but cannot author an alternate input endpoint scalar').toHaveAttribute('data-draggable', 'false');
-  await expect(page.getByTestId('foundry-param-handle-C'), 'input authoring leaves the independent C/J2 output handle available').toHaveAttribute('data-draggable', 'true');
+  await expect(page.getByTestId('foundry-param-handle-C'), 'C/J2 is confirmation-only because the physical output hole owns it').toHaveAttribute('data-draggable', 'false');
 
   const afterInput = await waitForConnectionCoordinate(foundryRig, '4bar.input-joint', beforeInput);
   expect(afterInput, 'live preview exposes the selected input coordinate').toBeTruthy();
@@ -1246,7 +1306,9 @@ test('gear linkage physical hole selection authors drive/output pins and exports
       await mechanismType.selectOption(type);
       const rig = page.getByTestId('foundry-camera-rig');
       await expect(rig, `${type} is selected through the visible Foundry control`).toHaveAttribute('data-mechanism-type', type);
-      await expect(page.locator('circle.foundry-connection-hole-hit'), `${type} does not expose authored connection-hole targets`).toHaveCount(0);
+      await expect.poll(async () => page.locator('circle.foundry-connection-hole-hit:visible').count(), {
+        message: `${type} exposes a physical pointer selection target`,
+      }).toBeGreaterThan(0);
       await expect(page.getByTestId('foundry-parametric-editor').getByTestId('connection-selection-author'), `${type} editor has no connection authoring control`).toHaveCount(0);
     }
   }
@@ -1255,7 +1317,7 @@ test('gear linkage physical hole selection authors drive/output pins and exports
   const foundryRig = page.getByTestId('foundry-camera-rig');
   await expect(foundryRig).toHaveAttribute('data-mechanism-type', 'gear_linkage');
   await page.getByLabel('Drive gear size').selectOption('g40');
-  await page.getByLabel('Output gear size').selectOption('g40');
+  await page.getByLabel('Output gear size').selectOption('g24');
 
   const initialSignature = await waitForConnectionSignature(foundryRig, ['gear_linkage.drive-pin', 'gear_linkage.output-pin']);
   const initialDriveHoleIndex = connectionSignatureHoleIndex(initialSignature, 'gear_linkage.drive-pin');
@@ -1266,7 +1328,10 @@ test('gear linkage physical hole selection authors drive/output pins and exports
   const initialOutputSignaturePart = connectionSignaturePart(initialSignature, 'gear_linkage.output-pin');
 
   const initialDriveHole = await waitForConnectionHoleTarget(page, 'gear_linkage.drive-pin', { holeIndex: initialDriveHoleIndex });
-  const driveHole = await dragConnectionHoleToRevealedCandidate(page, initialDriveHole, { excludeHoleIndex: initialDriveHoleIndex });
+  const driveHole = await dragConnectionHoleToRevealedCandidate(page, initialDriveHole, {
+    partKey: initialDriveHole.partKey,
+    excludeHoleIndex: initialDriveHoleIndex,
+  });
   expect(driveHole.kind, 'gear linkage drive pin is authored from gear attachment holes').toBe('gear-attachment-hole');
   expect(driveHole.partKey, 'drive pin hole comes from the selected drive gear blank').toBe('g40');
 
@@ -1293,21 +1358,18 @@ test('gear linkage physical hole selection authors drive/output pins and exports
   expect(connectionSignaturePart(afterDriveSignature, 'gear_linkage.output-pin'), 'drive-pin selection does not mutate output-pin signature').toBe(initialOutputSignaturePart);
 
   await page.getByLabel('Drive gear size').selectOption('g24');
-  await expect.poll(async () => connectionSignaturePart(await foundryRig.getAttribute('data-three-fabrication-export-signature'), 'gear_linkage.drive-pin'), { message: 'stale drive-pin selection is dropped after drive gear geometry changes' }).toBe('');
+  await expect(page.getByLabel('Drive gear size'), 'family selection commits with a compatible physical drive hole').toHaveValue('g24');
   const afterDriveGearChangeSignature = await foundryRig.getAttribute('data-three-fabrication-export-signature');
-  expect(connectionSignaturePart(afterDriveGearChangeSignature, 'gear_linkage.output-pin'), 'drive gear geometry change preserves the still-valid output-pin selection').toBe(initialOutputSignaturePart);
-  const repairedDriveDefaultHole = await waitForConnectionHoleTarget(page, 'gear_linkage.drive-pin');
-  const replacementDriveHole = await dragConnectionHoleToRevealedCandidate(page, repairedDriveDefaultHole, { excludeHoleIndex: repairedDriveDefaultHole.holeIndex });
-  expect(replacementDriveHole.partKey, 'recovered drive candidates come from the current drive gear blank').toBe('g24');
-  const afterDriveRepairSignature = await waitForConnectionSignature(foundryRig, ['gear_linkage.drive-pin', 'gear_linkage.output-pin']);
-  expect(connectionSignaturePart(afterDriveRepairSignature, 'gear_linkage.drive-pin')).toBe(`gear_linkage.drive-pin:g24:0:${replacementDriveHole.holeIndex}`);
-  await expectConnectionHoleZMatchesRenderedLayer(foundryRig, connectionHoleMarker(page, replacementDriveHole), { label: 'gear-0:gear', role: 'gear', occurrence: 0 });
-  expect(connectionSignaturePart(afterDriveRepairSignature, 'gear_linkage.output-pin'), 'new drive gesture preserves the unrelated output-pin selection').toBe(initialOutputSignaturePart);
+  expect(connectionSignaturePart(afterDriveGearChangeSignature, 'gear_linkage.drive-pin'), 'family selection replaces the structural gear key atomically').toMatch(/^gear_linkage\.drive-pin:g24:0:\d+$/);
+  expect(afterDriveGearChangeSignature, 'family selection changes the complete structural signature').not.toBe(afterDriveSignature);
 
   const initialOutputHole = await waitForConnectionHoleTarget(page, 'gear_linkage.output-pin', { holeIndex: initialOutputHoleIndex });
-  const outputHole = await dragConnectionHoleToRevealedCandidate(page, initialOutputHole, { excludeHoleIndex: initialOutputHoleIndex });
+  const outputHole = await dragConnectionHoleToRevealedCandidate(page, initialOutputHole, {
+    partKey: initialOutputHole.partKey,
+    excludeHoleIndex: initialOutputHoleIndex,
+  });
   expect(outputHole.kind, 'gear linkage output pin is authored from gear attachment holes').toBe('gear-attachment-hole');
-  expect(outputHole.partKey, 'output pin hole comes from the selected output gear blank').toBe('g40');
+  expect(outputHole.partKey, 'output pin hole comes from the selected output gear blank').toBe('g24');
 
   await expect(foundryRig, 'preview exposes selected output-pin role after physical affordance drag').toHaveAttribute('data-three-selected-connection-role', 'gear_linkage.output-pin');
   await expect(foundryRig).toHaveAttribute('data-three-selected-connection-kind', 'gear-attachment-hole');
@@ -1317,11 +1379,13 @@ test('gear linkage physical hole selection authors drive/output pins and exports
   const afterOutputCoordinate = await waitForConnectionCoordinate(foundryRig, 'gear_linkage.output-pin', outputAfterDrive);
   const afterOutputSignature = await foundryRig.getAttribute('data-three-fabrication-export-signature');
   expect(afterOutputCoordinate, 'selecting a non-default output-pin hole changes the canonical output coordinate').not.toEqual(outputAfterDrive);
-  expect(connectionSignaturePart(afterOutputSignature, 'gear_linkage.drive-pin'), 'output-pin selection does not mutate drive-pin signature').toBe(connectionSignaturePart(afterDriveRepairSignature, 'gear_linkage.drive-pin'));
+  expect(connectionSignaturePart(afterOutputSignature, 'gear_linkage.drive-pin'), 'output-pin selection does not mutate drive-pin signature').toBe(connectionSignaturePart(afterDriveGearChangeSignature, 'gear_linkage.drive-pin'));
   expect(connectionSignaturePart(afterOutputSignature, 'gear_linkage.output-pin'), 'output-pin drag persists the exact role-matched gear hole signature').toBe(`gear_linkage.output-pin:${outputHole.partKey}:1:${outputHole.holeIndex}`);
   expect(connectionSignaturePart(afterOutputSignature, 'gear_linkage.output-pin'), 'output-pin selection changes its compiler signature').not.toBe(initialOutputSignaturePart);
 
-  await page.getByRole('button', { name: /Use mechanism/i }).click();
+  const useMechanism = page.getByRole('button', { name: /Use mechanism/i });
+  await expect(useMechanism, 'fabrication-ready gear linkage can be used').toBeEnabled();
+  await useMechanism.click();
   await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
   await expect(page.getByTestId('design-parametric-editor'), 'Design confirms the authored gear-linkage selection without authoring controls').toContainText(/gear_linkage\.output-pin|Output pin/i);
   await expect(page.getByTestId('design-parametric-editor').getByTestId('connection-selection-author')).toHaveCount(0);
@@ -1336,6 +1400,197 @@ test('gear linkage physical hole selection authors drive/output pins and exports
   expect(exportedPackage.metadataJson, 'export metadata excludes legacy generic connection identifiers').not.toMatch(/\b(?:P1|J1|J2|board-hole|gear-center)\b/);
 
   expectCleanPage(pageErrors, consoleErrors);
+});
+
+for (const [family, role] of Object.entries(G006_POINTER_ROLE_BY_FAMILY) as Array<
+  [keyof typeof G006_POINTER_ROLE_BY_FAMILY, ConnectionSelectionRole]
+>) {
+  test(`G006 ${family} uses the shared physical pointer flow in Foundry and Design`, async ({ page }) => {
+    await page.goto('/');
+    await openCharacterScreen(page);
+    await clickStage(page, 'Foundry');
+    await page.getByText('Mechanism options').click();
+    const mechanismType = page.getByLabel('Foundry mechanism type');
+    await expect(mechanismType.locator('option')).toHaveCount(6);
+    await expect(mechanismType.locator('option[value="crank"]')).toHaveCount(0);
+    await mechanismType.selectOption(family);
+    const foundryRig = page.locator('[data-testid="foundry-camera-rig"][data-viewer-tab="foundry"]');
+    await expect(foundryRig).toHaveAttribute('data-mechanism-type', family);
+    const foundryStart = await waitForConnectionHoleTarget(page, role);
+    const foundryBefore = connectionSignaturePart(
+      await foundryRig.getAttribute('data-three-fabrication-export-signature'),
+      role,
+    );
+    await dragConnectionHoleToRevealedCandidate(page, foundryStart);
+    const foundryAfter = connectionSignaturePart(
+      await foundryRig.getAttribute('data-three-fabrication-export-signature'),
+      role,
+    );
+    expect(foundryAfter, `${family} Foundry drag persists a structural selection`).not.toBe(foundryBefore);
+    await expect(foundryRig).toHaveAttribute('data-three-selected-connection-role', role);
+    await expect(page.getByTestId('foundry-mechanism-connection-overlay')).toHaveAttribute(
+      'data-direct-manipulation',
+      'shared-physical-connections',
+    );
+
+    const useMechanism = page.getByRole('button', { name: /Use mechanism/i });
+    await expect(useMechanism).toBeEnabled();
+    await useMechanism.click();
+    await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+    const pause = page.getByTestId('workspace-player-dock').getByRole('button', { name: 'Pause' });
+    if (await pause.count()) await pause.click();
+    const designRig = page.locator('[data-testid="foundry-camera-rig"][data-viewer-tab="design"]');
+    await expect(designRig).toHaveAttribute('data-mechanism-type', family);
+    const designStart = await waitForConnectionHoleTarget(page, role);
+    const designBefore = connectionSignaturePart(
+      await designRig.getAttribute('data-three-fabrication-export-signature'),
+      role,
+    );
+    await dragConnectionHoleToRevealedCandidate(page, designStart);
+    const designAfter = connectionSignaturePart(
+      await designRig.getAttribute('data-three-fabrication-export-signature'),
+      role,
+    );
+    expect(designAfter, `${family} Design drag persists through the same structural path`).not.toBe(designBefore);
+    await expect(designRig).toHaveAttribute('data-three-selected-connection-role', role);
+    await expect(page.getByTestId(`connection-selection-confirmation-${role}`)).toBeVisible();
+    await expect(page.getByTestId('design-mechanism-connection-overlay')).toHaveAttribute(
+      'data-direct-manipulation',
+      'shared-physical-connections',
+    );
+  });
+}
+
+test('G006 short/fullscreen zoom playback and accessibility matrix stays recoverable', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 620 });
+  await page.goto('/');
+  await openCharacterScreen(page);
+  await clickStage(page, 'Foundry');
+
+  const foundryRig = page.locator('[data-testid="foundry-camera-rig"][data-viewer-tab="foundry"]');
+  const foundryPreview = page.getByTestId('foundry-preview');
+  const foundrySignature = await foundryRig.getAttribute('data-three-fabrication-export-signature');
+  const foundryZoom = Number(await foundryRig.getAttribute('data-camera-zoom'));
+  await foundryPreview.hover();
+  await page.mouse.wheel(0, -480);
+  await expect.poll(async () => Number(await foundryRig.getAttribute('data-camera-zoom'))).toBeGreaterThan(foundryZoom);
+  await expect(foundryRig).toHaveAttribute('data-three-fabrication-export-signature', foundrySignature ?? '');
+
+  await page.getByLabel('Foundry phase').fill('90');
+  await expect(page.getByTestId('foundry-playback-percent')).toHaveText('25%');
+  await expect(page.getByLabel('Foundry phase')).toHaveAttribute('aria-valuetext', '25%');
+
+  const advanced = page.getByTestId('stage-right-inspector').locator('details.advanced-panel');
+  const advancedSummary = advanced.locator('summary');
+  await advancedSummary.click();
+  await expect(advanced).toHaveAttribute('open', '');
+  const bounded = advanced.locator('[data-bounded-input]').first();
+  await expect(bounded).toBeVisible();
+  const boundedNumber = bounded.locator('input[type="number"]');
+  await expect(boundedNumber).toHaveAttribute('min', /.+/);
+  await expect(boundedNumber).toHaveAttribute('max', /.+/);
+  await expect(page.getByTestId('mechanism-motion-option-locks')).toHaveText('Fit inside board.');
+  await advancedSummary.click();
+  await expect(advanced).not.toHaveAttribute('open', '');
+  await expect(foundryRig).toHaveAttribute('data-three-fabrication-export-signature', foundrySignature ?? '');
+
+  const recoveryStart = await waitForConnectionHoleTarget(page, '4bar.input-joint');
+  await dragConnectionHoleToNowhere(page, recoveryStart, 'foundry', async (recovery) => {
+    await expectInsideViewport(page, recovery, 'Foundry recovery blocker');
+    await expect(recovery).toHaveAttribute('role', 'status');
+    const contrast = await recovery.evaluate((element) => {
+      const rgb = (value: string) => (value.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+      const luminance = (channels: number[]) => channels.reduce((sum, channel, index) => {
+        const normalized = channel / 255;
+        const linear = normalized <= 0.03928
+          ? normalized / 12.92
+          : ((normalized + 0.055) / 1.055) ** 2.4;
+        return sum + linear * [0.2126, 0.7152, 0.0722][index];
+      }, 0);
+      const style = getComputedStyle(element);
+      const foreground = luminance(rgb(style.color));
+      const background = luminance(rgb(style.backgroundColor));
+      return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
+    });
+    expect(contrast, 'yellow recovery warning meets WCAG AA text contrast').toBeGreaterThanOrEqual(4.5);
+  });
+  await expect(foundryRig).toHaveAttribute('data-three-fabrication-export-signature', foundrySignature ?? '');
+
+  await page.evaluate(() => {
+    const trigger = document.querySelector<HTMLElement>('[data-testid="app-header-home"]');
+    trigger?.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      void document.documentElement.requestFullscreen();
+    }, { capture: true, once: true });
+  });
+  await page.getByTestId('app-header-home').click();
+  await expect.poll(() => page.evaluate(() => Boolean(document.fullscreenElement))).toBe(true);
+  await expectInsideViewport(page, page.getByTestId('stage-canvas-pane'), 'fullscreen Foundry canvas');
+  await expectInsideViewport(page, page.getByTestId('foundry-toolbar'), 'fullscreen Foundry playback');
+  await page.evaluate(() => document.exitFullscreen());
+  await expect.poll(() => page.evaluate(() => Boolean(document.fullscreenElement))).toBe(false);
+
+  for (const viewport of [{ width: 1280, height: 620 }, { width: 1024, height: 560 }]) {
+    await page.setViewportSize(viewport);
+    await assertNoDocumentHorizontalOverflow(page, `Foundry ${viewport.width}x${viewport.height}`);
+    await expectReachableInViewportOrOwnScroller(page.getByTestId('stage-canvas-pane'), 'Foundry center canvas');
+    await expectReachableInViewportOrOwnScroller(page.getByTestId('foundry-toolbar'), 'Foundry playback controls');
+    await expectReachableInViewportOrOwnScroller(page.getByTestId('foundry-mechanism-connection-overlay'), 'Foundry pointer overlay');
+  }
+
+  await page.getByRole('button', { name: /Use mechanism/i }).click();
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+  const designRig = page.locator('[data-testid="foundry-camera-rig"][data-viewer-tab="design"]');
+  const designSignature = await designRig.getAttribute('data-three-fabrication-export-signature');
+  const designZoom = await designRig.getAttribute('data-camera-zoom');
+  const scrubber = page.getByLabel('Workspace scrubber');
+  await scrubber.fill('42');
+  await expect(page.getByTestId('workspace-playback-percent')).toHaveText('42%');
+  await expect(scrubber).toHaveAttribute('aria-valuetext', '42%');
+  await expect(designRig).toHaveAttribute('data-three-fabrication-export-signature', designSignature ?? '');
+  await expect(designRig).toHaveAttribute('data-camera-zoom', designZoom ?? '');
+
+  await page.evaluate(() => { document.documentElement.style.zoom = '1.1'; });
+  await expect(designRig).toHaveAttribute('data-three-fabrication-export-signature', designSignature ?? '');
+  await expect(designRig).toHaveAttribute('data-camera-zoom', designZoom ?? '');
+  await page.evaluate(() => { document.documentElement.style.zoom = ''; });
+
+  const designPreview = page.getByTestId('design-shared-foundry-preview');
+  await designPreview.hover({ position: { x: 24, y: 180 } });
+  await page.mouse.wheel(0, -480);
+  await expect(designRig).not.toHaveAttribute('data-camera-zoom', designZoom ?? '');
+  await expect(designRig).toHaveAttribute('data-three-fabrication-export-signature', designSignature ?? '');
+  await expect(page.getByTestId('workspace-playback-percent')).toHaveText('42%');
+
+  const selectedHandle = connectionHoleMarker(
+    page,
+    await selectedConnectionHoleTarget(page, '4bar.input-joint'),
+  );
+  await expect(selectedHandle).toHaveAttribute('role', 'button');
+  await expect(selectedHandle).toHaveAttribute('tabindex', '0');
+  await expect(selectedHandle).toHaveAttribute('aria-label', /Input joint, linkage-.+, hole \d+/i);
+  await expect(selectedHandle).toHaveAttribute('aria-pressed', 'true');
+
+  for (const viewport of [{ width: 1280, height: 620 }, { width: 1024, height: 560 }]) {
+    await page.setViewportSize(viewport);
+    await assertNoDocumentHorizontalOverflow(page, `Design ${viewport.width}x${viewport.height}`);
+    await expectReachableInViewportOrOwnScroller(page.getByTestId('stage-canvas-pane'), 'Design center canvas');
+    await expectReachableInViewportOrOwnScroller(page.getByTestId('workspace-player-dock'), 'Design playback controls');
+    await expectReachableInViewportOrOwnScroller(page.getByTestId('design-editor-toolbar'), 'Design camera controls');
+    const designOverlay = page.getByTestId('design-mechanism-connection-overlay');
+    await expect(designOverlay, 'Design pointer overlay remains visible').toBeVisible();
+    expect(await designOverlay.evaluate((element) => {
+      const host = element.closest('[data-testid="foundry-preview"]');
+      if (!host) return false;
+      const overlay = element.getBoundingClientRect();
+      const bounds = host.getBoundingClientRect();
+      return overlay.left >= bounds.left - 1
+        && overlay.top >= bounds.top - 1
+        && overlay.right <= bounds.right + 1
+        && overlay.bottom <= bounds.bottom + 1;
+    }), 'Design pointer overlay stays clipped to its center-canvas host').toBe(true);
+  }
 });
 
 test('MotionSmith header logo returns to Character home', async ({ page }) => {
@@ -1404,11 +1659,14 @@ test('G006 student warning UX hides raw ids and fit scores in Design recommendat
   await page.goto('/');
   await openWavingArmTemplate(page);
   await clickStage(page, 'Design');
-  await page.getByRole('button', { name: /Four-bar linkage/i }).click();
+  const motionPath = page.getByLabel('Mechanism motion path');
+  await expect(motionPath).toHaveValue('path-right-arm');
+  await motionPath.selectOption('');
+  await expect(motionPath, 'invalid edits retain the prior valid path').toHaveValue('path-right-arm');
 
-  const warningRegion = page.getByTestId('stage-left-pane');
+  const warningRegion = page.getByTestId('stage-right-inspector');
   const warnings = warningRegion.locator('.warning');
-  await expect(warnings.first(), 'Design shows the primary student warning near the mechanism list').toBeVisible();
+  await expect(warnings.first(), 'Design shows the primary student warning near the selected mechanism').toHaveText('Fix: Choose anchor');
 
   const warningTexts = (await warnings.allTextContents()).map(text => text.replace(/\s+/g, ' ').trim()).filter(Boolean);
   const primaryWarning = warningTexts[0] ?? '';
@@ -1705,7 +1963,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(page.getByTestId('foundry-three-canvas')).toBeVisible();
   const foundryRig = page.getByTestId('foundry-camera-rig');
   await expect(foundryRig).toHaveAttribute('data-three-renderer', 'webgl');
-  await expect(foundryRig).toHaveAttribute('data-three-stack-source', 'compileMechanismRenderPlan');
+  await expect(foundryRig).toHaveAttribute('data-three-stack-source', 'MechanismSceneContract');
   await expect(foundryRig).toHaveAttribute('data-three-stack-mode', 'assembled-spacer-separated');
   await expect(foundryRig).toHaveAttribute('data-three-exploded', 'false');
   await expect(foundryRig).toHaveAttribute('data-three-stack-order', /^Back Clip → .*S10 spacer.*Front Clip$/);
@@ -1783,7 +2041,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   await expect(designRig).toHaveAttribute('data-three-renderer', 'webgl');
   await expect(designRig).toHaveAttribute('data-mechanism-type', '4bar');
   await expect(designRig).toHaveAttribute('data-viewer-tab', 'design');
-  await expect(designRig).toHaveAttribute('data-three-stack-source', 'compileMechanismRenderPlan');
+  await expect(designRig).toHaveAttribute('data-three-stack-source', 'MechanismSceneContract');
   await expect(designRig).toHaveAttribute('data-three-stack-validation-errors', '0');
   await expect(designRig).toHaveAttribute('data-three-physical-validation-errors', '0');
   await expect(designRig).toHaveAttribute('data-three-preview-renderable', 'ready');
@@ -1873,7 +2131,7 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   const assemblyRig = page.getByTestId('assembly-mechanism-three-preview').getByTestId('foundry-camera-rig');
   await expect(assemblyRig).toHaveAttribute('data-viewer-tab', 'assembly');
   await expect(assemblyRig).toHaveAttribute('data-viewer-contract-state', /"tab":"assembly"/);
-  await expect(assemblyRig).toHaveAttribute('data-three-stack-source', 'compileMechanismRenderPlan');
+  await expect(assemblyRig).toHaveAttribute('data-three-stack-source', 'MechanismSceneContract');
   await expect(assemblyRig).toHaveAttribute('data-three-exploded', 'false');
   await expect(assemblyRig).toHaveAttribute('data-three-assembly-scene', 'contract-driven');
   await expect(assemblyRig).toHaveAttribute('data-three-assembly-motion-kind', 'none');
@@ -2337,6 +2595,20 @@ test('Character replacement package starts clean without keep-mechanisms toggle'
   expectCleanPage(pageErrors, consoleErrors);
 });
 
+const expectStaticDesignRecoveryPreview = async (page: Page) => {
+  const preview = page.getByTestId('design-shared-foundry-preview');
+  await expect(preview).toBeVisible();
+  await expect(preview).toHaveAttribute('data-recovery-mode', 'static');
+  await expect(preview).toHaveAttribute('data-design-motion-source', 'none');
+  await expect(preview).toHaveAttribute('data-design-generated-path-count', '0');
+  await expect(preview).toHaveAttribute('data-design-animated-part-count', '0');
+  await expect(preview).toHaveAttribute('data-design-animated-object-count', '0');
+  await expect(preview.getByTestId('foundry-preview')).toHaveAttribute(
+    'data-mechanism-runtime-mode',
+    'static-recovery',
+  );
+};
+
 test('Options and validation gates update browser blueprint output', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
@@ -2361,6 +2633,9 @@ test('Options and validation gates update browser blueprint output', async ({ pa
   await expect(page.getByTestId('path-canvas').getByText('Letter sheet · 2.5cm grid')).toBeVisible();
   await page.getByRole('button', { name: 'Drawing free path', exact: true }).click();
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
+  await expect(page.getByTestId('design-readiness-blocker')).toHaveText('Fix mechanism geometry.');
+  await expectStaticDesignRecoveryPreview(page);
+  await page.getByRole('button', { name: /^Fit$/i }).click();
   await expect(page.getByTestId('design-shared-foundry-preview')).toBeVisible();
   await expect(page.getByTestId('design-canvas')).toHaveCount(0);
   const anchorXInput = page.getByLabel('anchor X number');
@@ -2395,9 +2670,10 @@ test('Options and validation gates update browser blueprint output', async ({ pa
   await laterGridPitchInput.fill('30');
   await laterGridPitchInput.press('Enter');
   await clickStage(page, 'Blueprint');
-  await expect(page.getByTestId('blueprint-control-panel').getByText(/anchor off grid/)).toBeVisible();
-  await expect(page.getByRole('button', { name: /Snap to hole/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Generate package/i })).toBeDisabled();
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+  await expect(page.getByTestId('design-readiness-blocker')).toHaveText('Fix mechanism geometry.');
+  await expect(page.getByRole('button', { name: /^Fit$/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Generate package/i })).toHaveCount(0);
 
   expectCleanPage(pageErrors, consoleErrors);
 });
@@ -2509,6 +2785,9 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await expect(page.getByTestId('scene-grid-label')).toContainText('Letter sheet · 0.98 in grid');
   await page.getByRole('button', { name: 'Drawing free path', exact: true }).click();
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
+  await expect(page.getByTestId('design-readiness-blocker')).toHaveText('Fix mechanism geometry.');
+  await expectStaticDesignRecoveryPreview(page);
+  await page.getByRole('button', { name: /^Fit$/i }).click();
   await expect(page.getByTestId('design-shared-foundry-preview')).toBeVisible();
   await expect(page.getByTestId('design-canvas')).toHaveCount(0);
   const anchorXInput = page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]');
@@ -2753,7 +3032,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(threeScene).toHaveAttribute('data-three-hole-mode', 'extruded-cut-through');
   await expect(threeScene).toHaveAttribute('data-three-render-loop', 'camera-only-orbit');
   await expect(threeScene).toHaveAttribute('data-three-inventory-source', 'rendered-template');
-  await expect(threeScene).toHaveAttribute('data-three-stack-source', 'compileMechanismRenderPlan');
+  await expect(threeScene).toHaveAttribute('data-three-stack-source', 'MechanismSceneContract');
   await expect(threeScene).toHaveAttribute('data-three-stack-mode', 'assembled-spacer-separated');
   await expect(threeScene).toHaveAttribute('data-three-exploded', 'false');
   await expect(threeScene).toHaveAttribute('data-three-base-layer', 'Base board');
@@ -2869,7 +3148,8 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(page.getByTestId('foundry-cycle-output-trace'), 'Foundry can switch among candidate motion target points for Mech Path').toBeEnabled();
   await page.getByTestId('foundry-toggle-paths').click();
   await page.getByTestId('foundry-cycle-output-trace').click();
-  await expect(threeScene).toHaveAttribute('data-three-primary-path-id', 'B');
+  await expect(page.getByTestId('foundry-cycle-output-trace')).toHaveText('Target B');
+  await expect(threeScene).toHaveAttribute('data-three-primary-path-id', 'C');
   await page.getByTestId('foundry-cycle-output-trace').click();
   await expect(threeScene).toHaveAttribute('data-three-primary-path-id', 'C');
   await page.getByTestId('foundry-toggle-paths').click();
@@ -2886,9 +3166,15 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(page.getByTestId('foundry-parametric-editor'), 'Foundry exposes fabrication-backed gear selectors').toBeVisible();
   await page.getByLabel('Drive gear size').selectOption('g40');
   await page.getByLabel('Output gear size').selectOption('g56');
-  await page.getByRole('button', { name: 'Add idler gear' }).click();
+  const addIdlerGear = page.getByRole('button', { name: 'Add idler gear' });
+  await expect(addIdlerGear, 'a valid G5/G7 physical endpoint pair can add a real idler').toBeEnabled();
+  await addIdlerGear.click();
   await page.getByLabel('Idler gear 1 size').selectOption('g8');
   await expect(threeScene, 'Gear train param editor writes ordered drive/idler/output radii to the shared preview').toHaveAttribute('data-three-gear-radii', '100.00,20.00,140.00');
+  await expect(threeScene, 'idler insertion keeps the exact drive and output physical owners on gear[0] and gear[last]').toHaveAttribute(
+    'data-three-fabrication-export-signature',
+    /^gear\.drive-pin:g40:0:\d+\|gear\.output-pin:g56:2:\d+$/,
+  );
   await expect(threeScene, 'Inserted idlers close the endpoint span into an adjacent pitch chain').toHaveAttribute('data-three-gear-train-endpoint-mode', 'idler-connected-pitch-chain');
   await expect(threeScene, 'Gear train axles are generated from the same fitted centers used to draw the gear plates').toHaveAttribute('data-three-gear-center-source', 'fitted-simulation-pitch-centers');
   await expect(threeScene).toHaveAttribute('data-three-gear-center-count', '3');
@@ -2936,7 +3222,7 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   for (const type of ['4bar', 'cam', 'gear', 'gear_linkage', 'planetary_gear']) {
     await page.getByLabel('Foundry mechanism type').selectOption(type);
     await expect(threeScene, `${type} has its own physical 3D preview template`).toHaveAttribute('data-mechanism-type', type);
-    await expect(threeScene, `${type} uses the fabrication stack as the 3D render source`).toHaveAttribute('data-three-stack-source', 'compileMechanismRenderPlan');
+    await expect(threeScene, `${type} uses the fabrication stack as the 3D render source`).toHaveAttribute('data-three-stack-source', 'MechanismSceneContract');
     await expect(threeScene, `${type} stack has no validation errors`).toHaveAttribute('data-three-stack-validation-errors', '0');
     await expect(threeScene, `${type} physical readiness gate is clean`).toHaveAttribute('data-three-physical-validation-errors', '0');
     await expect(threeScene, `${type} preview is renderable only after shared physical validation passes`).toHaveAttribute('data-three-preview-renderable', 'ready');
@@ -3111,21 +3397,23 @@ test('Foundry sensemaking shows library, partial range, and exported metadata', 
   await expect(page.getByLabel('ground number')).toHaveValue('120');
   await page.getByLabel('Foundry preset').selectOption('balanced');
   await expect(page.getByLabel('ground number')).toHaveValue('160');
-  await page.getByLabel('Foundry preset').selectOption('compact');
+  await page.getByLabel('Foundry preset').selectOption('broad');
+  await expect(page.getByLabel('Coupler link length')).toHaveValue('6');
 
   const linkOptionLabels = await page.getByLabel('Input link length').locator('option').allTextContents();
   expect(linkOptionLabels.join(' '), 'visible 4bar link-size labels name holes, not cells').toMatch(/3-hole/);
   expect(linkOptionLabels.join(' '), 'visible 4bar link-size labels avoid cell wording').not.toMatch(/\bcell\b/i);
   const stackBeforeResize = await threeScene.getAttribute('data-three-stack-order');
-  await page.getByLabel('Output link length').selectOption('4');
-  await page.getByLabel('Input link length').selectOption('4');
+  await expect(page.getByLabel('Output link length'), 'physical output holes own the role endpoint').toBeDisabled();
+  await expect(page.getByLabel('Input link length'), 'physical input holes own the role endpoint').toBeDisabled();
   await page.getByLabel('Coupler link length').selectOption('4');
-  await expect(threeScene, '4bar link-size selectors override all three typed linkage layers without relying on flattened inventory order').toHaveAttribute('data-three-stack-order', /(?=.*Input 5-hole link)(?=.*Coupler 5-hole link)(?=.*Output 5-hole link)/);
+  await expect(threeScene, 'the non-role-owned coupler selector updates its typed linkage layer').toHaveAttribute('data-three-stack-order', /Coupler 5-hole link/);
   expect(await threeScene.getAttribute('data-three-stack-order')).not.toBe(stackBeforeResize);
   expect(await threeScene.getAttribute('data-three-rendered-layer-labels')).toBe(await threeScene.getAttribute('data-three-stack-order'));
+  await page.getByLabel('Foundry preset').selectOption('compact');
   await expect(page.getByLabel('Output link length').locator('option[value="2"]'), 'unsafe 4bar output sizes stay visible but locked instead of breaking the preview').toHaveAttribute('disabled', '');
-  await expect(page.getByLabel('Output link length').locator('option[value="2"]')).toContainText(/locked/i);
-  await expect(page.getByTestId('mechanism-motion-option-locks')).toContainText(/Locked choices may jam/);
+  await expect(page.getByLabel('Output link length').locator('option[value="2"]')).toContainText(/not fitting/i);
+  await expect(page.getByTestId('mechanism-motion-option-locks')).toHaveText('Fit inside board.');
   await expect(page.getByTestId('foundry-motion-warning')).toHaveCount(0);
   await expect(page.getByTestId('stage-left-pane')).not.toContainText(/Motion may jam|No full motion/);
   await expect(page.getByTestId('stage-left-pane')).not.toContainText(/Motion [0-9]+%/);
@@ -3179,12 +3467,12 @@ test('Foundry clamps feasible numeric parameter edits without adding jam warning
 
   await page.getByLabel('Foundry mechanism type').selectOption('4bar');
   await page.getByLabel('Foundry preset').selectOption('compact');
-  await page.getByLabel('Output link length').selectOption('4');
-  await page.getByLabel('Input link length').selectOption('4');
+  await expect(page.getByLabel('Output link length'), 'physical output holes own the role endpoint').toBeDisabled();
+  await expect(page.getByLabel('Input link length'), 'physical input holes own the role endpoint').toBeDisabled();
   await page.getByLabel('Coupler link length').selectOption('4');
   await expect(page.getByLabel('Output link length').locator('option[value="2"]'), 'unsafe 4bar output sizes stay visible but locked instead of breaking the preview').toHaveAttribute('disabled', '');
-  await expect(page.getByLabel('Output link length').locator('option[value="2"]')).toContainText(/locked/i);
-  await expect(page.getByTestId('mechanism-motion-option-locks')).toContainText(/Locked choices may jam/);
+  await expect(page.getByLabel('Output link length').locator('option[value="2"]')).toContainText(/not fitting/i);
+  await expect(page.getByTestId('mechanism-motion-option-locks')).toHaveText('Fit inside board.');
   await expect(page.getByTestId('foundry-motion-warning')).toHaveCount(0);
   await expect(page.getByTestId('stage-left-pane')).not.toContainText(/Motion may jam|No full motion/);
 });
@@ -3390,11 +3678,13 @@ test('Recommendation sheet applies a distinct mechanism and blueprint recipe', a
   await openUnoccupiedWavingArmTemplate(page);
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   await page.getByRole('button', { name: /Recommend/i }).click();
-  await expect(page.getByTestId('recommendation-sheet')).toBeVisible();
-  const enabledApplyButtons = page.getByTestId('recommendation-sheet').locator('button.btn-primary:not(:disabled)');
-  await expect(enabledApplyButtons.first()).toBeVisible();
-  expect(await enabledApplyButtons.count(), 'at least two fabrication-ready recommendations').toBeGreaterThan(1);
-  await enabledApplyButtons.nth(1).click();
+  const recommendationSheet = page.getByTestId('recommendation-sheet');
+  await expect(recommendationSheet).toBeVisible();
+  const acceptedUseActions = recommendationSheet.getByRole('button', { name: 'Use', exact: true });
+  await expect(acceptedUseActions.first()).toBeVisible();
+  await expect(acceptedUseActions.first()).toBeEnabled();
+  await expect(recommendationSheet.locator('[data-testid^="recommendation-card-"] button.btn-primary:disabled')).toHaveCount(0);
+  await acceptedUseActions.first().click();
   await clickStage(page, 'Blueprint');
   await expect(page.getByRole('button', { name: /Generate package/i })).toBeEnabled();
 
@@ -4281,7 +4571,7 @@ test('Every top menu command is wired to a visible result', async ({ page }) => 
     const downloadedPath = await download.path();
     expect(downloadedPath, `${id} keeps a readable local artifact`).toBeTruthy();
     const snapshot = JSON.parse(await readFile(downloadedPath!, 'utf8'));
-    expect(snapshot.version, `${id} exports a MotionSmith project snapshot`).toBe(1);
+    expect(snapshot.version, `${id} exports a MotionSmith project snapshot`).toBe(2);
     expect(Object.keys(snapshot.parts ?? {}).length, `${id} export preserves character parts`).toBeGreaterThan(0);
     expect(snapshot.mechanisms?.length, `${id} export preserves mechanisms`).toBeGreaterThan(0);
   }
@@ -4342,23 +4632,24 @@ test('guided classroom lesson opens real baseline and can reset safely', async (
   expectCleanPage(pageErrors, consoleErrors);
 });
 
-test('Detached visible mechanisms block browser blueprint generation', async ({ page }) => {
+test('Invalid Design target edits retain the prior valid mechanism and exact recovery blocker', async ({ page }) => {
   await page.goto('/');
   await openWavingArmTemplate(page);
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   await page.getByRole('button', { name: 'Slider piston', exact: true }).click();
-  await page.getByLabel('Mechanism target').selectOption('head');
-  await expect(page.getByLabel('Mechanism motion path')).toHaveValue('');
-  await page.getByRole('button', { name: 'Cam follower', exact: true }).click();
+  await expectProjectCounts(page, 14, 1, 1);
+  await expect(page.getByLabel('Mechanism target')).toHaveValue('right_hand_part');
+  await expect(page.getByLabel('Mechanism motion path')).toHaveValue('path-right-arm');
 
-  await clickStage(page, 'Blueprint');
-  await expect(page.getByTestId('blueprint-control-panel').getByText(/choose target \+ path/)).toBeVisible();
-  await expect(page.getByTestId('blueprint-control-panel').getByText(/choose target \+ path/)).toHaveCount(1);
-  await expect(page.getByRole('button', { name: /Generate package/i })).toBeDisabled();
+  await page.getByLabel('Mechanism target').selectOption('head');
+  await expect(page.getByLabel('Mechanism target'), 'invalid retarget keeps the prior owner').toHaveValue('right_hand_part');
+  await expect(page.getByLabel('Mechanism motion path'), 'invalid retarget keeps the prior path').toHaveValue('path-right-arm');
+  await expect(page.getByTestId('stage-right-inspector').locator('.warning')).toHaveText('Fix: Choose anchor');
+  await expect(page.getByRole('button', { name: 'Export Blueprint', exact: true })).toBeEnabled();
 });
 
 
-test('Mechanism Design library chips, target filters, delete, and enabled export work', async ({ page }) => {
+test('Mechanism Design library chips replace transactionally, delete, and export', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
@@ -4373,27 +4664,20 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   await expect(page.getByTestId('design-visible-sensemaking')).toContainText('Crank turns');
 
   await page.getByRole('button', { name: 'Slider piston', exact: true }).click();
-  await expectProjectCounts(page, 14, 1, 2);
+  await expectProjectCounts(page, 14, 1, 1);
   const selectedMechanismText = await page.getByLabel('Mechanism instance').evaluate((select: HTMLSelectElement) => select.selectedOptions[0]?.textContent ?? '');
   expect(selectedMechanismText).toContain('piston');
   await expect(page.getByTestId('design-mechanism-library')).toContainText('Slider piston');
   await expect(page.getByTestId('design-visible-sensemaking')).toContainText('Crank turns');
-  await expect(page.getByTestId('design-parametric-editor')).toHaveCount(0);
+  await expect(page.getByTestId('design-parametric-editor'), 'piston keeps its fabrication-backed physical selections visible in Design').toBeVisible();
   await expect(page.getByLabel('slider offset number')).toHaveCount(0);
   await expect(page.getByLabel('rod length number')).toHaveCount(0);
-  await expect(page.getByLabel('Mechanism target')).toHaveValue('');
-  await expect(page.getByLabel('Mechanism motion path')).toHaveValue('');
-
-  await page.getByLabel('Mechanism target').selectOption('head');
-  await expect(page.getByLabel('Mechanism motion path')).toHaveValue('');
-  const headPathOptions = await page.getByLabel('Mechanism motion path').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
-  expect(headPathOptions).toEqual(['No path']);
-  await page.getByLabel('Mechanism target').selectOption('right_hand_part');
-  await expect(page.getByLabel('Mechanism motion path')).toHaveValue('');
+  await expect(page.getByLabel('Mechanism target')).toHaveValue('right_hand_part');
+  await expect(page.getByLabel('Mechanism motion path')).toHaveValue('path-right-arm');
   const handPathOptions = await page.getByLabel('Mechanism motion path').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => ({ text: option.textContent ?? '', value: option.value, disabled: option.disabled })));
   expect(handPathOptions.map(option => option.text).join(' ')).toContain('Right hand path');
   expect(handPathOptions.map(option => option.text).join(' ')).not.toContain('pts');
-  expect(handPathOptions.find(option => option.value === 'path-right-arm')?.disabled).toBe(true);
+  expect(handPathOptions.find(option => option.value === 'path-right-arm')?.disabled).toBe(false);
   const anchorOptionValues = await page.getByLabel('Motion handle').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.value));
   expect(anchorOptionValues).toEqual(['', 'right_hand']);
   const anchorOptions = await page.getByLabel('Motion handle').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
@@ -4403,14 +4687,20 @@ test('Mechanism Design library chips, target filters, delete, and enabled export
   await expect(page.getByTestId('mechanism-ik-chain-summary')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Delete', exact: true }).click();
-  await expectProjectCounts(page, 14, 1, 1);
+  await expectProjectCounts(page, 14, 1, 0);
   const remainingOptions = await page.getByLabel('Mechanism instance').evaluate((select: HTMLSelectElement) => Array.from(select.options).map(option => option.textContent ?? ''));
   expect(remainingOptions.join(' ')).not.toContain('piston');
 
+  await page.getByRole('button', { name: 'Four-bar linkage', exact: true }).click();
+  await expectProjectCounts(page, 14, 1, 1);
+  await expect(page.getByLabel('Mechanism motion path')).toHaveValue('path-right-arm');
+
   await page.locator('label').filter({ hasText: 'Enabled' }).locator('input[type="checkbox"]').uncheck();
   await clickStage(page, 'Blueprint');
-  await expect(page.getByTestId('blueprint-control-panel').getByText('No enabled mechanism to export.')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Generate package/i })).toBeDisabled();
+  await expect(page.getByRole('heading', { name: 'Mechanism Design' })).toBeVisible();
+  await expect(page.getByTestId('design-readiness-blocker')).toHaveText('Add a mechanism.');
+  await expect(page.getByRole('button', { name: 'Export Blueprint', exact: true })).toBeDisabled();
+  await expect(page.getByTestId('blueprint-control-panel')).toHaveCount(0);
 
   await page.getByRole('button', { name: /Mechanism Design/i }).click();
   await page.locator('label').filter({ hasText: 'Enabled' }).locator('input[type="checkbox"]').check();
@@ -4441,7 +4731,7 @@ test('Mechanism Design integrated automata preview keeps placed anchors on the f
   await expect(designPreview).toBeVisible();
   const designRig = designPreview.getByTestId('foundry-camera-rig');
   await expect(designRig).toHaveAttribute('data-three-renderer', 'webgl');
-  await expect(designRig).toHaveAttribute('data-three-stack-source', 'compileMechanismRenderPlan');
+  await expect(designRig).toHaveAttribute('data-three-stack-source', 'MechanismSceneContract');
 
   await expect(page.getByLabel('anchor X number')).toBeVisible();
   const anchorPoint = {
@@ -4519,7 +4809,7 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
   await expect(designRig).toHaveAttribute('data-physics-update-policy', 'kinematic-authority-rapier-contact-validation');
   await expect(designRig).toHaveAttribute('data-high-throughput-scene-policy', 'viser-style-transform-tree-batched-updates-instancing');
   await expect(designRig).toHaveAttribute('data-physics-authority', 'motionsmith-kinematics');
-  await expect(designRig).toHaveAttribute('data-three-stack-source', 'compileMechanismRenderPlan');
+  await expect(designRig).toHaveAttribute('data-three-stack-source', 'MechanismSceneContract');
   await expect(designRig).toHaveAttribute('data-three-stack-mode', 'assembled-spacer-separated');
   await expect(designRig).toHaveAttribute('data-three-exploded', 'false');
   const automataSurfaceClearance = Number(await designRig.getAttribute('data-three-automata-surface-clearance'));
@@ -4569,7 +4859,7 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
   for (const { type, label } of mechanismTemplateButtons) {
     await page.getByRole('button', { name: label, exact: true }).click();
     await expect(designRig, `${type} design automata preview uses the Foundry mechanism state`).toHaveAttribute('data-mechanism-type', type);
-    await expect(designRig, `${type} design renderer uses the shared fabrication stack`).toHaveAttribute('data-three-stack-source', 'compileMechanismRenderPlan');
+    await expect(designRig, `${type} design renderer uses the shared fabrication stack`).toHaveAttribute('data-three-stack-source', 'MechanismSceneContract');
     await expect(designRig, `${type} design stack stays assembled until explicitly exploded`).toHaveAttribute('data-three-exploded', 'false');
     await expect(designRig, `${type} design stack has no validation errors`).toHaveAttribute('data-three-stack-validation-errors', '0');
     await expect(designRig, `${type} design physical readiness gate is clean`).toHaveAttribute('data-three-physical-validation-errors', '0');
@@ -4791,7 +5081,7 @@ test('Shared path view supports 2D zoom and 3D direct orbit', async ({ page }) =
   await expect(svgCanvas).not.toHaveAttribute('viewBox', viewBoxBefore ?? '');
 });
 
-test('Draw mode forces 2D Path view and accepts free path strokes on SceneSketch', async ({ page }) => {
+test('Draw mode forces 2D Path view and accepts free path strokes on SceneSketch', async ({ page }: { page: Page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await openWavingArmTemplate(page);

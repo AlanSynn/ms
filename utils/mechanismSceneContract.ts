@@ -1,13 +1,24 @@
-import type { FabricationRecipe, MechanismConfig, MechanismType, PhysicalKitSettings, ProjectState } from '../types';
+import type { ConnectionSelectionRole, FabricationRecipe, MechanismConfig, MechanismRecoveryCandidates, MechanismType, PhysicalKitSettings, ProjectState } from '../types';
+import { defaultPhysicalKit } from './coordinates';
 import { compileMechanism, summarizeCompiledMechanism, type MechanismGraphCompilerSummary } from './mechanismCompiler';
+import { connectionSelectionIdentity } from './mechanismConnectionSelections';
 import type {
     CompiledSupportPath,
     FabricationRenderKind,
     FabricationRenderLayer,
+    FabricationRenderPlan,
     PinSpanMm,
     RetainedSupportEdgeMm,
     RetainedSupportNodeMm
 } from './mechanismFabricationZStack';
+import { buildMechanismPhysicalEnvelopeDescriptors, type MechanismPhysicalEnvelopeDescriptor } from './mechanismPhysicalEnvelope';
+import {
+    compilePhysicalInstancesFromPlan,
+    type MechanismPhysicalPartDefinition,
+    type MechanismPhysicalPartInstance
+} from './mechanismPhysicalInstances';
+import { resolveMechanismRuntimeGate } from './mechanismRuntimePolicy';
+import { MECHANISM_BINDING_BLOCKER } from './pathTargets';
 
 export const MECHANISM_SCENE_CONTRACT_VERSION = 1;
 
@@ -17,6 +28,7 @@ export type MechanismSceneLayer = {
     label: string;
     role: FabricationRenderLayer['role'];
     renderKind: FabricationRenderKind;
+    partKey: string;
     color: string;
     stackIndex: number;
     stackItemIndex?: number;
@@ -34,6 +46,15 @@ export type MechanismSceneLayer = {
     gearPlaneId?: string;
 };
 
+export type MechanismSceneConnectionSourceNode = {
+    role: ConnectionSelectionRole;
+    selectionSignature: string;
+    sourceNodeId: string;
+    partKey: string;
+    layerId: string;
+    stackOccurrenceId: string;
+};
+
 export type MechanismSceneContract = {
     version: typeof MECHANISM_SCENE_CONTRACT_VERSION;
     mechanismId: string;
@@ -41,6 +62,9 @@ export type MechanismSceneContract = {
     renderPlanSource: 'mechanismCompiler';
     compilerSource: 'mechanismCompiler';
     graphCompiler: MechanismGraphCompilerSummary;
+    compilerSignature: string;
+    physicalConnectionSignature: string;
+    connectionSourceNodes: MechanismSceneConnectionSourceNode[];
     stackSource: 'mechanismCompiler';
     stackSummary: string;
     roleSummary: string;
@@ -60,37 +84,91 @@ export type MechanismSceneContract = {
     supportEdges: RetainedSupportEdgeMm[];
     pinSpans: PinSpanMm[];
     gearPlaneIds: string[];
+    physicalDefinitions: readonly MechanismPhysicalPartDefinition[];
+    physicalInstances: readonly MechanismPhysicalPartInstance[];
+    physicalEnvelopeDescriptors: MechanismPhysicalEnvelopeDescriptor[];
+    renderPlan: FabricationRenderPlan;
+    runtimeMode?: 'bound' | 'static-recovery';
+    runtimeBlocker?: string;
+    projectDriveEnabled?: boolean;
+    boundPhysicsEnabled?: boolean;
+    recoveryCandidates?: MechanismRecoveryCandidates;
 };
 
-const sceneLayerForCompiledLayer = (layer: FabricationRenderLayer): MechanismSceneLayer => ({
-    id: layer.layerId,
-    layerId: layer.layerId,
-    label: layer.label,
-    role: layer.role,
-    renderKind: layer.renderKind,
-    color: layer.color,
-    stackIndex: layer.stackIndex,
-    ...(layer.stackItemIndex !== undefined ? { stackItemIndex: layer.stackItemIndex } : {}),
-    occurrence: layer.occurrence,
-    stackOccurrenceId: layer.stackOccurrenceId,
-    z: layer.z,
-    centerMm: layer.centerMm,
-    backFaceMm: layer.backFaceMm,
-    frontFaceMm: layer.frontFaceMm,
-    physicalDepthMm: layer.physicalDepthMm,
-    source: layer.source,
-    ...(layer.sourceNodeId ? { sourceNodeId: layer.sourceNodeId } : {}),
-    sourceConstraintIds: [...layer.sourceConstraintIds],
-    supportPathIds: [...layer.supportPathIds],
-    ...(layer.gearPlaneId ? { gearPlaneId: layer.gearPlaneId } : {})
-});
+const sceneLayerForCompiledLayer = (layer: FabricationRenderLayer): MechanismSceneLayer => {
+    return {
+        id: layer.layerId,
+        layerId: layer.layerId,
+        label: layer.label,
+        role: layer.role,
+        renderKind: layer.renderKind,
+        partKey: layer.partKey,
+        color: layer.color,
+        stackIndex: layer.stackIndex,
+        ...(layer.stackItemIndex !== undefined ? { stackItemIndex: layer.stackItemIndex } : {}),
+        occurrence: layer.occurrence,
+        stackOccurrenceId: layer.stackOccurrenceId,
+        z: layer.z,
+        centerMm: layer.centerMm,
+        backFaceMm: layer.backFaceMm,
+        frontFaceMm: layer.frontFaceMm,
+        physicalDepthMm: layer.physicalDepthMm,
+        source: layer.source,
+        ...(layer.sourceNodeId ? { sourceNodeId: layer.sourceNodeId } : {}),
+        sourceConstraintIds: [...layer.sourceConstraintIds],
+        supportPathIds: [...layer.supportPathIds],
+        ...(layer.gearPlaneId ? { gearPlaneId: layer.gearPlaneId } : {})
+    };
+};
 
-export const buildMechanismSceneContract = (
+const connectionSourceNodesFor = (
+    summary: MechanismGraphCompilerSummary,
+    renderPlan: FabricationRenderPlan,
+): MechanismSceneConnectionSourceNode[] => {
+    const layers = [renderPlan.base, ...renderPlan.layers];
+    return [...(summary.connectionSelectionSummary?.physicalConnections ?? [])]
+        .map(connection => {
+            const layer = layers
+                .filter(item => item.sourceNodeId === connection.sourceNodeId && item.partKey === connection.partKey)
+                .sort((left, right) => left.layerId.localeCompare(right.layerId))[0];
+            return {
+                role: connection.role,
+                selectionSignature: connectionSelectionIdentity(connection.role, connection.selection),
+                sourceNodeId: connection.sourceNodeId,
+                partKey: connection.partKey,
+                layerId: layer?.layerId ?? '',
+                stackOccurrenceId: layer?.stackOccurrenceId ?? '',
+            };
+        })
+        .sort((left, right) => left.role.localeCompare(right.role));
+};
+
+const compilerSignatureFor = (
+    summary: MechanismGraphCompilerSummary,
+    renderPlan: FabricationRenderPlan,
+) => [
+    `${summary.graphId}@${summary.irVersion}`,
+    summary.connectionSelectionSummary?.physicalConnectionSignature ?? '',
+    [renderPlan.base, ...renderPlan.layers]
+        .map(layer => [
+            layer.layerId,
+            layer.sourceNodeId ?? '',
+            layer.partKey,
+            layer.backFaceMm,
+            layer.frontFaceMm,
+        ].join(':'))
+        .join('|'),
+].join('::');
+
+/** Bounded compiler diagnostic. Runtime stages and exports must use the ProjectState builder below. */
+const compileMechanismSceneContract = (
     mechanism: MechanismConfig,
     recipe?: FabricationRecipe,
     kit?: PhysicalKitSettings,
+    angleRad = 0,
 ): MechanismSceneContract => {
-    const compiledMechanism = compileMechanism(mechanism, undefined, undefined, kit);
+    const physicalKit = kit ?? defaultPhysicalKit();
+    const compiledMechanism = compileMechanism(mechanism, undefined, undefined, physicalKit);
     const renderPlan = compiledMechanism.fabrication.renderPlan;
     const validationErrors = [
         ...compiledMechanism.fabrication.validationErrors,
@@ -99,13 +177,18 @@ export const buildMechanismSceneContract = (
         ...(mechanism.warnings ?? [])
     ].filter(Boolean);
 
-    return {
+    const graphCompiler = summarizeCompiledMechanism(compiledMechanism);
+    const physicalConnectionSignature = graphCompiler.connectionSelectionSummary?.physicalConnectionSignature ?? '';
+    const sceneContract = {
         version: MECHANISM_SCENE_CONTRACT_VERSION,
         mechanismId: mechanism.id,
         mechanismType: mechanism.type,
         renderPlanSource: 'mechanismCompiler',
         compilerSource: 'mechanismCompiler',
-        graphCompiler: summarizeCompiledMechanism(compiledMechanism),
+        graphCompiler,
+        compilerSignature: compilerSignatureFor(graphCompiler, renderPlan),
+        physicalConnectionSignature,
+        connectionSourceNodes: connectionSourceNodesFor(graphCompiler, renderPlan),
         stackSource: 'mechanismCompiler',
         stackSummary: compiledMechanism.fabrication.stackSummary,
         roleSummary: renderPlan.roleSummary,
@@ -131,15 +214,95 @@ export const buildMechanismSceneContract = (
         supportEdges: renderPlan.supportEdges.map(edge => ({ ...edge })),
         pinSpans: renderPlan.pinSpans.map(span => ({ ...span, supportNodeIds: [...span.supportNodeIds] })),
         gearPlaneIds: [...new Set(renderPlan.layers.flatMap(layer => layer.gearPlaneId ? [layer.gearPlaneId] : []))].sort()
-    };
+    } as Omit<MechanismSceneContract, 'physicalDefinitions' | 'physicalInstances' | 'physicalEnvelopeDescriptors' | 'renderPlan'>;
+
+    let physicalParts: ReturnType<typeof compilePhysicalInstancesFromPlan> | undefined;
+    const getPhysicalParts = () => physicalParts ??= compilePhysicalInstancesFromPlan(mechanism, compiledMechanism.graph, renderPlan, angleRad, physicalKit);
+    Object.defineProperties(sceneContract, {
+        renderPlan: { value: renderPlan, enumerable: false },
+        physicalDefinitions: { get: () => getPhysicalParts().definitions, enumerable: false },
+        physicalInstances: { get: () => getPhysicalParts().instances, enumerable: false }
+    });
+
+    let physicalEnvelopeDescriptors: MechanismPhysicalEnvelopeDescriptor[] | undefined;
+    Object.defineProperty(sceneContract, 'physicalEnvelopeDescriptors', {
+        get: () => physicalEnvelopeDescriptors ??= buildMechanismPhysicalEnvelopeDescriptors(mechanism, undefined, renderPlan, physicalKit),
+        enumerable: false
+    });
+
+    return sceneContract as MechanismSceneContract;
+};
+
+/** Compatibility diagnostic only. Runtime, stage, and export callers require ProjectState. */
+export const buildLowLevelMechanismSceneContract = (
+    mechanism: MechanismConfig,
+    recipe?: FabricationRecipe,
+    kit?: PhysicalKitSettings,
+    angleRad = 0,
+): MechanismSceneContract => Object.assign(
+    compileMechanismSceneContract(mechanism, recipe, kit, angleRad),
+    {
+        ready: false,
+        runtimeMode: 'static-recovery' as const,
+        runtimeBlocker: 'Project context required',
+        projectDriveEnabled: false,
+        boundPhysicsEnabled: false,
+    },
+);
+
+export const buildProjectMechanismSceneContract = (
+    project: ProjectState,
+    mechanismId: string,
+    recipe?: FabricationRecipe,
+    angleRad = 0,
+): MechanismSceneContract | undefined => {
+    const mechanism = project.mechanisms.find((item) => item.id === mechanismId);
+    if (!mechanism) return undefined;
+    const gate = resolveMechanismRuntimeGate(project, mechanism);
+    if (!gate.canProjectScene) return undefined;
+    const contract = compileMechanismSceneContract(
+        mechanism,
+        recipe,
+        project.settings.physicalKit,
+        gate.canDriveProject ? angleRad : 0,
+    );
+    if (gate.canDriveProject) {
+        return Object.assign(contract, {
+            runtimeMode: 'bound',
+            projectDriveEnabled: true,
+            boundPhysicsEnabled: true,
+            recoveryCandidates: gate.recoveryCandidates,
+        } satisfies Partial<MechanismSceneContract>);
+    }
+    return Object.assign(contract, {
+        ready: false,
+        validationErrors: [...new Set([...contract.validationErrors, gate.blocker ?? MECHANISM_BINDING_BLOCKER])],
+        targetPartId: undefined,
+        targetSceneObjectId: undefined,
+        targetPathId: undefined,
+        targetAnchorJointId: undefined,
+        generatedPathPointCount: 0,
+        runtimeMode: 'static-recovery',
+        runtimeBlocker: gate.blocker,
+        projectDriveEnabled: false,
+        boundPhysicsEnabled: false,
+        recoveryCandidates: gate.recoveryCandidates,
+    } satisfies Partial<MechanismSceneContract>);
 };
 
 export const buildMechanismSceneContracts = (
-    project: Pick<ProjectState, 'mechanisms' | 'settings'>,
+    project: ProjectState,
     recipes: FabricationRecipe[] = []
 ) => {
     const recipeByMechanismId = new Map(recipes.map(recipe => [recipe.mechanismId, recipe]));
     return project.mechanisms
         .filter(mechanism => mechanism.visible && mechanism.enabled !== false)
-        .map(mechanism => buildMechanismSceneContract(mechanism, recipeByMechanismId.get(mechanism.id), project.settings.physicalKit));
+        .flatMap(mechanism => {
+            const contract = buildProjectMechanismSceneContract(
+                project,
+                mechanism.id,
+                recipeByMechanismId.get(mechanism.id),
+            );
+            return contract ? [contract] : [];
+        });
 };

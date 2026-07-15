@@ -3,7 +3,6 @@ import { buildFoundryPhysicsOverlay } from './physicsSession';
 import { generateCurvePoints } from './kinematics';
 import { createFoundryPlaybackFrame, generateFoundryPlaybackPointTraces } from './foundryPlayback';
 import { createMechanismFitContext, createSceneMechanismFitContext, pointsToSvgPath, type MechanismPreviewSimulation } from './mechanismPreview';
-import { normalizeGearMeshMechanism } from './mechanismRecommendations';
 
 export type FoundryMechanismPreviewModel = {
   mechanism: MechanismConfig;
@@ -24,33 +23,45 @@ export const buildFoundryMechanismPreviewModel = (
   resolution = 96,
   frame: 'fit' | 'scene' = 'fit',
 ): FoundryMechanismPreviewModel => {
-  const normalizedMechanism = normalizeGearMeshMechanism(mechanism);
   const context = frame === 'scene'
-    ? createSceneMechanismFitContext(normalizedMechanism, width, height, resolution)
+    ? createSceneMechanismFitContext(
+        mechanism,
+        width,
+        height,
+        resolution,
+        settings.physicalKit,
+      )
     : createMechanismFitContext(
-        normalizedMechanism,
+        mechanism,
         width,
         height,
         resolution,
         userPathPoints,
+        settings.physicalKit,
       );
   const rawTraces = generateFoundryPlaybackPointTraces(
-    normalizedMechanism,
+    mechanism,
     resolution,
+    settings.physicalKit,
   ).traces;
   const pointTraces = rawTraces.map((trace) => ({
     ...trace,
     points: trace.points.map(context.map),
   }));
-  const fallbackPreview = generateCurvePoints(normalizedMechanism, resolution).points.map(context.map);
+  const fallbackPreview = generateCurvePoints(
+    mechanism,
+    resolution,
+    settings.physicalKit,
+  ).points.map(context.map);
   const previewPoints =
     pointTraces.find((trace) => trace.primary)?.points ??
     pointTraces[0]?.points ??
     fallbackPreview;
   const playbackFrame = createFoundryPlaybackFrame(
-    normalizedMechanism,
+    mechanism,
     playbackPhaseRad,
     context,
+    settings.physicalKit,
   );
   const physicalSimulation = {
     ...playbackFrame.simulation,
@@ -58,13 +69,13 @@ export const buildFoundryMechanismPreviewModel = (
     pathD: pointsToSvgPath(previewPoints),
   };
   return {
-    mechanism: normalizedMechanism,
+    mechanism,
     pointTraces,
     previewPoints,
     userPathPoints: userPathPoints.map(context.map),
     physicalSimulation,
     physicsOverlay: buildFoundryPhysicsOverlay(
-      normalizedMechanism,
+      mechanism,
       physicalSimulation,
       playbackFrame.playbackPhaseRad,
       settings,

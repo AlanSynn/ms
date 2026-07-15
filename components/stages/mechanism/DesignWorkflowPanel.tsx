@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { ClassroomExampleVideo } from "../../ui/ClassroomExampleVideo";
 import { StageLeftSummary } from "../stageLayout";
@@ -9,7 +10,9 @@ import type {
   ProjectState,
 } from "../../../types";
 import { mechanismBindingWarnings, mechanismDriverIdentity } from "../../../utils/motion";
-import { fitMechanismToTargetPath } from "../../../utils/mechanismRecommendations";
+import { fitMechanismToTargetPathResult } from "../../../utils/mechanismRecommendations";
+import { compactStudentActionForFabricationDiagnostic } from "../../../utils/fabricationReadiness";
+import { resolveMechanismEditAttempt } from "../../../utils/mechanismEditAuthority";
 import { pathOwnedTargetFields } from "../../../utils/pathTargets";
 import {
   classroomAssessmentFor,
@@ -18,7 +21,7 @@ import {
   formatClassroomAssessmentPrompt,
 } from "../../../utils/classroomContent";
 import {
-  AUTHORABLE_MECHANISM_TYPES,
+  FOUNDRY_MECHANISM_TYPES,
   MECHANISM_TEMPLATE_LIBRARY as MECHANISM_LIBRARY,
   mechanismTemplateLabel,
 } from "../../../utils/mechanismTemplates";
@@ -49,6 +52,7 @@ export const DesignWorkflowPanel = ({
   goStage,
   dispatch,
 }: DesignWorkflowPanelProps) => {
+  const [addBlocker, setAddBlocker] = useState<string | null>(null);
   const selectedLibrary = selectedMechanism
     ? MECHANISM_LIBRARY[selectedMechanism.type]
     : undefined;
@@ -67,14 +71,37 @@ export const DesignWorkflowPanel = ({
     new Set(Object.values(bindingWarnings).flat()),
   );
   const addLibraryMechanism = (type: MechanismType) => {
-    const base = createDefaultMechanism(type, uid("mech"));
+    setAddBlocker(null);
+    const activeMechanism =
+      project.mechanisms.find((mechanism) => mechanism.id === project.selectedMechanismId) ??
+      selectedMechanism ??
+      project.mechanisms[0];
+    const replacementMechanismId = activeMechanism?.id;
     const path = project.selectedPathId
       ? project.paths[project.selectedPathId]
       : undefined;
+    const pathFields = path ? pathOwnedTargetFields(path) : undefined;
+    const replacementSeed = replacementMechanismId
+      ? project.mechanisms.find((mechanism) => mechanism.id === replacementMechanismId)
+      : activeMechanism;
+    const replacementTargetFields = replacementSeed
+      ? {
+          targetPartId: replacementSeed.targetPartId,
+          targetSceneObjectId: replacementSeed.targetSceneObjectId,
+          targetPathId: replacementSeed.targetPathId,
+          targetAnchorJointId: replacementSeed.targetAnchorJointId,
+          activeVisualPartIds: replacementSeed.activeVisualPartIds,
+        }
+      : {};
+    const preservedTargetFields = pathFields ?? replacementTargetFields;
+    const base = {
+      ...createDefaultMechanism(type, replacementMechanismId ?? uid("mech")),
+      ...(path ? pathFields : replacementTargetFields),
+    };
     const pathDriver = path
       ? mechanismDriverIdentity(project, {
           ...base,
-          ...pathOwnedTargetFields(path),
+          ...pathFields,
           visible: true,
           enabled: true,
         })
@@ -82,21 +109,56 @@ export const DesignWorkflowPanel = ({
     const pathOccupied = Boolean(
       pathDriver &&
         project.mechanisms.some(
-          (mechanism) => mechanismDriverIdentity(project, mechanism) === pathDriver,
+          (mechanism) =>
+            mechanism.id !== replacementMechanismId &&
+            mechanismDriverIdentity(project, mechanism) === pathDriver,
         ),
     );
-    const mechanism =
+    const fitResult =
       path && path.points.length >= 3 && !pathOccupied
-        ? fitMechanismToTargetPath(
+        ? fitMechanismToTargetPathResult(
             project,
             {
               ...base,
-              ...pathOwnedTargetFields(path),
+              ...pathFields,
             },
             path.id,
           )
-        : mechanismWithGeneratedPath(base);
-    dispatch({ type: "upsert_mechanism", mechanism });
+        : undefined;
+    const nextMechanismRaw = fitResult?.mechanism ?? mechanismWithGeneratedPath(base);
+    const nextMechanism = replacementMechanismId
+      ? {
+          ...nextMechanismRaw,
+          id: replacementMechanismId,
+          ...preservedTargetFields,
+        }
+      : nextMechanismRaw;
+
+    if (fitResult && !fitResult.accepted) {
+      setAddBlocker(
+        compactStudentActionForFabricationDiagnostic(fitResult.blockers[0]) ??
+          "Fit blocked.",
+      );
+      return;
+    } else {
+      setAddBlocker(null);
+    }
+
+    const attempt = resolveMechanismEditAttempt(
+      project,
+      replacementMechanismId ? replacementSeed : undefined,
+      nextMechanism,
+    );
+    if (attempt.status === "rejected") {
+      setAddBlocker(attempt.blocker);
+      return;
+    }
+
+    dispatch({
+      type: "upsert_mechanism",
+      mechanism: attempt.mechanism,
+      replaceMechanismId: replacementMechanismId,
+    });
   };
 
   return (
@@ -139,10 +201,12 @@ export const DesignWorkflowPanel = ({
           ))}
         </select>
         <div className="mt-3 flex flex-wrap gap-2">
-          {AUTHORABLE_MECHANISM_TYPES.map((type) => (
+          {FOUNDRY_MECHANISM_TYPES.map((type) => (
             <button
               key={type}
+              type="button"
               className="chip"
+              data-testid={`design-mechanism-family-${type}`}
               title={mechanismTemplateLabel(type)}
               onClick={() => addLibraryMechanism(type)}
             >
@@ -150,6 +214,11 @@ export const DesignWorkflowPanel = ({
             </button>
           ))}
         </div>
+        {addBlocker && (
+          <div className="warning" data-testid="design-add-blocker">
+            {addBlocker}
+          </div>
+        )}
         {selectedLibrary && (
           <div
             className="rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-600"

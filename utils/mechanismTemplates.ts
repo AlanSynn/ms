@@ -36,7 +36,7 @@ export const ALL_MECHANISM_TYPES: readonly MechanismType[] = [
 ] as const;
 
 export const AUTHORABLE_MECHANISM_TYPES: readonly MechanismType[] = ALL_MECHANISM_TYPES.filter(type => type !== 'crank');
-export const FOUNDRY_MECHANISM_TYPES: readonly MechanismType[] = REFERENCE_FOUNDRY_TYPES;
+export const FOUNDRY_MECHANISM_TYPES: readonly MechanismType[] = REFERENCE_FOUNDRY_TYPES.filter(type => type !== 'crank');
 
 export const MECHANISM_TEMPLATE_LIBRARY: Record<MechanismType, MechanismTemplateMetadata> = {
     crank: {
@@ -258,20 +258,29 @@ export const MECHANISM_TEMPLATE_LIBRARY: Record<MechanismType, MechanismTemplate
 };
 
 export const FOUNDRY_PRESETS: Record<string, Partial<MechanismConfig> & { label: string; recommendation: string }> = {
-    balanced: { label: 'Balanced', recommendation: 'Balanced' },
+    balanced: {
+        label: 'Balanced',
+        recommendation: 'Balanced',
+        groundLength: 160,
+        crankLength: 80,
+        couplerLength: 160,
+        rockerLength: 160
+    },
     compact: {
         label: 'Compact',
         recommendation: 'Compact',
         groundLength: 120,
-        couplerLength: 120,
-        rockerLength: 80
+        crankLength: 80,
+        couplerLength: 160,
+        rockerLength: 160
     },
     broad: {
         label: 'Broad sweep',
         recommendation: 'Broad',
-        groundLength: 220,
-        couplerLength: 210,
-        rockerLength: 150
+        groundLength: 240,
+        crankLength: 80,
+        couplerLength: 240,
+        rockerLength: 160
     }
 };
 

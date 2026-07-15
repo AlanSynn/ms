@@ -1,7 +1,9 @@
 import type {
   MechanismConfig,
+  MechanismRecoveryCandidates,
   MechanismType,
   PhysicalKitSettings,
+  ProjectState,
 } from "../types";
 import {
   boardToScene,
@@ -9,23 +11,20 @@ import {
   sceneToBoardRaw,
 } from "./coordinates";
 import {
-  closePhysicalValue,
-  closeToBoardPitch,
-  closeToFabricationLinkage,
-  physicalTolerance,
-  sampleFeasibleRange,
-} from "./fabricationReadiness";
-import {
-  FABRICATION_LINKAGE_ROLE_MIN_HOLES,
-  planetaryRingPitchRadius,
-} from "./fabricationSizing";
-import {
-  gearTrainPitchCenterDistance,
-  gearTrainPitchRadii,
-  gearTrainResolvedCenterDistance,
+  calculateLinkage,
+  mechanismSafetyPhaseSchedule,
 } from "./kinematics";
-import { compileMechanismGraphFabrication } from "./mechanismCompiler";
-import { resolveFourBarConnectionSelections } from "./mechanismConnectionSelections";
+import {
+  connectionSelectionRolesForMechanism,
+  mechanismConnectionCompatibilityUpdates,
+  normalizeMechanismConnectionSelections,
+} from "./mechanismConnectionSelections";
+import { mechanismWithGeneratedPath } from "./mechanismGeneratedPath";
+import { mechanismGraphForMechanism } from "./mechanismGraph";
+import {
+  assessMechanismTargetBinding,
+  MECHANISM_BINDING_BLOCKER,
+} from "./pathTargets";
 
 export type MechanismParamMeta = {
   key: keyof MechanismConfig;
@@ -117,151 +116,138 @@ export const clampMechanismParam = (
   return Math.max(param.min, Math.min(param.max, value));
 };
 
-const MOTION_SAFE_PARAM_SAMPLES = 28;
 const MOTION_SAFE_RANGE_STEPS = 24;
-const MOTION_AUTHORITY_SAMPLES = 48;
 
 const uniqueSortedNumbers = (values: number[]) =>
   [...new Set(values.map((value) => Number(value.toFixed(4))))].sort(
     (a, b) => a - b,
   );
 
-export const mechanismMotionCompletes = (mechanism: MechanismConfig) =>
-  sampleFeasibleRange(mechanism, MOTION_SAFE_PARAM_SAMPLES).warning === null;
-
-const gearTrainRadiiShapeIsBuildable = (mechanism: MechanismConfig) => {
-  if (mechanism.type !== "gear" && mechanism.type !== "gear_linkage")
-    return true;
-  if (!Array.isArray(mechanism.gearTrainRadii)) return false;
-  if (
-    mechanism.gearTrainRadii.length < 2 ||
-    mechanism.gearTrainRadii.length > 8
-  )
-    return false;
-  if (
-    !mechanism.gearTrainRadii.every(
-      (value) => Number.isFinite(value) && Math.abs(value) >= 1,
-    )
-  )
-    return false;
-  const first = Math.abs(mechanism.gearTrainRadii[0]);
-  const last = Math.abs(mechanism.gearTrainRadii.at(-1) ?? first);
-  return (
-    closePhysicalValue(first, Math.abs(mechanism.crankLength)) &&
-    closePhysicalValue(last, Math.abs(mechanism.rockerLength))
-  );
-};
-
-const mechanismDimensionsAreBuildable = (
+export const mechanismMotionCompletes = (
   mechanism: MechanismConfig,
   kit: PhysicalKitSettings = defaultPhysicalKit(),
+) => mechanismHasFiniteValidStates(mechanism, kit);
+
+const scalarDomain = new Map(
+  MECHANISM_PARAM_META.map(({ key, min, max }) => [key, { min, max }]),
+);
+
+const familyScalarDomain = new Map<string, { min: number; max: number }>([
+  ["4bar:groundLength", { min: 0, max: 320 }],
+  ["4bar:rockerLength", { min: 0, max: 320 }],
+  ["cam:rockerLength", { min: 0, max: 320 }],
+]);
+
+const scalarDomainAppliesToFamily = (
+  mechanism: MechanismConfig,
+  key: keyof MechanismConfig,
 ) => {
-  const physicalNumbers = [
-    mechanism.crankLength,
-    mechanism.couplerLength,
-    mechanism.groundLength,
-    mechanism.rockerLength,
-    mechanism.sliderOffset,
-    mechanism.couplerPointDist,
-    mechanism.couplerPointAngle,
-  ];
-  if (
-    mechanism.type === "5bar" ||
-    mechanism.type === "6bar" ||
-    mechanism.type === "piston"
-  ) {
-    physicalNumbers.push(mechanism.rodLength ?? Number.NaN);
-  }
-  if (
-    mechanism.type === "gear" ||
-    mechanism.type === "gear_linkage" ||
-    mechanism.type === "planetary_gear"
-  ) {
-    physicalNumbers.push(
-      mechanism.gearRatio ?? Number.NaN,
-      mechanism.speed2 ?? Number.NaN,
+  if (key === "rodLength")
+    return ["5bar", "6bar", "piston"].includes(mechanism.type);
+  if (key === "gearRatio" || key === "outputGearRadius")
+    return ["gear", "gear_linkage", "planetary_gear"].includes(mechanism.type);
+  if (key === "phase")
+    return ["5bar", "gear", "gear_linkage", "planetary_gear"].includes(
+      mechanism.type,
     );
-  }
-  if (!physicalNumbers.every(Number.isFinite)) return false;
-  if (
-    (mechanism.type === "gear" ||
-      mechanism.type === "gear_linkage" ||
-      mechanism.type === "planetary_gear") &&
-    (mechanism.gearRatio ?? 0) === 0
-  ) {
-    return false;
-  }
-  if (mechanism.type === "4bar") {
-    const connections = resolveFourBarConnectionSelections(mechanism);
-    return (
-      closeToBoardPitch(mechanism.groundLength, kit.gridPitchMm) &&
-      (connections.inputJoint !== undefined ||
-        closeToFabricationLinkage(
-          mechanism.crankLength,
-          FABRICATION_LINKAGE_ROLE_MIN_HOLES.driver,
-        )) &&
-      closeToFabricationLinkage(
-        mechanism.couplerLength,
-        FABRICATION_LINKAGE_ROLE_MIN_HOLES.coupler,
-      ) &&
-      (connections.outputJoint !== undefined ||
-        closeToFabricationLinkage(
-          mechanism.rockerLength,
-          FABRICATION_LINKAGE_ROLE_MIN_HOLES.output,
-        ))
-    );
-  }
-  if (mechanism.type === "gear") {
-    if (!gearTrainRadiiShapeIsBuildable(mechanism)) return false;
-    const pitchSpan = gearTrainPitchCenterDistance(mechanism);
-    const resolvedSpan = gearTrainResolvedCenterDistance(mechanism);
-    return (
-      closePhysicalValue(Math.abs(mechanism.groundLength), pitchSpan) &&
-      closePhysicalValue(resolvedSpan, pitchSpan)
-    );
-  }
-  if (mechanism.type === "gear_linkage") {
-    if (!gearTrainRadiiShapeIsBuildable(mechanism)) return false;
-    const radii = gearTrainPitchRadii(mechanism);
-    const pitchSpan = gearTrainPitchCenterDistance(mechanism);
-    const resolvedSpan = gearTrainResolvedCenterDistance(mechanism);
-    const actualGround = Math.abs(mechanism.groundLength);
-    if (radii.length > 2) {
-      return (
-        closePhysicalValue(actualGround, pitchSpan) &&
-        closePhysicalValue(resolvedSpan, pitchSpan)
-      );
-    }
-    return (
-      actualGround > pitchSpan + physicalTolerance(pitchSpan) &&
-      closePhysicalValue(actualGround, resolvedSpan)
-    );
-  }
-  if (mechanism.type === "planetary_gear") {
-    const expectedCarrier =
-      Math.abs(mechanism.crankLength) + Math.abs(mechanism.rockerLength);
-    const expectedRing =
-      Math.abs(mechanism.crankLength) + Math.abs(mechanism.rockerLength) * 2;
-    return (
-      closePhysicalValue(Math.abs(mechanism.groundLength), expectedCarrier) &&
-      closePhysicalValue(planetaryRingPitchRadius(mechanism), expectedRing)
-    );
-  }
+  if (key === "rockerLength" && mechanism.type === "rack-pinion") return false;
   return true;
 };
 
-const mechanismGraphBuildIsSafe = (
+const numberInDeclaredDomain = (
+  mechanism: MechanismConfig,
+  key: keyof MechanismConfig,
+  value: unknown,
+) => {
+  if (value === undefined) return true;
+  if (typeof value !== "number" || !Number.isFinite(value)) return false;
+  if (!scalarDomainAppliesToFamily(mechanism, key)) return true;
+  const domain = key === "groundAngle"
+    ? { min: -360, max: 360 }
+    : familyScalarDomain.get(`${mechanism.type}:${String(key)}`) ??
+      scalarDomain.get(key);
+  return !domain || (value >= domain.min && value <= domain.max);
+};
+
+const pointIsDeclaredBoardHole = (
+  point: { x: number; y: number },
+  kit: PhysicalKitSettings,
+) => {
+  if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return false;
+  const board = sceneToBoardRaw(point, kit);
+  const snapped = boardToScene(board.col, board.row, kit);
+  return board.valid && Math.abs(point.x - snapped.x) <= 1e-4 &&
+    Math.abs(point.y - snapped.y) <= 1e-4;
+};
+
+const boardAnchorIsDeclared = (
+  mechanism: MechanismConfig,
+  kit: PhysicalKitSettings,
+) => pointIsDeclaredBoardHole(
+  { x: mechanism.anchorX ?? Number.NaN, y: mechanism.anchorY ?? Number.NaN },
+  kit,
+);
+
+const boardPivotsAreDeclared = (
+  mechanism: MechanismConfig,
+  kit: PhysicalKitSettings,
+) => mechanismGraphForMechanism(mechanism, kit).nodes
+  .filter((node) => node.role === "board-anchor")
+  .every((node) => node.position !== undefined && pointIsDeclaredBoardHole(node.position, kit));
+
+export const completeMechanismCandidateIsValid = (
   mechanism: MechanismConfig,
   kit: PhysicalKitSettings = defaultPhysicalKit(),
-) => compileMechanismGraphFabrication(mechanism, kit).buildable;
+) => {
+  for (const key of MECHANISM_FEASIBILITY_AUTHORITY_KEYS) {
+    if (!candidateValueIsFinite(mechanism[key])) return false;
+    if (key === "gearTrainRadii" || key === "camProfileSamples" ||
+        key === "connectionSelections" || key === "assemblyMode" ||
+        key === "showOutputGear") continue;
+    if (!numberInDeclaredDomain(mechanism, key, mechanism[key])) return false;
+  }
+  if (mechanism.assemblyMode !== undefined &&
+      mechanism.assemblyMode !== "open" && mechanism.assemblyMode !== "crossed") return false;
+  if (mechanism.showOutputGear !== undefined && typeof mechanism.showOutputGear !== "boolean") return false;
+  if ((mechanism.rodLength !== undefined && mechanism.rodLength <= 0) ||
+      (mechanism.outputGearRadius !== undefined && mechanism.outputGearRadius <= 0)) return false;
+  if ((mechanism.type === "gear" || mechanism.type === "gear_linkage") &&
+      (!Array.isArray(mechanism.gearTrainRadii) || mechanism.gearTrainRadii.length < 2 ||
+       mechanism.gearTrainRadii.length > 8 || mechanism.gearTrainRadii.some((value) => !Number.isFinite(value) || value < 1 || value > 220))) return false;
+  if (mechanism.type === "cam" &&
+      (!Array.isArray(mechanism.camProfileSamples) || !mechanism.camProfileSamples.length ||
+       mechanism.camProfileSamples.length > 64 || mechanism.camProfileSamples.some((value) => !Number.isFinite(value) || value < 0 || value > 320))) return false;
+  const connectionState = normalizeMechanismConnectionSelections(
+    mechanism,
+    mechanism.connectionSelections,
+    undefined,
+    { kit },
+  );
+  const compatibilityUpdates = mechanismConnectionCompatibilityUpdates(
+    mechanism,
+    connectionState,
+  );
+  return connectionState.connectionSelectionValidation?.status !== "invalid" &&
+    Object.entries(compatibilityUpdates).every(([key, value]) =>
+      sameCandidateValue(mechanism[key as keyof MechanismConfig], value)
+    ) &&
+    boardAnchorIsDeclared(mechanism, kit) && boardPivotsAreDeclared(mechanism, kit);
+};
+
+const mechanismHasFiniteValidStates = (
+  mechanism: MechanismConfig,
+  kit: PhysicalKitSettings,
+) =>
+  mechanismSafetyPhaseSchedule(mechanism.type).every((phase) => {
+    const state = calculateLinkage(mechanism, phase, kit);
+    return state.isValid && candidateValueIsFinite(state);
+  });
 
 export const mechanismEditIsSafe = (
   mechanism: MechanismConfig,
   kit: PhysicalKitSettings = defaultPhysicalKit(),
-) =>
-  sampleFeasibleRange(mechanism, MOTION_AUTHORITY_SAMPLES).warning === null &&
-  mechanismDimensionsAreBuildable(mechanism, kit) &&
-  mechanismGraphBuildIsSafe(mechanism, kit);
+) => completeMechanismCandidateIsValid(mechanism, kit) &&
+  mechanismHasFiniteValidStates(mechanism, kit);
 
 const MECHANISM_PLACEMENT_RECOVERY_KEYS = new Set<keyof MechanismConfig>([
   "anchorX",
@@ -319,6 +305,35 @@ const boardAnchorAxisCandidates = (
     (a, b) => Math.abs(a - requestedValue) - Math.abs(b - requestedValue),
   );
 
+const fourBarGroundSpanValues = (
+  mechanism: MechanismConfig,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+) => {
+  const anchor = {
+    x: Number(mechanism.anchorX ?? 0),
+    y: Number(mechanism.anchorY ?? 0),
+  };
+  const angle = ((mechanism.groundAngle ?? 0) * Math.PI) / 180;
+  return uniqueSortedNumbers(
+    Array.from({ length: kit.boardCells * kit.boardCells }, (_, index) => {
+      const endpoint = boardToScene(
+        index % kit.boardCells,
+        Math.floor(index / kit.boardCells),
+        kit,
+      );
+      return Math.hypot(endpoint.x - anchor.x, endpoint.y - anchor.y);
+    }).filter((span) =>
+      pointIsDeclaredBoardHole(
+        {
+          x: anchor.x + span * Math.cos(angle),
+          y: anchor.y + span * Math.sin(angle),
+        },
+        kit,
+      )
+    ),
+  );
+};
+
 const motionSafeParamCandidates = (
   mechanism: MechanismConfig,
   param: MechanismParamMeta,
@@ -331,6 +346,8 @@ const motionSafeParamCandidates = (
       current,
     ]);
   }
+  if (mechanism.type === "4bar" && param.key === "groundLength")
+    return fourBarGroundSpanValues(mechanism, kit);
   const step = param.step;
   if (step && step > 0) {
     const totalSteps = Math.floor(
@@ -394,6 +411,15 @@ export const motionSafeParamRange = (
   const currentSafe = safeAt(current);
   if (!currentSafe)
     return { min: param.min, max: param.max, locked: true, currentSafe: false };
+  if (mechanism.type === "4bar" && key === "groundLength") {
+    const safe = sorted.filter(safeAt);
+    return {
+      min: safe[0] ?? current,
+      max: safe.at(-1) ?? current,
+      locked: true,
+      currentSafe,
+    };
+  }
   const currentIndex = sorted.findIndex((value) => value >= current);
   let min = current;
   for (let index = Math.max(0, currentIndex - 1); index >= 0; index -= 1) {
@@ -423,10 +449,16 @@ export const clampMechanismParamForMotion = (
   }
   if (
     key === "groundLength" &&
-    mechanism.type === "4bar" &&
-    !mechanismEditIsSafe(mechanism, kit)
+    mechanism.type === "4bar"
   ) {
-    return nearestBoardSpan(clampMechanismParam(key, value), kit);
+    const requested = clampMechanismParam(key, value);
+    const safe = fourBarGroundSpanValues(mechanism, kit)
+      .sort((a, b) => Math.abs(a - requested) - Math.abs(b - requested))
+      .find((span) => mechanismEditIsSafe({ ...mechanism, [key]: span }, kit));
+    if (safe !== undefined) return safe;
+    return mechanismEditIsSafe(mechanism, kit)
+      ? Number(mechanism[key] ?? 0)
+      : nearestBoardSpan(requested, kit);
   }
   const range = motionSafeParamRange(mechanism, key, kit);
   const clamped = clampMechanismParam(key, value);
@@ -488,6 +520,9 @@ export const MECHANISM_NON_FEASIBILITY_EDIT_KEYS = [
   "generatedPath",
   "warnings",
   "connectionSelectionValidation",
+  // Import-recovery provenance is display-only; it must not alter mechanism
+  // geometry or make a previously valid aggregate fail a safe edit.
+  "rejectedConnectionSelectionDiagnostics",
 ] as const satisfies readonly (keyof MechanismConfig)[];
 
 const motionAuthorityKeys = new Set<keyof MechanismConfig>(
@@ -511,73 +546,278 @@ export const mechanismUpdateRequiresReplacement = (
     replacementOnlyKeys.has(key as keyof MechanismConfig),
   );
 
-const isFiniteScalarParam = (
-  key: keyof MechanismConfig,
-  value: unknown,
-): value is number =>
-  typeof value === "number" &&
-  Number.isFinite(value) &&
-  MECHANISM_PARAM_META.some((param) => param.key === key);
+const physicalGeometryKeys = new Set<keyof MechanismConfig>([
+  ...MECHANISM_FEASIBILITY_AUTHORITY_KEYS,
+  ...MECHANISM_REPLACEMENT_ONLY_KEYS,
+]);
+
+const geometryKeys = new Set<keyof MechanismConfig>([
+  ...physicalGeometryKeys,
+  "targetPartId",
+  "targetSceneObjectId",
+  "targetPathId",
+  "targetAnchorJointId",
+]);
+
+const sameCandidateValue = (left: unknown, right: unknown): boolean => {
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) || Array.isArray(right))
+    return Array.isArray(left) && Array.isArray(right) && left.length === right.length &&
+      left.every((value, index) => sameCandidateValue(value, right[index]));
+  if (!left || !right || typeof left !== "object" || typeof right !== "object") return false;
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const keys = [...new Set([...Object.keys(leftRecord), ...Object.keys(rightRecord)])].sort();
+  return keys.every((key) => sameCandidateValue(leftRecord[key], rightRecord[key]));
+};
+
+export const mechanismGeometryChanged = (
+  previous: MechanismConfig,
+  next: MechanismConfig,
+) => [...geometryKeys].some((key) => !sameCandidateValue(previous[key], next[key]));
+
+const mechanismPhysicalGeometryChanged = (
+  previous: MechanismConfig,
+  next: MechanismConfig,
+) => [...physicalGeometryKeys].some(
+  (key) => !sameCandidateValue(previous[key], next[key]),
+);
+
+const derivedStateKeys = [
+  "generatedPath",
+  "foundryExport",
+  "transform",
+  "sceneAnchor",
+  "fabricationMetadata",
+  "activeVisualPartIds",
+  "warnings",
+] as const satisfies readonly (keyof MechanismConfig)[];
+
+const candidateValueIsFinite = (value: unknown): boolean => {
+  if (typeof value === "number") return Number.isFinite(value);
+  if (Array.isArray(value)) return value.every(candidateValueIsFinite);
+  if (value && typeof value === "object")
+    return Object.values(value).every(candidateValueIsFinite);
+  return true;
+};
+
+const declaredConnectionValidation = (
+  mechanism: MechanismConfig,
+  fallback?: MechanismConfig["connectionSelectionValidation"],
+) => {
+  const declaredRoles = connectionSelectionRolesForMechanism(mechanism.type);
+  const currentEntries = mechanism.connectionSelectionValidation?.entries ?? [];
+  const fallbackEntries = fallback?.entries ?? [];
+  const canonicalEntries = declaredRoles.flatMap((role) => {
+    const entry = currentEntries.find((item) => item.role === role)
+      ?? fallbackEntries.find((item) => item.role === role);
+    return entry ? [entry] : [];
+  });
+  return canonicalEntries.length
+    ? {
+        status: canonicalEntries.some((entry) => entry.status === "rejected")
+          ? "invalid" as const
+          : "valid" as const,
+        entries: canonicalEntries,
+      }
+    : undefined;
+};
+
+const withoutCandidateDerivedState = (
+  mechanism: MechanismConfig,
+  fallbackValidation?: MechanismConfig["connectionSelectionValidation"],
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+): MechanismConfig => {
+  const {
+    generatedPath: _generatedPath,
+    foundryExport: _foundryExport,
+    transform: _transform,
+    sceneAnchor: _sceneAnchor,
+    fabricationMetadata: _fabricationMetadata,
+    activeVisualPartIds: _activeVisualPartIds,
+    warnings: _warnings,
+    connectionSelectionValidation: _connectionSelectionValidation,
+    ...geometry
+  } = mechanism;
+  const connectionState = normalizeMechanismConnectionSelections(
+    geometry as MechanismConfig,
+    geometry.connectionSelections,
+    declaredConnectionValidation(mechanism, fallbackValidation),
+    { kit },
+  );
+  const compatible = {
+    ...geometry,
+    connectionSelections: connectionState.connectionSelections,
+    connectionSelectionValidation: connectionState.connectionSelectionValidation,
+    warnings: [],
+    activeVisualPartIds: [],
+  } as MechanismConfig;
+  return mechanismWithGeneratedPath(compatible, { kit });
+};
+
+export type CompleteMechanismCandidateResult =
+  | { status: "accepted"; mechanism: MechanismConfig; geometryChanged: boolean }
+  | { status: "preserved"; mechanism: MechanismConfig; geometryChanged: boolean; blocker: string }
+  | { status: "recovery-blocked"; mechanism: MechanismConfig; geometryChanged: boolean; blocker: string };
+
+export type NewMechanismCandidateResult =
+  | { status: "accepted"; mechanism: MechanismConfig }
+  | { status: "rejected"; blocker: string };
+
+export type MechanismEditAttemptResult =
+  | { status: "accepted"; mechanism: MechanismConfig }
+  | {
+      status: "rejected";
+      mechanism: MechanismConfig;
+      blocker: string;
+      recoveryCandidates: MechanismRecoveryCandidates;
+    };
+
+export const resolveNewMechanismCandidateCommit = (
+  candidate: MechanismConfig,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+): NewMechanismCandidateResult => {
+  const rebuilt = withoutCandidateDerivedState(candidate, undefined, kit);
+  return mechanismEditIsSafe(rebuilt, kit)
+    ? { status: "accepted", mechanism: rebuilt }
+    : { status: "rejected", blocker: "Fix mechanism geometry" };
+};
+
+export const resolveMechanismCandidateCommit = (
+  previous: MechanismConfig,
+  candidate: MechanismConfig,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+  mode: "edit" | "recovery" = "edit",
+): CompleteMechanismCandidateResult => {
+  const changed = mechanismGeometryChanged(previous, candidate);
+  if (mode === "recovery") {
+    const rebuilt = withoutCandidateDerivedState(candidate, previous.connectionSelectionValidation, kit);
+    return mechanismEditIsSafe(rebuilt, kit)
+      ? { status: "accepted", mechanism: rebuilt, geometryChanged: changed }
+      : { status: "recovery-blocked", mechanism: previous, geometryChanged: changed, blocker: "Fix mechanism geometry" };
+  }
+  if (!changed) {
+    const trustedDerived = derivedStateKeys.every((key) =>
+      candidateValueIsFinite(previous[key])
+    ) ? previous : withoutCandidateDerivedState(previous, undefined, kit);
+    const mechanism = { ...candidate };
+    for (const key of derivedStateKeys) {
+      (mechanism as Record<keyof MechanismConfig, unknown>)[key] =
+        trustedDerived[key];
+    }
+    const connectionState = normalizeMechanismConnectionSelections(
+      mechanism,
+      mechanism.connectionSelections,
+      declaredConnectionValidation(candidate, previous.connectionSelectionValidation),
+      { kit },
+    );
+    mechanism.connectionSelections = connectionState.connectionSelections;
+    mechanism.connectionSelectionValidation = connectionState.connectionSelectionValidation;
+    return { status: "accepted", mechanism, geometryChanged: false };
+  }
+  const rebuilt = withoutCandidateDerivedState(candidate, previous.connectionSelectionValidation, kit);
+  if (mechanismEditIsSafe(rebuilt, kit))
+    return { status: "accepted", mechanism: rebuilt, geometryChanged: true };
+  if (
+    !mechanismPhysicalGeometryChanged(previous, candidate) &&
+    !mechanismEditIsSafe(previous, kit) &&
+    MECHANISM_FEASIBILITY_AUTHORITY_KEYS.every((key) =>
+      candidateValueIsFinite(candidate[key])
+    )
+  ) {
+    return {
+      status: "recovery-blocked",
+      mechanism: previous,
+      geometryChanged: true,
+      blocker: "Fix mechanism geometry",
+    };
+  }
+  return { status: "preserved", mechanism: previous, geometryChanged: true, blocker: "Fix mechanism geometry" };
+};
+
+export const resolveMechanismEditAttempt = (
+  project: ProjectState,
+  previous: MechanismConfig | undefined,
+  candidate: MechanismConfig,
+): MechanismEditAttemptResult => {
+  if (previous === candidate) {
+    const binding = assessMechanismTargetBinding(project, candidate);
+    return binding.valid
+      ? { status: "accepted", mechanism: previous }
+      : {
+          status: "rejected",
+          mechanism: previous,
+          blocker: MECHANISM_BINDING_BLOCKER,
+          recoveryCandidates: binding.recoveryCandidates,
+        };
+  }
+  const physical = previous
+    ? resolveMechanismCandidateCommit(
+        previous,
+        candidate,
+        project.settings.physicalKit,
+      )
+    : resolveNewMechanismCandidateCommit(
+        candidate,
+        project.settings.physicalKit,
+      );
+  const recoveryCandidates = assessMechanismTargetBinding(
+    project,
+    candidate,
+  ).recoveryCandidates;
+  if (physical.status !== "accepted") {
+    return {
+      status: "rejected",
+      mechanism: previous ?? candidate,
+      blocker: physical.blocker,
+      recoveryCandidates,
+    };
+  }
+  const binding = assessMechanismTargetBinding(project, physical.mechanism);
+  if (!binding.valid) {
+    return {
+      status: "rejected",
+      mechanism: previous ?? candidate,
+      blocker: MECHANISM_BINDING_BLOCKER,
+      recoveryCandidates: binding.recoveryCandidates,
+    };
+  }
+  return {
+    status: "accepted",
+    mechanism: {
+      ...physical.mechanism,
+      activeVisualPartIds: binding.activeVisualPartIds,
+    },
+  };
+};
 
 export const safeMechanismUpdate = (
   mechanism: MechanismConfig,
   updates: Partial<MechanismConfig>,
   kit: PhysicalKitSettings = defaultPhysicalKit(),
-) =>
-  !mechanismUpdateRequiresReplacement(updates) &&
-  (!mechanismUpdateChangesMotion(updates) ||
-    mechanismEditIsSafe({ ...mechanism, ...updates }, kit));
+) => !mechanismUpdateRequiresReplacement(updates) &&
+  resolveMechanismCandidateCommit(mechanism, { ...mechanism, ...updates }, kit).status === "accepted";
 
 export const constrainMechanismUpdate = (
   mechanism: MechanismConfig,
   updates: Partial<MechanismConfig>,
   kit: PhysicalKitSettings = defaultPhysicalKit(),
 ): Partial<MechanismConfig> => {
-  if (
-    !mechanismUpdateRequiresReplacement(updates) &&
-    !mechanismUpdateChangesMotion(updates)
-  )
-    return updates;
-  if (safeMechanismUpdate(mechanism, updates, kit)) return updates;
-
-  const constrained: Partial<MechanismConfig> = {};
-  (Object.entries(updates) as Array<[keyof MechanismConfig, unknown]>).forEach(
-    ([key, value]) => {
-      if (replacementOnlyKeys.has(key)) return;
-      if (!motionAuthorityKeys.has(key)) {
-        (constrained as Record<keyof MechanismConfig, unknown>)[key] = value;
-        return;
-      }
-      if (
-        mechanismEditIsSafe({ ...mechanism, ...constrained, [key]: value }, kit)
-      ) {
-        (constrained as Record<keyof MechanismConfig, unknown>)[key] = value;
-        return;
-      }
-      if (!isFiniteScalarParam(key, value)) return;
-      const current = { ...mechanism, ...constrained };
-      const nextValue = clampMechanismParamForMotion(current, key, value, kit);
-      if (nextValue !== mechanism[key]) {
-        if (
-          mechanismParamIsPlacementRecoveryEditable(current, key, kit) ||
-          mechanismEditIsSafe({ ...current, [key]: nextValue }, kit)
-        ) {
-          (constrained as Record<keyof MechanismConfig, unknown>)[key] = nextValue;
-        }
-      }
-    },
-  );
-  return constrained;
+  if (mechanismUpdateRequiresReplacement(updates)) return {};
+  const result = resolveMechanismCandidateCommit(mechanism, { ...mechanism, ...updates }, kit);
+  if (result.status !== "accepted") return {};
+  const accepted: Partial<MechanismConfig> = {};
+  for (const key of Object.keys(updates) as Array<keyof MechanismConfig>) {
+    (accepted as Record<keyof MechanismConfig, unknown>)[key] = result.mechanism[key];
+  }
+  return accepted;
 };
 
 export const constrainMechanismCommit = (
-  previous: MechanismConfig | undefined,
+  previous: MechanismConfig,
   next: MechanismConfig,
   kit: PhysicalKitSettings = defaultPhysicalKit(),
 ): MechanismConfig => {
-  if (!previous || previous.id !== next.id) return next;
-  if (previous.type !== next.type)
-    return mechanismEditIsSafe(next, kit) ? next : previous;
-  const { id: _id, type: _type, ...updates } = next;
-  return { ...previous, ...constrainMechanismUpdate(previous, updates, kit) };
+  if (previous.id !== next.id) return previous;
+  return resolveMechanismCandidateCommit(previous, next, kit).mechanism;
 };

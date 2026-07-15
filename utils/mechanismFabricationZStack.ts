@@ -24,6 +24,7 @@ export type FabricationRenderLayer = FabricationLayerShape & PhysicalZMm & {
   occurrence: number;
   z: number;
   renderKind: FabricationRenderKind;
+  partKey: string;
   layerId: string;
   sourceNodeId?: string;
   sourceConstraintIds: string[];
@@ -137,6 +138,7 @@ type LayerDraft = FabricationLayerShape & {
   stackItemIndex?: number;
   occurrence: number;
   renderKind: FabricationRenderKind;
+  partKey?: string;
   sourceNodeId?: string;
   sourceConstraintIds?: string[];
   preferredBackFaceMm?: number;
@@ -160,6 +162,13 @@ type PathDraft = {
 };
 
 const GENERATED_LAYER_COLORS = { spacer: '#f59e0b', clip: '#334155' } as const;
+
+const managedPartKey = (draft: Pick<LayerDraft, 'partKey' | 'renderKind' | 'sourceNodeId' | 'label'>) => draft.partKey
+  ?? (draft.renderKind === 'spacer'
+    ? 'spacers:s10'
+    : draft.renderKind === 'clip'
+      ? `hardware:${draft.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'retainer'}`
+      : `${draft.renderKind}s:${draft.sourceNodeId ?? draft.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
 
 const layerIdForDraft = (graphId: string, draft: LayerDraft) => draft.sourceNodeId
   ? `${graphId}:step:${draft.stackIndex}:node:${draft.sourceNodeId}:occ:${draft.occurrence}`
@@ -220,6 +229,7 @@ export const packFabricationRenderPlan = ({
     const stackOccurrenceId = `${draft.stackIndex}:${draft.stackItemIndex ?? index}:${draft.renderKind}:${draft.occurrence}`;
     const layer: FabricationRenderLayer = {
       ...draft,
+      partKey: managedPartKey(draft),
       ...zMm,
       z: projectFabricationZMm(zMm.centerMm),
       layerId,
@@ -228,6 +238,7 @@ export const packFabricationRenderPlan = ({
       supportPathIds: [],
       ...(planeId ? { gearPlaneId: planeId } : {})
     };
+    Object.defineProperty(layer, 'partKey', { value: managedPartKey(draft), enumerable: false });
     layers.push(layer);
     layerByDraftIndex.set(index, layer);
   });
@@ -235,9 +246,10 @@ export const packFabricationRenderPlan = ({
   const base: FabricationRenderLayer = {
     label: 'Base board', role: 'base', color: '#94a3b8',
     source: drafts[0]?.source ?? 'mechanism-graph', stackIndex: -1, occurrence: 0,
-    renderKind: 'base', ...baseZ, z: projectFabricationZMm(baseZ.centerMm),
+    renderKind: 'base', partKey: 'boards:pegboard', ...baseZ, z: projectFabricationZMm(baseZ.centerMm),
     layerId: `${graphId}:base`, sourceConstraintIds: [], stackOccurrenceId: '-1:0:base:0', supportPathIds: []
   };
+  Object.defineProperty(base, 'partKey', { value: 'boards:pegboard', enumerable: false });
   const supportNodes: RetainedSupportNodeMm[] = [{ id: `${graphId}:support:board`, kind: 'board', ownerLayerId: base.layerId, ...baseZ }];
   const supportNodeByLayer = new Map<string, string>();
   const registerSupportNode = (layer: FabricationRenderLayer, explicitKind?: RetainedSupportNodeKind) => {
@@ -288,6 +300,7 @@ export const packFabricationRenderPlan = ({
     const zMm = physicalZ(backFaceMm, depthForRenderKind(renderKind, label));
     const layer: FabricationRenderLayer = {
       ...draft,
+      partKey: managedPartKey(draft),
       ...zMm,
       z: projectFabricationZMm(zMm.centerMm),
       layerId: layerIdForDraft(graphId, draft),
@@ -295,6 +308,7 @@ export const packFabricationRenderPlan = ({
       sourceConstraintIds: [...path.sourceIds].sort(),
       supportPathIds: []
     };
+    Object.defineProperty(layer, 'partKey', { value: managedPartKey(draft), enumerable: false });
     layers.push(layer);
     registerSupportNode(layer, supportKind);
     return layer;

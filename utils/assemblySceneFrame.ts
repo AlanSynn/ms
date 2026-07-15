@@ -1,4 +1,4 @@
-import type { FabricationRecipe, MechanismConfig, PhysicalKitSettings, Point } from '../types';
+import type { FabricationRecipe, MechanismConfig, PhysicalKitSettings, Point, ProjectState } from '../types';
 import type {
     AssemblyLane,
     AssemblyMotionKind,
@@ -7,7 +7,7 @@ import type {
     CharacterAssemblyStep
 } from './assemblyPlayback';
 import { isBoardFixedCoordRole } from './mechanismReference';
-import { buildMechanismSceneContract, type MechanismSceneContract } from './mechanismSceneContract';
+import { buildProjectMechanismSceneContract, type MechanismSceneContract } from './mechanismSceneContract';
 
 export const ASSEMBLY_SCENE_FRAME_VERSION = 1;
 
@@ -56,6 +56,7 @@ const boardModeForMechanismStep = (step: AssemblyPlaybackStep, activeBoardCoords
 export const buildMechanismAssemblySceneFrame = ({
     recipe,
     mechanism,
+    project,
     step,
     lane,
     kit,
@@ -63,6 +64,7 @@ export const buildMechanismAssemblySceneFrame = ({
 }: {
     recipe: FabricationRecipe;
     mechanism: MechanismConfig;
+    project: ProjectState;
     step: AssemblyPlaybackStep;
     lane: AssemblyLane;
     kit: PhysicalKitSettings;
@@ -70,7 +72,7 @@ export const buildMechanismAssemblySceneFrame = ({
 }): AssemblySceneFrame => {
     const activeBoardCoords = unique(step.coords.filter((_, index) => isBoardFixedCoordRole(step.coordRoles[index] ?? '')));
     const floatingReferenceCoords = unique(step.coords.filter((_, index) => !isBoardFixedCoordRole(step.coordRoles[index] ?? '')));
-    const mechanismContract = buildMechanismSceneContract(mechanism, recipe, kit);
+    const mechanismContract = buildProjectMechanismSceneContract(project, mechanism.id, recipe);
     const stackParts = step.stack.map((item) => ({
         id: `${step.index}:${item.order}:${item.label}`,
         label: item.label,
@@ -80,7 +82,7 @@ export const buildMechanismAssemblySceneFrame = ({
     }));
     const visibleParts = stackParts.length
         ? stackParts
-        : mechanismContract.layers.map((layer) => ({
+        : (mechanismContract?.layers ?? []).map((layer) => ({
             id: layer.id,
             label: layer.label,
             role: layer.role,

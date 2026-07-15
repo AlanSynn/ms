@@ -11,6 +11,7 @@ import type {
   StandardSkeleton,
 } from "../../../types";
 import {
+  camFollowerConstraintError,
   gearPairOutputRatio,
   gearTrainMeshPhaseDegAt,
   gearTrainOutputRatio,
@@ -25,7 +26,7 @@ import {
   planetaryGearRadii,
   validateMechanismPreviewReadiness,
 } from "../../../utils/fabrication";
-import { compileMechanismRenderPlan } from "../../../utils/mechanismCompiler";
+import type { MechanismSceneContract } from "../../../utils/mechanismSceneContract";
 import { mechanismInventoryForMechanism } from "../../../utils/mechanismInventory";
 import { SCENE_PX_PER_MM, SCENE_VIEW } from "../../../utils/coordinates";
 import {
@@ -44,7 +45,6 @@ import {
   type Viewer3DTabKey,
 } from "../../../utils/viewer3d";
 import {
-  degToRad,
   foundryCameraPosition,
   foundryCameraTarget,
   type FoundryCamera,
@@ -77,6 +77,7 @@ import {
 
 type ThreeFoundryPreviewProps = {
   mechanism: MechanismConfig;
+  mechanismContract: MechanismSceneContract;
   simulation: MechanismPreviewSimulation;
   kit: PhysicalKitSettings;
   camera: FoundryCamera;
@@ -216,6 +217,12 @@ type FoundryScreenTarget = {
   visible: boolean;
 };
 
+type FoundryScreenTargets = {
+  objectTargets: FoundryScreenTarget[];
+  partTargets: FoundryScreenTarget[];
+  mechanismTargets?: FoundryScreenTarget[];
+};
+
 const roundedFoundryScreenTargets = (targets: FoundryScreenTarget[]) =>
   targets.map((target) => ({
     kind: target.kind,
@@ -229,6 +236,96 @@ const roundedFoundryScreenTargets = (targets: FoundryScreenTarget[]) =>
     radius: Number(target.radius.toFixed(1)),
     visible: target.visible,
   }));
+
+const createFoundryFallbackScreenTarget = (
+  kind: FoundryScreenTarget["kind"],
+  id: string,
+  point: Point,
+  automataBaseZ: number,
+  renderer: THREE.WebGLRenderer | null,
+  cam: THREE.PerspectiveCamera | null,
+): FoundryScreenTarget | null => {
+  if (!renderer || !cam) return null;
+  const rect = renderer.domElement.getBoundingClientRect();
+  const projected = sceneTo3(point, automataBaseZ).project(cam);
+  const x = rect.left + ((projected.x + 1) / 2) * rect.width;
+  const y = rect.top + ((1 - projected.y) / 2) * rect.height;
+  const radius = 24;
+  return {
+    kind,
+    id,
+    x,
+    y,
+    left: x - radius,
+    top: y - radius,
+    right: x + radius,
+    bottom: y + radius,
+    radius,
+    visible: rect.width > 0 && rect.height > 0,
+  };
+};
+
+const createFoundryFallbackSceneObjectTargets = (
+  visibleObjectIds: string[],
+  visiblePartIds: string[],
+  automataContext: FoundryAutomataContext | undefined,
+  automataBaseZ: number,
+  renderer: THREE.WebGLRenderer | null,
+  cam: THREE.PerspectiveCamera | null,
+) => {
+  const fallbackObjectTargets = visibleObjectIds
+    .map((id) =>
+      createFoundryFallbackScreenTarget(
+        "object",
+        id,
+        (automataContext?.animatedSceneObjects?.[id] ??
+          automataContext?.project.sceneObjects[id])?.transform ?? { x: 0, y: 0 },
+        automataBaseZ,
+        renderer,
+        cam,
+      ),
+    )
+    .filter((target): target is FoundryScreenTarget => Boolean(target));
+  const fallbackPartTargets = visiblePartIds
+    .map((id) =>
+      createFoundryFallbackScreenTarget(
+        "part",
+        id,
+        (automataContext?.animatedParts?.[id] ??
+          automataContext?.project.parts[id])?.transform ?? { x: 0, y: 0 },
+        automataBaseZ,
+        renderer,
+        cam,
+      ),
+    )
+    .filter((target): target is FoundryScreenTarget => Boolean(target));
+  return {
+    objectTargets: roundedFoundryScreenTargets(fallbackObjectTargets),
+    partTargets: roundedFoundryScreenTargets(fallbackPartTargets),
+  };
+};
+
+const visibleAutomataSceneIds = (automataContext?: FoundryAutomataContext) => {
+  if (!automataContext?.showCharacter) {
+    return {
+      partIds: [] as string[],
+      objectIds: [] as string[],
+      partArtIds: [] as string[],
+    };
+  }
+  const partIds = automataContext.project.partOrder.filter((id) =>
+    (automataContext.animatedParts?.[id] ??
+      automataContext.project.parts[id])?.visible,
+  );
+  const objectIds = automataContext.project.sceneObjectOrder.filter((id) =>
+    (automataContext.animatedSceneObjects?.[id] ??
+      automataContext.project.sceneObjects[id])?.visible,
+  );
+  const partArtIds = partIds.filter(
+    (id) => Boolean(automataContext.project.parts[id]?.textureUrl),
+  );
+  return { partIds, objectIds, partArtIds };
+};
 
 const foundryAutomataMaterial = (
   color: string,
@@ -469,6 +566,7 @@ const renderFoundryAutomataContext = ({
 
 export const ThreeFoundryPreview = ({
   mechanism,
+  mechanismContract,
   simulation,
   kit,
   camera,
@@ -477,10 +575,10 @@ export const ThreeFoundryPreview = ({
   pathPoints,
   pathTraces,
   showGrid,
-  showPathPreview,
-  showTrail,
-  showForces,
-  showVelocity,
+  showPathPreview: requestedShowPathPreview,
+  showTrail: requestedShowTrail,
+  showForces: requestedShowForces,
+  showVelocity: requestedShowVelocity,
   explode,
   physicsRule,
   velocityMagnitude,
@@ -510,6 +608,11 @@ export const ThreeFoundryPreview = ({
   automataContext,
   children,
 }: ThreeFoundryPreviewProps) => {
+  const boundRuntime = mechanismContract.projectDriveEnabled === true;
+  const showPathPreview = boundRuntime && requestedShowPathPreview;
+  const showTrail = boundRuntime && requestedShowTrail;
+  const showForces = boundRuntime && requestedShowForces;
+  const showVelocity = boundRuntime && requestedShowVelocity;
   const hostRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -545,10 +648,7 @@ export const ThreeFoundryPreview = ({
       : null;
   const inv = mechanismInventoryForMechanism(mechanism, kit);
   const pinionRotation = simulation.driveAngleDeg;
-  const renderPlan = useMemo(
-    () => compileMechanismRenderPlan(mechanism, kit),
-    [kit, mechanism],
-  );
+  const renderPlan = mechanismContract.renderPlan;
   const physicalValidationErrors = useMemo(
     () => validateMechanismPreviewReadiness(mechanism, kit),
     [kit, mechanism],
@@ -658,6 +758,8 @@ export const ThreeFoundryPreview = ({
       ),
     [renderedLayerZ],
   );
+  const { partIds: visibleAutomataPartIds, objectIds: visibleAutomataObjectIds, partArtIds: visibleAutomataPartArtIds } =
+    useMemo(() => visibleAutomataSceneIds(automataContext), [automataContext]);
   const pinStacks = useMemo(
     () => foundryPinStacks(pinStackPoints, renderPlan),
     [pinStackPoints, renderPlan],
@@ -873,33 +975,20 @@ export const ThreeFoundryPreview = ({
   const automataSurfaceZ = automataBaseZ + AUTOMATA_PART_ART_SURFACE_Z;
   const camContactErrorForData =
     mechanism.type === "cam"
-      ? (() => {
-          const s = simulation.state;
-          const guideDx = s.j2.x - s.p1.x;
-          const guideDy = s.j2.y - s.p1.y;
-          const guideLength = Math.hypot(guideDx, guideDy);
-          const guide =
-            guideLength > 0.001
-              ? { x: guideDx / guideLength, y: guideDy / guideLength }
-              : {
-                  x: Math.cos(degToRad(mechanism.groundAngle ?? 90)),
-                  y: -Math.sin(degToRad(mechanism.groundAngle ?? 90)),
-                };
-          const contactGap = Math.abs(
-            Math.hypot(s.j2.x - s.j1.x, s.j2.y - s.j1.y) -
-              Math.max(0, mechanism.sliderOffset) * simulation.scale,
-          );
-          const axisError = Math.abs(
-            (s.j1.x - s.p1.x) * guide.y - (s.j1.y - s.p1.y) * guide.x,
-          );
-          return Math.max(contactGap, axisError);
-        })()
+      ? camFollowerConstraintError(mechanism, simulation.rawState) *
+        simulation.scale
     : 0;
   const assemblyLayerFocusSummary = useMemo(
     () => foundryAssemblyLayerFocusSummary(assemblySceneFrame, renderPlan.layers),
     [assemblySceneFrame, renderPlan.layers],
   );
   useEffect(() => {
+    if (!mechanismContract.boundPhysicsEnabled) {
+      setPhysicsKernelRuntime("unavailable");
+      setPhysicsKernelVersion("disabled");
+      setPhysicsKernelError(mechanismContract.runtimeBlocker ?? "disabled");
+      return;
+    }
     let active = true;
     loadRapierPhysicsKernel()
       .then((kernel) => {
@@ -917,9 +1006,12 @@ export const ThreeFoundryPreview = ({
     return () => {
       active = false;
     };
-  }, []);
+  }, [mechanismContract.boundPhysicsEnabled, mechanismContract.runtimeBlocker]);
 
-  const renderCamera = (view: FoundryCamera) => {
+  const renderCamera = (
+    view: FoundryCamera,
+    screenTargetOverride?: FoundryScreenTargets,
+  ) => {
     const scene = sceneRef.current;
     const renderer = rendererRef.current;
     const cam = cameraRef.current;
@@ -985,28 +1077,51 @@ export const ThreeFoundryPreview = ({
       const clickY = visible ? (visibleTop + visibleBottom) / 2 : centerScreen.y;
       return { kind, id, x: clickX, y: clickY, left, top, right, bottom, radius, visible };
     };
-    const objectTargets = new Map<string, FoundryScreenTarget>();
-    const partTargets = new Map<string, FoundryScreenTarget>();
+    const dynamicObjectTargets = new Map<string, FoundryScreenTarget>();
+    const dynamicPartTargets = new Map<string, FoundryScreenTarget>();
     const dynamic = scene.getObjectByName("foundry-dynamic");
     dynamic?.traverse((object) => {
       const sceneObjectId = object.userData.sceneObjectId;
-      if (typeof sceneObjectId === "string" && !objectTargets.has(sceneObjectId)) {
+      if (
+        typeof sceneObjectId === "string" &&
+        !dynamicObjectTargets.has(sceneObjectId)
+      ) {
         const target = targetForObject("object", sceneObjectId, object);
-        if (target) objectTargets.set(sceneObjectId, target);
+        if (target) dynamicObjectTargets.set(sceneObjectId, target);
       }
       const partId = object.userData.partId;
-      if (typeof partId === "string" && !partTargets.has(partId)) {
+      if (typeof partId === "string" && !dynamicPartTargets.has(partId)) {
         const target = targetForObject("part", partId, object);
-        if (target) partTargets.set(partId, target);
+        if (target) dynamicPartTargets.set(partId, target);
       }
     });
+    const targetsToWrite = screenTargetOverride
+      ? {
+          objectTargets:
+            screenTargetOverride.objectTargets.length > 0
+              ? screenTargetOverride.objectTargets
+              : roundedFoundryScreenTargets([...dynamicObjectTargets.values()]),
+          partTargets:
+            screenTargetOverride.partTargets.length > 0
+              ? screenTargetOverride.partTargets
+              : roundedFoundryScreenTargets([...dynamicPartTargets.values()]),
+          mechanismTargets:
+            screenTargetOverride.mechanismTargets ?? roundedFoundryScreenTargets([]),
+        }
+      : {
+          objectTargets: roundedFoundryScreenTargets([...dynamicObjectTargets.values()]),
+          partTargets: roundedFoundryScreenTargets([...dynamicPartTargets.values()]),
+          mechanismTargets: [],
+        };
     stateRef.current.dataset.threeSceneObjectScreenTargets = JSON.stringify(
-      roundedFoundryScreenTargets([...objectTargets.values()]),
+      targetsToWrite.objectTargets,
     );
     stateRef.current.dataset.threePartScreenTargets = JSON.stringify(
-      roundedFoundryScreenTargets([...partTargets.values()]),
+      targetsToWrite.partTargets,
     );
-    stateRef.current.dataset.threeMechanismScreenTargets = "[]";
+    stateRef.current.dataset.threeMechanismScreenTargets = JSON.stringify(
+      targetsToWrite.mechanismTargets,
+    );
     const assemblyBoard = scene.getObjectByName("assembly-15x15-board-surface");
     stateRef.current.dataset.threeAssemblyBoardSurface = assemblyBoard
       ? String(assemblyBoard.userData.assemblyBoardSurface ?? "15x15-hole-board")
@@ -1249,9 +1364,28 @@ export const ThreeFoundryPreview = ({
         stateRef.current.dataset.threeMaterialCacheSize = String(
           materialCacheRef.current.size,
         );
+    const fallbackTargets = createFoundryFallbackSceneObjectTargets(
+      visibleAutomataObjectIds,
+      visibleAutomataPartIds,
+          automataContext,
+          automataBaseZ,
+          renderer,
+          cam,
+        );
+        stateRef.current.dataset.threeSceneObjectScreenTargets = JSON.stringify(
+          fallbackTargets.objectTargets,
+        );
+        stateRef.current.dataset.threePartScreenTargets = JSON.stringify(
+          fallbackTargets.partTargets,
+        );
+        stateRef.current.dataset.threeMechanismScreenTargets = "[]";
+        renderCamera(cameraStateRef.current, {
+          objectTargets: fallbackTargets.objectTargets,
+          partTargets: fallbackTargets.partTargets,
+          mechanismTargets: [],
+        });
+        return;
       }
-      renderCamera(cameraStateRef.current);
-      return;
     }
     const primitives = createFoundryThreePrimitiveFactory({
       root,
@@ -1266,6 +1400,7 @@ export const ThreeFoundryPreview = ({
     });
     renderFoundryDynamicLayers({
       mechanism,
+      kit,
       simulation,
       primitives,
       renderPlan,
@@ -1305,25 +1440,9 @@ export const ThreeFoundryPreview = ({
 
     dynamicBuildCountRef.current += 1;
     if (stateRef.current) {
-      const visiblePartIds =
-        automataContext?.showCharacter
-          ? automataContext.project.partOrder.filter(
-              (id) =>
-                (automataContext.animatedParts?.[id] ??
-                  automataContext.project.parts[id])?.visible,
-            )
-          : [];
-      const visibleObjectIds =
-        automataContext?.showCharacter
-          ? automataContext.project.sceneObjectOrder.filter(
-              (id) =>
-                (automataContext.animatedSceneObjects?.[id] ??
-                  automataContext.project.sceneObjects[id])?.visible,
-            )
-          : [];
-      const visiblePartArtIds = visiblePartIds.filter(
-        (id) => Boolean(automataContext?.project.parts[id]?.textureUrl),
-      );
+      const visiblePartIds = visibleAutomataPartIds;
+      const visibleObjectIds = visibleAutomataObjectIds;
+      const visiblePartArtIds = visibleAutomataPartArtIds;
       stateRef.current.dataset.threeDynamicBuildCount = String(
         dynamicBuildCountRef.current,
       );
@@ -1357,59 +1476,19 @@ export const ThreeFoundryPreview = ({
         visibleObjectIds.length,
       );
       stateRef.current.dataset.threeScenePropIds = visibleObjectIds.join(",");
-      const fallbackScreenTarget = (
-        kind: FoundryScreenTarget["kind"],
-        id: string,
-        point: Point,
-      ): FoundryScreenTarget | null => {
-        const renderer = rendererRef.current;
-        const cam = cameraRef.current;
-        if (!renderer || !cam) return null;
-        const rect = renderer.domElement.getBoundingClientRect();
-        const projected = sceneTo3(point, automataBaseZ).project(cam);
-        const x = rect.left + ((projected.x + 1) / 2) * rect.width;
-        const y = rect.top + ((1 - projected.y) / 2) * rect.height;
-        const radius = 24;
-        return {
-          kind,
-          id,
-          x,
-          y,
-          left: x - radius,
-          top: y - radius,
-          right: x + radius,
-          bottom: y + radius,
-          radius,
-          visible: rect.width > 0 && rect.height > 0,
-        };
-      };
+      const fallbackTargets = createFoundryFallbackSceneObjectTargets(
+        visibleObjectIds,
+        visiblePartIds,
+        automataContext,
+        automataBaseZ,
+        renderer,
+        cam,
+      );
       stateRef.current.dataset.threeSceneObjectScreenTargets = JSON.stringify(
-        roundedFoundryScreenTargets(
-          visibleObjectIds
-            .map((id) =>
-              fallbackScreenTarget(
-                "object",
-                id,
-                (automataContext?.animatedSceneObjects?.[id] ??
-                  automataContext?.project.sceneObjects[id])?.transform ?? { x: 0, y: 0 },
-              ),
-            )
-            .filter((target): target is FoundryScreenTarget => Boolean(target)),
-        ),
+        fallbackTargets.objectTargets,
       );
       stateRef.current.dataset.threePartScreenTargets = JSON.stringify(
-        roundedFoundryScreenTargets(
-          visiblePartIds
-            .map((id) =>
-              fallbackScreenTarget(
-                "part",
-                id,
-                (automataContext?.animatedParts?.[id] ??
-                  automataContext?.project.parts[id])?.transform ?? { x: 0, y: 0 },
-              ),
-            )
-            .filter((target): target is FoundryScreenTarget => Boolean(target)),
-        ),
+        fallbackTargets.partTargets,
       );
       stateRef.current.dataset.threeMechanismScreenTargets = "[]";
       const assemblyBoard = scene.getObjectByName("assembly-15x15-board-surface");
@@ -1462,6 +1541,8 @@ export const ThreeFoundryPreview = ({
       className={`foundry-preview h-[520px] w-full ${isPickingAnchor ? "is-picking-anchor" : ""} ${isOrbiting ? "is-orbiting" : ""} ${isZooming ? "is-zooming" : ""} ${isPanning ? "is-panning" : ""}`}
       aria-label="Foundry 3D view"
       data-viewer-contract={VIEWER3D_CONTRACT_VERSION}
+      data-mechanism-compiler-signature={mechanismContract.compilerSignature}
+      data-mechanism-runtime-mode={mechanismContract.runtimeMode ?? ""}
       data-viewer-contract-state={JSON.stringify(viewerContract)}
       data-viewer-tab={viewerContract.tab}
       data-layer-grid={viewer3DLayerDataValue(showGrid)}
@@ -1549,6 +1630,10 @@ export const ThreeFoundryPreview = ({
         physicalValidationSummary={physicalValidationSummary}
         assemblySceneFrame={assemblySceneFrame}
         assemblyLayerFocusSummary={assemblyLayerFocusSummary}
+        visibleSceneObjectCount={visibleAutomataObjectIds.length}
+        visiblePartCount={Math.max(visibleAutomataPartIds.length, inv.parts)}
+        visibleSceneObjectIds={visibleAutomataObjectIds}
+        selectedSceneObjectId={automataContext?.project.selectedSceneObjectId ?? ""}
         connectionSelectionCoordinates={connectionSelectionCoordinates}
         connectionExportSignature={connectionExportSignature}
         selectedConnection={selectedConnection}

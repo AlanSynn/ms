@@ -54,6 +54,7 @@ type FoundryRouterProps = Pick<
 type MechanismRouterProps = Pick<
   AppStageRouterProps,
   | "updateMechanism"
+  | "mechanismEditFeedback"
   | "showTrace"
   | "setShowTrace"
   | "onOptimize"

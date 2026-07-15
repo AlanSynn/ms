@@ -1,5 +1,7 @@
 import type { AppStage, ProjectAction, ProjectState } from "../types";
 import { handoffGate } from "./project";
+import { projectMechanismReadiness } from "./mechanismReadiness";
+import { hasHardReadinessBlockers } from "./fabricationReadiness";
 
 type NavigateAppStageOptions = {
   project: ProjectState;
@@ -24,7 +26,16 @@ export const navigateAppStage = ({
   setCommandStatus,
   stageLabel,
 }: NavigateAppStageOptions) => {
-  const gate = handoffGate(project, target);
+  const readiness = target === "blueprint" || target === "assembly"
+    ? projectMechanismReadiness(project)
+    : undefined;
+  const blockedBlueprintOrAssembly =
+    readiness?.status === "blocked" &&
+    (target === "blueprint" || target === "assembly") &&
+    hasHardReadinessBlockers(readiness.blockers);
+  const gate = blockedBlueprintOrAssembly
+    ? { ok: false as const, message: readiness.blockers[0], recoveryStage: "design" as const }
+    : handoffGate(project, target);
   if (!gate.ok && "recoveryStage" in gate) {
     dispatch({
       type: "set_processing",

@@ -430,10 +430,32 @@ const main = () => {
     hardFailures: [],
   };
 
+  const refreshIndexes = () => {
+    const reportName = `fabrication-parity-${reportDate}.md`;
+    const analysisIndexPath = join(reportDir, 'README.md');
+    const analysisIndex = safeRead(analysisIndexPath).replace(
+      /^- \[Fabrication parity trace \(\d{4}-\d{2}-\d{2}\)\]\(fabrication-parity-\d{4}-\d{2}-\d{2}\.md\)/m,
+      `- [Fabrication parity trace (${reportDate})](${reportName})`,
+    );
+    if (!analysisIndex.includes(reportName)) throw new Error(`Missing active fabrication parity link in ${analysisIndexPath}`);
+    writeFileSync(analysisIndexPath, analysisIndex, 'utf8');
+
+    const docsIndexPath = join(cwd, 'docs', 'index.md');
+    const docsIndex = safeRead(docsIndexPath)
+      .replace(/^Last refreshed: \d{4}-\d{2}-\d{2}$/m, `Last refreshed: ${reportDate}`)
+      .replace(
+        /\[`analysis\/fabrication-parity-\d{4}-\d{2}-\d{2}\.md`\]\(analysis\/fabrication-parity-\d{4}-\d{2}-\d{2}\.md\)/,
+        '[`analysis/' + reportName + '`](analysis/' + reportName + ')',
+      );
+    if (!docsIndex.includes(`analysis/${reportName}`)) throw new Error(`Missing active fabrication parity link in ${docsIndexPath}`);
+    writeFileSync(docsIndexPath, docsIndex, 'utf8');
+  };
+
   const writeReport = (forceFail = false) => {
     if (!process.argv.includes('--no-write')) {
       writeFileSync(result.paths.reportJsonPath, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
       writeFileSync(result.paths.reportMarkdownPath, buildMarkdown(result), 'utf8');
+      refreshIndexes();
     }
     if (forceFail) process.exitCode = 1;
   };

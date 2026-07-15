@@ -48,8 +48,8 @@ svg_height = 34.0 mm
 
 | Symbol | PartId | Label | Span cells | Length at 20 mm pitch | Hole count | Typical use |
 |---|---|---|---:|---:|---:|---|
-| `L2` | `linkages:linkage-2-cell` | 2-cell linkage | 2 | `40.0 mm` | 3 | crank/input, output rocker, planetary carrier, slider crank. |
-| `L4` | `linkages:linkage-4-cell` | 4-cell linkage | 4 | `80.0 mm` | 5 | four-bar coupler, gear-linkage arm. |
+| `L2` | `linkages:linkage-2-cell` | 2-cell linkage | 2 | `40.0 mm` | 3 | crank/input, output rocker, slider crank. |
+| `L4` | `linkages:linkage-4-cell` | 4-cell linkage | 4 | `80.0 mm` | 5 | four-bar coupler, gear-linkage arm, planetary carrier. |
 | `L6` | `linkages:linkage-6-cell` | 6-cell linkage | 6 | `120.0 mm` | 7 | slider-crank connecting rod. |
 | `L8` | `linkages:linkage-8-cell` | 8-cell linkage | 8 | `160.0 mm` | 9 | long rod / custom extension. |
 
@@ -131,7 +131,7 @@ Fixed module parts:
 | `cam_modules:paper-washer` | Paper washer | 3 | low-friction washer at crank/board, board/cam, and cam/lock faces |
 | `cam_modules:cam-spacer` | Cam spacer | 1 | keeps the cam disk from rubbing the pegboard |
 | `cam_modules:u-channel-guide-cartridge` | U-channel guide cartridge | 1 | integrated guide side rails, front cover, top/bottom stops, and peg tabs |
-| `cam_modules:gravity-follower-module` | Preassembled gravity follower module | 1 | square rod, rounded/capsule contact head, weight block, and output tab |
+| `cam_modules:gravity-follower-module-v2` | Preassembled gravity follower module v2 | 1 | square rod, rounded/capsule contact head, weight block, and three named output holes |
 
 Swappable module part:
 
@@ -139,7 +139,7 @@ Swappable module part:
 |---|---|---|---|
 | `cam_modules:swappable-cam-disk` | Swappable cam disk | eccentric circle, oval | centre hole is shared; edge must be smooth with no sharp drop |
 
-The old `cams:*` and `followers:*` primitives may remain in historical source snapshots, but the default fabrication-ready cam recipe must use the `cam_modules:*` parts above.
+The one-hole `cam_modules:gravity-follower-module` and old `cams:*` / `followers:*` primitives remain historical source evidence only. The default fabrication-ready cam recipe uses the v2 `cam_modules:*` follower above.
 
 ## 1.7 Gravity follower / guide cartridge contract
 

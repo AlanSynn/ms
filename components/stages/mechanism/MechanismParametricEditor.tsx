@@ -1,6 +1,7 @@
 import React, { useMemo, useRef } from "react";
 
 import type {
+  ConnectionSelection,
   ConnectionSelectionRole,
   MechanismConfig,
   PhysicalKitSettings,
@@ -23,13 +24,22 @@ import {
   mechanismMotionCompletes,
   safeMechanismUpdate,
 } from "./mechanismParamPolicy";
-import {
-  connectionSelectionAccepted,
-  normalizeMechanismConnectionSelections,
-} from "../../../utils/mechanismConnectionSelections";
+import { normalizeMechanismConnectionSelections } from "../../../utils/mechanismConnectionSelections";
+import { FABRICATION_MODULE_SPECS } from "../../../utils/fabricationContract";
+import { connectionRoleLabel } from "./MechanismConnectionOverlay";
+import { resolveMechanismPhysicalFamilySelectionAttempt } from "../../../utils/mechanismPhysicalCandidates";
 
 type FabricationGearOption = (typeof FABRICATION_GEAR_SPECS)[number];
 type FabricationLinkageOption = (typeof FABRICATION_LINKAGE_SPECS)[number];
+type ConnectionConfirmation = {
+  role: string;
+  kind: ConnectionSelection["kind"];
+  label: string;
+  rawPartKey: string;
+  partLabel: string;
+  detail: string;
+  holeIndex?: number;
+};
 
 const defaultKitPitchMm = () => FABRICATION_LINKAGE_SPECS[0]?.pitchMm ?? 20;
 const kitGridPitchMm = (kit?: PhysicalKitSettings) =>
@@ -52,21 +62,9 @@ const linkageCellsForSceneLength = (length: number) =>
   fabricationLinkageSpecForSceneLength(length).cells;
 const gearOptionLabel = (teeth: number) => `${teeth} teeth`;
 const linkageOptionLabel = (holeCount: number) => `${holeCount}-hole`;
-const connectionRoleLabel = (role: ConnectionSelectionRole): string => {
-  switch (role) {
-    case "4bar.input-joint":
-      return "Input joint";
-    case "4bar.output-joint":
-      return "Output joint";
-    case "gear_linkage.drive-pin":
-      return "Drive pin";
-    case "gear_linkage.output-pin":
-      return "Output pin";
-  }
-};
 type SafeOption<T> = { item: T; working: boolean; current: boolean };
 const unsafeOptionLabel = (label: string, current: boolean) =>
-  current ? `${label} · current` : `${label} · locked`;
+  current ? `${label} · current` : `${label} · not fitting`;
 
 export const MechanismParametricEditor = ({
   mechanism,
@@ -86,13 +84,32 @@ export const MechanismParametricEditor = ({
     mechanism.type === "gear" || mechanism.type === "gear_linkage"
       ? gearTrainPitchRadii(mechanism)
       : [];
+  const outputGearRole = mechanism.type === "gear_linkage"
+    ? "gear_linkage.output-pin" as const
+    : mechanism.type === "gear"
+      ? "gear.output-pin" as const
+      : undefined;
+  const reindexedOutputGearSelection = (nextRadii: readonly number[]) => {
+    if (!outputGearRole) return undefined;
+    const output = mechanism.connectionSelections?.[outputGearRole];
+    const gearIndex = nextRadii.length - 1;
+    if (output?.kind !== "gear-attachment-hole" || output.gearIndex === gearIndex)
+      return undefined;
+    return {
+      ...mechanism.connectionSelections,
+      [outputGearRole]: { ...output, gearIndex },
+    };
+  };
   const withResolvedGearGround = (updates: Partial<MechanismConfig>) => {
     if (mechanism.type !== "gear" && mechanism.type !== "gear_linkage")
       return updates;
     const nextMechanism = { ...mechanism, ...updates };
+    const nextRadii = gearTrainPitchRadii(nextMechanism);
+    const connectionSelections = reindexedOutputGearSelection(nextRadii);
     return {
       ...updates,
       groundLength: gearTrainResolvedCenterDistance(nextMechanism),
+      ...(connectionSelections ? { connectionSelections } : {}),
     } satisfies Partial<MechanismConfig>;
   };
   const gearRadiusUpdates = (index: number, key: string) => {
@@ -107,12 +124,28 @@ export const MechanismParametricEditor = ({
       gearTrainRadii: next,
     });
   };
+  const endpointGearRole = (index: number): ConnectionSelectionRole | undefined => {
+    if (index !== 0 && index !== Math.max(0, radii.length - 1)) return undefined;
+    if (mechanism.type === "gear_linkage")
+      return index === 0 ? "gear_linkage.drive-pin" : "gear_linkage.output-pin";
+    if (mechanism.type === "gear")
+      return index === 0 ? "gear.drive-pin" : "gear.output-pin";
+    return undefined;
+  };
   const updateGearRadius = (index: number, key: string) => {
+    const role = endpointGearRole(index);
+    if (role) {
+      const attempt = resolveMechanismPhysicalFamilySelectionAttempt(
+        mechanism,
+        role,
+        key,
+        kit,
+      );
+      if (attempt.status === "accepted") onChange(attempt.updates);
+      return;
+    }
     const updates = gearRadiusUpdates(index, key);
-    const endpointGearEdit =
-      mechanism.type === "gear_linkage" &&
-      (index === 0 || index === Math.max(0, radii.length - 1));
-    if (!endpointGearEdit && !safeMechanismUpdate(mechanism, updates, kit)) return;
+    if (!safeMechanismUpdate(mechanism, updates, kit)) return;
     onChange(updates);
   };
   const idlerGearUpdatesForKey = (key: string) => {
@@ -162,11 +195,7 @@ export const MechanismParametricEditor = ({
   const renderLinkageControls =
     mechanism.type === "4bar" || mechanism.type === "gear_linkage";
   const endpointGearOptions =
-    mechanism.type === "gear_linkage"
-      ? gearSpecs.filter(
-          (spec) => spec.attachmentHoleCentersMm.length > 0,
-        )
-      : gearSpecs;
+    gearSpecs.filter((spec) => spec.attachmentHoleCentersMm.length > 0);
   const safeLinkageOptions = (
     key: "crankLength" | "couplerLength" | "rockerLength",
   ): SafeOption<FabricationLinkageOption>[] => {
@@ -182,7 +211,7 @@ export const MechanismParametricEditor = ({
         item: spec,
         current,
         working: current
-          ? mechanismMotionCompletes(mechanism)
+          ? mechanismMotionCompletes(mechanism, kit)
           : safeMechanismUpdate(mechanism, updates, kit),
       };
     });
@@ -194,16 +223,24 @@ export const MechanismParametricEditor = ({
   ): SafeOption<FabricationGearOption>[] =>
     options.map((spec) => {
       const current = spec.key === selected;
+      const role = endpointGearRole(index);
       return {
         item: spec,
         current,
         working: current
-          ? mechanismMotionCompletes(mechanism)
-          : safeMechanismUpdate(
-              mechanism,
-              gearRadiusUpdates(index, spec.key),
-              kit,
-            ),
+          ? mechanismMotionCompletes(mechanism, kit)
+          : role
+            ? resolveMechanismPhysicalFamilySelectionAttempt(
+                mechanism,
+                role,
+                spec.key,
+                kit,
+              ).status === "accepted"
+            : safeMechanismUpdate(
+                mechanism,
+                gearRadiusUpdates(index, spec.key),
+                kit,
+              ),
       };
     });
   const pairedLinkOptions = (): SafeOption<
@@ -221,7 +258,7 @@ export const MechanismParametricEditor = ({
         item: spec,
         current,
         working: current
-          ? mechanismMotionCompletes(mechanism)
+          ? mechanismMotionCompletes(mechanism, kit)
           : safeMechanismUpdate(mechanism, updates, kit),
       };
     });
@@ -261,35 +298,47 @@ export const MechanismParametricEditor = ({
       ),
     [mechanism],
   );
-  const connectionConfirmations = Object.entries(connectionState.connectionSelections ?? {}).map(([role, selection]) => {
+  const connectionConfirmations: ConnectionConfirmation[] = Object.entries(connectionState.connectionSelections ?? {}).map(([role, selection]) => {
+    const label = connectionRoleLabel(role as ConnectionSelectionRole);
+    if (selection.kind === "board-mount-pattern") {
+      return {
+        role,
+        kind: selection.kind,
+        label,
+        rawPartKey: selection.mountKey,
+        partLabel: mechanism.type === "cam" ? "Cam guide" : "Slider guide",
+        detail: `${selection.boardHoleIds.length}-hole mount`,
+      };
+    }
+    if (selection.kind === "module-hole") {
+      const module = FABRICATION_MODULE_SPECS.find((spec) => spec.key === selection.moduleKey);
+      const holeIndex = module ? Object.keys(module.holes).indexOf(selection.holeId) : -1;
+      return {
+        role,
+        kind: selection.kind,
+        label,
+        rawPartKey: selection.moduleKey,
+        partLabel: "Follower",
+        detail: holeIndex >= 0 ? `Hole ${holeIndex + 1}` : "Output hole",
+        holeIndex: holeIndex >= 0 ? holeIndex : undefined,
+      };
+    }
     const rawPartKey = selection.kind === "linkage-hole" ? selection.linkageKey : selection.gearKey;
-    const partLabel =
-      selection.kind === "linkage-hole"
-        ? linkageSpecs.find((spec) => spec.key === rawPartKey)?.label
-        : gearSpecs.find((spec) => spec.key === rawPartKey)?.label;
+    const rawPartLabel = selection.kind === "linkage-hole"
+      ? linkageSpecs.find((spec) => spec.key === rawPartKey)?.label
+      : gearSpecs.find((spec) => spec.key === rawPartKey)?.label;
     return {
       role,
       kind: selection.kind,
-      label: connectionRoleLabel(role as ConnectionSelectionRole),
+      label,
       rawPartKey,
-      partLabel: partLabel ? fabricationPartDisplayLabel(partLabel) : "Selected part",
+      partLabel: rawPartLabel ? fabricationPartDisplayLabel(rawPartLabel) : "Selected part",
+      detail: `Hole ${selection.holeIndex + 1}`,
       holeIndex: selection.holeIndex,
     };
   });
-  const acceptedFourBarInput =
-    mechanism.type === "4bar" &&
-    connectionSelectionAccepted(
-      connectionState.connectionSelectionValidation,
-      "4bar.input-joint",
-    );
-  const acceptedFourBarOutput =
-    mechanism.type === "4bar" &&
-    connectionSelectionAccepted(
-      connectionState.connectionSelectionValidation,
-      "4bar.output-joint",
-    );
   const canAddIdlerGear = idlerGearOptions.length > 0;
-  if (!renderGearControls && !renderLinkageControls && mechanism.type !== "cam")
+  if (!renderGearControls && !renderLinkageControls && mechanism.type !== "cam" && connectionConfirmations.length === 0)
     return null;
   return (
     <div
@@ -314,7 +363,7 @@ export const MechanismParametricEditor = ({
               data-connection-part-key={item.rawPartKey}
               data-connection-hole-index={item.holeIndex}
             >
-              {item.label}: {item.partLabel} · Hole {item.holeIndex + 1}
+              {item.label}: {item.partLabel} · {item.detail}
             </div>
           ))}
         </div>
@@ -331,7 +380,7 @@ export const MechanismParametricEditor = ({
                   ? "Output gear size"
                   : `Idler gear ${index} size`;
             const options =
-              mechanism.type === "gear_linkage" && (index === 0 || isOutput)
+              endpointGearRole(index)
                 ? endpointGearOptions
                 : gearSpecs;
             const selected = gearSpecForSceneRadius(radius).key;
@@ -423,8 +472,7 @@ export const MechanismParametricEditor = ({
                 (option) => !option.working,
               ).length;
               const connectionLocked =
-                (key === "crankLength" && acceptedFourBarInput) ||
-                (key === "rockerLength" && acceptedFourBarOutput);
+                key === "crankLength" || key === "rockerLength";
               return (
                 <label
                   key={key}
@@ -470,6 +518,9 @@ export const MechanismParametricEditor = ({
                       );
                     })}
                   </select>
+                  {connectionLocked && (
+                    <span className="motion-option-lock-note">Set on canvas.</span>
+                  )}
                 </label>
               );
             })}
@@ -523,7 +574,7 @@ export const MechanismParametricEditor = ({
               className="motion-option-lock-note"
               data-testid="mechanism-motion-option-locks"
             >
-              Locked choices may jam.
+              Fit inside board.
             </div>
           )}
         </div>

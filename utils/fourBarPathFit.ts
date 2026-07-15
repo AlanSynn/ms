@@ -1,11 +1,21 @@
-import type { FabricationIssue, MechanismConfig, Point, ProjectMotionPath, ProjectState } from '../types';
+import type { MechanismConfig, MechanismRecoveryCandidates, Point, ProjectMotionPath, ProjectState } from '../types';
 import { boardToScene, sceneToBoard, SCENE_PX_PER_MM } from './coordinates';
 import { FABRICATION_LINKAGE_SPECS } from './fabricationContract';
-import { newFabricationIssues, validateForFabrication, visibleFabricationMessages } from './fabrication';
 import { generateMechanismPointTraces } from './kinematics';
+import {
+  connectionSelectionAccepted,
+  normalizeAuthoredMechanismToFabricationSet,
+  resolveFourBarConnectionSelections,
+} from './mechanismConnectionSelections';
+import {
+  mechanismReadiness,
+  projectMechanismReadiness,
+  type MechanismReadinessResult,
+} from './mechanismReadiness';
 import { normalizeMechanismToFabricationSet } from './mechanismReference';
 import { mechanismWithGeneratedPath } from './mechanismGeneratedPath';
 import { pathOwnedTargetFields } from './pathTargets';
+import { resolveMechanismEditAttempt } from './mechanismEditAuthority';
 
 const pathMetrics = (path: ProjectMotionPath) => {
   const length =
@@ -19,28 +29,52 @@ const pathMetrics = (path: ProjectMotionPath) => {
   return { length };
 };
 
-const fabricationIssuesForCandidate = (
-  project: ProjectState,
-  mechanism: MechanismConfig,
-): FabricationIssue[] => {
-  const siblingMechanisms = project.mechanisms.filter(
-    (candidate) => candidate.id !== mechanism.id,
-  );
-  const baselineIssues = validateForFabrication({ ...project, mechanisms: siblingMechanisms }).issues;
-  const candidateProject: ProjectState = {
-    ...project,
-    mechanisms: [...siblingMechanisms, mechanism],
-  };
-  return newFabricationIssues(
-    baselineIssues,
-    validateForFabrication(candidateProject).issues,
-  );
+export type AutomaticFitResult = {
+  mechanism: MechanismConfig;
+  accepted: boolean;
+  readiness: MechanismReadinessResult;
+  blockers: string[];
+  recoveryCandidates?: MechanismRecoveryCandidates;
 };
 
-const fabricationErrorsForCandidate = (
+export const completeAutomaticFitCandidate = (
   project: ProjectState,
-  mechanism: MechanismConfig,
-) => visibleFabricationMessages(fabricationIssuesForCandidate(project, mechanism), 'error');
+  prior: MechanismConfig,
+  candidate: MechanismConfig,
+): AutomaticFitResult => {
+  const attempt = resolveMechanismEditAttempt(project, prior, candidate);
+  if (attempt.status === 'rejected') {
+    return {
+      mechanism: prior,
+      accepted: false,
+      readiness: mechanismReadiness(project, prior),
+      blockers: [attempt.blocker],
+      recoveryCandidates: attempt.recoveryCandidates,
+    };
+  }
+  const acceptedCandidate = attempt.mechanism;
+  const candidateProject: ProjectState = {
+    ...project,
+    mechanisms: [
+      ...project.mechanisms.filter((mechanism) => mechanism.id !== acceptedCandidate.id),
+      acceptedCandidate,
+    ],
+  };
+  const readiness = mechanismReadiness(candidateProject, acceptedCandidate);
+  const projectReadiness = projectMechanismReadiness(candidateProject);
+  const accepted = readiness.simulationSafe && (
+    readiness.status === 'fabrication-unsupported' ||
+    projectReadiness.status === 'project-ready'
+  );
+  return {
+    mechanism: accepted ? acceptedCandidate : prior,
+    accepted,
+    readiness,
+    blockers: accepted
+      ? readiness.blockers
+      : [...new Set([...readiness.blockers, ...projectReadiness.blockers])],
+  };
+};
 
 
 const pathPointsForFit = (path: ProjectMotionPath): Point[] => {
@@ -188,20 +222,57 @@ export const fitFourBarKitMechanismToPath = (
   mechanism: MechanismConfig,
   path: ProjectMotionPath,
 ) => {
+  const result = fitFourBarKitMechanismToPathResult(project, mechanism, path);
+  return result.accepted ? result.mechanism : undefined;
+};
+
+export const fitFourBarKitMechanismToPathResult = (
+  project: ProjectState,
+  mechanism: MechanismConfig,
+  path: ProjectMotionPath,
+): AutomaticFitResult => {
   const targetPoints = resamplePolyline(pathPointsForFit(path), 32);
-  if (targetPoints.length < 3) return undefined;
+  if (targetPoints.length < 3) {
+    const readiness = mechanismReadiness(project, mechanism);
+    return {
+      mechanism,
+      accepted: false,
+      readiness,
+      blockers: ['Draw a path.'],
+    };
+  }
   const motionReach = pathMotionReach(project, path);
   const kitLengths = FABRICATION_LINKAGE_SPECS.map(
     (spec) => spec.lengthMm * SCENE_PX_PER_MM,
   );
   const anchors = boardAnchorCandidatesForFit(project, path, mechanism);
-  const validationProject = {
-    ...project,
-    mechanisms: project.mechanisms.filter(
-      (existing) => existing.id === mechanism.id || existing.targetPathId !== path.id,
-    ),
-  };
   const angles = [0, 45, 90, 135, 180, 225, 270, 315];
+  const pitch = project.settings.physicalKit.gridPitchMm * SCENE_PX_PER_MM;
+  const maxSpan = project.settings.physicalKit.boardCells - 1;
+  const groundLengthsForAngle = (angle: number) =>
+    Array.from(
+      { length: maxSpan },
+      (_, index) =>
+        (index + 1) * pitch * (angle % 90 === 0 ? 1 : Math.SQRT2),
+    );
+  const resolvedConnections = resolveFourBarConnectionSelections(mechanism);
+  const inputAccepted = connectionSelectionAccepted(
+    resolvedConnections.validation,
+    '4bar.input-joint',
+  );
+  const outputAccepted = connectionSelectionAccepted(
+    resolvedConnections.validation,
+    '4bar.output-joint',
+  );
+  const crankLengths = inputAccepted && resolvedConnections.inputJoint
+    ? [resolvedConnections.inputJoint.length]
+    : kitLengths;
+  const rockerLengths = outputAccepted && resolvedConnections.outputJoint
+    ? [resolvedConnections.outputJoint.length]
+    : kitLengths;
+  const hasAuthoredBoundary =
+    mechanism.connectionSelections !== undefined ||
+    mechanism.connectionSelectionValidation !== undefined;
   const modes: Array<MechanismConfig['assemblyMode']> = [
     mechanism.assemblyMode ?? 'open',
   ];
@@ -215,29 +286,28 @@ export const fitFourBarKitMechanismToPath = (
     error: number,
   ) => {
     if (top.length >= 12 && error >= top.at(-1)!.error) return;
-    if (fabricationErrorsForCandidate(validationProject, mechanismCandidate).length) return;
     top.push({ mechanism: mechanismCandidate, error });
     top.sort((a, b) => a.error - b.error);
     if (top.length > 12) top.pop();
   };
 
   for (const anchor of anchors) {
-    for (const groundLength of kitLengths) {
-      for (const crankLength of kitLengths) {
-        for (const couplerLength of kitLengths) {
-          for (const rockerLength of kitLengths) {
-            if (
-              !isLikelyFullRotationFourBar(
-                groundLength,
-                crankLength,
-                couplerLength,
-                rockerLength,
+    for (const groundAngle of angles) {
+      for (const groundLength of groundLengthsForAngle(groundAngle)) {
+        for (const crankLength of crankLengths) {
+          for (const couplerLength of kitLengths) {
+            for (const rockerLength of rockerLengths) {
+              if (
+                !isLikelyFullRotationFourBar(
+                  groundLength,
+                  crankLength,
+                  couplerLength,
+                  rockerLength,
+                )
               )
-            )
-              continue;
-            for (const groundAngle of angles) {
+                continue;
               for (const assemblyMode of modes) {
-                const candidate = normalizeMechanismToFabricationSet({
+                const authoredCandidate: MechanismConfig = {
                   ...mechanism,
                   type: '4bar',
                   anchorX: anchor.x,
@@ -263,7 +333,11 @@ export const fitFourBarKitMechanismToPath = (
                   ...pathOwnedTargetFields(path),
                   source: 'optimized',
                   recommendation: 'Fit path',
-                });
+                };
+                const normalizedCandidate = hasAuthoredBoundary
+                  ? normalizeAuthoredMechanismToFabricationSet(authoredCandidate)
+                  : normalizeMechanismToFabricationSet(authoredCandidate);
+                const candidate = { ...normalizedCandidate, groundLength };
                 const traces = generateMechanismPointTraces(candidate, 36);
                 if (traces.percentValid < 0.98) continue;
                 const movingTraces = traces.traces.filter((trace) => trace.primary);
@@ -298,8 +372,19 @@ export const fitFourBarKitMechanismToPath = (
       }
     }
   }
-  return top.find(
-    (candidate) =>
-      !fabricationErrorsForCandidate(validationProject, candidate.mechanism).length,
-  )?.mechanism ?? top[0]?.mechanism;
+  const rejected: AutomaticFitResult[] = [];
+  for (const candidate of top) {
+    const completed = completeAutomaticFitCandidate(project, mechanism, candidate.mechanism);
+    if (completed.accepted) return completed;
+    rejected.push(completed);
+  }
+  const readiness = mechanismReadiness(project, mechanism);
+  return {
+    mechanism,
+    accepted: false,
+    readiness,
+    blockers: rejected.length
+      ? [...new Set(rejected.flatMap(result => result.blockers))]
+      : ['No simulation-safe four-bar fit.'],
+  };
 };

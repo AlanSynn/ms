@@ -3,26 +3,32 @@ import type {
   AppStage,
   FoundryExportPackage,
   GlobalConfig,
+  MechanismEditFeedback,
   MechanismConfig,
   ProjectAction,
   ProjectMotionPath,
   ProjectState,
 } from "../types";
-import { generateDXF, generateSVG } from "../utils/exporter";
 import {
-  evaluateFitness,
-  generateSmartConfig,
-  mutateConfig,
-} from "../utils/optimizer";
+  generateProjectReadyDXF,
+  generateProjectReadySVG,
+} from "../utils/exporter";
 import { preferredMotionJointId } from "../utils/motion";
 import { downloadText, mechanismWithGeneratedPath } from "../utils/project";
 import {
-  fitMechanismToTargetPath,
+  fitMechanismToTargetPathResult,
   fitRecommendedMechanismToSheet,
   normalizeGearMeshMechanism,
 } from "../utils/mechanismRecommendations";
-import { constrainMechanismUpdate } from "../utils/mechanismEditAuthority";
 import {
+  constrainMechanismUpdate,
+  resolveMechanismEditAttempt,
+} from "../utils/mechanismEditAuthority";
+import { compactStudentActionForFabricationDiagnostic } from "../utils/fabricationReadiness";
+import { isReferenceExportReady } from "../utils/mechanismReference";
+import { resolveFoundryTransaction } from "../utils/foundryTransaction";
+import {
+  MECHANISM_BINDING_BLOCKER,
   mechanismForTargetFields,
   pathOwnedTargetFields,
 } from "../utils/pathTargets";
@@ -52,6 +58,7 @@ const GENERATED_PATH_GEOMETRY_KEYS = new Set<keyof MechanismConfig>([
   "sceneAnchor",
   "outputGearRadius",
   "showOutputGear",
+  "connectionSelections",
 ]);
 
 const changesGeneratedPathGeometry = (updates: Partial<MechanismConfig>) =>
@@ -68,7 +75,6 @@ export const useAppMechanismActions = ({
   selectedPath,
   selectedMechanism,
   foundry,
-  mechanismConfig,
   angle,
   setStage,
   setCommandStatus,
@@ -86,11 +92,13 @@ export const useAppMechanismActions = ({
   setShowRecommendations: (show: boolean) => void;
 }) => {
   const [optimizerBusy, setOptimizerBusy] = useState(false);
+  const [mechanismEditFeedback, setMechanismEditFeedback] =
+    useState<MechanismEditFeedback | null>(null);
 
   const updateMechanism = useCallback(
     (id: string, updates: Partial<MechanismConfig>) => {
       const mechanism = project.mechanisms.find((m) => m.id === id);
-      if (!mechanism) return;
+      if (!mechanism) return false;
       const nextUpdates = { ...updates };
       const pathUpdate = updates.targetPathId
         ? project.paths[updates.targetPathId]
@@ -127,30 +135,83 @@ export const useAppMechanismActions = ({
         nextUpdates,
         project.settings.physicalKit,
       );
+      if (
+        Object.keys(nextUpdates).length > 0 &&
+        Object.keys(constrainedUpdates).length === 0
+      ) {
+        const blocker = updates.connectionSelections
+          ? "Fix: Choose anchor"
+          : "Change blocked";
+        setMechanismEditFeedback({
+          mechanismId: id,
+          blocker,
+          recoveryCandidates: {
+            targetPartIds: [],
+            targetSceneObjectIds: [],
+            targetPathIds: [],
+            targetAnchorJointIds: [],
+          },
+        });
+        setCommandStatus(blocker);
+        return false;
+      }
       const next = { ...mechanism, ...constrainedUpdates };
-      const normalized = normalizeGearMeshMechanism(next);
+      const normalized = constrainedUpdates.connectionSelections
+        ? next
+        : changesGeneratedPathGeometry(constrainedUpdates)
+          ? normalizeGearMeshMechanism(next)
+          : next;
+      const attempt = resolveMechanismEditAttempt(project, mechanism, normalized);
+      if (attempt.status === "rejected") {
+        const blocker = updates.connectionSelections
+          ? MECHANISM_BINDING_BLOCKER
+          : attempt.blocker;
+        setMechanismEditFeedback({
+          mechanismId: id,
+          blocker,
+          recoveryCandidates: attempt.recoveryCandidates,
+        });
+        setCommandStatus(blocker);
+        return false;
+      }
       const preserveGeneratedPath =
         hasStoredGeneratedPath(mechanism) &&
         !changesGeneratedPathGeometry(constrainedUpdates);
-      const fitted =
-        constrainedUpdates.targetPathId
-          ? fitMechanismToTargetPath(
-              project,
-              normalized,
-              constrainedUpdates.targetPathId,
-            )
-          : mechanismWithGeneratedPath(
+      const fitResult = constrainedUpdates.targetPathId
+        ? fitMechanismToTargetPathResult(
+            project,
+            attempt.mechanism,
+            constrainedUpdates.targetPathId,
+          )
+        : undefined;
+      if (fitResult && !fitResult.accepted) {
+        if (fitResult.recoveryCandidates) {
+          setMechanismEditFeedback({
+            mechanismId: id,
+            blocker: fitResult.blockers[0] ?? MECHANISM_BINDING_BLOCKER,
+            recoveryCandidates: fitResult.recoveryCandidates,
+          });
+        }
+        setCommandStatus(fitResult.blockers[0] ?? MECHANISM_BINDING_BLOCKER);
+        return false;
+      }
+      const fitted = fitResult?.mechanism ?? mechanismWithGeneratedPath(
               {
-                ...normalized,
-                activeVisualPartIds: normalized.targetPartId
-                  ? [normalized.targetPartId]
+                ...attempt.mechanism,
+                activeVisualPartIds: attempt.mechanism.targetPartId
+                  ? [attempt.mechanism.targetPartId]
                   : [],
               },
-              { preserveGeneratedPath },
+              {
+                preserveGeneratedPath,
+                kit: project.settings.physicalKit,
+              },
             );
       dispatch({ type: "upsert_mechanism", mechanism: fitted });
+      setMechanismEditFeedback(null);
+      return true;
     },
-    [dispatch, project],
+    [dispatch, project, setCommandStatus],
   );
 
   const optimizeSelectedMechanism = useCallback(async () => {
@@ -159,61 +220,68 @@ export const useAppMechanismActions = ({
       : selectedPath;
     if (!selectedMechanism || !fitPath || fitPath.points.length < 3) return;
     setOptimizerBusy(true);
-    await new Promise((resolve) => setTimeout(resolve, 16));
-    let best = generateSmartConfig(fitPath.points, selectedMechanism.type);
-    let bestScore = evaluateFitness(best, fitPath.points);
-    const iterations =
-      project.settings.performancePreset === "fast"
-        ? 120
-        : project.settings.performancePreset === "high"
-          ? 520
-          : 260;
-    for (let i = 0; i < iterations; i++) {
-      const candidate =
-        i < 80
-          ? generateSmartConfig(fitPath.points, selectedMechanism.type)
-          : mutateConfig(best, 0.45, true);
-      const score = evaluateFitness(candidate, fitPath.points);
-      if (score < bestScore) {
-        best = candidate;
-        bestScore = score;
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 16));
+      const result = fitMechanismToTargetPathResult(
+        project,
+        selectedMechanism,
+        fitPath.id,
+      );
+      if (!result.accepted) {
+        if (result.recoveryCandidates) {
+          setMechanismEditFeedback({
+            mechanismId: selectedMechanism.id,
+            blocker: result.blockers[0] ?? MECHANISM_BINDING_BLOCKER,
+            recoveryCandidates: result.recoveryCandidates,
+          });
+        }
+        setCommandStatus(
+          compactStudentActionForFabricationDiagnostic(result.blockers[0]) ??
+            result.blockers[0] ??
+            "Fit blocked.",
+        );
+        return;
       }
+      dispatch({ type: "upsert_mechanism", mechanism: result.mechanism });
+      setMechanismEditFeedback(null);
+    } finally {
+      setOptimizerBusy(false);
     }
-    updateMechanism(selectedMechanism.id, {
-      ...best,
-      id: selectedMechanism.id,
-      color: selectedMechanism.color,
-      visible: true,
-      ...pathOwnedTargetFields(fitPath),
-      source: "optimized",
-      warnings:
-        bestScore > 350 ? ["Fit is loose. Try Fit again."] : [],
-    });
-    setOptimizerBusy(false);
   }, [
+    dispatch,
     project,
     selectedMechanism,
     selectedPath,
-    updateMechanism,
+    setCommandStatus,
   ]);
 
   const exportMechanismSvg = useCallback(() => {
+    const result = generateProjectReadySVG(project, angle);
+    if (!result.ok) {
+      setCommandStatus(result.blockers[0] ?? "Project not ready");
+      return;
+    }
     downloadText(
       `mechanisms-${Date.now()}.svg`,
-      generateSVG(mechanismConfig, angle),
+      result.artifact,
       "image/svg+xml",
     );
     setCommandStatus("Exported mechanism SVG");
-  }, [angle, mechanismConfig, setCommandStatus]);
+  }, [angle, project, setCommandStatus]);
 
   const exportMechanismDxf = useCallback(() => {
+    const result = generateProjectReadyDXF(project, angle);
+    if (!result.ok) {
+      setCommandStatus(result.blockers[0] ?? "Project not ready");
+      return;
+    }
     downloadText(
       `mechanisms-${Date.now()}.dxf`,
-      generateDXF(mechanismConfig, angle),
+      result.artifact,
       "application/dxf",
     );
     setCommandStatus("Exported mechanism DXF");
-  }, [angle, mechanismConfig, setCommandStatus]);
+  }, [angle, project, setCommandStatus]);
 
   const exportFoundryMechanism = useCallback(
     (pkg: FoundryExportPackage) => {
@@ -242,33 +310,25 @@ export const useAppMechanismActions = ({
           presetId: pkg.metadata.selectedPreset,
           recommendation: pkg.metadata.recommendation,
           source: "foundry",
-          foundryExport: pkg,
           generatedPath: pkg.generatedPath,
           warnings: pkg.warnings,
         },
-        { preserveGeneratedPath: true },
+        {
+          preserveGeneratedPath: true,
+          kit: project.settings.physicalKit,
+        },
       );
       const fittedMechanism = fitRecommendedMechanismToSheet(
         project,
-        normalizeGearMeshMechanism(rawMechanism),
+        rawMechanism,
       );
       const generatedPath =
         fittedMechanism.generatedPath ??
         rawMechanism.generatedPath ??
         pkg.generatedPath;
-      const mechanism = mechanismWithGeneratedPath(
+      const candidate = mechanismWithGeneratedPath(
         {
           ...fittedMechanism,
-          foundryExport: {
-            ...pkg,
-            parameters: { ...fittedMechanism },
-            pivot: {
-              x: fittedMechanism.anchorX ?? pkg.pivot.x,
-              y: fittedMechanism.anchorY ?? pkg.pivot.y,
-            },
-            outputPoint: generatedPath[0] ?? pkg.outputPoint,
-            generatedPath,
-          },
           generatedPath,
           warnings: [
             ...new Set([
@@ -277,26 +337,85 @@ export const useAppMechanismActions = ({
             ]),
           ],
         },
-        { preserveGeneratedPath: true },
+        {
+          preserveGeneratedPath: true,
+          kit: project.settings.physicalKit,
+        },
       );
-      dispatch({ type: "set_foundry_export", foundryExport: pkg });
-      dispatch({ type: "upsert_mechanism", mechanism });
-      setStage("design");
+      const intent = isReferenceExportReady(candidate.type)
+        ? "fabrication-package"
+        : "simulation-only";
+      const result = resolveFoundryTransaction({
+        project,
+        candidate,
+        intent,
+        allowSoftReadinessBlockers: intent === 'fabrication-package',
+        generatePackage: intent === "fabrication-package"
+          ? (accepted) => ({
+              ...pkg,
+              mechanismId: accepted.id,
+              mechanismType: accepted.type,
+              parameters: { ...accepted },
+              pivot: {
+                x: accepted.anchorX ?? pkg.pivot.x,
+                y: accepted.anchorY ?? pkg.pivot.y,
+              },
+              outputPoint: accepted.generatedPath?.[0] ?? pkg.outputPoint,
+              generatedPath: accepted.generatedPath ?? pkg.generatedPath,
+            })
+          : undefined,
+      });
+      if (result.status === "ready") {
+        setCommandStatus("Package generation required");
+        return;
+      }
+      dispatch({ type: "commit_mechanism_candidate", result });
+      if (result.status === "committed") {
+        setMechanismEditFeedback(null);
+        setCommandStatus(
+          result.blocker ?? (intent === "fabrication-package"
+            ? "Mechanism package ready"
+            : "Mechanism ready"),
+        );
+        setStage("design");
+      } else {
+        if (result.recoveryCandidates) {
+          setMechanismEditFeedback({
+            mechanismId: result.mechanism.id,
+            blocker: result.blocker ?? MECHANISM_BINDING_BLOCKER,
+            recoveryCandidates: result.recoveryCandidates,
+          });
+        }
+        setCommandStatus(result.blocker ?? "Mechanism blocked");
+      }
     },
-    [dispatch, foundry, project, setStage],
+    [dispatch, foundry, project, setCommandStatus, setStage],
   );
 
   const applyRecommendedMechanism = useCallback(
     (mechanism: MechanismConfig) => {
-      dispatch({ type: "upsert_mechanism", mechanism });
+      const previous = project.mechanisms.find((item) => item.id === mechanism.id);
+      const attempt = resolveMechanismEditAttempt(project, previous, mechanism);
+      if (attempt.status === "rejected") {
+        setMechanismEditFeedback({
+          mechanismId: mechanism.id,
+          blocker: attempt.blocker,
+          recoveryCandidates: attempt.recoveryCandidates,
+        });
+        setCommandStatus(attempt.blocker);
+        return;
+      }
+      dispatch({ type: "upsert_mechanism", mechanism: attempt.mechanism });
+      setMechanismEditFeedback(null);
       setShowRecommendations(false);
       setStage("design");
     },
-    [dispatch, setShowRecommendations, setStage],
+    [dispatch, project, setCommandStatus, setShowRecommendations, setStage],
   );
 
   return {
     optimizerBusy,
+    mechanismEditFeedback,
     updateMechanism,
     optimizeSelectedMechanism,
     exportMechanismSvg,

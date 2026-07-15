@@ -74,11 +74,11 @@
   <text x="189" y="63" class="tiny" text-anchor="middle">Cam spacer</text>
   <rect x="21" y="116" width="22" height="7.5" class="score part-card" style="fill:#f472b6;fill-opacity:0.22;stroke:#f472b6;stroke-width:0.5" data-step="3" data-part-key="cam_modules:u-channel-guide-cartridge" data-part-index="1"/>
   <text x="32" y="121" class="tiny" text-anchor="middle">Guide cartrid…</text>
-  <rect x="153" y="116" width="22" height="7.5" class="score part-card" style="fill:#f472b6;fill-opacity:0.22;stroke:#f472b6;stroke-width:0.5" data-step="4" data-part-key="cam_modules:gravity-follower-module" data-part-index="1"/>
+  <rect x="153" y="116" width="22" height="7.5" class="score part-card" style="fill:#f472b6;fill-opacity:0.22;stroke:#f472b6;stroke-width:0.5" data-step="4" data-part-key="cam_modules:gravity-follower-module-v2" data-part-index="1"/>
   <text x="164" y="121" class="tiny" text-anchor="middle">Gravity follo…</text>
   <rect x="21" y="174" width="22" height="7.5" class="score part-card" style="fill:#f472b6;fill-opacity:0.22;stroke:#f472b6;stroke-width:0.5" data-step="5" data-part-key="cam_modules:swappable-cam-disk" data-part-index="1"/>
   <text x="32" y="179" class="tiny" text-anchor="middle">Cam disk</text>
-  <rect x="46" y="174" width="22" height="7.5" class="score part-card" style="fill:#f472b6;fill-opacity:0.22;stroke:#f472b6;stroke-width:0.5" data-step="5" data-part-key="cam_modules:gravity-follower-module" data-part-index="2"/>
+  <rect x="46" y="174" width="22" height="7.5" class="score part-card" style="fill:#f472b6;fill-opacity:0.22;stroke:#f472b6;stroke-width:0.5" data-step="5" data-part-key="cam_modules:gravity-follower-module-v2" data-part-index="2"/>
   <text x="57" y="179" class="tiny" text-anchor="middle">Gravity follo…</text>
   </g>
   <g id="layer-new-part-highlight">

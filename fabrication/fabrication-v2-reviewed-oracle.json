@@ -1,0 +1,34 @@
+{
+  "schema_version": 2,
+  "baseline_kind": "reviewed-source-delta",
+  "signature_format": "svg-contour-sha256-v1",
+  "reviewed_at": "2026-07-14T10:07:43.912Z",
+  "review_reason": "V2 physical inventory adds the three-hole gravity follower, restores the approved two-pitch cam guide, and updates active cam/planetary assembly contours; the Python v1 oracle remains frozen.",
+  "base_oracle": "fabrication-python-oracle.json",
+  "managed_file_additions": [
+    "cam_modules/gravity-follower-module-v2.svg"
+  ],
+  "managed_file_removals": [],
+  "files": {
+    "assembly/02-cam-follower-basic.svg": {
+      "source_svg_sha256": "293597f2cf5d22f7e337308b1bd6999f3bcb3605399f3e3096c172cdda2b3a8c",
+      "contour_sha256": "192691307a886e263f77b4532a5661f7570e6ed59137678d92fcf8a873984b11"
+    },
+    "assembly/05-planetary-gear-basic.svg": {
+      "source_svg_sha256": "9b024a5b071b7d7864190985621b74ac139ffdba2a6e654c1e2304716e932a75",
+      "contour_sha256": "2079037207379fc08567bf2212ee42eb057afa150e666fd9b230502bdb220a41"
+    },
+    "assembly/parts-overview.svg": {
+      "source_svg_sha256": "45a582bb26a2d6f599a71d4124f0e25e5daac7e6063d941e29502d21e32ef678",
+      "contour_sha256": "c26b43c33bd06091581da48e71fbd83307575ca5ec55e36518d7106dca0dd66f"
+    },
+    "cam_modules/gravity-follower-module-v2.svg": {
+      "source_svg_sha256": "08a28452f2693fc5e496f0b909d3c76953ff0f138ed3f275c6c74b763554dece",
+      "contour_sha256": "f11d1d06a30bcfa943be48421685427539dbbf73c6cb767ea3a9c91cb82f69b9"
+    },
+    "cam_modules/u-channel-guide-cartridge.svg": {
+      "source_svg_sha256": "63e2b0bfab1823fadd9559037ddcaa322451bfa1de8078b5c1dde87f3db1fb2a",
+      "contour_sha256": "d6f6828cf770b39f0e9bb16d715a3135560bc1029ba78bab510d32b638e8e0f4"
+    }
+  }
+}

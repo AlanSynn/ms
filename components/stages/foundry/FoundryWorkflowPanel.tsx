@@ -30,6 +30,7 @@ export const FoundryWorkflowPanel = ({
   targetReady,
   isPickingAnchor,
   hardBlocked,
+  transactionBlocker,
   onToggleAnchorPick,
   onFitPath,
   onUseMechanism,
@@ -42,6 +43,7 @@ export const FoundryWorkflowPanel = ({
   targetReady: boolean;
   isPickingAnchor: boolean;
   hardBlocked: boolean;
+  transactionBlocker?: string;
   onToggleAnchorPick: () => void;
   onFitPath: () => void;
   onUseMechanism: () => void;
@@ -84,6 +86,13 @@ export const FoundryWorkflowPanel = ({
         <Boxes size={16} /> Use mechanism
       </button>
       {!targetReady && <div className="warning">Draw a path first.</div>}
+      {targetReady && transactionBlocker && (
+        <div className="warning">
+          {/^Fix:/i.test(transactionBlocker)
+            ? transactionBlocker
+            : `Fix: ${transactionBlocker}`}
+        </div>
+      )}
       <h4 className="section-title mt-4">Templates</h4>
       <div
         className="mechanism-choice-grid"
@@ -103,15 +112,19 @@ export const FoundryWorkflowPanel = ({
             180,
             96,
             96,
+            [],
+            project.settings.physicalKit,
           );
           const cardSimulation = createFoundryPlaybackFrame(
             cardMechanism,
             foundryPhase,
             cardContext,
+            project.settings.physicalKit,
           ).simulation;
           const cardPlaybackTraces = generateFoundryPlaybackPointTraces(
             cardMechanism,
             96,
+            project.settings.physicalKit,
           ).traces;
           const cardPlaybackTrace =
             cardPlaybackTraces.find((trace) => trace.primary) ??
@@ -125,6 +138,7 @@ export const FoundryWorkflowPanel = ({
                 cardMechanism,
                 foundryPhase + offset,
                 cardContext,
+                project.settings.physicalKit,
               ).simulation,
           );
           return (

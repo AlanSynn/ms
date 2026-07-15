@@ -114,7 +114,7 @@ Examples:
 - `linkages:linkage-4-cell`
 - `cam_modules:swappable-cam-disk`
 - `cam_modules:u-channel-guide-cartridge`
-- `cam_modules:gravity-follower-module`
+- `cam_modules:gravity-follower-module-v2`
 - `brackets:2-hole-straight`
 - `spacers:s10`
 - `handles:folding-fork-tripod`

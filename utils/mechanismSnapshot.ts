@@ -1,11 +1,11 @@
 import type { JointState, MechanismConfig, MechanismType, PhysicalKitSettings, Point, ProjectMotionPath, ProjectState } from '../types';
+import { defaultPhysicalKit } from './coordinates';
 import type { FabricationRenderPlan } from './fabricationRenderPlan';
 import { type MechanismGraph } from './mechanismGraph';
 import { compileMechanism, summarizeCompiledMechanism, type MechanismGraphCompilerSummary } from './mechanismCompiler';
 import type { MechanismFeatureIssue, MechanismInteractionPolicy, MechanismPhysicsHint, MechanismProjectionHint, MechanismFeasibleRange } from './mechanismFeatureRegistry';
-import { normalizeMechanismToFabricationSet } from './mechanismReference';
 import { mechanismFeature } from './mechanismFeatureRegistry';
-import { normalizeMechanismConnectionSelections } from './mechanismConnectionSelections';
+import { normalizeAuthoredMechanismToFabricationSet, normalizeMechanismConnectionSelections } from './mechanismConnectionSelections';
 
 export interface MechanismSnapshotSourceIds {
     projectId: string;
@@ -61,6 +61,7 @@ export interface MechanismSnapshotMechanism {
     generatedPath: Point[];
     connectionSelections?: MechanismConfig['connectionSelections'];
     connectionSelectionValidation?: MechanismConfig['connectionSelectionValidation'];
+    rejectedConnectionSelectionDiagnostics?: MechanismConfig['rejectedConnectionSelectionDiagnostics'];
     warnings: string[];
 }
 
@@ -81,7 +82,7 @@ export interface MechanismSnapshotPath {
 }
 
 export interface MechanismSnapshot {
-    version: 1;
+    version: 2;
     fingerprint: string;
     sourceIds: MechanismSnapshotSourceIds;
     mechanism: MechanismSnapshotMechanism;
@@ -142,12 +143,17 @@ const deepFreeze = <T>(value: T): T => {
 
 const cloneData = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
-export const snapshotMechanism = (mechanism: MechanismConfig): MechanismSnapshotMechanism => {
-    const connectionState = normalizeMechanismConnectionSelections(mechanism, mechanism.connectionSelections);
-    const connectionSelectionValidation = connectionState.connectionSelectionValidation
-        ?? (mechanism.connectionSelectionValidation?.status === 'invalid'
-            ? mechanism.connectionSelectionValidation
-            : undefined);
+export const snapshotMechanism = (
+    mechanism: MechanismConfig,
+    kit: PhysicalKitSettings = defaultPhysicalKit(),
+): MechanismSnapshotMechanism => {
+    const connectionState = normalizeMechanismConnectionSelections(
+        mechanism,
+        mechanism.connectionSelections,
+        mechanism.connectionSelectionValidation,
+        { kit },
+    );
+    const connectionSelectionValidation = connectionState.connectionSelectionValidation;
     return ({
     id: mechanism.id,
     type: mechanism.type,
@@ -191,6 +197,9 @@ export const snapshotMechanism = (mechanism: MechanismConfig): MechanismSnapshot
     generatedPath: clonePoints(mechanism.generatedPath),
     connectionSelections: connectionState.connectionSelections ? cloneData(connectionState.connectionSelections) : undefined,
     connectionSelectionValidation: connectionSelectionValidation ? cloneData(connectionSelectionValidation) : undefined,
+    rejectedConnectionSelectionDiagnostics: mechanism.rejectedConnectionSelectionDiagnostics
+        ? cloneData(mechanism.rejectedConnectionSelectionDiagnostics)
+        : undefined,
     warnings: [...(mechanism.warnings ?? [])]
     });
 };
@@ -224,9 +233,15 @@ export const buildMechanismSnapshot = (project: ProjectState, mechanismId: strin
     const mechanism = project.mechanisms.find(item => item.id === mechanismId);
     if (!mechanism) return null;
 
-    const sourceMechanism = normalizeMechanismToFabricationSet(mechanism);
+    const sourceMechanism = normalizeAuthoredMechanismToFabricationSet(
+        mechanism,
+        project.settings.physicalKit,
+    );
     const feature = mechanismFeature(sourceMechanism.type);
-    const normalizedMechanism = snapshotMechanism(sourceMechanism);
+    const normalizedMechanism = snapshotMechanism(
+        sourceMechanism,
+        project.settings.physicalKit,
+    );
     const targetPath = snapshotPath(mechanism.targetPathId ? project.paths[mechanism.targetPathId] : undefined);
     const resolvedMechanism: MechanismConfig = {
         ...sourceMechanism,
@@ -243,7 +258,8 @@ export const buildMechanismSnapshot = (project: ProjectState, mechanismId: strin
         rodLength: normalizedMechanism.rodLength,
         phase: normalizedMechanism.phase,
         connectionSelections: normalizedMechanism.connectionSelections,
-        connectionSelectionValidation: normalizedMechanism.connectionSelectionValidation
+        connectionSelectionValidation: normalizedMechanism.connectionSelectionValidation,
+        rejectedConnectionSelectionDiagnostics: normalizedMechanism.rejectedConnectionSelectionDiagnostics,
     };
     const snapshotAngles = [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2];
     if (!snapshotAngles.some(angle => Math.abs(angle - angleRad) < 1e-9)) snapshotAngles.push(angleRad);
@@ -261,7 +277,7 @@ export const buildMechanismSnapshot = (project: ProjectState, mechanismId: strin
     };
 
     const withoutFingerprint: Omit<MechanismSnapshot, 'fingerprint'> = {
-        version: 1,
+        version: 2,
         sourceIds,
         mechanism: normalizedMechanism,
         label: feature.label,

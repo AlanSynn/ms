@@ -54,6 +54,7 @@ type FoundryPathTrace = {
 type FoundryPreviewStateProbeProps = {
   stateRef: Ref<HTMLDivElement>;
   viewerContract: Viewer3DContract;
+  selectedSceneObjectId: string;
   camera: FoundryCamera;
   showGrid: boolean;
   showPathPreview: boolean;
@@ -122,6 +123,9 @@ type FoundryPreviewStateProbeProps = {
   automataSurfaceZ: number;
   pinLengthZ: number;
   stackZGap: number;
+  visibleSceneObjectCount: number;
+  visiblePartCount: number;
+  visibleSceneObjectIds: string[];
   renderPlan: FabricationRenderPlan;
   renderedLayerZ: number[];
   physicalValidationErrors: string[];
@@ -202,6 +206,10 @@ export const FoundryPreviewStateProbe = ({
   automataSurfaceZ,
   pinLengthZ,
   stackZGap,
+  visibleSceneObjectCount,
+  visiblePartCount,
+  visibleSceneObjectIds,
+  selectedSceneObjectId,
   renderPlan,
   renderedLayerZ,
   physicalValidationErrors,
@@ -292,6 +300,8 @@ export const FoundryPreviewStateProbe = ({
       data-layer-forces={viewer3DLayerDataValue(showForces)}
       data-layer-velocity={viewer3DLayerDataValue(showVelocity)}
       data-layer-trail={viewer3DLayerDataValue(showTrail)}
+      data-scene-object-count={visibleSceneObjectCount}
+      data-selected-scene-object-id={selectedSceneObjectId}
       data-camera-yaw={camera.yaw.toFixed(1)}
       data-camera-pitch={camera.pitch.toFixed(1)}
       data-camera-zoom={camera.zoom.toFixed(3)}
@@ -315,7 +325,7 @@ export const FoundryPreviewStateProbe = ({
       data-physics-kernel-error={physicsKernelError}
       data-physics-authority="motionsmith-kinematics"
       data-mechanism-type={mechanism.type}
-      data-three-part-count={inv.parts}
+      data-three-part-count={visiblePartCount}
       data-three-hole-count={inv.holes}
       data-three-slot-count={inv.slots}
       data-three-gear-count={inv.gears}
@@ -512,7 +522,7 @@ export const FoundryPreviewStateProbe = ({
       data-three-static-grid-mode="persistent-scene-layer"
       data-three-fit-bounds="phase-invariant-sweep"
       data-three-inventory-source="rendered-template"
-      data-three-stack-source="compileMechanismRenderPlan"
+      data-three-stack-source="MechanismSceneContract"
       data-three-stack-mode="assembled-spacer-separated"
       data-three-exploded={explode > 0 ? "true" : "false"}
       data-three-explode-percent={Math.round(explode * 100)}
@@ -525,6 +535,10 @@ export const FoundryPreviewStateProbe = ({
       data-three-spacer-z-gap={stackZGap.toFixed(2)}
       data-three-base-layer={renderPlan.base.label}
       data-three-stack-order={renderPlan.stackSummary}
+      data-three-scene-object-count={visibleSceneObjectCount}
+      data-three-scene-prop-count={visibleSceneObjectCount}
+      data-three-scene-prop-ids={visibleSceneObjectIds.join(",")}
+      data-three-automata-object-count={visibleSceneObjectCount}
       data-three-stack-occurrences={renderPlan.occurrenceSummary}
       data-three-stack-roles={renderPlan.roleSummary}
       data-three-stack-colors={renderPlan.colorSummary}

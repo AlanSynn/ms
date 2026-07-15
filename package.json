@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "build:exe": "bun scripts/with-rustup-cargo.mjs tauri build --bundles app",
-    "test": "bun run test:contracts",
+    "test": "find tests -maxdepth 1 -type f -name '*.test.ts' -print | LC_ALL=C sort | while IFS= read -r file; do bun \"$file\" || exit; done",
     "test:contracts": "bun tests/project-contract.test.ts",
     "generate:fabrication": "bun scripts/generate-fabrication-assets.ts",
     "build:dmg": "bun scripts/with-rustup-cargo.mjs tauri build --bundles dmg",

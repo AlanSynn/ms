@@ -56,7 +56,10 @@ export const useProjectHistory = (createInitialProject: () => ProjectState) => {
   };
 
   const dispatch = (action: ProjectAction) =>
-    setProject((prev) => applyProjectAction(prev, action), {
+    setProject((prev) => {
+      const next = applyProjectAction(prev, action);
+      return next;
+    }, {
       history: isUndoableProjectAction(action),
     });
 

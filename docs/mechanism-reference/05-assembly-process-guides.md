@@ -393,7 +393,7 @@ Parts:
 R56 ring × 1
 G1 sun × 1
 G3 planet × 1
-L2 carrier × 1
+L4 carrier × 1
 S10 × 8
 paper fasteners
 ```
@@ -413,7 +413,7 @@ Build sequence:
    - Check: G1 spins cleanly before carrier is added.
 4. **Add carrier link**
    - Coordinates: `H8(board)`, `H10(carrier_reference)`.
-   - Stack: `B@H8 > F > S10 > L2_carrier > S10 > tabs-loose`.
+   - Stack: `B@H8 > F > S10 > L4_carrier > S10 > tabs-loose`.
    - Check: carrier swings loosely around sun axle.
 5. **Add moving G3 planet gear**
    - Coordinate: `H10(carrier_reference)`.

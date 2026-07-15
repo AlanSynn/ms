@@ -3,14 +3,15 @@ import {
   AppStage,
   BodyPartLayer,
   CharacterPackageArtifact,
-  FoundryExportPackage,
   MechanismConfig,
   Point,
   ProcessingStatus,
   ProjectAction,
+  ProjectSnapshotLoadResult,
   ProjectMotionPath,
   SceneObject,
   ProjectState,
+  RejectedConnectionSelectionDiagnostic,
   StandardJoint,
   StandardSkeleton,
   Transform,
@@ -33,6 +34,7 @@ import {
 import { mechanismWithGeneratedPath } from "./mechanismGeneratedPath";
 import {
   gearTrainOutputRatio,
+  gearTrainCenters,
   normalizeCamProfileSamples,
 } from "./kinematics";
 import {
@@ -45,16 +47,21 @@ import {
 import {
   mechanismConnectionCompatibilityUpdates,
   normalizeMechanismConnectionSelections,
+  resolveMechanismPhysicalConnections,
 } from "./mechanismConnectionSelections";
 import { isUsableContourPoints } from "./partGeometry";
 import {
   DEFAULT_CLASSROOM_ASSESSMENT_KEY,
   normalizeClassroomAssessmentKey,
 } from "./classroomContent";
-import { constrainMechanismCommit } from "./mechanismEditAuthority";
-import { mechanismDriverIdentity } from "./motion";
-import { fitMechanismToTargetPath } from "./mechanismRecommendations";
-import { pathOwnedTargetFields } from "./pathTargets";
+import {
+  mechanismEditIsSafe,
+  resolveMechanismEditAttempt,
+} from "./mechanismEditAuthority";
+import { fitMechanismToTargetPathResult } from "./mechanismRecommendations";
+import { completeAutomaticFitCandidate } from "./fourBarPathFit";
+import { MECHANISM_BINDING_BLOCKER, pathOwnedTargetFields } from "./pathTargets";
+import { assessProjectMechanismRuntime } from "./mechanismRuntimePolicy";
 import {
   guidedFourBarTimedPoints,
   guidedGearDriverPhaseOffset,
@@ -65,7 +72,7 @@ import {
 export { createDefaultMechanism, mechanismRequiredParts } from "./mechanismDefaults";
 export { mechanismWithGeneratedPath } from "./mechanismGeneratedPath";
 
-export const APP_STATE_VERSION = 1;
+export const APP_STATE_VERSION = 2 as const;
 
 export const nowIso = () => new Date().toISOString();
 export const uid = (prefix: string) =>
@@ -354,29 +361,47 @@ const defaultSkeleton = () =>
 const skeletonPoint = (skeleton: StandardSkeleton, jointId: string): Point =>
   skeleton.joints[jointId]?.position ?? { x: 0, y: 0 };
 
-const guidedArmWavePath = (skeleton: StandardSkeleton): Point[] => {
-  const shoulder = skeletonPoint(skeleton, "right_shoulder");
-  const hand = skeletonPoint(skeleton, "right_hand");
-  const side = Math.sign(hand.x - shoulder.x) || 1;
-  const mirror = -side;
-  return [
-    { x: -118, y: -13.589 },
-    { x: -127.382, y: 12.393 },
-    { x: -129.157, y: 18.257 },
-    { x: -120.269, y: -7.898 },
-    { x: -109.154, y: -33.187 },
-    { x: -95.905, y: -57.426 },
-    { x: -80.617, y: -80.434 },
-    { x: -63.408, y: -102.041 },
-    { x: -59.346, y: -106.627 },
-    { x: -76.967, y: -85.354 },
-    { x: -92.696, y: -62.645 },
-    { x: -106.407, y: -38.664 },
-  ].map((offset) => ({
-    x: shoulder.x + offset.x * mirror,
-    y: shoulder.y + offset.y,
-  }));
-};
+const guidedArmWaveMechanism = (id = "mech-1"): MechanismConfig =>
+  mechanismWithGeneratedPath(
+    normalizeMechanismToFabricationSet({
+      ...createDefaultMechanism("4bar", id),
+      anchorX: 0,
+      anchorY: -40,
+      transform: { x: 0, y: -40, rotation: 180, scale: 1 },
+      sceneAnchor: { x: 0, y: -40 },
+      groundAngle: 180,
+      groundLength: 160,
+      crankLength: 80,
+      couplerLength: 160,
+      rockerLength: 160,
+      couplerPointDist: 40,
+      couplerPointAngle: -90,
+      assemblyMode: "crossed",
+      source: "optimized",
+      presetId: "sample-fitted",
+      recommendation: "sample path fit",
+      targetPartId: "right_hand_part",
+      targetPathId: "path-right-arm",
+      targetAnchorJointId: "right_hand",
+      activeVisualPartIds: ["right_hand_part"],
+    }),
+  );
+
+const guidedArmWaveCycle = () =>
+  guidedArmWaveMechanism().generatedPath ?? [];
+
+const guidedArmWavePath = (): Point[] =>
+  guidedArmWaveCycle().filter((_, index) => index % 8 === 0);
+
+const guidedArmWaveTimedPoints = (
+  duration: number,
+): NonNullable<ProjectMotionPath["timedPoints"]> =>
+  guidedArmWaveCycle()
+    .filter((_, index) => index % 2 === 0)
+    .map((point, index, points) => ({
+      ...point,
+      time: (index / points.length) * duration,
+    }));
 
 const guidedHeadBobPath = (skeleton: StandardSkeleton): Point[] => {
   const headTop = skeletonPoint(skeleton, "head_top");
@@ -588,8 +613,56 @@ export const createDefaultSceneObject = (
   zIndex: 20,
 });
 
-const preserveGeneratedPathFor = (mechanism: MechanismConfig) =>
-  Boolean(mechanism.foundryExport || mechanism.generatedPath?.length);
+const invalidateMechanismArtifacts = (
+  mechanism: MechanismConfig,
+  parts: Record<string, BodyPartLayer>,
+): MechanismConfig => {
+  const {
+    foundryExport: _foundryExport,
+    generatedPath: _generatedPath,
+    fabricationMetadata: _fabricationMetadata,
+    warnings: _warnings,
+    ...authored
+  } = mechanism;
+  return {
+    ...authored,
+    activeVisualPartIds:
+      mechanism.targetPartId && parts[mechanism.targetPartId]
+        ? [mechanism.targetPartId]
+        : [],
+    warnings: [],
+  };
+};
+
+const invalidateOrphanedMechanisms = (project: ProjectState): ProjectState => {
+  const assessment = assessProjectMechanismRuntime(project);
+  let invalidated = false;
+  const mechanisms = project.mechanisms.map((mechanism) => {
+    if (assessment.gates.get(mechanism.id)?.canDriveProject) return mechanism;
+    invalidated = true;
+    return invalidateMechanismArtifacts(mechanism, project.parts);
+  });
+  return invalidated
+    ? {
+        ...project,
+        mechanisms,
+        lastExport: undefined,
+        lastFoundryExport: undefined,
+      }
+    : project;
+};
+
+const invalidatesAcceptedBinding = (
+  previous: ProjectState,
+  candidate: ProjectState,
+) => {
+  const previousAssessment = assessProjectMechanismRuntime(previous);
+  const candidateAssessment = assessProjectMechanismRuntime(candidate);
+  return previous.mechanisms.some((mechanism) =>
+    previousAssessment.gates.get(mechanism.id)?.canDriveProject &&
+    !candidateAssessment.gates.get(mechanism.id)?.canDriveProject
+  );
+};
 
 const samePoint = (a: Point | undefined, b: Point | undefined) =>
   (!a && !b) || Boolean(a && b && a.x === b.x && a.y === b.y);
@@ -626,83 +699,79 @@ const pathGeneratedGeometryUnchanged = (
   );
 };
 
-const reconcileMechanismTargets = (
+const mechanismWithKitConnections = (
   mechanism: MechanismConfig,
-  parts: Record<string, BodyPartLayer>,
-  paths: Record<string, ProjectMotionPath>,
-  sceneObjects: Record<string, SceneObject> = {},
-  options: { preserveGeneratedPath?: boolean } = {},
+  connectionState: ReturnType<typeof normalizeMechanismConnectionSelections>,
+  kit: AppSettings["physicalKit"],
 ) => {
-  let targetSceneObjectId =
-    mechanism.targetSceneObjectId && sceneObjects[mechanism.targetSceneObjectId]
-      ? mechanism.targetSceneObjectId
-      : undefined;
-  let targetPartId =
-    !targetSceneObjectId &&
-    mechanism.targetPartId &&
-    parts[mechanism.targetPartId]
-      ? mechanism.targetPartId
-      : undefined;
-  let targetPathId =
-    mechanism.targetPathId && paths[mechanism.targetPathId]
-      ? mechanism.targetPathId
-      : undefined;
-  if (targetPathId) {
-    const path = paths[targetPathId];
-    if (path.sceneObjectId) {
-      if (sceneObjects[path.sceneObjectId]) {
-        targetSceneObjectId = path.sceneObjectId;
-        targetPartId = undefined;
-      } else {
-        targetPathId = undefined;
+  const authored = { ...mechanism, ...connectionState };
+  const hasAcceptedConnection = connectionState.connectionSelectionValidation?.entries
+    .some((entry) => entry.status === "accepted");
+  const canonical = hasAcceptedConnection
+    ? {
+        ...authored,
+        ...mechanismConnectionCompatibilityUpdates(mechanism, connectionState),
       }
-    } else if (parts[path.partId]) {
-      targetPartId = path.partId;
-      targetSceneObjectId = undefined;
-    } else {
-      targetPathId = undefined;
-    }
-  }
-  const path = targetPathId ? paths[targetPathId] : undefined;
-  const pathFields = path ? pathOwnedTargetFields(path) : undefined;
-  const normalized = normalizeMechanismToFabricationSet({
-    ...mechanism,
-    targetPartId,
-    targetSceneObjectId,
-    targetPathId,
-    targetAnchorJointId: targetPartId
-      ? (mechanism.targetAnchorJointId ?? parts[targetPartId]?.anchorJointId)
-      : undefined,
-    activeVisualPartIds: targetPartId ? [targetPartId] : [],
-    ...(pathFields ?? {}),
+    : authored;
+  return mechanismEditIsSafe(canonical, kit) ? canonical : authored;
+};
+
+const revalidateMechanismArtifacts = (
+  project: ProjectState,
+  sourceMechanisms: MechanismConfig[],
+  options: { preserveExactTargetFit?: boolean } = {},
+): ProjectState => {
+  const mechanisms = sourceMechanisms.map((mechanism) => {
+    const connectionState = normalizeMechanismConnectionSelections(
+      mechanism,
+      mechanism.connectionSelections,
+      mechanism.connectionSelectionValidation,
+      {
+        kit: project.settings.physicalKit,
+        priorDiagnostics: mechanism.rejectedConnectionSelectionDiagnostics,
+      },
+    );
+    return invalidateMechanismArtifacts(
+      mechanismWithKitConnections(
+        mechanism,
+        connectionState,
+        project.settings.physicalKit,
+      ),
+      project.parts,
+    );
   });
-  const connectionState = normalizeMechanismConnectionSelections(
-    normalized,
-    mechanism.connectionSelections,
-    mechanism.connectionSelectionValidation,
-  );
-  const compatibilityUpdates = mechanismConnectionCompatibilityUpdates(normalized, connectionState);
-  return mechanismWithGeneratedPath(
-    {
-      ...normalized,
-      ...compatibilityUpdates,
-      connectionSelections: connectionState.connectionSelections,
-      connectionSelectionValidation: connectionState.connectionSelectionValidation,
-    },
-    options,
-  );
+  const cleanProject = {
+    ...project,
+    mechanisms,
+    lastExport: undefined,
+    lastFoundryExport: undefined,
+  };
+  const assessment = assessProjectMechanismRuntime(cleanProject);
+  return {
+    ...cleanProject,
+    mechanisms: mechanisms.map((mechanism, index) => {
+      if (!assessment.gates.get(mechanism.id)?.canDriveProject) return mechanism;
+      const rebuilt = mechanismWithGeneratedPath(mechanism, {
+        kit: project.settings.physicalKit,
+      });
+      const targetPath = mechanism.targetPathId
+        ? cleanProject.paths[mechanism.targetPathId]
+        : undefined;
+      const sourcePath = sourceMechanisms[index]?.generatedPath;
+      return options.preserveExactTargetFit && targetPath && sourcePath && samePoints(sourcePath, targetPath.points)
+        ? {
+            ...rebuilt,
+            generatedPath: targetPath.points.map((point) => ({ ...point })),
+          }
+        : rebuilt;
+    }),
+  };
 };
 
 const mechanismDriverConflictSignatures = (project: ProjectState) => {
-  const drivers = new Map<string, string[]>();
-  project.mechanisms.forEach((mechanism) => {
-    const driver = mechanismDriverIdentity(project, mechanism);
-    if (!driver) return;
-    drivers.set(driver, [...(drivers.get(driver) ?? []), mechanism.id]);
-  });
-  return [...drivers.entries()]
+  return [...assessProjectMechanismRuntime(project).driverGroups.entries()]
     .flatMap(([driver, ids]) => {
-      const sortedIds = ids.sort();
+      const sortedIds = [...ids].sort();
       return sortedIds.flatMap((left, leftIndex) =>
         sortedIds.slice(leftIndex + 1).map((right) => `${driver}:${left},${right}`),
       );
@@ -711,12 +780,12 @@ const mechanismDriverConflictSignatures = (project: ProjectState) => {
 };
 
 const mechanismDriverConflict = (project: ProjectState, mechanism: MechanismConfig) => {
-  const driver = mechanismDriverIdentity(project, mechanism);
-  if (!driver) return false;
-  return project.mechanisms.some(
-    (candidate) =>
-      candidate.id !== mechanism.id &&
-      mechanismDriverIdentity(project, candidate) === driver,
+  const mechanisms = project.mechanisms.some(candidate => candidate.id === mechanism.id)
+    ? project.mechanisms.map(candidate => candidate.id === mechanism.id ? mechanism : candidate)
+    : [...project.mechanisms, mechanism];
+  const candidateProject = { ...project, mechanisms };
+  return [...assessProjectMechanismRuntime(candidateProject).driverGroups.values()].some(
+    ids => ids.length > 1 && ids.includes(mechanism.id),
   );
 };
 
@@ -901,37 +970,9 @@ export const createSampleProject = (
     ),
     localPivotJointId: p.anchorJointId,
   }));
-  const mechanisms = includeMechanism
-    ? [createDefaultMechanism("4bar", "mech-1")]
-    : [];
-  if (mechanisms[0]) {
-    mechanisms[0].targetPartId = "right_hand_part";
-    mechanisms[0].targetPathId = "path-right-arm";
-    mechanisms[0].targetAnchorJointId = "right_hand";
-    Object.assign(
-      mechanisms[0],
-      normalizeMechanismToFabricationSet({
-        ...mechanisms[0],
-        anchorX: 0,
-        anchorY: 200,
-        transform: { x: 0, y: 200, rotation: 270, scale: 1 },
-        sceneAnchor: { x: 0, y: 200 },
-        groundAngle: 270,
-        groundLength: 160,
-        crankLength: 80,
-        couplerLength: 240,
-        rockerLength: 160,
-        couplerPointDist: 160,
-        couplerPointAngle: -13.2,
-        assemblyMode: "crossed",
-        source: "optimized",
-        presetId: "sample-fitted",
-        recommendation: "sample path fit",
-      }),
-    );
-  }
+  const mechanisms = includeMechanism ? [guidedArmWaveMechanism()] : [];
 
-  const pathPoints = guidedArmWavePath(skeleton);
+  const pathPoints = guidedArmWavePath();
   const armPathDuration = 1800;
 
   return {
@@ -954,10 +995,7 @@ export const createSampleProject = (
         targetAnchorJointId: "right_hand",
         chainRootJointId: "right_shoulder",
         points: pathPoints,
-        timedPoints: guidedFourBarTimedPoints(
-          { x: -200, y: 200 },
-          armPathDuration,
-        ),
+        timedPoints: guidedArmWaveTimedPoints(armPathDuration),
         duration: armPathDuration,
         closed: true,
         enabled: true,
@@ -1128,13 +1166,24 @@ export const createLessonProject = (
     const path = paths[pathId];
     if (!path) return mechanismWithGeneratedPath(mechanism);
     const targeted = { ...mechanism, ...pathOwnedTargetFields(path) };
-    const fitted = fitMechanismToTargetPath(
-      { ...project, paths, mechanisms },
+    const fitProject = {
+      ...project,
+      paths,
+      mechanisms: mechanisms.filter((item) => item.id !== mechanism.id),
+    };
+    const direct = completeAutomaticFitCandidate(
+      fitProject,
       targeted,
-      pathId,
+      mechanismWithGeneratedPath(targeted),
     );
+    const fit = direct.accepted
+      ? direct
+      : fitMechanismToTargetPathResult(fitProject, targeted, pathId);
+    if (!fit.accepted || !fit.readiness.fabricationReady)
+      throw new Error(fit.blockers[0] ?? `Lesson mechanism blocked: ${mechanism.id}`);
     return {
-      ...fitted,
+      ...fit.mechanism,
+      generatedPath: path.points.map((point) => ({ ...point })),
       id: mechanism.id,
       color: mechanism.color,
       visible: mechanism.visible,
@@ -1142,7 +1191,8 @@ export const createLessonProject = (
       source: mechanism.source,
       presetId: mechanism.presetId,
       recommendation: mechanism.recommendation,
-      warnings: [...new Set([...(mechanism.warnings ?? []), ...(fitted.warnings ?? [])])],
+      foundryExport: undefined,
+      warnings: [...new Set([...(mechanism.warnings ?? []), ...(fit.mechanism.warnings ?? [])])],
       ...pathOwnedTargetFields(path),
     };
   };
@@ -1165,20 +1215,20 @@ export const createLessonProject = (
     const armFourBar = mechanisms[0];
     if (armFourBar) {
       Object.assign(armFourBar, {
-        anchorX: -200,
-        anchorY: 200,
-        groundAngle: 0,
-        groundLength: 320,
+        anchorX: 0,
+        anchorY: -40,
+        groundAngle: 180,
+        groundLength: 160,
         crankLength: 80,
         couplerLength: 160,
-        rockerLength: 320,
-        couplerPointDist: 80,
-        couplerPointAngle: 45,
+        rockerLength: 160,
+        couplerPointDist: 40,
+        couplerPointAngle: -90,
         assemblyMode: "crossed",
-        speed1: -1,
-        driverPhaseOffset: Math.PI,
-        transform: { x: -200, y: 200, rotation: 0, scale: 1 },
-        sceneAnchor: { x: -200, y: 200 },
+        speed1: 1,
+        driverPhaseOffset: 0,
+        transform: { x: 0, y: -40, rotation: 180, scale: 1 },
+        sceneAnchor: { x: 0, y: -40 },
         targetPartId: "right_hand_part",
         targetPathId: "path-right-arm",
         targetAnchorJointId: "right_hand",
@@ -1211,14 +1261,14 @@ export const createLessonProject = (
     const cam = createDefaultMechanism("cam", "mech-head-bob");
     Object.assign(cam, {
       anchorX: 0,
-      anchorY: 120,
-      groundAngle: 90,
+      anchorY: 200,
+      groundAngle: 270,
       driverPhaseOffset: Math.PI / 2,
-      crankLength: 28,
-      sliderOffset: 16,
+      crankLength: 30,
+      sliderOffset: 5,
       camProfileSamples: [0.84, 0.92, 1, 0.92],
-      transform: { x: 0, y: 120, rotation: 90, scale: 1 },
-      sceneAnchor: { x: 0, y: 120 },
+      transform: { x: 0, y: 200, rotation: 270, scale: 1 },
+      sceneAnchor: { x: 0, y: 200 },
       targetPartId: "head",
       targetPathId: pathId,
       targetAnchorJointId: "head_top",
@@ -1286,20 +1336,43 @@ export const createLessonProject = (
     const pathDuration = 1600;
     const rightShoulder = lessonSkeleton.joints.right_shoulder.position;
     const rightHand = lessonSkeleton.joints.right_hand.position;
-    const side = Math.sign(rightHand.x - rightShoulder.x) || 1;
-    const gearRadii: [number, number] = [60, 20];
+    // Both lesson endpoints need real off-axis attachment holes. G1/g8 is an
+    // axle-only gear, so the lesson uses the smallest attachment-capable pair.
+    // A vertical three-pitch pair stays on the physical sheet while keeping the
+    // output circle wholly on the viewer-left side of the character.
+    const gearRadii: [number, number] = [60, 60];
     const gearGridStep = project.settings.physicalKit.gridPitchMm * SCENE_PX_PER_MM;
-    const gearAnchorX =
-      Math.round((rightHand.x + side * (gearRadii[0] + gearRadii[1])) / gearGridStep) *
-      gearGridStep;
-    const gearGroundAngle = side < 0 ? 0 : 180;
-    const gearGroundAngleRad = (gearGroundAngle * Math.PI) / 180;
-    const outputCenter = {
-      x:
-        gearAnchorX +
-        (gearRadii[0] + gearRadii[1]) * Math.cos(gearGroundAngleRad),
-      y: 80 + (gearRadii[0] + gearRadii[1]) * Math.sin(gearGroundAngleRad),
-    };
+    const gearAnchorX = -2 * gearGridStep;
+    const gearAnchorY = 120;
+    const gearGroundAngle = rightHand.y <= rightShoulder.y ? 270 : 90;
+    const gear = createDefaultMechanism("gear", "mech-spin-gears");
+    Object.assign(gear, {
+      anchorX: gearAnchorX,
+      anchorY: gearAnchorY,
+      groundAngle: gearGroundAngle,
+      groundLength: gearRadii[0] + gearRadii[1],
+      crankLength: gearRadii[0],
+      rockerLength: gearRadii[1],
+      gearTrainRadii: gearRadii,
+      gearRatio: gearTrainOutputRatio(gearRadii),
+      speed2: gearTrainOutputRatio(gearRadii),
+      driverPhaseOffset: guidedGearDriverPhaseOffset(gearRadii),
+      couplerPointDist: 0,
+      couplerPointAngle: 0,
+      transform: { x: gearAnchorX, y: gearAnchorY, rotation: gearGroundAngle, scale: 1 },
+      sceneAnchor: { x: gearAnchorX, y: gearAnchorY },
+      source: "manual",
+      presetId: "lesson-spin-gears",
+      recommendation: lesson.description,
+    } satisfies Partial<MechanismConfig>);
+    const outputConnection = resolveMechanismPhysicalConnections(gear).connections.find(
+      (connection) => connection.role === "gear.output-pin",
+    );
+    if (!outputConnection?.local) throw new Error("Spin-gears needs an output attachment hole.");
+    const outputCenter = gearTrainCenters(gear).at(-1);
+    if (!outputCenter) throw new Error("Spin-gears needs an output gear center.");
+    const outputHandleRadius = outputConnection.local.length;
+    const outputHandleAngle = outputConnection.local.localAngle;
     paths = {
       [pathId]: {
         id: pathId,
@@ -1309,15 +1382,16 @@ export const createLessonProject = (
         points: Array.from({ length: 8 }, (_, index) => {
           const angle = (index / 8) * Math.PI * 2;
           return {
-            x: outputCenter.x + gearRadii[1] * Math.cos(angle),
-            y: outputCenter.y + gearRadii[1] * Math.sin(angle),
+            x: outputCenter.x + outputHandleRadius * Math.cos(angle + outputHandleAngle),
+            y: outputCenter.y + outputHandleRadius * Math.sin(angle + outputHandleAngle),
           };
         }),
         timedPoints: guidedGearTimedPoints(
           outputCenter,
           gearRadii,
-          gearRadii[1],
+          outputHandleRadius,
           pathDuration,
+          outputHandleAngle,
         ),
         duration: pathDuration,
         closed: true,
@@ -1327,27 +1401,11 @@ export const createLessonProject = (
         warnings: [],
       },
     };
-    const gear = createDefaultMechanism("gear", "mech-spin-gears");
     Object.assign(gear, {
-      anchorX: gearAnchorX,
-      anchorY: 80,
-      groundAngle: gearGroundAngle,
-      groundLength: 80,
-      crankLength: gearRadii[0],
-      rockerLength: gearRadii[1],
-      gearTrainRadii: gearRadii,
-      gearRatio: gearTrainOutputRatio(gearRadii),
-      speed2: gearTrainOutputRatio(gearRadii),
-      driverPhaseOffset: guidedGearDriverPhaseOffset(gearRadii),
-      transform: { x: gearAnchorX, y: 80, rotation: gearGroundAngle, scale: 1 },
-      sceneAnchor: { x: gearAnchorX, y: 80 },
       targetPartId: "right_hand_part",
       targetPathId: pathId,
       targetAnchorJointId: "right_hand",
       activeVisualPartIds: ["right_hand_part"],
-      source: "manual",
-      presetId: "lesson-spin-gears",
-      recommendation: lesson.description,
     } satisfies Partial<MechanismConfig>);
     mechanisms = [persistLessonMechanism(gear, pathId)];
     selectedPartId = "right_hand_part";
@@ -1395,310 +1453,41 @@ export const resetProjectToLessonBaseline = (
   const lesson = classroomLessonById(project.metadata.classroomLessonId);
   if (!lesson) return undefined;
   const baseline = createLessonProject(lesson.id);
-  return { ...baseline, settings: project.settings };
-};
-
-const jointScenePoint = (
-  project: ProjectState,
-  jointId?: string,
-): Point | undefined =>
-  jointId ? project.skeleton?.joints[jointId]?.position : undefined;
-
-const skeletonBox = (project: ProjectState) => {
-  const points = Object.values(project.skeleton?.joints ?? {}).map(
-    (joint) => joint.position,
-  );
-  if (!points.length) return undefined;
-  const xs = points.map((p) => p.x);
-  const ys = points.map((p) => p.y);
-  return {
-    minX: Math.min(...xs),
-    maxX: Math.max(...xs),
-    minY: Math.min(...ys),
-    maxY: Math.max(...ys),
-    center: {
-      x: (Math.min(...xs) + Math.max(...xs)) / 2,
-      y: (Math.min(...ys) + Math.max(...ys)) / 2,
-    },
-  };
-};
-
-const characterScaleBetween = (previous: ProjectState, next: ProjectState) => {
-  const before = skeletonBox(previous);
-  const after = skeletonBox(next);
-  if (!before || !after) return 1;
-  const beforeSize = Math.max(
-    1,
-    before.maxX - before.minX,
-    before.maxY - before.minY,
-  );
-  const afterSize = Math.max(
-    1,
-    after.maxX - after.minX,
-    after.maxY - after.minY,
-  );
-  return clampNumber(afterSize / beforeSize, 1, 0.2, 5);
-};
-
-const jointChainIds = (
-  skeleton: StandardSkeleton | null | undefined,
-  rootJointId?: string,
-  targetJointId?: string,
-) => {
-  if (!skeleton || !rootJointId || !targetJointId) return [];
-  if (rootJointId === targetJointId && skeleton.joints[rootJointId])
-    return [rootJointId];
-  const chain = [targetJointId];
-  let current = skeleton.joints[targetJointId]?.parentId ?? null;
-  while (current) {
-    chain.push(current);
-    if (current === rootJointId) return chain.reverse();
-    current = skeleton.joints[current]?.parentId ?? null;
-  }
-  return [];
-};
-
-const limbKeywordScore = (oldId: string | undefined, newId: string) => {
-  if (!oldId) return 0;
-  const tokens = [
-    "left",
-    "right",
-    "arm",
-    "leg",
-    "head",
-    "torso",
-    "hand",
-    "foot",
-  ];
-  return tokens.reduce(
-    (score, token) =>
-      score + (oldId.includes(token) && newId.includes(token) ? 1 : 0),
-    0,
+  return revalidateMechanismArtifacts(
+    { ...baseline, settings: project.settings },
+    baseline.mechanisms,
   );
 };
-
-const replacementPartId = (
-  project: ProjectState,
-  oldPartId?: string,
-  targetJointId?: string,
-) => {
-  if (oldPartId && project.parts[oldPartId]) return oldPartId;
-  const candidates = Object.values(project.parts)
-    .map((part) => ({
-      part,
-      chainLength: targetJointId
-        ? jointChainIds(project.skeleton, part.anchorJointId, targetJointId)
-            .length
-        : 0,
-      score: limbKeywordScore(oldPartId, part.id),
-    }))
-    .filter((item) => (targetJointId ? item.chainLength > 0 : item.score > 0))
-    .sort(
-      (a, b) =>
-        (targetJointId && oldPartId ? b.score - a.score : 0) ||
-        (targetJointId ? a.chainLength - b.chainLength : b.score - a.score) ||
-        b.score - a.score ||
-        a.part.zIndex - b.part.zIndex,
-    );
-  return candidates[0]?.part.id;
-};
-
-const mappedPoint = (
-  point: Point,
-  from: Point,
-  to: Point,
-  scale: number,
-): Point => ({
-  x: to.x + (point.x - from.x) * scale,
-  y: to.y + (point.y - from.y) * scale,
-});
-
-const mechanismScaleKeys: Array<keyof MechanismConfig> = [
-  "crankLength",
-  "groundLength",
-  "couplerLength",
-  "rockerLength",
-  "sliderOffset",
-  "couplerPointDist",
-  "rodLength",
-  "outputGearRadius",
-];
 
 export const replaceCharacterProject = (
   next: ProjectState,
   previous: ProjectState,
   previousStage: AppStage = "character",
 ): ProjectState => {
-  const scale = characterScaleBetween(previous, next);
-  const previousBox = skeletonBox(previous);
-  const nextBox = skeletonBox(next);
-  const fallbackFrom = previousBox?.center ?? { x: 0, y: 0 };
-  const fallbackTo = nextBox?.center ?? { x: 0, y: 0 };
-  const remappedPaths: Record<string, ProjectMotionPath> = Object.fromEntries(
-    Object.entries(previous.paths).flatMap(
-      ([id, path]): Array<[string, ProjectMotionPath]> => {
-        if (path.sceneObjectId)
-          return previous.sceneObjects[path.sceneObjectId]
-            ? [[id, { ...path, warnings: [] }]]
-            : [];
-        const referencingMechanismTarget = previous.mechanisms.find(
-          (mechanism) =>
-            mechanism.targetPathId === id &&
-            mechanism.targetAnchorJointId &&
-            next.skeleton?.joints[mechanism.targetAnchorJointId],
-        )?.targetAnchorJointId;
-        const previousPartRoot = previous.parts[path.partId]?.anchorJointId;
-        const targetJointId =
-          path.targetAnchorJointId &&
-          next.skeleton?.joints[path.targetAnchorJointId]
-            ? path.targetAnchorJointId
-            : (referencingMechanismTarget ??
-              (previousPartRoot && next.skeleton?.joints[previousPartRoot]
-                ? previousPartRoot
-                : undefined));
-        const partId = replacementPartId(next, path.partId, targetJointId);
-        if (!partId) return [];
-        const from =
-          jointScenePoint(previous, targetJointId) ??
-          jointScenePoint(
-            previous,
-            previous.parts[path.partId]?.anchorJointId,
-          ) ??
-          fallbackFrom;
-        const to =
-          jointScenePoint(next, targetJointId) ??
-          jointScenePoint(next, next.parts[partId]?.anchorJointId) ??
-          fallbackTo;
-        const candidateChainRootJointId =
-          path.chainRootJointId ?? previousPartRoot;
-        const chainRootJointId =
-          candidateChainRootJointId &&
-          jointChainIds(next.skeleton, candidateChainRootJointId, targetJointId)
-            .length
-            ? candidateChainRootJointId
-            : undefined;
-        return [
-          [
-            id,
-            {
-              ...path,
-              partId,
-              targetAnchorJointId: targetJointId,
-              chainRootJointId,
-              points: path.points.map((point) =>
-                mappedPoint(point, from, to, scale),
-              ),
-              timedPoints: path.timedPoints?.map((point) => ({
-                ...mappedPoint(point, from, to, scale),
-                time: point.time,
-              })),
-              warnings: [],
-            },
-          ],
-        ];
-      },
-    ),
+  const mechanisms = previous.mechanisms.map((mechanism) =>
+    invalidateMechanismArtifacts(mechanism, next.parts),
   );
-  const firstPathByPart = (partId?: string) =>
-    partId
-      ? Object.values(remappedPaths).find((path) => path.partId === partId)
-      : undefined;
-  const remappedMechanisms = previous.mechanisms.map((mechanism) => {
-    const priorPath = mechanism.targetPathId
-      ? remappedPaths[mechanism.targetPathId]
-      : undefined;
-    if (mechanism.targetSceneObjectId)
-      return mechanismWithGeneratedPath(
-        {
-          ...mechanism,
-          targetPartId: undefined,
-          targetSceneObjectId: next.sceneObjects[mechanism.targetSceneObjectId]
-            ? mechanism.targetSceneObjectId
-            : undefined,
-          targetPathId: priorPath?.id,
-          targetAnchorJointId: undefined,
-          activeVisualPartIds: [],
-        },
-        {
-          preserveGeneratedPath: Boolean(
-            mechanism.foundryExport || mechanism.generatedPath?.length,
-          ),
-        },
-      );
-    const targetAnchorJointId =
-      mechanism.targetAnchorJointId &&
-      next.skeleton?.joints[mechanism.targetAnchorJointId]
-        ? mechanism.targetAnchorJointId
-        : priorPath?.targetAnchorJointId;
-    const targetPartId = replacementPartId(
-      next,
-      mechanism.targetPartId,
-      targetAnchorJointId,
-    );
-    const targetPathId = priorPath?.id ?? firstPathByPart(targetPartId)?.id;
-    const anchor = mappedPoint(
-      {
-        x:
-          mechanism.anchorX ??
-          mechanism.sceneAnchor?.x ??
-          mechanism.transform?.x ??
-          fallbackFrom.x,
-        y:
-          mechanism.anchorY ??
-          mechanism.sceneAnchor?.y ??
-          mechanism.transform?.y ??
-          fallbackFrom.y,
-      },
-      fallbackFrom,
-      fallbackTo,
-      scale,
-    );
-    const scaled = mechanismScaleKeys.reduce((acc, key) => {
-      const value = mechanism[key];
-      return typeof value === "number" ? { ...acc, [key]: value * scale } : acc;
-    }, {} as Partial<MechanismConfig>);
-    return mechanismWithGeneratedPath({
-      ...mechanism,
-      ...scaled,
-      gearTrainRadii: mechanism.gearTrainRadii?.map((radius) => radius * scale),
-      targetPartId,
-      targetPathId,
-      targetAnchorJointId,
-      activeVisualPartIds: targetPartId ? [targetPartId] : [],
-      anchorX: anchor.x,
-      anchorY: anchor.y,
-      transform: mechanism.transform
-        ? { ...mechanism.transform, x: anchor.x, y: anchor.y }
-        : {
-            x: anchor.x,
-            y: anchor.y,
-            rotation: mechanism.groundAngle ?? 0,
-            scale: 1,
-          },
-      sceneAnchor: anchor,
-    });
-  });
   return {
     ...next,
-    paths: remappedPaths,
-    mechanisms: remappedMechanisms,
-    selectedPartId:
-      remappedMechanisms[0]?.targetPartId ?? Object.keys(next.parts)[0],
-    selectedPathId: Object.keys(remappedPaths)[0],
-    selectedMechanismId: remappedMechanisms[0]?.id,
+    paths: previous.paths,
+    mechanisms,
+    selectedPartId: previous.selectedPartId,
+    selectedPathId: previous.selectedPathId,
+    selectedMechanismId: previous.selectedMechanismId,
+    lastExport: undefined,
+    lastFoundryExport: undefined,
     characterPackage: next.characterPackage
       ? {
           ...next.characterPackage,
           replacementContext: {
             mode: "replace-character",
             previousStage,
-            rebindingSummary: `${remappedMechanisms.filter((m) => m.targetPartId).length}/${remappedMechanisms.length} mechanisms rebound; ${Object.keys(remappedPaths).length}/${Object.keys(previous.paths).length} paths scaled to new joints.`,
+            rebindingSummary: MECHANISM_BINDING_BLOCKER,
           },
         }
       : next.characterPackage,
   };
 };
-
 export const normalizePartsToSheet = (
   parts: BodyPartLayer[],
   settings = defaultSettings(),
@@ -1854,10 +1643,13 @@ export const createProjectFromProcessed = (input: {
 
 const touch = (
   project: ProjectState,
-  options: { preserveExport?: boolean } = {},
+  options: { preserveExport?: boolean; preserveFoundryExport?: boolean } = {},
 ): ProjectState => ({
   ...project,
   lastExport: options.preserveExport ? project.lastExport : undefined,
+  lastFoundryExport: options.preserveFoundryExport
+    ? project.lastFoundryExport
+    : undefined,
   metadata: { ...project.metadata, updatedAt: nowIso() },
 });
 
@@ -1906,8 +1698,10 @@ export const applyProjectAction = (
   action: ProjectAction,
 ): ProjectState => {
   switch (action.type) {
-    case "load_project":
-      return loadProjectSnapshot(action.project);
+    case "load_project": {
+      const loaded = loadProjectSnapshot(action.project, project);
+      return loaded.status === "loaded" ? loaded.project : project;
+    }
     case "set_processing":
       return { ...project, processing: action.processing };
     case "select_part": {
@@ -1923,13 +1717,20 @@ export const applyProjectAction = (
     }
     case "upsert_part": {
       const exists = Boolean(project.parts[action.part.id]);
+      if (
+        exists &&
+        action.part.anchorJointId &&
+        !project.skeleton?.joints[action.part.anchorJointId]
+      ) return project;
       const parts = { ...project.parts, [action.part.id]: action.part };
       const partOrder = exists
         ? project.partOrder
         : [...project.partOrder, action.part.id];
+      const nextPartProject = { ...project, parts };
+      if (exists && invalidatesAcceptedBinding(project, nextPartProject))
+        return project;
       return touch({
-        ...project,
-        parts,
+        ...nextPartProject,
         partOrder,
         selectedPartId: action.part.id,
         selectedSceneObjectId: undefined,
@@ -1938,22 +1739,19 @@ export const applyProjectAction = (
     case "delete_part": {
       if (project.parts[action.partId]?.locked) return project;
       const { [action.partId]: _part, ...parts } = project.parts;
+      const removedPathIds = new Set(
+        Object.values(project.paths)
+          .filter((path) => !path.sceneObjectId && path.partId === action.partId)
+          .map((path) => path.id),
+      );
       const paths = Object.fromEntries(
         Object.entries(project.paths).filter(
           ([, path]) => path.sceneObjectId || path.partId !== action.partId,
         ),
       );
       const mechanisms = project.mechanisms.map((m) =>
-        m.targetPartId === action.partId
-          ? mechanismWithGeneratedPath(
-              {
-                ...m,
-                targetPartId: undefined,
-                targetPathId: undefined,
-                activeVisualPartIds: [],
-              },
-              { preserveGeneratedPath: preserveGeneratedPathFor(m) },
-            )
+        m.targetPartId === action.partId || removedPathIds.has(m.targetPathId ?? "")
+          ? invalidateMechanismArtifacts(m, parts)
           : m,
       );
       const nextPartId = project.partOrder.find((id) => id !== action.partId);
@@ -1985,7 +1783,7 @@ export const applyProjectAction = (
         Object.keys(action.updates).some((key) => key !== "locked")
       )
         return project;
-      return touch({
+      const updatedPartProject = {
         ...project,
         parts: {
           ...project.parts,
@@ -1994,7 +1792,12 @@ export const applyProjectAction = (
             ...action.updates,
           },
         },
-      });
+      };
+      if (
+        action.updates.anchorJointId !== undefined &&
+        invalidatesAcceptedBinding(project, updatedPartProject)
+      ) return project;
+      return touch(updatedPartProject);
     case "reorder_part": {
       if (project.parts[action.partId]?.locked) return project;
       const order = [...project.partOrder];
@@ -2062,12 +1865,14 @@ export const applyProjectAction = (
           ([, path]) => path.sceneObjectId !== action.objectId,
         ),
       );
+      const removedPathIds = new Set(
+        Object.values(project.paths)
+          .filter((path) => path.sceneObjectId === action.objectId)
+          .map((path) => path.id),
+      );
       const mechanisms = project.mechanisms.map((m) =>
-        m.targetSceneObjectId === action.objectId
-          ? mechanismWithGeneratedPath(
-              { ...m, targetSceneObjectId: undefined, targetPathId: undefined },
-              { preserveGeneratedPath: preserveGeneratedPathFor(m) },
-            )
+        m.targetSceneObjectId === action.objectId || removedPathIds.has(m.targetPathId ?? "")
+          ? invalidateMechanismArtifacts(m, project.parts)
           : m,
       );
       return touch({
@@ -2090,7 +1895,10 @@ export const applyProjectAction = (
       });
     }
     case "set_skeleton":
-      return touch({ ...project, skeleton: action.skeleton });
+      return touch(invalidateOrphanedMechanisms({
+        ...project,
+        skeleton: action.skeleton,
+      }));
     case "update_joint": {
       if (!project.skeleton?.joints[action.jointId]) return project;
       if (
@@ -2135,7 +1943,12 @@ export const applyProjectAction = (
             ]),
           )
         : project.parts;
-      return touch({ ...project, parts, skeleton });
+      const updatedJointProject = { ...project, parts, skeleton };
+      if (
+        action.updates.parentId !== undefined &&
+        invalidatesAcceptedBinding(project, updatedJointProject)
+      ) return project;
+      return touch(updatedJointProject);
     }
     case "add_joint":
       return touch({
@@ -2163,16 +1976,10 @@ export const applyProjectAction = (
       const remaining = Object.values(project.skeleton.joints).filter(
         (j) => !remove.has(j.id),
       );
-      const fallbackAnchor = remaining[0]?.id;
-      const parts = Object.fromEntries(
-        Object.entries(project.parts).map(([id, part]) => [
-          id,
-          remove.has(part.anchorJointId) && fallbackAnchor
-            ? { ...part, anchorJointId: fallbackAnchor }
-            : part,
-        ]),
-      );
-      return touch({ ...project, parts, skeleton: buildSkeleton(remaining) });
+      return touch(invalidateOrphanedMechanisms({
+        ...project,
+        skeleton: buildSkeleton(remaining),
+      }));
     }
     case "upsert_path": {
       const path = validatePath(action.path);
@@ -2186,26 +1993,19 @@ export const applyProjectAction = (
         ? validatePath(project.paths[path.id])
         : undefined;
       const paths = { ...project.paths, [path.id]: path };
+      const nextPathProject = { ...project, paths };
+      if (
+        previousPath &&
+        invalidatesAcceptedBinding(project, nextPathProject)
+      ) return project;
       const mechanisms = project.mechanisms.map((m) =>
         m.targetPathId === path.id
-          ? reconcileMechanismTargets(
-              {
-                ...m,
-                targetPartId: path.sceneObjectId ? undefined : m.targetPartId,
-                targetSceneObjectId: path.sceneObjectId,
-              },
-              project.parts,
-              paths,
-              project.sceneObjects,
-              {
-                preserveGeneratedPath:
-                  preserveGeneratedPathFor(m) &&
-                  pathGeneratedGeometryUnchanged(previousPath, path),
-              },
-            )
+          ? pathGeneratedGeometryUnchanged(previousPath, path)
+            ? m
+            : invalidateMechanismArtifacts(m, project.parts)
           : m,
       );
-      return touch({ ...project, paths, mechanisms, selectedPathId: path.id });
+      return touch({ ...nextPathProject, mechanisms, selectedPathId: path.id });
     }
     case "delete_path": {
       const current = project.paths[action.pathId];
@@ -2219,13 +2019,7 @@ export const applyProjectAction = (
       const { [action.pathId]: _removed, ...paths } = project.paths;
       const mechanisms = project.mechanisms.map((m) =>
         m.targetPathId === action.pathId
-          ? reconcileMechanismTargets(
-              { ...m, targetPathId: undefined },
-              project.parts,
-              paths,
-              project.sceneObjects,
-              { preserveGeneratedPath: preserveGeneratedPathFor(m) },
-            )
+          ? invalidateMechanismArtifacts(m, project.parts)
           : m,
       );
       return touch({
@@ -2239,39 +2033,105 @@ export const applyProjectAction = (
       });
     }
     case "set_mechanisms": {
-      const mechanisms = action.mechanisms.map((m) =>
-        reconcileMechanismTargets(
-          m,
-          project.parts,
-          project.paths,
-          project.sceneObjects,
-          { preserveGeneratedPath: preserveGeneratedPathFor(m) },
-        ),
-      );
+      const mechanisms: MechanismConfig[] = [];
+      for (const candidate of action.mechanisms) {
+        const previous = project.mechanisms.find((item) => item.id === candidate.id);
+        const attempt = resolveMechanismEditAttempt(project, previous, candidate);
+        if (attempt.status !== "accepted") return project;
+        mechanisms.push(attempt.mechanism);
+      }
+      const preservesExactPrior =
+        mechanisms.length === project.mechanisms.length &&
+        mechanisms.every((mechanism, index) => mechanism === project.mechanisms[index]);
+      const requestedSelection =
+        action.selectedMechanismId ?? project.selectedMechanismId;
+      if (preservesExactPrior) {
+        const selectedMechanismId =
+          requestedSelection &&
+          mechanisms.some((mechanism) => mechanism.id === requestedSelection)
+            ? requestedSelection
+            : project.selectedMechanismId;
+        return selectedMechanismId === project.selectedMechanismId
+          ? project
+          : touch({ ...project, selectedMechanismId });
+      }
       const next = {
         ...project,
         mechanisms,
         selectedMechanismId:
-          action.selectedMechanismId ?? project.selectedMechanismId,
+          requestedSelection &&
+          mechanisms.some((mechanism) => mechanism.id === requestedSelection)
+            ? requestedSelection
+            : project.selectedMechanismId,
       };
       return introducesMechanismDriverConflict(project, next) ? project : touch(next);
     }
     case "upsert_mechanism": {
-      const mechanism = reconcileMechanismTargets(
-        action.mechanism,
-        project.parts,
-        project.paths,
-        project.sceneObjects,
-        { preserveGeneratedPath: preserveGeneratedPathFor(action.mechanism) },
+      const selectedMechanism = project.mechanisms.find(
+        (mechanism) => mechanism.id === project.selectedMechanismId,
       );
+      const replacementCandidateById = action.replaceMechanismId
+        ? project.mechanisms.find(
+            (mechanism) => mechanism.id === action.replaceMechanismId,
+          )
+        : undefined;
+      const replacementCandidateBySelection =
+        action.mechanism.id === project.selectedMechanismId &&
+        selectedMechanism?.type === action.mechanism.type
+          ? selectedMechanism
+          : undefined;
+      const replacementCandidate =
+        replacementCandidateById ?? replacementCandidateBySelection;
+      const resolvedMechanismId = replacementCandidate
+        ? replacementCandidate.id
+        : action.mechanism.id;
+      const replacementSeedTargets = replacementCandidate
+        ? {
+            targetPartId: replacementCandidate.targetPartId,
+            targetSceneObjectId: replacementCandidate.targetSceneObjectId,
+            targetPathId: replacementCandidate.targetPathId,
+            targetAnchorJointId: replacementCandidate.targetAnchorJointId,
+            activeVisualPartIds: replacementCandidate.activeVisualPartIds,
+          }
+        : {
+            targetPartId: undefined,
+            targetSceneObjectId: undefined,
+            targetPathId: undefined,
+            targetAnchorJointId: undefined,
+            activeVisualPartIds: undefined,
+          };
+      const mergedIncomingMechanism = {
+        ...action.mechanism,
+        targetPartId:
+          !Object.hasOwn(action.mechanism, "targetPartId")
+            ? replacementSeedTargets.targetPartId
+            : action.mechanism.targetPartId,
+        targetSceneObjectId:
+          !Object.hasOwn(action.mechanism, "targetSceneObjectId")
+            ? replacementSeedTargets.targetSceneObjectId
+            : action.mechanism.targetSceneObjectId,
+        targetPathId:
+          !Object.hasOwn(action.mechanism, "targetPathId")
+            ? replacementSeedTargets.targetPathId
+            : action.mechanism.targetPathId,
+        targetAnchorJointId:
+          !Object.hasOwn(action.mechanism, "targetAnchorJointId")
+            ? replacementSeedTargets.targetAnchorJointId
+            : action.mechanism.targetAnchorJointId,
+        activeVisualPartIds:
+          !Object.hasOwn(action.mechanism, "activeVisualPartIds")
+            ? replacementSeedTargets.activeVisualPartIds
+            : action.mechanism.activeVisualPartIds,
+      };
+
+      const mechanism = {
+        ...mergedIncomingMechanism,
+        id: resolvedMechanismId,
+      };
       const previous = project.mechanisms.find((m) => m.id === mechanism.id);
-      const commitBase =
-        previous ?? createDefaultMechanism(mechanism.type, mechanism.id);
-      const accepted = constrainMechanismCommit(
-        commitBase,
-        mechanism,
-        project.settings.physicalKit,
-      );
+      const result = resolveMechanismEditAttempt(project, previous, mechanism);
+      if (result.status !== "accepted") return project;
+      const accepted = result.mechanism;
       if (mechanismDriverConflict(project, accepted)) return project;
       const mechanisms = previous
         ? project.mechanisms.map((m) => (m.id === accepted.id ? accepted : m))
@@ -2281,6 +2141,42 @@ export const applyProjectAction = (
         mechanisms,
         selectedMechanismId: accepted.id,
       });
+    }
+    case "commit_mechanism_candidate": {
+      const { result } = action;
+      if (result.status === "blocked") return project;
+      const previous = project.mechanisms.find(
+        (mechanism) => mechanism.id === result.mechanism.id,
+      );
+      if (previous === result.mechanism && !result.foundryExport) return project;
+      const attempt = resolveMechanismEditAttempt(
+        project,
+        previous,
+        result.mechanism,
+      );
+      if (attempt.status !== "accepted") return project;
+      const accepted = result.foundryExport
+        ? { ...attempt.mechanism, foundryExport: result.foundryExport }
+        : (() => {
+            const { foundryExport: _foundryExport, ...withoutPackage } =
+              attempt.mechanism;
+            return withoutPackage as MechanismConfig;
+          })();
+      if (mechanismDriverConflict(project, accepted)) return project;
+      const mechanisms = previous
+        ? project.mechanisms.map((mechanism) =>
+            mechanism.id === accepted.id ? accepted : mechanism,
+          )
+        : [...project.mechanisms, accepted];
+      return touch(
+        {
+          ...project,
+          mechanisms,
+          selectedMechanismId: accepted.id,
+          lastFoundryExport: result.foundryExport,
+        },
+        { preserveFoundryExport: Boolean(result.foundryExport) },
+      );
     }
     case "delete_mechanism":
       return touch({
@@ -2312,18 +2208,19 @@ export const applyProjectAction = (
         action.settings.simulationFriction !== undefined ||
         action.settings.simulationMassKg !== undefined,
       );
-      return invalidatesExport
-        ? touch({ ...project, settings })
+      const nextProject = action.settings.physicalKit
+        ? revalidateMechanismArtifacts(
+            { ...project, settings },
+            project.mechanisms,
+          )
         : { ...project, settings };
+      return invalidatesExport
+        ? touch(nextProject)
+        : nextProject;
     }
     case "set_export":
       return touch(
         { ...project, lastExport: action.fabricationPackage },
-        { preserveExport: true },
-      );
-    case "set_foundry_export":
-      return touch(
-        { ...project, lastFoundryExport: action.foundryExport },
         { preserveExport: true },
       );
     default:
@@ -2651,7 +2548,11 @@ const normalizeSceneObjectSnapshot = (
   };
 };
 
-export const normalizeMechanismSnapshot = (value: unknown): MechanismConfig => {
+export const normalizeMechanismSnapshot = (
+  value: unknown,
+  sourceVersion: 1 | 2 = APP_STATE_VERSION,
+  kit = defaultPhysicalKit(),
+): MechanismConfig => {
   const raw = asRecord(value);
   const type = sanitizeMechanismType(raw.type);
   const base = createDefaultMechanism(
@@ -2660,9 +2561,6 @@ export const normalizeMechanismSnapshot = (value: unknown): MechanismConfig => {
       ? raw.id.slice(0, 80)
       : uid("mech"),
   );
-  const warnings = Array.isArray(raw.warnings)
-    ? raw.warnings.map(String).slice(0, 20)
-    : [];
   const optionalNumber = (v: unknown): number | undefined => {
     if (v === undefined || v === null || v === "") return undefined;
     const parsed = finiteNumber(v, Number.NaN);
@@ -2677,34 +2575,22 @@ export const normalizeMechanismSnapshot = (value: unknown): MechanismConfig => {
     : typeof raw.targetPartId === "string"
       ? [raw.targetPartId]
       : [];
-  const crankLength = clampNumber(raw.crankLength, base.crankLength, 1, 10000);
-  const rockerLength = clampNumber(
-    raw.rockerLength,
-    base.rockerLength,
-    1,
-    10000,
-  );
+  const crankLength = finiteNumber(raw.crankLength, base.crankLength);
+  const rockerLength = finiteNumber(raw.rockerLength, base.rockerLength);
   const gearTrainRadii = Array.isArray(raw.gearTrainRadii)
     ? raw.gearTrainRadii
-        .map((value) => finiteNumber(value, Number.NaN))
-        .filter(Number.isFinite)
-        .map((value) => Math.max(1, Math.abs(value)))
+        .map((value, index) => finiteNumber(value, base.gearTrainRadii?.[index] ?? 1))
         .slice(0, 8)
     : type === "gear" || type === "gear_linkage"
       ? [crankLength, rockerLength]
       : base.gearTrainRadii;
-  const gearRatio =
-    type === "gear" || type === "gear_linkage"
-      ? gearTrainOutputRatio({ crankLength, rockerLength, gearTrainRadii })
-      : raw.gearRatio === undefined
-        ? base.gearRatio
-        : finiteNumber(raw.gearRatio, base.gearRatio ?? 1);
+  const gearRatio = raw.gearRatio === undefined
+    ? base.gearRatio
+    : finiteNumber(raw.gearRatio, base.gearRatio ?? 1);
   const camProfileSamples = Array.isArray(raw.camProfileSamples)
-    ? normalizeCamProfileSamples(
-        raw.camProfileSamples
-          .map((value) => finiteNumber(value, Number.NaN))
-          .filter(Number.isFinite),
-      ).slice(0, 64)
+    ? raw.camProfileSamples
+        .map((value, index) => finiteNumber(value, base.camProfileSamples?.[index] ?? 0))
+        .slice(0, 64)
     : base.camProfileSamples;
   const normalized: MechanismConfig = {
     ...base,
@@ -2726,17 +2612,12 @@ export const normalizeMechanismSnapshot = (value: unknown): MechanismConfig => {
     }),
     sceneAnchor: sanitizePoint(raw.sceneAnchor, anchor),
     activeVisualPartIds,
-    fabricationMetadata: asRecord(
-      raw.fabricationMetadata,
-    ) as MechanismConfig["fabricationMetadata"],
-    foundryExport:
-      raw.foundryExport && typeof raw.foundryExport === "object"
-        ? (raw.foundryExport as FoundryExportPackage)
-        : undefined,
+    fabricationMetadata: undefined,
+    foundryExport: undefined,
     groundAngle: finiteNumber(raw.groundAngle, base.groundAngle ?? 0),
     groundLength: finiteNumber(raw.groundLength, base.groundLength),
     crankLength,
-    couplerLength: clampNumber(raw.couplerLength, base.couplerLength, 0, 10000),
+    couplerLength: finiteNumber(raw.couplerLength, base.couplerLength),
     rockerLength,
     sliderOffset: finiteNumber(raw.sliderOffset, base.sliderOffset),
     couplerPointDist: finiteNumber(raw.couplerPointDist, base.couplerPointDist),
@@ -2751,10 +2632,7 @@ export const normalizeMechanismSnapshot = (value: unknown): MechanismConfig => {
           ? "open"
           : base.assemblyMode,
     speed1: finiteNumber(raw.speed1, base.speed1 ?? 1),
-    speed2:
-      type === "gear" || type === "gear_linkage"
-        ? gearRatio
-        : finiteNumber(raw.speed2, base.speed2 ?? 1),
+    speed2: finiteNumber(raw.speed2, base.speed2 ?? 1),
     gearRatio,
     gearTrainRadii,
     camProfileSamples,
@@ -2804,110 +2682,208 @@ export const normalizeMechanismSnapshot = (value: unknown): MechanismConfig => {
     generatedPath: Array.isArray(raw.generatedPath)
       ? raw.generatedPath.map((p) => sanitizePoint(p)).slice(0, 1000)
       : undefined,
-    warnings,
+    warnings: [],
   };
-  const hasFittedGeometry =
-    [
-      raw.groundLength,
-      raw.crankLength,
-      raw.couplerLength,
-      raw.rockerLength,
-      raw.sliderOffset,
-      raw.couplerPointDist,
-      raw.couplerPointAngle,
-      raw.rodLength,
-      raw.outputGearRadius,
-      raw.gearRatio,
-    ].some((value) => optionalNumber(value) !== undefined) ||
-    Array.isArray(raw.gearTrainRadii) ||
-    Array.isArray(raw.camProfileSamples) ||
-    Array.isArray(raw.generatedPath);
-  const fabricationNormalized = hasFittedGeometry
-    ? normalizeMechanismToFabricationSet(normalized)
-    : normalizeMechanismToReference(normalized);
   const connectionState = normalizeMechanismConnectionSelections(
-    fabricationNormalized,
+    normalized,
     raw.connectionSelections,
     (raw as Partial<MechanismConfig>).connectionSelectionValidation,
+    {
+      sourceVersion,
+      kit,
+      priorDiagnostics: Array.isArray(raw.rejectedConnectionSelectionDiagnostics)
+        ? raw.rejectedConnectionSelectionDiagnostics
+        : undefined,
+    },
   );
-  const compatibilityUpdates = mechanismConnectionCompatibilityUpdates(fabricationNormalized, connectionState);
-  return {
-    ...fabricationNormalized,
-    ...compatibilityUpdates,
-    connectionSelections: connectionState.connectionSelections,
-    connectionSelectionValidation: connectionState.connectionSelectionValidation,
-  };
+  return mechanismWithKitConnections(normalized, connectionState, kit);
 };
 
-export const migrateProjectSnapshot = (raw: unknown): ProjectState => {
+type ProjectSnapshotEnvelope = {
+  data: Record<string, unknown>;
+  sourceVersion: 1 | 2;
+};
+
+const PROJECT_SNAPSHOT_CONTENT_KEYS = [
+  "metadata",
+  "parts",
+  "partOrder",
+  "sceneObjects",
+  "sceneObjectOrder",
+  "skeleton",
+  "paths",
+  "mechanisms",
+  "settings",
+] as const;
+
+const PROJECT_V2_REQUIRED_KEYS = [
+  ...PROJECT_SNAPSHOT_CONTENT_KEYS,
+  "processing",
+] as const;
+
+const snapshotRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value && typeof value === "object" && !Array.isArray(value));
+
+const snapshotRecordValuesAreRecords = (value: unknown) =>
+  snapshotRecord(value) && Object.values(value).every(snapshotRecord);
+
+const snapshotSkeletonShapeIsValid = (value: unknown) => {
+  if (value === null) return true;
+  if (!snapshotRecord(value)) return false;
+  if (Object.hasOwn(value, "joints") && !snapshotRecordValuesAreRecords(value.joints)) return false;
+  if (
+    Object.hasOwn(value, "bones") &&
+    (!Array.isArray(value.bones) || !value.bones.every((bone) =>
+      Array.isArray(bone) && bone.length === 2 && bone.every((id) => typeof id === "string")))
+  ) return false;
+  if (
+    Object.hasOwn(value, "rootJointIds") &&
+    (!Array.isArray(value.rootJointIds) || !value.rootJointIds.every((id) => typeof id === "string"))
+  ) return false;
+  if (
+    Object.hasOwn(value, "skeleton") &&
+    (!Array.isArray(value.skeleton) || !value.skeleton.every(snapshotRecord))
+  ) return false;
+  return true;
+};
+
+const projectSnapshotShapeIsValid = (
+  data: Record<string, unknown>,
+  sourceVersion: 1 | 2,
+) => {
+  if (
+    sourceVersion === 2 &&
+    PROJECT_V2_REQUIRED_KEYS.some((key) => !Object.hasOwn(data, key))
+  ) return false;
+  if (
+    ["metadata", "settings", "processing"].some(
+      (key) => Object.hasOwn(data, key) && !snapshotRecord(data[key]),
+    )
+  ) return false;
+  if (
+    ["parts", "sceneObjects", "paths"].some(
+      (key) => Object.hasOwn(data, key) && !snapshotRecordValuesAreRecords(data[key]),
+    )
+  ) return false;
+  if (
+    ["partOrder", "sceneObjectOrder"].some(
+      (key) => Object.hasOwn(data, key) &&
+        (!Array.isArray(data[key]) || !(data[key] as unknown[]).every((item) => typeof item === "string")),
+    )
+  ) return false;
+  if (
+    Object.hasOwn(data, "mechanisms") &&
+    (!Array.isArray(data.mechanisms) || !data.mechanisms.every(snapshotRecord))
+  ) return false;
+  if (
+    Object.hasOwn(data, "skeleton") &&
+    !snapshotSkeletonShapeIsValid(data.skeleton)
+  ) return false;
+  if (
+    ["selectedPartId", "selectedPathId", "selectedMechanismId", "selectedSceneObjectId"].some(
+      (key) => Object.hasOwn(data, key) && data[key] != null && typeof data[key] !== "string",
+    )
+  ) return false;
+  if (
+    Object.hasOwn(data, "characterPackage") &&
+    data.characterPackage !== null &&
+    !snapshotRecord(data.characterPackage)
+  ) return false;
+  const physicalKit = snapshotRecord(data.settings) ? data.settings.physicalKit : undefined;
+  return physicalKit === undefined || snapshotRecord(physicalKit);
+};
+
+const projectSnapshotEnvelope = (
+  raw: unknown,
+): ProjectSnapshotEnvelope | { reason: "unsupported-version" | "invalid-snapshot" } => {
+  if (!snapshotRecord(raw)) {
+    return { reason: "invalid-snapshot" };
+  }
+  const data = raw;
+  if (!PROJECT_SNAPSHOT_CONTENT_KEYS.some((key) => Object.hasOwn(data, key))) {
+    return { reason: "invalid-snapshot" };
+  }
+  const sourceVersion = data.version === undefined || data.version === 1
+    ? 1
+    : data.version === 2
+      ? 2
+      : undefined;
+  if (!sourceVersion) {
+    return { reason: typeof data.version === "number" ? "unsupported-version" : "invalid-snapshot" };
+  }
+  return projectSnapshotShapeIsValid(data, sourceVersion)
+    ? { data, sourceVersion }
+    : { reason: "invalid-snapshot" };
+};
+
+/**
+ * Converts an already-versioned envelope only. Raw ingress must go through
+ * `loadProjectSnapshot`, which preserves the current aggregate on rejection.
+ */
+const migrateProjectSnapshot = (
+  data: Record<string, unknown>,
+  sourceVersion: 1 | 2,
+): ProjectState => {
   const fallback = createEmptyProject();
-  if (!raw || typeof raw !== "object") return fallback;
-  const data = raw as Partial<ProjectState>;
   const skeleton = normalizeSkeletonSnapshot(data.skeleton);
+  const rawParts = asRecord(data.parts);
   const parts = Object.fromEntries(
-    Object.entries(data.parts ?? {}).map(([id, value]) => [
+    Object.entries(rawParts).map(([id, value]) => [
       id,
       normalizePartSnapshot(id, value, skeleton),
     ]),
   );
-  const partOrder = (data.partOrder ?? Object.keys(parts)).filter((id) =>
+  const partOrder = (Array.isArray(data.partOrder)
+    ? data.partOrder.filter((id): id is string => typeof id === "string")
+    : Object.keys(parts)).filter((id) =>
     Boolean(parts[id]),
   );
+  const rawSceneObjects = asRecord(data.sceneObjects);
   const sceneObjects = Object.fromEntries(
-    Object.entries(data.sceneObjects ?? {}).map(([id, value]) => [
+    Object.entries(rawSceneObjects).map(([id, value]) => [
       id,
       normalizeSceneObjectSnapshot(id, value),
     ]),
   );
-  const sceneObjectOrder = (
-    data.sceneObjectOrder ?? Object.keys(sceneObjects)
-  ).filter((id) => Boolean(sceneObjects[id]));
+  const sceneObjectOrder = (Array.isArray(data.sceneObjectOrder)
+    ? data.sceneObjectOrder.filter((id): id is string => typeof id === "string")
+    : Object.keys(sceneObjects)).filter((id) => Boolean(sceneObjects[id]));
+  const rawPaths = asRecord(data.paths);
   const paths = Object.fromEntries(
-    Object.entries(data.paths ?? {}).flatMap(([id, path]) => {
-      const next = validatePath({ ...asRecord(path), id } as ProjectMotionPath);
-      return next.sceneObjectId
-        ? sceneObjects[next.sceneObjectId]
-          ? [[id, next] as const]
-          : []
-        : parts[next.partId]
-          ? [[id, next] as const]
-          : [];
-    }),
+    Object.entries(rawPaths).map(([id, path]) => [
+      id,
+      validatePath({ ...asRecord(path), id } as ProjectMotionPath),
+    ]),
   );
-  const mechanisms = (
-    Array.isArray(data.mechanisms) ? data.mechanisms : fallback.mechanisms
-  ).map((m) =>
-    reconcileMechanismTargets(
-      normalizeMechanismSnapshot(m),
-      parts,
-      paths,
-      sceneObjects,
-      { preserveGeneratedPath: true },
-    ),
-  );
+  const settings = normalizeAppSettings(data.settings, fallback.settings);
+  const mechanisms = (Array.isArray(data.mechanisms)
+    ? data.mechanisms
+    : fallback.mechanisms).map((m) =>
+      normalizeMechanismSnapshot(m, sourceVersion, settings.physicalKit)
+    );
   const selectedPartId =
-    data.selectedPartId && parts[data.selectedPartId]
+    typeof data.selectedPartId === "string" && parts[data.selectedPartId]
       ? data.selectedPartId
       : undefined;
   const selectedPathId =
-    data.selectedPathId && paths[data.selectedPathId]
+    typeof data.selectedPathId === "string" && paths[data.selectedPathId]
       ? data.selectedPathId
       : undefined;
   const selectedMechanismId =
-    data.selectedMechanismId &&
+    typeof data.selectedMechanismId === "string" &&
     mechanisms.some((mechanism) => mechanism.id === data.selectedMechanismId)
       ? data.selectedMechanismId
       : undefined;
   const selectedSceneObjectId =
-    data.selectedSceneObjectId && sceneObjects[data.selectedSceneObjectId]
+    typeof data.selectedSceneObjectId === "string" && sceneObjects[data.selectedSceneObjectId]
       ? data.selectedSceneObjectId
       : undefined;
-  return {
+  const project: ProjectState = {
     ...fallback,
     version: APP_STATE_VERSION,
     metadata: {
       ...fallback.metadata,
-      ...(data.metadata ?? {}),
+      ...asRecord(data.metadata),
       updatedAt: nowIso(),
     },
     parts,
@@ -2917,26 +2893,68 @@ export const migrateProjectSnapshot = (raw: unknown): ProjectState => {
     skeleton,
     paths,
     mechanisms,
-    settings: normalizeAppSettings(data.settings, fallback.settings),
+    settings,
     selectedPartId,
     selectedPathId,
     selectedMechanismId,
     selectedSceneObjectId,
-    processing: data.processing ?? idleProcessing(),
+    processing:
+      data.processing && typeof data.processing === "object"
+        ? data.processing as ProcessingStatus
+        : idleProcessing(),
     lastExport: undefined,
     characterPackage:
       data.characterPackage && typeof data.characterPackage === "object"
         ? (data.characterPackage as CharacterPackageArtifact)
         : undefined,
-    lastFoundryExport:
-      data.lastFoundryExport && typeof data.lastFoundryExport === "object"
-        ? (data.lastFoundryExport as FoundryExportPackage)
-        : undefined,
+    lastFoundryExport: undefined,
   };
+  return revalidateMechanismArtifacts(project, mechanisms, {
+    preserveExactTargetFit: true,
+  });
 };
 
-export const loadProjectSnapshot = (raw: unknown): ProjectState =>
-  migrateProjectSnapshot(raw);
+const projectSnapshotDiagnostics = (
+  project: ProjectState,
+): RejectedConnectionSelectionDiagnostic[] =>
+  project.mechanisms
+    .flatMap((mechanism) => mechanism.rejectedConnectionSelectionDiagnostics ?? [])
+    .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)))
+    .slice(0, 24);
+
+/** Trusted fixture convenience. Rejected input throws instead of fabricating an empty project. */
+export function loadProjectSnapshot(raw: unknown): ProjectState;
+/** Raw file/autosave/reducer ingress preserves the exact current project on rejection. */
+export function loadProjectSnapshot(
+  raw: unknown,
+  currentProject: ProjectState,
+): ProjectSnapshotLoadResult;
+export function loadProjectSnapshot(
+  raw: unknown,
+  currentProject?: ProjectState,
+): ProjectState | ProjectSnapshotLoadResult {
+  const envelope = projectSnapshotEnvelope(raw);
+  if ("reason" in envelope) {
+    if (currentProject === undefined) {
+      throw new TypeError(`Project snapshot rejected: ${envelope.reason}`);
+    }
+    return {
+      status: "rejected",
+      project: currentProject,
+      blocker: "Fix: Update project",
+      reason: envelope.reason,
+    };
+  }
+  const project = migrateProjectSnapshot(envelope.data, envelope.sourceVersion);
+  const result: ProjectSnapshotLoadResult = {
+    status: "loaded",
+    project,
+    sourceVersion: envelope.sourceVersion,
+    migrated: envelope.sourceVersion === 1,
+    diagnostics: projectSnapshotDiagnostics(project),
+  };
+  return currentProject === undefined ? result.project : result;
+}
 
 export const downloadText = (
   filename: string,
@@ -2985,7 +3003,7 @@ export const projectSelfCheck = () => {
     type: "remove_joint",
     jointId: "right_elbow",
   });
-  if (removed.parts.right_arm_lower?.anchorJointId === "right_elbow")
-    throw new Error("selfcheck: part anchor not repaired after joint delete");
+  if (removed.parts.right_arm_lower?.anchorJointId !== "right_elbow")
+    throw new Error("selfcheck: joint delete did not preserve authored anchor");
   return true;
 };

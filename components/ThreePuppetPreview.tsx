@@ -4,7 +4,7 @@ import type { BodyPartLayer, CanvasViewport, MechanismConfig, MechanismType, Phy
 import { boardGridLines, defaultPhysicalKit, SCENE_PX_PER_MM, sceneBoundsForSheet } from '../utils/coordinates';
 import { calculateLinkage, normalizeCamProfileSamples, sampledCamProfileScale, gearPairOutputRatio, gearTrainCenters, gearTrainMeshPhaseRadAt, gearTrainOutputRatio, gearTrainPitchRadii, gearTrainRotationRatioAt, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from '../utils/kinematics';
 import { FABRICATION_HOLE_RADIUS_MM, FABRICATION_LINKAGE_ROLE_MIN_HOLES, FABRICATION_LINKAGE_SPECS, FABRICATION_LINKAGE_WIDTH_MM, FABRICATION_SPACER_SPEC, fabricationGearProfileForPitchRadius, fabricationLinkageHoleCountsForMechanism, fabricationLinkageSceneLengthsForMechanism, fabricationLinkageSpecForSceneLength, fabricationRingGearProfileForPitchRadius, fabricationRingInnerGearOutlinePoints, planetaryGearConventionForMechanism, planetaryGearRadii, planetaryPlanetCenters, planetaryRingPitchRadius, projectFabricationZMm, validateMechanismPreviewReadiness, type FabricationLinkageRoleLengths, type FabricationRenderPlan } from '../utils/fabrication';
-import { compileMechanismRenderPlan } from '../utils/mechanismCompiler';
+import { buildProjectMechanismSceneContract, type MechanismSceneContract } from '../utils/mechanismSceneContract';
 import { mechanismInventoryForMechanism, zeroMechanismInventory, type MechanismInventory } from '../utils/mechanismInventory';
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, pointInsideOutline } from '../utils/partGeometry';
 import { clampCanvasZoom, WEBGL_PIXEL_RATIO_CAP } from '../utils/viewport';
@@ -12,7 +12,7 @@ import { HIGH_THROUGHPUT_SCENE_POLICY, PHYSICS_KERNEL_ENGINE, PHYSICS_RENDER_STA
 import { DEFAULT_PUPPET_VIEWER_LAYERS, VIEWER3D_CAMERA_PRESETS, VIEWER3D_CONTRACT_VERSION, createViewer3DContract, viewer3DLayerDataValue, type Viewer3DCameraPreset, type Viewer3DTabKey } from '../utils/viewer3d';
 import { ALL_MECHANISM_TYPES } from '../utils/mechanismTemplates';
 import { cachedThreeResource, clearThreeGroup, disposeMarkedThreeMaterials, disposeThreeObjectGraph, setRendererPixelRatioCap } from '../utils/threeResourceKit';
-import { connectionSelectionSignature, resolveFourBarConnectionSelections, resolveFourBarLinkageBlankPoses } from '../utils/mechanismConnectionSelections';
+import { resolveFourBarConnectionSelections, resolveFourBarLinkageBlankPoses } from '../utils/mechanismConnectionSelections';
 import { foundryPinStackPoints, foundryPinStacks } from '../utils/mechanismPreviewStacks';
 
 const VIEW_SCALE = 35;
@@ -569,8 +569,12 @@ const mechanismGearRotations = (mechanism: MechanismConfig, angle: number) => {
   return [input];
 };
 
-const mechanismTelemetry = (mechanism: MechanismConfig, angle: number) => {
-  const state = calculateLinkage(mechanism, angle);
+const mechanismTelemetry = (
+  mechanism: MechanismConfig,
+  angle: number,
+  kit: PhysicalKitSettings,
+) => {
+  const state = calculateLinkage(mechanism, angle, kit);
   const rotations = mechanismGearRotations(mechanism, angle);
   const rack = mechanism.type === 'rack-pinion' ? rackGuideCenter(mechanism, state) : null;
   const rackHalfLength = Math.max(1, mechanism.rockerLength / 2);
@@ -630,10 +634,13 @@ const gearPlaneModeForMechanism = (mechanism: MechanismConfig | undefined, rende
   return 'not-gear-train';
 };
 
-const mechanismGeometrySignature = (mechanisms: MechanismConfig[], kit: PhysicalKitSettings) => mechanisms.map(mechanism => [
+const mechanismGeometrySignature = (
+  mechanisms: MechanismConfig[],
+  contracts: Map<string, MechanismSceneContract>,
+) => mechanisms.map(mechanism => [
   mechanism.id,
   mechanism.type,
-  compileMechanismRenderPlan(mechanism, kit).zSummary,
+  contracts.get(mechanism.id)?.compilerSignature ?? '',
   mechanism.crankLength,
   mechanism.groundLength,
   mechanism.couplerLength,
@@ -644,7 +651,6 @@ const mechanismGeometrySignature = (mechanisms: MechanismConfig[], kit: Physical
   mechanism.outputGearRadius,
   mechanism.gearTrainRadii?.join(',') ?? '',
   mechanism.showOutputGear,
-  connectionSelectionSignature(mechanism.connectionSelections)
 ].join(':')).join('|');
 
 export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneObjects = {}, skeleton, mechanisms, paths, selectedPathId, angle = 0, viewport, setViewport, inputMode = 'always', testId = 'three-puppet', cameraPresets = PUPPET_CAMERA_PRESETS, showToolbar = true, initialLayers, assemblyOverlay, onSelectPart, onSelectSceneObject, onSelectMechanism, onSelectOnlyPointerDown, onSelectOnlyPointerMove, onSelectOnlyPointerUp, onSelectOnlyPointerCancel, onSelectOnlyWheel }: {
@@ -734,8 +740,19 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     .filter((object): object is SceneObject => Boolean(object?.visible)), [animatedSceneObjects, project?.sceneObjectOrder, project?.sceneObjects]);
   const joints = useMemo(() => Object.values(activeSkeleton?.joints ?? {}), [activeSkeleton]);
   const bones = useMemo(() => activeSkeleton?.bones ?? [], [activeSkeleton]);
-  const mechanismsToRender = useMemo(() => (mechanisms ?? project?.mechanisms ?? [])
-    .filter(mechanism => mechanism.visible !== false && mechanism.enabled !== false), [mechanisms, project?.mechanisms]);
+  const mechanismCandidates = mechanisms ?? project?.mechanisms ?? [];
+  const mechanismContracts = useMemo(() => new Map(
+    project
+      ? mechanismCandidates.flatMap(mechanism => {
+          const contract = buildProjectMechanismSceneContract(project, mechanism.id, undefined, 0);
+          return contract ? [[mechanism.id, contract] as const] : [];
+        })
+      : [],
+  ), [mechanismCandidates, project]);
+  const mechanismsToRender = useMemo(
+    () => mechanismCandidates.filter(mechanism => mechanismContracts.has(mechanism.id)),
+    [mechanismCandidates, mechanismContracts],
+  );
   const pathsToRender = useMemo(() => (paths ?? [])
     .filter(path => path.visible !== false && path.enabled !== false && path.points.length > 1), [paths]);
   const assemblyPhase = assemblyOverlay?.phase;
@@ -747,10 +764,19 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   );
   const renderedMechanisms = mechanismsToRender;
   const mechanismRenderPlans = useMemo(
-    () => new Map(renderedMechanisms.map(mechanism => [mechanism.id, compileMechanismRenderPlan(mechanism, kit)])),
-    [kit, renderedMechanisms]
+    () => new Map(renderedMechanisms.flatMap(mechanism => {
+      const contract = mechanismContracts.get(mechanism.id);
+      return contract ? [[mechanism.id, contract.renderPlan] as const] : [];
+    })),
+    [mechanismContracts, renderedMechanisms]
   );
-  const selectedTelemetry = useMemo(() => selectedMechanism ? mechanismTelemetry(selectedMechanism, angle) : null, [selectedMechanism, angle]);
+  const selectedTelemetry = useMemo(() => selectedMechanism
+      ? mechanismTelemetry(
+        selectedMechanism,
+        mechanismContracts.get(selectedMechanism.id)?.projectDriveEnabled ? angle : 0,
+        kit,
+      )
+    : null, [angle, kit, mechanismContracts, selectedMechanism]);
   const selectedRenderPlan = useMemo(
     () => selectedMechanism ? mechanismRenderPlans.get(selectedMechanism.id) ?? null : null,
     [mechanismRenderPlans, selectedMechanism]
@@ -1228,7 +1254,10 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     render();
   }, [pathSignature, rendererStatus, selectedPathId]);
 
-  const mechanismSignature = useMemo(() => mechanismGeometrySignature(renderedMechanisms, kit), [kit, renderedMechanisms]);
+  const mechanismSignature = useMemo(
+    () => mechanismGeometrySignature(renderedMechanisms, mechanismContracts),
+    [mechanismContracts, renderedMechanisms],
+  );
   useEffect(() => {
     const roots = rootsRef.current;
     const materials = materialsRef.current;
@@ -1335,8 +1364,14 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     renderedMechanisms.forEach(mechanism => {
       const visual = mechanismRefs.current.get(mechanism.id);
       if (!visual) return;
-      const state = calculateLinkage(mechanism, angle);
-      const renderPlan = mechanismRenderPlans.get(mechanism.id) ?? compileMechanismRenderPlan(mechanism, kit);
+      const contract = mechanismContracts.get(mechanism.id);
+      const renderPlan = mechanismRenderPlans.get(mechanism.id);
+      if (!contract || !renderPlan) return;
+      const state = calculateLinkage(
+        mechanism,
+        contract.projectDriveEnabled ? angle : 0,
+        kit,
+      );
       const isGearTrain = mechanism.type === 'gear' || mechanism.type === 'gear_linkage';
       const layerForSource = (sourceNodeId: string) =>
         renderPlan.layers.find(layer => layer.sourceNodeId === sourceNodeId);
@@ -1508,7 +1543,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       });
     });
     render();
-  }, [angle, kit, mechanismRenderPlans, renderedMechanisms, rendererStatus]);
+  }, [angle, kit, mechanismContracts, mechanismRenderPlans, renderedMechanisms, rendererStatus]);
 
   useEffect(() => {
     const roots = rootsRef.current;
@@ -1848,11 +1883,14 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       data-three-selected-mechanism-type={selectedTelemetry?.type ?? ''}
       data-three-selected-mechanism-id={selectedMechanism?.id ?? ''}
       data-three-selectable-mechanism-count={onSelectMechanism ? mechanismsToRender.length : 0}
-      data-three-selected-mechanism-generated-path-count={selectedMechanism?.generatedPath?.length ?? 0}
+      data-three-selected-mechanism-generated-path-count={selectedMechanism && mechanismContracts.get(selectedMechanism.id)?.projectDriveEnabled
+        ? selectedMechanism.generatedPath?.length ?? 0
+        : 0}
       data-three-mechanism-ids={mechanismsToRender.map(mechanism => mechanism.id).join(',')}
       data-three-rendered-mechanism-ids={renderedMechanisms.map(mechanism => mechanism.id).join(',')}
-      data-three-mechanism-generated-path-counts={mechanismsToRender.map(mechanism => `${mechanism.id}:${mechanism.generatedPath?.length ?? 0}`).join(',')}
-      data-three-stack-source={selectedRenderPlan ? 'compileMechanismRenderPlan' : ''}
+      data-three-mechanism-generated-path-counts={mechanismsToRender.map(mechanism => `${mechanism.id}:${mechanismContracts.get(mechanism.id)?.projectDriveEnabled ? mechanism.generatedPath?.length ?? 0 : 0}`).join(',')}
+      data-three-mechanism-runtime-modes={mechanismsToRender.map(mechanism => `${mechanism.id}:${mechanismContracts.get(mechanism.id)?.runtimeMode ?? ''}`).join(',')}
+      data-three-stack-source={selectedRenderPlan ? 'MechanismSceneContract' : ''}
       data-three-stack-mode="assembled-spacer-separated"
       data-three-part-surface="solid-cut-plates"
       data-three-part-art="top-texture-decal"

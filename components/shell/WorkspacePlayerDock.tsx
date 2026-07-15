@@ -95,7 +95,9 @@ export const WorkspacePlayerDock = ({ isPlaying, setIsPlaying, angle, setAngle, 
       min={0}
       max={stepPlayback ? maxStepIndex : 100}
       value={stepPlayback ? stepIndex : percent}
+      aria-valuetext={stepPlayback ? `Step ${stepIndex + 1} of ${stepCount}` : `${percent}%`}
       onChange={event => stepPlayback ? goStep(Number(event.currentTarget.value)) : scrubWorkspace(Number(event.currentTarget.value))}
     />
+    <output data-testid="workspace-playback-percent" aria-label="Playback percent">{percent}%</output>
   </aside>;
 };

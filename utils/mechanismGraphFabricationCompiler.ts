@@ -21,6 +21,11 @@ import {
 import { assemblyStepFingerprint, type AssemblyStepFingerprint } from './fabricationAssemblyFingerprint';
 import { fabricationBaseLayer, STACK_COLORS, type FabricationStackLayer } from './fabricationStackModel';
 import { validateMechanismGraph, type MechanismConstraintRole, type MechanismGraph, type MechanismGraphNode, type MechanismGraphNodeRole } from './mechanismGraph';
+import {
+    connectionSelectionPartKey,
+    connectionSelectionRolesForMechanism,
+    connectionSelectionSourceNodeId,
+} from './mechanismConnectionSelections';
 
 export type GraphRecipeCompilerSource = 'compileGraphFabricationRecipe';
 
@@ -35,7 +40,8 @@ export type AuthoredGraphFabricationResult = {
     assemblyStepFingerprints?: GraphAssemblyStepFingerprint[];
 };
 
-const graphPartRoleForNode = (role: MechanismGraph['nodes'][number]['role']): FabricationStackLayer['role'] | null => {
+const graphPartRoleForNode = (node: MechanismGraphNode): FabricationStackLayer['role'] | null => {
+    const { role } = node;
     if (role === 'link' || role === 'rigid-part') return 'linkage';
     if (role === 'gear' || role === 'ring-gear') return 'gear';
     if (role === 'cam') return 'cam';
@@ -55,9 +61,12 @@ const distanceBetween = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y)
 const boardCoordinateForPoint = (point: Point | undefined, kit: PhysicalKitSettings) => {
     if (!point) return null;
     const board = sceneToBoardRaw(point, kit);
-    const sceneAnchor = board.valid ? boardToScene(board.col, board.row, kit) : point;
-    const snapDistance = board.valid ? distanceBetween(point, sceneAnchor) : Number.POSITIVE_INFINITY;
-    return { board, sceneAnchor, coordinate: board.label, snapDistance, snapped: board.valid && snapDistance <= boardSnapTolerance(kit) };
+    const sceneAnchor = boardToScene(board.col, board.row, kit);
+    const snapDistance = distanceBetween(point, sceneAnchor);
+    // Grid alignment and board containment are separate physical facts. Keep
+    // an aligned off-board node compilable so the envelope/readiness layer can
+    // return the exact fit blocker instead of misreporting a snap failure.
+    return { board, sceneAnchor, coordinate: board.label, snapDistance, snapped: snapDistance <= boardSnapTolerance(kit) };
 };
 
 const GRAPH_FABRICATION_PART_ROLES = new Set<MechanismGraphNodeRole>([
@@ -99,13 +108,17 @@ const finiteGraphPartValue = (node: MechanismGraphNode) => {
     return Number(node.value);
 };
 
+const selectedPhysicalConnectionForGraphNode = (graph: MechanismGraph, node: MechanismGraphNode) => {
+    if (!graph.mechanismType) return undefined;
+    const selections = graph.connectionSelectionSummary?.connectionSelections;
+    return connectionSelectionRolesForMechanism(graph.mechanismType).flatMap(role => {
+        const selection = selections?.[role];
+        return selection && connectionSelectionSourceNodeId(role, selection) === node.id ? [{ role, selection }] : [];
+    })[0];
+};
+
 const selectedLinkageSpecForGraphNode = (graph: MechanismGraph, node: MechanismGraphNode) => {
-    const role = node.id === 'input-link'
-        ? '4bar.input-joint'
-        : node.id === 'output-link'
-            ? '4bar.output-joint'
-            : undefined;
-    const selection = role ? graph.connectionSelectionSummary?.connectionSelections?.[role] : undefined;
+    const selection = selectedPhysicalConnectionForGraphNode(graph, node)?.selection;
     return selection?.kind === 'linkage-hole'
         ? FABRICATION_LINKAGE_SPECS.find(spec => spec.key === selection.linkageKey)
         : undefined;
@@ -119,12 +132,8 @@ const linkageSpecForGraphNode = (graph: MechanismGraph, node: MechanismGraphNode
 };
 
 const selectedGearSpecForGraphNode = (graph: MechanismGraph, node: MechanismGraphNode) => {
-    if (graph.mechanismType !== 'gear_linkage') return undefined;
-    const selections = graph.connectionSelectionSummary?.connectionSelections;
-    const selection = node.id === 'gear-0'
-        ? selections?.['gear_linkage.drive-pin']
-        : selections?.['gear_linkage.output-pin'];
-    return selection?.kind === 'gear-attachment-hole' && node.id === `gear-${selection.gearIndex}`
+    const selection = selectedPhysicalConnectionForGraphNode(graph, node)?.selection;
+    return selection?.kind === 'gear-attachment-hole'
         ? FABRICATION_GEAR_SPECS.find(spec => spec.key === selection.gearKey)
         : undefined;
 };
@@ -158,6 +167,9 @@ const graphPartLabelForNode = (node: MechanismGraphNode, graph: MechanismGraph) 
 };
 
 const graphPartKeyForNode = (node: MechanismGraphNode, role: FabricationStackLayer['role'], graph: MechanismGraph) => {
+    if (node.id === 'rack') return 'racks:rack';
+    const selected = selectedPhysicalConnectionForGraphNode(graph, node);
+    if (selected) return connectionSelectionPartKey(selected.role, selected.selection);
     if (node.role === 'link' || node.role === 'rigid-part') return `linkages:${linkageSpecForGraphNode(graph, node).key}`;
     if (node.role === 'ring-gear') {
         return `ring_gears:${fabricationRingGearSpecForPitchRadius(Math.abs(finiteGraphPartValue(node)) / SCENE_PX_PER_MM).key}`;
@@ -174,6 +186,8 @@ const requirementCategoryForPart = (part: string | undefined, _role: string) => 
     if (lowerPart.startsWith('linkages:')) return 'linkage';
     if (lowerPart.startsWith('gears:') || lowerPart.startsWith('ring_gears:')) return 'gear';
     if (lowerPart.startsWith('cams:')) return 'cam';
+    if (lowerPart.startsWith('cam_modules:')) return 'cam-module';
+    if (lowerPart.startsWith('brackets:')) return 'guide';
     if (lowerPart.startsWith('guides:')) return 'guide';
     if (lowerPart.startsWith('followers:')) return 'follower';
     if (lowerPart.startsWith('spacers:')) return 'spacer';
@@ -238,18 +252,26 @@ const graphRenderPlan = (
     const boardMountedNodeIds = new Set(graph.constraints
         .filter(constraint => constraint.role === 'fixed-to-board' || constraint.role === 'board-snap')
         .flatMap(constraint => constraint.nodes));
+    const sourceConstraintIdsFor = (sourceNodeId: string, declared: readonly string[] = []) => declared.length
+        ? [...declared]
+        : graph.constraints
+            .filter(constraint => constraint.nodes.includes(sourceNodeId)
+                || (constraint.role === 'distance' && constraint.fabricatedPartNodeId === sourceNodeId))
+            .map(constraint => constraint.id)
+            .sort();
     const stackLayers = assemblySteps.flatMap(step => (step.stack ?? []).flatMap(item => {
         if (item.axialRole !== 'structural' || !item.sourceNodeId) return [];
         const node = nodeById.get(item.sourceNodeId);
-        const role = node ? graphPartRoleForNode(node.role) ?? 'linkage' : 'linkage';
+        const role = node ? graphPartRoleForNode(node) ?? 'linkage' : 'linkage';
         return [{
             label: item.label,
             role,
             color: STACK_COLORS[role],
             stepIndex: step.index,
             stackItemIndex: item.order - 1,
+            part: item.part,
             sourceNodeId: item.sourceNodeId,
-            sourceConstraintIds: [...(item.sourceConstraintIds ?? [])]
+            sourceConstraintIds: sourceConstraintIdsFor(item.sourceNodeId, item.sourceConstraintIds)
         }];
     }));
     const occurrenceByRole = new Map<FabricationStackLayer['role'], number>();
@@ -265,6 +287,7 @@ const graphRenderPlan = (
             stackItemIndex: item.stackItemIndex,
             occurrence,
             renderKind: renderKindForGraphRole(item.role),
+            partKey: item.part,
             sourceNodeId: item.sourceNodeId,
             sourceConstraintIds: item.sourceConstraintIds,
             preferredBackFaceMm: undefined as number | undefined
@@ -382,7 +405,11 @@ const graphRenderPlan = (
         candidates.push({
             id: `${graph.id}:support:${sourceKind}:${constraint.id}:occ:0`, sourceKind, sourceIds: [constraint.id],
             rootNodeId: constraint.nodes[0] ?? constraint.id, draftIndexes: indexes,
-            rootedToBoard: constraint.nodes.some(nodeId => boardMountedNodeIds.has(nodeId)), pinBearing: false,
+            // A prismatic pair is guide containment, not an axial stack from
+            // the board into the moving slider/follower. Its fixed guide has
+            // its own board support path; rooting the pair here invents a
+            // vertical contact gap before the moving part.
+            rootedToBoard: constraint.role !== 'prismatic' && constraint.nodes.some(nodeId => boardMountedNodeIds.has(nodeId)), pinBearing: false,
             transitionKinds: indexes.slice(1).map(() => sourceKind === 'contact' ? 'contact-overlap' : 'guide-capture')
         });
     });
@@ -492,10 +519,15 @@ const graphRenderPlan = (
         ownerExpansions: candidate.ownerExpansions,
         ...(candidate.pinBearing ? { displayAlias: String.fromCharCode(65 + aliasOrdinal++) } : {})
     }));
+    const physicalConnectionErrors = graph.connectionSelectionSummary?.physicalConnections.flatMap(connection =>
+        drafts.some(draft => draft.sourceNodeId === connection.sourceNodeId && draft.partKey === connection.partKey)
+            ? []
+            : [`Missing compiled physical layer for ${connection.role} (${connection.sourceNodeId}/${connection.partKey})`]
+    ) ?? [];
     return packFabricationRenderPlan({
         graphId: graph.id,
         layers: drafts,
-        validationErrors,
+        validationErrors: [...validationErrors, ...physicalConnectionErrors],
         ...(graph.connectionSelectionSummary ? { connectionSelectionSummary: graph.connectionSelectionSummary } : {}),
         gearPlaneComponents,
         pathDrafts
@@ -541,8 +573,12 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
         };
     }
     const validation = validateMechanismGraph(graph);
-    const validationErrors = validation.diagnostics.filter(diagnostic => diagnostic.severity === 'error').map(diagnostic => diagnostic.message);
-    if (validationErrors.length) {
+    const errorDiagnostics = validation.diagnostics.filter(diagnostic => diagnostic.severity === 'error');
+    const validationErrors = errorDiagnostics.map(diagnostic => diagnostic.message);
+    const familyPositionDiagnosticsOnly = graph.source === 'family-definition'
+        && errorDiagnostics.length > 0
+        && errorDiagnostics.every(diagnostic => diagnostic.code === 'position-mismatch');
+    if (validationErrors.length && !familyPositionDiagnosticsOnly) {
         return {
             recipeCompilerSource: 'compileGraphFabricationRecipe',
             buildable: false,
@@ -569,6 +605,7 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
     const hasFabricatedMovingPart = fabricatedMovingPartNodes.length > 0
         || linkConstraintEntries.length > 0;
     const boardMountedNodesArePlaced = boardMountedNodes.every(node => boardCoordinateForPoint(node.position, kit)?.snapped);
+    const boardMountedNodesFit = boardMountedNodes.every(node => boardCoordinateForPoint(node.position, kit)?.board.valid);
     const fabricatedConstraintNodeIds = new Set(graph.constraints
         .filter(constraint => FABRICATED_CONSTRAINT_ROLES.has(constraint.role))
         .flatMap(constraint => constraint.nodes));
@@ -625,7 +662,7 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
             renderPlan: graphRenderPlan(graph, [], [blocker, ...recipeErrors.filter(error => error !== blocker)])
         };
     }
-    if (!fabricatedMovingPartFootprintsFit) {
+    if (!boardMountedNodesFit || !fabricatedMovingPartFootprintsFit) {
         return {
             recipeCompilerSource: 'compileGraphFabricationRecipe',
             buildable: false,
@@ -751,7 +788,7 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
             recipeCompilerSource: 'compileGraphFabricationRecipe',
             buildable: renderPlan.validationErrors.length === 0,
             blocker: renderPlan.validationErrors[0],
-            recipe,
+            ...(validationErrors.length ? {} : { recipe }),
             renderPlan,
             assemblyStepFingerprints: packedAssemblySteps.map(assemblyStepFingerprint)
         };
@@ -773,7 +810,7 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
             check: 'The link can swing without rubbing.',
             stack: stack(
                 { label: 'Back Clip', role: 'clip', sourceConstraintIds: [constraint.id], axialRole: 'back-retainer' },
-                { label, role: 'moving-part', part: graphPartKeyForNode(partNode, graphPartRoleForNode(partNode.role) ?? 'linkage', graph), sourceNodeId: partNode.id, sourceConstraintIds: [constraint.id], axialRole: 'structural' },
+                { label, role: 'moving-part', part: graphPartKeyForNode(partNode, graphPartRoleForNode(partNode) ?? 'linkage', graph), sourceNodeId: partNode.id, sourceConstraintIds: [constraint.id], axialRole: 'structural' },
                 { label: FABRICATION_SPACER_SPEC.label, role: 'spacer', part: `spacers:${FABRICATION_SPACER_SPEC.key}`, sourceConstraintIds: [constraint.id], axialRole: 'spacer' },
                 { label: `End hole ${coords[1] ?? coords[0] ?? primaryAnchor.coordinate}`, role: coordRoleForNode(constraint.nodes[1] ?? constraint.nodes[0]) },
                 { label: 'Paper fastener', role: 'hardware', part: 'hardware:paper-fastener' },
@@ -785,7 +822,7 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
         .filter(node => graphNodeIsFabricatedPart(node) && !representedLinkPartNodeIds.has(node.id))
         .map((node, index) => {
         const coord = boardCoordinateForNode(node.id);
-        const role = graphPartRoleForNode(node.role) ?? 'linkage';
+        const role = graphPartRoleForNode(node) ?? 'linkage';
         const label = graphPartLabelForNode(node, graph);
         const stackReferenceRole = boardMountedNodeIds.has(node.id) ? 'board' : coordRoleForNode(node.id);
         return {
@@ -840,7 +877,7 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
         recipeCompilerSource: 'compileGraphFabricationRecipe',
         buildable: renderPlan.validationErrors.length === 0,
         blocker: renderPlan.validationErrors[0],
-        recipe,
+        ...(validationErrors.length ? {} : { recipe }),
         renderPlan,
         assemblyStepFingerprints: packedAssemblySteps.map(assemblyStepFingerprint)
     };

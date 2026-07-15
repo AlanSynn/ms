@@ -84,6 +84,7 @@ export const guidedGearTimedPoints = (
   radii: number[],
   outputRadius: number,
   duration: number,
+  outputLocalAngle = 0,
 ): TimedPoint[] => {
   const outputIndex = radii.length - 1;
   const outputRatio = gearTrainRotationRatioAt(radii, outputIndex);
@@ -96,8 +97,8 @@ export const guidedGearTimedPoints = (
         (index / GUIDED_PHASE_SAMPLE_COUNT) * Math.PI * 2;
       const outputPhase = meshPhase + inputPhase * outputRatio;
       return {
-        x: outputCenter.x + outputRadius * Math.cos(outputPhase),
-        y: outputCenter.y + outputRadius * Math.sin(outputPhase),
+        x: outputCenter.x + outputRadius * Math.cos(outputPhase + outputLocalAngle),
+        y: outputCenter.y + outputRadius * Math.sin(outputPhase + outputLocalAngle),
       };
     }),
     duration,

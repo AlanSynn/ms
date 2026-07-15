@@ -8,6 +8,7 @@ export const MiniNumber = ({
   max,
   step = 1,
   disabled = false,
+  constraint,
   helpId,
   onChange,
 }: {
@@ -17,16 +18,25 @@ export const MiniNumber = ({
   max: number;
   step?: number;
   disabled?: boolean;
+  constraint?: string;
   helpId?: ContextHelpId;
   onChange: (v: number) => void;
-}) => (
-  <label className={`block ${disabled ? "opacity-50" : ""}`}>
+}) => {
+  const boundedChange = (next: number) => {
+    if (!Number.isFinite(next)) return;
+    onChange(Math.max(min, Math.min(max, next)));
+  };
+  const displayedValue = Number.isFinite(value) ? value : min;
+  return <label
+    className={`block mini-number-control ${disabled ? "is-disabled" : ""}`}
+    data-bounded-input={`${min}:${max}:${step}`}
+  >
     <div className="mb-1 flex justify-between text-xs font-black uppercase tracking-wider text-slate-500">
       <span className="inline-flex items-center gap-1">
         {label}
         {helpId && <ContextHelp helpId={helpId} />}
       </span>
-      <span>{Number(value).toFixed(step < 1 ? 2 : 0)}</span>
+      <span>{Number(displayedValue).toFixed(step < 1 ? 2 : 0)}</span>
     </div>
     <input
       aria-label={`${label} slider`}
@@ -36,8 +46,9 @@ export const MiniNumber = ({
       max={max}
       step={step}
       disabled={disabled}
-      value={Number.isFinite(value) ? value : 0}
-      onChange={(e) => onChange(Number(e.target.value))}
+      value={displayedValue}
+      aria-valuetext={`${displayedValue}; ${min} to ${max}`}
+      onChange={(event) => boundedChange(event.currentTarget.valueAsNumber)}
     />
     <input
       aria-label={`${label} number`}
@@ -47,11 +58,13 @@ export const MiniNumber = ({
       max={max}
       step={step}
       disabled={disabled}
-      value={Number.isFinite(value) ? value : 0}
-      onChange={(e) => onChange(Number(e.target.value))}
+      value={displayedValue}
+      onChange={(event) => boundedChange(event.currentTarget.valueAsNumber)}
     />
-  </label>
-);
+    <small className="mini-number-limit">{min}–{max}</small>
+    {constraint && <small className="motion-option-lock-note">{constraint}</small>}
+  </label>;
+};
 
 export const Toggle = ({
   label,

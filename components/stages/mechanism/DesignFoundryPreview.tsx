@@ -1,5 +1,11 @@
 import React, { useMemo, useRef, useState } from "react";
-import type { MechanismConfig, Point, ProjectAction, ProjectState } from "../../../types";
+import type {
+  MechanismConfig,
+  MechanismEditFeedback,
+  Point,
+  ProjectAction,
+  ProjectState,
+} from "../../../types";
 import {
   FOUNDRY_OVERLAY_SIZE,
   FOUNDRY_VIEW_PRESETS,
@@ -12,14 +18,29 @@ import {
 } from "../../../utils/foundryCamera";
 import { buildAutomataSceneModel } from "../../../utils/automataSceneModel";
 import { pointsToSvgPath } from "../../../utils/mechanismPreview";
+import {
+  connectionSelectionSceneCoordinates,
+  connectionSelectionSignature,
+} from "../../../utils/mechanismConnectionSelections";
 import { ThreeFoundryPreview } from "../foundry/ThreeFoundryPreview";
+import {
+  MechanismConnectionOverlay,
+  projectMechanismConnectionHoleHandles,
+  useMechanismConnectionDrag,
+} from "./MechanismConnectionOverlay";
 
 type DesignFoundryPreviewProps = {
   project: ProjectState;
   mechanism?: MechanismConfig;
   angle: number;
+  setIsPlaying: (v: boolean) => void;
   showTrace: boolean;
   dispatch: (action: ProjectAction) => void;
+  updateMechanism: (
+    id: string,
+    updates: Partial<MechanismConfig>,
+  ) => boolean | void;
+  mechanismEditFeedback?: MechanismEditFeedback | null;
 };
 
 const noPoint = { x: 0, y: 0 };
@@ -34,8 +55,11 @@ export const DesignFoundryPreview = ({
   project,
   mechanism,
   angle,
+  setIsPlaying,
   showTrace,
   dispatch,
+  updateMechanism,
+  mechanismEditFeedback,
 }: DesignFoundryPreviewProps) => {
   const [showGrid, setShowGrid] = useState(true);
   const [showUserPathPreview, setShowUserPathPreview] = useState(true);
@@ -66,6 +90,7 @@ export const DesignFoundryPreview = ({
     () => buildAutomataSceneModel(project, mechanism, angle, "design-live"),
     [angle, mechanism, project],
   );
+  const previewMechanism = sceneModel.mechanism ?? sceneModel.recoveryMechanism;
   const automataContext = useMemo(
     () =>
       sceneModel.mechanism
@@ -83,6 +108,55 @@ export const DesignFoundryPreview = ({
   );
   const showUserPath = showTrace && showUserPathPreview;
   const showMechanismPath = showTrace && showMechanismPathPreview;
+  const connectionHoleHandles = useMemo(() => {
+    if (!previewMechanism || !sceneModel.foundryPreview || !sceneModel.mechanismContract)
+      return [];
+    const layers = sceneModel.mechanismContract.renderPlan.layers;
+    return projectMechanismConnectionHoleHandles({
+      mechanism: sceneModel.foundryPreview.mechanism,
+      state: sceneModel.foundryPreview.physicalSimulation.state,
+      kit: project.settings.physicalKit,
+      camera,
+      projectionSize,
+      layers,
+      renderedLayerZ: layers.map((layer) => layer.z),
+    });
+  }, [camera, previewMechanism, projectionSize, project.settings.physicalKit, sceneModel]);
+  const connectionMechanism = sceneModel.foundryPreview?.mechanism;
+  const connectionInteraction = useMechanismConnectionDrag({
+    mechanism: connectionMechanism,
+    handles: connectionHoleHandles,
+    projectionSize,
+    kit: project.settings.physicalKit,
+    disabled: !connectionMechanism || Boolean(sceneModel.recoveryMechanism),
+    onCommit: (updates) => {
+      return connectionMechanism
+        ? updateMechanism(connectionMechanism.id, updates)
+        : false;
+    },
+    onInteractionStart: () => setIsPlaying(false),
+  });
+  const selectedConnectionHandle =
+    connectionInteraction.selectedHandle ??
+    connectionHoleHandles.find((handle) => handle.selected) ??
+    connectionHoleHandles.find((handle) => handle.provisional);
+  const connectionCoordinates = sceneModel.foundryPreview
+    ? connectionSelectionSceneCoordinates(
+        sceneModel.foundryPreview.mechanism,
+        sceneModel.foundryPreview.physicalSimulation.state,
+        sceneModel.foundryPreview.mechanism.connectionSelections,
+        project.settings.physicalKit,
+      )
+    : {};
+  const connectionExportSignature = connectionSelectionSignature(
+    sceneModel.mechanismContract?.renderPlan.connectionSelectionSummary
+      ?.connectionSelections ?? {},
+  );
+  const matchingEditFeedback =
+    mechanismEditFeedback && mechanismEditFeedback.mechanismId === previewMechanism?.id
+      ? mechanismEditFeedback
+      : null;
+  const editBlocker = matchingEditFeedback?.blocker ?? sceneModel.mechanismContract?.runtimeBlocker;
   const userPathD = useMemo(() => {
     if (!showUserPath || !sceneModel.foundryPreview?.userPathPoints.length) return "";
     const projected = sceneModel.foundryPreview.userPathPoints
@@ -181,7 +255,7 @@ export const DesignFoundryPreview = ({
     }));
   };
 
-  if (!sceneModel.mechanism || !sceneModel.foundryPreview) {
+  if (!previewMechanism || !sceneModel.foundryPreview || !sceneModel.mechanismContract) {
     return (
       <div className="blueprint-empty-state" data-testid="design-shared-foundry-empty">
         Add a mechanism.
@@ -201,8 +275,9 @@ export const DesignFoundryPreview = ({
       data-shared-with="foundry-renderer"
       data-design-scene-mode="single-foundry-automata-scene"
       data-automata-model-source="buildAutomataSceneModel"
-      data-mechanism-id={sceneModel.mechanism.id}
-      data-mechanism-type={sceneModel.mechanism.type}
+      data-mechanism-id={previewMechanism.id}
+      data-mechanism-type={previewMechanism.type}
+      data-recovery-mode={sceneModel.recoveryMechanism ? "static" : "bound"}
       data-foundry-feature-label={sceneModel.featureLabel ?? ""}
       data-foundry-feature-issue-count={sceneModel.featureIssues.length}
       data-guided-context-mode="single-scene-automata"
@@ -212,7 +287,7 @@ export const DesignFoundryPreview = ({
       data-user-path-preview={showUserPath ? "shown" : "hidden"}
       data-mechanism-path-preview={showMechanismPath ? "shown" : "hidden"}
       data-design-motion-source={sceneModel.motionSource}
-      data-design-generated-path-count={sceneModel.mechanism.generatedPath?.length ?? 0}
+      data-design-generated-path-count={sceneModel.mechanism?.generatedPath?.length ?? 0}
       data-design-path-fit-status={sceneModel.pathFitStatus}
       data-design-path-fit-error={
         sceneModel.pathFitError === undefined ? "unmeasured" : sceneModel.pathFitError.toFixed(3)
@@ -316,6 +391,7 @@ export const DesignFoundryPreview = ({
       </div>
       <ThreeFoundryPreview
         mechanism={sceneModel.foundryPreview.mechanism}
+        mechanismContract={sceneModel.mechanismContract}
         simulation={sceneModel.foundryPreview.physicalSimulation}
         kit={project.settings.physicalKit}
         camera={camera}
@@ -324,8 +400,8 @@ export const DesignFoundryPreview = ({
         pathPoints={sceneModel.foundryPreview.previewPoints}
         pathTraces={sceneModel.foundryPreview.pointTraces}
         showGrid={showGrid}
-        showPathPreview={showMechanismPath}
-        showTrail={showMechanismPath}
+        showPathPreview={showMechanismPath && sceneModel.mechanismContract.projectDriveEnabled === true}
+        showTrail={showMechanismPath && sceneModel.mechanismContract.projectDriveEnabled === true}
         showForces={false}
         showVelocity={false}
         explode={0}
@@ -353,6 +429,13 @@ export const DesignFoundryPreview = ({
         onAutomataSceneObjectSelect={(objectId) =>
           dispatch({ type: "select_scene_object", objectId })
         }
+        connectionSelectionCoordinates={connectionCoordinates}
+        connectionExportSignature={connectionExportSignature}
+        selectedConnection={selectedConnectionHandle ? {
+          role: selectedConnectionHandle.role,
+          kind: selectedConnectionHandle.kind,
+          holeIndex: selectedConnectionHandle.holeIndex,
+        } : undefined}
         viewerTab="design"
         automataContext={automataContext}
       >
@@ -374,6 +457,20 @@ export const DesignFoundryPreview = ({
             />
           </svg>
         )}
+        <MechanismConnectionOverlay
+          surface="design"
+          handles={connectionHoleHandles}
+          projectionSize={projectionSize}
+          dragging={connectionInteraction.dragging}
+          recoveryRole={connectionInteraction.recoveryRole}
+          blocker={connectionInteraction.blocker ?? editBlocker}
+          disabled={Boolean(sceneModel.recoveryMechanism)}
+          onInteractionStart={connectionInteraction.beginInteraction}
+          onSelect={connectionInteraction.selectHandle}
+          onPointerDown={connectionInteraction.onPointerDown}
+          onPointerMove={connectionInteraction.onPointerMove}
+          onPointerUp={connectionInteraction.onPointerUp}
+        />
       </ThreeFoundryPreview>
     </section>
   );

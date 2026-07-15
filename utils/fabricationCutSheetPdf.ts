@@ -35,7 +35,7 @@ export const makeCutSheetPdf = (project: ProjectState, recipes: FabricationRecip
         }
     }
     project.mechanisms.filter(m => m.visible && m.enabled !== false).forEach(m => {
-        const points = generateCurvePoints(m, 48).points.map(toPdf);
+        const points = generateCurvePoints(m, 48, kit).points.map(toPdf);
         if (points.length > 1) {
             commands.push(`${hexRgb(m.color)} RG 0.9 w`);
             commands.push(`${num(points[0].x)} ${num(points[0].y)} m ${points.slice(1).map(p => `${num(p.x)} ${num(p.y)} l`).join(' ')} S`);

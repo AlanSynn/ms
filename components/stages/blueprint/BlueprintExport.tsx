@@ -6,6 +6,7 @@ import {
   makeBlueprintPreviewSvg,
   validateForFabrication,
 } from "../../../utils/fabrication";
+import { isSoftReadinessBlocker } from "../../../utils/fabricationReadiness";
 import {
   EditorStageFrame,
   canvasPane,
@@ -13,7 +14,7 @@ import {
   workflowPane,
 } from "../stageLayout";
 import { BlueprintControlPanel } from "./BlueprintControlPanel";
-import { buildMechanismSceneContract } from "../../../utils/mechanismSceneContract";
+import { buildProjectMechanismSceneContract } from "../../../utils/mechanismSceneContract";
 import { BlueprintDetailPanel } from "./BlueprintDetailPanel";
 
 export const selectBlueprintRecipe = (
@@ -34,16 +35,25 @@ export const BlueprintExport = ({
   dispatch: (action: ProjectAction) => void;
   goStage: (stage: AppStage) => void;
 }) => {
-  const validation = validateForFabrication(project);
+  const validation = validateForFabrication(project, {
+    allowSoftReadinessBlockers: true,
+  });
+  const { readiness } = validation;
+  const buildReady =
+    readiness.status === "project-ready" ||
+    !readiness.blockers.some((blocker) => !isSoftReadinessBlocker(blocker));
   const create = () =>
     dispatch({
       type: "set_export",
-      fabricationPackage: createFabricationPackage(project),
+      fabricationPackage: createFabricationPackage(project, {
+        allowSoftReadinessBlockers: true,
+      }),
     });
-  const pkg = project.lastExport;
-  const activeMechanisms = project.mechanisms.filter(
-    (m) => m.visible && m.enabled !== false,
-  );
+  const pkg = buildReady ? project.lastExport : undefined;
+  const readyIds = new Set(readiness.activeMechanismIds);
+  const activeMechanisms = buildReady
+    ? project.mechanisms.filter((mechanism) => readyIds.has(mechanism.id))
+    : [];
   const liveRecipes = activeMechanisms.map((mechanism) =>
     pendingRecipeForMechanism(project, mechanism),
   );
@@ -52,11 +62,11 @@ export const BlueprintExport = ({
   const selectedRecipe = selectBlueprintRecipe(recipes, selectedRecipeId, project.selectedMechanismId);
   const selectedMechanism = selectedRecipe
     ? project.mechanisms.find((mechanism) => mechanism.id === selectedRecipe.mechanismId)
+    : project.mechanisms.find((mechanism) => mechanism.id === project.selectedMechanismId);
+  const selectedMechanismContract = selectedMechanism
+    ? buildProjectMechanismSceneContract(project, selectedMechanism.id, selectedRecipe)
     : undefined;
-  const selectedMechanismContract = selectedMechanism && selectedRecipe
-    ? buildMechanismSceneContract(selectedMechanism, selectedRecipe, project.settings.physicalKit)
-    : undefined;
-  const previewSvg = makeBlueprintPreviewSvg(project, recipes);
+  const previewSvg = buildReady ? makeBlueprintPreviewSvg(project, recipes) : "";
   return (
     <EditorStageFrame
       stage="blueprint"

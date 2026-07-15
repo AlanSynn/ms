@@ -9,6 +9,10 @@ import type { FabricationRenderPlan } from './fabrication';
 import { sampleFeasibleRange } from './fabrication';
 import { calculateLinkage } from './kinematics';
 import { compileMechanismRenderPlan } from './mechanismCompiler';
+import {
+    CONNECTION_SELECTION_ROLE_POLICIES,
+    connectionSelectionRolesForMechanism,
+} from './mechanismConnectionSelections';
 import { ALL_MECHANISM_TYPES, MECHANISM_TEMPLATE_LIBRARY } from './mechanismTemplates';
 import { createDefaultMechanism, mechanismRequiredParts } from './project';
 
@@ -153,36 +157,40 @@ const draggableHandlesForType = (type: MechanismType): MechanismDragHandle[] => 
     }
 };
 
+const authoredConnectionPolicyForType = (
+    type: MechanismType,
+): Partial<Record<ConnectionSelectionRole, MechanismConnectionKind>> =>
+    Object.fromEntries(
+        connectionSelectionRolesForMechanism(type).map((role) => [
+            role,
+            CONNECTION_SELECTION_ROLE_POLICIES[role].kind,
+        ]),
+    ) as Partial<Record<ConnectionSelectionRole, MechanismConnectionKind>>;
+
 const connectionPolicyForType = (type: MechanismType): MechanismConnectionPolicy => {
     switch (type) {
         case '4bar':
             return {
-                authored: {
-                    '4bar.input-joint': 'linkage-hole',
-                    '4bar.output-joint': 'linkage-hole'
-                },
+                authored: authoredConnectionPolicyForType(type),
                 fixed: ['4bar.input-ground', '4bar.output-ground'],
                 derived: ['4bar.coupler', '4bar.effector', '4bar.aux'],
                 blocked: []
             };
         case 'gear_linkage':
             return {
-                authored: {
-                    'gear_linkage.drive-pin': 'gear-attachment-hole',
-                    'gear_linkage.output-pin': 'gear-attachment-hole'
-                },
+                authored: authoredConnectionPolicyForType(type),
                 fixed: ['gear_linkage.drive-center', 'gear_linkage.output-center'],
                 derived: ['gear_linkage.connector-link', 'gear_linkage.aux'],
                 blocked: []
             };
         case 'gear':
-            return { authored: {}, fixed: ['gear.drive-axle', 'gear.output-axle'], derived: ['gear.mesh', 'gear.phase', 'gear.output'], blocked: [] };
+            return { authored: authoredConnectionPolicyForType(type), fixed: ['gear.drive-axle', 'gear.output-axle'], derived: ['gear.mesh', 'gear.phase', 'gear.output'], blocked: [] };
         case 'planetary_gear':
-            return { authored: {}, fixed: ['planetary_gear.sun-axle', 'planetary_gear.ring-gear'], derived: ['planetary_gear.planet-gear', 'planetary_gear.carrier', 'planetary_gear.output'], blocked: [] };
+            return { authored: authoredConnectionPolicyForType(type), fixed: ['planetary_gear.sun-axle', 'planetary_gear.ring-gear'], derived: ['planetary_gear.planet-gear', 'planetary_gear.carrier', 'planetary_gear.output'], blocked: [] };
         case 'cam':
-            return { authored: {}, fixed: ['cam.cam-axle', 'cam.follower-guide'], derived: ['cam.cam-profile-contact', 'cam.follower', 'cam.effector'], blocked: [] };
+            return { authored: authoredConnectionPolicyForType(type), fixed: ['cam.cam-axle', 'cam.follower-guide'], derived: ['cam.cam-profile-contact', 'cam.follower', 'cam.effector'], blocked: [] };
         case 'piston':
-            return { authored: {}, fixed: ['piston.crank-ground', 'piston.slider-guide'], derived: ['piston.crank', 'piston.connecting-rod', 'piston.slider', 'piston.effector'], blocked: [] };
+            return { authored: authoredConnectionPolicyForType(type), fixed: ['piston.crank-ground', 'piston.slider-guide'], derived: ['piston.crank', 'piston.connecting-rod', 'piston.slider', 'piston.effector'], blocked: [] };
         case 'crank':
             return { authored: {}, fixed: ['crank.ground'], derived: ['crank.link', 'crank.effector'], blocked: [] };
         case 'yoke':

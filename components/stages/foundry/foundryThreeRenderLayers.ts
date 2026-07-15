@@ -1,15 +1,17 @@
 import * as THREE from "three";
-import type { MechanismConfig, Point } from "../../../types";
+import type { MechanismConfig, PhysicalKitSettings, Point } from "../../../types";
 import {
+  calculateLinkage,
   gearTrainMeshPhaseDegAt,
   gearTrainRotationRatioAt,
 } from "../../../utils/kinematics";
+import { defaultPhysicalKit } from "../../../utils/coordinates";
 import { foundryPlanetaryPlanetRotationDeg } from "../../../utils/foundryPlayback";
-import {
-  planetaryRingPitchRadius,
-  type FabricationRenderLayer,
-  type FabricationRenderPlan,
-} from "../../../utils/fabrication";
+import { planetaryRingPitchRadius } from "../../../utils/fabricationSizing";
+import type {
+  FabricationRenderLayer,
+  FabricationRenderPlan,
+} from "../../../utils/mechanismFabricationZStack";
 import { degToRad } from "../../../utils/foundryCamera";
 import type { MechanismPreviewSimulation } from "../../../utils/mechanismPreview";
 import {
@@ -25,6 +27,60 @@ import {
   foundryAssemblyLayerState,
   type FoundryAssemblySceneFrame,
 } from "./foundryAssemblySceneOverlay";
+import {
+  buildMechanismPhysicalEnvelopeDescriptors,
+  type MechanismPhysicalEnvelopeDescriptor,
+} from "../../../utils/mechanismPhysicalEnvelope";
+
+export type FoundryPhysicalEnvelopeAffine = {
+  scale: number;
+  translateX: number;
+  translateY: number;
+};
+
+export type FoundryPhysicalEnvelopePreview = MechanismPhysicalEnvelopeDescriptor["envelope"];
+
+export const mapPhysicalEnvelopeToFoundryPreview = (
+  descriptor: MechanismPhysicalEnvelopeDescriptor,
+  affine: FoundryPhysicalEnvelopeAffine,
+): FoundryPhysicalEnvelopePreview => {
+  const envelope = descriptor.envelope;
+  const scale = Math.abs(affine.scale);
+  const pose = {
+    x: envelope.x * affine.scale + affine.translateX,
+    y: -envelope.y * affine.scale + affine.translateY,
+  };
+  if (envelope.kind === "circle")
+    return { kind: "circle", ...pose, rotation: 0, radius: envelope.radius * scale };
+  if (envelope.kind === "capsule")
+    return {
+      kind: "capsule",
+      ...pose,
+      rotation: -envelope.rotation,
+      length: envelope.length * scale,
+      radius: envelope.radius * scale,
+    };
+  return {
+    kind: "oriented-box",
+    ...pose,
+    rotation: -envelope.rotation,
+    width: envelope.width * scale,
+    height: envelope.height * scale,
+  };
+};
+
+export const foundryPhysicalEnvelopeAffine = (
+  mechanism: MechanismConfig,
+  simulation: MechanismPreviewSimulation,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+): FoundryPhysicalEnvelopeAffine => {
+  const source = calculateLinkage(mechanism, simulation.inputAngleRad, kit).p1;
+  return {
+    scale: simulation.scale,
+    translateX: simulation.state.p1.x - source.x * simulation.scale,
+    translateY: simulation.state.p1.y + source.y * simulation.scale,
+  };
+};
 
 type VisiblePathTrace = {
   points: Point[];
@@ -32,6 +88,7 @@ type VisiblePathTrace = {
 
 type FoundryDynamicLayerRenderOptions = {
   mechanism: MechanismConfig;
+  kit: PhysicalKitSettings;
   simulation: MechanismPreviewSimulation;
   primitives: FoundryThreePrimitiveFactory;
   renderPlan: FabricationRenderPlan;
@@ -61,6 +118,7 @@ const linkageHoleCountForSource = (sourceNodeId: string | undefined) => ({
 
 export const renderFoundryDynamicLayers = ({
   mechanism,
+  kit,
   simulation,
   primitives,
   renderPlan,
@@ -95,6 +153,17 @@ export const renderFoundryDynamicLayers = ({
     addPath,
   } = primitives;
   const supportPathById = new Map(renderPlan.supportPaths.map((path) => [path.id, path]));
+  const mappedLayerEnvelopes = new Map(
+    buildMechanismPhysicalEnvelopeDescriptors(mechanism, [simulation.inputAngleRad], renderPlan, kit)
+      .map((descriptor) => [
+        descriptor.layerId,
+        mapPhysicalEnvelopeToFoundryPreview(
+          descriptor,
+          foundryPhysicalEnvelopeAffine(mechanism, simulation, kit),
+        ),
+      ]),
+  );
+  const envelopeForLayer = (layerId: string) => mappedLayerEnvelopes.get(layerId);
   const metadataForLayer = (layer: FabricationRenderLayer): FoundryFabricationMeshMetadata => ({
     fabricationLayerId: layer.layerId,
     supportPathIds: [...layer.supportPathIds],
@@ -117,42 +186,8 @@ export const renderFoundryDynamicLayers = ({
   const s = simulation.state;
   const fourBarBlankPoses = resolveFourBarLinkageBlankPoses(mechanism, s);
   const angle = pinionRotation;
-  const camGuideFallback = {
-    x: Math.cos(degToRad(mechanism.groundAngle ?? 90)),
-    y: -Math.sin(degToRad(mechanism.groundAngle ?? 90)),
-  };
-  const camGuideVector =
-    mechanism.type === "cam"
-      ? (() => {
-          const dx = s.j2.x - s.p1.x;
-          const dy = s.j2.y - s.p1.y;
-          const len = Math.hypot(dx, dy);
-          return len > 0.001
-            ? { x: dx / len, y: dy / len }
-            : camGuideFallback;
-        })()
-      : camGuideFallback;
-  const camGuideRotation = Math.atan2(camGuideVector.y, camGuideVector.x);
-  const camFollowerRotation = camGuideRotation - Math.PI / 2;
-  const camGuideCenter =
-    mechanism.type === "cam"
-      ? {
-          x:
-            s.p1.x +
-            camGuideVector.x *
-              (mechanism.crankLength +
-                mechanism.sliderOffset +
-                mechanism.rockerLength * 0.5) *
-              simulation.scale,
-          y:
-            s.p1.y +
-            camGuideVector.y *
-              (mechanism.crankLength +
-                mechanism.sliderOffset +
-                mechanism.rockerLength * 0.5) *
-              simulation.scale,
-        }
-      : s.j2;
+  const camGuideFallbackRotation = -Math.atan2(s.j2.y - s.p1.y, s.j2.x - s.p1.x);
+  const camFollowerRotation = camGuideFallbackRotation - Math.PI / 2;
   const usesMeshedPitchCenters = [
     "gear",
     "gear_linkage",
@@ -175,14 +210,44 @@ export const renderFoundryDynamicLayers = ({
   ) => {
     const holeCount = linkageHoleCountForSource(layer.sourceNodeId);
     const metadata = metadataForLayer(layer);
-    if (layer.sourceNodeId === "connector-link-a")
-      addBar(s.j1, s.effector, z, mat, holeCount, undefined, metadata);
-    else if (layer.sourceNodeId === "connector-link-b")
-      addBar(s.j2, s.effector, z, mat, holeCount, undefined, metadata);
-    else if (layer.sourceNodeId === "carrier")
-      addBar(s.p1, s.p2, z, mat, holeCount, undefined, metadata);
+    const envelope = envelopeForLayer(layer.layerId);
+    if (layer.sourceNodeId === "connector-link-a") {
+      const capsule = envelope?.kind === "capsule" ? envelope : undefined;
+      addBar(s.j1, s.effector, z, mat, holeCount, undefined, metadata, capsule
+        ? {
+          center: { x: capsule.x, y: capsule.y },
+          rotation: capsule.rotation,
+          centerlineLengthPx: capsule.length,
+          radiusPx: capsule.radius,
+        }
+        : undefined,
+      );
+    } else if (layer.sourceNodeId === "connector-link-b") {
+      const capsule = envelope?.kind === "capsule" ? envelope : undefined;
+      addBar(s.j2, s.effector, z, mat, holeCount, undefined, metadata, capsule
+        ? {
+          center: { x: capsule.x, y: capsule.y },
+          rotation: capsule.rotation,
+          centerlineLengthPx: capsule.length,
+          radiusPx: capsule.radius,
+        }
+        : undefined,
+      );
+    } else if (layer.sourceNodeId === "carrier") {
+      const capsule = envelope?.kind === "capsule" ? envelope : undefined;
+      addBar(s.p1, s.p2, z, mat, holeCount, undefined, metadata, capsule
+        ? {
+          center: { x: capsule.x, y: capsule.y },
+          rotation: capsule.rotation,
+          centerlineLengthPx: capsule.length,
+          radiusPx: capsule.radius,
+        }
+        : undefined,
+      );
+    }
     else if (layer.sourceNodeId === "output-link" && mechanism.type === "4bar") {
       const pose = fourBarBlankPoses["4bar.output-joint"];
+      const capsule = envelope?.kind === "capsule" ? envelope : undefined;
       addBar(
         pose?.origin ?? s.p2,
         pose?.end ?? s.j2,
@@ -191,9 +256,18 @@ export const renderFoundryDynamicLayers = ({
         pose?.holeCount ?? holeCount,
         pose?.partKey,
         metadata,
+        capsule
+        ? {
+            center: { x: capsule.x, y: capsule.y },
+            rotation: capsule.rotation,
+            centerlineLengthPx: capsule.length,
+            radiusPx: capsule.radius,
+          }
+          : undefined,
       );
     } else if (layer.sourceNodeId === "input-link" && mechanism.type === "4bar") {
       const pose = fourBarBlankPoses["4bar.input-joint"];
+      const capsule = envelope?.kind === "capsule" ? envelope : undefined;
       addBar(
         pose?.origin ?? s.p1,
         pose?.end ?? s.j1,
@@ -202,6 +276,14 @@ export const renderFoundryDynamicLayers = ({
         pose?.holeCount ?? holeCount,
         pose?.partKey,
         metadata,
+        capsule
+        ? {
+            center: { x: capsule.x, y: capsule.y },
+            rotation: capsule.rotation,
+            centerlineLengthPx: capsule.length,
+            radiusPx: capsule.radius,
+          }
+          : undefined,
       );
     } else {
       const endpoints: Record<string, [Point | undefined, Point | undefined]> = {
@@ -220,7 +302,16 @@ export const renderFoundryDynamicLayers = ({
         "follower-link": [s.p2, s.aux],
       };
       const [a, b] = endpoints[layer.sourceNodeId ?? ""] ?? [s.j1, s.j2];
-      addBar(a, b, z, mat, holeCount, undefined, metadata);
+      const capsule = envelope?.kind === "capsule" ? envelope : undefined;
+      addBar(a, b, z, mat, holeCount, undefined, metadata, capsule
+        ? {
+          center: { x: capsule.x, y: capsule.y },
+          rotation: capsule.rotation,
+          centerlineLengthPx: capsule.length,
+          radiusPx: capsule.radius,
+        }
+        : undefined,
+      );
     }
   };
   const renderGearLayer = (
@@ -229,14 +320,25 @@ export const renderFoundryDynamicLayers = ({
     mat: THREE.Material,
   ) => {
     const metadata = metadataForLayer(layer);
+    const envelope = envelopeForLayer(layer.layerId);
+    const envelopeRadius = envelope?.kind === "circle" ? envelope.radius : undefined;
+    const envelopeCenter = envelope?.kind === "circle" ? envelope : undefined;
     if (layer.sourceNodeId === "ring-gear")
-        addRingGear(s.p1, planetaryRingPitchRadius(mechanism), z, 0, mat, metadata);
+      addRingGear(
+        envelopeCenter ? { x: envelopeCenter.x, y: envelopeCenter.y } : s.p1,
+        planetaryRingPitchRadius(mechanism),
+        z,
+        0,
+        mat,
+        metadata,
+        envelopeRadius,
+      );
     else if (layer.sourceNodeId === "planet-gear") {
         const planetCenters = [s.p2];
         const planetCount = Math.max(1, planetCenters.length);
-        planetCenters.forEach((center, index) =>
+      planetCenters.forEach((fallbackCenter, index) =>
           addGear(
-            center,
+            envelopeCenter ? { x: envelopeCenter.x, y: envelopeCenter.y } : fallbackCenter,
             mechanism.rockerLength,
             z,
             foundryPlanetaryPlanetRotationDeg(
@@ -247,10 +349,19 @@ export const renderFoundryDynamicLayers = ({
             ),
             mat,
             metadata,
+            envelopeRadius,
           ),
         );
     } else if (layer.sourceNodeId === "sun-gear")
-      addGear(s.p1, mechanism.crankLength, z, angle, mat, metadata);
+      addGear(
+        envelopeCenter ? { x: envelopeCenter.x, y: envelopeCenter.y } : s.p1,
+        mechanism.crankLength,
+        z,
+        angle,
+        mat,
+        metadata,
+        envelopeRadius,
+      );
     else if (isGearTrain) {
       const match = /^gear-(\d+)$/.exec(layer.sourceNodeId ?? "");
       const gearTrainIndex = match ? Number(match[1]) : 0;
@@ -275,14 +386,15 @@ export const renderFoundryDynamicLayers = ({
               : 0
           : 0;
       addGear(
-        gearCenters[index] ?? fallbackCenter,
+        envelopeCenter ?? gearCenters[index] ?? fallbackCenter,
         gearRadii[index] ?? fallbackRadius,
         z,
         angle * ratio + phaseDeg,
         mat,
         metadata,
+        envelopeRadius,
       );
-    } else addGear(s.p1, mechanism.crankLength, z, angle, mat, metadata);
+    } else addGear(envelopeCenter ?? s.p1, mechanism.crankLength, z, angle, mat, metadata, envelopeRadius);
   };
   renderPlan.layers.forEach((layerItem, index) => {
     const z = renderedLayerZ[index] ?? layerItem.z;
@@ -313,42 +425,83 @@ export const renderFoundryDynamicLayers = ({
       renderLinkageLayer(layerItem, z, mat);
     else if (layerItem.renderKind === "gear") {
       renderGearLayer(layerItem, z, mat);
-    } else if (layerItem.renderKind === "cam")
-      addCam(s.p1, z, degToRad(angle), mat, metadataForLayer(layerItem));
-    else if (layerItem.renderKind === "guide") {
-      const slotRotation =
-        layerItem.sourceNodeId === "follower-guide"
-          ? camGuideRotation
-          : layerItem.sourceNodeId === "guide"
-            ? Math.PI / 2
-            : Math.atan2(s.j2.y - s.p2.y, s.j2.x - s.p2.x);
-      const slotCenter =
-        layerItem.sourceNodeId === "follower-guide"
-          ? camGuideCenter
-          : layerItem.sourceNodeId === "slotted-arm"
-            ? { x: (s.p2.x + s.j2.x) / 2, y: (s.p2.y + s.j2.y) / 2 }
-            : s.j2;
-      addSlotPlate(
-        slotCenter,
-        layerItem.sourceNodeId === "guide" && mechanism.type === "rack-pinion" ? 4.8 : 3.2,
-        slotRotation,
+    } else if (layerItem.renderKind === "cam") {
+      const envelope = envelopeForLayer(layerItem.layerId);
+      const mappedCamCenter = envelope?.kind === "circle" ? { x: envelope.x, y: envelope.y } : s.p1;
+      addCam(
+        mappedCamCenter,
         z,
+        degToRad(angle),
         mat,
         metadataForLayer(layerItem),
+        envelope?.kind === "circle" ? envelope.radius : undefined,
+      );
+    } else if (layerItem.renderKind === "guide") {
+      const envelope = envelopeForLayer(layerItem.layerId);
+      const slotRotation =
+        envelope?.kind === "oriented-box"
+          ? -envelope.rotation
+          : layerItem.sourceNodeId === "follower-guide"
+            ? camGuideFallbackRotation
+            : layerItem.sourceNodeId === "guide"
+              ? Math.PI / 2
+              : -Math.atan2(s.j2.y - s.p2.y, s.j2.x - s.p2.x);
+      const slotCenter =
+        envelope?.kind === "oriented-box"
+          ? { x: envelope.x, y: envelope.y }
+          : layerItem.sourceNodeId === "follower-guide"
+            ? s.p2
+            : layerItem.sourceNodeId === "slotted-arm"
+              ? { x: (s.p2.x + s.j2.x) / 2, y: (s.p2.y + s.j2.y) / 2 }
+              : s.j2;
+      addSlotPlate(
+        slotCenter,
+        z,
+        mat,
+        slotRotation,
+        layerItem.sourceNodeId === "guide" && mechanism.type === "rack-pinion" ? 4.8 : 3.2,
+        metadataForLayer(layerItem),
+        envelope?.kind === "oriented-box" ? {
+          widthPx: envelope.width,
+          heightPx: envelope.height,
+        } : undefined,
       );
     } else if (layerItem.renderKind === "rack") {
       const metadata = metadataForLayer(layerItem);
-      addRack(s.j2, z, mat, metadata);
-      addEndStop(s.j2, -2.55, z, metadata);
-      addEndStop(s.j2, 2.55, z, metadata);
+      const envelope = envelopeForLayer(layerItem.layerId);
+      addRack(s.j2, z, mat, metadata, envelope?.kind === "oriented-box" ? {
+        center: { x: envelope.x, y: envelope.y },
+        rotation: envelope.rotation,
+        widthPx: envelope.width,
+        heightPx: envelope.height,
+      } : undefined);
+      if (envelope?.kind !== "oriented-box") {
+        addEndStop(s.j2, -2.55, z, metadata);
+        addEndStop(s.j2, 2.55, z, metadata);
+      }
     } else if (layerItem.renderKind === "follower")
+    {
+      const envelope = envelopeForLayer(layerItem.layerId);
       addFollowerBlock(
-        s.j2,
+        envelope?.kind === "oriented-box"
+          ? { x: envelope.x, y: envelope.y }
+          : s.j2,
         z,
         mat,
-        mechanism.type === "cam" ? camFollowerRotation : 0,
+        envelope?.kind === "oriented-box"
+          ? -envelope.rotation
+          : mechanism.type === "cam"
+            ? camFollowerRotation
+            : 0,
         metadataForLayer(layerItem),
+        envelope?.kind === "oriented-box"
+          ? {
+            widthPx: envelope.width,
+            heightPx: envelope.height,
+          }
+          : undefined,
       );
+    }
   });
   pinStacks.forEach((pinStack) => {
     pinStack.retainerZ.forEach((z) => {

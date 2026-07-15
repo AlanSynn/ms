@@ -32,8 +32,8 @@ Current web contracts are maintained in the codebase modules and tests; the sour
 | `cam_follower` | production physical mechanism | yes | yes | yes | Pegboard-mounted gravity cam follower module; only the cam disk is swapped often. |
 | `gear_train` | production physical mechanism | yes | yes | yes | Separated G3 endpoint gears by default; inserted idlers create the mesh/coupling. |
 | `gear_linkage` | production physical mechanism | yes | yes | yes | Separated endpoint gear crank pins plus paired links meeting at R; inserted idlers provide gear coupling. |
-| `planetary_gear` | production physical mechanism | yes | yes | yes | G1 sun, G3 planet, R56 fixed ring, L2 carrier; ring/sun/planet teeth share one mesh plane while the carrier rides on a separate spacer plane. |
-| `slider_crank` | supported physical/export mechanism | no | yes | yes | Assembly recipe exists; not exposed in Foundry gallery. |
+| `planetary_gear` | production physical mechanism | yes | yes | yes | G1 sun, G3 planet, R56 fixed ring, L4 carrier; ring/sun/planet teeth share one mesh plane while the carrier rides on a separate spacer plane. |
+| `slider_crank` | production physical mechanism | yes | yes | yes | Assembly recipe and Foundry preview are available. |
 | `three_bar` / `linkage_three_bar` | content/domain reference only | no | no | no | No current physical recipe. |
 | `five_bar` / `linkage_five_bar` | content/domain reference only | no | no | no | No current physical recipe; needs synchronized dual inputs. |
 | `six_bar` / `linkage_six_bar` | catalog/content/domain reference only | no | no | no | Catalog entry exists; no current physical recipe. |

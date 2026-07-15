@@ -1,20 +1,27 @@
-import type { MechanismConfig, Point } from "../types";
+import type { MechanismConfig, PhysicalKitSettings, Point } from "../types";
+import { defaultPhysicalKit } from "./coordinates";
 import { primaryFoundryPlaybackPath } from "./foundryPlayback";
 import { generateCurvePoints } from "./kinematics";
 import { mechanismRequiredParts } from "./mechanismDefaults";
 import { isReferenceFoundryVisible } from "./mechanismReference";
 
-const generatedMechanismPath = (mechanism: MechanismConfig) => {
+const generatedMechanismPath = (
+  mechanism: MechanismConfig,
+  kit: PhysicalKitSettings,
+) => {
   if (isReferenceFoundryVisible(mechanism.type)) {
-    const foundryPath = primaryFoundryPlaybackPath(mechanism, 96);
+    const foundryPath = primaryFoundryPlaybackPath(mechanism, 96, kit);
     if (foundryPath.length) return foundryPath;
   }
-  return generateCurvePoints(mechanism, 96).points;
+  return generateCurvePoints(mechanism, 96, kit).points;
 };
 
 export const mechanismWithGeneratedPath = (
   mechanism: MechanismConfig,
-  options: { preserveGeneratedPath?: boolean } = {},
+  options: {
+    preserveGeneratedPath?: boolean;
+    kit?: PhysicalKitSettings;
+  } = {},
 ): MechanismConfig => ({
   ...mechanism,
   transform: mechanism.transform ?? {
@@ -36,15 +43,16 @@ export const mechanismWithGeneratedPath = (
   generatedPath:
     options.preserveGeneratedPath && mechanism.generatedPath?.length
       ? mechanism.generatedPath
-      : generatedMechanismPath(mechanism),
+      : generatedMechanismPath(mechanism, options.kit ?? defaultPhysicalKit()),
 });
 
 export const compactGeneratedPathControlPoints = (
   mechanism: MechanismConfig,
   count: number,
   closed = true,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
 ): Point[] => {
-  const generated = mechanismWithGeneratedPath(mechanism).generatedPath ?? [];
+  const generated = mechanismWithGeneratedPath(mechanism, { kit }).generatedPath ?? [];
   const sampleCount = Math.max(2, Math.round(count));
   if (generated.length <= 1) return generated.map((point) => ({ ...point }));
   const source = closed ? [...generated, generated[0]] : generated;

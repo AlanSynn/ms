@@ -380,7 +380,7 @@
         "highlight_ids": [
           "cam_modules:swappable-cam-disk",
           "cam_modules:u-channel-guide-cartridge",
-          "cam_modules:gravity-follower-module"
+          "cam_modules:gravity-follower-module-v2"
         ],
         "mechanism_type": "cam_follower"
       },
@@ -445,9 +445,9 @@
         {
           "category": "cam_modules",
           "count": 1,
-          "key": "gravity-follower-module",
-          "label": "Preassembled gravity follower module",
-          "part": "cam_modules:gravity-follower-module"
+          "key": "gravity-follower-module-v2",
+          "label": "Preassembled gravity follower module v2",
+          "part": "cam_modules:gravity-follower-module-v2"
         }
       ],
       "steps": [
@@ -695,9 +695,9 @@
         {
           "action": "insert-follower",
           "app_mapping": {
-            "component_role": "gravity-follower-module",
+            "component_role": "gravity-follower-module-v2",
             "highlight_ids": [
-              "cam_modules:gravity-follower-module"
+              "cam_modules:gravity-follower-module-v2"
             ],
             "mechanism_type": "cam_follower"
           },
@@ -716,9 +716,9 @@
             {
               "category": "cam_modules",
               "count": 1,
-              "key": "gravity-follower-module",
-              "label": "Preassembled gravity follower module",
-              "part": "cam_modules:gravity-follower-module"
+              "key": "gravity-follower-module-v2",
+              "label": "Preassembled gravity follower module v2",
+              "part": "cam_modules:gravity-follower-module-v2"
             }
           ],
           "stack": [
@@ -729,9 +729,9 @@
               "role": "guide"
             },
             {
-              "label": "Preassembled gravity follower module",
+              "label": "Preassembled gravity follower module v2",
               "order": 2,
-              "part": "cam_modules:gravity-follower-module",
+              "part": "cam_modules:gravity-follower-module-v2",
               "role": "follower"
             },
             {
@@ -744,10 +744,10 @@
           "title": "Insert gravity follower",
           "visual_state": {
             "active_parts": [
-              "cam_modules:gravity-follower-module"
+              "cam_modules:gravity-follower-module-v2"
             ],
             "ghost_parts": [
-              "cam_modules:gravity-follower-module"
+              "cam_modules:gravity-follower-module-v2"
             ],
             "highlight_coords": [
               "J9",
@@ -761,7 +761,7 @@
             "component_role": "contact-check",
             "highlight_ids": [
               "cam_modules:swappable-cam-disk",
-              "cam_modules:gravity-follower-module"
+              "cam_modules:gravity-follower-module-v2"
             ],
             "mechanism_type": "cam_follower"
           },
@@ -787,9 +787,9 @@
             {
               "category": "cam_modules",
               "count": 1,
-              "key": "gravity-follower-module",
-              "label": "Preassembled gravity follower module",
-              "part": "cam_modules:gravity-follower-module"
+              "key": "gravity-follower-module-v2",
+              "label": "Preassembled gravity follower module v2",
+              "part": "cam_modules:gravity-follower-module-v2"
             }
           ],
           "stack": [
@@ -802,7 +802,7 @@
             {
               "label": "Rounded follower head",
               "order": 2,
-              "part": "cam_modules:gravity-follower-module",
+              "part": "cam_modules:gravity-follower-module-v2",
               "role": "contact"
             },
             {
@@ -816,11 +816,11 @@
           "visual_state": {
             "active_parts": [
               "cam_modules:swappable-cam-disk",
-              "cam_modules:gravity-follower-module"
+              "cam_modules:gravity-follower-module-v2"
             ],
             "ghost_parts": [
               "cam_modules:swappable-cam-disk",
-              "cam_modules:gravity-follower-module"
+              "cam_modules:gravity-follower-module-v2"
             ],
             "highlight_coords": [
               "J7",
@@ -1773,7 +1773,7 @@
           "ring_gears:ring-g8-g24",
           "gears:g8",
           "gears:g24",
-          "linkages:linkage-2-cell"
+          "linkages:linkage-4-cell"
         ],
         "mechanism_type": "planetary_gear"
       },
@@ -1821,9 +1821,9 @@
         {
           "category": "linkages",
           "count": 1,
-          "key": "linkage-2-cell",
-          "label": "L2 linkage",
-          "part": "linkages:linkage-2-cell"
+          "key": "linkage-4-cell",
+          "label": "L4 linkage",
+          "part": "linkages:linkage-4-cell"
         },
         {
           "category": "spacers",
@@ -2051,7 +2051,7 @@
             "component_role": "carrier",
             "highlight_ids": [
               "spacers:s10",
-              "linkages:linkage-2-cell"
+              "linkages:linkage-4-cell"
             ],
             "mechanism_type": "planetary_gear"
           },
@@ -2064,7 +2064,7 @@
             "H8",
             "H10"
           ],
-          "instruction": "Place L2 from H8 toward H10 as the carrier.",
+          "instruction": "Place L4 from H8 through its third hole at H10 as the carrier.",
           "n": 4,
           "parts": [
             {
@@ -2077,9 +2077,9 @@
             {
               "category": "linkages",
               "count": 1,
-              "key": "linkage-2-cell",
-              "label": "L2 linkage",
-              "part": "linkages:linkage-2-cell"
+              "key": "linkage-4-cell",
+              "label": "L4 linkage",
+              "part": "linkages:linkage-4-cell"
             }
           ],
           "stack": [
@@ -2095,9 +2095,9 @@
               "role": "spacer"
             },
             {
-              "label": "L2 linkage",
+              "label": "L4 linkage",
               "order": 3,
-              "part": "linkages:linkage-2-cell",
+              "part": "linkages:linkage-4-cell",
               "role": "moving-part"
             },
             {
@@ -2115,7 +2115,7 @@
           "visual_state": {
             "active_parts": [
               "spacers:s10",
-              "linkages:linkage-2-cell"
+              "linkages:linkage-4-cell"
             ],
             "ghost_parts": [
               "ring_gears:ring-g8-g24",
@@ -2206,7 +2206,7 @@
             "ghost_parts": [
               "ring_gears:ring-g8-g24",
               "gears:g8",
-              "linkages:linkage-2-cell"
+              "linkages:linkage-4-cell"
             ],
             "highlight_coords": [
               "H10"
@@ -2220,7 +2220,7 @@
             "highlight_ids": [
               "gears:g8",
               "gears:g24",
-              "linkages:linkage-2-cell"
+              "linkages:linkage-4-cell"
             ],
             "mechanism_type": "planetary_gear"
           },
@@ -2253,9 +2253,9 @@
             {
               "category": "linkages",
               "count": 1,
-              "key": "linkage-2-cell",
-              "label": "L2 linkage",
-              "part": "linkages:linkage-2-cell"
+              "key": "linkage-4-cell",
+              "label": "L4 linkage",
+              "part": "linkages:linkage-4-cell"
             }
           ],
           "stack": [
@@ -2298,13 +2298,13 @@
             "active_parts": [
               "gears:g8",
               "gears:g24",
-              "linkages:linkage-2-cell"
+              "linkages:linkage-4-cell"
             ],
             "ghost_parts": [
               "ring_gears:ring-g8-g24",
               "gears:g8",
               "gears:g24",
-              "linkages:linkage-2-cell"
+              "linkages:linkage-4-cell"
             ],
             "highlight_coords": [
               "H8",

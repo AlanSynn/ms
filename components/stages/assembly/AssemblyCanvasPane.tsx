@@ -64,6 +64,7 @@ export const AssemblyCanvasPane = ({
       ? buildMechanismAssemblySceneFrame({
           recipe: selectedRecipe,
           mechanism: selectedMechanism,
+          project,
           step: currentStep,
           lane,
           kit,

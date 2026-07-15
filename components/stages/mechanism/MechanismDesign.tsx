@@ -1,5 +1,5 @@
 import { EditorStageFrame, canvasPane, inspectorPane, workflowPane } from "../stageLayout";
-import type { AppStage, MechanismConfig, ProjectAction, ProjectState } from "../../../types";
+import type { AppStage, MechanismConfig, MechanismEditFeedback, ProjectAction, ProjectState } from "../../../types";
 import { DesignFoundryPreview } from "./DesignFoundryPreview";
 import { DesignInspectorPanel } from "./DesignInspectorPanel";
 import { DesignWorkflowPanel } from "./DesignWorkflowPanel";
@@ -8,10 +8,12 @@ export const MechanismDesign = ({
   project,
   selectedMechanism,
   updateMechanism,
+  mechanismEditFeedback,
   dispatch,
   showTrace,
   setShowTrace,
   angle,
+  setIsPlaying,
   onOptimize,
   onRecommendations,
   optimizerBusy,
@@ -23,10 +25,12 @@ export const MechanismDesign = ({
   project: ProjectState;
   selectedMechanism?: MechanismConfig;
   updateMechanism: (id: string, updates: Partial<MechanismConfig>) => void;
+  mechanismEditFeedback: MechanismEditFeedback | null;
   dispatch: (action: ProjectAction) => void;
   showTrace: boolean;
   setShowTrace: (v: boolean) => void;
   angle: number;
+  setIsPlaying: (v: boolean) => void;
   onOptimize: () => void;
   onRecommendations: () => void;
   optimizerBusy: boolean;
@@ -56,8 +60,11 @@ export const MechanismDesign = ({
           project={project}
           mechanism={selectedMechanism}
           angle={angle}
+          setIsPlaying={setIsPlaying}
           showTrace={showTrace}
           dispatch={dispatch}
+          updateMechanism={updateMechanism}
+          mechanismEditFeedback={mechanismEditFeedback}
         />,
       ),
       inspector: inspectorPane(
@@ -65,6 +72,7 @@ export const MechanismDesign = ({
           project={project}
           selectedMechanism={selectedMechanism}
           updateMechanism={updateMechanism}
+          mechanismEditFeedback={mechanismEditFeedback}
           dispatch={dispatch}
           optimizerBusy={optimizerBusy}
           onOptimize={onOptimize}

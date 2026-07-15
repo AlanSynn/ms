@@ -14,8 +14,9 @@ import {
     type MechanismGraphMotionSample
 } from './mechanismGraph';
 import type { ConnectionSelectionSummary } from './mechanismConnectionSelections';
+import { compilePhysicalInstancesFromPlan, type CompiledMechanismPhysicalInstances } from './mechanismPhysicalInstances';
 import { validateMechanismPreviewReadiness } from './mechanismPreviewReadiness';
-import { preferredMotionJointId } from './motion';
+import { preferredMotionJointId } from './motionTargetSelection';
 
 export type CompiledAssemblyStepFingerprint = AssemblyStepFingerprint;
 
@@ -157,7 +158,7 @@ const graphRecipeBlocker = (
 
 export const compileFabricationRecipe = (project: ProjectState, mechanism: MechanismConfig): FabricationRecipe =>
     {
-        const graph = mechanismGraphForMechanism(mechanism);
+        const graph = mechanismGraphForMechanism(mechanism, project.settings.physicalKit);
     const compiled = compileGraphFabricationRecipe(graph, project.settings.physicalKit);
     return compiled.buildable && compiled.recipe
         ? graphRecipeWithProjectContext(project, mechanism, compiled.recipe)
@@ -168,13 +169,23 @@ export const compileMechanismGraphFabrication = (
     mechanism: MechanismConfig,
     kit?: PhysicalKitSettings
 ): AuthoredGraphFabricationResult =>
-    compileGraphFabricationRecipe(mechanismGraphForMechanism(mechanism), kit);
+    compileGraphFabricationRecipe(mechanismGraphForMechanism(mechanism, kit), kit);
 
 export const compileMechanismRenderPlan = (
     mechanism: MechanismConfig,
     kit?: PhysicalKitSettings
 ): FabricationRenderPlan => {
     return compileMechanismGraphFabrication(mechanism, kit).renderPlan;
+};
+
+export const compileMechanismPhysicalInstances = (
+    mechanism: MechanismConfig,
+    angleRad: number,
+    kit?: PhysicalKitSettings
+): CompiledMechanismPhysicalInstances => {
+    const graph = mechanismGraphForMechanism(mechanism, kit);
+    const renderPlan = compileGraphFabricationRecipe(graph, kit).renderPlan;
+    return compilePhysicalInstancesFromPlan(mechanism, graph, renderPlan, angleRad, kit);
 };
 
 export const compileAuthoredMechanismGraph = (graph: MechanismGraph, kit?: PhysicalKitSettings): AuthoredGraphCompilation => {
@@ -200,7 +211,7 @@ export const compileMechanism = (
     feasibleSamples = 24,
     kit?: PhysicalKitSettings
 ): CompiledMechanism => {
-    const graph = mechanismGraphForMechanism(mechanism);
+    const graph = mechanismGraphForMechanism(mechanism, kit);
     const graphValidation = validateMechanismGraph(graph);
     const graphFabrication = compileGraphFabricationRecipe(graph, kit);
     const renderPlan = graphFabrication.renderPlan;
@@ -216,8 +227,8 @@ export const compileMechanism = (
         compilerSource: 'mechanismCompiler',
         graph,
         graphValidationDiagnostics: graphValidation.diagnostics,
-        motionSamples: angles.map(angle => sampleMechanismGraphMotion(mechanism, angle)),
-        feasibleRange: sampleFeasibleRange(mechanism, feasibleSamples),
+        motionSamples: angles.map(angle => sampleMechanismGraphMotion(mechanism, angle, kit)),
+        feasibleRange: sampleFeasibleRange(mechanism, feasibleSamples, kit),
         readinessErrors: validateMechanismPreviewReadiness(mechanism, kit),
         fabrication: {
             renderPlan,

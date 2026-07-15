@@ -1,177 +1,319 @@
 import type {
   ConnectionSelection,
   ConnectionSelectionRole,
-  MechanismType,
   ConnectionSelectionValidation,
+  FabricationBoardMountKey,
+  FabricationModuleKey,
   MechanismConfig,
+  RejectedConnectionSelectionDiagnostic,
+  RejectedConnectionSelectionReason,
+  PhysicalKitSettings,
   Point,
 } from '../types';
 import {
+  FABRICATION_BOARD_MOUNT_SPECS,
   FABRICATION_GEAR_SPECS,
   FABRICATION_LINKAGE_SPECS,
-  fabricationGearSpecForPitchRadius,
+  FABRICATION_MODULE_SPECS,
 } from './fabricationContract';
-import { SCENE_PX_PER_MM } from './coordinates';
+import {
+  boardCoordinateLabel,
+  boardToScene,
+  defaultPhysicalKit,
+  isBoardCoordinateInKit,
+  parseBoardCoordinateLabel,
+  SCENE_PX_PER_MM,
+} from './coordinates';
+import {
+  CONNECTION_SELECTION_ROLES,
+  CONNECTION_SELECTION_ROLE_POLICIES,
+  connectionSelectionIdentity,
+  connectionSelectionPartKey,
+  connectionSelectionRolesForMechanism,
+  connectionSelectionSourceNodeId,
+  defaultSelectionForRole,
+  defaultSelections,
+  expectedGearIndex,
+  expectedGearSpec,
+  finiteIndex,
+  gearSpec,
+  linkageSpec,
+  mechanismWithConnectionSelectionFamily,
+} from './mechanismConnectionSelectionPolicy';
+import { normalizeMechanismToFabricationSet } from './mechanismReference';
 
-const FOUR_BAR_CONNECTION_ROLES = [
-  '4bar.input-joint',
-  '4bar.output-joint',
-] as const satisfies readonly ConnectionSelectionRole[];
-
-const GEAR_LINKAGE_CONNECTION_ROLES = [
-  'gear_linkage.drive-pin',
-  'gear_linkage.output-pin',
-] as const satisfies readonly ConnectionSelectionRole[];
-
-export const CONNECTION_SELECTION_ROLES = [
-  ...FOUR_BAR_CONNECTION_ROLES,
-  ...GEAR_LINKAGE_CONNECTION_ROLES,
-] as const satisfies readonly ConnectionSelectionRole[];
-
-const MECHANISM_TYPE_CONNECTION_ROLES = {
-  crank: [] as const,
-  '4bar': FOUR_BAR_CONNECTION_ROLES,
-  piston: [] as const,
-  yoke: [] as const,
-  'quick-return': [] as const,
-  '5bar': [] as const,
-  '6bar': [] as const,
-  cam: [] as const,
-  'rack-pinion': [] as const,
-  gear: [] as const,
-  gear_linkage: GEAR_LINKAGE_CONNECTION_ROLES,
-  planetary_gear: [] as const,
-} satisfies Record<MechanismType, readonly ConnectionSelectionRole[]>;
-
-export const connectionSelectionRolesForMechanism = (type: MechanismType): readonly ConnectionSelectionRole[] =>
-  MECHANISM_TYPE_CONNECTION_ROLES[type];
+export {
+  CONNECTION_SELECTION_ROLES,
+  CONNECTION_SELECTION_ROLE_POLICIES,
+  connectionSelectionIdentity,
+  connectionSelectionPartKey,
+  connectionSelectionRolesForMechanism,
+  connectionSelectionSignature,
+  connectionSelectionSourceNodeId,
+} from './mechanismConnectionSelectionPolicy';
 
 export type ConnectionSelectionSummary = {
   connectionSelections: MechanismConfig['connectionSelections'];
   connectionSelectionValidation: ConnectionSelectionValidation;
+  physicalConnections: readonly ResolvedPhysicalConnection[];
+  physicalConnectionSignature: string;
 };
-
-export const connectionSelectionSignature = (
-  selections: MechanismConfig['connectionSelections'],
-): string =>
-  CONNECTION_SELECTION_ROLES.flatMap((role) => {
-    const selection = selections?.[role];
-    if (!selection) return [];
-    return selection.kind === 'linkage-hole'
-      ? `${role}:${selection.linkageKey}:${selection.holeIndex}`
-      : `${role}:${selection.gearKey}:${selection.gearIndex}:${selection.holeIndex}`;
-  }).join('|');
 
 const roleSet = new Set<string>(CONNECTION_SELECTION_ROLES);
-const linkageRoles = new Set<ConnectionSelectionRole>(MECHANISM_TYPE_CONNECTION_ROLES['4bar']);
-const gearRoles = new Set<ConnectionSelectionRole>(MECHANISM_TYPE_CONNECTION_ROLES.gear_linkage);
 
-const linkageSpec = (key: unknown) =>
-  typeof key === 'string' ? FABRICATION_LINKAGE_SPECS.find((spec) => spec.key === key) : undefined;
+const KNOWN_KINDS = new Set<ConnectionSelection['kind']>([
+  'linkage-hole',
+  'gear-attachment-hole',
+  'board-mount-pattern',
+  'module-hole',
+]);
+const MAX_INVENTORY_KEY_LENGTH = 64;
+const MAX_DIAGNOSTIC_INDEX = 999;
+const MAX_REJECTED_SELECTION_DIAGNOSTICS = 12;
 
-const gearSpec = (key: unknown) =>
-  typeof key === 'string' ? FABRICATION_GEAR_SPECS.find((spec) => spec.key === key) : undefined;
-
-const finiteIndex = (value: unknown) =>
-  typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : -1;
-
-const expectedGearIndex = (role: ConnectionSelectionRole, mechanism: MechanismConfig) =>
-  role === 'gear_linkage.drive-pin' ? 0 : Math.max(0, (mechanism.gearTrainRadii?.length ?? 2) - 1);
-
-const expectedGearSpec = (role: ConnectionSelectionRole, mechanism: MechanismConfig) => {
-  const index = expectedGearIndex(role, mechanism);
-  const radius = mechanism.gearTrainRadii?.[index] ?? (role === 'gear_linkage.drive-pin' ? mechanism.crankLength : mechanism.rockerLength);
-  return fabricationGearSpecForPitchRadius(Math.abs(radius ?? 0) / SCENE_PX_PER_MM);
+export type NormalizeConnectionSelectionOptions = {
+  sourceVersion?: 1 | 2;
+  priorDiagnostics?: readonly RejectedConnectionSelectionDiagnostic[];
+  kit?: PhysicalKitSettings;
 };
 
-const linkageSpecForSceneLength = (sceneLength: number, minHoleCount = 3) => {
-  const lengthMm = Math.abs(sceneLength) / SCENE_PX_PER_MM;
-  const candidates = FABRICATION_LINKAGE_SPECS.filter((spec) => spec.holeCentersMm.length >= minHoleCount);
-  const pool = candidates.length ? candidates : FABRICATION_LINKAGE_SPECS;
-  return pool.reduce((best, spec) =>
-    Math.abs(spec.lengthMm - lengthMm) < Math.abs(best.lengthMm - lengthMm) ? spec : best
-  );
+export type NormalizedConnectionSelectionState = Pick<
+  MechanismConfig,
+  'connectionSelections' | 'connectionSelectionValidation' | 'rejectedConnectionSelectionDiagnostics'
+>;
+
+const boundedCatalogKey = (item: Record<string, unknown>) => {
+  const value = [item.linkageKey, item.gearKey, item.mountKey, item.moduleKey]
+    .find((candidate) => typeof candidate === 'string');
+  return typeof value === 'string' && value
+    ? value.slice(0, MAX_INVENTORY_KEY_LENGTH)
+    : undefined;
 };
 
-const defaultLinkageSelection = (mechanism: MechanismConfig, role: ConnectionSelectionRole): ConnectionSelection => {
-  const length = role === '4bar.input-joint' ? mechanism.crankLength : mechanism.rockerLength;
-  const spec = linkageSpecForSceneLength(length);
-  return { kind: 'linkage-hole', linkageKey: spec.key, holeIndex: spec.holeCentersMm.length - 1 };
-};
+const boundedIndices = (item: Record<string, unknown>) => [item.gearIndex, item.holeIndex]
+  .filter((value): value is number => typeof value === 'number' && Number.isInteger(value))
+  .slice(0, 3)
+  .map((value) => Math.max(-MAX_DIAGNOSTIC_INDEX, Math.min(MAX_DIAGNOSTIC_INDEX, value)));
 
-const defaultSelectionForRole = (mechanism: MechanismConfig, role: ConnectionSelectionRole): ConnectionSelection | undefined => {
-  if (mechanism.type === '4bar' && linkageRoles.has(role)) return defaultLinkageSelection(mechanism, role);
-  if (mechanism.type === 'gear_linkage' && gearRoles.has(role)) return defaultGearSelection(mechanism, role);
-  return undefined;
-};
-
-const nearestGearAttachmentHoleIndex = (spec: (typeof FABRICATION_GEAR_SPECS)[number], sceneOffset: number) => {
-  const targetOffsetMm = Math.abs(sceneOffset) / SCENE_PX_PER_MM;
-  return spec.attachmentHoleCentersMm.reduce(
-    (best, point, index) => {
-      const errorMm = Math.abs(Math.hypot(point.x, point.y) - targetOffsetMm);
-      return errorMm < best.errorMm || (errorMm === best.errorMm && index < best.index)
-        ? { index, errorMm }
-        : best;
-    },
-    { index: 0, errorMm: Number.POSITIVE_INFINITY },
-  ).index;
-};
-
-const defaultGearSelection = (mechanism: MechanismConfig, role: ConnectionSelectionRole): ConnectionSelection => {
-  const spec = expectedGearSpec(role, mechanism);
-  const legacyOffset = Number.isFinite(mechanism.couplerPointDist) ? mechanism.couplerPointDist : 0;
+const diagnosticFor = (
+  sourceVersion: 1 | 2,
+  role: string,
+  value: unknown,
+  reason: RejectedConnectionSelectionReason,
+): RejectedConnectionSelectionDiagnostic => {
+  const item = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  const kind = typeof item.kind === 'string' && KNOWN_KINDS.has(item.kind as ConnectionSelection['kind'])
+    ? item.kind as ConnectionSelection['kind']
+    : 'unknown';
+  const catalogKey = boundedCatalogKey(item);
+  const indices = boundedIndices(item);
   return {
-    kind: 'gear-attachment-hole',
-    gearKey: spec.key,
-    gearIndex: expectedGearIndex(role, mechanism),
-    holeIndex: nearestGearAttachmentHoleIndex(spec, legacyOffset),
+    sourceVersion,
+    role: roleSet.has(role) ? role as ConnectionSelectionRole : 'unknown',
+    kind,
+    ...(catalogKey ? { catalogKey } : {}),
+    ...(indices.length ? { indices } : {}),
+    reason,
   };
 };
 
-const defaultSelections = (mechanism: MechanismConfig): Partial<Record<ConnectionSelectionRole, ConnectionSelection>> => {
-  return Object.fromEntries(
-    connectionSelectionRolesForMechanism(mechanism.type).map((role) => [role, defaultSelectionForRole(mechanism, role)]).filter(([, selection]) => selection) as [
-      ConnectionSelectionRole,
-      ConnectionSelection,
-    ][],
-  );
+const sanitizeDiagnostic = (value: unknown): RejectedConnectionSelectionDiagnostic | undefined => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  const sourceVersion = raw.sourceVersion === 1 ? 1 : 2;
+  const knownReasons: readonly RejectedConnectionSelectionReason[] = [
+    'invalid-selection-shape',
+    'invalid-role',
+    'wrong-family',
+    'invalid-kind',
+    'invalid-inventory-key',
+    'invalid-index',
+    'invalid-mount-pattern',
+    'incompatible-selection',
+  ];
+  const role = typeof raw.role === 'string' && roleSet.has(raw.role)
+    ? raw.role as ConnectionSelectionRole
+    : 'unknown';
+  const kind = typeof raw.kind === 'string' && KNOWN_KINDS.has(raw.kind as ConnectionSelection['kind'])
+    ? raw.kind as ConnectionSelection['kind']
+    : 'unknown';
+  const catalogKey = typeof raw.catalogKey === 'string'
+    ? raw.catalogKey.slice(0, MAX_INVENTORY_KEY_LENGTH)
+    : undefined;
+  const indices = Array.isArray(raw.indices)
+    ? raw.indices
+      .filter((item): item is number => typeof item === 'number' && Number.isInteger(item))
+      .slice(0, 3)
+      .map((item) => Math.max(-MAX_DIAGNOSTIC_INDEX, Math.min(MAX_DIAGNOSTIC_INDEX, item)))
+    : [];
+  return {
+    sourceVersion,
+    role,
+    kind,
+    ...(catalogKey ? { catalogKey } : {}),
+    ...(indices.length ? { indices } : {}),
+    reason: knownReasons.includes(raw.reason as RejectedConnectionSelectionReason)
+      ? raw.reason as RejectedConnectionSelectionReason
+      : 'invalid-selection-shape',
+  };
 };
 
-const reject = (validation: ConnectionSelectionValidation, role: string, reason: string) => {
-  validation.entries.push({ role, status: 'rejected', reason });
+const diagnosticIdentity = (diagnostic: RejectedConnectionSelectionDiagnostic) =>
+  `${diagnostic.sourceVersion}:${diagnostic.role}:${diagnostic.kind}:${diagnostic.catalogKey ?? ''}:${(diagnostic.indices ?? []).join(',')}:${diagnostic.reason}`;
+
+const boardMountSelection = (
+  role: ConnectionSelectionRole,
+  item: Record<string, unknown>,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+): ConnectionSelection | undefined => {
+  const expectedMount: FabricationBoardMountKey | undefined = role === 'cam.guide-mount'
+    ? 'cam-guide-2-hole'
+    : role === 'piston.guide-mount'
+      ? 'piston-guide-3-hole'
+      : undefined;
+  if (item.mountKey !== expectedMount || !expectedMount || !Array.isArray(item.boardHoleIds)) return undefined;
+  const spec = FABRICATION_BOARD_MOUNT_SPECS.find((candidate) => candidate.key === expectedMount);
+  if (!spec || item.boardHoleIds.length !== spec.sourceHoleIndices.length) return undefined;
+  const holes = item.boardHoleIds.map((value) => typeof value === 'string' ? parseBoardCoordinateLabel(value) : null);
+  if (holes.some((hole) => !hole || !isBoardCoordinateInKit(hole.label, kit))) return undefined;
+  const [first, second, third] = holes as NonNullable<(typeof holes)[number]>[];
+  if (!first || !second) return undefined;
+  const ordered = expectedMount === 'cam-guide-2-hole'
+    ? first.col === second.col && second.row - first.row === -spec.gridPitchCount
+    : Boolean(third)
+      && first.col === second.col
+      && second.col === third!.col
+      && second.row - first.row === 1
+      && third!.row - first.row === 2;
+  if (!ordered) return undefined;
+  return {
+    kind: 'board-mount-pattern',
+    mountKey: expectedMount,
+    boardHoleIds: holes.map((hole) => hole!.label),
+  };
 };
 
-const rawSelectionMatches = (value: unknown, selection: ConnectionSelection | undefined) => {
-  if (!selection || !value || typeof value !== 'object' || Array.isArray(value)) return false;
+const validateSelection = (
+  mechanism: MechanismConfig,
+  role: ConnectionSelectionRole,
+  value: unknown,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+): { selection?: ConnectionSelection; reason?: RejectedConnectionSelectionReason } => {
+  const policy = CONNECTION_SELECTION_ROLE_POLICIES[role];
+  if (policy.mechanismType !== mechanism.type) return { reason: 'wrong-family' };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { reason: 'invalid-selection-shape' };
   const item = value as Record<string, unknown>;
-  return selection.kind === 'linkage-hole'
-    ? item.kind === 'linkage-hole' && item.linkageKey === selection.linkageKey && item.holeIndex === selection.holeIndex
-    : item.kind === 'gear-attachment-hole' && item.gearKey === selection.gearKey && item.gearIndex === selection.gearIndex && item.holeIndex === selection.holeIndex;
+  if (item.kind !== policy.kind) return { reason: 'invalid-kind' };
+
+  if (item.kind === 'linkage-hole') {
+    const spec = linkageSpec(item.linkageKey);
+    const holeIndex = finiteIndex(item.holeIndex);
+    if (!spec) return { reason: 'invalid-inventory-key' };
+    if (holeIndex < 0 || holeIndex >= spec.holeCentersMm.length) return { reason: 'invalid-index' };
+    if (role === 'planetary_gear.carrier-planet-pivot' && (spec.key !== 'linkage-4-cell' || holeIndex < 2 || holeIndex > 4)) return { reason: 'incompatible-selection' };
+    if (role === 'planetary_gear.carrier-output-hole' && spec.key !== 'linkage-4-cell') return { reason: 'incompatible-selection' };
+    if (role === 'piston.crank-pin' && (spec.key !== 'linkage-2-cell' || holeIndex < 1 || holeIndex > 2)) return { reason: 'incompatible-selection' };
+    if (role === 'piston.rod-slider-pin' && (spec.key !== 'linkage-6-cell' || holeIndex < 1 || holeIndex > 6)) return { reason: 'incompatible-selection' };
+    return { selection: { kind: 'linkage-hole', linkageKey: spec.key, holeIndex } };
+  }
+
+  if (item.kind === 'gear-attachment-hole') {
+    const spec = gearSpec(item.gearKey);
+    const gearIndex = finiteIndex(item.gearIndex);
+    const holeIndex = finiteIndex(item.holeIndex);
+    const expectedIndex = expectedGearIndex(role, mechanism);
+    const expectedSpec = expectedGearSpec(role, mechanism);
+    if (!spec || spec.attachmentHoleCentersMm.length === 0) return { reason: 'invalid-inventory-key' };
+    if (spec.key !== expectedSpec.key || gearIndex !== expectedIndex) return { reason: 'incompatible-selection' };
+    if (holeIndex < 0 || holeIndex >= spec.attachmentHoleCentersMm.length) return { reason: 'invalid-index' };
+    return { selection: { kind: 'gear-attachment-hole', gearKey: spec.key, gearIndex, holeIndex } };
+  }
+
+  if (item.kind === 'board-mount-pattern') {
+    const selection = boardMountSelection(role, item, kit);
+    return selection ? { selection } : { reason: 'invalid-mount-pattern' };
+  }
+
+  const moduleKey = item.moduleKey as FabricationModuleKey;
+  const spec = FABRICATION_MODULE_SPECS.find((candidate) => candidate.key === moduleKey);
+  if (!spec || item.moduleKey !== spec.key) return { reason: 'invalid-inventory-key' };
+  if (typeof item.holeId !== 'string' || !(item.holeId in spec.holes)) return { reason: 'invalid-index' };
+  return {
+    selection: {
+      kind: 'module-hole',
+      moduleKey: spec.key,
+      holeId: item.holeId as keyof typeof spec.holes,
+    },
+  };
 };
 
 export const normalizeMechanismConnectionSelections = (
   mechanism: MechanismConfig,
   rawSelections: unknown,
   priorValidation?: ConnectionSelectionValidation,
-): Pick<MechanismConfig, 'connectionSelections' | 'connectionSelectionValidation'> => {
+  options: NormalizeConnectionSelectionOptions = {},
+): NormalizedConnectionSelectionState => {
+  const sourceVersion = options.sourceVersion ?? 2;
+  const kit = options.kit ?? defaultPhysicalKit();
+  const diagnostics = new Map<string, RejectedConnectionSelectionDiagnostic>();
+  for (const diagnostic of options.priorDiagnostics ?? mechanism.rejectedConnectionSelectionDiagnostics ?? []) {
+    const safe = sanitizeDiagnostic(diagnostic);
+    if (safe) diagnostics.set(diagnosticIdentity(safe), safe);
+  }
   const priorDefaultedRoles = new Set(
     priorValidation?.entries
       .filter((entry) => entry.status === 'defaulted' && roleSet.has(entry.role))
       .map((entry) => entry.role as ConnectionSelectionRole) ?? [],
   );
-  const priorRejectedEntries = priorValidation?.entries
-    .filter((entry) => entry.status === 'rejected')
-    .sort((a, b) => a.role.localeCompare(b.role)) ?? [];
   const priorRejectedRoles = new Set(
-    priorRejectedEntries
-      .filter((entry) => roleSet.has(entry.role))
+    [...(priorValidation?.entries ?? []), ...diagnostics.values()]
+      .filter((entry) => entry.role !== 'unknown' && (('status' in entry && entry.status === 'rejected') || !('status' in entry)))
       .map((entry) => entry.role as ConnectionSelectionRole),
   );
   const validation: ConnectionSelectionValidation = { status: 'valid', entries: [] };
+  const validationReason = (
+    value: unknown,
+    reason: RejectedConnectionSelectionReason,
+  ) => {
+    const item = value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : {};
+    if (reason === 'invalid-role') return 'invalid role';
+    if (reason === 'wrong-family') return 'role is not valid for mechanism type';
+    if (reason === 'invalid-kind') return `wrong kind for ${mechanism.type} role`;
+    if (reason === 'invalid-inventory-key') {
+      if (typeof item.linkageKey === 'string') return 'invalid linkageKey';
+      if (typeof item.gearKey === 'string') return 'invalid gearKey';
+      if (typeof item.mountKey === 'string') return 'invalid mountKey';
+      if (typeof item.moduleKey === 'string') return 'invalid moduleKey';
+      return 'invalid inventory key';
+    }
+    if (reason === 'invalid-index') {
+      if (typeof item.gearIndex === 'number') return 'invalid gearIndex';
+      if (typeof item.holeIndex === 'number' || typeof item.holeId === 'string') return 'invalid holeIndex';
+      return 'invalid index';
+    }
+    if (reason === 'incompatible-selection' && typeof item.gearKey === 'string') return 'gearKey does not match gear index';
+    return reason.replace(/-/g, ' ');
+  };
+  const reject = (role: string, value: unknown, reason: RejectedConnectionSelectionReason) => {
+    const safeRole = role.length > MAX_INVENTORY_KEY_LENGTH ? 'unknown' : role;
+    validation.entries.push({ role: safeRole, status: 'rejected', reason: validationReason(value, reason) });
+    const diagnostic = diagnosticFor(sourceVersion, role, value, reason);
+    diagnostics.set(diagnosticIdentity(diagnostic), diagnostic);
+  };
   if (rawSelections !== undefined && (!rawSelections || typeof rawSelections !== 'object' || Array.isArray(rawSelections))) {
-    reject(validation, 'connectionSelections', 'connection selection state must be a role-keyed object');
-    return { connectionSelections: {}, connectionSelectionValidation: { ...validation, status: 'invalid' } };
+    reject('unknown', rawSelections, 'invalid-selection-shape');
+    const rejectedConnectionSelectionDiagnostics = [...diagnostics.values()]
+      .sort((a, b) => diagnosticIdentity(a).localeCompare(diagnosticIdentity(b)))
+      .slice(0, MAX_REJECTED_SELECTION_DIAGNOSTICS);
+    return {
+      connectionSelections: {},
+      connectionSelectionValidation: { ...validation, status: 'invalid' },
+      ...(rejectedConnectionSelectionDiagnostics.length ? { rejectedConnectionSelectionDiagnostics } : {}),
+    };
   }
 
   const selections: Partial<Record<ConnectionSelectionRole, ConnectionSelection>> = {};
@@ -179,91 +321,70 @@ export const normalizeMechanismConnectionSelections = (
     ? []
     : Object.entries(rawSelections as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
   const rawRoles = new Set(rawSelectionEntries.map(([role]) => role));
-  validation.entries.push(
-    ...priorRejectedEntries.filter((entry) => !rawRoles.has(entry.role)),
-  );
-  const defaults = defaultSelections(mechanism);
+  const retainedRejectedEntries = new Map<string, { role: string; status: 'rejected'; reason?: string }>();
+  for (const entry of priorValidation?.entries ?? []) {
+    if (entry.status !== 'rejected' || rawRoles.has(entry.role)) continue;
+    const role = entry.role.length > MAX_INVENTORY_KEY_LENGTH ? 'unknown' : entry.role;
+    retainedRejectedEntries.set(`validation:${role}`, { role, status: 'rejected', ...(entry.reason ? { reason: entry.reason } : {}) });
+  }
+  for (const diagnostic of diagnostics.values()) {
+    if (rawRoles.has(diagnostic.role)) continue;
+    const role = diagnostic.role;
+    const key = `diagnostic:${role}`;
+    const priorAlreadyRepresentsUnknown = role === 'unknown'
+      && (priorValidation?.entries ?? []).some((entry) => entry.status === 'rejected' && !roleSet.has(entry.role));
+    if (!retainedRejectedEntries.has(`validation:${role}`) && !priorAlreadyRepresentsUnknown) {
+      retainedRejectedEntries.set(key, { role, status: 'rejected', reason: diagnostic.reason.replace(/-/g, ' ') });
+    }
+  }
+  validation.entries.push(...retainedRejectedEntries.values());
+  const defaults = defaultSelections(mechanism, kit);
   for (const role of Object.keys(defaults).sort() as ConnectionSelectionRole[]) {
     if (rawRoles.has(role) || priorRejectedRoles.has(role)) continue;
     selections[role] = defaults[role];
     validation.entries.push({ role, status: 'defaulted', reason: 'legacy connection selection absent' });
   }
+  const refreshedDefaultedRoles = new Set<ConnectionSelectionRole>();
   for (const role of [...priorDefaultedRoles].sort()) {
-    const selection = defaultSelectionForRole(mechanism, role);
-    const rawValue = rawSelectionEntries.find(([rawRole]) => rawRole === role)?.[1];
-    if (selection && rawSelectionMatches(rawValue, selection)) {
+    const selection = defaultSelectionForRole(mechanism, role, kit);
+    if (selection && rawRoles.has(role)) {
+      refreshedDefaultedRoles.add(role);
       selections[role] = selection;
       validation.entries.push({ role, status: 'defaulted', reason: 'legacy connection selection absent' });
     }
   }
   for (const [role, value] of rawSelectionEntries) {
-    if (priorDefaultedRoles.has(role as ConnectionSelectionRole) && rawSelectionMatches(value, defaultSelectionForRole(mechanism, role as ConnectionSelectionRole))) continue;
+    if (refreshedDefaultedRoles.has(role as ConnectionSelectionRole)) continue;
     if (!roleSet.has(role)) {
-      reject(validation, role, 'invalid role');
+      reject(role, value, 'invalid-role');
       continue;
     }
     const typedRole = role as ConnectionSelectionRole;
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-      reject(validation, role, 'connection selection value must be an object');
+    const result = validateSelection(mechanism, typedRole, value, kit);
+    if (!result.selection) {
+      reject(role, value, result.reason ?? 'invalid-selection-shape');
       continue;
     }
-    const item = value as Record<string, unknown>;
-    if (linkageRoles.has(typedRole)) {
-      if (mechanism.type !== '4bar' || item.kind !== 'linkage-hole') {
-        const reason = mechanism.type !== '4bar'
-          ? 'role is not valid for mechanism type'
-          : 'wrong kind for 4bar role';
-        reject(validation, role, reason);
-        continue;
-      }
-      const spec = linkageSpec(item.linkageKey);
-      const holeIndex = finiteIndex(item.holeIndex);
-      if (!spec) {
-        reject(validation, role, 'invalid linkageKey');
-        continue;
-      }
-      if (holeIndex < 0 || holeIndex >= spec.holeCentersMm.length) {
-        reject(validation, role, 'invalid holeIndex');
-        continue;
-      }
-      selections[typedRole] = { kind: 'linkage-hole', linkageKey: spec.key, holeIndex };
-      validation.entries.push({ role, status: 'accepted' });
-      continue;
-    }
-    if (mechanism.type !== 'gear_linkage') {
-      reject(validation, role, 'role is not valid for mechanism type');
-      continue;
-    }
-    if (!gearRoles.has(typedRole) || item.kind !== 'gear-attachment-hole') {
-      reject(validation, role, 'wrong kind for gear_linkage role');
-      continue;
-    }
-    const spec = gearSpec(item.gearKey);
-    const gearIndex = finiteIndex(item.gearIndex);
-    const holeIndex = finiteIndex(item.holeIndex);
-    const expectedIndex = expectedGearIndex(typedRole, mechanism);
-    const expectedSpec = expectedGearSpec(typedRole, mechanism);
-    if (!spec) {
-      reject(validation, role, 'invalid gearKey');
-      continue;
-    }
-    if (spec.key !== expectedSpec.key) {
-      reject(validation, role, 'gearKey does not match gear index');
-      continue;
-    }
-    if (gearIndex !== expectedIndex) {
-      reject(validation, role, 'invalid gearIndex');
-      continue;
-    }
-    if (holeIndex < 0 || holeIndex >= spec.attachmentHoleCentersMm.length) {
-      reject(validation, role, 'invalid holeIndex');
-      continue;
-    }
-    selections[typedRole] = { kind: 'gear-attachment-hole', gearKey: spec.key, gearIndex, holeIndex };
+    selections[typedRole] = result.selection;
     validation.entries.push({ role, status: 'accepted' });
+    for (const [identity, diagnostic] of diagnostics) {
+      if (diagnostic.role === typedRole) diagnostics.delete(identity);
+    }
+  }
+
+  const planet = selections['planetary_gear.carrier-planet-pivot'];
+  const output = selections['planetary_gear.carrier-output-hole'];
+  if (planet?.kind === 'linkage-hole' && output?.kind === 'linkage-hole'
+    && (planet.linkageKey !== output.linkageKey || output.holeIndex === planet.holeIndex || output.holeIndex === planet.holeIndex - 2)) {
+    delete selections['planetary_gear.carrier-output-hole'];
+    validation.entries = validation.entries.filter((entry) => entry.role !== 'planetary_gear.carrier-output-hole');
+    reject('planetary_gear.carrier-output-hole', output, 'incompatible-selection');
   }
 
   const invalid = validation.entries.some((entry) => entry.status === 'rejected');
+  const rejectedConnectionSelectionDiagnostics = [...diagnostics.values()]
+    .sort((a, b) => diagnosticIdentity(a).localeCompare(diagnosticIdentity(b)))
+    .slice(0, MAX_REJECTED_SELECTION_DIAGNOSTICS);
   const hasSelections = Object.keys(selections).length > 0;
   return {
     connectionSelections: rawSelections === undefined && !hasSelections && validation.entries.length === 0
@@ -271,19 +392,20 @@ export const normalizeMechanismConnectionSelections = (
       : selections,
     connectionSelectionValidation: validation.entries.length
       ? { ...validation, status: invalid ? 'invalid' : 'valid' }
-      : priorValidation?.status === 'invalid'
-        ? priorValidation
-        : undefined,
+      : undefined,
+    ...(rejectedConnectionSelectionDiagnostics.length ? { rejectedConnectionSelectionDiagnostics } : {}),
   };
 };
 
 const resolvedSelectionState = (
   mechanism: MechanismConfig,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
 ): Pick<MechanismConfig, 'connectionSelections' | 'connectionSelectionValidation'> =>
   normalizeMechanismConnectionSelections(
     mechanism,
     mechanism.connectionSelections,
     mechanism.connectionSelectionValidation,
+    { kit },
   );
 
 const rotate = (point: Point, angleRad: number): Point => ({
@@ -355,6 +477,196 @@ const resolvedLocal = (
   };
 };
 
+export type ResolvedBoardMountPose = {
+  selection: Extract<ConnectionSelection, { kind: 'board-mount-pattern' }>;
+  origin: Point;
+  center: Point;
+  length: number;
+  axisAngle: number;
+  sourceRotation: number;
+};
+
+/** Derives board-space orientation from the selected tuple, never an assumed asset orientation. */
+export const resolveBoardMountPose = (
+  selection: ConnectionSelection | undefined,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+): ResolvedBoardMountPose | undefined => {
+  if (selection?.kind !== 'board-mount-pattern') return undefined;
+  const spec = FABRICATION_BOARD_MOUNT_SPECS.find((item) => item.key === selection.mountKey);
+  const sourceStart = spec?.sourceHoleCentersMm[0];
+  const sourceEnd = spec?.sourceHoleCentersMm.at(-1);
+  const first = parseBoardCoordinateLabel(selection.boardHoleIds[0]);
+  const last = parseBoardCoordinateLabel(selection.boardHoleIds.at(-1));
+  if (!spec || !sourceStart || !sourceEnd || !first || !last) return undefined;
+  const origin = boardToScene(first.col, first.row, kit);
+  const end = boardToScene(last.col, last.row, kit);
+  const sourceAngle = Math.atan2(sourceEnd.y - sourceStart.y, sourceEnd.x - sourceStart.x);
+  const axisAngle = Math.atan2(end.y - origin.y, end.x - origin.x);
+  return {
+    selection,
+    origin,
+    center: { x: (origin.x + end.x) / 2, y: (origin.y + end.y) / 2 },
+    length: Math.hypot(end.x - origin.x, end.y - origin.y),
+    axisAngle,
+    sourceRotation: axisAngle - sourceAngle,
+  };
+};
+
+const linkageOffsetMmForRole = (
+  role: ConnectionSelectionRole,
+  selection: ConnectionSelection,
+  selections: MechanismConfig['connectionSelections'],
+) => {
+  if (selection.kind !== 'linkage-hole') return undefined;
+  const spec = linkageSpec(selection.linkageKey);
+  const hole = spec?.holeCentersMm[selection.holeIndex];
+  const planetSelection = role === 'planetary_gear.carrier-planet-pivot'
+    ? selection
+    : selections?.['planetary_gear.carrier-planet-pivot'];
+  const anchorIndex = role.startsWith('planetary_gear.') && planetSelection?.kind === 'linkage-hole'
+    ? planetSelection.holeIndex - 2
+    : 0;
+  const anchor = spec?.holeCentersMm[anchorIndex];
+  return hole && anchor ? { x: hole.x - anchor.x, y: hole.y - anchor.y } : undefined;
+};
+
+const linkageAnchorHoleIndexForRole = (
+  role: ConnectionSelectionRole,
+  selection: Extract<ConnectionSelection, { kind: 'linkage-hole' }>,
+  selections: MechanismConfig['connectionSelections'],
+) => {
+  if (!role.startsWith('planetary_gear.')) return 0;
+  const planet = role === 'planetary_gear.carrier-planet-pivot'
+    ? selection
+    : selections?.['planetary_gear.carrier-planet-pivot'];
+  return planet?.kind === 'linkage-hole' ? planet.holeIndex - 2 : -1;
+};
+
+const resolvedLinkageAssetGeometry = (
+  role: ConnectionSelectionRole,
+  selection: Extract<ConnectionSelection, { kind: 'linkage-hole' }>,
+  selections: MechanismConfig['connectionSelections'],
+): ResolvedLinkageAssetGeometry | undefined => {
+  const spec = linkageSpec(selection.linkageKey);
+  const anchorHoleIndex = linkageAnchorHoleIndexForRole(role, selection, selections);
+  const anchor = spec?.holeCentersMm[anchorHoleIndex];
+  const start = spec?.holeCentersMm[0];
+  const end = spec?.holeCentersMm.at(-1);
+  if (!anchor || !start || !end) return undefined;
+  const startOffsetMm = { x: start.x - anchor.x, y: start.y - anchor.y };
+  const endOffsetMm = { x: end.x - anchor.x, y: end.y - anchor.y };
+  return {
+    anchorHoleIndex,
+    startOffsetMm,
+    endOffsetMm,
+    centerOffsetMm: {
+      x: (startOffsetMm.x + endOffsetMm.x) / 2,
+      y: (startOffsetMm.y + endOffsetMm.y) / 2,
+    },
+  };
+};
+
+const moduleOffsetMm = (selection: ConnectionSelection) => {
+  if (selection.kind !== 'module-hole') return undefined;
+  const spec = FABRICATION_MODULE_SPECS.find((item) => item.key === selection.moduleKey);
+  const origin = spec?.holes['output-0'];
+  const hole = spec?.holes[selection.holeId];
+  return origin && hole ? { x: hole.x - origin.x, y: hole.y - origin.y } : undefined;
+};
+
+export type ResolvedPhysicalConnection = {
+  role: ConnectionSelectionRole;
+  selection: ConnectionSelection;
+  sourceNodeId: string;
+  partKey: string;
+  local?: ResolvedConnectionLocal;
+  linkageAsset?: ResolvedLinkageAssetGeometry;
+  boardMount?: ResolvedBoardMountPose;
+};
+
+/**
+ * The physical blank is anchored at the role's derived source hole. Keeping
+ * these source-local extents alongside the selected local offset lets the
+ * instance and collision paths place the complete printed blank rather than
+ * a scalar endpoint segment.
+ */
+export type ResolvedLinkageAssetGeometry = {
+  anchorHoleIndex: number;
+  startOffsetMm: Point;
+  endOffsetMm: Point;
+  centerOffsetMm: Point;
+};
+
+export type ResolvedPhysicalConnectionSet = {
+  selections?: MechanismConfig['connectionSelections'];
+  validation?: MechanismConfig['connectionSelectionValidation'];
+  valid: boolean;
+  connections: ResolvedPhysicalConnection[];
+};
+
+/** Stable graph/compiler handoff fingerprint for real source-node assets. */
+export const physicalConnectionSignature = (
+  connections: readonly ResolvedPhysicalConnection[],
+) => [...connections]
+  .sort((left, right) => CONNECTION_SELECTION_ROLES.indexOf(left.role) - CONNECTION_SELECTION_ROLES.indexOf(right.role))
+  .map((connection) => `${connectionSelectionIdentity(connection.role, connection.selection)}:${connection.sourceNodeId}:${connection.partKey}`)
+  .join('|');
+
+/**
+ * Single structural resolver for every authorable physical role. Its records
+ * are the only source of role -> selection -> graph node -> printable asset.
+ */
+export const resolveMechanismPhysicalConnections = (
+  mechanism: MechanismConfig,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+): ResolvedPhysicalConnectionSet => {
+  const state = resolvedSelectionState(mechanism, kit);
+  const selections = state.connectionSelections;
+  const connections = connectionSelectionRolesForMechanism(mechanism.type).flatMap((role) => {
+    const selection = selections?.[role];
+    if (!selection) return [];
+    const localOffsetMm = selection.kind === 'linkage-hole'
+      ? linkageOffsetMmForRole(role, selection, selections)
+      : selection.kind === 'gear-attachment-hole'
+        ? gearOffsetMm(selection)
+        : selection.kind === 'module-hole'
+          ? moduleOffsetMm(selection)
+          : undefined;
+    const local = resolvedLocal(role, selection, localOffsetMm);
+    const boardMount = resolveBoardMountPose(selection, kit);
+    const linkageAsset = selection.kind === 'linkage-hole'
+      ? resolvedLinkageAssetGeometry(role, selection, selections)
+      : undefined;
+    return [{
+      role,
+      selection,
+      sourceNodeId: connectionSelectionSourceNodeId(role, selection),
+      partKey: connectionSelectionPartKey(role, selection),
+      ...(local ? { local } : {}),
+      ...(linkageAsset ? { linkageAsset } : {}),
+      ...(boardMount ? { boardMount } : {}),
+    }];
+  });
+  const requiredRoles = connectionSelectionRolesForMechanism(mechanism.type);
+  return {
+    selections,
+    validation: state.connectionSelectionValidation,
+    valid: state.connectionSelectionValidation?.status !== 'invalid'
+      && requiredRoles.every((role) => connections.some((connection) => connection.role === role)),
+    connections,
+  };
+};
+
+export const physicalConnectionForRole = (
+  resolved: ResolvedPhysicalConnectionSet,
+  role: ConnectionSelectionRole,
+) => resolved.connections.find((connection) => connection.role === role);
+
+export const physicalConnectionForSourceNode = (
+  resolved: ResolvedPhysicalConnectionSet,
+  sourceNodeId: string | undefined,
+) => resolved.connections.find((connection) => connection.sourceNodeId === sourceNodeId);
+
 export const connectionPointAt = (
   connection: ResolvedConnectionLocal,
   origin: Point,
@@ -370,15 +682,14 @@ export const connectionPointAt = (
 
 export const resolveFourBarConnectionSelections = (
   mechanism: MechanismConfig,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
 ): ResolvedFourBarConnections => {
-  const state = resolvedSelectionState(mechanism);
-  const inputSelection = state.connectionSelections?.['4bar.input-joint'];
-  const outputSelection = state.connectionSelections?.['4bar.output-joint'];
+  const resolved = resolveMechanismPhysicalConnections(mechanism, kit);
   return {
-    selections: state.connectionSelections,
-    validation: state.connectionSelectionValidation,
-    inputJoint: resolvedLocal('4bar.input-joint', inputSelection, inputSelection && linkageOffsetMm(inputSelection)),
-    outputJoint: resolvedLocal('4bar.output-joint', outputSelection, outputSelection && linkageOffsetMm(outputSelection)),
+    selections: resolved.selections,
+    validation: resolved.validation,
+    inputJoint: physicalConnectionForRole(resolved, '4bar.input-joint')?.local,
+    outputJoint: physicalConnectionForRole(resolved, '4bar.output-joint')?.local,
   };
 };
 
@@ -387,15 +698,14 @@ export const resolveGearLinkageConnectionGeometry = (
   driveAngleRad: number,
   outputAngleRad: number,
   centers: Point[],
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
 ): ResolvedMechanismConnections => {
-  const state = resolvedSelectionState(mechanism);
-  const driveSelection = state.connectionSelections?.['gear_linkage.drive-pin'];
-  const outputSelection = state.connectionSelections?.['gear_linkage.output-pin'];
-  const driveConnection = resolvedLocal('gear_linkage.drive-pin', driveSelection, driveSelection && gearOffsetMm(driveSelection));
-  const outputConnection = resolvedLocal('gear_linkage.output-pin', outputSelection, outputSelection && gearOffsetMm(outputSelection));
+  const resolved = resolveMechanismPhysicalConnections(mechanism, kit);
+  const driveConnection = physicalConnectionForRole(resolved, 'gear_linkage.drive-pin')?.local;
+  const outputConnection = physicalConnectionForRole(resolved, 'gear_linkage.output-pin')?.local;
   return {
-    selections: state.connectionSelections,
-    validation: state.connectionSelectionValidation,
+    selections: resolved.selections,
+    validation: resolved.validation,
     drivePin: driveConnection && centers[0] ? connectionPointAt(driveConnection, centers[0], driveAngleRad) : undefined,
     outputPin: outputConnection && (centers.at(-1) ?? centers[0])
       ? connectionPointAt(outputConnection, centers.at(-1) ?? centers[0], outputAngleRad)
@@ -408,6 +718,67 @@ export type ConnectionSelectionSceneState = {
   j1: Point;
   p2: Point;
   j2: Point;
+  effector?: Point;
+};
+
+/** The derived source anchor and selected physical point for one sampled state. */
+export const physicalConnectionAnchorAndSelected = (
+  connection: ResolvedPhysicalConnection | undefined,
+  state: ConnectionSelectionSceneState,
+): { anchor: Point; selected: Point } | undefined => {
+  if (!connection?.local) return undefined;
+  switch (connection.role) {
+    case '4bar.input-joint':
+    case 'gear_linkage.drive-pin':
+    case 'gear.drive-pin':
+    case 'piston.crank-pin':
+      return { anchor: state.p1, selected: state.j1 };
+    case '4bar.output-joint':
+    case 'gear_linkage.output-pin':
+    case 'gear.output-pin':
+      return { anchor: state.p2, selected: state.j2 };
+    case 'planetary_gear.carrier-planet-pivot':
+      return { anchor: state.p1, selected: state.p2 };
+    case 'planetary_gear.carrier-output-hole':
+      return state.effector ? { anchor: state.p1, selected: state.effector } : undefined;
+    case 'cam.follower-output-hole':
+      return state.effector ? { anchor: state.j2, selected: state.effector } : undefined;
+    case 'piston.rod-slider-pin':
+      return { anchor: state.j1, selected: state.j2 };
+    case 'cam.guide-mount':
+    case 'piston.guide-mount':
+      return undefined;
+  }
+};
+
+export type ResolvedPhysicalLinkageAssetPose = {
+  start: Point;
+  end: Point;
+  center: Point;
+  rotation: number;
+};
+
+/**
+ * Transforms the real source blank from its selected anchor hole. This is
+ * shared by renderer instances and collision envelopes so neither can turn a
+ * selected hole into an unrelated scalar line segment.
+ */
+export const resolvePhysicalLinkageAssetPose = (
+  connection: ResolvedPhysicalConnection | undefined,
+  sampled: { anchor: Point; selected: Point } | undefined,
+): ResolvedPhysicalLinkageAssetPose | undefined => {
+  if (!connection?.local || !connection.linkageAsset || !sampled) return undefined;
+  const dx = sampled.selected.x - sampled.anchor.x;
+  const dy = sampled.selected.y - sampled.anchor.y;
+  if (Math.hypot(dx, dy) < 0.001) return undefined;
+  const rotation = Math.atan2(dy, dx) - connection.local.localAngle;
+  const world = (offsetMm: Point) => add(sampled.anchor, rotate(scaleMm(offsetMm), rotation));
+  return {
+    start: world(connection.linkageAsset.startOffsetMm),
+    end: world(connection.linkageAsset.endOffsetMm),
+    center: world(connection.linkageAsset.centerOffsetMm),
+    rotation,
+  };
 };
 
 export type ResolvedLinkageBlankPose = {
@@ -425,18 +796,40 @@ export type MechanismConnectionHoleCandidate = {
   role: ConnectionSelectionRole;
   kind: ConnectionSelection['kind'];
   partKey: string;
+  printedPartKey: string;
+  sourceNodeId: string;
+  identity: string;
   holeIndex: number;
   selection: ConnectionSelection;
   coordinate: Point;
+  legal: true;
+  recoveryEligible: boolean;
   selected: boolean;
   provisional: boolean;
 };
 
 const sameSelection = (a: ConnectionSelection | undefined, b: ConnectionSelection) => {
   if (!a || a.kind !== b.kind) return false;
-  return a.kind === 'linkage-hole'
-    ? b.kind === 'linkage-hole' && a.linkageKey === b.linkageKey && a.holeIndex === b.holeIndex
-    : b.kind === 'gear-attachment-hole' && a.gearKey === b.gearKey && a.gearIndex === b.gearIndex && a.holeIndex === b.holeIndex;
+  switch (a.kind) {
+    case 'linkage-hole':
+      return b.kind === 'linkage-hole'
+        && a.linkageKey === b.linkageKey
+        && a.holeIndex === b.holeIndex;
+    case 'gear-attachment-hole':
+      return b.kind === 'gear-attachment-hole'
+        && a.gearKey === b.gearKey
+        && a.gearIndex === b.gearIndex
+        && a.holeIndex === b.holeIndex;
+    case 'board-mount-pattern':
+      return b.kind === 'board-mount-pattern'
+        && a.mountKey === b.mountKey
+        && a.boardHoleIds.length === b.boardHoleIds.length
+        && a.boardHoleIds.every((hole, index) => hole === b.boardHoleIds[index]);
+    case 'module-hole':
+      return b.kind === 'module-hole'
+        && a.moduleKey === b.moduleKey
+        && a.holeId === b.holeId;
+  }
 };
 
 const angleBetween = (origin: Point, tip: Point) => Math.atan2(tip.y - origin.y, tip.x - origin.x);
@@ -478,9 +871,10 @@ const resolvedLinkageBlankPose = (
 export const resolveFourBarLinkageBlankPoses = (
   mechanism: MechanismConfig,
   state: ConnectionSelectionSceneState,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
 ): Partial<Record<ResolvedLinkageBlankPose['role'], ResolvedLinkageBlankPose>> => {
   if (mechanism.type !== '4bar') return {};
-  const selections = resolvedSelectionState(mechanism).connectionSelections;
+  const selections = resolvedSelectionState(mechanism, kit).connectionSelections;
   const input = resolvedLinkageBlankPose(
     '4bar.input-joint',
     selections?.['4bar.input-joint'],
@@ -499,125 +893,270 @@ export const resolveFourBarLinkageBlankPoses = (
   };
 };
 
-const scenePoseForRole = (role: ConnectionSelectionRole, state: ConnectionSelectionSceneState) => {
-  switch (role) {
-    case '4bar.input-joint':
-    case 'gear_linkage.drive-pin':
-      return { origin: state.p1, angle: angleBetween(state.p1, state.j1) };
-    case '4bar.output-joint':
-    case 'gear_linkage.output-pin':
-      return { origin: state.p2, angle: angleBetween(state.p2, state.j2) };
-  }
+const localForSelection = (
+  role: ConnectionSelectionRole,
+  selection: ConnectionSelection,
+  selections: MechanismConfig['connectionSelections'],
+) => {
+  const offsetMm = selection.kind === 'linkage-hole'
+    ? linkageOffsetMmForRole(role, selection, selections)
+    : selection.kind === 'gear-attachment-hole'
+      ? gearOffsetMm(selection)
+      : selection.kind === 'module-hole'
+        ? moduleOffsetMm(selection)
+        : undefined;
+  return resolvedLocal(role, selection, offsetMm);
+};
+
+const candidatePartKey = (selection: ConnectionSelection) => selection.kind === 'linkage-hole'
+  ? selection.linkageKey
+  : selection.kind === 'gear-attachment-hole'
+    ? selection.gearKey
+    : selection.kind === 'board-mount-pattern'
+      ? selection.mountKey
+      : selection.moduleKey;
+
+const selectedCoordinateForRole = (
+  _role: ConnectionSelectionRole,
+  connection: ResolvedPhysicalConnection | undefined,
+  state: ConnectionSelectionSceneState,
+): Point | undefined => {
+  if (!connection) return undefined;
+  if (connection.boardMount) return connection.boardMount.center;
+  return physicalConnectionAnchorAndSelected(connection, state)?.selected;
 };
 
 const selectedCoordinatesForSelections = (
   mechanism: MechanismConfig,
   state: ConnectionSelectionSceneState,
   selections: MechanismConfig['connectionSelections'],
+  kit: PhysicalKitSettings,
 ) => {
-  const coordinates: Partial<Record<ConnectionSelectionRole, Point>> = {};
-  for (const role of CONNECTION_SELECTION_ROLES) {
-    const selection = selections?.[role];
-    if (mechanism.type === '4bar' && linkageRoles.has(role) && selection?.kind === 'linkage-hole') {
-      const local = resolvedLocal(role, selection, linkageOffsetMm(selection));
-      if (!local) continue;
-      const pose = scenePoseForRole(role, state);
-      coordinates[role] = connectionPointAt(local, pose.origin, pose.angle).position;
-    }
-    if (mechanism.type === 'gear_linkage' && gearRoles.has(role) && selection?.kind === 'gear-attachment-hole') {
-      const local = resolvedLocal(role, selection, gearOffsetMm(selection));
-      if (!local) continue;
-      coordinates[role] = role === 'gear_linkage.drive-pin' ? state.j1 : state.j2;
-    }
-  }
-  return coordinates;
+  const resolved = resolveMechanismPhysicalConnections({
+    ...mechanism,
+    connectionSelections: selections,
+    connectionSelectionValidation: undefined,
+  }, kit);
+  return resolved.connections.reduce<Partial<Record<ConnectionSelectionRole, Point>>>((coordinates, connection) => {
+    const coordinate = selectedCoordinateForRole(connection.role, connection, state);
+    if (coordinate) coordinates[connection.role] = coordinate;
+    return coordinates;
+  }, {});
 };
 
 export const connectionSelectionSceneCoordinates = (
   mechanism: MechanismConfig,
   state: ConnectionSelectionSceneState,
   rawSelections: unknown = mechanism.connectionSelections,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
 ): Partial<Record<ConnectionSelectionRole, Point>> =>
   selectedCoordinatesForSelections(
     mechanism,
     state,
-    normalizeMechanismConnectionSelections(mechanism, rawSelections, mechanism.connectionSelectionValidation).connectionSelections,
+    normalizeMechanismConnectionSelections(
+      mechanism,
+      rawSelections,
+      mechanism.connectionSelectionValidation,
+      { kit },
+    ).connectionSelections,
+    kit,
   );
+
+const candidateCoordinate = (
+  mechanism: MechanismConfig,
+  state: ConnectionSelectionSceneState,
+  role: ConnectionSelectionRole,
+  selection: ConnectionSelection,
+  active: ConnectionSelection | undefined,
+  selections: MechanismConfig['connectionSelections'],
+  kit: PhysicalKitSettings,
+): Point | undefined => {
+  const mounted = resolveBoardMountPose(selection, kit);
+  if (mounted) return mounted.center;
+  const local = localForSelection(role, selection, selections);
+  const activeLocal = active ? localForSelection(role, active, selections) : undefined;
+  if (!local || !activeLocal) return undefined;
+  const phaseFrom = (origin: Point, selectedPoint: Point) =>
+    angleBetween(origin, selectedPoint) - activeLocal.localAngle;
+  switch (role) {
+    case '4bar.input-joint':
+      return connectionPointAt(local, state.p1, phaseFrom(state.p1, state.j1)).position;
+    case '4bar.output-joint':
+      return connectionPointAt(local, state.p2, phaseFrom(state.p2, state.j2)).position;
+    case 'gear_linkage.drive-pin':
+    case 'gear.drive-pin':
+      return connectionPointAt(local, state.p1, phaseFrom(state.p1, state.j1)).position;
+    case 'gear_linkage.output-pin':
+    case 'gear.output-pin':
+      return connectionPointAt(local, state.p2, phaseFrom(state.p2, state.j2)).position;
+    case 'planetary_gear.carrier-planet-pivot':
+      return connectionPointAt(local, state.p1, phaseFrom(state.p1, state.p2)).position;
+    case 'planetary_gear.carrier-output-hole':
+      return connectionPointAt(local, state.p1, phaseFrom(state.p1, state.effector ?? state.j2)).position;
+    case 'piston.crank-pin':
+      return connectionPointAt(local, state.p1, phaseFrom(state.p1, state.j1)).position;
+    case 'piston.rod-slider-pin':
+      return connectionPointAt(local, state.j1, phaseFrom(state.j1, state.j2)).position;
+    case 'cam.follower-output-hole': {
+      const guide = selections?.['cam.guide-mount'];
+      const guidePose = resolveBoardMountPose(guide, kit);
+      return connectionPointAt(local, state.j2, (guidePose?.sourceRotation ?? 0)).position;
+    }
+  }
+};
 
 export const mechanismConnectionHoleCandidates = (
   mechanism: MechanismConfig,
   state: ConnectionSelectionSceneState,
   rawSelections: unknown = mechanism.connectionSelections,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
 ): MechanismConnectionHoleCandidate[] => {
-  const resolvedState = normalizeMechanismConnectionSelections(mechanism, rawSelections, mechanism.connectionSelectionValidation);
+  const resolvedState = normalizeMechanismConnectionSelections(
+    mechanism,
+    rawSelections,
+    mechanism.connectionSelectionValidation,
+    { kit },
+  );
   const resolved = resolvedState.connectionSelections;
   const selected = resolved ?? {};
   const candidates: MechanismConnectionHoleCandidate[] = [];
-
-  const addLinkageRole = (role: '4bar.input-joint' | '4bar.output-joint') => {
-    const active = resolved?.[role] ?? defaultLinkageSelection(mechanism, role);
+  const structuralMechanism = {
+    ...mechanism,
+    connectionSelectionValidation: undefined,
+    rejectedConnectionSelectionDiagnostics: undefined,
+  };
+  const isLegal = (role: ConnectionSelectionRole, selection: ConnectionSelection) => {
+    // Rejected sibling roles are repair evidence, not a reason to hide this
+    // role's real asset holes. Re-normalize the current retained selections
+    // without stale diagnostics so this candidate is judged only against the
+    // structural selections it would actually coexist with.
+    const prospectiveMechanism = mechanismWithConnectionSelectionFamily(
+      structuralMechanism,
+      role,
+      selection,
+    );
+    const normalized = normalizeMechanismConnectionSelections(
+      prospectiveMechanism,
+      { ...selected, [role]: selection },
+      undefined,
+      { kit },
+    );
+    return normalized.connectionSelectionValidation?.status === 'valid'
+      && sameSelection(normalized.connectionSelections?.[role], selection)
+      && normalized.connectionSelectionValidation?.entries.some(
+        (entry) => entry.role === role && (entry.status === 'accepted' || entry.status === 'defaulted'),
+      );
+  };
+  const add = (role: ConnectionSelectionRole, selection: ConnectionSelection, coordinate: Point | undefined, holeIndex: number) => {
+    if (!coordinate || !isLegal(role, selection)) return;
+    const active = selected[role] ?? defaultSelectionForRole(mechanism, role, kit);
+    const selectedForRole = selected[role];
+    candidates.push({
+      role,
+      kind: selection.kind,
+      partKey: candidatePartKey(selection),
+      printedPartKey: connectionSelectionPartKey(role, selection),
+      sourceNodeId: connectionSelectionSourceNodeId(role, selection),
+      identity: connectionSelectionIdentity(role, selection),
+      holeIndex,
+      selection,
+      coordinate,
+      legal: true,
+      recoveryEligible: !sameSelection(selectedForRole, selection),
+      selected: sameSelection(selectedForRole, selection),
+      provisional: !selectedForRole && sameSelection(active, selection),
+    });
+  };
+  const addLinkageRole = (role: Extract<ConnectionSelectionRole, `${'4bar' | 'planetary_gear' | 'piston'}.${string}`>, allowed: (index: number) => boolean) => {
+    const active = selected[role] ?? defaultSelectionForRole(mechanism, role, kit);
     if (active?.kind !== 'linkage-hole') return;
-    const spec = linkageSpec(active.linkageKey);
-    const ground = spec?.holeCentersMm[0];
-    if (!spec || !ground) return;
-    const pose = scenePoseForRole(role, state);
-    spec.holeCentersMm.forEach((hole, holeIndex) => {
-      if (holeIndex === 0) return;
-      const selection: ConnectionSelection = { kind: 'linkage-hole', linkageKey: spec.key, holeIndex };
-      const local = resolvedLocal(role, selection, { x: hole.x - ground.x, y: hole.y - ground.y });
-      if (!local) return;
-      const selectedForRole = selected[role];
-      candidates.push({
-        role,
-        kind: selection.kind,
-        partKey: spec.key,
-        holeIndex,
-        selection,
-        coordinate: connectionPointAt(local, pose.origin, pose.angle).position,
-        selected: sameSelection(selectedForRole, selection),
-        provisional: !selectedForRole && sameSelection(active, selection),
+    const specs = mechanism.type === '4bar'
+      ? FABRICATION_LINKAGE_SPECS
+      : FABRICATION_LINKAGE_SPECS.filter((spec) => spec.key === active.linkageKey);
+    specs.forEach((spec) => {
+      spec.holeCentersMm.forEach((_, holeIndex) => {
+        if (!allowed(holeIndex)) return;
+        const selection: ConnectionSelection = { kind: 'linkage-hole', linkageKey: spec.key, holeIndex };
+        add(role, selection, candidateCoordinate(mechanism, state, role, selection, active, { ...selected, [role]: selection }, kit), holeIndex);
       });
     });
   };
-
-  const addGearRole = (role: 'gear_linkage.drive-pin' | 'gear_linkage.output-pin') => {
-    const active = resolved?.[role] ?? defaultGearSelection(mechanism, role);
+  const addGearRole = (role: Extract<ConnectionSelectionRole, `${'gear' | 'gear_linkage'}.${string}`>) => {
+    const active = selected[role] ?? defaultSelectionForRole(mechanism, role, kit);
     if (active?.kind !== 'gear-attachment-hole') return;
-    const spec = gearSpec(active.gearKey);
-    const activeLocal = resolvedLocal(role, active, gearOffsetMm(active));
-    if (!spec || !activeLocal) return;
-    const pose = scenePoseForRole(role, state);
-    const phase = pose.angle - activeLocal.localAngle;
-    spec.attachmentHoleCentersMm.forEach((hole, holeIndex) => {
-      const selection: ConnectionSelection = {
-        kind: 'gear-attachment-hole',
-        gearKey: spec.key,
-        gearIndex: expectedGearIndex(role, mechanism),
-        holeIndex,
-      };
-      const local = resolvedLocal(role, selection, hole);
-      if (!local) return;
-      const selectedForRole = selected[role];
-      candidates.push({
-        role,
-        kind: selection.kind,
-        partKey: spec.key,
-        holeIndex,
-        selection,
-        coordinate: connectionPointAt(local, pose.origin, phase).position,
-        selected: sameSelection(selectedForRole, selection),
-        provisional: !selectedForRole && sameSelection(active, selection),
+    FABRICATION_GEAR_SPECS.forEach((spec) => {
+      spec.attachmentHoleCentersMm.forEach((_, holeIndex) => {
+        const selection: ConnectionSelection = { kind: 'gear-attachment-hole', gearKey: spec.key, gearIndex: expectedGearIndex(role, mechanism), holeIndex };
+        add(role, selection, candidateCoordinate(mechanism, state, role, selection, active, { ...selected, [role]: selection }, kit), holeIndex);
       });
+    });
+  };
+  const addBoardMount = (role: 'cam.guide-mount' | 'piston.guide-mount') => {
+    const spec = FABRICATION_BOARD_MOUNT_SPECS.find((item) =>
+      item.key === (role === 'cam.guide-mount' ? 'cam-guide-2-hole' : 'piston-guide-3-hole')
+    );
+    if (!spec) return;
+    let candidateIndex = 0;
+    for (let col = 0; col < kit.boardCells; col += 1) {
+      const firstRows = role === 'cam.guide-mount'
+        ? Array.from(
+            { length: Math.max(0, kit.boardCells - spec.gridPitchCount) },
+            (_, index) => index + spec.gridPitchCount,
+          )
+        : Array.from(
+            { length: Math.max(0, kit.boardCells - spec.sourceHoleIndices.length + 1) },
+            (_, index) => index,
+          );
+      for (const firstRow of firstRows) {
+        const boardHoleIds = role === 'cam.guide-mount'
+          ? [
+              boardCoordinateLabel(col, firstRow),
+              boardCoordinateLabel(col, firstRow - spec.gridPitchCount),
+            ]
+          : spec.sourceHoleIndices.map((_, index) =>
+              boardCoordinateLabel(col, firstRow + index)
+            );
+        const selection: ConnectionSelection = {
+          kind: 'board-mount-pattern',
+          mountKey: spec.key,
+          boardHoleIds,
+        };
+        add(role, selection, resolveBoardMountPose(selection, kit)?.center, candidateIndex);
+        candidateIndex += 1;
+      }
+    }
+  };
+  const addModuleRole = () => {
+    const role = 'cam.follower-output-hole' as const;
+    const active = selected[role] ?? defaultSelectionForRole(mechanism, role, kit);
+    if (active?.kind !== 'module-hole') return;
+    const spec = FABRICATION_MODULE_SPECS.find(item => item.key === active.moduleKey);
+    if (!spec) return;
+    Object.keys(spec.holes).forEach((holeId, holeIndex) => {
+      const selection: ConnectionSelection = { kind: 'module-hole', moduleKey: spec.key, holeId: holeId as keyof typeof spec.holes };
+      add(role, selection, candidateCoordinate(mechanism, state, role, selection, active, { ...selected, [role]: selection }, kit), holeIndex);
     });
   };
 
   if (mechanism.type === '4bar') {
-    addLinkageRole('4bar.input-joint');
-    addLinkageRole('4bar.output-joint');
-  }
-  if (mechanism.type === 'gear_linkage') {
+    addLinkageRole('4bar.input-joint', index => index > 0);
+    addLinkageRole('4bar.output-joint', index => index > 0);
+  } else if (mechanism.type === 'gear_linkage') {
     addGearRole('gear_linkage.drive-pin');
     addGearRole('gear_linkage.output-pin');
+  } else if (mechanism.type === 'gear') {
+    addGearRole('gear.drive-pin');
+    addGearRole('gear.output-pin');
+  } else if (mechanism.type === 'planetary_gear') {
+    addLinkageRole('planetary_gear.carrier-planet-pivot', index => index >= 2 && index <= 4);
+    addLinkageRole('planetary_gear.carrier-output-hole', () => true);
+  } else if (mechanism.type === 'cam') {
+    addBoardMount('cam.guide-mount');
+    addModuleRole();
+  } else if (mechanism.type === 'piston') {
+    addLinkageRole('piston.crank-pin', index => index >= 1 && index <= 2);
+    addLinkageRole('piston.rod-slider-pin', index => index >= 1 && index <= 6);
+    addBoardMount('piston.guide-mount');
   }
   return candidates;
 };
@@ -646,12 +1185,76 @@ export const mechanismConnectionCompatibilityUpdates = (
   return updates;
 };
 
+export const normalizeAuthoredMechanismToFabricationSet = (
+  mechanism: MechanismConfig,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+): MechanismConfig => {
+  const fabricated = normalizeMechanismToFabricationSet(mechanism);
+  if (
+    mechanism.connectionSelections === undefined
+    && mechanism.connectionSelectionValidation === undefined
+    && mechanism.rejectedConnectionSelectionDiagnostics === undefined
+  ) {
+    return fabricated;
+  }
+  const connectionState = normalizeMechanismConnectionSelections(
+    fabricated,
+    mechanism.connectionSelections,
+    mechanism.connectionSelectionValidation,
+    { kit },
+  );
+  return {
+    ...fabricated,
+    ...mechanismConnectionCompatibilityUpdates(fabricated, connectionState),
+    ...connectionState,
+  };
+};
+
+export type RejectedConnectionSelectionAttempt = Readonly<{
+  role: ConnectionSelectionRole | 'unknown';
+  reason: RejectedConnectionSelectionReason;
+  diagnostic: RejectedConnectionSelectionDiagnostic;
+}>;
+
+/**
+ * A rejected pointer candidate is feedback, not project state. Keeping this
+ * property non-enumerable lets existing `{ ...authorMechanismConnectionSelection(...) }`
+ * callers retain the exact prior mechanism while still exposing bounded detail
+ * to a direct authoring surface.
+ */
+export type ConnectionSelectionAuthoringResult = Partial<MechanismConfig> & {
+  readonly rejection?: RejectedConnectionSelectionAttempt;
+};
+
+const rejectedAuthoringResult = (
+  role: string,
+  selection: unknown,
+  reason: RejectedConnectionSelectionReason,
+): ConnectionSelectionAuthoringResult => {
+  const result: ConnectionSelectionAuthoringResult = {};
+  Object.defineProperty(result, 'rejection', {
+    value: Object.freeze({
+      role: roleSet.has(role) ? role as ConnectionSelectionRole : 'unknown',
+      reason,
+      diagnostic: Object.freeze(diagnosticFor(2, role, selection, reason)),
+    }),
+    enumerable: false,
+  });
+  return result;
+};
+
 export const authorMechanismConnectionSelection = (
   mechanism: MechanismConfig,
   role: ConnectionSelectionRole,
   selection: ConnectionSelection,
-): Partial<MechanismConfig> => {
-  const current = resolvedSelectionState(mechanism);
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+): ConnectionSelectionAuthoringResult => {
+  if (!roleSet.has(role)) return rejectedAuthoringResult(String(role), selection, 'invalid-role');
+  const candidate = validateSelection(mechanism, role, selection, kit);
+  if (!candidate.selection) {
+    return rejectedAuthoringResult(role, selection, candidate.reason ?? 'invalid-selection-shape');
+  }
+  const current = resolvedSelectionState(mechanism, kit);
   const priorValidation = current.connectionSelectionValidation
     ? {
         ...current.connectionSelectionValidation,
@@ -667,17 +1270,34 @@ export const authorMechanismConnectionSelection = (
       [role]: selection,
     },
     priorValidation,
+    { kit },
   );
+  const acceptedSelection = normalized.connectionSelections?.[role];
+  const accepted = acceptedSelection
+    && sameSelection(acceptedSelection, candidate.selection)
+    && normalized.connectionSelectionValidation?.entries.some(
+      (entry) => entry.role === role && entry.status === 'accepted',
+    );
+  if (!accepted) return rejectedAuthoringResult(role, selection, 'incompatible-selection');
   return {
     ...mechanismConnectionCompatibilityUpdates(mechanism, normalized),
     connectionSelections: normalized.connectionSelections,
     connectionSelectionValidation: normalized.connectionSelectionValidation,
+    rejectedConnectionSelectionDiagnostics: normalized.rejectedConnectionSelectionDiagnostics,
   };
 };
 
-export const connectionSelectionSummary = (mechanism: MechanismConfig): ConnectionSelectionSummary | undefined => {
-  const state = resolvedSelectionState(mechanism);
-  return state.connectionSelectionValidation
-    ? { connectionSelections: state.connectionSelections, connectionSelectionValidation: state.connectionSelectionValidation }
+export const connectionSelectionSummary = (
+  mechanism: MechanismConfig,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+): ConnectionSelectionSummary | undefined => {
+  const resolved = resolveMechanismPhysicalConnections(mechanism, kit);
+  return resolved.validation
+    ? {
+        connectionSelections: resolved.selections,
+        connectionSelectionValidation: resolved.validation,
+        physicalConnections: resolved.connections,
+        physicalConnectionSignature: physicalConnectionSignature(resolved.connections),
+      }
     : undefined;
 };

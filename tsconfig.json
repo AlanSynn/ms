@@ -27,7 +27,15 @@
     "noEmit": true
   },
   "include": [
-    "."
+    "App.tsx",
+    "index.tsx",
+    "types.ts",
+    "vite-env.d.ts",
+    "vite.config.ts",
+    "components",
+    "hooks",
+    "resources",
+    "utils"
   ],
   "exclude": [
     "node_modules",
