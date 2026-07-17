@@ -62,6 +62,7 @@ const chunked = new Map<string, {
   total: number;
   chunks: Array<Uint8Array | undefined>;
 }>();
+const orphanChunks = new Set<string>();
 const events: Array<Record<string, unknown>> = [];
 for (const event of rawEvents) {
   const data = event.data as Record<string, unknown> | undefined;
@@ -77,7 +78,8 @@ for (const event of rawEvents) {
     const chunkKey = `${event.contextId}\0${data.snapshotId}`;
     const pending = chunked.get(chunkKey);
     const index = Number(data.index);
-    if (!pending || !Number.isSafeInteger(index) || index < 0 || index >= pending.total) continue;
+    if (!pending) { orphanChunks.add(chunkKey); continue; }
+    if (!Number.isSafeInteger(index) || index < 0 || index >= pending.total) continue;
     pending.chunks[index] = Buffer.from(data.parts.join(""), "base64url");
     if (pending.chunks.every(Boolean)) {
       try {
@@ -95,6 +97,29 @@ for (const event of rawEvents) {
     continue;
   }
   events.push(event);
+}
+
+// Surface data-loss instead of silently bridging it. A chunked snapshot
+// whose begin landed but a chunk never did stays in `chunked`; a chunk
+// whose begin was lost (bad/missing total, or batch drop) is an orphan.
+// Either leaves the context reconstructing from a stale/null baseline,
+// so the researcher must be told rather than misled.
+const losses: Array<{ kind: string; contextId: string; snapshotId: string; reason?: string; total?: number; missing?: number[] }> = [];
+for (const [key, pending] of chunked) {
+  const [contextId, snapshotId] = key.split("\0");
+  const missing = pending.chunks
+    .map((chunk, idx) => (chunk ? null : idx))
+    .filter((idx): idx is number => idx !== null);
+  losses.push({ kind: "incomplete_snapshot", contextId, snapshotId, reason: pending.reason, total: pending.total, missing });
+}
+for (const key of orphanChunks) {
+  if (chunked.has(key)) continue;
+  const [contextId, snapshotId] = key.split("\0");
+  losses.push({ kind: "orphan_chunk_no_begin", contextId, snapshotId });
+}
+if (losses.length) {
+  const incomplete = losses.filter((loss) => loss.kind === "incomplete_snapshot").length;
+  console.warn(`study-replay: ${losses.length} gap record(s) — ${incomplete} incomplete snapshot(s), ${losses.length - incomplete} chunk(s) without a begin event. Affected contexts may reconstruct from a stale or null baseline; treat their state as unverified.`);
 }
 
 const assetEntries = [...new Map(
@@ -115,7 +140,7 @@ for (const asset of assetEntries) {
   });
 }
 
-const payload = JSON.stringify({ deployment, session, events, assets: embeddedAssets })
+const payload = JSON.stringify({ deployment, session, events, assets: embeddedAssets, losses })
   .replace(/</g, "\\u003c");
 const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -163,9 +188,9 @@ values(state.sceneObjects).forEach(object=>{const t=object.transform||{},b=objec
 values(state.parts).forEach(part=>{const t=part.transform||{},b=part.bounds||{};ctx.save();ctx.translate(t.x||0,t.y||0);ctx.rotate((t.rotation||0)*Math.PI/180);ctx.scale(t.scale||1,t.scale||1);ctx.fillStyle=part.fillColor||'#8b5cf6';ctx.globalAlpha=part.opacity??.8;ctx.fillRect(-(b.width||30)/2,-(b.height||30)/2,b.width||30,b.height||30);ctx.restore()});
 const joints=state.skeleton&&state.skeleton.joints||{};ctx.globalAlpha=1;ctx.strokeStyle='#334155';ctx.lineWidth=2;(state.skeleton&&state.skeleton.bones||[]).forEach(b=>{const a=point(joints[b[0]]&&joints[b[0]].position),c=point(joints[b[1]]&&joints[b[1]].position);if(a&&c){ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(c.x,c.y);ctx.stroke()}});values(joints).forEach(j=>{const p=point(j.position);if(!p)return;ctx.fillStyle='#fff';ctx.strokeStyle='#334155';ctx.beginPath();ctx.arc(p.x,p.y,5,0,Math.PI*2);ctx.fill();ctx.stroke()});
 values(state.mechanisms).forEach(m=>{ctx.strokeStyle=m.color||'#16a34a';ctx.beginPath();ctx.arc(m.anchorX||0,m.anchorY||0,Math.max(8,m.crankLength||18),0,Math.PI*2);ctx.stroke()});ctx.restore()}
-function render(){const index=Number(slider.value),event=data.events[index]||{};draw(index);document.querySelector('#summary').textContent=data.events.length+' records · '+data.assets.length+' visuals';document.querySelector('#current').innerHTML='<span class="pill">'+time(event.t)+'</span><span class="pill">'+String(event.stage||'unknown')+'</span><span class="pill">'+String(event.contextId||'unknown')+'</span><b>'+String(event.type||'empty')+'</b>';document.querySelector('#detail').textContent=JSON.stringify(event,null,2);const start=Math.max(0,index-40),end=Math.min(data.events.length,index+41);document.querySelector('#timeline').innerHTML=data.events.slice(start,end).map((item,offset)=>'<div class="event '+(start+offset===index?'active':'')+'" data-index="'+(start+offset)+'"><span class="muted">'+time(item.t)+' · '+String(item.stage||'')+' · '+String(item.contextId||'')+'</span><br>'+String(item.type)+'</div>').join('');document.querySelectorAll('.event').forEach(el=>el.onclick=()=>{slider.value=el.dataset.index;render()})}
+function render(){const index=Number(slider.value),event=data.events[index]||{};draw(index);document.querySelector('#summary').textContent=data.events.length+' records · '+data.assets.length+' visuals'+(data.losses&&data.losses.length?' · ⚠ '+data.losses.length+' gap(s)':'');document.querySelector('#current').innerHTML='<span class="pill">'+time(event.t)+'</span><span class="pill">'+String(event.stage||'unknown')+'</span><span class="pill">'+String(event.contextId||'unknown')+'</span><b>'+String(event.type||'empty')+'</b>';document.querySelector('#detail').textContent=JSON.stringify(event,null,2);const start=Math.max(0,index-40),end=Math.min(data.events.length,index+41);document.querySelector('#timeline').innerHTML=data.events.slice(start,end).map((item,offset)=>'<div class="event '+(start+offset===index?'active':'')+'" data-index="'+(start+offset)+'"><span class="muted">'+time(item.t)+' · '+String(item.stage||'')+' · '+String(item.contextId||'')+'</span><br>'+String(item.type)+'</div>').join('');document.querySelectorAll('.event').forEach(el=>el.onclick=()=>{slider.value=el.dataset.index;render()})}
 document.querySelector('#prev').onclick=()=>{slider.value=Math.max(0,Number(slider.value)-1);render()};document.querySelector('#next').onclick=()=>{slider.value=Math.min(data.events.length-1,Number(slider.value)+1);render()};slider.oninput=render;document.querySelector('#gallery').innerHTML=data.assets.map(asset=>'<div><img src="data:'+asset.type+';base64,'+asset.data+'"><small>'+String(asset.metadata&&asset.metadata.kind||asset.key)+'</small></div>').join('');render();
 </script></body></html>`;
 
 await writeFile(output, html, { mode: 0o600, flag: Object.hasOwn(args, "force") ? "w" : "wx" });
-console.log(`${output}: ${events.length} records, ${embeddedAssets.length}/${assetEntries.length} visuals`);
+console.log(`${output}: ${events.length} records, ${embeddedAssets.length}/${assetEntries.length} visuals${losses.length ? `, ${losses.length} gap(s)` : ""}`);
