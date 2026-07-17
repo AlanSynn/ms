@@ -15,7 +15,7 @@ Live classroom web build: <https://alansynn.com/ms/>
 7. Generate local build files in **Blueprint**.
 8. Assemble from the Three-backed step view in **Assembly**.
 
-MotionSmith is static and local-first: no account, backend, cloud save, roster, dashboard, server inference, or server export job is required. Browser autosave, portable project snapshots, ONNX processing, blueprint downloads, and assembly guidance stay on the device.
+MotionSmith remains local-first: no account, cloud save, roster, dashboard, server inference, or server export job is required. Browser autosave, portable project snapshots, ONNX processing, blueprint downloads, and assembly guidance stay on the device. Designated tagged study builds may additionally send pseudonymous interaction records and compact imported source images to the deployment-controlled study collector; deployment profiles can disable all collection or select metrics, replay, or full study capture.
 
 ## Current capabilities
 

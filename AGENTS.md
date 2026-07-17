@@ -10,8 +10,8 @@ This file is the project-level rulebook for future agents. If older docs or UI c
 
 MotionSmith is a tinkerable workbench, not a reading-heavy tutorial. Users should learn the workflow by touching the character, joints, paths, mechanisms, and playback controls directly.
 
-- Product scope is local-first browser/Tauri. Do not add backend/API server, cloud DB, auth/RBAC, billing, team accounts, realtime collaboration, hosted asset storage, server inference, or server export jobs unless the user explicitly reopens server scope.
-- Classroom web release is the static GitHub Pages app at `https://alansynn.com/ms/` with `VITE_BASE_PATH=/ms/`; do not add accounts, uploads, rosters, dashboards, analytics, or cloud sync language for classroom support.
+- Product scope is local-first browser/Tauri. The sole approved server exception is deployment-controlled study telemetry and private bug intake under `/ms-study/v1`; do not add other backend/API services, cloud DB, auth/RBAC, billing, team accounts, realtime collaboration, server inference, or server export jobs unless the user explicitly reopens scope again.
+- Classroom web release is the static GitHub Pages app at `https://alansynn.com/ms/` with `VITE_BASE_PATH=/ms/`. Tagged study builds may use invisible pseudonymous telemetry and restricted imported-image/bug storage through `/ms-study/v1`; do not add accounts, rosters, dashboards, cloud sync, or unrelated analytics language.
 - When a full-stack feature gap needs a server, document it as excluded local-first scope instead of building a fake client-only substitute.
 - Local persistence must be named honestly: browser autosave, local snapshot download, portable project copy. Do not label downloads as cloud save/sync.
 - AI/inference stays browser-local ONNX. If model caching or local inference fails, use starter/package workflows and show status; do not mock remote AI.
@@ -168,3 +168,4 @@ Before claiming completion, run the smallest checks that prove the changed contr
 - Keep release versions aligned across `package.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json` before tagging.
 - The `github-pages` environment must allow `v*.*.*` tags only. Do not re-enable `main` branch deployment unless the release policy is explicitly changed.
 - Do not add a Pages `CNAME` file for this project page; the repo lives under the already-routed `/ms/` path.
+- The `/ms-study/v1` Worker authenticates through the Cloudflare CLI (`cf`) OAuth, reused by `wrangler` via `CLOUDFLARE_API_TOKEN` (no `wrangler login`). Deploy with `wrangler deploy` from `infrastructure/study/` — `cf deploy` is avoided because it forces the unstable `cloudflare.config.ts` format. See `docs/deployment.md` "Study Worker deploy tooling rule".
