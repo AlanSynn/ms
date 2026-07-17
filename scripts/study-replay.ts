@@ -1,4 +1,5 @@
 import { writeFile } from "node:fs/promises";
+import { reassembleStudyEvents } from "../utils/studyReplayProjection";
 
 const args = Object.fromEntries(
   process.argv.slice(2).flatMap((value, index, values) =>
@@ -57,66 +58,9 @@ const rawEvents = pages.flatMap((page) =>
   Number(a.t) - Number(b.t) || String(a.contextId).localeCompare(String(b.contextId)) || Number(a.seq) - Number(b.seq),
 );
 
-const chunked = new Map<string, {
-  reason: string;
-  total: number;
-  chunks: Array<Uint8Array | undefined>;
-}>();
-const orphanChunks = new Set<string>();
-const events: Array<Record<string, unknown>> = [];
-for (const event of rawEvents) {
-  const data = event.data as Record<string, unknown> | undefined;
-  if (event.type === "project.snapshot.begin" && data && typeof data.snapshotId === "string" && Number.isSafeInteger(data.total)) {
-    chunked.set(`${event.contextId}\0${data.snapshotId}`, {
-      reason: typeof data.reason === "string" ? data.reason : "chunked",
-      total: Number(data.total),
-      chunks: Array.from({ length: Number(data.total) }),
-    });
-    continue;
-  }
-  if (event.type === "project.snapshot.chunk" && data && typeof data.snapshotId === "string" && Array.isArray(data.parts)) {
-    const chunkKey = `${event.contextId}\0${data.snapshotId}`;
-    const pending = chunked.get(chunkKey);
-    const index = Number(data.index);
-    if (!pending) { orphanChunks.add(chunkKey); continue; }
-    if (!Number.isSafeInteger(index) || index < 0 || index >= pending.total) continue;
-    pending.chunks[index] = Buffer.from(data.parts.join(""), "base64url");
-    if (pending.chunks.every(Boolean)) {
-      try {
-        const state = JSON.parse(Buffer.concat(pending.chunks as Uint8Array[]).toString("utf8"));
-        events.push({
-          ...event,
-          type: "project.snapshot",
-          data: { reason: pending.reason, state },
-        });
-      } catch {
-        // Corrupt/incomplete research records do not block the rest of a replay.
-      }
-      chunked.delete(chunkKey);
-    }
-    continue;
-  }
-  events.push(event);
-}
-
-// Surface data-loss instead of silently bridging it. A chunked snapshot
-// whose begin landed but a chunk never did stays in `chunked`; a chunk
-// whose begin was lost (bad/missing total, or batch drop) is an orphan.
-// Either leaves the context reconstructing from a stale/null baseline,
-// so the researcher must be told rather than misled.
-const losses: Array<{ kind: string; contextId: string; snapshotId: string; reason?: string; total?: number; missing?: number[] }> = [];
-for (const [key, pending] of chunked) {
-  const [contextId, snapshotId] = key.split("\0");
-  const missing = pending.chunks
-    .map((chunk, idx) => (chunk ? null : idx))
-    .filter((idx): idx is number => idx !== null);
-  losses.push({ kind: "incomplete_snapshot", contextId, snapshotId, reason: pending.reason, total: pending.total, missing });
-}
-for (const key of orphanChunks) {
-  if (chunked.has(key)) continue;
-  const [contextId, snapshotId] = key.split("\0");
-  losses.push({ kind: "orphan_chunk_no_begin", contextId, snapshotId });
-}
+// Chunked-snapshot reassembly + loss surfacing live in the canonical projection
+// (utils/studyReplayProjection) so analysis and the CLI share one pipeline.
+const { events, losses } = reassembleStudyEvents(rawEvents);
 if (losses.length) {
   const incomplete = losses.filter((loss) => loss.kind === "incomplete_snapshot").length;
   console.warn(`study-replay: ${losses.length} gap record(s) — ${incomplete} incomplete snapshot(s), ${losses.length - incomplete} chunk(s) without a begin event. Affected contexts may reconstruct from a stale or null baseline; treat their state as unverified.`);
@@ -181,7 +125,7 @@ case 'delete_mechanism':return {...state,mechanisms:mechanisms.filter(item=>item
 case 'update_settings':return {...state,settings:{...(state.settings||{}),...(action.settings||{}),physicalKit:{...(state.settings&&state.settings.physicalKit||{}),...(action.settings&&action.settings.physicalKit||{})}}};
 case 'set_export':return {...state,lastExport:action.fabricationPackage};
 default:return state}}
-const snapshots=[],contexts={};data.events.forEach((event,index)=>{const context=String(event.contextId||'unknown'),view=contexts[context]||=( {state:null,past:[],future:[]} );if(event.type==='project.snapshot'&&event.data&&event.data.state){view.state=event.data.state;view.past=[];view.future=[]}else if(event.type==='project.action'&&view.state){const action=event.data,next=applyAction(view.state,action),undoable=action&&!['set_processing','select_part','set_export'].includes(action.type);if(next!==view.state&&undoable)view.past=[...view.past.slice(-79),view.state];view.state=next;view.future=[]}else if(event.type==='project.undo'&&view.past.length){const previous=view.past[view.past.length-1];view.past=view.past.slice(0,-1);view.future=[view.state,...view.future].slice(0,80);view.state=previous}else if(event.type==='project.redo'&&view.future.length){const next=view.future[0];view.future=view.future.slice(1);view.past=[...view.past.slice(-79),view.state];view.state=next}snapshots[index]=view.state});
+const snapshots=[],contexts={};data.events.forEach((event,index)=>{const context=String(event.contextId||'unknown'),view=contexts[context]||=({state:null,past:[],future:[]});if(event.type==='project.snapshot'&&event.data&&event.data.state){view.state=event.data.state;view.past=[];view.future=[]}else if(event.type==='project.action'&&view.state){const action=event.data||{},flaggedApplied=action.applied!==false,next=flaggedApplied?applyAction(view.state,action):view.state;if(next!==view.state){const undoable=!['set_processing','select_part','set_export'].includes(action.type);if(undoable)view.past=[...view.past.slice(-79),view.state];view.state=next;view.future=[]}}else if(event.type==='project.undo'&&view.past.length){const previous=view.past[view.past.length-1];view.past=view.past.slice(0,-1);view.future=[view.state,...view.future].slice(0,80);view.state=previous}else if(event.type==='project.redo'&&view.future.length){const next=view.future[0];view.future=view.future.slice(1);view.past=[...view.past.slice(-79),view.state];view.state=next}snapshots[index]=view.state});
 function draw(index){ctx.clearRect(0,0,1200,750);ctx.save();ctx.translate(600,375);const state=snapshots[index];if(!state){ctx.fillStyle='#64748b';ctx.fillText('No snapshot yet',-50,0);ctx.restore();return}
 ctx.lineWidth=3;ctx.strokeStyle='#c4b5fd';values(state.paths).forEach(path=>{if(!Array.isArray(path.points)||!path.points.length)return;ctx.beginPath();path.points.forEach((p,i)=>{const q=point(p);if(!q)return;i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y)});ctx.stroke()});
 values(state.sceneObjects).forEach(object=>{const t=object.transform||{},b=object.bounds||{};ctx.save();ctx.translate(t.x||0,t.y||0);ctx.rotate((t.rotation||0)*Math.PI/180);ctx.scale(t.scale||1,t.scale||1);ctx.fillStyle=object.fillColor||'#f59e0b';ctx.globalAlpha=object.opacity??1;ctx.fillRect(-(b.width||40)/2,-(b.height||40)/2,b.width||40,b.height||40);ctx.restore()});

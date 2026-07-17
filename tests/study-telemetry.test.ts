@@ -7,6 +7,7 @@ import worker from "../infrastructure/study/worker.js";
 import type { ProjectAction } from "../types";
 import { applyProjectAction, applyProjectActionResult, createSampleProject } from "../utils/project";
 import { checkpointBatchIntact, studyProfileIncludes } from "../utils/studyTelemetry";
+import { projectStudyReplayState, reassembleStudyEvents } from "../utils/studyReplayProjection";
 import {
   makeStudySnapshotRecords,
   scrubStudyValue,
@@ -113,6 +114,84 @@ assert(!JSON.stringify(aliasedAction).includes(rawEntityId), "raw entity id neve
   assert.equal(updated.applied, true, "update_part on an existing part applies");
   assert.notEqual(updated.state, rejBase, "applied update returns a new state reference");
   console.log("rejected-action applied flag verified: 2 rejected, 2 applied");
+}
+
+// Canonical replay projection (projectStudyReplayState) golden fidelity. The
+// projection is the single fold analysis code must use instead of raw events,
+// pinned here against hand-built streams that exercise edges the reducer-only
+// fidelity test above cannot reach: undo/redo, the rejected-action skip (trust
+// applied:false), multi-context reconnect, and chunk reassembly.
+{
+  const baseState = { parts: {}, partOrder: [], paths: {}, sceneObjects: {}, sceneObjectOrder: [], mechanisms: [] };
+  const part = (id: string) => ({ id, transform: { x: 1, y: 1 }, bounds: { width: 10, height: 10 }, fillColor: "#ffffff", opacity: 1 });
+  const hasPart = (state: unknown, id: string) =>
+    Boolean(state && typeof state === "object" && (state as { parts?: Record<string, unknown> }).parts && id in (state as { parts: Record<string, unknown> }).parts);
+
+  // Undo/redo: upsert -> undo (reverts) -> redo (re-applies).
+  const undoRedo = projectStudyReplayState([
+    { type: "project.snapshot", contextId: "ctx_u", t: 1, seq: 1, data: { reason: "initial", state: { ...baseState } } },
+    { type: "project.action", contextId: "ctx_u", t: 2, seq: 2, data: { type: "upsert_part", part: part("ent_u1") } },
+    { type: "project.undo", contextId: "ctx_u", t: 3, seq: 3, data: {} },
+    { type: "project.redo", contextId: "ctx_u", t: 4, seq: 4, data: {} },
+  ]);
+  const undoRedoCtx = undoRedo.contexts.find((c) => c.contextId === "ctx_u")!;
+  assert.equal(hasPart(undoRedoCtx.snapshots[1], "ent_u1"), true, "upsert_part applies under the projection");
+  assert.equal(hasPart(undoRedoCtx.snapshots[2], "ent_u1"), false, "undo reverts the applied edit");
+  assert.equal(hasPart(undoRedoCtx.snapshots[3], "ent_u1"), true, "redo re-applies the reverted edit");
+
+  // Rejected action (applied:false) must be skipped entirely: it neither mutates
+  // state nor wipes the redo stack. After upsert + undo, a rejected edit followed
+  // by redo must still restore the upsert — proving the reject did not clear
+  // future. Regression guard for the rejected-action replay bug.
+  const rejected = projectStudyReplayState([
+    { type: "project.snapshot", contextId: "ctx_r", t: 1, seq: 1, data: { reason: "initial", state: { ...baseState } } },
+    { type: "project.action", contextId: "ctx_r", t: 2, seq: 2, data: { type: "upsert_part", part: part("ent_r1") } },
+    { type: "project.undo", contextId: "ctx_r", t: 3, seq: 3, data: {} },
+    { type: "project.action", contextId: "ctx_r", t: 4, seq: 4, data: { type: "update_part", partId: "ent_missing", updates: { locked: true }, applied: false } },
+    { type: "project.redo", contextId: "ctx_r", t: 5, seq: 5, data: {} },
+  ]);
+  const rejectedCtx = rejected.contexts.find((c) => c.contextId === "ctx_r")!;
+  assert.equal(hasPart(rejectedCtx.snapshots[3], "ent_r1"), false, "rejected action does not mutate state");
+  assert.equal(hasPart(rejectedCtx.snapshots[4], "ent_r1"), true, "rejected action does not wipe the redo stack");
+
+  // Reconnect: two contexts fold independently — an edit in one never bleeds into
+  // the other's final state.
+  const reconnect = projectStudyReplayState([
+    { type: "project.snapshot", contextId: "ctx_a", t: 1, seq: 1, data: { reason: "initial", state: { ...baseState } } },
+    { type: "project.action", contextId: "ctx_a", t: 2, seq: 2, data: { type: "upsert_part", part: part("ent_a") } },
+    { type: "project.snapshot", contextId: "ctx_b", t: 3, seq: 1, data: { reason: "reconnect", state: { ...baseState } } },
+    { type: "project.action", contextId: "ctx_b", t: 4, seq: 2, data: { type: "upsert_part", part: part("ent_b") } },
+  ]);
+  const ctxA = reconnect.contexts.find((c) => c.contextId === "ctx_a")!;
+  const ctxB = reconnect.contexts.find((c) => c.contextId === "ctx_b")!;
+  assert.equal(hasPart(ctxA.finalState, "ent_a"), true, "context a retains its edit");
+  assert.equal(hasPart(ctxA.finalState, "ent_b"), false, "context a is untouched by context b");
+  assert.equal(hasPart(ctxB.finalState, "ent_b"), true, "context b retains its edit");
+
+  // Chunk reassembly: begin + 2 chunks collapse into one project.snapshot event
+  // with zero losses, and the projection applies the reassembled state.
+  const chunkedState = { marker: "reassembled", parts: { ent_c: { id: "ent_c" } }, paths: {}, sceneObjects: {}, mechanisms: [] };
+  const encoded = Buffer.from(JSON.stringify(chunkedState)).toString("base64url");
+  const split = Math.ceil(encoded.length / 2);
+  const { events: reassembled, losses: chunkLosses } = reassembleStudyEvents([
+    { type: "project.snapshot.begin", contextId: "ctx_c", t: 1, seq: 1, data: { snapshotId: "snp_c", reason: "chunked", total: 2 } },
+    { type: "project.snapshot.chunk", contextId: "ctx_c", t: 2, seq: 2, data: { snapshotId: "snp_c", index: 0, parts: [encoded.slice(0, split)] } },
+    { type: "project.snapshot.chunk", contextId: "ctx_c", t: 3, seq: 3, data: { snapshotId: "snp_c", index: 1, parts: [encoded.slice(split)] } },
+  ]);
+  assert.equal(chunkLosses.length, 0, "complete chunk set produces no loss");
+  assert.equal(reassembled.length, 1, "begin + chunks collapse to one snapshot event");
+  assert.equal(reassembled[0].type, "project.snapshot");
+  const chunked = projectStudyReplayState(reassembled);
+  assert.deepEqual(JSON.parse(JSON.stringify(chunked.contexts[0].finalState)), chunkedState, "reassembled snapshot folds into the projected state");
+
+  // Incomplete chunk set surfaces a loss instead of silently bridging.
+  const { losses: gapLosses } = reassembleStudyEvents([
+    { type: "project.snapshot.begin", contextId: "ctx_g", t: 1, seq: 1, data: { snapshotId: "snp_g", reason: "chunked", total: 2 } },
+    { type: "project.snapshot.chunk", contextId: "ctx_g", t: 2, seq: 2, data: { snapshotId: "snp_g", index: 0, parts: [encoded.slice(0, split)] } },
+  ]);
+  assert.equal(gapLosses.length, 1, "missing chunk is surfaced as a loss");
+  assert.equal(gapLosses[0].kind, "incomplete_snapshot");
+  console.log("projectStudyReplayState golden fidelity verified: undo/redo, rejected-action skip, reconnect, chunk reassembly");
 }
 
 const largeProject = createSampleProject();
