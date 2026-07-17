@@ -4053,7 +4053,11 @@ test('Startup uses one boot loader and opens Getting Started over Character', as
   await expect(page.getByTestId('getting-started-dialog')).toHaveCount(0);
 });
 
-test('Bug report opens a GitHub issue draft from any stage', async ({ page }) => {
+test('Bug report opens a safe GitHub draft locally from any stage', async ({ page }) => {
+  let bugRequests = 0;
+  page.on('request', request => {
+    if (request.url().endsWith('/ms-study/v1/bug')) bugRequests += 1;
+  });
   await page.goto('/');
   await importWavingArmLessonProject(page, 'character');
 
@@ -4063,21 +4067,22 @@ test('Bug report opens a GitHub issue draft from any stage', async ({ page }) =>
   await report.getByLabel('What broke?').fill('Design canvas froze');
   await report.getByLabel('What did you do?').fill('Opened Mechanism Design and scrubbed playback.');
   await report.getByLabel('What should happen?').fill('The character should keep moving.');
+  await report.getByLabel(/Email optional/).fill('private@example.com');
   await expect(report.getByLabel(/Email optional/)).toBeVisible();
   await expect(report.getByLabel(/name/i)).toHaveCount(0);
-
-  let href = await report.getByRole('link', { name: /Open issue/ }).getAttribute('href');
-  expect(href).toContain('https://github.com/AlanSynn/ms/issues/new');
-  let issue = new URL(href!);
-  expect(issue.searchParams.get('title')).toBe('Bug: Design canvas froze');
-  expect(issue.searchParams.get('body')).toContain('- Stage: Character');
-  expect(issue.searchParams.get('body')).toContain('Attach downloaded screenshots here if needed.');
+  await expect(report.getByRole('button', { name: 'Capture screen' })).toBeVisible();
+  await expect(report).toContainText('One optional screen is sent with this report.');
 
   await clickStage(page, 'Path');
   await expect(report).toBeVisible();
-  href = await report.getByRole('link', { name: /Open issue/ }).getAttribute('href');
-  issue = new URL(href!);
-  expect(issue.searchParams.get('body')).toContain('- Stage: Path Editor');
+  await report.getByRole('button', { name: 'Send report' }).click();
+  await expect(report.getByRole('status')).toHaveText('Open GitHub to finish report');
+  const href = await report.getByRole('link', { name: /Open GitHub/ }).getAttribute('href');
+  const issue = new URL(href!);
+  expect(issue.origin + issue.pathname).toBe('https://github.com/AlanSynn/ms/issues/new');
+  expect(issue.searchParams.get('body')).toContain('Stage: Path Editor');
+  expect(issue.searchParams.get('body')).not.toContain('private@example.com');
+  expect(bugRequests).toBe(0);
 });
 
 test('Mobile startup shows compact Getting Started with a session opt-out', async ({ page }) => {

@@ -14,8 +14,10 @@
     "generate:fabrication": "bun scripts/generate-fabrication-assets.ts",
     "build:dmg": "bun scripts/with-rustup-cargo.mjs tauri build --bundles dmg",
     "test:browser": "bun run build && env -u NO_COLOR PLAYWRIGHT_SERVER=preview playwright test",
+    "test:study:browser": "VITE_STUDY_PROFILE=study VITE_STUDY_ENDPOINT=/ms-study/v1 VITE_STUDY_DEPLOYMENT=browser-test VITE_STUDY_CLASS_ID=class VITE_STUDY_SESSION_ID=session bun run build && env -u NO_COLOR VITE_STUDY_PROFILE=study PLAYWRIGHT_SERVER=preview playwright test tests/browser/study-telemetry.spec.ts",
     "build:tauri-frontend": "tsc && vite build --base ./",
-    "audit:fabrication-parity": "bun scripts/trace-fabrication-parity.ts"
+    "audit:fabrication-parity": "bun scripts/trace-fabrication-parity.ts",
+    "study:replay": "bun scripts/study-replay.ts"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.19.3",

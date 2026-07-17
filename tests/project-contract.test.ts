@@ -802,6 +802,7 @@ const rapierProbe = await runRapierFrictionProbe({ frictionCoefficient: 0.74, st
 const physicsKernelSource = readFileSync(join(process.cwd(), 'utils', 'physicsKernel.ts'), 'utf8');
 const dockerfileText = readFileSync(join(process.cwd(), 'Dockerfile'), 'utf8');
 const deployWorkflowText = readFileSync(join(process.cwd(), '.github', 'workflows', 'deploy.yml'), 'utf8');
+const studyWranglerText = readFileSync(join(process.cwd(), 'infrastructure', 'study', 'wrangler.toml'), 'utf8');
 const cargoTomlText = readFileSync(join(process.cwd(), 'src-tauri', 'Cargo.toml'), 'utf8');
 const cargoLockText = readFileSync(join(process.cwd(), 'src-tauri', 'Cargo.lock'), 'utf8');
 const tauriConfig = JSON.parse(readFileSync(join(process.cwd(), 'src-tauri', 'tauri.conf.json'), 'utf8'));
@@ -854,12 +855,16 @@ assert(deployWorkflowText.includes('Check ONNX LFS asset') && deployWorkflowText
 assert(deployWorkflowText.includes('tags:') && deployWorkflowText.includes('v*.*.*') && !deployWorkflowText.includes('branches:'), 'GitHub Pages workflow deploys only from version tags');
 assert(deployWorkflowText.includes('test "v${VERSION}" = "${GITHUB_REF_NAME}"'), 'GitHub Pages workflow requires the tag to match package.json version');
 assert(deployWorkflowText.includes('VITE_BASE_PATH: /ms/'), 'GitHub Pages workflow builds assets under /ms/');
+assert(deployWorkflowText.indexOf('  build:') < deployWorkflowText.indexOf('  study-worker:') && deployWorkflowText.includes('study-worker:\n    runs-on: ubuntu-latest\n    needs: build'), 'study Worker deploy runs only after the tested production build');
+assert(deployWorkflowText.includes("VITE_STUDY_PROFILE: ${{ vars.STUDY_PROFILE || 'study' }}"), 'tagged releases default to approved study capture and can switch profile through one deployment variable');
+assert(deployWorkflowText.includes('VITE_STUDY_BUILD_SHA: ${{ github.sha }}') && deployWorkflowText.includes('cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd') && deployWorkflowText.includes('wranglerVersion: "4.112.0"'), 'study deployment records the exact app build and pins its Worker deploy tool');
+assert(studyWranglerText.includes('INGEST_RATE_LIMITER') && studyWranglerText.includes('BUG_RATE_LIMITER') && studyWranglerText.includes('limit = 6000') && studyWranglerText.includes('limit = 20'), 'study Worker has school-NAT-safe ingest and stricter bug-report rate limits');
 assert(dockerfileText.includes('FROM oven/bun:1.3.14-alpine') && dockerfileText.includes('bun install --frozen-lockfile') && dockerfileText.includes('\"preview\"'), 'Docker image uses Bun install, build, and preview runtime');
 assert.equal(tauriConfig.build.beforeDevCommand, 'bun run dev', 'Tauri dev hook uses Bun');
 assert.equal(tauriConfig.build.beforeBuildCommand, 'bun run build:tauri-frontend', 'Tauri build hook uses Bun');
 assert(deploymentDocs.includes('bun install --frozen-lockfile') && !deploymentDocs.includes('npm '), 'deployment docs use Bun commands');
 assert(deploymentDocs.includes('Classroom release checklist') && deploymentDocs.includes('v<package.json version>') && deploymentDocs.includes('VITE_BASE_PATH=/ms/'), 'deployment docs include the classroom /ms release checklist');
-assert(deploymentDocs.includes('no `/api/` requests') && deploymentDocs.includes('Teacher pack workflow') && deploymentDocs.includes('no account, no upload'), 'deployment docs lock classroom release to static local-first teacher-pack flow');
+assert(deploymentDocs.includes('runtime calls except the selected `/ms-study/v1` telemetry profile') && deploymentDocs.includes('Teacher pack workflow') && deploymentDocs.includes('no account, no upload'), 'deployment docs lock classroom release to local-first teacher-pack flow with the narrow study boundary');
 assert(macosDocs.includes('bun run build:exe') && !macosDocs.includes('npm '), 'macOS distribution docs use Bun commands');
 assert(agentsContract.includes('three` + Rapier WASM'), 'AGENTS.md records the selected high-performance 3D physics stack');
 assert(agentsContract.includes('Viser-style transform tree'), 'AGENTS.md records the Viser-inspired batching rule for large scenes');
@@ -870,7 +875,7 @@ assert(agentsContract.includes('GitHub Pages is the only hosted web release path
 assert(agentsContract.includes('Deploy only from version tags') && agentsContract.includes('v<package.json version>') && agentsContract.includes('Do not re-enable `main` branch deployment'), 'AGENTS.md locks tag-only release deployment');
 assert(agentsContract.includes('package.json') && agentsContract.includes('src-tauri/Cargo.toml') && agentsContract.includes('src-tauri/tauri.conf.json'), 'AGENTS.md requires browser and Tauri version alignment before release');
 assert(agentsContract.includes('local-first browser/Tauri'), 'AGENTS.md excludes server scope and locks the app as local-first');
-assert(agentsContract.includes('Do not add backend/API server'), 'AGENTS.md explicitly excludes backend/API/auth/cloud work unless reopened');
+assert(agentsContract.includes('sole approved server exception') && agentsContract.includes('/ms-study/v1') && agentsContract.includes('do not add other backend/API services'), 'AGENTS.md limits server scope to the approved study and bug boundary');
 assert(agentsContract.includes('Guided classroom lesson templates must create real serializable `ProjectState` data') && agentsContract.includes('Blank starters stay mechanism-free'), 'AGENTS.md locks lesson templates to real state and keeps blank starters clean');
 assert(agentsContract.includes('Classroom entry is theme-guided first') && agentsContract.includes('open exploration stays secondary'), 'AGENTS.md locks guided project entry as the classroom-primary start');
 assert(agentsContract.includes('`Reset Lesson` must restore a known-good lesson baseline') && agentsContract.includes('preserving app settings'), 'AGENTS.md locks stable lesson reset semantics');
@@ -4754,6 +4759,9 @@ const partShapeText = readFileSync(join(process.cwd(), 'components', 'stages', '
 const appText = appCommandSource;
 const appWorkspaceShellText = readFileSync(join(process.cwd(), 'components', 'AppWorkspaceShell.tsx'), 'utf8');
 const bugReportOverlayText = readFileSync(join(process.cwd(), 'components', 'shell', 'BugReportOverlay.tsx'), 'utf8');
+const bugReportClientText = readFileSync(join(process.cwd(), 'utils', 'bugReport.ts'), 'utf8');
+const studyTelemetryText = readFileSync(join(process.cwd(), 'utils', 'studyTelemetry.ts'), 'utf8');
+const studyWorkerText = readFileSync(join(process.cwd(), 'infrastructure', 'study', 'worker.js'), 'utf8');
 const appStageRouterText = readFileSync(join(process.cwd(), 'components', 'AppStageRouter.tsx'), 'utf8');
 const appDerivedStateHookText = readFileSync(join(process.cwd(), 'hooks', 'useAppDerivedState.ts'), 'utf8');
 const workspacePlayerDockHookText = readFileSync(join(process.cwd(), 'hooks', 'useWorkspacePlayerDock.tsx'), 'utf8');
@@ -5504,7 +5512,9 @@ assert(designFoundryPreviewText.includes('data-testid="design-shared-foundry-pre
 assert(characterSelectionText.includes('Choose new character.'), 'Character tab disables active-project artwork edits while a package review is pending');
 assert(characterSelectionText.includes('disabled={partPanelDisabled}') && characterSelectionText.includes('onClick={onEditCharacter}'), 'Pending package review disables active-character edit buttons');
 assert(characterSelectionText.includes('disabled={partPanelDisabled}') && characterSelectionText.includes('onClick={onSaveSkeleton}'), 'Pending package review disables active skeleton save controls');
-assert(appWorkspaceShellText.includes('data-testid="bug-report-button"') && appWorkspaceShellText.includes('<BugReportOverlay') && bugReportOverlayText.includes('https://github.com/AlanSynn/ms/issues/new') && bugReportOverlayText.includes('getDisplayMedia') && bugReportOverlayText.includes('Email optional') && bugReportOverlayText.includes('Attach downloaded screenshots here if needed.') && bugReportOverlayText.includes('ClipboardItem') && bugReportOverlayText.includes('Copy image') && !bugReportOverlayText.includes('Your name') && indexText.includes('.bug-report-overlay'), 'header bug button opens a local-first GitHub issue overlay with optional email and screenshot capture');
+assert(appWorkspaceShellText.includes('data-testid="bug-report-button"') && appWorkspaceShellText.includes('<BugReportOverlay') && bugReportOverlayText.includes('submitBugReport') && bugReportOverlayText.includes('Email optional') && bugReportOverlayText.includes('One optional screen is sent with this report.') && bugReportOverlayText.includes('download={screenshot.name}') && bugReportOverlayText.includes('Remove') && bugReportClientText.includes('getDisplayMedia') && bugReportClientText.includes('MAX_SCREENSHOT_EDGE = 1280') && bugReportClientText.includes('MAX_SCREENSHOT_BYTES = 1024 * 1024') && bugReportClientText.includes('`${base}/bug`') && bugReportClientText.includes('https://github.com/AlanSynn/ms/issues/new') && bugReportClientText.includes('email: ""') && !bugReportOverlayText.includes('Your name') && indexText.includes('.bug-report-overlay'), 'header bug button sends through the same-origin Worker, downloads the optional screen locally, and falls back to a de-identified GitHub draft');
+assert(studyTelemetryText.includes('CompressionStream("gzip")') && studyTelemetryText.includes('indexedDB.open') && studyTelemetryText.includes('navigator.sendBeacon') && studyTelemetryText.includes('requestIdleCallback') && studyTelemetryText.includes('VITE_STUDY_BUILD_SHA') && !studyTelemetryText.includes('setInterval'), 'study telemetry uses versioned compressed batches, idle snapshots, a durable browser outbox, page-exit delivery, and no polling loop');
+assert(studyWorkerText.includes('request.headers.get("Origin") !== env.ALLOWED_ORIGIN') && studyWorkerText.includes('GITHUB_TOKEN') && studyWorkerText.includes('ADMIN_TOKEN') && studyWorkerText.includes('withinRateLimit') && studyWorkerText.includes('limitedStreamBytes') && !bugReportClientText.includes('GITHUB_TOKEN'), 'study Worker owns origin, streaming limits, rate limits, and private GitHub/admin secrets; browser code owns none');
 assert(appStageRouterText.includes('stage-body editor-workbench relative min-h-0 flex-1 overflow-hidden'), 'shared workbench prevents right-pane scroll from moving the center canvas');
 assert(indexText.includes('.stage-left-pane, .stage-right-inspector { min-width: 0; min-height: 0; height: 100%; max-height: 100%; overflow-x: hidden; overflow-y: auto; overflow-wrap: anywhere;') && indexText.includes('.stage-left-pane-content > *, .stage-pane-stack > *, .workspace { min-width: 0; max-width: 100%; }') && indexText.includes('.character-setup-panel { min-height: 0; overflow: visible;') && indexText.includes('.character-inspector { min-height: 0; overflow: visible; }'), 'right inspector owns the single vertical scroll container for all stages, including Character, while shared panes wrap instead of clipping');
 const paneWheelCaptureCount = stageLayoutText.match(/onWheelCapture={keepPaneWheelOnPane}/g)?.length ?? 0;
