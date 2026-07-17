@@ -1694,6 +1694,23 @@ export const handoffGate = (
   return { ok: true as const, message: "Ready" };
 };
 
+// Variant of applyProjectAction that also reports whether the action changed
+// state. applyProjectAction returns the SAME project reference whenever one of
+// its guards rejects the action (missing part/joint/path, locked target, bad
+// anchor, binding invalidation, out-of-range reorder, ...); reference equality
+// therefore distinguishes applied from rejected without duplicating the guards.
+// The telemetry dispatch path uses this so a rejected action is stamped
+// applied:false at record time — the single source of truth the replay
+// projection trusts (it never re-derives applied-ness from its own guards,
+// which could drift from these).
+export const applyProjectActionResult = (
+  project: ProjectState,
+  action: ProjectAction,
+): { state: ProjectState; applied: boolean } => {
+  const state = applyProjectAction(project, action);
+  return { state, applied: state !== project };
+};
+
 export const applyProjectAction = (
   project: ProjectState,
   action: ProjectAction,

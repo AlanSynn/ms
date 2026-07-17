@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import worker from "../infrastructure/study/worker.js";
 import type { ProjectAction } from "../types";
-import { applyProjectAction, createSampleProject } from "../utils/project";
+import { applyProjectAction, applyProjectActionResult, createSampleProject } from "../utils/project";
 import { checkpointBatchIntact, studyProfileIncludes } from "../utils/studyTelemetry";
 import {
   makeStudySnapshotRecords,
@@ -88,6 +88,31 @@ assert(!JSON.stringify(aliasedAction).includes(rawEntityId), "raw entity id neve
     );
   }
   console.log("replay reducer fidelity verified for", edits.length, "guard-free authored edits");
+}
+
+// Rejected-action telemetry. applyProjectAction returns the SAME project
+// reference whenever one of its guards rejects an action (missing entity,
+// locked target, out-of-range reorder, ...). applyProjectActionResult must
+// surface that as applied:false — computed against the true previous state — so
+// the replay projection can trust the flag and skip rejected edits rather than
+// treating them as applied. Positive controls confirm applied actions return a
+// new reference.
+{
+  const rejBase = createSampleProject();
+  const rejPartId = rejBase.partOrder[0];
+  const missingPart = applyProjectActionResult(rejBase, { type: "update_part", partId: "part_does_not_exist", updates: { locked: false } });
+  assert.equal(missingPart.applied, false, "update_part on a missing part is rejected");
+  assert.equal(missingPart.state, rejBase, "rejected action returns the same state reference");
+  const lastPartId = rejBase.partOrder[rejBase.partOrder.length - 1];
+  const offEnd = applyProjectActionResult(rejBase, { type: "reorder_part", partId: lastPartId, direction: 1 });
+  assert.equal(offEnd.applied, false, "reorder_part past the end of partOrder is rejected");
+  const selected = applyProjectActionResult(rejBase, { type: "select_part", partId: rejPartId });
+  assert.equal(selected.applied, true, "select_part applies");
+  assert.notEqual(selected.state, rejBase, "applied action returns a new state reference");
+  const updated = applyProjectActionResult(rejBase, { type: "update_part", partId: rejPartId, updates: { locked: !rejBase.parts[rejPartId].locked } });
+  assert.equal(updated.applied, true, "update_part on an existing part applies");
+  assert.notEqual(updated.state, rejBase, "applied update returns a new state reference");
+  console.log("rejected-action applied flag verified: 2 rejected, 2 applied");
 }
 
 const largeProject = createSampleProject();
@@ -242,6 +267,26 @@ assert([...bucket.objects.keys()].some((key) => key.includes(envelope.sessionId)
     body: JSON.stringify(snapshotEnvelope),
   }));
   assert.equal(snapshotResponse.status, 201, `snapshot with aliased entity keys ingests instead of being rejected as identity: ${await snapshotResponse.text()}`);
+}
+
+// A rejected-action record carries applied:false. The flag is a boolean (no
+// digit run, no PII), so it is identity-guard-safe and the Worker must accept
+// it at ingest — the replay projection handles skipping applied:false, not the
+// collector.
+{
+  const rejectedEnvelope = {
+    ...envelope,
+    batchId: "bat_00000000-0000-4000-8000-0000000000rej",
+    records: [
+      { seq: 1, t: 500, type: "project.action", stage: "character", project: "prj_rej", data: { ...studyProjectAction({ type: "update_part", partId: "part_does_not_exist", updates: { locked: false } }, "prj_rej"), applied: false } },
+    ],
+  };
+  const rejectedResponse = await call(new Request("https://alansynn.com/ms-study/v1/batch", {
+    method: "POST",
+    headers: { Origin: "https://alansynn.com", "Content-Type": "application/json" },
+    body: JSON.stringify(rejectedEnvelope),
+  }));
+  assert.equal(rejectedResponse.status, 201, `applied:false project.action ingests (identity-guard-safe flag): ${await rejectedResponse.text()}`);
 }
 
 const duplicateGzipBody = await new Response(new Blob([JSON.stringify(envelope)]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer();

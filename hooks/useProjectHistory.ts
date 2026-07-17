@@ -1,6 +1,6 @@
-import { useState, type SetStateAction } from "react";
+import { useState, useRef, type SetStateAction } from "react";
 import type { ProjectAction, ProjectState } from "../types";
-import { applyProjectAction, projectSelfCheck } from "../utils/project";
+import { applyProjectActionResult, projectSelfCheck } from "../utils/project";
 import {
   recordStudyEvent,
   recordStudyProjectAction,
@@ -32,6 +32,10 @@ export const useProjectHistory = (createInitialProject: () => ProjectState) => {
     },
   );
 
+  // Tracks action objects already recorded in the current update so the
+  // StrictMode double-invoke of the state updater does not double-record.
+  const appliedActionRefs = useRef(new WeakSet<ProjectAction>());
+
   const setProject = (
     update: SetStateAction<ProjectState>,
     options: SetProjectOptions = {},
@@ -60,10 +64,20 @@ export const useProjectHistory = (createInitialProject: () => ProjectState) => {
   };
 
   const dispatch = (action: ProjectAction) => {
-    recordStudyProjectAction(action);
     setProject((prev) => {
-      const next = applyProjectAction(prev, action);
-      return next;
+      const result = applyProjectActionResult(prev, action);
+      // Record exactly once per action object: React StrictMode double-invokes
+      // state updaters in development, so without this guard one dispatch would
+      // emit two project.action records. `applied` is computed here against the
+      // true previous state, so the replay projection can trust the flag
+      // instead of re-deriving applied-ness from its own guards (which could
+      // drift from applyProjectAction's). Rejected actions (applied:false) are
+      // recorded without a coalesce key so they can never overwrite a real edit.
+      if (!appliedActionRefs.current.has(action)) {
+        appliedActionRefs.current.add(action);
+        recordStudyProjectAction(action, result.applied);
+      }
+      return result.state;
     }, {
       history: isUndoableProjectAction(action),
       telemetrySource: "action",

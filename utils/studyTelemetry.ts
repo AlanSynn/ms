@@ -247,11 +247,20 @@ export const recordStudyStage = (stage: AppStage) => {
   );
 };
 
-export const recordStudyProjectAction = (action: ProjectAction) =>
-  recordStudyEvent("project.action", studyProjectAction(action, currentProject), {
-    level: "replay",
-    coalesceKey: projectActionCoalesceKey(action),
-  });
+export const recordStudyProjectAction = (
+  action: ProjectAction,
+  applied: boolean,
+) =>
+  recordStudyEvent(
+    "project.action",
+    { ...(studyProjectAction(action, currentProject) as Record<string, unknown>), applied },
+    {
+      level: "replay",
+      // A rejected action (applied:false) must never replace a prior applied
+      // action that shares its coalesce key — that would erase the real edit.
+      coalesceKey: applied ? projectActionCoalesceKey(action) : undefined,
+    },
+  );
 
 const projectActionCoalesceKey = (action: ProjectAction) => {
   if (action.type === "update_part") return `${action.type}:${action.partId}:${Object.keys(action.updates).sort().join(",")}`;
