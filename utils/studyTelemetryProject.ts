@@ -69,8 +69,18 @@ const hashEntityId = (value: string, salt: string) => {
   return `${(first >>> 0).toString(16).padStart(8, "0")}${(second >>> 0).toString(16).padStart(8, "0")}`;
 };
 
-export const studyEntityAlias = (projectAlias: string, value: string) =>
-  `ent_${hashEntityId(value, projectAlias)}`;
+export const studyEntityAlias = (projectAlias: string, value: string) => {
+  // Group the hex digest into 4-char blocks separated by `_`. The Worker's
+  // identity guard flags any 9+ decimal-digit run as a phone number, and an
+  // ungrouped 16-char hex digest routinely contains such runs — which would
+  // otherwise reject every snapshot whose entity ids alias to one. `_` sits
+  // outside that guard's `[\d ().-]` character class, so it breaks the runs
+  // while the token stays opaque and referentially stable.
+  const digest = hashEntityId(value, projectAlias);
+  const groups: string[] = [];
+  for (let index = 0; index < digest.length; index += 4) groups.push(digest.slice(index, index + 4));
+  return `ent_${groups.join("_")}`;
+};
 
 const isEntityIdKey = (key: string) =>
   !STATIC_ID_KEYS.has(key) && (key === "id" || key.endsWith("Id"));

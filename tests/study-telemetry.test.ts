@@ -209,6 +209,41 @@ const batchResponse = await call(new Request("https://alansynn.com/ms-study/v1/b
 assert.equal(batchResponse.status, 201, "valid batch stored");
 assert([...bucket.objects.keys()].some((key) => key.includes(envelope.sessionId) && key.endsWith(".json.gz")), "session-keyed canonical gzip batch exists");
 
+// Entity aliases must stay opaque to the Worker's phone/email identity guard.
+// The digest is hex, so an ungrouped `ent_<16 hex>` can contain a 9+ decimal
+// digit run that matches the phone pattern and gets the whole snapshot
+// rejected. Aliases are grouped (4 hex chars per `_`-separated block) so no
+// digit run reaches that length — and this must hold for hostile seeds too.
+{
+  const identityPattern = /(?:[^\s@]+@[^\s@]+\.[^\s@]+)|(?:\+?\d[\d ().-]{7,}\d)/;
+  for (const seed of ["part_a", "path_b", "joint_c", "9999999999", "1111111111111111", "p_00000000-0000-4000-8000-000000000001"]) {
+    const alias = studyEntityAlias("prj_guard", seed);
+    assert(/^ent_[0-9a-f]{4}(_[0-9a-f]{4}){3}$/.test(alias), `alias shape stable for ${seed}: ${alias}`);
+    assert(!identityPattern.test(alias), `alias never reads as identity for ${seed}: ${alias}`);
+  }
+}
+
+// A snapshot carrying aliased entity keys and values (whose hex digests hold long
+// digit runs under the old format) must still ingest — the alias format keeps it
+// opaque to the Worker's identity guard. This is the regression that the prod
+// smoke caught: the prior single-record fixture had no aliased entity keys, so
+// it never exercised a snapshot against the deployed validator.
+{
+  const snapshotEnvelope = {
+    ...envelope,
+    batchId: "bat_00000000-0000-4000-8000-0000000000snap",
+    records: [
+      { seq: 1, t: 500, type: "project.snapshot", stage: "character", project: "prj_snap", data: { reason: "initial", snapshotSchema: STUDY_SNAPSHOT_SCHEMA, state: studyProjectSnapshot(createSampleProject(), "prj_snap") } },
+    ],
+  };
+  const snapshotResponse = await call(new Request("https://alansynn.com/ms-study/v1/batch", {
+    method: "POST",
+    headers: { Origin: "https://alansynn.com", "Content-Type": "application/json" },
+    body: JSON.stringify(snapshotEnvelope),
+  }));
+  assert.equal(snapshotResponse.status, 201, `snapshot with aliased entity keys ingests instead of being rejected as identity: ${await snapshotResponse.text()}`);
+}
+
 const duplicateGzipBody = await new Response(new Blob([JSON.stringify(envelope)]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer();
 const batchObjectsBeforeDuplicate = bucket.objects.size;
 assert.equal((await call(new Request("https://alansynn.com/ms-study/v1/batch", {
