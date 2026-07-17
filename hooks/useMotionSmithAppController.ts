@@ -450,11 +450,6 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
       setShowRecommendations(false);
     },
     onApplyRecommendation: (mechanism) => {
-      recordStudyEvent(
-        "recommendation.accept",
-        { mechanismType: mechanism.type, presetId: mechanism.presetId },
-        { level: "metrics", immediate: true },
-      );
       applyRecommendedMechanism(mechanism);
     },
     showTracking,

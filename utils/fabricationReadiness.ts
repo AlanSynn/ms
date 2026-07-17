@@ -80,6 +80,41 @@ export const compactStudentActionForFabricationDiagnostic = (
     return action && action.length > 90 ? `${action.slice(0, 87).trimEnd()}...` : action;
 };
 
+// Low-cardinality category for a fabrication/motion diagnostic, for study
+// telemetry (simulation.validation.category). The regex order mirrors
+// compactStudentActionForFabricationDiagnostic above — keep them in sync; the
+// first matching category wins. Returns null when the text carries no
+// recognizable diagnostic so the caller can emit "none". No free text leaves
+// this layer: only the enum does.
+export type FabricationDiagnosticCategory =
+    | "feasibility"
+    | "collision"
+    | "geometry"
+    | "connection"
+    | "constraint";
+
+export const classifyFabricationDiagnosticCategory = (
+    diagnostic: string | null | undefined,
+): FabricationDiagnosticCategory | null => {
+    if (!diagnostic) return null;
+    const text = diagnostic.trim();
+    if (/mechanisms? collide|collision/i.test(text)) return "collision";
+    if (/^No motion\b|Motion\s*\d+%(?:\s|$)|Motion may jam|No full motion/i.test(text)) return "feasibility";
+    if (/^Fix:\s*Choose anchor|choose another target|duplicate target|target.+(?:used|occupied)|choose (?:this target's )?path|missing path|no path|choose a target|missing target|no target|no active mechanism/i.test(text)) return "connection";
+    if (/outside sheet|off[- ]sheet|off board|outside board|placement off board|physical envelope incomplete|fix mechanism geometry/i.test(text)) return "geometry";
+    if (/graph invalid|graph fabrication blocked|constraint|validation|\bscore\b|not fabrication-ready|fabrication unsupported/i.test(text)) return "constraint";
+    return null;
+};
+
+// Prefer the active transaction blocker over the motion warning: a blocker is
+// the currently-blocking failure while a warning may be advisory.
+export const fabricationDiagnosticCategory = (
+    blocker: string | null | undefined,
+    motionWarning: string | null | undefined,
+): FabricationDiagnosticCategory | null =>
+    classifyFabricationDiagnosticCategory(blocker)
+    ?? classifyFabricationDiagnosticCategory(motionWarning);
+
 const normalizeReadinessBlocker = (diagnostic: string | null | undefined) => {
   const compact = compactStudentActionForFabricationDiagnostic(diagnostic);
   if (!compact) return null;

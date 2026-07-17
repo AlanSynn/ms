@@ -41,6 +41,39 @@ export type MechanismRecommendation = {
   fabricationErrors: string[];
 };
 
+// Low-cardinality key for a recommendation's rationale, for study telemetry
+// (recommendation.candidates[].reasonKey). The free-text `reason` labels are a
+// bounded vocabulary; this maps them to stable identifiers so no free text
+// enters telemetry. "blocked" wins when the candidate has fabrication errors.
+// Keep the map in sync with the reason strings emitted by
+// buildMechanismRecommendations below.
+export type RecommendationReasonKey =
+  | "arc_limb"
+  | "push_pull"
+  | "lift"
+  | "gear_crank"
+  | "reverse_rotation"
+  | "compact_loop"
+  | "blocked"
+  | "other";
+
+const RECOMMENDATION_REASON_KEYS: Readonly<Record<string, RecommendationReasonKey>> = {
+  "Arc limb": "arc_limb",
+  "Push-pull": "push_pull",
+  "Lift": "lift",
+  "Gear crank": "gear_crank",
+  "Reverse rotation": "reverse_rotation",
+  "Compact loop": "compact_loop",
+};
+
+export const recommendationReasonKey = (
+  reason: string | null | undefined,
+  blocked: boolean,
+): RecommendationReasonKey => {
+  if (blocked) return "blocked";
+  return (reason && RECOMMENDATION_REASON_KEYS[reason]) || "other";
+};
+
 const pathMetrics = (path: ProjectMotionPath) => {
   const xs = path.points.map((p) => p.x);
   const ys = path.points.map((p) => p.y);

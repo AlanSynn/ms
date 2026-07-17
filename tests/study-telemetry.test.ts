@@ -289,6 +289,36 @@ assert([...bucket.objects.keys()].some((key) => key.includes(envelope.sessionId)
   assert.equal(rejectedResponse.status, 201, `applied:false project.action ingests (identity-guard-safe flag): ${await rejectedResponse.text()}`);
 }
 
+// The two new low-cardinality study fields — simulation.validation.category
+// (enum) and recommendation.candidates[].reasonKey (enum) plus
+// recommendation.accept rank/score/candidateCount (numbers) — must ingest.
+// The enum slugs carry no digit run and the numerics are real JSON numbers
+// (not strings), so the Worker's 9+-digit identity guard must not mistake any
+// of them for PII and reject the batch. This is the release gate: the new
+// fields ship only if they survive the deployed validator on real numeric
+// payloads (a long digit run in a score string would have been caught here).
+{
+  const numericEnvelope = {
+    ...envelope,
+    batchId: "bat_00000000-0000-4000-8000-0000000000num",
+    records: [
+      { seq: 1, t: 500, type: "simulation.validation", stage: "foundry", project: "prj_num", data: { type: "4bar", valid: false, category: "collision" } },
+      { seq: 2, t: 510, type: "recommendation.candidates", stage: "path", project: "prj_num", data: { candidates: [
+        { type: "4bar", score: 0.917, blocked: false, reasonKey: "arc_limb" },
+        { type: "crank", score: 0.812, blocked: true, reasonKey: "blocked" },
+        { type: "compact", score: 0.76, blocked: false, reasonKey: "compact_loop" },
+      ] } },
+      { seq: 3, t: 520, type: "recommendation.accept", stage: "path", project: "prj_num", data: { mechanismType: "4bar", presetId: "recommendation-4bar", rank: 1, score: 0.917, candidateCount: 3 } },
+    ],
+  };
+  const numericResponse = await call(new Request("https://alansynn.com/ms-study/v1/batch", {
+    method: "POST",
+    headers: { Origin: "https://alansynn.com", "Content-Type": "application/json" },
+    body: JSON.stringify(numericEnvelope),
+  }));
+  assert.equal(numericResponse.status, 201, `enum+numeric study fields ingest through the identity guard: ${await numericResponse.text()}`);
+}
+
 const duplicateGzipBody = await new Response(new Blob([JSON.stringify(envelope)]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer();
 const batchObjectsBeforeDuplicate = bucket.objects.size;
 assert.equal((await call(new Request("https://alansynn.com/ms-study/v1/batch", {

@@ -58,7 +58,7 @@ import {
   FABRICATION_RENDER_LAYER_Z_STEP,
   sampleFeasibleRange,
 } from "../../../utils/fabrication";
-import { compactStudentActionForFabricationDiagnostic } from "../../../utils/fabricationReadiness";
+import { compactStudentActionForFabricationDiagnostic, fabricationDiagnosticCategory } from "../../../utils/fabricationReadiness";
 import { recordStudyEvent } from "../../../utils/studyTelemetry";
 import { buildProjectMechanismSceneContract } from "../../../utils/mechanismSceneContract";
 import {
@@ -1070,6 +1070,7 @@ export const MechanismFoundry = ({
         valid: selectedSimulation.state.isValid && foundryProjectDriveEnabled && !motionWarning,
         warning: Boolean(motionWarning),
         transaction: foundryTransaction.status,
+        category: fabricationDiagnosticCategory(foundryTransaction.blocker, motionWarning) ?? "none",
       },
       { level: "metrics", coalesceKey: "foundry-validation" },
     );

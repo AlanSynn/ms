@@ -8,6 +8,7 @@ import type {
 import { mechanismWithGeneratedPath, uid } from "../../../utils/project";
 import {
   buildMechanismRecommendations,
+  recommendationReasonKey,
   type MechanismRecommendation,
 } from "../../../utils/mechanismRecommendations";
 import {
@@ -153,6 +154,7 @@ export const MechanismRecommendationSheet = ({
           type: option.type,
           score: Math.round(option.score * 1000) / 1000,
           blocked: option.fabricationErrors.length > 0,
+          reasonKey: recommendationReasonKey(option.reason, option.fabricationErrors.length > 0),
         })),
       },
       { level: "metrics", immediate: true },
@@ -160,6 +162,18 @@ export const MechanismRecommendationSheet = ({
   }, [isOpen, recommendations]);
 
   const apply = (option: MechanismRecommendation) => {
+    const rank = recommendations.indexOf(option) + 1;
+    recordStudyEvent(
+      "recommendation.accept",
+      {
+        mechanismType: option.type,
+        presetId: `recommendation-${option.type}`,
+        rank,
+        score: Math.round(option.score * 1000) / 1000,
+        candidateCount: recommendations.length,
+      },
+      { level: "metrics", immediate: true },
+    );
     onApply(
       mechanismWithGeneratedPath({
         ...option.mechanism,
