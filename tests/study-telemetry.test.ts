@@ -284,6 +284,16 @@ const env = {
   ADMIN_TOKEN: "admin-secret",
 };
 const call = (request: Request) => worker.fetch(request, env);
+const listCount = async (prefix: string) => {
+  let count = 0;
+  let cursor: string | undefined;
+  do {
+    const page = await bucket.list({ prefix, limit: 1000, cursor });
+    count += page.objects.length;
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return count;
+};
 
 const envelope = {
   v: 1,
@@ -765,6 +775,62 @@ try {
     false,
     "checkpoint is rejected when the body batchId does not match the wrapper",
   );
+}
+
+// Admin purge (DELETE) clears telemetry + assets for a deployment tag or a
+// single session, so test/smoke data can be wiped before real classroom
+// sessions — research data must not mix with test logs. Requires ADMIN_TOKEN;
+// the deployment-wide purge additionally requires ?confirm=<tag>.
+{
+  const beforeTelemetry = await listCount("telemetry/v0.0.9/");
+  const beforeAssets = await listCount("assets/v0.0.9/");
+  assert(beforeTelemetry > 0 && beforeAssets > 0, "fixtures populated telemetry + assets before purge");
+
+  // Auth + confirm guards on the destructive deployment-wide route.
+  assert.equal((await call(new Request("https://alansynn.com/ms-study/v1/admin/deployment/v0.0.9?confirm=v0.0.9", { method: "DELETE" }))).status, 401, "deployment purge requires admin token");
+  assert.equal((await call(new Request("https://alansynn.com/ms-study/v1/admin/deployment/v0.0.9", { headers: { Authorization: "Bearer admin-secret" }, method: "DELETE" }))).status, 400, "deployment purge requires the tag echoed as confirm");
+  assert.equal((await call(new Request("https://alansynn.com/ms-study/v1/admin/deployment/v0.0.9?confirm=other", { headers: { Authorization: "Bearer admin-secret" }, method: "DELETE" }))).status, 400, "deployment purge rejects a mismatched confirm");
+  assert.equal((await call(new Request("https://alansynn.com/ms-study/v1/admin/session/ses_x?deployment=v0.0.9", { method: "DELETE" }))).status, 401, "session purge requires admin token");
+
+  // Deployment-wide purge clears telemetry + assets for the tag.
+  const deployPurge = await call(new Request("https://alansynn.com/ms-study/v1/admin/deployment/v0.0.9?confirm=v0.0.9", { headers: { Authorization: "Bearer admin-secret" }, method: "DELETE" }));
+  assert.equal(deployPurge.status, 200, "admin can purge a whole deployment");
+  const deployBody = await deployPurge.json() as { purged: { telemetry: number; assets: number } };
+  assert(deployBody.purged.telemetry >= 1 && deployBody.purged.assets >= 1, "deployment purge deletes across telemetry + asset prefixes");
+  assert.equal(await listCount("telemetry/v0.0.9/"), 0, "deployment purge empties telemetry");
+  assert.equal(await listCount("assets/v0.0.9/"), 0, "deployment purge empties assets");
+
+  // Single-session purge: ingest under a fresh session, then remove just it.
+  const purgeSession = "ses_purge-target-0001";
+  const purgeCtx = "ctx_purge-target-0001";
+  const ingestEnvelope = {
+    ...envelope,
+    batchId: "bat_purge-target-0001",
+    sessionId: purgeSession,
+    contextId: purgeCtx,
+    deployment: "v0.0.9",
+  };
+  assert.equal((await call(new Request("https://alansynn.com/ms-study/v1/batch", {
+    method: "POST",
+    headers: { Origin: "https://alansynn.com", "Content-Type": "application/json" },
+    body: JSON.stringify(ingestEnvelope),
+  }))).status, 201, "purge-target batch ingested");
+  const neighborSession = "ses_purge-neighbor-0001";
+  assert.equal((await call(new Request("https://alansynn.com/ms-study/v1/batch", {
+    method: "POST",
+    headers: { Origin: "https://alansynn.com", "Content-Type": "application/json" },
+    body: JSON.stringify({ ...ingestEnvelope, batchId: "bat_purge-neighbor-0001", sessionId: neighborSession }),
+  }))).status, 201, "neighbor batch ingested");
+  const sessionPurge = await call(new Request(`https://alansynn.com/ms-study/v1/admin/session/${purgeSession}?deployment=v0.0.9`, { headers: { Authorization: "Bearer admin-secret" }, method: "DELETE" }));
+  assert.equal(sessionPurge.status, 200, "admin can purge a single session");
+  const sessionBody = await sessionPurge.json() as { purged: { telemetry: number; assets: number } };
+  assert(sessionBody.purged.telemetry >= 1, "session purge reports telemetry deletes");
+  assert.equal(await listCount(`telemetry/v0.0.9/sessions/${purgeSession}/`), 0, "session purge removes only that session's telemetry");
+  assert((await listCount(`telemetry/v0.0.9/sessions/${neighborSession}/`)) >= 1, "session purge leaves other sessions untouched");
+  // Clean up the neighbor so the suite leaves the deployment empty.
+  await call(new Request(`https://alansynn.com/ms-study/v1/admin/session/${neighborSession}?deployment=v0.0.9`, { headers: { Authorization: "Bearer admin-secret" }, method: "DELETE" }));
+  assert.equal(await listCount("telemetry/v0.0.9/"), 0, "deployment left empty after purge suite");
+  console.log("admin purge verified: deployment-wide + single-session DELETE with auth + confirm guards");
 }
 
 console.log("study telemetry contracts passed");

@@ -30,6 +30,12 @@ export default {
       }
       if (request.method === "GET" && url.pathname === `${PREFIX}/admin/bugs`) return await adminBugs(request, env, url);
       if (request.method === "GET" && url.pathname === `${PREFIX}/admin/object`) return await adminObject(request, env, url);
+      if (request.method === "DELETE" && url.pathname.startsWith(`${PREFIX}/admin/session/`)) {
+        return await adminPurgeSession(request, env, url, url.pathname.slice(`${PREFIX}/admin/session/`.length));
+      }
+      if (request.method === "DELETE" && url.pathname.startsWith(`${PREFIX}/admin/deployment/`)) {
+        return await adminPurgeDeployment(request, env, url, url.pathname.slice(`${PREFIX}/admin/deployment/`.length));
+      }
       return json(env, 404, { error: "not_found" });
     } catch {
       return json(env, 500, { error: "internal_error" });
@@ -283,6 +289,48 @@ async function adminObject(request, env, url) {
   return new Response(object.body, { status: 200, headers });
 }
 
+// Delete every object under a prefix, paging through list() until none remain.
+// R2 list() is capped at 1000 keys per call, so a deployment purge loops on
+// the cursor until the prefix is empty. Returns the number of objects deleted.
+async function purgePrefix(env, prefix) {
+  let purged = 0;
+  let cursor;
+  do {
+    const page = await env.STUDY_BUCKET.list({ prefix, limit: 1000, cursor });
+    for (const item of page.objects) {
+      await env.STUDY_BUCKET.delete(item.key);
+      purged += 1;
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return purged;
+}
+
+// Purge a single session's telemetry + assets. Surgical scope: only objects
+// partitioned under this deployment/session, leaving every other session (and
+// the rest of the deployment) intact.
+async function adminPurgeSession(request, env, url, sessionId) {
+  if (!isAdmin(request, env)) return json(env, 401, { error: "unauthorized" });
+  const deployment = url.searchParams.get("deployment") || "";
+  if (!SAFE_ID.test(deployment) || !SAFE_ID.test(sessionId)) return json(env, 400, { error: "invalid_session" });
+  const telemetry = await purgePrefix(env, `telemetry/${deployment}/sessions/${sessionId}/`);
+  const assets = await purgePrefix(env, `assets/${deployment}/sessions/${sessionId}/`);
+  return json(env, 200, { ok: true, deployment, sessionId, purged: { telemetry, assets } });
+}
+
+// Purge ALL telemetry + assets for a deployment tag. This is the test/smoke
+// cleanup path so disposable deployment data does not mix with real research
+// sessions. Destructive and bulk, so it additionally requires the tag echoed
+// back as ?confirm=<tag> — a malformed or accidental call cannot wipe a tag.
+async function adminPurgeDeployment(request, env, url, deployment) {
+  if (!isAdmin(request, env)) return json(env, 401, { error: "unauthorized" });
+  if (!SAFE_ID.test(deployment)) return json(env, 400, { error: "invalid_deployment" });
+  if (url.searchParams.get("confirm") !== deployment) return json(env, 400, { error: "confirm_required" });
+  const telemetry = await purgePrefix(env, `telemetry/${deployment}/`);
+  const assets = await purgePrefix(env, `assets/${deployment}/`);
+  return json(env, 200, { ok: true, deployment, purged: { telemetry, assets } });
+}
+
 function validEnvelope(value) {
   const keys = ["v", "eventSchema", "snapshotSchema", "batchId", "deployment", "appVersion", "buildSha", "profile", "classId", "classSessionId", "teamId", "participantId", "sessionId", "contextId", "sessionCount", "reconnectCount", "records"];
   return exactKeys(value, keys)
@@ -440,7 +488,7 @@ function preflight(request, env) {
   return new Response(null, {
     status: 204,
     headers: responseHeaders(env, {
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
       "Access-Control-Allow-Headers": "Authorization, Content-Type, Content-Encoding, X-MotionSmith-Meta",
       "Access-Control-Max-Age": "86400",
     }),
