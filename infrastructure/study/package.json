@@ -1,0 +1,10 @@
+{
+  "name": "motionsmith-study-worker",
+  "version": "0.0.0",
+  "private": true,
+  "description": "MotionSmith study collector Worker. Auth via Cloudflare CLI (`cf` OAuth + minted API token); deploy/secrets via wrangler because `cf deploy` forces the unstable cloudflare.config.ts format.",
+  "main": "worker.js",
+  "devDependencies": {
+    "wrangler": "^4.112.0"
+  }
+}

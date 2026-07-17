@@ -49,3 +49,12 @@ playwright-report/
 .omc/
 .agents/
 skills-lock.json
+
+# Local secrets (study Worker admin/GH tokens, never commit)
+.env
+.env.*
+!.env.example
+
+# Cloudflare Workers local state (R2 blobs, sqlite, temp) — never commit
+.wrangler/
+

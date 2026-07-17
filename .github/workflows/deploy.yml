@@ -5,10 +5,7 @@ on:
     tags:
       - "v*.*.*"
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+permissions: {}
 
 concurrency:
   group: "pages-${{ github.ref_name }}"
@@ -17,6 +14,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -52,6 +51,13 @@ jobs:
       - name: Build
         env:
           VITE_BASE_PATH: /ms/
+          VITE_STUDY_PROFILE: ${{ vars.STUDY_PROFILE || 'study' }}
+          VITE_STUDY_ENDPOINT: /ms-study/v1
+          VITE_STUDY_DEPLOYMENT: ${{ github.ref_name }}
+          VITE_STUDY_BUILD_SHA: ${{ github.sha }}
+          VITE_STUDY_CLASS_ID: ${{ vars.STUDY_CLASS_ID || 'class' }}
+          VITE_STUDY_SESSION_ID: ${{ vars.STUDY_SESSION_ID || 'session' }}
+          VITE_STUDY_TEAM_ID: ${{ vars.STUDY_TEAM_ID || 'none' }}
         run: bun run build
 
       - name: Check built ONNX asset
@@ -68,12 +74,45 @@ jobs:
         with:
           path: ./dist
 
+  study-worker:
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Deploy study collector
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4.112.0"
+          workingDirectory: infrastructure/study
+          command: deploy
+          secrets: |
+            GITHUB_TOKEN
+            ADMIN_TOKEN
+        env:
+          GITHUB_TOKEN: ${{ secrets.STUDY_GITHUB_TOKEN }}
+          ADMIN_TOKEN: ${{ secrets.STUDY_ADMIN_TOKEN }}
+
+      - name: Check study collector
+        run: >-
+          curl --retry 5 --retry-all-errors --retry-delay 2 -fsS -o /dev/null
+          -X OPTIONS -H 'Origin: https://alansynn.com'
+          https://alansynn.com/ms-study/v1/batch
+
   deploy:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, study-worker]
+    permissions:
+      pages: write
+      id-token: write
     steps:
       - name: Deploy to GitHub Pages
         id: deployment

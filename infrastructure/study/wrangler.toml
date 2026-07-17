@@ -1,0 +1,32 @@
+name = "motionsmith-study"
+main = "worker.js"
+compatibility_date = "2026-07-17"
+workers_dev = false
+
+routes = [
+  { pattern = "alansynn.com/ms-study/v1/*", zone_name = "alansynn.com" }
+]
+
+[vars]
+GITHUB_REPOSITORY = "AlanSynn/ms"
+ALLOWED_ORIGIN = "https://alansynn.com"
+
+[[r2_buckets]]
+binding = "STUDY_BUCKET"
+bucket_name = "motionsmith-study"
+
+[[ratelimits]]
+name = "INGEST_RATE_LIMITER"
+namespace_id = "1784212861"
+
+[ratelimits.simple]
+limit = 6000
+period = 60
+
+[[ratelimits]]
+name = "BUG_RATE_LIMITER"
+namespace_id = "1784212862"
+
+[ratelimits.simple]
+limit = 20
+period = 60
