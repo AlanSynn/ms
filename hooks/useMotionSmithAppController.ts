@@ -29,6 +29,8 @@ import { useProjectAutosave } from "./useProjectAutosave";
 import { useProjectHistory } from "./useProjectHistory";
 import { useWorkspacePlaybackLoop } from "./useWorkspacePlaybackLoop";
 import { useWorkspacePlayerDock } from "./useWorkspacePlayerDock";
+import { useStudyTelemetry } from "./useStudyTelemetry";
+import { recordStudyEvent } from "../utils/studyTelemetry";
 
 type FoundryState = MechanismConfig;
 
@@ -288,6 +290,46 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   });
 
   useModalInertEffect(appShellRef, modalOpen);
+  useStudyTelemetry({
+    project,
+    stage: editorStage,
+    viewport: canvasViewport,
+    isPlaying,
+    commandStatus,
+    showGettingStarted,
+    showShortcuts,
+    showAbout,
+    showRecommendations,
+    showTracking,
+  });
+  useEffect(() => {
+    recordStudyEvent(
+      "foundry.state",
+      { mechanism: foundry },
+      { level: "replay", coalesceKey: "foundry-state" },
+    );
+  }, [foundry]);
+  useEffect(() => {
+    recordStudyEvent(
+      "path.draw_mode",
+      { active: drawMode },
+      { level: "metrics", immediate: true },
+    );
+  }, [drawMode]);
+  useEffect(() => {
+    recordStudyEvent(
+      "assembly.state",
+      { step: assemblyStepIndex, playing: assemblyPlaying },
+      { level: "replay", coalesceKey: "assembly-state" },
+    );
+  }, [assemblyPlaying, assemblyStepIndex]);
+  useEffect(() => {
+    recordStudyEvent(
+      "simulation.trace",
+      { visible: showTrace },
+      { level: "metrics" },
+    );
+  }, [showTrace]);
 
   const stageLabel =
     STAGES.find((item) => item.id === editorStage)?.label ?? editorStage;
@@ -350,7 +392,10 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
       showTrace,
       setShowTrace,
       onOptimize: optimizeSelectedMechanism,
-      onRecommendations: () => setShowRecommendations(true),
+      onRecommendations: () => {
+        recordStudyEvent("recommendation.request", undefined, { level: "metrics", immediate: true });
+        setShowRecommendations(true);
+      },
       optimizerBusy,
       exportSvg: exportMechanismSvg,
       exportDxf: exportMechanismDxf,
@@ -400,8 +445,18 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     onOpenBugReport: () => setShowBugReport(true),
     onCloseBugReport: () => setShowBugReport(false),
     showRecommendations,
-    onCloseRecommendations: () => setShowRecommendations(false),
-    onApplyRecommendation: applyRecommendedMechanism,
+    onCloseRecommendations: () => {
+      recordStudyEvent("recommendation.dismiss", undefined, { level: "metrics" });
+      setShowRecommendations(false);
+    },
+    onApplyRecommendation: (mechanism) => {
+      recordStudyEvent(
+        "recommendation.accept",
+        { mechanismType: mechanism.type, presetId: mechanism.presetId },
+        { level: "metrics", immediate: true },
+      );
+      applyRecommendedMechanism(mechanism);
+    },
     showTracking,
     onCloseTracking: closeTracking,
     onTransferTracking: transferTrackedPath,

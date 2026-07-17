@@ -50,6 +50,7 @@ import {
   resolveMechanismPhysicalConnections,
 } from "./mechanismConnectionSelections";
 import { isUsableContourPoints } from "./partGeometry";
+import { recordStudyEvent } from "./studyTelemetry";
 import {
   DEFAULT_CLASSROOM_ASSESSMENT_KEY,
   normalizeClassroomAssessmentKey,
@@ -2962,6 +2963,12 @@ export const downloadText = (
   type = "application/json",
 ) => {
   const blob = new Blob([text], { type });
+  const extension = filename.toLowerCase().match(/\.([a-z0-9]{1,8})$/)?.[1] ?? "unknown";
+  recordStudyEvent(
+    "export.download",
+    { extension, mime: type.slice(0, 80), bytes: blob.size },
+    { level: "metrics", immediate: true },
+  );
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

@@ -59,6 +59,7 @@ import {
   sampleFeasibleRange,
 } from "../../../utils/fabrication";
 import { compactStudentActionForFabricationDiagnostic } from "../../../utils/fabricationReadiness";
+import { recordStudyEvent } from "../../../utils/studyTelemetry";
 import { buildProjectMechanismSceneContract } from "../../../utils/mechanismSceneContract";
 import {
   connectionSelectionSignature,
@@ -1049,6 +1050,30 @@ export const MechanismFoundry = ({
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [foundryPlaying, project.settings.animationSpeed]);
+  useEffect(() => {
+    recordStudyEvent(
+      "simulation.foundry",
+      {
+        state: foundryPlaying ? "playing" : "stopped",
+        mechanismType: foundry.type,
+        valid: selectedSimulation.state.isValid,
+        driveEnabled: foundryProjectDriveEnabled,
+      },
+      { level: "metrics", immediate: true },
+    );
+  }, [foundryPlaying]);
+  useEffect(() => {
+    recordStudyEvent(
+      "simulation.validation",
+      {
+        mechanismType: foundry.type,
+        valid: selectedSimulation.state.isValid && foundryProjectDriveEnabled && !motionWarning,
+        warning: Boolean(motionWarning),
+        transaction: foundryTransaction.status,
+      },
+      { level: "metrics", coalesceKey: "foundry-validation" },
+    );
+  }, [foundry.type, foundryProjectDriveEnabled, foundryTransaction.status, motionWarning, selectedSimulation.state.isValid]);
   const makePackage = (): FoundryExportPackage => {
     const mechanismId = landedFoundry.id;
     const state = calculateLinkage(

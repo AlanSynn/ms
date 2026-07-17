@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import type {
   BodyPartLayer,
   MechanismConfig,
@@ -16,6 +16,7 @@ import {
   pointsToSvgPath,
 } from "../../../utils/mechanismPreview";
 import { MechanismLinkagePreview } from "../foundry/MechanismLinkagePreview";
+import { recordStudyEvent } from "../../../utils/studyTelemetry";
 
 type MechanismRecommendationSheetProps = {
   isOpen: boolean;
@@ -143,6 +144,20 @@ export const MechanismRecommendationSheet = ({
     () => buildMechanismRecommendations(project, selectedPart, selectedPath),
     [project, selectedPart, selectedPath],
   );
+  useEffect(() => {
+    if (!isOpen) return;
+    recordStudyEvent(
+      "recommendation.candidates",
+      {
+        candidates: recommendations.map((option) => ({
+          type: option.type,
+          score: Math.round(option.score * 1000) / 1000,
+          blocked: option.fabricationErrors.length > 0,
+        })),
+      },
+      { level: "metrics", immediate: true },
+    );
+  }, [isOpen, recommendations]);
 
   const apply = (option: MechanismRecommendation) => {
     onApply(

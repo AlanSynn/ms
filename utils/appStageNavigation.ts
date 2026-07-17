@@ -2,6 +2,7 @@ import type { AppStage, ProjectAction, ProjectState } from "../types";
 import { handoffGate } from "./project";
 import { projectMechanismReadiness } from "./mechanismReadiness";
 import { hasHardReadinessBlockers } from "./fabricationReadiness";
+import { recordStudyEvent } from "./studyTelemetry";
 
 type NavigateAppStageOptions = {
   project: ProjectState;
@@ -37,6 +38,11 @@ export const navigateAppStage = ({
     ? { ok: false as const, message: readiness.blockers[0], recoveryStage: "design" as const }
     : handoffGate(project, target);
   if (!gate.ok && "recoveryStage" in gate) {
+    recordStudyEvent(
+      "stage.navigation",
+      { target, outcome: "blocked", recoveryStage: gate.recoveryStage },
+      { level: "metrics", immediate: true },
+    );
     dispatch({
       type: "set_processing",
       processing: {
@@ -50,6 +56,11 @@ export const navigateAppStage = ({
     setStage(gate.recoveryStage);
     return gate;
   }
+  recordStudyEvent(
+    "stage.navigation",
+    { target, outcome: "opened" },
+    { level: "metrics", immediate: true },
+  );
   setCommandStatus(`Opened ${stageLabel(target)}`);
   setStage(target);
   return gate;

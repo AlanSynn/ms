@@ -1,6 +1,11 @@
 import { useState, type SetStateAction } from "react";
 import type { ProjectAction, ProjectState } from "../types";
 import { applyProjectAction, projectSelfCheck } from "../utils/project";
+import {
+  recordStudyEvent,
+  recordStudyProjectAction,
+  recordStudyProjectReplace,
+} from "../utils/studyTelemetry";
 
 const PROJECT_HISTORY_LIMIT = 80;
 
@@ -13,6 +18,7 @@ type ProjectHistoryState = {
 type SetProjectOptions = {
   history?: boolean;
   resetHistory?: boolean;
+  telemetrySource?: "action";
 };
 
 const isUndoableProjectAction = (action: ProjectAction) =>
@@ -35,6 +41,9 @@ export const useProjectHistory = (createInitialProject: () => ProjectState) => {
     update: SetStateAction<ProjectState>,
     options: SetProjectOptions = {},
   ) => {
+    if (options.telemetrySource !== "action") {
+      recordStudyProjectReplace(options);
+    }
     setProjectHistory((prev) => {
       const next =
         typeof update === "function"
@@ -55,16 +64,20 @@ export const useProjectHistory = (createInitialProject: () => ProjectState) => {
     });
   };
 
-  const dispatch = (action: ProjectAction) =>
+  const dispatch = (action: ProjectAction) => {
+    recordStudyProjectAction(action);
     setProject((prev) => {
       const next = applyProjectAction(prev, action);
       return next;
     }, {
       history: isUndoableProjectAction(action),
+      telemetrySource: "action",
     });
+  };
 
   const undoProject = () => {
     if (!projectHistory.past.length) return false;
+    recordStudyEvent("project.undo", undefined, { level: "replay", immediate: true });
     setProjectHistory((prev) => {
       if (!prev.past.length) return prev;
       const previous = prev.past[prev.past.length - 1];
@@ -79,6 +92,7 @@ export const useProjectHistory = (createInitialProject: () => ProjectState) => {
 
   const redoProject = () => {
     if (!projectHistory.future.length) return false;
+    recordStudyEvent("project.redo", undefined, { level: "replay", immediate: true });
     setProjectHistory((prev) => {
       if (!prev.future.length) return prev;
       const [next, ...future] = prev.future;

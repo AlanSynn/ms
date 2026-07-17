@@ -13,6 +13,7 @@ import {
   type ContextHelpId,
   type HelpLocale,
 } from "../../utils/contextHelp";
+import { recordStudyEvent } from "../../utils/studyTelemetry";
 
 export const ContextHelp = ({
   helpId,
@@ -94,6 +95,11 @@ export const ContextHelp = ({
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
+          recordStudyEvent(
+            "help.context",
+            { helpId, action: open ? "close" : "open" },
+            { level: "metrics" },
+          );
           setOpen((current) => !current);
         }}
         onKeyDown={(event) => {
