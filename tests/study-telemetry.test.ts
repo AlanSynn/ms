@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import worker from "../infrastructure/study/worker.js";
-import { createSampleProject } from "../utils/project";
+import type { ProjectAction } from "../types";
+import { applyProjectAction, createSampleProject } from "../utils/project";
 import { checkpointBatchIntact, studyProfileIncludes } from "../utils/studyTelemetry";
 import {
   makeStudySnapshotRecords,
@@ -47,6 +49,46 @@ const rawEntityId = "student-object-raw-314159";
 const aliasedAction = studyProjectAction({ type: "select_part", partId: rawEntityId }, projectAlias) as { partId: string };
 assert.equal(aliasedAction.partId, studyEntityAlias(projectAlias, rawEntityId), "project entity references use project-scoped aliases");
 assert(!JSON.stringify(aliasedAction).includes(rawEntityId), "raw entity id never enters telemetry action");
+
+// Replay reducer fidelity. The HTML reducer embedded in scripts/study-replay.ts
+// must reconstruct the same authored state the real applyProjectAction produces
+// for the accepted, guard-free edit surface. The reducer source is read straight
+// from the script (single source of truth — edits auto-track) and compiled here
+// so it is actually executed and diffed, not merely string-matched. Edges that
+// involve normalization or invalidation side-effects (update_settings, skeleton
+// / joint edits, mechanism edits, deletes that orphan mechanisms) are documented,
+// snapshot-bounded divergences — the periodic project.snapshot resyncs replay to
+// truth — and are intentionally outside this guard-free baseline.
+{
+  const scriptSrc = readFileSync(join(process.cwd(), "scripts/study-replay.ts"), "utf8");
+  const reducerSrc = scriptSrc.slice(scriptSrc.indexOf("function values"), scriptSrc.indexOf("const snapshots"));
+  const replayApply = new Function(`${reducerSrc}\nreturn applyAction;`)() as (state: unknown, action: unknown) => Record<string, unknown>;
+  const fidAlias = "prj_fidelity";
+  const base = createSampleProject();
+  const firstPartId = base.partOrder[0];
+  const edits: ProjectAction[] = [
+    { type: "update_part", partId: firstPartId, updates: { locked: false } },
+    { type: "select_part", partId: firstPartId },
+  ];
+  if (base.partOrder.length > 1) edits.push({ type: "reorder_part", partId: firstPartId, direction: 1 });
+  if (base.sceneObjectOrder.length) edits.push({ type: "select_scene_object", objectId: base.sceneObjectOrder[0] });
+  for (const action of edits) {
+    const realNext = applyProjectAction(base, action);
+    assert.notEqual(realNext, base, `real reducer applies ${action.type}`);
+    const liveScrubbed = studyProjectSnapshot(realNext, fidAlias);
+    const replayNext = replayApply(studyProjectSnapshot(base, fidAlias), studyProjectAction(action, fidAlias));
+    // Project state treats an absent key and an explicitly-undefined key as the
+    // same thing; the scrub strips undefined values while the reducer may write
+    // them, so compare through a JSON round-trip (state is plain serializable)
+    // that collapses undefined-vs-absent without weakening any real divergence.
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(replayNext)),
+      JSON.parse(JSON.stringify(liveScrubbed)),
+      `replay reducer matches real reducer for ${action.type}`,
+    );
+  }
+  console.log("replay reducer fidelity verified for", edits.length, "guard-free authored edits");
+}
 
 const largeProject = createSampleProject();
 const largePathId = Object.keys(largeProject.paths)[0];
@@ -446,6 +488,47 @@ try {
 } finally {
   replayFixture.stop(true);
   await rm(replayDir, { recursive: true, force: true });
+}
+
+// Incomplete chunked snapshots must surface a visible gap, not bridge silently.
+// A session whose begin declares total:2 but only delivers chunk 0 leaves the
+// context reconstructing from a stale/null baseline — the CLI must report that
+// in its log and the generated HTML banner (regression guard for the
+// silent-snapshot-loss fix).
+{
+  const incompleteBatches = [
+    {
+      ...envelope,
+      contextId: "ctx_00000000-0000-4000-8000-0000000000gap",
+      records: [
+        { seq: 1, t: 10, type: "project.snapshot.begin", stage: "character", data: { snapshotId: "snp_gap", reason: "test", total: 2 } },
+        { seq: 2, t: 11, type: "project.snapshot.chunk", stage: "character", data: { snapshotId: "snp_gap", index: 0, parts: [encodedReplayStateA.slice(0, replaySplit)] } },
+      ],
+    },
+  ];
+  const gapFixture = Bun.serve({
+    port: 0,
+    fetch(request) {
+      if (request.headers.get("Authorization") !== "Bearer replay-secret") return new Response("no", { status: 401 });
+      return Response.json({ batches: incompleteBatches, assets: [], cursor: null });
+    },
+  });
+  const gapDir = await mkdtemp(join(tmpdir(), "motionsmith-replay-gap-"));
+  const gapPath = join(gapDir, "gap.html");
+  try {
+    const child = Bun.spawn(
+      ["bun", "scripts/study-replay.ts", "--endpoint", `http://127.0.0.1:${gapFixture.port}`, "--deployment", "v0.0.9", "--session", envelope.sessionId, "--out", gapPath],
+      { cwd: process.cwd(), env: { ...process.env, STUDY_ADMIN_TOKEN: "replay-secret" }, stdout: "pipe", stderr: "pipe" },
+    );
+    const stdoutText = await new Response(child.stdout).text();
+    assert.equal(await child.exited, 0, `gap replay CLI exits cleanly: ${await new Response(child.stderr).text()}`);
+    assert(stdoutText.includes("gap"), `CLI surfaces snapshot gap in its log: ${stdoutText}`);
+    const gapHtml = await readFile(gapPath, "utf8");
+    assert(gapHtml.includes("gap"), "generated HTML surfaces snapshot gap in its banner");
+  } finally {
+    gapFixture.stop(true);
+    await rm(gapDir, { recursive: true, force: true });
+  }
 }
 
 // Exit-checkpoint recovery must survive a release-tag bump. VITE_STUDY_DEPLOYMENT
