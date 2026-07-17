@@ -77,7 +77,7 @@ const MAX_OUTBOX_ITEMS = 256;
 // body (server partitions storage by the in-body deployment), so an app-version
 // bump must never reclassify still-undelivered offline data as incompatible and
 // drop it. Legacy items written as `${endpoint}|${deployment}` are still
-// accepted via scopeStartsWith below so this change loses no queued data.
+// accepted via scopeMatches below so this change loses no queued data.
 const outboxScope = STUDY_ENDPOINT;
 const scopeMatches = (scope: string) => scope === outboxScope || scope.startsWith(`${outboxScope}|`);
 const EXIT_CHECKPOINT_KEY = "motionsmith.study.exit.v1";
@@ -558,6 +558,32 @@ const saveExitCheckpoint = (batches: StudyBatch[]) => {
   }
 };
 
+const CHECKPOINT_BATCH_ID_RE = /^bat_[0-9a-f-]{36}$/;
+/**
+ * A checkpoint batch is recoverable as long as its body is intact and its capture
+ * profile still fits the running profile. Deployment is intentionally NOT compared:
+ * it travels inside the body and the server partitions storage by the in-body
+ * deployment, so a release-tag bump (VITE_STUDY_DEPLOYMENT = git ref_name) must
+ * never orphan a checkpoint written under the previous tag. This recovery path is
+ * the only window where that loss is observable — a tab closed during a pagehide
+ * whose outbox write failed, then the app auto-updates between sessions — which is
+ * exactly when a deployment change is most likely.
+ */
+export const checkpointBatchIntact = (
+  batch: { batchId: string; json: string },
+  level: StudyLevel,
+): boolean => {
+  if (!CHECKPOINT_BATCH_ID_RE.test(batch.batchId) || typeof batch.json !== "string" || batch.json.length > 512 * 1024) return false;
+  try {
+    const envelope = JSON.parse(batch.json) as { batchId?: unknown; deployment?: unknown; profile?: unknown };
+    return envelope.batchId === batch.batchId
+      && typeof envelope.deployment === "string"
+      && envelope.profile === level;
+  } catch {
+    return false;
+  }
+};
+
 const readExitCheckpoint = () => {
   const checkpoint = readJson<ExitCheckpoint>(EXIT_CHECKPOINT_KEY);
   const valid = checkpoint
@@ -569,15 +595,7 @@ const readExitCheckpoint = () => {
     && Array.isArray(checkpoint.batches)
     && checkpoint.batches.length > 0
     && checkpoint.batches.length <= MAX_OUTBOX_ITEMS
-    && checkpoint.batches.every((batch) => {
-      if (!/^bat_[0-9a-f-]{36}$/.test(batch.batchId) || typeof batch.json !== "string" || batch.json.length > 512 * 1024) return false;
-      try {
-        const envelope = JSON.parse(batch.json) as { batchId?: unknown; deployment?: unknown; profile?: unknown };
-        return envelope.batchId === batch.batchId && envelope.deployment === deployment && envelope.profile === checkpoint.level;
-      } catch {
-        return false;
-      }
-    });
+    && checkpoint.batches.every((batch) => checkpointBatchIntact(batch, checkpoint.level));
   if (!valid) {
     if (checkpoint) clearExitCheckpoint();
     return undefined;
@@ -733,8 +751,11 @@ export const flushStudyTelemetry = async (
     }
   } catch {
     // Compression/storage failure must never strand reserved seqs in-flight nor
-    // surface to the product UI. Release the reservations and abandon this attempt.
+    // surface to the product UI. Release the reservations and re-arm a coalesced
+    // retry so a transient throw self-heals instead of leaving buffered records
+    // un-armed until the next unrelated event.
     finishBatches(batches, false);
+    scheduleFlush(1_000);
   }
 };
 

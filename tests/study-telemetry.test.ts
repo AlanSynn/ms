@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import worker from "../infrastructure/study/worker.js";
 import { createSampleProject } from "../utils/project";
-import { studyProfileIncludes } from "../utils/studyTelemetry";
+import { checkpointBatchIntact, studyProfileIncludes } from "../utils/studyTelemetry";
 import {
   makeStudySnapshotRecords,
   scrubStudyValue,
@@ -446,6 +446,53 @@ try {
 } finally {
   replayFixture.stop(true);
   await rm(replayDir, { recursive: true, force: true });
+}
+
+// Exit-checkpoint recovery must survive a release-tag bump. VITE_STUDY_DEPLOYMENT
+// is the git ref_name, so every release changes `deployment`. A checkpoint written
+// under the previous tag must still recover next session — the body carries
+// deployment and the server partitions by it, so the validator must not require the
+// in-body deployment to equal the running one (regression guard for the data-loss
+// bug where a tag bump silently orphaned undelivered pagehide checkpoints).
+{
+  const batchId = "bat_00000000-0000-4000-8000-000000000000";
+  const envelope = (deployment: string) => JSON.stringify({
+    batchId,
+    deployment,
+    profile: "study",
+    eventSchema: "motionsmith-study-event-v1",
+    records: [],
+  });
+  assert.equal(
+    checkpointBatchIntact({ batchId, json: envelope("v1.2.3") }, "study"),
+    true,
+    "checkpoint batch with a well-formed body is intact",
+  );
+  assert.equal(
+    checkpointBatchIntact({ batchId, json: envelope("v1.2.4") }, "study"),
+    true,
+    "checkpoint recovers across a deployment/tag bump (deployment not equality-checked)",
+  );
+  assert.equal(
+    checkpointBatchIntact({ batchId, json: envelope("v1.2.4") }, "metrics"),
+    false,
+    "checkpoint is rejected when its capture profile exceeds the running profile",
+  );
+  assert.equal(
+    checkpointBatchIntact({ batchId, json: envelope("v1.2.4").replace('"deployment":"v1.2.4"', '"deployment":9') }, "study"),
+    false,
+    "checkpoint is rejected when the in-body deployment is malformed",
+  );
+  assert.equal(
+    checkpointBatchIntact({ batchId: "bat_not-a-uuid", json: envelope("v1.2.4") }, "study"),
+    false,
+    "checkpoint is rejected when the batch id is malformed",
+  );
+  assert.equal(
+    checkpointBatchIntact({ batchId, json: envelope("v1.2.4").replace(batchId, "bat_deadbeef-0000-4000-8000-000000000000") }, "study"),
+    false,
+    "checkpoint is rejected when the body batchId does not match the wrapper",
+  );
 }
 
 console.log("study telemetry contracts passed");
