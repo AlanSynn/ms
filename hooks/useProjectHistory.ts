@@ -22,12 +22,7 @@ type SetProjectOptions = {
 };
 
 const isUndoableProjectAction = (action: ProjectAction) =>
-  ![
-    "set_processing",
-    "select_part",
-    "set_export",
-    "set_foundry_export",
-  ].includes(action.type);
+  !["set_processing", "select_part", "set_export"].includes(action.type);
 
 export const useProjectHistory = (createInitialProject: () => ProjectState) => {
   const [projectHistory, setProjectHistory] = useState<ProjectHistoryState>(
