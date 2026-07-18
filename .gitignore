@@ -58,3 +58,17 @@ skills-lock.json
 # Cloudflare Workers local state (R2 blobs, sqlite, temp) — never commit
 .wrangler/
 
+# Transient debug / repro scratch at the repo root (one-off scripts, snapshot
+# dumps, screenshots, stray Playwright output dirs). Anchored to root so legit
+# source elsewhere is never matched. These are session artifacts, not source.
+/repro*.ts
+/repro*.js
+/repro*.mjs
+/repro*.png
+/check-*.ts
+/check_*.ts
+/snap_*.json
+/test-results-*/
+tests/browser/*debug*.spec.ts
+tests/browser/tmp-*.spec.ts
+
