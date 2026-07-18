@@ -134,6 +134,7 @@ export type SessionMetrics = {
     /* technical */
     technicalStatusCounts: Record<string, number>;
     technicalErrors: number;
+    technicalContext: { browser: string; os: string; pointer: string; network: string } | null;
     assetImports: number;
     assetOmitted: number;
     exportDownloads: Array<{ extension: string; mime: string; bytes: number }>;
@@ -522,6 +523,7 @@ export const computeSessionMetrics = (input: SessionMetricsInput): SessionMetric
     // Technical context + assets + exports.
     const technicalStatusCounts: Record<string, number> = {};
     let technicalErrors = 0;
+    let technicalContext: { browser: string; os: string; pointer: string; network: string } | null = null;
     let assetImports = 0;
     let assetOmitted = 0;
     const exportDownloads: Array<{ extension: string; mime: string; bytes: number }> = [];
@@ -542,6 +544,24 @@ export const computeSessionMetrics = (input: SessionMetricsInput): SessionMetric
                 mime: str(detail.mime) || "",
                 bytes: num(detail.bytes) ?? 0,
             });
+        } else if (event.type === "session.start" && !technicalContext) {
+            // First session.start wins: technical context is captured once at
+            // session open (studyTechnicalContext in utils/studyTelemetry).
+            const technical = detail.technical && typeof detail.technical === "object"
+                ? (detail.technical as Record<string, unknown>)
+                : {};
+            const browser = str(technical.browser);
+            const os = str(technical.os);
+            const pointer = str(technical.pointer);
+            const network = str(technical.network);
+            if (browser || os || pointer || network) {
+                technicalContext = {
+                    browser: browser || "unknown",
+                    os: os || "unknown",
+                    pointer: pointer || "unknown",
+                    network: network || "unknown",
+                };
+            }
         }
     }
 
@@ -640,6 +660,7 @@ export const computeSessionMetrics = (input: SessionMetricsInput): SessionMetric
         gestureVolume: { count: gestureCount, totalDurationMs: gestureDuration },
         technicalStatusCounts,
         technicalErrors,
+        technicalContext,
         assetImports,
         assetOmitted,
         exportDownloads,
@@ -726,6 +747,12 @@ export const aggregateSessionMetrics = (sessions: SessionMetrics[]): DeploymentA
         addDistribution(mechanismTypeDistribution, session.mechanismTypeDistribution);
         addDistribution(validationCategoryFrequency, session.validationCategoryCounts);
         addDistribution(technicalStatusFrequency, session.technicalStatusCounts);
+        if (session.technicalContext) {
+            tally(technicalContextDistribution.browser, session.technicalContext.browser);
+            tally(technicalContextDistribution.os, session.technicalContext.os);
+            tally(technicalContextDistribution.pointer, session.technicalContext.pointer);
+            tally(technicalContextDistribution.network, session.technicalContext.network);
+        }
         if (session.sessionActiveMs != null) activeMsValues.push(session.sessionActiveMs);
         rankValues.push(...session.rankAtAcceptance);
         candidateValues.push(...session.candidateCountAtAcceptance);

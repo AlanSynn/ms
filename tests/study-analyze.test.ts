@@ -129,6 +129,7 @@ const buildInput = (
     assert.deepEqual(metrics.mechanismTypeDistribution, { four_bar: 1, cam: 1 });
     assert.deepEqual(metrics.mechanismTypesAccepted, ["four_bar"]);
     assert.equal(metrics.lossCount, 0);
+    assert.deepEqual(metrics.technicalContext, { browser: "chrome", os: "macos", pointer: "mouse", network: "4g" }, "technicalContext read from first session.start");
     console.log("T1 per-session metrics verified against hand-computed stream");
 }
 
@@ -137,7 +138,7 @@ const buildInput = (
 {
     const mkSession = (id: string, reach: "export" | "foundry" | "assembly") => {
         const events: Ev[] = [
-            ev("session.start", 100, 1, {}),
+            ev("session.start", 100, 1, { technical: { browser: "chrome", os: "macos", pointer: "fine", network: "4g" } }),
             ev("stage.view", 200, 2, { from: "character", to: "path", dwellMs: 1000 }),
             ev("stage.view", 300, 3, { from: "path", to: "foundry", dwellMs: 2000 }),
         ];
@@ -165,6 +166,8 @@ const buildInput = (
     assert.equal(aggregate.completionFunnel.assembly, 2, "a + c reached assembly");
     assert.equal(aggregate.completionFunnel.export, 1, "only a reached export");
     assert.equal(aggregate.completionRate, 1 / 3);
+    assert.deepEqual(aggregate.technicalContextDistribution.browser, { chrome: 3 }, "technical context bucketed across sessions");
+    assert.deepEqual(aggregate.technicalContextDistribution.os, { macos: 3 });
     // activeMs values: a=9000, b=4000, c=8000 -> median 8000, p25~6000, p75~8500
     assert.equal(aggregate.medianSessionActiveMs, 8000);
     assert.equal(aggregate.p25SessionActiveMs, 6000);
