@@ -83,6 +83,7 @@ Keep for provenance and rollback reasoning, but do not use as default context.
   - [`docs/analysis/README.md`](analysis/README.md) (audit map)
   - [`docs/mechanism-reference/README.md`](mechanism-reference/README.md)
   - [`docs/observability/README.md`](observability/README.md)
+  - [`docs/study/README.md`](study/README.md)
   - [`docs/sessions/README.md`](sessions/README.md)
   - [`docs/adr/README.md`](adr/README.md)
 
