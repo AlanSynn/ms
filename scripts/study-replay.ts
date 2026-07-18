@@ -46,6 +46,9 @@ do {
   cursor = page.cursor || "";
 } while (cursor);
 
+// `seq` is local to a browser context, so it only breaks equal-timestamp ties
+// after contextId. This orders the display timeline without claiming causal
+// order between concurrent contexts.
 const rawEvents = pages.flatMap((page) =>
   page.batches
     .filter((batch) => !selectedContext || batch.contextId === selectedContext)
@@ -55,7 +58,9 @@ const rawEvents = pages.flatMap((page) =>
       participantId: batch.participantId,
     }))),
 ).sort((a, b) =>
-  Number(a.t) - Number(b.t) || String(a.contextId).localeCompare(String(b.contextId)) || Number(a.seq) - Number(b.seq),
+  Number(a.t) - Number(b.t)
+  || String(a.contextId).localeCompare(String(b.contextId))
+  || Number(a.seq) - Number(b.seq),
 );
 
 // Chunked-snapshot reassembly + loss surfacing live in the canonical projection

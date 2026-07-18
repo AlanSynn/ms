@@ -351,7 +351,11 @@ const foundryAutomataTextureMaterial = (
   textureUrl: string | undefined,
   opacity: number,
   onLoaded: () => void,
+  materialCache: Map<string, THREE.Material>,
 ) => {
+  const key = `automata-texture:${textureUrl ?? "none"}:${opacity.toFixed(2)}`;
+  const existing = materialCache.get(key);
+  if (existing) return existing as THREE.MeshBasicMaterial;
   const material = new THREE.MeshBasicMaterial({
     color: textureUrl ? "#ffffff" : "#f8fafc",
     transparent: true,
@@ -367,6 +371,8 @@ const foundryAutomataTextureMaterial = (
     material.map = texture;
     material.needsUpdate = true;
   }
+  material.userData[FOUNDRY_CACHE_MARKER] = true;
+  materialCache.set(key, material);
   return material;
 };
 
@@ -485,7 +491,12 @@ const renderFoundryAutomataContext = ({
       artGeometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
       const art = new THREE.Mesh(
         artGeometry,
-        foundryAutomataTextureMaterial(base.textureUrl, Math.min(0.82, base.opacity), onLoaded),
+        foundryAutomataTextureMaterial(
+          base.textureUrl,
+          Math.min(0.82, base.opacity),
+          onLoaded,
+          materialCache,
+        ),
       );
       art.name = `foundry-automata-art-${part.id}`;
       art.position.z = 0.09;
@@ -535,7 +546,12 @@ const renderFoundryAutomataContext = ({
       artGeometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
       const art = new THREE.Mesh(
         artGeometry,
-        foundryAutomataTextureMaterial(object.textureUrl, Math.min(0.86, object.opacity), onLoaded),
+        foundryAutomataTextureMaterial(
+          object.textureUrl,
+          Math.min(0.86, object.opacity),
+          onLoaded,
+          materialCache,
+        ),
       );
       art.position.z = 0.08;
       art.userData.sceneObjectId = object.id;
@@ -1320,7 +1336,10 @@ export const ThreeFoundryPreview = ({
         host.removeChild(renderer.domElement);
       disposeFoundryThreeObject(scene);
       geometryCacheRef.current.forEach((geometry) => geometry.dispose());
-      materialCacheRef.current.forEach((material) => material.dispose());
+      materialCacheRef.current.forEach((material) => {
+        (material as THREE.MeshBasicMaterial).map?.dispose();
+        material.dispose();
+      });
       geometryCacheRef.current.clear();
       materialCacheRef.current.clear();
     };

@@ -15,7 +15,10 @@ import { DEFAULT_CANVAS_VIEWPORT } from "../utils/viewport";
 import { classroomAssessmentKeyFromSearch } from "../utils/classroomContent";
 import { readAutosaveProject } from "../utils/projectPersistence";
 import { workflowStatusFor } from "../utils/workflowStatus";
-import { createStageNavigator } from "../utils/appStageNavigation";
+import {
+  createStageNavigator,
+  recordStageNavigationOpened,
+} from "../utils/appStageNavigation";
 import { buildAppStageRouterProps } from "../utils/appStageRouterProps";
 import { useAppCharacterImportActions } from "./useAppCharacterImportActions";
 import { useAppCommandBindings } from "./useAppCommandBindings";
@@ -102,12 +105,26 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     DEFAULT_CANVAS_VIEWPORT,
   );
   const [commandStatus, setCommandStatus] = useState("Ready");
+  const [autosaveStatus, setAutosaveStatus] = useState("");
   const { onnxCacheStatus, setOnnxCacheStatus, cacheOnnxModel } =
     useAppOnnxBootstrap(setCommandStatus);
   const projectInputRef = useRef<HTMLInputElement>(null);
   const appShellRef = useRef<HTMLDivElement>(null);
   const assessmentQueryApplied = useRef(false);
-  useProjectAutosave(project);
+  useProjectAutosave(project, {
+    onRestore: (restoredProject, mayHaveUnsavedChanges) => {
+      setProject(restoredProject, { resetHistory: true });
+      if (mayHaveUnsavedChanges) setAutosaveStatus("Autosave may be older");
+    },
+    onStatus: (status) =>
+      setAutosaveStatus(
+        status === "saving"
+          ? "Autosave saving"
+          : status === "saved"
+            ? "Autosave saved"
+            : "Autosave failed",
+      ),
+  });
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -267,6 +284,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
   };
   const closeGettingStarted = () => {
     setShowGettingStarted(false);
+    recordStageNavigationOpened("character", "getting_started_close");
     setStage("character");
   };
   const {
@@ -423,6 +441,7 @@ export const useMotionSmithAppController = (): AppWorkspaceShellProps => {
     stageRouterProps,
     workflowStatus,
     commandStatus,
+    autosaveStatus,
     onnxCacheStatus,
     cacheOnnxModel,
     showGettingStarted,

@@ -14,7 +14,11 @@ import {
   generateProjectReadySVG,
 } from "../utils/exporter";
 import { preferredMotionJointId } from "../utils/motion";
-import { downloadText, mechanismWithGeneratedPath } from "../utils/project";
+import {
+  applyProjectActionResult,
+  downloadText,
+  mechanismWithGeneratedPath,
+} from "../utils/project";
 import {
   fitMechanismToTargetPathResult,
   fitRecommendedMechanismToSheet,
@@ -32,6 +36,7 @@ import {
   mechanismForTargetFields,
   pathOwnedTargetFields,
 } from "../utils/pathTargets";
+import { recordStageNavigationOpened } from "../utils/appStageNavigation";
 
 const GENERATED_PATH_GEOMETRY_KEYS = new Set<keyof MechanismConfig>([
   "anchorX",
@@ -65,6 +70,11 @@ const changesGeneratedPathGeometry = (updates: Partial<MechanismConfig>) =>
   Object.keys(updates).some((key) =>
     GENERATED_PATH_GEOMETRY_KEYS.has(key as keyof MechanismConfig),
   );
+
+const changesOnlyMechanismPlacement = (updates: Partial<MechanismConfig>) => {
+  const keys = Object.keys(updates);
+  return keys.length > 0 && keys.every((key) => key === "anchorX" || key === "anchorY");
+};
 
 const hasStoredGeneratedPath = (mechanism: MechanismConfig) =>
   Boolean(mechanism.foundryExport || mechanism.generatedPath?.length);
@@ -156,7 +166,8 @@ export const useAppMechanismActions = ({
         return false;
       }
       const next = { ...mechanism, ...constrainedUpdates };
-      const normalized = constrainedUpdates.connectionSelections
+      const normalized = constrainedUpdates.connectionSelections ||
+          changesOnlyMechanismPlacement(constrainedUpdates)
         ? next
         : changesGeneratedPathGeometry(constrainedUpdates)
           ? normalizeGearMeshMechanism(next)
@@ -207,7 +218,46 @@ export const useAppMechanismActions = ({
                 kit: project.settings.physicalKit,
               },
             );
-      dispatch({ type: "upsert_mechanism", mechanism: fitted });
+      const committedAttempt = resolveMechanismEditAttempt(
+        project,
+        mechanism,
+        fitted,
+      );
+      if (committedAttempt.status === "rejected") {
+        const blocker = updates.connectionSelections
+          ? MECHANISM_BINDING_BLOCKER
+          : committedAttempt.blocker;
+        setMechanismEditFeedback({
+          mechanismId: id,
+          blocker,
+          recoveryCandidates: committedAttempt.recoveryCandidates,
+        });
+        setCommandStatus(blocker);
+        return false;
+      }
+      const action = {
+        type: "upsert_mechanism" as const,
+        mechanism: committedAttempt.mechanism,
+      };
+      const actionResult = applyProjectActionResult(project, action);
+      const appliedMechanism = actionResult.state.mechanisms.find(
+        (candidate) => candidate.id === mechanism.id,
+      );
+      const appliedRequestedUpdates = Object.keys(constrainedUpdates).every(
+        (key) =>
+          JSON.stringify(
+            appliedMechanism?.[key as keyof MechanismConfig],
+          ) === JSON.stringify(constrainedUpdates[key as keyof MechanismConfig]),
+      );
+      if (!actionResult.applied || !appliedMechanism || !appliedRequestedUpdates) {
+        const blocker = updates.connectionSelections
+          ? MECHANISM_BINDING_BLOCKER
+          : "Change blocked";
+        setMechanismEditFeedback(null);
+        setCommandStatus(blocker);
+        return false;
+      }
+      dispatch(action);
       setMechanismEditFeedback(null);
       return true;
     },
@@ -221,7 +271,6 @@ export const useAppMechanismActions = ({
     if (!selectedMechanism || !fitPath || fitPath.points.length < 3) return;
     setOptimizerBusy(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 16));
       const result = fitMechanismToTargetPathResult(
         project,
         selectedMechanism,
@@ -377,6 +426,7 @@ export const useAppMechanismActions = ({
             ? "Mechanism package ready"
             : "Mechanism ready"),
         );
+        recordStageNavigationOpened("design", "mechanism_commit");
         setStage("design");
       } else {
         if (result.recoveryCandidates) {
@@ -408,6 +458,7 @@ export const useAppMechanismActions = ({
       dispatch({ type: "upsert_mechanism", mechanism: attempt.mechanism });
       setMechanismEditFeedback(null);
       setShowRecommendations(false);
+      recordStageNavigationOpened("design", "recommendation_accept");
       setStage("design");
     },
     [dispatch, project, setCommandStatus, setShowRecommendations, setStage],

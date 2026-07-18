@@ -24,7 +24,7 @@ export const MechanismDesign = ({
 }: {
   project: ProjectState;
   selectedMechanism?: MechanismConfig;
-  updateMechanism: (id: string, updates: Partial<MechanismConfig>) => void;
+  updateMechanism: (id: string, updates: Partial<MechanismConfig>) => boolean;
   mechanismEditFeedback: MechanismEditFeedback | null;
   dispatch: (action: ProjectAction) => void;
   showTrace: boolean;

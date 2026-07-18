@@ -33,7 +33,7 @@ Study deployment controls:
 - Repository variables `STUDY_CLASS_ID`, `STUDY_SESSION_ID`, and optional pseudonymous `STUDY_TEAM_ID`.
 - Secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `STUDY_GITHUB_TOKEN` (one repository, Issues write), and `STUDY_ADMIN_TOKEN`.
 - Create private R2 bucket `motionsmith-study` once before first deploy. Keep `GITHUB_TOKEN` and `ADMIN_TOKEN` only as Worker secrets.
-- Every batch records deployment tag, app version, Git commit, event schema, snapshot schema, and project-state version. Rate limits are sized for a shared school NAT; IP-derived limiter keys are transient and never stored.
+- Every batch records deployment tag, app version, Git commit, event schema, snapshot schema, and project-state version. The ingest limiter uses independent participant and transient IP-derived keys: participant is primary, while the looser IP bucket remains a shared-school-NAT abuse backstop. Neither key is stored.
 
 ## Study Worker deploy tooling rule
 

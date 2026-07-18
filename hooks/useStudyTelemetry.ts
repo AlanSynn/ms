@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { AppStage, CanvasViewport, ProjectState } from "../types";
 import {
   commitPendingStudySnapshot,
@@ -110,7 +110,7 @@ export const useStudyTelemetry = ({
     scheduleStudySnapshot(project, projectAlias, "stage", true);
   }, [stage]);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (!studyTelemetryEnabled()) return;
     if (!projectAlias) return;
     setStudyViewContext(stage, projectAlias);
@@ -191,7 +191,13 @@ export const useStudyTelemetry = ({
 
   useEffect(() => {
     if (!studyTelemetryEnabled()) return;
-    const pointers = new Map<number, { x: number; y: number; t: number; target: string }>();
+    const pointers = new Map<number, {
+      x: number;
+      y: number;
+      t: number;
+      target: string;
+      samples: number;
+    }>();
     const onClick = (event: MouseEvent) => {
       if (bugReportTarget(event.target)) return;
       recordStudyEvent("ui.activate", { control: controlCode(event.target) }, { level: "replay" });
@@ -207,7 +213,12 @@ export const useStudyTelemetry = ({
         y: event.clientY,
         t: performance.now(),
         target: controlCode(event.target),
+        samples: 1,
       });
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      const start = pointers.get(event.pointerId);
+      if (start) start.samples += 1;
     };
     const finishPointer = (event: PointerEvent, outcome: "complete" | "cancel") => {
       const start = pointers.get(event.pointerId);
@@ -221,25 +232,32 @@ export const useStudyTelemetry = ({
           dx: Math.round((event.clientX - start.x) / 8) * 8,
           dy: Math.round((event.clientY - start.y) / 8) * 8,
           durationMs: Math.round((performance.now() - start.t) / 10) * 10,
+          pointerSamples: start.samples,
+          affectedEntityCount: 1,
         },
         { level: "study" },
       );
     };
     const onPointerUp = (event: PointerEvent) => finishPointer(event, "complete");
     const onPointerCancel = (event: PointerEvent) => finishPointer(event, "cancel");
+    const onLostPointerCapture = (event: PointerEvent) => finishPointer(event, "cancel");
     document.addEventListener("click", onClick, true);
     document.addEventListener("change", onChange, true);
     if (STUDY_PROFILE === "study") {
       document.addEventListener("pointerdown", onPointerDown, true);
+      document.addEventListener("pointermove", onPointerMove, true);
       document.addEventListener("pointerup", onPointerUp, true);
       document.addEventListener("pointercancel", onPointerCancel, true);
+      document.addEventListener("lostpointercapture", onLostPointerCapture, true);
     }
     return () => {
       document.removeEventListener("click", onClick, true);
       document.removeEventListener("change", onChange, true);
       document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("pointermove", onPointerMove, true);
       document.removeEventListener("pointerup", onPointerUp, true);
       document.removeEventListener("pointercancel", onPointerCancel, true);
+      document.removeEventListener("lostpointercapture", onLostPointerCapture, true);
     };
   }, []);
 
@@ -271,7 +289,7 @@ export const useStudyTelemetry = ({
         }
         recordStudyEvent("session.pause", { activeMs: Math.round(activeMs.current) }, { level: "metrics" });
         commitPendingStudySnapshot();
-        void flushStudyTelemetry("hidden", true);
+        void flushStudyTelemetry("hidden", true, true, true);
       } else {
         visibleStartedAt.current = performance.now();
         recordStudyEvent("session.resume", undefined, { level: "metrics" });

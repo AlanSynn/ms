@@ -20,7 +20,13 @@ type StudyRecord = {
   data?: unknown;
 };
 
-type BufferedRecord = StudyRecord & { coalesceKey?: string };
+type DeliveryClass = "core-action" | "technical" | "snapshot" | "asset";
+type OutboxState = "queued" | "quarantined";
+
+type BufferedRecord = StudyRecord & {
+  coalesceKey?: string;
+  deliveryClass: DeliveryClass;
+};
 type OutboxItem = {
   id: string;
   created: number;
@@ -30,6 +36,11 @@ type OutboxItem = {
   body: Blob;
   headers: Record<string, string>;
   bytes: number;
+  deliveryClass?: DeliveryClass;
+  state?: OutboxState;
+  snapshotKey?: string;
+  failureStatus?: number;
+  quarantinedAt?: number;
 };
 
 const env = (import.meta as ImportMeta & { env?: Record<string, string> }).env ?? {};
@@ -65,14 +76,35 @@ const enabledHost = () => {
   if (typeof location === "undefined") return false;
   return location.hostname === "alansynn.com" || location.hostname === "localhost" || location.hostname === "127.0.0.1";
 };
-export const studyTelemetryEnabled = () =>
-  STUDY_PROFILE !== "off" && enabledHost();
+export type StudyTelemetryStatus = "off" | "host_disabled" | "enabled";
+let hostPolicyNoticeEmitted = false;
+export const studyTelemetryStatus = (): StudyTelemetryStatus => {
+  if (STUDY_PROFILE === "off") return "off";
+  return enabledHost() ? "enabled" : "host_disabled";
+};
+export const studyTelemetryEnabled = () => {
+  const status = studyTelemetryStatus();
+  if (status === "host_disabled" && !hostPolicyNoticeEmitted) {
+    hostPolicyNoticeEmitted = true;
+    console.info("MotionSmith study telemetry disabled: hostname policy");
+  }
+  return status === "enabled";
+};
 
 const INSTALLATION_KEY = "motionsmith.study.installation.v1";
 const PROJECTS_KEY = "motionsmith.study.projects.v1";
 const SESSION_IDLE_MS = 30 * 60 * 1000;
 const MAX_OUTBOX_BYTES = 48 * 1024 * 1024;
 const MAX_OUTBOX_ITEMS = 256;
+const MAX_BUFFERED_RECORDS = 400;
+const DELIVERY_ORDER: DeliveryClass[] = [
+  "core-action",
+  "technical",
+  "snapshot",
+  "asset",
+];
+const deliveryRank = (deliveryClass: DeliveryClass) =>
+  DELIVERY_ORDER.indexOf(deliveryClass);
 // Scope by collector endpoint only. Deployment travels inside each batch/asset
 // body (server partitions storage by the in-body deployment), so an app-version
 // bump must never reclassify still-undelivered offline data as incompatible and
@@ -177,8 +209,86 @@ const inFlightRecords = new Set<number>();
 let flushTimer: number | undefined;
 let flushDueAt = 0;
 let flushRunning = false;
+type TransportMode = "normal" | "constrained" | "offline-recovery";
+let transportMode: TransportMode = "normal";
+let consecutiveDeliveryFailures = 0;
+let consecutiveSlowDeliveries = 0;
+let consecutiveDeliverySuccesses = 0;
+let sawOffline = false;
+const telemetryLosses: Record<DeliveryClass, number> = {
+  "core-action": 0,
+  technical: 0,
+  snapshot: 0,
+  asset: 0,
+};
+let reportingLoss = false;
 
-const scheduleFlush = (delay = 10_000) => {
+const deliveryClassFor = (type: string): DeliveryClass => {
+  if (type.startsWith("project.snapshot")) return "snapshot";
+  if (type.startsWith("asset.")) return "asset";
+  if (
+    type.startsWith("project.")
+    || type.startsWith("stage.")
+    || type.startsWith("ui.")
+    || type.startsWith("simulation.")
+    || type.startsWith("recommendation.")
+    || type.startsWith("export.")
+  ) {
+    return "core-action";
+  }
+  return "technical";
+};
+
+export const studyTelemetryDiagnostics = () => ({
+  bufferedRecords: buffer.length,
+  losses: { ...telemetryLosses },
+  transportMode,
+});
+
+const reportTelemetryLoss = (deliveryClass: DeliveryClass) => {
+  telemetryLosses[deliveryClass] += 1;
+  // The exported counter is always observable. Avoid adding another record while
+  // the failed queue is full, because that would defeat the memory bound.
+  if (reportingLoss || buffer.length >= MAX_BUFFERED_RECORDS) return;
+  reportingLoss = true;
+  recordStudyEvent(
+    "technical.loss",
+    { deliveryClass, count: telemetryLosses[deliveryClass] },
+    { level: "metrics", immediate: true },
+  );
+  reportingLoss = false;
+};
+
+const discardBufferedLowPriority = () => {
+  while (buffer.length > MAX_BUFFERED_RECORDS) {
+    let candidate = -1;
+    let candidateRank = -1;
+    for (let index = 0; index < buffer.length; index += 1) {
+      const record = buffer[index];
+      if (inFlightRecords.has(record.seq)) continue;
+      const rank = deliveryRank(record.deliveryClass);
+      if (rank > candidateRank) {
+        candidate = index;
+        candidateRank = rank;
+      }
+    }
+    // Keep core behavioral actions in memory as long as possible. A sustained
+    // total storage failure may still require a hard bound at twice the cap.
+    if (candidate < 0 || (buffer[candidate].deliveryClass === "core-action" && buffer.length <= MAX_BUFFERED_RECORDS * 2)) break;
+    const [dropped] = buffer.splice(candidate, 1);
+    reportTelemetryLoss(dropped.deliveryClass);
+  }
+};
+
+const spillBuffer = () => {
+  void flushStudyTelemetry("buffer-pressure", false, true).then((stored) => {
+    if (!stored) discardBufferedLowPriority();
+  });
+};
+
+const scheduleFlush = (
+  delay = transportMode === "constrained" ? 30_000 : 10_000,
+) => {
   if (typeof window === "undefined") return;
   const dueAt = Date.now() + delay;
   if (flushTimer !== undefined && dueAt >= flushDueAt) return;
@@ -211,6 +321,7 @@ export const recordStudyEvent = (
     project: currentProject,
     data: scrubStudyValue(data),
     coalesceKey: options.coalesceKey,
+    deliveryClass: deliveryClassFor(type),
   };
   if (options.coalesceKey) {
     let index = -1;
@@ -225,6 +336,7 @@ export const recordStudyEvent = (
   } else {
     buffer.push(record);
   }
+  if (buffer.length >= MAX_BUFFERED_RECORDS) spillBuffer();
   if (buffer.length >= 50 || options.immediate) scheduleFlush(250 + Math.floor(Math.random() * 1_500));
   else scheduleFlush();
 };
@@ -279,17 +391,30 @@ export const recordStudyProjectReplace = (options: { history?: boolean; resetHis
   recordStudyEvent("project.replace", options, { level: "replay" });
 };
 
-let pendingSnapshot: { project: ProjectState; alias: string; reason: string } | undefined;
+let pendingSnapshot: {
+  project: ProjectState;
+  alias: string;
+  reason: string;
+  generation: number;
+} | undefined;
 let snapshotTimer: number | undefined;
 let snapshotIdle: number | undefined;
 let lastSnapshotAt = 0;
+let snapshotGeneration = 0;
+let lastSnapshotProject: ProjectState | undefined;
+let lastSnapshotAlias: string | undefined;
 
 const commitPendingSnapshot = (emergency = false) => {
   if (!pendingSnapshot) return;
   if (snapshotTimer !== undefined || snapshotIdle !== undefined) clearSnapshotSchedule();
-  const { project, alias, reason } = pendingSnapshot;
+  const { project, alias, reason, generation } = pendingSnapshot;
   pendingSnapshot = undefined;
+  if (!emergency && document.hidden) return;
+  if (generation !== snapshotGeneration) return;
+  if (project === lastSnapshotProject && alias === lastSnapshotAlias) return;
   lastSnapshotAt = Date.now();
+  lastSnapshotProject = project;
+  lastSnapshotAlias = alias;
   makeStudySnapshotRecords(project, alias, reason, uuid("snp")).forEach((record) =>
     recordStudyEvent(record.type, record.data, { level: "replay" }),
   );
@@ -305,17 +430,17 @@ const clearSnapshotSchedule = () => {
   snapshotIdle = undefined;
 };
 
-const scheduleSnapshotIdle = () => {
+const scheduleSnapshotIdle = (generation = snapshotGeneration) => {
   if (typeof window.requestIdleCallback === "function") {
     snapshotIdle = window.requestIdleCallback(() => {
       snapshotIdle = undefined;
-      commitPendingSnapshot();
+      if (generation === snapshotGeneration) commitPendingSnapshot();
     }, { timeout: 1_000 });
     return;
   }
   snapshotTimer = window.setTimeout(() => {
     snapshotTimer = undefined;
-    commitPendingSnapshot();
+    if (generation === snapshotGeneration) commitPendingSnapshot();
   }, 0);
 };
 
@@ -326,7 +451,9 @@ export const scheduleStudySnapshot = (
   immediate = false,
 ) => {
   if (levelRank[STUDY_PROFILE] < levelRank.replay || !studyTelemetryEnabled()) return;
-  pendingSnapshot = { project, alias, reason };
+  if (document.hidden && !immediate && !forceNextSnapshot) return;
+  const generation = ++snapshotGeneration;
+  pendingSnapshot = { project, alias, reason, generation };
   if (forceNextSnapshot) {
     forceNextSnapshot = false;
     clearSnapshotSchedule();
@@ -335,14 +462,14 @@ export const scheduleStudySnapshot = (
   }
   if (immediate) {
     clearSnapshotSchedule();
-    scheduleSnapshotIdle();
+    scheduleSnapshotIdle(generation);
     return;
   }
   clearSnapshotSchedule();
   const continuousDelay = Math.max(0, 15_000 - (Date.now() - lastSnapshotAt));
   snapshotTimer = window.setTimeout(() => {
     snapshotTimer = undefined;
-    scheduleSnapshotIdle();
+    scheduleSnapshotIdle(generation);
   }, Math.max(1_200, continuousDelay));
 };
 
@@ -350,7 +477,7 @@ let dbPromise: Promise<IDBDatabase> | undefined;
 let outboxDb: IDBDatabase | undefined;
 const openOutbox = () => {
   if (!dbPromise) {
-    dbPromise = new Promise((resolve, reject) => {
+    const opening = new Promise<IDBDatabase>((resolve, reject) => {
       const request = indexedDB.open("motionsmith-study", 1);
       request.onupgradeneeded = () => {
         const store = request.result.createObjectStore("outbox", { keyPath: "id" });
@@ -367,15 +494,15 @@ const openOutbox = () => {
       };
       request.onerror = () => reject(request.error);
     });
+    dbPromise = opening;
+    // Storage may recover after a temporary quota or browser failure. Do not
+    // leave telemetry permanently bound to one rejected promise.
+    void opening.catch(() => {
+      if (dbPromise === opening) dbPromise = undefined;
+    });
   }
   return dbPromise;
 };
-
-const requestResult = <T>(request: IDBRequest<T>) =>
-  new Promise<T>((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
 
 const writeOutboxItems = (db: IDBDatabase, items: OutboxItem[]) => {
   try {
@@ -408,11 +535,28 @@ const queueOutboxItems = (items: OutboxItem[]) => {
 
 const queueOutbox = (item: OutboxItem) => queueOutboxItems([item]);
 
-const listOutbox = async () => {
+const outboxDeliveryClass = (item: OutboxItem): DeliveryClass =>
+  item.deliveryClass ?? (item.path === "/asset" ? "asset" : "technical");
+
+const outboxState = (item: OutboxItem): OutboxState => item.state ?? "queued";
+
+const visitOutbox = async (visit: (item: OutboxItem) => void) => {
   const db = await openOutbox();
   const tx = db.transaction("outbox", "readonly");
-  const items = await requestResult(tx.objectStore("outbox").getAll()) as OutboxItem[];
-  return items.sort((a, b) => a.created - b.created);
+  const request = tx.objectStore("outbox").index("created").openCursor();
+  await new Promise<void>((resolve, reject) => {
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        resolve();
+        return;
+      }
+      visit(cursor.value as OutboxItem);
+      cursor.continue();
+    };
+    request.onerror = () => reject(request.error);
+    tx.onerror = () => reject(tx.error);
+  });
 };
 
 const deleteOutbox = async (ids: string[]) => {
@@ -427,22 +571,81 @@ const deleteOutbox = async (ids: string[]) => {
   });
 };
 
+const quarantineOutbox = async (item: OutboxItem, status: number) => {
+  const db = await openOutbox();
+  const tx = db.transaction("outbox", "readwrite", { durability: "relaxed" });
+  tx.objectStore("outbox").put({
+    ...item,
+    body: new Blob(),
+    headers: {},
+    bytes: 0,
+    state: "quarantined",
+    failureStatus: status,
+    quarantinedAt: Date.now(),
+  } satisfies OutboxItem);
+  await new Promise<void>((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+};
+
 const trimOutbox = async () => {
   try {
-    const items = await listOutbox();
-    let bytes = items.reduce((total, item) => total + item.bytes, 0);
-    const remove: string[] = [];
+    let itemCount = 0;
+    let bytes = 0;
+    type TrimCandidate = {
+      id: string;
+      bytes: number;
+      deliveryClass: DeliveryClass;
+      created: number;
+      priority: number;
+    };
+    const standalone: TrimCandidate[] = [];
+    const snapshotGroups = new Map<string, TrimCandidate[]>();
+    await visitOutbox((item) => {
+      itemCount += 1;
+      bytes += item.bytes;
+      const deliveryClass = outboxDeliveryClass(item);
+      const candidate = {
+        id: item.id,
+        bytes: item.bytes,
+        deliveryClass,
+        created: item.created,
+        priority: outboxState(item) === "quarantined" ? 5 : deliveryRank(deliveryClass),
+      };
+      if (deliveryClass === "snapshot" && item.snapshotKey) {
+        const group = snapshotGroups.get(item.snapshotKey) ?? [];
+        group.push(candidate);
+        snapshotGroups.set(item.snapshotKey, group);
+        return;
+      }
+      standalone.push(candidate);
+    });
+    // A chunked snapshot is useful only as a complete generation. Treat its
+    // Outbox batches as one trim unit so pressure never leaves orphan chunks.
     const removalOrder = [
-      ...items.filter((item) => item.path === "/asset"),
-      ...items.filter((item) => item.path === "/batch"),
-    ];
-    while (items.length - remove.length > MAX_OUTBOX_ITEMS || bytes > MAX_OUTBOX_BYTES) {
-      const item = removalOrder[remove.length];
-      if (!item) break;
-      remove.push(item.id);
-      bytes -= item.bytes;
+      ...standalone.map((candidate) => [candidate]),
+      ...snapshotGroups.values(),
+    ].sort((a, b) => {
+      const priorityA = Math.max(...a.map((candidate) => candidate.priority));
+      const priorityB = Math.max(...b.map((candidate) => candidate.priority));
+      const createdA = Math.min(...a.map((candidate) => candidate.created));
+      const createdB = Math.min(...b.map((candidate) => candidate.created));
+      return priorityB - priorityA || createdA - createdB;
+    });
+    const remove = new Map<string, TrimCandidate>();
+    for (const group of removalOrder) {
+      if (itemCount <= MAX_OUTBOX_ITEMS && bytes <= MAX_OUTBOX_BYTES) break;
+      for (const candidate of group) {
+        remove.set(candidate.id, candidate);
+        itemCount -= 1;
+        bytes -= candidate.bytes;
+      }
     }
-    await deleteOutbox(remove);
+    const removed = [...remove.values()];
+    await deleteOutbox(removed.map((candidate) => candidate.id));
+    removed.forEach((candidate) => reportTelemetryLoss(candidate.deliveryClass));
   } catch {
     // Best-effort research queue bound.
   }
@@ -456,14 +659,24 @@ const gzip = async (json: string) => {
   return new Blob([await new Response(stream).arrayBuffer()], { type: "application/gzip" });
 };
 
-const makeBatch = (beacon = false) => {
+const snapshotIdFrom = (records: StudyRecord[]) => {
+  for (const record of records) {
+    const data = record.data;
+    if (!data || typeof data !== "object") continue;
+    const snapshotId = (data as { snapshotId?: unknown }).snapshotId;
+    if (typeof snapshotId === "string" && snapshotId) return snapshotId;
+  }
+  return undefined;
+};
+
+const makeBatch = (beacon: boolean, deliveryClass: DeliveryClass) => {
   const records: StudyRecord[] = [];
   const recordIds: number[] = [];
   let recordBytes = 0;
   if (beacon) {
     for (const buffered of buffer) {
-      if (inFlightRecords.has(buffered.seq)) continue;
-      const { coalesceKey: _key, ...candidate } = buffered;
+      if (inFlightRecords.has(buffered.seq) || buffered.deliveryClass !== deliveryClass) continue;
+      const { coalesceKey: _key, deliveryClass: _deliveryClass, ...candidate } = buffered;
       const bytes = new TextEncoder().encode(JSON.stringify(candidate)).byteLength;
       if (records.length < 200 && bytes <= 48 * 1024 && recordBytes + bytes <= 48 * 1024) {
         records.push(candidate);
@@ -473,8 +686,8 @@ const makeBatch = (beacon = false) => {
     }
   } else {
     for (const buffered of buffer) {
-      if (inFlightRecords.has(buffered.seq)) continue;
-      const { coalesceKey: _key, ...candidate } = buffered;
+      if (inFlightRecords.has(buffered.seq) || buffered.deliveryClass !== deliveryClass) continue;
+      const { coalesceKey: _key, deliveryClass: _deliveryClass, ...candidate } = buffered;
       const bytes = new TextEncoder().encode(JSON.stringify(candidate)).byteLength;
       if (records.length && recordBytes + bytes > 400 * 1024) break;
       recordIds.push(candidate.seq);
@@ -493,6 +706,7 @@ const makeBatch = (beacon = false) => {
   if (!records.length) return undefined;
   const state = ensureInstallation();
   const batchId = uuid("bat");
+  const snapshotId = deliveryClass === "snapshot" ? snapshotIdFrom(records) : undefined;
   const envelope = {
     v: 1,
     eventSchema: STUDY_EVENT_SCHEMA,
@@ -512,7 +726,15 @@ const makeBatch = (beacon = false) => {
     reconnectCount: state.reconnectCount,
     records,
   };
-  return { batchId, json: JSON.stringify(envelope), recordIds };
+  return {
+    batchId,
+    json: JSON.stringify(envelope),
+    recordIds,
+    deliveryClass,
+    snapshotKey: deliveryClass === "snapshot" && snapshotId
+      ? `${participantId()}:${state.sessionId}:${currentContextId()}:${records[0]?.project ?? "none"}:${snapshotId}`
+      : undefined,
+  };
 };
 
 type StudyBatch = NonNullable<ReturnType<typeof makeBatch>>;
@@ -529,6 +751,34 @@ const finishBatches = (batches: StudyBatch[], stored: boolean) => {
   if (stored) buffer = buffer.filter((record) => !ids.has(record.seq));
   ids.forEach((id) => inFlightRecords.delete(id));
 };
+const makeBufferedBatches = (beacon: boolean, drain: boolean) => {
+  const batches: StudyBatch[] = [];
+  if (beacon) {
+    // Beacon is only for one small best-effort packet. Durable queue batches
+    // retain their normal 400 KiB ceiling so large snapshot chunks survive a
+    // page exit instead of being rejected by the keepalive byte limit.
+    for (const deliveryClass of DELIVERY_ORDER) {
+      const first = makeBatch(true, deliveryClass);
+      if (!first) continue;
+      reserveBatch(first);
+      batches.push(first);
+      break;
+    }
+    if (!drain) return batches;
+  }
+  for (const deliveryClass of DELIVERY_ORDER) {
+    let batch = makeBatch(false, deliveryClass);
+    while (batch) {
+      reserveBatch(batch);
+      batches.push(batch);
+      if (!drain) return batches;
+      // Only the first exit packet is constrained by keepalive. All remaining
+      // records must still be durably enqueued at the normal batch ceiling.
+      batch = makeBatch(false, deliveryClass);
+    }
+  }
+  return batches;
+};
 const outboxBatch = (batch: StudyBatch, body: Blob): OutboxItem => ({
   id: `${outboxScope}:${batch.batchId}`,
   created: Date.now(),
@@ -540,7 +790,23 @@ const outboxBatch = (batch: StudyBatch, body: Blob): OutboxItem => ({
     ? { "Content-Type": "application/json", "Content-Encoding": "gzip" }
     : { "Content-Type": "application/json" },
   bytes: body.size,
+  deliveryClass: batch.deliveryClass,
+  state: "queued",
+  snapshotKey: batch.snapshotKey,
 });
+
+const batchDeliveryClass = (json: string): DeliveryClass => {
+  try {
+    const records = (JSON.parse(json) as { records?: Array<{ type?: unknown }> }).records;
+    if (!records?.length) return "technical";
+    return records.reduce<DeliveryClass>((priority, record) => {
+      const candidate = deliveryClassFor(typeof record.type === "string" ? record.type : "");
+      return deliveryRank(candidate) < deliveryRank(priority) ? candidate : priority;
+    }, "asset");
+  } catch {
+    return "technical";
+  }
+};
 
 const clearExitCheckpoint = (id?: string) => {
   try {
@@ -624,35 +890,118 @@ const recoverExitCheckpoint = async () => {
     body: new Blob([batch.json], { type: "application/json" }),
     headers: { "Content-Type": "application/json" },
     bytes: new Blob([batch.json]).size,
+    deliveryClass: batchDeliveryClass(batch.json),
+    state: "queued" as const,
   })));
   if (stored) clearExitCheckpoint(checkpoint.id);
 };
 
 let deliveryRetryTimer: number | undefined;
 let deliveryRetryMs = 5_000;
+
+const connectionIsConstrained = () => {
+  const connection = (navigator as Navigator & {
+    connection?: { effectiveType?: string; saveData?: boolean };
+  }).connection;
+  return Boolean(
+    connection?.saveData
+      || connection?.effectiveType === "slow-2g"
+      || connection?.effectiveType === "2g"
+      || connection?.effectiveType === "3g",
+  );
+};
+
+const noteDelivery = (success: boolean, rttMs = 0) => {
+  if (!success) {
+    consecutiveDeliveryFailures += 1;
+    consecutiveDeliverySuccesses = 0;
+  } else {
+    consecutiveDeliveryFailures = 0;
+    consecutiveDeliverySuccesses += 1;
+    consecutiveSlowDeliveries = rttMs >= 3_000 ? consecutiveSlowDeliveries + 1 : 0;
+  }
+  if (
+    connectionIsConstrained()
+    || consecutiveDeliveryFailures >= 2
+    || consecutiveSlowDeliveries >= 2
+  ) {
+    transportMode = "constrained";
+  } else if (transportMode !== "normal" && consecutiveDeliverySuccesses >= 3) {
+    transportMode = "normal";
+  }
+};
+
 const scheduleDeliveryRetry = (delay = deliveryRetryMs) => {
   if (deliveryRetryTimer !== undefined || typeof window === "undefined") return;
+  const capped = Math.min(5 * 60_000, Math.max(1_000, delay));
+  const jittered = Math.round(capped * (0.5 + Math.random() * 0.5));
   deliveryRetryTimer = window.setTimeout(() => {
     deliveryRetryTimer = undefined;
     void flushOutbox();
-  }, Math.min(5 * 60_000, Math.max(1_000, delay)));
-  deliveryRetryMs = Math.min(5 * 60_000, Math.max(deliveryRetryMs * 2, delay));
+  }, jittered);
+  deliveryRetryMs = Math.min(5 * 60_000, Math.max(deliveryRetryMs * 2, capped));
+};
+
+const selectOutboxForDelivery = async () => {
+  const items: OutboxItem[] = [];
+  const incompatible: Array<{ id: string; deliveryClass: DeliveryClass }> = [];
+  await visitOutbox((rawItem) => {
+    const item: OutboxItem = {
+      ...rawItem,
+      deliveryClass: outboxDeliveryClass(rawItem),
+      state: outboxState(rawItem),
+    };
+    const deliverable = scopeMatches(item.scope)
+      && isStudyLevel(item.level)
+      && levelRank[item.level] <= levelRank[STUDY_PROFILE];
+    if (!deliverable) {
+      incompatible.push({ id: item.id, deliveryClass: outboxDeliveryClass(item) });
+      return;
+    }
+    if (item.state !== "queued") return;
+    items.push(item);
+    items.sort((a, b) =>
+      deliveryRank(outboxDeliveryClass(a)) - deliveryRank(outboxDeliveryClass(b))
+      || a.created - b.created,
+    );
+    if (items.length > 8) items.pop();
+  });
+  return { items, incompatible };
+};
+
+const hasQueuedOutbox = async () => {
+  let queued = false;
+  await visitOutbox((item) => {
+    if (queued || outboxState(item) !== "queued") return;
+    if (
+      scopeMatches(item.scope)
+      && isStudyLevel(item.level)
+      && levelRank[item.level] <= levelRank[STUDY_PROFILE]
+    ) {
+      queued = true;
+    }
+  });
+  return queued;
 };
 
 const flushOutbox = async () => {
-  if (flushRunning || !studyTelemetryEnabled() || navigator.onLine === false) return;
+  if (flushRunning || !studyTelemetryEnabled()) return;
+  if (navigator.onLine === false) {
+    sawOffline = true;
+    return;
+  }
+  if (sawOffline) {
+    sawOffline = false;
+    transportMode = "offline-recovery";
+    consecutiveDeliverySuccesses = 0;
+  }
   flushRunning = true;
   let deliverySucceeded = true;
   let retryAfterMs = 0;
   try {
-    const allItems = await listOutbox();
-    const deliverable = (item: OutboxItem) =>
-      scopeMatches(item.scope)
-      && isStudyLevel(item.level)
-      && levelRank[item.level] <= levelRank[STUDY_PROFILE];
-    const incompatible = allItems.filter((item) => !deliverable(item));
+    const { items, incompatible } = await selectOutboxForDelivery();
     await deleteOutbox(incompatible.map((item) => item.id));
-    const items = allItems.filter(deliverable).slice(0, 8);
+    incompatible.forEach((item) => reportTelemetryLoss(item.deliveryClass));
     for (const item of items) {
       const body = item.path === "/batch" && item.body.type === "application/json"
         ? await gzip(await item.body.text())
@@ -662,6 +1011,7 @@ const flushOutbox = async () => {
         : item.headers;
       const controller = new AbortController();
       const timeout = window.setTimeout(() => controller.abort(), 30_000);
+      const startedAt = performance.now();
       const response = await fetch(`${STUDY_ENDPOINT}${item.path}`, {
         method: "POST",
         headers,
@@ -670,27 +1020,41 @@ const flushOutbox = async () => {
         credentials: "omit",
         signal: controller.signal,
       }).finally(() => window.clearTimeout(timeout));
+      const rttMs = performance.now() - startedAt;
       if (!response.ok) {
         if ([400, 401, 403, 404, 405, 409, 413, 415, 422].includes(response.status)) {
-          await deleteOutbox([item.id]);
+          await quarantineOutbox(item, response.status);
+          recordStudyEvent(
+            "technical.quarantine",
+            { deliveryClass: outboxDeliveryClass(item), status: response.status },
+            { level: "metrics", immediate: true },
+          );
           continue;
         }
         const retryAfter = Number(response.headers.get("Retry-After"));
         retryAfterMs = Number.isFinite(retryAfter) ? retryAfter * 1_000 : 0;
         deliverySucceeded = false;
+        noteDelivery(false, rttMs);
         break;
       }
       await deleteOutbox([item.id]);
       deliveryRetryMs = 5_000;
+      noteDelivery(true, rttMs);
     }
   } catch {
     deliverySucceeded = false;
+    noteDelivery(false);
     // Offline/server failure remains queued and never reaches product UI.
   } finally {
     flushRunning = false;
     if (deliverySucceeded) {
       try {
-        if ((await listOutbox()).length) window.setTimeout(() => void flushOutbox(), 1_000);
+        if (await hasQueuedOutbox()) {
+          window.setTimeout(
+            () => void flushOutbox(),
+            transportMode === "constrained" ? 5_000 : 1_000,
+          );
+        }
       } catch {
         // A later interaction retries unavailable storage.
       }
@@ -706,26 +1070,17 @@ export const flushStudyTelemetry = async (
   durableOnly = false,
   checkpoint = false,
 ) => {
-  if (!studyTelemetryEnabled()) return;
+  if (!studyTelemetryEnabled()) return false;
   if (flushTimer !== undefined) window.clearTimeout(flushTimer);
   flushTimer = undefined;
   flushDueAt = 0;
-  const first = makeBatch(beacon);
-  if (!first) {
+  const batches = makeBufferedBatches(beacon, beacon || durableOnly);
+  if (!batches.length) {
     if (!beacon) await flushOutbox();
-    return;
+    return true;
   }
-  const batches = [first];
-  reserveBatch(first);
   try {
-    if (beacon || durableOnly) {
-      let remaining = makeBatch();
-      while (remaining) {
-        reserveBatch(remaining);
-        batches.push(remaining);
-        remaining = makeBatch();
-      }
-    }
+    const first = batches[0];
     if (beacon && first.json.length <= 60 * 1024) {
       const exitBody = new Blob([first.json], { type: "application/json" });
       const sent = navigator.sendBeacon?.(`${STUDY_ENDPOINT}/batch`, exitBody) ?? false;
@@ -758,6 +1113,7 @@ export const flushStudyTelemetry = async (
       // coalesced drain so delivery is guaranteed, not best-effort.
       scheduleFlush(1_000);
     }
+    return stored;
   } catch {
     // Compression/storage failure must never strand reserved seqs in-flight nor
     // surface to the product UI. Release the reservations and re-arm a coalesced
@@ -765,13 +1121,16 @@ export const flushStudyTelemetry = async (
     // un-armed until the next unrelated event.
     finishBatches(batches, false);
     scheduleFlush(1_000);
+    return false;
   }
 };
 
 const base64Url = (bytes: Uint8Array) => {
-  let binary = "";
-  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const chunks: string[] = [];
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + 0x8000)));
+  }
+  return btoa(chunks.join("")).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 };
 
 const imageBlob = async (dataUrl: string) => {
@@ -856,6 +1215,8 @@ const runImageQueue = async () => {
             "X-MotionSmith-Meta": header,
           },
           bytes: normalized.blob.size,
+          deliveryClass: "asset",
+          state: "queued",
         });
         recordStudyEvent("asset.imported", metadata, { level: "study" });
         await flushOutbox();
@@ -919,7 +1280,7 @@ export const studyTechnicalContext = () => {
     screen: [Math.round(screen.width / 64) * 64, Math.round(screen.height / 64) * 64],
     dpr: Math.round(devicePixelRatio * 4) / 4,
     pointer: matchMedia("(pointer: coarse)").matches ? "coarse" : "fine",
-    network: connection?.effectiveType && /^[234]g|slow-2g$/.test(connection.effectiveType) ? connection.effectiveType : "unknown",
+    network: connection?.effectiveType && /^(?:[234]g|slow-2g)$/.test(connection.effectiveType) ? connection.effectiveType : "unknown",
     saveData: Boolean(connection?.saveData),
     loadMs: navigation ? Math.round(navigation.duration / 100) * 100 : 0,
     memoryGb: deviceMemory ? Math.min(8, deviceMemory) : 0,

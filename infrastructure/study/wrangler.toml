@@ -20,6 +20,8 @@ name = "INGEST_RATE_LIMITER"
 namespace_id = "1784212861"
 
 [ratelimits.simple]
+# Worker keys this namespace independently by participant and by IP. The IP
+# bucket is a shared-NAT backstop; the participant bucket is the primary limit.
 limit = 6000
 period = 60
 

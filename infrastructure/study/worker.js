@@ -81,6 +81,13 @@ async function postBatch(request, env) {
     return json(env, 400, { error: "invalid_json" });
   }
   if (!validEnvelope(envelope)) return json(env, 400, { error: "invalid_envelope" });
+  // The same binding may back both keys during a gradual deploy. Distinct keys
+  // still give each participant an independent bucket while the existing IP
+  // check remains a loose NAT-abuse backstop.
+  const participantLimiter = env.PARTICIPANT_RATE_LIMITER || env.INGEST_RATE_LIMITER;
+  if (participantLimiter && !await withinParticipantRateLimit(participantLimiter, envelope.participantId, "/batch")) {
+    return json(env, 429, { error: "participant_rate_limited" }, { "Retry-After": "60" });
+  }
   const key = `telemetry/${envelope.deployment}/sessions/${envelope.sessionId}/${envelope.contextId}/${envelope.batchId}.json.gz`;
   const storedBody = encoding === "gzip" ? raw : await compressGzip(decoded);
   const stored = await putIdempotent(env.STUDY_BUCKET, key, storedBody, await sha256Hex(decoded), {
@@ -104,6 +111,10 @@ async function postAsset(request, env) {
     return json(env, 400, { error: "invalid_metadata" });
   }
   if (!validAssetMeta(meta) || meta.bytes !== body.byteLength) return json(env, 400, { error: "invalid_metadata" });
+  const participantLimiter = env.PARTICIPANT_RATE_LIMITER || env.INGEST_RATE_LIMITER;
+  if (participantLimiter && !await withinParticipantRateLimit(participantLimiter, meta.participantId, "/asset")) {
+    return json(env, 429, { error: "participant_rate_limited" }, { "Retry-After": "60" });
+  }
   const ext = type === "image/webp" ? "webp" : "png";
   const key = `assets/${meta.deployment}/sessions/${meta.sessionId}/${meta.projectId}/${meta.assetId}.${ext}`;
   const stored = await putIdempotent(env.STUDY_BUCKET, key, body, await sha256Hex(body), {
@@ -473,9 +484,18 @@ async function sha256Hex(bytes) {
 
 async function withinRateLimit(request, limiter, path) {
   const actor = request.headers.get("CF-Connecting-IP") || "unknown";
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(actor)));
-  const key = `${path}:${Array.from(digest.slice(0, 8), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+  const key = `${path}:ip:${await rateLimitDigest(actor)}`;
   return (await limiter.limit({ key })).success;
+}
+
+async function withinParticipantRateLimit(limiter, participantId, path) {
+  const key = `${path}:participant:${await rateLimitDigest(participantId)}`;
+  return (await limiter.limit({ key })).success;
+}
+
+async function rateLimitDigest(actor) {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(actor)));
+  return Array.from(digest.slice(0, 8), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function validImage(bytes, type) {

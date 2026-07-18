@@ -45,7 +45,7 @@ const PRIVATE_KEYS = new Set([
 
 const PRIVATE_SUFFIXES = ["Url", "Filename", "FileName", "Name", "Label"];
 const PRIVATE_TEXT_KEYS = /^(?:title|instruction|description|actual|expected|summary|steps|note|comment|text)$/i;
-const DIRECT_IDENTITY_VALUE = /(?:[^\s@]+@[^\s@]+\.[^\s@]+)|(?:\+?\d[\d ().-]{7,}\d)/;
+const DIRECT_IDENTITY_VALUE = /(?:[^\s@]+@[^\s@]+\.[^\s@]+)|(?:\+?\(?\d{1,4}[ ().-]+\d{2,4}(?:[ ().-]+\d{2,4}){1,3})|(?:\+\d{7,15})/;
 const STATIC_ID_KEYS = new Set(["classroomLessonId", "presetId", "graphFamilyId"]);
 const ENTITY_MAP_KEYS = new Set(["parts", "sceneObjects", "paths", "joints", "nodes", "constraints", "handles", "anchors"]);
 const ENTITY_ID_ARRAY_KEYS = new Set(["bones", "partOrder", "sceneObjectOrder"]);
@@ -218,9 +218,11 @@ export const studyProjectAction = (action: ProjectAction, projectAlias = "prj_un
 };
 
 const bytesToBase64Url = (bytes: Uint8Array) => {
-  let binary = "";
-  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const chunks: string[] = [];
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + 0x8000)));
+  }
+  return btoa(chunks.join("")).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 };
 
 export const makeStudySnapshotRecords = (
@@ -234,7 +236,7 @@ export const makeStudySnapshotRecords = (
   if (bytes.byteLength <= 240 * 1024) {
     return [{
       type: "project.snapshot",
-      data: { reason, snapshotSchema: STUDY_SNAPSHOT_SCHEMA, state },
+      data: { snapshotId, reason, snapshotSchema: STUDY_SNAPSHOT_SCHEMA, state },
     }];
   }
 

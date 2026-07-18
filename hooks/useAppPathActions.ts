@@ -10,6 +10,7 @@ import type {
 } from "../types";
 import { validatePath } from "../utils/project";
 import { pathBelongsToTarget } from "../utils/pathTargets";
+import { recordStageNavigationOpened } from "../utils/appStageNavigation";
 
 type UseAppPathActionsParams = {
   project: ProjectState;
@@ -94,6 +95,7 @@ export const useAppPathActions = ({
     (path: Point[]) => {
       setPathPoints(path, "tracked");
       setShowTracking(false);
+      recordStageNavigationOpened("path", "tracked_path");
       setStage("path");
     },
     [setPathPoints, setStage],

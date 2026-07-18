@@ -10,6 +10,7 @@ import type {
   ProjectState,
 } from "../../../types";
 import { sampleFeasibleRange } from "../../../utils/fabrication";
+import { SCENE_PX_PER_MM } from "../../../utils/coordinates";
 import { compactStudentActionForFabricationDiagnostic } from "../../../utils/fabricationReadiness";
 import {
   motionAnchorJointIds,
@@ -34,7 +35,7 @@ import { projectMechanismReadiness } from "../../../utils/mechanismReadiness";
 type DesignInspectorPanelProps = {
   project: ProjectState;
   selectedMechanism?: MechanismConfig;
-  updateMechanism: (id: string, updates: Partial<MechanismConfig>) => void;
+  updateMechanism: (id: string, updates: Partial<MechanismConfig>) => boolean;
   mechanismEditFeedback?: MechanismEditFeedback | null;
   dispatch: (action: ProjectAction) => void;
   optimizerBusy: boolean;
@@ -320,7 +321,11 @@ export const DesignInspectorPanel = ({
                   value={Number(selectedMechanism[p.key] ?? 0)}
                   min={safeRange?.min ?? p.min}
                   max={safeRange?.max ?? p.max}
-                  step={p.step}
+                  step={
+                    p.key === "anchorX" || p.key === "anchorY"
+                      ? project.settings.physicalKit.gridPitchMm * SCENE_PX_PER_MM
+                      : p.step
+                  }
                   disabled={disabled}
                   constraint={
                     disabled

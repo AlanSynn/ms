@@ -15,6 +15,16 @@ type NavigateAppStageOptions = {
 
 type StageNavigatorOptions = Omit<NavigateAppStageOptions, "target">;
 
+// Project loads and recovery replace the aggregate before React can rebuild the
+// gated navigator. Keep their telemetry in the same event family without
+// evaluating the stale project's handoff gate.
+export const recordStageNavigationOpened = (target: AppStage, source?: string) =>
+  recordStudyEvent(
+    "stage.navigation",
+    { target, outcome: "opened", ...(source ? { source } : {}) },
+    { level: "metrics", immediate: true },
+  );
+
 export const createStageNavigator =
   (options: StageNavigatorOptions) => (target: AppStage) =>
     navigateAppStage({ ...options, target });
@@ -56,11 +66,7 @@ export const navigateAppStage = ({
     setStage(gate.recoveryStage);
     return gate;
   }
-  recordStudyEvent(
-    "stage.navigation",
-    { target, outcome: "opened" },
-    { level: "metrics", immediate: true },
-  );
+  recordStageNavigationOpened(target);
   setCommandStatus(`Opened ${stageLabel(target)}`);
   setStage(target);
   return gate;

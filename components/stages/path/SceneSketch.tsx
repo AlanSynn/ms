@@ -245,6 +245,9 @@ export const SceneSketch = ({
       onMouseMove={handleMove}
       onMouseUp={finishInteraction}
       onMouseLeave={finishInteraction}
+      onPointerUp={finishInteraction}
+      onPointerCancel={finishInteraction}
+      onLostPointerCapture={finishInteraction}
       onWheel={handleWheel}
     >
       <defs>

@@ -77,8 +77,9 @@ const listSessions = async (): Promise<string[]> => {
 };
 
 // Pull every batch for a session, flatten records to a stream annotated with
-// contextId/participantId, and sort by (t, contextId, seq) — the same key
-// study-replay.ts uses so the fold sees a single deterministic order.
+    // contextId/participantId. `seq` is local to a browser context, so it only
+    // breaks equal-timestamp ties after contextId. This is a display/analysis
+    // order, not a claim of causal order across concurrent contexts.
 const fetchSessionEvents = async (sessionId: string) => {
     const batches: Envelope[] = [];
     let cursor = "";
@@ -123,7 +124,9 @@ const fetchSessionEvents = async (sessionId: string) => {
             participantId: batch.participantId,
         })),
     ).sort((a, b) =>
-        Number(a.t) - Number(b.t) || String(a.contextId).localeCompare(String(b.contextId)) || Number(a.seq) - Number(b.seq),
+        Number(a.t) - Number(b.t)
+        || String(a.contextId).localeCompare(String(b.contextId))
+        || Number(a.seq) - Number(b.seq),
     );
     return { meta, rawEvents };
 };

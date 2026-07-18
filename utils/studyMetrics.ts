@@ -481,7 +481,7 @@ export const computeSessionMetrics = (input: SessionMetricsInput): SessionMetric
             const detail = dataOf(event);
             const valid = detail.valid === true;
             if (valid) validationPasses += 1;
-            const type = str(detail.type) || "unknown";
+            const type = str(detail.mechanismType) || "unknown";
             if (!mechanismValidations[type]) mechanismValidations[type] = { total: 0, failed: 0 };
             mechanismValidations[type].total += 1;
             if (!valid) mechanismValidations[type].failed += 1;

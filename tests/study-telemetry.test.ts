@@ -37,6 +37,12 @@ firstPart.name = "Alan";
 firstPart.textureUrl = "data:image/png;base64,private";
 
 const projectAlias = "prj_00000000-0000-4000-8000-000000000000";
+const telemetryTransportSource = readFileSync(join(process.cwd(), "utils/studyTelemetry.ts"), "utf8");
+assert(telemetryTransportSource.includes('openCursor()') && !telemetryTransportSource.includes('.getAll()') && telemetryTransportSource.includes('Array<{ id: string; deliveryClass: DeliveryClass }>'), "outbox scans through cursors and retains only metadata for incompatible queue entries");
+assert(telemetryTransportSource.includes('state: "quarantined"') && telemetryTransportSource.includes('deliveryClass'), "delivery preserves priority metadata and quarantines non-retryable batches without retaining payloads");
+assert(telemetryTransportSource.includes('0.5 + Math.random() * 0.5') && telemetryTransportSource.includes('offline-recovery'), "delivery retry jitter and adaptive transport state are explicit");
+assert(telemetryTransportSource.includes('batch = makeBatch(false, deliveryClass);'), "exit beacons only reserve one keepalive-sized packet; remaining snapshot chunks use durable batches");
+assert(readFileSync(join(process.cwd(), "scripts/study-analyze.ts"), "utf8").includes("Number(a.t) - Number(b.t)") && readFileSync(join(process.cwd(), "scripts/study-replay.ts"), "utf8").includes("String(a.contextId).localeCompare(String(b.contextId))"), "cross-context scripts order by elapsed time and context before a local sequence tie-breaker");
 const snapshotText = JSON.stringify(studyProjectSnapshot(project, projectAlias));
 const skeletonActionText = JSON.stringify(studyProjectAction({ type: "set_skeleton", skeleton: project.skeleton }, projectAlias));
 for (const forbidden of ["Student Name", "student-face.png", "school-id-123", "student@example.com", "file:///Users/student", "student-private-joint", "student-private-child", "Student Private Joint", "data:image", '"Alan"']) {
@@ -391,7 +397,7 @@ assert([...bucket.objects.keys()].some((key) => key.includes(envelope.sessionId)
     ...envelope,
     batchId: "bat_00000000-0000-4000-8000-0000000000num",
     records: [
-      { seq: 1, t: 500, type: "simulation.validation", stage: "foundry", project: "prj_num", data: { type: "4bar", valid: false, category: "collision" } },
+      { seq: 1, t: 500, type: "simulation.validation", stage: "foundry", project: "prj_num", data: { mechanismType: "4bar", valid: false, category: "collision" } },
       { seq: 2, t: 510, type: "recommendation.candidates", stage: "path", project: "prj_num", data: { candidates: [
         { type: "4bar", score: 0.917, blocked: false, reasonKey: "arc_limb" },
         { type: "crank", score: 0.812, blocked: true, reasonKey: "blocked" },
@@ -519,6 +525,36 @@ assert.equal((await worker.fetch(new Request("https://alansynn.com/ms-study/v1/b
   ...env,
   INGEST_RATE_LIMITER: { limit: async () => ({ success: false }) },
 })).status, 429, "tokenless collector rate-limits abusive sources without persisting IP data");
+
+assert.equal((await worker.fetch(new Request("https://alansynn.com/ms-study/v1/batch", {
+  method: "POST",
+  headers: { Origin: "https://alansynn.com", "Content-Type": "application/json" },
+  body: JSON.stringify({ ...envelope, batchId: "bat_00000000-0000-4000-8000-000000000010" }),
+}), {
+  ...env,
+  PARTICIPANT_RATE_LIMITER: { limit: async () => ({ success: false }) },
+})).status, 429, "participant limit is independent from the shared-NAT IP backstop");
+
+{
+  const keys: string[] = [];
+  const limiter = {
+    limit: async ({ key }: { key: string }) => {
+      keys.push(key);
+      return { success: true };
+    },
+  };
+  const response = await worker.fetch(new Request("https://alansynn.com/ms-study/v1/batch", {
+    method: "POST",
+    headers: {
+      Origin: "https://alansynn.com",
+      "Content-Type": "application/json",
+      "CF-Connecting-IP": "203.0.113.9",
+    },
+    body: JSON.stringify({ ...envelope, batchId: "bat_00000000-0000-4000-8000-000000000011" }),
+  }), { ...env, INGEST_RATE_LIMITER: limiter });
+  assert.equal(response.status, 201, "shared-NAT request remains accepted when both buckets allow it");
+  assert(keys.some((key) => key.includes(":ip:")) && keys.some((key) => key.includes(":participant:")), "ingest checks separate participant and IP keys");
+}
 
 const loadResponses = await Promise.all(Array.from({ length: 300 }, (_, index) => {
   const suffix = index.toString().padStart(3, "0");

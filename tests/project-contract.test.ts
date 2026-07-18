@@ -4741,6 +4741,7 @@ const stageLayoutText = readFileSync(join(process.cwd(), 'components', 'stages',
 const partInspectorText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'PartInspector.tsx'), 'utf8');
 const cutOutlineEditorText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CutOutlineEditorDialog.tsx'), 'utf8');
 const skeletonInspectorText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'SkeletonInspector.tsx'), 'utf8');
+const inspectorControlsText = readFileSync(join(process.cwd(), 'components', 'ui', 'InspectorControls.tsx'), 'utf8');
 const characterImportOverlaysText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CharacterImportOverlays.tsx'), 'utf8');
 const characterLessonOwnershipText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CharacterLessonOwnership.tsx'), 'utf8');
 const characterSetupPanelText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CharacterSetupPanel.tsx'), 'utf8');
@@ -4882,6 +4883,17 @@ assert(optionsText.includes('from "./OptionsSettingsControls"') && !optionsText.
 });
 assert(appText.includes('createStageNavigator({') && !appText.includes('navigateAppStage({') && appStageNavigationText.includes('handoffGate(project, target)') && appStageNavigationText.includes('set_processing') && !appText.includes('handoffGate(project'), 'App delegates stage handoff side effects and goStage wiring to appStageNavigation while preserving recovery processing dispatch');
 assert(
+  appStageNavigationText.includes('recordStageNavigationOpened') &&
+    appProjectCommandsHookText.includes('recordStageNavigationOpened(startStage, source)') &&
+    appProjectCommandsHookText.includes('recordStageNavigationOpened("character", "new_project")') &&
+    appProjectCommandsHookText.includes('recordStageNavigationOpened("path", "autosave_recovery")') &&
+    appCharacterImportActionsHookText.includes('recordStageNavigationOpened("path", "project_import")') &&
+    appMechanismActionsHookText.includes('recordStageNavigationOpened("design", "mechanism_commit")') &&
+    appPathActionsHookText.includes('recordStageNavigationOpened("path", "tracked_path")') &&
+    appControllerSource.includes('recordStageNavigationOpened("character", "getting_started_close")'),
+  'all ungated project load, recovery, import, mechanism, path, and Getting Started stage moves emit the canonical navigation event',
+);
+assert(
   appStageRouterText.includes('onFoundryExport') &&
     !appStageRouterText.includes('fitMechanismToTargetPath') &&
     appText.includes('useAppMechanismActions') &&
@@ -4903,6 +4915,33 @@ const mechanismUpdateHarness = renderMechanismActionHarness();
 mechanismUpdateHarness.actions.updateMechanism('mech-1', { targetPartId: 'head' });
 assert.deepEqual(mechanismUpdateHarness.dispatches, [], 'mechanism action hook does not dispatch an invalid direct target edit');
 assert.equal(mechanismUpdateHarness.commandStatus(), 'Fix: Choose anchor', 'mechanism action hook surfaces the exact rejected-edit action');
+
+const conflictingMechanism = {
+  ...sample.mechanisms[0],
+  id: 'mech-driver-conflict',
+};
+const conflictProject = {
+  ...sample,
+  mechanisms: [sample.mechanisms[0], conflictingMechanism],
+};
+const conflictUpdateHarness = renderMechanismActionHarness({
+  project: conflictProject,
+});
+assert.equal(
+  conflictUpdateHarness.actions.updateMechanism('mech-1', { color: '#000000' }),
+  false,
+  'mechanism action hook reports false when the authoritative reducer rejects a conflicting edit',
+);
+assert.deepEqual(
+  conflictUpdateHarness.dispatches,
+  [],
+  'mechanism action hook does not dispatch an edit that the authoritative reducer would reject',
+);
+assert.equal(
+  conflictUpdateHarness.commandStatus(),
+  'Change blocked',
+  'mechanism action hook exposes a concise recovery status for a rejected reducer edit',
+);
 
 const foundryExportProject = createSampleProject({ includeMechanism: true });
 const foundryExportPath = foundryExportProject.paths['path-right-arm'];
@@ -5356,6 +5395,7 @@ assert(foundry3dText.includes('time - (elapsed % FOUNDRY_ANIMATION_COMMIT_MS)'),
 assert(foundry3dText.includes("scene.remove(old)") && foundry3dText.includes("disposeFoundryThreeObject(old)"), 'Foundry disposes noncached dynamic resources when replacing animation groups');
 assert(foundry3dText.includes('geometryCacheRef') && foundry3dText.includes('materialCacheRef'), 'Foundry caches reusable Three geometry/material resources during playback');
 assert(foundry3dText.includes('foundryCached') && foundry3dText.includes('data-three-geometry-cache-size'), 'Foundry tags cached resources and exposes cache size for browser perf tests');
+assert(foundry3dText.includes('automata-texture:') && foundry3dText.includes('map?.dispose()'), 'Foundry reuses character/object texture materials across dynamic rebuilds and disposes their cached GPU maps on unmount');
 assert(foundry3dText.includes('const addPath = (points: Point[], z: number, mat: THREE.Material)') && foundry3dText.includes('new THREE.BufferGeometry().setFromPoints') && foundry3dText.includes('points.map((point) => to3(point, z))'), 'Foundry path/trail line geometry is intentionally not long-cached because it can be phase-dependent');
 assert(mechanismPreviewText.includes('sweepBounds') && foundry3dText.includes('data-three-fit-bounds=\"phase-invariant-sweep\"'), 'Foundry fitting bounds are sampled in the shared preview utility instead of jittering per animation frame');
 assert(foundry3dText.includes('data-three-static-grid-mode=\"persistent-scene-layer\"'), 'Foundry grid and plane live in a persistent scene layer, not the per-frame dynamic group');
@@ -5452,7 +5492,8 @@ assert(indexText.includes('--ms-font-sans') && indexText.includes('font-family: 
 assert(appWorkspaceShellText.includes('app-header-brand') && appWorkspaceShellText.includes('app-header-actions') && appWorkspaceShellText.includes('quick-toolbar'), 'top app bar separates brand, menus, and quick actions into compact zones');
 assert(indexText.includes('.app-header-brand') && indexText.includes('.app-header-actions') && indexText.includes('border-radius: 999px'), 'top app bar keeps the brand and current stage in one slick editor row');
 assert(!appWorkspaceShellText.includes('flex flex-col items-end gap-2'), 'top app bar does not stack menu and quick actions vertically');
-assert(appText.includes('useProjectAutosave(project)') && appText.includes('readAutosaveProject(initialProject)') && appProjectCommandsHookText.includes('readAutosaveProject') && appProjectCommandsHookText.includes('readWorkspaceLayoutSnapshot') && appProjectCommandsHookText.includes('writeWorkspaceLayoutSnapshot') && appAutosaveHookText.includes('writeAutosaveSnapshot') && appAutosaveHookText.includes('pagehide') && appAutosaveHookText.includes('beforeunload') && projectPersistenceText.includes('readStorageWithLegacy') && projectPersistenceText.includes('migrateStorageValue'), 'MotionSmith storage rename keeps typed autosave/workspace recovery behind the persistence seam');
+assert(appText.includes('useProjectAutosave(project,') && appText.includes('readAutosaveProject(initialProject)') && appProjectCommandsHookText.includes('readAutosaveProjectAsync') && appProjectCommandsHookText.includes('readWorkspaceLayoutSnapshot') && appProjectCommandsHookText.includes('writeWorkspaceLayoutSnapshot') && appAutosaveHookText.includes('writeAutosaveSnapshot') && appAutosaveHookText.includes('visibilitychange') && appAutosaveHookText.includes('pagehide') && appAutosaveHookText.includes('beforeunload') && projectPersistenceText.includes('readAutosaveProjectAsync') && projectPersistenceText.includes('readStorageWithLegacy') && projectPersistenceText.includes('migrateStorageValue'), 'MotionSmith storage rename keeps typed autosave/workspace recovery behind the persistence seam');
+assert(projectPersistenceText.includes('indexedDB.open(AUTOSAVE_DB_NAME') && projectPersistenceText.includes('AUTOSAVE_PREVIOUS') && projectPersistenceText.includes('navigator.storage.persist') && appAutosaveHookText.includes('markAutosaveDirty') && appAutosaveHookText.includes('writingRef.current') && appAutosaveHookText.includes('document.hidden'), 'autosave uses two IndexedDB generations, requests durable browser storage, and records a hidden-tab dirty marker when a write is in flight');
 assert(!appUiText.includes('MOTIONSMITH_VIDEO_URL'), 'welcome splash does not embed the old preview video');
 assert(appUiText.includes('getting-started-dialog') && appUiText.includes('getting-started-gallery'), 'Getting Started is an explicit compact starter dialog');
 assert(appUiText.includes('const [showGuided, setShowGuided] = useState(false)') && appUiText.includes('Start.') && appUiText.includes('Pick a project.'), 'Getting Started opens as starter choices and moves guided projects behind the explicit Guide tile');
@@ -5501,6 +5542,7 @@ assert(threePreviewText.includes(".filter(layer => layer !== 'mechanisms' || mec
 assert(appText.includes('setStage("character")'), 'Character edit controls stay in the functional Character tab');
 assert(partInspectorText.includes('className={`compact-number') && partInspectorText.includes('<summary>Artwork</summary>') && partInspectorText.includes('Art width') && partInspectorText.includes('Art offset X'), 'Character part inspector keeps X/Y/Rotation compact while moving detailed artwork extent controls behind the Artwork disclosure');
 assert(skeletonInspectorText.includes('Motion setup') && skeletonInspectorText.includes('character-motion-preset-summary') && skeletonInspectorText.includes('Part pivot') && skeletonInspectorText.includes('<summary>Edit skeleton</summary>') && skeletonInspectorText.includes('motionChainRootJointIds') && characterSetupPanelText.includes('<SkeletonInspector'), 'Character setup panel shows a compact motion preset summary while raw skeleton editing stays behind the Edit skeleton disclosure');
+assert(pathEditorText.includes('requestAnimationFrame') && pathEditorText.includes('flushPendingPath') && sceneSketchText.includes('onPointerCancel={finishInteraction}') && inspectorControlsText.includes('queueRangeChange') && inspectorControlsText.includes('onPointerUp={flushRangeChange}') && inspectorControlsText.includes('setNumberResetVersion'), 'path strokes and inspector joint sliders commit permanent ProjectState at animation-frame cadence, flush on pointer completion, and restore rejected values');
 assert(partInspectorText.includes('data-testid="part-cut-controls"') && cutOutlineEditorText.includes('data-testid="cut-outline-dialog"') && partInspectorText.includes('Edit cut') && !partInspectorText.includes('Cut point X') && !cutOutlineEditorText.includes('Cut point X'), 'Character part inspector opens a canvas-first cut overlay instead of coordinate controls');
 assert(partInspectorText.includes('sourceTextureUrl={sourceTextureUrl}') && cutOutlineEditorText.includes('sourceImageFrame') && cutOutlineEditorText.includes('data-testid="cut-outline-art"') && indexText.includes('.cut-outline-part-window'), 'Character cut editor shows the full source picture behind a zoomed editable contour when available');
 assert(partInspectorText.includes('contourSource: "user"') && cutOutlineEditorText.includes('Auto cut') && cutOutlineEditorText.includes('Add point'), 'Character cut editor writes user contours and can bake/add contour points');

@@ -200,7 +200,7 @@ assert(!assemblyHtml.includes('aria-label="Print"'), 'blocked Assembly exposes n
 const designHtml = renderToStaticMarkup(createElement(DesignInspectorPanel, {
   project: staleBlockedProject,
   selectedMechanism: staleBlockedProject.mechanisms[0],
-  updateMechanism: noop,
+  updateMechanism: () => false,
   dispatch: noop,
   optimizerBusy: false,
   onOptimize: noop,

@@ -19,6 +19,7 @@ import {
 } from "../utils/webOnnx";
 import { loadCharacterPackage } from "../utils/packageLoader";
 import { foundryPreviewFromProject } from "../utils/mechanismDefaults";
+import { recordStageNavigationOpened } from "../utils/appStageNavigation";
 
 type SetProjectOptions = {
   history?: boolean;
@@ -65,6 +66,7 @@ export const useAppCharacterImportActions = ({
         progress: 100,
       },
     });
+    recordStageNavigationOpened("character", "character_review");
     setStage("character");
   };
 
@@ -175,6 +177,7 @@ export const useAppCharacterImportActions = ({
       setCommandStatus(
         `Couldn’t load character: ${error instanceof Error ? error.message : String(error)}`,
       );
+      recordStageNavigationOpened("character", "character_import_failed");
       setStage("character");
     }
   };
@@ -192,18 +195,21 @@ export const useAppCharacterImportActions = ({
       setFoundry(foundryPreviewFromProject(loadedProject));
       setCommandStatus(`Loaded project ${file.name}`);
       setShowGettingStarted(false);
+      recordStageNavigationOpened("path", "project_import");
       setStage("path");
     } catch (error) {
       setCommandStatus(
         `Project import failed: ${error instanceof Error ? error.message : String(error)}`,
       );
       setShowGettingStarted(false);
+      recordStageNavigationOpened("character", "project_import_failed");
       setStage("character");
     }
   };
 
   const editCharacterParts = () => {
     setCommandStatus("Opened Character part, outline, and skeleton tools");
+    recordStageNavigationOpened("character", "character_edit");
     setStage("character");
   };
 
@@ -227,6 +233,7 @@ export const useAppCharacterImportActions = ({
     setProject(pendingCharacter.project, { resetHistory: true });
     setPendingCharacter(null);
     setShowGettingStarted(false);
+    recordStageNavigationOpened(pendingCharacter.returnStage, "character_review_accept");
     setStage(pendingCharacter.returnStage);
   };
 

@@ -35,6 +35,7 @@ export type AppWorkspaceShellProps = {
   stageRouterProps: AppStageRouterProps;
   workflowStatus: WorkflowStatus;
   commandStatus: string;
+  autosaveStatus: string;
   onnxCacheStatus: WebOnnxCacheStatus;
   cacheOnnxModel: () => void | Promise<void>;
   showGettingStarted: boolean;
@@ -84,6 +85,7 @@ export const AppWorkspaceShell = ({
   stageRouterProps,
   workflowStatus,
   commandStatus,
+  autosaveStatus,
   onnxCacheStatus,
   cacheOnnxModel,
   showGettingStarted,
@@ -212,6 +214,11 @@ export const AppWorkspaceShell = ({
           <WorkflowStatusStrip {...workflowStatus} />
           <footer className="status-bar" data-testid="status-bar">
             <span>{commandStatus}</span>
+            {autosaveStatus && (
+              <span data-testid="autosave-status" aria-live="polite">
+                {autosaveStatus}
+              </span>
+            )}
             <OnnxCacheStatusPill
               status={onnxCacheStatus}
               onDownload={cacheOnnxModel}

@@ -87,9 +87,9 @@ const buildInput = (
         ev("project.undo", 1300, 14, {}),
         ev("project.undo", 1310, 15, {}),
         ev("project.redo", 1320, 16, {}),
-        ev("simulation.validation", 2000, 17, { type: "four_bar", valid: false, category: "collision" }),
-        ev("simulation.validation", 2010, 18, { type: "four_bar", valid: true, category: "none" }),
-        ev("simulation.validation", 2020, 19, { type: "four_bar", valid: true, category: "none" }),
+        ev("simulation.validation", 2000, 17, { mechanismType: "four_bar", valid: false, category: "collision" }),
+        ev("simulation.validation", 2010, 18, { mechanismType: "four_bar", valid: true, category: "none" }),
+        ev("simulation.validation", 2020, 19, { mechanismType: "four_bar", valid: true, category: "none" }),
         ev("simulation.foundry", 2100, 20, { state: "playing" }),
         ev("export.download", 3000, 21, { extension: "pdf", mime: "application/pdf", bytes: 42 }),
         ev("project.completed", 3100, 22, { recipes: 2, validationIssues: 0 }),
@@ -119,6 +119,7 @@ const buildInput = (
     assert.equal(metrics.pathEditCount, 2);
     assert.equal(metrics.validationPassRate, 2 / 3);
     assert.deepEqual(metrics.validationCategoryCounts, { collision: 1, none: 2 });
+    assert.deepEqual(metrics.mechanismTypeValidationFailureRate, { four_bar: 1 / 3 });
     assert.equal(metrics.foundryPlaySessions, 1);
     assert.equal(metrics.reachedExport, true);
     assert.equal(metrics.completedProject, true);
@@ -236,7 +237,7 @@ const buildInput = (
     const events: Ev[] = [
         ev("session.start", 100, 1, {}),
         ev("stage.view", 200, 2, { from: "character", to: "path", dwellMs: 1000 }),
-        ev("simulation.validation", 300, 3, { type: "four_bar", valid: true, category: "none" }),
+        ev("simulation.validation", 300, 3, { mechanismType: "four_bar", valid: true, category: "none" }),
         ev("recommendation.accept", 400, 4, { mechanismType: "four_bar", rank: 1, candidateCount: 3 }),
         ev("session.pagehide", 500, 5, { activeMs: 2000, completed: false }),
     ];

@@ -21,10 +21,11 @@ import {
 import { foundryPreviewFromProject } from "../utils/mechanismDefaults";
 import {
   projectSnapshotFileName,
-  readAutosaveProject,
+  readAutosaveProjectAsync,
   readWorkspaceLayoutSnapshot,
   writeWorkspaceLayoutSnapshot,
 } from "../utils/projectPersistence";
+import { recordStageNavigationOpened } from "../utils/appStageNavigation";
 import { clampCanvasZoom, DEFAULT_CANVAS_VIEWPORT } from "../utils/viewport";
 
 const APP_STAGE_IDS: AppStage[] = [
@@ -112,6 +113,7 @@ export const useAppProjectCommands = ({
   const openLessonProject = (
     lessonProject: ProjectState,
     startStage: AppStage,
+    source: "lesson_load" | "lesson_reset",
   ) => {
     setPendingCharacter(null);
     setProject(lessonProject, { resetHistory: true });
@@ -120,6 +122,7 @@ export const useAppProjectCommands = ({
     setIsPlaying(false);
     setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
     setShowGettingStarted(false);
+    recordStageNavigationOpened(startStage, source);
     setStage(startStage);
   };
 
@@ -142,6 +145,7 @@ export const useAppProjectCommands = ({
     setCanvasViewport(DEFAULT_CANVAS_VIEWPORT);
     setCommandStatus("New project");
     setShowGettingStarted(false);
+    recordStageNavigationOpened("character", "new_project");
     setStage("character");
   };
 
@@ -159,7 +163,7 @@ export const useAppProjectCommands = ({
         classroomAssessmentKey: project.settings.classroomAssessmentKey,
       },
     };
-    openLessonProject(lessonProject, lesson.startStage);
+    openLessonProject(lessonProject, lesson.startStage, "lesson_load");
     setCommandStatus(`${lesson.outcome ?? lessonProject.metadata.name} ready`);
   };
 
@@ -167,6 +171,7 @@ export const useAppProjectCommands = ({
     setPendingCharacter(null);
     setProject(createSampleProject(), { resetHistory: true });
     setShowGettingStarted(false);
+    recordStageNavigationOpened("character", "sample_load");
     setStage("character");
   };
 
@@ -177,13 +182,13 @@ export const useAppProjectCommands = ({
       setCommandStatus("No lesson");
       return;
     }
-    openLessonProject(resetProject, lesson.startStage);
+    openLessonProject(resetProject, lesson.startStage, "lesson_reset");
     setCommandStatus("Lesson reset");
   };
 
-  const recoverAutosave = () => {
+  const recoverAutosave = async () => {
     try {
-      const recovered = readAutosaveProject(project);
+      const recovered = await readAutosaveProjectAsync(project);
       if (recovered.status === "rejected") {
         setCommandStatus(recovered.blocker);
         return;
@@ -200,7 +205,12 @@ export const useAppProjectCommands = ({
         return;
       }
       setProject(recoveredProject, { resetHistory: true });
-      setCommandStatus("Recovered browser autosave snapshot");
+      setCommandStatus(
+        recovered.mayHaveUnsavedChanges
+          ? "Recovered autosave may be older"
+          : "Recovered browser autosave snapshot",
+      );
+      recordStageNavigationOpened("path", "autosave_recovery");
       setStage("path");
     } catch (error) {
       setCommandStatus(
@@ -284,7 +294,9 @@ export const useAppProjectCommands = ({
   const commandHandlers = createAppCommandHandlers({
     newProject,
     openProject: openProjectPicker,
-    recoverAutosave,
+    recoverAutosave: () => {
+      void recoverAutosave();
+    },
     saveProject,
     saveProjectAs,
     exportProjectCopy,

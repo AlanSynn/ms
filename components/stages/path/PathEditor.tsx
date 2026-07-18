@@ -72,6 +72,15 @@ export const PathEditor = ({
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const freeDraftRef = useRef<DrawSamplePoint[] | null>(null);
+  const dragPointsRef = useRef<Point[] | undefined>(undefined);
+  const pendingPathRef = useRef<{
+    points: Point[];
+    source?: ProjectMotionPath["source"];
+    timedPoints?: ProjectMotionPath["timedPoints"];
+  }>(undefined);
+  const pathCommitFrameRef = useRef<number | undefined>(undefined);
+  const setPathPointsRef = useRef(setPathPoints);
+  setPathPointsRef.current = setPathPoints;
   const [dragPoint, setDragPoint] = useState<number | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
   const [isFreeDrawing, setIsFreeDrawing] = useState(false);
@@ -106,12 +115,56 @@ export const PathEditor = ({
     ? project.skeleton?.joints[ikDescriptor.foldJointId]
     : undefined;
   const jointLabel = (id?: string) => (id ? id.replaceAll("_", " ") : "none");
+  const flushPendingPath = () => {
+    if (pathCommitFrameRef.current !== undefined) {
+      window.cancelAnimationFrame(pathCommitFrameRef.current);
+      pathCommitFrameRef.current = undefined;
+    }
+    const pending = pendingPathRef.current;
+    pendingPathRef.current = undefined;
+    if (pending) {
+      setPathPointsRef.current(
+        pending.points,
+        pending.source,
+        pending.timedPoints,
+      );
+    }
+  };
+  const queuePathPoints = (
+    points: Point[],
+    source?: ProjectMotionPath["source"],
+    timedPoints?: ProjectMotionPath["timedPoints"],
+  ) => {
+    pendingPathRef.current = { points, source, timedPoints };
+    if (pathCommitFrameRef.current !== undefined) return;
+    pathCommitFrameRef.current = window.requestAnimationFrame(() => {
+      pathCommitFrameRef.current = undefined;
+      const pending = pendingPathRef.current;
+      pendingPathRef.current = undefined;
+      if (pending) {
+        setPathPointsRef.current(
+          pending.points,
+          pending.source,
+          pending.timedPoints,
+        );
+      }
+    });
+  };
   useEffect(() => {
+    flushPendingPath();
     freeDraftRef.current = null;
+    dragPointsRef.current = undefined;
     setIsFreeDrawing(false);
     setDragPoint(null);
     setSelectedPoint(null);
   }, [selectedPart?.id, selectedSceneObject?.id]);
+  useEffect(() => () => {
+    if (pathCommitFrameRef.current !== undefined) {
+      window.cancelAnimationFrame(pathCommitFrameRef.current);
+      pathCommitFrameRef.current = undefined;
+    }
+    pendingPathRef.current = undefined;
+  }, []);
   const appendFreePoint = (point: Point, seed = false) => {
     const next = addDrawSamplePoint(
       freeDraftRef.current,
@@ -126,7 +179,7 @@ export const PathEditor = ({
       { closed: selectedPath?.closed ?? true },
     );
     freeDraftRef.current = next;
-    setPathPoints(
+    queuePathPoints(
       timed.map(({ x, y }) => ({ x, y })),
       "drawn",
       timed,
@@ -185,29 +238,34 @@ export const PathEditor = ({
     }
     if (dragPoint === null || !svgRef.current || !selectedPath || pathLocked)
       return;
-    const points = [...selectedPath.points];
+    const points = [...(dragPointsRef.current ?? selectedPath.points)];
     points[dragPoint] = svgPointerToScene(svgRef.current, e.clientX, e.clientY);
-    setPathPoints(points, selectedPath.source);
+    dragPointsRef.current = points;
+    queuePathPoints(points, selectedPath.source);
   };
   const stopDrawing = () => {
     const finishedFreeStroke = Boolean(freeDraftRef.current?.length);
+    flushPendingPath();
     setDragPoint(null);
     setIsFreeDrawing(false);
     freeDraftRef.current = null;
+    dragPointsRef.current = undefined;
     if (finishedFreeStroke) setDrawMode(false);
   };
   const deletePoint = () => {
     if (selectedPoint === null || !selectedPath || pathLocked) return;
+    flushPendingPath();
     setPathPoints(
       selectedPath.points.filter((_, i) => i !== selectedPoint),
       selectedPath.source,
     );
     setSelectedPoint(null);
   };
-  const clearPath = () =>
-    selectedPath &&
-    !pathLocked &&
+  const clearPath = () => {
+    if (!selectedPath || pathLocked) return;
+    flushPendingPath();
     dispatch({ type: "delete_path", pathId: selectedPath.id });
+  };
   const switchPathView = (mode: "2d" | "3d") => {
     setPathViewMode(mode);
     if (mode === "3d" && drawMode) {

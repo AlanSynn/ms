@@ -47,6 +47,46 @@ const expectCleanPage = (pageErrors: string[], consoleErrors: string[]) => {
   expect(consoleErrors, 'no browser console errors').toEqual([]);
 };
 
+const readAutosaveSerialized = async (page: Page) => page.evaluate(() => new Promise<string>((resolve, reject) => {
+  const open = indexedDB.open('motionsmith-project');
+  open.onerror = () => reject(open.error);
+  open.onsuccess = () => {
+    const transaction = open.result.transaction('autosave', 'readonly');
+    const request = transaction.objectStore('autosave').get('current');
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve((request.result as { serialized?: string } | undefined)?.serialized ?? '');
+  };
+}));
+
+const clearAutosaveGenerations = async (page: Page) => page.evaluate(() => new Promise<void>((resolve, reject) => {
+  const open = indexedDB.open('motionsmith-project');
+  open.onerror = () => reject(open.error);
+  open.onsuccess = () => {
+    const transaction = open.result.transaction('autosave', 'readwrite');
+    const store = transaction.objectStore('autosave');
+    store.delete('current');
+    store.delete('previous');
+    store.delete('dirty');
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  };
+}));
+
+const markAutosaveDirty = async (page: Page) => page.evaluate(() => new Promise<void>((resolve, reject) => {
+  const open = indexedDB.open('motionsmith-project');
+  open.onerror = () => reject(open.error);
+  open.onsuccess = () => {
+    const transaction = open.result.transaction('autosave', 'readwrite');
+    transaction.objectStore('autosave').put({
+      id: 'dirty',
+      projectId: 'interrupted-test',
+      changedAt: Date.now(),
+    });
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  };
+}));
+
 const FOUNDRY_RENDER_CONTRACT_ATTRS = [
   'data-mechanism-type',
   'data-three-stack-order',
@@ -2747,8 +2787,8 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await page.getByLabel('Format').selectOption('json');
   await expect(page.getByTestId('grid-cell-readout')).toContainText('0.98 in');
 
-  await expect.poll(async () => page.evaluate(() => {
-    const saved = JSON.parse(localStorage.getItem('motionsmith.autosave') ?? '{}');
+  await expect.poll(async () => {
+    const saved = JSON.parse(await readAutosaveSerialized(page) || '{}');
     return {
       autosave: saved.settings?.autosave,
       interval: saved.settings?.autosaveIntervalSeconds,
@@ -2764,7 +2804,7 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
       pitch: saved.settings?.physicalKit?.gridPitchMm,
       cutSheet: saved.settings?.physicalKit?.cutSheetFileType
     };
-  }), { timeout: 15000 }).toEqual({
+  }, { timeout: 15000 }).toEqual({
     autosave: true,
     interval: 1,
     duration: 6000,
@@ -2788,16 +2828,19 @@ test('Options parity updates workspace UI, canvas context, and blueprint default
   await expect(page.getByTestId('design-readiness-blocker')).toHaveText('Fix mechanism geometry.');
   await expectStaticDesignRecoveryPreview(page);
   await page.getByRole('button', { name: /^Fit$/i }).click();
+  await expect(page.getByTestId('design-readiness-blocker')).toHaveCount(0);
   await expect(page.getByTestId('design-shared-foundry-preview')).toBeVisible();
   await expect(page.getByTestId('design-canvas')).toHaveCount(0);
-  const anchorXInput = page.locator('label').filter({ hasText: 'anchor X' }).locator('input[type="number"]');
-  const anchorYInput = page.locator('label').filter({ hasText: 'anchor Y' }).locator('input[type="number"]');
+  const designInspector = page.getByTestId('stage-right-inspector');
+  const anchorXInput = designInspector.getByLabel('anchor X number');
+  const anchorYInput = designInspector.getByLabel('anchor Y number');
   await anchorXInput.fill('0');
   await anchorXInput.press('Enter');
   await anchorYInput.fill('100');
   await anchorYInput.press('Enter');
+  await expect(anchorYInput, 'Design accepts the exact board-hole placement').toHaveValue('100');
   await expect.poll(async () => {
-    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('motionsmith.autosave') ?? '{}')?.mechanisms?.[0]);
+    const saved = JSON.parse(await readAutosaveSerialized(page) || '{}')?.mechanisms?.[0];
     const visibleX = Number(await anchorXInput.inputValue());
     const visibleY = Number(await anchorYInput.inputValue());
     return Boolean(
@@ -2836,25 +2879,30 @@ test('Legacy storage namespace migrates to MotionSmith keys without losing autos
   await page.getByRole('button', { name: /Options/i }).click();
   const autosaveToggle = page.getByLabel('Enable autosave');
   if (!(await autosaveToggle.isChecked())) await autosaveToggle.check();
-  await expect.poll(async () => page.evaluate(() => localStorage.getItem('motionsmith.autosave') ?? ''), { timeout: 5000 }).not.toBe('');
-  await page.evaluate(() => {
-    const current = localStorage.getItem('motionsmith.autosave') ?? '';
+  await expect.poll(async () => readAutosaveSerialized(page), { timeout: 5000 }).not.toBe('');
+  const current = await readAutosaveSerialized(page);
+  await clearAutosaveGenerations(page);
+  await page.evaluate((serialized) => {
     const legacyPrefix = ['mech', 'anim'].join('');
     localStorage.removeItem('motionsmith.autosave');
     localStorage.removeItem('motionsmith.workspace');
-    localStorage.setItem(`${legacyPrefix}.autosave`, current);
+    localStorage.setItem(`${legacyPrefix}.autosave`, serialized);
     localStorage.setItem(`${legacyPrefix}.workspace`, JSON.stringify({
       stage: 'character',
       viewport: { offset: { x: 24, y: -12 }, zoom: 1.25 },
       toolbarVisible: false,
       partPanelVisible: false
     }));
-  });
+  }, current);
 
   await page.getByTestId('top-command-bar').getByText('File', { exact: true }).click();
   await page.getByRole('button', { name: 'Recover Autosave…' }).click();
   await expect(page.getByTestId('status-bar')).toContainText('Recovered browser autosave snapshot');
-  await expect.poll(async () => page.evaluate(() => Boolean(localStorage.getItem('motionsmith.autosave'))), { timeout: 5000 }).toBe(true);
+  await expect.poll(async () => readAutosaveSerialized(page), { timeout: 5000 }).not.toBe('');
+  await expect.poll(async () => page.evaluate(() => ({
+    current: Boolean(localStorage.getItem('motionsmith.autosave')),
+    legacy: Boolean(localStorage.getItem('mechanim.autosave')),
+  })), { timeout: 5000 }).toEqual({ current: false, legacy: false });
 
   await page.getByTestId('top-command-bar').getByText('View', { exact: true }).click();
   await page.getByRole('button', { name: 'Restore Layout' }).click();
@@ -2863,6 +2911,49 @@ test('Legacy storage namespace migrates to MotionSmith keys without losing autos
   await expect(page.getByTestId('quick-toolbar')).toHaveCount(0);
 
   expectCleanPage(pageErrors, consoleErrors);
+});
+
+test('Autosave recovery warns when a hidden-tab commit may be incomplete', async ({ page }) => {
+  await page.goto('/');
+  await openCharacterScreen(page);
+  await expect.poll(async () => readAutosaveSerialized(page), { timeout: 5000 }).not.toBe('');
+  await markAutosaveDirty(page);
+
+  await page.getByTestId('top-command-bar').getByText('File', { exact: true }).click();
+  await page.getByRole('button', { name: 'Recover Autosave…' }).click();
+  await expect(page.getByTestId('status-bar')).toContainText('Recovered autosave may be older');
+});
+
+test('Autosave reports an IndexedDB transaction failure instead of claiming success', async ({ page }) => {
+  await page.goto('/');
+  await openCharacterScreen(page);
+  await page.getByRole('button', { name: /Options/i }).click();
+  await page.evaluate(async () => {
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.deleteDatabase('motionsmith-project');
+      request.onsuccess = () => resolve();
+      request.onblocked = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+    const nativeOpen = indexedDB.open.bind(indexedDB);
+    Object.defineProperty(indexedDB, 'open', {
+      configurable: true,
+      value: (name: string, ...args: unknown[]) => {
+        if (name !== 'motionsmith-project') return nativeOpen(name, ...(args as [number?]));
+        const request = {
+          error: new DOMException('quota', 'QuotaExceededError'),
+          onupgradeneeded: null,
+          onsuccess: null,
+          onerror: null as ((event: Event) => void) | null,
+        } as unknown as IDBOpenDBRequest;
+        queueMicrotask(() => request.onerror?.(new Event('error')));
+        return request;
+      },
+    });
+  });
+  await page.getByLabel('Duration number').fill('7');
+  await page.getByLabel('Duration number').press('Enter');
+  await expect(page.getByTestId('status-bar')).toContainText('Autosave failed');
 });
 
 test('Path Editor sensemaking follows selected part, lock state, and anchor handoff', async ({ page }) => {
@@ -4833,12 +4924,18 @@ test('Mechanism Design center workspace renders the integrated Foundry automata 
   const footTarget = await waitForThreePartTarget(designRig, 'right_foot_part');
   expect(headTarget.y, 'Design front view preserves Character/Path scene orientation: head stays above torso').toBeLessThan(torsoTarget.y);
   expect(torsoTarget.y, 'Design front view preserves Character/Path scene orientation: torso stays above foot').toBeLessThan(footTarget.y);
-  const drivenHandBefore = await waitForThreePartTarget(designRig, 'right_hand_part');
-  await page.getByLabel('Workspace scrubber').fill('28');
+  const workspaceScrubber = page.getByLabel('Workspace scrubber');
+  await workspaceScrubber.fill('0');
+  await expect(workspaceScrubber).toHaveValue('0');
+  await page.evaluate(() => new Promise<void>((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  ));
+  const drivenHandAtStart = await waitForThreePartTarget(designRig, 'right_hand_part');
+  await workspaceScrubber.fill('28');
   await expect.poll(async () => {
     const moved = (await readThreeScreenTargets(designRig, 'data-three-part-screen-targets'))
       .find(item => item.id === 'right_hand_part' && item.visible);
-    return moved ? Math.hypot(moved.x - drivenHandBefore.x, moved.y - drivenHandBefore.y) : 0;
+    return moved ? Math.hypot(moved.x - drivenHandAtStart.x, moved.y - drivenHandAtStart.y) : 0;
   }, { message: 'visible Design hand part follows the rendered mechanism path through scrubber changes' }).toBeGreaterThan(2);
   expect(Number(await designPreview.getAttribute('data-design-target-error'))).toBeLessThan(0.01);
 
