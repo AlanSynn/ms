@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ReplayEvent, StudyReplayProjection } from "../utils/studyReplayProjection";
 import { projectStudyReplayState, reassembleStudyEvents } from "../utils/studyReplayProjection";
 import {
@@ -344,6 +347,78 @@ const buildInput = (
     const csv = toCsv(rows);
     assert.equal(csv.split("\n").length, 4, "header + 2 rows + trailing newline");
     console.log("deployment CSV rows verified");
+}
+
+// T9 — CLI smoke. scripts/study-analyze.ts lists a deployment's sessions,
+// folds each, and writes a private JSON + CSV export. Drives a stub Worker
+// (Bun.serve) so no network is touched. Mirrors the study-replay CLI smoke.
+{
+    const smokeBatch = {
+        v: 1,
+        eventSchema: "motionsmith-study-event-v1",
+        snapshotSchema: "motionsmith-study-snapshot-v1",
+        batchId: "bat_smoke_1",
+        deployment: "smoke-analyze",
+        appVersion: "0.0.10",
+        buildSha: "0123456789abcdef0123456789abcdef01234567",
+        profile: "study",
+        classId: "class-smoke",
+        classSessionId: "session-smoke",
+        teamId: "team-smoke",
+        participantId: "participant-smoke",
+        sessionId: "ses_smoke",
+        contextId: "ctx_smoke",
+        sessionCount: 1,
+        reconnectCount: 1,
+        records: [
+            { seq: 1, t: 100, type: "session.start", stage: "character", data: {} },
+            { seq: 2, t: 200, type: "stage.view", stage: "path", data: { from: "character", to: "path", dwellMs: 1000 } },
+            { seq: 3, t: 300, type: "export.download", stage: "assembly", data: { extension: "pdf", mime: "application/pdf", bytes: 7 } },
+            { seq: 4, t: 400, type: "session.pagehide", stage: "assembly", data: { activeMs: 2000, completed: true } },
+        ],
+    };
+    const fixture = Bun.serve({
+        port: 0,
+        fetch(request) {
+            if (request.headers.get("Authorization") !== "Bearer analyze-secret") return new Response("no", { status: 401 });
+            const url = new URL(request.url);
+            if (url.pathname === "/admin/sessions") return Response.json({ sessions: ["ses_smoke"], cursor: null });
+            if (url.pathname.startsWith("/admin/session/")) return Response.json({ batches: [smokeBatch], assets: [], cursor: null });
+            return new Response("missing", { status: 404 });
+        },
+    });
+    const dir = await mkdtemp(join(tmpdir(), "motionsmith-analyze-"));
+    const outPrefix = join(dir, "out");
+    const baseArgs = ["bun", "scripts/study-analyze.ts", "--endpoint", `http://127.0.0.1:${fixture.port}`, "--deployment", "smoke-analyze", "--out", outPrefix];
+    try {
+        const child = Bun.spawn(baseArgs, { cwd: process.cwd(), env: { ...process.env, STUDY_ADMIN_TOKEN: "analyze-secret" }, stdout: "pipe", stderr: "pipe" });
+        const stdoutText = await new Response(child.stdout).text();
+        assert.equal(await child.exited, 0, `analyze CLI exits cleanly: ${await new Response(child.stderr).text()}`);
+
+        const jsonStat = await stat(`${outPrefix}.json`);
+        const csvStat = await stat(`${outPrefix}.csv`);
+        assert.equal(jsonStat.mode & 0o777, 0o600, "JSON export is owner-readable only");
+        assert.equal(csvStat.mode & 0o777, 0o600, "CSV export is owner-readable only");
+
+        const payload = JSON.parse(await readFile(`${outPrefix}.json`, "utf8")) as { deployment: string; sessions: unknown[]; aggregate: { completionFunnel: Record<string, number> }; warnings: string[] };
+        assert.equal(payload.deployment, "smoke-analyze");
+        assert.equal(payload.sessions.length, 1);
+        assert.equal(payload.aggregate.completionFunnel.export, 1, "aggregate funnel counts the smoke session's export");
+        assert.ok(Array.isArray(payload.warnings));
+
+        const csv = await readFile(`${outPrefix}.csv`, "utf8");
+        assert.equal(csv.split("\n").length, 3, "CSV has header + one session row + trailing newline");
+        assert.ok(csv.includes("ses_smoke"), "CSV row carries the session id");
+
+        assert.ok(stdoutText.includes("completion funnel") && stdoutText.includes("wrote:"), `stdout summary present: ${stdoutText}`);
+
+        const overwrite = Bun.spawn(baseArgs, { cwd: process.cwd(), env: { ...process.env, STUDY_ADMIN_TOKEN: "analyze-secret" }, stdout: "ignore", stderr: "ignore" });
+        assert.notEqual(await overwrite.exited, 0, "analyze CLI does not overwrite an existing export without --force");
+    } finally {
+        fixture.stop(true);
+        await rm(dir, { recursive: true, force: true });
+    }
+    console.log("T9 CLI smoke verified: list -> fold -> JSON+CSV export (mode 0600), --force gate");
 }
 
 console.log("study metrics contracts passed");
