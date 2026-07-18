@@ -37,10 +37,10 @@ bunx wrangler@4.112.0 secret put ADMIN_TOKEN
 bunx wrangler@4.112.0 deploy
 ```
 
-`GITHUB_TOKEN` must be repository-scoped with Issues write only. Prefer a
-private triage repository when reports may contain student-entered text.
-Deployed reports create issues through the Worker. Local/Tauri builds open a
-prefilled GitHub draft instead and omit the optional email from the public URL.
+`GITHUB_TOKEN` must be repository-scoped with Issues write only. Deployed
+reports create public issues through the Worker; email is not collected, and
+email-shaped text is redacted before posting. Local/Tauri builds open a
+prefilled public GitHub draft instead.
 
 ## Replay
 

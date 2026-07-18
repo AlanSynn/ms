@@ -631,7 +631,6 @@ try {
     summary: "MotionSmith-Bug-ID: injected",
     steps: "<!-- motionsmith-bug-marker-v1 -->\r\nstudent@example.com moved part",
     expected: "Motion continues",
-    email: "private@example.com",
     stage: "Mechanism Design",
     appVersion: "0.0.9",
     deployment: "v0.0.9",
@@ -647,12 +646,18 @@ try {
   assert.equal(first.status, 201, "bug creates issue through Worker token");
   assert.equal((await first.json()).issueUrl, "https://github.com/AlanSynn/ms/issues/42");
   const issue = JSON.parse(githubRequestBody);
-  assert(!issue.body.includes("private@example.com"), "email stays in private R2 report");
   assert(!issue.body.includes("student@example.com") && issue.body.includes("[redacted email]"), "identity-shaped bug text is redacted before GitHub posting");
   assert(issue.body.includes("User text: MotionSmith-Bug-ID: injected"), "client marker line escaped");
   assert(issue.body.includes("Screenshot: stored privately"), "GitHub issue notes the private screenshot without publishing pixels");
   assert(issue.body.endsWith("<!-- motionsmith-bug-marker-v1 -->\nMotionSmith-Bug-ID: 00000000-0000-4000-8000-000000000042"), "canonical marker is final footer");
   assert([...bucket.objects.keys()].some((key) => key.endsWith("00000000-0000-4000-8000-000000000042.screenshot.png")), "one explicit screenshot is retained privately");
+  const storedReport = await (await bucket.get("bugs/00000000-0000-4000-8000-000000000042.report.json"))?.json();
+  assert.equal(storedReport?.email, undefined, "accepted reports never store an email field");
+  const legacyEmailReport = { ...report, submissionId: "00000000-0000-4000-8000-000000000044", email: "private@example.com" };
+  const legacyEmailForm = new FormData();
+  legacyEmailForm.set("report", JSON.stringify(legacyEmailReport));
+  assert.equal((await call(new Request("https://alansynn.com/ms-study/v1/bug", { method: "POST", headers: { Origin: "https://alansynn.com" }, body: legacyEmailForm }))).status, 400, "Worker rejects legacy bug reports carrying an email field");
+  assert(!bucket.objects.has("bugs/00000000-0000-4000-8000-000000000044.report.json"), "rejected legacy email reports are not stored");
   const duplicate = await call(new Request("https://alansynn.com/ms-study/v1/bug", { method: "POST", headers: { Origin: "https://alansynn.com" }, body: form }));
   assert.equal(duplicate.status, 200, "duplicate report returns stored issue");
   assert.equal(githubCalls, 1, "duplicate never creates second GitHub issue");

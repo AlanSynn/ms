@@ -401,7 +401,7 @@ function validAssetMeta(value) {
 }
 
 function validBugReport(value) {
-  const limits = { submissionId: 64, summary: 160, steps: 4000, expected: 2000, email: 254, stage: 100, appVersion: 40, deployment: 96, buildSha: 96, browserFamily: 24, browserMajor: 16, viewportBucket: 16 };
+  const limits = { submissionId: 64, summary: 160, steps: 4000, expected: 2000, stage: 100, appVersion: 40, deployment: 96, buildSha: 96, browserFamily: 24, browserMajor: 16, viewportBucket: 16 };
   return exactKeys(value, Object.keys(limits))
     && Object.entries(limits).every(([key, limit]) => typeof value[key] === "string" && value[key].length <= limit)
     && /^[0-9a-f-]{36}$/.test(value.submissionId)

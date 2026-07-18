@@ -10,7 +10,6 @@ export const BUG_REPORT_LIMITS = {
   summary: 160,
   steps: 4000,
   expected: 2000,
-  email: 254,
   stage: 100,
 } as const;
 
@@ -26,7 +25,6 @@ export type BugReportFields = {
   summary: string;
   steps: string;
   expected: string;
-  email: string;
   stage: string;
   appVersion: string;
 };
@@ -140,12 +138,11 @@ export const bugReportText = (fields: BugReportFields) => [
   `Steps\n${fields.steps.trim() || "Not provided"}`,
   `Expected\n${fields.expected.trim() || "Not provided"}`,
   `Context\nStage: ${fields.stage}\nApp: MotionSmith v${fields.appVersion}\nDeployment: ${bugDeployment}\nBuild: ${bugBuildSha}`,
-  fields.email.trim() ? `Contact\n${fields.email.trim()}` : "",
 ].filter(Boolean).join("\n\n");
 
 const bugReportDraftUrl = (fields: BugReportFields) => `${BUG_ISSUE_URL}?${new URLSearchParams({
   title: `Bug: ${redactPublicIdentity(bounded(fields.summary, 80)) || fields.stage}`,
-  body: redactPublicIdentity(bugReportText({ ...fields, email: "" })),
+  body: redactPublicIdentity(bugReportText(fields)),
   labels: "bug",
 })}`;
 
@@ -160,7 +157,6 @@ export const submitBugReport = async (
     summary: bounded(fields.summary, BUG_REPORT_LIMITS.summary),
     steps: bounded(fields.steps, BUG_REPORT_LIMITS.steps),
     expected: bounded(fields.expected, BUG_REPORT_LIMITS.expected),
-    email: bounded(fields.email, BUG_REPORT_LIMITS.email),
     stage: bounded(fields.stage, BUG_REPORT_LIMITS.stage),
     appVersion: fields.appVersion,
     deployment: bugDeployment,

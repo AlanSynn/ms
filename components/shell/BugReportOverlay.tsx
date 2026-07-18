@@ -20,7 +20,6 @@ export const BugReportOverlay = ({
   const [summary, setSummary] = useState("");
   const [steps, setSteps] = useState("");
   const [expected, setExpected] = useState("");
-  const [email, setEmail] = useState("");
   const [screenshot, setScreenshot] = useState<BugScreenshot>();
   const [status, setStatus] = useState("Ready");
   const [capturing, setCapturing] = useState(false);
@@ -32,10 +31,9 @@ export const BugReportOverlay = ({
     summary,
     steps,
     expected,
-    email,
     stage: stageLabel,
     appVersion: __APP_VERSION__,
-  }), [email, expected, stageLabel, steps, summary]);
+  }), [expected, stageLabel, steps, summary]);
 
   useEffect(() => () => {
     if (screenshot) URL.revokeObjectURL(screenshot.url);
@@ -123,10 +121,6 @@ export const BugReportOverlay = ({
         <label className="bug-report-field">
           <span>What should happen?</span>
           <textarea className="field" value={expected} onChange={(event) => { setExpected(event.target.value); clearResult(); }} placeholder="Expected result" rows={2} maxLength={BUG_REPORT_LIMITS.expected} required />
-        </label>
-        <label className="bug-report-field">
-          <span>Email optional</span>
-          <input className="field" value={email} onChange={(event) => { setEmail(event.target.value); clearResult(); }} placeholder="Only if you want a reply" type="email" maxLength={BUG_REPORT_LIMITS.email} />
         </label>
 
         <div className="bug-report-actions">
