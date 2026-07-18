@@ -3,7 +3,22 @@ const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/;
 const SAFE_CODE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
 const DIRECT_KEY = /^(?:name|title|description|instruction|summary|steps|expected|actual|email|phone|address|schoolid|studentid|useragent|ip|ipaddress|latitude|longitude|location|geo|filename|sourceimagename|url|uri|message|error|stack|text|note|comment|jointmap|hierarchy)$/i;
-const DIRECT_IDENTITY_VALUE = /(?:[^\s@]+@[^\s@]+\.[^\s@]+)|(?:\+?\d[\d ().-]{7,}\d)/;
+// Direct-identity scrub for STRING values/keys in record.data (envelope fields
+// go through SAFE_ID, not this). Three arms:
+//   1. email — x@y.z
+//   2. a GROUPED phone — digit groups of >=2 (first group 1-4) split by phone
+//      separators (space, (), ., -). Requiring separators distinguishes a real
+//      phone from a bare numeric run.
+//   3. a bare international number — '+' then 7-15 digits.
+// Deliberately NOT matched: a bare (no '+', no separator) digit run of any
+// length. The prior `+?\d[\d ().-]{7,}\d` arm matched any 9+ char digit run and
+// rejected benign telemetry (stringified ms timestamps, numeric IDs, hex
+// digests). Underscore is intentionally excluded from the separator class so
+// the grouped alias format `ent_xxxx_xxxx_xxxx_xxxx` never reads as a phone.
+// Trade-off: an unformatted domestic phone typed as a bare digit string is not
+// caught here — it is instead prevented by field-level allow-listing in the
+// client scrubber, since every emitted field is a known enum/bounded value.
+const DIRECT_IDENTITY_VALUE = /(?:[^\s@]+@[^\s@]+\.[^\s@]+)|(?:\+?\(?\d{1,4}[ ().-]+\d{2,4}(?:[ ().-]+\d{2,4}){1,3})|(?:\+\d{7,15})/;
 
 export default {
   async fetch(request, env) {

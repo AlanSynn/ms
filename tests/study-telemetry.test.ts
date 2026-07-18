@@ -324,12 +324,12 @@ assert.equal(batchResponse.status, 201, "valid batch stored");
 assert([...bucket.objects.keys()].some((key) => key.includes(envelope.sessionId) && key.endsWith(".json.gz")), "session-keyed canonical gzip batch exists");
 
 // Entity aliases must stay opaque to the Worker's phone/email identity guard.
-// The digest is hex, so an ungrouped `ent_<16 hex>` can contain a 9+ decimal
-// digit run that matches the phone pattern and gets the whole snapshot
-// rejected. Aliases are grouped (4 hex chars per `_`-separated block) so no
-// digit run reaches that length — and this must hold for hostile seeds too.
+// Aliases are grouped `ent_xxxx_xxxx_xxxx_xxxx` (4 hex per `_`-separated block).
+// The deployed guard matches only SEPARATED digit groups (space/paren/dot/dash)
+// or a leading-`+` run; underscore is not a phone separator, so the grouped
+// alias never reads as a phone — and this must hold for hostile seeds too.
 {
-  const identityPattern = /(?:[^\s@]+@[^\s@]+\.[^\s@]+)|(?:\+?\d[\d ().-]{7,}\d)/;
+  const identityPattern = /(?:[^\s@]+@[^\s@]+\.[^\s@]+)|(?:\+?\(?\d{1,4}[ ().-]+\d{2,4}(?:[ ().-]+\d{2,4}){1,3})|(?:\+\d{7,15})/;
   for (const seed of ["part_a", "path_b", "joint_c", "9999999999", "1111111111111111", "p_00000000-0000-4000-8000-000000000001"]) {
     const alias = studyEntityAlias("prj_guard", seed);
     assert(/^ent_[0-9a-f]{4}(_[0-9a-f]{4}){3}$/.test(alias), `alias shape stable for ${seed}: ${alias}`);
@@ -406,6 +406,45 @@ assert([...bucket.objects.keys()].some((key) => key.includes(envelope.sessionId)
     body: JSON.stringify(numericEnvelope),
   }));
   assert.equal(numericResponse.status, 201, `enum+numeric study fields ingest through the identity guard: ${await numericResponse.text()}`);
+}
+
+// Hardened identity guard (#17). The phone arm now requires SEPARATORS (or a
+// leading '+') so a bare digit run no longer reads as PII. A stringified
+// timestamp / numeric ID — the false positive that bit new telemetry string
+// fields — must INGEST, while formatted and international phones still reject.
+// All three use the neutral key `value` (not a DIRECT_KEY), so the verdict is
+// driven solely by the value regex, not the key blocklist.
+{
+  // Bare 13-digit run, no separators, no '+'. The prior `+?\d[\d ().-]{7,}\d`
+  // arm matched this and rejected; it must now ingest.
+  const bareNumeric = structuredClone(envelope);
+  bareNumeric.batchId = "bat_00000000-0000-4000-8000-000000000bare";
+  bareNumeric.records[0].data = { value: "1719900000000" } as never;
+  assert.equal((await call(new Request("https://alansynn.com/ms-study/v1/batch", {
+    method: "POST",
+    headers: { Origin: "https://alansynn.com", "Content-Type": "application/json" },
+    body: JSON.stringify(bareNumeric),
+  }))).status, 201, "bare 13-digit numeric string ingests (no longer a phone false positive)");
+
+  // Formatted domestic phone (separators between digit groups) — still rejected.
+  const formattedPhone = structuredClone(envelope);
+  formattedPhone.batchId = "bat_00000000-0000-4000-8000-0000000000ph1";
+  formattedPhone.records[0].data = { value: "555-123-4567" } as never;
+  assert.equal((await call(new Request("https://alansynn.com/ms-study/v1/batch", {
+    method: "POST",
+    headers: { Origin: "https://alansynn.com", "Content-Type": "application/json" },
+    body: JSON.stringify(formattedPhone),
+  }))).status, 400, "formatted domestic phone (separators) still rejected");
+
+  // Bare international phone (leading '+', 7-15 digits) — still rejected.
+  const intlPhone = structuredClone(envelope);
+  intlPhone.batchId = "bat_00000000-0000-4000-8000-0000000000ph2";
+  intlPhone.records[0].data = { value: "+15551234567" } as never;
+  assert.equal((await call(new Request("https://alansynn.com/ms-study/v1/batch", {
+    method: "POST",
+    headers: { Origin: "https://alansynn.com", "Content-Type": "application/json" },
+    body: JSON.stringify(intlPhone),
+  }))).status, 400, "bare international phone (+ leading) still rejected");
 }
 
 const duplicateGzipBody = await new Response(new Blob([JSON.stringify(envelope)]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer();
