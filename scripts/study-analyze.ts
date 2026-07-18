@@ -143,9 +143,18 @@ for (const sessionId of sessions) {
     buildShas.add(meta.buildSha);
     const { events, losses } = reassembleStudyEvents(rawEvents);
     const projection = projectStudyReplayState(events);
-    const ts = events.map((event) => Number(event.t)).filter((value) => Number.isFinite(value));
-    const firstT = ts.length ? Math.min(...ts) : 0;
-    const lastT = ts.length ? Math.max(...ts) : 0;
+    // Reduce instead of Math.min/max(...spread): a large session can exceed the
+    // engine's spread-argument ceiling, collapsing min/max to NaN.
+    let firstT = Infinity;
+    let lastT = -Infinity;
+    for (const event of events) {
+        const value = Number(event.t);
+        if (!Number.isFinite(value)) continue;
+        if (value < firstT) firstT = value;
+        if (value > lastT) lastT = value;
+    }
+    if (!Number.isFinite(firstT)) firstT = 0;
+    if (!Number.isFinite(lastT)) lastT = 0;
     const metrics = computeSessionMetrics({ meta, events, losses, projection, firstT, lastT });
     metricsList.push(metrics);
     if (expectedProfile && meta.profile !== expectedProfile) {

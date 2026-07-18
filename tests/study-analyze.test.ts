@@ -313,6 +313,45 @@ const buildInput = (
     console.log("T8 reconnect/multi-context verified: latest authored state wins, no cross-context bleed");
 }
 
+// T8b — finalHasExport reads lastExport. An export authored via set_export
+// AFTER the last snapshot sets state.lastExport but never exportSummary. The
+// metric must report finalHasExport=true (the common near-end-of-session case).
+// Regression guard: an earlier version read only exportSummary and missed this.
+{
+    const baseState = { parts: {}, partOrder: [], paths: {}, sceneObjects: {}, sceneObjectOrder: [], mechanisms: [] };
+    const events: Ev[] = [
+        ev("project.snapshot", 100, 1, { reason: "initial", state: { ...baseState, mechanisms: [{ id: "ent_m1", type: "four_bar", enabled: true }] } }),
+        // export authored after the snapshot — exportSummary stays absent, but
+        // applyReplayAction("set_export") sets finalState.lastExport.
+        ev("project.action", 200, 2, { type: "set_export", fabricationPackage: { recipes: 2 } }),
+        ev("session.pagehide", 300, 3, { activeMs: 1000, completed: true }),
+    ];
+    const metrics = computeSessionMetrics(buildInput(events));
+    assert.equal(metrics.finalHasExport, true, "finalHasExport reads lastExport when exportSummary is absent");
+    // sanity: the projection actually applied the set_export (not a no-op).
+    assert.equal(metrics.actionFamilyCounts.export, 1, "set_export tallied as export family");
+    console.log("T8b finalHasExport verified: reads lastExport, not only exportSummary");
+}
+
+// T8c — pauseMsLowerBound keeps the earliest open pause. A double-pause before a
+// single resume (a resume was lost — tab closed mid-pause) must measure from the
+// FIRST pause, not be silently shortened by overwriting to the second.
+// Regression guard for the overwriting `?? openPauseT` line.
+{
+    const events: Ev[] = [
+        ev("session.start", 100, 1, {}),
+        ev("session.pause", 500, 2, {}),
+        ev("session.pause", 700, 3, {}),
+        ev("session.resume", 1000, 4, {}),
+        ev("session.pagehide", 1100, 5, { activeMs: 2000, completed: false }),
+    ];
+    const metrics = computeSessionMetrics(buildInput(events));
+    assert.equal(metrics.pauseCount, 2);
+    assert.equal(metrics.resumeCount, 1);
+    assert.equal(metrics.pauseMsLowerBound, 500, "lower bound measured from the earliest open pause (1000-500)");
+    console.log("T8c pauseMsLowerBound verified: earliest open pause wins, no silent overwrite on double-pause");
+}
+
 // Pure-helper unit checks (statistical primitives + action family mapping).
 {
     assert.equal(median([1, 2, 3]), 2);

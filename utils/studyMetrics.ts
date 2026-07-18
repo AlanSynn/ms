@@ -353,8 +353,6 @@ const finalStateOfSession = (projection: StudyReplayProjection): ReplayState | n
     return timeline.length ? (timeline[timeline.length - 1] ?? null) : null;
 };
 
-const EMPTY_DISTRIBUTION: Record<string, number> = {};
-
 export const computeSessionMetrics = (input: SessionMetricsInput): SessionMetrics => {
     const { meta, events, losses, projection, firstT, lastT } = input;
     const contextCount = projection.contexts.length;
@@ -417,10 +415,15 @@ export const computeSessionMetrics = (input: SessionMetricsInput): SessionMetric
     let lastRequestTByContext: Record<string, number> = {};
     for (const event of events) {
         const detail = dataOf(event);
-        const contextId = str(event.contextId) || "";
+        // Track the pairing key only when a contextId is present: a missing one
+        // must not collapse unrelated requests into a shared "" bucket.
+        const contextId = str(event.contextId);
         if (event.type === "recommendation.request") {
             recommendationRequests += 1;
-            lastRequestTByContext[contextId] = num(event.t) ?? lastRequestTByContext[contextId] ?? 0;
+            // Anchor the pairing only on a real timestamp; a request with no t
+            // cannot anchor a duration and is left unpaired.
+            const requestT = num(event.t);
+            if (contextId && requestT != null) lastRequestTByContext[contextId] = requestT;
         } else if (event.type === "recommendation.accept") {
             recommendationAccepts += 1;
             const type = str(detail.mechanismType);
@@ -429,12 +432,12 @@ export const computeSessionMetrics = (input: SessionMetricsInput): SessionMetric
             if (rank != null) rankAtAcceptance.push(rank);
             const candidateCount = num(detail.candidateCount);
             if (candidateCount != null) candidateCountAtAcceptance.push(candidateCount);
-            const requestT = lastRequestTByContext[contextId];
-            if (requestT != null) considerationMs.push(Math.max(0, (num(event.t) ?? 0) - requestT));
+            const requestT = contextId ? lastRequestTByContext[contextId] : undefined;
+            if (requestT != null) considerationMs.push(Math.max(0, (num(event.t) ?? requestT) - requestT));
         } else if (event.type === "recommendation.dismiss") {
             recommendationDismisses += 1;
-            const requestT = lastRequestTByContext[contextId];
-            if (requestT != null) considerationMs.push(Math.max(0, (num(event.t) ?? 0) - requestT));
+            const requestT = contextId ? lastRequestTByContext[contextId] : undefined;
+            if (requestT != null) considerationMs.push(Math.max(0, (num(event.t) ?? requestT) - requestT));
         }
     }
 
@@ -457,7 +460,8 @@ export const computeSessionMetrics = (input: SessionMetricsInput): SessionMetric
         if (actionType === "upsert_path" || actionType === "delete_path") pathEditCount += 1;
         if (actionType === "add_joint" || actionType === "update_joint" || actionType === "remove_joint" || actionType === "set_skeleton") skeletonEditCount += 1;
         if (actionType === "upsert_mechanism" || actionType === "commit_mechanism_candidate" || actionType === "delete_mechanism" || actionType === "set_mechanisms") mechanismEditCount += 1;
-        if (actionType === "redo") redoCount += 1;
+        // redo/undo are top-level project.redo / project.undo events, not
+        // project.action payloads — counted in the loop below.
     }
     for (const event of events) {
         if (event.type === "project.undo") undoCount += 1;
@@ -573,7 +577,11 @@ export const computeSessionMetrics = (input: SessionMetricsInput): SessionMetric
     for (const event of events) {
         if (event.type === "session.pause") {
             pauseCount += 1;
-            openPauseT = num(event.t) ?? openPauseT;
+            // Keep the EARLIEST open pause: the lower bound is tightest from the
+            // earliest start. A second pause before any resume means a resume was
+            // missed (e.g. tab closed mid-pause) — that interval is unmeasurable,
+            // and overwriting would silently drop the measured portion.
+            if (openPauseT == null) openPauseT = num(event.t) ?? null;
         } else if (event.type === "session.resume") {
             resumeCount += 1;
             if (openPauseT != null) {
@@ -593,7 +601,12 @@ export const computeSessionMetrics = (input: SessionMetricsInput): SessionMetric
     const finalValidMechanismCount = finalState
         ? mechanisms.filter((mechanism) => mechanism.enabled === true).length
         : null;
-    const finalHasExport = finalState ? Boolean(finalState.exportSummary) : false;
+    // An export lives in the final state two ways: lastExport (written by a
+    // replayed set_export action after the last snapshot — the common case,
+    // since users export near the end) or exportSummary (synthesized into a
+    // snapshot taken after an export). Read both so an export that followed the
+    // final snapshot is not misreported as absent.
+    const finalHasExport = finalState ? Boolean(finalState.lastExport ?? finalState.exportSummary) : false;
 
     const incompleteSnapshots = losses.filter((loss) => loss.kind === "incomplete_snapshot").length;
 
@@ -629,7 +642,7 @@ export const computeSessionMetrics = (input: SessionMetricsInput): SessionMetric
         reachedExport: funnel.reachedExport,
         completedProject: funnel.completedProject,
         mechanismTypesAccepted,
-        mechanismTypeDistribution: finalState ? mechanismTypeDistributionFromProjection(projection) : EMPTY_DISTRIBUTION,
+        mechanismTypeDistribution: mechanismTypeDistributionFromProjection(projection),
         recommendationRequests,
         recommendationAccepts,
         recommendationDismisses,
@@ -796,7 +809,9 @@ export const aggregateSessionMetrics = (sessions: SessionMetrics[]): DeploymentA
 const csvCell = (value: string | number | boolean | null | undefined): string => {
     if (value == null) return "";
     const text = typeof value === "string" ? value : String(value);
-    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    // RFC 4180: quote when the cell contains a comma, quote, or any line break
+    // (including a bare CR).
+    return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 };
 
 const csvPair = (
@@ -890,8 +905,11 @@ export const deploymentMetricsToCsvRows = (
 ): Array<Record<string, string | number | boolean>> =>
     sessions.map(sessionMetricsToCsvRow);
 
+// Deterministic key order: sort lexicographically so a distribution serializes
+// identically regardless of insertion order (CSV group-by relies on this).
 const formatDistribution = (distribution: Record<string, number>): string =>
     Object.entries(distribution)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
         .map(([key, value]) => `${key}:${value}`)
         .join("|");
 
