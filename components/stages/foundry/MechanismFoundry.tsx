@@ -59,7 +59,7 @@ import {
   sampleFeasibleRange,
 } from "../../../utils/fabrication";
 import { compactStudentActionForFabricationDiagnostic, fabricationDiagnosticCategory } from "../../../utils/fabricationReadiness";
-import { recordStudyEvent } from "../../../utils/studyTelemetry";
+import { recordStudyEvent } from "../../../utils/studyTelemetryBoundary";
 import { buildProjectMechanismSceneContract } from "../../../utils/mechanismSceneContract";
 import {
   connectionSelectionSignature,

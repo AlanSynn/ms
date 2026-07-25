@@ -225,14 +225,14 @@ const bytesToBase64Url = (bytes: Uint8Array) => {
   return btoa(chunks.join("")).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 };
 
-export const makeStudySnapshotRecords = (
-  project: ProjectState,
-  projectAlias: string,
+export type StudySnapshotRecord = { type: string; data: unknown };
+
+const snapshotRecords = (
+  state: unknown,
+  bytes: Uint8Array,
   reason: string,
   snapshotId: string,
-) => {
-  const state = studyProjectSnapshot(project, projectAlias);
-  const bytes = new TextEncoder().encode(JSON.stringify(state));
+): StudySnapshotRecord[] => {
   if (bytes.byteLength <= 240 * 1024) {
     return [{
       type: "project.snapshot",
@@ -242,7 +242,7 @@ export const makeStudySnapshotRecords = (
 
   const chunkSize = 96 * 1024;
   const total = Math.ceil(bytes.byteLength / chunkSize);
-  const records: Array<{ type: string; data: unknown }> = [{
+  const records: StudySnapshotRecord[] = [{
     type: "project.snapshot.begin",
     data: { snapshotId, reason, snapshotSchema: STUDY_SNAPSHOT_SCHEMA, total, bytes: bytes.byteLength },
   }];
@@ -260,6 +260,46 @@ export const makeStudySnapshotRecords = (
     });
   }
   return records;
+};
+
+const snapshotPayload = (
+  project: ProjectState,
+  projectAlias: string,
+  reason: string,
+  snapshotId: string,
+) => {
+  const state = studyProjectSnapshot(project, projectAlias);
+  const bytes = new TextEncoder().encode(JSON.stringify(state));
+  return { bytes, records: snapshotRecords(state, bytes, reason, snapshotId) };
+};
+
+export const makeStudySnapshotRecords = (
+  project: ProjectState,
+  projectAlias: string,
+  reason: string,
+  snapshotId: string,
+) => snapshotPayload(project, projectAlias, reason, snapshotId).records;
+
+export const prepareStudySnapshotRecords = async (
+  project: ProjectState,
+  projectAlias: string,
+  reason: string,
+  snapshotId: string,
+) => {
+  const { bytes, records } = snapshotPayload(
+    project,
+    projectAlias,
+    reason,
+    snapshotId,
+  );
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return {
+    contentHash: Array.from(
+      digest,
+      (byte) => byte.toString(16).padStart(2, "0"),
+    ).join(""),
+    records,
+  };
 };
 
 export const studyProjectCounts = (project: ProjectState) => ({

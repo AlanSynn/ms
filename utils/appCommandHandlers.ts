@@ -1,6 +1,6 @@
 import type { AppStage } from "../types";
 import type { AppCommandHandlerMap } from "./appCommands";
-import { recordStudyEvent } from "./studyTelemetry";
+import { recordStudyEvent } from "./studyTelemetryBoundary";
 
 type CreateAppCommandHandlersOptions = {
   newProject: () => void;

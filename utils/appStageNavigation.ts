@@ -2,7 +2,7 @@ import type { AppStage, ProjectAction, ProjectState } from "../types";
 import { handoffGate } from "./project";
 import { projectMechanismReadiness } from "./mechanismReadiness";
 import { hasHardReadinessBlockers } from "./fabricationReadiness";
-import { recordStudyEvent } from "./studyTelemetry";
+import { recordStudyEvent } from "./studyTelemetryBoundary";
 
 type NavigateAppStageOptions = {
   project: ProjectState;

@@ -6,10 +6,16 @@ import { join } from "node:path";
 import worker from "../infrastructure/study/worker.js";
 import type { ProjectAction } from "../types";
 import { applyProjectAction, applyProjectActionResult, createSampleProject } from "../utils/project";
-import { checkpointBatchIntact, studyProfileIncludes } from "../utils/studyTelemetry";
+import {
+  checkpointBatchIntact,
+  mergeExitCheckpointBatches,
+  studyProfileIncludes,
+  studyTransportPolicyFor,
+} from "../utils/studyTelemetry";
 import { projectStudyReplayState, reassembleStudyEvents } from "../utils/studyReplayProjection";
 import {
   makeStudySnapshotRecords,
+  prepareStudySnapshotRecords,
   scrubStudyValue,
   STUDY_EVENT_SCHEMA,
   STUDY_SNAPSHOT_SCHEMA,
@@ -40,8 +46,14 @@ const projectAlias = "prj_00000000-0000-4000-8000-000000000000";
 const telemetryTransportSource = readFileSync(join(process.cwd(), "utils/studyTelemetry.ts"), "utf8");
 assert(telemetryTransportSource.includes('openCursor()') && !telemetryTransportSource.includes('.getAll()') && telemetryTransportSource.includes('Array<{ id: string; deliveryClass: DeliveryClass }>'), "outbox scans through cursors and retains only metadata for incompatible queue entries");
 assert(telemetryTransportSource.includes('state: "quarantined"') && telemetryTransportSource.includes('deliveryClass'), "delivery preserves priority metadata and quarantines non-retryable batches without retaining payloads");
-assert(telemetryTransportSource.includes('0.5 + Math.random() * 0.5') && telemetryTransportSource.includes('offline-recovery'), "delivery retry jitter and adaptive transport state are explicit");
+assert(telemetryTransportSource.includes("scheduleReconnectDrain") && telemetryTransportSource.includes("collapseSnapshots"), "reconnect jitter and constrained snapshot collapse are explicit");
 assert(telemetryTransportSource.includes('batch = makeBatch(false, deliveryClass);'), "exit beacons only reserve one keepalive-sized packet; remaining snapshot chunks use durable batches");
+assert(telemetryTransportSource.includes("prepared.generation !== snapshotGeneration") && telemetryTransportSource.includes("activeBatches"), "snapshot commits require the current generation and exit checkpoints retain reserved batches");
+assert(readFileSync(join(process.cwd(), "utils/studySnapshotWorker.ts"), "utf8").includes("recordsBuffer") && readFileSync(join(process.cwd(), "utils/studySnapshotWorker.ts"), "utf8").includes("[recordsBuffer]"), "snapshot records return through a transferable buffer instead of nested structured clone");
+const viteConfigSource = readFileSync(join(process.cwd(), "vite.config.ts"), "utf8");
+assert(viteConfigSource.includes("motionsmith-study-boundary") && viteConfigSource.includes("loadEnv"), "one Vite-aware build boundary controls the optional telemetry runtime");
+assert(readFileSync(join(process.cwd(), "hooks/useStudyTelemetryBoundary.ts"), "utf8").includes('typeof import("./useStudyTelemetry").useStudyTelemetry'), "the removable no-op hook type-checks against the real study hook");
+assert(readFileSync(join(process.cwd(), "hooks/useMotionSmithAppController.ts"), "utf8").includes("./useStudyTelemetryBoundary"), "the app compiles against the removable telemetry hook boundary");
 assert(readFileSync(join(process.cwd(), "scripts/study-analyze.ts"), "utf8").includes("Number(a.t) - Number(b.t)") && readFileSync(join(process.cwd(), "scripts/study-replay.ts"), "utf8").includes("String(a.contextId).localeCompare(String(b.contextId))"), "cross-context scripts order by elapsed time and context before a local sequence tie-breaker");
 const snapshotText = JSON.stringify(studyProjectSnapshot(project, projectAlias));
 const skeletonActionText = JSON.stringify(studyProjectAction({ type: "set_skeleton", skeleton: project.skeleton }, projectAlias));
@@ -219,6 +231,103 @@ const recoveredSnapshot = JSON.parse(Buffer.concat(largeRecords.slice(1).map((re
   return Buffer.from(parts.join(""), "base64url");
 })).toString("utf8"));
 assert.deepEqual(recoveredSnapshot, studyProjectSnapshot(largeProject, projectAlias), "chunked snapshot round-trips exactly");
+const preparedLarge = await prepareStudySnapshotRecords(largeProject, projectAlias, "large", "snp_large");
+assert.deepEqual(preparedLarge.records, largeRecords, "worker snapshot preparation preserves the synchronous snapshot contract");
+const identityVariant = structuredClone(largeProject);
+identityVariant.metadata.name = "A Different Student";
+identityVariant.parts[identityVariant.partOrder[0]].name = "Private Part Name";
+const preparedIdentityVariant = await prepareStudySnapshotRecords(identityVariant, projectAlias, "different-reason", "snp_other");
+assert.equal(preparedIdentityVariant.contentHash, preparedLarge.contentHash, "snapshot content hash ignores scrubbed identity and transport metadata");
+
+const normalPolicy = studyTransportPolicyFor("normal");
+const constrainedPolicy = studyTransportPolicyFor("constrained");
+const recoveryPolicy = studyTransportPolicyFor("offline-recovery");
+assert(
+  constrainedPolicy.flushIntervalMs > normalPolicy.flushIntervalMs
+    && constrainedPolicy.batchBytes > normalPolicy.batchBytes
+    && constrainedPolicy.retryFloorMs > normalPolicy.retryFloorMs
+    && constrainedPolicy.collapseSnapshots,
+  "constrained transport batches more, flushes less, retries slower, and collapses stale snapshots",
+);
+assert(
+  recoveryPolicy.outboxItemsPerDrain < normalPolicy.outboxItemsPerDrain
+    && recoveryPolicy.drainDelayMs[1] > normalPolicy.drainDelayMs[1]
+    && recoveryPolicy.collapseSnapshots,
+  "offline recovery drains a small jittered window without a reconnect burst",
+);
+
+const checkpointBatch = (batchId: string, type: string) => ({
+  batchId,
+  json: JSON.stringify({ records: [{ type }] }),
+});
+const mergedCheckpoint = mergeExitCheckpointBatches(
+  [
+    checkpointBatch("snapshot-old", "project.snapshot"),
+    checkpointBatch("core-old", "project.action"),
+  ],
+  [
+    checkpointBatch("snapshot-new", "project.snapshot"),
+    checkpointBatch("core-new", "stage.view"),
+  ],
+  3,
+);
+assert.deepEqual(
+  mergedCheckpoint.batches.map((batch) => batch.batchId),
+  ["core-old", "snapshot-new", "core-new"],
+  "exit checkpoints merge instead of overwrite, retaining core actions and the newest snapshot",
+);
+assert.deepEqual(
+  mergedCheckpoint.dropped.map((batch) => batch.batchId),
+  ["snapshot-old"],
+  "checkpoint pressure drops the oldest lower-priority snapshot first",
+);
+const snapshotCheckpointBatch = (
+  batchId: string,
+  snapshotId: string,
+  fill: string,
+) => ({
+  batchId,
+  json: JSON.stringify({
+    participantId: "participant",
+    sessionId: "session",
+    contextId: "context",
+    records: [{
+      project: "project",
+      type: "project.snapshot.chunk",
+      data: { snapshotId, fill },
+    }],
+  }),
+});
+const checkpointCore = checkpointBatch("core", "project.action");
+const olderSnapshot = [
+  snapshotCheckpointBatch("snapshot-old-1", "snapshot-old", "x".repeat(200)),
+  snapshotCheckpointBatch("snapshot-old-2", "snapshot-old", "x".repeat(200)),
+];
+const newerSnapshot = [
+  snapshotCheckpointBatch("snapshot-new-1", "snapshot-new", "x".repeat(200)),
+  snapshotCheckpointBatch("snapshot-new-2", "snapshot-new", "x".repeat(200)),
+];
+const byteBoundCheckpoint = mergeExitCheckpointBatches(
+  [],
+  [...olderSnapshot, ...newerSnapshot, checkpointCore],
+  10,
+  checkpointCore.json.length
+    + newerSnapshot.reduce(
+      (total, batch) => total + batch.batchId.length + batch.json.length,
+      0,
+    )
+    + checkpointCore.batchId.length,
+);
+assert.deepEqual(
+  byteBoundCheckpoint.batches.map((batch) => batch.batchId),
+  ["snapshot-new-1", "snapshot-new-2", "core"],
+  "checkpoint byte pressure keeps core actions and the newest complete snapshot",
+);
+assert.deepEqual(
+  byteBoundCheckpoint.dropped.map((batch) => batch.batchId),
+  ["snapshot-old-1", "snapshot-old-2"],
+  "checkpoint byte pressure drops an old snapshot as one complete generation",
+);
 
 assert(studyProfileIncludes("metrics", "metrics") && !studyProfileIncludes("metrics", "replay"), "metrics profile sends metrics only");
 assert(studyProfileIncludes("replay", "replay") && !studyProfileIncludes("replay", "study"), "replay profile adds semantic replay without pixels");

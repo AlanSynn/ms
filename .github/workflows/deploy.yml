@@ -48,6 +48,12 @@ jobs:
       - name: Test contracts
         run: bun run test
 
+      - name: Install Chromium
+        run: bunx playwright install --with-deps chromium
+
+      - name: Test study telemetry
+        run: bun run test:study:browser
+
       - name: Build
         env:
           VITE_BASE_PATH: /ms/

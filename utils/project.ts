@@ -50,7 +50,7 @@ import {
   resolveMechanismPhysicalConnections,
 } from "./mechanismConnectionSelections";
 import { isUsableContourPoints } from "./partGeometry";
-import { recordStudyEvent } from "./studyTelemetry";
+import { recordStudyEvent } from "./studyTelemetryBoundary";
 import {
   DEFAULT_CLASSROOM_ASSESSMENT_KEY,
   normalizeClassroomAssessmentKey,

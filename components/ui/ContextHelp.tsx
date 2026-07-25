@@ -13,7 +13,7 @@ import {
   type ContextHelpId,
   type HelpLocale,
 } from "../../utils/contextHelp";
-import { recordStudyEvent } from "../../utils/studyTelemetry";
+import { recordStudyEvent } from "../../utils/studyTelemetryBoundary";
 
 export const ContextHelp = ({
   helpId,

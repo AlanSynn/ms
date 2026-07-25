@@ -10,9 +10,10 @@ import {
   scheduleStudySnapshot,
   setStudyViewContext,
   STUDY_PROFILE,
+  studyProfileIncludes,
   studyProjectAlias,
   studyTelemetryEnabled,
-} from "../utils/studyTelemetry";
+} from "../utils/studyTelemetryBoundary";
 
 type StudyTelemetryOptions = {
   project: ProjectState;
@@ -107,7 +108,7 @@ export const useStudyTelemetry = ({
     if (!projectAlias) return;
     recordStudyStage(stage);
     setStudyViewContext(stage, projectAlias);
-    scheduleStudySnapshot(project, projectAlias, "stage", true);
+    scheduleStudySnapshot(project, projectAlias, "stage");
   }, [stage]);
 
   useEffect(() => {
@@ -190,7 +191,10 @@ export const useStudyTelemetry = ({
   }, [showGettingStarted, showShortcuts, showAbout, showRecommendations, showTracking]);
 
   useEffect(() => {
-    if (!studyTelemetryEnabled()) return;
+    if (
+      !studyTelemetryEnabled()
+      || !studyProfileIncludes(STUDY_PROFILE, "replay")
+    ) return;
     const pointers = new Map<number, {
       x: number;
       y: number;

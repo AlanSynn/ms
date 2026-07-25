@@ -39,6 +39,7 @@ type OutboxItem = {
   deliveryClass?: DeliveryClass;
   state?: OutboxState;
   snapshotKey?: string;
+  snapshotSeries?: string;
   failureStatus?: number;
   quarantinedAt?: number;
 };
@@ -96,6 +97,7 @@ const PROJECTS_KEY = "motionsmith.study.projects.v1";
 const SESSION_IDLE_MS = 30 * 60 * 1000;
 const MAX_OUTBOX_BYTES = 48 * 1024 * 1024;
 const MAX_OUTBOX_ITEMS = 256;
+const MAX_EXIT_CHECKPOINT_CHARS = 2_000_000;
 const MAX_BUFFERED_RECORDS = 400;
 const DELIVERY_ORDER: DeliveryClass[] = [
   "core-action",
@@ -209,12 +211,74 @@ const inFlightRecords = new Set<number>();
 let flushTimer: number | undefined;
 let flushDueAt = 0;
 let flushRunning = false;
-type TransportMode = "normal" | "constrained" | "offline-recovery";
+export type TransportMode = "normal" | "constrained" | "offline-recovery";
+type TransportPolicy = {
+  flushIntervalMs: number;
+  batchBytes: number;
+  batchRecords: number;
+  outboxItemsPerDrain: number;
+  drainDelayMs: [number, number];
+  retryFloorMs: number;
+  collapseSnapshots: boolean;
+};
+const connectionIsConstrained = () => {
+  if (typeof navigator === "undefined") return false;
+  const connection = (navigator as Navigator & {
+    connection?: { effectiveType?: string; saveData?: boolean };
+  }).connection;
+  return Boolean(
+    connection?.saveData
+      || connection?.effectiveType === "slow-2g"
+      || connection?.effectiveType === "2g"
+      || connection?.effectiveType === "3g",
+  );
+};
+const TRANSPORT_POLICIES: Record<TransportMode, TransportPolicy> = {
+  normal: {
+    flushIntervalMs: 10_000,
+    batchBytes: 256 * 1024,
+    batchRecords: 160,
+    outboxItemsPerDrain: 8,
+    drainDelayMs: [750, 1_500],
+    retryFloorMs: 5_000,
+    collapseSnapshots: false,
+  },
+  constrained: {
+    flushIntervalMs: 30_000,
+    batchBytes: 400 * 1024,
+    batchRecords: 200,
+    outboxItemsPerDrain: 4,
+    drainDelayMs: [4_000, 7_000],
+    retryFloorMs: 15_000,
+    collapseSnapshots: true,
+  },
+  "offline-recovery": {
+    flushIntervalMs: 20_000,
+    batchBytes: 320 * 1024,
+    batchRecords: 180,
+    outboxItemsPerDrain: 2,
+    drainDelayMs: [2_000, 8_000],
+    retryFloorMs: 10_000,
+    collapseSnapshots: true,
+  },
+};
+export const studyTransportPolicyFor = (mode: TransportMode) => ({
+  ...TRANSPORT_POLICIES[mode],
+  drainDelayMs: [...TRANSPORT_POLICIES[mode].drainDelayMs] as [number, number],
+});
+const activeTransportMode = () =>
+  connectionIsConstrained() ? "constrained" : transportMode;
+const transportPolicy = () => TRANSPORT_POLICIES[activeTransportMode()];
+const randomBetween = ([min, max]: [number, number]) =>
+  min + Math.floor(Math.random() * Math.max(1, max - min + 1));
 let transportMode: TransportMode = "normal";
 let consecutiveDeliveryFailures = 0;
 let consecutiveSlowDeliveries = 0;
 let consecutiveDeliverySuccesses = 0;
 let sawOffline = false;
+let lastSnapshotPreparationMs = 0;
+let maxSnapshotPreparationMs = 0;
+let snapshotPreparationFailures = 0;
 const telemetryLosses: Record<DeliveryClass, number> = {
   "core-action": 0,
   technical: 0,
@@ -242,11 +306,20 @@ const deliveryClassFor = (type: string): DeliveryClass => {
 export const studyTelemetryDiagnostics = () => ({
   bufferedRecords: buffer.length,
   losses: { ...telemetryLosses },
-  transportMode,
+  transportMode: activeTransportMode(),
+  snapshotPreparation: {
+    lastMs: lastSnapshotPreparationMs,
+    maxMs: maxSnapshotPreparationMs,
+    failures: snapshotPreparationFailures,
+  },
 });
 
-const reportTelemetryLoss = (deliveryClass: DeliveryClass) => {
-  telemetryLosses[deliveryClass] += 1;
+const reportTelemetryLosses = (
+  deliveryClass: DeliveryClass,
+  removed = 1,
+) => {
+  if (removed <= 0) return;
+  telemetryLosses[deliveryClass] += removed;
   // The exported counter is always observable. Avoid adding another record while
   // the failed queue is full, because that would defeat the memory bound.
   if (reportingLoss || buffer.length >= MAX_BUFFERED_RECORDS) return;
@@ -258,6 +331,8 @@ const reportTelemetryLoss = (deliveryClass: DeliveryClass) => {
   );
   reportingLoss = false;
 };
+const reportTelemetryLoss = (deliveryClass: DeliveryClass) =>
+  reportTelemetryLosses(deliveryClass);
 
 const discardBufferedLowPriority = () => {
   while (buffer.length > MAX_BUFFERED_RECORDS) {
@@ -287,7 +362,7 @@ const spillBuffer = () => {
 };
 
 const scheduleFlush = (
-  delay = transportMode === "constrained" ? 30_000 : 10_000,
+  delay = transportPolicy().flushIntervalMs,
 ) => {
   if (typeof window === "undefined") return;
   const dueAt = Date.now() + delay;
@@ -308,6 +383,7 @@ export const recordStudyEvent = (
     level?: StudyLevel;
     immediate?: boolean;
     coalesceKey?: string;
+    prescrubbed?: boolean;
   } = {},
 ) => {
   if (!studyTelemetryEnabled()) return;
@@ -319,7 +395,7 @@ export const recordStudyEvent = (
     type: safeCode(type, "unknown"),
     stage: currentStage,
     project: currentProject,
-    data: scrubStudyValue(data),
+    data: options.prescrubbed ? data : scrubStudyValue(data),
     coalesceKey: options.coalesceKey,
     deliveryClass: deliveryClassFor(type),
   };
@@ -386,9 +462,22 @@ const projectActionCoalesceKey = (action: ProjectAction) => {
 };
 
 let forceNextSnapshot = false;
-export const recordStudyProjectReplace = (options: { history?: boolean; resetHistory?: boolean }) => {
+export const recordStudyProjectReplace = (
+  options: { history?: boolean; resetHistory?: boolean },
+  project?: ProjectState,
+) => {
   forceNextSnapshot = true;
+  const alias = project ? studyProjectAlias(project.metadata.id) : undefined;
+  if (alias) setStudyViewContext(currentStage, alias);
   recordStudyEvent("project.replace", options, { level: "replay" });
+  if (project && alias) {
+    scheduleStudySnapshot(
+      project,
+      alias,
+      "replace",
+      true,
+    );
+  }
 };
 
 let pendingSnapshot: {
@@ -396,32 +485,63 @@ let pendingSnapshot: {
   alias: string;
   reason: string;
   generation: number;
+  immediate: boolean;
+} | undefined;
+let preparedSnapshot: {
+  records: Array<{ type: string; data: unknown }>;
+  contentHash: string;
+  generation: number;
 } | undefined;
 let snapshotTimer: number | undefined;
 let snapshotIdle: number | undefined;
+let snapshotCommitTimer: number | undefined;
+let snapshotWorker: Worker | undefined;
 let lastSnapshotAt = 0;
 let snapshotGeneration = 0;
-let lastSnapshotProject: ProjectState | undefined;
-let lastSnapshotAlias: string | undefined;
-
-const commitPendingSnapshot = (emergency = false) => {
-  if (!pendingSnapshot) return;
-  if (snapshotTimer !== undefined || snapshotIdle !== undefined) clearSnapshotSchedule();
-  const { project, alias, reason, generation } = pendingSnapshot;
-  pendingSnapshot = undefined;
-  if (!emergency && document.hidden) return;
-  if (generation !== snapshotGeneration) return;
-  if (project === lastSnapshotProject && alias === lastSnapshotAlias) return;
-  lastSnapshotAt = Date.now();
-  lastSnapshotProject = project;
-  lastSnapshotAlias = alias;
-  makeStudySnapshotRecords(project, alias, reason, uuid("snp")).forEach((record) =>
-    recordStudyEvent(record.type, record.data, { level: "replay" }),
-  );
-  void flushStudyTelemetry("snapshot", false, true, emergency);
+let lastSnapshotContentHash = "";
+let snapshotExitPending = false;
+const measureSnapshotMain = (
+  phase: "handoff" | "commit" | "exit",
+  startedAt: number,
+) => {
+  const name = `motionsmith.study.snapshot.${phase}`;
+  try {
+    performance.clearMeasures(name);
+    performance.measure(name, { start: startedAt, end: performance.now() });
+  } catch {
+    // Performance diagnostics never affect snapshot durability.
+  }
 };
 
-export const commitPendingStudySnapshot = () => commitPendingSnapshot(true);
+const discardPreparedSnapshot = () => {
+  preparedSnapshot = undefined;
+  if (snapshotCommitTimer !== undefined) {
+    window.clearTimeout(snapshotCommitTimer);
+    snapshotCommitTimer = undefined;
+  }
+};
+
+const commitPreparedSnapshot = (emergency = false) => {
+  const prepared = preparedSnapshot;
+  if (!prepared || prepared.generation !== snapshotGeneration) return false;
+  discardPreparedSnapshot();
+  if (prepared.contentHash === lastSnapshotContentHash) return false;
+  lastSnapshotAt = Date.now();
+  lastSnapshotContentHash = prepared.contentHash;
+  prepared.records.forEach((record) =>
+    recordStudyEvent(record.type, record.data, {
+      level: "replay",
+      prescrubbed: true,
+    }),
+  );
+  void flushStudyTelemetry("snapshot", false, true, emergency);
+  return true;
+};
+
+const stopSnapshotWorker = () => {
+  snapshotWorker?.terminate();
+  snapshotWorker = undefined;
+};
 
 const clearSnapshotSchedule = () => {
   if (snapshotTimer !== undefined) window.clearTimeout(snapshotTimer);
@@ -430,18 +550,173 @@ const clearSnapshotSchedule = () => {
   snapshotIdle = undefined;
 };
 
-const scheduleSnapshotIdle = (generation = snapshotGeneration) => {
-  if (typeof window.requestIdleCallback === "function") {
-    snapshotIdle = window.requestIdleCallback(() => {
-      snapshotIdle = undefined;
-      if (generation === snapshotGeneration) commitPendingSnapshot();
-    }, { timeout: 1_000 });
+const startSnapshotPreparation = (generation: number) => {
+  const request = pendingSnapshot;
+  if (!request || request.generation !== generation) return;
+  if (typeof Worker === "undefined") {
+    pendingSnapshot = undefined;
+    snapshotPreparationFailures += 1;
+    reportTelemetryLoss("snapshot");
     return;
   }
+  stopSnapshotWorker();
+  const worker = new Worker(
+    new URL("./studySnapshotWorker.ts", import.meta.url),
+    { type: "module" },
+  );
+  snapshotWorker = worker;
+  worker.onmessage = (event: MessageEvent<{
+    generation: number;
+    contentHash?: string;
+    recordsBuffer?: ArrayBuffer;
+    durationMs?: number;
+    error?: string;
+  }>) => {
+    const startedAt = performance.now();
+    try {
+      if (snapshotWorker === worker) snapshotWorker = undefined;
+      worker.terminate();
+      if (
+        event.data.generation !== snapshotGeneration
+        || event.data.generation !== request.generation
+      ) return;
+      pendingSnapshot = undefined;
+      if (
+        event.data.error
+        || !event.data.contentHash
+        || !(event.data.recordsBuffer instanceof ArrayBuffer)
+      ) {
+        snapshotPreparationFailures += 1;
+        reportTelemetryLoss("snapshot");
+        return;
+      }
+      let records: Array<{ type: string; data: unknown }>;
+      try {
+        records = JSON.parse(
+          new TextDecoder().decode(event.data.recordsBuffer),
+        ) as Array<{ type: string; data: unknown }>;
+      } catch {
+        snapshotPreparationFailures += 1;
+        reportTelemetryLoss("snapshot");
+        return;
+      }
+      if (!Array.isArray(records)) {
+        snapshotPreparationFailures += 1;
+        reportTelemetryLoss("snapshot");
+        return;
+      }
+      lastSnapshotPreparationMs = Math.max(0, event.data.durationMs ?? 0);
+      maxSnapshotPreparationMs = Math.max(
+        maxSnapshotPreparationMs,
+        lastSnapshotPreparationMs,
+      );
+      preparedSnapshot = {
+        records,
+        contentHash: event.data.contentHash,
+        generation: event.data.generation,
+      };
+      if (
+        request.immediate
+        || snapshotExitPending
+        || Date.now() - lastSnapshotAt >= 15_000
+      ) {
+        commitPreparedSnapshot(snapshotExitPending);
+        snapshotExitPending = false;
+        return;
+      }
+      if (snapshotCommitTimer === undefined) {
+        snapshotCommitTimer = window.setTimeout(() => {
+          snapshotCommitTimer = undefined;
+          commitPreparedSnapshot();
+        }, Math.max(0, 15_000 - (Date.now() - lastSnapshotAt)));
+      }
+    } finally {
+      measureSnapshotMain("commit", startedAt);
+    }
+  };
+  worker.onerror = () => {
+    if (snapshotWorker === worker) snapshotWorker = undefined;
+    worker.terminate();
+    if (request.generation !== snapshotGeneration) return;
+    pendingSnapshot = undefined;
+    snapshotPreparationFailures += 1;
+    reportTelemetryLoss("snapshot");
+  };
+  try {
+    const startedAt = performance.now();
+    worker.postMessage({
+      generation,
+      project: request.project,
+      alias: request.alias,
+      reason: request.reason,
+      snapshotId: uuid("snp"),
+    });
+    measureSnapshotMain("handoff", startedAt);
+  } catch {
+    worker.onerror?.(new ErrorEvent("error"));
+  }
+};
+
+const scheduleSnapshotPreparation = (
+  generation: number,
+  delay: number,
+) => {
+  clearSnapshotSchedule();
   snapshotTimer = window.setTimeout(() => {
     snapshotTimer = undefined;
-    if (generation === snapshotGeneration) commitPendingSnapshot();
-  }, 0);
+    if (delay === 0) {
+      if (generation === snapshotGeneration) startSnapshotPreparation(generation);
+      return;
+    }
+    const start = () => {
+      snapshotIdle = undefined;
+      if (generation === snapshotGeneration) startSnapshotPreparation(generation);
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      snapshotIdle = window.requestIdleCallback(start, { timeout: 1_000 });
+    } else {
+      start();
+    }
+  }, delay);
+};
+
+export const commitPendingStudySnapshot = () => {
+  const request = pendingSnapshot;
+  if (request?.immediate) {
+    const startedAt = performance.now();
+    clearSnapshotSchedule();
+    stopSnapshotWorker();
+    discardPreparedSnapshot();
+    pendingSnapshot = undefined;
+    snapshotExitPending = false;
+    try {
+      const records = makeStudySnapshotRecords(
+        request.project,
+        request.alias,
+        request.reason,
+        uuid("snp"),
+      );
+      lastSnapshotAt = Date.now();
+      records.forEach((record) =>
+        recordStudyEvent(record.type, record.data, {
+          level: "replay",
+          prescrubbed: true,
+        }),
+      );
+      measureSnapshotMain("exit", startedAt);
+      void flushStudyTelemetry("snapshot-exit", false, true, true);
+      return;
+    } catch {
+      snapshotPreparationFailures += 1;
+      reportTelemetryLoss("snapshot");
+    }
+  }
+  snapshotExitPending = Boolean(pendingSnapshot || snapshotWorker);
+  commitPreparedSnapshot(true);
+  if (pendingSnapshot && !snapshotWorker) {
+    clearSnapshotSchedule();
+    startSnapshotPreparation(pendingSnapshot.generation);
+  }
 };
 
 export const scheduleStudySnapshot = (
@@ -451,26 +726,22 @@ export const scheduleStudySnapshot = (
   immediate = false,
 ) => {
   if (levelRank[STUDY_PROFILE] < levelRank.replay || !studyTelemetryEnabled()) return;
-  if (document.hidden && !immediate && !forceNextSnapshot) return;
+  const force = forceNextSnapshot;
+  if (pendingSnapshot?.immediate && !immediate && !force) return;
+  if (pendingSnapshot?.project === project) return;
+  if (document.hidden && !immediate && !force) return;
   const generation = ++snapshotGeneration;
-  pendingSnapshot = { project, alias, reason, generation };
-  if (forceNextSnapshot) {
-    forceNextSnapshot = false;
-    clearSnapshotSchedule();
-    commitPendingSnapshot(true);
-    return;
-  }
-  if (immediate) {
-    clearSnapshotSchedule();
-    scheduleSnapshotIdle(generation);
-    return;
-  }
-  clearSnapshotSchedule();
-  const continuousDelay = Math.max(0, 15_000 - (Date.now() - lastSnapshotAt));
-  snapshotTimer = window.setTimeout(() => {
-    snapshotTimer = undefined;
-    scheduleSnapshotIdle(generation);
-  }, Math.max(1_200, continuousDelay));
+  discardPreparedSnapshot();
+  forceNextSnapshot = false;
+  pendingSnapshot = {
+    project,
+    alias,
+    reason,
+    generation,
+    immediate: immediate || force,
+  };
+  stopSnapshotWorker();
+  scheduleSnapshotPreparation(generation, immediate || force ? 0 : 400);
 };
 
 let dbPromise: Promise<IDBDatabase> | undefined;
@@ -504,13 +775,43 @@ const openOutbox = () => {
   return dbPromise;
 };
 
-const writeOutboxItems = (db: IDBDatabase, items: OutboxItem[]) => {
+const writeOutboxItems = (
+  db: IDBDatabase,
+  items: OutboxItem[],
+  collapseSnapshots: boolean,
+) => {
   try {
     const tx = db.transaction("outbox", "readwrite", { durability: "relaxed" });
     const store = tx.objectStore("outbox");
     items.forEach((item) => store.put(item));
-    return new Promise<void>((resolve, reject) => {
-      tx.oncomplete = () => resolve();
+    let supersededSnapshots = 0;
+    const newIds = new Set(items.map((item) => item.id));
+    const newSeries = new Set(
+      items
+        .map((item) => item.snapshotSeries)
+        .filter((series): series is string => Boolean(series)),
+    );
+    if (collapseSnapshots && newSeries.size) {
+      const cursor = store.openCursor();
+      cursor.onsuccess = () => {
+        const entry = cursor.result;
+        if (!entry) return;
+        const item = entry.value as OutboxItem;
+        if (
+          !newIds.has(item.id)
+          && item.state !== "quarantined"
+          && item.deliveryClass === "snapshot"
+          && item.snapshotSeries
+          && newSeries.has(item.snapshotSeries)
+        ) {
+          entry.delete();
+          supersededSnapshots += 1;
+        }
+        entry.continue();
+      };
+    }
+    return new Promise<number>((resolve, reject) => {
+      tx.oncomplete = () => resolve(supersededSnapshots);
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
     });
@@ -519,12 +820,17 @@ const writeOutboxItems = (db: IDBDatabase, items: OutboxItem[]) => {
   }
 };
 
-const queueOutboxItems = (items: OutboxItem[]) => {
+const queueOutboxItems = (
+  items: OutboxItem[],
+  collapseSnapshots = transportPolicy().collapseSnapshots,
+) => {
   if (!items.length) return Promise.resolve(true);
   const write = outboxDb
-    ? writeOutboxItems(outboxDb, items)
-    : openOutbox().then((db) => writeOutboxItems(db, items));
-  return write.then(() => {
+    ? writeOutboxItems(outboxDb, items, collapseSnapshots)
+    : openOutbox().then((db) =>
+        writeOutboxItems(db, items, collapseSnapshots));
+  return write.then((supersededSnapshots) => {
+    reportTelemetryLosses("snapshot", supersededSnapshots);
     void trimOutbox();
     return true;
   }).catch(() => {
@@ -673,12 +979,15 @@ const makeBatch = (beacon: boolean, deliveryClass: DeliveryClass) => {
   const records: StudyRecord[] = [];
   const recordIds: number[] = [];
   let recordBytes = 0;
+  const policy = transportPolicy();
+  const batchBytes = beacon ? 48 * 1024 : policy.batchBytes - 16 * 1024;
+  const batchRecords = beacon ? 200 : policy.batchRecords;
   if (beacon) {
     for (const buffered of buffer) {
       if (inFlightRecords.has(buffered.seq) || buffered.deliveryClass !== deliveryClass) continue;
       const { coalesceKey: _key, deliveryClass: _deliveryClass, ...candidate } = buffered;
       const bytes = new TextEncoder().encode(JSON.stringify(candidate)).byteLength;
-      if (records.length < 200 && bytes <= 48 * 1024 && recordBytes + bytes <= 48 * 1024) {
+      if (records.length < batchRecords && bytes <= batchBytes && recordBytes + bytes <= batchBytes) {
         records.push(candidate);
         recordIds.push(candidate.seq);
         recordBytes += bytes;
@@ -689,9 +998,9 @@ const makeBatch = (beacon: boolean, deliveryClass: DeliveryClass) => {
       if (inFlightRecords.has(buffered.seq) || buffered.deliveryClass !== deliveryClass) continue;
       const { coalesceKey: _key, deliveryClass: _deliveryClass, ...candidate } = buffered;
       const bytes = new TextEncoder().encode(JSON.stringify(candidate)).byteLength;
-      if (records.length && recordBytes + bytes > 400 * 1024) break;
+      if (records.length && recordBytes + bytes > batchBytes) break;
       recordIds.push(candidate.seq);
-      if (bytes > 400 * 1024) {
+      if (bytes > batchBytes) {
         records.push({
           ...candidate,
           data: { omitted: "record_too_large", bytes },
@@ -700,13 +1009,16 @@ const makeBatch = (beacon: boolean, deliveryClass: DeliveryClass) => {
       }
       records.push(candidate);
       recordBytes += bytes;
-      if (records.length >= 200) break;
+      if (records.length >= batchRecords) break;
     }
   }
   if (!records.length) return undefined;
   const state = ensureInstallation();
   const batchId = uuid("bat");
   const snapshotId = deliveryClass === "snapshot" ? snapshotIdFrom(records) : undefined;
+  const snapshotSeries = deliveryClass === "snapshot"
+    ? `${participantId()}:${state.sessionId}:${currentContextId()}:${records[0]?.project ?? "none"}`
+    : undefined;
   const envelope = {
     v: 1,
     eventSchema: STUDY_EVENT_SCHEMA,
@@ -731,8 +1043,9 @@ const makeBatch = (beacon: boolean, deliveryClass: DeliveryClass) => {
     json: JSON.stringify(envelope),
     recordIds,
     deliveryClass,
-    snapshotKey: deliveryClass === "snapshot" && snapshotId
-      ? `${participantId()}:${state.sessionId}:${currentContextId()}:${records[0]?.project ?? "none"}:${snapshotId}`
+    snapshotSeries,
+    snapshotKey: snapshotSeries && snapshotId
+      ? `${snapshotSeries}:${snapshotId}`
       : undefined,
   };
 };
@@ -745,17 +1058,23 @@ type ExitCheckpoint = {
   level: StudyLevel;
   batches: Array<{ batchId: string; json: string }>;
 };
-const reserveBatch = (batch: StudyBatch) => batch.recordIds.forEach((id) => inFlightRecords.add(id));
+type ExitCheckpointBatch = ExitCheckpoint["batches"][number];
+const activeBatches = new Map<string, StudyBatch>();
+const reserveBatch = (batch: StudyBatch) => {
+  activeBatches.set(batch.batchId, batch);
+  batch.recordIds.forEach((id) => inFlightRecords.add(id));
+};
 const finishBatches = (batches: StudyBatch[], stored: boolean) => {
   const ids = new Set(batches.flatMap((batch) => batch.recordIds));
   if (stored) buffer = buffer.filter((record) => !ids.has(record.seq));
   ids.forEach((id) => inFlightRecords.delete(id));
+  batches.forEach((batch) => activeBatches.delete(batch.batchId));
 };
 const makeBufferedBatches = (beacon: boolean, drain: boolean) => {
   const batches: StudyBatch[] = [];
   if (beacon) {
     // Beacon is only for one small best-effort packet. Durable queue batches
-    // retain their normal 400 KiB ceiling so large snapshot chunks survive a
+    // retain their transport-policy ceiling so large snapshot chunks survive a
     // page exit instead of being rejected by the keepalive byte limit.
     for (const deliveryClass of DELIVERY_ORDER) {
       const first = makeBatch(true, deliveryClass);
@@ -793,6 +1112,7 @@ const outboxBatch = (batch: StudyBatch, body: Blob): OutboxItem => ({
   deliveryClass: batch.deliveryClass,
   state: "queued",
   snapshotKey: batch.snapshotKey,
+  snapshotSeries: batch.snapshotSeries,
 });
 
 const batchDeliveryClass = (json: string): DeliveryClass => {
@@ -808,6 +1128,35 @@ const batchDeliveryClass = (json: string): DeliveryClass => {
   }
 };
 
+const batchSnapshotMetadata = (json: string) => {
+  try {
+    const envelope = JSON.parse(json) as {
+      participantId?: unknown;
+      sessionId?: unknown;
+      contextId?: unknown;
+      records?: Array<{ project?: unknown; data?: unknown }>;
+    };
+    const first = envelope.records?.[0];
+    const snapshotId = first?.data && typeof first.data === "object"
+      ? (first.data as { snapshotId?: unknown }).snapshotId
+      : undefined;
+    if (
+      typeof envelope.participantId !== "string"
+      || typeof envelope.sessionId !== "string"
+      || typeof envelope.contextId !== "string"
+      || typeof first?.project !== "string"
+      || typeof snapshotId !== "string"
+    ) return {};
+    const snapshotSeries = `${envelope.participantId}:${envelope.sessionId}:${envelope.contextId}:${first.project}`;
+    return {
+      snapshotSeries,
+      snapshotKey: `${snapshotSeries}:${snapshotId}`,
+    };
+  } catch {
+    return {};
+  }
+};
+
 const clearExitCheckpoint = (id?: string) => {
   try {
     const current = readJson<ExitCheckpoint>(EXIT_CHECKPOINT_KEY);
@@ -817,19 +1166,77 @@ const clearExitCheckpoint = (id?: string) => {
   }
 };
 
+export const mergeExitCheckpointBatches = (
+  existing: ExitCheckpointBatch[],
+  incoming: ExitCheckpointBatch[],
+  limit = MAX_OUTBOX_ITEMS,
+  charLimit = MAX_EXIT_CHECKPOINT_CHARS,
+) => {
+  const deduplicated = new Map<string, ExitCheckpointBatch>();
+  [...existing, ...incoming].forEach((batch) =>
+    deduplicated.set(batch.batchId, batch));
+  const entries = [...deduplicated.values()].map((batch, order) => ({
+    batch,
+    order,
+    priority: deliveryRank(batchDeliveryClass(batch.json)),
+    unitKey: batchSnapshotMetadata(batch.json).snapshotKey
+      ?? batch.batchId,
+  }));
+  const units = new Map<string, typeof entries>();
+  entries.forEach((entry) => {
+    const unit = units.get(entry.unitKey) ?? [];
+    unit.push(entry);
+    units.set(entry.unitKey, unit);
+  });
+  const ranked = [...units.values()].sort((a, b) =>
+    Math.min(...a.map((entry) => entry.priority))
+      - Math.min(...b.map((entry) => entry.priority))
+    || Math.max(...b.map((entry) => entry.order))
+      - Math.max(...a.map((entry) => entry.order)));
+  const keptIds = new Set<string>();
+  let keptChars = 0;
+  for (const unit of ranked) {
+    const unitChars = unit.reduce(
+      (total, { batch }) => total + batch.batchId.length + batch.json.length,
+      0,
+    );
+    if (
+      keptIds.size + unit.length > limit
+      || keptChars + unitChars > charLimit
+    ) continue;
+    unit.forEach(({ batch }) => keptIds.add(batch.batchId));
+    keptChars += unitChars;
+  }
+  const kept = entries.filter(({ batch }) => keptIds.has(batch.batchId));
+  return {
+    batches: kept.map(({ batch }) => batch),
+    dropped: entries
+      .filter(({ batch }) => !keptIds.has(batch.batchId))
+      .map(({ batch }) => batch),
+  };
+};
+
 const saveExitCheckpoint = (batches: StudyBatch[]) => {
+  const existing = readExitCheckpoint();
+  if (existing && existing.level !== STUDY_PROFILE) return false;
+  const merged = mergeExitCheckpointBatches(
+    existing?.batches ?? [],
+    batches.map(({ batchId, json }) => ({ batchId, json })),
+  );
   const checkpoint: ExitCheckpoint = {
     id: uuid("chk"),
-    created: Date.now(),
+    created: existing?.created ?? Date.now(),
     scope: outboxScope,
     level: STUDY_PROFILE as StudyLevel,
-    batches: batches.map(({ batchId, json }) => ({ batchId, json })),
+    batches: merged.batches,
   };
   try {
     localStorage.setItem(EXIT_CHECKPOINT_KEY, JSON.stringify(checkpoint));
-    return checkpoint.id;
+    merged.dropped.forEach((batch) =>
+      reportTelemetryLoss(batchDeliveryClass(batch.json)));
+    return true;
   } catch {
-    return undefined;
+    return false;
   }
 };
 
@@ -878,38 +1285,62 @@ const readExitCheckpoint = () => {
   return checkpoint;
 };
 
+const removeExitCheckpointBatches = (batchIds: string[]) => {
+  if (!batchIds.length) return;
+  const checkpoint = readExitCheckpoint();
+  if (!checkpoint) return;
+  const stored = new Set(batchIds);
+  const batches = checkpoint.batches.filter(
+    (batch) => !stored.has(batch.batchId),
+  );
+  if (!batches.length) {
+    clearExitCheckpoint(checkpoint.id);
+    return;
+  }
+  try {
+    localStorage.setItem(
+      EXIT_CHECKPOINT_KEY,
+      JSON.stringify({ ...checkpoint, batches }),
+    );
+  } catch {
+    // Retaining already-stored batches is safe; server batch ids are idempotent.
+  }
+};
+
 const recoverExitCheckpoint = async () => {
   const checkpoint = readExitCheckpoint();
   if (!checkpoint) return;
-  const stored = await queueOutboxItems(checkpoint.batches.map((batch) => ({
-    id: `${checkpoint.scope}:${batch.batchId}`,
-    created: Date.now(),
-    scope: checkpoint.scope,
-    level: checkpoint.level,
-    path: "/batch" as const,
-    body: new Blob([batch.json], { type: "application/json" }),
-    headers: { "Content-Type": "application/json" },
-    bytes: new Blob([batch.json]).size,
-    deliveryClass: batchDeliveryClass(batch.json),
-    state: "queued" as const,
-  })));
-  if (stored) clearExitCheckpoint(checkpoint.id);
+  const stored = await queueOutboxItems(checkpoint.batches.map((batch) => {
+    const deliveryClass = batchDeliveryClass(batch.json);
+    const snapshot = deliveryClass === "snapshot"
+      ? batchSnapshotMetadata(batch.json)
+      : {};
+    const body = new Blob([batch.json], { type: "application/json" });
+    return {
+      id: `${checkpoint.scope}:${batch.batchId}`,
+      created: Date.now(),
+      scope: checkpoint.scope,
+      level: checkpoint.level,
+      path: "/batch" as const,
+      body,
+      headers: { "Content-Type": "application/json" },
+      bytes: body.size,
+      deliveryClass,
+      state: "queued" as const,
+      ...snapshot,
+    };
+  }));
+  if (stored) {
+    removeExitCheckpointBatches(
+      checkpoint.batches.map((batch) => batch.batchId),
+    );
+  }
 };
 
 let deliveryRetryTimer: number | undefined;
 let deliveryRetryMs = 5_000;
-
-const connectionIsConstrained = () => {
-  const connection = (navigator as Navigator & {
-    connection?: { effectiveType?: string; saveData?: boolean };
-  }).connection;
-  return Boolean(
-    connection?.saveData
-      || connection?.effectiveType === "slow-2g"
-      || connection?.effectiveType === "2g"
-      || connection?.effectiveType === "3g",
-  );
-};
+let reconnectDrainTimer: number | undefined;
+let deliveryDrainTimer: number | undefined;
 
 const noteDelivery = (success: boolean, rttMs = 0) => {
   if (!success) {
@@ -933,13 +1364,35 @@ const noteDelivery = (success: boolean, rttMs = 0) => {
 
 const scheduleDeliveryRetry = (delay = deliveryRetryMs) => {
   if (deliveryRetryTimer !== undefined || typeof window === "undefined") return;
-  const capped = Math.min(5 * 60_000, Math.max(1_000, delay));
-  const jittered = Math.round(capped * (0.5 + Math.random() * 0.5));
+  const capped = Math.min(
+    5 * 60_000,
+    Math.max(transportPolicy().retryFloorMs, delay),
+  );
+  const jittered = randomBetween([capped, Math.min(5 * 60_000, Math.round(capped * 1.5))]);
   deliveryRetryTimer = window.setTimeout(() => {
     deliveryRetryTimer = undefined;
     void flushOutbox();
   }, jittered);
   deliveryRetryMs = Math.min(5 * 60_000, Math.max(deliveryRetryMs * 2, capped));
+};
+
+const scheduleReconnectDrain = () => {
+  if (reconnectDrainTimer !== undefined || typeof window === "undefined") return;
+  transportMode = "offline-recovery";
+  consecutiveDeliverySuccesses = 0;
+  sawOffline = false;
+  if (deliveryRetryTimer !== undefined) {
+    window.clearTimeout(deliveryRetryTimer);
+    deliveryRetryTimer = undefined;
+  }
+  if (deliveryDrainTimer !== undefined) {
+    window.clearTimeout(deliveryDrainTimer);
+    deliveryDrainTimer = undefined;
+  }
+  reconnectDrainTimer = window.setTimeout(() => {
+    reconnectDrainTimer = undefined;
+    void flushOutbox();
+  }, randomBetween(TRANSPORT_POLICIES["offline-recovery"].drainDelayMs));
 };
 
 const selectOutboxForDelivery = async () => {
@@ -964,7 +1417,7 @@ const selectOutboxForDelivery = async () => {
       deliveryRank(outboxDeliveryClass(a)) - deliveryRank(outboxDeliveryClass(b))
       || a.created - b.created,
     );
-    if (items.length > 8) items.pop();
+    if (items.length > transportPolicy().outboxItemsPerDrain) items.pop();
   });
   return { items, incompatible };
 };
@@ -991,9 +1444,8 @@ const flushOutbox = async () => {
     return;
   }
   if (sawOffline) {
-    sawOffline = false;
-    transportMode = "offline-recovery";
-    consecutiveDeliverySuccesses = 0;
+    scheduleReconnectDrain();
+    return;
   }
   flushRunning = true;
   let deliverySucceeded = true;
@@ -1038,8 +1490,8 @@ const flushOutbox = async () => {
         break;
       }
       await deleteOutbox([item.id]);
-      deliveryRetryMs = 5_000;
       noteDelivery(true, rttMs);
+      deliveryRetryMs = transportPolicy().retryFloorMs;
     }
   } catch {
     deliverySucceeded = false;
@@ -1050,9 +1502,16 @@ const flushOutbox = async () => {
     if (deliverySucceeded) {
       try {
         if (await hasQueuedOutbox()) {
-          window.setTimeout(
-            () => void flushOutbox(),
-            transportMode === "constrained" ? 5_000 : 1_000,
+          const policy = transportPolicy();
+          if (deliveryDrainTimer !== undefined) {
+            window.clearTimeout(deliveryDrainTimer);
+          }
+          deliveryDrainTimer = window.setTimeout(
+            () => {
+              deliveryDrainTimer = undefined;
+              void flushOutbox();
+            },
+            randomBetween(policy.drainDelayMs),
           );
         }
       } catch {
@@ -1071,14 +1530,21 @@ export const flushStudyTelemetry = async (
   checkpoint = false,
 ) => {
   if (!studyTelemetryEnabled()) return false;
+  const reconnecting = reason === "online";
+  if (reconnecting) scheduleReconnectDrain();
   if (flushTimer !== undefined) window.clearTimeout(flushTimer);
   flushTimer = undefined;
   flushDueAt = 0;
   const batches = makeBufferedBatches(beacon, beacon || durableOnly);
+  if (checkpoint && activeBatches.size) {
+    saveExitCheckpoint([...activeBatches.values()]);
+  }
   if (!batches.length) {
-    if (!beacon) await flushOutbox();
+    if (!beacon && reconnectDrainTimer === undefined) await flushOutbox();
     return true;
   }
+  const unfinished = new Set(batches.map((batch) => batch.batchId));
+  let allStored = true;
   try {
     const first = batches[0];
     if (beacon && first.json.length <= 60 * 1024) {
@@ -1093,18 +1559,36 @@ export const flushStudyTelemetry = async (
         }).catch(() => undefined);
       }
     }
-    const bodies = beacon || durableOnly
-      ? batches.map((batch) => new Blob([batch.json], { type: "application/json" }))
-      : await Promise.all(batches.map((batch) => gzip(batch.json)));
-    const checkpointId = checkpoint ? saveExitCheckpoint(batches) : undefined;
-    const stored = await queueOutboxItems(batches.map((batch, index) => outboxBatch(batch, bodies[index])));
-    finishBatches(batches, stored);
-    if (stored && checkpointId) clearExitCheckpoint(checkpointId);
-    if (stored && !beacon && !durableOnly) await flushOutbox();
+    for (const deliveryClass of DELIVERY_ORDER) {
+      const group = batches.filter((batch) => batch.deliveryClass === deliveryClass);
+      if (!group.length) continue;
+      let stored = false;
+      try {
+        const bodies = beacon || durableOnly
+          ? group.map((batch) => new Blob([batch.json], { type: "application/json" }))
+          : await Promise.all(group.map((batch) => gzip(batch.json)));
+        stored = await queueOutboxItems(
+          group.map((batch, index) => outboxBatch(batch, bodies[index])),
+        );
+      } finally {
+        finishBatches(group, stored);
+        group.forEach((batch) => unfinished.delete(batch.batchId));
+      }
+      allStored &&= stored;
+      if (stored) {
+        removeExitCheckpointBatches(group.map((batch) => batch.batchId));
+      }
+    }
+    if (
+      allStored
+      && !beacon
+      && !durableOnly
+      && reconnectDrainTimer === undefined
+    ) await flushOutbox();
     const hasBufferLeft = buffer.some((record) => !inFlightRecords.has(record.seq));
     if (hasBufferLeft) {
-      scheduleFlush(stored ? 0 : 1_000);
-    } else if (stored && durableOnly && !beacon) {
+      scheduleFlush(allStored ? 0 : 1_000);
+    } else if (allStored && durableOnly && !beacon) {
       // durableOnly stored records to the outbox without posting (large snapshot
       // commits, visibility/page transitions). This branch also cleared the pending
       // activity timer above, and finishBatches already emptied the buffer, so
@@ -1113,13 +1597,16 @@ export const flushStudyTelemetry = async (
       // coalesced drain so delivery is guaranteed, not best-effort.
       scheduleFlush(1_000);
     }
-    return stored;
+    return allStored;
   } catch {
     // Compression/storage failure must never strand reserved seqs in-flight nor
     // surface to the product UI. Release the reservations and re-arm a coalesced
     // retry so a transient throw self-heals instead of leaving buffered records
     // un-armed until the next unrelated event.
-    finishBatches(batches, false);
+    finishBatches(
+      batches.filter((batch) => unfinished.has(batch.batchId)),
+      false,
+    );
     scheduleFlush(1_000);
     return false;
   }

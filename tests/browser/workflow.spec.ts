@@ -2879,7 +2879,7 @@ test('Legacy storage namespace migrates to MotionSmith keys without losing autos
   await page.getByRole('button', { name: /Options/i }).click();
   const autosaveToggle = page.getByLabel('Enable autosave');
   if (!(await autosaveToggle.isChecked())) await autosaveToggle.check();
-  await expect.poll(async () => readAutosaveSerialized(page), { timeout: 5000 }).not.toBe('');
+  await expect.poll(async () => readAutosaveSerialized(page)).not.toBe('');
   const current = await readAutosaveSerialized(page);
   await clearAutosaveGenerations(page);
   await page.evaluate((serialized) => {
@@ -2898,16 +2898,16 @@ test('Legacy storage namespace migrates to MotionSmith keys without losing autos
   await page.getByTestId('top-command-bar').getByText('File', { exact: true }).click();
   await page.getByRole('button', { name: 'Recover Autosave…' }).click();
   await expect(page.getByTestId('status-bar')).toContainText('Recovered browser autosave snapshot');
-  await expect.poll(async () => readAutosaveSerialized(page), { timeout: 5000 }).not.toBe('');
+  await expect.poll(async () => readAutosaveSerialized(page)).not.toBe('');
   await expect.poll(async () => page.evaluate(() => ({
     current: Boolean(localStorage.getItem('motionsmith.autosave')),
     legacy: Boolean(localStorage.getItem('mechanim.autosave')),
-  })), { timeout: 5000 }).toEqual({ current: false, legacy: false });
+  }))).toEqual({ current: false, legacy: false });
 
   await page.getByTestId('top-command-bar').getByText('View', { exact: true }).click();
   await page.getByRole('button', { name: 'Restore Layout' }).click();
   await expect(page.getByTestId('status-bar')).toContainText('Workspace layout restored');
-  await expect.poll(async () => page.evaluate(() => Boolean(localStorage.getItem('motionsmith.workspace'))), { timeout: 5000 }).toBe(true);
+  await expect.poll(async () => page.evaluate(() => Boolean(localStorage.getItem('motionsmith.workspace')))).toBe(true);
   await expect(page.getByTestId('quick-toolbar')).toHaveCount(0);
 
   expectCleanPage(pageErrors, consoleErrors);
@@ -2916,7 +2916,7 @@ test('Legacy storage namespace migrates to MotionSmith keys without losing autos
 test('Autosave recovery warns when a hidden-tab commit may be incomplete', async ({ page }) => {
   await page.goto('/');
   await openCharacterScreen(page);
-  await expect.poll(async () => readAutosaveSerialized(page), { timeout: 5000 }).not.toBe('');
+  await expect.poll(async () => readAutosaveSerialized(page)).not.toBe('');
   await markAutosaveDirty(page);
 
   await page.getByTestId('top-command-bar').getByText('File', { exact: true }).click();

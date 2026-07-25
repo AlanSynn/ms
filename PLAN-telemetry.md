@@ -11,6 +11,34 @@ The verified risks are concentrated in four areas:
 * Pointer-driven editing and snapshot encoding can block the main thread on low-end CPUs.
 * Shared NAT, synchronized exports, and unreliable Wi-Fi can delay or lose telemetry delivery.
 
+## Implementation Update — 2026-07-25
+
+The targeted follow-up findings are implemented:
+
+* Snapshot normalization, stringify, hashing, and Base64 chunking run in
+  `studySnapshotWorker.ts`. Prepared records return through a transferable
+  `ArrayBuffer`; the main thread only hands off `ProjectState`, decodes once,
+  and commits the current generation.
+* Hidden/pagehide checkpoints merge instead of overwrite. Core actions are
+  enqueued before technical and snapshot batches in separate transactions,
+  already-reserved batches remain recoverable, and only successfully stored
+  checkpoint batches are removed.
+* Network transport now has `normal`, `constrained`, and `offline-recovery`
+  policies with hysteresis, larger bounded constrained batches, slower retry
+  spacing, stale-snapshot collapse, and a randomized reconnect drain window.
+* Normal builds resolve telemetry calls to no-op boundaries. One
+  `VITE_STUDY_PROFILE=metrics|replay|study` setting opts in to the real runtime;
+  the default bundle contains neither that runtime nor the snapshot Worker.
+* Closed recommendation UI no longer performs path-fit optimization after
+  unrelated project edits.
+
+Production-preview verification used a 36,000-point project for three mutations
+at 6× CPU throttle. Maximum Worker handoff was 15.8 ms, maximum and p95
+prepared-record commit was 23.2 ms, and no interaction Long Task was observed.
+This is a repeatable headless regression gate, not a physical Chromebook claim.
+All four capture profiles have build/runtime coverage; the tagged release
+workflow runs the study browser gate before building `/ms/`.
+
 ## Completion Criteria
 
 Under a representative Chromebook profile:
@@ -577,4 +605,4 @@ Unchanged:
 * Broader free-text PII hardening for private bug intake
 * Per-candidate inspection dwell events
 * Explicit abandonment-reason events
-* Web Worker adoption unless profiling shows snapshot encoding remains a bottleneck
+* Additional Worker pipelines beyond the measured snapshot encoder

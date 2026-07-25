@@ -39,6 +39,10 @@ bun run dev
 
 Open the printed Vite URL in a browser.
 
+Study telemetry is excluded from normal builds. Tagged study builds opt in with
+one setting: `VITE_STUDY_PROFILE=metrics|replay|study`. See
+[`docs/study/README.md`](docs/study/README.md#build-switch).
+
 ## Verification
 
 ```bash

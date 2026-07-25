@@ -17,7 +17,7 @@ import {
   pointsToSvgPath,
 } from "../../../utils/mechanismPreview";
 import { MechanismLinkagePreview } from "../foundry/MechanismLinkagePreview";
-import { recordStudyEvent } from "../../../utils/studyTelemetry";
+import { recordStudyEvent } from "../../../utils/studyTelemetryBoundary";
 
 type MechanismRecommendationSheetProps = {
   isOpen: boolean;
@@ -142,8 +142,10 @@ export const MechanismRecommendationSheet = ({
   onApply,
 }: MechanismRecommendationSheetProps) => {
   const recommendations = useMemo(
-    () => buildMechanismRecommendations(project, selectedPart, selectedPath),
-    [project, selectedPart, selectedPath],
+    () => isOpen
+      ? buildMechanismRecommendations(project, selectedPart, selectedPath)
+      : [],
+    [isOpen, project, selectedPart, selectedPath],
   );
   useEffect(() => {
     if (!isOpen) return;

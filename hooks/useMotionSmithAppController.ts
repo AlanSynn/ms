@@ -32,8 +32,8 @@ import { useProjectAutosave } from "./useProjectAutosave";
 import { useProjectHistory } from "./useProjectHistory";
 import { useWorkspacePlaybackLoop } from "./useWorkspacePlaybackLoop";
 import { useWorkspacePlayerDock } from "./useWorkspacePlayerDock";
-import { useStudyTelemetry } from "./useStudyTelemetry";
-import { recordStudyEvent } from "../utils/studyTelemetry";
+import { useStudyTelemetry } from "./useStudyTelemetryBoundary";
+import { recordStudyEvent } from "../utils/studyTelemetryBoundary";
 
 type FoundryState = MechanismConfig;
 

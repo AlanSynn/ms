@@ -25,7 +25,7 @@ git push origin main
 git push origin v$VERSION
 ```
 
-The workflow fetches the Git LFS ONNX model, rejects pointer files before and after build, verifies `v$VERSION == package.json.version`, runs tests, and builds with `VITE_BASE_PATH=/ms/`. Only then does it deploy and smoke-check the `/ms-study/v1` Cloudflare Worker before publishing `dist/` with GitHub Pages Actions.
+The workflow fetches the Git LFS ONNX model, rejects pointer files before and after build, verifies `v$VERSION == package.json.version`, runs contracts plus the production-preview study browser gate, and builds with `VITE_BASE_PATH=/ms/`. Only then does it deploy and smoke-check the `/ms-study/v1` Cloudflare Worker before publishing `dist/` with GitHub Pages Actions.
 
 Study deployment controls:
 
@@ -61,6 +61,9 @@ Before a teacher-facing web release:
 
 - Tag must be `v<package.json version>`; the workflow must reject mismatched tags.
 - Build must use `VITE_BASE_PATH=/ms/` for `https://alansynn.com/ms/`.
+- Repository variable `STUDY_PROFILE` must be `study` for the full approved
+  classroom capture profile.
+- `bun run test:study:browser` must pass before the release build.
 - `public/onnx/pose_model.onnx` and `dist/onnx/pose_model.onnx` must be real ONNX bytes, not Git LFS pointers.
 - Runtime HTML must not load CDN scripts, import maps, or external `https://` assets.
 - Browser QA must show no server login, cloud sync, roster, dashboard, or runtime calls except the selected `/ms-study/v1` telemetry profile.

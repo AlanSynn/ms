@@ -5,7 +5,7 @@ import {
   recordStudyEvent,
   recordStudyProjectAction,
   recordStudyProjectReplace,
-} from "../utils/studyTelemetry";
+} from "../utils/studyTelemetryBoundary";
 
 const PROJECT_HISTORY_LIMIT = 80;
 
@@ -41,7 +41,10 @@ export const useProjectHistory = (createInitialProject: () => ProjectState) => {
     options: SetProjectOptions = {},
   ) => {
     if (options.telemetrySource !== "action") {
-      recordStudyProjectReplace(options);
+      recordStudyProjectReplace(
+        options,
+        typeof update === "function" ? undefined : update,
+      );
     }
     setProjectHistory((prev) => {
       const next =
