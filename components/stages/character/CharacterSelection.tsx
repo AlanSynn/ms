@@ -23,6 +23,7 @@ import {
   CharacterImportReviewDialog,
   CharacterImportStatusDock,
   type PendingCharacterReview,
+  useImageImportReview,
 } from "./CharacterImportOverlays";
 import { CharacterLessonOwnership } from "./CharacterLessonOwnership";
 import { CharacterSetupPanel } from "./CharacterSetupPanel";
@@ -69,13 +70,15 @@ export const CharacterSelection = ({
   viewport: CanvasViewport;
   setViewport: Dispatch<SetStateAction<CanvasViewport>>;
 }) => {
-  const reviewedProject = pendingCharacter?.project ?? project;
+  const livePendingCharacter = useImageImportReview();
+  const activePendingCharacter = pendingCharacter ?? livePendingCharacter;
+  const reviewedProject = activePendingCharacter?.project ?? project;
   const packageInputRef = useRef<HTMLInputElement>(null);
   const objectInputRef = useRef<HTMLInputElement>(null);
   const onnxInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
-  const partPanelProject = pendingCharacter ? reviewedProject : project;
-  const partPanelDisabled = Boolean(pendingCharacter);
+  const partPanelProject = activePendingCharacter ? reviewedProject : project;
+  const partPanelDisabled = Boolean(activePendingCharacter);
   const editableParts = partPanelProject.partOrder
     .map((id) => partPanelProject.parts[id])
     .filter((part): part is BodyPartLayer => Boolean(part));
@@ -334,7 +337,7 @@ export const CharacterSelection = ({
         onCharacterFile={() => packageInputRef.current?.click()}
       />
       <CharacterImportReviewDialog
-        pendingCharacter={pendingCharacter}
+        pendingCharacter={activePendingCharacter}
         onAccept={onAccept}
         onDiscard={onDiscard}
       />

@@ -1,16 +1,51 @@
 import { AlertCircle, CheckCircle2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import type { AppStage, ProjectState } from "../../../types";
 import { ProgressBlock } from "./ProgressBlock";
-
-export const IMAGE_IMPORT_PROCESSING_EVENT = "motionsmith:image-import-processing";
-export const IMAGE_IMPORT_REVIEW_EVENT = "motionsmith:image-import-review";
 
 export type PendingCharacterReview = {
   project: ProjectState;
   summary: string;
   returnStage: AppStage;
 };
+
+type StoreListener = () => void;
+
+let processingSnapshot: ProjectState["processing"] | null = null;
+let reviewSnapshot: PendingCharacterReview | null = null;
+const processingListeners = new Set<StoreListener>();
+const reviewListeners = new Set<StoreListener>();
+
+const subscribeProcessing = (listener: StoreListener) => {
+  processingListeners.add(listener);
+  return () => processingListeners.delete(listener);
+};
+
+const subscribeReview = (listener: StoreListener) => {
+  reviewListeners.add(listener);
+  return () => reviewListeners.delete(listener);
+};
+
+export const publishImageImportProcessing = (
+  processing: ProjectState["processing"],
+) => {
+  processingSnapshot = processing;
+  processingListeners.forEach((listener) => listener());
+};
+
+export const publishImageImportReview = (
+  review: PendingCharacterReview | null,
+) => {
+  reviewSnapshot = review;
+  reviewListeners.forEach((listener) => listener());
+};
+
+export const useImageImportReview = () =>
+  useSyncExternalStore(
+    subscribeReview,
+    () => reviewSnapshot,
+    () => reviewSnapshot,
+  );
 
 const activeImportStages = new Set([
   "preparing-image",
@@ -40,16 +75,11 @@ export const CharacterImportStatusDock = ({
   onStarterRig: () => void;
   onCharacterFile: () => void;
 }) => {
-  const [liveProcessing, setLiveProcessing] =
-    useState<ProjectState["processing"] | null>(null);
-  useEffect(() => {
-    const update = (event: Event) =>
-      setLiveProcessing(
-        (event as CustomEvent<ProjectState["processing"]>).detail,
-      );
-    window.addEventListener(IMAGE_IMPORT_PROCESSING_EVENT, update);
-    return () => window.removeEventListener(IMAGE_IMPORT_PROCESSING_EVENT, update);
-  }, []);
+  const liveProcessing = useSyncExternalStore(
+    subscribeProcessing,
+    () => processingSnapshot,
+    () => processingSnapshot,
+  );
   const statusProject = liveProcessing
     ? { ...project, processing: liveProcessing }
     : project;
@@ -169,17 +199,7 @@ export const CharacterImportReviewDialog = ({
   onAccept: () => void;
   onDiscard: () => void;
 }) => {
-  const [liveReview, setLiveReview] = useState<PendingCharacterReview | null>(
-    pendingCharacter,
-  );
-  useEffect(() => {
-    const update = (event: Event) =>
-      setLiveReview(
-        (event as CustomEvent<PendingCharacterReview | null>).detail,
-      );
-    window.addEventListener(IMAGE_IMPORT_REVIEW_EVENT, update);
-    return () => window.removeEventListener(IMAGE_IMPORT_REVIEW_EVENT, update);
-  }, []);
+  const liveReview = useImageImportReview();
   const review = pendingCharacter ?? liveReview;
   if (!review) return null;
 

@@ -2,8 +2,8 @@ import { useRef, type Dispatch, type SetStateAction } from "react";
 import type { StarterImageTemplate } from "../components/AppShell";
 import { processingLabel } from "../components/stages/character/ProgressBlock";
 import {
-  IMAGE_IMPORT_PROCESSING_EVENT,
-  IMAGE_IMPORT_REVIEW_EVENT,
+  publishImageImportProcessing,
+  publishImageImportReview,
   type PendingCharacterReview,
 } from "../components/stages/character/CharacterImportOverlays";
 import type {
@@ -65,16 +65,10 @@ export const useAppCharacterImportActions = ({
       typeof update === "function"
         ? update(pendingCharacter.current)
         : update;
-    window.dispatchEvent(
-      new CustomEvent(IMAGE_IMPORT_REVIEW_EVENT, {
-        detail: pendingCharacter.current,
-      }),
-    );
+    publishImageImportReview(pendingCharacter.current);
   };
   const showProcessing = (processing: ProjectState["processing"]) =>
-    window.dispatchEvent(
-      new CustomEvent(IMAGE_IMPORT_PROCESSING_EVENT, { detail: processing }),
-    );
+    publishImageImportProcessing(processing);
 
   const pixelBucket = (pixels: number) =>
     pixels <= 0 ? "unknown"
