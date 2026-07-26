@@ -44,10 +44,20 @@ jobs:
       - name: Install Chromium
         run: bunx playwright install --with-deps chromium
 
-      - name: Test production preview
-        env:
-          PLAYWRIGHT_WORKERS: 2
-        run: bun run test:browser
+      - name: Build production preview
+        run: bun run build
+
+      - name: Test production preview 1/4
+        run: env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test --shard=1/4 --workers=2
+
+      - name: Test production preview 2/4
+        run: env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test --shard=2/4 --workers=2
+
+      - name: Test production preview 3/4
+        run: env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test --shard=3/4 --workers=2
+
+      - name: Test production preview 4/4
+        run: env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test --shard=4/4 --workers=2
 
       - name: Test low-end image AI
         run: bun run test:image-ai:performance
