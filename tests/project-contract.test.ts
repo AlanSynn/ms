@@ -884,6 +884,8 @@ assert(
   pullRequestWorkflowText.includes('first: 1') &&
   pullRequestWorkflowText.includes('second: 8') &&
   pullRequestWorkflowText.includes('fail-fast: false') &&
+  pullRequestWorkflowText.includes('image-ai-performance:') &&
+  pullRequestWorkflowText.includes('name: low-end image AI') &&
   pullRequestWorkflowText.includes('bun run test:image-ai:performance') &&
   pullRequestWorkflowText.includes('bun run test:study:browser'),
   'pull requests fetch LFS and run contracts, eight production-preview browser shards across four isolated runners, image performance, and study gates'
