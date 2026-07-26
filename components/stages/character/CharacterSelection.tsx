@@ -29,6 +29,49 @@ import { CharacterLessonOwnership } from "./CharacterLessonOwnership";
 import { CharacterSetupPanel } from "./CharacterSetupPanel";
 import { SceneObjectInspector } from "./SceneObjectInspector";
 
+const CharacterProcessingPanel = ({
+  disabled,
+  onEditCharacter,
+  onSaveSkeleton,
+}: {
+  disabled: boolean;
+  onEditCharacter: () => void;
+  onSaveSkeleton: () => void;
+}) => {
+  const pendingReview = useImageImportReview();
+  const isDisabled = disabled || Boolean(pendingReview);
+  return (
+    <details
+      className="advanced-panel mt-4"
+      data-testid="character-processing-panel"
+    >
+      <summary>Tools</summary>
+      {isDisabled && (
+        <p className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">
+          Choose new character.
+        </p>
+      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          className="btn-secondary"
+          aria-label="Edit rig"
+          disabled={isDisabled}
+          onClick={onEditCharacter}
+        >
+          Edit rig
+        </button>
+        <button
+          className="btn-secondary"
+          disabled={isDisabled}
+          onClick={onSaveSkeleton}
+        >
+          Save Skeleton
+        </button>
+      </div>
+    </details>
+  );
+};
+
 export const CharacterSelection = ({
   project,
   dispatch,
@@ -70,15 +113,13 @@ export const CharacterSelection = ({
   viewport: CanvasViewport;
   setViewport: Dispatch<SetStateAction<CanvasViewport>>;
 }) => {
-  const livePendingCharacter = useImageImportReview();
-  const activePendingCharacter = pendingCharacter ?? livePendingCharacter;
-  const reviewedProject = activePendingCharacter?.project ?? project;
+  const reviewedProject = pendingCharacter?.project ?? project;
   const packageInputRef = useRef<HTMLInputElement>(null);
   const objectInputRef = useRef<HTMLInputElement>(null);
   const onnxInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
-  const partPanelProject = activePendingCharacter ? reviewedProject : project;
-  const partPanelDisabled = Boolean(activePendingCharacter);
+  const partPanelProject = pendingCharacter ? reviewedProject : project;
+  const partPanelDisabled = Boolean(pendingCharacter);
   const editableParts = partPanelProject.partOrder
     .map((id) => partPanelProject.parts[id])
     .filter((part): part is BodyPartLayer => Boolean(part));
@@ -160,34 +201,11 @@ export const CharacterSelection = ({
                   onProcess={onProcess}
                   onImport={onImport}
                 />
-                <details
-                  className="advanced-panel mt-4"
-                  data-testid="character-processing-panel"
-                >
-                  <summary>Tools</summary>
-                  {partPanelDisabled && (
-                    <p className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">
-                      Choose new character.
-                    </p>
-                  )}
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      className="btn-secondary"
-                      aria-label="Edit rig"
-                      disabled={partPanelDisabled}
-                      onClick={onEditCharacter}
-                    >
-                      Edit rig
-                    </button>
-                    <button
-                      className="btn-secondary"
-                      disabled={partPanelDisabled}
-                      onClick={onSaveSkeleton}
-                    >
-                      Save Skeleton
-                    </button>
-                  </div>
-                </details>
+                <CharacterProcessingPanel
+                  disabled={partPanelDisabled}
+                  onEditCharacter={onEditCharacter}
+                  onSaveSkeleton={onSaveSkeleton}
+                />
                 <section
                   className="character-part-list mt-4"
                   data-testid="character-part-list"
@@ -337,7 +355,7 @@ export const CharacterSelection = ({
         onCharacterFile={() => packageInputRef.current?.click()}
       />
       <CharacterImportReviewDialog
-        pendingCharacter={activePendingCharacter}
+        pendingCharacter={pendingCharacter}
         onAccept={onAccept}
         onDiscard={onDiscard}
       />

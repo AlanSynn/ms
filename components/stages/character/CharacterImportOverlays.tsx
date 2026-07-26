@@ -80,11 +80,13 @@ export const CharacterImportStatusDock = ({
     () => processingSnapshot,
     () => processingSnapshot,
   );
+  const pendingReview = useImageImportReview();
+  const liveReviewedProject = pendingReview?.project ?? reviewedProject;
   const statusProject = liveProcessing
     ? { ...project, processing: liveProcessing }
     : project;
   const processing = statusProject.processing;
-  const artifact = reviewedProject.characterPackage;
+  const artifact = liveReviewedProject.characterPackage;
   const showImportProgress = Boolean(
     project.settings.detailedProcessingSteps ||
       activeImportStages.has(processing.stage),
@@ -100,32 +102,32 @@ export const CharacterImportStatusDock = ({
     { label: "parts", ok: Boolean(artifact?.partsInfo) },
     {
       label: "skeleton",
-      ok: Boolean(artifact?.charCfg && reviewedProject.skeleton),
+      ok: Boolean(artifact?.charCfg && liveReviewedProject.skeleton),
     },
     {
       label: "art",
       ok:
-        Boolean(reviewedProject.characterPackage?.sourceTextureUrl) ||
-        reviewedProject.partOrder.some((id) =>
+        Boolean(liveReviewedProject.characterPackage?.sourceTextureUrl) ||
+        liveReviewedProject.partOrder.some((id) =>
           Boolean(
-            reviewedProject.parts[id]?.textureUrl ||
-              reviewedProject.parts[id]?.maskUrl,
+            liveReviewedProject.parts[id]?.textureUrl ||
+              liveReviewedProject.parts[id]?.maskUrl,
           ),
         ),
     },
     {
       label: "outlines",
-      ok: reviewedProject.partOrder.some((id) =>
+      ok: liveReviewedProject.partOrder.some((id) =>
         Boolean(
-          reviewedProject.parts[id]?.originalSvgPath ||
-            reviewedProject.parts[id]?.enhancedSvgPath,
+          liveReviewedProject.parts[id]?.originalSvgPath ||
+            liveReviewedProject.parts[id]?.enhancedSvgPath,
         ),
       ),
     },
     {
       label: "clean load",
       ok: Boolean(
-        artifact && isPlainReview && reviewedProject.mechanisms.length === 0,
+        artifact && isPlainReview && liveReviewedProject.mechanisms.length === 0,
       ),
     },
     {
@@ -133,7 +135,7 @@ export const CharacterImportStatusDock = ({
       ok: Boolean(
         artifact &&
           isReplacementReview &&
-          reviewedProject.mechanisms.length > 0 &&
+          liveReviewedProject.mechanisms.length > 0 &&
           artifact.replacementContext?.rebindingSummary.includes("preserved"),
       ),
     },
