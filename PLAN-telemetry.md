@@ -35,6 +35,9 @@ The targeted follow-up findings are implemented:
   the default bundle contains neither that runtime nor the snapshot Worker.
 * Closed recommendation UI no longer performs path-fit optimization after
   unrelated project edits.
+* Browser pose inference uses the 34.3 MB quality-gated INT8 ORT runtime.
+  The 135.9 MB FP32 source stays outside deployed assets, and CI pulls only the
+  INT8 runtime while fixed calibration evidence remains reproducible in-repo.
 
 Production-preview verification uses a 36,000-point project for three mutations
 at 6× CPU throttle and requires every main-thread snapshot phase and interaction

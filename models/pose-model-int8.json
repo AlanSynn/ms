@@ -1,0 +1,51 @@
+{
+  "schema": "motionsmith.pose-model-int8.v1",
+  "source": {
+    "path": "models/source/pose_model.fp32.onnx",
+    "sha256": "9fd0dc927f41d1981c64d1ac7f5b22545f369c16b95944d60d93495c5a68eb74",
+    "bytes": 135929562,
+    "opset": 11,
+    "input": ["batch_size", 3, 256, 192],
+    "output": ["batch_size", 17, 64, 48]
+  },
+  "calibration": {
+    "path": "models/calibration/pose-inputs.npz",
+    "sha256": "b3b9e7eacea9b7feb23b0a2c1e84173a2b770a6db9ff369356678d3ccd76e34f",
+    "samples": 12
+  },
+  "quantization": {
+    "format": "QDQ",
+    "activation_type": "QInt8",
+    "weight_type": "QInt8",
+    "per_channel": false,
+    "calibration_method": "MinMax",
+    "intermediate_sha256": "1f76103815ceb8ae2101676415406509bd6fbb1b172e43c93371459f8cff7ab0"
+  },
+  "runtime": {
+    "path": "public/onnx/pose_model.int8.ort",
+    "format": "ORT",
+    "optimization": "basic",
+    "sha256": "50973d96bc0dcee28035aefe147fdd589f5556d3c1a43d661e3ba2894e172058",
+    "bytes": 34339384,
+    "source_size_ratio": 0.2526263124426164,
+    "size_reduction_percent": 74.73736875573836
+  },
+  "quality": {
+    "samples": 12,
+    "keypoints": 204,
+    "mean_normalized_argmax_displacement_percent": 0.1939355486511819,
+    "max_normalized_argmax_displacement_percent": 2.7950849718747373,
+    "exact_argmax_match_percent": 85.29411764705883
+  },
+  "thresholds": {
+    "mean_normalized_argmax_displacement_percent_max": 0.5,
+    "max_normalized_argmax_displacement_percent_max": 3.0,
+    "exact_argmax_match_percent_min": 80.0
+  },
+  "tool_versions": {
+    "python": "3.13",
+    "numpy": "2.5.1",
+    "onnx": "1.22.0",
+    "onnxruntime": "1.27.0"
+  }
+}

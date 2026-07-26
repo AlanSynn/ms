@@ -215,10 +215,64 @@ const scanEnglishOnlyText = (dir: string) => {
 scanEnglishOnlyText(process.cwd());
 assert.deepEqual(filesWithHangul, [], 'repository text and UI copy stay English-only with no Hangul/Korean strings');
 
-const onnxPath = join(process.cwd(), 'public', 'onnx', 'pose_model.onnx');
+const poseModelManifest = JSON.parse(
+  readFileSync(join(process.cwd(), 'models', 'pose-model-int8.json'), 'utf8')
+) as {
+  schema: string;
+  source: { path: string; sha256: string; bytes: number };
+  calibration: { path: string; sha256: string; samples: number };
+  runtime: {
+    path: string;
+    sha256: string;
+    bytes: number;
+    source_size_ratio: number;
+    size_reduction_percent: number;
+  };
+  quality: {
+    samples: number;
+    keypoints: number;
+    mean_normalized_argmax_displacement_percent: number;
+    max_normalized_argmax_displacement_percent: number;
+    exact_argmax_match_percent: number;
+  };
+  thresholds: {
+    mean_normalized_argmax_displacement_percent_max: number;
+    max_normalized_argmax_displacement_percent_max: number;
+    exact_argmax_match_percent_min: number;
+  };
+};
+const onnxPath = join(process.cwd(), poseModelManifest.runtime.path);
+const sourceOnnxPath = join(process.cwd(), poseModelManifest.source.path);
+const calibrationPath = join(process.cwd(), poseModelManifest.calibration.path);
 assert(existsSync(onnxPath), 'web ONNX asset is present');
-assert(statSync(onnxPath).size > 1_000_000, 'web ONNX asset is real model data, not a Git LFS pointer or mock');
-assert(!readFileSync(onnxPath).subarray(0, 64).toString('utf8').startsWith('version https://git-lfs'), 'web ONNX asset is checked out from Git LFS before tests run');
+const onnxBytes = readFileSync(onnxPath);
+assert.equal(poseModelManifest.schema, 'motionsmith.pose-model-int8.v1', 'INT8 pose model evidence uses the versioned manifest');
+assert(statSync(onnxPath).size > 1_000_000 && statSync(onnxPath).size < 40_000_000, 'web INT8 asset is real bounded model data');
+assert(!onnxBytes.subarray(0, 64).toString('utf8').startsWith('version https://git-lfs'), 'web INT8 asset is checked out from Git LFS before tests run');
+assert.equal(onnxBytes.subarray(4, 8).toString('ascii'), 'ORTM', 'web INT8 asset uses ONNX Runtime format');
+assert.equal(statSync(onnxPath).size, poseModelManifest.runtime.bytes, 'runtime model size matches the committed evidence');
+assert.equal(createHash('sha256').update(onnxBytes).digest('hex'), poseModelManifest.runtime.sha256, 'runtime model hash matches the committed evidence');
+const sourceOnnxBytes = readFileSync(sourceOnnxPath);
+const sourceOnnxText = sourceOnnxBytes.subarray(0, 256).toString('utf8');
+if (sourceOnnxText.startsWith('version https://git-lfs')) {
+  assert(sourceOnnxText.includes(`oid sha256:${poseModelManifest.source.sha256}`) && sourceOnnxText.includes(`size ${poseModelManifest.source.bytes}`), 'retained FP32 source LFS pointer matches the committed evidence');
+} else {
+  assert.equal(sourceOnnxBytes.byteLength, poseModelManifest.source.bytes, 'retained FP32 source size matches the committed evidence');
+  assert.equal(createHash('sha256').update(sourceOnnxBytes).digest('hex'), poseModelManifest.source.sha256, 'retained FP32 source hash matches the committed evidence');
+}
+assert.equal(createHash('sha256').update(readFileSync(calibrationPath)).digest('hex'), poseModelManifest.calibration.sha256, 'calibration input hash matches the committed evidence');
+assert.equal(poseModelManifest.calibration.samples, 12, 'INT8 evidence uses all twelve fixed calibration inputs');
+assert(poseModelManifest.runtime.source_size_ratio < 0.26 && poseModelManifest.runtime.size_reduction_percent > 74, 'INT8 runtime cuts deployed model bytes by at least 74%');
+assert.deepEqual(poseModelManifest.thresholds, {
+  mean_normalized_argmax_displacement_percent_max: 0.5,
+  max_normalized_argmax_displacement_percent_max: 3,
+  exact_argmax_match_percent_min: 80,
+}, 'INT8 evidence keeps the approved quality thresholds');
+assert.equal(poseModelManifest.quality.samples, poseModelManifest.calibration.samples, 'INT8 quality evidence covers every fixed calibration input');
+assert.equal(poseModelManifest.quality.keypoints, poseModelManifest.calibration.samples * 17, 'INT8 quality evidence covers all seventeen pose keypoints');
+assert(poseModelManifest.quality.mean_normalized_argmax_displacement_percent <= poseModelManifest.thresholds.mean_normalized_argmax_displacement_percent_max, 'INT8 mean keypoint displacement stays within its quality gate');
+assert(poseModelManifest.quality.max_normalized_argmax_displacement_percent <= poseModelManifest.thresholds.max_normalized_argmax_displacement_percent_max, 'INT8 maximum keypoint displacement stays within its quality gate');
+assert(poseModelManifest.quality.exact_argmax_match_percent >= poseModelManifest.thresholds.exact_argmax_match_percent_min, 'INT8 exact keypoint matches stay within their quality gate');
 
 const emptyProject = createEmptyProject();
 const starterSample = createSampleProject();
@@ -882,7 +936,9 @@ assert(physicsKernelSource.includes('finally') && physicsKernelSource.includes('
 assert(deployWorkflowText.includes('oven-sh/setup-bun@v2') && deployWorkflowText.includes('bun install --frozen-lockfile') && deployWorkflowText.includes('bun run build'), 'GitHub Pages workflow uses Bun install and build');
 assert(
   pullRequestWorkflowText.includes('pull_request:') &&
-  pullRequestWorkflowText.includes('lfs: true') &&
+  !pullRequestWorkflowText.includes('lfs: true') &&
+  pullRequestWorkflowText.includes('git lfs pull --include="public/onnx/pose_model.int8.ort" --exclude=""') &&
+  pullRequestWorkflowText.includes('test "$BYTES" -lt 40000000') &&
   pullRequestWorkflowText.includes('bun run test') &&
   pullRequestWorkflowText.includes('matrix.first') &&
   pullRequestWorkflowText.includes('matrix.second') &&
@@ -899,7 +955,7 @@ assert(
 );
 assert(deployWorkflowText.indexOf('bun run test') > -1 && deployWorkflowText.indexOf('bun run test') < deployWorkflowText.indexOf('bun run build'), 'GitHub Pages workflow runs contract tests before build and deploy');
 assert(deployWorkflowText.includes('playwright install --with-deps chromium') && deployWorkflowText.includes('bun run test:study:browser'), 'tagged study releases run the production-preview telemetry browser gate before the release build');
-assert(deployWorkflowText.includes('lfs: true') && deployWorkflowText.includes('git lfs pull --include="public/onnx/pose_model.onnx"'), 'GitHub Pages workflow fetches real ONNX bytes from Git LFS before build');
+assert(!deployWorkflowText.includes('lfs: true') && deployWorkflowText.includes('git lfs pull --include="public/onnx/pose_model.int8.ort" --exclude=""'), 'GitHub Pages fetches only the deployed INT8 runtime from Git LFS before build');
 assert(deployWorkflowText.includes('Check ONNX LFS asset') && deployWorkflowText.includes('Check built ONNX asset') && deployWorkflowText.includes('version https://git-lfs'), 'GitHub Pages workflow rejects Git LFS pointer files before upload');
 assert(deployWorkflowText.includes('tags:') && deployWorkflowText.includes('v*.*.*') && !deployWorkflowText.includes('branches:'), 'GitHub Pages workflow deploys only from version tags');
 assert(deployWorkflowText.includes('test "v${VERSION}" = "${GITHUB_REF_NAME}"'), 'GitHub Pages workflow requires the tag to match package.json version');
@@ -4789,6 +4845,7 @@ const foundryCameraText = readFileSync(join(process.cwd(), 'utils', 'foundryCame
 const mechanismRecommendationsText = readFileSync(join(process.cwd(), 'utils', 'mechanismRecommendations.ts'), 'utf8');
 const webOnnxText = readFileSync(join(process.cwd(), 'utils', 'webOnnx.ts'), 'utf8');
 const webOnnxWorkerText = readFileSync(join(process.cwd(), 'utils', 'webOnnxWorker.ts'), 'utf8');
+const quantizePoseModelText = readFileSync(join(process.cwd(), 'scripts', 'quantize-pose-model.py'), 'utf8');
 const stageLayoutText = readFileSync(join(process.cwd(), 'components', 'stages', 'stageLayout.tsx'), 'utf8');
 const partInspectorText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'PartInspector.tsx'), 'utf8');
 const cutOutlineEditorText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CutOutlineEditorDialog.tsx'), 'utf8');
@@ -5495,6 +5552,10 @@ assert(!threePreviewText.includes('teeth * 2'), '3D preview no longer carries a 
 assert(threePreviewText.includes('fabricablePartOutlinePoints'), '3D puppet preview uses shared model/user contour outlines instead of raw image crop rectangles');
 assert(webOnnxWorkerText.includes('contourFromCropMask') && webOnnxWorkerText.includes("contourSource: crop.contourPoints.length >= 3 ? 'onnx-mask'"), 'browser ONNX worker preserves mask-derived part contours for fabrication plates');
 assert(webOnnxText.includes('MODEL_CACHE_NAME') && webOnnxWorkerText.includes('caches.open') && webOnnxText.includes('warmWebOnnxCache'), 'browser ONNX model can be separately downloaded and cached on demand');
+assert(webOnnxText.includes("motionsmith-web-onnx-v3") && webOnnxText.includes("motionsmith-web-onnx-v2") && webOnnxText.includes("motionsmith-web-onnx-v1") && webOnnxWorkerText.includes("pose_model.int8.ort"), 'browser ONNX uses the INT8 runtime and clears both older FP32 cache generations');
+assert(webOnnxText.includes("model: 'int8'") && webOnnxWorkerText.includes("model: 'int8'"), 'image processing metrics identify the quality-gated INT8 model');
+assert(quantizePoseModelText.includes('QuantFormat.QDQ') && quantizePoseModelText.includes('QuantType.QInt8') && quantizePoseModelText.includes('CalibrationMethod.MinMax') && quantizePoseModelText.includes('ORT_ENABLE_BASIC'), 'pose model generator locks the committed QDQ INT8 and ORT basic pipeline');
+assert(quantizePoseModelText.includes('assert_quality') && quantizePoseModelText.includes('EXACT_MATCH_FLOOR_PERCENT = 80.0'), 'pose model generator fails when fixed calibration quality falls below the committed gate');
 assert(webOnnxWorkerText.includes('GIT_LFS_POINTER_PREFIX') && webOnnxWorkerText.includes('deleteCachedModel') && webOnnxWorkerText.includes("cache: 'reload'"), 'browser ONNX worker rejects stale Git LFS pointer caches and refetches model bytes');
 assert(webOnnxWorkerText.includes('MODEL_BYTES_HEADER') && webOnnxText.includes('x-motionsmith-model-bytes'), 'browser ONNX marks valid cached model bytes so boot checks only cache headers');
 assert(webOnnxWorkerText.includes('assertCompleteModelDownload') && webOnnxWorkerText.includes('download disconnected after') && webOnnxWorkerText.includes('model-download-stalled'), 'browser ONNX rejects interrupted or stalled model downloads before caching');
@@ -8275,11 +8336,13 @@ assert.equal(simulationSettingsProject.lastExport, undefined, 'simulation physic
 const indexHtml = readFileSync(join(process.cwd(), 'index.html'), 'utf8');
 assert(!/https?:\/\//.test(indexHtml), 'index.html has no external CDN URLs');
 assert(!/importmap|tailwindcss/i.test(indexHtml), 'index.html does not rely on importmap or Tailwind CDN');
-assert(existsSync(join(process.cwd(), 'public/onnx/pose_model.onnx')), 'ONNX model asset is present for web runtime');
+assert(existsSync(join(process.cwd(), 'public/onnx/pose_model.int8.ort')), 'ONNX model asset is present for web runtime');
 if (existsSync(join(process.cwd(), 'dist'))) {
-  const distOnnxPath = join(process.cwd(), 'dist/onnx/pose_model.onnx');
+  const distOnnxPath = join(process.cwd(), 'dist/onnx/pose_model.int8.ort');
   assert(existsSync(distOnnxPath), 'production build copies ONNX model to dist');
-  assert(statSync(distOnnxPath).size > 1_000_000 && !readFileSync(distOnnxPath).subarray(0, 64).toString('utf8').startsWith('version https://git-lfs'), 'production ONNX build output is real model bytes, not a Git LFS pointer');
+  const distOnnxBytes = readFileSync(distOnnxPath);
+  assert.equal(createHash('sha256').update(distOnnxBytes).digest('hex'), poseModelManifest.runtime.sha256, 'production ONNX build output matches the quality-gated runtime');
+  assert.equal(distOnnxBytes.subarray(4, 8).toString('ascii'), 'ORTM', 'production ONNX build output uses ONNX Runtime format');
 }
 const staleExport = loadProjectSnapshot({ ...sample, lastExport: { id: 'stale-export' } });
 assert.equal(staleExport.lastExport, undefined, 'imported project snapshots clear stale fabrication exports');

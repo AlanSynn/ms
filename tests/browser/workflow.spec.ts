@@ -10,7 +10,7 @@ import type { ConnectionSelection, ConnectionSelectionRole, Point } from '../../
 
 
 const TEST_ONNX_MODEL_BYTES = Buffer.alloc(1_000_001);
-const ONNX_MODEL_ROUTE = '**/onnx/pose_model.onnx';
+const ONNX_MODEL_ROUTE = '**/onnx/pose_model.int8.ort';
 
 const EXPECTED_COMPILED_SUPPORT_PATH_KINDS: Record<string, string> = {
   '4bar': 'input-length:linkage>spacer>clip;coupler-length+input-length:clip>linkage>spacer>linkage>clip;coupler-length+output-length:clip>linkage>spacer>linkage>clip;output-length:linkage>spacer>clip',
@@ -2497,7 +2497,7 @@ test('animation performance: Foundry playback stays responsive without runaway T
 test('Girl and Boy starters open from bounded packages without AI', async ({ page }) => {
   let modelRequests = 0;
   page.on('request', request => {
-    if (request.url().includes('/onnx/pose_model.onnx')) modelRequests += 1;
+    if (request.url().includes('/onnx/pose_model.int8.ort')) modelRequests += 1;
   });
   await page.goto('/');
   await waitForBootLoader(page);
@@ -2543,10 +2543,10 @@ test('invalid cached AI is cleared and exposes real local fallbacks', async ({ p
   await page.goto('/');
   await openCharacterScreen(page, { loadStarter: false });
   await page.evaluate(async () => {
-    const cache = await caches.open('motionsmith-web-onnx-v2');
+    const cache = await caches.open('motionsmith-web-onnx-v3');
     const bytes = new Uint8Array(1_000_001);
     await cache.put(
-      new URL('onnx/pose_model.onnx', location.href),
+      new URL('onnx/pose_model.int8.ort', location.href),
       new Response(bytes, { headers: { 'x-motionsmith-model-bytes': String(bytes.byteLength) } }),
     );
   });
@@ -2557,8 +2557,8 @@ test('invalid cached AI is cleared and exposes real local fallbacks', async ({ p
   await expect(dock.getByRole('button', { name: 'Starter rig' })).toBeVisible();
   await expect(dock.getByRole('button', { name: 'Character file' })).toBeVisible();
   expect(await page.evaluate(async () => {
-    const cache = await caches.open('motionsmith-web-onnx-v2');
-    return Boolean(await cache.match(new URL('onnx/pose_model.onnx', location.href)));
+    const cache = await caches.open('motionsmith-web-onnx-v3');
+    return Boolean(await cache.match(new URL('onnx/pose_model.int8.ort', location.href)));
   }), 'invalid session bytes are evicted').toBe(false);
   await dock.getByRole('button', { name: 'Starter rig' }).click();
   await expectProjectCounts(page, 14, 1, 0);
@@ -4337,7 +4337,7 @@ test('Mobile path editor keeps Draw free path action above the canvas', async ({
 test('Startup uses one boot loader and opens Getting Started over Character', async ({ page }) => {
   let modelRequests = 0;
   page.on('request', request => {
-    if (request.url().includes('/onnx/pose_model.onnx')) modelRequests += 1;
+    if (request.url().includes('/onnx/pose_model.int8.ort')) modelRequests += 1;
   });
   const bootHtml = await (await page.request.get('/')).text();
   expect(bootHtml).toContain('id="boot-loader"');
