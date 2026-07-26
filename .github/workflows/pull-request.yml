@@ -46,7 +46,7 @@ jobs:
 
       - name: Test production preview
         env:
-          PLAYWRIGHT_WORKERS: 4
+          PLAYWRIGHT_WORKERS: 2
         run: bun run test:browser
 
       - name: Test low-end image AI
