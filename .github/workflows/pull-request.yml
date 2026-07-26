@@ -100,7 +100,7 @@ jobs:
         run: bun run build
 
       - name: Test long browser flow
-        run: env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test tests/browser/workflow.spec.ts --grep @long-e2e --workers=1
+        run: env -u NO_COLOR DEBUG=pw:api PLAYWRIGHT_SERVER=preview bunx playwright test tests/browser/workflow.spec.ts --grep @long-e2e --workers=1
 
   study-telemetry:
     name: study telemetry
