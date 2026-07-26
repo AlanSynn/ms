@@ -56,12 +56,14 @@ export const CharacterImportStatusDock = ({
     },
     {
       label: "art",
-      ok: reviewedProject.partOrder.some((id) =>
-        Boolean(
-          reviewedProject.parts[id]?.textureUrl ||
-            reviewedProject.parts[id]?.maskUrl,
+      ok:
+        Boolean(reviewedProject.characterPackage?.sourceTextureUrl) ||
+        reviewedProject.partOrder.some((id) =>
+          Boolean(
+            reviewedProject.parts[id]?.textureUrl ||
+              reviewedProject.parts[id]?.maskUrl,
+          ),
         ),
-      ),
     },
     {
       label: "outlines",

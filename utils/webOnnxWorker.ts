@@ -48,7 +48,6 @@ const MAX_WORKING_EDGE = 1_024;
 const MAX_WORKING_PIXELS = 1_000_000;
 const MAX_SOURCE_TEXTURE_EDGE = 512;
 const MAX_SOURCE_TEXTURE_BYTES = 256 * 1_024;
-const MAX_PART_TEXTURE_BYTES = 256 * 1_024;
 const MAX_MASK_BYTES = 128 * 1_024;
 
 const readImage = async (file: File) => {
@@ -426,46 +425,16 @@ const contourFromCropMask = (
     }).map(point => ({ x: point.x - width / 2, y: height / 2 - point.y }));
 };
 
-const cropPart = async (img: WorkerImage, mask: ImageMask, partMask: Uint8Array, maskWidth: number, maskHeight: number, scale: number, bbox: Bounds) => {
+const cropPart = (img: WorkerImage, mask: ImageMask, partMask: Uint8Array, maskWidth: number, maskHeight: number, scale: number, bbox: Bounds) => {
     const x = Math.max(0, Math.floor(bbox.x));
     const y = Math.max(0, Math.floor(bbox.y));
     const width = Math.max(24, Math.min(img.width - x, Math.ceil(bbox.width)));
     const height = Math.max(24, Math.min(img.height - y, Math.ceil(bbox.height)));
-    const canvas = new OffscreenCanvas(width, height);
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) throw new Error('Canvas 2D unavailable for part crop');
-    ctx.drawImage(img, x, y, width, height, 0, 0, width, height);
-    const image = ctx.getImageData(0, 0, width, height);
-    const maskCanvas = new OffscreenCanvas(width, height);
-    const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
-    if (!maskCtx) throw new Error('Canvas 2D unavailable for part mask');
-    const maskImage = maskCtx.createImageData(width, height);
-    for (let py = 0; py < height; py++) for (let px = 0; px < width; px++) {
-        const ix = Math.min(mask.width - 1, x + px);
-        const iy = Math.min(mask.height - 1, y + py);
-        const sx = Math.min(maskWidth - 1, Math.round(ix * scale));
-        const sy = Math.min(maskHeight - 1, Math.round(iy * scale));
-        const v = partMask[sy * maskWidth + sx] && mask.data[iy * mask.width + ix] ? 255 : 0;
-        const o = (py * width + px) * 4;
-        image.data[o + 3] = v;
-        maskImage.data[o] = maskImage.data[o + 1] = maskImage.data[o + 2] = v;
-        maskImage.data[o + 3] = 255;
-    }
-    ctx.putImageData(image, 0, 0);
-    maskCtx.putImageData(maskImage, 0, 0);
     const contourPoints = contourFromCropMask(mask, partMask, maskWidth, maskHeight, scale, { x, y, width, height });
-    return {
-        textureUrl: await canvasDataUrl(canvas, 'image/webp', MAX_PART_TEXTURE_BYTES),
-        maskUrl: await canvasDataUrl(maskCanvas, 'image/png', MAX_MASK_BYTES),
-        contourPoints,
-        x,
-        y,
-        width,
-        height
-    };
+    return { contourPoints, x, y, width, height };
 };
 
-const buildParts = async (skeleton: StandardSkeleton, img: WorkerImage, mask: ImageMask): Promise<BodyPartLayer[]> => {
+const buildParts = (skeleton: StandardSkeleton, img: WorkerImage, mask: ImageMask): BodyPartLayer[] => {
     const imagePoint = (jointId: string): Point | null => skeleton.joints[jointId] ? toImage(skeleton.joints[jointId].position, img) : null;
     const segmented = buildPartMasks(skeleton, mask, img);
     const parts: BodyPartLayer[] = [];
@@ -473,14 +442,12 @@ const buildParts = async (skeleton: StandardSkeleton, img: WorkerImage, mask: Im
         const points = def.joints.map(imagePoint).filter((p): p is Point => !!p);
         if (!points.length) continue;
         const cropBox = partMaskBBox(segmented.masks[def.id], segmented.width, segmented.height, segmented.scale, points);
-        const crop = await cropPart(img, mask, segmented.masks[def.id], segmented.width, segmented.height, segmented.scale, cropBox);
+        const crop = cropPart(img, mask, segmented.masks[def.id], segmented.width, segmented.height, segmented.scale, cropBox);
         const center = { x: crop.x + crop.width / 2, y: crop.y + crop.height / 2 };
         const anchor = imagePoint(def.anchor) ?? center;
         parts.push({
             id: def.id,
             name: def.name,
-            textureUrl: crop.textureUrl,
-            maskUrl: crop.maskUrl,
             sourceImageFrame: { x: -crop.x - crop.width / 2, y: -crop.y - crop.height / 2, width: img.width, height: img.height },
             contourPoints: crop.contourPoints,
             contourSource: crop.contourPoints.length >= 3 ? 'onnx-mask' : undefined,
@@ -714,7 +681,7 @@ export const processImageWithWebOnnx = async (
         runtimeStage = 'extracting-parts';
         onProgress('extracting-parts', 75);
         const skeleton = buildPoseSkeleton(keypoints, img, mask);
-        const parts = await buildParts(skeleton, img, mask);
+        const parts = buildParts(skeleton, img, mask);
         if (!parts.length) throw new Error('ONNX pose succeeded but no body parts could be extracted');
         runtimeStage = 'normalizing';
         onProgress('normalizing', 90);

@@ -341,6 +341,7 @@ export const SceneSketch = ({
             <PartShape
               part={part}
               skeleton={previewSkeleton}
+              sourceTextureUrl={project.characterPackage?.sourceTextureUrl}
               selected={project.selectedPartId === part.id}
               drawMode={drawMode}
               onSelect={() =>

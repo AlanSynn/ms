@@ -322,7 +322,14 @@ const visibleAutomataSceneIds = (automataContext?: FoundryAutomataContext) => {
       automataContext.project.sceneObjects[id])?.visible,
   );
   const partArtIds = partIds.filter(
-    (id) => Boolean(automataContext.project.parts[id]?.textureUrl),
+    (id) => {
+      const part = automataContext.project.parts[id];
+      return Boolean(
+        part?.textureUrl ||
+          (part?.sourceImageFrame &&
+            automataContext.project.characterPackage?.sourceTextureUrl),
+      );
+    },
   );
   return { partIds, objectIds, partArtIds };
 };
@@ -352,8 +359,9 @@ const foundryAutomataTextureMaterial = (
   opacity: number,
   onLoaded: () => void,
   materialCache: Map<string, THREE.Material>,
+  textureKey = textureUrl,
 ) => {
-  const key = `automata-texture:${textureUrl ?? "none"}:${opacity.toFixed(2)}`;
+  const key = `automata-texture:${textureKey ?? "none"}:${opacity.toFixed(2)}`;
   const existing = materialCache.get(key);
   if (existing) return existing as THREE.MeshBasicMaterial;
   const material = new THREE.MeshBasicMaterial({
@@ -445,6 +453,12 @@ const renderFoundryAutomataContext = ({
 
   parts.forEach((part) => {
     const base = project.parts[part.id] ?? part;
+    const sourceFrame = project.characterPackage?.sourceTextureUrl
+      ? base.sourceImageFrame
+      : undefined;
+    const textureUrl = sourceFrame
+      ? project.characterPackage?.sourceTextureUrl
+      : base.textureUrl;
     const landmarks = partLandmarkLocalPoints(base, skeleton);
     const outline = fabricablePartOutlinePoints(base, landmarks);
     if (outline.length < 3) return;
@@ -478,7 +492,7 @@ const renderFoundryAutomataContext = ({
     mesh.userData.partId = part.id;
     mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), edge));
     group.add(mesh);
-    if (base.textureUrl) {
+    if (textureUrl) {
       const artGeometry = new THREE.ShapeGeometry(shape);
       const positions = artGeometry.getAttribute("position");
       const uvs: number[] = [];
@@ -486,16 +500,20 @@ const renderFoundryAutomataContext = ({
       const height = Math.max(1, base.bounds.height);
       for (let i = 0; i < positions.count; i += 1) {
         const local = sceneLocalFromFoundryGeometry(positions.getX(i), positions.getY(i));
-        uvs.push((local.x - base.bounds.x) / width, (local.y - base.bounds.y) / height);
+        uvs.push(
+          sourceFrame ? (local.x - sourceFrame.x) / sourceFrame.width : (local.x - base.bounds.x) / width,
+          sourceFrame ? (local.y - sourceFrame.y) / sourceFrame.height : (local.y - base.bounds.y) / height,
+        );
       }
       artGeometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
       const art = new THREE.Mesh(
         artGeometry,
         foundryAutomataTextureMaterial(
-          base.textureUrl,
+          textureUrl,
           Math.min(0.82, base.opacity),
           onLoaded,
           materialCache,
+          sourceFrame ? `character-source:${project.characterPackage?.id}` : textureUrl,
         ),
       );
       art.name = `foundry-automata-art-${part.id}`;

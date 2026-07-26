@@ -2622,6 +2622,7 @@ test('Create from image upload creates a reviewed character package in browser @
   await expect(generatedPuppet).toHaveAttribute('data-puppet-mode', 'thick-flat-assembly');
   await expect(generatedPuppet).toHaveAttribute('data-three-part-surface', 'solid-cut-plates');
   await expect(generatedPuppet).toHaveAttribute('data-three-part-art', 'top-texture-decal');
+  await expect(generatedPuppet).toHaveAttribute('data-three-part-texture-count', '10');
   await expect(generatedPuppet).toHaveAttribute('data-three-part-opacity', '1');
   expect(Number(await generatedPuppet.getAttribute('data-three-part-hole-count')), 'generated character 3D puppet keeps cut-through joint holes').toBeGreaterThan(0);
   await expect.poll(async () => Number(await generatedPuppet.getAttribute('data-three-render-triangles')), { message: 'accepted ONNX character renders as real 3D fabrication geometry' }).toBeGreaterThan(0);
@@ -2636,7 +2637,7 @@ test('Create from image upload creates a reviewed character package in browser @
   const workingBounds = importedProject.skeleton.metadata.imageBounds;
   expect(workingBounds.width * workingBounds.height, '12MP input is downscaled before ProjectState pixel work').toBeLessThanOrEqual(1_000_000);
   expect(Math.max(workingBounds.width, workingBounds.height), 'working image edge is Chromebook-bounded').toBeLessThanOrEqual(1_024);
-  expect(snapshot.byteLength, 'portable project stays bounded after a 12MP import').toBeLessThanOrEqual(8 * 1024 * 1024);
+  expect(snapshot.byteLength, 'portable project stays bounded after a 12MP import').toBeLessThanOrEqual(1 * 1024 * 1024);
   expect(importedProject.characterPackage.sourceTextureUrl.length, 'normalized source texture stays below the 256KB byte ceiling').toBeLessThanOrEqual(Math.ceil(256 * 1024 * 4 / 3) + 64);
   const sourceTextureSize = await page.evaluate(async (src) => {
     const image = new Image();
@@ -2646,8 +2647,8 @@ test('Create from image upload creates a reviewed character package in browser @
   }, importedProject.characterPackage.sourceTextureUrl);
   expect(Math.max(sourceTextureSize.width, sourceTextureSize.height), 'display texture stays Chromebook-bounded').toBeLessThanOrEqual(512);
   for (const part of Object.values(importedProject.parts) as Array<{ textureUrl?: string; maskUrl?: string }>) {
-    expect(part.textureUrl?.length ?? 0, 'part texture stays below the 256KB byte ceiling').toBeLessThanOrEqual(Math.ceil(256 * 1024 * 4 / 3) + 64);
-    expect(part.maskUrl?.length ?? 0, 'part mask stays below the 128KB byte ceiling').toBeLessThanOrEqual(Math.ceil(128 * 1024 * 4 / 3) + 64);
+    expect(part.textureUrl, 'ONNX parts reuse the optimized source texture').toBeUndefined();
+    expect(part.maskUrl, 'ONNX parts reuse contours instead of duplicate masks').toBeUndefined();
   }
 
   expectCleanPage(pageErrors, consoleErrors);

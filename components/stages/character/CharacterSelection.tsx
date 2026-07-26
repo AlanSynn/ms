@@ -130,7 +130,8 @@ export const CharacterSelection = ({
                     {Object.keys(project.skeleton?.joints ?? {}).length} joints
                   </span>
                   <span>
-                    {reviewedProject.partOrder.some((id) =>
+                    {reviewedProject.characterPackage?.sourceTextureUrl ||
+                    reviewedProject.partOrder.some((id) =>
                       Boolean(reviewedProject.parts[id]?.textureUrl),
                     )
                       ? "art on plates"
@@ -215,7 +216,13 @@ export const CharacterSelection = ({
                             <small>{part.locked ? "Locked part" : "Editable part"}</small>
                           </span>
                           <span className="part-list-badges">
-                            {part.textureUrl ? <b>art</b> : <b>plate</b>}
+                            {part.textureUrl ||
+                            (part.sourceImageFrame &&
+                              partPanelProject.characterPackage?.sourceTextureUrl) ? (
+                              <b>art</b>
+                            ) : (
+                              <b>plate</b>
+                            )}
                             {part.locked && <b>lock</b>}
                           </span>
                         </button>

@@ -840,7 +840,10 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     const outline = fabricablePartOutlinePoints(base, landmarks);
     return sum + landmarks.filter(local => pointInsideOutline(local, outline, 0.5)).length;
   }, 0), [canonicalSkeleton, geometryParts, project?.parts]);
-  const partTextureCount = geometryParts.reduce((sum, part) => sum + ((project?.parts[part.id] ?? part).textureUrl ? 1 : 0), 0);
+  const partTextureCount = geometryParts.reduce((sum, part) => {
+    const base = project?.parts[part.id] ?? part;
+    return sum + (base.textureUrl || (base.sourceImageFrame && project?.characterPackage?.sourceTextureUrl) ? 1 : 0);
+  }, 0);
   const partArtCount = geometryParts.length;
   const estimatedObjectCount = boardGridLines(kit).length + 1 + geometryParts.length * 4 + sceneObjects.length * 4 + holeCount + joints.length * 2 + bones.length + pathsToRender.length * 3 + pathsToRender.reduce((sum, path) => sum + path.points.length, 0) + mechanismLinkCount * 2 + mechanismsToRender.length * 8 + mechanismInventory.holes + mechanismInventory.gears * 2;
 
