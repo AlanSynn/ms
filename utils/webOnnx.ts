@@ -85,6 +85,17 @@ export const checkWebOnnxCache = async (): Promise<WebOnnxCacheStatus> => {
 
 let nextJobId = 1;
 let activeJob: { cancel: (code: 'canceled' | 'superseded') => void } | undefined;
+let reusableWorker: Worker | undefined;
+
+const imageAiWorker = () => reusableWorker ??= new Worker(
+    new URL('./webOnnxWorker.ts', import.meta.url),
+    { type: 'module', name: 'motionsmith-image-ai' }
+);
+
+const retireWorker = (worker: Worker) => {
+    if (reusableWorker === worker) reusableWorker = undefined;
+    worker.terminate();
+};
 
 const runWorker = <T>(
     request: { type: 'warm' } | { type: 'process'; file: File },
@@ -98,18 +109,20 @@ const runWorker = <T>(
             return;
         }
         const id = nextJobId++;
-        const worker = new Worker(new URL('./webOnnxWorker.ts', import.meta.url), { type: 'module', name: 'motionsmith-image-ai' });
+        const worker = imageAiWorker();
         let settled = false;
-        const finish = (value: T | WebOnnxError, failed = false) => {
+        const finish = (value: T | WebOnnxError, failed = false, retire = failed) => {
             if (settled) return;
             settled = true;
             signal?.removeEventListener('abort', abort);
-            worker.terminate();
+            worker.onmessage = null;
+            worker.onerror = null;
+            if (retire) retireWorker(worker);
             if (activeJob?.cancel === cancel) activeJob = undefined;
             if (failed) reject(value);
             else resolve(value as T);
         };
-        const cancel = (code: 'canceled' | 'superseded') => finish(new WebOnnxError(code, code === 'canceled' ? 'Image import canceled.' : 'A newer image import started.'), true);
+        const cancel = (code: 'canceled' | 'superseded') => finish(new WebOnnxError(code, code === 'canceled' ? 'Image import canceled.' : 'A newer image import started.'), true, true);
         const abort = () => cancel('canceled');
         activeJob = { cancel };
         if (signal?.aborted) {

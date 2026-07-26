@@ -2655,6 +2655,17 @@ test('Create from image upload creates a reviewed character package in browser @
 });
 
 test('image AI warm-cache performance @performance @real-onnx', async ({ page }) => {
+  await page.addInitScript(() => {
+    const NativeWorker = window.Worker;
+    let workerCount = 0;
+    Object.defineProperty(window, '__imageAiWorkerCount', { get: () => workerCount });
+    window.Worker = new Proxy(NativeWorker, {
+      construct(target, args) {
+        workerCount += 1;
+        return Reflect.construct(target, args);
+      },
+    });
+  });
   await page.goto('/');
   await openCharacterScreen(page);
   await page.getByTestId('onnx-input').setInputFiles('tests/fixtures/stick-character.png');
@@ -2729,6 +2740,7 @@ test('image AI warm-cache performance @performance @real-onnx', async ({ page })
     await expect(page.getByTestId('character-import-review')).toHaveCount(0);
   }
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+  expect(await page.evaluate(() => (window as typeof window & { __imageAiWorkerCount: number }).__imageAiWorkerCount), 'warm cache and repeated imports reuse one image AI Worker').toBe(1);
   expect(Math.max(...durations), `warm-cache samples: ${JSON.stringify(durations)}`).toBeLessThanOrEqual(30_000);
   expect(Math.max(...windows.map(value => value.maxLongTaskMs)), `main-thread samples: ${JSON.stringify(windows)}`).toBeLessThanOrEqual(200);
   expect(Math.max(...windows.map(value => value.maxHeartbeatGapMs)), `heartbeat samples: ${JSON.stringify(windows)}`).toBeLessThanOrEqual(250);
