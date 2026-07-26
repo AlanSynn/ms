@@ -894,7 +894,10 @@ assert(
   pullRequestWorkflowText.includes('image-ai-performance:') &&
   pullRequestWorkflowText.includes('name: low-end image AI') &&
   pullRequestWorkflowText.includes('bun run test:image-ai:performance') &&
-  pullRequestWorkflowText.includes('bun run test:study:browser'),
+  pullRequestWorkflowText.includes('bun run test:study:browser') &&
+  pullRequestWorkflowText.includes('PLAYWRIGHT_SKIP_LONG_E2E=1') &&
+  pullRequestWorkflowText.includes('--grep @long-e2e --workers=1') &&
+  readFileSync(join(process.cwd(), 'tests', 'browser', 'workflow.spec.ts'), 'utf8').includes('browser @long-e2e'),
   'pull requests fetch LFS and run contracts, eight production-preview browser shards across four runners, and isolated image-performance and study gates'
 );
 assert(deployWorkflowText.indexOf('bun run test') > -1 && deployWorkflowText.indexOf('bun run test') < deployWorkflowText.indexOf('bun run build'), 'GitHub Pages workflow runs contract tests before build and deploy');

@@ -66,7 +66,13 @@ jobs:
         run: bun run build
 
       - name: Test production preview ${{ matrix.first }}/8
-        run: env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test --shard=${{ matrix.first }}/8 --workers=2
+        run: |
+          if [ "${{ matrix.first }}" = "4" ]; then
+            PLAYWRIGHT_SKIP_LONG_E2E=1 env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test --shard=4/8 --workers=2
+            env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test tests/browser/workflow.spec.ts --grep @long-e2e --workers=1
+          else
+            env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test --shard=${{ matrix.first }}/8 --workers=2
+          fi
 
       - name: Test production preview ${{ matrix.second }}/8
         run: env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test --shard=${{ matrix.second }}/8 --workers=2
