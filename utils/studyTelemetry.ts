@@ -776,6 +776,11 @@ const writeOutboxItems = (
         .map((item) => item.snapshotSeries)
         .filter((series): series is string => Boolean(series)),
     );
+    const newSnapshotKeys = new Set(
+      items
+        .map((item) => item.snapshotKey)
+        .filter((key): key is string => Boolean(key)),
+    );
     if (collapseSnapshots && newSeries.size) {
       const cursor = store.openCursor();
       cursor.onsuccess = () => {
@@ -788,6 +793,7 @@ const writeOutboxItems = (
           && item.deliveryClass === "snapshot"
           && item.snapshotSeries
           && newSeries.has(item.snapshotSeries)
+          && (!item.snapshotKey || !newSnapshotKeys.has(item.snapshotKey))
         ) {
           entry.delete();
           supersededSnapshots += 1;
@@ -1520,7 +1526,9 @@ export const flushStudyTelemetry = async (
   if (flushTimer !== undefined) window.clearTimeout(flushTimer);
   flushTimer = undefined;
   flushDueAt = 0;
-  const batches = makeBufferedBatches(beacon, beacon || durableOnly);
+  // Normal durable flushes store one bounded batch per task. Exit checkpoints
+  // still drain every batch so a closing page cannot strand a generation.
+  const batches = makeBufferedBatches(beacon, beacon || checkpoint);
   if (checkpoint && activeBatches.size) {
     saveExitCheckpoint([...activeBatches.values()]);
   }
