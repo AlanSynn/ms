@@ -884,11 +884,13 @@ assert(
   pullRequestWorkflowText.includes('first: 1') &&
   pullRequestWorkflowText.includes('second: 8') &&
   pullRequestWorkflowText.includes('fail-fast: false') &&
+  pullRequestWorkflowText.includes('study-telemetry:') &&
+  pullRequestWorkflowText.includes('name: study telemetry') &&
   pullRequestWorkflowText.includes('image-ai-performance:') &&
   pullRequestWorkflowText.includes('name: low-end image AI') &&
   pullRequestWorkflowText.includes('bun run test:image-ai:performance') &&
   pullRequestWorkflowText.includes('bun run test:study:browser'),
-  'pull requests fetch LFS and run contracts, eight production-preview browser shards across four isolated runners, image performance, and study gates'
+  'pull requests fetch LFS and run contracts, eight production-preview browser shards across four runners, and isolated image-performance and study gates'
 );
 assert(deployWorkflowText.indexOf('bun run test') > -1 && deployWorkflowText.indexOf('bun run test') < deployWorkflowText.indexOf('bun run build'), 'GitHub Pages workflow runs contract tests before build and deploy');
 assert(deployWorkflowText.includes('playwright install --with-deps chromium') && deployWorkflowText.includes('bun run test:study:browser'), 'tagged study releases run the production-preview telemetry browser gate before the release build');
