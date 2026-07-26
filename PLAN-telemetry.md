@@ -16,9 +16,9 @@ The verified risks are concentrated in four areas:
 The targeted follow-up findings are implemented:
 
 * Snapshot normalization, stringify, hashing, and Base64 chunking run in
-  `studySnapshotWorker.ts`. Prepared records return through a transferable
-  `ArrayBuffer`; the main thread only hands off `ProjectState`, decodes once,
-  and commits the current generation.
+  `studySnapshotWorker.ts`. Prepared records return through native Worker
+  structured clone so the main thread does not repeat JSON decode and parse;
+  it only hands off `ProjectState` and commits the current generation.
 * Hidden/pagehide checkpoints merge instead of overwrite. Core actions are
   enqueued before technical and snapshot batches in separate transactions,
   already-reserved batches remain recoverable, and only successfully stored

@@ -568,7 +568,7 @@ const startSnapshotPreparation = (generation: number) => {
   worker.onmessage = (event: MessageEvent<{
     generation: number;
     contentHash?: string;
-    recordsBuffer?: ArrayBuffer;
+    records?: Array<{ type: string; data: unknown }>;
     durationMs?: number;
     error?: string;
   }>) => {
@@ -584,23 +584,8 @@ const startSnapshotPreparation = (generation: number) => {
       if (
         event.data.error
         || !event.data.contentHash
-        || !(event.data.recordsBuffer instanceof ArrayBuffer)
+        || !Array.isArray(event.data.records)
       ) {
-        snapshotPreparationFailures += 1;
-        reportTelemetryLoss("snapshot");
-        return;
-      }
-      let records: Array<{ type: string; data: unknown }>;
-      try {
-        records = JSON.parse(
-          new TextDecoder().decode(event.data.recordsBuffer),
-        ) as Array<{ type: string; data: unknown }>;
-      } catch {
-        snapshotPreparationFailures += 1;
-        reportTelemetryLoss("snapshot");
-        return;
-      }
-      if (!Array.isArray(records)) {
         snapshotPreparationFailures += 1;
         reportTelemetryLoss("snapshot");
         return;
@@ -611,7 +596,7 @@ const startSnapshotPreparation = (generation: number) => {
         lastSnapshotPreparationMs,
       );
       preparedSnapshot = {
-        records,
+        records: event.data.records,
         contentHash: event.data.contentHash,
         generation: event.data.generation,
       };
