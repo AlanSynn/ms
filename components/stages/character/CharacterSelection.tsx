@@ -282,8 +282,8 @@ export const CharacterSelection = ({
                   setViewport={setViewport}
                 />
                 <ThreePuppetPreview
-                  project={reviewedProject}
-                  skeleton={reviewedProject.skeleton}
+                  project={project}
+                  skeleton={project.skeleton}
                   mechanisms={[]}
                   angle={0}
                   viewport={viewport}

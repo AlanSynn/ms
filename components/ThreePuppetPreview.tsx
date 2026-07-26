@@ -138,18 +138,18 @@ const clearGroup = (group: THREE.Group) =>
     disposeObject(child, false);
   });
 
-const createPartArtMaterial = (part: BodyPartLayer, onLoaded: () => void) => {
+const createPartArtMaterial = (part: BodyPartLayer, onLoaded: () => void, textureUrl = part.textureUrl) => {
   const material = new THREE.MeshBasicMaterial({
-    color: part.textureUrl ? '#ffffff' : part.fillColor,
+    color: textureUrl ? '#ffffff' : part.fillColor,
     transparent: true,
-    opacity: part.textureUrl ? Math.max(0.35, Math.min(1, part.opacity ?? 1)) : 0.6,
+    opacity: textureUrl ? Math.max(0.35, Math.min(1, part.opacity ?? 1)) : 0.6,
     depthWrite: false,
     polygonOffset: true,
     polygonOffsetFactor: -1
   });
   material.userData.ownedByPartArt = true;
-  if (part.textureUrl) {
-    const texture = new THREE.TextureLoader().load(part.textureUrl, () => onLoaded());
+  if (textureUrl) {
+    const texture = new THREE.TextureLoader().load(textureUrl, () => onLoaded());
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.anisotropy = 4;
     material.map = texture;
@@ -606,18 +606,6 @@ const gearShape = (pitchRadius: number, physicalPitchRadiusMm: number) => {
   return shape;
 };
 
-const partGeometrySignature = (parts: BodyPartLayer[], project?: ProjectState, skeleton?: StandardSkeleton | null) => [
-  parts.map(part => {
-    const base = project?.parts[part.id] ?? part;
-    const contour = base.contourPoints?.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(';') ?? '';
-    return `${base.id}:${base.bounds.width}:${base.bounds.height}:${base.bounds.x}:${base.bounds.y}:${base.transform.x}:${base.transform.y}:${base.transform.rotation}:${base.transform.scale}:${base.visible}:${base.textureUrl ?? ''}:${base.contourSource ?? ''}:${contour}:${base.fillColor}:${base.opacity}`;
-  }).join('|'),
-  Object.values((project?.skeleton ?? skeleton)?.joints ?? {})
-    .map(joint => `${joint.id}:${joint.position.x.toFixed(2)}:${joint.position.y.toFixed(2)}`)
-    .join('|')
-].join('::');
-
-
 const gearMeshPlaneZForPlan = (renderPlan: FabricationRenderPlan) =>
   renderPlan.layers.find(layer => layer.gearPlaneId)?.z;
 
@@ -1050,13 +1038,19 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     render();
   }, [kitSignature, rendererStatus]);
 
-  const partSignature = useMemo(() => partGeometrySignature(geometryParts, project, canonicalSkeleton), [canonicalSkeleton, geometryParts, project?.parts]);
   useEffect(() => {
     const roots = rootsRef.current;
     const materials = materialsRef.current;
     if (!roots || !materials || rendererStatus !== 'webgl') return;
     clearGroup(roots.partsLayer);
     partMeshesRef.current.clear();
+    const sourceTextureUrl = project?.characterPackage?.sourceTextureUrl;
+    const sourceTexturePart = sourceTextureUrl
+      ? geometryParts.map(part => project?.parts[part.id] ?? part).find(part => part.sourceImageFrame)
+      : undefined;
+    const sourceArtMaterial = sourceTexturePart
+      ? createPartArtMaterial(sourceTexturePart, render, sourceTextureUrl)
+      : undefined;
     let partIndex = 0;
     let timer = 0;
     const buildNextPart = () => {
@@ -1081,13 +1075,20 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       const uvs: number[] = [];
       const artWidth = Math.max(1, base.bounds.width);
       const artHeight = Math.max(1, base.bounds.height);
+      const sourceFrame = sourceArtMaterial ? base.sourceImageFrame : undefined;
       for (let i = 0; i < artPositions.count; i += 1) {
         const x = artPositions.getX(i) * VIEW_SCALE;
         const y = artPositions.getY(i) * VIEW_SCALE;
-        uvs.push((x - base.bounds.x) / artWidth, (y - base.bounds.y) / artHeight);
+        uvs.push(
+          sourceFrame ? (x - sourceFrame.x) / sourceFrame.width : (x - base.bounds.x) / artWidth,
+          sourceFrame ? (y - sourceFrame.y) / sourceFrame.height : (y - base.bounds.y) / artHeight,
+        );
       }
       artGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-      const art = new THREE.Mesh(artGeometry, createPartArtMaterial(base, render));
+      const art = new THREE.Mesh(
+        artGeometry,
+        sourceFrame && sourceArtMaterial ? sourceArtMaterial : createPartArtMaterial(base, render),
+      );
       art.name = `part-art-decal-${part.id}`;
       art.position.set(0, 0, THICKNESS + 0.018);
       mesh.add(art);
@@ -1126,7 +1127,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     };
     timer = window.setTimeout(buildNextPart, 16);
     return () => window.clearTimeout(timer);
-  }, [partSignature, rendererStatus]);
+  }, [canonicalSkeleton?.joints, geometryParts, project?.characterPackage?.sourceTextureUrl, project?.parts, rendererStatus]);
 
   useEffect(() => {
     const materials = materialsRef.current;

@@ -46,7 +46,8 @@ type WorkerImage = ImageBitmap;
 
 const MAX_WORKING_EDGE = 1_024;
 const MAX_WORKING_PIXELS = 1_000_000;
-const MAX_SOURCE_TEXTURE_BYTES = 1_048_576;
+const MAX_SOURCE_TEXTURE_EDGE = 512;
+const MAX_SOURCE_TEXTURE_BYTES = 256 * 1_024;
 const MAX_PART_TEXTURE_BYTES = 256 * 1_024;
 const MAX_MASK_BYTES = 128 * 1_024;
 
@@ -90,10 +91,11 @@ const canvasDataUrl = async (canvas: OffscreenCanvas, type: 'image/webp' | 'imag
 };
 
 const imageToDataUrl = async (img: WorkerImage) => {
-    const canvas = new OffscreenCanvas(img.width, img.height);
+    const scale = Math.min(1, MAX_SOURCE_TEXTURE_EDGE / Math.max(img.width, img.height));
+    const canvas = new OffscreenCanvas(Math.round(img.width * scale), Math.round(img.height * scale));
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas 2D unavailable');
-    ctx.drawImage(img, 0, 0);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     return canvasDataUrl(canvas, 'image/webp', MAX_SOURCE_TEXTURE_BYTES);
 };
 

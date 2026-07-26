@@ -2609,7 +2609,7 @@ test('Create from image upload creates a reviewed character package in browser @
   const viewport = page.viewportSize();
   const reviewCenterX = (reviewBox?.x ?? 0) + (reviewBox?.width ?? 0) / 2;
   expect(Math.abs(reviewCenterX - (viewport?.width ?? 0) / 2), 'character import approval is centered on screen').toBeLessThan(8);
-  await expect(page.getByTestId('character-three-puppet-state')).toHaveAttribute('data-part-count', /[1-9]\d*/);
+  await expect(page.getByTestId('character-import-review-preview')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Use it' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Use it' }).click();
@@ -2637,7 +2637,14 @@ test('Create from image upload creates a reviewed character package in browser @
   expect(workingBounds.width * workingBounds.height, '12MP input is downscaled before ProjectState pixel work').toBeLessThanOrEqual(1_000_000);
   expect(Math.max(workingBounds.width, workingBounds.height), 'working image edge is Chromebook-bounded').toBeLessThanOrEqual(1_024);
   expect(snapshot.byteLength, 'portable project stays bounded after a 12MP import').toBeLessThanOrEqual(8 * 1024 * 1024);
-  expect(importedProject.characterPackage.sourceTextureUrl.length, 'normalized source texture stays below the 1MB byte ceiling').toBeLessThanOrEqual(Math.ceil(1_048_576 * 4 / 3) + 64);
+  expect(importedProject.characterPackage.sourceTextureUrl.length, 'normalized source texture stays below the 256KB byte ceiling').toBeLessThanOrEqual(Math.ceil(256 * 1024 * 4 / 3) + 64);
+  const sourceTextureSize = await page.evaluate(async (src) => {
+    const image = new Image();
+    image.src = src;
+    await image.decode();
+    return { width: image.naturalWidth, height: image.naturalHeight };
+  }, importedProject.characterPackage.sourceTextureUrl);
+  expect(Math.max(sourceTextureSize.width, sourceTextureSize.height), 'display texture stays Chromebook-bounded').toBeLessThanOrEqual(512);
   for (const part of Object.values(importedProject.parts) as Array<{ textureUrl?: string; maskUrl?: string }>) {
     expect(part.textureUrl?.length ?? 0, 'part texture stays below the 256KB byte ceiling').toBeLessThanOrEqual(Math.ceil(256 * 1024 * 4 / 3) + 64);
     expect(part.maskUrl?.length ?? 0, 'part mask stays below the 128KB byte ceiling').toBeLessThanOrEqual(Math.ceil(128 * 1024 * 4 / 3) + 64);
@@ -2742,7 +2749,7 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
   await expect(review).toBeVisible();
   await expect(review.getByText('Ready', { exact: true })).toBeVisible();
   await expect(review).toContainText('1 parts · 2 joints');
-  await expect(page.getByTestId('character-three-puppet-state')).toHaveAttribute('data-part-count', '1');
+  await expect(page.getByTestId('character-import-review-preview')).toBeVisible();
   await expect(page.getByText('outlines')).toBeHidden();
   await expect(page.getByText('Checks')).toHaveCount(0);
   await expect(page.getByTestId('character-setup-panel').getByText('Choose new character.')).toBeVisible();

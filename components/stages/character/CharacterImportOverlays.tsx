@@ -154,6 +154,11 @@ export const CharacterImportReviewDialog = ({
   const pendingStats = `${pendingCharacter.project.partOrder.length} parts · ${
     Object.keys(pendingCharacter.project.skeleton?.joints ?? {}).length
   } joints`;
+  const previewUrl =
+    pendingCharacter.project.characterPackage?.sourceTextureUrl ??
+    pendingCharacter.project.partOrder
+      .map((id) => pendingCharacter.project.parts[id]?.textureUrl)
+      .find((url): url is string => Boolean(url));
 
   return (
     <section
@@ -174,6 +179,15 @@ export const CharacterImportReviewDialog = ({
         <div className="character-import-review-meta">
           {pendingStats || compactPackageSummary(pendingCharacter.summary)}
         </div>
+        {previewUrl && (
+          <img
+            className="character-import-review-preview"
+            data-testid="character-import-review-preview"
+            src={previewUrl}
+            alt="Imported character preview"
+            decoding="async"
+          />
+        )}
         <div className="character-import-review-actions">
           <button className="btn-primary" onClick={onAccept}>
             Use it
