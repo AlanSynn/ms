@@ -2682,37 +2682,49 @@ test('image AI warm-cache performance @performance @real-onnx', async ({ page })
       state.lastHeartbeat = now;
     }, 50);
   }, source);
-  const imageWindowMetrics = () => page.evaluate(() => {
-    const state = (window as typeof window & {
-      __imagePerf: {
-        longTasks: Array<{ start: number; duration: number }>;
-        heartbeats: Array<{ from: number; at: number }>;
-      };
-    }).__imagePerf;
-    const start = performance.getEntriesByName('motionsmith-image-processing-start').at(-1)?.startTime ?? 0;
-    const end = performance.now();
-    return {
-      maxLongTaskMs: Math.max(0, ...state.longTasks.filter(entry => entry.start >= start && entry.start <= end).map(entry => entry.duration)),
-      maxHeartbeatGapMs: Math.max(0, ...state.heartbeats.filter(entry => entry.from >= start && entry.at <= end).map(entry => entry.at - entry.from)),
-    };
-  });
-
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 });
   const durations: number[] = [];
   const windows: Array<{ maxLongTaskMs: number; maxHeartbeatGapMs: number }> = [];
   for (let sample = 0; sample < 3; sample += 1) {
-    const started = performance.now();
-    await page.evaluate(() => {
+    const sampleResult = await page.evaluate(() => new Promise<{
+      durationMs: number;
+      maxLongTaskMs: number;
+      maxHeartbeatGapMs: number;
+    }>((resolve) => {
+      const state = (window as typeof window & {
+        __imagePerf: {
+          longTasks: Array<{ start: number; duration: number }>;
+          heartbeats: Array<{ from: number; at: number }>;
+          lastHeartbeat: number;
+        };
+      }).__imagePerf;
+      state.longTasks.length = 0;
+      state.heartbeats.length = 0;
+      state.lastHeartbeat = performance.now();
+      const started = performance.now();
+      const observer = new MutationObserver(() => {
+        if (!document.querySelector('[data-testid="character-import-review"]')) return;
+        observer.disconnect();
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          const ended = performance.now();
+          resolve({
+            durationMs: ended - started,
+            maxLongTaskMs: Math.max(0, ...state.longTasks.map(entry => entry.duration)),
+            maxHeartbeatGapMs: Math.max(0, ...state.heartbeats.map(entry => entry.at - entry.from)),
+          });
+        }));
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
       const input = document.querySelector<HTMLInputElement>('[data-testid="onnx-input"]')!;
       const transfer = new DataTransfer();
       transfer.items.add((window as typeof window & { __imagePerfFile: File }).__imagePerfFile);
       input.files = transfer.files;
       input.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-    await expect(page.getByTestId('character-import-review')).toBeVisible({ timeout: 60_000 });
-    durations.push(performance.now() - started);
-    windows.push(await imageWindowMetrics());
+    }));
+    durations.push(sampleResult.durationMs);
+    windows.push(sampleResult);
+    await expect(page.getByTestId('character-import-review')).toBeVisible();
     await page.getByRole('button', { name: 'Skip' }).click();
     await expect(page.getByTestId('character-import-review')).toHaveCount(0);
   }
