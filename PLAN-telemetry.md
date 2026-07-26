@@ -24,8 +24,9 @@ The targeted follow-up findings are implemented:
   already-reserved batches remain recoverable, and only successfully stored
   checkpoint batches are removed.
 * Normal large snapshots serialize and durably store one bounded batch per
-  task. Hidden/pagehide checkpoints still drain the full generation, and
-  constrained-mode collapse preserves every chunk of the current snapshot.
+  task without repeatedly scanning queued payloads. Hidden/pagehide checkpoints
+  still drain the full generation, and constrained-mode collapse preserves
+  every chunk of the current snapshot.
 * Network transport now has `normal`, `constrained`, and `offline-recovery`
   policies with hysteresis, larger bounded constrained batches, slower retry
   spacing, stale-snapshot collapse, and a randomized reconnect drain window.

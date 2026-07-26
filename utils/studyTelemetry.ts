@@ -262,6 +262,9 @@ const TRANSPORT_POLICIES: Record<TransportMode, TransportPolicy> = {
     collapseSnapshots: true,
   },
 };
+const MAX_OUTBOX_ITEM_BYTES = Math.max(
+  ...Object.values(TRANSPORT_POLICIES).map((policy) => policy.batchBytes),
+);
 export const studyTransportPolicyFor = (mode: TransportMode) => ({
   ...TRANSPORT_POLICIES[mode],
   drainDelayMs: [...TRANSPORT_POLICIES[mode].drainDelayMs] as [number, number],
@@ -363,6 +366,7 @@ const spillBuffer = () => {
 
 const scheduleFlush = (
   delay = transportPolicy().flushIntervalMs,
+  durableOnly = false,
 ) => {
   if (typeof window === "undefined") return;
   const dueAt = Date.now() + delay;
@@ -372,7 +376,11 @@ const scheduleFlush = (
   flushTimer = window.setTimeout(() => {
     flushTimer = undefined;
     flushDueAt = 0;
-    void flushStudyTelemetry("activity");
+    void flushStudyTelemetry(
+      durableOnly ? "snapshot-continue" : "activity",
+      false,
+      durableOnly,
+    );
   }, delay);
 };
 
@@ -889,7 +897,19 @@ const quarantineOutbox = async (item: OutboxItem, status: number) => {
 
 const trimOutbox = async () => {
   try {
-    let itemCount = 0;
+    const db = await openOutbox();
+    const countRequest = db.transaction("outbox", "readonly")
+      .objectStore("outbox")
+      .count();
+    const itemCount = await new Promise<number>((resolve, reject) => {
+      countRequest.onsuccess = () => resolve(countRequest.result);
+      countRequest.onerror = () => reject(countRequest.error);
+    });
+    if (
+      itemCount <= MAX_OUTBOX_ITEMS
+      && itemCount <= Math.floor(MAX_OUTBOX_BYTES / MAX_OUTBOX_ITEM_BYTES)
+    ) return;
+    let scannedItems = 0;
     let bytes = 0;
     type TrimCandidate = {
       id: string;
@@ -901,7 +921,7 @@ const trimOutbox = async () => {
     const standalone: TrimCandidate[] = [];
     const snapshotGroups = new Map<string, TrimCandidate[]>();
     await visitOutbox((item) => {
-      itemCount += 1;
+      scannedItems += 1;
       bytes += item.bytes;
       const deliveryClass = outboxDeliveryClass(item);
       const candidate = {
@@ -933,10 +953,10 @@ const trimOutbox = async () => {
     });
     const remove = new Map<string, TrimCandidate>();
     for (const group of removalOrder) {
-      if (itemCount <= MAX_OUTBOX_ITEMS && bytes <= MAX_OUTBOX_BYTES) break;
+      if (scannedItems <= MAX_OUTBOX_ITEMS && bytes <= MAX_OUTBOX_BYTES) break;
       for (const candidate of group) {
         remove.set(candidate.id, candidate);
-        itemCount -= 1;
+        scannedItems -= 1;
         bytes -= candidate.bytes;
       }
     }
@@ -1580,7 +1600,10 @@ export const flushStudyTelemetry = async (
     ) await flushOutbox();
     const hasBufferLeft = buffer.some((record) => !inFlightRecords.has(record.seq));
     if (hasBufferLeft) {
-      scheduleFlush(allStored ? 0 : 1_000);
+      scheduleFlush(
+        allStored ? 0 : 1_000,
+        durableOnly && !beacon,
+      );
     } else if (allStored && durableOnly && !beacon) {
       // durableOnly stored records to the outbox without posting (large snapshot
       // commits, visibility/page transitions). This branch also cleared the pending
