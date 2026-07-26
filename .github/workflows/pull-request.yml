@@ -11,6 +11,23 @@ concurrency:
 
 jobs:
   verify:
+    name: verify ${{ matrix.first }}+${{ matrix.second }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - first: 1
+            second: 5
+            contracts: true
+          - first: 2
+            second: 6
+            contracts: false
+          - first: 3
+            second: 7
+            contracts: false
+          - first: 4
+            second: 8
+            contracts: false
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -39,6 +56,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Test contracts
+        if: matrix.contracts
         run: bun run test
 
       - name: Install Chromium
@@ -47,34 +65,18 @@ jobs:
       - name: Build production preview
         run: bun run build
 
-      - name: Test production preview 1/8
-        run: env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test --shard=1/8 --workers=2
+      - name: Test production preview ${{ matrix.first }}/8
+        run: env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test --shard=${{ matrix.first }}/8 --workers=2
 
-      - name: Test production preview 2/8
-        run: env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test --shard=2/8 --workers=2
-
-      - name: Test production preview 3/8
-        run: env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test --shard=3/8 --workers=2
-
-      - name: Test production preview 4/8
-        run: env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test --shard=4/8 --workers=2
-
-      - name: Test production preview 5/8
-        run: env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test --shard=5/8 --workers=2
-
-      - name: Test production preview 6/8
-        run: env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test --shard=6/8 --workers=2
-
-      - name: Test production preview 7/8
-        run: env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test --shard=7/8 --workers=2
-
-      - name: Test production preview 8/8
-        run: env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test --shard=8/8 --workers=2
+      - name: Test production preview ${{ matrix.second }}/8
+        run: env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test --shard=${{ matrix.second }}/8 --workers=2
 
       - name: Test low-end image AI
+        if: matrix.contracts
         run: bun run test:image-ai:performance
 
       - name: Test study profile
+        if: matrix.contracts
         env:
           PLAYWRIGHT_WORKERS: 2
         run: bun run test:study:browser
