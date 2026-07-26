@@ -871,6 +871,11 @@ assert(
     && packageJson.scripts['test:browser'].includes('PLAYWRIGHT_SERVER=preview'),
   'browser test script validates the production build through preview mode without color-env warning spam'
 );
+assert(
+  packageJson.scripts['test:study:browser'].includes('--grep-invert @study-performance')
+    && packageJson.scripts['test:study:browser'].includes('--grep @study-performance --workers=1'),
+  'study browser tests isolate the 6x CPU snapshot gate from parallel browser CPU contention without skipping either suite'
+);
 assert(physicsKernelSource.includes('RAPIER_INIT_DEPRECATION_WARNING'), 'Rapier init keeps the known upstream wasm-bindgen deprecation at the physics boundary');
 assert(physicsKernelSource.includes('args.length === 1 && args[0] === RAPIER_INIT_DEPRECATION_WARNING'), 'Rapier init filters only the exact upstream deprecation warning');
 assert(physicsKernelSource.includes('finally') && physicsKernelSource.includes('console.warn = warn'), 'Rapier init restores console.warn after the scoped compatibility filter');
