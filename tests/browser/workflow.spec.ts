@@ -9,7 +9,7 @@ import { FOUNDRY_MECHANISM_TYPES } from '../../utils/mechanismTemplates';
 import type { ConnectionSelection, ConnectionSelectionRole, Point } from '../../types';
 
 
-const TEST_ONNX_MODEL_BYTES = Buffer.alloc(1_000_001, 1);
+const TEST_ONNX_MODEL_BYTES = Buffer.alloc(1_000_001);
 const ONNX_MODEL_ROUTE = '**/onnx/pose_model.onnx';
 
 const EXPECTED_COMPILED_SUPPORT_PATH_KINDS: Record<string, string> = {
@@ -2545,7 +2545,6 @@ test('invalid cached AI is cleared and exposes real local fallbacks', async ({ p
   await page.evaluate(async () => {
     const cache = await caches.open('motionsmith-web-onnx-v2');
     const bytes = new Uint8Array(1_000_001);
-    bytes.fill(1);
     await cache.put(
       new URL('onnx/pose_model.onnx', location.href),
       new Response(bytes, { headers: { 'x-motionsmith-model-bytes': String(bytes.byteLength) } }),
