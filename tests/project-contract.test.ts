@@ -3245,8 +3245,10 @@ const goldenExportConfig = {
   mechanisms: goldenSample.mechanisms
 };
 const goldenMaster = {
-  project: serializeProject(stableProjectForGoldenMaster(goldenSample)),
-  lesson: serializeProject(stableProjectForGoldenMaster(goldenLesson)),
+  // Parse serialized state before six-decimal hashing so libm noise does not
+  // make the behavioral golden architecture-dependent.
+  project: JSON.parse(serializeProject(stableProjectForGoldenMaster(goldenSample))),
+  lesson: JSON.parse(serializeProject(stableProjectForGoldenMaster(goldenLesson))),
   mechanismSnapshot: stableMechanismSnapshotForGoldenMaster(goldenSnapshot),
   allMechanismSnapshots: goldenAllMechanismSnapshots.map(stableMechanismSnapshotForGoldenMaster),
   sceneProjection: buildToonSceneProjection(goldenSample),
@@ -3261,8 +3263,8 @@ assert.deepEqual(
   {
     // Intentional G004 lesson delta: guided Fit now passes through the existing
     // structural commit authority and the full target/path/anchor gate.
-    project: 'ae9449aff07a24da1d2ef0924f818b3a527b045114cf9f872f970b5f6c25c1d3',
-    lesson: '66f8dfebcc25baa2bf625f1817ec8cf0d9b4dc24679e0fe82346f8fa52a3f73d',
+    project: '48fb3aba7bfbb621d5706e7819028e96dae54a092415a7873396d6351b8d4c3c',
+    lesson: 'aff59033bcdf17dac207a568a090bca8b0767d2233b5198ee92e2d8df3494b36',
     mechanismSnapshot: '11eb2e87e4a3f0edb99fa3da620d144555bec5120cdca867cb4bba655702058a',
     allMechanismSnapshots: '2fb8cc33f8371ed0296cd5a925cc0cade7d8b0fbd3d0d384ba4f0fabb1cdb949',
     // Intentional G005 delta: scene projection now serializes canonical
