@@ -1,4 +1,10 @@
-import { useRef, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  startTransition,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import type { StarterImageTemplate } from "../components/AppShell";
 import { processingLabel } from "../components/stages/character/ProgressBlock";
 import type { PendingCharacterReview } from "../components/stages/character/CharacterImportOverlays";
@@ -65,21 +71,23 @@ export const useAppCharacterImportActions = ({
             : "gt-4m";
 
   const queueCharacterReview = (next: ProjectState, summary: string) => {
-    setPendingCharacter({
-      project: next,
-      summary,
-      returnStage: "character",
-    });
-    dispatch({
-      type: "set_processing",
-      processing: {
-        stage: "ready",
-        message: "Check character",
-        progress: 100,
-      },
+    startTransition(() => {
+      setPendingCharacter({
+        project: next,
+        summary,
+        returnStage: "character",
+      });
+      dispatch({
+        type: "set_processing",
+        processing: {
+          stage: "ready",
+          message: "Check character",
+          progress: 100,
+        },
+      });
+      setStage("character");
     });
     recordStageNavigationOpened("character", "character_review");
-    setStage("character");
   };
 
   const runWebOnnx = async (file: File) => {
@@ -89,38 +97,43 @@ export const useAppCharacterImportActions = ({
     lastImageFile.current = file;
     const startedAt = performance.now();
     performance.mark("motionsmith-image-processing-start");
-    dispatch({
-      type: "set_processing",
-      processing: {
-        stage: "preparing-image",
-        message: "Preparing image…",
-        progress: 2,
-      },
-    });
+    startTransition(() =>
+      dispatch({
+        type: "set_processing",
+        processing: {
+          stage: "preparing-image",
+          message: "Preparing image…",
+          progress: 2,
+        },
+      }),
+    );
     try {
       const result = await processImageWithWebOnnx(
         file,
         (stageName, progress) => {
-          if (stageName === "downloading-model")
-            setOnnxCacheStatus((prev) => ({
-              ...prev,
-              stage: "downloading",
-              progress,
-            }));
-          if (stageName === "loading-model")
-            setOnnxCacheStatus((prev) => ({
-              ...prev,
-              stage: "cached",
-              progress: 100,
-            }));
-          const stageId = stageName as ProjectState["processing"]["stage"];
-          dispatch({
-            type: "set_processing",
-            processing: {
-              stage: stageId,
-              message: processingLabel(stageId, ""),
-              progress,
-            },
+          performance.mark(`motionsmith-image-progress-${stageName}`);
+          startTransition(() => {
+            if (stageName === "downloading-model")
+              setOnnxCacheStatus((prev) => ({
+                ...prev,
+                stage: "downloading",
+                progress,
+              }));
+            if (stageName === "loading-model")
+              setOnnxCacheStatus((prev) => ({
+                ...prev,
+                stage: "cached",
+                progress: 100,
+              }));
+            const stageId = stageName as ProjectState["processing"]["stage"];
+            dispatch({
+              type: "set_processing",
+              processing: {
+                stage: stageId,
+                message: processingLabel(stageId, ""),
+                progress,
+              },
+            });
           });
         },
         { signal: controller.signal },
@@ -177,15 +190,17 @@ export const useAppCharacterImportActions = ({
         durationMs: Math.round((performance.now() - startedAt) / 500) * 500,
         errorCode: code,
       }, { level: "metrics", immediate: true });
-      dispatch({
-        type: "set_processing",
-        processing: {
-          stage: canceled ? "idle" : "error",
-          message: canceled ? "Import canceled" : "Image processing failed",
-          progress: 0,
-          error: canceled ? undefined : code,
-        },
-      });
+      startTransition(() =>
+        dispatch({
+          type: "set_processing",
+          processing: {
+            stage: canceled ? "idle" : "error",
+            message: canceled ? "Import canceled" : "Image processing failed",
+            progress: 0,
+            error: canceled ? undefined : code,
+          },
+        }),
+      );
     } finally {
       if (activeImageImport.current === controller) activeImageImport.current = null;
     }
