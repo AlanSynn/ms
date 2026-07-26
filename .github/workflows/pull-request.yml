@@ -69,13 +69,38 @@ jobs:
         run: |
           if [ "${{ matrix.first }}" = "4" ]; then
             PLAYWRIGHT_SKIP_LONG_E2E=1 env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test --shard=4/8 --workers=2
-            env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test tests/browser/workflow.spec.ts --grep @long-e2e --workers=1
           else
             env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test --shard=${{ matrix.first }}/8 --workers=2
           fi
 
       - name: Test production preview ${{ matrix.second }}/8
         run: env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test --shard=${{ matrix.second }}/8 --workers=2
+
+  long-browser-flow:
+    name: long browser flow
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Chromium
+        run: bunx playwright install --with-deps chromium
+
+      - name: Build production preview
+        run: bun run build
+
+      - name: Test long browser flow
+        run: env -u NO_COLOR PLAYWRIGHT_SERVER=preview bunx playwright test tests/browser/workflow.spec.ts --grep @long-e2e --workers=1
 
   study-telemetry:
     name: study telemetry

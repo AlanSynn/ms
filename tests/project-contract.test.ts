@@ -895,6 +895,7 @@ assert(
   pullRequestWorkflowText.includes('name: low-end image AI') &&
   pullRequestWorkflowText.includes('bun run test:image-ai:performance') &&
   pullRequestWorkflowText.includes('bun run test:study:browser') &&
+  pullRequestWorkflowText.includes('long-browser-flow:') &&
   pullRequestWorkflowText.includes('PLAYWRIGHT_SKIP_LONG_E2E=1') &&
   pullRequestWorkflowText.includes('--grep @long-e2e --workers=1') &&
   readFileSync(join(process.cwd(), 'tests', 'browser', 'workflow.spec.ts'), 'utf8').includes('browser @long-e2e'),
