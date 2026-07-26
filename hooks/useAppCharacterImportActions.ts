@@ -165,7 +165,7 @@ export const useAppCharacterImportActions = ({
       recordStudyEvent("image.processing", {
         outcome: canceled ? "canceled" : "error",
         provider: "wasm",
-        model: "fp32",
+        model: "int8",
         inputPixels: pixelBucket(0),
         workingPixels: pixelBucket(0),
         durationMs: Math.round((performance.now() - startedAt) / 500) * 500,

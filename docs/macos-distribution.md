@@ -16,7 +16,8 @@ bun run build:dmg
 Before distributing, verify:
 
 - `bun run test` passes.
-- `dist/onnx/pose_model.onnx` is present.
+- `dist/onnx/pose_model.int8.ort` is present, below 40 MB, and matches
+  `models/pose-model-int8.json`.
 - `resources/icons/AppIcon.png` / `.icns` are the canonical app icon assets, and `src-tauri/icons/icon.png`, `.ico`, and `.icns` are regenerated package copies.
 - The app opens without network access.
 - Blueprint export downloads JSON, SVG, HTML, metadata JSON, and PDF artifacts.

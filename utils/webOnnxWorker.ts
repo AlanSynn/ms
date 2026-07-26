@@ -16,7 +16,7 @@ export interface WebOnnxResult {
         workingWidth: number;
         workingHeight: number;
         provider: 'wasm';
-        model: 'fp32';
+        model: 'int8';
     };
 }
 
@@ -471,7 +471,7 @@ const buildParts = (skeleton: StandardSkeleton, img: WorkerImage, mask: ImageMas
 const publicAssetUrl = (path: string) => new URL(`${import.meta.env.BASE_URL}${path}`, self.location.href).href;
 const bundledAssetUrl = (path: string) => new URL(path, self.location.href).href;
 
-export const modelUrl = () => publicAssetUrl('onnx/pose_model.onnx');
+export const modelUrl = () => publicAssetUrl('onnx/pose_model.int8.ort');
 export const ortRuntimeWasmUrl = () => bundledAssetUrl(ortWasmUrl);
 
 export type WebOnnxCacheStage = 'checking' | 'missing' | 'downloading' | 'cached' | 'error';
@@ -485,8 +485,11 @@ export interface WebOnnxCacheStatus {
     error?: string;
 }
 
-const MODEL_CACHE_NAME = 'motionsmith-web-onnx-v2';
-const LEGACY_MODEL_CACHE_NAME = 'motionsmith-web-onnx-v1';
+const MODEL_CACHE_NAME = 'motionsmith-web-onnx-v3';
+const LEGACY_MODEL_CACHE_NAMES = [
+    'motionsmith-web-onnx-v2',
+    'motionsmith-web-onnx-v1'
+];
 const MODEL_LABEL = 'AI pose model';
 const MIN_MODEL_BYTES = 1_000_000;
 const MODEL_BYTES_HEADER = 'x-motionsmith-model-bytes';
@@ -590,7 +593,9 @@ const cacheModelBuffer = async (buffer: ArrayBuffer) => {
 
 export const checkWebOnnxCache = async (): Promise<WebOnnxCacheStatus> => {
     try {
-        if (supportsCacheApi()) await caches.delete(LEGACY_MODEL_CACHE_NAME);
+        if (supportsCacheApi()) {
+            await Promise.all(LEGACY_MODEL_CACHE_NAMES.map(name => caches.delete(name)));
+        }
         const cached = await cachedModelResponse();
         if (!cached) return cacheStatus('missing', 0);
         const cachedBytes = Number(cached.headers.get(MODEL_BYTES_HEADER));
@@ -697,7 +702,7 @@ export const processImageWithWebOnnx = async (
                 workingWidth: img.width,
                 workingHeight: img.height,
                 provider: 'wasm',
-                model: 'fp32'
+                model: 'int8'
             }
         };
     } catch (error) {

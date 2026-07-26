@@ -7,7 +7,7 @@ import { join } from "node:path";
 import type { ConnectionSelectionRole } from "../../types";
 import { createLessonProject, serializeProject } from "../../utils/project";
 
-const ONNX_MODEL_ROUTE = "**/onnx/pose_model.onnx";
+const ONNX_MODEL_ROUTE = "**/onnx/pose_model.int8.ort";
 const TEST_ONNX_MODEL_BYTES = Buffer.alloc(1_000_001, 1);
 
 test.beforeEach(async ({ page }) => {

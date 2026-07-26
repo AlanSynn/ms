@@ -10,7 +10,12 @@ bun run build
 bun run test
 ```
 
-`vite build` copies static ONNX assets from `public/onnx/` into `dist/onnx/`. The contract test asserts `dist/onnx/pose_model.onnx` exists and is real model data, not a Git LFS pointer.
+`vite build` copies the 34.3 MB quality-gated INT8 ORT asset from
+`public/onnx/` into `dist/onnx/`. The retained FP32 source and fixed calibration
+inputs live under `models/`; CI and release builds pull only
+`public/onnx/pose_model.int8.ort`. Regenerate and verify it with
+`scripts/quantize-pose-model.py` using the tool versions recorded in
+`models/pose-model-int8.json`.
 
 
 ## GitHub Pages release deploy
@@ -25,7 +30,12 @@ git push origin main
 git push origin v$VERSION
 ```
 
-The workflow fetches the Git LFS ONNX model, rejects pointer files before and after build, verifies `v$VERSION == package.json.version`, runs contracts plus the production-preview study browser gate, and builds with `VITE_BASE_PATH=/ms/`. Only then does it deploy and smoke-check the `/ms-study/v1` Cloudflare Worker before publishing `dist/` with GitHub Pages Actions.
+The workflow fetches only the Git LFS INT8 runtime, rejects pointer files and
+models outside the 1–40 MB release bound before and after build, verifies
+`v$VERSION == package.json.version`, runs contracts plus the production-preview
+study browser gate, and builds with `VITE_BASE_PATH=/ms/`. Only then does it
+deploy and smoke-check the `/ms-study/v1` Cloudflare Worker before publishing
+`dist/` with GitHub Pages Actions.
 
 Study deployment controls:
 
@@ -64,7 +74,7 @@ Before a teacher-facing web release:
 - Repository variable `STUDY_PROFILE` must be `study` for the full approved
   classroom capture profile.
 - `bun run test:study:browser` must pass before the release build.
-- `public/onnx/pose_model.onnx` and `dist/onnx/pose_model.onnx` must be real ONNX bytes, not Git LFS pointers.
+- `public/onnx/pose_model.int8.ort` and `dist/onnx/pose_model.int8.ort` must be real ONNX bytes, not Git LFS pointers.
 - Runtime HTML must not load CDN scripts, import maps, or external `https://` assets.
 - Browser QA must show no server login, cloud sync, roster, dashboard, or runtime calls except the selected `/ms-study/v1` telemetry profile.
 - About/help copy must state: no account, no upload, local ONNX, browser autosave, local downloads.

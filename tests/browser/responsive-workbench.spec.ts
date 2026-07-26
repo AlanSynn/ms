@@ -7,7 +7,7 @@ const VIEWPORTS = [
 ] as const;
 
 test.beforeEach(async ({ page }) => {
-  await page.route('**/onnx/pose_model.onnx', route => route.fulfill({
+  await page.route('**/onnx/pose_model.int8.ort', route => route.fulfill({
     status: 200,
     contentType: 'application/octet-stream',
     body: Buffer.alloc(1_000_001, 1),

@@ -12,7 +12,7 @@ export interface WebOnnxResult {
         workingWidth: number;
         workingHeight: number;
         provider: 'wasm';
-        model: 'fp32';
+        model: 'int8';
     };
 }
 
@@ -53,8 +53,11 @@ type WorkerMessage =
     | { id: number; type: 'result'; result: WebOnnxResult | WebOnnxCacheStatus }
     | { id: number; type: 'error'; code: WebOnnxErrorCode; message: string };
 
-const MODEL_CACHE_NAME = 'motionsmith-web-onnx-v2';
-const LEGACY_MODEL_CACHE_NAME = 'motionsmith-web-onnx-v1';
+const MODEL_CACHE_NAME = 'motionsmith-web-onnx-v3';
+const LEGACY_MODEL_CACHE_NAMES = [
+    'motionsmith-web-onnx-v2',
+    'motionsmith-web-onnx-v1'
+];
 const MODEL_BYTES_HEADER = 'x-motionsmith-model-bytes';
 const MODEL_LABEL = 'AI pose model';
 const MIN_MODEL_BYTES = 1_000_000;
@@ -65,12 +68,12 @@ const cacheStatus = (stage: WebOnnxCacheStage, progress: number, extra: Partial<
     ...extra
 });
 
-export const modelUrl = () => new URL(`${import.meta.env.BASE_URL}onnx/pose_model.onnx`, window.location.href).href;
+export const modelUrl = () => new URL(`${import.meta.env.BASE_URL}onnx/pose_model.int8.ort`, window.location.href).href;
 
 export const checkWebOnnxCache = async (): Promise<WebOnnxCacheStatus> => {
     if (typeof window === 'undefined' || !('caches' in window)) return cacheStatus('missing', 0);
     try {
-        await caches.delete(LEGACY_MODEL_CACHE_NAME);
+        await Promise.all(LEGACY_MODEL_CACHE_NAMES.map(name => caches.delete(name)));
         const cache = await caches.open(MODEL_CACHE_NAME);
         const response = await cache.match(modelUrl());
         if (!response) return cacheStatus('missing', 0);

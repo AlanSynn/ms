@@ -123,7 +123,7 @@ test("capture profiles emit only their allowed records and assets", async ({ pag
   const batches: Batch[] = [];
   let assets = 0;
 
-  await page.route("**/onnx/pose_model.onnx", (route) => route.fulfill({
+  await page.route("**/onnx/pose_model.int8.ort", (route) => route.fulfill({
     status: 200,
     contentType: "application/octet-stream",
     body: Buffer.alloc(1_000_001, 1),
@@ -211,7 +211,7 @@ test("study profile stays responsive, strips assignment query, batches, and retr
   let releaseFirst!: () => void;
   const firstBlocked = new Promise<void>((resolve) => { releaseFirst = resolve; });
 
-  await page.route("**/onnx/pose_model.onnx", (route) => route.fulfill({
+  await page.route("**/onnx/pose_model.int8.ort", (route) => route.fulfill({
     status: 200,
     contentType: "application/octet-stream",
     body: Buffer.alloc(1_000_001, 1),
@@ -333,7 +333,7 @@ test("large final snapshot survives collector outage and page exit @study-perfor
   const delivered: Batch[] = [];
   let collectorAvailable = false;
 
-  await page.route("**/onnx/pose_model.onnx", (route) => route.fulfill({
+  await page.route("**/onnx/pose_model.int8.ort", (route) => route.fulfill({
     status: 200,
     contentType: "application/octet-stream",
     body: Buffer.alloc(1_000_001, 1),
@@ -516,7 +516,7 @@ test("page exit checkpoints a large import while its snapshot Worker is still pe
       value: PendingStudyWorker,
     });
   });
-  await page.route("**/onnx/pose_model.onnx", (route) => route.fulfill({
+  await page.route("**/onnx/pose_model.int8.ort", (route) => route.fulfill({
     status: 200,
     contentType: "application/octet-stream",
     body: Buffer.alloc(1_000_001, 1),
@@ -591,7 +591,7 @@ test("page exit includes a batch already reserved by a normal flush", async ({ p
       value: PendingCompressionStream,
     });
   });
-  await page.route("**/onnx/pose_model.onnx", (route) => route.fulfill({
+  await page.route("**/onnx/pose_model.int8.ort", (route) => route.fulfill({
     status: 200,
     contentType: "application/octet-stream",
     body: Buffer.alloc(1_000_001, 1),
@@ -648,7 +648,7 @@ test("page exit includes a batch already reserved by a normal flush", async ({ p
 
 test("a replacement invalidates an older prepared snapshot before page exit", async ({ page }) => {
   test.skip(process.env.VITE_STUDY_PROFILE !== "study", "requires study-enabled build");
-  await page.route("**/onnx/pose_model.onnx", (route) => route.fulfill({
+  await page.route("**/onnx/pose_model.int8.ort", (route) => route.fulfill({
     status: 200,
     contentType: "application/octet-stream",
     body: Buffer.alloc(1_000_001, 1),
