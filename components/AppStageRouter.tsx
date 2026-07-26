@@ -34,6 +34,9 @@ export type AppStageRouterProps = {
   onOpenGettingStarted: () => void;
   onAcceptPendingCharacter: () => void;
   onDiscardPendingCharacter: () => void;
+  onCancelCharacterImport: () => void;
+  onRetryCharacterImport: () => void;
+  onStarterRig: () => void;
   onProcessCharacter: (file: File) => void | Promise<void>;
   onPackageCharacter: (files: FileList | File[]) => void | Promise<void>;
   onImportProject: (file: File) => void | Promise<void>;
@@ -95,6 +98,9 @@ export const AppStageRouter = ({
   onOpenGettingStarted,
   onAcceptPendingCharacter,
   onDiscardPendingCharacter,
+  onCancelCharacterImport,
+  onRetryCharacterImport,
+  onStarterRig,
   onProcessCharacter,
   onPackageCharacter,
   onImportProject,
@@ -149,6 +155,9 @@ export const AppStageRouter = ({
         onOpenGettingStarted={onOpenGettingStarted}
         onAccept={onAcceptPendingCharacter}
         onDiscard={onDiscardPendingCharacter}
+        onCancelImport={onCancelCharacterImport}
+        onRetryImport={onRetryCharacterImport}
+        onStarterRig={onStarterRig}
         onProcess={onProcessCharacter}
         onPackage={onPackageCharacter}
         onImport={onImportProject}

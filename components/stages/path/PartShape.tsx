@@ -10,12 +10,14 @@ import {
 export const PartShape = ({
   part,
   skeleton,
+  sourceTextureUrl,
   selected,
   drawMode,
   onSelect,
 }: {
   part: BodyPartLayer;
   skeleton?: ProjectState["skeleton"];
+  sourceTextureUrl?: string;
   selected: boolean;
   drawMode?: boolean;
   onSelect: () => void;
@@ -26,6 +28,8 @@ export const PartShape = ({
   const h = part.bounds.height * part.transform.scale;
   const artX = part.bounds.x * part.transform.scale;
   const artY = -(part.bounds.y + part.bounds.height) * part.transform.scale;
+  const sourceFrame = sourceTextureUrl ? part.sourceImageFrame : undefined;
+  const textureUrl = sourceFrame ? sourceTextureUrl : part.textureUrl;
   const landmarks = partLandmarkLocalPoints(part, skeleton);
   const outline = fabricablePartOutlinePoints(part, landmarks);
   const outlineD = partOutlinePathD(part, landmarks, {
@@ -78,14 +82,14 @@ export const PartShape = ({
         opacity=".72"
         mask={`url(#${maskId})`}
       />
-      {part.textureUrl ? (
+      {textureUrl ? (
         <image
           data-testid={`path-part-art-${part.id}`}
-          href={part.textureUrl}
-          x={artX}
-          y={artY}
-          width={w}
-          height={h}
+          href={textureUrl}
+          x={sourceFrame ? sourceFrame.x * part.transform.scale : artX}
+          y={sourceFrame ? -(sourceFrame.y + sourceFrame.height) * part.transform.scale : artY}
+          width={sourceFrame ? sourceFrame.width * part.transform.scale : w}
+          height={sourceFrame ? sourceFrame.height * part.transform.scale : h}
           preserveAspectRatio="xMidYMid meet"
           opacity=".52"
           mask={`url(#${maskId})`}
@@ -129,4 +133,3 @@ export const PartShape = ({
     </g>
   );
 };
-

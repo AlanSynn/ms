@@ -328,7 +328,7 @@ test("study profile stays responsive, strips assignment query, batches, and retr
   await expect.poll(() => batches.flatMap((batch) => batch.records).some((record) => record.type === "session.pagehide"), { timeout: 15_000 }).toBe(true);
 });
 
-test("large final snapshot survives collector outage and page exit", async ({ page, context }) => {
+test("large final snapshot survives collector outage and page exit @study-performance", async ({ page, context }) => {
   test.skip(process.env.VITE_STUDY_PROFILE !== "study", "requires study-enabled build");
   const delivered: Batch[] = [];
   let collectorAvailable = false;

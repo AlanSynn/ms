@@ -262,6 +262,9 @@ const TRANSPORT_POLICIES: Record<TransportMode, TransportPolicy> = {
     collapseSnapshots: true,
   },
 };
+const MAX_OUTBOX_ITEM_BYTES = Math.max(
+  ...Object.values(TRANSPORT_POLICIES).map((policy) => policy.batchBytes),
+);
 export const studyTransportPolicyFor = (mode: TransportMode) => ({
   ...TRANSPORT_POLICIES[mode],
   drainDelayMs: [...TRANSPORT_POLICIES[mode].drainDelayMs] as [number, number],
@@ -363,6 +366,7 @@ const spillBuffer = () => {
 
 const scheduleFlush = (
   delay = transportPolicy().flushIntervalMs,
+  durableOnly = false,
 ) => {
   if (typeof window === "undefined") return;
   const dueAt = Date.now() + delay;
@@ -372,7 +376,11 @@ const scheduleFlush = (
   flushTimer = window.setTimeout(() => {
     flushTimer = undefined;
     flushDueAt = 0;
-    void flushStudyTelemetry("activity");
+    void flushStudyTelemetry(
+      durableOnly ? "snapshot-continue" : "activity",
+      false,
+      durableOnly,
+    );
   }, delay);
 };
 
@@ -568,7 +576,7 @@ const startSnapshotPreparation = (generation: number) => {
   worker.onmessage = (event: MessageEvent<{
     generation: number;
     contentHash?: string;
-    recordsBuffer?: ArrayBuffer;
+    records?: Array<{ type: string; data: unknown }>;
     durationMs?: number;
     error?: string;
   }>) => {
@@ -584,23 +592,8 @@ const startSnapshotPreparation = (generation: number) => {
       if (
         event.data.error
         || !event.data.contentHash
-        || !(event.data.recordsBuffer instanceof ArrayBuffer)
+        || !Array.isArray(event.data.records)
       ) {
-        snapshotPreparationFailures += 1;
-        reportTelemetryLoss("snapshot");
-        return;
-      }
-      let records: Array<{ type: string; data: unknown }>;
-      try {
-        records = JSON.parse(
-          new TextDecoder().decode(event.data.recordsBuffer),
-        ) as Array<{ type: string; data: unknown }>;
-      } catch {
-        snapshotPreparationFailures += 1;
-        reportTelemetryLoss("snapshot");
-        return;
-      }
-      if (!Array.isArray(records)) {
         snapshotPreparationFailures += 1;
         reportTelemetryLoss("snapshot");
         return;
@@ -611,7 +604,7 @@ const startSnapshotPreparation = (generation: number) => {
         lastSnapshotPreparationMs,
       );
       preparedSnapshot = {
-        records,
+        records: event.data.records,
         contentHash: event.data.contentHash,
         generation: event.data.generation,
       };
@@ -791,6 +784,11 @@ const writeOutboxItems = (
         .map((item) => item.snapshotSeries)
         .filter((series): series is string => Boolean(series)),
     );
+    const newSnapshotKeys = new Set(
+      items
+        .map((item) => item.snapshotKey)
+        .filter((key): key is string => Boolean(key)),
+    );
     if (collapseSnapshots && newSeries.size) {
       const cursor = store.openCursor();
       cursor.onsuccess = () => {
@@ -803,6 +801,7 @@ const writeOutboxItems = (
           && item.deliveryClass === "snapshot"
           && item.snapshotSeries
           && newSeries.has(item.snapshotSeries)
+          && (!item.snapshotKey || !newSnapshotKeys.has(item.snapshotKey))
         ) {
           entry.delete();
           supersededSnapshots += 1;
@@ -898,7 +897,19 @@ const quarantineOutbox = async (item: OutboxItem, status: number) => {
 
 const trimOutbox = async () => {
   try {
-    let itemCount = 0;
+    const db = await openOutbox();
+    const countRequest = db.transaction("outbox", "readonly")
+      .objectStore("outbox")
+      .count();
+    const itemCount = await new Promise<number>((resolve, reject) => {
+      countRequest.onsuccess = () => resolve(countRequest.result);
+      countRequest.onerror = () => reject(countRequest.error);
+    });
+    if (
+      itemCount <= MAX_OUTBOX_ITEMS
+      && itemCount <= Math.floor(MAX_OUTBOX_BYTES / MAX_OUTBOX_ITEM_BYTES)
+    ) return;
+    let scannedItems = 0;
     let bytes = 0;
     type TrimCandidate = {
       id: string;
@@ -910,7 +921,7 @@ const trimOutbox = async () => {
     const standalone: TrimCandidate[] = [];
     const snapshotGroups = new Map<string, TrimCandidate[]>();
     await visitOutbox((item) => {
-      itemCount += 1;
+      scannedItems += 1;
       bytes += item.bytes;
       const deliveryClass = outboxDeliveryClass(item);
       const candidate = {
@@ -942,10 +953,10 @@ const trimOutbox = async () => {
     });
     const remove = new Map<string, TrimCandidate>();
     for (const group of removalOrder) {
-      if (itemCount <= MAX_OUTBOX_ITEMS && bytes <= MAX_OUTBOX_BYTES) break;
+      if (scannedItems <= MAX_OUTBOX_ITEMS && bytes <= MAX_OUTBOX_BYTES) break;
       for (const candidate of group) {
         remove.set(candidate.id, candidate);
-        itemCount -= 1;
+        scannedItems -= 1;
         bytes -= candidate.bytes;
       }
     }
@@ -1535,7 +1546,9 @@ export const flushStudyTelemetry = async (
   if (flushTimer !== undefined) window.clearTimeout(flushTimer);
   flushTimer = undefined;
   flushDueAt = 0;
-  const batches = makeBufferedBatches(beacon, beacon || durableOnly);
+  // Normal durable flushes store one bounded batch per task. Exit checkpoints
+  // still drain every batch so a closing page cannot strand a generation.
+  const batches = makeBufferedBatches(beacon, beacon || checkpoint);
   if (checkpoint && activeBatches.size) {
     saveExitCheckpoint([...activeBatches.values()]);
   }
@@ -1587,7 +1600,10 @@ export const flushStudyTelemetry = async (
     ) await flushOutbox();
     const hasBufferLeft = buffer.some((record) => !inFlightRecords.has(record.seq));
     if (hasBufferLeft) {
-      scheduleFlush(allStored ? 0 : 1_000);
+      scheduleFlush(
+        allStored ? 0 : 1_000,
+        durableOnly && !beacon,
+      );
     } else if (allStored && durableOnly && !beacon) {
       // durableOnly stored records to the outbox without posting (large snapshot
       // commits, visibility/page transitions). This branch also cleared the pending
@@ -1622,33 +1638,20 @@ const base64Url = (bytes: Uint8Array) => {
 
 const imageBlob = async (dataUrl: string) => {
   const source = await (await fetch(dataUrl)).blob();
-  const bitmap = await createImageBitmap(source);
-  let scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
-  let output = source;
-  let width = 0;
-  let height = 0;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    width = Math.max(1, Math.round(bitmap.width * scale));
-    height = Math.max(1, Math.round(bitmap.height * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    canvas.getContext("2d", { alpha: true })?.drawImage(bitmap, 0, 0, width, height);
-    output = await new Promise<Blob>((resolve) =>
-      canvas.toBlob(
-        (blob) => resolve(blob ?? source),
-        "image/webp",
-        0.68,
-      ),
-    );
-    if (output.size <= 192 * 1024) break;
-    scale *= 0.72;
-  }
-  bitmap.close();
-  if (output.size > 192 * 1024 || !["image/webp", "image/png"].includes(output.type)) {
-    throw new Error("asset_too_large");
-  }
-  return { blob: output, width, height };
+  return new Promise<{ blob: Blob; width: number; height: number }>((resolve, reject) => {
+    const worker = new Worker(new URL("./studyImageWorker.ts", import.meta.url), { type: "module", name: "motionsmith-study-image" });
+    const finish = () => worker.terminate();
+    worker.onmessage = ({ data }: MessageEvent<{ type: "result"; blob: Blob; width: number; height: number } | { type: "error" }>) => {
+      finish();
+      if (data.type === "result") resolve(data);
+      else reject(new Error("normalize_failed"));
+    };
+    worker.onerror = () => {
+      finish();
+      reject(new Error("normalize_failed"));
+    };
+    worker.postMessage({ id: 1, source });
+  });
 };
 
 const assetIdFor = async (blob: Blob, kind: string) => {

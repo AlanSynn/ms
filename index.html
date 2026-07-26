@@ -53,9 +53,6 @@
       #boot-loader .boot-logo { width: clamp(4.5rem, 12vw, 8rem); height: clamp(4.5rem, 12vw, 8rem); border-radius: clamp(1rem, 2vw, 1.6rem); object-fit: cover; filter: drop-shadow(0 22px 44px rgba(47,86,214,.20)); }
       #boot-loader .boot-word { max-width: calc(100vw - 2rem); color: var(--ms-text); font-family: Manrope, var(--ms-font-display); font-size: clamp(2.4rem, 8vw, 6.5rem); line-height: .92; letter-spacing: clamp(.08em, .9vw, .24em); font-weight: 800; text-transform: uppercase; white-space: nowrap; }
       #boot-loader .boot-version { color: rgba(100,116,139,.42); font-size: .72rem; font-weight: 760; letter-spacing: .16em; }
-      #boot-loader .boot-status { min-height: 1.1rem; color: rgba(100,116,139,.70); font-size: clamp(.72rem, 1.7vw, .95rem); font-weight: 760; letter-spacing: .08em; text-transform: uppercase; }
-      #boot-loader .boot-progress { width: min(22rem, calc(100vw - 4rem)); height: .38rem; overflow: hidden; border-radius: 999px; background: rgba(203,213,225,.62); }
-      #boot-loader .boot-progress > span { display: block; width: 8%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2f56d6, #8b5cf6); transition: width .18s ease; }
       body.app-ready #boot-loader { opacity: 0; pointer-events: none; transition: opacity .25s ease; }
       @keyframes boot-breathe { 0%, 100% { opacity: .82; transform: scale(.985); } 50% { opacity: 1; transform: scale(1); } }
       html, body, #root { height: 100%; }
@@ -307,6 +304,7 @@
       .character-import-review-status { display: inline-flex; align-items: center; gap: .45rem; color: #10b981; font-size: .85rem; font-weight: 800; }
       .character-import-review-title { margin-top: .45rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: clamp(1.45rem, 4vw, 2.25rem); line-height: 1; letter-spacing: -.045em; font-weight: 800; }
       .character-import-review-meta { margin-top: .45rem; color: var(--ms-muted); font-size: .92rem; font-weight: 650; }
+      .character-import-review-preview { display: block; width: 100%; height: min(32vh, 16rem); margin-top: .75rem; border-radius: 1rem; background: #f8fafc; object-fit: contain; }
       .character-import-review-actions { display: flex; gap: .65rem; margin-top: 1rem; }
       .character-import-review-actions .btn-primary { min-width: 9rem; justify-content: center; font-size: 1rem; }
       .recommendation-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1rem; }
@@ -409,7 +407,7 @@
       .three-puppet-overlay[data-input-mode="always"] .three-puppet-host, .three-puppet-overlay[data-input-mode="always"] .three-puppet-canvas, .three-puppet-overlay[data-input-mode="3d-only"][data-view-mode="3d"] .three-puppet-host, .three-puppet-overlay[data-input-mode="3d-only"][data-view-mode="3d"] .three-puppet-canvas { pointer-events: auto; touch-action: none; cursor: grab; }
       .three-puppet-overlay[data-input-mode="select-only"] .three-puppet-host, .three-puppet-overlay[data-input-mode="select-only"] .three-puppet-canvas { pointer-events: auto; cursor: pointer; }
       .three-puppet-overlay[data-is-dragging="true"] .three-puppet-host, .three-puppet-overlay[data-is-dragging="true"] .three-puppet-canvas { cursor: grabbing; }
-      .three-puppet-view-toolbar { left: 50%; right: auto; top: 1rem; transform: translateX(-50%); z-index: 31; pointer-events: auto; }
+      .three-puppet-view-toolbar { left: 1rem; right: auto; top: 4.75rem; transform: none; z-index: 31; pointer-events: auto; }
       .three-puppet-view-toolbar { gap: .16rem; padding: .3rem; }
       .three-puppet-view-toolbar button, .three-puppet-view-toolbar span { min-width: 1.75rem; padding: .38rem .42rem; font-size: .72rem; }
       .three-puppet-view-toolbar button.active { background: var(--ms-accent); color: #fff; border-color: var(--ms-accent); box-shadow: 0 10px 26px rgba(79,70,229,.22); }
@@ -674,8 +672,6 @@
         <img class="boot-logo" src="resources/icons/AppIcon.png" alt="" />
         <div class="boot-word">MotionSmith</div>
         <div class="boot-version">v%APP_VERSION%</div>
-        <div class="boot-status" data-boot-status>Preparing AI model</div>
-        <div class="boot-progress" aria-hidden="true"><span data-boot-progress></span></div>
       </div>
     </div>
     <div id="root"></div>

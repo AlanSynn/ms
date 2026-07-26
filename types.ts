@@ -335,7 +335,7 @@ export interface AppSettings {
 }
 
 export interface ProcessingStatus {
-    stage: 'idle' | 'selecting' | 'downloading-model' | 'loading-model' | 'running-onnx' | 'extracting-parts' | 'normalizing' | 'ready' | 'error';
+    stage: 'idle' | 'selecting' | 'preparing-image' | 'downloading-model' | 'loading-model' | 'running-onnx' | 'extracting-parts' | 'normalizing' | 'ready' | 'error';
     message: string;
     progress: number;
     error?: string;

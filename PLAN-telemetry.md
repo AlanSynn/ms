@@ -16,13 +16,17 @@ The verified risks are concentrated in four areas:
 The targeted follow-up findings are implemented:
 
 * Snapshot normalization, stringify, hashing, and Base64 chunking run in
-  `studySnapshotWorker.ts`. Prepared records return through a transferable
-  `ArrayBuffer`; the main thread only hands off `ProjectState`, decodes once,
-  and commits the current generation.
+  `studySnapshotWorker.ts`. Prepared records return through native Worker
+  structured clone so the main thread does not repeat JSON decode and parse;
+  it only hands off `ProjectState` and commits the current generation.
 * Hidden/pagehide checkpoints merge instead of overwrite. Core actions are
   enqueued before technical and snapshot batches in separate transactions,
   already-reserved batches remain recoverable, and only successfully stored
   checkpoint batches are removed.
+* Normal large snapshots serialize and durably store one bounded batch per
+  task without repeatedly scanning queued payloads. Hidden/pagehide checkpoints
+  still drain the full generation, and constrained-mode collapse preserves
+  every chunk of the current snapshot.
 * Network transport now has `normal`, `constrained`, and `offline-recovery`
   policies with hysteresis, larger bounded constrained batches, slower retry
   spacing, stale-snapshot collapse, and a randomized reconnect drain window.
@@ -32,10 +36,10 @@ The targeted follow-up findings are implemented:
 * Closed recommendation UI no longer performs path-fit optimization after
   unrelated project edits.
 
-Production-preview verification used a 36,000-point project for three mutations
-at 6× CPU throttle. Maximum Worker handoff was 15.8 ms, maximum and p95
-prepared-record commit was 23.2 ms, and no interaction Long Task was observed.
-This is a repeatable headless regression gate, not a physical Chromebook claim.
+Production-preview verification uses a 36,000-point project for three mutations
+at 6× CPU throttle and requires every main-thread snapshot phase and interaction
+Long Task to stay below 50 ms. This is a repeatable headless regression gate,
+not a physical Chromebook claim.
 All four capture profiles have build/runtime coverage; the tagged release
 workflow runs the study browser gate before building `/ms/`.
 

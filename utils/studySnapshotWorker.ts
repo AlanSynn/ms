@@ -22,15 +22,12 @@ workerScope.onmessage = (event) => {
     event.data.reason,
     event.data.snapshotId,
   ).then(({ contentHash, records }) => {
-    const recordsBuffer = new TextEncoder()
-      .encode(JSON.stringify(records))
-      .buffer;
     workerScope.postMessage({
       generation: event.data.generation,
       contentHash,
-      recordsBuffer,
+      records,
       durationMs: performance.now() - startedAt,
-    }, [recordsBuffer]);
+    });
   }).catch(() => {
     workerScope.postMessage({
       generation: event.data.generation,

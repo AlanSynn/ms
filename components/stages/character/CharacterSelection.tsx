@@ -23,10 +23,54 @@ import {
   CharacterImportReviewDialog,
   CharacterImportStatusDock,
   type PendingCharacterReview,
+  useImageImportReview,
 } from "./CharacterImportOverlays";
 import { CharacterLessonOwnership } from "./CharacterLessonOwnership";
 import { CharacterSetupPanel } from "./CharacterSetupPanel";
 import { SceneObjectInspector } from "./SceneObjectInspector";
+
+const CharacterProcessingPanel = ({
+  disabled,
+  onEditCharacter,
+  onSaveSkeleton,
+}: {
+  disabled: boolean;
+  onEditCharacter: () => void;
+  onSaveSkeleton: () => void;
+}) => {
+  const pendingReview = useImageImportReview();
+  const isDisabled = disabled || Boolean(pendingReview);
+  return (
+    <details
+      className="advanced-panel mt-4"
+      data-testid="character-processing-panel"
+    >
+      <summary>Tools</summary>
+      {isDisabled && (
+        <p className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">
+          Choose new character.
+        </p>
+      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          className="btn-secondary"
+          aria-label="Edit rig"
+          disabled={isDisabled}
+          onClick={onEditCharacter}
+        >
+          Edit rig
+        </button>
+        <button
+          className="btn-secondary"
+          disabled={isDisabled}
+          onClick={onSaveSkeleton}
+        >
+          Save Skeleton
+        </button>
+      </div>
+    </details>
+  );
+};
 
 export const CharacterSelection = ({
   project,
@@ -35,6 +79,9 @@ export const CharacterSelection = ({
   onOpenGettingStarted,
   onAccept,
   onDiscard,
+  onCancelImport,
+  onRetryImport,
+  onStarterRig,
   onProcess,
   onPackage,
   onImport,
@@ -52,6 +99,9 @@ export const CharacterSelection = ({
   onOpenGettingStarted: () => void;
   onAccept: () => void;
   onDiscard: () => void;
+  onCancelImport: () => void;
+  onRetryImport: () => void;
+  onStarterRig: () => void;
   onProcess: (file: File) => void;
   onPackage: (files: FileList | File[]) => void;
   onImport: (file: File) => void;
@@ -124,7 +174,8 @@ export const CharacterSelection = ({
                     {Object.keys(project.skeleton?.joints ?? {}).length} joints
                   </span>
                   <span>
-                    {reviewedProject.partOrder.some((id) =>
+                    {reviewedProject.characterPackage?.sourceTextureUrl ||
+                    reviewedProject.partOrder.some((id) =>
                       Boolean(reviewedProject.parts[id]?.textureUrl),
                     )
                       ? "art on plates"
@@ -150,34 +201,11 @@ export const CharacterSelection = ({
                   onProcess={onProcess}
                   onImport={onImport}
                 />
-                <details
-                  className="advanced-panel mt-4"
-                  data-testid="character-processing-panel"
-                >
-                  <summary>Tools</summary>
-                  {partPanelDisabled && (
-                    <p className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">
-                      Choose new character.
-                    </p>
-                  )}
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      className="btn-secondary"
-                      aria-label="Edit rig"
-                      disabled={partPanelDisabled}
-                      onClick={onEditCharacter}
-                    >
-                      Edit rig
-                    </button>
-                    <button
-                      className="btn-secondary"
-                      disabled={partPanelDisabled}
-                      onClick={onSaveSkeleton}
-                    >
-                      Save Skeleton
-                    </button>
-                  </div>
-                </details>
+                <CharacterProcessingPanel
+                  disabled={partPanelDisabled}
+                  onEditCharacter={onEditCharacter}
+                  onSaveSkeleton={onSaveSkeleton}
+                />
                 <section
                   className="character-part-list mt-4"
                   data-testid="character-part-list"
@@ -209,7 +237,13 @@ export const CharacterSelection = ({
                             <small>{part.locked ? "Locked part" : "Editable part"}</small>
                           </span>
                           <span className="part-list-badges">
-                            {part.textureUrl ? <b>art</b> : <b>plate</b>}
+                            {part.textureUrl ||
+                            (part.sourceImageFrame &&
+                              partPanelProject.characterPackage?.sourceTextureUrl) ? (
+                              <b>art</b>
+                            ) : (
+                              <b>plate</b>
+                            )}
                             {part.locked && <b>lock</b>}
                           </span>
                         </button>
@@ -276,8 +310,8 @@ export const CharacterSelection = ({
                   setViewport={setViewport}
                 />
                 <ThreePuppetPreview
-                  project={reviewedProject}
-                  skeleton={reviewedProject.skeleton}
+                  project={project}
+                  skeleton={project.skeleton}
                   mechanisms={[]}
                   angle={0}
                   viewport={viewport}
@@ -315,6 +349,10 @@ export const CharacterSelection = ({
       <CharacterImportStatusDock
         project={project}
         reviewedProject={reviewedProject}
+        onCancel={onCancelImport}
+        onRetry={onRetryImport}
+        onStarterRig={onStarterRig}
+        onCharacterFile={() => packageInputRef.current?.click()}
       />
       <CharacterImportReviewDialog
         pendingCharacter={pendingCharacter}

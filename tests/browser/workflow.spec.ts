@@ -9,7 +9,7 @@ import { FOUNDRY_MECHANISM_TYPES } from '../../utils/mechanismTemplates';
 import type { ConnectionSelection, ConnectionSelectionRole, Point } from '../../types';
 
 
-const TEST_ONNX_MODEL_BYTES = Buffer.alloc(1_000_001, 1);
+const TEST_ONNX_MODEL_BYTES = Buffer.alloc(1_000_001);
 const ONNX_MODEL_ROUTE = '**/onnx/pose_model.onnx';
 
 const EXPECTED_COMPILED_SUPPORT_PATH_KINDS: Record<string, string> = {
@@ -31,7 +31,7 @@ const EXPECTED_COMPILED_PIN_COUNTS: Record<string, number> = {
 };
 
 test.beforeEach(async ({ page }, testInfo) => {
-  if (testInfo.title.includes('Create from image upload')) return;
+  if (testInfo.title.includes('@real-onnx')) return;
   await page.route(ONNX_MODEL_ROUTE, async route => {
     await route.fulfill({
       status: 200,
@@ -244,7 +244,7 @@ const openBlueprintMoreFiles = async (page: Page) => {
 };
 
 const waitForBootLoader = async (page: Page) => {
-  await expect(page.locator('#boot-loader'), 'static boot loader releases after AI model warmup').toHaveCount(0, { timeout: 180_000 });
+  await expect(page.locator('#boot-loader'), 'static boot loader releases when the editor mounts').toHaveCount(0, { timeout: 10_000 });
 };
 
 const openCharacterScreen = async (page: Page, options: { loadStarter?: boolean } = { loadStarter: true }) => {
@@ -2494,7 +2494,77 @@ test('animation performance: Foundry playback stays responsive without runaway T
   expectCleanPage(pageErrors, consoleErrors);
 });
 
-test('Create from image upload creates a reviewed character package in browser', async ({ page }) => {
+test('Girl and Boy starters open from bounded packages without AI', async ({ page }) => {
+  let modelRequests = 0;
+  page.on('request', request => {
+    if (request.url().includes('/onnx/pose_model.onnx')) modelRequests += 1;
+  });
+  await page.goto('/');
+  await waitForBootLoader(page);
+  for (const id of ['girl', 'boy']) {
+    const dialog = page.getByTestId('getting-started-dialog');
+    await dialog.getByTestId(`getting-started-card-${id}`).click();
+    await expect(page.getByTestId('character-import-review')).toBeVisible();
+    await expect(page.getByTestId('character-import-review')).toContainText('10 parts · 17 joints');
+    await page.getByRole('button', { name: 'Skip' }).click();
+    await page.getByRole('button', { name: /Open Getting Started/i }).click();
+  }
+  expect(modelRequests, 'precomputed starters never request the pose model').toBe(0);
+});
+
+test('image import can cancel a pending model download', async ({ page }) => {
+  await page.unroute(ONNX_MODEL_ROUTE);
+  let releaseDownload!: () => void;
+  const release = new Promise<void>(resolve => { releaseDownload = resolve; });
+  let requestStarted!: () => void;
+  const started = new Promise<void>(resolve => { requestStarted = resolve; });
+  await page.route(ONNX_MODEL_ROUTE, async route => {
+    requestStarted();
+    await release;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/octet-stream',
+      headers: { 'content-length': String(TEST_ONNX_MODEL_BYTES.length) },
+      body: TEST_ONNX_MODEL_BYTES,
+    });
+  });
+  await page.goto('/');
+  await openCharacterScreen(page, { loadStarter: false });
+  await page.getByTestId('onnx-input').setInputFiles('tests/fixtures/stick-character.png');
+  await started;
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  releaseDownload();
+  await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0);
+  await expect(page.getByTestId('character-import-review')).toHaveCount(0);
+  await expect(page.getByTestId('character-status-dock')).toHaveCount(0);
+});
+
+test('invalid cached AI is cleared and exposes real local fallbacks', async ({ page }) => {
+  await page.goto('/');
+  await openCharacterScreen(page, { loadStarter: false });
+  await page.evaluate(async () => {
+    const cache = await caches.open('motionsmith-web-onnx-v2');
+    const bytes = new Uint8Array(1_000_001);
+    await cache.put(
+      new URL('onnx/pose_model.onnx', location.href),
+      new Response(bytes, { headers: { 'x-motionsmith-model-bytes': String(bytes.byteLength) } }),
+    );
+  });
+  await page.getByTestId('onnx-input').setInputFiles('tests/fixtures/stick-character.png');
+  const dock = page.getByTestId('character-status-dock');
+  await expect(dock).toBeVisible({ timeout: 60_000 });
+  await expect(dock.getByRole('button', { name: 'Retry' })).toBeVisible();
+  await expect(dock.getByRole('button', { name: 'Starter rig' })).toBeVisible();
+  await expect(dock.getByRole('button', { name: 'Character file' })).toBeVisible();
+  expect(await page.evaluate(async () => {
+    const cache = await caches.open('motionsmith-web-onnx-v2');
+    return Boolean(await cache.match(new URL('onnx/pose_model.onnx', location.href)));
+  }), 'invalid session bytes are evicted').toBe(false);
+  await dock.getByRole('button', { name: 'Starter rig' }).click();
+  await expectProjectCounts(page, 14, 1, 0);
+});
+
+test('Create from image upload creates a reviewed character package in browser @real-onnx', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
@@ -2504,6 +2574,20 @@ test('Create from image upload creates a reviewed character package in browser',
 
   await page.goto('/');
   await openCharacterScreen(page);
+  const stickSource = Buffer.from(await readFile('tests/fixtures/stick-character.png')).toString('base64');
+  const largeImage = await page.evaluate(async source => {
+    const image = new Image();
+    image.src = `data:image/png;base64,${source}`;
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = 4_000;
+    canvas.height = 3_000;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(image, 900, 100, 2_200, 2_800);
+    return canvas.toDataURL('image/png').split(',')[1];
+  }, stickSource);
   const runOnnxButton = page.getByRole('button', { name: /Create from image/i });
   await runOnnxButton.focus();
   await expect(runOnnxButton).toBeFocused();
@@ -2511,7 +2595,11 @@ test('Create from image upload creates a reviewed character package in browser',
     page.waitForEvent('filechooser'),
     page.keyboard.press('Enter')
   ]);
-  await onnxChooser.setFiles('tests/fixtures/stick-character.png');
+  await onnxChooser.setFiles({
+    name: '12mp-stick.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(largeImage, 'base64'),
+  });
 
   const review = page.getByTestId('character-import-review');
   await expect(review).toBeVisible({ timeout: 180_000 });
@@ -2521,7 +2609,7 @@ test('Create from image upload creates a reviewed character package in browser',
   const viewport = page.viewportSize();
   const reviewCenterX = (reviewBox?.x ?? 0) + (reviewBox?.width ?? 0) / 2;
   expect(Math.abs(reviewCenterX - (viewport?.width ?? 0) / 2), 'character import approval is centered on screen').toBeLessThan(8);
-  await expect(page.getByTestId('character-three-puppet-state')).toHaveAttribute('data-part-count', /[1-9]\d*/);
+  await expect(page.getByTestId('character-import-review-preview')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Use it' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Use it' }).click();
@@ -2534,11 +2622,137 @@ test('Create from image upload creates a reviewed character package in browser',
   await expect(generatedPuppet).toHaveAttribute('data-puppet-mode', 'thick-flat-assembly');
   await expect(generatedPuppet).toHaveAttribute('data-three-part-surface', 'solid-cut-plates');
   await expect(generatedPuppet).toHaveAttribute('data-three-part-art', 'top-texture-decal');
+  await expect(generatedPuppet).toHaveAttribute('data-three-part-texture-count', '10');
   await expect(generatedPuppet).toHaveAttribute('data-three-part-opacity', '1');
   expect(Number(await generatedPuppet.getAttribute('data-three-part-hole-count')), 'generated character 3D puppet keeps cut-through joint holes').toBeGreaterThan(0);
   await expect.poll(async () => Number(await generatedPuppet.getAttribute('data-three-render-triangles')), { message: 'accepted ONNX character renders as real 3D fabrication geometry' }).toBeGreaterThan(0);
 
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByTestId('top-command-bar').getByText('File', { exact: true }).click();
+  await page.getByTestId('command-download-snapshot').click();
+  const snapshotPath = await (await downloadPromise).path();
+  expect(snapshotPath, 'portable project download path').toBeTruthy();
+  const snapshot = await readFile(snapshotPath!);
+  const importedProject = JSON.parse(snapshot.toString());
+  const workingBounds = importedProject.skeleton.metadata.imageBounds;
+  expect(workingBounds.width * workingBounds.height, '12MP input is downscaled before ProjectState pixel work').toBeLessThanOrEqual(1_000_000);
+  expect(Math.max(workingBounds.width, workingBounds.height), 'working image edge is Chromebook-bounded').toBeLessThanOrEqual(1_024);
+  expect(snapshot.byteLength, 'portable project stays bounded after a 12MP import').toBeLessThanOrEqual(1 * 1024 * 1024);
+  expect(importedProject.characterPackage.sourceTextureUrl.length, 'normalized source texture stays below the 256KB byte ceiling').toBeLessThanOrEqual(Math.ceil(256 * 1024 * 4 / 3) + 64);
+  const sourceTextureSize = await page.evaluate(async (src) => {
+    const image = new Image();
+    image.src = src;
+    await image.decode();
+    return { width: image.naturalWidth, height: image.naturalHeight };
+  }, importedProject.characterPackage.sourceTextureUrl);
+  expect(Math.max(sourceTextureSize.width, sourceTextureSize.height), 'display texture stays Chromebook-bounded').toBeLessThanOrEqual(512);
+  for (const part of Object.values(importedProject.parts) as Array<{ textureUrl?: string; maskUrl?: string }>) {
+    expect(part.textureUrl, 'ONNX parts reuse the optimized source texture').toBeUndefined();
+    expect(part.maskUrl, 'ONNX parts reuse contours instead of duplicate masks').toBeUndefined();
+  }
+
   expectCleanPage(pageErrors, consoleErrors);
+});
+
+test('image AI warm-cache performance @performance @real-onnx', async ({ page }) => {
+  await page.addInitScript(() => {
+    const NativeWorker = window.Worker;
+    let workerCount = 0;
+    Object.defineProperty(window, '__imageAiWorkerCount', { get: () => workerCount });
+    window.Worker = new Proxy(NativeWorker, {
+      construct(target, args) {
+        workerCount += 1;
+        return Reflect.construct(target, args);
+      },
+    });
+  });
+  await page.goto('/');
+  await openCharacterScreen(page);
+  await page.getByTestId('onnx-input').setInputFiles('tests/fixtures/stick-character.png');
+  await expect(page.getByTestId('character-import-review')).toBeVisible({ timeout: 180_000 });
+  await page.getByRole('button', { name: 'Skip' }).click();
+
+  const source = Buffer.from(await readFile('tests/fixtures/stick-character.png')).toString('base64');
+  await page.evaluate(encoded => {
+    const bytes = Uint8Array.from(atob(encoded), character => character.charCodeAt(0));
+    const state = {
+      longTasks: [] as Array<{ start: number; duration: number }>,
+      heartbeats: [] as Array<{ from: number; at: number }>,
+      lastHeartbeat: performance.now(),
+    };
+    Object.assign(window, {
+      __imagePerf: state,
+      __imagePerfFile: new File([bytes], 'stick-character.png', { type: 'image/png' }),
+    });
+    new PerformanceObserver(list => {
+      for (const entry of list.getEntries()) state.longTasks.push({ start: entry.startTime, duration: entry.duration });
+    }).observe({ type: 'longtask' });
+    window.setInterval(() => {
+      const now = performance.now();
+      state.heartbeats.push({ from: state.lastHeartbeat, at: now });
+      state.lastHeartbeat = now;
+    }, 50);
+  }, source);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 });
+  const durations: number[] = [];
+  const windows: Array<{ maxLongTaskMs: number; maxHeartbeatGapMs: number }> = [];
+  for (let sample = 0; sample < 3; sample += 1) {
+    const sampleResult = await page.evaluate(() => new Promise<{
+      durationMs: number;
+      maxLongTaskMs: number;
+      maxHeartbeatGapMs: number;
+      longTasks: Array<{ startMs: number; durationMs: number }>;
+      phaseMarks: Array<{ name: string; startMs: number }>;
+    }>((resolve) => {
+      const state = (window as typeof window & {
+        __imagePerf: {
+          longTasks: Array<{ start: number; duration: number }>;
+          heartbeats: Array<{ from: number; at: number }>;
+          lastHeartbeat: number;
+        };
+      }).__imagePerf;
+      state.longTasks.length = 0;
+      state.heartbeats.length = 0;
+      state.lastHeartbeat = performance.now();
+      const started = performance.now();
+      const observer = new MutationObserver(() => {
+        if (!document.querySelector('[data-testid="character-import-review"]')) return;
+        observer.disconnect();
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          const ended = performance.now();
+          resolve({
+            durationMs: ended - started,
+            maxLongTaskMs: Math.max(0, ...state.longTasks.map(entry => entry.duration)),
+            maxHeartbeatGapMs: Math.max(0, ...state.heartbeats.map(entry => entry.at - entry.from)),
+            longTasks: state.longTasks.map(entry => ({
+              startMs: entry.start - started,
+              durationMs: entry.duration,
+            })),
+            phaseMarks: performance.getEntriesByType('mark')
+              .filter(entry => entry.name.startsWith('motionsmith-image-') && entry.startTime >= started)
+              .map(entry => ({ name: entry.name, startMs: entry.startTime - started })),
+          });
+        }));
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+      const input = document.querySelector<HTMLInputElement>('[data-testid="onnx-input"]')!;
+      const transfer = new DataTransfer();
+      transfer.items.add((window as typeof window & { __imagePerfFile: File }).__imagePerfFile);
+      input.files = transfer.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }));
+    durations.push(sampleResult.durationMs);
+    windows.push(sampleResult);
+    await expect(page.getByTestId('character-import-review')).toBeVisible();
+    await page.getByRole('button', { name: 'Skip' }).click();
+    await expect(page.getByTestId('character-import-review')).toHaveCount(0);
+  }
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+  expect(await page.evaluate(() => (window as typeof window & { __imageAiWorkerCount: number }).__imageAiWorkerCount), 'warm cache and repeated imports reuse one image AI Worker').toBe(1);
+  expect(Math.max(...durations), `warm-cache samples: ${JSON.stringify(durations)}`).toBeLessThanOrEqual(30_000);
+  expect(Math.max(...windows.map(value => value.maxLongTaskMs)), `main-thread samples: ${JSON.stringify(windows)}`).toBeLessThanOrEqual(200);
+  expect(Math.max(...windows.map(value => value.maxHeartbeatGapMs)), `heartbeat samples: ${JSON.stringify(windows)}`).toBeLessThanOrEqual(250);
 });
 
 test('Load package review, accept, discard, and missing-file recovery stay in browser', async ({ page }) => {
@@ -2569,7 +2783,7 @@ test('Load package review, accept, discard, and missing-file recovery stay in br
   await expect(review).toBeVisible();
   await expect(review.getByText('Ready', { exact: true })).toBeVisible();
   await expect(review).toContainText('1 parts · 2 joints');
-  await expect(page.getByTestId('character-three-puppet-state')).toHaveAttribute('data-part-count', '1');
+  await expect(page.getByTestId('character-import-review-preview')).toBeVisible();
   await expect(page.getByText('outlines')).toBeHidden();
   await expect(page.getByText('Checks')).toHaveCount(0);
   await expect(page.getByTestId('character-setup-panel').getByText('Choose new character.')).toBeVisible();
@@ -2917,6 +3131,8 @@ test('Autosave recovery warns when a hidden-tab commit may be incomplete', async
   await page.goto('/');
   await openCharacterScreen(page);
   await expect.poll(async () => readAutosaveSerialized(page)).not.toBe('');
+  await page.getByRole('button', { name: /Options/i }).click();
+  await page.getByLabel('Enable autosave').uncheck();
   await markAutosaveDirty(page);
 
   await page.getByTestId('top-command-bar').getByText('File', { exact: true }).click();
@@ -4119,22 +4335,16 @@ test('Mobile path editor keeps Draw free path action above the canvas', async ({
 
 
 test('Startup uses one boot loader and opens Getting Started over Character', async ({ page }) => {
-  let releaseModelDownload!: () => void;
-  const heldDownload = new Promise<void>(resolve => { releaseModelDownload = resolve; });
-  await page.route(ONNX_MODEL_ROUTE, async route => {
-    await heldDownload;
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/octet-stream',
-      headers: { 'content-length': String(TEST_ONNX_MODEL_BYTES.length) },
-      body: TEST_ONNX_MODEL_BYTES,
-    });
+  let modelRequests = 0;
+  page.on('request', request => {
+    if (request.url().includes('/onnx/pose_model.onnx')) modelRequests += 1;
   });
+  const bootHtml = await (await page.request.get('/')).text();
+  expect(bootHtml).toContain('id="boot-loader"');
+  expect(bootHtml).toContain('MotionSmith');
   await page.goto('/');
-  await expect(page.locator('#boot-loader')).toContainText(/MotionSmith/);
-  await expect(page.locator('#boot-loader')).toContainText(/AI model/i);
-  releaseModelDownload();
-  await expect(page.locator('#boot-loader')).toHaveCount(0, { timeout: 180_000 });
+  await expect(page.locator('#boot-loader')).toHaveCount(0, { timeout: 10_000 });
+  expect(modelRequests, 'startup does not request the optional pose model').toBe(0);
   await expect(page.getByTestId('character-screen')).toBeVisible();
   await expect(page.getByTestId('getting-started-dialog')).toBeVisible();
   await page.getByTestId('getting-started-hide-session').locator('input').check();

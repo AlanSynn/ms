@@ -2,6 +2,7 @@ import { Plus, Trash2 } from "lucide-react";
 
 import type { BodyPartLayer, ProjectAction, ProjectState } from "../../../types";
 import { uid } from "../../../utils/project";
+import { useImageImportReview } from "./CharacterImportOverlays";
 import { PartInspector } from "./PartInspector";
 import { SkeletonInspector } from "./SkeletonInspector";
 
@@ -18,8 +19,11 @@ export const CharacterSetupPanel = ({
   project: ProjectState;
   dispatch: (action: ProjectAction) => void;
 }) => {
-  const sortedParts = partPanelProject.partOrder
-    .map((id) => partPanelProject.parts[id])
+  const pendingReview = useImageImportReview();
+  const livePartPanelProject = pendingReview?.project ?? partPanelProject;
+  const panelDisabled = partPanelDisabled || Boolean(pendingReview);
+  const sortedParts = livePartPanelProject.partOrder
+    .map((id) => livePartPanelProject.parts[id])
     .filter((part): part is BodyPartLayer => Boolean(part));
   const addLayer = () => {
     const base = selectedEditablePart;
@@ -69,7 +73,7 @@ export const CharacterSetupPanel = ({
       <div className="mt-1 text-sm font-extrabold text-slate-800">
         {selectedEditablePart?.name ?? "No part"}
       </div>
-      {!partPanelDisabled && (
+      {!panelDisabled && (
         <div className="mt-3 flex flex-wrap gap-2" data-testid="character-rig-actions">
           <button className="btn-secondary" onClick={addLayer}>
             <Plus size={16} /> Add layer
@@ -90,7 +94,7 @@ export const CharacterSetupPanel = ({
           )}
         </div>
       )}
-      {partPanelDisabled ? (
+      {panelDisabled ? (
         <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">
           Choose new character.
         </div>
@@ -98,16 +102,16 @@ export const CharacterSetupPanel = ({
         selectedEditablePart && (
           <PartInspector
             part={selectedEditablePart}
-            skeleton={partPanelProject.skeleton}
-            sourceTextureUrl={partPanelProject.characterPackage?.sourceTextureUrl}
+            skeleton={livePartPanelProject.skeleton}
+            sourceTextureUrl={livePartPanelProject.characterPackage?.sourceTextureUrl}
             dispatch={dispatch}
             compact
           />
         )
       )}
-      <details className="advanced-panel mt-3" open={!partPanelDisabled}>
+      <details className="advanced-panel mt-3" open={!panelDisabled}>
         <summary>Anchors</summary>
-        {partPanelDisabled ? (
+        {panelDisabled ? (
           <div className="mt-2 text-xs font-bold text-slate-500">
             Choose new character first.
           </div>
