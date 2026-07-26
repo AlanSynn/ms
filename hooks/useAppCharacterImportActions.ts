@@ -126,6 +126,7 @@ export const useAppCharacterImportActions = ({
         { signal: controller.signal },
       );
       if (controller.signal.aborted || activeImageImport.current !== controller) return;
+      performance.mark("motionsmith-image-result-received");
       recordStudyEvent("image.processing", {
         outcome: "success",
         provider: result.metrics.provider,
@@ -149,10 +150,12 @@ export const useAppCharacterImportActions = ({
           rebindingSummary: "Clean start.",
         },
       });
+      performance.mark("motionsmith-image-project-created");
       queueCharacterReview(
         next,
         `${next.partOrder.length} parts · ${Object.keys(next.skeleton?.joints ?? {}).length} joints · ready`,
       );
+      performance.mark("motionsmith-image-review-queued");
     } catch (error) {
       if (activeImageImport.current !== controller) return;
       const code = error instanceof WebOnnxError ? error.code : "image-processing-failed";

@@ -2702,6 +2702,8 @@ test('image AI warm-cache performance @performance @real-onnx', async ({ page })
       durationMs: number;
       maxLongTaskMs: number;
       maxHeartbeatGapMs: number;
+      longTasks: Array<{ startMs: number; durationMs: number }>;
+      phaseMarks: Array<{ name: string; startMs: number }>;
     }>((resolve) => {
       const state = (window as typeof window & {
         __imagePerf: {
@@ -2723,6 +2725,13 @@ test('image AI warm-cache performance @performance @real-onnx', async ({ page })
             durationMs: ended - started,
             maxLongTaskMs: Math.max(0, ...state.longTasks.map(entry => entry.duration)),
             maxHeartbeatGapMs: Math.max(0, ...state.heartbeats.map(entry => entry.at - entry.from)),
+            longTasks: state.longTasks.map(entry => ({
+              startMs: entry.start - started,
+              durationMs: entry.duration,
+            })),
+            phaseMarks: performance.getEntriesByType('mark')
+              .filter(entry => entry.name.startsWith('motionsmith-image-') && entry.startTime >= started)
+              .map(entry => ({ name: entry.name, startMs: entry.startTime - started })),
           });
         }));
       });

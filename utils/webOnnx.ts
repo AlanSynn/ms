@@ -132,6 +132,7 @@ const runWorker = <T>(
         signal?.addEventListener('abort', abort, { once: true });
         worker.onmessage = ({ data }: MessageEvent<WorkerMessage>) => {
             if (data.id !== id) return;
+            if (data.type === 'result') performance.mark('motionsmith-image-worker-result');
             onMessage(data);
             if (data.type === 'result') finish(data.result as T);
             if (data.type === 'error') finish(new WebOnnxError(data.code, data.message), true);
