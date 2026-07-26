@@ -344,6 +344,22 @@ const linkageSceneLengthIsFabricationPreset = (length: number) =>
   FABRICATION_LINKAGE_SPECS.some(spec => Math.abs(spec.lengthMm * SCENE_PX_PER_MM - length) < 1e-9);
 assert(existsSync(join(process.cwd(), 'resources/examples/raw/girl.png')), 'girl starter source image is present');
 assert(existsSync(join(process.cwd(), 'resources/examples/raw/boy.PNG')), 'boy starter source image is present');
+const webOnnxFp32Golden = JSON.parse(readFileSync(join(process.cwd(), 'tests', 'fixtures', 'web-onnx-fp32-golden.json'), 'utf8')) as {
+  schema: string;
+  partOrder: string[];
+  anchors: Record<string, string>;
+  jointParents: Record<string, string | null>;
+  cases: Record<string, { source: [number, number]; keypoints: Array<[string, number, number, number]> }>;
+};
+assert.equal(webOnnxFp32Golden.schema, 'motionsmith.web-onnx-fp32.v1', 'FP32 image-import golden uses the versioned normalized ProjectState schema');
+assert.deepEqual(Object.keys(webOnnxFp32Golden.cases).sort(), ['boy', 'girl', 'stick'], 'FP32 image-import golden covers both starters and the synthetic stick figure');
+assert.equal(webOnnxFp32Golden.partOrder.length, 10, 'FP32 image-import golden locks the ten editable body parts');
+assert.equal(Object.keys(webOnnxFp32Golden.anchors).length, 10, 'FP32 image-import golden locks every editable part anchor');
+assert.equal(Object.keys(webOnnxFp32Golden.jointParents).length, 17, 'FP32 image-import golden locks the generated skeleton tree');
+for (const [name, value] of Object.entries(webOnnxFp32Golden.cases)) {
+  assert(value.source[0] * value.source[1] <= 1_000_000 && Math.max(...value.source) <= 1_024, `${name} FP32 golden uses the Chromebook working-image limit`);
+  assert.equal(value.keypoints.length, 17, `${name} FP32 golden locks every COCO pose keypoint`);
+}
 const agentsContract = readFileSync(join(process.cwd(), 'AGENTS.md'), 'utf8');
 const docsMap = readFileSync(join(process.cwd(), 'docs', 'README.md'), 'utf8');
 const workbenchContractText = readFileSync(join(process.cwd(), 'docs', 'workbench-flow-ux-contract.md'), 'utf8');

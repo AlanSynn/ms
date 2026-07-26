@@ -1,0 +1,115 @@
+{
+  "schema": "motionsmith.web-onnx-fp32.v1",
+  "note": "Normalized FP32 ProjectState output at the 1024px/1MP working-image limit. Source art bytes are intentionally omitted.",
+  "partOrder": [
+    "torso",
+    "left_leg_lower",
+    "right_leg_lower",
+    "left_leg_upper",
+    "right_leg_upper",
+    "left_arm_lower",
+    "right_arm_lower",
+    "left_arm_upper",
+    "right_arm_upper",
+    "head"
+  ],
+  "anchors": {
+    "torso": "torso",
+    "left_leg_lower": "left_knee",
+    "right_leg_lower": "right_knee",
+    "left_leg_upper": "left_hip",
+    "right_leg_upper": "right_hip",
+    "left_arm_lower": "left_elbow",
+    "right_arm_lower": "right_elbow",
+    "left_arm_upper": "left_shoulder",
+    "right_arm_upper": "right_shoulder",
+    "head": "neck"
+  },
+  "jointParents": {
+    "root": null,
+    "hip": "root",
+    "torso": "hip",
+    "neck": "torso",
+    "head_top": "neck",
+    "left_shoulder": "torso",
+    "left_elbow": "left_shoulder",
+    "left_hand": "left_elbow",
+    "right_shoulder": "torso",
+    "right_elbow": "right_shoulder",
+    "right_hand": "right_elbow",
+    "left_hip": "root",
+    "left_knee": "left_hip",
+    "left_foot": "left_knee",
+    "right_hip": "root",
+    "right_knee": "right_hip",
+    "right_foot": "right_knee"
+  },
+  "cases": {
+    "stick": {
+      "source": [160, 220],
+      "keypoints": [
+        ["nose", 0.51971, 0.11597, 0.86421],
+        ["left_eye", 0.56104, 0.10309, 0.82018],
+        ["right_eye", 0.45771, 0.10309, 0.8192],
+        ["left_ear", 0.60237, 0.11597, 0.8765],
+        ["right_ear", 0.41638, 0.11597, 0.87821],
+        ["left_shoulder", 0.66436, 0.25772, 0.86242],
+        ["right_shoulder", 0.35439, 0.25772, 0.85519],
+        ["left_elbow", 0.74702, 0.37369, 0.83851],
+        ["right_elbow", 0.29239, 0.37369, 0.82172],
+        ["left_wrist", 0.80902, 0.50255, 0.80262],
+        ["right_wrist", 0.2304, 0.51544, 0.778],
+        ["left_hip", 0.5817, 0.45101, 0.73872],
+        ["right_hip", 0.45771, 0.43812, 0.71404],
+        ["left_knee", 0.60237, 0.5541, 0.79614],
+        ["right_knee", 0.41638, 0.54121, 0.78104],
+        ["left_ankle", 0.6437, 0.65719, 0.82061],
+        ["right_ankle", 0.37505, 0.65719, 0.81425]
+      ]
+    },
+    "girl": {
+      "source": [1000, 1000],
+      "keypoints": [
+        ["nose", 0.48597, 0.20635, 0.92367],
+        ["left_eye", 0.50468, 0.19048, 0.87688],
+        ["right_eye", 0.46726, 0.19048, 0.8751],
+        ["left_ear", 0.52338, 0.20635, 0.8558],
+        ["right_ear", 0.44856, 0.22222, 0.81497],
+        ["left_shoulder", 0.53274, 0.25397, 0.3943],
+        ["right_shoulder", 0.46726, 0.39683, 0.36046],
+        ["left_elbow", 0.54209, 0.49206, 0.1853],
+        ["right_elbow", 0.46726, 0.46032, 0.4285],
+        ["left_wrist", 0.55144, 0.39683, 0.17906],
+        ["right_wrist", 0.45791, 0.49206, 0.56369],
+        ["left_hip", 0.53274, 0.60317, 0.73376],
+        ["right_hip", 0.50468, 0.60317, 0.58977],
+        ["left_knee", 0.53274, 0.69841, 0.79405],
+        ["right_knee", 0.51403, 0.69841, 0.74839],
+        ["left_ankle", 0.53274, 0.8254, 0.87015],
+        ["right_ankle", 0.52338, 0.8254, 0.77508]
+      ]
+    },
+    "boy": {
+      "source": [478, 1024],
+      "keypoints": [
+        ["nose", 0.44681, 0.12698, 0.84645],
+        ["left_eye", 0.48936, 0.11111, 0.83918],
+        ["right_eye", 0.38298, 0.12698, 0.82816],
+        ["left_ear", 0.55319, 0.12698, 0.85891],
+        ["right_ear", 0.34043, 0.14286, 0.86122],
+        ["left_shoulder", 0.65957, 0.2381, 0.80611],
+        ["right_shoulder", 0.34043, 0.2381, 0.88511],
+        ["left_elbow", 0.76596, 0.33333, 0.84385],
+        ["right_elbow", 0.23404, 0.26984, 0.8893],
+        ["left_wrist", 0.85106, 0.42857, 0.82237],
+        ["right_wrist", 0.17021, 0.15873, 0.83784],
+        ["left_hip", 0.65957, 0.49206, 0.79907],
+        ["right_hip", 0.42553, 0.47619, 0.83304],
+        ["left_knee", 0.68085, 0.63492, 0.80974],
+        ["right_knee", 0.3617, 0.61905, 0.79331],
+        ["left_ankle", 0.68085, 0.80952, 0.82447],
+        ["right_ankle", 0.38298, 0.79365, 0.83216]
+      ]
+    }
+  }
+}
