@@ -1,0 +1,58 @@
+name: Pull request
+
+on:
+  pull_request:
+
+permissions: {}
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          lfs: true
+
+      - name: Check ONNX asset
+        run: |
+          git lfs pull --include="public/onnx/pose_model.onnx"
+          BYTES="$(wc -c < public/onnx/pose_model.onnx | tr -d ' ')"
+          test "$BYTES" -gt 1000000
+          if head -c 64 public/onnx/pose_model.onnx | grep -q "version https://git-lfs"; then
+            echo "public/onnx/pose_model.onnx is a Git LFS pointer, not model bytes" >&2
+            exit 1
+          fi
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Test contracts
+        run: bun run test
+
+      - name: Install Chromium
+        run: bunx playwright install --with-deps chromium
+
+      - name: Test production preview
+        env:
+          PLAYWRIGHT_WORKERS: 4
+        run: bun run test:browser
+
+      - name: Test low-end image AI
+        run: bun run test:image-ai:performance
+
+      - name: Test study profile
+        env:
+          PLAYWRIGHT_WORKERS: 2
+        run: bun run test:study:browser

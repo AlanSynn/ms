@@ -1057,7 +1057,11 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     if (!roots || !materials || rendererStatus !== 'webgl') return;
     clearGroup(roots.partsLayer);
     partMeshesRef.current.clear();
-    geometryParts.forEach(part => {
+    let partIndex = 0;
+    let timer = 0;
+    const buildNextPart = () => {
+      const part = geometryParts[partIndex++];
+      if (!part) return;
       const base = project?.parts[part.id] ?? part;
       const landmarks = partLandmarkLocalPoints(base, canonicalSkeleton);
       const outline = fabricablePartOutlinePoints(base, landmarks);
@@ -1066,7 +1070,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       localHoles.forEach(local => {
         shape.holes.push(holePath(local.x / VIEW_SCALE, local.y / VIEW_SCALE));
       });
-      const geometry = new THREE.ExtrudeGeometry(shape, { depth: THICKNESS, bevelEnabled: true, bevelSize: 0.018, bevelThickness: 0.012 });
+      const geometry = new THREE.ExtrudeGeometry(shape, { depth: THICKNESS, bevelEnabled: false, steps: 1, curveSegments: 4 });
       const mesh = new THREE.Mesh(geometry, materials.part);
       mesh.userData.partId = part.id;
       mesh.castShadow = true;
@@ -1105,8 +1109,23 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
       });
       roots.partsLayer.add(mesh);
       partMeshesRef.current.set(part.id, mesh);
-    });
-    render();
+      const animated = parts.find(candidate => candidate.id === part.id) ?? part;
+      const animatedIndex = Math.max(0, parts.findIndex(candidate => candidate.id === part.id));
+      const assemblyOffset = assemblyOffsetForPart(animatedIndex, parts.length, assemblyExplodeAmount);
+      mesh.visible = animated.visible;
+      mesh.position.set(
+        (animated.transform.x + assemblyOffset.x) / VIEW_SCALE,
+        (animated.transform.y + assemblyOffset.y) / VIEW_SCALE,
+        animated.zIndex * 0.035 + assemblyOffset.z
+      );
+      mesh.rotation.z = (animated.transform.rotation * Math.PI) / 180;
+      mesh.scale.set(animated.transform.scale, animated.transform.scale, 1);
+      mesh.material = project?.selectedPartId === animated.id ? materials.selected : materials.part;
+      render();
+      if (partIndex < geometryParts.length) timer = window.setTimeout(buildNextPart, 16);
+    };
+    timer = window.setTimeout(buildNextPart, 16);
+    return () => window.clearTimeout(timer);
   }, [partSignature, rendererStatus]);
 
   useEffect(() => {

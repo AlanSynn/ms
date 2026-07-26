@@ -35,6 +35,9 @@ export const CharacterSelection = ({
   onOpenGettingStarted,
   onAccept,
   onDiscard,
+  onCancelImport,
+  onRetryImport,
+  onStarterRig,
   onProcess,
   onPackage,
   onImport,
@@ -52,6 +55,9 @@ export const CharacterSelection = ({
   onOpenGettingStarted: () => void;
   onAccept: () => void;
   onDiscard: () => void;
+  onCancelImport: () => void;
+  onRetryImport: () => void;
+  onStarterRig: () => void;
   onProcess: (file: File) => void;
   onPackage: (files: FileList | File[]) => void;
   onImport: (file: File) => void;
@@ -315,6 +321,10 @@ export const CharacterSelection = ({
       <CharacterImportStatusDock
         project={project}
         reviewedProject={reviewedProject}
+        onCancel={onCancelImport}
+        onRetry={onRetryImport}
+        onStarterRig={onStarterRig}
+        onCharacterFile={() => packageInputRef.current?.click()}
       />
       <CharacterImportReviewDialog
         pendingCharacter={pendingCharacter}

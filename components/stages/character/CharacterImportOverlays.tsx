@@ -9,6 +9,7 @@ export type PendingCharacterReview = {
 };
 
 const activeImportStages = new Set([
+  "preparing-image",
   "downloading-model",
   "loading-model",
   "running-onnx",
@@ -23,9 +24,17 @@ const compactPackageSummary = (summary: string) =>
 export const CharacterImportStatusDock = ({
   project,
   reviewedProject,
+  onCancel,
+  onRetry,
+  onStarterRig,
+  onCharacterFile,
 }: {
   project: ProjectState;
   reviewedProject: ProjectState;
+  onCancel: () => void;
+  onRetry: () => void;
+  onStarterRig: () => void;
+  onCharacterFile: () => void;
 }) => {
   const artifact = reviewedProject.characterPackage;
   const showImportProgress = Boolean(
@@ -93,6 +102,20 @@ export const CharacterImportStatusDock = ({
         <div className="mt-3">
           <ProgressBlock project={project} />
         </div>
+        {project.processing.stage !== "error" &&
+          project.processing.stage !== "ready" &&
+          project.processing.stage !== "idle" && (
+            <button type="button" className="btn-secondary mt-3" onClick={onCancel}>
+              Cancel
+            </button>
+          )}
+        {project.processing.stage === "error" && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" className="btn-primary" onClick={onRetry}>Retry</button>
+            <button type="button" className="btn-secondary" onClick={onStarterRig}>Starter rig</button>
+            <button type="button" className="btn-secondary" onClick={onCharacterFile}>Character file</button>
+          </div>
+        )}
         {showImportChecks && (
           <details className="advanced-panel mt-6">
             <summary>Checks</summary>

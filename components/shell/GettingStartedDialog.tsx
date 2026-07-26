@@ -7,7 +7,7 @@ import { type ClassroomLessonId, createLessonProject } from '../../utils/project
 import { fabricablePartOutlinePoints, partLandmarkLocalPoints, partOutlinePathD } from '../../utils/partGeometry';
 import { resolveMechanismRuntimeGate } from '../../utils/mechanismRuntimePolicy';
 
-export type StarterImageTemplate = { id: string; label: string; fileName: string; url: string; thumbUrl: string };
+export type StarterImageTemplate = { id: string; label: string; fileName: string; thumbUrl: string; packageUrl: string };
 export type GuidedLessonTile = {
     id: string;
     label: string;

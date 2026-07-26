@@ -360,6 +360,14 @@ for (const [name, value] of Object.entries(webOnnxFp32Golden.cases)) {
   assert(value.source[0] * value.source[1] <= 1_000_000 && Math.max(...value.source) <= 1_024, `${name} FP32 golden uses the Chromebook working-image limit`);
   assert.equal(value.keypoints.length, 17, `${name} FP32 golden locks every COCO pose keypoint`);
 }
+for (const starter of ['girl', 'boy']) {
+  const starterPath = join(process.cwd(), 'resources', 'examples', 'packages', `${starter}.motionsmith.json`);
+  const starterProject = JSON.parse(readFileSync(starterPath, 'utf8')) as ProjectState;
+  assert(statSync(starterPath).size <= 512 * 1024, `${starter} AI-free starter package stays below 512KB`);
+  assert.equal(starterProject.partOrder.length, 10, `${starter} AI-free starter package keeps all editable parts`);
+  assert.equal(Object.keys(starterProject.skeleton?.joints ?? {}).length, 17, `${starter} AI-free starter package keeps the editable skeleton`);
+  assert(starterProject.characterPackage?.sourceTextureUrl?.startsWith('data:image/webp;base64,'), `${starter} AI-free starter stores a normalized WebP source`);
+}
 const agentsContract = readFileSync(join(process.cwd(), 'AGENTS.md'), 'utf8');
 const docsMap = readFileSync(join(process.cwd(), 'docs', 'README.md'), 'utf8');
 const workbenchContractText = readFileSync(join(process.cwd(), 'docs', 'workbench-flow-ux-contract.md'), 'utf8');
@@ -818,6 +826,7 @@ const rapierProbe = await runRapierFrictionProbe({ frictionCoefficient: 0.74, st
 const physicsKernelSource = readFileSync(join(process.cwd(), 'utils', 'physicsKernel.ts'), 'utf8');
 const dockerfileText = readFileSync(join(process.cwd(), 'Dockerfile'), 'utf8');
 const deployWorkflowText = readFileSync(join(process.cwd(), '.github', 'workflows', 'deploy.yml'), 'utf8');
+const pullRequestWorkflowText = readFileSync(join(process.cwd(), '.github', 'workflows', 'pull-request.yml'), 'utf8');
 const studyWranglerText = readFileSync(join(process.cwd(), 'infrastructure', 'study', 'wrangler.toml'), 'utf8');
 const cargoTomlText = readFileSync(join(process.cwd(), 'src-tauri', 'Cargo.toml'), 'utf8');
 const cargoLockText = readFileSync(join(process.cwd(), 'src-tauri', 'Cargo.lock'), 'utf8');
@@ -830,6 +839,7 @@ assert(playwrightConfigText.includes('PLAYWRIGHT_WORKERS'), 'browser worker coun
 assert(playwrightConfigText.includes('MAX_BROWSER_WORKERS'), 'browser worker defaults are bounded to avoid local over-parallelization');
 assert(playwrightConfigText.includes('Number.isInteger'), 'browser worker override validates positive integer input');
 assert(playwrightConfigText.includes('PLAYWRIGHT_SERVER') && playwrightConfigText.includes('preview'), 'browser tests can run against production preview without Vite HMR noise');
+assert(playwrightConfigText.includes('PLAYWRIGHT_PERFORMANCE') && packageJson.scripts['test:image-ai:performance'].includes('--workers=1'), 'resource-sensitive 6x CPU image measurements run in one isolated browser while the functional suite stays parallel');
 assert(playwrightConfigText.includes('delete process.env.NO_COLOR') && playwrightConfigText.includes('env -u NO_COLOR'), 'Playwright normalizes conflicting FORCE_COLOR/NO_COLOR env to avoid worker/webserver warning spam');
 assert.equal(packageJson.version, '0.0.10', 'release version is bumped for the GitHub Pages redeploy');
 assert.equal(tauriConfig.version, packageJson.version, 'Tauri config version stays aligned with package.json');
@@ -865,6 +875,7 @@ assert(physicsKernelSource.includes('RAPIER_INIT_DEPRECATION_WARNING'), 'Rapier 
 assert(physicsKernelSource.includes('args.length === 1 && args[0] === RAPIER_INIT_DEPRECATION_WARNING'), 'Rapier init filters only the exact upstream deprecation warning');
 assert(physicsKernelSource.includes('finally') && physicsKernelSource.includes('console.warn = warn'), 'Rapier init restores console.warn after the scoped compatibility filter');
 assert(deployWorkflowText.includes('oven-sh/setup-bun@v2') && deployWorkflowText.includes('bun install --frozen-lockfile') && deployWorkflowText.includes('bun run build'), 'GitHub Pages workflow uses Bun install and build');
+assert(pullRequestWorkflowText.includes('pull_request:') && pullRequestWorkflowText.includes('lfs: true') && pullRequestWorkflowText.includes('bun run test') && pullRequestWorkflowText.includes('bun run test:browser') && pullRequestWorkflowText.includes('bun run test:image-ai:performance') && pullRequestWorkflowText.includes('bun run test:study:browser'), 'pull requests fetch LFS and run contracts, production-preview browser, isolated image performance, and study gates');
 assert(deployWorkflowText.indexOf('bun run test') > -1 && deployWorkflowText.indexOf('bun run test') < deployWorkflowText.indexOf('bun run build'), 'GitHub Pages workflow runs contract tests before build and deploy');
 assert(deployWorkflowText.includes('playwright install --with-deps chromium') && deployWorkflowText.includes('bun run test:study:browser'), 'tagged study releases run the production-preview telemetry browser gate before the release build');
 assert(deployWorkflowText.includes('lfs: true') && deployWorkflowText.includes('git lfs pull --include="public/onnx/pose_model.onnx"'), 'GitHub Pages workflow fetches real ONNX bytes from Git LFS before build');
@@ -4754,6 +4765,7 @@ const viewer3dText = readFileSync(join(process.cwd(), 'utils', 'viewer3d.ts'), '
 const foundryCameraText = readFileSync(join(process.cwd(), 'utils', 'foundryCamera.ts'), 'utf8');
 const mechanismRecommendationsText = readFileSync(join(process.cwd(), 'utils', 'mechanismRecommendations.ts'), 'utf8');
 const webOnnxText = readFileSync(join(process.cwd(), 'utils', 'webOnnx.ts'), 'utf8');
+const webOnnxWorkerText = readFileSync(join(process.cwd(), 'utils', 'webOnnxWorker.ts'), 'utf8');
 const stageLayoutText = readFileSync(join(process.cwd(), 'components', 'stages', 'stageLayout.tsx'), 'utf8');
 const partInspectorText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'PartInspector.tsx'), 'utf8');
 const cutOutlineEditorText = readFileSync(join(process.cwd(), 'components', 'stages', 'character', 'CutOutlineEditorDialog.tsx'), 'utf8');
@@ -5328,7 +5340,7 @@ assert(foundry3dText.includes('fabricationRingGearProfileForPitchRadius'), '3D F
 assert(workspacePlaybackLoopHookText.includes('SHARED_PLAYBACK_STAGES') && workspacePlaybackLoopHookText.includes('!SHARED_PLAYBACK_STAGES.includes(stage)') && workspacePlaybackLoopHookText.includes('requestAnimationFrame(tick)') && workspacePlaybackLoopHookText.includes('animationDeltaRadians') && workspacePlaybackLoopHookText.includes('stage !== "path" && drawMode'), 'shared playback rAF and Path draw reset only run from the extracted workspace playback loop hook');
 assert(appText.includes('useWorkspacePlaybackLoop({') && !appText.includes('requestAnimationFrame(') && !appText.includes('animationDeltaRadians('), 'App delegates shared playback timing to useWorkspacePlaybackLoop without owning animation-frame math');
 assert(modalInertHookText.includes('setAttribute("inert", "")') && modalInertHookText.includes('aria-hidden') && modalInertHookText.includes('welcome-modal-open') && appText.includes('useModalInertEffect(appShellRef, modalOpen)') && !appText.includes('document.documentElement.classList.add("welcome-modal-open")') && !appText.includes('useEffect, useRef'), 'App delegates startup/help/about modal inert DOM side effects to useModalInertEffect');
-assert(appText.includes('STARTER_IMAGE_TEMPLATES') && !appText.includes('girl.png?url') && starterImageTemplatesText.includes('girl.png?url') && starterImageTemplatesText.includes('boy.PNG?url') && starterImageTemplatesText.includes('girl-thumb.png?url') && starterImageTemplatesText.includes('boy-thumb.png?url'), 'App delegates starter image template assets to resources/starterImageTemplates without changing starter labels or package URLs');
+assert(appText.includes('STARTER_IMAGE_TEMPLATES') && !appText.includes('girl.png?url') && starterImageTemplatesText.includes('girl.motionsmith.json?url') && starterImageTemplatesText.includes('boy.motionsmith.json?url') && starterImageTemplatesText.includes('girl-thumb.png?url') && starterImageTemplatesText.includes('boy-thumb.png?url') && !starterImageTemplatesText.includes('examples/raw'), 'App delegates AI-free starter packages and thumbnails to resources/starterImageTemplates without bundling full-size source art');
 assert(appText.includes('useAppPathActions({') && !appText.includes('const setPathPoints =') && !appText.includes('setShowTracking(false);\n    setStage("path")') && appPathActionsHookText.includes('validatePath') && appPathActionsHookText.includes('ProjectMotionPath["source"] = "drawn"') && appPathActionsHookText.includes('setPathPoints(path, "tracked")') && appPathActionsHookText.includes('setStage("path")'), 'App delegates Path draw/tracking actions to useAppPathActions while preserving validated drawn/tracked path upserts');
 assert(appPathActionsHookText.includes('closed: current?.closed ?? true'), 'new drawn/tracked paths default to closed loops while preserving existing open paths');
 const pathWorkflowPanelText = readFileSync(join(process.cwd(), 'components', 'stages', 'path', 'PathWorkflowPanel.tsx'), 'utf8');
@@ -5458,17 +5470,19 @@ assert.deepEqual(cachedFit.pathPoints, directFit.pathPoints, 'cached Foundry fit
 assert(Math.hypot(cachedFit.state.effector.x - directFit.state.effector.x, cachedFit.state.effector.y - directFit.state.effector.y) < 1e-9, 'cached Foundry fit maps the live effector exactly like direct fit');
 assert(!threePreviewText.includes('teeth * 2'), '3D preview no longer carries a separate saw-tooth gear implementation');
 assert(threePreviewText.includes('fabricablePartOutlinePoints'), '3D puppet preview uses shared model/user contour outlines instead of raw image crop rectangles');
-assert(webOnnxText.includes('contourFromCropMask') && webOnnxText.includes("contourSource: crop.contourPoints.length >= 3 ? 'onnx-mask'"), 'browser ONNX preserves mask-derived part contours for fabrication plates');
-assert(webOnnxText.includes('MODEL_CACHE_NAME') && webOnnxText.includes('caches.open') && webOnnxText.includes('warmWebOnnxCache'), 'browser ONNX model can be separately downloaded and cached');
-assert(webOnnxText.includes('GIT_LFS_POINTER_PREFIX') && webOnnxText.includes('deleteCachedModel') && webOnnxText.includes("cache: 'reload'"), 'browser ONNX rejects stale Git LFS pointer caches and refetches model bytes');
-assert(webOnnxText.includes('MODEL_BYTES_HEADER') && webOnnxText.includes('x-motionsmith-model-bytes'), 'browser ONNX marks valid cached model bytes to avoid treating pointer files as ready');
-assert(webOnnxText.includes('assertCompleteModelDownload') && webOnnxText.includes('download disconnected after'), 'browser ONNX rejects interrupted model downloads before they can be cached');
-assert(webOnnxText.includes('markedBytes && markedBytes !== buffer.byteLength'), 'browser ONNX evicts cache entries whose recorded bytes do not match the cached body');
-assert(webOnnxText.includes("runtimeStage === 'loading-model'") && webOnnxText.includes('Cached model bytes were cleared') && webOnnxText.includes('URL.revokeObjectURL(imageUrl)'), 'browser ONNX clears bad session-load caches and releases per-image blob URLs for repeated imports');
-assert(webOnnxText.includes('InferenceSession.create(new Uint8Array(modelBuffer)'), 'browser ONNX creates sessions from cached model bytes');
-assert(webOnnxText.includes("import('onnxruntime-web')") && !webOnnxText.includes("import * as ort from 'onnxruntime-web'"), 'ONNX Runtime JS is lazy-loaded outside the initial editor shell bundle');
-assert(appUiText.includes('data-testid="onnx-cache-status"') && appOnnxBootstrapText.includes('warmWebOnnxCache'), 'status bar exposes ONNX cache/download status');
-assert(indexText.includes('id="boot-loader"') && indexText.includes('Loading MotionSmith') && indexText.includes('boot-version') && indexText.includes('data-boot-status') && indexText.includes('data-boot-progress'), 'static boot loader covers slow startup with logo, wordmark, version, and AI model progress');
+assert(webOnnxWorkerText.includes('contourFromCropMask') && webOnnxWorkerText.includes("contourSource: crop.contourPoints.length >= 3 ? 'onnx-mask'"), 'browser ONNX worker preserves mask-derived part contours for fabrication plates');
+assert(webOnnxText.includes('MODEL_CACHE_NAME') && webOnnxWorkerText.includes('caches.open') && webOnnxText.includes('warmWebOnnxCache'), 'browser ONNX model can be separately downloaded and cached on demand');
+assert(webOnnxWorkerText.includes('GIT_LFS_POINTER_PREFIX') && webOnnxWorkerText.includes('deleteCachedModel') && webOnnxWorkerText.includes("cache: 'reload'"), 'browser ONNX worker rejects stale Git LFS pointer caches and refetches model bytes');
+assert(webOnnxWorkerText.includes('MODEL_BYTES_HEADER') && webOnnxText.includes('x-motionsmith-model-bytes'), 'browser ONNX marks valid cached model bytes so boot checks only cache headers');
+assert(webOnnxWorkerText.includes('assertCompleteModelDownload') && webOnnxWorkerText.includes('download disconnected after') && webOnnxWorkerText.includes('model-download-stalled'), 'browser ONNX rejects interrupted or stalled model downloads before caching');
+assert(webOnnxWorkerText.includes('new TransformStream<Uint8Array, Uint8Array>') && !webOnnxWorkerText.includes('const chunks: Uint8Array[]') && !webOnnxWorkerText.includes('buffer.slice('), 'model download progress streams into one browser-owned buffer without chunk-array or cache-slice copies');
+assert(webOnnxWorkerText.includes('markedBytes && markedBytes !== buffer.byteLength'), 'browser ONNX worker evicts cache entries whose recorded bytes do not match the cached body');
+assert(webOnnxWorkerText.includes('InferenceSession.create(new Uint8Array(modelBuffer)') && webOnnxWorkerText.includes('await session?.release()'), 'browser ONNX creates and releases request-scoped sessions inside the Worker');
+assert(webOnnxWorkerText.includes("import('onnxruntime-web/wasm')") && !webOnnxWorkerText.includes('jsep.wasm'), 'ONNX Runtime uses the lazy wasm-only runtime instead of the larger JSEP build');
+assert(webOnnxWorkerText.includes('new OffscreenCanvas') && webOnnxWorkerText.includes('MAX_WORKING_PIXELS = 1_000_000') && webOnnxWorkerText.includes('MAX_WORKING_EDGE = 1_024'), 'image decode, pixel work, and output encoding stay in the bounded Worker path');
+assert(!webOnnxWorkerText.includes('document.') && !webOnnxWorkerText.includes('new Image(') && webOnnxText.includes("activeJob?.cancel('superseded')"), 'image AI avoids main-thread DOM pixel work and keeps only the newest import active');
+assert(appUiText.includes('data-testid="onnx-cache-status"') && appOnnxBootstrapText.includes('checkWebOnnxCache') && appOnnxBootstrapText.includes('warmWebOnnxCache'), 'status bar exposes cache state and keeps manual AI download separate from boot');
+assert(indexText.includes('id="boot-loader"') && indexText.includes('Loading MotionSmith') && indexText.includes('boot-version') && !indexText.includes('Preparing AI model') && !indexText.includes('data-boot-progress'), 'static boot loader contains only logo, wordmark, and version while editor startup stays independent of AI');
 assert(viewer3dText.includes('VIEWER3D_CAMERA_PRESETS') && threePreviewText.includes('three-puppet-view-toolbar') && foundryCameraText.includes('foundryPreset'), '3D puppet and foundry previews share one viewer camera preset contract');
 assert(viewer3dText.includes('type Viewer3DContract') && viewer3dText.includes('createViewer3DContract'), '3D viewers expose one shared OOP-style contract object for tab adapters');
 assert(threePreviewText.includes('DEFAULT_PUPPET_VIEWER_LAYERS') && threePreviewText.includes('data-testid={`${testId}-toggle-${layer}`}') && foundry3dText.includes('foundry-toggle-grid'), '3D viewer top overlay toolbar wires shared layer toggles instead of decorative buttons');
@@ -5488,6 +5502,7 @@ assert(threePreviewText.includes('data-three-part-surface="solid-cut-plates"'), 
 assert(threePreviewText.includes('data-three-part-art="top-texture-decal"'), '3D puppet preview exposes that artwork is rendered on top of plates');
 assert(threePreviewText.includes('TextureLoader'), '3D puppet preview loads character part images as surface decals');
 assert(threePreviewText.includes('new THREE.ShapeGeometry(shape)'), '3D puppet artwork decals are clipped to fabrication part outlines');
+assert(threePreviewText.includes('window.setTimeout(buildNextPart, 16)') && threePreviewText.includes('bevelEnabled: false, steps: 1, curveSegments: 4'), '3D puppet builds one solid part per frame without decorative bevel overhead on low-end laptops');
 assert(threePreviewText.includes('part-art-decal'), '3D puppet preview names surface decal meshes for browser inspection');
 assert(threePreviewText.includes('cut-hole-ring'), '3D puppet preview draws raised joint-hole rings on part surfaces');
 assert(threePreviewText.includes('transparent: false, opacity: 1'), '3D puppet body plates are opaque assembled solids, not ghost overlays');
@@ -5495,10 +5510,10 @@ assert(threePreviewText.includes('disposeOwnedMaterials(scene)'), '3D puppet pre
 assert(agentsContract.includes('Path Editor must render only character, skeleton, editable path') && agentsContract.includes('Mechanism Design is the first workflow tab that overlays character + path + mechanism together'), 'AGENTS.md locks tab-scoped rendering ownership for Path vs Mechanism Design');
 assert(agentsContract.includes('Getting Started can be reopened from the Character/Getting Started action') && agentsContract.includes('compact modal'), 'AGENTS.md defines compact Getting Started reopen behavior and scope after startup');
 assert(workbenchContractText.includes('Character is correct creation owner') && workbenchContractText.includes('compact'), 'Workbench contract keeps Character as a compact functional creation owner');
-assert(indexText.includes('id="boot-loader"') && indexText.includes('aria-label="Loading MotionSmith"') && indexText.includes('boot-word') && indexText.includes('boot-version') && indexText.includes('Preparing AI model'), 'startup uses one static logo/wordmark/version/model boot loader before React mounts');
+assert(indexText.includes('id="boot-loader"') && indexText.includes('aria-label="Loading MotionSmith"') && indexText.includes('boot-word') && indexText.includes('boot-version') && !indexText.includes('Preparing AI model'), 'startup uses one static logo/wordmark/version boot loader before React mounts');
 assert(indexText.includes('resources/icons/AppIcon.png') && !indexText.includes('src-tauri/icons/icon.png'), 'startup boot loader uses the canonical MotionSmith app icon instead of the old blue grid path');
 assert(indexText.includes('#boot-loader .boot-word') && indexText.includes('max-width: calc(100vw - 2rem)') && indexText.includes('white-space: nowrap'), 'startup wordmark is viewport-constrained instead of clipped');
-assert(appText.includes('useAppOnnxBootstrap') && appOnnxBootstrapText.includes('warmWebOnnxCache(publishBootStatus)') && appOnnxBootstrapText.includes('finishBootLoader()') && appOnnxBootstrapText.includes('document.getElementById("boot-loader")?.remove()'), 'React keeps the static boot loader through AI model warmup before opening the editor');
+assert(appText.includes('useAppOnnxBootstrap') && appOnnxBootstrapText.includes('checkWebOnnxCache().then') && appOnnxBootstrapText.includes('const bootTimer = finishBootLoader()') && appOnnxBootstrapText.includes('document.getElementById("boot-loader")?.remove()'), 'React opens the editor independently and checks only AI cache headers during startup');
 assert(shellUiText.includes('const APP_VERSION = __APP_VERSION__') && shellUiText.includes('workflow-rail-version') && indexText.includes('v%APP_VERSION%'), 'startup boot loader and editor rail show the package version subtly');
 assert(indexText.includes('.boot-version') && indexText.includes('.workflow-rail-version'), 'version labels use low-emphasis styling');
 assert(appWorkspaceShellText.includes('../resources/icons/AppIcon.png?url') && indexText.includes('.app-header-icon'), 'top bar renders the canonical MotionSmith app icon with dedicated sizing');

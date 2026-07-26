@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type { StarterImageTemplate } from "../components/AppShell";
 import { processingLabel } from "../components/stages/character/ProgressBlock";
 import type { PendingCharacterReview } from "../components/stages/character/CharacterImportOverlays";
@@ -15,11 +15,13 @@ import {
 } from "../utils/project";
 import {
   processImageWithWebOnnx,
+  WebOnnxError,
   type WebOnnxCacheStatus,
 } from "../utils/webOnnx";
 import { loadCharacterPackage } from "../utils/packageLoader";
 import { foundryPreviewFromProject } from "../utils/mechanismDefaults";
 import { recordStageNavigationOpened } from "../utils/appStageNavigation";
+import { recordStudyEvent } from "../utils/studyTelemetryBoundary";
 
 type SetProjectOptions = {
   history?: boolean;
@@ -51,6 +53,16 @@ export const useAppCharacterImportActions = ({
 }: UseAppCharacterImportActionsParams) => {
   const [pendingCharacter, setPendingCharacter] =
     useState<PendingCharacterReview | null>(null);
+  const activeImageImport = useRef<AbortController | null>(null);
+  const lastImageFile = useRef<File | null>(null);
+
+  const pixelBucket = (pixels: number) =>
+    pixels <= 0 ? "unknown"
+      : pixels <= 250_000 ? "lte-250k"
+      : pixels <= 500_000 ? "lte-500k"
+        : pixels <= 1_000_000 ? "lte-1m"
+          : pixels <= 4_000_000 ? "lte-4m"
+            : "gt-4m";
 
   const queueCharacterReview = (next: ProjectState, summary: string) => {
     setPendingCharacter({
@@ -71,12 +83,18 @@ export const useAppCharacterImportActions = ({
   };
 
   const runWebOnnx = async (file: File) => {
+    activeImageImport.current?.abort();
+    const controller = new AbortController();
+    activeImageImport.current = controller;
+    lastImageFile.current = file;
+    const startedAt = performance.now();
+    performance.mark("motionsmith-image-processing-start");
     dispatch({
       type: "set_processing",
       processing: {
-        stage: "loading-model",
-        message: "Reading picture…",
-        progress: 10,
+        stage: "preparing-image",
+        message: "Preparing image…",
+        progress: 2,
       },
     });
     try {
@@ -105,7 +123,18 @@ export const useAppCharacterImportActions = ({
             },
           });
         },
+        { signal: controller.signal },
       );
+      if (controller.signal.aborted || activeImageImport.current !== controller) return;
+      recordStudyEvent("image.processing", {
+        outcome: "success",
+        provider: result.metrics.provider,
+        model: result.metrics.model,
+        inputPixels: pixelBucket(result.metrics.inputWidth * result.metrics.inputHeight),
+        workingPixels: pixelBucket(result.metrics.workingWidth * result.metrics.workingHeight),
+        durationMs: Math.round((performance.now() - startedAt) / 500) * 500,
+        errorCode: "none",
+      }, { level: "metrics", immediate: true });
       const next = createProjectFromProcessed({
         name: file.name.replace(/\.[^.]+$/, "") || "Processed character",
         sourceImageName: file.name,
@@ -125,16 +154,44 @@ export const useAppCharacterImportActions = ({
         `${next.partOrder.length} parts · ${Object.keys(next.skeleton?.joints ?? {}).length} joints · ready`,
       );
     } catch (error) {
+      if (activeImageImport.current !== controller) return;
+      const code = error instanceof WebOnnxError ? error.code : "image-processing-failed";
+      const canceled = code === "canceled" || code === "superseded";
+      if (code.startsWith("model-") || code === "wasm-unavailable") {
+        setOnnxCacheStatus({
+          stage: "error",
+          label: "AI pose model",
+          progress: 0,
+          error: code,
+        });
+      }
+      recordStudyEvent("image.processing", {
+        outcome: canceled ? "canceled" : "error",
+        provider: "wasm",
+        model: "fp32",
+        inputPixels: pixelBucket(0),
+        workingPixels: pixelBucket(0),
+        durationMs: Math.round((performance.now() - startedAt) / 500) * 500,
+        errorCode: code,
+      }, { level: "metrics", immediate: true });
       dispatch({
         type: "set_processing",
         processing: {
-          stage: "error",
-          message: "Image processing failed",
+          stage: canceled ? "idle" : "error",
+          message: canceled ? "Import canceled" : "Image processing failed",
           progress: 0,
-          error: error instanceof Error ? error.message : String(error),
+          error: canceled ? undefined : code,
         },
       });
+    } finally {
+      if (activeImageImport.current === controller) activeImageImport.current = null;
     }
+  };
+
+  const cancelWebOnnx = () => activeImageImport.current?.abort();
+  const retryWebOnnx = () => {
+    const file = lastImageFile.current;
+    if (file) void runWebOnnx(file);
   };
 
   const loadStarterImage = async (template: StarterImageTemplate) => {
@@ -142,18 +199,17 @@ export const useAppCharacterImportActions = ({
     dispatch({
       type: "set_processing",
       processing: {
-        stage: "loading-model",
+        stage: "preparing-image",
         message: `Opening ${template.label}`,
         progress: 8,
       },
     });
     try {
-      const response = await fetch(template.url);
-      if (!response.ok) throw new Error(`Could not load ${template.fileName}`);
-      const blob = await response.blob();
-      await runWebOnnx(
-        new File([blob], template.fileName, { type: blob.type || "image/png" }),
-      );
+      const response = await fetch(template.packageUrl);
+      if (!response.ok) throw new Error("Starter package unavailable");
+      const loaded = loadProjectSnapshot(await response.json(), project);
+      if (loaded.status === "rejected") throw new Error(loaded.blocker);
+      queueCharacterReview(loaded.project, "Ready to use.");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       dispatch({
@@ -267,6 +323,8 @@ export const useAppCharacterImportActions = ({
     editCharacterParts,
     saveSkeleton,
     acceptPendingCharacter,
+    cancelWebOnnx,
+    retryWebOnnx,
     startFromStarterImage,
     startFromPackage,
     startFromImage,

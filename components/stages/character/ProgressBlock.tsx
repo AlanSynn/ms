@@ -7,6 +7,7 @@ export const processingLabel = (
 ) => {
   if (stage === "error") return message || "Fix needed";
   if (stage === "ready") return "Ready";
+  if (stage === "preparing-image") return "Preparing image…";
   if (stage === "downloading-model") return "Getting AI…";
   if (stage === "loading-model") return "Opening…";
   if (stage === "running-onnx") return "Finding joints…";
@@ -22,6 +23,7 @@ export const ProgressBlock = ({ project }: { project: ProjectState }) => {
     label: string;
   }> = [
     { stage: "selecting", label: "Pick file" },
+    { stage: "preparing-image", label: "Prepare image" },
     { stage: "downloading-model", label: "Get AI" },
     { stage: "loading-model", label: "Open" },
     { stage: "running-onnx", label: "Find joints" },

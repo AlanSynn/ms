@@ -1622,33 +1622,20 @@ const base64Url = (bytes: Uint8Array) => {
 
 const imageBlob = async (dataUrl: string) => {
   const source = await (await fetch(dataUrl)).blob();
-  const bitmap = await createImageBitmap(source);
-  let scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
-  let output = source;
-  let width = 0;
-  let height = 0;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    width = Math.max(1, Math.round(bitmap.width * scale));
-    height = Math.max(1, Math.round(bitmap.height * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    canvas.getContext("2d", { alpha: true })?.drawImage(bitmap, 0, 0, width, height);
-    output = await new Promise<Blob>((resolve) =>
-      canvas.toBlob(
-        (blob) => resolve(blob ?? source),
-        "image/webp",
-        0.68,
-      ),
-    );
-    if (output.size <= 192 * 1024) break;
-    scale *= 0.72;
-  }
-  bitmap.close();
-  if (output.size > 192 * 1024 || !["image/webp", "image/png"].includes(output.type)) {
-    throw new Error("asset_too_large");
-  }
-  return { blob: output, width, height };
+  return new Promise<{ blob: Blob; width: number; height: number }>((resolve, reject) => {
+    const worker = new Worker(new URL("./studyImageWorker.ts", import.meta.url), { type: "module", name: "motionsmith-study-image" });
+    const finish = () => worker.terminate();
+    worker.onmessage = ({ data }: MessageEvent<{ type: "result"; blob: Blob; width: number; height: number } | { type: "error" }>) => {
+      finish();
+      if (data.type === "result") resolve(data);
+      else reject(new Error("normalize_failed"));
+    };
+    worker.onerror = () => {
+      finish();
+      reject(new Error("normalize_failed"));
+    };
+    worker.postMessage({ id: 1, source });
+  });
 };
 
 const assetIdFor = async (blob: Blob, kind: string) => {

@@ -26,6 +26,7 @@ const webServerCommand = serverMode === 'preview'
 export default defineConfig({
   testDir: './tests/browser',
   timeout: 0,
+  grepInvert: process.env.PLAYWRIGHT_PERFORMANCE ? undefined : /@performance/,
   expect: { timeout: 10_000 },
   fullyParallel: true,
   workers: workerCount,
