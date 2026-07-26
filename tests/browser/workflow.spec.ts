@@ -1777,11 +1777,7 @@ test('G005 mobile Getting Started keeps actions reachable in a short viewport', 
   await expectReachableInViewportOrOwnScroller(gettingStarted.getByTestId('getting-started-hide-session'), '390x640 Getting Started opt-out');
 });
 
-test('character → path → foundry → design → blueprint runs end-to-end in browser @long-e2e', async ({ page }) => {
-  test.skip(
-    process.env.PLAYWRIGHT_SKIP_LONG_E2E === '1',
-    'runs alone after the other 4/8 WebGL flows on constrained CI runners',
-  );
+test('character → path → foundry → design → blueprint runs end-to-end in browser', async ({ page }) => {
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
   page.on('pageerror', error => pageErrors.push(error.message));
