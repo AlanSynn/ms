@@ -5520,6 +5520,7 @@ assert(threePreviewText.includes('TextureLoader'), '3D puppet preview loads char
 assert(threePreviewText.includes('new THREE.ShapeGeometry(shape)'), '3D puppet artwork decals are clipped to fabrication part outlines');
 assert(threePreviewText.includes('project?.characterPackage?.sourceTextureUrl') && threePreviewText.includes('sourceArtMaterial'), '3D puppet reuses one optimized source texture across imported part decals');
 assert(partShapeText.includes('sourceTextureUrl') && sceneSketchText.includes('sourceTextureUrl={project.characterPackage?.sourceTextureUrl}') && foundry3dText.includes('project.characterPackage?.sourceTextureUrl'), 'Path, shared 3D, and Foundry render imported parts from the same optimized source texture');
+assert(threePreviewText.includes('[animatedParts, project?.partOrder, project?.parts]') && threePreviewText.includes('return EMPTY_MECHANISM_CONTRACTS'), 'processing-only ProjectState updates do not rebuild or rerender unchanged Three character geometry');
 assert(threePreviewText.includes('window.setTimeout(buildNextPart, 16)') && threePreviewText.includes('bevelEnabled: false, steps: 1, curveSegments: 4'), '3D puppet builds one solid part per frame without decorative bevel overhead on low-end laptops');
 assert(threePreviewText.includes('part-art-decal'), '3D puppet preview names surface decal meshes for browser inspection');
 assert(threePreviewText.includes('cut-hole-ring'), '3D puppet preview draws raised joint-hole rings on part surfaces');

@@ -21,6 +21,8 @@ const FABRICATION_HOLE_RADIUS_3D = Math.max(0.04, (FABRICATION_HOLE_RADIUS_MM * 
 const THICKNESS = 0.22;
 const SUPPORTED_MECHANISM_TYPES: MechanismType[] = [...ALL_MECHANISM_TYPES];
 const PUPPET_CAMERA_PRESETS: Viewer3DCameraPreset[] = ['front', 'iso'];
+const EMPTY_MECHANISMS: MechanismConfig[] = [];
+const EMPTY_MECHANISM_CONTRACTS = new Map<string, MechanismSceneContract>();
 type RendererStatus = 'pending' | 'webgl' | 'unavailable';
 type LinkKey = 'base' | 'driver' | 'coupler' | 'output' | 'effector' | 'follower';
 
@@ -718,7 +720,7 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
   const kit = project?.settings.physicalKit ?? fallbackKit;
   const parts = useMemo(() => (project?.partOrder ?? [])
     .map(id => animatedParts[id] ?? project?.parts[id])
-    .filter((part): part is BodyPartLayer => Boolean(part?.visible)), [animatedParts, project]);
+    .filter((part): part is BodyPartLayer => Boolean(part?.visible)), [animatedParts, project?.partOrder, project?.parts]);
   const topologyParts = useMemo(() => (project?.partOrder ?? [])
     .map(id => project?.parts[id])
     .filter((part): part is BodyPartLayer => Boolean(part?.visible)), [project?.partOrder, project?.parts]);
@@ -728,15 +730,16 @@ export const ThreePuppetPreview = ({ project, animatedParts = {}, animatedSceneO
     .filter((object): object is SceneObject => Boolean(object?.visible)), [animatedSceneObjects, project?.sceneObjectOrder, project?.sceneObjects]);
   const joints = useMemo(() => Object.values(activeSkeleton?.joints ?? {}), [activeSkeleton]);
   const bones = useMemo(() => activeSkeleton?.bones ?? [], [activeSkeleton]);
-  const mechanismCandidates = mechanisms ?? project?.mechanisms ?? [];
-  const mechanismContracts = useMemo(() => new Map(
-    project
-      ? mechanismCandidates.flatMap(mechanism => {
-          const contract = buildProjectMechanismSceneContract(project, mechanism.id, undefined, 0);
-          return contract ? [[mechanism.id, contract] as const] : [];
-        })
-      : [],
-  ), [mechanismCandidates, project]);
+  const mechanismCandidates = mechanisms
+    ? mechanisms.length ? mechanisms : EMPTY_MECHANISMS
+    : project?.mechanisms ?? EMPTY_MECHANISMS;
+  const mechanismContracts = useMemo(() => {
+    if (!project || !mechanismCandidates.length) return EMPTY_MECHANISM_CONTRACTS;
+    return new Map(mechanismCandidates.flatMap(mechanism => {
+      const contract = buildProjectMechanismSceneContract(project, mechanism.id, undefined, 0);
+      return contract ? [[mechanism.id, contract] as const] : [];
+    }));
+  }, [mechanismCandidates, project]);
   const mechanismsToRender = useMemo(
     () => mechanismCandidates.filter(mechanism => mechanismContracts.has(mechanism.id)),
     [mechanismCandidates, mechanismContracts],
