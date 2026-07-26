@@ -1,6 +1,10 @@
 import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { AppStage, ProjectState } from "../../../types";
 import { ProgressBlock } from "./ProgressBlock";
+
+export const IMAGE_IMPORT_PROCESSING_EVENT = "motionsmith:image-import-processing";
+export const IMAGE_IMPORT_REVIEW_EVENT = "motionsmith:image-import-review";
 
 export type PendingCharacterReview = {
   project: ProjectState;
@@ -36,10 +40,24 @@ export const CharacterImportStatusDock = ({
   onStarterRig: () => void;
   onCharacterFile: () => void;
 }) => {
+  const [liveProcessing, setLiveProcessing] =
+    useState<ProjectState["processing"] | null>(null);
+  useEffect(() => {
+    const update = (event: Event) =>
+      setLiveProcessing(
+        (event as CustomEvent<ProjectState["processing"]>).detail,
+      );
+    window.addEventListener(IMAGE_IMPORT_PROCESSING_EVENT, update);
+    return () => window.removeEventListener(IMAGE_IMPORT_PROCESSING_EVENT, update);
+  }, []);
+  const statusProject = liveProcessing
+    ? { ...project, processing: liveProcessing }
+    : project;
+  const processing = statusProject.processing;
   const artifact = reviewedProject.characterPackage;
   const showImportProgress = Boolean(
     project.settings.detailedProcessingSteps ||
-      activeImportStages.has(project.processing.stage),
+      activeImportStages.has(processing.stage),
   );
   if (!showImportProgress) return null;
 
@@ -102,16 +120,16 @@ export const CharacterImportStatusDock = ({
       <details className="advanced-panel import-status" open>
         <summary>Import</summary>
         <div className="mt-3">
-          <ProgressBlock project={project} />
+          <ProgressBlock project={statusProject} />
         </div>
-        {project.processing.stage !== "error" &&
-          project.processing.stage !== "ready" &&
-          project.processing.stage !== "idle" && (
+        {processing.stage !== "error" &&
+          processing.stage !== "ready" &&
+          processing.stage !== "idle" && (
             <button type="button" className="btn-secondary mt-3" onClick={onCancel}>
               Cancel
             </button>
           )}
-        {project.processing.stage === "error" && (
+        {processing.stage === "error" && (
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" className="btn-primary" onClick={onRetry}>Retry</button>
             <button type="button" className="btn-secondary" onClick={onStarterRig}>Starter rig</button>
@@ -151,15 +169,27 @@ export const CharacterImportReviewDialog = ({
   onAccept: () => void;
   onDiscard: () => void;
 }) => {
-  if (!pendingCharacter) return null;
+  const [liveReview, setLiveReview] = useState<PendingCharacterReview | null>(
+    pendingCharacter,
+  );
+  useEffect(() => {
+    const update = (event: Event) =>
+      setLiveReview(
+        (event as CustomEvent<PendingCharacterReview | null>).detail,
+      );
+    window.addEventListener(IMAGE_IMPORT_REVIEW_EVENT, update);
+    return () => window.removeEventListener(IMAGE_IMPORT_REVIEW_EVENT, update);
+  }, []);
+  const review = pendingCharacter ?? liveReview;
+  if (!review) return null;
 
-  const pendingStats = `${pendingCharacter.project.partOrder.length} parts · ${
-    Object.keys(pendingCharacter.project.skeleton?.joints ?? {}).length
+  const pendingStats = `${review.project.partOrder.length} parts · ${
+    Object.keys(review.project.skeleton?.joints ?? {}).length
   } joints`;
   const previewUrl =
-    pendingCharacter.project.characterPackage?.sourceTextureUrl ??
-    pendingCharacter.project.partOrder
-      .map((id) => pendingCharacter.project.parts[id]?.textureUrl)
+    review.project.characterPackage?.sourceTextureUrl ??
+    review.project.partOrder
+      .map((id) => review.project.parts[id]?.textureUrl)
       .find((url): url is string => Boolean(url));
 
   return (
@@ -176,10 +206,10 @@ export const CharacterImportReviewDialog = ({
           <span>Ready</span>
         </div>
         <div className="character-import-review-title">
-          {pendingCharacter.project.metadata.name}
+          {review.project.metadata.name}
         </div>
         <div className="character-import-review-meta">
-          {pendingStats || compactPackageSummary(pendingCharacter.summary)}
+          {pendingStats || compactPackageSummary(review.summary)}
         </div>
         {previewUrl && (
           <img

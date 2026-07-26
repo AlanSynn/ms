@@ -1,13 +1,11 @@
-import {
-  startTransition,
-  useRef,
-  useState,
-  type Dispatch,
-  type SetStateAction,
-} from "react";
+import { useRef, type Dispatch, type SetStateAction } from "react";
 import type { StarterImageTemplate } from "../components/AppShell";
 import { processingLabel } from "../components/stages/character/ProgressBlock";
-import type { PendingCharacterReview } from "../components/stages/character/CharacterImportOverlays";
+import {
+  IMAGE_IMPORT_PROCESSING_EVENT,
+  IMAGE_IMPORT_REVIEW_EVENT,
+  type PendingCharacterReview,
+} from "../components/stages/character/CharacterImportOverlays";
 import type {
   AppStage,
   MechanismConfig,
@@ -57,10 +55,26 @@ export const useAppCharacterImportActions = ({
   setShowGettingStarted,
   setOnnxCacheStatus,
 }: UseAppCharacterImportActionsParams) => {
-  const [pendingCharacter, setPendingCharacter] =
-    useState<PendingCharacterReview | null>(null);
+  const pendingCharacter = useRef<PendingCharacterReview | null>(null);
   const activeImageImport = useRef<AbortController | null>(null);
   const lastImageFile = useRef<File | null>(null);
+  const setPendingCharacter: Dispatch<
+    SetStateAction<PendingCharacterReview | null>
+  > = (update) => {
+    pendingCharacter.current =
+      typeof update === "function"
+        ? update(pendingCharacter.current)
+        : update;
+    window.dispatchEvent(
+      new CustomEvent(IMAGE_IMPORT_REVIEW_EVENT, {
+        detail: pendingCharacter.current,
+      }),
+    );
+  };
+  const showProcessing = (processing: ProjectState["processing"]) =>
+    window.dispatchEvent(
+      new CustomEvent(IMAGE_IMPORT_PROCESSING_EVENT, { detail: processing }),
+    );
 
   const pixelBucket = (pixels: number) =>
     pixels <= 0 ? "unknown"
@@ -71,23 +85,18 @@ export const useAppCharacterImportActions = ({
             : "gt-4m";
 
   const queueCharacterReview = (next: ProjectState, summary: string) => {
-    startTransition(() => {
-      setPendingCharacter({
-        project: next,
-        summary,
-        returnStage: "character",
-      });
-      dispatch({
-        type: "set_processing",
-        processing: {
-          stage: "ready",
-          message: "Check character",
-          progress: 100,
-        },
-      });
-      setStage("character");
+    setPendingCharacter({
+      project: next,
+      summary,
+      returnStage: "character",
+    });
+    showProcessing({
+      stage: "ready",
+      message: "Check character",
+      progress: 100,
     });
     recordStageNavigationOpened("character", "character_review");
+    if (stage !== "character") setStage("character");
   };
 
   const runWebOnnx = async (file: File) => {
@@ -97,43 +106,21 @@ export const useAppCharacterImportActions = ({
     lastImageFile.current = file;
     const startedAt = performance.now();
     performance.mark("motionsmith-image-processing-start");
-    startTransition(() =>
-      dispatch({
-        type: "set_processing",
-        processing: {
-          stage: "preparing-image",
-          message: "Preparing image…",
-          progress: 2,
-        },
-      }),
-    );
+    showProcessing({
+      stage: "preparing-image",
+      message: "Preparing image…",
+      progress: 2,
+    });
     try {
       const result = await processImageWithWebOnnx(
         file,
         (stageName, progress) => {
           performance.mark(`motionsmith-image-progress-${stageName}`);
-          startTransition(() => {
-            if (stageName === "downloading-model")
-              setOnnxCacheStatus((prev) => ({
-                ...prev,
-                stage: "downloading",
-                progress,
-              }));
-            if (stageName === "loading-model")
-              setOnnxCacheStatus((prev) => ({
-                ...prev,
-                stage: "cached",
-                progress: 100,
-              }));
-            const stageId = stageName as ProjectState["processing"]["stage"];
-            dispatch({
-              type: "set_processing",
-              processing: {
-                stage: stageId,
-                message: processingLabel(stageId, ""),
-                progress,
-              },
-            });
+          const stageId = stageName as ProjectState["processing"]["stage"];
+          showProcessing({
+            stage: stageId,
+            message: processingLabel(stageId, ""),
+            progress,
           });
         },
         { signal: controller.signal },
@@ -190,17 +177,12 @@ export const useAppCharacterImportActions = ({
         durationMs: Math.round((performance.now() - startedAt) / 500) * 500,
         errorCode: code,
       }, { level: "metrics", immediate: true });
-      startTransition(() =>
-        dispatch({
-          type: "set_processing",
-          processing: {
-            stage: canceled ? "idle" : "error",
-            message: canceled ? "Import canceled" : "Image processing failed",
-            progress: 0,
-            error: canceled ? undefined : code,
-          },
-        }),
-      );
+      showProcessing({
+        stage: canceled ? "idle" : "error",
+        message: canceled ? "Import canceled" : "Image processing failed",
+        progress: 0,
+        error: canceled ? undefined : code,
+      });
     } finally {
       if (activeImageImport.current === controller) activeImageImport.current = null;
     }
@@ -303,12 +285,13 @@ export const useAppCharacterImportActions = ({
   };
 
   const acceptPendingCharacter = () => {
-    if (!pendingCharacter) return;
-    setProject(pendingCharacter.project, { resetHistory: true });
+    const review = pendingCharacter.current;
+    if (!review) return;
+    setProject(review.project, { resetHistory: true });
     setPendingCharacter(null);
     setShowGettingStarted(false);
-    recordStageNavigationOpened(pendingCharacter.returnStage, "character_review_accept");
-    setStage(pendingCharacter.returnStage);
+    recordStageNavigationOpened(review.returnStage, "character_review_accept");
+    setStage(review.returnStage);
   };
 
   const startFromStarterImage = (template: StarterImageTemplate) => {
@@ -332,7 +315,7 @@ export const useAppCharacterImportActions = ({
   };
 
   return {
-    pendingCharacter,
+    pendingCharacter: null,
     setPendingCharacter,
     runWebOnnx,
     loadStarterImage,
