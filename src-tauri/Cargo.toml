@@ -1,6 +1,6 @@
 [package]
 name = "motionsmith"
-version = "0.0.10"
+version = "0.0.11"
 description = "A portable character motion designer"
 authors = ["you"]
 edition = "2021"

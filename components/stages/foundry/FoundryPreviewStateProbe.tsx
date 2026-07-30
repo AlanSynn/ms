@@ -132,6 +132,7 @@ type FoundryPreviewStateProbeProps = {
   physicalValidationSummary: string;
   assemblySceneFrame?: FoundryAssemblySceneFrame;
   assemblyLayerFocusSummary: string;
+  assemblyVisibleLayerCount: number;
   connectionSelectionCoordinates: Record<string, Point>;
   connectionExportSignature: string;
   selectedConnection?: { role: string; kind: string; holeIndex: number };
@@ -216,6 +217,7 @@ export const FoundryPreviewStateProbe = ({
   physicalValidationSummary,
   assemblySceneFrame,
   assemblyLayerFocusSummary,
+  assemblyVisibleLayerCount,
   connectionSelectionCoordinates,
   connectionExportSignature,
   selectedConnection,
@@ -587,6 +589,7 @@ export const FoundryPreviewStateProbe = ({
         assemblySceneFrame?.activePartIds.join(",") ?? ""
       }
       data-three-assembly-rendered-layer-focus={assemblyLayerFocusSummary}
+      data-three-assembly-visible-layer-count={assemblyVisibleLayerCount}
       data-three-assembly-rendered-board-marker-count={
         assemblyBoardMarkerCount
       }

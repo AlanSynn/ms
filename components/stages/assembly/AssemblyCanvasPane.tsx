@@ -31,7 +31,6 @@ export const AssemblyCanvasPane = ({
   lane,
   kit,
   progress,
-  playing,
   hasCharacterAssembly,
 }: {
   project: ProjectState;
@@ -43,7 +42,6 @@ export const AssemblyCanvasPane = ({
   lane: AssemblyLane;
   kit: PhysicalKitSettings;
   progress: number;
-  playing: boolean;
   hasCharacterAssembly: boolean;
 }) => {
   const selectedMechanism = selectedRecipe
@@ -83,7 +81,6 @@ export const AssemblyCanvasPane = ({
             project={project}
             step={currentCharacterStep}
             progress={progress}
-            playing={playing}
             sceneFrame={characterFrame}
           />
           <AssemblySceneFrame frame={characterFrame} />
@@ -95,7 +92,6 @@ export const AssemblyCanvasPane = ({
             mechanism={selectedMechanism}
             step={currentStep}
             progress={progress}
-            playing={playing}
             sceneFrame={mechanismFrame}
           />
           <AssemblySceneFrame frame={mechanismFrame} />

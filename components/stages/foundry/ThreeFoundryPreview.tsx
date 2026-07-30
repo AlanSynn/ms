@@ -64,7 +64,10 @@ import {
   createFoundryThreePrimitiveFactory,
   disposeFoundryThreeObject,
 } from "./foundryThreePrimitives";
-import { renderFoundryDynamicLayers } from "./foundryThreeRenderLayers";
+import {
+  foundryAssemblyVisibleLayerIndexes,
+  renderFoundryDynamicLayers,
+} from "./foundryThreeRenderLayers";
 import {
   foundryAssemblyPinContract,
   foundryLocalSpacerZForPin,
@@ -797,6 +800,15 @@ export const ThreeFoundryPreview = ({
   const pinStacks = useMemo(
     () => foundryPinStacks(pinStackPoints, renderPlan),
     [pinStackPoints, renderPlan],
+  );
+  const assemblyVisibleLayerIndexes = useMemo(
+    () =>
+      foundryAssemblyVisibleLayerIndexes(
+        assemblySceneFrame,
+        renderPlan.layers,
+        pinStacks,
+      ),
+    [assemblySceneFrame, pinStacks, renderPlan.layers],
   );
   const spacerRenderCount = spacerLayerIndexes.reduce(
     (count, spacerIndex) =>
@@ -1667,6 +1679,9 @@ export const ThreeFoundryPreview = ({
         physicalValidationSummary={physicalValidationSummary}
         assemblySceneFrame={assemblySceneFrame}
         assemblyLayerFocusSummary={assemblyLayerFocusSummary}
+        assemblyVisibleLayerCount={
+          assemblyVisibleLayerIndexes?.size ?? renderPlan.layers.length
+        }
         visibleSceneObjectCount={visibleAutomataObjectIds.length}
         visiblePartCount={Math.max(visibleAutomataPartIds.length, inv.parts)}
         visibleSceneObjectIds={visibleAutomataObjectIds}

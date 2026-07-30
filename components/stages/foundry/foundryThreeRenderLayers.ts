@@ -107,6 +107,24 @@ type FoundryDynamicLayerRenderOptions = {
   assemblySceneFrame?: FoundryAssemblySceneFrame;
 };
 
+export const foundryAssemblyVisibleLayerIndexes = (
+  frame: FoundryAssemblySceneFrame | undefined,
+  layers: FabricationRenderLayer[],
+  pinStacks: FoundryPinStack[],
+) => {
+  if (frame?.kind !== "mechanism" || frame.phase !== "assemble-module")
+    return undefined;
+  const indexes = new Set(
+    layers.flatMap((layer, index) =>
+      layer.stackIndex === frame.stepIndex - 1 ? [index] : [],
+    ),
+  );
+  pinStacks
+    .filter((pin) => pin.layerIndexes.some((index) => indexes.has(index)))
+    .forEach((pin) => pin.layerIndexes.forEach((index) => indexes.add(index)));
+  return indexes;
+};
+
 const linkageHoleCountForSource = (sourceNodeId: string | undefined) => ({
   "coupler-link": 5,
   "connector-link-a": 5,
@@ -195,14 +213,23 @@ export const renderFoundryDynamicLayers = ({
     "rack-pinion",
     "cam",
   ].includes(mechanism.type);
-  if (!usesMeshedPitchCenters && mechanism.type !== "4bar")
-    addBar(s.p1, s.p2, 0, material.base, 3);
   const clipLayer = renderPlan.layers.find(
     (layer) => layer.renderKind === "clip",
   );
   const clipMat = clipLayer
     ? materialForLayer(clipLayer.color, 0.66, 0.03)
     : material.dark;
+  const assemblyVisibleLayerIndexes = foundryAssemblyVisibleLayerIndexes(
+    assemblySceneFrame,
+    renderPlan.layers,
+    pinStacks,
+  );
+  if (
+    !assemblyVisibleLayerIndexes &&
+    !usesMeshedPitchCenters &&
+    mechanism.type !== "4bar"
+  )
+    addBar(s.p1, s.p2, 0, material.base, 3);
   const renderLinkageLayer = (
     layer: FabricationRenderLayer,
     z: number,
@@ -397,6 +424,8 @@ export const renderFoundryDynamicLayers = ({
     } else addGear(envelopeCenter ?? s.p1, mechanism.crankLength, z, angle, mat, metadata, envelopeRadius);
   };
   renderPlan.layers.forEach((layerItem, index) => {
+    if (assemblyVisibleLayerIndexes && !assemblyVisibleLayerIndexes.has(index))
+      return;
     const z = renderedLayerZ[index] ?? layerItem.z;
     const assemblyLayerState = foundryAssemblyLayerState(
       assemblySceneFrame,
@@ -503,21 +532,35 @@ export const renderFoundryDynamicLayers = ({
       );
     }
   });
-  pinStacks.forEach((pinStack) => {
-    pinStack.retainerZ.forEach((z) => {
-      const clipLayerIndex = pinStack.clipLayerIndexes.find((index) => Math.abs((renderedLayerZ[index] ?? renderPlan.layers[index]?.z ?? 0) - z) <= 1e-6);
-      const clipLayer = clipLayerIndex === undefined ? undefined : renderPlan.layers[clipLayerIndex];
-      addClipCap(pinStack.point, z, clipMat, 1.35, {
-        ...(clipLayer ? { fabricationLayerId: clipLayer.layerId } : {}),
+  pinStacks
+    .filter(
+      (pinStack) =>
+        !assemblyVisibleLayerIndexes ||
+        pinStack.layerIndexes.some((index) => assemblyVisibleLayerIndexes.has(index)),
+    )
+    .forEach((pinStack) => {
+      pinStack.retainerZ.forEach((z) => {
+        const clipLayerIndex = pinStack.clipLayerIndexes.find(
+          (index) =>
+            Math.abs(
+              (renderedLayerZ[index] ?? renderPlan.layers[index]?.z ?? 0) - z,
+            ) <= 1e-6,
+        );
+        const clipLayer =
+          clipLayerIndex === undefined
+            ? undefined
+            : renderPlan.layers[clipLayerIndex];
+        addClipCap(pinStack.point, z, clipMat, 1.35, {
+          ...(clipLayer ? { fabricationLayerId: clipLayer.layerId } : {}),
+          supportPathIds: [pinStack.pathId],
+          pinSpanIds: [pinStack.pinSpanId],
+          primitiveKind: "retainer",
+        });
+      });
+      addPin(pinStack.point, pinStack.centerZ, pinStack.lengthZ, {
         supportPathIds: [pinStack.pathId],
         pinSpanIds: [pinStack.pinSpanId],
-        primitiveKind: "retainer",
+        primitiveKind: "pin",
       });
     });
-    addPin(pinStack.point, pinStack.centerZ, pinStack.lengthZ, {
-      supportPathIds: [pinStack.pathId],
-      pinSpanIds: [pinStack.pinSpanId],
-      primitiveKind: "pin",
-    });
-  });
 };

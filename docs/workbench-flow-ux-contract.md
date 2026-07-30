@@ -193,7 +193,7 @@ Guardrails:
 
 Guardrails:
 
-- `explode_z` changes z only.
+- Foundry starts at `explode=0` and its Explode slider is local to Foundry; Assembly may use an independent z-only value for the current build step.
 - `mount_travel_xy` and `connect_travel_xy` are the only x/y build travel motions.
 - Character assembly uses real parts, art decals, pins, pivots, and anchors.
 - Foundry visuals, Blueprint labels, and Assembly parts must agree.
@@ -254,7 +254,7 @@ None known from this audit. This pass ran contract tests and production build; f
 | Shared viewport | The product contract asks for preserved viewport across Path/Design/Blueprint; Design currently owns local view state and Blueprint has static SVG preview. | `README.md`, `DesignFoundryPreview.tsx`, `BlueprintExport.tsx` | Either thread shared viewport through all workbench tabs or narrow the contract to the implemented surfaces. |
 | Mechanism parity testing | Foundry, Design, and Assembly do not yet have an exact browser parity assertion for same mechanism id/type/layers/z/labels/validation. | `tests/browser/workflow.spec.ts` has broad coverage but no exact cross-tab equality gate. | Add Foundry -> Design -> Assembly parity test before the next renderer refactor. |
 | Path purity testing | Path hides mechanisms in code, but browser coverage should prove no mechanism geometry/pins/overlays after a mechanism exists. | `PathCanvasPane.tsx` passes `mechanisms={[]}`; test gap from audit. | Add a regression after applying a mechanism and returning to Path. |
-| Assembly z-only explode | `AssemblySceneFrame` names `explode_z`, but direct x/y invariance over progress is not fully locked. | `utils/assemblySceneFrame.ts`, Foundry overlay frame motion. | Add pure and browser tests that x/y stay unchanged for z-only explode. |
+| Assembly stack focus | Step-local rendering must keep future mechanism layers out while retaining the current fastener closure and its independent z-only build separation. | `utils/assemblySceneFrame.ts`, `foundryThreeRenderLayers.ts`. | Keep browser coverage for current-stack filtering and stage-local explode values. |
 | Assembly character no-mechanism fallback | Character art/pin Assembly now uses the Foundry preview when an active mechanism exists, but a blank no-mechanism project can only show a blocker. | `AssemblyThreePreview.tsx`, `ThreeFoundryPreview.tsx`, `AssemblySceneFrame.tsx` | Do not invent a fake mechanism. Keep the blocker honest, or require a lesson/mechanism before 3D build simulation. |
 | Assembly realism | Assembly is now Three-first for mechanism steps, but full Lego-like clarity for character art, fasteners, spacers, board holes, and final motion remains a polish/coverage risk. | `AssemblyCanvasPane.tsx`, `AssemblyInspectorPanel.tsx`, `AssemblySceneFrame.tsx` | Keep enriching `AssemblySceneFrame`; do not reintroduce lower SVG/ghost truth. |
 | Blueprint/Assembly labels | Labels mostly share fabrication helpers, but all mechanism-family label parity is not exhaustively tested. | `fabricationPartDisplayLabel`, `fabricationRecipeStackSummary`, `compileFabricationRecipe`, browser tests. | Add all-mechanism contract parity for recipe labels, cut labels, and assembly labels. |

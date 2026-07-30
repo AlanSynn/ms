@@ -27,10 +27,8 @@ const assemblyMechanismForProject = (project: ProjectState) =>
     (item) => item.visible !== false && item.enabled !== false,
   );
 
-const stepLift = (motion: string, progress: number, playing: boolean) =>
-  motion === "explode_z" && (playing || progress > 0)
-    ? Math.max(0, 0.38 * (1 - progress))
-    : 0;
+const assemblyStepExplode = (motion: string, progress: number) =>
+  motion === "explode_z" ? Math.max(0, 0.38 * (1 - progress)) : 0;
 
 const cameraLabel = (camera: FoundryCamera) =>
   camera.preset === "custom"
@@ -171,13 +169,11 @@ export const AssemblyCharacterThreePreview = ({
   project,
   step,
   progress,
-  playing,
   sceneFrame,
 }: {
   project: ProjectState;
   step: CharacterAssemblyStep;
   progress: number;
-  playing: boolean;
   sceneFrame: AssemblySceneFrame;
 }) => {
   const angle = step.phase === "test-character" ? progress * Math.PI * 2 : 0;
@@ -277,7 +273,7 @@ export const AssemblyCharacterThreePreview = ({
         showTrail={step.phase === "test-character" && sceneModel.mechanismContract.projectDriveEnabled === true}
         showForces={false}
         showVelocity={false}
-        explode={stepLift(sceneFrame.motion, progress, playing)}
+        explode={assemblyStepExplode(sceneFrame.motion, progress)}
         physicsRule={physicsOverlay.rule}
         velocityMagnitude={physicsOverlay.velocityMagnitude}
         forceMagnitude={physicsOverlay.forceMagnitude}
@@ -317,18 +313,16 @@ export const AssemblyMechanismThreePreview = ({
   mechanism,
   step,
   progress,
-  playing,
   sceneFrame,
 }: {
   project: ProjectState;
   mechanism: MechanismConfig;
   step: AssemblyPlaybackStep;
   progress: number;
-  playing: boolean;
   sceneFrame: AssemblySceneFrame;
 }) => {
   const angle = progress * Math.PI * 2;
-  const explode = stepLift(step.motion, progress, playing);
+  const explode = assemblyStepExplode(step.motion, progress);
   const {
     camera,
     projectionSize,

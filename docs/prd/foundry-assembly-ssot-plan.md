@@ -67,13 +67,13 @@ It must not own:
 
 | Motion kind | Meaning | X/Y allowed | Z allowed |
 |---|---|---:|---:|
-| `explode_z` | stack/layer separation | no | yes |
+| `explode_z` | Assembly current-stack separation | no | yes |
 | `mount_travel_xy` | module/tray moves to board coordinate | yes | yes |
 | `connect_travel_xy` | connector/character/object attachment travel | yes | yes |
 | `scrub_time` | final mechanism playback/test motion | derived by mechanism | derived by mechanism |
 | `none` | static step | no | no |
 
-No x/y movement is valid under `explode_z`.
+Explode values are stage-local: Foundry starts at zero and uses its own slider, while Assembly can separate its current build stack with `explode_z`.
 
 ## Stage obligations
 
@@ -98,9 +98,9 @@ No x/y movement is valid under `explode_z`.
 - Shows one Three build truth.
 - Lower flow is a read-only step strip: labels, checks, progress only.
 - No independent SVG mechanism/character simulation truth after cutover.
-- Mechanism assembly passes `AssemblySceneFrame` into `ThreeFoundryPreview`; the renderer consumes it for current-layer focus, active board markers, floating references, z guides, mount/connect travel, and scrub path telemetry.
+- Mechanism assembly passes `AssemblySceneFrame` into `ThreeFoundryPreview`; the renderer consumes it for current-stack/fastener focus, active board markers, floating references, z guides, mount/connect travel, and scrub path telemetry.
 - Character assembly uses real `ProjectState` parts, art decals, fixed pins, free pivots, connector targets, and anchors.
-- `explode_z` separates layers on z only.
+- Assembly may separate only its current build stack on z; this value is independent from Foundry's slider.
 
 ### Blueprint
 
@@ -154,7 +154,7 @@ git diff --check
 Targeted browser assertions:
 
 - Foundry -> Design -> Assembly contract parity for same mechanism id/type/roles/z/validation.
-- `explode_z` changes z only.
+- Foundry starts assembled while Assembly can use its own z-only current-stack separation.
 - lower Assembly strip has no independent SVG simulation truth.
 - character/object attachment attrs are present in Assembly.
 - runtime UI remains English-only.

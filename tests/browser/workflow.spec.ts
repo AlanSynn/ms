@@ -2191,9 +2191,13 @@ test('character → path → foundry → design → blueprint runs end-to-end in
   const floatingReferenceList = floatingReferenceCoords!.split(',');
   expect(new Set(floatingReferenceList).size).toBe(2);
   await expect(assemblyRig).toHaveAttribute('data-three-assembly-motion-kind', 'explode_z');
+  await expect(assemblyRig).toHaveAttribute('data-three-exploded', 'true');
   await expect(assemblyRig).toHaveAttribute('data-three-assembly-floating-reference-coords', floatingReferenceCoords!);
   await expect(assemblyRig).toHaveAttribute('data-three-assembly-rendered-floating-marker-count', `${floatingReferenceList.length}`);
   await expect(assemblyRig).toHaveAttribute('data-three-assembly-rendered-layer-focus', /[0-9]/);
+  const assemblyLayerCount = Number(await assemblyRig.getAttribute('data-three-stack-layer-count'));
+  expect(Number(await assemblyRig.getAttribute('data-three-assembly-visible-layer-count'))).toBeGreaterThan(0);
+  expect(Number(await assemblyRig.getAttribute('data-three-assembly-visible-layer-count'))).toBeLessThan(assemblyLayerCount);
   await expect(assemblyRig).toHaveAttribute('data-three-assembly-board-surface', 'hidden');
   for (const coord of floatingReferenceList) {
     await expect(page.getByTestId('assembly-floating-references')).toContainText(coord);
@@ -2358,7 +2362,7 @@ test('Assembly shows character pins as a separate board build stage', async ({ p
   await expect(workbench).toHaveAttribute('data-step-phase', 'fixed-pins');
   await expect(workbench).toHaveAttribute('data-assembly-motion-kind', 'explode_z');
   await expect(workbench).toHaveAttribute('data-active-board-coords', /^[A-O]([1-9]|1[0-5])/);
-  await expect(characterAssemblyThree).toHaveAttribute('data-three-exploded', 'false');
+  await expect(characterAssemblyThree).toHaveAttribute('data-three-exploded', 'true');
   await expect(characterAssemblyThree).toHaveAttribute('data-three-assembly-motion-kind', 'explode_z');
   await expect(characterAssemblyThree).toHaveAttribute('data-three-assembly-board-surface', '15x15-hole-board');
   await expect(characterAssemblyThree).toHaveAttribute('data-three-assembly-board-hole-count', '225');

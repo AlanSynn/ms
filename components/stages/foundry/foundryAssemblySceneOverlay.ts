@@ -92,11 +92,12 @@ export const foundryAssemblyLayerState = (
   ) {
     return { focused: false, opacity: 0.72, color: layer.color };
   }
-  const focused = activeParts.some(
-    (part) =>
-      textMatches(layer.label, part.label) ||
-      textMatches(layer.role, part.role) ||
-      textMatches(layer.renderKind, part.role),
+  const focused = activeParts.some((part) =>
+    part.sourceConstraintIds?.length
+      ? part.sourceConstraintIds.some((id) => layer.sourceConstraintIds.includes(id))
+      : textMatches(layer.label, part.label) ||
+        textMatches(layer.role, part.role) ||
+        textMatches(layer.renderKind, part.role),
   );
   return {
     focused,

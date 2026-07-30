@@ -18,6 +18,7 @@ export type AssemblySceneVisiblePart = {
     id: string;
     label: string;
     role: string;
+    sourceConstraintIds?: string[];
     zMm?: number;
     active: boolean;
 };
@@ -77,6 +78,7 @@ export const buildMechanismAssemblySceneFrame = ({
         id: `${step.index}:${item.order}:${item.label}`,
         label: item.label,
         role: item.role,
+        sourceConstraintIds: item.sourceConstraintIds,
         zMm: step.zMm,
         active: true
     }));

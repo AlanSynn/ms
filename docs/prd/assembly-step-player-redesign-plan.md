@@ -3,7 +3,7 @@
 Status: active implementation plan  
 Date: 2026-07-02  
 Scope: Assembly tab, Blueprint handoff, fabrication recipe playback, character mount steps  
-Canonical override: `foundry-assembly-ssot-plan.md` is the stricter Foundry/Design/Assembly SSOT for mechanism visuals, `MechanismSceneContract`, `AssemblySceneFrame`, and z-only `explode_z`. This PRD remains the Assembly UX execution plan.
+Canonical override: `foundry-assembly-ssot-plan.md` is the stricter Foundry/Design/Assembly SSOT for mechanism visuals, `MechanismSceneContract`, `AssemblySceneFrame`, and stage-local z-only `explode_z`. This PRD remains the Assembly UX execution plan.
 
 ## 2026-07-05 implementation cutover note
 
@@ -243,7 +243,7 @@ Legacy migration aliases:
 | Current/legacy name | New motion kind | Note |
 |---|---|---|
 | `place-part` | `none` or `connect_travel_xy` | static highlight by default; use travel only for explicit connector/attachment motion |
-| `stack-layer` | `explode_z` | z separation only |
+| `stack-layer` | `explode_z` | z separation only for the current Assembly stack |
 | `snap-to-board`, `move-to-board` | `mount_travel_xy` | module/tray moves to board coordinate |
 | `connect-character` | `connect_travel_xy` | character/object connector travel |
 | `play-test`, `test-motion` | `scrub_time` | mechanism playback/test scrub |
@@ -334,7 +334,7 @@ Work:
 
 1. Use canonical linkage, gear, spacer, clip, and pin display labels.
 2. Use the same z stack order as Foundry and Design.
-3. Show `explode_z` lanes only for the current stack action; no x/y travel under `explode_z`.
+3. Show only the current stack and its required fastener closure; `explode_z` may separate it on z independently from Foundry's slider.
 4. Fail closed if a recipe does not have enough stack data.
 
 ### Phase D - Board mount and character attach
