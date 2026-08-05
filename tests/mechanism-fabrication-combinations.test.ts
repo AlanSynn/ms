@@ -86,6 +86,25 @@ const selected = (
 
 {
   const requested = {
+    ...createDefaultMechanism('gear_linkage', 'preserve-g3-ground-and-coupler'),
+    gearTrainRadii: [60, 60],
+    crankLength: 60,
+    rockerLength: 60,
+    groundLength: 400,
+    couplerLength: 320,
+  };
+  const result = resolveFabricationCombination(requested, requested, kit, 'scalar');
+  assert.equal(result.status, 'accepted');
+  if (result.status === 'accepted') {
+    assert.deepEqual(result.mechanism.gearTrainRadii, [60, 60], 'requested G3 endpoints remain selected');
+    assert.equal(result.mechanism.groundLength, 400, 'scalar intent keeps the requested legal ground span');
+    assert.equal(result.mechanism.couplerLength, 320, 'scalar intent keeps the paired linkage length');
+    assert.equal(mechanismUsesExactFabricationCombination(result.mechanism, kit), true, 'the requested aggregate remains exact and buildable');
+  }
+}
+
+{
+  const requested = {
     ...createDefaultMechanism('planetary_gear', 'fixed-planetary'),
     crankLength: 93,
     rockerLength: 47,

@@ -309,8 +309,14 @@ const makeCandidate = (
     : mechanism;
   const requestedRadii = requested.gearTrainRadii ?? [];
   const candidateRadii = candidateMechanism.gearTrainRadii ?? [];
+  const gearRadiusError = candidateRadii.reduce((sum, value, index) =>
+    sum + Math.abs(value - (requestedRadii[index] ?? (index === 0 ? requested.crankLength : requested.rockerLength))), 0);
   const scalarError = candidateMechanism.type === 'gear' || candidateMechanism.type === 'gear_linkage'
-    ? candidateRadii.reduce((sum, value, index) => sum + Math.abs(value - (requestedRadii[index] ?? (index === 0 ? requested.crankLength : requested.rockerLength))), 0)
+    ? gearRadiusError
+      + (candidateMechanism.type === 'gear_linkage'
+        ? Math.abs(abs(candidateMechanism.groundLength) - abs(requested.groundLength))
+          + Math.abs(abs(candidateMechanism.couplerLength) - abs(requested.couplerLength))
+        : 0)
     : Math.abs(candidateMechanism.groundLength - requested.groundLength)
       + Math.abs(candidateMechanism.crankLength - requested.crankLength)
       + Math.abs(candidateMechanism.couplerLength - requested.couplerLength)
