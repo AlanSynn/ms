@@ -139,27 +139,20 @@ export const useAppMechanismActions = ({
         Object.keys(nextUpdates).length > 0 &&
         Object.keys(constrainedUpdates).length === 0
       ) {
-        const rejectedAttempt = resolveMechanismEditAttempt(
+        const attempt = resolveMechanismEditAttempt(
           project,
           mechanism,
           { ...mechanism, ...nextUpdates },
         );
-        const blocker = rejectedAttempt.status === "rejected"
-          ? rejectedAttempt.blocker
-          : updates.connectionSelections
-            ? "Fix: Choose anchor"
-            : "Change blocked";
+        if (attempt.status === "accepted") {
+          setMechanismEditFeedback(null);
+          return true;
+        }
+        const blocker = attempt.blocker;
         setMechanismEditFeedback({
           mechanismId: id,
           blocker,
-          recoveryCandidates: rejectedAttempt.status === "rejected"
-            ? rejectedAttempt.recoveryCandidates
-            : {
-                targetPartIds: [],
-                targetSceneObjectIds: [],
-                targetPathIds: [],
-                targetAnchorJointIds: [],
-              },
+          recoveryCandidates: attempt.recoveryCandidates,
         });
         setCommandStatus(blocker);
         return false;

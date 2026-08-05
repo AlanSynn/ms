@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createDefaultMechanism } from '../utils/mechanismDefaults';
 import {
+  authorMechanismConnectionSelection,
+  normalizeMechanismConnectionSelections,
+} from '../utils/mechanismConnectionSelections';
+import {
   constrainMechanismCommit,
   constrainMechanismUpdate,
   mechanismEditIsSafe,
@@ -156,6 +160,58 @@ assert.equal(atomicGearUpdate.groundLength, 160, 'geometric command carries the 
 assert.equal(atomicGearUpdate.gearRatio, -100 / 60, 'geometric command carries the resolved ratio');
 assert.equal(atomicGearUpdate.speed2, -100 / 60, 'geometric command carries the resolved speed');
 assert(atomicGearUpdate.generatedPath?.length, 'geometric command carries rebuilt derived path state');
+
+const staleValidationProject = createLessonProject('waving-arm');
+const staleValidationPrior = staleValidationProject.mechanisms[0]!;
+const staleValidationCandidate = {
+  ...staleValidationPrior,
+  groundAngle: (staleValidationPrior.groundAngle ?? 0) + 90,
+  connectionSelectionValidation: {
+    status: 'invalid' as const,
+    entries: [{ role: 'stale-derived-entry', status: 'rejected' as const }],
+  },
+};
+const staleValidationResult = resolveMechanismCandidateCommit(
+  staleValidationPrior,
+  staleValidationCandidate,
+  staleValidationProject.settings.physicalKit,
+);
+assert.equal(staleValidationResult.status, 'accepted', 'stale derived connection validation cannot reject safe geometry');
+if (staleValidationResult.status === 'accepted') {
+  assert.equal(
+    staleValidationResult.mechanism.groundAngle,
+    staleValidationCandidate.groundAngle,
+    'safe geometry survives stale validation stripping',
+  );
+}
+
+const provenanceBase = createDefaultMechanism('4bar', 'correction-provenance');
+const provenanceDefaults = normalizeMechanismConnectionSelections(provenanceBase, undefined);
+const provenanceUntouched = { ...provenanceBase, ...provenanceDefaults };
+const provenanceInput = provenanceUntouched.connectionSelections?.['4bar.input-joint'];
+assert(provenanceInput);
+const provenanceAuthored = {
+  ...provenanceUntouched,
+  ...authorMechanismConnectionSelection(provenanceUntouched, '4bar.input-joint', provenanceInput),
+};
+const provenanceCommitted = resolveMechanismCandidateCommit(provenanceUntouched, provenanceAuthored);
+assert.equal(provenanceCommitted.status, 'accepted');
+if (provenanceCommitted.status === 'accepted') {
+  const provenanceCandidate = resolveMechanismCandidateCommit(provenanceCommitted.mechanism, {
+    ...provenanceCommitted.mechanism,
+    targetPartId: 'correction-target',
+    connectionSelectionValidation: {
+      status: 'valid',
+      entries: [{ role: '4bar.input-joint', status: 'accepted' }],
+    },
+  });
+  assert.equal(provenanceCandidate.status, 'accepted');
+  if (provenanceCandidate.status === 'accepted') {
+    const outputStatus = provenanceCandidate.mechanism.connectionSelectionValidation?.entries
+      .find((entry) => entry.role === '4bar.output-joint')?.status;
+    assert.equal(outputStatus, 'defaulted', 'stale omitted validation cannot rewrite retained defaulted provenance');
+  }
+}
 
 const noKitPrevious = createDefaultMechanism('gear', 'no-kit-fit');
 const noKitResult = resolveMechanismCandidateCommit(noKitPrevious, {

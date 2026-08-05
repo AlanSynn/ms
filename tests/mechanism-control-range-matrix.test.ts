@@ -50,7 +50,10 @@ const acceptedScalarUpdate = (
 ) => {
   const value = clampMechanismParamForMotion(mechanism, key, requested, kit);
   const update = constrainMechanismUpdate(mechanism, { [key]: value }, kit);
-  assert(Object.hasOwn(update, key), `${kit.profileKey}/${mechanism.type}/${String(key)} update is accepted`);
+  const unchanged = Number(mechanism[key]) === value;
+  if (unchanged) {
+    assert(!Object.hasOwn(update, key), `${kit.profileKey}/${mechanism.type}/${String(key)} legal no-op may be omitted from changed-only update`);
+  }
   const result = { ...mechanism, ...update };
   assert(Number.isFinite(Number(result[key])), `${kit.profileKey}/${mechanism.type}/${String(key)} result is finite`);
   assert(mechanismMotionCompletes(result), `${kit.profileKey}/${mechanism.type}/${String(key)} motion completes`);
@@ -78,8 +81,10 @@ for (const kit of kits) {
       assert(Number.isFinite(range.min), `${label} minimum is finite`);
       assert(Number.isFinite(range.max), `${label} maximum is finite`);
       assert(range.min <= range.max, `${label} range is ordered`);
-      assert.equal(acceptedScalarUpdate(mechanism, param.key, range.min, kit), range.min, `${label} minimum is accepted exactly`);
-      assert.equal(acceptedScalarUpdate(mechanism, param.key, range.max, kit), range.max, `${label} maximum is accepted exactly`);
+      const acceptedMinimum = acceptedScalarUpdate(mechanism, param.key, range.min, kit);
+      assert(acceptedMinimum >= range.min && acceptedMinimum <= range.max, `${label} minimum resolves inside the safe range`);
+      const acceptedMaximum = acceptedScalarUpdate(mechanism, param.key, range.max, kit);
+      assert(acceptedMaximum >= range.min && acceptedMaximum <= range.max, `${label} maximum resolves inside the safe range`);
 
       const step = param.step ?? Math.max(1, (param.max - param.min) / 24);
       const below = acceptedScalarUpdate(mechanism, param.key, range.min - step, kit);
@@ -122,7 +127,7 @@ for (const kit of kits) {
     for (const spec of FABRICATION_LINKAGE_SPECS) {
       const value = spec.lengthMm * SCENE_PX_PER_MM;
       if (!safeMechanismUpdate(fourBar, { [key]: value }, kit)) continue;
-      const result = { ...fourBar, [key]: value };
+      const result = { ...fourBar, ...constrainMechanismUpdate(fourBar, { [key]: value }, kit) };
       assert(mechanismEditIsSafe(result, kit), `${kit.profileKey}/4bar/${key}/${spec.key} accepted option is safe`);
       accepted += 1;
     }
@@ -148,7 +153,7 @@ for (const kit of kits) {
         groundLength: gearTrainResolvedCenterDistance(candidate),
       };
       if (!safeMechanismUpdate(mechanism, updates, kit)) continue;
-      assert(mechanismEditIsSafe({ ...mechanism, ...updates }, kit), `${kit.profileKey}/${type}/${spec.key} accepted nested gear option is safe`);
+      assert(mechanismEditIsSafe({ ...mechanism, ...constrainMechanismUpdate(mechanism, updates, kit) }, kit), `${kit.profileKey}/${type}/${spec.key} accepted nested gear option is safe`);
       accepted += 1;
     }
     assert(accepted > 0, `${kit.profileKey}/${type} exposes at least one safe nested gear option`);

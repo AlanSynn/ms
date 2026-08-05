@@ -19,6 +19,9 @@ import { createDefaultMechanism } from '../utils/mechanismDefaults';
 import { synchronizedMechanismCollisionOracle } from '../utils/mechanismCollision';
 import { mechanismReadiness, projectMechanismReadiness } from '../utils/mechanismReadiness';
 import {
+  resolveMechanismEditAttempt,
+} from '../utils/mechanismEditAuthority';
+import {
   buildMechanismRecommendations,
   fitMechanismToTargetPathResult,
   fitRecommendedMechanismToSheet,
@@ -68,6 +71,40 @@ const withoutPackage = (mechanism: MechanismConfig) => {
     validateMechanismPreviewReadiness(fitted, project.settings.physicalKit),
     [],
     'Fit returns an aggregate without preview-readiness errors',
+  );
+}
+
+{
+  const project = createLessonProject('waving-arm');
+  const prior = project.mechanisms[0]!;
+  const illegalCandidate: MechanismConfig = {
+    ...prior,
+    connectionSelections: {
+      ...(prior.connectionSelections ?? {}),
+      '4bar.input-joint': {
+        kind: 'linkage-hole',
+        linkageKey: 'linkage-4-cell',
+        holeIndex: 999,
+      },
+    },
+  };
+  const fitted = fitRecommendedMechanismToSheet(project, illegalCandidate);
+  assert.notEqual(
+    fitted.connectionSelections?.['4bar.input-joint']?.kind === 'linkage-hole'
+      ? fitted.connectionSelections['4bar.input-joint'].holeIndex
+      : undefined,
+    999,
+    'sheet Fit never returns an explicitly illegal raw connection selection',
+  );
+  assert.deepEqual(
+    fitted.connectionSelections,
+    prior.connectionSelections,
+    'sheet Fit retains the prior legal connection set when no legal candidate can retain the request',
+  );
+  assert.equal(
+    resolveMechanismEditAttempt(project, prior, fitted).status,
+    'accepted',
+    'sheet Fit output passes the authoritative edit gate',
   );
 }
 

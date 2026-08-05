@@ -259,11 +259,16 @@ const gearSelection = (
   mechanism: MechanismConfig,
   spec: (typeof FABRICATION_GEAR_SPECS)[number],
   gearIndex: number,
+  requestedSelection?: ConnectionSelection,
 ): ConnectionSelection => {
-  const current = mechanism.connectionSelections?.[role];
-  const requestedLength = current?.kind === 'gear-attachment-hole' && current.gearKey === spec.key
-    ? Math.hypot(...Object.values(spec.attachmentHoleCentersMm[current.holeIndex] ?? { x: 0, y: 0 })) * SCENE_PX_PER_MM
-    : abs(mechanism.couplerPointDist);
+  const current = requestedSelection;
+  if (
+    current?.kind === 'gear-attachment-hole' &&
+    current.gearKey === spec.key &&
+    current.gearIndex === gearIndex &&
+    spec.attachmentHoleCentersMm[current.holeIndex]
+  ) return { ...current };
+  const requestedLength = current ? abs(mechanism.couplerPointDist) : 0;
   const holeIndex = nearestHoleIndex(spec.attachmentHoleCentersMm, requestedLength, true);
   return { kind: 'gear-attachment-hole', gearKey: spec.key, gearIndex, holeIndex };
 };
@@ -434,11 +439,11 @@ const gearCandidates = (
     const selections = {
       ...(selectionsFor(base, kit)),
       ...(isLinkage ? {
-        'gear_linkage.drive-pin': gearSelection('gear_linkage.drive-pin', requested, specs[0], 0),
-        'gear_linkage.output-pin': gearSelection('gear_linkage.output-pin', requested, specs.at(-1)!, specs.length - 1),
+        'gear_linkage.drive-pin': gearSelection('gear_linkage.drive-pin', requested, specs[0], 0, requested.connectionSelections?.['gear_linkage.drive-pin']),
+        'gear_linkage.output-pin': gearSelection('gear_linkage.output-pin', requested, specs.at(-1)!, specs.length - 1, requested.connectionSelections?.['gear_linkage.output-pin']),
       } : {
-        'gear.drive-pin': gearSelection('gear.drive-pin', requested, specs[0], 0),
-        'gear.output-pin': gearSelection('gear.output-pin', requested, specs.at(-1)!, specs.length - 1),
+        'gear.drive-pin': gearSelection('gear.drive-pin', requested, specs[0], 0, requested.connectionSelections?.['gear.drive-pin']),
+        'gear.output-pin': gearSelection('gear.output-pin', requested, specs.at(-1)!, specs.length - 1, requested.connectionSelections?.['gear.output-pin']),
       }),
     };
     const linkageChoicesForCandidate = isLinkage

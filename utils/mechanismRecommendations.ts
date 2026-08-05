@@ -223,7 +223,6 @@ export const fitRecommendedMechanismToSheet = (
       candidate,
       kit,
       "scalar",
-      { candidateIsCatalogSnapped: true },
     );
     return result.status === "accepted"
       ? mechanismWithGeneratedPath(result.mechanism, { kit })
@@ -250,7 +249,30 @@ export const fitRecommendedMechanismToSheet = (
     }
   };
 
-  let best = resolveSheetCandidate(seed) ?? seed;
+  const retained = project.mechanisms.find((candidate) => candidate.id === mechanism.id);
+  const fallbackSeed = snapMechanismAnchor(
+    {
+      ...createDefaultMechanism(mechanism.type, mechanism.id),
+      visible: mechanism.visible,
+      enabled: mechanism.enabled,
+      color: mechanism.color,
+      anchorX: seed.anchorX,
+      anchorY: seed.anchorY,
+      sceneAnchor: seed.sceneAnchor,
+      targetPartId: mechanism.targetPartId,
+      targetSceneObjectId: mechanism.targetSceneObjectId,
+      targetPathId: mechanism.targetPathId,
+      targetAnchorJointId: mechanism.targetAnchorJointId,
+      source: mechanism.source,
+      presetId: mechanism.presetId,
+      recommendation: mechanism.recommendation,
+    },
+    project,
+  );
+  let best = resolveSheetCandidate(seed) ??
+    (retained ? resolveSheetCandidate(retained) : undefined) ??
+    resolveSheetCandidate(fallbackSeed);
+  if (!best) throw new Error("No kit fit");
   let bestScore = score(best);
   let bestDistance = 0;
   const isBoardSnapBack =
@@ -704,50 +726,61 @@ export const fitMechanismToTargetPathResult = (
   const fourBarResult = mechanism.type === "4bar"
     ? fitFourBarKitMechanismToPathResult(project, mechanism, path)
     : undefined;
-  const fittedCandidate = mechanism.type === "4bar"
-    ? fourBarResult?.mechanism
-    : mechanism.type === "gear_linkage"
-      ? fitGearLinkageOutputToPath(
-          project,
-          readyMechanismFallbackForPath(project, mechanism, path),
-          path,
-        )
-      : (() => {
-        const fitted = createRecommendedMechanism(
-          project,
-          part,
-          path,
-          mechanism.type,
-          mechanism.recommendation ?? "Fit",
-          80,
-        );
-        return localizeFittedMechanismAnchor(
-          project,
-          mechanismWithGeneratedPath({
-            ...fitted,
-            id: mechanism.id,
-            color: mechanism.color ?? fitted.color,
-            visible: mechanism.visible,
-            enabled: mechanism.enabled,
-            source: mechanism.source ?? fitted.source,
-            presetId: mechanism.presetId ?? fitted.presetId,
-            recommendation: mechanism.recommendation ?? fitted.recommendation,
-            warnings: mechanism.warnings ?? fitted.warnings,
-            transform: mechanism.transform ?? fitted.transform,
-            connectionSelections: mechanism.connectionSelections ?? fitted.connectionSelections,
-            connectionSelectionValidation:
-              mechanism.connectionSelectionValidation ?? fitted.connectionSelectionValidation,
-            ...targetFields,
-          }, { kit: project.settings.physicalKit }),
-          Number.isFinite(mechanism.anchorX) && Number.isFinite(mechanism.anchorY)
-            ? { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 }
-            : undefined,
-        );
-      })();
-  const fallback = fitRecommendedMechanismToSheet(
-    project,
-    readyMechanismFallbackForPath(project, mechanism, path),
-  );
+  const noKitFit = (error: unknown) => error instanceof Error && error.message === "No kit fit";
+  let fittedCandidate: MechanismConfig | undefined;
+  try {
+    fittedCandidate = mechanism.type === "4bar"
+      ? fourBarResult?.mechanism
+      : mechanism.type === "gear_linkage"
+        ? fitGearLinkageOutputToPath(
+            project,
+            readyMechanismFallbackForPath(project, mechanism, path),
+            path,
+          )
+        : (() => {
+          const fitted = createRecommendedMechanism(
+            project,
+            part,
+            path,
+            mechanism.type,
+            mechanism.recommendation ?? "Fit",
+            80,
+          );
+          return localizeFittedMechanismAnchor(
+            project,
+            mechanismWithGeneratedPath({
+              ...fitted,
+              id: mechanism.id,
+              color: mechanism.color ?? fitted.color,
+              visible: mechanism.visible,
+              enabled: mechanism.enabled,
+              source: mechanism.source ?? fitted.source,
+              presetId: mechanism.presetId ?? fitted.presetId,
+              recommendation: mechanism.recommendation ?? fitted.recommendation,
+              warnings: mechanism.warnings ?? fitted.warnings,
+              transform: mechanism.transform ?? fitted.transform,
+              connectionSelections: mechanism.connectionSelections ?? fitted.connectionSelections,
+              connectionSelectionValidation:
+                mechanism.connectionSelectionValidation ?? fitted.connectionSelectionValidation,
+              ...targetFields,
+            }, { kit: project.settings.physicalKit }),
+            Number.isFinite(mechanism.anchorX) && Number.isFinite(mechanism.anchorY)
+              ? { x: mechanism.anchorX ?? 0, y: mechanism.anchorY ?? 0 }
+              : undefined,
+          );
+        })();
+  } catch (error) {
+    if (!noKitFit(error)) throw error;
+  }
+  let fallback: MechanismConfig | undefined;
+  try {
+    fallback = fitRecommendedMechanismToSheet(
+      project,
+      readyMechanismFallbackForPath(project, mechanism, path),
+    );
+  } catch (error) {
+    if (!noKitFit(error)) throw error;
+  }
   const targetSamples = Array.from({ length: 96 }, (_, index) =>
     pointOnProjectPath(path, (index / 96) * Math.PI * 2),
   );

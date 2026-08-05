@@ -620,14 +620,49 @@ const candidateValueIsFinite = (value: unknown): boolean => {
   return true;
 };
 
+const withoutCandidateConnectionValidation = (
+  mechanism: MechanismConfig,
+): MechanismConfig => {
+  const {
+    connectionSelectionValidation: _connectionSelectionValidation,
+    ...candidate
+  } = mechanism;
+  return candidate;
+};
+
+const withoutDefaultedConnectionSelections = (
+  previous: MechanismConfig,
+  candidate: MechanismConfig,
+): MechanismConfig => {
+  const candidateWithoutValidation = withoutCandidateConnectionValidation(candidate);
+  const defaultedRoles = new Set<string>(
+    connectionSelectionRolesForMechanism(candidate.type).filter((role) => {
+      const candidateEntry = candidate.connectionSelectionValidation?.entries
+        .find((entry) => entry.role === role);
+      const previousEntry = previous.connectionSelectionValidation?.entries
+        .find((entry) => entry.role === role);
+      return (candidateEntry ?? previousEntry)?.status === "defaulted";
+    }),
+  );
+  if (!defaultedRoles.size) return candidateWithoutValidation;
+  const selections = Object.fromEntries(
+    Object.entries(candidateWithoutValidation.connectionSelections ?? {})
+      .filter(([role]) => !defaultedRoles.has(role)),
+  ) as MechanismConfig["connectionSelections"];
+  return {
+    ...candidateWithoutValidation,
+    connectionSelections: Object.keys(selections ?? {}).length ? selections : undefined,
+  };
+};
+
 const declaredConnectionValidation = (
   mechanism: MechanismConfig,
   fallback?: MechanismConfig["connectionSelectionValidation"],
 ) => {
-  const declaredRoles = connectionSelectionRolesForMechanism(mechanism.type);
+  const declaredRoles = new Set(connectionSelectionRolesForMechanism(mechanism.type));
   const currentEntries = mechanism.connectionSelectionValidation?.entries ?? [];
   const fallbackEntries = fallback?.entries ?? [];
-  const canonicalEntries = declaredRoles.flatMap((role) => {
+  const canonicalEntries = [...declaredRoles].flatMap((role) => {
     const entry = currentEntries.find((item) => item.role === role)
       ?? fallbackEntries.find((item) => item.role === role);
     return entry ? [entry] : [];
@@ -661,7 +696,7 @@ const withoutCandidateDerivedState = (
   const connectionState = normalizeMechanismConnectionSelections(
     geometry as MechanismConfig,
     geometry.connectionSelections,
-    declaredConnectionValidation(mechanism, fallbackValidation),
+    fallbackValidation,
     { kit },
   );
   const compatible = {
@@ -717,14 +752,41 @@ const canonicalCandidateIsCompilerReady = (
 };
 
 const explicitConnectionSelectionsArePreserved = (
+  previous: MechanismConfig,
   requested: MechanismConfig,
   resolved: MechanismConfig,
-) => Object.entries(requested.connectionSelections ?? {}).every(
-  ([role, selection]) => sameCandidateValue(
-    selection,
-    resolved.connectionSelections?.[role as keyof NonNullable<MechanismConfig["connectionSelections"]>],
-  ),
-);
+) => {
+  const previousDefaultedRoles = new Set(
+    previous.connectionSelectionValidation?.entries
+      .filter((entry) => entry.status === "defaulted")
+      .map((entry) => entry.role) ?? [],
+  );
+  return Object.entries(requested.connectionSelections ?? {}).every(([role, selection]) => {
+    const validation = requested.connectionSelectionValidation?.entries
+      .find((entry) => entry.role === role);
+    const derivedDefault = validation?.status === "defaulted" ||
+      (!validation && previousDefaultedRoles.has(role));
+    if (derivedDefault) return true;
+    return sameCandidateValue(
+      selection,
+      resolved.connectionSelections?.[role as keyof NonNullable<MechanismConfig["connectionSelections"]>],
+    );
+  });
+};
+
+const candidateHasUsableConnectionValidation = (candidate: MechanismConfig) => {
+  const roles = new Set<string>(connectionSelectionRolesForMechanism(candidate.type));
+  return candidate.connectionSelectionValidation?.entries.some(
+    (entry) => roles.has(entry.role) && entry.status !== "rejected",
+  ) ?? false;
+};
+
+const canonicalPreservesRequestedGeometry = (
+  requested: MechanismConfig,
+  canonical: MechanismConfig,
+) => MECHANISM_FEASIBILITY_AUTHORITY_KEYS
+  .filter((key) => key !== "connectionSelections")
+  .every((key) => sameCandidateValue(requested[key], canonical[key]));
 
 type FabricationCandidateResolution =
   | { status: "accepted"; mechanism: MechanismConfig }
@@ -739,24 +801,35 @@ export const resolveFabricationCandidate = (
 ): FabricationCandidateResolution => {
   if (!usesFabricationCombinationResolver(candidate))
     return { status: "accepted", mechanism: candidate };
-  const canonical = normalizeMechanismWithFabricationSelections(candidate, kit);
-  if (!explicitConnectionSelectionsArePreserved(candidate, canonical))
+  const candidateWithoutValidation = withoutCandidateConnectionValidation(candidate);
+  if (rebuiltCandidateIsReady(candidateWithoutValidation, kit)) {
+    return { status: "accepted", mechanism: candidateWithoutValidation };
+  }
+  const canonical = normalizeMechanismWithFabricationSelections(candidateWithoutValidation, kit);
+  if (!explicitConnectionSelectionsArePreserved(previous, candidate, canonical))
     return { status: "rejected", blocker: "No kit fit" };
   if (options.candidateIsCatalogSnapped) {
-    return canonicalCandidateIsCompilerReady(canonical, kit)
+    return canonicalPreservesRequestedGeometry(candidateWithoutValidation, canonical) &&
+      canonicalCandidateIsCompilerReady(canonical, kit)
       ? { status: "accepted", mechanism: canonical }
       : { status: "rejected", blocker: "No kit fit" };
   }
-  const canonicalReady = options.requireSafety === false
-    ? canonicalCandidateIsCompilerReady(canonical, kit)
-    : rebuiltCandidateIsReady(canonical, kit);
+  const canonicalReady = canonicalPreservesRequestedGeometry(candidateWithoutValidation, canonical) &&
+    (options.requireSafety === false
+      ? canonicalCandidateIsCompilerReady(canonical, kit)
+      : rebuiltCandidateIsReady(canonical, kit));
   if (canonicalReady)
     return { status: "accepted", mechanism: canonical };
-  const result = resolveFabricationCombination(previous, candidate, kit, intent);
+  const result = resolveFabricationCombination(
+    previous,
+    withoutDefaultedConnectionSelections(previous, candidate),
+    kit,
+    intent,
+  );
   if (result.status !== "accepted")
     return { status: "rejected", blocker: result.blocker };
   const resolved = normalizeMechanismWithFabricationSelections(result.mechanism, kit);
-  if (!explicitConnectionSelectionsArePreserved(candidate, resolved))
+  if (!explicitConnectionSelectionsArePreserved(previous, candidate, resolved))
     return { status: "rejected", blocker: "No kit fit" };
   return rebuiltCandidateIsReady(resolved, kit)
     ? { status: "accepted", mechanism: resolved }
@@ -826,7 +899,8 @@ export const resolveMechanismCandidateCommit = (
     const trustedDerived = derivedStateKeys.every((key) =>
       candidateValueIsFinite(previous[key])
     ) ? previous : withoutCandidateDerivedState(previous, undefined, kit);
-    const mechanism = { ...candidate };
+    const candidateWithoutValidation = withoutCandidateConnectionValidation(candidate);
+    const mechanism = { ...candidateWithoutValidation };
     for (const key of derivedStateKeys) {
       (mechanism as Record<keyof MechanismConfig, unknown>)[key] =
         trustedDerived[key];
@@ -867,7 +941,14 @@ export const resolveMechanismCandidateCommit = (
   }
   const rebuilt = withoutCandidateDerivedState(
     resolution.mechanism,
-    previous.connectionSelectionValidation,
+    candidateHasUsableConnectionValidation(candidate)
+      ? declaredConnectionValidation(candidate, previous.connectionSelectionValidation)
+      : sameCandidateValue(
+          previous.connectionSelections,
+          resolution.mechanism.connectionSelections,
+        )
+        ? previous.connectionSelectionValidation
+        : resolution.mechanism.connectionSelectionValidation,
     kit,
   );
   if (!mechanismEditIsSafe(rebuilt, kit))
