@@ -1,6 +1,21 @@
 import type { MechanismConfig, MechanismType } from '../types';
 import { SCENE_PX_PER_MM } from './coordinates';
-import { FABRICATION_DEFAULT_GRID_PITCH_MM, FABRICATION_GEAR_SPECS, FABRICATION_LINKAGE_SPECS, FABRICATION_SPACER_SPEC, type FabricationGearSpec, type FabricationLinkageSpec } from './fabricationContract';
+import { FABRICATION_DEFAULT_GRID_PITCH_MM, FABRICATION_GEAR_SPECS, FABRICATION_LINKAGE_SPECS, FABRICATION_RING_GEAR_SPEC, FABRICATION_SPACER_SPEC, type FabricationGearSpec, type FabricationLinkageSpec } from './fabricationContract';
+
+const manifestPlanetaryGear = (teeth: number) => {
+    const spec = FABRICATION_GEAR_SPECS.find(item => item.teeth === teeth);
+    if (!spec) throw new Error(`Missing planetary gear manifest entry for ${teeth} teeth`);
+    return spec;
+};
+
+const MANIFEST_PLANETARY_SUN = manifestPlanetaryGear(FABRICATION_RING_GEAR_SPEC.compatibleSunTeeth);
+const MANIFEST_PLANETARY_PLANET = manifestPlanetaryGear(FABRICATION_RING_GEAR_SPEC.compatiblePlanetTeeth);
+const MANIFEST_PLANETARY_SUN_RADIUS = MANIFEST_PLANETARY_SUN.pitchRadiusMm * SCENE_PX_PER_MM;
+const MANIFEST_PLANETARY_PLANET_RADIUS = MANIFEST_PLANETARY_PLANET.pitchRadiusMm * SCENE_PX_PER_MM;
+const MANIFEST_PLANETARY_RING_RADIUS = FABRICATION_RING_GEAR_SPEC.pitchRadiusMm * SCENE_PX_PER_MM;
+if (Math.abs(MANIFEST_PLANETARY_RING_RADIUS - (MANIFEST_PLANETARY_SUN_RADIUS + 2 * MANIFEST_PLANETARY_PLANET_RADIUS)) > 1e-6) {
+    throw new Error('Planetary gear manifest dimensions are incompatible');
+}
 
 export type ReferenceSupport = 'fabrication-ready' | 'simulation-only' | 'unsupported';
 
@@ -89,10 +104,10 @@ export const REFERENCE_DEFAULTS = {
         outputLinkage: mmToScene(80)
     },
     planetary: {
-        sunRadius: mmToScene(10),
-        planetRadius: mmToScene(30),
-        carrierRadius: mmToScene(40),
-        ringPitchRadius: mmToScene(70),
+        sunRadius: MANIFEST_PLANETARY_SUN_RADIUS,
+        planetRadius: MANIFEST_PLANETARY_PLANET_RADIUS,
+        carrierRadius: MANIFEST_PLANETARY_SUN_RADIUS + MANIFEST_PLANETARY_PLANET_RADIUS,
+        ringPitchRadius: MANIFEST_PLANETARY_RING_RADIUS,
         planetCount: 1
     },
     cam: {

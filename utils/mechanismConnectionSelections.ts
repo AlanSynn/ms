@@ -1221,10 +1221,38 @@ export const normalizeMechanismWithFabricationSelections = (
   kit: PhysicalKitSettings = defaultPhysicalKit(),
 ): MechanismConfig => {
   const fabricated = normalizeMechanismToFabricationSet(mechanism);
-  const connectionState = normalizeMechanismConnectionSelections(
+  const rawRoles = new Set(Object.keys(mechanism.connectionSelections ?? {}));
+  const priorValidation = mechanism.connectionSelectionValidation
+    ? {
+        ...mechanism.connectionSelectionValidation,
+        entries: mechanism.connectionSelectionValidation.entries.filter(
+          (entry) => !(entry.status === 'defaulted' && rawRoles.has(entry.role)),
+        ),
+      }
+    : undefined;
+  const initialState = normalizeMechanismConnectionSelections(
     fabricated,
     mechanism.connectionSelections,
-    mechanism.connectionSelectionValidation,
+    priorValidation,
+    { kit },
+  );
+  if (
+    initialState.connectionSelectionValidation?.status === 'invalid'
+    || !initialState.connectionSelections
+  ) {
+    return {
+      ...fabricated,
+      ...mechanismConnectionCompatibilityUpdates(fabricated, initialState),
+      ...initialState,
+    };
+  }
+  // Defaults are useful compatibility evidence, but they are not a license to
+  // skip catalog validation. Revalidate the complete persisted set without the
+  // legacy provenance so an off-board default mount cannot become buildable.
+  const connectionState = normalizeMechanismConnectionSelections(
+    { ...fabricated, rejectedConnectionSelectionDiagnostics: undefined },
+    initialState.connectionSelections,
+    undefined,
     { kit },
   );
   return {
