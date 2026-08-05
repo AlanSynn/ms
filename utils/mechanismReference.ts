@@ -250,6 +250,21 @@ export const fabricationLinkageSpecForSceneLength = (sceneLength: number, minHol
     );
 };
 
+/**
+ * Returns the physical span from a linkage blank's first hole to an actual
+ * drilled hole. The blank remains the selected fabrication asset; this is the
+ * effective distance used by the mechanism graph and kinematics.
+ */
+export const fabricationLinkageEffectiveSceneLength = (
+    spec: FabricationLinkageSpec,
+    holeIndex: number,
+) => {
+    const origin = spec.holeCentersMm[0];
+    const hole = spec.holeCentersMm[holeIndex];
+    if (!origin || !hole || holeIndex <= 0) return Number.NaN;
+    return Math.hypot(hole.x - origin.x, hole.y - origin.y) * SCENE_PX_PER_MM;
+};
+
 const normalizeGearTrainRadii = (
     mechanism: Partial<MechanismConfig>,
     fallbackDrive: number,

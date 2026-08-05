@@ -1210,6 +1210,30 @@ export const normalizeAuthoredMechanismToFabricationSet = (
   };
 };
 
+/**
+ * Normalizes a mechanism and materializes the deterministic physical
+ * selections used by an exact fabrication combination. Legacy normalization
+ * intentionally leaves absent selections absent; resolver callers need the
+ * complete catalog-backed state instead.
+ */
+export const normalizeMechanismWithFabricationSelections = (
+  mechanism: MechanismConfig,
+  kit: PhysicalKitSettings = defaultPhysicalKit(),
+): MechanismConfig => {
+  const fabricated = normalizeMechanismToFabricationSet(mechanism);
+  const connectionState = normalizeMechanismConnectionSelections(
+    fabricated,
+    mechanism.connectionSelections,
+    mechanism.connectionSelectionValidation,
+    { kit },
+  );
+  return {
+    ...fabricated,
+    ...mechanismConnectionCompatibilityUpdates(fabricated, connectionState),
+    ...connectionState,
+  };
+};
+
 export type RejectedConnectionSelectionAttempt = Readonly<{
   role: ConnectionSelectionRole | 'unknown';
   reason: RejectedConnectionSelectionReason;
