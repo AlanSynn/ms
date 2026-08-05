@@ -10,7 +10,7 @@ import { isSoftReadinessBlocker } from '../utils/fabricationReadiness';
 import { generateProjectReadyDXF, generateProjectReadySVG } from '../utils/exporter';
 import { navigateAppStage } from '../utils/appStageNavigation';
 import { createDefaultMechanism } from '../utils/mechanismDefaults';
-import { compileMechanismGraphFabrication } from '../utils/mechanismCompiler';
+import { compileFabricationRecipe, compileMechanismGraphFabrication } from '../utils/mechanismCompiler';
 import { projectMechanismReadiness } from '../utils/mechanismReadiness';
 import { createSampleProject } from '../utils/project';
 import { workflowStatusFor } from '../utils/workflowStatus';
@@ -54,6 +54,24 @@ assert.equal(generateProjectReadyDXF(readyProject, 0).ok, true, 'guarded DXF exp
   const gearResult = compileMechanismGraphFabrication(invalidGear);
   assert.equal(gearResult.buildable, false);
   assert.match(gearResult.renderPlan.validationErrors.join(' '), /approved gear/i);
+}
+
+{
+  const invalidLink = {
+    ...createDefaultMechanism('4bar', 'wrapper-off-catalog-link'),
+    couplerLength: 60,
+  };
+  const recipe = compileFabricationRecipe(projectWith(invalidLink), invalidLink);
+  const visibleBlockers = [
+    ...recipe.steps,
+    ...recipe.warnings,
+    ...recipe.requiredParts.map(part => part.name),
+    ...recipe.requiredParts.map(part => part.label),
+    ...recipe.assemblySteps.flatMap(step => [step.instruction, ...(step.stack ?? []).map(item => item.label)]),
+  ];
+  assert(visibleBlockers.length > 0, 'wrapper exposes the compiler blocker');
+  assert(visibleBlockers.every(value => value === 'Fix: approved linkage required'), 'wrapper exposes one canonical Fix blocker');
+  assert(!visibleBlockers.some(value => value.includes('Fix: Fix:')), 'wrapper does not duplicate the Fix prefix');
 }
 
 const blockedProjects = [

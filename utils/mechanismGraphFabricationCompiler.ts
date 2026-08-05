@@ -602,11 +602,13 @@ const graphRenderPlan = (
         ownerExpansions: candidate.ownerExpansions,
         ...(candidate.pinBearing ? { displayAlias: String.fromCharCode(65 + aliasOrdinal++) } : {})
     }));
-    const physicalConnectionErrors = graph.connectionSelectionSummary?.physicalConnections.flatMap(connection =>
-        drafts.some(draft => draft.sourceNodeId === connection.sourceNodeId && draft.partKey === connection.partKey)
-            ? []
-            : [`Missing compiled physical layer for ${connection.role} (${connection.sourceNodeId}/${connection.partKey})`]
-    ) ?? [];
+    const physicalConnectionErrors = drafts.length === 0
+        ? []
+        : graph.connectionSelectionSummary?.physicalConnections.flatMap(connection =>
+            drafts.some(draft => draft.sourceNodeId === connection.sourceNodeId && draft.partKey === connection.partKey)
+                ? []
+                : [`Missing compiled physical layer for ${connection.role} (${connection.sourceNodeId}/${connection.partKey})`]
+        ) ?? [];
     return packFabricationRenderPlan({
         graphId: graph.id,
         layers: drafts,

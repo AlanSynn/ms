@@ -3,12 +3,14 @@ import type { ConnectionSelection, MechanismConfig } from '../types';
 import { boardToScene, defaultPhysicalKit, SCENE_PX_PER_MM, sceneToBoardRaw } from '../utils/coordinates';
 import { FABRICATION_GEAR_SPECS, FABRICATION_LINKAGE_SPECS, FABRICATION_RING_GEAR_SPEC } from '../utils/fabricationContract';
 import { compileMechanismGraphFabrication } from '../utils/mechanismCompiler';
+import { compileGraphFabricationRecipe } from '../utils/mechanismGraphFabricationCompiler';
 import {
   connectionSelectionSignature,
   normalizeMechanismConnectionSelections,
   resolveMechanismPhysicalConnections,
 } from '../utils/mechanismConnectionSelections';
 import { createDefaultMechanism } from '../utils/mechanismDefaults';
+import { mechanismGraphForMechanism } from '../utils/mechanismGraph';
 import { generateCurvePoints, planetaryCarrierOutputRatio, planetaryPlanetSpinRatio } from '../utils/kinematics';
 import { validateMechanismPreviewReadiness } from '../utils/mechanismPreviewReadiness';
 import {
@@ -193,6 +195,46 @@ const selected = (
   const linkResult = compileMechanismGraphFabrication(invalidLink);
   assert.equal(linkResult.buildable, false);
   assert.match(linkResult.renderPlan.validationErrors.join(' '), /approved linkage/i);
+  assert.equal(linkResult.renderPlan.layers.length, 0, 'rejected exact parts emit no graph layers');
+  assert.deepEqual(linkResult.renderPlan.validationErrors, ['Fix: approved linkage required'], 'rejected exact parts emit only the canonical blocker');
+}
+
+{
+  const invalidGearLinkage = {
+    ...createDefaultMechanism('gear_linkage', 'raw-off-catalog-gear-linkage'),
+    gearTrainRadii: [37, 61],
+    crankLength: 37,
+    rockerLength: 61,
+  };
+  const graph = mechanismGraphForMechanism(invalidGearLinkage, kit);
+  assert.deepEqual(
+    graph.nodes.filter(node => node.role === 'gear').map(node => node.value),
+    [37, 61],
+    'gear-linkage graph preserves raw authored endpoint radii for exact validation',
+  );
+  const result = compileGraphFabricationRecipe(graph, kit);
+  assert.equal(result.buildable, false, 'off-catalog gear-linkage radii are not buildable');
+  assert.equal(result.blocker, 'Fix: approved gear required');
+  assert.equal(result.renderPlan.layers.length, 0, 'off-catalog gear-linkage radii emit no graph layers');
+  assert.deepEqual(result.renderPlan.validationErrors, ['Fix: approved gear required']);
+}
+
+{
+  const invalidGearLinkage = {
+    ...createDefaultMechanism('gear_linkage', 'raw-off-catalog-linkage'),
+    couplerLength: 111,
+  };
+  const graph = mechanismGraphForMechanism(invalidGearLinkage, kit);
+  assert.deepEqual(
+    graph.nodes.filter(node => node.id.startsWith('connector-link-')).map(node => node.value),
+    [111, 111],
+    'gear-linkage graph preserves raw authored connector length for exact validation',
+  );
+  const result = compileGraphFabricationRecipe(graph, kit);
+  assert.equal(result.buildable, false, 'off-catalog gear-linkage linkage length is not buildable');
+  assert.equal(result.blocker, 'Fix: approved linkage required');
+  assert.equal(result.renderPlan.layers.length, 0, 'off-catalog gear-linkage linkage emits no graph layers');
+  assert.deepEqual(result.renderPlan.validationErrors, ['Fix: approved linkage required']);
 }
 
 {

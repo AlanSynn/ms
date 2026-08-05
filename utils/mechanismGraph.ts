@@ -424,8 +424,21 @@ export const camMechanismGraph = (mechanism: MechanismConfig, kit?: PhysicalKitS
 
 export const gearLinkageMechanismGraph = (mechanism: MechanismConfig, kit?: PhysicalKitSettings): MechanismGraph => {
     const referencePair = normalizeGearLinkageToReference(mechanism);
-    const { radii, gearNodes, boardConstraints, meshConstraints } = gearTrainGraphParts(referencePair);
-    const linkLength = Math.max(1, Math.abs(referencePair.couplerLength));
+    const { radii, gearNodes: normalizedGearNodes, boardConstraints, meshConstraints } = gearTrainGraphParts(referencePair);
+    const rawGearRadii = Array.isArray(mechanism.gearTrainRadii) && mechanism.gearTrainRadii.length >= 2
+        ? mechanism.gearTrainRadii
+        : [mechanism.crankLength, mechanism.rockerLength];
+    const authoredGearRadii = rawGearRadii
+        .filter(value => Number.isFinite(value))
+        .slice(0, 8)
+        .map(value => Math.max(1, Math.abs(value)));
+    const gearNodes = normalizedGearNodes.map((node, index) => {
+        const authoredRadius = authoredGearRadii[index];
+        return authoredRadius === undefined ? node : { ...node, value: authoredRadius };
+    });
+    const linkLength = Number.isFinite(mechanism.couplerLength)
+        ? Math.max(1, Math.abs(mechanism.couplerLength))
+        : Math.max(1, Math.abs(referencePair.couplerLength));
     const physicalMeshConstraints = radii.length > 2 ? meshConstraints : [];
     const state = graphState(referencePair, kit);
     const driveCenter = gearNodes[0]?.position ?? state.p1;

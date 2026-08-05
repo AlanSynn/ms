@@ -101,8 +101,10 @@ const graphRecipeWithProjectContext = (
     };
 };
 
+const canonicalFixBlocker = (blocker: string) => `Fix: ${blocker.replace(/^(?:Fix:\s*)+/i, '').trim()}`;
+
 const graphCompilerBlockerPart = (blocker: string): FabricationPartRequirement => ({
-    name: `Fix: ${blocker}`,
+    name: canonicalFixBlocker(blocker),
     label: blocker,
     key: 'compiler-blocker',
     category: 'blocker',
@@ -122,9 +124,9 @@ const graphCompilerBlockerStep = (
     coords: [boardCoordinate],
     coordRoles: ['board'],
     action: 'fix-before-build',
-    instruction: `Fix: ${blocker}`,
+    instruction: canonicalFixBlocker(blocker),
     check: 'Build files are ready after the issue is fixed.',
-    stack: [{ order: 1, label: `Fix: ${blocker}`, role: 'blocker', part: 'blockers:compiler-blocker' }]
+    stack: [{ order: 1, label: canonicalFixBlocker(blocker), role: 'blocker', part: 'blockers:compiler-blocker' }]
 });
 
 const graphRecipeBlocker = (
@@ -150,9 +152,9 @@ const graphRecipeBlocker = (
         sceneAnchor,
         offsetFromBoardMm: { x: 0, y: 0 },
         requiredParts: [graphCompilerBlockerPart(blocker)],
-        steps: [`Fix: ${blocker}`],
+        steps: [canonicalFixBlocker(blocker)],
         assemblySteps: [graphCompilerBlockerStep(mechanism, blocker, boardCoordinate)],
-        warnings: [`Fix: ${blocker}`]
+        warnings: [canonicalFixBlocker(blocker)]
     });
 };
 
