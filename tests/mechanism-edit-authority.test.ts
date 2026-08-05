@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createDefaultMechanism } from '../utils/mechanismDefaults';
 import {
   constrainMechanismCommit,
+  constrainMechanismUpdate,
   mechanismEditIsSafe,
   mechanismMotionCompletes,
   motionSafeParamRange,
@@ -119,6 +120,78 @@ if (connected.status === 'accepted') {
     'declared connection selections must exactly match candidate geometry',
   );
 }
+
+const atomicGearPrevious = createDefaultMechanism('gear', 'atomic-gear');
+const atomicGearCandidate = {
+  ...atomicGearPrevious,
+  crankLength: 83,
+  rockerLength: 51,
+  groundLength: 999,
+  gearTrainRadii: [83, 51],
+};
+const atomicGearResult = resolveMechanismCandidateCommit(
+  atomicGearPrevious,
+  atomicGearCandidate,
+);
+assert.equal(atomicGearResult.status, 'accepted', 'authority accepts a resolvable gear edit');
+if (atomicGearResult.status === 'accepted') {
+  assert.deepEqual(atomicGearResult.mechanism.gearTrainRadii, [100, 60]);
+  assert.equal(atomicGearResult.mechanism.groundLength, 160);
+  assert.equal(atomicGearResult.mechanism.gearRatio, -100 / 60);
+  assert.equal(atomicGearResult.mechanism.speed2, -100 / 60);
+  assert(atomicGearResult.mechanism.generatedPath?.length, 'accepted authority result rebuilds generated path state');
+}
+
+const atomicGearUpdate = constrainMechanismUpdate(
+  atomicGearPrevious,
+  {
+    crankLength: 83,
+    rockerLength: 51,
+    groundLength: 999,
+    gearTrainRadii: [83, 51],
+  },
+);
+assert.deepEqual(atomicGearUpdate.gearTrainRadii, [100, 60], 'geometric command carries the resolved gear tuple');
+assert.equal(atomicGearUpdate.groundLength, 160, 'geometric command carries the resolved center span');
+assert.equal(atomicGearUpdate.gearRatio, -100 / 60, 'geometric command carries the resolved ratio');
+assert.equal(atomicGearUpdate.speed2, -100 / 60, 'geometric command carries the resolved speed');
+assert(atomicGearUpdate.generatedPath?.length, 'geometric command carries rebuilt derived path state');
+
+const noKitPrevious = createDefaultMechanism('gear', 'no-kit-fit');
+const noKitResult = resolveMechanismCandidateCommit(noKitPrevious, {
+  ...noKitPrevious,
+  anchorX: 99_999,
+  anchorY: 99_999,
+});
+assert.equal(noKitResult.status, 'preserved', 'authority rejects a candidate with no legal combination');
+assert.equal(noKitResult.blocker, 'No kit fit');
+assert.strictEqual(noKitResult.mechanism, noKitPrevious, 'rejection preserves the exact last-valid aggregate');
+
+const explicitInvalidSelectionPrevious = createDefaultMechanism('4bar', 'explicit-invalid-selection');
+const explicitInvalidSelection = resolveMechanismCandidateCommit(
+  explicitInvalidSelectionPrevious,
+  {
+    ...explicitInvalidSelectionPrevious,
+    connectionSelections: {
+      '4bar.input-joint': {
+        kind: 'linkage-hole',
+        linkageKey: 'linkage-8-cell',
+        holeIndex: 999,
+      },
+    },
+  },
+);
+assert.equal(
+  explicitInvalidSelection.status,
+  'preserved',
+  'authority rejects an explicitly requested connection it cannot retain',
+);
+assert.equal(explicitInvalidSelection.blocker, 'No kit fit');
+assert.strictEqual(
+  explicitInvalidSelection.mechanism,
+  explicitInvalidSelectionPrevious,
+  'an explicitly rejected connection preserves the exact prior aggregate',
+);
 
 for (const type of ['4bar', 'crank', 'gear_linkage'] as const) {
   const phases = mechanismSafetyPhaseSchedule(type);

@@ -74,6 +74,7 @@ const withStalePackage = {
   );
   assert.equal(invalid.accepted, false);
   assert.strictEqual(invalid.mechanism, prior, 'invalid local candidate preserves the exact previous preview');
+  assert.equal(invalid.blocker, 'No kit fit', 'rejected Foundry edits expose the authority blocker');
 
   const foundrySource = readFileSync(
     new URL('../components/stages/foundry/MechanismFoundry.tsx', import.meta.url),

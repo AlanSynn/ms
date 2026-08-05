@@ -18,6 +18,7 @@ import {
   fitFourBarKitMechanismToPathResult,
   type AutomaticFitResult,
 } from "./fourBarPathFit";
+import { resolveFabricationCandidate } from "./mechanismEditAuthority";
 import { generateFoundryPlaybackPointTraces, primaryFoundryPlaybackPath } from "./foundryPlayback";
 import {
   pointOnGeneratedMechanismPath,
@@ -78,6 +79,15 @@ const pathMetrics = (path: ProjectMotionPath) => {
     length,
   };
 };
+
+const fabricationCombinationTypes = new Set<MechanismType>([
+  "4bar",
+  "gear",
+  "gear_linkage",
+  "planetary_gear",
+  "cam",
+  "piston",
+]);
 
 const traceDistanceToGeneratedPath = (
   trace: { points: Point[] },
@@ -206,11 +216,26 @@ export const fitRecommendedMechanismToSheet = (
     };
   };
 
+  const resolveSheetCandidate = (candidate: MechanismConfig) => {
+    if (!fabricationCombinationTypes.has(candidate.type)) return candidate;
+    const result = resolveFabricationCandidate(
+      mechanism,
+      candidate,
+      kit,
+      "scalar",
+      { candidateIsCatalogSnapped: true },
+    );
+    return result.status === "accepted"
+      ? mechanismWithGeneratedPath(result.mechanism, { kit })
+      : undefined;
+  };
   const considerCandidate = (
     candidate: MechanismConfig,
     distance: number,
   ) => {
-    const candidateScore = score(candidate);
+    const resolved = resolveSheetCandidate(candidate);
+    if (!resolved) return;
+    const candidateScore = score(resolved);
     if (
       (bestScore.invalid && !candidateScore.invalid) ||
       (bestScore.invalid === candidateScore.invalid &&
@@ -219,14 +244,14 @@ export const fitRecommendedMechanismToSheet = (
         candidateScore.outside === bestScore.outside &&
         distance < bestDistance)
     ) {
-      best = candidate;
+      best = resolved;
       bestScore = candidateScore;
       bestDistance = distance;
     }
   };
 
-  let best = seed;
-  let bestScore = score(seed);
+  let best = resolveSheetCandidate(seed) ?? seed;
+  let bestScore = score(best);
   let bestDistance = 0;
   const isBoardSnapBack =
     Math.hypot(
@@ -651,7 +676,22 @@ export const fitMechanismToTargetPathResult = (
     return { ...result, mechanism, accepted: false, blockers: ["Draw a path."] };
   }
   const targetFields = pathOwnedTargetFields(path);
-  const unchanged = mechanismWithGeneratedPath(
+  const resolveFitCandidate = (candidate: MechanismConfig) => {
+    if (!fabricationCombinationTypes.has(candidate.type)) return candidate;
+    const result = resolveFabricationCandidate(
+      mechanism,
+      candidate,
+      project.settings.physicalKit,
+      "fit",
+      { candidateIsCatalogSnapped: true },
+    );
+    return result.status === "accepted"
+      ? mechanismWithGeneratedPath(result.mechanism, {
+          kit: project.settings.physicalKit,
+        })
+      : undefined;
+  };
+  const unchanged = resolveFitCandidate(mechanismWithGeneratedPath(
     snapMechanismAnchor(
       normalizeAuthoredMechanismToFabricationSet(
         normalizeMechanismToReference({ ...mechanism, ...targetFields }),
@@ -660,7 +700,7 @@ export const fitMechanismToTargetPathResult = (
       project,
     ),
     { kit: project.settings.physicalKit },
-  );
+  ));
   const fourBarResult = mechanism.type === "4bar"
     ? fitFourBarKitMechanismToPathResult(project, mechanism, path)
     : undefined;
@@ -738,17 +778,23 @@ export const fitMechanismToTargetPathResult = (
     ...[fittedCandidate, fallback, unchanged]
       .filter((candidate): candidate is MechanismConfig => Boolean(candidate))
       .filter((candidate) => candidate !== fourBarResult?.mechanism)
+      .map((candidate) => resolveFitCandidate(candidate))
+      .filter((candidate): candidate is MechanismConfig => Boolean(candidate))
       .map((candidate) => completeAutomaticFitCandidate(project, mechanism, candidate)),
   ];
   const viable = completed
     .filter((result) => result.accepted)
     .sort((a, b) => fitScore(a.mechanism) - fitScore(b.mechanism));
   if (viable[0]) return viable[0];
+  const priorResult = completeAutomaticFitCandidate(project, mechanism, mechanism);
   return {
-    ...completed[0],
-    mechanism: completeAutomaticFitCandidate(project, mechanism, mechanism).mechanism,
+    ...priorResult,
+    mechanism: priorResult.mechanism,
     accepted: false,
-    blockers: [...new Set(completed.flatMap((result) => result.blockers))],
+    blockers: [...new Set([
+      ...completed.flatMap((result) => result.blockers),
+      ...priorResult.blockers,
+    ])],
   };
 };
 

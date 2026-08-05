@@ -139,18 +139,27 @@ export const useAppMechanismActions = ({
         Object.keys(nextUpdates).length > 0 &&
         Object.keys(constrainedUpdates).length === 0
       ) {
-        const blocker = updates.connectionSelections
-          ? "Fix: Choose anchor"
-          : "Change blocked";
+        const rejectedAttempt = resolveMechanismEditAttempt(
+          project,
+          mechanism,
+          { ...mechanism, ...nextUpdates },
+        );
+        const blocker = rejectedAttempt.status === "rejected"
+          ? rejectedAttempt.blocker
+          : updates.connectionSelections
+            ? "Fix: Choose anchor"
+            : "Change blocked";
         setMechanismEditFeedback({
           mechanismId: id,
           blocker,
-          recoveryCandidates: {
-            targetPartIds: [],
-            targetSceneObjectIds: [],
-            targetPathIds: [],
-            targetAnchorJointIds: [],
-          },
+          recoveryCandidates: rejectedAttempt.status === "rejected"
+            ? rejectedAttempt.recoveryCandidates
+            : {
+                targetPartIds: [],
+                targetSceneObjectIds: [],
+                targetPathIds: [],
+                targetAnchorJointIds: [],
+              },
         });
         setCommandStatus(blocker);
         return false;
@@ -163,9 +172,7 @@ export const useAppMechanismActions = ({
           : next;
       const attempt = resolveMechanismEditAttempt(project, mechanism, normalized);
       if (attempt.status === "rejected") {
-        const blocker = updates.connectionSelections
-          ? MECHANISM_BINDING_BLOCKER
-          : attempt.blocker;
+        const blocker = attempt.blocker;
         setMechanismEditFeedback({
           mechanismId: id,
           blocker,
@@ -207,7 +214,22 @@ export const useAppMechanismActions = ({
                 kit: project.settings.physicalKit,
               },
             );
-      dispatch({ type: "upsert_mechanism", mechanism: fitted });
+      const committedAttempt = resolveMechanismEditAttempt(
+        project,
+        mechanism,
+        fitted,
+      );
+      if (committedAttempt.status === "rejected") {
+        const blocker = committedAttempt.blocker;
+        setMechanismEditFeedback({
+          mechanismId: id,
+          blocker,
+          recoveryCandidates: committedAttempt.recoveryCandidates,
+        });
+        setCommandStatus(blocker);
+        return false;
+      }
+      dispatch({ type: "upsert_mechanism", mechanism: committedAttempt.mechanism });
       setMechanismEditFeedback(null);
       return true;
     },

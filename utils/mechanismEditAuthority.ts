@@ -18,9 +18,16 @@ import {
   connectionSelectionRolesForMechanism,
   mechanismConnectionCompatibilityUpdates,
   normalizeMechanismConnectionSelections,
+  normalizeMechanismWithFabricationSelections,
 } from "./mechanismConnectionSelections";
 import { mechanismWithGeneratedPath } from "./mechanismGeneratedPath";
 import { mechanismGraphForMechanism } from "./mechanismGraph";
+import { compileMechanismGraphFabrication } from "./mechanismCompiler";
+import {
+  resolveFabricationCombination,
+  type FabricationCombinationIntent,
+} from "./mechanismFabricationCombinations";
+import { validateMechanismPreviewReadiness } from "./mechanismPreviewReadiness";
 import {
   assessMechanismTargetBinding,
   MECHANISM_BINDING_BLOCKER,
@@ -593,6 +600,18 @@ const derivedStateKeys = [
   "warnings",
 ] as const satisfies readonly (keyof MechanismConfig)[];
 
+const fabricationCombinationTypes = new Set<MechanismType>([
+  "4bar",
+  "gear",
+  "gear_linkage",
+  "planetary_gear",
+  "cam",
+  "piston",
+]);
+
+const usesFabricationCombinationResolver = (mechanism: MechanismConfig) =>
+  fabricationCombinationTypes.has(mechanism.type);
+
 const candidateValueIsFinite = (value: unknown): boolean => {
   if (typeof value === "number") return Number.isFinite(value);
   if (Array.isArray(value)) return value.every(candidateValueIsFinite);
@@ -655,6 +674,95 @@ const withoutCandidateDerivedState = (
   return mechanismWithGeneratedPath(compatible, { kit });
 };
 
+const fabricationIntentFor = (
+  previous: MechanismConfig,
+  candidate: MechanismConfig,
+): FabricationCombinationIntent => {
+  const physicalChanges = [...physicalGeometryKeys].filter((key) =>
+    !sameCandidateValue(previous[key], candidate[key]),
+  );
+  if (
+    physicalChanges.length > 0 &&
+    physicalChanges.every((key) => key === "anchorX" || key === "anchorY") &&
+    (!sameCandidateValue(previous.sceneAnchor, candidate.sceneAnchor) ||
+      !sameCandidateValue(previous.transform, candidate.transform))
+  ) return "pivot";
+  if (!sameCandidateValue(previous.connectionSelections, candidate.connectionSelections))
+    return "connection";
+  if (
+    !sameCandidateValue(previous.generatedPath, candidate.generatedPath) &&
+    candidate.generatedPath?.length
+  ) return "fit";
+  return "scalar";
+};
+
+const rebuiltCandidateIsReady = (
+  mechanism: MechanismConfig,
+  kit: PhysicalKitSettings,
+) => {
+  if (!mechanismEditIsSafe(mechanism, kit)) return false;
+  const compiled = compileMechanismGraphFabrication(mechanism, kit);
+  return compiled.buildable &&
+    compiled.renderPlan.validationErrors.length === 0 &&
+    validateMechanismPreviewReadiness(mechanism, kit).length === 0;
+};
+
+const canonicalCandidateIsCompilerReady = (
+  mechanism: MechanismConfig,
+  kit: PhysicalKitSettings,
+) => {
+  const compiled = compileMechanismGraphFabrication(mechanism, kit);
+  return compiled.buildable && compiled.renderPlan.validationErrors.length === 0 &&
+    validateMechanismPreviewReadiness(mechanism, kit).length === 0;
+};
+
+const explicitConnectionSelectionsArePreserved = (
+  requested: MechanismConfig,
+  resolved: MechanismConfig,
+) => Object.entries(requested.connectionSelections ?? {}).every(
+  ([role, selection]) => sameCandidateValue(
+    selection,
+    resolved.connectionSelections?.[role as keyof NonNullable<MechanismConfig["connectionSelections"]>],
+  ),
+);
+
+type FabricationCandidateResolution =
+  | { status: "accepted"; mechanism: MechanismConfig }
+  | { status: "rejected"; blocker: string };
+
+export const resolveFabricationCandidate = (
+  previous: MechanismConfig,
+  candidate: MechanismConfig,
+  kit: PhysicalKitSettings,
+  intent: FabricationCombinationIntent,
+  options: { candidateIsCatalogSnapped?: boolean; requireSafety?: boolean } = {},
+): FabricationCandidateResolution => {
+  if (!usesFabricationCombinationResolver(candidate))
+    return { status: "accepted", mechanism: candidate };
+  const canonical = normalizeMechanismWithFabricationSelections(candidate, kit);
+  if (!explicitConnectionSelectionsArePreserved(candidate, canonical))
+    return { status: "rejected", blocker: "No kit fit" };
+  if (options.candidateIsCatalogSnapped) {
+    return canonicalCandidateIsCompilerReady(canonical, kit)
+      ? { status: "accepted", mechanism: canonical }
+      : { status: "rejected", blocker: "No kit fit" };
+  }
+  const canonicalReady = options.requireSafety === false
+    ? canonicalCandidateIsCompilerReady(canonical, kit)
+    : rebuiltCandidateIsReady(canonical, kit);
+  if (canonicalReady)
+    return { status: "accepted", mechanism: canonical };
+  const result = resolveFabricationCombination(previous, candidate, kit, intent);
+  if (result.status !== "accepted")
+    return { status: "rejected", blocker: result.blocker };
+  const resolved = normalizeMechanismWithFabricationSelections(result.mechanism, kit);
+  if (!explicitConnectionSelectionsArePreserved(candidate, resolved))
+    return { status: "rejected", blocker: "No kit fit" };
+  return rebuiltCandidateIsReady(resolved, kit)
+    ? { status: "accepted", mechanism: resolved }
+    : { status: "rejected", blocker: "No kit fit" };
+};
+
 export type CompleteMechanismCandidateResult =
   | { status: "accepted"; mechanism: MechanismConfig; geometryChanged: boolean }
   | { status: "preserved"; mechanism: MechanismConfig; geometryChanged: boolean; blocker: string }
@@ -677,10 +785,28 @@ export const resolveNewMechanismCandidateCommit = (
   candidate: MechanismConfig,
   kit: PhysicalKitSettings = defaultPhysicalKit(),
 ): NewMechanismCandidateResult => {
-  const rebuilt = withoutCandidateDerivedState(candidate, undefined, kit);
-  return mechanismEditIsSafe(rebuilt, kit)
-    ? { status: "accepted", mechanism: rebuilt }
-    : { status: "rejected", blocker: "Fix mechanism geometry" };
+  if (!MECHANISM_FEASIBILITY_AUTHORITY_KEYS.every((key) =>
+    candidateValueIsFinite(candidate[key])
+  )) return { status: "rejected", blocker: "Fix mechanism geometry" };
+  if (
+    Object.keys(candidate.connectionSelections ?? {}).length > 0 &&
+    !completeMechanismCandidateIsValid(candidate, kit)
+  ) return { status: "rejected", blocker: "Fix mechanism geometry" };
+  const resolution = resolveFabricationCandidate(
+    candidate,
+    candidate,
+    kit,
+    "scalar",
+  );
+  if (resolution.status !== "accepted") return resolution;
+  const rebuilt = withoutCandidateDerivedState(resolution.mechanism, undefined, kit);
+  if (!mechanismEditIsSafe(rebuilt, kit))
+    return { status: "rejected", blocker: "Fix mechanism geometry" };
+  if (
+    usesFabricationCombinationResolver(rebuilt) &&
+    !rebuiltCandidateIsReady(rebuilt, kit)
+  ) return { status: "rejected", blocker: "No kit fit" };
+  return { status: "accepted", mechanism: rebuilt };
 };
 
 export const resolveMechanismCandidateCommit = (
@@ -715,7 +841,48 @@ export const resolveMechanismCandidateCommit = (
     mechanism.connectionSelectionValidation = connectionState.connectionSelectionValidation;
     return { status: "accepted", mechanism, geometryChanged: false };
   }
-  const rebuilt = withoutCandidateDerivedState(candidate, previous.connectionSelectionValidation, kit);
+  if (!MECHANISM_FEASIBILITY_AUTHORITY_KEYS.every((key) =>
+    candidateValueIsFinite(candidate[key])
+  )) {
+    return {
+      status: "preserved",
+      mechanism: previous,
+      geometryChanged: true,
+      blocker: "Fix mechanism geometry",
+    };
+  }
+  const resolution = resolveFabricationCandidate(
+    previous,
+    candidate,
+    kit,
+    fabricationIntentFor(previous, candidate),
+  );
+  if (resolution.status !== "accepted") {
+    return {
+      status: "preserved",
+      mechanism: previous,
+      geometryChanged: true,
+      blocker: resolution.blocker,
+    };
+  }
+  const rebuilt = withoutCandidateDerivedState(
+    resolution.mechanism,
+    previous.connectionSelectionValidation,
+    kit,
+  );
+  if (!mechanismEditIsSafe(rebuilt, kit))
+    return { status: "preserved", mechanism: previous, geometryChanged: true, blocker: "Fix mechanism geometry" };
+  if (
+    usesFabricationCombinationResolver(rebuilt) &&
+    !rebuiltCandidateIsReady(rebuilt, kit)
+  ) {
+    return {
+      status: "preserved",
+      mechanism: previous,
+      geometryChanged: true,
+      blocker: "No kit fit",
+    };
+  }
   if (mechanismEditIsSafe(rebuilt, kit))
     return { status: "accepted", mechanism: rebuilt, geometryChanged: true };
   if (
@@ -807,8 +974,14 @@ export const constrainMechanismUpdate = (
   const result = resolveMechanismCandidateCommit(mechanism, { ...mechanism, ...updates }, kit);
   if (result.status !== "accepted") return {};
   const accepted: Partial<MechanismConfig> = {};
-  for (const key of Object.keys(updates) as Array<keyof MechanismConfig>) {
-    (accepted as Record<keyof MechanismConfig, unknown>)[key] = result.mechanism[key];
+  const keys = new Set<keyof MechanismConfig>([
+    ...(Object.keys(mechanism) as Array<keyof MechanismConfig>),
+    ...(Object.keys(result.mechanism) as Array<keyof MechanismConfig>),
+  ]);
+  for (const key of keys) {
+    if (!sameCandidateValue(mechanism[key], result.mechanism[key])) {
+      (accepted as Record<keyof MechanismConfig, unknown>)[key] = result.mechanism[key];
+    }
   }
   return accepted;
 };

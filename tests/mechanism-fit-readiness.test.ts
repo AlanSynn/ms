@@ -23,6 +23,7 @@ import {
   fitMechanismToTargetPathResult,
   fitRecommendedMechanismToSheet,
 } from '../utils/mechanismRecommendations';
+import { validateMechanismPreviewReadiness } from '../utils/mechanismPreviewReadiness';
 import { ALL_MECHANISM_TYPES, AUTHORABLE_MECHANISM_TYPES } from '../utils/mechanismTemplates';
 import { pathOwnedTargetFields } from '../utils/pathTargets';
 import { applyProjectAction, createLessonProject, createSampleProject } from '../utils/project';
@@ -46,6 +47,29 @@ const withoutPackage = (mechanism: MechanismConfig) => {
   const { foundryExport: _foundryExport, ...geometry } = mechanism;
   return geometry;
 };
+
+{
+  const project = createLessonProject('waving-arm');
+  const prior = project.mechanisms[0]!;
+  const rawTarget = { ...prior, couplerLength: 111 };
+  const fitted = fitRecommendedMechanismToSheet(project, rawTarget);
+  assert.notEqual(fitted.couplerLength, 111, 'Fit snaps a raw target between linkage sizes to a legal blank');
+  assert.equal(
+    fitted.connectionSelections?.['4bar.output-joint']?.kind,
+    'linkage-hole',
+    'Fit persists the physical output hole for the snapped aggregate',
+  );
+  assert.equal(
+    compileMechanismGraphFabrication(fitted, project.settings.physicalKit).buildable,
+    true,
+    'Fit returns a directly compiler-ready aggregate',
+  );
+  assert.deepEqual(
+    validateMechanismPreviewReadiness(fitted, project.settings.physicalKit),
+    [],
+    'Fit returns an aggregate without preview-readiness errors',
+  );
+}
 
 const numbersAreFinite = (value: unknown): boolean => {
   if (typeof value === 'number') return Number.isFinite(value);

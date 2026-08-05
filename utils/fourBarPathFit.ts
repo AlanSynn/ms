@@ -15,7 +15,10 @@ import {
 import { normalizeMechanismToFabricationSet } from './mechanismReference';
 import { mechanismWithGeneratedPath } from './mechanismGeneratedPath';
 import { pathOwnedTargetFields } from './pathTargets';
-import { resolveMechanismEditAttempt } from './mechanismEditAuthority';
+import {
+  resolveFabricationCandidate,
+  resolveMechanismEditAttempt,
+} from './mechanismEditAuthority';
 
 const pathMetrics = (path: ProjectMotionPath) => {
   const length =
@@ -337,7 +340,16 @@ export const fitFourBarKitMechanismToPathResult = (
                 const normalizedCandidate = hasAuthoredBoundary
                   ? normalizeAuthoredMechanismToFabricationSet(authoredCandidate)
                   : normalizeMechanismToFabricationSet(authoredCandidate);
-                const candidate = { ...normalizedCandidate, groundLength };
+                const rawCandidate = { ...normalizedCandidate, groundLength };
+                const resolved = resolveFabricationCandidate(
+                  mechanism,
+                  rawCandidate,
+                  project.settings.physicalKit,
+                  'fit',
+                  { candidateIsCatalogSnapped: true },
+                );
+                if (resolved.status !== 'accepted') continue;
+                const candidate = resolved.mechanism;
                 const traces = generateMechanismPointTraces(candidate, 36);
                 if (traces.percentValid < 0.98) continue;
                 const movingTraces = traces.traces.filter((trace) => trace.primary);
@@ -350,7 +362,7 @@ export const fitFourBarKitMechanismToPathResult = (
                       error / fitScale > 0.5
                         ? ['Closest kit fit. Try a smaller move if it misses.']
                         : [],
-                  });
+                  }, { kit: project.settings.physicalKit });
                   if (
                     motionReach &&
                     candidateWithGeneratedPath.generatedPath?.some(
