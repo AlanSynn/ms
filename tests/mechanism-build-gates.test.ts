@@ -10,6 +10,7 @@ import { isSoftReadinessBlocker } from '../utils/fabricationReadiness';
 import { generateProjectReadyDXF, generateProjectReadySVG } from '../utils/exporter';
 import { navigateAppStage } from '../utils/appStageNavigation';
 import { createDefaultMechanism } from '../utils/mechanismDefaults';
+import { compileMechanismGraphFabrication } from '../utils/mechanismCompiler';
 import { projectMechanismReadiness } from '../utils/mechanismReadiness';
 import { createSampleProject } from '../utils/project';
 import { workflowStatusFor } from '../utils/workflowStatus';
@@ -44,6 +45,16 @@ assert.equal(validateForFabrication(readyProject).errors.length, 0, 'fabrication
 assert.equal(createFabricationPackage(readyProject).recipes.length, 1, 'package emits the canonical ready mechanism');
 assert.equal(generateProjectReadySVG(readyProject, 0).ok, true, 'guarded SVG export accepts a ready project');
 assert.equal(generateProjectReadyDXF(readyProject, 0).ok, true, 'guarded DXF export accepts a ready project');
+
+{
+  const invalidGear = {
+    ...createDefaultMechanism('gear', 'off-catalog-gear'),
+    gearTrainRadii: [37, 61],
+  };
+  const gearResult = compileMechanismGraphFabrication(invalidGear);
+  assert.equal(gearResult.buildable, false);
+  assert.match(gearResult.renderPlan.validationErrors.join(' '), /approved gear/i);
+}
 
 const blockedProjects = [
   projectWith({ ...boundMechanism('recovery'), crankLength: Number.NaN }),

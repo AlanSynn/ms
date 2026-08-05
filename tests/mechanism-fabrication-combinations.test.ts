@@ -186,6 +186,16 @@ const selected = (
 }
 
 {
+  const invalidLink = {
+    ...createDefaultMechanism('4bar', 'off-catalog-link'),
+    couplerLength: 60,
+  };
+  const linkResult = compileMechanismGraphFabrication(invalidLink);
+  assert.equal(linkResult.buildable, false);
+  assert.match(linkResult.renderPlan.validationErrors.join(' '), /approved linkage/i);
+}
+
+{
   const requested = {
     ...createDefaultMechanism('4bar', 'pivot-board-snap'),
     anchorX: 1,

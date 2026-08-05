@@ -4,6 +4,7 @@ import { physicalTolerance } from './fabricationReadiness';
 import {
     FABRICATION_GEAR_SPECS,
     FABRICATION_LINKAGE_SPECS,
+    FABRICATION_RING_GEAR_SPEC,
     FABRICATION_SPACER_SPEC,
     fabricationGearSpecForPitchRadius,
     fabricationRingGearSpecForPitchRadius,
@@ -124,9 +125,21 @@ const selectedLinkageSpecForGraphNode = (graph: MechanismGraph, node: MechanismG
         : undefined;
 };
 
+const graphRequiresExactCatalogParts = (graph: MechanismGraph) =>
+    graph.source === 'family-definition' && graph.family.authoringMode === 'classroom-preset';
+
+const exactSceneLengthMatches = (value: number | undefined, lengthMm: number) =>
+    Number.isFinite(value) && Math.abs(Math.abs(value as number) - lengthMm * SCENE_PX_PER_MM) <= 1e-6;
+
+const physicalConnectionsForGraphNode = (graph: MechanismGraph, node: MechanismGraphNode) =>
+    graph.connectionSelectionSummary?.physicalConnections.filter(connection => connection.sourceNodeId === node.id) ?? [];
+
 const linkageSpecForGraphNode = (graph: MechanismGraph, node: MechanismGraphNode) => {
     const selected = selectedLinkageSpecForGraphNode(graph, node);
     if (selected) return selected;
+    if (graphRequiresExactCatalogParts(graph)) {
+        return FABRICATION_LINKAGE_SPECS.find(spec => exactSceneLengthMatches(node.value, spec.lengthMm));
+    }
     const cells = Math.max(2, Math.round(Math.abs(finiteGraphPartValue(node)) / Math.max(1, SCENE_PX_PER_MM * 20)));
     return fabricationLinkageSpecForCells(cells);
 };
@@ -138,18 +151,29 @@ const selectedGearSpecForGraphNode = (graph: MechanismGraph, node: MechanismGrap
         : undefined;
 };
 
-const graphGearSpecForNode = (graph: MechanismGraph, node: MechanismGraphNode) =>
-    selectedGearSpecForGraphNode(graph, node)
-    ?? fabricationGearSpecForPitchRadius(Math.abs(finiteGraphPartValue(node)) / SCENE_PX_PER_MM);
+const graphGearSpecForNode = (graph: MechanismGraph, node: MechanismGraphNode) => {
+    const selected = selectedGearSpecForGraphNode(graph, node);
+    if (selected) return selected;
+    return graphRequiresExactCatalogParts(graph)
+        ? FABRICATION_GEAR_SPECS.find(spec => exactSceneLengthMatches(node.value, spec.pitchRadiusMm))
+        : fabricationGearSpecForPitchRadius(Math.abs(finiteGraphPartValue(node)) / SCENE_PX_PER_MM);
+};
+
+const ringGearSpecForGraphNode = (graph: MechanismGraph, node: MechanismGraphNode) =>
+    graphRequiresExactCatalogParts(graph)
+        ? exactSceneLengthMatches(node.value, FABRICATION_RING_GEAR_SPEC.pitchRadiusMm)
+            ? FABRICATION_RING_GEAR_SPEC
+            : undefined
+        : fabricationRingGearSpecForPitchRadius(Math.abs(finiteGraphPartValue(node)) / SCENE_PX_PER_MM);
 
 const graphPartLabelForNode = (node: MechanismGraphNode, graph: MechanismGraph) => {
     const { source } = graph;
     if (node.role === 'ring-gear') {
-        const ringLabel = fabricationRingGearSpecForPitchRadius(Math.abs(finiteGraphPartValue(node)) / SCENE_PX_PER_MM).label;
+        const ringLabel = ringGearSpecForGraphNode(graph, node)?.label ?? node.label;
         return source !== 'family-definition' ? node.label || ringLabel : ringLabel;
     }
     if (node.role === 'gear') {
-        const gearLabel = graphGearSpecForNode(graph, node).label;
+        const gearLabel = graphGearSpecForNode(graph, node)?.label ?? node.label;
         if (source !== 'family-definition') return node.label || gearLabel;
         const idlerMatch = /^Idler gear\s*(\d+)$/i.exec(node.label);
         if (idlerMatch) return `Idler ${gearLabel} ${idlerMatch[1]}`;
@@ -157,12 +181,12 @@ const graphPartLabelForNode = (node: MechanismGraphNode, graph: MechanismGraph) 
         return roleLabel ? `${roleLabel} ${gearLabel}` : gearLabel;
     }
     if (node.role === 'link') {
-        const holeLabel = fabricationPartDisplayLabel(linkageSpecForGraphNode(graph, node).label);
+        const holeLabel = fabricationPartDisplayLabel(linkageSpecForGraphNode(graph, node)?.label ?? node.label);
         if (source !== 'family-definition') return node.label || holeLabel;
         const roleLabel = node.label.replace(/\blink\b/i, '').trim();
         return roleLabel ? `${roleLabel} ${holeLabel}` : holeLabel;
     }
-    if (node.role === 'rigid-part') return node.label || fabricationPartDisplayLabel(linkageSpecForGraphNode(graph, node).label);
+    if (node.role === 'rigid-part') return node.label || fabricationPartDisplayLabel(linkageSpecForGraphNode(graph, node)?.label ?? node.label);
     return node.label;
 };
 
@@ -170,12 +194,17 @@ const graphPartKeyForNode = (node: MechanismGraphNode, role: FabricationStackLay
     if (node.id === 'rack') return 'racks:rack';
     const selected = selectedPhysicalConnectionForGraphNode(graph, node);
     if (selected) return connectionSelectionPartKey(selected.role, selected.selection);
-    if (node.role === 'link' || node.role === 'rigid-part') return `linkages:${linkageSpecForGraphNode(graph, node).key}`;
+    if (node.role === 'link' || node.role === 'rigid-part') {
+        const spec = linkageSpecForGraphNode(graph, node);
+        return spec ? `linkages:${spec.key}` : `linkages:unapproved`;
+    }
     if (node.role === 'ring-gear') {
-        return `ring_gears:${fabricationRingGearSpecForPitchRadius(Math.abs(finiteGraphPartValue(node)) / SCENE_PX_PER_MM).key}`;
+        const spec = ringGearSpecForGraphNode(graph, node);
+        return spec ? `ring_gears:${spec.key}` : 'ring_gears:unapproved';
     }
     if (node.role === 'gear') {
-        return `gears:${graphGearSpecForNode(graph, node).key}`;
+        const spec = graphGearSpecForNode(graph, node);
+        return spec ? `gears:${spec.key}` : 'gears:unapproved';
     }
     return `${role}s:${node.id}`;
 };
@@ -239,6 +268,60 @@ const requiredPartsFromAssemblySteps = (assemblySteps: FabricationRecipe['assemb
         });
     }));
     return [...counts.values()].filter(part => part.quantity > 0);
+};
+
+const catalogSelectionRolesForGraph = (graph: MechanismGraph) => {
+    if (!graph.mechanismType) return [];
+    return connectionSelectionRolesForMechanism(graph.mechanismType).filter(role =>
+        role.startsWith('4bar.')
+        || role.startsWith('gear')
+        || role.startsWith('planetary_gear.')
+        || role === 'piston.crank-pin'
+        || role === 'piston.rod-slider-pin'
+    );
+};
+
+const exactCatalogValidationErrors = (graph: MechanismGraph): string[] => {
+    if (!graphRequiresExactCatalogParts(graph)) return [];
+    const errors = new Set<string>();
+    const physicalConnections = graph.connectionSelectionSummary?.physicalConnections ?? [];
+    catalogSelectionRolesForGraph(graph).forEach(role => {
+        if (physicalConnections.some(connection => connection.role === role)) return;
+        errors.add(role.startsWith('gear') ? 'Fix: approved gear required' : 'Fix: approved linkage required');
+    });
+    graph.nodes.filter(graphNodeIsFabricatedPart).forEach(node => {
+        if (node.role === 'link' || node.role === 'rigid-part') {
+            const connections = physicalConnectionsForGraphNode(graph, node);
+            const validSelection = connections.length > 0
+                ? connections.every(connection => {
+                    const selection = connection.selection;
+                    if (selection.kind !== 'linkage-hole') return false;
+                    return FABRICATION_LINKAGE_SPECS.some(spec => spec.key === selection.linkageKey);
+                })
+                : Boolean(linkageSpecForGraphNode(graph, node));
+            if (!validSelection) errors.add('Fix: approved linkage required');
+            return;
+        }
+        if (node.role === 'gear') {
+            const connections = physicalConnectionsForGraphNode(graph, node);
+            const validSelection = connections.length > 0
+                ? connections.every(connection => {
+                    if (connection.selection.kind !== 'gear-attachment-hole') return false;
+                    const spec = FABRICATION_GEAR_SPECS.find(candidate =>
+                        connection.selection.kind === 'gear-attachment-hole'
+                        && candidate.key === connection.selection.gearKey
+                    );
+                    return Boolean(spec && exactSceneLengthMatches(node.value, spec.pitchRadiusMm));
+                })
+                : FABRICATION_GEAR_SPECS.some(spec => exactSceneLengthMatches(node.value, spec.pitchRadiusMm));
+            if (!validSelection) errors.add('Fix: approved gear required');
+            return;
+        }
+        if (node.role === 'ring-gear' && !ringGearSpecForGraphNode(graph, node)) {
+            errors.add('Fix: approved gear required');
+        }
+    });
+    return [...errors];
 };
 
 type AssemblyStackItem = NonNullable<FabricationRecipe['assemblySteps'][number]['stack']>[number];
@@ -584,6 +667,15 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
             buildable: false,
             blocker: 'Graph invalid',
             renderPlan: graphRenderPlan(graph, [], validationErrors)
+        };
+    }
+    const exactPartErrors = exactCatalogValidationErrors(graph);
+    if (exactPartErrors.length) {
+        return {
+            recipeCompilerSource: 'compileGraphFabricationRecipe',
+            buildable: false,
+            blocker: exactPartErrors[0],
+            renderPlan: graphRenderPlan(graph, [], exactPartErrors)
         };
     }
     const nodeById = new Map(graph.nodes.map(node => [node.id, node]));
