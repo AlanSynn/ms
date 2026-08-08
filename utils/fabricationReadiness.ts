@@ -93,7 +93,6 @@ export const isSoftReadinessBlocker = (
   const normalized = normalizeReadinessBlocker(diagnostic);
   if (!normalized) return false;
   return [
-    /^Fit inside board\.?$/i,
     /^Fit mechanism parts\.?$/i,
     /^Motion may jam\./i,
     /^No full motion\./i,

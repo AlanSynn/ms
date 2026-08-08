@@ -106,8 +106,9 @@ export const makeFabricationBoardTemplateSvg = (options: BoardTemplateOptions = 
   const sideCount = Math.max(metadata.rows, metadata.columns);
   const boardSizeMm = metadata.pitchMm * Math.max(1, sideCount - 1);
   const origin = 15;
+  const outerInset = metadata.pitchMm / 2;
   const labelMargin = 7;
-  const widthMm = boardSizeMm + origin + 10;
+  const widthMm = boardSizeMm + origin + outerInset;
   const heightMm = widthMm;
   const step = boardSizeMm / Math.max(1, sideCount - 1);
   const holeRadius = metadata.holeDiameterMm / 2;
@@ -123,8 +124,6 @@ export const makeFabricationBoardTemplateSvg = (options: BoardTemplateOptions = 
   const labelsRows: string[] = [];
   const labelCols: string[] = [];
   const holeClass = 'drill board-hole';
-  const outerInset = 5;
-
   rectElements.push(
     `<rect x="${origin - outerInset}" y="${origin - outerInset}" width="${formatNumber(boardSizeMm + outerInset * 2)}" height="${formatNumber(boardSizeMm + outerInset * 2)}" class="score board-outline"/>`
   );

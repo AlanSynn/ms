@@ -20,7 +20,7 @@
     </style>
   </defs>
   <g id="layer-board-grid" class="board-grid">
-  <rect x="10" y="10" width="290" height="290" class="score board-outline"/>
+  <rect x="5" y="5" width="300" height="300" class="score board-outline"/>
   <text x="15" y="8" class="coord-label" text-anchor="middle" data-axis="horizontal" data-index="1" data-label="A">A</text>
   <text x="35" y="8" class="coord-label" text-anchor="middle" data-axis="horizontal" data-index="2" data-label="B">B</text>
   <text x="55" y="8" class="coord-label" text-anchor="middle" data-axis="horizontal" data-index="3" data-label="C">C</text>

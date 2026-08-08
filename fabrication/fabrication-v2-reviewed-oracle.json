@@ -2,14 +2,18 @@
   "schema_version": 2,
   "baseline_kind": "reviewed-source-delta",
   "signature_format": "svg-contour-sha256-v1",
-  "reviewed_at": "2026-07-14T10:07:43.912Z",
-  "review_reason": "V2 physical inventory adds the three-hole gravity follower, restores the approved two-pitch cam guide, and updates active cam/planetary assembly contours; the Python v1 oracle remains frozen.",
+  "reviewed_at": "2026-08-08T15:11:00.000Z",
+  "review_reason": "V2 physical inventory preserves the reviewed cam/planetary contours and updates the main board to a 300mm 15x15 physical boundary; the Python v1 oracle remains frozen.",
   "base_oracle": "fabrication-python-oracle.json",
   "managed_file_additions": [
     "cam_modules/gravity-follower-module-v2.svg"
   ],
   "managed_file_removals": [],
   "files": {
+    "board-final.svg": {
+      "source_svg_sha256": "9d0202b80395c555be87e0abb91ff10910d3c4ffdd580484e49c6368baa33568",
+      "contour_sha256": "4319a2d0b458a2d86692c3feedcdc3eb3534c799e69032a8b0494b6c5f41edab"
+    },
     "assembly/02-cam-follower-basic.svg": {
       "source_svg_sha256": "293597f2cf5d22f7e337308b1bd6999f3bcb3605399f3e3096c172cdda2b3a8c",
       "contour_sha256": "192691307a886e263f77b4532a5661f7570e6ed59137678d92fcf8a873984b11"

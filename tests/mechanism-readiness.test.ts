@@ -34,6 +34,7 @@ const projectWith = (...mechanisms: MechanismConfig[]): ProjectState => {
       ...project.settings,
       physicalKit: {
         ...project.settings.physicalKit,
+        boardCells: 41,
         sheetWidthMm: 1_000,
         sheetHeightMm: 1_000,
       },

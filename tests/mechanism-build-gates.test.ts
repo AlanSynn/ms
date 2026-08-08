@@ -32,6 +32,7 @@ const projectWith = (mechanism: MechanismConfig): ProjectState => {
       ...project.settings,
       physicalKit: {
         ...project.settings.physicalKit,
+        boardCells: 41,
         sheetWidthMm: 1_000,
         sheetHeightMm: 1_000,
       },
@@ -151,19 +152,18 @@ for (const project of blockedProjects) {
 
 {
   const readiness = projectMechanismReadiness(softBlockedProject);
-  assert.equal(readiness.status, 'blocked', 'soft-blocked project remains blocked');
-  assert(readiness.blockers.length > 0, 'soft blocked project has explicit blockers');
-  assert(readiness.blockers.every(isSoftReadinessBlocker), 'soft blockers are all soft-ready');
+  assert.equal(readiness.status, 'blocked', 'off-board project remains blocked');
+  assert(readiness.blockers.includes('Fit inside board.'), 'off-board project exposes the board-fit blocker');
+  assert(readiness.blockers.some(blocker => !isSoftReadinessBlocker(blocker)), 'board fit cannot be softened');
   const validation = validateForFabrication(softBlockedProject, {
     allowSoftReadinessBlockers: true,
   });
-  assert.equal(validation.errors.length, 0, 'soft blocker project validates as non-error when allowed');
-  assert.equal(validation.warnings.length > 0, true, 'soft blocker project reports warnings');
-  assert.doesNotThrow(
+  assert(validation.errors.includes('Fit inside board.'), 'board fit remains a fabrication error when soft blockers are allowed');
+  assert.throws(
     () => createFabricationPackage(softBlockedProject, {
       allowSoftReadinessBlockers: true,
     }),
-    'soft blocker project can create a package',
+    'board fit cannot create a package through the soft-blocker path',
   );
 
   for (const target of ['blueprint', 'assembly'] as AppStage[]) {
@@ -177,13 +177,13 @@ for (const project of blockedProjects) {
       setCommandStatus: () => {},
       stageLabel: value => value,
     });
-    assert.equal(gate.ok, true, `soft blockers can open ${target}`);
-    assert.equal(stage, target, `${target} is reachable with soft blockers`);
-    assert.equal(dispatches.length, 0, `${target} does not emit recovery processing on soft blockers`);
+    assert.equal(gate.ok, false, `board fit cannot open ${target}`);
+    assert.equal(stage, 'design', `${target} returns to Design for board recovery`);
+    assert.equal(dispatches[0]?.type, 'set_processing', `${target} reports board recovery processing`);
   }
 
   const status = workflowStatusFor('blueprint', 'Blueprint', softBlockedProject);
-  assert.equal(status.nextAction, 'Make sheets', 'workflow status allows make sheets for soft blockers');
+  assert.equal(status.nextAction, 'Fix', 'workflow status blocks sheets for off-board geometry');
 }
 
 for (const target of ['blueprint', 'assembly'] as AppStage[]) {

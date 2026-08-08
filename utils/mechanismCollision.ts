@@ -1,8 +1,12 @@
 import type { MechanismConfig, PhysicalKitSettings, Point } from '../types';
-import { defaultPhysicalKit, sceneBoundsForSheet } from './coordinates';
-import { synchronizedMechanismSafetyPhaseSchedule } from './kinematics';
+import {
+    defaultPhysicalKit,
+    sceneBoundsForBoard,
+    sceneBoundsForSheet
+} from './coordinates';
+import { mechanismSafetyPhaseSchedule, synchronizedMechanismSafetyPhaseSchedule } from './kinematics';
 import { FABRICATION_Z_EPSILON_MM } from './mechanismFabricationZStack';
-import { compileMechanismRenderPlan } from './mechanismCompiler';
+import { compileMechanismGraphFabrication, compileMechanismRenderPlan } from './mechanismCompiler';
 import {
     buildMechanismPhysicalEnvelopeDescriptors,
     type MechanismPhysicalEnvelopeDescriptor
@@ -157,10 +161,53 @@ export const mechanismEnvelopeWithinSheet = (envelope: Envelope, kit: PhysicalKi
     return boxCorners(envelope).every(point => point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY);
 };
 
+export const mechanismEnvelopeWithinBoard = (envelope: Envelope, kit: PhysicalKitSettings): boolean => {
+    const board = sceneBoundsForBoard(kit);
+    const minX = board.x;
+    const maxX = board.x + board.width;
+    const minY = board.y;
+    const maxY = board.y + board.height;
+    if (envelope.kind === 'circle') {
+        return envelope.x - envelope.radius >= minX && envelope.x + envelope.radius <= maxX
+            && envelope.y - envelope.radius >= minY && envelope.y + envelope.radius <= maxY;
+    }
+    if (envelope.kind === 'capsule') {
+        return capsuleSegment(envelope).every(point =>
+            point.x - envelope.radius >= minX && point.x + envelope.radius <= maxX
+            && point.y - envelope.radius >= minY && point.y + envelope.radius <= maxY
+        );
+    }
+    return boxCorners(envelope).every(point =>
+        point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY
+    );
+};
+
 export const mechanismDescriptorWithinSheet = (
     descriptor: MechanismPhysicalEnvelopeDescriptor,
     kit: PhysicalKitSettings
 ) => mechanismEnvelopeWithinSheet(descriptor.envelope, kit);
+
+export const mechanismDescriptorWithinBoard = (
+    descriptor: MechanismPhysicalEnvelopeDescriptor,
+    kit: PhysicalKitSettings
+) => mechanismEnvelopeWithinBoard(descriptor.envelope, kit);
+
+export const mechanismFitsFabricationBoard = (
+    mechanism: MechanismConfig,
+    kit: PhysicalKitSettings
+) => {
+    const compiled = compileMechanismGraphFabrication(mechanism, kit);
+    if (!compiled.buildable || compiled.renderPlan.validationErrors.length) return false;
+    const descriptors = buildMechanismPhysicalEnvelopeDescriptors(
+        mechanism,
+        undefined,
+        compiled.renderPlan,
+        kit
+    );
+    return descriptors.length > 0
+        && new Set(descriptors.map(descriptor => descriptor.phaseIndex)).size === mechanismSafetyPhaseSchedule(mechanism.type).length
+        && descriptors.every(descriptor => mechanismDescriptorWithinBoard(descriptor, kit));
+};
 
 export const mechanismDescriptorsCollide = (
     first: MechanismPhysicalEnvelopeDescriptor,

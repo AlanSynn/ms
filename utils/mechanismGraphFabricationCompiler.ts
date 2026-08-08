@@ -1,5 +1,5 @@
 import type { AssemblyStepStackItem, FabricationPartRequirement, FabricationRecipe, PhysicalKitSettings, Point } from '../types';
-import { boardToScene, defaultPhysicalKit, sceneToBoardRaw, SCENE_PX_PER_MM } from './coordinates';
+import { boardToScene, defaultPhysicalKit, sceneBoundsForBoard, sceneToBoardRaw, SCENE_PX_PER_MM } from './coordinates';
 import { physicalTolerance } from './fabricationReadiness';
 import {
     FABRICATION_GEAR_SPECS,
@@ -713,15 +713,15 @@ export const compileGraphFabricationRecipe = (graph: MechanismGraph, kit = defau
             return point && Number.isFinite(point.x) && Number.isFinite(point.y);
         })
     );
-    const boardExtent = Math.floor(kit.boardCells / 2) * kit.gridPitchMm * SCENE_PX_PER_MM;
+    const boardBounds = sceneBoundsForBoard(kit);
     const footprintConstrainedNodes = fabricatedMovingPartNodes.filter(node => node.role === 'cam' || node.role === 'guide');
     const fabricatedMovingPartFootprintsFit = footprintConstrainedNodes.every(node => {
         if (!node.position) return false;
         const radius = footprintRadiusForNode(node);
-        return node.position.x - radius >= -boardExtent
-            && node.position.x + radius <= boardExtent
-            && node.position.y - radius >= -boardExtent
-            && node.position.y + radius <= boardExtent;
+        return node.position.x - radius >= boardBounds.x
+            && node.position.x + radius <= boardBounds.x + boardBounds.width
+            && node.position.y - radius >= boardBounds.y
+            && node.position.y + radius <= boardBounds.y + boardBounds.height;
     });
     if (!primaryAnchor || !boardMountedNodesArePlaced || !fabricatedBoardConstraintNodesArePlaced || !fabricatedMovingPartNodesArePlaced || !linkConstraintEndpointsArePlaced || !hasFabricatedMovingPart) {
         const offGridBoardNodes = boardMountedNodes

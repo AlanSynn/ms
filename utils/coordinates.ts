@@ -98,6 +98,17 @@ export const boardToScene = (col: number, row: number, kit: PhysicalKitSettings)
     };
 };
 
+export const sceneBoundsForBoard = (kit: PhysicalKitSettings): Bounds => {
+    const first = boardToScene(0, 0, kit);
+    const last = boardToScene(kit.boardCells - 1, kit.boardCells - 1, kit);
+    const edge = (kit.gridPitchMm * SCENE_PX_PER_MM) / 2;
+    const minX = Math.min(first.x, last.x) - edge;
+    const maxX = Math.max(first.x, last.x) + edge;
+    const minY = Math.min(first.y, last.y) - edge;
+    const maxY = Math.max(first.y, last.y) + edge;
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+};
+
 export const boardGridLines = (kit: PhysicalKitSettings) => {
     const lines: Array<{ key: string; a: Point; b: Point }> = [];
     for (let col = 0; col < kit.boardCells; col++) {

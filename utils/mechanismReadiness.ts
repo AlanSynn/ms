@@ -3,6 +3,7 @@ import { validateFabricationStack } from './fabricationStackModel';
 import { compactStudentActionForFabricationDiagnostic } from './fabricationReadiness';
 import { mechanismSafetyPhaseSchedule } from './kinematics';
 import {
+  mechanismDescriptorWithinBoard,
   mechanismDescriptorWithinSheet,
   synchronizedMechanismCollisionOracle,
 } from './mechanismCollision';
@@ -117,6 +118,9 @@ export const mechanismReadiness = (
     );
     const coveredPhases = new Set(descriptors.map(descriptor => descriptor.phaseIndex));
     if (!descriptors.length || coveredPhases.size !== phases.length) blockers.push('Physical envelope incomplete');
+    if (descriptors.some(descriptor => !mechanismDescriptorWithinBoard(descriptor, project.settings.physicalKit))) {
+      blockers.push('Physical envelope outside board');
+    }
     if (descriptors.some(descriptor => !mechanismDescriptorWithinSheet(descriptor, project.settings.physicalKit))) {
       blockers.push('Physical envelope outside sheet');
     }
