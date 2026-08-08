@@ -718,6 +718,10 @@ export const fitMechanismToTargetPathResult = (
         })
       : undefined;
   };
+  const fourBarResult = mechanism.type === "4bar"
+    ? fitFourBarKitMechanismToPathResult(project, mechanism, path)
+    : undefined;
+  if (fourBarResult?.accepted) return fourBarResult;
   const unchanged = resolveFitCandidate(mechanismWithGeneratedPath(
     snapMechanismAnchor(
       normalizeAuthoredMechanismToFabricationSet(
@@ -728,9 +732,6 @@ export const fitMechanismToTargetPathResult = (
     ),
     { kit: project.settings.physicalKit },
   ));
-  const fourBarResult = mechanism.type === "4bar"
-    ? fitFourBarKitMechanismToPathResult(project, mechanism, path)
-    : undefined;
   const noKitFit = (error: unknown) => error instanceof Error && error.message === "No kit fit";
   let fittedCandidate: MechanismConfig | undefined;
   try {

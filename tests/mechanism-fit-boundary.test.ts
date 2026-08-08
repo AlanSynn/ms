@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import type { MechanismConfig } from '../types';
 import {
   completeAutomaticFitCandidate,
@@ -57,4 +58,13 @@ assert.equal(
   'bounded Fit repeats the same bounded validation work',
 );
 
+const recommendationsSource = readFileSync(
+  new URL('../utils/mechanismRecommendations.ts', import.meta.url),
+  'utf8',
+);
+assert.match(
+  recommendationsSource,
+  /const fourBarResult = mechanism\.type === "4bar"[\s\S]*?if \(fourBarResult\?\.accepted\) return fourBarResult;[\s\S]*?const unchanged = resolveFitCandidate/,
+  'accepted four-bar Fits return before generic fallback resolution performs avoidable work',
+);
 console.log('mechanism Fit boundary contracts passed');
