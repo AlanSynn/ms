@@ -230,6 +230,17 @@ for (const mechanism of [
   assert(unsafe.length > 0, `${mechanism.type} fixture covers a known unsafe physical choice`);
   assert(
     unsafe.every((candidate) =>
+      resolveMechanismPhysicalSelectionAttempt(
+        mechanism,
+        candidate.role,
+        candidate.selection,
+        defaultKit,
+      ).status === "rejected"
+    ),
+    `${mechanism.type} raw-unsafe physical choices are rejected before resolver snapping`,
+  );
+  assert(
+    unsafe.every((candidate) =>
       !safeCandidates.some((safe) => safe.identity === candidate.identity)
     ),
     `${mechanism.type} shared candidates do not advertise unsafe closure/clearance choices`,

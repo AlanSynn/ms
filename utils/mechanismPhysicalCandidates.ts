@@ -21,7 +21,10 @@ import {
   type ConnectionSelectionSceneState,
   type MechanismConnectionHoleCandidate,
 } from "./mechanismConnectionSelections";
-import { resolveMechanismCandidateCommit } from "./mechanismEditAuthority";
+import {
+  mechanismEditIsSafe,
+  resolveMechanismCandidateCommit,
+} from "./mechanismEditAuthority";
 import { compileMechanismGraphFabrication } from "./mechanismCompiler";
 
 export type MechanismPhysicalSelectionAttempt =
@@ -95,6 +98,9 @@ export const resolveMechanismPhysicalSelectionAttempt = (
     return { status: "rejected", blocker: MECHANISM_BINDING_BLOCKER };
   }
   const candidate = { ...prospective, ...updates };
+  if (!mechanismEditIsSafe(candidate, kit)) {
+    return { status: "rejected", blocker: MECHANISM_BINDING_BLOCKER };
+  }
   const committed = resolveMechanismCandidateCommit(
     mechanism,
     candidate,
