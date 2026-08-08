@@ -5,6 +5,7 @@ import { generateMechanismPointTraces } from './kinematics';
 import {
   connectionSelectionAccepted,
   normalizeAuthoredMechanismToFabricationSet,
+  normalizeMechanismWithFabricationSelections,
   resolveFourBarConnectionSelections,
 } from './mechanismConnectionSelections';
 import {
@@ -16,9 +17,13 @@ import { normalizeMechanismToFabricationSet } from './mechanismReference';
 import { mechanismWithGeneratedPath } from './mechanismGeneratedPath';
 import { pathOwnedTargetFields } from './pathTargets';
 import {
-  resolveFabricationCandidate,
+  mechanismEditIsSafe,
   resolveMechanismEditAttempt,
 } from './mechanismEditAuthority';
+import {
+  mechanismUsesExactFabricationCombination,
+  resolveFabricationCombination,
+} from './mechanismFabricationCombinations';
 
 const pathMetrics = (path: ProjectMotionPath) => {
   const length =
@@ -35,9 +40,64 @@ const pathMetrics = (path: ProjectMotionPath) => {
 export type AutomaticFitResult = {
   mechanism: MechanismConfig;
   accepted: boolean;
+  snapped: boolean;
+  summary?: string;
   readiness: MechanismReadinessResult;
   blockers: string[];
   recoveryCandidates?: MechanismRecoveryCandidates;
+};
+
+export const FOUR_BAR_FIT_VALIDATION_LIMIT = 12;
+const FOUR_BAR_FIT_DISCOVERY_LIMIT = 48;
+const FOUR_BAR_FIT_ANCHOR_LIMIT = 18;
+const FOUR_BAR_FIT_LENGTH_LIMIT = 3;
+const FOUR_BAR_FIT_GROUND_LIMIT = 5;
+const FOUR_BAR_FIT_COARSE_TRACE_RESOLUTION = 12;
+
+export type FourBarFitCandidateValidator = (
+  project: ProjectState,
+  prior: MechanismConfig,
+  candidate: MechanismConfig,
+) => AutomaticFitResult;
+
+export type FourBarFitOptions = {
+  validateCandidate?: FourBarFitCandidateValidator;
+};
+
+const automaticFitSnapOutcome = (
+  prior: MechanismConfig,
+  acceptedCandidate: MechanismConfig,
+  kit: ProjectState['settings']['physicalKit'],
+) => {
+  const priorResolution = resolveFabricationCombination(prior, prior, kit, 'scalar');
+  const acceptedResolution = resolveFabricationCombination(
+    acceptedCandidate,
+    acceptedCandidate,
+    kit,
+    'scalar',
+  );
+  const snapped = priorResolution.status === 'accepted' &&
+    priorResolution.snapped &&
+    acceptedResolution.status === 'accepted' &&
+    !acceptedResolution.snapped;
+  return {
+    snapped,
+    ...(snapped && acceptedResolution.status === 'accepted' && acceptedResolution.summary
+      ? { summary: acceptedResolution.summary }
+      : {}),
+  };
+};
+
+export const withAutomaticFitSnapOutcome = (
+  project: ProjectState,
+  prior: MechanismConfig,
+  result: AutomaticFitResult,
+): AutomaticFitResult => {
+  if (!result.accepted) return { ...result, snapped: false };
+  return {
+    ...result,
+    ...automaticFitSnapOutcome(prior, result.mechanism, project.settings.physicalKit),
+  };
 };
 
 export const completeAutomaticFitCandidate = (
@@ -50,6 +110,7 @@ export const completeAutomaticFitCandidate = (
     return {
       mechanism: prior,
       accepted: false,
+      snapped: false,
       readiness: mechanismReadiness(project, prior),
       blockers: [attempt.blocker],
       recoveryCandidates: attempt.recoveryCandidates,
@@ -72,6 +133,7 @@ export const completeAutomaticFitCandidate = (
   return {
     mechanism: accepted ? acceptedCandidate : prior,
     accepted,
+    snapped: false,
     readiness,
     blockers: accepted
       ? readiness.blockers
@@ -205,6 +267,62 @@ const boardAnchorCandidatesForFit = (
   return [...anchors.values()];
 };
 
+const nearestValues = (values: readonly number[], requested: number, limit: number) =>
+  [...values]
+    .sort((left, right) => Math.abs(left - requested) - Math.abs(right - requested) || left - right)
+    .slice(0, limit);
+
+const nearestFitAnchors = (
+  anchors: readonly Point[],
+  mechanism: MechanismConfig,
+  targetPoints: readonly Point[],
+) => {
+  const anchor = {
+    x: Number.isFinite(mechanism.anchorX) ? mechanism.anchorX ?? 0 : 0,
+    y: Number.isFinite(mechanism.anchorY) ? mechanism.anchorY ?? 0 : 0,
+  };
+  const target = targetPoints.reduce(
+    (center, point) => ({ x: center.x + point.x / targetPoints.length, y: center.y + point.y / targetPoints.length }),
+    { x: 0, y: 0 },
+  );
+  return [...anchors]
+    .sort((left, right) => {
+      const leftDistance = Math.min(
+        Math.hypot(left.x - anchor.x, left.y - anchor.y),
+        Math.hypot(left.x - target.x, left.y - target.y),
+      );
+      const rightDistance = Math.min(
+        Math.hypot(right.x - anchor.x, right.y - anchor.y),
+        Math.hypot(right.x - target.x, right.y - target.y),
+      );
+      return leftDistance - rightDistance || left.y - right.y || left.x - right.x;
+    })
+    .slice(0, FOUR_BAR_FIT_ANCHOR_LIMIT);
+};
+
+const fourBarFitSummary = (mechanism: MechanismConfig) => {
+  const coupler = FABRICATION_LINKAGE_SPECS.find(spec =>
+    spec.holeCentersMm.length >= 4 &&
+    Math.abs(spec.lengthMm * SCENE_PX_PER_MM - Math.abs(mechanism.couplerLength)) <= 1e-6,
+  );
+  return coupler ? `Snapped: ${coupler.holeCentersMm.length}-hole` : undefined;
+};
+
+const withFourBarFitSnapOutcome = (
+  project: ProjectState,
+  prior: MechanismConfig,
+  result: AutomaticFitResult,
+): AutomaticFitResult => {
+  if (!result.accepted) return { ...result, snapped: false };
+  const snapped = !mechanismUsesExactFabricationCombination(prior, project.settings.physicalKit);
+  const summary = snapped ? fourBarFitSummary(result.mechanism) : undefined;
+  return {
+    ...result,
+    snapped,
+    ...(summary ? { summary } : {}),
+  };
+};
+
 const isLikelyFullRotationFourBar = (
   groundLength: number,
   crankLength: number,
@@ -233,6 +351,7 @@ export const fitFourBarKitMechanismToPathResult = (
   project: ProjectState,
   mechanism: MechanismConfig,
   path: ProjectMotionPath,
+  options: FourBarFitOptions = {},
 ): AutomaticFitResult => {
   const targetPoints = resamplePolyline(pathPointsForFit(path), 32);
   if (targetPoints.length < 3) {
@@ -240,6 +359,7 @@ export const fitFourBarKitMechanismToPathResult = (
     return {
       mechanism,
       accepted: false,
+      snapped: false,
       readiness,
       blockers: ['Draw a path.'],
     };
@@ -248,7 +368,11 @@ export const fitFourBarKitMechanismToPathResult = (
   const kitLengths = FABRICATION_LINKAGE_SPECS.map(
     (spec) => spec.lengthMm * SCENE_PX_PER_MM,
   );
-  const anchors = boardAnchorCandidatesForFit(project, path, mechanism);
+  const anchors = nearestFitAnchors(
+    boardAnchorCandidatesForFit(project, path, mechanism),
+    mechanism,
+    targetPoints,
+  );
   const angles = [0, 45, 90, 135, 180, 225, 270, 315];
   const pitch = project.settings.physicalKit.gridPitchMm * SCENE_PX_PER_MM;
   const maxSpan = project.settings.physicalKit.boardCells - 1;
@@ -269,10 +393,10 @@ export const fitFourBarKitMechanismToPathResult = (
   );
   const crankLengths = inputAccepted && resolvedConnections.inputJoint
     ? [resolvedConnections.inputJoint.length]
-    : kitLengths;
+    : nearestValues(kitLengths, mechanism.crankLength, FOUR_BAR_FIT_LENGTH_LIMIT);
   const rockerLengths = outputAccepted && resolvedConnections.outputJoint
     ? [resolvedConnections.outputJoint.length]
-    : kitLengths;
+    : nearestValues(kitLengths, mechanism.rockerLength, FOUR_BAR_FIT_LENGTH_LIMIT);
   const hasAuthoredBoundary =
     mechanism.connectionSelections !== undefined ||
     mechanism.connectionSelectionValidation !== undefined;
@@ -288,17 +412,25 @@ export const fitFourBarKitMechanismToPathResult = (
     mechanismCandidate: MechanismConfig,
     error: number,
   ) => {
-    if (top.length >= 12 && error >= top.at(-1)!.error) return;
+    if (top.length >= FOUR_BAR_FIT_DISCOVERY_LIMIT && error >= top.at(-1)!.error) return;
     top.push({ mechanism: mechanismCandidate, error });
     top.sort((a, b) => a.error - b.error);
-    if (top.length > 12) top.pop();
+    if (top.length > FOUR_BAR_FIT_DISCOVERY_LIMIT) top.pop();
   };
 
   for (const anchor of anchors) {
     for (const groundAngle of angles) {
-      for (const groundLength of groundLengthsForAngle(groundAngle)) {
+      for (const groundLength of nearestValues(
+        groundLengthsForAngle(groundAngle),
+        mechanism.groundLength,
+        FOUR_BAR_FIT_GROUND_LIMIT,
+      )) {
         for (const crankLength of crankLengths) {
-          for (const couplerLength of kitLengths) {
+          for (const couplerLength of nearestValues(
+            kitLengths,
+            mechanism.couplerLength,
+            FOUR_BAR_FIT_LENGTH_LIMIT,
+          )) {
             for (const rockerLength of rockerLengths) {
               if (
                 !isLikelyFullRotationFourBar(
@@ -337,45 +469,17 @@ export const fitFourBarKitMechanismToPathResult = (
                   source: 'optimized',
                   recommendation: 'Fit path',
                 };
-                const normalizedCandidate = hasAuthoredBoundary
-                  ? normalizeAuthoredMechanismToFabricationSet(authoredCandidate)
-                  : normalizeMechanismToFabricationSet(authoredCandidate);
-                const rawCandidate = { ...normalizedCandidate, groundLength };
-                const resolved = resolveFabricationCandidate(
-                  mechanism,
-                  rawCandidate,
+                const traces = generateMechanismPointTraces(
+                  authoredCandidate,
+                  FOUR_BAR_FIT_COARSE_TRACE_RESOLUTION,
                   project.settings.physicalKit,
-                  'fit',
-                  { candidateIsCatalogSnapped: true },
                 );
-                if (resolved.status !== 'accepted') continue;
-                const candidate = resolved.mechanism;
-                const traces = generateMechanismPointTraces(candidate, 36);
                 if (traces.percentValid < 0.98) continue;
                 const movingTraces = traces.traces.filter((trace) => trace.primary);
                 for (const trace of movingTraces) {
                   const tracePoints = resamplePolyline(trace.points, 32);
                   const error = pathFitError(tracePoints, targetPoints);
-                  const candidateWithGeneratedPath = mechanismWithGeneratedPath({
-                    ...candidate,
-                    warnings:
-                      error / fitScale > 0.5
-                        ? ['Closest kit fit. Try a smaller move if it misses.']
-                        : [],
-                  }, { kit: project.settings.physicalKit });
-                  if (
-                    motionReach &&
-                    candidateWithGeneratedPath.generatedPath?.some(
-                      (point) =>
-                        Math.hypot(
-                          point.x - motionReach.root.x,
-                          point.y - motionReach.root.y,
-                        ) >
-                        motionReach.reach + 1e-6,
-                    )
-                  )
-                    continue;
-                  rememberCandidate(candidateWithGeneratedPath, error);
+                  rememberCandidate(authoredCandidate, error);
                 }
               }
             }
@@ -384,16 +488,48 @@ export const fitFourBarKitMechanismToPathResult = (
       }
     }
   }
+  const ranked = top.flatMap(({ mechanism: candidate, error }) => {
+    const normalizedCandidate = hasAuthoredBoundary
+      ? normalizeAuthoredMechanismToFabricationSet(candidate)
+      : normalizeMechanismToFabricationSet(candidate);
+    const materialized = normalizeMechanismWithFabricationSelections(
+      { ...normalizedCandidate, groundLength: candidate.groundLength },
+      project.settings.physicalKit,
+    );
+    if (!mechanismEditIsSafe(materialized, project.settings.physicalKit)) return [];
+    const traces = generateMechanismPointTraces(materialized, 36, project.settings.physicalKit);
+    if (traces.percentValid < 0.98) return [];
+    const movingTrace = traces.traces.find(trace => trace.primary);
+    if (!movingTrace) return [];
+    return [{ mechanism: materialized, error: pathFitError(resamplePolyline(movingTrace.points, 32), targetPoints) + error * 1e-6 }];
+  }).sort((left, right) => left.error - right.error).slice(0, FOUR_BAR_FIT_VALIDATION_LIMIT);
   const rejected: AutomaticFitResult[] = [];
-  for (const candidate of top) {
-    const completed = completeAutomaticFitCandidate(project, mechanism, candidate.mechanism);
-    if (completed.accepted) return completed;
+  const validateCandidate = options.validateCandidate ?? completeAutomaticFitCandidate;
+  for (const candidate of ranked) {
+    const candidateWithGeneratedPath = mechanismWithGeneratedPath({
+      ...candidate.mechanism,
+      warnings:
+        candidate.error / fitScale > 0.5
+          ? ['Closest kit fit. Try a smaller move if it misses.']
+          : [],
+    }, { kit: project.settings.physicalKit });
+    if (
+      motionReach &&
+      candidateWithGeneratedPath.generatedPath?.some(
+        (point) =>
+          Math.hypot(point.x - motionReach.root.x, point.y - motionReach.root.y) >
+          motionReach.reach + 1e-6,
+      )
+    ) continue;
+    const completed = validateCandidate(project, mechanism, candidateWithGeneratedPath);
+    if (completed.accepted) return withFourBarFitSnapOutcome(project, mechanism, completed);
     rejected.push(completed);
   }
   const readiness = mechanismReadiness(project, mechanism);
   return {
     mechanism,
     accepted: false,
+    snapped: false,
     readiness,
     blockers: rejected.length
       ? [...new Set(rejected.flatMap(result => result.blockers))]

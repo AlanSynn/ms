@@ -571,11 +571,18 @@ const enumerateCandidates = (
 
 const effectiveCouplerChoice = (mechanism: MechanismConfig, minHoleCount = 4): LinkageChoice | undefined => {
   const choices = fullLinkageChoices(minHoleCount, abs(mechanism.couplerLength));
-  const selectedPart = mechanism.fabricationMetadata?.requiredParts?.find(part => part.part?.startsWith('linkages:'))?.part?.slice('linkages:'.length);
-  return choices.find(choice =>
-    Math.abs(choice.effectiveLength - abs(mechanism.couplerLength)) <= EPSILON
-      && (!selectedPart || choice.spec.key === selectedPart)
+  const choice = choices.find(candidate =>
+    Math.abs(candidate.effectiveLength - abs(mechanism.couplerLength)) <= EPSILON,
   );
+  if (!choice) return undefined;
+  const linkageParts = mechanism.fabricationMetadata?.requiredParts?.filter(part =>
+    part.part?.startsWith('linkages:'),
+  ) ?? [];
+  return !linkageParts.length || linkageParts.some(part =>
+    part.part === `linkages:${choice.spec.key}`,
+  )
+    ? choice
+    : undefined;
 };
 
 const exactGearSpec = (radius: number) => FABRICATION_GEAR_SPECS.find(spec => Math.abs(sceneLength(spec.pitchRadiusMm) - abs(radius)) <= EPSILON);

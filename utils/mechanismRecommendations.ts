@@ -216,13 +216,17 @@ export const fitRecommendedMechanismToSheet = (
     };
   };
 
-  const resolveSheetCandidate = (candidate: MechanismConfig) => {
+  const resolveSheetCandidate = (
+    candidate: MechanismConfig,
+    placementOnly = false,
+  ) => {
     if (!fabricationCombinationTypes.has(candidate.type)) return candidate;
     const result = resolveFabricationCandidate(
       mechanism,
       candidate,
       kit,
       "scalar",
+      placementOnly ? { candidateIsCatalogSnapped: true } : undefined,
     );
     return result.status === "accepted"
       ? mechanismWithGeneratedPath(result.mechanism, { kit })
@@ -232,7 +236,7 @@ export const fitRecommendedMechanismToSheet = (
     candidate: MechanismConfig,
     distance: number,
   ) => {
-    const resolved = resolveSheetCandidate(candidate);
+    const resolved = resolveSheetCandidate(candidate, true);
     if (!resolved) return;
     const candidateScore = score(resolved);
     if (
@@ -275,6 +279,7 @@ export const fitRecommendedMechanismToSheet = (
   if (!best) throw new Error("No kit fit");
   let bestScore = score(best);
   let bestDistance = 0;
+  const placementSeed = best;
   const isBoardSnapBack =
     Math.hypot(
       (seed.anchorX ?? 0) - previousSnapped.x,
@@ -286,7 +291,7 @@ export const fitRecommendedMechanismToSheet = (
     for (let row = 0; row < kit.boardCells; row += 1) {
       const anchor = boardToScene(col, row, kit);
       const candidate = snapMechanismAnchor(
-        { ...seed, anchorX: anchor.x, anchorY: anchor.y, sceneAnchor: anchor },
+        { ...placementSeed, anchorX: anchor.x, anchorY: anchor.y, sceneAnchor: anchor },
         project,
       );
       const distance = Math.hypot(anchor.x - seedAnchor.x, anchor.y - seedAnchor.y);
@@ -305,7 +310,7 @@ export const fitRecommendedMechanismToSheet = (
       considerCandidate(
         snapMechanismAnchor(
           {
-            ...seed,
+            ...placementSeed,
             anchorX: candidateAnchor.x,
             anchorY: candidateAnchor.y,
             sceneAnchor: candidateAnchor,
