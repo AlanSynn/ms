@@ -165,7 +165,7 @@ const definitionForLayer = (
     const holes = Array.from({ length: kit.boardCells * kit.boardCells }, (_, index) => freezeHole(
       `board-${index % kit.boardCells}-${Math.floor(index / kit.boardCells)}`,
       'mount',
-      { x: index % kit.boardCells * kit.gridPitchMm - offset, y: Math.floor(index / kit.boardCells) * kit.gridPitchMm - offset },
+      { x: index % kit.boardCells * kit.gridPitchMm - offset, y: offset - Math.floor(index / kit.boardCells) * kit.gridPitchMm },
       holeDiameter
     ));
     return freezeDefinition(layer.partKey, rectangle(boardSize, boardSize), holes);

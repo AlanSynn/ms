@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import type { MechanismType } from '../types';
+import { boardToScene, physicalKitPreset, SCENE_PX_PER_MM } from '../utils/coordinates';
 import { createDefaultMechanism } from '../utils/mechanismDefaults';
 import { compileMechanismPhysicalInstances, compileMechanismRenderPlan } from '../utils/mechanismCompiler';
 import type { MechanismPhysicalInstanceKind } from '../utils/mechanismPhysicalInstances';
@@ -91,6 +92,31 @@ const rack = compileMechanismPhysicalInstances(createDefaultMechanism('rack-pini
 const rackInstance = rack.instances.find(instance => instance.kind === 'rack');
 assert(rackInstance, 'rack-pinion inventories a distinct rack instance');
 assert(rackInstance.partKey.startsWith('racks:'), 'rack does not alias a guide part key');
+
+for (const profileKey of ['letter-12x12-2cm', 'letter-15x15-2cm'] as const) {
+  const kit = physicalKitPreset(profileKey);
+  const compiled = compileMechanismPhysicalInstances(
+    createDefaultMechanism('crank', `physical-base-parity-${kit.boardCells}`),
+    0,
+    kit
+  );
+  const baseInstance = compiled.instances.find(instance => instance.kind === 'base');
+  assert(baseInstance, `${profileKey} has a base instance`);
+  const baseDefinition = compiled.definitions.find(definition => definition.partKey === baseInstance.partKey);
+  assert(baseDefinition, `${profileKey} has a base definition`);
+
+  for (let row = 0; row < kit.boardCells; row += 1) {
+    for (let col = 0; col < kit.boardCells; col += 1) {
+      const hole = baseDefinition.holes.find(candidate => candidate.id === `board-${col}-${row}`);
+      assert(hole, `${profileKey} includes board-${col}-${row}`);
+      const scenePoint = boardToScene(col, row, kit);
+      assert.deepEqual(hole.centerMm, {
+        x: scenePoint.x / SCENE_PX_PER_MM,
+        y: scenePoint.y / SCENE_PX_PER_MM
+      }, `${profileKey} board-${col}-${row} matches boardToScene`);
+    }
+  }
+}
 
 assert.throws(
   () => compileMechanismPhysicalInstances(createDefaultMechanism('4bar', 'physical-invalid-phase'), Number.NaN),
