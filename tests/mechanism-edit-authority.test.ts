@@ -110,6 +110,26 @@ assert.equal(
   'active anchors must still satisfy the board-hole policy',
 );
 
+const explicitBoardAnchor = {
+  ...createDefaultMechanism('crank', 'explicit-board-anchor'),
+  anchorX: 0,
+  anchorY: 0,
+  sceneAnchor: { x: 0, y: 0 },
+  transform: { x: 0, y: 0, rotation: 0, scale: 1 },
+};
+const explicitBoardAnchorResult = resolveNewMechanismCandidateCommit(explicitBoardAnchor);
+assert.equal(explicitBoardAnchorResult.status, 'accepted');
+if (explicitBoardAnchorResult.status === 'accepted') {
+  assert.deepEqual(
+    {
+      x: explicitBoardAnchorResult.mechanism.anchorX,
+      y: explicitBoardAnchorResult.mechanism.anchorY,
+    },
+    { x: 0, y: 0 },
+    'a caller-provided board anchor remains unchanged when creating a mechanism',
+  );
+}
+
 const connected = resolveNewMechanismCandidateCommit(
   createDefaultMechanism('4bar', 'exact-connections'),
 );

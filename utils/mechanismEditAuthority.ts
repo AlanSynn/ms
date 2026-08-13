@@ -33,6 +33,7 @@ import {
   assessMechanismTargetBinding,
   MECHANISM_BINDING_BLOCKER,
 } from "./pathTargets";
+import { DEFAULT_MECHANISM_ANCHOR } from "./mechanismDefaults";
 
 export type MechanismParamMeta = {
   key: keyof MechanismConfig;
@@ -236,6 +237,10 @@ const snapNewMechanismAnchorToBoard = (
     snapped,
   };
 };
+
+const isFreshDefaultMechanismAnchor = (mechanism: MechanismConfig) =>
+  mechanism.anchorX === DEFAULT_MECHANISM_ANCHOR.x &&
+  mechanism.anchorY === DEFAULT_MECHANISM_ANCHOR.y;
 
 export const completeMechanismCandidateIsValid = (
   mechanism: MechanismConfig,
@@ -893,7 +898,9 @@ export const resolveNewMechanismCandidateCommit = (
   candidate: MechanismConfig,
   kit: PhysicalKitSettings = defaultPhysicalKit(),
 ): NewMechanismCandidateResult => {
-  const anchoredCandidate = snapNewMechanismAnchorToBoard(candidate, kit);
+  const anchoredCandidate = isFreshDefaultMechanismAnchor(candidate)
+    ? snapNewMechanismAnchorToBoard(candidate, kit)
+    : { mechanism: candidate, snapped: false };
   if (!MECHANISM_FEASIBILITY_AUTHORITY_KEYS.every((key) =>
     candidateValueIsFinite(anchoredCandidate.mechanism[key])
   )) return { status: "rejected", blocker: "Fix mechanism geometry" };

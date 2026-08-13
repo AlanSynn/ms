@@ -28,6 +28,7 @@ const DEFAULT_PLANETARY_PLANET_RADIUS = defaultGearRadiusByTeeth(
 );
 const DEFAULT_PLANETARY_CARRIER_RADIUS =
   DEFAULT_PLANETARY_SUN_RADIUS + DEFAULT_PLANETARY_PLANET_RADIUS;
+export const DEFAULT_MECHANISM_ANCHOR = { x: -120, y: -40 } as const;
 
 export const createDefaultMechanism = (
   type: MechanismConfig["type"] = "4bar",
@@ -50,10 +51,15 @@ export const createDefaultMechanism = (
         : type === "yoke" || type === "cam"
           ? "#f59e0b"
           : "#3b82f6",
-  anchorX: -120,
-  anchorY: -40,
-  transform: { x: -120, y: -40, rotation: 0, scale: 1 },
-  sceneAnchor: { x: -120, y: -40 },
+  anchorX: DEFAULT_MECHANISM_ANCHOR.x,
+  anchorY: DEFAULT_MECHANISM_ANCHOR.y,
+  transform: {
+    x: DEFAULT_MECHANISM_ANCHOR.x,
+    y: DEFAULT_MECHANISM_ANCHOR.y,
+    rotation: 0,
+    scale: 1,
+  },
+  sceneAnchor: { ...DEFAULT_MECHANISM_ANCHOR },
   activeVisualPartIds: [],
   groundAngle: type === "cam" || type === "rack-pinion" ? 90 : 0,
   groundLength:
