@@ -8,6 +8,7 @@ import type {
 import {
   boardToScene,
   defaultPhysicalKit,
+  sceneToBoard,
   sceneToBoardRaw,
 } from "./coordinates";
 import {
@@ -201,6 +202,40 @@ const boardPivotsAreDeclared = (
 ) => mechanismGraphForMechanism(mechanism, kit).nodes
   .filter((node) => node.role === "board-anchor")
   .every((node) => node.position !== undefined && pointIsDeclaredBoardHole(node.position, kit));
+
+const snapNewMechanismAnchorToBoard = (
+  mechanism: MechanismConfig,
+  kit: PhysicalKitSettings,
+) => {
+  const requested = {
+    x: Number.isFinite(mechanism.anchorX) ? mechanism.anchorX ?? 0 : 0,
+    y: Number.isFinite(mechanism.anchorY) ? mechanism.anchorY ?? 0 : 0,
+  };
+  const board = sceneToBoard(requested, kit);
+  const anchor = boardToScene(board.col, board.row, kit);
+  const snapped = Math.abs(anchor.x - requested.x) > 1e-4 ||
+    Math.abs(anchor.y - requested.y) > 1e-4;
+  if (!snapped) return { mechanism, snapped };
+  return {
+    mechanism: {
+      ...mechanism,
+      anchorX: anchor.x,
+      anchorY: anchor.y,
+      sceneAnchor: anchor,
+      transform: {
+        ...(mechanism.transform ?? {
+          x: requested.x,
+          y: requested.y,
+          rotation: mechanism.groundAngle ?? 0,
+          scale: 1,
+        }),
+        x: anchor.x,
+        y: anchor.y,
+      },
+    },
+    snapped,
+  };
+};
 
 export const completeMechanismCandidateIsValid = (
   mechanism: MechanismConfig,
@@ -858,16 +893,17 @@ export const resolveNewMechanismCandidateCommit = (
   candidate: MechanismConfig,
   kit: PhysicalKitSettings = defaultPhysicalKit(),
 ): NewMechanismCandidateResult => {
+  const anchoredCandidate = snapNewMechanismAnchorToBoard(candidate, kit);
   if (!MECHANISM_FEASIBILITY_AUTHORITY_KEYS.every((key) =>
-    candidateValueIsFinite(candidate[key])
+    candidateValueIsFinite(anchoredCandidate.mechanism[key])
   )) return { status: "rejected", blocker: "Fix mechanism geometry" };
   if (
-    Object.keys(candidate.connectionSelections ?? {}).length > 0 &&
-    !completeMechanismCandidateIsValid(candidate, kit)
+    Object.keys(anchoredCandidate.mechanism.connectionSelections ?? {}).length > 0 &&
+    !completeMechanismCandidateIsValid(anchoredCandidate.mechanism, kit)
   ) return { status: "rejected", blocker: "Fix mechanism geometry" };
   const resolution = resolveFabricationCandidate(
-    candidate,
-    candidate,
+    anchoredCandidate.mechanism,
+    anchoredCandidate.mechanism,
     kit,
     "scalar",
   );

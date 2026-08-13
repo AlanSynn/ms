@@ -18,6 +18,7 @@ import {
   mechanismMotionCompletes,
   mechanismParamIsPlacementRecoveryEditable,
   motionSafeParamRange,
+  resolveNewMechanismCandidateCommit,
   safeMechanismUpdate,
   shouldShowMechanismParam,
 } from '../utils/mechanismEditAuthority';
@@ -64,9 +65,17 @@ const acceptedScalarUpdate = (
 assert.equal(ALL_MECHANISM_TYPES.length, 12, 'control matrix covers all 12 mechanism families');
 assert.equal(new Set(ALL_MECHANISM_TYPES).size, 12, 'control matrix has no duplicate mechanism family');
 
+const safeMechanismForKit = (type: MechanismConfig['type'], id: string, kit: PhysicalKitSettings) => {
+  if (kit.boardCells % 2 !== 0) return createDefaultMechanism(type, id);
+  const result = resolveNewMechanismCandidateCommit(createDefaultMechanism(type, id), kit);
+  assert.equal(result.status, 'accepted', `${kit.profileKey}/${type} new candidate resolves to the active board grid`);
+  if (result.status !== 'accepted') throw new Error(`${kit.profileKey}/${type} candidate rejected`);
+  return result.mechanism;
+};
+
 for (const kit of kits) {
   for (const type of ALL_MECHANISM_TYPES) {
-    const mechanism = createDefaultMechanism(type, `${kit.profileKey}-${type}-controls`);
+    const mechanism = safeMechanismForKit(type, `${kit.profileKey}-${type}-controls`, kit);
     assert(finiteDeep(mechanism), `${kit.profileKey}/${type} default is finite`);
     assert(mechanismMotionCompletes(mechanism), `${kit.profileKey}/${type} default motion completes`);
     assert(mechanismEditIsSafe(mechanism, kit), `${kit.profileKey}/${type} default is safe`);
@@ -97,7 +106,7 @@ for (const kit of kits) {
 
 for (const kit of kits) {
   for (const type of ALL_MECHANISM_TYPES) {
-    const knownGood = createDefaultMechanism(type, `${kit.profileKey}-${type}-recovery`);
+    const knownGood = safeMechanismForKit(type, `${kit.profileKey}-${type}-recovery`, kit);
     const offGrid = { ...knownGood, anchorX: Number(knownGood.anchorX) + 1 };
     assert(!mechanismEditIsSafe(offGrid, kit), `${kit.profileKey}/${type} off-grid legacy state starts unsafe`);
 
@@ -120,7 +129,7 @@ assert(!mechanismParamIsPlacementRecoveryEditable(createDefaultMechanism('crank'
 assert.equal(commandById('project.resetLesson').testId, 'command-reset-lesson', 'known-good lesson reset remains available');
 
 for (const kit of kits) {
-  const fourBar = createDefaultMechanism('4bar', `${kit.profileKey}-discrete-4bar`);
+  const fourBar = safeMechanismForKit('4bar', `${kit.profileKey}-discrete-4bar`, kit);
   assert(safeMechanismUpdate(fourBar, { assemblyMode: 'crossed' }, kit), `${kit.profileKey}/4bar crossed assembly is accepted`);
   for (const key of ['crankLength', 'couplerLength', 'rockerLength'] as const) {
     let accepted = 0;
@@ -135,7 +144,7 @@ for (const kit of kits) {
   }
 
   for (const type of ['gear', 'gear_linkage'] as const) {
-    const mechanism = createDefaultMechanism(type, `${kit.profileKey}-nested-${type}`);
+    const mechanism = safeMechanismForKit(type, `${kit.profileKey}-nested-${type}`, kit);
     let accepted = 0;
     for (const spec of FABRICATION_GEAR_SPECS) {
       const gearTrainRadii = [...(mechanism.gearTrainRadii ?? [])];
@@ -159,7 +168,7 @@ for (const kit of kits) {
     assert(accepted > 0, `${kit.profileKey}/${type} exposes at least one safe nested gear option`);
   }
 
-  const cam = createDefaultMechanism('cam', `${kit.profileKey}-nested-cam`);
+  const cam = safeMechanismForKit('cam', `${kit.profileKey}-nested-cam`, kit);
   const profile = normalizeCamProfileSamples(cam.camProfileSamples);
   const editedProfile = profile.map((sample, index) => index === 0 ? 1.2 : sample);
   assert(safeMechanismUpdate(cam, { camProfileSamples: editedProfile }, kit), `${kit.profileKey}/cam accepts a finite profile edit`);
