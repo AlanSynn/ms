@@ -121,7 +121,11 @@ export const resolveLocalFoundryCandidate = (
     : resolveMechanismCandidateCommit(previous, candidate, kit);
   return result.status === "accepted"
     ? { accepted: true as const, mechanism: result.mechanism }
-    : { accepted: false as const, mechanism: previous };
+    : {
+      accepted: false as const,
+      mechanism: previous,
+      blocker: result.blocker,
+    };
 };
 
 export const MechanismFoundry = ({
