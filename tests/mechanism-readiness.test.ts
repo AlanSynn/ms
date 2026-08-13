@@ -110,7 +110,8 @@ offSheetProject.settings = {
 };
 const offSheetResult = mechanismReadiness(offSheetProject, offSheet);
 assert.equal(offSheetResult.status, 'simulation-safe', 'off-sheet complete envelope is simulation-safe only');
-assert(offSheetResult.blockers.includes('Physical envelope outside sheet'), 'complete envelope must fit the sheet');
+assert(offSheetResult.blockers.includes('Physical envelope outside board'), 'complete envelope must fit the fabrication board');
+assert(!offSheetResult.blockers.includes('Physical envelope outside sheet'), 'cut-sheet layout is not the assembly readiness gate');
 
 const compilerBlocked = boundMechanism('4bar', 'compiler-blocked');
 compilerBlocked.groundLength = 321;

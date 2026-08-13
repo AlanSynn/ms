@@ -4,6 +4,7 @@ import { sceneBoundsForSheet } from '../utils/coordinates';
 import { createDefaultMechanism } from '../utils/mechanismDefaults';
 import { FABRICATION_Z_EPSILON_MM } from '../utils/mechanismFabricationZStack';
 import {
+    mechanismDescriptorFitsCutSheet,
     mechanismDescriptorWithinSheet,
     mechanismDescriptorsCollide,
     mechanismEnvelopesIntersect,
@@ -68,6 +69,10 @@ assert(!mechanismDescriptorWithinSheet(descriptor('capsule', capsule(0, sheet.y 
 const rotatedExtent = Math.SQRT2 * 5;
 assert(mechanismDescriptorWithinSheet(descriptor('box', box(sheet.x + rotatedExtent, 0, Math.PI / 4, 10, 10), 0, 1), kit), 'rotated box may touch sheet edge');
 assert(!mechanismDescriptorWithinSheet(descriptor('box', box(sheet.x + rotatedExtent - 0.001, 0, Math.PI / 4, 10, 10), 0, 1), kit), 'rotated box corner may not leave sheet');
+assert(mechanismDescriptorFitsCutSheet(descriptor('packed-circle', circle(99_999, 99_999, 50), 0, 1), kit), 'cut-part fit ignores board-space position');
+assert(!mechanismDescriptorFitsCutSheet(descriptor('large-circle', circle(0, 0, 101), 0, 1), kit), 'a part wider than the sheet remains blocked');
+assert(mechanismDescriptorFitsCutSheet(descriptor('rotatable-box', box(0, 0, 0, 150, 190), 0, 1), kit), 'a cut part may rotate to use the sheet orientation');
+assert(!mechanismDescriptorFitsCutSheet(descriptor('long-capsule', capsule(0, 0, 0, 181, 10), 0, 1), kit), 'a linkage blank longer than either sheet axis remains blocked');
 
 const familyParticipation = new Set<MechanismType>();
 ALL_MECHANISM_TYPES.forEach(type => {

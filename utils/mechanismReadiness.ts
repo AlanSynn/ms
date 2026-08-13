@@ -3,8 +3,8 @@ import { validateFabricationStack } from './fabricationStackModel';
 import { compactStudentActionForFabricationDiagnostic } from './fabricationReadiness';
 import { mechanismSafetyPhaseSchedule } from './kinematics';
 import {
+  mechanismDescriptorFitsCutSheet,
   mechanismDescriptorWithinBoard,
-  mechanismDescriptorWithinSheet,
   synchronizedMechanismCollisionOracle,
 } from './mechanismCollision';
 import { compileMechanismGraphFabrication } from './mechanismCompiler';
@@ -121,7 +121,7 @@ export const mechanismReadiness = (
     if (descriptors.some(descriptor => !mechanismDescriptorWithinBoard(descriptor, project.settings.physicalKit))) {
       blockers.push('Physical envelope outside board');
     }
-    if (descriptors.some(descriptor => !mechanismDescriptorWithinSheet(descriptor, project.settings.physicalKit))) {
+    if (descriptors.some(descriptor => !mechanismDescriptorFitsCutSheet(descriptor, project.settings.physicalKit))) {
       blockers.push('Physical envelope outside sheet');
     }
   }

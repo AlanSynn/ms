@@ -97,8 +97,8 @@ assert(inSheetCount(defaultKit) < inSheetCount(largeKit), 'large kit contains mo
 const defaultReadiness = mechanismReadiness(projectWith(envelopeFixture, defaultKit), envelopeFixture);
 const compactReadiness = mechanismReadiness(projectWith(envelopeFixture, compactKit), envelopeFixture);
 const largeReadiness = mechanismReadiness(projectWith(envelopeFixture, largeKit), envelopeFixture);
-assert(defaultReadiness.blockers.includes('Physical envelope outside sheet'), 'default kit reaches readiness envelope blocking');
-assert(compactReadiness.blockers.includes('Physical envelope outside sheet'), 'compact kit reaches readiness envelope blocking');
+assert(defaultReadiness.blockers.includes('Physical envelope outside board'), 'default kit reaches board-envelope blocking');
+assert(compactReadiness.blockers.includes('Physical envelope outside board'), 'compact kit still blocks a moving assembly that exceeds its fabrication board');
 assert.equal(largeReadiness.fabricationReady, true, 'large kit makes the same valid mechanism fabrication-ready');
 
 const collisionFirst = boundMechanism('4bar', 'kit-collision-first');

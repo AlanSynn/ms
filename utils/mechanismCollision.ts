@@ -192,6 +192,36 @@ export const mechanismDescriptorWithinBoard = (
     kit: PhysicalKitSettings
 ) => mechanismEnvelopeWithinBoard(descriptor.envelope, kit);
 
+const dimensionsFitCutSheet = (
+    width: number,
+    height: number,
+    kit: PhysicalKitSettings,
+) => {
+    const sheet = sceneBoundsForSheet(kit);
+    return (width <= sheet.width && height <= sheet.height) ||
+        (width <= sheet.height && height <= sheet.width);
+};
+
+/**
+ * Cut sheets pack individual physical parts. Their fit must not depend on an
+ * assembly's board-space position, which is validated separately.
+ */
+export const mechanismDescriptorFitsCutSheet = (
+    descriptor: MechanismPhysicalEnvelopeDescriptor,
+    kit: PhysicalKitSettings,
+) => {
+    const envelope = descriptor.envelope;
+    if (envelope.kind === 'circle')
+        return dimensionsFitCutSheet(envelope.radius * 2, envelope.radius * 2, kit);
+    if (envelope.kind === 'capsule')
+        return dimensionsFitCutSheet(
+            envelope.length + envelope.radius * 2,
+            envelope.radius * 2,
+            kit,
+        );
+    return dimensionsFitCutSheet(envelope.width, envelope.height, kit);
+};
+
 export const mechanismFitsFabricationBoard = (
     mechanism: MechanismConfig,
     kit: PhysicalKitSettings
