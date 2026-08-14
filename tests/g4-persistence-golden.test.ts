@@ -86,11 +86,31 @@ const compareStableKeys = (left: string, right: string) =>
 // Bound platform libm tail drift without masking changes at or above one nanounit.
 const GOLDEN_DECIMAL_PLACES = 9;
 
+const stableNumber = (value: number) => {
+  const normalized = Number(value.toFixed(GOLDEN_DECIMAL_PLACES));
+  return Object.is(normalized, -0) ? 0 : normalized;
+};
+
+const stableFixture = (value: unknown): unknown => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return stableNumber(value);
+  }
+  if (Array.isArray(value)) return value.map((item) => stableFixture(item));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([entryKey, entryValue]) => [
+        entryKey,
+        stableFixture(entryValue),
+      ]),
+    );
+  }
+  return value;
+};
+
 const stable = (value: unknown, key?: string): unknown => {
   if (key && volatileKeys.has(key)) return "<volatile>";
   if (typeof value === "number" && Number.isFinite(value)) {
-    const normalized = Number(value.toFixed(GOLDEN_DECIMAL_PLACES));
-    return Object.is(normalized, -0) ? 0 : normalized;
+    return stableNumber(value);
   }
   if (Array.isArray(value)) return value.map((item) => stable(item));
   if (value && typeof value === "object") {
@@ -136,7 +156,9 @@ const readSummary = (storage: AutosaveStorage, current: ProjectState) => {
   });
 };
 
-const base = fixedProject();
+// Keep exact serialized bytes and fingerprints meaningful by stabilizing the
+// generated fixture before it enters the production persistence path.
+const base = stableFixture(fixedProject()) as ProjectState;
 const first = { ...base, metadata: { ...base.metadata, name: "First" } };
 const second = { ...base, metadata: { ...base.metadata, name: "Second" } };
 const third = { ...base, metadata: { ...base.metadata, name: "Third" } };
@@ -226,6 +248,6 @@ const digest = createHash("sha256").update(goldenJson).digest("hex");
 
 assert.equal(
   digest,
-  "b4bdcd26334daf1112b80a6d9be3076f3369eea8580b4ec34f72edf57e2d7329",
+  "fa5eb9b95c71c79e54de5032645bf86ad8bfb95de739e15df264a09903ef5a20",
   `G4 autosave golden changed: ${digest}\n${goldenJson}`,
 );
