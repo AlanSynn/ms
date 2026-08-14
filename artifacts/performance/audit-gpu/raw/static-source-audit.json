@@ -1,0 +1,142 @@
+{
+  "repository": "/Users/alansynn/Workspace/ms-wt/audit-gpu",
+  "generatedAt": "2026-08-14T20:51:17.258Z",
+  "files": {
+    "components/ThreePuppetPreview.tsx": {
+      "webglRendererCreation": [
+        {
+          "line": 1100,
+          "excerpt": "renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });"
+        }
+      ],
+      "rendererDispose": [
+        {
+          "line": 1154,
+          "excerpt": "renderer.dispose();"
+        }
+      ],
+      "rendererSubmission": [
+        {
+          "line": 1081,
+          "excerpt": "renderer.render(scene, camera);"
+        }
+      ],
+      "rendererInfo": [
+        {
+          "line": 1086,
+          "excerpt": "stateRef.current.dataset.threeRenderTriangles = String(renderer.info.render.triangles);"
+        }
+      ],
+      "shaderPrecompile": [],
+      "contextEvents": [],
+      "loseContext": [],
+      "visibilityHandling": [],
+      "rawRaf": []
+    },
+    "components/stages/foundry/ThreeFoundryPreview.tsx": {
+      "webglRendererCreation": [
+        {
+          "line": 1644,
+          "excerpt": "const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });"
+        }
+      ],
+      "rendererDispose": [
+        {
+          "line": 1697,
+          "excerpt": "renderer.dispose();"
+        }
+      ],
+      "rendererSubmission": [
+        {
+          "line": 1475,
+          "excerpt": "queuedRenderer.render(queuedScene, queuedCamera);"
+        }
+      ],
+      "rendererInfo": [],
+      "shaderPrecompile": [],
+      "contextEvents": [],
+      "loseContext": [],
+      "visibilityHandling": [],
+      "rawRaf": []
+    },
+    "components/stages/path/PathCanvasPane.tsx": {
+      "webglRendererCreation": [],
+      "rendererDispose": [],
+      "rendererSubmission": [],
+      "rendererInfo": [],
+      "shaderPrecompile": [],
+      "contextEvents": [],
+      "loseContext": [],
+      "visibilityHandling": [],
+      "rawRaf": []
+    },
+    "components/stages/path/SceneSketch.tsx": {
+      "webglRendererCreation": [],
+      "rendererDispose": [],
+      "rendererSubmission": [],
+      "rendererInfo": [],
+      "shaderPrecompile": [],
+      "contextEvents": [],
+      "loseContext": [],
+      "visibilityHandling": [],
+      "rawRaf": []
+    },
+    "components/AppStageRouter.tsx": {
+      "webglRendererCreation": [],
+      "rendererDispose": [],
+      "rendererSubmission": [],
+      "rendererInfo": [],
+      "shaderPrecompile": [],
+      "contextEvents": [],
+      "loseContext": [],
+      "visibilityHandling": [],
+      "rawRaf": []
+    },
+    "utils/animationClock.ts": {
+      "webglRendererCreation": [],
+      "rendererDispose": [],
+      "rendererSubmission": [],
+      "rendererInfo": [],
+      "shaderPrecompile": [],
+      "contextEvents": [],
+      "loseContext": [],
+      "visibilityHandling": [],
+      "rawRaf": [
+        {
+          "line": 48,
+          "excerpt": "requestFrame: (callback) => window.requestAnimationFrame(callback),"
+        }
+      ]
+    },
+    "hooks/useWorkspacePlaybackLoop.ts": {
+      "webglRendererCreation": [],
+      "rendererDispose": [],
+      "rendererSubmission": [],
+      "rendererInfo": [],
+      "shaderPrecompile": [],
+      "contextEvents": [],
+      "loseContext": [],
+      "visibilityHandling": [],
+      "rawRaf": []
+    }
+  },
+  "totals": {
+    "webglRendererCreation": 2,
+    "rendererDispose": 2,
+    "rendererSubmission": 2,
+    "rendererInfo": 1,
+    "shaderPrecompile": 0,
+    "contextEvents": 0,
+    "loseContext": 0,
+    "visibilityHandling": 0,
+    "rawRaf": 1
+  },
+  "summary": {
+    "rendererCreationFiles": [
+      "components/ThreePuppetPreview.tsx",
+      "components/stages/foundry/ThreeFoundryPreview.tsx"
+    ],
+    "noRuntimeContextRecoveryHandlers": true,
+    "noVisibilityHandlerInRuntime": true
+  }
+}

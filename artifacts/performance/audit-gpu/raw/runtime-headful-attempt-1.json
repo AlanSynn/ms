@@ -1,0 +1,3162 @@
+{
+  "schemaVersion": 1,
+  "baseline": "97e6b3b3ce6be2cc43699fd282687ff1a8cfc5af",
+  "command": "/opt/homebrew/Cellar/node/26.5.0/bin/node /Users/alansynn/Workspace/ms-wt/audit-gpu/artifacts/performance/audit-gpu/run-gpu-audit.mjs",
+  "baseUrl": "http://127.0.0.1:4173",
+  "chromePath": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "startedAt": "2026-08-14T20:37:29.598Z",
+  "mode": {
+    "requested": "headed-visible-foreground",
+    "actual": "headed-run-with-foreground-verification-incomplete"
+  },
+  "platform": {
+    "uname": {
+      "ok": true,
+      "value": "Darwin COD-MBP16-LOAN2 25.5.0 Darwin Kernel Version 25.5.0: Tue Jun  9 22:18:58 PDT 2026; root:xnu-12377.121.10~1/RELEASE_ARM64_T6000 arm64"
+    },
+    "osVersion": {
+      "ok": true,
+      "value": "ProductName:\t\tmacOS\nProductVersion:\t\t26.5.2\nBuildVersion:\t\t25F84"
+    },
+    "architecture": {
+      "ok": true,
+      "value": "arm64"
+    }
+  },
+  "foreground": {
+    "before": {
+      "ok": true,
+      "value": ""
+    },
+    "active": {
+      "frontmost": {
+        "ok": false,
+        "error": "Error: spawnSync osascript ETIMEDOUT"
+      },
+      "page": {
+        "visibilityState": "visible",
+        "hidden": false,
+        "hasFocus": true,
+        "innerWidth": 1366,
+        "innerHeight": 768,
+        "devicePixelRatio": 1
+      }
+    }
+  },
+  "browser": {
+    "systemInfo": {
+      "gpu": {
+        "devices": [
+          {
+            "vendorId": 4203,
+            "deviceId": 0,
+            "vendorString": "Google Inc. (Apple)",
+            "deviceString": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Version 26.5.2 (Build 25F84))",
+            "driverVendor": "Apple",
+            "driverVersion": "26.5.2"
+          }
+        ],
+        "auxAttributes": {
+          "amdSwitchable": false,
+          "canSupportThreadedTextureMailbox": false,
+          "directRenderingVersion": "",
+          "displayType": "ANGLE_METAL",
+          "glExtensions": "GL_AMD_performance_monitor GL_ANGLE_base_vertex_base_instance_shader_builtin GL_ANGLE_blob_cache GL_ANGLE_client_arrays GL_ANGLE_clip_cull_distance GL_ANGLE_compressed_texture_etc GL_ANGLE_depth_texture GL_ANGLE_framebuffer_blit GL_ANGLE_framebuffer_multisample GL_ANGLE_get_serialized_context_string GL_ANGLE_get_tex_level_parameter GL_ANGLE_instanced_arrays GL_ANGLE_memory_size GL_ANGLE_pack_reverse_row_order GL_ANGLE_polygon_mode GL_ANGLE_program_binary_readiness_query GL_ANGLE_program_cache_control GL_ANGLE_provoking_vertex GL_ANGLE_renderability_validation GL_ANGLE_request_extension GL_ANGLE_rgbx_internal_format GL_ANGLE_robust_client_memory GL_ANGLE_shader_pixel_local_storage GL_ANGLE_shader_pixel_local_storage_coherent GL_ANGLE_stencil_texturing GL_ANGLE_texture_compression_dxt3 GL_ANGLE_texture_compression_dxt5 GL_ANGLE_texture_multisample GL_ANGLE_translated_shader_source GL_APPLE_clip_distance GL_ARM_rgba8 GL_CHROMIUM_bind_generates_resource GL_CHROMIUM_bind_uniform_location GL_CHROMIUM_copy_texture GL_CHROMIUM_lose_context GL_EXT_base_instance GL_EXT_blend_func_extended GL_EXT_blend_minmax GL_EXT_clip_control GL_EXT_color_buffer_float GL_EXT_color_buffer_half_float GL_EXT_compressed_ETC1_RGB8_sub_texture GL_EXT_conservative_depth GL_EXT_debug_label GL_EXT_debug_marker GL_EXT_depth_clamp GL_EXT_discard_framebuffer GL_EXT_disjoint_timer_query GL_EXT_draw_buffers GL_EXT_draw_buffers_indexed GL_EXT_draw_elements_base_vertex GL_EXT_float_blend GL_EXT_frag_depth GL_EXT_instanced_arrays GL_EXT_map_buffer_range GL_EXT_multisampled_render_to_texture GL_EXT_occlusion_query_boolean GL_EXT_polygon_offset_clamp GL_EXT_pvrtc_sRGB GL_EXT_read_format_bgra GL_EXT_render_snorm GL_EXT_robustness GL_EXT_sRGB GL_EXT_shader_texture_lod GL_EXT_texture_compression_bptc GL_EXT_texture_compression_dxt1 GL_EXT_texture_compression_rgtc GL_EXT_texture_compression_s3tc_srgb GL_EXT_texture_filter_anisotropic GL_EXT_texture_format_BGRA8888 GL_EXT_texture_mirror_clamp_to_edge GL_EXT_texture_norm16 GL_EXT_texture_rg GL_EXT_texture_sRGB_R8 GL_EXT_texture_sRGB_RG8 GL_EXT_texture_shadow_lod GL_EXT_texture_storage GL_IMG_texture_compression_pvrtc GL_KHR_debug GL_KHR_parallel_shader_compile GL_KHR_robustness GL_KHR_texture_compression_astc_hdr GL_KHR_texture_compression_astc_ldr GL_KHR_texture_compression_astc_sliced_3d GL_MESA_framebuffer_flip_y GL_NV_fence GL_NV_framebuffer_blit GL_NV_pixel_buffer_object GL_NV_shader_noperspective_interpolation GL_OES_EGL_image GL_OES_EGL_sync GL_OES_compressed_EAC_R11_signed_texture GL_OES_compressed_EAC_R11_unsigned_texture GL_OES_compressed_EAC_RG11_signed_texture GL_OES_compressed_EAC_RG11_unsigned_texture GL_OES_compressed_ETC1_RGB8_texture GL_OES_compressed_ETC2_RGB8_texture GL_OES_compressed_ETC2_RGBA8_texture GL_OES_compressed_ETC2_punchthroughA_RGBA8_texture GL_OES_compressed_ETC2_punchthroughA_sRGB8_alpha_texture GL_OES_compressed_ETC2_sRGB8_alpha8_texture GL_OES_compressed_ETC2_sRGB8_texture GL_OES_depth24 GL_OES_depth32 GL_OES_depth_texture GL_OES_draw_buffers_indexed GL_OES_draw_elements_base_vertex GL_OES_element_index_uint GL_OES_fbo_render_mipmap GL_OES_get_program_binary GL_OES_mapbuffer GL_OES_packed_depth_stencil GL_OES_required_internalformat GL_OES_rgb8_rgba8 GL_OES_sample_variables GL_OES_shader_multisample_interpolation GL_OES_standard_derivatives GL_OES_surfaceless_context GL_OES_texture_3D GL_OES_texture_float GL_OES_texture_float_linear GL_OES_texture_half_float GL_OES_texture_half_float_linear GL_OES_texture_npot GL_OES_texture_stencil8 GL_OES_vertex_array_object GL_QCOM_render_shared_exponent ",
+          "glImplementationParts": "(gl=egl-angle,angle=metal)",
+          "glRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Version 26.5.2 (Build 25F84))",
+          "glResetNotificationStrategy": 33362,
+          "glVendor": "Google Inc. (Apple)",
+          "glVersion": "OpenGL ES 3.0 (ANGLE 2.1.28232 git hash: a17d5224d83f)",
+          "glWsExtensions": "",
+          "glWsVendor": "",
+          "glWsVersion": "",
+          "inProcessGpu": false,
+          "initializationTime": 0.550316,
+          "isAsan": false,
+          "isClangCoverage": false,
+          "jpegDecodeAcceleratorSupported": false,
+          "maxMsaaSamples": "4",
+          "optimus": false,
+          "passthroughCmdDecoder": true,
+          "pixelShaderVersion": "3.00",
+          "processCrashCount": 0,
+          "sandboxed": false,
+          "skiaBackendType": "GraphiteDawnMetal",
+          "subpixelFontRendering": true,
+          "targetCpuBits": 64,
+          "vertexShaderVersion": "3.00",
+          "visibilityCallbackCallCount": 0
+        },
+        "featureStatus": {
+          "2d_canvas": "enabled",
+          "direct_rendering_display_compositor": "disabled_off_ok",
+          "gpu_compositing": "enabled",
+          "multiple_raster_threads": "enabled_on",
+          "opengl": "enabled_on",
+          "rasterization": "enabled",
+          "raw_draw": "disabled_off_ok",
+          "skia_graphite": "enabled_on",
+          "trees_in_viz": "disabled_off",
+          "video_decode": "enabled",
+          "video_encode": "enabled",
+          "webgl": "enabled",
+          "webgpu": "enabled",
+          "webnn": "disabled_off"
+        },
+        "driverBugWorkarounds": [
+          "disable_2d_canvas_auto_flush",
+          "enable_webgl_timer_query_extensions",
+          "disabled_extension_GL_KHR_blend_equation_advanced",
+          "disabled_extension_GL_KHR_blend_equation_advanced_coherent"
+        ],
+        "videoDecoding": [],
+        "videoEncoding": []
+      },
+      "modelName": "MacBookPro",
+      "modelVersion": "18.1",
+      "commandLine": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --no-sandbox --window-size=1366,768 --user-data-dir=/var/folders/3d/cclyxf1x3bjf_y3pf071s1r00000gr/T/playwright_chromiumdev_profile-TGmv9p --remote-debugging-pipe --no-startup-window --flag-switches-begin --flag-switches-end --enable-unsafe-swiftshader"
+    }
+  },
+  "scenarios": [
+    {
+      "label": "cold-character-paused",
+      "durationMs": 700,
+      "before": {
+        "version": "1.0.0",
+        "atMs": 14308.2,
+        "document": {
+          "visibilityState": "visible",
+          "hidden": false,
+          "hasFocus": true
+        },
+        "animationFrames": 1284,
+        "stage": "Character",
+        "canvases": [
+          {
+            "id": "canvas-1",
+            "width": 622,
+            "height": 608,
+            "attached": true,
+            "className": "three-puppet-canvas"
+          }
+        ],
+        "rendererInfoSamples": [
+          {
+            "testId": "character-three-puppet-state",
+            "renderer": "webgl",
+            "renderTriangles": "32788",
+            "dynamicBuilds": "166",
+            "geometryCacheSize": null,
+            "materialCacheSize": null,
+            "pixelRatioCap": "1.5"
+          }
+        ],
+        "contexts": [
+          {
+            "id": "context-1",
+            "canvasId": "canvas-1",
+            "kind": "webgl2",
+            "attached": true,
+            "contextLost": false,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+            "vendor": "Google Inc. (Apple)",
+            "attributes": {
+              "alpha": true,
+              "antialias": true,
+              "depth": true,
+              "desynchronized": false,
+              "failIfMajorPerformanceCaveat": false,
+              "powerPreference": "default",
+              "premultipliedAlpha": true,
+              "preserveDrawingBuffer": false,
+              "stencil": false,
+              "xrCompatible": false
+            },
+            "createdAtMs": 2591.5,
+            "getContextCalls": 1,
+            "drawCalls": 3819,
+            "estimatedTriangles": 733739,
+            "clearCalls": 37,
+            "framesWithDraws": 5,
+            "framesWithClears": 5,
+            "shaderCompiles": 8,
+            "programCreates": 4,
+            "programLinks": 4,
+            "programDeletes": 0,
+            "livePrograms": 4,
+            "textureCreates": 18,
+            "textureDeletes": 0,
+            "liveTextures": 18,
+            "estimatedTextureBytes": 962140,
+            "events": []
+          }
+        ],
+        "totals": {
+          "trackedContexts": 1,
+          "attachedContexts": 1,
+          "nonLostContexts": 1,
+          "detachedNonLostContexts": 0,
+          "drawCalls": 3819,
+          "estimatedTriangles": 733739,
+          "clearCalls": 37,
+          "shaderCompiles": 8,
+          "programLinks": 4,
+          "livePrograms": 4,
+          "liveTextures": 18,
+          "estimatedTextureBytes": 962140
+        }
+      },
+      "after": {
+        "version": "1.0.0",
+        "atMs": 15071.2,
+        "document": {
+          "visibilityState": "visible",
+          "hidden": false,
+          "hasFocus": true
+        },
+        "animationFrames": 1376,
+        "stage": "Character",
+        "canvases": [
+          {
+            "id": "canvas-1",
+            "width": 622,
+            "height": 608,
+            "attached": true,
+            "className": "three-puppet-canvas"
+          }
+        ],
+        "rendererInfoSamples": [
+          {
+            "testId": "character-three-puppet-state",
+            "renderer": "webgl",
+            "renderTriangles": "32788",
+            "dynamicBuilds": "166",
+            "geometryCacheSize": null,
+            "materialCacheSize": null,
+            "pixelRatioCap": "1.5"
+          }
+        ],
+        "contexts": [
+          {
+            "id": "context-1",
+            "canvasId": "canvas-1",
+            "kind": "webgl2",
+            "attached": true,
+            "contextLost": false,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+            "vendor": "Google Inc. (Apple)",
+            "attributes": {
+              "alpha": true,
+              "antialias": true,
+              "depth": true,
+              "desynchronized": false,
+              "failIfMajorPerformanceCaveat": false,
+              "powerPreference": "default",
+              "premultipliedAlpha": true,
+              "preserveDrawingBuffer": false,
+              "stencil": false,
+              "xrCompatible": false
+            },
+            "createdAtMs": 2591.5,
+            "getContextCalls": 1,
+            "drawCalls": 3819,
+            "estimatedTriangles": 733739,
+            "clearCalls": 37,
+            "framesWithDraws": 5,
+            "framesWithClears": 5,
+            "shaderCompiles": 8,
+            "programCreates": 4,
+            "programLinks": 4,
+            "programDeletes": 0,
+            "livePrograms": 4,
+            "textureCreates": 18,
+            "textureDeletes": 0,
+            "liveTextures": 18,
+            "estimatedTextureBytes": 962140,
+            "events": []
+          }
+        ],
+        "totals": {
+          "trackedContexts": 1,
+          "attachedContexts": 1,
+          "nonLostContexts": 1,
+          "detachedNonLostContexts": 0,
+          "drawCalls": 3819,
+          "estimatedTriangles": 733739,
+          "clearCalls": 37,
+          "shaderCompiles": 8,
+          "programLinks": 4,
+          "livePrograms": 4,
+          "liveTextures": 18,
+          "estimatedTextureBytes": 962140
+        }
+      },
+      "delta": {
+        "totals": {
+          "trackedContexts": 0,
+          "attachedContexts": 0,
+          "nonLostContexts": 0,
+          "detachedNonLostContexts": 0,
+          "drawCalls": 0,
+          "estimatedTriangles": 0,
+          "clearCalls": 0,
+          "shaderCompiles": 0,
+          "programLinks": 0,
+          "livePrograms": 0,
+          "liveTextures": 0,
+          "estimatedTextureBytes": 0
+        },
+        "contexts": [
+          {
+            "id": "context-1",
+            "attached": true,
+            "contextLost": false,
+            "drawCalls": 0,
+            "estimatedTriangles": 0,
+            "clearCalls": 0,
+            "shaderCompiles": 0,
+            "programLinks": 0,
+            "textureCreates": 0,
+            "textureDeletes": 0,
+            "estimatedTextureBytes": 0
+          }
+        ],
+        "animationFrames": 92
+      },
+      "gpuTimer": {
+        "available": true,
+        "contextId": "context-1",
+        "disjoint": false,
+        "nanoseconds": 0,
+        "milliseconds": 0
+      },
+      "memoryBefore": {
+        "cdp": {
+          "metrics": [
+            {
+              "name": "Timestamp",
+              "value": 1090431.785502
+            },
+            {
+              "name": "AudioHandlers",
+              "value": 0
+            },
+            {
+              "name": "AudioWorkletProcessors",
+              "value": 0
+            },
+            {
+              "name": "Documents",
+              "value": 9
+            },
+            {
+              "name": "Frames",
+              "value": 9
+            },
+            {
+              "name": "JSEventListeners",
+              "value": 303
+            },
+            {
+              "name": "LayoutObjects",
+              "value": 691
+            },
+            {
+              "name": "MediaKeySessions",
+              "value": 0
+            },
+            {
+              "name": "MediaKeys",
+              "value": 0
+            },
+            {
+              "name": "Nodes",
+              "value": 2801
+            },
+            {
+              "name": "Resources",
+              "value": 10
+            },
+            {
+              "name": "ContextLifecycleStateObservers",
+              "value": 36
+            },
+            {
+              "name": "V8PerContextDatas",
+              "value": 2
+            },
+            {
+              "name": "WorkerGlobalScopes",
+              "value": 1
+            },
+            {
+              "name": "UACSSResources",
+              "value": 0
+            },
+            {
+              "name": "RTCPeerConnections",
+              "value": 0
+            },
+            {
+              "name": "ResourceFetchers",
+              "value": 10
+            },
+            {
+              "name": "AdSubframes",
+              "value": 0
+            },
+            {
+              "name": "DetachedScriptStates",
+              "value": 0
+            },
+            {
+              "name": "ArrayBufferContents",
+              "value": 418
+            },
+            {
+              "name": "LayoutCount",
+              "value": 40
+            },
+            {
+              "name": "RecalcStyleCount",
+              "value": 52
+            },
+            {
+              "name": "LayoutDuration",
+              "value": 0.066853
+            },
+            {
+              "name": "RecalcStyleDuration",
+              "value": 0.01531
+            },
+            {
+              "name": "DevToolsCommandDuration",
+              "value": 0.101088
+            },
+            {
+              "name": "ScriptDuration",
+              "value": 3.523268
+            },
+            {
+              "name": "V8CompileDuration",
+              "value": 0
+            },
+            {
+              "name": "TaskDuration",
+              "value": 4.154333
+            },
+            {
+              "name": "TaskOtherDuration",
+              "value": 0.447814
+            },
+            {
+              "name": "ThreadTime",
+              "value": 0.796344
+            },
+            {
+              "name": "ProcessTime",
+              "value": 2.647175
+            },
+            {
+              "name": "JSHeapUsedSize",
+              "value": 13616612
+            },
+            {
+              "name": "JSHeapTotalSize",
+              "value": 27328512
+            },
+            {
+              "name": "FirstMeaningfulPaint",
+              "value": 1090419.791894
+            },
+            {
+              "name": "DomContentLoaded",
+              "value": 1090417.60969
+            },
+            {
+              "name": "NavigationStart",
+              "value": 1090417.426335
+            }
+          ]
+        },
+        "page": {
+          "memory": {
+            "usedJSHeapSize": 20323415,
+            "totalJSHeapSize": 33635159,
+            "jsHeapSizeLimit": 4395630592
+          },
+          "uaMemory": {
+            "unavailable": true
+          }
+        }
+      },
+      "memoryAfter": {
+        "cdp": {
+          "metrics": [
+            {
+              "name": "Timestamp",
+              "value": 1090432.547521
+            },
+            {
+              "name": "AudioHandlers",
+              "value": 0
+            },
+            {
+              "name": "AudioWorkletProcessors",
+              "value": 0
+            },
+            {
+              "name": "Documents",
+              "value": 9
+            },
+            {
+              "name": "Frames",
+              "value": 9
+            },
+            {
+              "name": "JSEventListeners",
+              "value": 303
+            },
+            {
+              "name": "LayoutObjects",
+              "value": 691
+            },
+            {
+              "name": "MediaKeySessions",
+              "value": 0
+            },
+            {
+              "name": "MediaKeys",
+              "value": 0
+            },
+            {
+              "name": "Nodes",
+              "value": 2801
+            },
+            {
+              "name": "Resources",
+              "value": 10
+            },
+            {
+              "name": "ContextLifecycleStateObservers",
+              "value": 36
+            },
+            {
+              "name": "V8PerContextDatas",
+              "value": 2
+            },
+            {
+              "name": "WorkerGlobalScopes",
+              "value": 1
+            },
+            {
+              "name": "UACSSResources",
+              "value": 0
+            },
+            {
+              "name": "RTCPeerConnections",
+              "value": 0
+            },
+            {
+              "name": "ResourceFetchers",
+              "value": 10
+            },
+            {
+              "name": "AdSubframes",
+              "value": 0
+            },
+            {
+              "name": "DetachedScriptStates",
+              "value": 0
+            },
+            {
+              "name": "ArrayBufferContents",
+              "value": 418
+            },
+            {
+              "name": "LayoutCount",
+              "value": 40
+            },
+            {
+              "name": "RecalcStyleCount",
+              "value": 52
+            },
+            {
+              "name": "LayoutDuration",
+              "value": 0.066853
+            },
+            {
+              "name": "RecalcStyleDuration",
+              "value": 0.01531
+            },
+            {
+              "name": "DevToolsCommandDuration",
+              "value": 0.110903
+            },
+            {
+              "name": "ScriptDuration",
+              "value": 3.52472
+            },
+            {
+              "name": "V8CompileDuration",
+              "value": 0
+            },
+            {
+              "name": "TaskDuration",
+              "value": 4.181778
+            },
+            {
+              "name": "TaskOtherDuration",
+              "value": 0.463992
+            },
+            {
+              "name": "ThreadTime",
+              "value": 0.823466
+            },
+            {
+              "name": "ProcessTime",
+              "value": 2.688462
+            },
+            {
+              "name": "JSHeapUsedSize",
+              "value": 16072400
+            },
+            {
+              "name": "JSHeapTotalSize",
+              "value": 27328512
+            },
+            {
+              "name": "FirstMeaningfulPaint",
+              "value": 1090419.791894
+            },
+            {
+              "name": "DomContentLoaded",
+              "value": 1090417.60969
+            },
+            {
+              "name": "NavigationStart",
+              "value": 1090417.426335
+            }
+          ]
+        },
+        "page": {
+          "memory": {
+            "usedJSHeapSize": 22777078,
+            "totalJSHeapSize": 33635190,
+            "jsHeapSizeLimit": 4395630592
+          },
+          "uaMemory": {
+            "unavailable": true
+          }
+        }
+      }
+    },
+    {
+      "label": "warm-path-three-paused",
+      "durationMs": 700,
+      "before": {
+        "version": "1.0.0",
+        "atMs": 15736.1,
+        "document": {
+          "visibilityState": "visible",
+          "hidden": false,
+          "hasFocus": true
+        },
+        "animationFrames": 1405,
+        "stage": "Path Editor",
+        "canvases": [
+          {
+            "id": "canvas-2",
+            "width": 624,
+            "height": 610,
+            "attached": true,
+            "className": "three-puppet-canvas"
+          }
+        ],
+        "rendererInfoSamples": [
+          {
+            "testId": "path-three-puppet-state",
+            "renderer": "webgl",
+            "renderTriangles": "35476",
+            "dynamicBuilds": "181",
+            "geometryCacheSize": null,
+            "materialCacheSize": null,
+            "pixelRatioCap": "1.5"
+          }
+        ],
+        "contexts": [
+          {
+            "id": "context-1",
+            "canvasId": "canvas-1",
+            "kind": "webgl2",
+            "attached": false,
+            "contextLost": false,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+            "vendor": "Google Inc. (Apple)",
+            "attributes": {
+              "alpha": true,
+              "antialias": true,
+              "depth": true,
+              "desynchronized": false,
+              "failIfMajorPerformanceCaveat": false,
+              "powerPreference": "default",
+              "premultipliedAlpha": true,
+              "preserveDrawingBuffer": false,
+              "stencil": false,
+              "xrCompatible": false
+            },
+            "createdAtMs": 2591.5,
+            "getContextCalls": 1,
+            "drawCalls": 3819,
+            "estimatedTriangles": 733739,
+            "clearCalls": 37,
+            "framesWithDraws": 5,
+            "framesWithClears": 5,
+            "shaderCompiles": 8,
+            "programCreates": 4,
+            "programLinks": 4,
+            "programDeletes": 4,
+            "livePrograms": 0,
+            "textureCreates": 18,
+            "textureDeletes": 13,
+            "liveTextures": 5,
+            "estimatedTextureBytes": 1028,
+            "events": []
+          },
+          {
+            "id": "context-2",
+            "canvasId": "canvas-2",
+            "kind": "webgl2",
+            "attached": true,
+            "contextLost": false,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+            "vendor": "Google Inc. (Apple)",
+            "attributes": {
+              "alpha": true,
+              "antialias": true,
+              "depth": true,
+              "desynchronized": false,
+              "failIfMajorPerformanceCaveat": false,
+              "powerPreference": "default",
+              "premultipliedAlpha": true,
+              "preserveDrawingBuffer": false,
+              "stencil": false,
+              "xrCompatible": false
+            },
+            "createdAtMs": 15482.4,
+            "getContextCalls": 1,
+            "drawCalls": 9840,
+            "estimatedTriangles": 2036503,
+            "clearCalls": 68,
+            "framesWithDraws": 9,
+            "framesWithClears": 9,
+            "shaderCompiles": 10,
+            "programCreates": 5,
+            "programLinks": 5,
+            "programDeletes": 0,
+            "livePrograms": 5,
+            "textureCreates": 18,
+            "textureDeletes": 0,
+            "liveTextures": 18,
+            "estimatedTextureBytes": 962140,
+            "events": []
+          }
+        ],
+        "totals": {
+          "trackedContexts": 2,
+          "attachedContexts": 1,
+          "nonLostContexts": 2,
+          "detachedNonLostContexts": 1,
+          "drawCalls": 13659,
+          "estimatedTriangles": 2770242,
+          "clearCalls": 105,
+          "shaderCompiles": 18,
+          "programLinks": 9,
+          "livePrograms": 5,
+          "liveTextures": 23,
+          "estimatedTextureBytes": 963168
+        }
+      },
+      "after": {
+        "version": "1.0.0",
+        "atMs": 16480.8,
+        "document": {
+          "visibilityState": "visible",
+          "hidden": false,
+          "hasFocus": true
+        },
+        "animationFrames": 1494,
+        "stage": "Path Editor",
+        "canvases": [
+          {
+            "id": "canvas-2",
+            "width": 624,
+            "height": 610,
+            "attached": true,
+            "className": "three-puppet-canvas"
+          }
+        ],
+        "rendererInfoSamples": [
+          {
+            "testId": "path-three-puppet-state",
+            "renderer": "webgl",
+            "renderTriangles": "35476",
+            "dynamicBuilds": "181",
+            "geometryCacheSize": null,
+            "materialCacheSize": null,
+            "pixelRatioCap": "1.5"
+          }
+        ],
+        "contexts": [
+          {
+            "id": "context-1",
+            "canvasId": "canvas-1",
+            "kind": "webgl2",
+            "attached": false,
+            "contextLost": false,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+            "vendor": "Google Inc. (Apple)",
+            "attributes": {
+              "alpha": true,
+              "antialias": true,
+              "depth": true,
+              "desynchronized": false,
+              "failIfMajorPerformanceCaveat": false,
+              "powerPreference": "default",
+              "premultipliedAlpha": true,
+              "preserveDrawingBuffer": false,
+              "stencil": false,
+              "xrCompatible": false
+            },
+            "createdAtMs": 2591.5,
+            "getContextCalls": 1,
+            "drawCalls": 3819,
+            "estimatedTriangles": 733739,
+            "clearCalls": 37,
+            "framesWithDraws": 5,
+            "framesWithClears": 5,
+            "shaderCompiles": 8,
+            "programCreates": 4,
+            "programLinks": 4,
+            "programDeletes": 4,
+            "livePrograms": 0,
+            "textureCreates": 18,
+            "textureDeletes": 13,
+            "liveTextures": 5,
+            "estimatedTextureBytes": 1028,
+            "events": []
+          },
+          {
+            "id": "context-2",
+            "canvasId": "canvas-2",
+            "kind": "webgl2",
+            "attached": true,
+            "contextLost": false,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+            "vendor": "Google Inc. (Apple)",
+            "attributes": {
+              "alpha": true,
+              "antialias": true,
+              "depth": true,
+              "desynchronized": false,
+              "failIfMajorPerformanceCaveat": false,
+              "powerPreference": "default",
+              "premultipliedAlpha": true,
+              "preserveDrawingBuffer": false,
+              "stencil": false,
+              "xrCompatible": false
+            },
+            "createdAtMs": 15482.4,
+            "getContextCalls": 1,
+            "drawCalls": 84990,
+            "estimatedTriangles": 18000703,
+            "clearCalls": 518,
+            "framesWithDraws": 99,
+            "framesWithClears": 99,
+            "shaderCompiles": 10,
+            "programCreates": 5,
+            "programLinks": 5,
+            "programDeletes": 0,
+            "livePrograms": 5,
+            "textureCreates": 18,
+            "textureDeletes": 0,
+            "liveTextures": 18,
+            "estimatedTextureBytes": 962140,
+            "events": []
+          }
+        ],
+        "totals": {
+          "trackedContexts": 2,
+          "attachedContexts": 1,
+          "nonLostContexts": 2,
+          "detachedNonLostContexts": 1,
+          "drawCalls": 88809,
+          "estimatedTriangles": 18734442,
+          "clearCalls": 555,
+          "shaderCompiles": 18,
+          "programLinks": 9,
+          "livePrograms": 5,
+          "liveTextures": 23,
+          "estimatedTextureBytes": 963168
+        }
+      },
+      "delta": {
+        "totals": {
+          "trackedContexts": 0,
+          "attachedContexts": 0,
+          "nonLostContexts": 0,
+          "detachedNonLostContexts": 0,
+          "drawCalls": 75150,
+          "estimatedTriangles": 15964200,
+          "clearCalls": 450,
+          "shaderCompiles": 0,
+          "programLinks": 0,
+          "livePrograms": 0,
+          "liveTextures": 0,
+          "estimatedTextureBytes": 0
+        },
+        "contexts": [
+          {
+            "id": "context-1",
+            "attached": false,
+            "contextLost": false,
+            "drawCalls": 0,
+            "estimatedTriangles": 0,
+            "clearCalls": 0,
+            "shaderCompiles": 0,
+            "programLinks": 0,
+            "textureCreates": 0,
+            "textureDeletes": 0,
+            "estimatedTextureBytes": 0
+          },
+          {
+            "id": "context-2",
+            "attached": true,
+            "contextLost": false,
+            "drawCalls": 75150,
+            "estimatedTriangles": 15964200,
+            "clearCalls": 450,
+            "shaderCompiles": 0,
+            "programLinks": 0,
+            "textureCreates": 0,
+            "textureDeletes": 0,
+            "estimatedTextureBytes": 0
+          }
+        ],
+        "animationFrames": 89
+      },
+      "gpuTimer": {
+        "available": true,
+        "contextId": "context-2",
+        "disjoint": false,
+        "nanoseconds": 0,
+        "milliseconds": 0
+      },
+      "memoryBefore": {
+        "cdp": {
+          "metrics": [
+            {
+              "name": "Timestamp",
+              "value": 1090433.217454
+            },
+            {
+              "name": "AudioHandlers",
+              "value": 0
+            },
+            {
+              "name": "AudioWorkletProcessors",
+              "value": 0
+            },
+            {
+              "name": "Documents",
+              "value": 9
+            },
+            {
+              "name": "Frames",
+              "value": 9
+            },
+            {
+              "name": "JSEventListeners",
+              "value": 1053
+            },
+            {
+              "name": "LayoutObjects",
+              "value": 487
+            },
+            {
+              "name": "MediaKeySessions",
+              "value": 0
+            },
+            {
+              "name": "MediaKeys",
+              "value": 0
+            },
+            {
+              "name": "Nodes",
+              "value": 3816
+            },
+            {
+              "name": "Resources",
+              "value": 10
+            },
+            {
+              "name": "ContextLifecycleStateObservers",
+              "value": 30
+            },
+            {
+              "name": "V8PerContextDatas",
+              "value": 2
+            },
+            {
+              "name": "WorkerGlobalScopes",
+              "value": 1
+            },
+            {
+              "name": "UACSSResources",
+              "value": 0
+            },
+            {
+              "name": "RTCPeerConnections",
+              "value": 0
+            },
+            {
+              "name": "ResourceFetchers",
+              "value": 10
+            },
+            {
+              "name": "AdSubframes",
+              "value": 0
+            },
+            {
+              "name": "DetachedScriptStates",
+              "value": 0
+            },
+            {
+              "name": "ArrayBufferContents",
+              "value": 427
+            },
+            {
+              "name": "LayoutCount",
+              "value": 49
+            },
+            {
+              "name": "RecalcStyleCount",
+              "value": 74
+            },
+            {
+              "name": "LayoutDuration",
+              "value": 0.137704
+            },
+            {
+              "name": "RecalcStyleDuration",
+              "value": 0.019698
+            },
+            {
+              "name": "DevToolsCommandDuration",
+              "value": 0.138829
+            },
+            {
+              "name": "ScriptDuration",
+              "value": 3.691454
+            },
+            {
+              "name": "V8CompileDuration",
+              "value": 0
+            },
+            {
+              "name": "TaskDuration",
+              "value": 4.473662
+            },
+            {
+              "name": "TaskOtherDuration",
+              "value": 0.485977
+            },
+            {
+              "name": "ThreadTime",
+              "value": 1.061899
+            },
+            {
+              "name": "ProcessTime",
+              "value": 3.096324
+            },
+            {
+              "name": "JSHeapUsedSize",
+              "value": 16451152
+            },
+            {
+              "name": "JSHeapTotalSize",
+              "value": 37027840
+            },
+            {
+              "name": "FirstMeaningfulPaint",
+              "value": 1090419.791894
+            },
+            {
+              "name": "DomContentLoaded",
+              "value": 1090417.60969
+            },
+            {
+              "name": "NavigationStart",
+              "value": 1090417.426335
+            }
+          ]
+        },
+        "page": {
+          "memory": {
+            "usedJSHeapSize": 23917771,
+            "totalJSHeapSize": 43217919,
+            "jsHeapSizeLimit": 4395630592
+          },
+          "uaMemory": {
+            "unavailable": true
+          }
+        }
+      },
+      "memoryAfter": {
+        "cdp": {
+          "metrics": [
+            {
+              "name": "Timestamp",
+              "value": 1090433.958546
+            },
+            {
+              "name": "AudioHandlers",
+              "value": 0
+            },
+            {
+              "name": "AudioWorkletProcessors",
+              "value": 0
+            },
+            {
+              "name": "Documents",
+              "value": 9
+            },
+            {
+              "name": "Frames",
+              "value": 9
+            },
+            {
+              "name": "JSEventListeners",
+              "value": 7893
+            },
+            {
+              "name": "LayoutObjects",
+              "value": 487
+            },
+            {
+              "name": "MediaKeySessions",
+              "value": 0
+            },
+            {
+              "name": "MediaKeys",
+              "value": 0
+            },
+            {
+              "name": "Nodes",
+              "value": 3816
+            },
+            {
+              "name": "Resources",
+              "value": 10
+            },
+            {
+              "name": "ContextLifecycleStateObservers",
+              "value": 30
+            },
+            {
+              "name": "V8PerContextDatas",
+              "value": 2
+            },
+            {
+              "name": "WorkerGlobalScopes",
+              "value": 1
+            },
+            {
+              "name": "UACSSResources",
+              "value": 0
+            },
+            {
+              "name": "RTCPeerConnections",
+              "value": 0
+            },
+            {
+              "name": "ResourceFetchers",
+              "value": 10
+            },
+            {
+              "name": "AdSubframes",
+              "value": 0
+            },
+            {
+              "name": "DetachedScriptStates",
+              "value": 0
+            },
+            {
+              "name": "ArrayBufferContents",
+              "value": 427
+            },
+            {
+              "name": "LayoutCount",
+              "value": 90
+            },
+            {
+              "name": "RecalcStyleCount",
+              "value": 84
+            },
+            {
+              "name": "LayoutDuration",
+              "value": 0.144377
+            },
+            {
+              "name": "RecalcStyleDuration",
+              "value": 0.021187
+            },
+            {
+              "name": "DevToolsCommandDuration",
+              "value": 0.145978
+            },
+            {
+              "name": "ScriptDuration",
+              "value": 4.007599
+            },
+            {
+              "name": "V8CompileDuration",
+              "value": 0
+            },
+            {
+              "name": "TaskDuration",
+              "value": 4.848705
+            },
+            {
+              "name": "TaskOtherDuration",
+              "value": 0.529564
+            },
+            {
+              "name": "ThreadTime",
+              "value": 1.438428
+            },
+            {
+              "name": "ProcessTime",
+              "value": 3.779131
+            },
+            {
+              "name": "JSHeapUsedSize",
+              "value": 24506328
+            },
+            {
+              "name": "JSHeapTotalSize",
+              "value": 53280768
+            },
+            {
+              "name": "FirstMeaningfulPaint",
+              "value": 1090419.791894
+            },
+            {
+              "name": "DomContentLoaded",
+              "value": 1090417.60969
+            },
+            {
+              "name": "NavigationStart",
+              "value": 1090417.426335
+            }
+          ]
+        },
+        "page": {
+          "memory": {
+            "usedJSHeapSize": 31397366,
+            "totalJSHeapSize": 59478738,
+            "jsHeapSizeLimit": 4395630592
+          },
+          "uaMemory": {
+            "unavailable": true
+          }
+        }
+      }
+    },
+    {
+      "label": "path-svg-paused",
+      "durationMs": 700,
+      "before": {
+        "version": "1.0.0",
+        "atMs": 16990,
+        "document": {
+          "visibilityState": "visible",
+          "hidden": false,
+          "hasFocus": true
+        },
+        "animationFrames": 1510,
+        "stage": "Path Editor",
+        "canvases": [],
+        "rendererInfoSamples": [],
+        "contexts": [
+          {
+            "id": "context-1",
+            "canvasId": "canvas-1",
+            "kind": "webgl2",
+            "attached": false,
+            "contextLost": false,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+            "vendor": "Google Inc. (Apple)",
+            "attributes": {
+              "alpha": true,
+              "antialias": true,
+              "depth": true,
+              "desynchronized": false,
+              "failIfMajorPerformanceCaveat": false,
+              "powerPreference": "default",
+              "premultipliedAlpha": true,
+              "preserveDrawingBuffer": false,
+              "stencil": false,
+              "xrCompatible": false
+            },
+            "createdAtMs": 2591.5,
+            "getContextCalls": 1,
+            "drawCalls": 3819,
+            "estimatedTriangles": 733739,
+            "clearCalls": 37,
+            "framesWithDraws": 5,
+            "framesWithClears": 5,
+            "shaderCompiles": 8,
+            "programCreates": 4,
+            "programLinks": 4,
+            "programDeletes": 4,
+            "livePrograms": 0,
+            "textureCreates": 18,
+            "textureDeletes": 13,
+            "liveTextures": 5,
+            "estimatedTextureBytes": 1028,
+            "events": []
+          },
+          {
+            "id": "context-2",
+            "canvasId": "canvas-2",
+            "kind": "webgl2",
+            "attached": false,
+            "contextLost": false,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+            "vendor": "Google Inc. (Apple)",
+            "attributes": {
+              "alpha": true,
+              "antialias": true,
+              "depth": true,
+              "desynchronized": false,
+              "failIfMajorPerformanceCaveat": false,
+              "powerPreference": "default",
+              "premultipliedAlpha": true,
+              "preserveDrawingBuffer": false,
+              "stencil": false,
+              "xrCompatible": false
+            },
+            "createdAtMs": 15482.4,
+            "getContextCalls": 1,
+            "drawCalls": 95010,
+            "estimatedTriangles": 20129263,
+            "clearCalls": 578,
+            "framesWithDraws": 111,
+            "framesWithClears": 111,
+            "shaderCompiles": 10,
+            "programCreates": 5,
+            "programLinks": 5,
+            "programDeletes": 5,
+            "livePrograms": 0,
+            "textureCreates": 18,
+            "textureDeletes": 13,
+            "liveTextures": 5,
+            "estimatedTextureBytes": 1028,
+            "events": []
+          }
+        ],
+        "totals": {
+          "trackedContexts": 2,
+          "attachedContexts": 0,
+          "nonLostContexts": 2,
+          "detachedNonLostContexts": 2,
+          "drawCalls": 98829,
+          "estimatedTriangles": 20863002,
+          "clearCalls": 615,
+          "shaderCompiles": 18,
+          "programLinks": 9,
+          "livePrograms": 0,
+          "liveTextures": 10,
+          "estimatedTextureBytes": 2056
+        }
+      },
+      "after": {
+        "version": "1.0.0",
+        "atMs": 17768.9,
+        "document": {
+          "visibilityState": "visible",
+          "hidden": false,
+          "hasFocus": true
+        },
+        "animationFrames": 1551,
+        "stage": "Path Editor",
+        "canvases": [],
+        "rendererInfoSamples": [],
+        "contexts": [
+          {
+            "id": "context-1",
+            "canvasId": "canvas-1",
+            "kind": "webgl2",
+            "attached": false,
+            "contextLost": false,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+            "vendor": "Google Inc. (Apple)",
+            "attributes": {
+              "alpha": true,
+              "antialias": true,
+              "depth": true,
+              "desynchronized": false,
+              "failIfMajorPerformanceCaveat": false,
+              "powerPreference": "default",
+              "premultipliedAlpha": true,
+              "preserveDrawingBuffer": false,
+              "stencil": false,
+              "xrCompatible": false
+            },
+            "createdAtMs": 2591.5,
+            "getContextCalls": 1,
+            "drawCalls": 3819,
+            "estimatedTriangles": 733739,
+            "clearCalls": 37,
+            "framesWithDraws": 5,
+            "framesWithClears": 5,
+            "shaderCompiles": 8,
+            "programCreates": 4,
+            "programLinks": 4,
+            "programDeletes": 4,
+            "livePrograms": 0,
+            "textureCreates": 18,
+            "textureDeletes": 13,
+            "liveTextures": 5,
+            "estimatedTextureBytes": 1028,
+            "events": []
+          },
+          {
+            "id": "context-2",
+            "canvasId": "canvas-2",
+            "kind": "webgl2",
+            "attached": false,
+            "contextLost": false,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+            "vendor": "Google Inc. (Apple)",
+            "attributes": {
+              "alpha": true,
+              "antialias": true,
+              "depth": true,
+              "desynchronized": false,
+              "failIfMajorPerformanceCaveat": false,
+              "powerPreference": "default",
+              "premultipliedAlpha": true,
+              "preserveDrawingBuffer": false,
+              "stencil": false,
+              "xrCompatible": false
+            },
+            "createdAtMs": 15482.4,
+            "getContextCalls": 1,
+            "drawCalls": 95010,
+            "estimatedTriangles": 20129263,
+            "clearCalls": 578,
+            "framesWithDraws": 111,
+            "framesWithClears": 111,
+            "shaderCompiles": 10,
+            "programCreates": 5,
+            "programLinks": 5,
+            "programDeletes": 5,
+            "livePrograms": 0,
+            "textureCreates": 18,
+            "textureDeletes": 13,
+            "liveTextures": 5,
+            "estimatedTextureBytes": 1028,
+            "events": []
+          }
+        ],
+        "totals": {
+          "trackedContexts": 2,
+          "attachedContexts": 0,
+          "nonLostContexts": 2,
+          "detachedNonLostContexts": 2,
+          "drawCalls": 98829,
+          "estimatedTriangles": 20863002,
+          "clearCalls": 615,
+          "shaderCompiles": 18,
+          "programLinks": 9,
+          "livePrograms": 0,
+          "liveTextures": 10,
+          "estimatedTextureBytes": 2056
+        }
+      },
+      "delta": {
+        "totals": {
+          "trackedContexts": 0,
+          "attachedContexts": 0,
+          "nonLostContexts": 0,
+          "detachedNonLostContexts": 0,
+          "drawCalls": 0,
+          "estimatedTriangles": 0,
+          "clearCalls": 0,
+          "shaderCompiles": 0,
+          "programLinks": 0,
+          "livePrograms": 0,
+          "liveTextures": 0,
+          "estimatedTextureBytes": 0
+        },
+        "contexts": [
+          {
+            "id": "context-1",
+            "attached": false,
+            "contextLost": false,
+            "drawCalls": 0,
+            "estimatedTriangles": 0,
+            "clearCalls": 0,
+            "shaderCompiles": 0,
+            "programLinks": 0,
+            "textureCreates": 0,
+            "textureDeletes": 0,
+            "estimatedTextureBytes": 0
+          },
+          {
+            "id": "context-2",
+            "attached": false,
+            "contextLost": false,
+            "drawCalls": 0,
+            "estimatedTriangles": 0,
+            "clearCalls": 0,
+            "shaderCompiles": 0,
+            "programLinks": 0,
+            "textureCreates": 0,
+            "textureDeletes": 0,
+            "estimatedTextureBytes": 0
+          }
+        ],
+        "animationFrames": 41
+      },
+      "gpuTimer": {
+        "available": false,
+        "reason": "no-active-context"
+      },
+      "memoryBefore": {
+        "cdp": {
+          "metrics": [
+            {
+              "name": "Timestamp",
+              "value": 1090434.469879
+            },
+            {
+              "name": "AudioHandlers",
+              "value": 0
+            },
+            {
+              "name": "AudioWorkletProcessors",
+              "value": 0
+            },
+            {
+              "name": "Documents",
+              "value": 9
+            },
+            {
+              "name": "Frames",
+              "value": 9
+            },
+            {
+              "name": "JSEventListeners",
+              "value": 9291
+            },
+            {
+              "name": "LayoutObjects",
+              "value": 746
+            },
+            {
+              "name": "MediaKeySessions",
+              "value": 0
+            },
+            {
+              "name": "MediaKeys",
+              "value": 0
+            },
+            {
+              "name": "Nodes",
+              "value": 5546
+            },
+            {
+              "name": "Resources",
+              "value": 10
+            },
+            {
+              "name": "ContextLifecycleStateObservers",
+              "value": 30
+            },
+            {
+              "name": "V8PerContextDatas",
+              "value": 2
+            },
+            {
+              "name": "WorkerGlobalScopes",
+              "value": 1
+            },
+            {
+              "name": "UACSSResources",
+              "value": 0
+            },
+            {
+              "name": "RTCPeerConnections",
+              "value": 0
+            },
+            {
+              "name": "ResourceFetchers",
+              "value": 10
+            },
+            {
+              "name": "AdSubframes",
+              "value": 0
+            },
+            {
+              "name": "DetachedScriptStates",
+              "value": 0
+            },
+            {
+              "name": "ArrayBufferContents",
+              "value": 427
+            },
+            {
+              "name": "LayoutCount",
+              "value": 100
+            },
+            {
+              "name": "RecalcStyleCount",
+              "value": 96
+            },
+            {
+              "name": "LayoutDuration",
+              "value": 0.147491
+            },
+            {
+              "name": "RecalcStyleDuration",
+              "value": 0.022985
+            },
+            {
+              "name": "DevToolsCommandDuration",
+              "value": 0.528197
+            },
+            {
+              "name": "ScriptDuration",
+              "value": 4.05676
+            },
+            {
+              "name": "V8CompileDuration",
+              "value": 0
+            },
+            {
+              "name": "TaskDuration",
+              "value": 5.300026
+            },
+            {
+              "name": "TaskOtherDuration",
+              "value": 0.544593
+            },
+            {
+              "name": "ThreadTime",
+              "value": 1.527248
+            },
+            {
+              "name": "ProcessTime",
+              "value": 3.918463
+            },
+            {
+              "name": "JSHeapUsedSize",
+              "value": 27739236
+            },
+            {
+              "name": "JSHeapTotalSize",
+              "value": 54329344
+            },
+            {
+              "name": "FirstMeaningfulPaint",
+              "value": 1090419.791894
+            },
+            {
+              "name": "DomContentLoaded",
+              "value": 1090417.60969
+            },
+            {
+              "name": "NavigationStart",
+              "value": 1090417.426335
+            }
+          ]
+        },
+        "page": {
+          "memory": {
+            "usedJSHeapSize": 34868958,
+            "totalJSHeapSize": 60555398,
+            "jsHeapSizeLimit": 4395630592
+          },
+          "uaMemory": {
+            "unavailable": true
+          }
+        }
+      },
+      "memoryAfter": {
+        "cdp": {
+          "metrics": [
+            {
+              "name": "Timestamp",
+              "value": 1090435.248662
+            },
+            {
+              "name": "AudioHandlers",
+              "value": 0
+            },
+            {
+              "name": "AudioWorkletProcessors",
+              "value": 0
+            },
+            {
+              "name": "Documents",
+              "value": 9
+            },
+            {
+              "name": "Frames",
+              "value": 9
+            },
+            {
+              "name": "JSEventListeners",
+              "value": 14006
+            },
+            {
+              "name": "LayoutObjects",
+              "value": 746
+            },
+            {
+              "name": "MediaKeySessions",
+              "value": 0
+            },
+            {
+              "name": "MediaKeys",
+              "value": 0
+            },
+            {
+              "name": "Nodes",
+              "value": 5546
+            },
+            {
+              "name": "Resources",
+              "value": 10
+            },
+            {
+              "name": "ContextLifecycleStateObservers",
+              "value": 30
+            },
+            {
+              "name": "V8PerContextDatas",
+              "value": 2
+            },
+            {
+              "name": "WorkerGlobalScopes",
+              "value": 1
+            },
+            {
+              "name": "UACSSResources",
+              "value": 0
+            },
+            {
+              "name": "RTCPeerConnections",
+              "value": 0
+            },
+            {
+              "name": "ResourceFetchers",
+              "value": 10
+            },
+            {
+              "name": "AdSubframes",
+              "value": 0
+            },
+            {
+              "name": "DetachedScriptStates",
+              "value": 0
+            },
+            {
+              "name": "ArrayBufferContents",
+              "value": 427
+            },
+            {
+              "name": "LayoutCount",
+              "value": 141
+            },
+            {
+              "name": "RecalcStyleCount",
+              "value": 137
+            },
+            {
+              "name": "LayoutDuration",
+              "value": 0.160147
+            },
+            {
+              "name": "RecalcStyleDuration",
+              "value": 0.027863
+            },
+            {
+              "name": "DevToolsCommandDuration",
+              "value": 0.595351
+            },
+            {
+              "name": "ScriptDuration",
+              "value": 4.120884
+            },
+            {
+              "name": "V8CompileDuration",
+              "value": 0
+            },
+            {
+              "name": "TaskDuration",
+              "value": 5.495839
+            },
+            {
+              "name": "TaskOtherDuration",
+              "value": 0.591594
+            },
+            {
+              "name": "ThreadTime",
+              "value": 1.664852
+            },
+            {
+              "name": "ProcessTime",
+              "value": 4.128138
+            },
+            {
+              "name": "JSHeapUsedSize",
+              "value": 39076912
+            },
+            {
+              "name": "JSHeapTotalSize",
+              "value": 55902208
+            },
+            {
+              "name": "FirstMeaningfulPaint",
+              "value": 1090419.791894
+            },
+            {
+              "name": "DomContentLoaded",
+              "value": 1090417.60969
+            },
+            {
+              "name": "NavigationStart",
+              "value": 1090417.426335
+            }
+          ]
+        },
+        "page": {
+          "memory": {
+            "usedJSHeapSize": 46568799,
+            "totalJSHeapSize": 62660127,
+            "jsHeapSizeLimit": 4395630592
+          },
+          "uaMemory": {
+            "unavailable": true
+          }
+        }
+      }
+    },
+    {
+      "label": "path-svg-after-draw",
+      "durationMs": 700,
+      "before": {
+        "version": "1.0.0",
+        "atMs": 18771.1,
+        "document": {
+          "visibilityState": "visible",
+          "hidden": false,
+          "hasFocus": true
+        },
+        "animationFrames": 1585,
+        "stage": "Path Editor",
+        "canvases": [],
+        "rendererInfoSamples": [],
+        "contexts": [
+          {
+            "id": "context-1",
+            "canvasId": "canvas-1",
+            "kind": "webgl2",
+            "attached": false,
+            "contextLost": false,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+            "vendor": "Google Inc. (Apple)",
+            "attributes": {
+              "alpha": true,
+              "antialias": true,
+              "depth": true,
+              "desynchronized": false,
+              "failIfMajorPerformanceCaveat": false,
+              "powerPreference": "default",
+              "premultipliedAlpha": true,
+              "preserveDrawingBuffer": false,
+              "stencil": false,
+              "xrCompatible": false
+            },
+            "createdAtMs": 2591.5,
+            "getContextCalls": 1,
+            "drawCalls": 3819,
+            "estimatedTriangles": 733739,
+            "clearCalls": 37,
+            "framesWithDraws": 5,
+            "framesWithClears": 5,
+            "shaderCompiles": 8,
+            "programCreates": 4,
+            "programLinks": 4,
+            "programDeletes": 4,
+            "livePrograms": 0,
+            "textureCreates": 18,
+            "textureDeletes": 13,
+            "liveTextures": 5,
+            "estimatedTextureBytes": 1028,
+            "events": []
+          },
+          {
+            "id": "context-2",
+            "canvasId": "canvas-2",
+            "kind": "webgl2",
+            "attached": false,
+            "contextLost": false,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+            "vendor": "Google Inc. (Apple)",
+            "attributes": {
+              "alpha": true,
+              "antialias": true,
+              "depth": true,
+              "desynchronized": false,
+              "failIfMajorPerformanceCaveat": false,
+              "powerPreference": "default",
+              "premultipliedAlpha": true,
+              "preserveDrawingBuffer": false,
+              "stencil": false,
+              "xrCompatible": false
+            },
+            "createdAtMs": 15482.4,
+            "getContextCalls": 1,
+            "drawCalls": 95010,
+            "estimatedTriangles": 20129263,
+            "clearCalls": 578,
+            "framesWithDraws": 111,
+            "framesWithClears": 111,
+            "shaderCompiles": 10,
+            "programCreates": 5,
+            "programLinks": 5,
+            "programDeletes": 5,
+            "livePrograms": 0,
+            "textureCreates": 18,
+            "textureDeletes": 13,
+            "liveTextures": 5,
+            "estimatedTextureBytes": 1028,
+            "events": []
+          }
+        ],
+        "totals": {
+          "trackedContexts": 2,
+          "attachedContexts": 0,
+          "nonLostContexts": 2,
+          "detachedNonLostContexts": 2,
+          "drawCalls": 98829,
+          "estimatedTriangles": 20863002,
+          "clearCalls": 615,
+          "shaderCompiles": 18,
+          "programLinks": 9,
+          "livePrograms": 0,
+          "liveTextures": 10,
+          "estimatedTextureBytes": 2056
+        }
+      },
+      "after": {
+        "version": "1.0.0",
+        "atMs": 19587.9,
+        "document": {
+          "visibilityState": "visible",
+          "hidden": false,
+          "hasFocus": true
+        },
+        "animationFrames": 1599,
+        "stage": "Path Editor",
+        "canvases": [],
+        "rendererInfoSamples": [],
+        "contexts": [
+          {
+            "id": "context-1",
+            "canvasId": "canvas-1",
+            "kind": "webgl2",
+            "attached": false,
+            "contextLost": false,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+            "vendor": "Google Inc. (Apple)",
+            "attributes": {
+              "alpha": true,
+              "antialias": true,
+              "depth": true,
+              "desynchronized": false,
+              "failIfMajorPerformanceCaveat": false,
+              "powerPreference": "default",
+              "premultipliedAlpha": true,
+              "preserveDrawingBuffer": false,
+              "stencil": false,
+              "xrCompatible": false
+            },
+            "createdAtMs": 2591.5,
+            "getContextCalls": 1,
+            "drawCalls": 3819,
+            "estimatedTriangles": 733739,
+            "clearCalls": 37,
+            "framesWithDraws": 5,
+            "framesWithClears": 5,
+            "shaderCompiles": 8,
+            "programCreates": 4,
+            "programLinks": 4,
+            "programDeletes": 4,
+            "livePrograms": 0,
+            "textureCreates": 18,
+            "textureDeletes": 13,
+            "liveTextures": 5,
+            "estimatedTextureBytes": 1028,
+            "events": []
+          },
+          {
+            "id": "context-2",
+            "canvasId": "canvas-2",
+            "kind": "webgl2",
+            "attached": false,
+            "contextLost": false,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+            "vendor": "Google Inc. (Apple)",
+            "attributes": {
+              "alpha": true,
+              "antialias": true,
+              "depth": true,
+              "desynchronized": false,
+              "failIfMajorPerformanceCaveat": false,
+              "powerPreference": "default",
+              "premultipliedAlpha": true,
+              "preserveDrawingBuffer": false,
+              "stencil": false,
+              "xrCompatible": false
+            },
+            "createdAtMs": 15482.4,
+            "getContextCalls": 1,
+            "drawCalls": 95010,
+            "estimatedTriangles": 20129263,
+            "clearCalls": 578,
+            "framesWithDraws": 111,
+            "framesWithClears": 111,
+            "shaderCompiles": 10,
+            "programCreates": 5,
+            "programLinks": 5,
+            "programDeletes": 5,
+            "livePrograms": 0,
+            "textureCreates": 18,
+            "textureDeletes": 13,
+            "liveTextures": 5,
+            "estimatedTextureBytes": 1028,
+            "events": []
+          }
+        ],
+        "totals": {
+          "trackedContexts": 2,
+          "attachedContexts": 0,
+          "nonLostContexts": 2,
+          "detachedNonLostContexts": 2,
+          "drawCalls": 98829,
+          "estimatedTriangles": 20863002,
+          "clearCalls": 615,
+          "shaderCompiles": 18,
+          "programLinks": 9,
+          "livePrograms": 0,
+          "liveTextures": 10,
+          "estimatedTextureBytes": 2056
+        }
+      },
+      "delta": {
+        "totals": {
+          "trackedContexts": 0,
+          "attachedContexts": 0,
+          "nonLostContexts": 0,
+          "detachedNonLostContexts": 0,
+          "drawCalls": 0,
+          "estimatedTriangles": 0,
+          "clearCalls": 0,
+          "shaderCompiles": 0,
+          "programLinks": 0,
+          "livePrograms": 0,
+          "liveTextures": 0,
+          "estimatedTextureBytes": 0
+        },
+        "contexts": [
+          {
+            "id": "context-1",
+            "attached": false,
+            "contextLost": false,
+            "drawCalls": 0,
+            "estimatedTriangles": 0,
+            "clearCalls": 0,
+            "shaderCompiles": 0,
+            "programLinks": 0,
+            "textureCreates": 0,
+            "textureDeletes": 0,
+            "estimatedTextureBytes": 0
+          },
+          {
+            "id": "context-2",
+            "attached": false,
+            "contextLost": false,
+            "drawCalls": 0,
+            "estimatedTriangles": 0,
+            "clearCalls": 0,
+            "shaderCompiles": 0,
+            "programLinks": 0,
+            "textureCreates": 0,
+            "textureDeletes": 0,
+            "estimatedTextureBytes": 0
+          }
+        ],
+        "animationFrames": 14
+      },
+      "gpuTimer": {
+        "available": false,
+        "reason": "no-active-context"
+      },
+      "memoryBefore": {
+        "cdp": {
+          "metrics": [
+            {
+              "name": "Timestamp",
+              "value": 1090436.250906
+            },
+            {
+              "name": "AudioHandlers",
+              "value": 0
+            },
+            {
+              "name": "AudioWorkletProcessors",
+              "value": 0
+            },
+            {
+              "name": "Documents",
+              "value": 9
+            },
+            {
+              "name": "Frames",
+              "value": 9
+            },
+            {
+              "name": "JSEventListeners",
+              "value": 17962
+            },
+            {
+              "name": "LayoutObjects",
+              "value": 764
+            },
+            {
+              "name": "MediaKeySessions",
+              "value": 0
+            },
+            {
+              "name": "MediaKeys",
+              "value": 0
+            },
+            {
+              "name": "Nodes",
+              "value": 5742
+            },
+            {
+              "name": "Resources",
+              "value": 10
+            },
+            {
+              "name": "ContextLifecycleStateObservers",
+              "value": 31
+            },
+            {
+              "name": "V8PerContextDatas",
+              "value": 2
+            },
+            {
+              "name": "WorkerGlobalScopes",
+              "value": 1
+            },
+            {
+              "name": "UACSSResources",
+              "value": 0
+            },
+            {
+              "name": "RTCPeerConnections",
+              "value": 0
+            },
+            {
+              "name": "ResourceFetchers",
+              "value": 10
+            },
+            {
+              "name": "AdSubframes",
+              "value": 0
+            },
+            {
+              "name": "DetachedScriptStates",
+              "value": 0
+            },
+            {
+              "name": "ArrayBufferContents",
+              "value": 475
+            },
+            {
+              "name": "LayoutCount",
+              "value": 175
+            },
+            {
+              "name": "RecalcStyleCount",
+              "value": 182
+            },
+            {
+              "name": "LayoutDuration",
+              "value": 0.166896
+            },
+            {
+              "name": "RecalcStyleDuration",
+              "value": 0.033629
+            },
+            {
+              "name": "DevToolsCommandDuration",
+              "value": 0.68354
+            },
+            {
+              "name": "ScriptDuration",
+              "value": 4.19957
+            },
+            {
+              "name": "V8CompileDuration",
+              "value": 0
+            },
+            {
+              "name": "TaskDuration",
+              "value": 5.729406
+            },
+            {
+              "name": "TaskOtherDuration",
+              "value": 0.645771
+            },
+            {
+              "name": "ThreadTime",
+              "value": 1.853422
+            },
+            {
+              "name": "ProcessTime",
+              "value": 4.409461
+            },
+            {
+              "name": "JSHeapUsedSize",
+              "value": 43315516
+            },
+            {
+              "name": "JSHeapTotalSize",
+              "value": 61734912
+            },
+            {
+              "name": "FirstMeaningfulPaint",
+              "value": 1090419.791894
+            },
+            {
+              "name": "DomContentLoaded",
+              "value": 1090417.60969
+            },
+            {
+              "name": "NavigationStart",
+              "value": 1090417.426335
+            }
+          ]
+        },
+        "page": {
+          "memory": {
+            "usedJSHeapSize": 54377117,
+            "totalJSHeapSize": 72076977,
+            "jsHeapSizeLimit": 4395630592
+          },
+          "uaMemory": {
+            "unavailable": true
+          }
+        }
+      },
+      "memoryAfter": {
+        "cdp": {
+          "metrics": [
+            {
+              "name": "Timestamp",
+              "value": 1090437.06757
+            },
+            {
+              "name": "AudioHandlers",
+              "value": 0
+            },
+            {
+              "name": "AudioWorkletProcessors",
+              "value": 0
+            },
+            {
+              "name": "Documents",
+              "value": 9
+            },
+            {
+              "name": "Frames",
+              "value": 9
+            },
+            {
+              "name": "JSEventListeners",
+              "value": 19822
+            },
+            {
+              "name": "LayoutObjects",
+              "value": 764
+            },
+            {
+              "name": "MediaKeySessions",
+              "value": 0
+            },
+            {
+              "name": "MediaKeys",
+              "value": 0
+            },
+            {
+              "name": "Nodes",
+              "value": 5742
+            },
+            {
+              "name": "Resources",
+              "value": 10
+            },
+            {
+              "name": "ContextLifecycleStateObservers",
+              "value": 31
+            },
+            {
+              "name": "V8PerContextDatas",
+              "value": 2
+            },
+            {
+              "name": "WorkerGlobalScopes",
+              "value": 1
+            },
+            {
+              "name": "UACSSResources",
+              "value": 0
+            },
+            {
+              "name": "RTCPeerConnections",
+              "value": 0
+            },
+            {
+              "name": "ResourceFetchers",
+              "value": 10
+            },
+            {
+              "name": "AdSubframes",
+              "value": 0
+            },
+            {
+              "name": "DetachedScriptStates",
+              "value": 0
+            },
+            {
+              "name": "ArrayBufferContents",
+              "value": 475
+            },
+            {
+              "name": "LayoutCount",
+              "value": 188
+            },
+            {
+              "name": "RecalcStyleCount",
+              "value": 205
+            },
+            {
+              "name": "LayoutDuration",
+              "value": 0.170767
+            },
+            {
+              "name": "RecalcStyleDuration",
+              "value": 0.0355
+            },
+            {
+              "name": "DevToolsCommandDuration",
+              "value": 0.787331
+            },
+            {
+              "name": "ScriptDuration",
+              "value": 4.221155
+            },
+            {
+              "name": "V8CompileDuration",
+              "value": 0
+            },
+            {
+              "name": "TaskDuration",
+              "value": 5.879665
+            },
+            {
+              "name": "TaskOtherDuration",
+              "value": 0.664912
+            },
+            {
+              "name": "ThreadTime",
+              "value": 1.908102
+            },
+            {
+              "name": "ProcessTime",
+              "value": 4.494793
+            },
+            {
+              "name": "JSHeapUsedSize",
+              "value": 39591552
+            },
+            {
+              "name": "JSHeapTotalSize",
+              "value": 63045632
+            },
+            {
+              "name": "FirstMeaningfulPaint",
+              "value": 1090419.791894
+            },
+            {
+              "name": "DomContentLoaded",
+              "value": 1090417.60969
+            },
+            {
+              "name": "NavigationStart",
+              "value": 1090417.426335
+            }
+          ]
+        },
+        "page": {
+          "memory": {
+            "usedJSHeapSize": 50985612,
+            "totalJSHeapSize": 73391228,
+            "jsHeapSizeLimit": 4395630592
+          },
+          "uaMemory": {
+            "unavailable": true
+          }
+        }
+      }
+    },
+    {
+      "label": "path-three-remount-paused",
+      "durationMs": 700,
+      "before": {
+        "version": "1.0.0",
+        "atMs": 20025.3,
+        "document": {
+          "visibilityState": "visible",
+          "hidden": false,
+          "hasFocus": true
+        },
+        "animationFrames": 1623,
+        "stage": "Path Editor",
+        "canvases": [
+          {
+            "id": "canvas-3",
+            "width": 624,
+            "height": 610,
+            "attached": true,
+            "className": "three-puppet-canvas"
+          }
+        ],
+        "rendererInfoSamples": [
+          {
+            "testId": "path-three-puppet-state",
+            "renderer": "webgl",
+            "renderTriangles": "37492",
+            "dynamicBuilds": "190",
+            "geometryCacheSize": null,
+            "materialCacheSize": null,
+            "pixelRatioCap": "1.5"
+          }
+        ],
+        "contexts": [
+          {
+            "id": "context-1",
+            "canvasId": "canvas-1",
+            "kind": "webgl2",
+            "attached": false,
+            "contextLost": false,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+            "vendor": "Google Inc. (Apple)",
+            "attributes": {
+              "alpha": true,
+              "antialias": true,
+              "depth": true,
+              "desynchronized": false,
+              "failIfMajorPerformanceCaveat": false,
+              "powerPreference": "default",
+              "premultipliedAlpha": true,
+              "preserveDrawingBuffer": false,
+              "stencil": false,
+              "xrCompatible": false
+            },
+            "createdAtMs": 2591.5,
+            "getContextCalls": 1,
+            "drawCalls": 3819,
+            "estimatedTriangles": 733739,
+            "clearCalls": 37,
+            "framesWithDraws": 5,
+            "framesWithClears": 5,
+            "shaderCompiles": 8,
+            "programCreates": 4,
+            "programLinks": 4,
+            "programDeletes": 4,
+            "livePrograms": 0,
+            "textureCreates": 18,
+            "textureDeletes": 13,
+            "liveTextures": 5,
+            "estimatedTextureBytes": 1028,
+            "events": []
+          },
+          {
+            "id": "context-2",
+            "canvasId": "canvas-2",
+            "kind": "webgl2",
+            "attached": false,
+            "contextLost": false,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+            "vendor": "Google Inc. (Apple)",
+            "attributes": {
+              "alpha": true,
+              "antialias": true,
+              "depth": true,
+              "desynchronized": false,
+              "failIfMajorPerformanceCaveat": false,
+              "powerPreference": "default",
+              "premultipliedAlpha": true,
+              "preserveDrawingBuffer": false,
+              "stencil": false,
+              "xrCompatible": false
+            },
+            "createdAtMs": 15482.4,
+            "getContextCalls": 1,
+            "drawCalls": 95010,
+            "estimatedTriangles": 20129263,
+            "clearCalls": 578,
+            "framesWithDraws": 111,
+            "framesWithClears": 111,
+            "shaderCompiles": 10,
+            "programCreates": 5,
+            "programLinks": 5,
+            "programDeletes": 5,
+            "livePrograms": 0,
+            "textureCreates": 18,
+            "textureDeletes": 13,
+            "liveTextures": 5,
+            "estimatedTextureBytes": 1028,
+            "events": []
+          },
+          {
+            "id": "context-3",
+            "canvasId": "canvas-3",
+            "kind": "webgl2",
+            "attached": true,
+            "contextLost": false,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+            "vendor": "Google Inc. (Apple)",
+            "attributes": {
+              "alpha": true,
+              "antialias": true,
+              "depth": true,
+              "desynchronized": false,
+              "failIfMajorPerformanceCaveat": false,
+              "powerPreference": "default",
+              "premultipliedAlpha": true,
+              "preserveDrawingBuffer": false,
+              "stencil": false,
+              "xrCompatible": false
+            },
+            "createdAtMs": 19882.5,
+            "getContextCalls": 1,
+            "drawCalls": 9468,
+            "estimatedTriangles": 1961939,
+            "clearCalls": 63,
+            "framesWithDraws": 9,
+            "framesWithClears": 9,
+            "shaderCompiles": 10,
+            "programCreates": 5,
+            "programLinks": 5,
+            "programDeletes": 0,
+            "livePrograms": 5,
+            "textureCreates": 18,
+            "textureDeletes": 0,
+            "liveTextures": 18,
+            "estimatedTextureBytes": 962140,
+            "events": []
+          }
+        ],
+        "totals": {
+          "trackedContexts": 3,
+          "attachedContexts": 1,
+          "nonLostContexts": 3,
+          "detachedNonLostContexts": 2,
+          "drawCalls": 108297,
+          "estimatedTriangles": 22824941,
+          "clearCalls": 678,
+          "shaderCompiles": 28,
+          "programLinks": 14,
+          "livePrograms": 5,
+          "liveTextures": 28,
+          "estimatedTextureBytes": 964196
+        }
+      },
+      "after": {
+        "version": "1.0.0",
+        "atMs": 20768.6,
+        "document": {
+          "visibilityState": "visible",
+          "hidden": false,
+          "hasFocus": true
+        },
+        "animationFrames": 1712,
+        "stage": "Path Editor",
+        "canvases": [
+          {
+            "id": "canvas-3",
+            "width": 624,
+            "height": 610,
+            "attached": true,
+            "className": "three-puppet-canvas"
+          }
+        ],
+        "rendererInfoSamples": [
+          {
+            "testId": "path-three-puppet-state",
+            "renderer": "webgl",
+            "renderTriangles": "37492",
+            "dynamicBuilds": "190",
+            "geometryCacheSize": null,
+            "materialCacheSize": null,
+            "pixelRatioCap": "1.5"
+          }
+        ],
+        "contexts": [
+          {
+            "id": "context-1",
+            "canvasId": "canvas-1",
+            "kind": "webgl2",
+            "attached": false,
+            "contextLost": false,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+            "vendor": "Google Inc. (Apple)",
+            "attributes": {
+              "alpha": true,
+              "antialias": true,
+              "depth": true,
+              "desynchronized": false,
+              "failIfMajorPerformanceCaveat": false,
+              "powerPreference": "default",
+              "premultipliedAlpha": true,
+              "preserveDrawingBuffer": false,
+              "stencil": false,
+              "xrCompatible": false
+            },
+            "createdAtMs": 2591.5,
+            "getContextCalls": 1,
+            "drawCalls": 3819,
+            "estimatedTriangles": 733739,
+            "clearCalls": 37,
+            "framesWithDraws": 5,
+            "framesWithClears": 5,
+            "shaderCompiles": 8,
+            "programCreates": 4,
+            "programLinks": 4,
+            "programDeletes": 4,
+            "livePrograms": 0,
+            "textureCreates": 18,
+            "textureDeletes": 13,
+            "liveTextures": 5,
+            "estimatedTextureBytes": 1028,
+            "events": []
+          },
+          {
+            "id": "context-2",
+            "canvasId": "canvas-2",
+            "kind": "webgl2",
+            "attached": false,
+            "contextLost": false,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+            "vendor": "Google Inc. (Apple)",
+            "attributes": {
+              "alpha": true,
+              "antialias": true,
+              "depth": true,
+              "desynchronized": false,
+              "failIfMajorPerformanceCaveat": false,
+              "powerPreference": "default",
+              "premultipliedAlpha": true,
+              "preserveDrawingBuffer": false,
+              "stencil": false,
+              "xrCompatible": false
+            },
+            "createdAtMs": 15482.4,
+            "getContextCalls": 1,
+            "drawCalls": 95010,
+            "estimatedTriangles": 20129263,
+            "clearCalls": 578,
+            "framesWithDraws": 111,
+            "framesWithClears": 111,
+            "shaderCompiles": 10,
+            "programCreates": 5,
+            "programLinks": 5,
+            "programDeletes": 5,
+            "livePrograms": 0,
+            "textureCreates": 18,
+            "textureDeletes": 13,
+            "liveTextures": 5,
+            "estimatedTextureBytes": 1028,
+            "events": []
+          },
+          {
+            "id": "context-3",
+            "canvasId": "canvas-3",
+            "kind": "webgl2",
+            "attached": true,
+            "contextLost": false,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+            "vendor": "Google Inc. (Apple)",
+            "attributes": {
+              "alpha": true,
+              "antialias": true,
+              "depth": true,
+              "desynchronized": false,
+              "failIfMajorPerformanceCaveat": false,
+              "powerPreference": "default",
+              "premultipliedAlpha": true,
+              "preserveDrawingBuffer": false,
+              "stencil": false,
+              "xrCompatible": false
+            },
+            "createdAtMs": 19882.5,
+            "getContextCalls": 1,
+            "drawCalls": 87788,
+            "estimatedTriangles": 18645879,
+            "clearCalls": 508,
+            "framesWithDraws": 98,
+            "framesWithClears": 98,
+            "shaderCompiles": 10,
+            "programCreates": 5,
+            "programLinks": 5,
+            "programDeletes": 0,
+            "livePrograms": 5,
+            "textureCreates": 18,
+            "textureDeletes": 0,
+            "liveTextures": 18,
+            "estimatedTextureBytes": 962140,
+            "events": []
+          }
+        ],
+        "totals": {
+          "trackedContexts": 3,
+          "attachedContexts": 1,
+          "nonLostContexts": 3,
+          "detachedNonLostContexts": 2,
+          "drawCalls": 186617,
+          "estimatedTriangles": 39508881,
+          "clearCalls": 1123,
+          "shaderCompiles": 28,
+          "programLinks": 14,
+          "livePrograms": 5,
+          "liveTextures": 28,
+          "estimatedTextureBytes": 964196
+        }
+      },
+      "delta": {
+        "totals": {
+          "trackedContexts": 0,
+          "attachedContexts": 0,
+          "nonLostContexts": 0,
+          "detachedNonLostContexts": 0,
+          "drawCalls": 78320,
+          "estimatedTriangles": 16683940,
+          "clearCalls": 445,
+          "shaderCompiles": 0,
+          "programLinks": 0,
+          "livePrograms": 0,
+          "liveTextures": 0,
+          "estimatedTextureBytes": 0
+        },
+        "contexts": [
+          {
+            "id": "context-1",
+            "attached": false,
+            "contextLost": false,
+            "drawCalls": 0,
+            "estimatedTriangles": 0,
+            "clearCalls": 0,
+            "shaderCompiles": 0,
+            "programLinks": 0,
+            "textureCreates": 0,
+            "textureDeletes": 0,
+            "estimatedTextureBytes": 0
+          },
+          {
+            "id": "context-2",
+            "attached": false,
+            "contextLost": false,
+            "drawCalls": 0,
+            "estimatedTriangles": 0,
+            "clearCalls": 0,
+            "shaderCompiles": 0,
+            "programLinks": 0,
+            "textureCreates": 0,
+            "textureDeletes": 0,
+            "estimatedTextureBytes": 0
+          },
+          {
+            "id": "context-3",
+            "attached": true,
+            "contextLost": false,
+            "drawCalls": 78320,
+            "estimatedTriangles": 16683940,
+            "clearCalls": 445,
+            "shaderCompiles": 0,
+            "programLinks": 0,
+            "textureCreates": 0,
+            "textureDeletes": 0,
+            "estimatedTextureBytes": 0
+          }
+        ],
+        "animationFrames": 89
+      },
+      "gpuTimer": {
+        "available": true,
+        "contextId": "context-3",
+        "disjoint": false,
+        "nanoseconds": 0,
+        "milliseconds": 0
+      },
+      "memoryBefore": {
+        "cdp": {
+          "metrics": [
+            {
+              "name": "Timestamp",
+              "value": 1090437.50515
+            },
+            {
+              "name": "AudioHandlers",
+              "value": 0
+            },
+            {
+              "name": "AudioWorkletProcessors",
+              "value": 0
+            },
+            {
+              "name": "Documents",
+              "value": 9
+            },
+            {
+              "name": "Frames",
+              "value": 9
+            },
+            {
+              "name": "JSEventListeners",
+              "value": 909
+            },
+            {
+              "name": "LayoutObjects",
+              "value": 486
+            },
+            {
+              "name": "MediaKeySessions",
+              "value": 0
+            },
+            {
+              "name": "MediaKeys",
+              "value": 0
+            },
+            {
+              "name": "Nodes",
+              "value": 3517
+            },
+            {
+              "name": "Resources",
+              "value": 10
+            },
+            {
+              "name": "ContextLifecycleStateObservers",
+              "value": 31
+            },
+            {
+              "name": "V8PerContextDatas",
+              "value": 2
+            },
+            {
+              "name": "WorkerGlobalScopes",
+              "value": 1
+            },
+            {
+              "name": "UACSSResources",
+              "value": 0
+            },
+            {
+              "name": "RTCPeerConnections",
+              "value": 0
+            },
+            {
+              "name": "ResourceFetchers",
+              "value": 10
+            },
+            {
+              "name": "AdSubframes",
+              "value": 0
+            },
+            {
+              "name": "DetachedScriptStates",
+              "value": 0
+            },
+            {
+              "name": "ArrayBufferContents",
+              "value": 427
+            },
+            {
+              "name": "LayoutCount",
+              "value": 210
+            },
+            {
+              "name": "RecalcStyleCount",
+              "value": 227
+            },
+            {
+              "name": "LayoutDuration",
+              "value": 0.177563
+            },
+            {
+              "name": "RecalcStyleDuration",
+              "value": 0.038031
+            },
+            {
+              "name": "DevToolsCommandDuration",
+              "value": 0.805842
+            },
+            {
+              "name": "ScriptDuration",
+              "value": 4.416444
+            },
+            {
+              "name": "V8CompileDuration",
+              "value": 0
+            },
+            {
+              "name": "TaskDuration",
+              "value": 6.133214
+            },
+            {
+              "name": "TaskOtherDuration",
+              "value": 0.695334
+            },
+            {
+              "name": "ThreadTime",
+              "value": 2.082544
+            },
+            {
+              "name": "ProcessTime",
+              "value": 4.799213
+            },
+            {
+              "name": "JSHeapUsedSize",
+              "value": 21287392
+            },
+            {
+              "name": "JSHeapTotalSize",
+              "value": 86638592
+            },
+            {
+              "name": "FirstMeaningfulPaint",
+              "value": 1090419.791894
+            },
+            {
+              "name": "DomContentLoaded",
+              "value": 1090417.60969
+            },
+            {
+              "name": "NavigationStart",
+              "value": 1090417.426335
+            }
+          ]
+        },
+        "page": {
+          "memory": {
+            "usedJSHeapSize": 33824287,
+            "totalJSHeapSize": 98279035,
+            "jsHeapSizeLimit": 4395630592
+          },
+          "uaMemory": {
+            "unavailable": true
+          }
+        }
+      },
+      "memoryAfter": {
+        "cdp": {
+          "metrics": [
+            {
+              "name": "Timestamp",
+              "value": 1090438.246153
+            },
+            {
+              "name": "AudioHandlers",
+              "value": 0
+            },
+            {
+              "name": "AudioWorkletProcessors",
+              "value": 0
+            },
+            {
+              "name": "Documents",
+              "value": 9
+            },
+            {
+              "name": "Frames",
+              "value": 9
+            },
+            {
+              "name": "JSEventListeners",
+              "value": 7673
+            },
+            {
+              "name": "LayoutObjects",
+              "value": 486
+            },
+            {
+              "name": "MediaKeySessions",
+              "value": 0
+            },
+            {
+              "name": "MediaKeys",
+              "value": 0
+            },
+            {
+              "name": "Nodes",
+              "value": 3517
+            },
+            {
+              "name": "Resources",
+              "value": 10
+            },
+            {
+              "name": "ContextLifecycleStateObservers",
+              "value": 31
+            },
+            {
+              "name": "V8PerContextDatas",
+              "value": 2
+            },
+            {
+              "name": "WorkerGlobalScopes",
+              "value": 1
+            },
+            {
+              "name": "UACSSResources",
+              "value": 0
+            },
+            {
+              "name": "RTCPeerConnections",
+              "value": 0
+            },
+            {
+              "name": "ResourceFetchers",
+              "value": 10
+            },
+            {
+              "name": "AdSubframes",
+              "value": 0
+            },
+            {
+              "name": "DetachedScriptStates",
+              "value": 0
+            },
+            {
+              "name": "ArrayBufferContents",
+              "value": 427
+            },
+            {
+              "name": "LayoutCount",
+              "value": 252
+            },
+            {
+              "name": "RecalcStyleCount",
+              "value": 227
+            },
+            {
+              "name": "LayoutDuration",
+              "value": 0.184141
+            },
+            {
+              "name": "RecalcStyleDuration",
+              "value": 0.038031
+            },
+            {
+              "name": "DevToolsCommandDuration",
+              "value": 0.813147
+            },
+            {
+              "name": "ScriptDuration",
+              "value": 4.712445
+            },
+            {
+              "name": "V8CompileDuration",
+              "value": 0
+            },
+            {
+              "name": "TaskDuration",
+              "value": 6.485359
+            },
+            {
+              "name": "TaskOtherDuration",
+              "value": 0.737595
+            },
+            {
+              "name": "ThreadTime",
+              "value": 2.441441
+            },
+            {
+              "name": "ProcessTime",
+              "value": 5.342719
+            },
+            {
+              "name": "JSHeapUsedSize",
+              "value": 42468988
+            },
+            {
+              "name": "JSHeapTotalSize",
+              "value": 97124352
+            },
+            {
+              "name": "FirstMeaningfulPaint",
+              "value": 1090419.791894
+            },
+            {
+              "name": "DomContentLoaded",
+              "value": 1090417.60969
+            },
+            {
+              "name": "NavigationStart",
+              "value": 1090417.426335
+            }
+          ]
+        },
+        "page": {
+          "memory": {
+            "usedJSHeapSize": 49343383,
+            "totalJSHeapSize": 103283923,
+            "jsHeapSizeLimit": 4395630592
+          },
+          "uaMemory": {
+            "unavailable": true
+          }
+        }
+      }
+    }
+  ],
+  "errors": [
+    {
+      "fatal": "TimeoutError: locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('workspace-player-dock').getByRole('button', { name: 'Play' })\u001b[22m\n"
+    }
+  ],
+  "tracePath": "/Users/alansynn/Workspace/ms-wt/audit-gpu/artifacts/performance/audit-gpu/raw/runtime-headful-trace.zip",
+  "success": false,
+  "finishedAt": "2026-08-14T20:38:29.594Z"
+}

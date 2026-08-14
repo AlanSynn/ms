@@ -1,0 +1,22 @@
+{
+  "output": "/Users/alansynn/Workspace/ms-wt/audit-gpu/artifacts/performance/audit-gpu/raw/static-source-audit.json",
+  "totals": {
+    "webglRendererCreation": 2,
+    "rendererDispose": 2,
+    "rendererSubmission": 2,
+    "rendererInfo": 1,
+    "shaderPrecompile": 0,
+    "contextEvents": 0,
+    "loseContext": 0,
+    "visibilityHandling": 0,
+    "rawRaf": 1
+  },
+  "summary": {
+    "rendererCreationFiles": [
+      "components/ThreePuppetPreview.tsx",
+      "components/stages/foundry/ThreeFoundryPreview.tsx"
+    ],
+    "noRuntimeContextRecoveryHandlers": true,
+    "noVisibilityHandlerInRuntime": true
+  }
+}
