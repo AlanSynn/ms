@@ -1,0 +1,22 @@
+counter	initial_value	unit	evidence	status
+React animation commits	unmeasured	commits/frame	Path and Foundry phase state call sites are present; fresh runtime attribution required	pending-A0
+compileMechanismGraphFabrication	unmeasured	calls/frame	FoundryInspectorPanel and multiple domain consumers call it	pending-A0
+projectMechanismReadiness	unmeasured	calls/frame	DesignInspectorPanel and workflow consumers call it	pending-A0
+sampleFeasibleRange	unmeasured	calls/frame	DesignInspectorPanel and MechanismFoundry call it	pending-A0
+motionSafeParamRange	unmeasured	calls/frame	FoundryInspectorPanel and DesignInspectorPanel call it	pending-A0
+mechanismEditIsSafe	unmeasured	calls/frame	Edit-authority and candidate paths call it	pending-A0
+safety phase linkage evaluations	unmeasured	evaluations/frame	Safety schedule density is mechanism-dependent	pending-A0
+prepareMechanismKinematics	unmeasured	calls/frame	At least fifteen static call sites; runtime cadence unknown	pending-A0
+connection candidate enumeration	unmeasured	calls/frame	Fresh CPU audit required	pending-A0
+motionPreviewForPath	unmeasured	calls/frame	Two live static call sites: PathEditor and SceneSketch	pending-A0
+samplePreparedMotionPreview	unmeasured	calls/frame	Three direct static call sites plus wrapper	pending-A0
+Box3.setFromObject	unmeasured	calls/frame	Two live static call sites: ThreePuppetPreview and ThreeFoundryPreview	pending-A0
+diagnostic JSON bytes	unmeasured	bytes/frame	Production dataset probes are present	pending-A0
+renderer creations	2	static constructor sites	ThreePuppetPreview and ThreeFoundryPreview; session count pending GPU audit	partial
+live WebGL contexts	unmeasured	contexts/session	Fresh GPU audit required	pending-A0
+renderer submissions	at-most-1 Foundry historical	submissions/presented-frame	Historical G3 proves only Foundry; all-stage evidence missing	partial
+shader compilation during warm stage switch	unmeasured	compilations/switch	Fresh GPU audit required	pending-A0
+autosave serialization	unmeasured	serializations/gesture	Fresh CPU audit required	pending-A0
+AI requests	unmeasured	requests/boot	Fresh network audit required	pending-A0
+Rapier requests	unmeasured	requests/before-Physics	Historical Foundry probe reported Rapier ready; fresh network audit required	pending-A0
+study requests	0 historical default	requests/playback	Historical controlled default build only; fresh bundle/runtime proof required	partial
