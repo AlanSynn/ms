@@ -1,0 +1,267 @@
+{
+  "schema": "motionsmith-cpu-static-audit-v1",
+  "baseline": "97e6b3b3ce6be2cc43699fd282687ff1a8cfc5af",
+  "capturedAt": "2026-08-14T20:49:42.819Z",
+  "qualification": "Static source evidence locates call sites only. It is not timing, allocation, frame, or executed-call evidence.",
+  "assertions": [
+    {
+      "id": "path-svg-duplicate-motion-preview",
+      "interpretation": "One call site exists in each 2D Path component, so a visible selected path has two independent application-level preview solve call sites per parent render.",
+      "matches": [
+        {
+          "file": "components/stages/path/PathEditor.tsx",
+          "line": 327,
+          "token": "motionPreviewForPath("
+        },
+        {
+          "file": "components/stages/path/SceneSketch.tsx",
+          "line": 91,
+          "token": "motionPreviewForPath("
+        }
+      ]
+    },
+    {
+      "id": "foundry-inspector-compiles-on-render",
+      "interpretation": "Foundry inspector has an unconditional graph fabrication compile call site in its render function.",
+      "matches": [
+        {
+          "file": "components/stages/foundry/FoundryInspectorPanel.tsx",
+          "line": 71,
+          "token": "compileMechanismGraphFabrication("
+        }
+      ]
+    },
+    {
+      "id": "foundry-inspector-safe-range-in-hidden-details",
+      "interpretation": "Foundry inspector computes safe parameter ranges in a component that also contains a details disclosure; closed disclosure state does not prevent the parent render function from executing.",
+      "matches": [
+        {
+          "file": "components/stages/foundry/FoundryInspectorPanel.tsx",
+          "line": 237,
+          "token": "motionSafeParamRange("
+        }
+      ]
+    },
+    {
+      "id": "design-inspector-readiness-and-range",
+      "interpretation": "Design inspector owns call sites for project readiness, feasible range sampling, and safe parameter ranges.",
+      "matches": [
+        {
+          "file": "components/stages/mechanism/DesignInspectorPanel.tsx",
+          "line": 63,
+          "token": "projectMechanismReadiness("
+        },
+        {
+          "file": "components/stages/mechanism/DesignInspectorPanel.tsx",
+          "line": 73,
+          "token": "sampleFeasibleRange("
+        },
+        {
+          "file": "components/stages/mechanism/DesignInspectorPanel.tsx",
+          "line": 308,
+          "token": "motionSafeParamRange("
+        }
+      ]
+    },
+    {
+      "id": "connection-candidates-preflight",
+      "interpretation": "Connection overlay reaches physical candidate enumeration, whose implementation preflights candidates with safety and fabrication calls.",
+      "matches": [
+        {
+          "file": "components/stages/mechanism/MechanismConnectionOverlay.tsx",
+          "line": 134,
+          "token": "mechanismPhysicalConnectionCandidates("
+        },
+        {
+          "file": "utils/mechanismPhysicalCandidates.ts",
+          "line": 73,
+          "token": "compileMechanismGraphFabrication("
+        },
+        {
+          "file": "utils/mechanismPhysicalCandidates.ts",
+          "line": 112,
+          "token": "mechanismEditIsSafe("
+        }
+      ]
+    },
+    {
+      "id": "safety-phase-linkage",
+      "interpretation": "Safety checks construct phase schedules and linkage calculations; standalone linkage calculation reaches kinematics preparation.",
+      "matches": [
+        {
+          "file": "utils/mechanismEditAuthority.ts",
+          "line": 288,
+          "token": "mechanismSafetyPhaseSchedule("
+        },
+        {
+          "file": "utils/mechanismEditAuthority.ts",
+          "line": 289,
+          "token": "calculateLinkage("
+        },
+        {
+          "file": "utils/kinematics.ts",
+          "line": 25,
+          "token": "mechanismSafetyPhaseSchedule("
+        },
+        {
+          "file": "utils/kinematics.ts",
+          "line": 25,
+          "token": "mechanismSafetyPhaseSchedule("
+        },
+        {
+          "file": "utils/kinematics.ts",
+          "line": 708,
+          "token": "prepareMechanismKinematics("
+        },
+        {
+          "file": "utils/kinematics.ts",
+          "line": 741,
+          "token": "prepareMechanismKinematics("
+        },
+        {
+          "file": "utils/kinematics.ts",
+          "line": 776,
+          "token": "prepareMechanismKinematics("
+        },
+        {
+          "file": "utils/kinematics.ts",
+          "line": 844,
+          "token": "prepareMechanismKinematics("
+        }
+      ]
+    },
+    {
+      "id": "three-box-and-diagnostics",
+      "interpretation": "The shared Three previews contain Box3 scene-bound and diagnostic JSON serialization call sites.",
+      "matches": [
+        {
+          "file": "components/ThreePuppetPreview.tsx",
+          "line": 1013,
+          "token": "new THREE.Box3().setFromObject("
+        },
+        {
+          "file": "components/ThreePuppetPreview.tsx",
+          "line": 1087,
+          "token": "JSON.stringify("
+        },
+        {
+          "file": "components/ThreePuppetPreview.tsx",
+          "line": 1088,
+          "token": "JSON.stringify("
+        },
+        {
+          "file": "components/ThreePuppetPreview.tsx",
+          "line": 1089,
+          "token": "JSON.stringify("
+        },
+        {
+          "file": "components/ThreePuppetPreview.tsx",
+          "line": 1889,
+          "token": "JSON.stringify("
+        },
+        {
+          "file": "components/ThreePuppetPreview.tsx",
+          "line": 1979,
+          "token": "JSON.stringify("
+        },
+        {
+          "file": "components/stages/foundry/ThreeFoundryPreview.tsx",
+          "line": 357,
+          "token": "JSON.stringify("
+        },
+        {
+          "file": "components/stages/foundry/ThreeFoundryPreview.tsx",
+          "line": 360,
+          "token": "JSON.stringify("
+        },
+        {
+          "file": "components/stages/foundry/ThreeFoundryPreview.tsx",
+          "line": 395,
+          "token": "new THREE.Box3().setFromObject("
+        },
+        {
+          "file": "components/stages/foundry/ThreeFoundryPreview.tsx",
+          "line": 472,
+          "token": "JSON.stringify("
+        },
+        {
+          "file": "components/stages/foundry/ThreeFoundryPreview.tsx",
+          "line": 475,
+          "token": "JSON.stringify("
+        },
+        {
+          "file": "components/stages/foundry/ThreeFoundryPreview.tsx",
+          "line": 478,
+          "token": "JSON.stringify("
+        },
+        {
+          "file": "components/stages/foundry/ThreeFoundryPreview.tsx",
+          "line": 1765,
+          "token": "JSON.stringify("
+        },
+        {
+          "file": "components/stages/foundry/ThreeFoundryPreview.tsx",
+          "line": 1768,
+          "token": "JSON.stringify("
+        },
+        {
+          "file": "components/stages/foundry/ThreeFoundryPreview.tsx",
+          "line": 1895,
+          "token": "JSON.stringify("
+        },
+        {
+          "file": "components/stages/foundry/ThreeFoundryPreview.tsx",
+          "line": 1898,
+          "token": "JSON.stringify("
+        },
+        {
+          "file": "components/stages/foundry/ThreeFoundryPreview.tsx",
+          "line": 1971,
+          "token": "JSON.stringify("
+        }
+      ]
+    },
+    {
+      "id": "autosave-serializes-project",
+      "interpretation": "Project changes can reach the autosave transaction and project serialization call sites.",
+      "matches": [
+        {
+          "file": "hooks/useProjectAutosave.ts",
+          "line": 19,
+          "token": "writeAutosaveSnapshot("
+        },
+        {
+          "file": "hooks/useProjectAutosave.ts",
+          "line": 21,
+          "token": "writeAutosaveSnapshot("
+        },
+        {
+          "file": "utils/projectAutosaveTransactions.ts",
+          "line": 75,
+          "token": "serializeProject("
+        },
+        {
+          "file": "utils/project.ts",
+          "line": 2983,
+          "token": "serializeProject("
+        }
+      ]
+    },
+    {
+      "id": "blueprint-and-assembly-validation",
+      "interpretation": "Blueprint entry and Assembly guide each call fabrication validation from their stage components.",
+      "matches": [
+        {
+          "file": "components/stages/blueprint/BlueprintExport.tsx",
+          "line": 40,
+          "token": "validateForFabrication("
+        },
+        {
+          "file": "components/stages/assembly/AssemblyGuide.tsx",
+          "line": 59,
+          "token": "validateForFabrication("
+        }
+      ]
+    }
+  ]
+}

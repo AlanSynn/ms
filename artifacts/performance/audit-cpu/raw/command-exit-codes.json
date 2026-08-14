@@ -1,0 +1,82 @@
+{
+  "baseline": "97e6b3b3ce6be2cc43699fd282687ff1a8cfc5af",
+  "records": [
+    {
+      "label": "dependency-install",
+      "cmd": [
+        "bun",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "startedAt": "2026-08-14T20:49:42.755Z",
+      "endedAt": "2026-08-14T20:49:42.785Z",
+      "exitCode": 0
+    },
+    {
+      "label": "static-audit",
+      "cmd": [
+        "bun",
+        "run",
+        "/Users/alansynn/Workspace/ms-wt/audit-cpu/artifacts/performance/audit-cpu/static-audit.mjs"
+      ],
+      "startedAt": "2026-08-14T20:49:42.785Z",
+      "endedAt": "2026-08-14T20:49:42.822Z",
+      "exitCode": 0
+    },
+    {
+      "label": "typecheck",
+      "cmd": [
+        "bunx",
+        "tsc",
+        "--noEmit"
+      ],
+      "startedAt": "2026-08-14T20:49:42.822Z",
+      "endedAt": "2026-08-14T20:49:46.555Z",
+      "exitCode": 0
+    },
+    {
+      "label": "audit-build",
+      "cmd": [
+        "bunx",
+        "vite",
+        "build",
+        "--config",
+        "/Users/alansynn/Workspace/ms-wt/audit-cpu/artifacts/performance/audit-cpu/vite.audit.config.ts"
+      ],
+      "startedAt": "2026-08-14T20:49:46.555Z",
+      "endedAt": "2026-08-14T20:49:48.076Z",
+      "exitCode": 0
+    },
+    {
+      "label": "browser-audit",
+      "cmd": [
+        "bun",
+        "run",
+        "/Users/alansynn/Workspace/ms-wt/audit-cpu/artifacts/performance/audit-cpu/run-browser-audit.ts"
+      ],
+      "startedAt": "2026-08-14T20:49:48.344Z",
+      "endedAt": "2026-08-14T20:50:43.291Z",
+      "exitCode": 0
+    },
+    {
+      "label": "preview",
+      "cmd": [
+        "bunx",
+        "vite",
+        "preview",
+        "--config",
+        "/Users/alansynn/Workspace/ms-wt/audit-cpu/artifacts/performance/audit-cpu/vite.audit.config.ts",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "5207",
+        "--strictPort"
+      ],
+      "startedAt": null,
+      "endedAt": "2026-08-14T20:50:43.300Z",
+      "exitCode": 143,
+      "terminatedByAudit": true
+    }
+  ],
+  "failure": null
+}
