@@ -1,0 +1,35 @@
+{
+  "context_probe_command": "/usr/local/bin/orca eval --page 255f06a9-d527-4b1a-9562-994d20dbc0b2 --expression <WEBGL_lose_context probe> --json",
+  "probe_result": {
+    "supported": true,
+    "visibility": "visible",
+    "hidden": false,
+    "focus": false,
+    "canvas": {"width": 769, "height": 751, "contextLostBefore": false},
+    "events": [
+      {"event": "lose-called", "t": 734714.2, "contextLost": true},
+      {"event": "lost", "t": 734716.4, "contextLost": true},
+      {"event": "restore-called", "t": 735015.5, "contextLost": true},
+      {"event": "restored", "t": 735061.6}
+    ],
+    "after": {
+      "contextLost": false,
+      "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+      "renderer": "WebKit WebGL",
+      "canvasStillAttached": true,
+      "visibility": "visible",
+      "hidden": false,
+      "focus": false
+    }
+  },
+  "initial_direct_context_observation": {
+    "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+    "vendor": "Google Inc. (Apple)",
+    "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+    "attrs": {"alpha": true, "antialias": true, "depth": true, "preserveDrawingBuffer": false, "powerPreference": "default"},
+    "maxTexture": 16384,
+    "maxDrawBuffers": 8
+  },
+  "console_effect": "Context Lost and Context Restored logs were captured; the probe itself is not a production failure. Two context-type errors were already present after Blueprint export actions.",
+  "decision": "recovery observed on host renderer; not Chromebook evidence"
+}

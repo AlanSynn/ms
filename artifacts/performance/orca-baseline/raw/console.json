@@ -1,0 +1,11 @@
+{
+  "command": "/usr/local/bin/orca console --page 255f06a9-d527-4b1a-9562-994d20dbc0b2 --limit 100 --json",
+  "orcaCommandId": "3039c1cc-3cbb-4ca8-92fe-79e0efdaacf9",
+  "messages": [
+    {"type": "error", "text": "THREE.WebGLRenderer: A WebGL context could not be created. Reason:  Canvas has an existing context of a different type"},
+    {"type": "error", "text": "THREE.WebGLRenderer: A WebGL context could not be created. Reason:  Canvas has an existing context of a different type"},
+    {"type": "log", "text": "THREE.WebGLRenderer: Context Lost."},
+    {"type": "log", "text": "THREE.WebGLRenderer: Context Restored."}
+  ],
+  "interpretation": "The two context-type errors were observed after Blueprint generation/export; context-lost/restored logs correspond to the explicit reversible probe. No error was suppressed."
+}

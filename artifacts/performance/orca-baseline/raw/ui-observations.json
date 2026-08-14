@@ -1,0 +1,49 @@
+{
+  "page": "255f06a9-d527-4b1a-9562-994d20dbc0b2",
+  "visibility": {"visibilityState": "visible", "hidden": false, "activeTab": true},
+  "stages": [
+    {
+      "name": "Character",
+      "heading": "Character",
+      "observed": ["14 parts", "17 joints", "Make it yours", "shared 3D character view"]
+    },
+    {
+      "name": "Path SVG 2D",
+      "heading": "Path Editor",
+      "observed": ["2D/3D mode buttons", "SVG path editor canvas", "Letter sheet / 2cm grid", "editable pivots and bend groups"],
+      "canvasCount": 0
+    },
+    {
+      "name": "Path Three",
+      "heading": "Path Editor",
+      "observed": ["Canvas", "3D character view", "path controls"],
+      "canvasCount": 1
+    },
+    {
+      "name": "Mechanism Foundry",
+      "heading": "Mechanism Foundry",
+      "observed": ["Four-bar", "Slider piston", "Cam follower", "Gear train", "Gear linkage", "Planetary", "3D view", "physical connection handles", "fabrication stack"],
+      "canvasCount": 1
+    },
+    {
+      "name": "Mechanism Design",
+      "heading": "Mechanism Design",
+      "observed": ["shared Foundry 3D view", "Move/Rotate/Zoom/Reset", "Front/Isometric/Side/Top", "grid/user path/mechanism path", "target/path/hole parameter controls"],
+      "canvasCount": 1,
+      "blocker": "No target selection displayed Fix: Choose anchor"
+    },
+    {
+      "name": "Blueprint",
+      "heading": "Blueprint",
+      "observed": ["print/cut/build", "board H9", "Generate package", "Download PDF", "Download SVG", "Character PDF", "Character SVG", "printable character and mechanism sheets image/SVG"],
+      "canvasCount": 0
+    },
+    {
+      "name": "Assembly",
+      "heading": "Assembly",
+      "observed": ["3D mechanism assembly simulation", "Build animation", "nine steps", "board coordinates", "parts and clips/spacers", "Play/Next/Scrubber"],
+      "canvasCount": 1
+    }
+  ],
+  "crossStageConclusion": "The visible UI exercised shared workflow surfaces, but stage canvas type varied and source attribution failed after reload; no production cutover decision is made."
+}

@@ -1,0 +1,74 @@
+{
+  "cli": "/usr/local/bin/orca",
+  "required_cli_commands": [
+    "/usr/local/bin/orca skills get orca-cli",
+    "/usr/local/bin/orca worktree show --worktree path:/Users/alansynn/Workspace/ms-wt/qa-orca --json",
+    "/usr/local/bin/orca terminal list --worktree path:/Users/alansynn/Workspace/ms-wt/qa-orca --include-visual-layouts --json",
+    "/usr/local/bin/orca tab show --page 255f06a9-d527-4b1a-9562-994d20dbc0b2 --json",
+    "/usr/local/bin/orca eval --page 255f06a9-d527-4b1a-9562-994d20dbc0b2 --expression JSON.stringify({url:location.href,visibility:document.visibilityState,hidden:document.hidden,focus:document.hasFocus()}) --json"
+  ],
+  "preview_command": "VITE_BASE_PATH=/ms/ bun run preview -- --host 0.0.0.0 --port 4173",
+  "worktree": {
+    "id": "2a3d0911-edb9-44e2-b503-f6dcbd2dba95::/Users/alansynn/Workspace/ms-wt/qa-orca",
+    "path": "/Users/alansynn/Workspace/ms-wt/qa-orca",
+    "branch": "refs/heads/audit/orca-baseline",
+    "head": "97e6b3b3ce6be2cc43699fd282687ff1a8cfc5af",
+    "workspaceStatus": "in-progress"
+  },
+  "browser": {
+    "browserPageId": "255f06a9-d527-4b1a-9562-994d20dbc0b2",
+    "url": "http://127.0.0.1:4173/ms/",
+    "title": "MotionSmith - Mechanical Character Designer",
+    "active": true,
+    "worktreeId": "2a3d0911-edb9-44e2-b503-f6dcbd2dba95::/Users/alansynn/Workspace/ms-wt/qa-orca",
+    "profile": "default"
+  },
+  "terminals": [
+    {
+      "handle": "term_1d7bb769-ba26-4053-8b25-5f26ec3be20d",
+      "title": "Visible production preview",
+      "surface": "visible",
+      "connected": true,
+      "writable": true,
+      "shellPreview": "alansynn@COD-MBP16-LOAN2 qa-orca %"
+    },
+    {
+      "handle": "term_b8ecba98-1588-4e8f-914b-075dbd0f2d4d",
+      "title": "Visible production preview exact",
+      "surface": "visible",
+      "connected": true,
+      "writable": true,
+      "shellPreview": "alansynn@COD-MBP16-LOAN2 qa-orca %"
+    },
+    {
+      "handle": "term_aec14bf5-1afb-49df-91d8-2d11cbaf8648",
+      "title": "Orca command probe",
+      "surface": "visible",
+      "connected": true,
+      "writable": true,
+      "shellPreview": "alansynn@COD-MBP16-LOAN2 qa-orca %"
+    }
+  ],
+  "visibility_samples": [
+    {
+      "source": "Orca eval before the initial stage run",
+      "visibility": "visible",
+      "hidden": false,
+      "focus": true
+    },
+    {
+      "source": "Orca eval after the final reload",
+      "visibility": "visible",
+      "hidden": false,
+      "focus": false
+    }
+  ],
+  "version_integrity": {
+    "package_json": "1.1.0",
+    "dist_index_initial_observation": "v1.1.0",
+    "page_after_reload": "v0.0.9",
+    "decision": "reject post-reload page as wrong/unattributed build"
+  },
+  "production_call_count_delta": 0,
+  "react_commit_call_counters": "unavailable"
+}

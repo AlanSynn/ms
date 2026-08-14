@@ -1,0 +1,18 @@
+{
+  "command": "/usr/local/bin/orca network --page 255f06a9-d527-4b1a-9562-994d20dbc0b2 --limit 100 --json",
+  "orcaCommandId": "c6c876e6-d3af-4af0-8227-731f67d05d15",
+  "requestCountReported": 16,
+  "requests": [
+    {"method": "GET", "url": "http://127.0.0.1:4173/ms/", "resourceType": "Document", "status": 200},
+    {"method": "GET", "url": "http://127.0.0.1:4173/assets/index-BY-JA2dz.js", "resourceType": "Script", "status": 200},
+    {"method": "GET", "url": "http://127.0.0.1:4173/assets/AppIcon-Dx9trOlC.png", "resourceType": "Image", "status": 200},
+    {"method": "GET", "url": "http://127.0.0.1:4173/fonts/manrope-800-latin.woff2", "resourceType": "Font", "status": 200},
+    {"method": "GET", "url": "http://127.0.0.1:4173/assets/girl-thumb-CAdQi3RL.png", "resourceType": "Image", "status": 200},
+    {"method": "GET", "url": "http://127.0.0.1:4173/assets/boy-thumb-YC7FWjeU.png", "resourceType": "Image", "status": 200},
+    {"method": "GET", "url": "http://127.0.0.1:4173/assets/webOnnxWorker-A3hq6BbQ.js", "resourceType": "Script", "status": null},
+    {"method": "GET", "url": "http://127.0.0.1:4173/assets/rapier-DS2Sl1i-.js", "resourceType": "Script", "status": 200}
+  ],
+  "dataImageRequests": "multiple data:image/svg+xml requests, all successful in captured rows",
+  "failedRequests": "none reported",
+  "limits": "The CLI buffer contained no explicit failure rows; a null status on the worker row is recorded as unavailable, not treated as success."
+}

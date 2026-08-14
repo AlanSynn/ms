@@ -1,0 +1,72 @@
+{
+  "harness": "window.__orcaAudit injected with Orca eval; PerformanceObserver longtask and long-animation-frame, RAF interval, pointerdown-to-next-RAF, WebGL draw-call wrappers",
+  "page": "255f06a9-d527-4b1a-9562-994d20dbc0b2",
+  "capture_command_shape": "/usr/local/bin/orca eval --page 255f06a9-d527-4b1a-9562-994d20dbc0b2 --expression JSON.stringify(window.__orcaAudit.segmentSummary()) --json",
+  "decision_limit": "All timing values rejected as performance gates because visible embedded-page callbacks were approximately 1 second apart and host was Apple M1 Pro, not Chromebook.",
+  "surfaces": [
+    {
+      "name": "Path SVG 2D",
+      "marks": {"start": 180031.9, "end": 191423.5, "durationMs": 11391.6},
+      "canvasCount": 0,
+      "renderer": "SVG path editor",
+      "playback": "played then paused through Orca",
+      "frames": "not isolated; segment reset was not used for this first run",
+      "longTasks": "not isolated",
+      "decision": "visible UI evidence only; timing rejected"
+    },
+    {
+      "name": "Path Three",
+      "durationMs": 7558.0,
+      "frames": {"count": 10, "p50Ms": 1000.8, "p95Ms": 1008.5, "p99Ms": 1008.5, "maxMs": 1008.8},
+      "drawCalls": 34100,
+      "longTasks": {"count": 0},
+      "inputToNextRafMs": 994.9,
+      "loafAttribution": ["FrameRequestCallback", "MessagePort callback"],
+      "canvasCount": 1,
+      "decision": "rejected timing gate"
+    },
+    {
+      "name": "Mechanism Foundry",
+      "durationMs": 7175.3,
+      "frames": {"count": 13, "p50Ms": 808.3, "p95Ms": 1008.4, "p99Ms": 1008.4, "maxMs": 1008.4},
+      "drawCalls": 268,
+      "longTasks": {"count": 4, "observedRangeMs": [50, 51]},
+      "inputToNextRafMs": 1001.0,
+      "loafAttribution": ["DIV#root.onclick", "FrameRequestCallback", "MessagePort callback"],
+      "physicalStackObserved": ["Back Clip", "Input 3-hole link", "Spacer 10mm OD / 4mm hole", "Front Clip", "Coupler 5-hole link", "Output 5-hole link"],
+      "decision": "rejected timing gate"
+    },
+    {
+      "name": "Mechanism Design",
+      "durationMs": 6804.5,
+      "frames": {"count": 12, "p50Ms": 541.5, "p95Ms": 1008.3, "p99Ms": 1008.3, "maxMs": 1008.3},
+      "drawCalls": 696,
+      "longTasks": {"count": 0},
+      "inputToNextRafMs": 999.6,
+      "loafAttribution": ["DIV#root.onclick", "FrameRequestCallback", "MessagePort callback"],
+      "blockerObserved": "Selecting No target surfaced Fix: Choose anchor; restoring Right hand did not clear the blocker in the captured state.",
+      "decision": "rejected timing gate"
+    },
+    {
+      "name": "Blueprint",
+      "canvasCount": 0,
+      "renderer": "Printable SVG/image sheet and board preview",
+      "actions": ["Generate package", "Download SVG", "Download PDF"],
+      "consoleAfterActions": "two WebGL context-type errors captured",
+      "decision": "visible export UI evidence only; not a Three canvas timing sample"
+    },
+    {
+      "name": "Assembly",
+      "durationMs": 6947.5,
+      "frames": {"count": 8, "p50Ms": 1004.0, "p95Ms": 1008.5, "p99Ms": 1008.5, "maxMs": 1008.5},
+      "drawCalls": 1437,
+      "longTasks": {"count": 0},
+      "inputToNextRafMs": 30.9,
+      "loafAttribution": ["FrameRequestCallback", "MessagePort callback"],
+      "steps": 9,
+      "decision": "rejected timing gate"
+    }
+  ],
+  "reactCommitOrCallCounters": "not available from current diagnostics; no value fabricated",
+  "productionCallCountDelta": 0
+}

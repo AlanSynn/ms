@@ -1,0 +1,35 @@
+{
+  "worktree_show_command": "/usr/local/bin/orca worktree show --worktree path:/Users/alansynn/Workspace/ms-wt/qa-orca --json",
+  "worktree_result": {
+    "head": "97e6b3b3ce6be2cc43699fd282687ff1a8cfc5af",
+    "branch": "refs/heads/audit/orca-baseline",
+    "path": "/Users/alansynn/Workspace/ms-wt/qa-orca"
+  },
+  "terminal_create_command": "/usr/local/bin/orca terminal create --worktree path:/Users/alansynn/Workspace/ms-wt/qa-orca --title 'Visible production preview exact' --command 'VITE_BASE_PATH=/ms/ bun run preview -- --host 0.0.0.0 --port 4174' --focus --json",
+  "terminal_handle": "term_b8ecba98-1588-4e8f-914b-075dbd0f2d4d",
+  "terminal_create_result": {
+    "surface": "visible",
+    "connected": true,
+    "writable": true
+  },
+  "terminal_send_command": "/usr/local/bin/orca terminal send --terminal term_b8ecba98-1588-4e8f-914b-075dbd0f2d4d --text 'VITE_BASE_PATH=/ms/ bun run preview -- --host 0.0.0.0 --port 4174' --enter --json",
+  "terminal_send_result": {
+    "accepted": true,
+    "bytesWritten": 66
+  },
+  "terminal_read_command": "/usr/local/bin/orca terminal read --terminal term_b8ecba98-1588-4e8f-914b-075dbd0f2d4d --limit 100 --json",
+  "terminal_read_result": {
+    "status": "running",
+    "tail": ["alansynn@COD-MBP16-LOAN2 qa-orca %"],
+    "oldestCursor": "0",
+    "nextCursor": "0",
+    "latestCursor": "0",
+    "returnedLineCount": 1
+  },
+  "control_probe": {
+    "command": "/usr/local/bin/orca terminal send --terminal term_aec14bf5-1afb-49df-91d8-2d11cbaf8648 --text pwd --enter --json",
+    "accepted": true,
+    "readback": "same shell prompt, latestCursor 0"
+  },
+  "interpretation": "Exact production preview process cannot be proven from Orca terminal output. The URL/page is not accepted as source-attributable after it changed from v1.1.0 to v0.0.9 on reload."
+}

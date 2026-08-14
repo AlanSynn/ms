@@ -1,0 +1,14 @@
+{
+  "page": "255f06a9-d527-4b1a-9562-994d20dbc0b2",
+  "command": "/usr/local/bin/orca screenshot --page 255f06a9-d527-4b1a-9562-994d20dbc0b2 --format png --json",
+  "returnedFormat": "png",
+  "captures": [
+    {"stage": "Assembly initial", "orcaCommandId": "74bf35d5-3f2d-41c9-984d-c2f7bf2e0aa8", "visibility": "visible", "hidden": false, "note": "returned base64 PNG; command output was intentionally not pasted into the report"},
+    {"stage": "Path Editor", "orcaCommandId": "e23e8e90-1a5d-4ebb-a8cf-727ea446669c", "visibility": "visible", "hidden": false},
+    {"stage": "Mechanism Foundry", "orcaCommandId": "f6bf8a6c-d564-447c-b70a-1fc85999f776", "visibility": "visible", "hidden": false},
+    {"stage": "Mechanism Design", "orcaCommandId": "3221b7e3-2da0-4c3c-b9f3-3dafac239aab", "visibility": "visible", "hidden": false},
+    {"stage": "Blueprint", "orcaCommandId": "b54a626f-171b-4e7e-bee1-b16d667429a4", "visibility": "visible", "hidden": false, "note": "post-command focus false; active tab and visibility still reported by Orca/page"},
+    {"stage": "Assembly", "orcaCommandId": "1c01c6be-18b4-436a-aaa0-2ed7274c883d", "visibility": "visible", "hidden": false, "note": "post-command focus false; active tab and visibility still reported by Orca/page"}
+  ],
+  "storageLimit": "No CLI option exposed a local output path; screenshot response bodies remain in Orca command history."
+}

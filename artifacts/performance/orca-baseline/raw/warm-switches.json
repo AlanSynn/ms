@@ -1,0 +1,22 @@
+{
+  "capture": "four cycles of Path Editor -> Mechanism Foundry -> Mechanism Design -> Blueprint -> Assembly through Orca click commands",
+  "clickCount": 20,
+  "stageEventLabels": [
+    "Path Editor", "Mechanism Foundry", "Mechanism Design", "Blueprint", "Assembly",
+    "Path Editor", "Mechanism Foundry", "Mechanism Design", "Blueprint", "Assembly",
+    "Path Editor", "Mechanism Foundry", "Mechanism Design", "Blueprint", "Assembly",
+    "Path Editor", "Mechanism Foundry", "Mechanism Design", "Blueprint", "Assembly"
+  ],
+  "segment": {
+    "name": "warm-stage-switches",
+    "durationMs": 24211.5,
+    "frames": {"count": 69, "p50Ms": 83.9, "p95Ms": 1008.3, "p99Ms": 1009.9, "maxMs": 1258.9},
+    "drawCalls": 13399,
+    "longTasks": {"count": 20, "observedDurationRangeMs": [50, 734]},
+    "loafScriptInvokersObserved": ["DIV#root.onclick", "FrameRequestCallback", "IMG[src=data:image/svg+xml].onload", "TimerHandler:setInterval"],
+    "loafBlockingDurationObservedMs": {"max": 384.7},
+    "inputToNextRafMs": [69.4, 76.7, 67.0, 317.3, 307.2, 8.0, 72.9, 76.0, 328.1, 73.4, 81.1, 72.1, 78.2, 77.1, 51.6, 52.7, 82.3, 69.3, 86.7, 2.1]
+  },
+  "stageEventNextRafDelayMs": [67.6, 75.3, 65.7, 316.1, 306.6, 6.8, 72.1, 74.5, 326.6, 72.9, 80.3, 69.7, 77.2, 75.8, 50.6, 51.1, 81.5, 67.8, 83.7, 0.8],
+  "decision": "rejected as warm-switch performance gate; next-RAF and LoAF presentation timestamps were throttled by embedded Orca browser"
+}
