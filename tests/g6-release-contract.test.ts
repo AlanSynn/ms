@@ -19,6 +19,7 @@ const gitattributes = read('.gitattributes');
 const playwright = read('playwright.config.ts');
 const vite = read('vite.config.ts');
 const workflow = read('.github', 'workflows', 'deploy.yml');
+const preprocessingRequirements = read('scripts', 'requirements-preprocess-contract.txt');
 const deployment = read('docs', 'deployment.md');
 const macos = read('docs', 'macos-distribution.md');
 const manifest = JSON.parse(read('docs', 'archive', 'ports', 'to-port-web-onnx', 'copy_manifest.json')) as {
@@ -90,6 +91,9 @@ assert(macos.includes('deployment.md#asset-provenance'), 'native distribution do
 
 assert(workflow.includes('tags:') && workflow.includes('v*.*.*') && !workflow.includes('branches:'), 'Pages deploy remains tag-only');
 assert(workflow.includes('[asset] Check ONNX LFS asset') && workflow.includes('[contracts] Run repository contracts') && workflow.includes('[web] Build GitHub Pages frontend') && workflow.includes('[artifact] Upload static Pages artifact'), 'release workflow labels its failing layers');
+assert(workflow.includes('actions/setup-python@v6') && workflow.includes('python-version: "3.14.6"'), 'Pages pins the Python interpreter used by cross-runtime contracts');
+assert(workflow.includes('cache-dependency-path: scripts/requirements-preprocess-contract.txt') && workflow.includes('python -m pip install --disable-pip-version-check --requirement scripts/requirements-preprocess-contract.txt'), 'Pages installs the pinned preprocessing contract dependencies from one manifest');
+assert.equal(preprocessingRequirements, 'numpy==2.5.1\nPillow==12.3.0\n', 'preprocessing contract dependencies stay exact and minimal');
 assert(workflow.includes('lfs: false'), 'Pages checkout does not eagerly smudge or fetch every LFS object');
 assert(workflow.includes('git lfs pull --include="public/onnx/pose_model.onnx"'), 'Pages explicitly fetches the deployed FP32 model');
 assert.equal((workflow.match(/git lfs pull/g) ?? []).length, 1, 'Pages has exactly one explicit, scoped LFS pull');
