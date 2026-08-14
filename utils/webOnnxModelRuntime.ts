@@ -78,10 +78,10 @@ export const assertUsableModelBuffer = (
   );
 };
 
-const assertCompleteModelDownload = (buffer: ArrayBuffer, total?: number) => {
-  if (!total || buffer.byteLength === total) return;
+export const assertCompleteModelDownload = (bytesReceived: number) => {
+  if (bytesReceived === WEB_ONNX_MODEL_BYTES) return;
   throw new Error(
-    `${WEB_ONNX_MODEL_LABEL} download disconnected after ${buffer.byteLength}/${total} bytes. Try again.`,
+    `${WEB_ONNX_MODEL_LABEL} download disconnected after ${bytesReceived}/${WEB_ONNX_MODEL_BYTES} bytes. Try again.`,
   );
 };
 
@@ -113,10 +113,13 @@ const fetchModelWithProgress = async (
   if (!response.ok) {
     throw new Error(`Could not download ${WEB_ONNX_MODEL_LABEL}: ${response.status}`);
   }
-  const total = Number(response.headers.get("content-length")) || undefined;
+  // Fetch streams decoded response bytes while Content-Length can describe the
+  // compressed transfer. The model's recorded byte count is the canonical
+  // progress and completeness boundary for both encoded and identity responses.
+  const total = WEB_ONNX_MODEL_BYTES;
   if (!response.body) {
     const buffer = await response.arrayBuffer();
-    assertCompleteModelDownload(buffer, total);
+    assertCompleteModelDownload(buffer.byteLength);
     reportStatus(cacheStatus("downloading", 100, {
       bytesLoaded: buffer.byteLength,
       bytesTotal: total,
@@ -155,7 +158,7 @@ const fetchModelWithProgress = async (
   );
   try {
     const buffer = await new Response(monitored).arrayBuffer();
-    assertCompleteModelDownload(buffer, total);
+    assertCompleteModelDownload(buffer.byteLength);
     return buffer;
   } finally {
     self.clearTimeout(stallTimer);

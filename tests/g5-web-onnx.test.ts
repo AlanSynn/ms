@@ -5,7 +5,14 @@ import { inflateSync } from "node:zlib";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { foregroundMaskFromRgba, poseCropBounds } from "../utils/webOnnxPreprocess";
-import { resolveWebOnnxModelUrl } from "../utils/webOnnxProtocol";
+import {
+  WEB_ONNX_MODEL_BYTES,
+  resolveWebOnnxModelUrl,
+} from "../utils/webOnnxProtocol";
+import {
+  assertCompleteModelDownload,
+  readCachedModel,
+} from "../utils/webOnnxModelRuntime";
 
 const root = process.cwd();
 const read = (relative: string) => readFileSync(join(root, relative), "utf8");
@@ -70,6 +77,39 @@ assert(overlay.includes("cancelWebOnnxProcessing") && overlay.includes("Cancel")
 assert(overlay.includes('alt="Imported character"') && characterSelection.includes("project={project}") && characterSelection.includes("Keep the canonical scene unchanged until Use it"), "pending image review is result-first without rebuilding the canonical Three scene before acceptance");
 assert(runtime.includes("readCachedModel") && runtime.includes("await readCachedModel(modelUrl)") && runtime.includes("buffer.byteLength"), "worker runtime validates cached model bytes, not only cache headers");
 assert(runtime.includes("expected ${WEB_ONNX_MODEL_BYTES} real ONNX model bytes"), "model runtime rejects incomplete or pointer model bytes");
+assert(runtime.includes("const total = WEB_ONNX_MODEL_BYTES") && !runtime.includes('headers.get("content-length")'), "model download progress and completeness use decoded model bytes instead of encoded transfer length");
+const encodedResponseHeaders = new Headers({
+  "content-encoding": "gzip",
+  "content-length": "126326351",
+});
+assert.notEqual(Number(encodedResponseHeaders.get("content-length")), WEB_ONNX_MODEL_BYTES, "compressed transfer length differs from decoded model bytes");
+assert.doesNotThrow(() => assertCompleteModelDownload(WEB_ONNX_MODEL_BYTES), "canonical decoded model bytes pass independently of compressed transfer length");
+assert.throws(
+  () => assertCompleteModelDownload(WEB_ONNX_MODEL_BYTES - 1),
+  /download disconnected after 135929561\/135929562 bytes/,
+  "truncated decoded model bytes are rejected",
+);
+const originalCaches = globalThis.caches;
+let invalidCacheEntryDeleted = false;
+Object.defineProperty(globalThis, "caches", {
+  configurable: true,
+  value: {
+    open: async () => ({
+      delete: async () => {
+        invalidCacheEntryDeleted = true;
+        return true;
+      },
+      match: async () => new Response("version https://git-lfs.github.com/spec/v1\n"),
+    }),
+  },
+});
+try {
+  assert.equal(await readCachedModel("https://example.test/pose_model.onnx"), undefined, "Git LFS pointer cache entry is rejected");
+  assert.equal(invalidCacheEntryDeleted, true, "Git LFS pointer cache entry is evicted");
+} finally {
+  if (originalCaches === undefined) delete (globalThis as { caches?: CacheStorage }).caches;
+  else Object.defineProperty(globalThis, "caches", { configurable: true, value: originalCaches });
+}
 assert(quantizer.includes("--calibration-fixtures") && quantizer.includes("--evaluation-fixtures") && quantizer.includes("artifactBitwiseReproduced"), "quantizer separates calibration inputs from held-out evaluation and avoids bitwise reproducibility overclaims");
 const imageRuntimeSources = ownedSources.filter(
   (path) => path !== "hooks/useAppCharacterImportActions.ts",

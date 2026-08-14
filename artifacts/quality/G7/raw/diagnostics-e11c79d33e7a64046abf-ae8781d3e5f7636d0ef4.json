@@ -5,7 +5,7 @@
   "consoleErrors": [],
   "failedRequests": [],
   "pageState": {
-    "url": "http://127.0.0.1:43179/",
+    "url": "http://127.0.0.1:59074/",
     "visibilityState": "visible",
     "stage": "Mechanism Foundry",
     "status": "Opened Mechanism FoundryAI ready",
@@ -22,12 +22,13 @@
       "totalParts": 10,
       "artParts": 10,
       "maskParts": 10,
-      "modelPath": "http://127.0.0.1:43179/onnx/pose_model.onnx",
-      "inferenceMs": 280.2999999523163,
+      "modelPath": "http://127.0.0.1:59074/onnx/pose_model.onnx",
+      "inferenceMs": 381.39999985694885,
       "modelResponse": {
         "status": 200,
-        "url": "http://127.0.0.1:43179/onnx/pose_model.onnx",
-        "contentLength": null,
+        "url": "http://127.0.0.1:59074/onnx/pose_model.onnx",
+        "transferContentLength": null,
+        "decodedBytes": 135929562,
         "assetBytes": 135929562
       }
     },
@@ -61,10 +62,10 @@
     },
     "playback": {
       "foundryPhaseBefore": "0",
-      "foundryPhaseAfter": "62",
+      "foundryPhaseAfter": "39",
       "design": {
         "before": "0",
-        "after": "54"
+        "after": "25"
       },
       "path": "started and stopped"
     },
@@ -73,15 +74,15 @@
       "restored": "letter-15x15-2cm"
     },
     "blueprint": {
-      "metadataBytes": 75007,
-      "assemblyGuideHtmlBytes": 11246,
-      "assemblyGuidePdfBytes": 1756,
-      "cutSheetFilename": "fab-mss994p0-cut-sheet.pdf"
+      "metadataBytes": 75053,
+      "assemblyGuideHtmlBytes": 11266,
+      "assemblyGuidePdfBytes": 1767,
+      "cutSheetFilename": "fab-msta6v24-cut-sheet.pdf"
     },
     "assembly": {
       "step": "prepare-parts",
       "progressBefore": 0,
-      "progressAfter": 14,
+      "progressAfter": 12,
       "stack": ""
     },
     "persistence": {
@@ -109,14 +110,14 @@
     "performance": {
       "before": {
         "label": "foundry-idle",
-        "startedAt": 2721.3000000715256,
-        "elapsedMs": 251,
+        "startedAt": 86750.09999990463,
+        "elapsedMs": 239.5,
         "requestedFrames": 30,
         "frames": 30,
         "frameIntervalMs": {
-          "p50": 8.400000000000091,
-          "p95": 9.600000000000364,
-          "max": 10.599999999999909
+          "p50": 8.19999999999709,
+          "p95": 9.39999999999418,
+          "max": 9.400000000008731
         },
         "longTasks": [],
         "visibilityState": "visible",
@@ -128,14 +129,14 @@
       },
       "during": {
         "label": "foundry-playing",
-        "startedAt": 3073.100000023842,
-        "elapsedMs": 2360.2000000476837,
+        "startedAt": 87367.89999985695,
+        "elapsedMs": 2637,
         "requestedFrames": 45,
         "frames": 45,
         "frameIntervalMs": {
-          "p50": 50.69999999999982,
-          "p95": 63.100000000000364,
-          "max": 68.69999999999982
+          "p50": 58.40000000000873,
+          "p95": 75.19999999999709,
+          "max": 108
         },
         "longTasks": [],
         "visibilityState": "visible",

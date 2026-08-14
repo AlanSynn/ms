@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { statSync } from "node:fs";
+import { WEB_ONNX_MODEL_CACHE_NAME } from "../../utils/webOnnxProtocol";
 
 import {
   clickStage,
@@ -86,12 +87,22 @@ test("G7 isolated critical flow covers the integrated workbench", async ({ page 
   const modelResponse = await modelResponsePromise;
   expect(modelResponse.status(), "image processing downloads the real ONNX model").toBe(200);
   expect(modelResponse.url(), "model response uses the deployed ONNX path").toMatch(ONNX_MODEL_RESPONSE);
-  const modelContentLength = modelResponse.headers()["content-length"];
   const modelAssetBytes = statSync(join(process.cwd(), "public/onnx/pose_model.onnx")).size;
   expect(modelAssetBytes, "the deployed ONNX asset is the recorded 135 MB model").toBe(135_929_562);
-  if (modelContentLength !== undefined) {
-    expect(Number(modelContentLength), "ONNX response content length matches the deployed asset").toBe(modelAssetBytes);
-  }
+  let modelDecodedBytes: number | null = null;
+  await expect.poll(async () => {
+    modelDecodedBytes = await page.evaluate(async ({ cacheName, modelUrl }) => {
+      const response = await (await caches.open(cacheName)).match(modelUrl);
+      return response ? (await response.arrayBuffer()).byteLength : null;
+    }, {
+      cacheName: WEB_ONNX_MODEL_CACHE_NAME,
+      modelUrl: modelResponse.url(),
+    });
+    return modelDecodedBytes;
+  }, {
+    message: "validated ONNX cache stores the complete decoded model",
+    timeout: 180_000,
+  }).toBe(modelAssetBytes);
 
   // 1. Guided project: the primary classroom entry creates real editable state.
   await openGuidedWavingArm(page);
@@ -124,7 +135,8 @@ test("G7 isolated critical flow covers the integrated workbench", async ({ page 
     modelResponse: {
       status: modelResponse.status(),
       url: modelResponse.url(),
-      contentLength: modelContentLength ?? null,
+      transferContentLength: modelResponse.headers()["content-length"] ?? null,
+      decodedBytes: modelDecodedBytes,
       assetBytes: modelAssetBytes,
     },
   };

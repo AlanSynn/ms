@@ -1,10 +1,10 @@
 {
   "version": 2,
   "metadata": {
-    "id": "project-jq4zmj-mss98w80",
+    "id": "project-orkrgh-msta6lvq",
     "name": "Waving arm",
-    "createdAt": "2026-08-14T01:15:00.000Z",
-    "updatedAt": "2026-08-14T01:15:00.000Z",
+    "createdAt": "2026-08-14T18:28:59.078Z",
+    "updatedAt": "2026-08-14T18:28:59.078Z",
     "normalizationScale": 1,
     "status": "sample",
     "classroomLessonId": "waving-arm",
@@ -1787,7 +1787,7 @@
   "selectedPathId": "path-right-arm",
   "characterPackage": {
     "id": "sample-character-package",
-    "createdAt": "2026-08-14T01:15:00.001Z",
+    "createdAt": "2026-08-14T18:28:59.083Z",
     "sourceImageName": "sample",
     "outputDir": "sample://built-in",
     "partsInfo": {
