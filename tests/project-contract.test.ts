@@ -192,21 +192,24 @@ const stableGoldenMasterJson = (value: unknown): string => JSON.stringify(value,
 const goldenMasterHash = (value: unknown): string =>
   createHash('sha256').update(typeof value === 'string' ? value : stableGoldenMasterJson(value)).digest('hex');
 
-const stableProjectForGoldenMaster = (project: ProjectState): ProjectState => ({
-  ...project,
-  metadata: {
-    ...project.metadata,
-    id: '<project-id>',
-    createdAt: '<created-at>',
-    updatedAt: '<updated-at>'
-  },
-  characterPackage: project.characterPackage ? {
-    ...project.characterPackage,
-    createdAt: '<created-at>'
-  } : project.characterPackage,
-  lastExport: undefined,
-  lastFoundryExport: undefined
-});
+// Stabilize generated libm tails before exact serialization; the resulting
+// string hash still covers serializeProject field order and formatting.
+const stableProjectForGoldenMaster = (project: ProjectState): ProjectState =>
+  JSON.parse(stableGoldenMasterJson({
+    ...project,
+    metadata: {
+      ...project.metadata,
+      id: '<project-id>',
+      createdAt: '<created-at>',
+      updatedAt: '<updated-at>'
+    },
+    characterPackage: project.characterPackage ? {
+      ...project.characterPackage,
+      createdAt: '<created-at>'
+    } : project.characterPackage,
+    lastExport: undefined,
+    lastFoundryExport: undefined
+  })) as ProjectState;
 
 const stableMechanismSnapshotForGoldenMaster = <T extends { fingerprint: string; sourceIds: { projectId: string } }>(snapshot: T): T => ({
   ...snapshot,
@@ -3282,10 +3285,12 @@ const goldenMaster = {
 assert.deepEqual(
   Object.fromEntries(Object.entries(goldenMaster).map(([key, value]) => [key, goldenMasterHash(value)])),
   {
+    // Generated ProjectState values use the same six-decimal canonicalization
+    // as every other object in this golden before exact serializer hashing.
+    project: '48fb3aba7bfbb621d5706e7819028e96dae54a092415a7873396d6351b8d4c3c',
     // Intentional G004 lesson delta: guided Fit now passes through the existing
     // structural commit authority and the full target/path/anchor gate.
-    project: 'ae9449aff07a24da1d2ef0924f818b3a527b045114cf9f872f970b5f6c25c1d3',
-    lesson: '66f8dfebcc25baa2bf625f1817ec8cf0d9b4dc24679e0fe82346f8fa52a3f73d',
+    lesson: 'aff59033bcdf17dac207a568a090bca8b0767d2233b5198ee92e2d8df3494b36',
     // Intentional G1 delta: prepared physical connections carry the managed
     // linkage hole count so ordinary renderer frames need no catalog lookup.
     mechanismSnapshot: 'd90a9a654c778f138c56f31f3c491fef7d04a310cf8fa5b8eb560e6fc9744c6b',
