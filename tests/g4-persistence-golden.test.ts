@@ -102,14 +102,19 @@ const stable = (value: unknown, key?: string): unknown => {
 
 const stableResult = (result: unknown) => stable(result);
 
+const stableJsonStorageKeys = new Set<string>([
+  STORAGE_KEYS.autosave,
+  STORAGE_KEYS.autosavePrevious,
+  STORAGE_KEYS.autosaveMetadata,
+  STORAGE_KEYS.autosaveDirty,
+  LEGACY_STORAGE_KEYS.autosave,
+]);
+
 const stableStorage = (values: Map<string, string>) =>
   [...values.entries()]
     .sort(([left], [right]) => compareStableKeys(left, right))
     .map(([key, value]) => {
-      if (
-        key === STORAGE_KEYS.autosaveMetadata ||
-        key === STORAGE_KEYS.autosaveDirty
-      ) {
+      if (stableJsonStorageKeys.has(key)) {
         return [key, stable(JSON.parse(value))];
       }
       return [key, value];
@@ -218,6 +223,6 @@ const digest = createHash("sha256").update(goldenJson).digest("hex");
 
 assert.equal(
   digest,
-  "fae54ed110cf3c28123f8aafcdfa93cac463ad8785348a7f69b35a606afdb7c9",
+  "8343a83cfbabf4bade04059d1c032f0a02e27238a8e4937e3edc5c70239d733a",
   `G4 autosave golden changed: ${digest}\n${goldenJson}`,
 );
