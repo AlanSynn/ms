@@ -83,10 +83,13 @@ const volatileKeys = new Set([
 const compareStableKeys = (left: string, right: string) =>
   left < right ? -1 : left > right ? 1 : 0;
 
+// Bound platform libm tail drift without masking changes at or above one nanounit.
+const GOLDEN_DECIMAL_PLACES = 9;
+
 const stable = (value: unknown, key?: string): unknown => {
   if (key && volatileKeys.has(key)) return "<volatile>";
   if (typeof value === "number" && Number.isFinite(value)) {
-    const normalized = Number(value.toFixed(12));
+    const normalized = Number(value.toFixed(GOLDEN_DECIMAL_PLACES));
     return Object.is(normalized, -0) ? 0 : normalized;
   }
   if (Array.isArray(value)) return value.map((item) => stable(item));
@@ -223,6 +226,6 @@ const digest = createHash("sha256").update(goldenJson).digest("hex");
 
 assert.equal(
   digest,
-  "8343a83cfbabf4bade04059d1c032f0a02e27238a8e4937e3edc5c70239d733a",
+  "b4bdcd26334daf1112b80a6d9be3076f3369eea8580b4ec34f72edf57e2d7329",
   `G4 autosave golden changed: ${digest}\n${goldenJson}`,
 );
