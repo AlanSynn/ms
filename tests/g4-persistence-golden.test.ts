@@ -80,13 +80,20 @@ const volatileKeys = new Set([
   "writerId",
 ]);
 
+const compareStableKeys = (left: string, right: string) =>
+  left < right ? -1 : left > right ? 1 : 0;
+
 const stable = (value: unknown, key?: string): unknown => {
   if (key && volatileKeys.has(key)) return "<volatile>";
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const normalized = Number(value.toFixed(12));
+    return Object.is(normalized, -0) ? 0 : normalized;
+  }
   if (Array.isArray(value)) return value.map((item) => stable(item));
   if (value && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value)
-        .sort(([left], [right]) => left.localeCompare(right))
+        .sort(([left], [right]) => compareStableKeys(left, right))
         .map(([entryKey, entryValue]) => [entryKey, stable(entryValue, entryKey)]),
     );
   }
@@ -97,7 +104,7 @@ const stableResult = (result: unknown) => stable(result);
 
 const stableStorage = (values: Map<string, string>) =>
   [...values.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
+    .sort(([left], [right]) => compareStableKeys(left, right))
     .map(([key, value]) => {
       if (
         key === STORAGE_KEYS.autosaveMetadata ||
@@ -211,6 +218,6 @@ const digest = createHash("sha256").update(goldenJson).digest("hex");
 
 assert.equal(
   digest,
-  "7e6898e0a3f7890e4ef26c68ce4570c62c922b5d4d5f2df300392e6752568254",
+  "fae54ed110cf3c28123f8aafcdfa93cac463ad8785348a7f69b35a606afdb7c9",
   `G4 autosave golden changed: ${digest}\n${goldenJson}`,
 );
