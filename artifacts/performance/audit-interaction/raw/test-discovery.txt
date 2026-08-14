@@ -1,0 +1,12 @@
+Command: rg --files tests | rg 'g2-coordinate-readiness|g3-path-pointer-finalization|mechanism-connection-provenance|mechanism-command-feedback|g3-foundry-command-sequencing|mechanism-fit-boundary|mechanism-warning-presentation|g3-prepared-support-point-gate'; then rg -n '^test\\(' against those files
+Output:
+--- focused test files ---
+tests/mechanism-warning-presentation.test.ts
+tests/mechanism-fit-boundary.test.ts
+tests/mechanism-connection-provenance.test.ts
+tests/mechanism-command-feedback.test.ts
+tests/g3-foundry-command-sequencing.test.ts
+tests/g2-coordinate-readiness.test.ts
+tests/g3-path-pointer-finalization.test.ts
+--- test declarations ---
+Exit=2

@@ -1,0 +1,94 @@
+Command: pwd; git status --short; find artifacts/performance; rg canonical/coordinate/path/character/Foundry/Blueprint/Assembly/keyboard source symbols
+Worktree: /Users/alansynn/Workspace/ms-wt/audit-interaction
+Branch: audit/fixed-view-interaction
+HEAD: 97e6b3b3ce6be2cc43699fd282687ff1a8cfc5af
+Exit: 0
+
+--- scope ---
+(git status --short produced no output: clean before artifact authoring)
+--- artifacts ---
+(find artifacts/performance -maxdepth 3 -type f -print produced no output before this audit)
+--- canonical action search ---
+hooks/useAppPathActions.ts:62:        type: "upsert_path",
+types.ts:510:export type ProjectAction =
+types.ts:513:    | { type: 'select_part'; partId?: string }
+types.ts:514:    | { type: 'select_scene_object'; objectId?: string }
+types.ts:523:    | { type: 'update_joint'; jointId: string; updates: Partial<StandardJoint> }
+types.ts:526:    | { type: 'upsert_path'; path: ProjectMotionPath }
+types.ts:530:        type: 'upsert_mechanism';
+types.ts:534:        type: 'commit_mechanism_candidate'; result: MechanismCandidateTransactionResult & { status: 'committed' | 'blocked' } }
+types.ts:536:    | { type: 'update_settings'; settings: Partial<AppSettings> }
+types.ts:537:    | { type: 'set_export'; fabricationPackage: FabricationPackage };
+utils/project.ts:1707:    case "select_part": {
+utils/project.ts:1810:    case "select_scene_object": {
+utils/project.ts:1902:    case "update_joint": {
+utils/project.ts:1984:    case "upsert_path": {
+utils/project.ts:2069:    case "upsert_mechanism": {
+utils/project.ts:2150:    case "commit_mechanism_candidate": {
+utils/project.ts:2198:    case "update_settings": {
+utils/project.ts:2227:    case "set_export":
+--- coordinate search ---
+utils/viewport.ts:33:export const canvasPanOffset = ({
+utils/viewport.ts:57:export const zoomCanvasViewportAtPoint = ({
+utils/coordinates.ts:6:export const SCENE_PX_PER_MM = 2;
+utils/coordinates.ts:7:export const SCENE_VIEW = { width: 900, height: 680 } as const;
+utils/coordinates.ts:80:export const boardRoundTripTolerance = (kit: PhysicalKitSettings) => boardScenePitch(kit) / Math.sqrt(2) + 1e-9;
+utils/coordinates.ts:96:export const sceneToBoardRaw = (p: Point, kit: PhysicalKitSettings) => {
+utils/coordinates.ts:198:export const svgPointerToScene = (svg: SVGSVGElement, clientX: number, clientY: number): Point => {
+--- path search ---
+components/stages/path/SceneSketch.tsx:254:      aria-label="Path editor canvas"
+components/stages/path/SceneSketch.tsx:260:      onMouseUp={finishInteraction}
+components/stages/path/SceneSketch.tsx:261:      onMouseLeave={finishInteraction}
+components/stages/path/SceneSketch.tsx:262:      onPointerUp={finishInteraction}
+components/stages/path/SceneSketch.tsx:263:      onPointerCancel={finishInteraction}
+components/stages/path/SceneSketch.tsx:264:      onLostPointerCapture={finishInteraction}
+components/stages/path/PathEditor.tsx:203:  const onCanvasDown = (e: React.MouseEvent<SVGSVGElement>) => {
+components/stages/path/PathEditor.tsx:205:    const p = svgPointerToScene(svgRef.current, e.clientX, e.clientY);
+components/stages/path/PathEditor.tsx:233:  const pickIkJoint = (jointId: string) => {
+components/stages/path/PathEditor.tsx:258:    points[dragPoint] = svgPointerToScene(svgRef.current, e.clientX, e.clientY);
+components/stages/path/PathEditor.tsx:271:  const startPointDrag = (index: number) => {
+components/stages/path/PathInspectorPanel.tsx:78:            aria-label="Motion start"
+components/stages/path/PathInspectorPanel.tsx:113:            aria-label="Motion handle"
+components/stages/path/PathInspectorPanel.tsx:154:            aria-label="Fold left"
+components/stages/path/PathInspectorPanel.tsx:162:            aria-label="Fold right"
+--- character search ---
+components/stages/character/CharacterSelection.tsx:194:                          data-testid={`character-part-item-${part.id}`}
+components/stages/character/CharacterSelection.tsx:199:                            dispatch({ type: "select_part", partId: part.id })
+components/stages/character/CharacterSelection.tsx:238:                          data-testid={`scene-object-item-${object.id}`}
+components/stages/character/CharacterSelection.tsx:244:                              type: "select_scene_object",
+components/stages/character/CharacterSelection.tsx:278:                <ThreePuppetPreview
+components/stages/character/CharacterSelection.tsx:290:                  onSelectPart={(partId) => dispatch({ type: "select_part", partId })}
+components/stages/character/CharacterSelection.tsx:292:                    dispatch({ type: "select_scene_object", objectId })
+components/stages/character/PartInspector.tsx:59:      type: "update_part",
+components/stages/character/SceneObjectInspector.tsx:20:    dispatch({ type: "update_scene_object", objectId: object.id, updates });
+components/stages/character/SkeletonInspector.tsx:96:                      type: "update_part",
+components/stages/character/SkeletonInspector.tsx:151:                  type: "update_joint",
+components/stages/character/SkeletonInspector.tsx:218:              Fold left
+--- Foundry/Design search ---
+components/stages/foundry/MechanismFoundry.tsx:709:  const applyAnchor = (point: Point) => {
+components/stages/foundry/MechanismFoundry.tsx:711:    const board = sceneToBoard(point, project.settings.physicalKit);
+components/stages/foundry/MechanismFoundry.tsx:712:    const snapped = boardToScene(
+components/stages/foundry/MechanismFoundry.tsx:1076:  const applyPathFit = (mechanism = foundryCommandRef.current) => {
+components/stages/foundry/MechanismFoundry.tsx:1084:  const resetFoundryPreview = () => {
+components/stages/foundry/FoundryOverlayLayer.tsx:232:        data-testid="foundry-param-handles"
+components/stages/foundry/FoundryOverlayLayer.tsx:246:              data-testid={`foundry-param-handle-${handle.id}`}
+components/stages/mechanism/MechanismConnectionOverlay.tsx:545:        aria-label={`${surface === "foundry" ? "Foundry" : "Design"} physical connection handles`}
+components/stages/mechanism/MechanismConnectionOverlay.tsx:583:                  role="button"
+components/stages/mechanism/MechanismConnectionOverlay.tsx:592:                  aria-label={label}
+components/stages/mechanism/MechanismConnectionOverlay.tsx:595:                  aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Enter Space Escape"
+--- Blueprint/Assembly/keyboard search ---
+utils/appCommands.ts:30:  { id: 'view.fit', menu: 'view', label: 'Fit', description: 'Fit view.', shortcuts: ['Mod+0'] },
+utils/appCommands.ts:36:  { id: 'stage.character', menu: 'go', label: 'Character', description: 'Character.', shortcuts: ['Alt+1'], stageTarget: 'character' },
+components/stages/blueprint/BlueprintControlPanel.tsx:110:            aria-label="Generate package"
+components/stages/blueprint/BlueprintExport.tsx:48:      type: "set_export",
+components/stages/blueprint/BlueprintExport.tsx:95:              data-testid="blueprint-svg-preview"
+components/stages/assembly/AssemblyGuide.tsx:69:      type: "set_export",
+components/stages/assembly/AssemblyControlPanel.tsx:177:                className={`assembly-step-button ${index === stepIndex ? "active" : ""}`}
+components/stages/assembly/AssemblySceneFrame.tsx:26:    aria-label="Assembly scene step"
+components/stages/assembly/AssemblySceneFrame.tsx:39:      data-testid="assembly-visual-progress"
+components/shell/WorkspacePlayerDock.tsx:86:    aria-label="Playback"
+components/shell/WorkspacePlayerDock.tsx:100:      aria-label={stepPlayback ? 'Assembly scrubber' : 'Workspace scrubber'}
+hooks/useAppCommandBindings.ts:17:export const useAppCommandBindings = ({
+tests/browser/workflow.spec.ts:4306:    await expect(left).toHaveAttribute('aria-label', 'Workflow');
+tests/browser/workflow.spec.ts:4307:    await expect(center).toHaveAttribute('aria-label', 'Shared canvas');
+tests/browser/workflow.spec.ts:4308:    await expect(right).toHaveAttribute('aria-label', 'Selected item inspector');

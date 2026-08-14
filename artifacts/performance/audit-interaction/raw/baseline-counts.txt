@@ -1,0 +1,13 @@
+Command: rg -n -c 'new THREE\\.WebGLRenderer|new WebGLRenderer' on relevant viewer components; count dispatch( calls; count renderer constructors.
+Worktree HEAD: 97e6b3b3ce6be2cc43699fd282687ff1a8cfc5af
+Output:
+--- renderer/action count baseline ---
+components/stages/foundry/ThreeFoundryPreview.tsx:1
+components/ThreePuppetPreview.tsx:1
+--- ProjectAction dispatch source count (owned interaction files) ---
+      49
+--- WebGL constructor source count (all relevant components) ---
+       2
+Exit=0
+
+This audit changed no production files, so the production renderer/action source-count delta is exactly zero.

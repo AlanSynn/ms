@@ -1,0 +1,42 @@
+Focused verification commands were run from `/Users/alansynn/Workspace/ms-wt/audit-interaction` at baseline `97e6b3b3ce6be2cc43699fd282687ff1a8cfc5af`. Commands were run in parallel by the harness; each output and exit code is recorded separately.
+
+=== bun tests/g3-path-pointer-finalization.test.ts ===
+G3 path pointer finalization contracts passed
+
+Exit=0
+
+=== bun tests/g2-coordinate-readiness.test.ts ===
+error: ENOENT while resolving package 'three' from '/Users/alansynn/Workspace/ms-wt/audit-interaction/utils/foundryCamera.ts'
+
+Bun v1.3.14 (macOS arm64)
+
+Exit=1
+
+=== bun tests/mechanism-connection-provenance.test.ts ===
+mechanism connection provenance contracts passed
+
+Exit=0
+
+=== bun tests/mechanism-command-feedback.test.ts ===
+mechanism command feedback contracts passed
+
+Exit=0
+
+=== bun tests/g3-foundry-command-sequencing.test.ts ===
+error: ENOENT while resolving package 'lucide-react' from '/Users/alansynn/Workspace/ms-wt/audit-interaction/components/stages/stageLayout.tsx'
+
+Bun v1.3.14 (macOS arm64)
+
+Exit=1
+
+=== bun tests/mechanism-fit-boundary.test.ts ===
+mechanism Fit boundary contracts passed
+
+Exit=0
+
+=== bun tests/mechanism-warning-presentation.test.ts ===
+mechanism warning presentation contracts passed
+
+Exit=0
+
+No dependency installation was performed by this audit. The two exit-1 results are preserved counterevidence, not silently converted to passes.
